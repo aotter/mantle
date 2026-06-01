@@ -5,6 +5,7 @@ import {
   SidebarFooter,
   SidebarHeader,
   SidebarSeparator,
+  SidebarTrigger,
 } from "../ui/sidebar";
 import { useLayout } from "../context/layout-provider";
 import { usePreferences } from "../app/preferences";
@@ -36,7 +37,10 @@ export function AppSidebar({
       variant={variant === "floating" ? "sidebar" : variant}
     >
       <SidebarHeader>
-        <AppTitle brand={brand} />
+        <div className="sidebar-chrome-row">
+          <AppTitle brand={brand} />
+          <SidebarTrigger />
+        </div>
       </SidebarHeader>
       <SidebarSeparator />
       <SidebarContent>

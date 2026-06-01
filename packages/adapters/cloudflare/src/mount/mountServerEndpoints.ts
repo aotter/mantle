@@ -109,6 +109,9 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     "/admin/",
     "/admin/sign-in",
     "/admin/c/:collection",
+    "/admin/c/:collection/:id",
+    "/admin/editor",
+    "/admin/media",
     "/admin/approvals",
     "/admin/preferences",
     "/admin/settings",
@@ -139,7 +142,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
 
   type StaffGateOk = Extract<StaffGate, { kind: "ok" }>;
   const guarded = (
-    method: "get" | "post",
+    method: "get" | "post" | "patch" | "delete",
     path: string,
     body: (c: Context, gate: StaffGateOk) => Response | Promise<Response>,
   ): void => {
@@ -170,6 +173,32 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     });
   });
 
+  guarded("get", "/admin/api/site-settings", async () =>
+    runUseCase("GET /admin/api/site-settings", async () => {
+      const runtime = await ref.get();
+      const site = await runtime.siteConfig.load();
+      const extra = await readSiteSettings(runtime);
+      return { ...site, ...extra };
+    }),
+  );
+
+  guarded("patch", "/admin/api/site-settings", async (c) =>
+    runUseCase("PATCH /admin/api/site-settings", async () => {
+      const runtime = await ref.get();
+      const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
+      await writeSiteSettings(runtime, {
+        brand: stringField(body.brand),
+        title: stringField(body.title),
+        description: stringField(body.description),
+        brandIntro: stringField(body.brandIntro),
+        serviceIncludes: stringField(body.serviceIncludes),
+      });
+      const site = await runtime.siteConfig.load();
+      const extra = await readSiteSettings(runtime);
+      return { ...site, ...extra };
+    }),
+  );
+
   guarded("get", "/admin/api/entries", async (c) => {
     const collection = c.req.query("collection");
     if (!collection) {
@@ -187,26 +216,134 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     const runtime = await ref.get();
     const rawLimit = c.req.query("limit");
     const parsedLimit = rawLimit ? Number.parseInt(rawLimit, 10) : NaN;
+    const statusQuery = c.req.query("status");
     // Admin pagination needs the cursored shape — `executePage` returns
     // `{ rows, nextCursor? }`. `execute()` is the flat-array variant
     // for app code.
     const result = await runtime.listEntries.executePage({
       collection,
-      status: c.req.query("status") as ContentState | undefined,
-      limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+      status: statusQuery && statusQuery !== "all" ? (statusQuery as ContentState) : undefined,
+      limit: Number.isFinite(parsedLimit) ? parsedLimit : 99,
       cursor: c.req.query("cursor") ?? undefined,
     });
-    const items = result.rows.map((row) => ({
-      id: row.id,
-      collection: row.collection,
-      locale: row.locale ?? null,
-      status: row.status,
-      version: row.version,
-      title: row.data.title,
-      updated_at: row.updatedAt,
-    }));
+    const titleByProductSlug =
+      collection === "products"
+        ? await localizedProductTitles(runtime, c.req.query("locale") ?? undefined)
+        : new Map<string, string>();
+    const items = result.rows.map((row) =>
+      adminListItem(row, titleByProductSlug),
+    );
     return jsonResponse(200, { items, next_cursor: result.nextCursor ?? null });
   });
+
+  guarded("patch", "/admin/api/entries/:id", async (c) =>
+    runUseCase(`PATCH /admin/api/entries/${c.req.param("id")}`, async () => {
+      const runtime = await ref.get();
+      const id = c.req.param("id")!;
+      const body = (await c.req.raw.json().catch(() => ({}))) as {
+        title?: unknown;
+        locale?: unknown;
+      };
+      const title = typeof body.title === "string" ? body.title.trim() : "";
+      if (!title) {
+        throw new DiagnosticError(
+          runtimeDiagnostic({
+            code: "INPUT_VALIDATION_FAILED",
+            severity: "error",
+            path: `PATCH /admin/api/entries/${id}#/title`,
+            expected: "non-empty string",
+            message: "A non-empty `title` is required.",
+          }),
+        );
+      }
+      const row = await readAdminEntry(runtime, id);
+      if (!row) {
+        throw new DiagnosticError(adminNotFoundDiagnostic(`PATCH /admin/api/entries/${id}`, id));
+      }
+      await updateAdminEntryTitle(
+        runtime,
+        row,
+        title,
+        typeof body.locale === "string" ? body.locale : undefined,
+      );
+      const updated = await readAdminEntry(runtime, id);
+      if (!updated) {
+        throw new DiagnosticError(adminNotFoundDiagnostic(`PATCH /admin/api/entries/${id}`, id));
+      }
+      return adminListItem(
+        updated,
+        updated.collection === "products"
+          ? await localizedProductTitles(runtime, typeof body.locale === "string" ? body.locale : undefined)
+          : new Map<string, string>(),
+      );
+    }),
+  );
+
+  guarded("get", "/admin/api/entries/:id/product-editor", async (c) =>
+    runUseCase(`GET /admin/api/entries/${c.req.param("id")}/product-editor`, async () => {
+      const runtime = await ref.get();
+      const id = c.req.param("id")!;
+      const row = await readAdminEntry(runtime, id);
+      if (!row) {
+        throw new DiagnosticError(adminNotFoundDiagnostic(`GET /admin/api/entries/${id}/product-editor`, id));
+      }
+      return productEditorPayload(runtime, row, c.req.query("locale") ?? undefined);
+    }),
+  );
+
+  guarded("patch", "/admin/api/entries/:id/product-editor", async (c) =>
+    runUseCase(`PATCH /admin/api/entries/${c.req.param("id")}/product-editor`, async () => {
+      const runtime = await ref.get();
+      const id = c.req.param("id")!;
+      const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
+      const row = await readAdminEntry(runtime, id);
+      if (!row) {
+        throw new DiagnosticError(adminNotFoundDiagnostic(`PATCH /admin/api/entries/${id}/product-editor`, id));
+      }
+      await updateProductEditor(runtime, row, body);
+      const updated = await readAdminEntry(runtime, id);
+      if (!updated) {
+        throw new DiagnosticError(adminNotFoundDiagnostic(`PATCH /admin/api/entries/${id}/product-editor`, id));
+      }
+      return productEditorPayload(runtime, updated, stringField(body.locale));
+    }),
+  );
+
+  guarded("post", "/admin/api/entries/:id/duplicate", async (c, gate) =>
+    runUseCase(`POST /admin/api/entries/${c.req.param("id")}/duplicate`, async () => {
+      const runtime = await ref.get();
+      const id = c.req.param("id")!;
+      const body = (await c.req.raw.json().catch(() => ({}))) as {
+        locale?: unknown;
+      };
+      const row = await readAdminEntry(runtime, id);
+      if (!row) {
+        throw new DiagnosticError(adminNotFoundDiagnostic(`POST /admin/api/entries/${id}/duplicate`, id));
+      }
+      const duplicated =
+        row.collection === "products"
+          ? await duplicateProductEntry(runtime, row, gate.userId)
+          : await duplicateGenericEntry(runtime, row, gate.userId);
+      return adminListItem(
+        duplicated,
+        duplicated.collection === "products"
+          ? await localizedProductTitles(runtime, typeof body.locale === "string" ? body.locale : undefined)
+          : new Map<string, string>(),
+      );
+    }),
+  );
+
+  guarded("delete", "/admin/api/entries/:id", async (c) =>
+    runUseCase(`DELETE /admin/api/entries/${c.req.param("id")}`, async () => {
+      const runtime = await ref.get();
+      const id = c.req.param("id")!;
+      const row = await readAdminEntry(runtime, id);
+      if (!row) {
+        throw new DiagnosticError(adminNotFoundDiagnostic(`DELETE /admin/api/entries/${id}`, id));
+      }
+      return deleteAdminEntry(runtime, row);
+    }),
+  );
 
   // Two-step multi-variant direct-upload flow (#272):
   //   POST /uploads (variants manifest) → caller PUTs every variant
@@ -309,6 +446,616 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       }),
     );
   });
+}
+
+async function localizedProductTitles(
+  runtime: CmsRuntime,
+  requestedLocale: string | undefined,
+): Promise<Map<string, string>> {
+  const site = await runtime.siteConfig.load().catch(() => null);
+  const locale = requestedLocale ?? site?.canonicalLocale ?? "zh-TW";
+  const page = await runtime.listEntries.executePage({
+    collection: "product-translations",
+    status: "published",
+    limit: 500,
+  });
+  const fallback = new Map<string, string>();
+  const preferred = new Map<string, string>();
+  for (const row of page.rows) {
+    const slug = typeof row.data.slug === "string" ? row.data.slug : null;
+    const title = typeof row.data.title === "string" ? row.data.title : null;
+    if (!slug || !title) continue;
+    if (!fallback.has(slug)) fallback.set(slug, title);
+    if (row.locale === locale || row.data.locale === locale) preferred.set(slug, title);
+  }
+  return new Map([...fallback, ...preferred]);
+}
+
+function adminEntryTitle(data: Record<string, unknown>, productTitles: Map<string, string>): unknown {
+  if (typeof data.title === "string" && data.title) return data.title;
+  if (typeof data.slug === "string" && productTitles.has(data.slug)) {
+    return productTitles.get(data.slug);
+  }
+  if (typeof data.slug === "string" && data.slug) return data.slug;
+  if (typeof data.skuCode === "string" && data.skuCode) return data.skuCode;
+  if (typeof data.orderId === "string" && data.orderId) return data.orderId;
+  return null;
+}
+
+function adminListItem(row: AdminEntryRow, productTitles: Map<string, string>): {
+  id: string;
+  collection: string;
+  locale: string | null;
+  status: string;
+  version: number;
+  title: unknown;
+  updated_at: number;
+} {
+  return {
+    id: row.id,
+    collection: row.collection,
+    locale: row.locale ?? null,
+    status: row.status,
+    version: row.version,
+    title: adminEntryTitle(row.data, productTitles),
+    updated_at: row.updatedAt,
+  };
+}
+
+type AdminEntryRow = {
+  readonly id: string;
+  readonly collection: string;
+  readonly status: ContentState;
+  readonly version: number;
+  readonly data: Record<string, unknown>;
+  readonly locale?: string;
+  readonly authorId: string | null;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+};
+
+type AdminEntryDbRow = {
+  readonly id: string;
+  readonly collection: string;
+  readonly status: string;
+  readonly version: number;
+  readonly data: string;
+  readonly author_id: string | null;
+  readonly created_at: number;
+  readonly updated_at: number;
+};
+
+async function readAdminEntry(runtime: CmsRuntime, id: string): Promise<AdminEntryRow | null> {
+  const row = await runtime.db
+    .prepare(
+      `SELECT id, collection, status, version, data, author_id, created_at, updated_at
+       FROM entries WHERE id = ?`,
+    )
+    .bind(id)
+    .first<AdminEntryDbRow>();
+  return row ? adminRowFromDb(row) : null;
+}
+
+async function updateAdminEntryTitle(
+  runtime: CmsRuntime,
+  row: AdminEntryRow,
+  title: string,
+  requestedLocale: string | undefined,
+): Promise<void> {
+  if (row.collection === "products" && typeof row.data.slug === "string") {
+    const locale = requestedLocale ?? "zh-TW";
+    const translation = await findProductTranslation(runtime, row.data.slug, locale);
+    if (translation) {
+      await updateAdminEntryData(runtime, translation, { ...translation.data, title });
+      return;
+    }
+    await insertAdminEntry(runtime, {
+      id: adminId("entry_admin_translation"),
+      collection: "product-translations",
+      status: row.status,
+      data: { slug: row.data.slug, locale, title },
+      authorId: row.authorId,
+    });
+    return;
+  }
+  await updateAdminEntryData(runtime, row, { ...row.data, title });
+}
+
+async function productEditorPayload(
+  runtime: CmsRuntime,
+  row: AdminEntryRow,
+  requestedLocale: string | undefined,
+): Promise<{
+  product: ReturnType<typeof adminListItem>;
+  sku: {
+    id: string | null;
+    priceMinor: number | null;
+    compareAtPriceMinor: number | null;
+    currency: string;
+  };
+  content: {
+    id: string | null;
+    title: string;
+    shortDescription: string;
+    body: string;
+    brand: { name: string; tagline: string; intro: string };
+    promotions: Array<{
+      label: string;
+      title: string;
+      body: string;
+      relatedSkuCode?: string;
+      discountPercent?: number | null;
+    }>;
+    serviceIncludes: string;
+  };
+  availableSkus: Array<{
+    skuCode: string;
+    productSlug: string;
+    title: string;
+    priceMinor: number | null;
+    currency: string;
+  }>;
+}> {
+  const slug = typeof row.data.slug === "string" ? row.data.slug : "";
+  const locale = requestedLocale ?? "zh-TW";
+  const sku = slug ? (await entriesByDataField(runtime, "product-skus", "productSlug", slug))[0] : null;
+  const translation = slug ? await findProductTranslation(runtime, slug, locale) : null;
+  const productTitles = await localizedProductTitles(runtime, locale);
+  const merchandising = objectField(translation?.data.merchandising);
+  const brand = objectField(merchandising.brand);
+  const serviceSection = arrayField(merchandising.introSections)
+    .map(objectField)
+    .find((section) => section.title === "服務包含");
+
+  return {
+    product: adminListItem(
+      row,
+      row.collection === "products" ? productTitles : new Map<string, string>(),
+    ),
+    sku: {
+      id: sku?.id ?? null,
+      priceMinor: numberField(sku?.data.priceMinor),
+      compareAtPriceMinor: numberField(sku?.data.compareAtPriceMinor),
+      currency: stringField(sku?.data.currency) ?? stringField(row.data.currency) ?? "TWD",
+    },
+    content: {
+      id: translation?.id ?? null,
+      title: stringField(translation?.data.title) ?? "",
+      shortDescription: stringField(translation?.data.shortDescription) ?? "",
+      body: stringField(translation?.data.body) ?? "",
+      brand: {
+        name: stringField(brand.name) ?? "",
+        tagline: stringField(brand.tagline) ?? "",
+        intro: stringField(brand.intro) ?? "",
+      },
+      promotions: arrayField(merchandising.promotions)
+        .map(objectField)
+        .map((promotion) => ({
+          label: stringField(promotion.label) ?? "",
+          title: stringField(promotion.title) ?? "",
+          body: stringField(promotion.body) ?? "",
+          relatedSkuCode: stringField(promotion.relatedSkuCode),
+          discountPercent: numberField(promotion.discountPercent),
+        })),
+      serviceIncludes: stringField(serviceSection?.body) ?? "",
+    },
+    availableSkus: await adminProductSkuOptions(runtime, productTitles),
+  };
+}
+
+async function updateProductEditor(
+  runtime: CmsRuntime,
+  row: AdminEntryRow,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const slug = typeof row.data.slug === "string" ? row.data.slug : null;
+  if (!slug) return;
+  const locale = stringField(body.locale) ?? "zh-TW";
+  const priceMinor = numberField(body.priceMinor);
+  const compareAtPriceMinor = numberField(body.compareAtPriceMinor);
+  const sku = (await entriesByDataField(runtime, "product-skus", "productSlug", slug))[0];
+  if (sku && priceMinor != null) {
+    await updateAdminEntryData(runtime, sku, {
+      ...sku.data,
+      priceMinor,
+      compareAtPriceMinor,
+    });
+  }
+
+  let translation = await findProductTranslation(runtime, slug, locale);
+  if (!translation) {
+    translation = await insertAdminEntry(runtime, {
+      id: adminId("entry_admin_translation"),
+      collection: "product-translations",
+      status: row.status,
+      authorId: row.authorId,
+      data: { slug, locale, title: stringField(body.title) ?? slug },
+    });
+  }
+
+  const existingMerchandising = objectField(translation.data.merchandising);
+  const introSections = upsertIntroSection(
+    arrayField(existingMerchandising.introSections).map(objectField),
+    "服務包含",
+    stringField(body.serviceIncludes) ?? "",
+  );
+  await updateAdminEntryData(runtime, translation, {
+    ...translation.data,
+    title: stringField(body.title) ?? translation.data.title,
+    shortDescription: stringField(body.shortDescription) ?? translation.data.shortDescription,
+    body: stringField(body.body) ?? translation.data.body,
+    merchandising: {
+      ...existingMerchandising,
+      brand: {
+        ...objectField(existingMerchandising.brand),
+        name: stringField(body.brandName) ?? "",
+        tagline: stringField(body.brandTagline) ?? "",
+        intro: stringField(body.brandIntro) ?? "",
+      },
+      promotions: promotionsField(body.promotions),
+      introSections,
+    },
+  });
+}
+
+async function readSiteSettings(runtime: CmsRuntime): Promise<{
+  brandIntro: string;
+  serviceIncludes: string;
+}> {
+  const rows = await runtime.db
+    .prepare(`SELECT key, value FROM site_config WHERE key IN ('brandIntro', 'serviceIncludes')`)
+    .all<{ key: string; value: string }>();
+  const map = new Map(rows.map((row) => [row.key, row.value]));
+  return {
+    brandIntro: map.get("brandIntro") ?? "",
+    serviceIncludes: map.get("serviceIncludes") ?? "",
+  };
+}
+
+async function writeSiteSettings(
+  runtime: CmsRuntime,
+  values: {
+    brand?: string;
+    title?: string;
+    description?: string;
+    brandIntro?: string;
+    serviceIncludes?: string;
+  },
+): Promise<void> {
+  const stmts = Object.entries(values)
+    .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+    .map(([key, value]) =>
+      runtime.db
+        .prepare(`INSERT INTO site_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
+        .bind(key, value),
+    );
+  if (stmts.length > 0) await runtime.db.batch(stmts);
+}
+
+async function duplicateProductEntry(
+  runtime: CmsRuntime,
+  row: AdminEntryRow,
+  authorId: string | null,
+): Promise<AdminEntryRow> {
+  const oldSlug = typeof row.data.slug === "string" ? row.data.slug : null;
+  if (!oldSlug) return duplicateGenericEntry(runtime, row, authorId);
+
+  const newSlug = await uniqueDataField(runtime, "products", "slug", `${oldSlug}-copy`);
+  const relatedSkus = await entriesByDataField(runtime, "product-skus", "productSlug", oldSlug);
+  const relatedTranslations = await entriesByDataField(runtime, "product-translations", "slug", oldSlug);
+  const skuMap = new Map<string, string>();
+  for (const sku of relatedSkus) {
+    const oldSku = typeof sku.data.skuCode === "string" ? sku.data.skuCode : null;
+    if (!oldSku) continue;
+    skuMap.set(oldSku, await uniqueDataField(runtime, "product-skus", "skuCode", `${oldSku}-COPY`));
+  }
+
+  const productSku = typeof row.data.sku === "string" ? row.data.sku : null;
+  const product = await insertAdminEntry(runtime, {
+    id: adminId("entry_admin_product"),
+    collection: "products",
+    status: row.status,
+    authorId,
+    data: {
+      ...row.data,
+      slug: newSlug,
+      sku: productSku ? (skuMap.get(productSku) ?? `${productSku}-COPY`) : row.data.sku,
+      createdAt: Date.now(),
+    },
+  });
+
+  for (const sku of relatedSkus) {
+    const oldSku = typeof sku.data.skuCode === "string" ? sku.data.skuCode : null;
+    await insertAdminEntry(runtime, {
+      id: adminId("entry_admin_sku"),
+      collection: "product-skus",
+      status: sku.status,
+      authorId,
+      data: {
+        ...sku.data,
+        productSlug: newSlug,
+        skuCode: oldSku ? (skuMap.get(oldSku) ?? `${oldSku}-COPY`) : sku.data.skuCode,
+        createdAt: Date.now(),
+      },
+    });
+  }
+
+  for (const translation of relatedTranslations) {
+    await insertAdminEntry(runtime, {
+      id: adminId("entry_admin_translation"),
+      collection: "product-translations",
+      status: translation.status,
+      authorId,
+      data: {
+        ...translation.data,
+        slug: newSlug,
+        title:
+          typeof translation.data.title === "string"
+            ? `${translation.data.title}（副本）`
+            : translation.data.title,
+      },
+    });
+  }
+
+  return product;
+}
+
+function upsertIntroSection(
+  sections: Record<string, unknown>[],
+  title: string,
+  body: string,
+): Record<string, unknown>[] {
+  const next = [...sections];
+  const index = next.findIndex((section) => section.title === title);
+  const value = { ...(index >= 0 ? next[index] : {}), title, body };
+  if (index >= 0) next[index] = value;
+  else next.push(value);
+  return next;
+}
+
+function promotionsField(value: unknown): Array<{
+  label: string;
+  title: string;
+  body: string;
+  relatedSkuCode?: string;
+  discountPercent?: number | null;
+}> {
+  return arrayField(value).map(objectField).map((promotion) => ({
+    label: stringField(promotion.label) ?? "",
+    title: stringField(promotion.title) ?? "",
+    body: stringField(promotion.body) ?? "",
+    ...(stringField(promotion.relatedSkuCode) ? { relatedSkuCode: stringField(promotion.relatedSkuCode) } : {}),
+    discountPercent: numberField(promotion.discountPercent),
+  }));
+}
+
+async function adminProductSkuOptions(
+  runtime: CmsRuntime,
+  productTitles: Map<string, string>,
+): Promise<Array<{
+  skuCode: string;
+  productSlug: string;
+  title: string;
+  priceMinor: number | null;
+  currency: string;
+}>> {
+  const page = await runtime.listEntries.executePage({
+    collection: "product-skus",
+    status: "published",
+    limit: 500,
+  });
+  return page.rows
+    .map((row) => {
+      const skuCode = stringField(row.data.skuCode);
+      const productSlug = stringField(row.data.productSlug);
+      if (!skuCode || !productSlug) return null;
+      return {
+        skuCode,
+        productSlug,
+        title: productTitles.get(productSlug) ?? productSlug,
+        priceMinor: numberField(row.data.priceMinor),
+        currency: stringField(row.data.currency) ?? "TWD",
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => Boolean(row))
+    .sort((a, b) => a.title.localeCompare(b.title) || a.skuCode.localeCompare(b.skuCode));
+}
+
+async function duplicateGenericEntry(
+  runtime: CmsRuntime,
+  row: AdminEntryRow,
+  authorId: string | null,
+): Promise<AdminEntryRow> {
+  const data = { ...row.data };
+  if (typeof data.slug === "string") {
+    data.slug = await uniqueDataField(runtime, row.collection, "slug", `${data.slug}-copy`);
+  }
+  if (typeof data.title === "string") data.title = `${data.title}（副本）`;
+  return insertAdminEntry(runtime, {
+    id: adminId("entry_admin_copy"),
+    collection: row.collection,
+    status: row.status,
+    data,
+    authorId,
+  });
+}
+
+async function deleteAdminEntry(
+  runtime: CmsRuntime,
+  row: AdminEntryRow,
+): Promise<{ readonly removed: boolean }> {
+  if (row.collection === "products" && typeof row.data.slug === "string") {
+    const related = [
+      ...(await entriesByDataField(runtime, "product-translations", "slug", row.data.slug)),
+      ...(await entriesByDataField(runtime, "product-skus", "productSlug", row.data.slug)),
+    ];
+    for (const child of related) {
+      await runtime.deleteEntry.execute({ id: child.id });
+    }
+  }
+  return runtime.deleteEntry.execute({ id: row.id });
+}
+
+async function updateAdminEntryData(
+  runtime: CmsRuntime,
+  row: AdminEntryRow,
+  data: Record<string, unknown>,
+): Promise<AdminEntryRow> {
+  const updated = await runtime.db
+    .prepare(
+      `UPDATE entries SET data = ?, version = version + 1, updated_at = ?
+       WHERE id = ?
+       RETURNING id, collection, status, version, data, author_id, created_at, updated_at`,
+    )
+    .bind(JSON.stringify(data), Date.now(), row.id)
+    .first<AdminEntryDbRow>();
+  if (!updated) throw new DiagnosticError(adminNotFoundDiagnostic("admin/updateEntryData", row.id));
+  return adminRowFromDb(updated);
+}
+
+async function insertAdminEntry(
+  runtime: CmsRuntime,
+  args: {
+    id: string;
+    collection: string;
+    status: ContentState;
+    data: Record<string, unknown>;
+    authorId: string | null;
+  },
+): Promise<AdminEntryRow> {
+  const now = Date.now();
+  await runtime.db
+    .prepare(
+      `INSERT INTO entries (id, collection, status, version, data, author_id, created_at, updated_at)
+       VALUES (?, ?, ?, 1, ?, ?, ?, ?)`,
+    )
+    .bind(args.id, args.collection, args.status, JSON.stringify(args.data), args.authorId, now, now)
+    .run();
+  const row = await readAdminEntry(runtime, args.id);
+  if (!row) throw new DiagnosticError(adminNotFoundDiagnostic("admin/insertEntry", args.id));
+  return row;
+}
+
+async function findProductTranslation(
+  runtime: CmsRuntime,
+  slug: string,
+  locale: string,
+): Promise<AdminEntryRow | null> {
+  const row = await runtime.db
+    .prepare(
+      `SELECT id, collection, status, version, data, author_id, created_at, updated_at
+       FROM entries
+       WHERE collection = 'product-translations' AND json_extract(data, '$.slug') = ?
+       ORDER BY CASE WHEN json_extract(data, '$.locale') = ? THEN 0 ELSE 1 END, updated_at DESC
+       LIMIT 1`,
+    )
+    .bind(slug, locale)
+    .first<AdminEntryDbRow>();
+  return row ? adminRowFromDb(row) : null;
+}
+
+async function entriesByDataField(
+  runtime: CmsRuntime,
+  collection: string,
+  field: string,
+  value: string,
+): Promise<AdminEntryRow[]> {
+  const rows = await runtime.db
+    .prepare(
+      `SELECT id, collection, status, version, data, author_id, created_at, updated_at
+       FROM entries
+       WHERE collection = ? AND json_extract(data, ?) = ?
+       ORDER BY updated_at DESC, id DESC`,
+    )
+    .bind(collection, `$.${field}`, value)
+    .all<AdminEntryDbRow>();
+  return rows.map(adminRowFromDb);
+}
+
+async function uniqueDataField(
+  runtime: CmsRuntime,
+  collection: string,
+  field: string,
+  preferred: string,
+): Promise<string> {
+  const base = slugifyIdentifier(preferred);
+  for (let i = 0; i < 100; i += 1) {
+    const candidate = i === 0 ? base : `${base}-${i + 1}`;
+    const row = await runtime.db
+      .prepare(
+        `SELECT id FROM entries
+         WHERE collection = ? AND json_extract(data, ?) = ?
+         LIMIT 1`,
+      )
+      .bind(collection, `$.${field}`, candidate)
+      .first<{ id: string }>();
+    if (!row) return candidate;
+  }
+  return `${base}-${Date.now()}`;
+}
+
+function adminRowFromDb(row: AdminEntryDbRow): AdminEntryRow {
+  const data = JSON.parse(row.data) as Record<string, unknown>;
+  const locale = typeof data.locale === "string" ? data.locale : undefined;
+  return {
+    id: row.id,
+    collection: row.collection,
+    status: row.status as ContentState,
+    version: row.version,
+    data,
+    locale,
+    authorId: row.author_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function adminId(prefix: string): string {
+  const raw = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${prefix}_${raw.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+}
+
+function slugifyIdentifier(value: string): string {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || `copy-${Date.now()}`;
+}
+
+function adminNotFoundDiagnostic(path: string, id: string): Diagnostic {
+  return runtimeDiagnostic({
+    code: "NOT_FOUND",
+    severity: "error",
+    path,
+    value: id,
+    expected: "existing entry id",
+    message: `Entry '${id}' was not found.`,
+  });
+}
+
+function stringField(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function numberField(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function objectField(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function arrayField(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
 }
 
 type StaffGate =

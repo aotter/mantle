@@ -23,9 +23,9 @@ export function PageHeader({
         {eyebrow ? <p className="label-eyebrow mb-1">{eyebrow}</p> : null}
         <h1 className="text-2xl">{title}</h1>
         {description ? (
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          <div className="mt-1 max-w-3xl text-sm text-muted-foreground">
             {description}
-          </p>
+          </div>
         ) : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}

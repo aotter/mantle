@@ -1,8 +1,11 @@
 import * as React from "react";
-import { Separator } from "../ui/separator";
-import { SidebarTrigger } from "../ui/sidebar";
+import { CircleHelp } from "lucide-react";
 import { ProfileDropdown } from "./profile-dropdown";
 import { cn } from "../lib/utils";
+import { Button } from "../ui/button";
+import { usePreferences } from "../app/preferences";
+import { t } from "../app/i18n";
+import type { AdminBrand } from "./types";
 import {
   LanguagePreferenceDropdown,
   ThemePreferenceDropdown,
@@ -22,6 +25,8 @@ interface HeaderProps {
     login: string | null;
     role: "owner" | "editor" | "contributor" | null;
   };
+  site?: AdminBrand;
+  onOpenGuide?: () => void;
 }
 
 export function Header({
@@ -29,7 +34,10 @@ export function Header({
   className,
   children,
   user,
+  site,
+  onOpenGuide,
 }: HeaderProps): React.ReactElement {
+  const { language } = usePreferences();
   const [scrolled, setScrolled] = React.useState(false);
   React.useEffect(() => {
     if (!fixed) return;
@@ -44,17 +52,20 @@ export function Header({
       data-slot="header"
       data-scrolled={scrolled || undefined}
       className={cn(
-        "z-20 flex h-14 shrink-0 items-center gap-2 px-4",
+        "admin-statusbar z-20 flex h-14 shrink-0 items-center gap-3 px-4",
         fixed
-          ? "sticky top-0 w-[inherit] backdrop-blur transition-shadow"
+          ? "sticky top-0 w-[inherit] transition-shadow"
           : "border-b border-border/40",
         scrolled && "shadow-sm",
-        "glass-strip",
         className,
       )}
     >
-      <SidebarTrigger className="-ms-1" />
-      <Separator orientation="vertical" className="me-2 h-4" />
+      {site ? (
+        <div className="admin-site-status" aria-label="Current admin site">
+          <span>{site.title}</span>
+          {site.subtitle ? <small>{site.subtitle}</small> : null}
+        </div>
+      ) : null}
       {children}
       {user ? (
         // `flex items-center` on the wrapper kills the inline-flex
@@ -67,6 +78,20 @@ export function Header({
             children ? "" : "ms-auto",
           )}
         >
+          {onOpenGuide ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onOpenGuide}
+              data-tour="guide-button"
+              title={t(language, "guide.open")}
+              aria-label={t(language, "guide.open")}
+            >
+              <CircleHelp className="size-4" aria-hidden />
+              <span className="hidden sm:inline">{t(language, "guide.open")}</span>
+            </Button>
+          ) : null}
           <LanguagePreferenceDropdown />
           <ThemePreferenceDropdown />
           <ProfileDropdown login={user.login} role={user.role} />
