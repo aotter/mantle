@@ -91,7 +91,7 @@ export function HomeView(): React.ReactElement {
             ))}
           </div>
         )}
-        {collectionsQuery.isError && <ErrorBox error={collectionsQuery.error} />}
+        {collectionsQuery.isError && !collectionsQuery.data ? <ErrorBox error={collectionsQuery.error} /> : null}
         {collectionsQuery.data && primaryCollections.length === 0 && (
           <EmptyState
             icon={Database}
