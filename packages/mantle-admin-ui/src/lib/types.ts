@@ -15,6 +15,11 @@ export interface Collection {
   title: string;
   description: string | null;
   lifecycle: Lifecycle;
+  parent?: {
+    collection: string;
+    parentField: string;
+    childField: string;
+  } | null;
   /** `true` when some other Schema lists this collection as the
    *  `translates.parent` — i.e. it is the i18n parent in a parent +
    *  translations pair. Translation-child Schemas (those with

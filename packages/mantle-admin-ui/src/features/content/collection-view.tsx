@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, FileText, PencilLine, Trash2, X } from "lucide-react";
+import { Check, Copy, FileText, PencilLine, Search, Trash2, X } from "lucide-react";
 import { useAdminLocation } from "../../app/router";
 import { api } from "../../lib/api";
 import type { Collection, EntryRow, ListEntriesResult } from "../../lib/types";
@@ -26,7 +26,9 @@ export function CollectionView({
   const { language } = usePreferences();
   const location = useAdminLocation();
   const queryClient = useQueryClient();
-  const status = new URLSearchParams(location.search).get("status") ?? undefined;
+  const params = new URLSearchParams(location.search);
+  const status = params.get("status") ?? undefined;
+  const searchTerm = params.get("search")?.trim() ?? "";
 
   const collectionsQuery = useQuery<Collection[]>({
     queryKey: ["collections"],
@@ -52,6 +54,23 @@ export function CollectionView({
     if (entries.data) setVisibleEntries(entries.data);
   }, [entries.data]);
   const displayedEntries = entries.data ?? visibleEntries;
+  const filteredEntries = React.useMemo(() => {
+    if (!displayedEntries || !searchTerm) return displayedEntries;
+    const needle = searchTerm.toLocaleLowerCase();
+    return {
+      ...displayedEntries,
+      items: displayedEntries.items.filter((row) => {
+        const title = renderTitleText(row.title, language);
+        return [
+          row.id,
+          row.collection,
+          row.status,
+          row.locale ?? "",
+          title,
+        ].some((value) => String(value).toLocaleLowerCase().includes(needle));
+      }),
+    };
+  }, [displayedEntries, language, searchTerm]);
   const isFirstLoad = entries.isLoading && !displayedEntries;
 
   const collection = collectionsQuery.data?.find((c) => c.name === collectionName);
@@ -111,27 +130,39 @@ export function CollectionView({
       />
 
       {collection ? (
+        <CollectionSearch
+          collectionName={collection.name}
+          status={status}
+          searchTerm={searchTerm}
+          language={language}
+        />
+      ) : null}
+
+      {collection ? (
         <StatusFilter
           collection={collection}
           activeStatus={status}
+          searchTerm={searchTerm}
           language={language}
         />
       ) : null}
 
       {isFirstLoad && <EntriesSkeleton />}
       {entries.isError && !displayedEntries && <ErrorBox error={entries.error} />}
-      {displayedEntries && displayedEntries.items.length === 0 && (
+      {filteredEntries && filteredEntries.items.length === 0 && (
         <EmptyState
           icon={FileText}
           title={t(language, "collection.empty.title")}
           description={
-            status
+            searchTerm
+              ? t(language, "collection.empty.search", { search: searchTerm })
+              : status
               ? t(language, "collection.empty.withStatus", { status })
               : t(language, "collection.empty.all")
           }
         />
       )}
-      {displayedEntries && displayedEntries.items.length > 0 && (
+      {filteredEntries && filteredEntries.items.length > 0 && (
         <>
           <TableShell>
             <thead>
@@ -146,7 +177,7 @@ export function CollectionView({
               </tr>
             </thead>
             <tbody>
-              {displayedEntries.items.map((row) => (
+              {filteredEntries.items.map((row) => (
                 <EntryRowDisplay
                   key={row.id}
                   row={row}
@@ -169,7 +200,7 @@ export function CollectionView({
               {t(language, "collection.refreshing")}
             </p>
           ) : null}
-          {displayedEntries.next_cursor ? (
+          {filteredEntries.next_cursor ? (
             <p className="mt-3 text-xs text-muted-foreground">
               {t(language, "collection.moreRows")}
             </p>
@@ -177,6 +208,46 @@ export function CollectionView({
         </>
       )}
     </div>
+  );
+}
+
+function CollectionSearch({
+  collectionName,
+  status,
+  searchTerm,
+  language,
+}: {
+  collectionName: string;
+  status: string | undefined;
+  searchTerm: string;
+  language: AdminLanguage;
+}): React.ReactElement {
+  const [draft, setDraft] = React.useState(searchTerm);
+  React.useEffect(() => setDraft(searchTerm), [searchTerm]);
+  return (
+    <form
+      className="mb-3 max-w-xl"
+      role="search"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const next = draft.trim();
+        const params = new URLSearchParams();
+        if (status) params.set("status", status);
+        if (next) params.set("search", next);
+        const suffix = params.toString();
+        window.location.href = `/admin/c/${encodeURIComponent(collectionName)}${suffix ? `?${suffix}` : ""}`;
+      }}
+    >
+      <label className="relative block">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <input
+          className="admin-input h-10 pl-9"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder={t(language, "collection.searchPlaceholder")}
+        />
+      </label>
+    </form>
   );
 }
 
@@ -218,10 +289,12 @@ function looksLikeSchemaNotes(description: string): boolean {
 function StatusFilter({
   collection,
   activeStatus,
+  searchTerm,
   language,
 }: {
   collection: Collection;
   activeStatus: string | undefined;
+  searchTerm: string;
   language: AdminLanguage;
 }): React.ReactElement {
   const statuses = collection.lifecycle === "editorial"
@@ -231,7 +304,7 @@ function StatusFilter({
   return (
     <div className="mb-5 flex gap-2 overflow-x-auto pb-1" data-tour="status-filter">
       <StatusFilterLink
-        href={`/admin/c/${encodeURIComponent(collection.name)}`}
+        href={collectionFilterHref(collection.name, undefined, searchTerm)}
         active={!activeStatus}
       >
         {t(language, "collection.filter.all")}
@@ -239,7 +312,7 @@ function StatusFilter({
       {statuses.map((s) => (
         <StatusFilterLink
           key={s}
-          href={`/admin/c/${encodeURIComponent(collection.name)}?status=${s}`}
+          href={collectionFilterHref(collection.name, s, searchTerm)}
           active={activeStatus === s}
         >
           {statusLabel(language, s)}
@@ -247,6 +320,18 @@ function StatusFilter({
       ))}
     </div>
   );
+}
+
+function collectionFilterHref(
+  collectionName: string,
+  status: string | undefined,
+  searchTerm: string,
+): string {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (searchTerm) params.set("search", searchTerm);
+  const suffix = params.toString();
+  return `/admin/c/${encodeURIComponent(collectionName)}${suffix ? `?${suffix}` : ""}`;
 }
 
 function StatusFilterLink({

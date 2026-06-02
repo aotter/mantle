@@ -137,6 +137,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       title: s.spec.title,
       description: s.spec.description ?? null,
       lifecycle: s.spec.lifecycle ?? "simple",
+      parent: collectionParentFor(s, schemas),
       hasTranslations: translatedParents.has(s.metadata.name),
       mediaFields: mediaFieldsForCollection(s, schemas),
     }));
@@ -597,6 +598,11 @@ type AdminEditorCollection = {
   readonly title: string;
   readonly description: string | null;
   readonly lifecycle: "simple" | "editorial";
+  readonly parent: {
+    readonly collection: string;
+    readonly parentField: string;
+    readonly childField: string;
+  } | null;
   readonly hasTranslations: boolean;
   readonly localized: boolean;
   readonly translates: SchemaManifest["spec"]["translates"] | null;
@@ -641,6 +647,7 @@ function adminEditorCollection(
     title: schema.spec.title,
     description: schema.spec.description ?? null,
     lifecycle: schema.spec.lifecycle ?? "simple",
+    parent: collectionParentFor(schema, schemas),
     hasTranslations: schemas.some((candidate) => candidate.spec.translates?.parent === schema.metadata.name),
     localized: schema.spec.localized ?? Boolean(schema.spec.translates),
     translates: schema.spec.translates ?? null,
@@ -775,6 +782,49 @@ function conventionalParentField(
       if (childField === `${base}${capitalizeIdentifier(parentField)}`) return parentField;
     }
   }
+  return null;
+}
+
+function collectionParentFor(
+  childSchema: SchemaManifest,
+  schemas: SchemaManifest[],
+): { collection: string; parentField: string; childField: string } | null {
+  if (childSchema.spec.translates) {
+    return {
+      collection: childSchema.spec.translates.parent,
+      parentField: childSchema.spec.translates.on,
+      childField: childSchema.spec.translates.on,
+    };
+  }
+
+  const childProps = childSchema.spec.schema.properties ?? {};
+  for (const parentSchema of schemas) {
+    if (parentSchema.metadata.name === childSchema.metadata.name) continue;
+    if (parentSchema.spec.translates) continue;
+    const parentProps = parentSchema.spec.schema.properties ?? {};
+
+    for (const [childField] of Object.entries(childProps)) {
+      const parentField = conventionalParentField(parentSchema.metadata.name, childField, parentProps);
+      if (parentField) {
+        return {
+          collection: parentSchema.metadata.name,
+          parentField,
+          childField,
+        };
+      }
+    }
+
+    for (const [parentField] of Object.entries(parentProps)) {
+      if (!isLikelyJoinField(parentField)) continue;
+      if (!Object.prototype.hasOwnProperty.call(childProps, parentField)) continue;
+      return {
+        collection: parentSchema.metadata.name,
+        parentField,
+        childField: parentField,
+      };
+    }
+  }
+
   return null;
 }
 

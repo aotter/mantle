@@ -31,6 +31,7 @@ export function HomeView(): React.ReactElement {
     },
   });
   const collections = collectionsQuery.data ?? [];
+  const primaryCollections = collections.filter((collection) => !collection.parent);
   const siteInfo = site.data;
 
   return (
@@ -91,16 +92,16 @@ export function HomeView(): React.ReactElement {
           </div>
         )}
         {collectionsQuery.isError && <ErrorBox error={collectionsQuery.error} />}
-        {collectionsQuery.data && collections.length === 0 && (
+        {collectionsQuery.data && primaryCollections.length === 0 && (
           <EmptyState
             icon={Database}
             title={t(language, "console.collections.emptyTitle")}
             description={t(language, "console.collections.emptyBody")}
           />
         )}
-        {collections.length > 0 && (
+        {primaryCollections.length > 0 && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {collections.map((c) => (
+            {primaryCollections.map((c) => (
               <a
                 key={c.name}
                 href={`/admin/c/${encodeURIComponent(c.name)}`}
