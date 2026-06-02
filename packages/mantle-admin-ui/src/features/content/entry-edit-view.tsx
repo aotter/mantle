@@ -8,6 +8,7 @@ import type { EntryEditorPayload, JsonSchema, RelatedEntrySection } from "../../
 import { Button } from "../../ui/button";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
+import { RichTextEditor } from "../editor/rich-text-editor";
 import { collectionTitle } from "./collection-labels";
 
 export function EntryEditView({
@@ -274,10 +275,10 @@ function SchemaField({
           language={language}
         />
       ) : multilineField(schema, name) ? (
-        <textarea
-          className="admin-textarea admin-textarea-compact"
+        <RichTextEditor
+          compact
           value={stringForInput(value)}
-          onChange={(event) => setValue(event.target.value)}
+          onChange={setValue}
         />
       ) : (
         <input
