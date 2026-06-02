@@ -315,6 +315,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       const body = (await c.req.raw.json().catch(() => ({}))) as {
         collection?: unknown;
         locale?: unknown;
+        data?: unknown;
       };
       if (typeof body.collection !== "string" || !body.collection.trim()) {
         throw new DiagnosticError(
@@ -344,9 +345,13 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       const locale = typeof body.locale === "string" && body.locale
         ? body.locale
         : (await runtime.siteConfig.load().catch(() => null))?.canonicalLocale ?? "zh-TW";
+      const initialData =
+        typeof body.data === "object" && body.data !== null && !Array.isArray(body.data)
+          ? (body.data as Record<string, unknown>)
+          : {};
       const inserted = collection === "products"
         ? await createProductEntry(runtime, schemas, locale, gate.userId)
-        : await createGenericEntry(runtime, schema, locale, gate.userId);
+        : await createGenericEntry(runtime, schema, locale, gate.userId, initialData);
       return adminListItem(
         inserted,
         inserted.collection === "products"
@@ -1240,13 +1245,14 @@ async function createGenericEntry(
   schema: SchemaManifest,
   locale: string,
   authorId: string | null,
+  initialData: Record<string, unknown> = {},
 ): Promise<AdminEntryRow> {
   const data = await defaultEntryData(runtime, schema, locale);
   return insertAdminEntry(runtime, {
     id: adminId("entry_admin_new"),
     collection: schema.metadata.name,
     status: "draft",
-    data,
+    data: { ...data, ...initialData },
     authorId,
   });
 }

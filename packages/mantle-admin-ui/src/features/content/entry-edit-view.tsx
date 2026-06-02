@@ -638,7 +638,14 @@ function RelatedSections({
             />
             <div className="space-y-2">
               {section.entries.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t(language, "entryEdit.noChildEntries")}</p>
+                <CreateRelatedEntryPrompt
+                  section={section}
+                  language={language}
+                  label={t(language, "entryEdit.createRelated", {
+                    name: collectionTitle(section.collection, language),
+                  })}
+                  onSaved={onSaved}
+                />
               ) : (
                 section.entries.map((entry) => (
                   <a
@@ -680,7 +687,19 @@ function ProductTranslationSection({
         body={t(language, "entryEdit.productInfoBody")}
       />
       {section.entries.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t(language, "entryEdit.noChildEntries")}</p>
+        <CreateRelatedEntryPrompt
+          section={section}
+          language={language}
+          label={t(language, "entryEdit.createProductInfo")}
+          seedData={{
+            locale: language,
+            title: "",
+            shortDescription: "",
+            body: "",
+            coverAlt: "",
+          }}
+          onSaved={onSaved}
+        />
       ) : (
         <div className="space-y-4">
           {section.entries.map((entry) => (
@@ -806,7 +825,20 @@ function ProductSkuSection({
         body={t(language, "entryEdit.skusBody", { name: parentTitle })}
       />
       {section.entries.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t(language, "entryEdit.noChildEntries")}</p>
+        <CreateRelatedEntryPrompt
+          section={section}
+          language={language}
+          label={t(language, "entryEdit.createSku")}
+          seedData={{
+            skuCode: `${String(section.relationship.parentValue || "SKU").toUpperCase().replace(/[^A-Z0-9]+/g, "-")}-SKU`,
+            optionValues: {},
+            priceMinor: 0,
+            compareAtPriceMinor: null,
+            inventoryMode: "tracked",
+            images: [],
+          }}
+          onSaved={onSaved}
+        />
       ) : (
         <div className="space-y-3">
           {section.entries.map((entry) => (
@@ -815,6 +847,58 @@ function ProductSkuSection({
         </div>
       )}
     </SectionCard>
+  );
+}
+
+function CreateRelatedEntryPrompt({
+  section,
+  language,
+  label,
+  seedData,
+  onSaved,
+}: {
+  section: RelatedEntrySection;
+  language: AdminLanguage;
+  label: string;
+  seedData?: Record<string, unknown>;
+  onSaved?: () => void;
+}): React.ReactElement {
+  const create = useMutation({
+    mutationFn: () =>
+      api.post("/entries", {
+        collection: section.collection.name,
+        locale: language,
+        data: {
+          ...seedData,
+          [section.relationship.childField]: section.relationship.parentValue,
+        },
+      }),
+    onSuccess: () => {
+      onSaved?.();
+    },
+  });
+
+  return (
+    <div className="rounded-lg border border-dashed border-[var(--glass-border)] bg-background/30 p-4">
+      <p className="text-sm leading-6 text-muted-foreground">
+        {t(language, "entryEdit.emptyChildCreateHint")}
+      </p>
+      <Button
+        type="button"
+        className="mt-3"
+        size="sm"
+        disabled={create.isPending}
+        onClick={() => create.mutate()}
+      >
+        <Plus className="size-3.5" aria-hidden />
+        {create.isPending ? t(language, "crud.saving") : label}
+      </Button>
+      {create.isError ? (
+        <p className="mt-2 text-xs text-destructive">
+          {create.error instanceof Error ? create.error.message : String(create.error)}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
