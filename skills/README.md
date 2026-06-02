@@ -4,10 +4,10 @@ Agent-readable skill briefs for consumers of `@aotter/mantle-*`. Discoverable by
 
 | Skill | When to invoke |
 |---|---|
-| [`install`](install/SKILL.md) | User wants to start a new mantle project (empty repo / "I want a publication site" / "headless CMS for my Next.js"). Invokes the `create-mantle` release tarball from the [starters monorepo](https://github.com/aotter/mantle-starters). |
+| [`install`](install/SKILL.md) | User wants to start a new mantle project (empty repo / "I want a publication site" / "headless CMS for my Next.js"). Invokes the `create-mantle` release tarball from the [starters monorepo](https://github.com/aotter/mantle-starters), including any selected source feature overlays. |
 | [`customize-design`](customize-design/SKILL.md) | User wants to rebrand or restyle a publication starter project. Walks the L1–L4 theme stack (tokens / extraCss+icons+i18n / Header+Footer / whole-template). |
 | [`extend`](extend/SKILL.md) | User has an existing project and wants to add a Schema / View / Procedure / Trigger or wire a feature (contact form, search, newsletter signup). |
-| [`provision`](provision/SKILL.md) | User wants to deploy to production: OAuth verifier swap, secrets, prod D1/KV, custom domain. |
+| [`provision`](provision/SKILL.md) | User wants to deploy to production through starter-owned lifecycle scripts: OAuth verifier swap, secrets, prod D1/KV, custom domain, and explicitly selected feature resources. |
 
 The skills target `mantle@v0.1.0`. Each one names its assumed grammar version in the front-matter `applies_to:` field; future versions add a sibling SKILL.md or update the existing one.
 

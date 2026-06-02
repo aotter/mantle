@@ -13,6 +13,8 @@ You're taking an installed consumer project from local files to a user-owned Clo
 End state:
 
 - D1 + render KV exist in the user's CF account; `wrangler.toml` points at them.
+- Explicitly selected feature resources are either provisioned by their own opt-in
+  starter scripts or clearly deferred for the operator.
 - Worker secrets are set (Better Auth + GitHub OAuth + Turnstile if the archetype carries it).
 - Worker deploys; GitHub OAuth via Better Auth + MCP OAuth/DCR work.
 - `mantle/site.md` frontmatter `site_url:` + `revisions:` updated; `AGENTS.md` `Public site:` line updated.
@@ -23,7 +25,7 @@ Provision does **not** seed content. First real content is created after owner s
 
 ## Principles (gotchas that aren't obvious from CF docs)
 
-1. **D1 + render KV always. No R2 in first-run.** R2 enables billing prompts on the CF account; first-run must not touch it. First-party media is an explicit opt-in flow after the site is online — the publication starter uses external image URLs for seeded covers until the user asks for media hosting.
+1. **D1 + render KV always. Base first-run does not touch R2.** R2 enables billing prompts on the CF account, so the default provision path must not create buckets. First-party media is an explicit opt-in feature (`media-r2`) after the site is online or when the user has clearly selected that overlay. If `.mantle/features.json` includes `media-r2`, use the starter's feature script only after the operator confirms billing readiness; otherwise leave R2 alone.
 
 2. **Turnstile is conditional on the starter, not on this skill.** Archetypes with a public unauthenticated write surface (`presence`, `publication`, `intake` — all carry the `contact-messages` Schema and CAPTCHA `before_create` Trigger) provision a Turnstile widget. `blank` skips it. The starter's `provision.mjs` decides.
 
@@ -58,6 +60,11 @@ pnpm provision:up   -- --project-name "<project-name>" --github-username "<gh-lo
 
 `provision:up` reads both `CLOUDFLARE_API_TOKEN` and `GITHUB_CLIENT_SECRET` from env. One pass: creates D1 + render KV + (conditional) Turnstile via CF API, writes resource IDs + `PUBLIC_ORIGIN` + Turnstile site key into `wrangler.toml`, deploys, pipes worker secrets (`ADMIN_GITHUB_LOGIN`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `BETTER_AUTH_SECRET` (freshly generated), `TURNSTILE_SECRET_KEY`), updates `mantle/site.md` + `AGENTS.md`. Single deploy — origin is correct before deploy. Partial failures don't roll back; IDs are printed so the user can clean up via dashboard or rerun.
 
+Feature overlays may add their own scripts, such as `pnpm media-r2:provision`.
+Treat those as starter lifecycle scripts, not `mantle` CLI commands. They run
+only when the feature is present in `.mantle/features.json` and the user
+explicitly accepts the extra provider requirements.
+
 Don't run `wrangler d1 create` / `wrangler kv namespace create` / `wrangler secret put` by hand when the script can do it. Wrangler's KV namespace command can produce ugly duplicated names like `<project>-<project>-render`; the script bypasses this via the CF API with exact titles.
 
 ## Flow
@@ -66,7 +73,7 @@ Don't run `wrangler d1 create` / `wrangler kv namespace create` / `wrangler secr
 
    If GitHub CLI auth fails or shows the wrong login, pause provision as a recoverable auth step. Tell the user the local install is already committed/validated, state the expected GitHub login, ask them to run `gh auth login -h github.com` or switch to the expected account, and ask them to reply when done. Do not ask for Cloudflare credentials yet. When they return, re-run `gh auth status`, then continue with step 2. Keep the project path, commit SHA, validation status, and expected login in your status message so the next turn can resume without rediscovery.
 
-2. **Get CF API token from user.** Via stdin (`! read -rsp …`), env var, or chat paste — user's choice. Set `CLOUDFLARE_API_TOKEN` in env and confirm `pnpm exec wrangler whoami` returns the expected account.
+2. **Get CF API token from user.** Via stdin (`! read -rsp …`), env var, or chat paste — user's choice. Set `CLOUDFLARE_API_TOKEN` in env and confirm `pnpm exec wrangler whoami` returns the expected account. If `.mantle/features.json` includes feature resources, inspect the feature README/scripts now and name any extra requirements before running them.
 
 3. **`pnpm provision:plan -- --project-name X`.** Print the precomputed values. Ask the user to register the GitHub OAuth App with those exact values (Homepage URL, Authorization callback URL). The user generates a Client Secret and copies both Client ID and Secret back.
 
@@ -90,6 +97,8 @@ Don't run `wrangler d1 create` / `wrangler kv namespace create` / `wrangler secr
    `<worker_url>/mcp` is the end-user MCP resource — read-only View queries in v0.1. Authoring lives on `/mcp/staff`.
 
 7. **Second-agent proof.** Connect a second agent through Staff MCP and run the starter's core workflow (list collections, create draft, update, publish, confirm public route). Publication: posts CRUD + `recent-posts` View. Intake: leads CRUD + `leads-recent` View. This is the v0.1.0 release gate — don't call the install production-ready until it works.
+
+   If `media-r2` was selected and provisioned, include one media smoke: create an upload, PUT a tiny image through the presigned URL, commit it, and fetch the returned public URL. If `media-r2` was selected but the operator deferred billing/API-token setup, state that production is online while media hosting remains explicitly deferred.
 
 8. **Handoff** — see § Mantle handoff below.
 
@@ -153,6 +162,6 @@ After the handoff, drop Mantle's voice.
 - Don't block v0.1.0 on admin UI. Bootstrap owner + MCP is the v0.1.0 proof.
 - Don't expose staff management as MCP tools.
 - Don't promise custom domain automation in v0.1.0.
-- Don't enable R2 / ask for billing setup / mention credit cards in the first-run path.
+- Don't enable R2 / ask for billing setup / mention credit cards in the base first-run path. Only do it for an explicit `media-r2` opt-in.
 - Don't ship the Turnstile test site key (`1x00000000000000000000AA`) or `dev-stub` secret to production. The starter ships them for `pnpm dev`; production deploys must replace both.
 - Don't deploy twice. `provision:up` deploys once after origin is correct.
