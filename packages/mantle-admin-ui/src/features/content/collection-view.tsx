@@ -1,11 +1,12 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, FileText, PencilLine, Search, Trash2, X } from "lucide-react";
+import { Check, Copy, FileText, PencilLine, Plus, Search, Trash2, X } from "lucide-react";
 import { useAdminLocation } from "../../app/router";
 import { api } from "../../lib/api";
 import type { Collection, EntryRow, ListEntriesResult } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { TableCell, TableHeadCell, TableShell } from "../../ui/admin-table";
+import { Button } from "../../ui/button";
 import { EmptyState, ErrorBox, PageHeader } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
 import { statusLabel } from "./status";
@@ -94,6 +95,16 @@ export function CollectionView({
       }),
     onSuccess: refreshEntries,
   });
+  const createMutation = useMutation({
+    mutationFn: () =>
+      api.post<EntryRow>("/entries", {
+        collection: collectionName,
+        locale: language,
+      }),
+    onSuccess: (row) => {
+      window.location.href = `/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`;
+    },
+  });
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
       api.delete<{ removed: boolean }>(`/entries/${encodeURIComponent(id)}`),
@@ -116,6 +127,18 @@ export function CollectionView({
         description={renderCollectionDescription(collection, language)}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {collection ? (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => createMutation.mutate()}
+                disabled={createMutation.isPending}
+                title={t(language, "crud.createTooltip", { name: heading })}
+              >
+                <Plus className="size-3.5" aria-hidden />
+                {createMutation.isPending ? t(language, "crud.saving") : t(language, "crud.create")}
+              </Button>
+            ) : null}
             {status ? <StatusBadge status={status} /> : null}
             {collection?.hasTranslations ? (
               <span className="badge-status bg-accent text-accent-foreground">i18n</span>
@@ -128,6 +151,8 @@ export function CollectionView({
           </div>
         }
       />
+
+      {createMutation.isError ? <ErrorBox error={createMutation.error} /> : null}
 
       {collection ? (
         <CollectionSearch

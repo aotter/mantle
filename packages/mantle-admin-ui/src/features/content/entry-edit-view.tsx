@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, PackageCheck, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, Copy, ExternalLink, ImagePlus, PackageCheck, Plus, Save, Trash2 } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
@@ -46,8 +46,11 @@ export function EntryEditView({
   const title = entryTitle(data, payload.entry.id);
   const dirty = JSON.stringify(data) !== JSON.stringify(payload.entry.data);
   const parentLink = parentAdminLink(payload.collection, data);
-  const inlineRelated = payload.related.filter(isPrimaryCommerceSection);
-  const sidebarRelated = payload.related.filter((section) => !isPrimaryCommerceSection(section));
+  const inlineRelated = payload.related.filter((section) => isPrimaryCommerceSection(section, payload.collection.name));
+  const sidebarRelated = payload.related.filter((section) => !isPrimaryCommerceSection(section, payload.collection.name));
+  const productTranslations = inlineRelated.filter((section) => section.collection.name === "product-translations");
+  const productSkus = inlineRelated.filter((section) => section.collection.name === "product-skus");
+  const isProduct = payload.collection.name === "products";
 
   return (
     <div className="space-y-6">
@@ -95,21 +98,47 @@ export function EntryEditView({
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-5">
-          <SectionCard>
-            <SectionTitle
-              title={t(language, "entryEdit.fields")}
-              body={payload.collection.description}
-            />
-            <SchemaFields
-              schema={payload.collection.schema}
+          {isProduct ? (
+            <ProductCommerceFields
               value={data}
-              path={[]}
               onChange={setData}
               language={language}
             />
-          </SectionCard>
+          ) : (
+            <SectionCard>
+              <SectionTitle
+                title={t(language, "entryEdit.fields")}
+                body={friendlyDescription(payload.collection.description)}
+              />
+              <SchemaFields
+                schema={payload.collection.schema}
+                value={data}
+                path={[]}
+                onChange={setData}
+                language={language}
+              />
+            </SectionCard>
+          )}
 
-          {inlineRelated.length > 0 ? (
+          {productTranslations.length > 0 ? (
+            <RelatedSections
+              sections={productTranslations}
+              language={language}
+              parentTitle={title}
+              onSaved={() => void query.refetch()}
+            />
+          ) : null}
+
+          {productSkus.length > 0 ? (
+            <RelatedSections
+              sections={productSkus}
+              language={language}
+              parentTitle={title}
+              onSaved={() => void query.refetch()}
+            />
+          ) : null}
+
+          {!isProduct && inlineRelated.length > 0 ? (
             <RelatedSections
               sections={inlineRelated}
               language={language}
@@ -157,6 +186,146 @@ function SectionTitle({
       <h2 className="text-lg font-semibold">{title}</h2>
       {body ? <p className="mt-1 text-sm leading-6 text-muted-foreground">{body}</p> : null}
     </div>
+  );
+}
+
+function ProductCommerceFields({
+  value,
+  onChange,
+  language,
+}: {
+  value: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+  language: AdminLanguage;
+}): React.ReactElement {
+  const setField = (field: string, next: unknown): void => onChange({ ...value, [field]: next });
+  return (
+    <>
+      <SectionCard>
+        <SectionTitle
+          title={t(language, "entryEdit.productVisual")}
+          body={t(language, "entryEdit.productVisualBody")}
+        />
+        <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
+          <div className="relative min-h-48 overflow-hidden rounded-lg border border-[var(--glass-border)] bg-[radial-gradient(circle_at_30%_20%,rgba(124,184,255,0.34),transparent_32%),linear-gradient(135deg,rgba(26,48,98,0.16),rgba(127,231,210,0.18))]">
+            <div className="absolute inset-4 flex flex-col items-center justify-center rounded-md border border-white/35 bg-white/20 text-center backdrop-blur-md dark:bg-slate-950/20">
+              <ImagePlus className="mb-2 size-7 text-primary" aria-hidden />
+              <p className="text-sm font-semibold text-foreground">
+                {value["coverAssetId"] ? t(language, "entryEdit.coverLinked") : t(language, "entryEdit.coverEmpty")}
+              </p>
+              {value["coverAssetId"] ? (
+                <code className="mt-2 max-w-[14rem] truncate text-xs text-muted-foreground">
+                  {stringForInput(value["coverAssetId"])}
+                </code>
+              ) : null}
+            </div>
+          </div>
+          <div className="space-y-3">
+            <FieldShell label={t(language, "entryEdit.coverAsset")} hint={t(language, "entryEdit.coverAssetHint")}>
+              <input
+                className="admin-input"
+                value={stringForInput(value["coverAssetId"])}
+                onChange={(event) => setField("coverAssetId", event.target.value)}
+                placeholder="media asset id"
+              />
+            </FieldShell>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="secondary" size="sm">
+                <a href="/admin/media">
+                  <ImagePlus className="size-3.5" aria-hidden />
+                  {t(language, "media.page.title")}
+                </a>
+              </Button>
+              <CopyValueButton value={stringForInput(value["coverAssetId"])} language={language} />
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard>
+        <SectionTitle
+          title={t(language, "entryEdit.productBase")}
+          body={t(language, "entryEdit.productBaseBody")}
+        />
+        <div className="grid gap-4 md:grid-cols-2">
+          <FieldShell label={t(language, "entryEdit.slug")} required>
+            <input
+              className="admin-input"
+              value={stringForInput(value["slug"])}
+              onChange={(event) => setField("slug", event.target.value)}
+            />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.operatorSku")}>
+            <input
+              className="admin-input"
+              value={stringForInput(value["sku"])}
+              onChange={(event) => setField("sku", event.target.value)}
+            />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.inventoryMode")} required>
+            <select
+              className="admin-input"
+              value={stringForInput(value["inventoryMode"])}
+              onChange={(event) => setField("inventoryMode", event.target.value)}
+            >
+              <option value="">{t(language, "entryEdit.emptyOption")}</option>
+              <option value="tracked">{t(language, "entryEdit.inventoryTracked")}</option>
+              <option value="untracked">{t(language, "entryEdit.inventoryUntracked")}</option>
+            </select>
+          </FieldShell>
+        </div>
+      </SectionCard>
+    </>
+  );
+}
+
+function FieldShell({
+  label,
+  hint,
+  required,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  required?: boolean;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <div className="block space-y-2">
+      <span className="flex items-center gap-1 text-sm font-semibold text-foreground">
+        {label}
+        {required ? <span className="text-destructive">*</span> : null}
+      </span>
+      {hint ? <span className="block text-xs leading-5 text-muted-foreground">{hint}</span> : null}
+      {children}
+    </div>
+  );
+}
+
+function CopyValueButton({
+  value,
+  language,
+}: {
+  value: string;
+  language: AdminLanguage;
+}): React.ReactElement {
+  const [copied, setCopied] = React.useState(false);
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={!value}
+      onClick={() => {
+        void navigator.clipboard.writeText(value).then(() => {
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1200);
+        });
+      }}
+    >
+      {copied ? <Check className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+      {t(language, "common.copy")}
+    </Button>
   );
 }
 
@@ -230,7 +399,7 @@ function SchemaField({
 }): React.ReactElement {
   const type = schemaType(schema);
   const label = fieldLabel(name);
-  const description = typeof schema.description === "string" ? schema.description : undefined;
+  const description = friendlyDescription(typeof schema.description === "string" ? schema.description : undefined);
   const setValue = (next: unknown): void => onChange(writePath(rootValue, path, next));
 
   return (
@@ -451,6 +620,13 @@ function RelatedSections({
             parentTitle={parentTitle}
             onSaved={onSaved}
           />
+        ) : section.collection.name === "product-translations" ? (
+          <ProductTranslationSection
+            key={`${section.collection.name}:${section.relationship.childField}`}
+            section={section}
+            language={language}
+            onSaved={onSaved}
+          />
         ) : (
           <SectionCard key={`${section.collection.name}:${section.relationship.childField}`}>
             <SectionTitle
@@ -485,6 +661,130 @@ function RelatedSections({
         )
       ))}
     </>
+  );
+}
+
+function ProductTranslationSection({
+  section,
+  language,
+  onSaved,
+}: {
+  section: RelatedEntrySection;
+  language: AdminLanguage;
+  onSaved?: () => void;
+}): React.ReactElement {
+  return (
+    <SectionCard>
+      <SectionTitle
+        title={t(language, "entryEdit.productInfo")}
+        body={t(language, "entryEdit.productInfoBody")}
+      />
+      {section.entries.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t(language, "entryEdit.noChildEntries")}</p>
+      ) : (
+        <div className="space-y-4">
+          {section.entries.map((entry) => (
+            <ProductTranslationCard
+              key={entry.id}
+              entry={entry}
+              language={language}
+              onSaved={onSaved}
+            />
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function ProductTranslationCard({
+  entry,
+  language,
+  onSaved,
+}: {
+  entry: RelatedEntrySection["entries"][number];
+  language: AdminLanguage;
+  onSaved?: () => void;
+}): React.ReactElement {
+  const [draft, setDraft] = React.useState<Record<string, unknown>>(entry.data);
+  React.useEffect(() => setDraft(entry.data), [entry.data]);
+  const save = useMutation({
+    mutationFn: (nextData: Record<string, unknown>) =>
+      api.patch<EntryEditorPayload>(`/entries/${encodeURIComponent(entry.id)}/editor`, {
+        data: nextData,
+      }),
+    onSuccess: (payload) => {
+      setDraft(payload.entry.data);
+      onSaved?.();
+    },
+  });
+  const dirty = JSON.stringify(draft) !== JSON.stringify(entry.data);
+  const setField = (field: string, value: unknown): void => {
+    setDraft((current) => ({ ...current, [field]: value }));
+  };
+  return (
+    <div className="rounded-lg border border-[var(--glass-border)] bg-background/35 p-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="label-eyebrow">{stringForInput(draft["locale"]) || entry.locale || "-"}</p>
+          <h3 className="text-base font-semibold">{stringForInput(draft["title"]) || entryTitle(entry.data, entry.id)}</h3>
+        </div>
+        <a
+          className="row-action"
+          title={t(language, "entryEdit.openAdvanced")}
+          href={`/admin/c/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}
+        >
+          <ExternalLink className="size-3.5" aria-hidden />
+        </a>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <FieldShell label={t(language, "entryEdit.title")} required>
+          <input
+            className="admin-input"
+            value={stringForInput(draft["title"])}
+            onChange={(event) => setField("title", event.target.value)}
+          />
+        </FieldShell>
+        <FieldShell label={t(language, "entryEdit.coverAlt")}>
+          <input
+            className="admin-input"
+            value={stringForInput(draft["coverAlt"])}
+            onChange={(event) => setField("coverAlt", event.target.value)}
+          />
+        </FieldShell>
+      </div>
+      <div className="mt-4">
+        <FieldShell label={t(language, "entryEdit.shortDescription")}>
+          <input
+            className="admin-input"
+            value={stringForInput(draft["shortDescription"])}
+            onChange={(event) => setField("shortDescription", event.target.value)}
+          />
+        </FieldShell>
+      </div>
+      <div className="mt-4">
+        <FieldShell label={t(language, "entryEdit.bodyMarkdown")}>
+          <RichTextEditor
+            compact
+            value={stringForInput(draft["body"])}
+            onChange={(value) => setField("body", value)}
+          />
+        </FieldShell>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">{t(language, "entryEdit.productInfoHint")}</p>
+        <Button
+          type="button"
+          size="sm"
+          disabled={!dirty || save.isPending}
+          onClick={() => save.mutate(draft)}
+        >
+          <Save className="size-3.5" aria-hidden />
+          {save.isPending ? t(language, "crud.saving") : t(language, "entryEdit.save")}
+        </Button>
+      </div>
+      {save.isError ? <p className="mt-2 text-xs text-destructive">{save.error instanceof Error ? save.error.message : String(save.error)}</p> : null}
+    </div>
   );
 }
 
@@ -667,8 +967,11 @@ function parentAdminLink(
   };
 }
 
-function isPrimaryCommerceSection(section: RelatedEntrySection): boolean {
-  return section.collection.name === "product-skus";
+function isPrimaryCommerceSection(section: RelatedEntrySection, parentCollection: string): boolean {
+  return parentCollection === "products" && (
+    section.collection.name === "product-skus" ||
+    section.collection.name === "product-translations"
+  );
 }
 
 function entryTitle(data: Record<string, unknown>, fallback: string): string {
@@ -695,6 +998,19 @@ function multilineField(schema: JsonSchema, name: string): boolean {
     /body|description|content|intro|notes|summary/i.test(name) ||
     (typeof schema.maxLength === "number" && schema.maxLength > 160)
   );
+}
+
+function friendlyDescription(description: string | null | undefined): string | undefined {
+  if (!description) return undefined;
+  const raw = description.trim();
+  if (!raw) return undefined;
+  if (
+    raw.length > 160 ||
+    /`|Schema|schema|BCP|ISO|ContentState|column|MediaAsset|create_media_upload|runtime\.|@aotter/i.test(raw)
+  ) {
+    return undefined;
+  }
+  return raw;
 }
 
 function fieldLabel(name: string): string {

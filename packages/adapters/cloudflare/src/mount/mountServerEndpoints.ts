@@ -238,6 +238,53 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     return jsonResponse(200, { items, next_cursor: result.nextCursor ?? null });
   });
 
+  guarded("post", "/admin/api/entries", async (c, gate) =>
+    runUseCase("POST /admin/api/entries", async () => {
+      const runtime = await ref.get();
+      const body = (await c.req.raw.json().catch(() => ({}))) as {
+        collection?: unknown;
+        locale?: unknown;
+      };
+      if (typeof body.collection !== "string" || !body.collection.trim()) {
+        throw new DiagnosticError(
+          runtimeDiagnostic({
+            code: "INPUT_VALIDATION_FAILED",
+            severity: "error",
+            path: "POST /admin/api/entries#/collection",
+            expected: "declared collection name",
+            message: "A `collection` string is required.",
+          }),
+        );
+      }
+      const collection = body.collection.trim();
+      const schema = schemas.find((item) => item.metadata.name === collection);
+      if (!schema) {
+        throw new DiagnosticError(
+          runtimeDiagnostic({
+            code: "NOT_FOUND",
+            severity: "error",
+            path: "POST /admin/api/entries#/collection",
+            value: collection,
+            expected: "declared Schema manifest",
+            message: `Schema '${collection}' was not found.`,
+          }),
+        );
+      }
+      const locale = typeof body.locale === "string" && body.locale
+        ? body.locale
+        : (await runtime.siteConfig.load().catch(() => null))?.canonicalLocale ?? "zh-TW";
+      const inserted = collection === "products"
+        ? await createProductEntry(runtime, schemas, locale, gate.userId)
+        : await createGenericEntry(runtime, schema, locale, gate.userId);
+      return adminListItem(
+        inserted,
+        inserted.collection === "products"
+          ? await localizedProductTitles(runtime, locale)
+          : new Map<string, string>(),
+      );
+    }),
+  );
+
   guarded("patch", "/admin/api/entries/:id", async (c) =>
     runUseCase(`PATCH /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
@@ -927,6 +974,169 @@ async function duplicateGenericEntry(
     data,
     authorId,
   });
+}
+
+async function createGenericEntry(
+  runtime: CmsRuntime,
+  schema: SchemaManifest,
+  locale: string,
+  authorId: string | null,
+): Promise<AdminEntryRow> {
+  const data = await defaultEntryData(runtime, schema, locale);
+  return insertAdminEntry(runtime, {
+    id: adminId("entry_admin_new"),
+    collection: schema.metadata.name,
+    status: "draft",
+    data,
+    authorId,
+  });
+}
+
+async function createProductEntry(
+  runtime: CmsRuntime,
+  schemas: SchemaManifest[],
+  locale: string,
+  authorId: string | null,
+): Promise<AdminEntryRow> {
+  const productSchema = schemas.find((schema) => schema.metadata.name === "products");
+  if (!productSchema) {
+    throw new DiagnosticError(
+      runtimeDiagnostic({
+        code: "NOT_FOUND",
+        severity: "error",
+        path: "POST /admin/api/entries#/products",
+        expected: "products Schema manifest",
+        message: "The products schema is not registered.",
+      }),
+    );
+  }
+
+  const slug = await uniqueDataField(runtime, "products", "slug", "new-product");
+  const sku = slug.toUpperCase().replace(/-/g, "_");
+  const currency = await readSiteCurrency(runtime);
+  const baseData = await defaultEntryData(runtime, productSchema, locale);
+  const product = await insertAdminEntry(runtime, {
+    id: adminId("entry_admin_product"),
+    collection: "products",
+    status: "draft",
+    data: {
+      ...baseData,
+      slug,
+      sku,
+      priceMinor: 0,
+      currency,
+      inventoryMode: "tracked",
+      createdAt: Date.now(),
+    },
+    authorId,
+  });
+
+  if (schemas.some((schema) => schema.metadata.name === "product-translations")) {
+    await insertAdminEntry(runtime, {
+      id: adminId("entry_admin_translation"),
+      collection: "product-translations",
+      status: "draft",
+      data: {
+        slug,
+        locale,
+        title: locale.startsWith("zh") ? "新商品" : "New product",
+        shortDescription: "",
+        body: "",
+        coverAlt: "",
+      },
+      authorId,
+    });
+  }
+
+  if (schemas.some((schema) => schema.metadata.name === "product-skus")) {
+    await insertAdminEntry(runtime, {
+      id: adminId("entry_admin_sku"),
+      collection: "product-skus",
+      status: "draft",
+      data: {
+        skuCode: sku,
+        productSlug: slug,
+        optionValues: {},
+        priceMinor: 0,
+        compareAtPriceMinor: null,
+        currency,
+        inventoryMode: "tracked",
+        images: [],
+        createdAt: Date.now(),
+      },
+      authorId,
+    });
+  }
+
+  return product;
+}
+
+async function defaultEntryData(
+  runtime: CmsRuntime,
+  schema: SchemaManifest,
+  locale: string,
+): Promise<Record<string, unknown>> {
+  const data: Record<string, unknown> = {};
+  const properties = schema.spec.schema.properties ?? {};
+  const required = new Set(schema.spec.schema.required ?? []);
+  for (const [field, fieldSchema] of Object.entries(properties)) {
+    if (fieldSchema.default !== undefined) {
+      data[field] = fieldSchema.default;
+      continue;
+    }
+    if (fieldSchema["x-mantle-bind"] === "now" || field === "createdAt" || field === "updatedAt") {
+      data[field] = Date.now();
+      continue;
+    }
+    if (field === "locale") {
+      data[field] = locale;
+      continue;
+    }
+    if (field === "currency") {
+      data[field] = await readSiteCurrency(runtime);
+      continue;
+    }
+    if (field === "inventoryMode" && fieldSchema.enum?.includes("tracked")) {
+      data[field] = "tracked";
+      continue;
+    }
+    if (isSlugField(field, fieldSchema)) {
+      data[field] = await uniqueDataField(runtime, schema.metadata.name, field, `new-${singularizeIdentifier(schema.metadata.name)}`);
+      continue;
+    }
+    if (required.has(field)) {
+      data[field] = defaultValueForJsonSchema(fieldSchema);
+    }
+  }
+  return data;
+}
+
+async function readSiteCurrency(runtime: CmsRuntime): Promise<string> {
+  const row = await runtime.db
+    .prepare(`SELECT value FROM site_config WHERE key = 'currency' LIMIT 1`)
+    .first<{ value: string }>();
+  return row?.value || "TWD";
+}
+
+function isSlugField(field: string, schema: JsonSchema): boolean {
+  return (
+    field === "slug" ||
+    /slug/i.test(field) ||
+    (typeof schema.pattern === "string" && schema.pattern.includes("a-z0-9-"))
+  );
+}
+
+function defaultValueForJsonSchema(schema: JsonSchema): unknown {
+  if (schema.default !== undefined) return schema.default;
+  if (schema.enum?.length) return schema.enum[0];
+  const type = Array.isArray(schema.type)
+    ? schema.type.find((value) => value !== "null")
+    : schema.type;
+  if (type === "integer" || type === "number") return 0;
+  if (type === "boolean") return false;
+  if (type === "array") return [];
+  if (type === "object" || schema.properties) return {};
+  return "";
 }
 
 async function deleteAdminEntry(
