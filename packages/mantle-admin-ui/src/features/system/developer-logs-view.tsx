@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, ExternalLink, Save, TerminalSquare } from "lucide-react";
+import { Activity, ChevronLeft, ChevronRight, ExternalLink, Save, ShieldCheck, TerminalSquare } from "lucide-react";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
@@ -12,6 +12,10 @@ const TIMESTAMP_FMT = new Intl.DateTimeFormat(undefined, {
   dateStyle: "short",
   timeStyle: "short",
 });
+
+const PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
+
+type DeveloperLogsTab = "logs" | "coverage";
 
 type LogForm = {
   source: string;
@@ -37,6 +41,11 @@ export function DeveloperLogsView(): React.ReactElement {
     message: "",
     details: "",
   });
+  const [activeTab, setActiveTab] = React.useState<DeveloperLogsTab>("logs");
+  const [logPage, setLogPage] = React.useState(1);
+  const [logPageSize, setLogPageSize] = React.useState<(typeof PAGE_SIZE_OPTIONS)[number]>(10);
+  const [coveragePage, setCoveragePage] = React.useState(1);
+  const [coveragePageSize, setCoveragePageSize] = React.useState<(typeof PAGE_SIZE_OPTIONS)[number]>(10);
   const createLog = useMutation({
     mutationFn: (next: LogForm) => api.post<DeveloperLogItem>("/developer-logs", next),
     onSuccess: () => {
@@ -53,110 +62,165 @@ export function DeveloperLogsView(): React.ReactElement {
         description={t(language, "developerLogs.body")}
       />
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <SectionCard>
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold">{t(language, "developerLogs.formTitle")}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">{t(language, "developerLogs.formBody")}</p>
-            </div>
-            <TerminalSquare className="size-5 text-primary" aria-hidden />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label={t(language, "developerLogs.source")}>
-              <select
-                className="admin-input"
-                value={form.source}
-                onChange={(event) => setForm((current) => ({ ...current, source: event.target.value }))}
-              >
-                <option value="manual">{t(language, "developerLogs.source.manual")}</option>
-                <option value="llm">{t(language, "developerLogs.source.llm")}</option>
-                <option value="tui">{t(language, "developerLogs.source.tui")}</option>
-                <option value="agent">{t(language, "developerLogs.source.agent")}</option>
-                <option value="system">{t(language, "developerLogs.source.system")}</option>
-              </select>
-            </Field>
-            <Field label={t(language, "developerLogs.level")}>
-              <select
-                className="admin-input"
-                value={form.level}
-                onChange={(event) => setForm((current) => ({ ...current, level: event.target.value }))}
-              >
-                <option value="info">{t(language, "developerLogs.level.info")}</option>
-                <option value="success">{t(language, "developerLogs.level.success")}</option>
-                <option value="warning">{t(language, "developerLogs.level.warning")}</option>
-                <option value="error">{t(language, "developerLogs.level.error")}</option>
-              </select>
-            </Field>
-          </div>
-          <div className="mt-3 grid gap-3">
-            <Field label={t(language, "developerLogs.message")}>
-              <input
-                className="admin-input"
-                value={form.message}
-                onChange={(event) => setForm((current) => ({ ...current, message: event.target.value }))}
-                placeholder={t(language, "developerLogs.messagePlaceholder")}
-              />
-            </Field>
-            <Field label={t(language, "developerLogs.details")}>
-              <textarea
-                className="admin-textarea min-h-28"
-                value={form.details}
-                onChange={(event) => setForm((current) => ({ ...current, details: event.target.value }))}
-                placeholder={t(language, "developerLogs.detailsPlaceholder")}
-              />
-            </Field>
-            {createLog.isError ? <ErrorBox error={createLog.error} /> : null}
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                disabled={createLog.isPending || !form.message.trim()}
-                onClick={() => createLog.mutate(form)}
-              >
-                <Save className="size-4" aria-hidden />
-                {createLog.isPending ? t(language, "crud.saving") : t(language, "developerLogs.add")}
-              </Button>
-            </div>
-          </div>
-        </SectionCard>
-
-        <SectionCard>
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold">{t(language, "developerLogs.recent")}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">{t(language, "developerLogs.recentBody")}</p>
-            </div>
-            <Activity className="size-5 text-primary" aria-hidden />
-          </div>
-          {logs.isLoading ? <div className="h-40 animate-pulse rounded-lg bg-muted/50" /> : null}
-          {logs.isError ? <ErrorBox error={logs.error} /> : null}
-          {logs.data && logs.data.items.length === 0 ? (
-            <EmptyState
-              icon={TerminalSquare}
-              title={t(language, "developerLogs.emptyTitle")}
-              description={t(language, "developerLogs.emptyBody")}
-            />
-          ) : null}
-          {logs.data && logs.data.items.length > 0 ? (
-            <div className="divide-y divide-[var(--glass-border)] overflow-hidden rounded-lg border border-[var(--glass-border)] bg-background/25">
-              {logs.data.items.map((item) => <LogRow key={item.id} item={item} />)}
-            </div>
-          ) : null}
-        </SectionCard>
+      <div className="segmented-control w-fit max-w-full overflow-x-auto" role="tablist" aria-label={t(language, "developerLogs.tabsLabel")}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "logs"}
+          data-active={activeTab === "logs" ? "true" : undefined}
+          onClick={() => setActiveTab("logs")}
+        >
+          <Activity className="size-4" aria-hidden />
+          {t(language, "developerLogs.tab.logs")}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "coverage"}
+          data-active={activeTab === "coverage" ? "true" : undefined}
+          onClick={() => setActiveTab("coverage")}
+        >
+          <ShieldCheck className="size-4" aria-hidden />
+          {t(language, "developerLogs.tab.coverage")}
+        </button>
       </div>
 
-      <SectionCard>
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">{t(language, "developerLogs.coverageTitle")}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{t(language, "developerLogs.coverageBody")}</p>
-          </div>
-          {coverage.data ? <CoverageSummary report={coverage.data} /> : null}
+      {activeTab === "logs" ? (
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]" role="tabpanel">
+          <SectionCard>
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">{t(language, "developerLogs.formTitle")}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{t(language, "developerLogs.formBody")}</p>
+              </div>
+              <TerminalSquare className="size-5 text-primary" aria-hidden />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={t(language, "developerLogs.source")}>
+                <select
+                  className="admin-input"
+                  value={form.source}
+                  onChange={(event) => setForm((current) => ({ ...current, source: event.target.value }))}
+                >
+                  <option value="manual">{t(language, "developerLogs.source.manual")}</option>
+                  <option value="llm">{t(language, "developerLogs.source.llm")}</option>
+                  <option value="tui">{t(language, "developerLogs.source.tui")}</option>
+                  <option value="agent">{t(language, "developerLogs.source.agent")}</option>
+                  <option value="system">{t(language, "developerLogs.source.system")}</option>
+                </select>
+              </Field>
+              <Field label={t(language, "developerLogs.level")}>
+                <select
+                  className="admin-input"
+                  value={form.level}
+                  onChange={(event) => setForm((current) => ({ ...current, level: event.target.value }))}
+                >
+                  <option value="info">{t(language, "developerLogs.level.info")}</option>
+                  <option value="success">{t(language, "developerLogs.level.success")}</option>
+                  <option value="warning">{t(language, "developerLogs.level.warning")}</option>
+                  <option value="error">{t(language, "developerLogs.level.error")}</option>
+                </select>
+              </Field>
+            </div>
+            <div className="mt-3 grid gap-3">
+              <Field label={t(language, "developerLogs.message")}>
+                <input
+                  className="admin-input"
+                  value={form.message}
+                  onChange={(event) => setForm((current) => ({ ...current, message: event.target.value }))}
+                  placeholder={t(language, "developerLogs.messagePlaceholder")}
+                />
+              </Field>
+              <Field label={t(language, "developerLogs.details")}>
+                <textarea
+                  className="admin-textarea min-h-28"
+                  value={form.details}
+                  onChange={(event) => setForm((current) => ({ ...current, details: event.target.value }))}
+                  placeholder={t(language, "developerLogs.detailsPlaceholder")}
+                />
+              </Field>
+              {createLog.isError ? <ErrorBox error={createLog.error} /> : null}
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  disabled={createLog.isPending || !form.message.trim()}
+                  onClick={() => createLog.mutate(form)}
+                >
+                  <Save className="size-4" aria-hidden />
+                  {createLog.isPending ? t(language, "crud.saving") : t(language, "developerLogs.add")}
+                </Button>
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard>
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">{t(language, "developerLogs.recent")}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{t(language, "developerLogs.recentBody")}</p>
+              </div>
+              <Activity className="size-5 text-primary" aria-hidden />
+            </div>
+            {logs.isLoading ? <div className="h-40 animate-pulse rounded-lg bg-muted/50" /> : null}
+            {logs.isError ? <ErrorBox error={logs.error} /> : null}
+            {logs.data && logs.data.items.length === 0 ? (
+              <EmptyState
+                icon={TerminalSquare}
+                title={t(language, "developerLogs.emptyTitle")}
+                description={t(language, "developerLogs.emptyBody")}
+              />
+            ) : null}
+            {logs.data && logs.data.items.length > 0 ? (
+              <>
+                <div className="divide-y divide-[var(--glass-border)] overflow-hidden rounded-lg border border-[var(--glass-border)] bg-background/25">
+                  {paginate(logs.data.items, logPage, logPageSize).map((item) => <LogRow key={item.id} item={item} />)}
+                </div>
+                <PaginationControls
+                  page={logPage}
+                  pageSize={logPageSize}
+                  totalItems={logs.data.items.length}
+                  onPageChange={setLogPage}
+                  onPageSizeChange={(nextPageSize) => {
+                    setLogPageSize(nextPageSize);
+                    setLogPage(1);
+                  }}
+                />
+              </>
+            ) : null}
+          </SectionCard>
         </div>
-        {coverage.isLoading ? <div className="h-48 animate-pulse rounded-lg bg-muted/50" /> : null}
-        {coverage.isError ? <ErrorBox error={coverage.error} /> : null}
-        {coverage.data ? <CoverageTable items={coverage.data.items} /> : null}
-      </SectionCard>
+      ) : null}
+
+      {activeTab === "coverage" ? (
+        <div role="tabpanel">
+          <SectionCard>
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">{t(language, "developerLogs.coverageTitle")}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{t(language, "developerLogs.coverageBody")}</p>
+            </div>
+            {coverage.data ? <CoverageSummary report={coverage.data} /> : null}
+          </div>
+          {coverage.isLoading ? <div className="h-48 animate-pulse rounded-lg bg-muted/50" /> : null}
+          {coverage.isError ? <ErrorBox error={coverage.error} /> : null}
+          {coverage.data ? (
+            <>
+              <CoverageTable items={paginate(coverage.data.items, coveragePage, coveragePageSize)} />
+              <PaginationControls
+                page={coveragePage}
+                pageSize={coveragePageSize}
+                totalItems={coverage.data.items.length}
+                onPageChange={setCoveragePage}
+                onPageSizeChange={(nextPageSize) => {
+                  setCoveragePageSize(nextPageSize);
+                  setCoveragePage(1);
+                }}
+              />
+            </>
+          ) : null}
+          </SectionCard>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -241,6 +305,85 @@ function CoverageTable({ items }: { items: CoverageItem[] }): React.ReactElement
   );
 }
 
+function PaginationControls({
+  page,
+  pageSize,
+  totalItems,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  page: number;
+  pageSize: (typeof PAGE_SIZE_OPTIONS)[number];
+  totalItems: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: (typeof PAGE_SIZE_OPTIONS)[number]) => void;
+}): React.ReactElement {
+  const { language } = usePreferences();
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const start = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const end = Math.min(totalItems, currentPage * pageSize);
+
+  React.useEffect(() => {
+    if (page > totalPages) onPageChange(totalPages);
+  }, [onPageChange, page, totalPages]);
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+      <div>
+        {t(language, "developerLogs.paginationRange", {
+          start: String(start),
+          end: String(end),
+          total: String(totalItems),
+        })}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="inline-flex items-center gap-2">
+          <span>{t(language, "developerLogs.rowsPerPage")}</span>
+          <select
+            className="admin-input h-9 w-24 py-1 text-sm"
+            value={pageSize}
+            onChange={(event) => onPageSizeChange(toPageSize(event.target.value))}
+          >
+            {PAGE_SIZE_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="inline-flex items-center gap-1">
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon"
+            className="size-9"
+            disabled={currentPage <= 1}
+            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+            aria-label={t(language, "developerLogs.previousPage")}
+          >
+            <ChevronLeft className="size-4" aria-hidden />
+          </Button>
+          <span className="min-w-20 text-center font-semibold text-foreground">
+            {currentPage} / {totalPages}
+          </span>
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon"
+            className="size-9"
+            disabled={currentPage >= totalPages}
+            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+            aria-label={t(language, "developerLogs.nextPage")}
+          >
+            <ChevronRight className="size-4" aria-hidden />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatusPill({ status }: { status: string }): React.ReactElement {
   const tone =
     status === "covered" || status === "success"
@@ -256,4 +399,16 @@ function StatusPill({ status }: { status: string }): React.ReactElement {
 function formatTimestamp(value: number): string {
   if (!value) return "-";
   return TIMESTAMP_FMT.format(new Date(value));
+}
+
+function paginate<T>(items: T[], page: number, pageSize: number): T[] {
+  const start = (page - 1) * pageSize;
+  return items.slice(start, start + pageSize);
+}
+
+function toPageSize(value: string): (typeof PAGE_SIZE_OPTIONS)[number] {
+  const numeric = Number(value);
+  return PAGE_SIZE_OPTIONS.includes(numeric as (typeof PAGE_SIZE_OPTIONS)[number])
+    ? (numeric as (typeof PAGE_SIZE_OPTIONS)[number])
+    : 10;
 }
