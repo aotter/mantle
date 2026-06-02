@@ -11,6 +11,7 @@ import { CollectionView } from "../features/content/collection-view";
 import { EntryEditView } from "../features/content/entry-edit-view";
 import { EditorView } from "../features/editor/editor-view";
 import { MediaLibraryView } from "../features/media/media-library-view";
+import { ApprovalsView } from "../features/system/approvals-view";
 import { NotFoundView } from "../features/system/not-found-view";
 import { PreferencesView } from "../features/system/preferences-view";
 import { SettingsView } from "../features/system/settings-view";
@@ -114,11 +115,7 @@ function Gate({ path }: { path: string }): React.ReactElement {
   if (path === "/admin/approvals") {
     return (
       <AuthenticatedLayout>
-        <NotFoundView
-          path={path}
-          intent="planned"
-          kind="route"
-        />
+        <ApprovalsView />
       </AuthenticatedLayout>
     );
   }
