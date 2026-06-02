@@ -29,6 +29,8 @@ After `create-mantle` runs, the scaffold's ground truth lives in:
 | `manifests/*.yaml` | Schemas / Views / Procedures / Triggers this archetype ships |
 | `src/mantleConfig.ts` | Site defaults, handler-ref registration, runtime bindings |
 | `src/handlers/` | Handler implementations (referenced from Procedures with `handler.kind: ref`) |
+| `src/.mantle/generated.*.ts` | Scaffolder-owned feature glue, regenerated from selected feature overlays |
+| `.mantle/features.json` | Scaffolder-owned receipt of selected source overlays |
 | `mantle/site.md` | Site semantic layer — brand / voice / locales / futures / revisions |
 | `AGENTS.md` | Cross-tool agent entry; updates on every Mantle pass |
 
@@ -169,13 +171,13 @@ If any value is unauthorized — including auto-derivation that "looks reasonabl
 
 1. **Confirm the synthesized draft.** User accepts or corrects.
 
-2. **Run the composed `## Run this` block.** Scroll to the `## Run this` section at the bottom of this composed document — the landing composer baked the archetype and theme literals into the command. Copy it verbatim, fill the 6 `<<...>>` markers from your authorized interview values (see Prerequisites table above), and run it.
+2. **Run the composed `## Run this` block.** Scroll to the `## Run this` section at the bottom of this composed document — the landing composer baked the archetype, theme, and any preselected feature literals into the command. Copy it verbatim, fill the 6 `<<...>>` markers from your authorized interview values (see Prerequisites table above), and run it.
 
-   Do not modify the literal flags or the archetype positional. Do not invent additional flags. If a marker has no authorized value, you're still in the interview — return there.
+   Do not modify the literal flags or the archetype positional. Do not invent additional `--feature` flags from vibes; features must come from the composed command or an explicit user request. If a marker has no authorized value, you're still in the interview — return there.
 
-   The CLI fetches `sources.json` at runtime from `mantle-starters/develop` unless the composed command pins another ref, downloads the starters tarball, merges `_common/` + `<archetype>/` + (optional) `themes/<theme>/`, fills `{{PLACEHOLDER}}` macros, renames `.template` files, runs `git init` and `pnpm install`. RUN_NOTES JSON arrives on stdout.
+   The CLI fetches `sources.json` at runtime from `mantle-starters/main` unless the composed command pins another ref, downloads the starters tarball, merges `_common/` + `<archetype>/` + selected feature overlays + (optional) `themes/<theme>/`, fills `{{PLACEHOLDER}}` macros, renames `.template` files, runs `git init` and `pnpm install`. RUN_NOTES JSON arrives on stdout, including `features` when overlays were selected.
 
-3. **Read the RUN_NOTES.** The `files_written` list is your scaffold inventory. Walk the ground-truth files — at minimum `manifests/`, `src/mantleConfig.ts`, `mantle/site.md` — before deciding anything else.
+3. **Read the RUN_NOTES.** The `files_written` list is your scaffold inventory. If `features` is non-empty, read `.mantle/features.json` and the generated `src/.mantle/generated.*.ts` glue before deciding anything else. Walk the ground-truth files — at minimum `manifests/`, `src/mantleConfig.ts`, `mantle/site.md` — before deciding anything else.
 
 4. **Adjustment window** (optional, see § below). Only if the interview surfaced a concrete deletion or single-field gap. Always `pnpm validate` after edit; commit before the Mantle subagent runs.
 
@@ -249,7 +251,7 @@ If any value is unauthorized — including auto-derivation that "looks reasonabl
 
 11. **Commit.** If step 4 produced an adjustment, that's its own commit. Then the main commit: `mantle: notes from install interview`.
 
-12. **Continue to provision — don't push a URL onto the user.** Provision is the next phase in the same conversation. Replace `install` with `provision` in the composed URL you read at the start, keep the same `?type=` + `?theme=` query, fetch that URL, follow it. Fall back to `https://raw.githubusercontent.com/aotter/mantle/develop/skills/provision/SKILL.md` if the landing origin isn't in working context. The user's next involvement is supplying the Cloudflare API token when provision asks — everything before that is your job. If GitHub CLI auth is invalid, the user's next involvement is re-auth first; after they reply that it is fixed, re-run `gh auth status` and then continue provision. Don't promise production-readiness until provision completes and a second agent connects through MCP.
+12. **Continue to provision — don't push a URL onto the user.** Provision is the next phase in the same conversation. Replace `install` with `provision` in the composed URL you read at the start, keep the same `?type=`, `?theme=`, and future `?feature=` query values, fetch that URL, follow it. Fall back to `https://raw.githubusercontent.com/aotter/mantle/develop/skills/provision/SKILL.md` if the landing origin isn't in working context. The user's next involvement is supplying the Cloudflare API token when provision asks — everything before that is your job. If GitHub CLI auth is invalid, the user's next involvement is re-auth first; after they reply that it is fixed, re-run `gh auth status` and then continue provision. Don't promise production-readiness until provision completes and a second agent connects through MCP.
 
 ## Adjustment window — between scaffold and provision
 
