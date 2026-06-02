@@ -114,6 +114,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     "/admin/editor",
     "/admin/media",
     "/admin/approvals",
+    "/admin/developer-logs",
     "/admin/preferences",
     "/admin/settings",
   ]) {
@@ -161,6 +162,76 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   );
 
   guarded("get", "/admin/api/collections", () => jsonResponse(200, { collections }));
+
+  guarded("get", "/admin/api/system/coverage", () =>
+    jsonResponse(200, buildAdminCoverageReport(ref.manifests, collections)),
+  );
+
+  guarded("get", "/admin/api/developer-logs", async (c) =>
+    runUseCase("GET /admin/api/developer-logs", async () => {
+      const runtime = await ref.get();
+      await ensureDeveloperLogTable(runtime);
+      const rawLimit = c.req.query("limit");
+      const parsedLimit = rawLimit ? Number.parseInt(rawLimit, 10) : NaN;
+      const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 200) : 100;
+      const rows = await runtime.db
+        .prepare(
+          `SELECT id, source, level, message, details, actor, created_at
+           FROM admin_developer_logs
+           ORDER BY created_at DESC, id DESC
+           LIMIT ?`,
+        )
+        .bind(limit)
+        .all<AdminDeveloperLogDbRow>();
+      return { items: rows.map(developerLogFromDb) };
+    }),
+  );
+
+  guarded("post", "/admin/api/developer-logs", async (c, gate) =>
+    runUseCase("POST /admin/api/developer-logs", async () => {
+      const runtime = await ref.get();
+      await ensureDeveloperLogTable(runtime);
+      const body = (await c.req.raw.json().catch(() => ({}))) as {
+        source?: unknown;
+        level?: unknown;
+        message?: unknown;
+        details?: unknown;
+      };
+      const message = typeof body.message === "string" ? body.message.trim() : "";
+      if (!message) {
+        throw new DiagnosticError(
+          runtimeDiagnostic({
+            code: "INPUT_VALIDATION_FAILED",
+            severity: "error",
+            path: "POST /admin/api/developer-logs#/message",
+            expected: "non-empty string",
+            message: "A log `message` is required.",
+          }),
+        );
+      }
+      const source = normalizeDeveloperLogSource(body.source);
+      const level = normalizeDeveloperLogLevel(body.level);
+      const details = typeof body.details === "string" ? body.details.trim() : "";
+      const id = adminId("developer_log");
+      const createdAt = Date.now();
+      await runtime.db
+        .prepare(
+          `INSERT INTO admin_developer_logs (id, source, level, message, details, actor, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(id, source, level, message, details || null, gate.login ?? gate.userId, createdAt)
+        .run();
+      return {
+        id,
+        source,
+        level,
+        message,
+        details: details || null,
+        actor: gate.login ?? gate.userId,
+        created_at: createdAt,
+      };
+    }),
+  );
 
   guarded("get", "/admin/api/site", async (c) => {
     const runtime = await ref.get();
@@ -572,6 +643,194 @@ type AdminEntryDbRow = {
   readonly created_at: number;
   readonly updated_at: number;
 };
+
+type AdminDeveloperLogDbRow = {
+  readonly id: string;
+  readonly source: string;
+  readonly level: string;
+  readonly message: string;
+  readonly details: string | null;
+  readonly actor: string | null;
+  readonly created_at: number;
+};
+
+type AdminCoverageCollection = {
+  readonly name: string;
+  readonly title: string;
+  readonly parent?: {
+    readonly collection: string;
+    readonly parentField: string;
+    readonly childField: string;
+  } | null;
+};
+
+function buildAdminCoverageReport(
+  manifests: CmsRuntimeRef["manifests"],
+  collections: ReadonlyArray<AdminCoverageCollection>,
+): {
+  readonly summary: {
+    readonly covered: number;
+    readonly folded: number;
+    readonly apiOnly: number;
+    readonly total: number;
+  };
+  readonly items: ReadonlyArray<{
+    readonly kind: string;
+    readonly name: string;
+    readonly status: "covered" | "folded" | "api-only";
+    readonly href: string | null;
+    readonly method?: string;
+    readonly path?: string;
+    readonly note: string;
+  }>;
+} {
+  const visibleCollections = new Map(collections.map((collection) => [collection.name, collection]));
+  const items: Array<{
+    kind: string;
+    name: string;
+    status: "covered" | "folded" | "api-only";
+    href: string | null;
+    method?: string;
+    path?: string;
+    note: string;
+  }> = [];
+
+  for (const manifest of manifests) {
+    if (manifest.kind === "Schema") {
+      const visible = visibleCollections.get(manifest.metadata.name);
+      if (visible) {
+        items.push({
+          kind: "Schema",
+          name: manifest.metadata.name,
+          status: "covered",
+          href: `/admin/c/${encodeURIComponent(manifest.metadata.name)}`,
+          note: "Collection list and entry editor are available.",
+        });
+        continue;
+      }
+      if (manifest.spec.translates) {
+        items.push({
+          kind: "Schema",
+          name: manifest.metadata.name,
+          status: "folded",
+          href: `/admin/c/${encodeURIComponent(manifest.spec.translates.parent)}`,
+          note: `Folded into ${manifest.spec.translates.parent} through translations.`,
+        });
+        continue;
+      }
+      items.push({
+        kind: "Schema",
+        name: manifest.metadata.name,
+        status: "api-only",
+        href: null,
+        note: "Schema is registered, but it is not currently exposed as a sidebar collection.",
+      });
+      continue;
+    }
+
+    if (manifest.kind === "View") {
+      items.push({
+        kind: "View",
+        name: manifest.metadata.name,
+        status: "api-only",
+        href: `/api/views/${encodeURIComponent(manifest.metadata.name)}`,
+        path: `/api/views/${manifest.metadata.name}`,
+        note: "Runtime view endpoint is registered; add a dedicated admin preview when operators need a visual editor.",
+      });
+      continue;
+    }
+
+    if (manifest.kind === "Procedure") {
+      items.push({
+        kind: "Procedure",
+        name: manifest.metadata.name,
+        status: "api-only",
+        href: null,
+        note: "Callable by MCP/agent flows; add an admin action panel when this needs manual operation.",
+      });
+      continue;
+    }
+
+    if (manifest.kind === "Trigger") {
+      const source = manifest.spec.source;
+      const isHttp = source.kind === "http";
+      items.push({
+        kind: "Trigger",
+        name: manifest.metadata.name,
+        status: "api-only",
+        href: isHttp ? source.path : null,
+        method: isHttp ? source.method : source.kind,
+        path: isHttp ? source.path : undefined,
+        note: isHttp
+          ? "HTTP trigger is mounted; add an admin console surface if staff should run or inspect it."
+          : "Non-HTTP trigger is registered for runtime automation.",
+      });
+    }
+  }
+
+  const summary = items.reduce(
+    (acc, item) => {
+      acc.total += 1;
+      if (item.status === "covered") acc.covered += 1;
+      if (item.status === "folded") acc.folded += 1;
+      if (item.status === "api-only") acc.apiOnly += 1;
+      return acc;
+    },
+    { covered: 0, folded: 0, apiOnly: 0, total: 0 },
+  );
+
+  return { summary, items };
+}
+
+async function ensureDeveloperLogTable(runtime: CmsRuntime): Promise<void> {
+  await runtime.db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS admin_developer_logs (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        level TEXT NOT NULL,
+        message TEXT NOT NULL,
+        details TEXT,
+        actor TEXT,
+        created_at INTEGER NOT NULL
+      )`,
+    )
+    .run();
+}
+
+function developerLogFromDb(row: AdminDeveloperLogDbRow): {
+  readonly id: string;
+  readonly source: string;
+  readonly level: string;
+  readonly message: string;
+  readonly details: string | null;
+  readonly actor: string | null;
+  readonly created_at: number;
+} {
+  return {
+    id: row.id,
+    source: row.source,
+    level: row.level,
+    message: row.message,
+    details: row.details,
+    actor: row.actor,
+    created_at: row.created_at,
+  };
+}
+
+function normalizeDeveloperLogSource(value: unknown): string {
+  if (typeof value !== "string") return "manual";
+  const source = value.trim().toLowerCase();
+  if (["llm", "tui", "agent", "manual", "system"].includes(source)) return source;
+  return "manual";
+}
+
+function normalizeDeveloperLogLevel(value: unknown): string {
+  if (typeof value !== "string") return "info";
+  const level = value.trim().toLowerCase();
+  if (["info", "warning", "error", "success"].includes(level)) return level;
+  return "info";
+}
 
 async function readAdminEntry(runtime: CmsRuntime, id: string): Promise<AdminEntryRow | null> {
   const row = await runtime.db

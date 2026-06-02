@@ -120,6 +120,36 @@ export interface SiteInfo {
   mcpUrl: string;
 }
 
+export interface DeveloperLogItem {
+  id: string;
+  source: "llm" | "tui" | "agent" | "manual" | "system" | string;
+  level: "info" | "warning" | "error" | "success" | string;
+  message: string;
+  details: string | null;
+  actor: string | null;
+  created_at: number;
+}
+
+export interface CoverageItem {
+  kind: "Schema" | "View" | "Procedure" | "Trigger" | string;
+  name: string;
+  status: "covered" | "folded" | "api-only";
+  href: string | null;
+  method?: string;
+  path?: string;
+  note: string;
+}
+
+export interface CoverageReport {
+  summary: {
+    covered: number;
+    folded: number;
+    apiOnly: number;
+    total: number;
+  };
+  items: CoverageItem[];
+}
+
 export const EDITORIAL_STATUSES: SidebarStatus[] = [
   "draft",
   "review",

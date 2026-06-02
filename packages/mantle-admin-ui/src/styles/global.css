@@ -250,23 +250,23 @@
 
 @theme {
   --text-xs:                0.75rem;
-  --text-xs--line-height:   1rem;
+  --text-xs--line-height:   1.45;
   --text-sm:                0.9375rem;
-  --text-sm--line-height:   1.55;
-  --text-base:              1.0625rem;
-  --text-base--line-height: 1.6;
-  --text-lg:                1.1875rem;
-  --text-lg--line-height:   1.5;
-  --text-xl:                1.3125rem;
-  --text-xl--line-height:   1.35;
+  --text-sm--line-height:   1.6;
+  --text-base:              1rem;
+  --text-base--line-height: 1.68;
+  --text-lg:                1.125rem;
+  --text-lg--line-height:   1.58;
+  --text-xl:                1.25rem;
+  --text-xl--line-height:   1.45;
   --text-2xl:               1.5rem;
-  --text-2xl--line-height:  1.25;
+  --text-2xl--line-height:  1.34;
   --text-3xl:               1.875rem;
-  --text-3xl--line-height:  1.15;
+  --text-3xl--line-height:  1.24;
 
-  --font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-display: "Fraunces", "IBM Plex Sans", Georgia, serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "Noto Sans TC", "PingFang TC", "Heiti TC", "Microsoft JhengHei", "Source Han Sans TC", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Noto Sans TC", "PingFang TC", "Heiti TC", "Microsoft JhengHei", "Source Han Sans TC", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /* html owns the flat base; body::before paints the gradient mesh
@@ -278,11 +278,13 @@ html {
 body {
   margin: 0;
   font-family: var(--font-sans);
-  font-feature-settings: "ss01", "cv11";
+  font-size: var(--text-base);
+  font-feature-settings: "kern", "liga";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: var(--foreground);
-  line-height: 1.6;
+  line-height: 1.68;
+  letter-spacing: 0;
   transition: color 0.2s;
 }
 
@@ -409,12 +411,12 @@ body::before {
 
 h1, h2, h3, h4 {
   font-family: var(--font-display);
-  font-feature-settings: "ss01";
-  font-variation-settings: "opsz" 144, "SOFT" 50;
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  font-feature-settings: "kern", "liga";
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.22;
 }
-h1 { font-variation-settings: "opsz" 144, "SOFT" 80; }
+h1 { line-height: 1.18; }
 
 code, kbd, pre { font-family: var(--font-mono); }
 
@@ -446,7 +448,39 @@ code, kbd, pre { font-family: var(--font-mono); }
 .admin-input,
 .admin-search input {
   min-height: 2.85rem;
-  padding: 0 0.85rem;
+  padding: 0 1rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+
+.admin-search-field {
+  position: relative;
+  display: block;
+}
+
+.admin-search-icon {
+  pointer-events: none;
+  position: absolute;
+  inset-inline-start: 1rem;
+  top: 50%;
+  width: 1rem;
+  height: 1rem;
+  transform: translateY(-50%);
+  color: var(--muted-foreground);
+}
+
+.admin-search-input {
+  min-height: 2.85rem;
+  padding-inline-start: 2.75rem !important;
+  padding-inline-end: 1rem !important;
+}
+
+.admin-input::placeholder,
+.admin-textarea::placeholder,
+.admin-search input::placeholder {
+  color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
+  opacity: 1;
 }
 
 .admin-textarea {
@@ -1108,8 +1142,9 @@ code, kbd, pre { font-family: var(--font-mono); }
 .label-eyebrow {
   font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
-  font-weight: 500;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  line-height: 1.45;
   color: var(--muted-foreground);
 }
 

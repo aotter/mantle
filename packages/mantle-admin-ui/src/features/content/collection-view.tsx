@@ -263,10 +263,10 @@ function CollectionSearch({
         window.location.href = `/admin/c/${encodeURIComponent(collectionName)}${suffix ? `?${suffix}` : ""}`;
       }}
     >
-      <label className="relative block">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+      <label className="admin-search-field">
+        <Search className="admin-search-icon" aria-hidden />
         <input
-          className="admin-input h-10 pl-9"
+          className="admin-input admin-search-input"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder={t(language, "collection.searchPlaceholder")}

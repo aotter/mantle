@@ -12,6 +12,7 @@ import { EntryEditView } from "../features/content/entry-edit-view";
 import { EditorView } from "../features/editor/editor-view";
 import { MediaLibraryView } from "../features/media/media-library-view";
 import { ApprovalsView } from "../features/system/approvals-view";
+import { DeveloperLogsView } from "../features/system/developer-logs-view";
 import { NotFoundView } from "../features/system/not-found-view";
 import { PreferencesView } from "../features/system/preferences-view";
 import { SettingsView } from "../features/system/settings-view";
@@ -116,6 +117,14 @@ function Gate({ path }: { path: string }): React.ReactElement {
     return (
       <AuthenticatedLayout>
         <ApprovalsView />
+      </AuthenticatedLayout>
+    );
+  }
+
+  if (path === "/admin/developer-logs") {
+    return (
+      <AuthenticatedLayout>
+        <DeveloperLogsView />
       </AuthenticatedLayout>
     );
   }
