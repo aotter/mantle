@@ -546,19 +546,24 @@ async function updateAdminEntryTitle(
     const locale = requestedLocale ?? "zh-TW";
     const translation = await findProductTranslation(runtime, row.data.slug, locale);
     if (translation) {
-      await updateAdminEntryData(runtime, translation, { ...translation.data, title });
+      const updated = await updateAdminEntryData(runtime, translation, { ...translation.data, title });
+      await republishIfPublished(runtime, updated);
+      await republishIfPublished(runtime, row);
       return;
     }
-    await insertAdminEntry(runtime, {
+    const inserted = await insertAdminEntry(runtime, {
       id: adminId("entry_admin_translation"),
       collection: "product-translations",
       status: row.status,
       data: { slug: row.data.slug, locale, title },
       authorId: row.authorId,
     });
+    await republishIfPublished(runtime, inserted);
+    await republishIfPublished(runtime, row);
     return;
   }
-  await updateAdminEntryData(runtime, row, { ...row.data, title });
+  const updated = await updateAdminEntryData(runtime, row, { ...row.data, title });
+  await republishIfPublished(runtime, updated);
 }
 
 async function productEditorPayload(
@@ -603,9 +608,9 @@ async function productEditorPayload(
   const productTitles = await localizedProductTitles(runtime, locale);
   const merchandising = objectField(translation?.data.merchandising);
   const brand = objectField(merchandising.brand);
-  const serviceSection = arrayField(merchandising.introSections)
-    .map(objectField)
-    .find((section) => section.title === "服務包含");
+  const serviceSection = findServiceSection(
+    arrayField(merchandising.introSections).map(objectField),
+  );
 
   return {
     product: adminListItem(
@@ -655,11 +660,12 @@ async function updateProductEditor(
   const compareAtPriceMinor = numberField(body.compareAtPriceMinor);
   const sku = (await entriesByDataField(runtime, "product-skus", "productSlug", slug))[0];
   if (sku && priceMinor != null) {
-    await updateAdminEntryData(runtime, sku, {
+    const updatedSku = await updateAdminEntryData(runtime, sku, {
       ...sku.data,
       priceMinor,
       compareAtPriceMinor,
     });
+    await republishIfPublished(runtime, updatedSku);
   }
 
   let translation = await findProductTranslation(runtime, slug, locale);
@@ -676,10 +682,11 @@ async function updateProductEditor(
   const existingMerchandising = objectField(translation.data.merchandising);
   const introSections = upsertIntroSection(
     arrayField(existingMerchandising.introSections).map(objectField),
-    "服務包含",
+    SERVICE_SECTION_KEY,
+    serviceSectionTitle(locale),
     stringField(body.serviceIncludes) ?? "",
   );
-  await updateAdminEntryData(runtime, translation, {
+  const updatedTranslation = await updateAdminEntryData(runtime, translation, {
     ...translation.data,
     title: stringField(body.title) ?? translation.data.title,
     shortDescription: stringField(body.shortDescription) ?? translation.data.shortDescription,
@@ -696,6 +703,8 @@ async function updateProductEditor(
       introSections,
     },
   });
+  await republishIfPublished(runtime, updatedTranslation);
+  await republishProductContent(runtime, row, slug);
 }
 
 async function readSiteSettings(runtime: CmsRuntime): Promise<{
@@ -800,14 +809,46 @@ async function duplicateProductEntry(
   return product;
 }
 
+const SERVICE_SECTION_KEY = "service-includes";
+const SERVICE_SECTION_TITLES = new Set(["服務包含", "服务包含", "Service includes"]);
+
+function serviceSectionTitle(locale: string): string {
+  if (locale === "zh-CN") return "服务包含";
+  if (locale === "en") return "Service includes";
+  return "服務包含";
+}
+
+function findServiceSection(
+  sections: Record<string, unknown>[],
+): Record<string, unknown> | undefined {
+  return sections.find((section) => {
+    const key = stringField(section.key) ?? stringField(section.id);
+    if (key === SERVICE_SECTION_KEY) return true;
+    const title = stringField(section.title);
+    return title ? SERVICE_SECTION_TITLES.has(title) : false;
+  });
+}
+
 function upsertIntroSection(
   sections: Record<string, unknown>[],
+  key: string,
   title: string,
   body: string,
 ): Record<string, unknown>[] {
   const next = [...sections];
-  const index = next.findIndex((section) => section.title === title);
-  const value = { ...(index >= 0 ? next[index] : {}), title, body };
+  const index = next.findIndex((section) => {
+    const sectionKey = stringField(section.key) ?? stringField(section.id);
+    if (sectionKey === key) return true;
+    const title = stringField(section.title);
+    return title ? SERVICE_SECTION_TITLES.has(title) : false;
+  });
+  const existing = index >= 0 ? (next[index] ?? {}) : {};
+  const value = {
+    ...existing,
+    key,
+    title: stringField(existing.title) ?? title,
+    body,
+  };
   if (index >= 0) next[index] = value;
   else next.push(value);
   return next;
@@ -890,10 +931,48 @@ async function deleteAdminEntry(
       ...(await entriesByDataField(runtime, "product-skus", "productSlug", row.data.slug)),
     ];
     for (const child of related) {
+      await unpublishIfPublished(runtime, child);
       await runtime.deleteEntry.execute({ id: child.id });
     }
   }
+  await unpublishIfPublished(runtime, row);
   return runtime.deleteEntry.execute({ id: row.id });
+}
+
+async function republishProductContent(
+  runtime: CmsRuntime,
+  product: AdminEntryRow,
+  slug: string,
+): Promise<void> {
+  await republishIfPublished(runtime, product);
+  const translations = await entriesByDataField(runtime, "product-translations", "slug", slug);
+  await Promise.all(translations.map((entry) => republishIfPublished(runtime, entry)));
+}
+
+async function republishIfPublished(
+  runtime: CmsRuntime,
+  row: AdminEntryRow,
+): Promise<void> {
+  if (row.status !== "published") return;
+  const site = await runtime.siteConfig.load();
+  await runtime.publishOrchestrator.publish({
+    entryId: row.id,
+    site,
+    templates: runtime.templates,
+  });
+}
+
+async function unpublishIfPublished(
+  runtime: CmsRuntime,
+  row: AdminEntryRow,
+): Promise<void> {
+  if (row.status !== "published") return;
+  const site = await runtime.siteConfig.load();
+  await runtime.publishOrchestrator.unpublish({
+    entryId: row.id,
+    site,
+    templates: runtime.templates,
+  });
 }
 
 async function updateAdminEntryData(

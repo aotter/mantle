@@ -70,14 +70,17 @@ export function ProductEditView({
       ),
     onSuccess: (data) => setForm(data),
   });
+  const bodyPreview = React.useMemo(
+    () => renderPreview(form?.content.body ?? "", bodyMode),
+    [form?.content.body, bodyMode],
+  );
 
+  if (query.isError) return <ErrorBox error={query.error} />;
   if (query.isLoading || !form) {
     return <div className="glass-card h-64 animate-pulse" />;
   }
-  if (query.isError) return <ErrorBox error={query.error} />;
 
   const productTitle = form.content.title || renderUnknownTitle(form.product.title);
-  const bodyPreview = React.useMemo(() => renderPreview(form.content.body, bodyMode), [form.content.body, bodyMode]);
 
   return (
     <div className="space-y-6">
