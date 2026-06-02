@@ -8,7 +8,7 @@ import { useAdminLocation } from "./router";
 import { AccessDeniedView, GateError, GateLoading, SignInView } from "../features/auth/auth-views";
 import { HomeView } from "../features/console/home-view";
 import { CollectionView } from "../features/content/collection-view";
-import { ProductEditView } from "../features/content/product-edit-view";
+import { EntryEditView } from "../features/content/entry-edit-view";
 import { EditorView } from "../features/editor/editor-view";
 import { MediaLibraryView } from "../features/media/media-library-view";
 import { NotFoundView } from "../features/system/not-found-view";
@@ -66,11 +66,7 @@ function Gate({ path }: { path: string }): React.ReactElement {
     const entryId = decodeURIComponent(entryMatch[2]!);
     return (
       <AuthenticatedLayout>
-        {collectionName === "products" ? (
-          <ProductEditView collectionName={collectionName} entryId={entryId} />
-        ) : (
-          <NotFoundView path={path} intent="planned" />
-        )}
+        <EntryEditView collectionName={collectionName} entryId={entryId} />
       </AuthenticatedLayout>
     );
   }

@@ -9,6 +9,7 @@ import {
   runtimeDiagnostic,
   type ContentState,
   type Diagnostic,
+  type JsonSchema,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
 import {
@@ -279,33 +280,35 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     }),
   );
 
-  guarded("get", "/admin/api/entries/:id/product-editor", async (c) =>
-    runUseCase(`GET /admin/api/entries/${c.req.param("id")}/product-editor`, async () => {
+  guarded("get", "/admin/api/entries/:id/editor", async (c) =>
+    runUseCase(`GET /admin/api/entries/${c.req.param("id")}/editor`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
       const row = await readAdminEntry(runtime, id);
       if (!row) {
-        throw new DiagnosticError(adminNotFoundDiagnostic(`GET /admin/api/entries/${id}/product-editor`, id));
+        throw new DiagnosticError(adminNotFoundDiagnostic(`GET /admin/api/entries/${id}/editor`, id));
       }
-      return productEditorPayload(runtime, row, c.req.query("locale") ?? undefined);
+      return entryEditorPayload(runtime, row, schemas);
     }),
   );
 
-  guarded("patch", "/admin/api/entries/:id/product-editor", async (c) =>
-    runUseCase(`PATCH /admin/api/entries/${c.req.param("id")}/product-editor`, async () => {
+  guarded("patch", "/admin/api/entries/:id/editor", async (c) =>
+    runUseCase(`PATCH /admin/api/entries/${c.req.param("id")}/editor`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
-      const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
+      const body = (await c.req.raw.json().catch(() => ({}))) as { data?: unknown };
       const row = await readAdminEntry(runtime, id);
       if (!row) {
-        throw new DiagnosticError(adminNotFoundDiagnostic(`PATCH /admin/api/entries/${id}/product-editor`, id));
+        throw new DiagnosticError(adminNotFoundDiagnostic(`PATCH /admin/api/entries/${id}/editor`, id));
       }
-      await updateProductEditor(runtime, row, body);
+      const data = objectField(body.data);
+      const saved = await updateAdminEntryData(runtime, row, data);
+      await republishIfPublished(runtime, saved);
       const updated = await readAdminEntry(runtime, id);
       if (!updated) {
-        throw new DiagnosticError(adminNotFoundDiagnostic(`PATCH /admin/api/entries/${id}/product-editor`, id));
+        throw new DiagnosticError(adminNotFoundDiagnostic(`PATCH /admin/api/entries/${id}/editor`, id));
       }
-      return productEditorPayload(runtime, updated, stringField(body.locale));
+      return entryEditorPayload(runtime, updated, schemas);
     }),
   );
 
@@ -320,10 +323,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       if (!row) {
         throw new DiagnosticError(adminNotFoundDiagnostic(`POST /admin/api/entries/${id}/duplicate`, id));
       }
-      const duplicated =
-        row.collection === "products"
-          ? await duplicateProductEntry(runtime, row, gate.userId)
-          : await duplicateGenericEntry(runtime, row, gate.userId);
+      const duplicated = await duplicateGenericEntry(runtime, row, gate.userId);
       return adminListItem(
         duplicated,
         duplicated.collection === "products"
@@ -566,145 +566,264 @@ async function updateAdminEntryTitle(
   await republishIfPublished(runtime, updated);
 }
 
-async function productEditorPayload(
+async function entryEditorPayload(
   runtime: CmsRuntime,
   row: AdminEntryRow,
-  requestedLocale: string | undefined,
-): Promise<{
-  product: ReturnType<typeof adminListItem>;
-  sku: {
-    id: string | null;
-    priceMinor: number | null;
-    compareAtPriceMinor: number | null;
-    currency: string;
-  };
-  content: {
-    id: string | null;
-    title: string;
-    shortDescription: string;
-    body: string;
-    brand: { name: string; tagline: string; intro: string };
-    promotions: Array<{
-      label: string;
-      title: string;
-      body: string;
-      relatedSkuCode?: string;
-      discountPercent?: number | null;
-    }>;
-    serviceIncludes: string;
-  };
-  availableSkus: Array<{
-    skuCode: string;
-    productSlug: string;
-    title: string;
-    priceMinor: number | null;
-    currency: string;
-  }>;
-}> {
-  const slug = typeof row.data.slug === "string" ? row.data.slug : "";
-  const locale = requestedLocale ?? "zh-TW";
-  const sku = slug ? (await entriesByDataField(runtime, "product-skus", "productSlug", slug))[0] : null;
-  const translation = slug ? await findProductTranslation(runtime, slug, locale) : null;
-  const productTitles = await localizedProductTitles(runtime, locale);
-  const merchandising = objectField(translation?.data.merchandising);
-  const brand = objectField(merchandising.brand);
-  const serviceSection = findServiceSection(
-    arrayField(merchandising.introSections).map(objectField),
-  );
-
+  schemas: SchemaManifest[],
+): Promise<AdminEntryEditorPayload> {
+  const schema = schemas.find((s) => s.metadata.name === row.collection);
+  if (!schema) {
+    throw new DiagnosticError(
+      runtimeDiagnostic({
+        code: "NOT_FOUND",
+        severity: "error",
+        path: `admin/editor/${row.collection}`,
+        value: row.collection,
+        expected: "declared Schema manifest",
+        message: `Schema '${row.collection}' was not found.`,
+      }),
+    );
+  }
+  const related = await relatedEntrySections(runtime, schema, row, schemas);
   return {
-    product: adminListItem(
-      row,
-      row.collection === "products" ? productTitles : new Map<string, string>(),
-    ),
-    sku: {
-      id: sku?.id ?? null,
-      priceMinor: numberField(sku?.data.priceMinor),
-      compareAtPriceMinor: numberField(sku?.data.compareAtPriceMinor),
-      currency: stringField(sku?.data.currency) ?? stringField(row.data.currency) ?? "TWD",
-    },
-    content: {
-      id: translation?.id ?? null,
-      title: stringField(translation?.data.title) ?? "",
-      shortDescription: stringField(translation?.data.shortDescription) ?? "",
-      body: stringField(translation?.data.body) ?? "",
-      brand: {
-        name: stringField(brand.name) ?? "",
-        tagline: stringField(brand.tagline) ?? "",
-        intro: stringField(brand.intro) ?? "",
-      },
-      promotions: arrayField(merchandising.promotions)
-        .map(objectField)
-        .map((promotion) => ({
-          label: stringField(promotion.label) ?? "",
-          title: stringField(promotion.title) ?? "",
-          body: stringField(promotion.body) ?? "",
-          relatedSkuCode: stringField(promotion.relatedSkuCode),
-          discountPercent: numberField(promotion.discountPercent),
-        })),
-      serviceIncludes: stringField(serviceSection?.body) ?? "",
-    },
-    availableSkus: await adminProductSkuOptions(runtime, productTitles),
+    collection: adminEditorCollection(schema, schemas),
+    entry: adminEditorEntry(row),
+    related,
   };
 }
 
-async function updateProductEditor(
+type AdminEditorCollection = {
+  readonly name: string;
+  readonly title: string;
+  readonly description: string | null;
+  readonly lifecycle: "simple" | "editorial";
+  readonly hasTranslations: boolean;
+  readonly localized: boolean;
+  readonly translates: SchemaManifest["spec"]["translates"] | null;
+  readonly schema: JsonSchema;
+  readonly uiSchema: Record<string, unknown> | null;
+  readonly mediaFields: Array<{ name: string; hint: string }>;
+};
+
+type AdminEditorEntry = {
+  readonly id: string;
+  readonly collection: string;
+  readonly locale: string | null;
+  readonly status: ContentState;
+  readonly version: number;
+  readonly data: Record<string, unknown>;
+  readonly updated_at: number;
+};
+
+type AdminEntryEditorPayload = {
+  readonly collection: AdminEditorCollection;
+  readonly entry: AdminEditorEntry;
+  readonly related: AdminRelatedEntrySection[];
+};
+
+type AdminRelatedEntrySection = {
+  readonly collection: AdminEditorCollection;
+  readonly relationship: {
+    readonly kind: "translation" | "field";
+    readonly parentField: string;
+    readonly childField: string;
+    readonly parentValue: string | number | boolean;
+  };
+  readonly entries: AdminEditorEntry[];
+};
+
+function adminEditorCollection(
+  schema: SchemaManifest,
+  schemas: SchemaManifest[],
+): AdminEditorCollection {
+  return {
+    name: schema.metadata.name,
+    title: schema.spec.title,
+    description: schema.spec.description ?? null,
+    lifecycle: schema.spec.lifecycle ?? "simple",
+    hasTranslations: schemas.some((candidate) => candidate.spec.translates?.parent === schema.metadata.name),
+    localized: schema.spec.localized ?? Boolean(schema.spec.translates),
+    translates: schema.spec.translates ?? null,
+    schema: schema.spec.schema,
+    uiSchema: schema.spec.uiSchema ?? null,
+    mediaFields: mediaFieldsForCollection(schema, schemas),
+  };
+}
+
+function adminEditorEntry(row: AdminEntryRow): AdminEditorEntry {
+  return {
+    id: row.id,
+    collection: row.collection,
+    locale: row.locale ?? null,
+    status: row.status,
+    version: row.version,
+    data: row.data,
+    updated_at: row.updatedAt,
+  };
+}
+
+async function relatedEntrySections(
   runtime: CmsRuntime,
-  row: AdminEntryRow,
-  body: Record<string, unknown>,
-): Promise<void> {
-  const slug = typeof row.data.slug === "string" ? row.data.slug : null;
-  if (!slug) return;
-  const locale = stringField(body.locale) ?? "zh-TW";
-  const priceMinor = numberField(body.priceMinor);
-  const compareAtPriceMinor = numberField(body.compareAtPriceMinor);
-  const sku = (await entriesByDataField(runtime, "product-skus", "productSlug", slug))[0];
-  if (sku && priceMinor != null) {
-    const updatedSku = await updateAdminEntryData(runtime, sku, {
-      ...sku.data,
-      priceMinor,
-      compareAtPriceMinor,
-    });
-    await republishIfPublished(runtime, updatedSku);
-  }
-
-  let translation = await findProductTranslation(runtime, slug, locale);
-  if (!translation) {
-    translation = await insertAdminEntry(runtime, {
-      id: adminId("entry_admin_translation"),
-      collection: "product-translations",
-      status: row.status,
-      authorId: row.authorId,
-      data: { slug, locale, title: stringField(body.title) ?? slug },
-    });
-  }
-
-  const existingMerchandising = objectField(translation.data.merchandising);
-  const introSections = upsertIntroSection(
-    arrayField(existingMerchandising.introSections).map(objectField),
-    SERVICE_SECTION_KEY,
-    serviceSectionTitle(locale),
-    stringField(body.serviceIncludes) ?? "",
-  );
-  const updatedTranslation = await updateAdminEntryData(runtime, translation, {
-    ...translation.data,
-    title: stringField(body.title) ?? translation.data.title,
-    shortDescription: stringField(body.shortDescription) ?? translation.data.shortDescription,
-    body: stringField(body.body) ?? translation.data.body,
-    merchandising: {
-      ...existingMerchandising,
-      brand: {
-        ...objectField(existingMerchandising.brand),
-        name: stringField(body.brandName) ?? "",
-        tagline: stringField(body.brandTagline) ?? "",
-        intro: stringField(body.brandIntro) ?? "",
+  parentSchema: SchemaManifest,
+  parentRow: AdminEntryRow,
+  schemas: SchemaManifest[],
+): Promise<AdminRelatedEntrySection[]> {
+  const relationships = discoverChildRelationships(parentSchema, parentRow, schemas);
+  const sections: AdminRelatedEntrySection[] = [];
+  for (const relationship of relationships) {
+    const childSchema = schemas.find((schema) => schema.metadata.name === relationship.collection);
+    if (!childSchema) continue;
+    const entries = await entriesByDataValue(
+      runtime,
+      relationship.collection,
+      relationship.childField,
+      relationship.parentValue,
+    );
+    sections.push({
+      collection: adminEditorCollection(childSchema, schemas),
+      relationship: {
+        kind: relationship.kind,
+        parentField: relationship.parentField,
+        childField: relationship.childField,
+        parentValue: relationship.parentValue,
       },
-      promotions: promotionsField(body.promotions),
-      introSections,
-    },
-  });
-  await republishIfPublished(runtime, updatedTranslation);
-  await republishProductContent(runtime, row, slug);
+      entries: entries.map(adminEditorEntry),
+    });
+  }
+  return sections;
+}
+
+type DiscoveredRelationship = {
+  readonly collection: string;
+  readonly kind: "translation" | "field";
+  readonly parentField: string;
+  readonly childField: string;
+  readonly parentValue: string | number | boolean;
+};
+
+function discoverChildRelationships(
+  parentSchema: SchemaManifest,
+  parentRow: AdminEntryRow,
+  schemas: SchemaManifest[],
+): DiscoveredRelationship[] {
+  const parentName = parentSchema.metadata.name;
+  const parentProps = parentSchema.spec.schema.properties ?? {};
+  const relationships: DiscoveredRelationship[] = [];
+  const seen = new Set<string>();
+  const add = (
+    childSchema: SchemaManifest,
+    kind: "translation" | "field",
+    parentField: string,
+    childField: string,
+  ): void => {
+    const parentValue = primitiveJoinValue(parentRow.data[parentField]);
+    if (parentValue == null) return;
+    const key = `${childSchema.metadata.name}:${kind}:${parentField}:${childField}:${String(parentValue)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    relationships.push({
+      collection: childSchema.metadata.name,
+      kind,
+      parentField,
+      childField,
+      parentValue,
+    });
+  };
+
+  for (const childSchema of schemas) {
+    if (childSchema.metadata.name === parentName) continue;
+    const childProps = childSchema.spec.schema.properties ?? {};
+    const translates = childSchema.spec.translates;
+    if (translates?.parent === parentName) {
+      add(childSchema, "translation", translates.on, translates.on);
+      continue;
+    }
+
+    for (const [parentField] of Object.entries(parentProps)) {
+      if (!isLikelyJoinField(parentField)) continue;
+      if (!Object.prototype.hasOwnProperty.call(childProps, parentField)) continue;
+      add(childSchema, "field", parentField, parentField);
+    }
+
+    for (const [childField] of Object.entries(childProps)) {
+      const parentField = conventionalParentField(parentName, childField, parentProps);
+      if (parentField) add(childSchema, "field", parentField, childField);
+    }
+  }
+
+  return relationships;
+}
+
+function isLikelyJoinField(field: string): boolean {
+  return /^(id|slug|sku|skuCode|code|key)$/i.test(field);
+}
+
+function conventionalParentField(
+  parentCollectionName: string,
+  childField: string,
+  parentProps: Readonly<Record<string, JsonSchema>>,
+): string | null {
+  const bases = new Set([
+    camelCaseIdentifier(parentCollectionName),
+    singularizeIdentifier(camelCaseIdentifier(parentCollectionName)),
+  ]);
+  const candidates = ["slug", "id", "sku", "code"].filter((field) =>
+    Object.prototype.hasOwnProperty.call(parentProps, field),
+  );
+  for (const base of bases) {
+    for (const parentField of candidates) {
+      if (childField === `${base}${capitalizeIdentifier(parentField)}`) return parentField;
+    }
+  }
+  return null;
+}
+
+function primitiveJoinValue(value: unknown): string | number | boolean | null {
+  if (typeof value === "string" && value !== "") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "boolean") return value;
+  return null;
+}
+
+function camelCaseIdentifier(value: string): string {
+  return value
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((part, index) => {
+      const lower = part.charAt(0).toLowerCase() + part.slice(1);
+      return index === 0 ? lower : capitalizeIdentifier(lower);
+    })
+    .join("");
+}
+
+function singularizeIdentifier(value: string): string {
+  if (value.endsWith("ies")) return `${value.slice(0, -3)}y`;
+  if (value.endsWith("ses")) return value.slice(0, -2);
+  if (value.endsWith("s") && value.length > 1) return value.slice(0, -1);
+  return value;
+}
+
+function capitalizeIdentifier(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+async function entriesByDataValue(
+  runtime: CmsRuntime,
+  collection: string,
+  field: string,
+  value: string | number | boolean,
+): Promise<AdminEntryRow[]> {
+  const rows = await runtime.db
+    .prepare(
+      `SELECT id, collection, status, version, data, author_id, created_at, updated_at
+       FROM entries
+       WHERE collection = ? AND json_extract(data, ?) = ?
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 50`,
+    )
+    .bind(collection, `$.${field}`, value)
+    .all<AdminEntryDbRow>();
+  return rows.map(adminRowFromDb);
 }
 
 async function readSiteSettings(runtime: CmsRuntime): Promise<{
@@ -741,167 +860,6 @@ async function writeSiteSettings(
   if (stmts.length > 0) await runtime.db.batch(stmts);
 }
 
-async function duplicateProductEntry(
-  runtime: CmsRuntime,
-  row: AdminEntryRow,
-  authorId: string | null,
-): Promise<AdminEntryRow> {
-  const oldSlug = typeof row.data.slug === "string" ? row.data.slug : null;
-  if (!oldSlug) return duplicateGenericEntry(runtime, row, authorId);
-
-  const newSlug = await uniqueDataField(runtime, "products", "slug", `${oldSlug}-copy`);
-  const relatedSkus = await entriesByDataField(runtime, "product-skus", "productSlug", oldSlug);
-  const relatedTranslations = await entriesByDataField(runtime, "product-translations", "slug", oldSlug);
-  const skuMap = new Map<string, string>();
-  for (const sku of relatedSkus) {
-    const oldSku = typeof sku.data.skuCode === "string" ? sku.data.skuCode : null;
-    if (!oldSku) continue;
-    skuMap.set(oldSku, await uniqueDataField(runtime, "product-skus", "skuCode", `${oldSku}-COPY`));
-  }
-
-  const productSku = typeof row.data.sku === "string" ? row.data.sku : null;
-  const product = await insertAdminEntry(runtime, {
-    id: adminId("entry_admin_product"),
-    collection: "products",
-    status: row.status,
-    authorId,
-    data: {
-      ...row.data,
-      slug: newSlug,
-      sku: productSku ? (skuMap.get(productSku) ?? `${productSku}-COPY`) : row.data.sku,
-      createdAt: Date.now(),
-    },
-  });
-
-  for (const sku of relatedSkus) {
-    const oldSku = typeof sku.data.skuCode === "string" ? sku.data.skuCode : null;
-    await insertAdminEntry(runtime, {
-      id: adminId("entry_admin_sku"),
-      collection: "product-skus",
-      status: sku.status,
-      authorId,
-      data: {
-        ...sku.data,
-        productSlug: newSlug,
-        skuCode: oldSku ? (skuMap.get(oldSku) ?? `${oldSku}-COPY`) : sku.data.skuCode,
-        createdAt: Date.now(),
-      },
-    });
-  }
-
-  for (const translation of relatedTranslations) {
-    await insertAdminEntry(runtime, {
-      id: adminId("entry_admin_translation"),
-      collection: "product-translations",
-      status: translation.status,
-      authorId,
-      data: {
-        ...translation.data,
-        slug: newSlug,
-        title:
-          typeof translation.data.title === "string"
-            ? `${translation.data.title}（副本）`
-            : translation.data.title,
-      },
-    });
-  }
-
-  return product;
-}
-
-const SERVICE_SECTION_KEY = "service-includes";
-const SERVICE_SECTION_TITLES = new Set(["服務包含", "服务包含", "Service includes"]);
-
-function serviceSectionTitle(locale: string): string {
-  if (locale === "zh-CN") return "服务包含";
-  if (locale === "en") return "Service includes";
-  return "服務包含";
-}
-
-function findServiceSection(
-  sections: Record<string, unknown>[],
-): Record<string, unknown> | undefined {
-  return sections.find((section) => {
-    const key = stringField(section.key) ?? stringField(section.id);
-    if (key === SERVICE_SECTION_KEY) return true;
-    const title = stringField(section.title);
-    return title ? SERVICE_SECTION_TITLES.has(title) : false;
-  });
-}
-
-function upsertIntroSection(
-  sections: Record<string, unknown>[],
-  key: string,
-  title: string,
-  body: string,
-): Record<string, unknown>[] {
-  const next = [...sections];
-  const index = next.findIndex((section) => {
-    const sectionKey = stringField(section.key) ?? stringField(section.id);
-    if (sectionKey === key) return true;
-    const title = stringField(section.title);
-    return title ? SERVICE_SECTION_TITLES.has(title) : false;
-  });
-  const existing = index >= 0 ? (next[index] ?? {}) : {};
-  const value = {
-    ...existing,
-    key,
-    title: stringField(existing.title) ?? title,
-    body,
-  };
-  if (index >= 0) next[index] = value;
-  else next.push(value);
-  return next;
-}
-
-function promotionsField(value: unknown): Array<{
-  label: string;
-  title: string;
-  body: string;
-  relatedSkuCode?: string;
-  discountPercent?: number | null;
-}> {
-  return arrayField(value).map(objectField).map((promotion) => ({
-    label: stringField(promotion.label) ?? "",
-    title: stringField(promotion.title) ?? "",
-    body: stringField(promotion.body) ?? "",
-    ...(stringField(promotion.relatedSkuCode) ? { relatedSkuCode: stringField(promotion.relatedSkuCode) } : {}),
-    discountPercent: numberField(promotion.discountPercent),
-  }));
-}
-
-async function adminProductSkuOptions(
-  runtime: CmsRuntime,
-  productTitles: Map<string, string>,
-): Promise<Array<{
-  skuCode: string;
-  productSlug: string;
-  title: string;
-  priceMinor: number | null;
-  currency: string;
-}>> {
-  const page = await runtime.listEntries.executePage({
-    collection: "product-skus",
-    status: "published",
-    limit: 500,
-  });
-  return page.rows
-    .map((row) => {
-      const skuCode = stringField(row.data.skuCode);
-      const productSlug = stringField(row.data.productSlug);
-      if (!skuCode || !productSlug) return null;
-      return {
-        skuCode,
-        productSlug,
-        title: productTitles.get(productSlug) ?? productSlug,
-        priceMinor: numberField(row.data.priceMinor),
-        currency: stringField(row.data.currency) ?? "TWD",
-      };
-    })
-    .filter((row): row is NonNullable<typeof row> => Boolean(row))
-    .sort((a, b) => a.title.localeCompare(b.title) || a.skuCode.localeCompare(b.skuCode));
-}
-
 async function duplicateGenericEntry(
   runtime: CmsRuntime,
   row: AdminEntryRow,
@@ -925,28 +883,8 @@ async function deleteAdminEntry(
   runtime: CmsRuntime,
   row: AdminEntryRow,
 ): Promise<{ readonly removed: boolean }> {
-  if (row.collection === "products" && typeof row.data.slug === "string") {
-    const related = [
-      ...(await entriesByDataField(runtime, "product-translations", "slug", row.data.slug)),
-      ...(await entriesByDataField(runtime, "product-skus", "productSlug", row.data.slug)),
-    ];
-    for (const child of related) {
-      await unpublishIfPublished(runtime, child);
-      await runtime.deleteEntry.execute({ id: child.id });
-    }
-  }
   await unpublishIfPublished(runtime, row);
   return runtime.deleteEntry.execute({ id: row.id });
-}
-
-async function republishProductContent(
-  runtime: CmsRuntime,
-  product: AdminEntryRow,
-  slug: string,
-): Promise<void> {
-  await republishIfPublished(runtime, product);
-  const translations = await entriesByDataField(runtime, "product-translations", "slug", slug);
-  await Promise.all(translations.map((entry) => republishIfPublished(runtime, entry)));
 }
 
 async function republishIfPublished(
@@ -1118,23 +1056,10 @@ function stringField(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-function numberField(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim() !== "") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
-}
-
 function objectField(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-}
-
-function arrayField(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
 }
 
 type StaffGate =
