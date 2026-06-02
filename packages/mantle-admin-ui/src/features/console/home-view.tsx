@@ -1,13 +1,21 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Bot, Database, FileText, Globe, PlugZap } from "lucide-react";
+import {
+  Database,
+  FileText,
+  Globe,
+  Images,
+  PencilLine,
+  type LucideIcon,
+} from "lucide-react";
 import { api } from "../../lib/api";
 import type { Collection, SiteInfo } from "../../lib/types";
 import { Button } from "../../ui/button";
-import { CopyField, EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { statusLabel } from "../content/status";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
+import { collectionDescription, collectionTitle } from "../content/collection-labels";
 
 export function HomeView(): React.ReactElement {
   const { language } = usePreferences();
@@ -47,55 +55,24 @@ export function HomeView(): React.ReactElement {
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.25fr_0.75fr]">
-        <SectionCard>
+      <div className="grid grid-cols-1 gap-4">
+        <SectionCard className="admin-dashboard-panel">
           <div className="mb-4 flex items-start gap-3">
             <div className="rounded-xl bg-primary/15 p-2 text-primary">
-              <Bot className="size-5" aria-hidden />
+              <PencilLine className="size-5" aria-hidden />
             </div>
             <div>
-              <h2 className="text-lg">{t(language, "console.agent.title")}</h2>
+              <h2 className="text-lg">{t(language, "console.workspace.title")}</h2>
               <p className="text-sm text-muted-foreground">
-                {t(language, "console.agent.body")}
+                {t(language, "console.workspace.body")}
               </p>
             </div>
           </div>
-          {site.isLoading ? (
-            <div className="space-y-3">
-              <div className="h-16 animate-pulse rounded-lg bg-muted" />
-              <div className="h-16 animate-pulse rounded-lg bg-muted" />
-            </div>
-          ) : site.isError ? (
-            <ErrorBox error={site.error} />
-          ) : siteInfo ? (
-            <div className="grid gap-3">
-              <CopyField label={t(language, "console.mcpUrl")} value={siteInfo.mcpUrl} />
-              <CopyField
-                label={t(language, "console.publicUrl")}
-                value={siteInfo.publicUrl}
-                href={siteInfo.publicUrl}
-              />
-            </div>
-          ) : null}
-        </SectionCard>
-
-        <SectionCard>
-          <div className="mb-4 flex items-start gap-3">
-            <div className="rounded-xl bg-accent p-2 text-accent-foreground">
-              <PlugZap className="size-5" aria-hidden />
-            </div>
-            <div>
-              <h2 className="text-lg">{t(language, "console.loop.title")}</h2>
-              <p className="text-sm text-muted-foreground">
-                {t(language, "console.loop.body")}
-              </p>
-            </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <QuickAction href="/admin/c/products" icon={PencilLine} label={t(language, "workspace.products")} />
+            <QuickAction href="/admin/c/pages" icon={FileText} label={t(language, "workspace.pages")} />
+            <QuickAction href="/admin/media" icon={Images} label={t(language, "workspace.media")} />
           </div>
-          <ol className="space-y-2 text-sm text-muted-foreground">
-            <li className="flex gap-2"><span className="text-primary">1.</span>{t(language, "console.loop.step1")}</li>
-            <li className="flex gap-2"><span className="text-primary">2.</span>{t(language, "console.loop.step2")}</li>
-            <li className="flex gap-2"><span className="text-primary">3.</span>{t(language, "console.loop.step3")}</li>
-          </ol>
         </SectionCard>
       </div>
 
@@ -131,14 +108,16 @@ export function HomeView(): React.ReactElement {
               >
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h2 className="truncate text-lg">{c.title}</h2>
+                    <h2 className="truncate text-lg" title={collectionTitle(c, language)}>
+                      {collectionTitle(c, language)}
+                    </h2>
                     <p className="font-mono text-xs text-muted-foreground">{c.name}</p>
                   </div>
                   <FileText className="size-5 shrink-0 text-muted-foreground" aria-hidden />
                 </div>
-                {c.description ? (
+                {collectionDescription(c, language) ? (
                   <p className="line-clamp-2 text-sm text-muted-foreground">
-                    {c.description}
+                    {collectionDescription(c, language)}
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground">
@@ -167,5 +146,22 @@ export function HomeView(): React.ReactElement {
         )}
       </section>
     </div>
+  );
+}
+
+function QuickAction({
+  href,
+  icon: Icon,
+  label,
+}: {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+}): React.ReactElement {
+  return (
+    <a href={href} title={label} className="quick-action">
+      <Icon className="size-4" aria-hidden />
+      <span>{label}</span>
+    </a>
   );
 }

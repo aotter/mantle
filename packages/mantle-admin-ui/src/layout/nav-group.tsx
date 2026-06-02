@@ -47,7 +47,7 @@ export function NavGroup({
 }: NavGroupProps): React.ReactElement {
   return (
     <SidebarGroup>
-      {group.title && <SidebarGroupLabel>{group.title}</SidebarGroupLabel>}
+      {group.title && <SidebarGroupLabel title={group.title}>{group.title}</SidebarGroupLabel>}
       <SidebarMenu>
         {group.items.map((item) => (
           <NavGroupItem
@@ -113,6 +113,8 @@ function NavLinkItem({
       <SidebarMenuButton asChild isActive={active}>
         <a
           href={item.url}
+          title={item.title}
+          data-tour={tourIdForUrl(item.url)}
           onClick={() => setOpenMobile(false)}
           {...(item.external
             ? { target: "_blank", rel: "noreferrer" }
@@ -152,9 +154,9 @@ function NavCollapsibleExpanded({
     >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton isActive={groupActive}>
+          <SidebarMenuButton isActive={groupActive} data-tour={tourIdForUrl(item.items[0]?.url)}>
             {item.icon && <item.icon aria-hidden />}
-            <span data-sidebar-label className="flex-1 truncate">{item.title}</span>
+            <span data-sidebar-label className="flex-1 truncate" title={item.title}>{item.title}</span>
             {item.marker && (
               <item.marker
                 aria-hidden
@@ -201,7 +203,7 @@ function NavSubLink({
   return (
     <SidebarMenuSubItem>
       <SidebarMenuSubButton asChild isActive={active}>
-        <a href={link.url} onClick={() => setOpenMobile(false)}>
+        <a href={link.url} title={link.title} data-tour={tourIdForUrl(link.url)} onClick={() => setOpenMobile(false)}>
           {link.icon && <link.icon aria-hidden />}
           <span>{link.title}</span>
           {link.badge && <NavBadge>{link.badge}</NavBadge>}
@@ -209,6 +211,15 @@ function NavSubLink({
       </SidebarMenuSubButton>
     </SidebarMenuSubItem>
   );
+}
+
+function tourIdForUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  if (url === "/admin") return "nav-home";
+  if (url.startsWith("/admin/c/products")) return "nav-products";
+  if (url === "/admin/media") return "nav-media";
+  if (url === "/admin/settings") return "nav-settings";
+  return undefined;
 }
 
 function NavCollapsibleDropdown({
@@ -228,7 +239,7 @@ function NavCollapsibleDropdown({
         <DropdownMenuTrigger asChild>
           <SidebarMenuButton isActive={groupActive}>
             {item.icon && <item.icon aria-hidden />}
-            <span data-sidebar-label>{item.title}</span>
+            <span data-sidebar-label title={item.title}>{item.title}</span>
             <ChevronRight aria-hidden data-sidebar-label className="ms-auto" />
           </SidebarMenuButton>
         </DropdownMenuTrigger>

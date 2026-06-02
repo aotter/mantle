@@ -24,6 +24,67 @@ export interface Collection {
   /** Schema properties carrying `x-mcp-hint: media-*`. Upload hosting
    *  is optional; this only marks which fields are media-shaped. */
   mediaFields?: Array<{ name: string; hint: string }>;
+  localized?: boolean;
+  translates?: { parent: string; on: string } | null;
+  schema?: JsonSchema;
+  uiSchema?: Record<string, unknown> | null;
+}
+
+export interface JsonSchema {
+  type?: string | string[];
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  items?: JsonSchema;
+  enum?: unknown[];
+  format?: string;
+  pattern?: string;
+  minLength?: number;
+  maxLength?: number;
+  minimum?: number;
+  maximum?: number;
+  minItems?: number;
+  maxItems?: number;
+  nullable?: boolean;
+  default?: unknown;
+  additionalProperties?: boolean | JsonSchema;
+  description?: string;
+  "x-mantle-ref"?: string;
+  "x-mcp-hint"?: string;
+  [key: string]: unknown;
+}
+
+export interface EntryEditorCollection extends Collection {
+  localized: boolean;
+  translates: { parent: string; on: string } | null;
+  schema: JsonSchema;
+  uiSchema: Record<string, unknown> | null;
+}
+
+export interface EntryEditorEntry {
+  id: string;
+  collection: string;
+  locale: string | null;
+  status: ContentStatus;
+  version: number;
+  data: Record<string, unknown>;
+  updated_at: number;
+}
+
+export interface RelatedEntrySection {
+  collection: EntryEditorCollection;
+  relationship: {
+    kind: "translation" | "field";
+    parentField: string;
+    childField: string;
+    parentValue: string | number | boolean;
+  };
+  entries: EntryEditorEntry[];
+}
+
+export interface EntryEditorPayload {
+  collection: EntryEditorCollection;
+  entry: EntryEditorEntry;
+  related: RelatedEntrySection[];
 }
 
 export interface AdminUser {
@@ -56,6 +117,30 @@ export interface SiteInfo {
   canonicalLocale: string | null;
   publicUrl: string;
   mcpUrl: string;
+  media?: {
+    purposes?: MediaPurposePolicy[];
+  };
+}
+
+export interface MediaPurposePolicy {
+  name: string;
+  required: string[];
+  maxBytes: Record<string, number>;
+}
+
+export interface MediaAssetVariant {
+  mimeType: string;
+  publicUrl: string;
+  storageKey?: string;
+  byteSize?: number;
+  role: "primary" | "alternate" | "fallback";
+}
+
+export interface CommittedMediaAsset {
+  id: string;
+  alt?: string;
+  caption?: string;
+  variants: MediaAssetVariant[];
 }
 
 export const EDITORIAL_STATUSES: SidebarStatus[] = [

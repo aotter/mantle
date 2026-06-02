@@ -1,9 +1,9 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
-import { FileText } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check, FileText, PencilLine, Trash2, X } from "lucide-react";
 import { useAdminLocation } from "../../app/router";
 import { api } from "../../lib/api";
-import type { Collection, EntryRow, ListEntriesResult } from "../../lib/types";
+import type { Collection, EntryEditorPayload, EntryRow, ListEntriesResult } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { TableCell, TableHeadCell, TableShell } from "../../ui/admin-table";
 import { EmptyState, ErrorBox, PageHeader } from "../../ui/page";
@@ -11,6 +11,7 @@ import { StatusBadge } from "../../ui/status-badge";
 import { statusLabel } from "./status";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
+import { collectionDescription, collectionTitle } from "./collection-labels";
 
 const TIMESTAMP_FMT = new Intl.DateTimeFormat(undefined, {
   dateStyle: "short",
@@ -24,6 +25,7 @@ export function CollectionView({
 }): React.ReactElement {
   const { language } = usePreferences();
   const location = useAdminLocation();
+  const queryClient = useQueryClient();
   const status = new URLSearchParams(location.search).get("status") ?? undefined;
 
   const collectionsQuery = useQuery<Collection[]>({
@@ -34,16 +36,43 @@ export function CollectionView({
     },
   });
   const entries = useQuery<ListEntriesResult>({
-    queryKey: ["entries", collectionName, status ?? "all"],
+    queryKey: ["entries", collectionName, status ?? "all", language],
     queryFn: () => {
-      const qs = new URLSearchParams({ collection: collectionName });
+      const qs = new URLSearchParams({
+        collection: collectionName,
+        limit: "99",
+        locale: language,
+      });
       if (status) qs.set("status", status);
       return api.get<ListEntriesResult>(`/entries?${qs.toString()}`);
     },
   });
+  const [visibleEntries, setVisibleEntries] = React.useState<ListEntriesResult | null>(null);
+  React.useEffect(() => {
+    if (entries.data) setVisibleEntries(entries.data);
+  }, [entries.data]);
+  const displayedEntries = entries.data ?? visibleEntries;
+  const isFirstLoad = entries.isLoading && !displayedEntries;
 
   const collection = collectionsQuery.data?.find((c) => c.name === collectionName);
-  const heading = collection?.title ?? collectionName;
+  const heading = collection ? collectionTitle(collection, language) : collectionName;
+  const refreshEntries = React.useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["entries", collectionName] });
+  }, [collectionName, queryClient]);
+
+  const titleMutation = useMutation({
+    mutationFn: ({ id, title, version }: { id: string; title: string; version: number }) =>
+      api.patch<EntryEditorPayload>(`/entries/${encodeURIComponent(id)}`, {
+        data: { title },
+        expectedVersion: version,
+      }),
+    onSuccess: refreshEntries,
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) =>
+      api.delete<{ removed: boolean }>(`/entries/${encodeURIComponent(id)}`),
+    onSuccess: refreshEntries,
+  });
 
   return (
     <div>
@@ -58,7 +87,7 @@ export function CollectionView({
           </>
         }
         title={heading}
-        description={collection?.description ?? t(language, "collection.defaultDescription")}
+        description={renderCollectionDescription(collection, language)}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
             {status ? <StatusBadge status={status} /> : null}
@@ -82,9 +111,9 @@ export function CollectionView({
         />
       ) : null}
 
-      {entries.isLoading && <EntriesSkeleton />}
-      {entries.isError && <ErrorBox error={entries.error} />}
-      {entries.data && entries.data.items.length === 0 && (
+      {isFirstLoad && <EntriesSkeleton />}
+      {entries.isError && !displayedEntries && <ErrorBox error={entries.error} />}
+      {displayedEntries && displayedEntries.items.length === 0 && (
         <EmptyState
           icon={FileText}
           title={t(language, "collection.empty.title")}
@@ -95,7 +124,7 @@ export function CollectionView({
           }
         />
       )}
-      {entries.data && entries.data.items.length > 0 && (
+      {displayedEntries && displayedEntries.items.length > 0 && (
         <>
           <TableShell>
             <thead>
@@ -106,15 +135,32 @@ export function CollectionView({
                 <TableHeadCell>{t(language, "collection.table.locale")}</TableHeadCell>
                 <TableHeadCell>{t(language, "collection.table.version")}</TableHeadCell>
                 <TableHeadCell>{t(language, "collection.table.updated")}</TableHeadCell>
+                <TableHeadCell>{t(language, "collection.table.actions")}</TableHeadCell>
               </tr>
             </thead>
             <tbody>
-              {entries.data.items.map((row) => (
-                <EntryRowDisplay key={row.id} row={row} language={language} />
+              {displayedEntries.items.map((row) => (
+                <EntryRowDisplay
+                  key={row.id}
+                  row={row}
+                  language={language}
+                  collection={collection}
+                  onRename={(title) => titleMutation.mutateAsync({ id: row.id, title, version: row.version })}
+                  onDelete={() => deleteMutation.mutateAsync(row.id)}
+                  busy={
+                    (titleMutation.isPending && titleMutation.variables?.id === row.id) ||
+                    (deleteMutation.isPending && deleteMutation.variables === row.id)
+                  }
+                />
               ))}
             </tbody>
           </TableShell>
-          {entries.data.next_cursor ? (
+          {entries.isFetching && !entries.data ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              {t(language, "collection.refreshing")}
+            </p>
+          ) : null}
+          {displayedEntries.next_cursor ? (
             <p className="mt-3 text-xs text-muted-foreground">
               {t(language, "collection.moreRows")}
             </p>
@@ -122,6 +168,41 @@ export function CollectionView({
         </>
       )}
     </div>
+  );
+}
+
+function renderCollectionDescription(
+  collection: Collection | undefined,
+  language: AdminLanguage,
+): React.ReactNode {
+  const raw = collectionDescription(collection, language)?.trim();
+  if (!raw) return t(language, "collection.defaultDescription");
+
+  if (!looksLikeSchemaNotes(raw)) return raw;
+
+  return (
+    <div className="space-y-2">
+      <p>
+        {t(language, "collection.schemaSummary", {
+          name: collection ? collectionTitle(collection, language) : "",
+        })}
+      </p>
+      <details className="group">
+        <summary className="inline-flex cursor-pointer list-none items-center rounded-md border border-border bg-card/70 px-2.5 py-1 text-xs font-semibold text-foreground/70 transition hover:bg-accent hover:text-accent-foreground">
+          {t(language, "collection.schemaDetails")}
+        </summary>
+        <p className="mt-2 max-w-3xl rounded-md border border-border bg-card/55 p-3 text-xs leading-relaxed text-muted-foreground">
+          {raw}
+        </p>
+      </details>
+    </div>
+  );
+}
+
+function looksLikeSchemaNotes(description: string): boolean {
+  return (
+    description.length > 180 ||
+    /`|SKU|BCP|ISO|ContentState|column|field|schema|locale|inventory/i.test(description)
   );
 }
 
@@ -139,7 +220,7 @@ function StatusFilter({
     : (["draft", "published", "archived"] as const);
 
   return (
-    <div className="mb-5 flex gap-2 overflow-x-auto pb-1">
+    <div className="mb-5 flex gap-2 overflow-x-auto pb-1" data-tour="status-filter">
       <StatusFilterLink
         href={`/admin/c/${encodeURIComponent(collection.name)}`}
         active={!activeStatus}
@@ -205,17 +286,99 @@ function EntriesSkeleton(): React.ReactElement {
 function EntryRowDisplay({
   row,
   language,
+  collection,
+  onRename,
+  onDelete,
+  busy,
 }: {
   row: EntryRow;
   language: AdminLanguage;
+  collection: Collection | undefined;
+  onRename: (title: string) => Promise<unknown>;
+  onDelete: () => Promise<unknown>;
+  busy: boolean;
 }): React.ReactElement {
+  const itemName = renderTitleText(row.title, language);
+  const [editing, setEditing] = React.useState(false);
+  const [draftTitle, setDraftTitle] = React.useState(itemName);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!editing) setDraftTitle(itemName);
+  }, [editing, itemName]);
+
+  async function saveTitle(): Promise<void> {
+    const next = draftTitle.trim();
+    if (!next || next === itemName) {
+      setEditing(false);
+      setDraftTitle(itemName);
+      return;
+    }
+    setError(null);
+    try {
+      await onRename(next);
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function remove(): Promise<void> {
+    if (typeof window !== "undefined" && !window.confirm(t(language, "crud.deleteConfirm", { name: itemName }))) {
+      return;
+    }
+    setError(null);
+    try {
+      await onDelete();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   return (
     <tr className="border-t border-[var(--glass-border)] hover:bg-accent/40">
       <TableCell className="font-mono text-xs text-muted-foreground">
         {String(row.id).slice(0, 8)}
       </TableCell>
-      <TableCell className="max-w-[24rem] truncate">
-        {renderTitle(row.title, language)}
+      <TableCell className="max-w-[28rem]">
+        <div className="min-w-[16rem]">
+          {editing ? (
+            <div className="flex items-center gap-1">
+              <input
+                className="admin-input h-9 min-w-0 flex-1"
+                value={draftTitle}
+                autoFocus
+                disabled={busy}
+                onChange={(event) => setDraftTitle(event.target.value)}
+                onBlur={() => void saveTitle()}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void saveTitle();
+                  if (event.key === "Escape") {
+                    setDraftTitle(itemName);
+                    setEditing(false);
+                  }
+                }}
+              />
+              <button type="button" className="row-action" title={t(language, "crud.saveTitle")} disabled={busy} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveTitle()}>
+                <Check className="size-3.5" aria-hidden />
+              </button>
+              <button type="button" className="row-action" title={t(language, "crud.cancelTitle")} disabled={busy} onMouseDown={(event) => event.preventDefault()} onClick={() => { setDraftTitle(itemName); setEditing(false); }}>
+                <X className="size-3.5" aria-hidden />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="group inline-flex max-w-full items-center gap-2 text-left"
+              onClick={() => setEditing(true)}
+              title={itemName}
+            >
+              <span className="truncate">{renderTitle(row.title, language)}</span>
+              <PencilLine className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" aria-hidden />
+            </button>
+          )}
+          {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+        </div>
       </TableCell>
       <TableCell>
         <StatusBadge status={row.status} />
@@ -226,6 +389,17 @@ function EntryRowDisplay({
       </TableCell>
       <TableCell className="text-muted-foreground">
         {formatTimestamp(row.updated_at)}
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-1" data-tour="entry-actions">
+          <a className="row-action" title={t(language, "crud.editTooltip", { name: itemName })} href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}>
+            <PencilLine className="size-3.5" aria-hidden />
+          </a>
+          <button type="button" className="row-action" title={t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy} onClick={() => void remove()}>
+            <Trash2 className="size-3.5" aria-hidden />
+          </button>
+        </div>
+        <span className="sr-only">{collection ? collectionTitle(collection, language) : ""}</span>
       </TableCell>
     </tr>
   );
@@ -244,6 +418,12 @@ function renderTitle(
   }
   if (typeof title === "string") return title;
   return <span className="font-mono text-xs">{JSON.stringify(title)}</span>;
+}
+
+function renderTitleText(title: unknown, language: AdminLanguage): string {
+  if (typeof title === "string" && title) return title;
+  if (title == null || title === "") return t(language, "collection.untitled");
+  return JSON.stringify(title);
 }
 
 function formatTimestamp(ms: number): string {

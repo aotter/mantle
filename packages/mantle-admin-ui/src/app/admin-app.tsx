@@ -8,8 +8,12 @@ import { useAdminLocation } from "./router";
 import { AccessDeniedView, GateError, GateLoading, SignInView } from "../features/auth/auth-views";
 import { HomeView } from "../features/console/home-view";
 import { CollectionView } from "../features/content/collection-view";
+import { EntryEditView } from "../features/content/entry-edit-view";
+import { EditorView } from "../features/editor/editor-view";
+import { MediaLibraryView } from "../features/media/media-library-view";
 import { NotFoundView } from "../features/system/not-found-view";
 import { PreferencesView } from "../features/system/preferences-view";
+import { SettingsView } from "../features/system/settings-view";
 
 export function AdminApp(): React.ReactElement {
   const location = useAdminLocation();
@@ -56,10 +60,37 @@ function Gate({ path }: { path: string }): React.ReactElement {
     );
   }
 
+  const entryMatch = path.match(/^\/admin\/c\/([^/]+)\/([^/]+)\/?$/);
+  if (entryMatch) {
+    const collectionName = decodeURIComponent(entryMatch[1]!);
+    const entryId = decodeURIComponent(entryMatch[2]!);
+    return (
+      <AuthenticatedLayout>
+        <EntryEditView collectionName={collectionName} entryId={entryId} />
+      </AuthenticatedLayout>
+    );
+  }
+
   if (path === "/admin" || path === "/admin/") {
     return (
       <AuthenticatedLayout>
         <HomeView />
+      </AuthenticatedLayout>
+    );
+  }
+
+  if (path === "/admin/editor") {
+    return (
+      <AuthenticatedLayout>
+        <EditorView />
+      </AuthenticatedLayout>
+    );
+  }
+
+  if (path === "/admin/media") {
+    return (
+      <AuthenticatedLayout>
+        <MediaLibraryView />
       </AuthenticatedLayout>
     );
   }
@@ -72,13 +103,21 @@ function Gate({ path }: { path: string }): React.ReactElement {
     );
   }
 
-  if (path === "/admin/approvals" || path === "/admin/settings") {
+  if (path === "/admin/settings") {
+    return (
+      <AuthenticatedLayout>
+        <SettingsView />
+      </AuthenticatedLayout>
+    );
+  }
+
+  if (path === "/admin/approvals") {
     return (
       <AuthenticatedLayout>
         <NotFoundView
           path={path}
           intent="planned"
-          kind={path === "/admin/settings" ? "settings" : "route"}
+          kind="route"
         />
       </AuthenticatedLayout>
     );
