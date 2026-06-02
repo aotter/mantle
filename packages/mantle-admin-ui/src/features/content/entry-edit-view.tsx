@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, Plus, Save, Trash2 } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
@@ -19,9 +19,11 @@ export function EntryEditView({
   entryId: string;
 }): React.ReactElement {
   const { language } = usePreferences();
+  const queryClient = useQueryClient();
+  const queryKey = React.useMemo(() => ["entry-editor", collectionName, entryId], [collectionName, entryId]);
   const query = useQuery<EntryEditorPayload>({
-    queryKey: ["entry-editor", collectionName, entryId],
-    queryFn: () => api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}/editor`),
+    queryKey,
+    queryFn: () => api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}`),
   });
   const [data, setData] = React.useState<Record<string, unknown> | null>(null);
   React.useEffect(() => {
@@ -30,11 +32,13 @@ export function EntryEditView({
 
   const save = useMutation({
     mutationFn: (nextData: Record<string, unknown>) =>
-      api.patch<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}/editor`, {
+      api.patch<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}`, {
         data: nextData,
+        expectedVersion: query.data?.entry.version,
       }),
     onSuccess: (payload) => {
       setData(payload.entry.data);
+      queryClient.setQueryData(queryKey, payload);
     },
   });
 

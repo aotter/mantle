@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, FileText, PencilLine, Trash2, X } from "lucide-react";
 import { useAdminLocation } from "../../app/router";
 import { api } from "../../lib/api";
-import type { Collection, EntryRow, ListEntriesResult } from "../../lib/types";
+import type { Collection, EntryEditorPayload, EntryRow, ListEntriesResult } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { TableCell, TableHeadCell, TableShell } from "../../ui/admin-table";
 import { EmptyState, ErrorBox, PageHeader } from "../../ui/page";
@@ -61,10 +61,10 @@ export function CollectionView({
   }, [collectionName, queryClient]);
 
   const titleMutation = useMutation({
-    mutationFn: ({ id, title }: { id: string; title: string }) =>
-      api.patch<EntryRow>(`/entries/${encodeURIComponent(id)}`, {
-        title,
-        locale: language,
+    mutationFn: ({ id, title, version }: { id: string; title: string; version: number }) =>
+      api.patch<EntryEditorPayload>(`/entries/${encodeURIComponent(id)}`, {
+        data: { title },
+        expectedVersion: version,
       }),
     onSuccess: refreshEntries,
   });
@@ -152,7 +152,7 @@ export function CollectionView({
                   row={row}
                   language={language}
                   collection={collection}
-                  onRename={(title) => titleMutation.mutateAsync({ id: row.id, title })}
+                  onRename={(title) => titleMutation.mutateAsync({ id: row.id, title, version: row.version })}
                   onDuplicate={() => duplicateMutation.mutateAsync(row.id)}
                   onDelete={() => deleteMutation.mutateAsync(row.id)}
                   busy={

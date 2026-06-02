@@ -126,20 +126,9 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   const schemas = ref.manifests.filter(
     (m): m is SchemaManifest => m.kind === "Schema",
   );
-  const translatedParents = new Set<string>();
-  for (const s of schemas) {
-    if (s.spec.translates) translatedParents.add(s.spec.translates.parent);
-  }
   const collections = schemas
     .filter((s) => !s.spec.translates)
-    .map((s) => ({
-      name: s.metadata.name,
-      title: s.spec.title,
-      description: s.spec.description ?? null,
-      lifecycle: s.spec.lifecycle ?? "simple",
-      hasTranslations: translatedParents.has(s.metadata.name),
-      mediaFields: mediaFieldsForCollection(s, schemas),
-    }));
+    .map((s) => adminEditorCollection(s, schemas));
 
   type StaffGateOk = Extract<StaffGate, { kind: "ok" }>;
   const guarded = (
@@ -227,88 +216,92 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       limit: Number.isFinite(parsedLimit) ? parsedLimit : 99,
       cursor: c.req.query("cursor") ?? undefined,
     });
-    const titleByProductSlug =
-      collection === "products"
-        ? await localizedProductTitles(runtime, c.req.query("locale") ?? undefined)
-        : new Map<string, string>();
-    const items = result.rows.map((row) =>
-      adminListItem(row, titleByProductSlug),
-    );
+    const items = result.rows.map(adminListItem);
     return jsonResponse(200, { items, next_cursor: result.nextCursor ?? null });
   });
 
-  guarded("patch", "/admin/api/entries/:id", async (c) =>
-    runUseCase(`PATCH /admin/api/entries/${c.req.param("id")}`, async () => {
+  guarded("get", "/admin/api/entries/:id", async (c) =>
+    runUseCase(`GET /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
+      const row = await runtime.getEntry.execute({ id });
+      return entryEditorPayload(runtime, adminRowFromRuntime(row), schemas);
+    }),
+  );
+
+  guarded("post", "/admin/api/entries", async (c, gate) =>
+    runUseCase("POST /admin/api/entries", async () => {
+      const runtime = await ref.get();
       const body = (await c.req.raw.json().catch(() => ({}))) as {
-        title?: unknown;
-        locale?: unknown;
+        collection?: unknown;
+        data?: unknown;
       };
-      const title = typeof body.title === "string" ? body.title.trim() : "";
-      if (!title) {
+      if (typeof body.collection !== "string" || !body.collection) {
         throw new DiagnosticError(
           runtimeDiagnostic({
             code: "INPUT_VALIDATION_FAILED",
             severity: "error",
-            path: `PATCH /admin/api/entries/${id}#/title`,
+            path: "POST /admin/api/entries#/collection",
             expected: "non-empty string",
-            message: "A non-empty `title` is required.",
+            message: "A non-empty `collection` is required.",
           }),
         );
       }
-      const row = await readAdminEntry(runtime, id);
-      if (!row) {
-        throw new DiagnosticError(adminNotFoundDiagnostic(`PATCH /admin/api/entries/${id}`, id));
-      }
-      await updateAdminEntryTitle(
-        runtime,
-        row,
-        title,
-        typeof body.locale === "string" ? body.locale : undefined,
-      );
-      const updated = await readAdminEntry(runtime, id);
-      if (!updated) {
-        throw new DiagnosticError(adminNotFoundDiagnostic(`PATCH /admin/api/entries/${id}`, id));
-      }
-      return adminListItem(
-        updated,
-        updated.collection === "products"
-          ? await localizedProductTitles(runtime, typeof body.locale === "string" ? body.locale : undefined)
-          : new Map<string, string>(),
-      );
+      const row = await runtime.createDraft.execute({
+        collection: body.collection,
+        data: objectField(body.data),
+        authorId: gate.userId,
+        ctx: adminHandlerContext(gate),
+        originalInput: body,
+      });
+      return entryEditorPayload(runtime, adminRowFromRuntime(row), schemas);
     }),
   );
 
-  guarded("get", "/admin/api/entries/:id/editor", async (c) =>
-    runUseCase(`GET /admin/api/entries/${c.req.param("id")}/editor`, async () => {
+  guarded("patch", "/admin/api/entries/:id", async (c, gate) =>
+    runUseCase(`PATCH /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
-      const row = await readAdminEntry(runtime, id);
-      if (!row) {
-        throw new DiagnosticError(adminNotFoundDiagnostic(`GET /admin/api/entries/${id}/editor`, id));
-      }
-      return entryEditorPayload(runtime, row, schemas);
+      const body = (await c.req.raw.json().catch(() => ({}))) as {
+        data?: unknown;
+        expectedVersion?: unknown;
+      };
+      const updated = await runtime.updateDraft.execute({
+        id,
+        expectedVersion: expectedVersionField(body.expectedVersion, `PATCH /admin/api/entries/${id}#/expectedVersion`),
+        data: objectField(body.data),
+        ctx: adminHandlerContext(gate),
+        originalInput: body,
+      });
+      return entryEditorPayload(runtime, adminRowFromRuntime(updated), schemas);
     }),
   );
 
-  guarded("patch", "/admin/api/entries/:id/editor", async (c) =>
-    runUseCase(`PATCH /admin/api/entries/${c.req.param("id")}/editor`, async () => {
+  guarded("post", "/admin/api/entries/:id/publish", async (c, gate) =>
+    runUseCase(`POST /admin/api/entries/${c.req.param("id")}/publish`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
-      const body = (await c.req.raw.json().catch(() => ({}))) as { data?: unknown };
-      const row = await readAdminEntry(runtime, id);
-      if (!row) {
-        throw new DiagnosticError(adminNotFoundDiagnostic(`PATCH /admin/api/entries/${id}/editor`, id));
-      }
-      const data = objectField(body.data);
-      const saved = await updateAdminEntryData(runtime, row, data);
-      await republishIfPublished(runtime, saved);
-      const updated = await readAdminEntry(runtime, id);
-      if (!updated) {
-        throw new DiagnosticError(adminNotFoundDiagnostic(`PATCH /admin/api/entries/${id}/editor`, id));
-      }
-      return entryEditorPayload(runtime, updated, schemas);
+      const body = await c.req.raw.json().catch(() => ({}));
+      const row = await runtime.requestPublish.execute({
+        id,
+        ctx: adminHandlerContext(gate),
+        originalInput: body,
+      });
+      return entryEditorPayload(runtime, adminRowFromRuntime(row), schemas);
+    }),
+  );
+
+  guarded("post", "/admin/api/entries/:id/unpublish", async (c, gate) =>
+    runUseCase(`POST /admin/api/entries/${c.req.param("id")}/unpublish`, async () => {
+      const runtime = await ref.get();
+      const id = c.req.param("id")!;
+      const body = await c.req.raw.json().catch(() => ({}));
+      const row = await runtime.unpublish.execute({
+        id,
+        ctx: adminHandlerContext(gate),
+        originalInput: body,
+      });
+      return entryEditorPayload(runtime, adminRowFromRuntime(row), schemas);
     }),
   );
 
@@ -316,32 +309,29 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     runUseCase(`POST /admin/api/entries/${c.req.param("id")}/duplicate`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
-      const body = (await c.req.raw.json().catch(() => ({}))) as {
-        locale?: unknown;
-      };
-      const row = await readAdminEntry(runtime, id);
-      if (!row) {
-        throw new DiagnosticError(adminNotFoundDiagnostic(`POST /admin/api/entries/${id}/duplicate`, id));
-      }
-      const duplicated = await duplicateGenericEntry(runtime, row, gate.userId);
-      return adminListItem(
-        duplicated,
-        duplicated.collection === "products"
-          ? await localizedProductTitles(runtime, typeof body.locale === "string" ? body.locale : undefined)
-          : new Map<string, string>(),
-      );
+      const source = await runtime.getEntry.execute({ id });
+      const data = duplicateEntryData(source.data);
+      const row = await runtime.createDraft.execute({
+        collection: source.collection,
+        data,
+        authorId: gate.userId,
+        ctx: adminHandlerContext(gate),
+        originalInput: { sourceId: id, data },
+      });
+      return adminListItem(adminRowFromRuntime(row));
     }),
   );
 
-  guarded("delete", "/admin/api/entries/:id", async (c) =>
+  guarded("delete", "/admin/api/entries/:id", async (c, gate) =>
     runUseCase(`DELETE /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
-      const row = await readAdminEntry(runtime, id);
-      if (!row) {
-        throw new DiagnosticError(adminNotFoundDiagnostic(`DELETE /admin/api/entries/${id}`, id));
-      }
-      return deleteAdminEntry(runtime, row);
+      const body = await c.req.raw.json().catch(() => ({}));
+      return runtime.deleteEntry.execute({
+        id,
+        ctx: adminHandlerContext(gate),
+        originalInput: body,
+      });
     }),
   );
 
@@ -448,41 +438,15 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   });
 }
 
-async function localizedProductTitles(
-  runtime: CmsRuntime,
-  requestedLocale: string | undefined,
-): Promise<Map<string, string>> {
-  const site = await runtime.siteConfig.load().catch(() => null);
-  const locale = requestedLocale ?? site?.canonicalLocale ?? "zh-TW";
-  const page = await runtime.listEntries.executePage({
-    collection: "product-translations",
-    status: "published",
-    limit: 500,
-  });
-  const fallback = new Map<string, string>();
-  const preferred = new Map<string, string>();
-  for (const row of page.rows) {
-    const slug = typeof row.data.slug === "string" ? row.data.slug : null;
-    const title = typeof row.data.title === "string" ? row.data.title : null;
-    if (!slug || !title) continue;
-    if (!fallback.has(slug)) fallback.set(slug, title);
-    if (row.locale === locale || row.data.locale === locale) preferred.set(slug, title);
-  }
-  return new Map([...fallback, ...preferred]);
-}
-
-function adminEntryTitle(data: Record<string, unknown>, productTitles: Map<string, string>): unknown {
+function adminEntryTitle(data: Record<string, unknown>): unknown {
   if (typeof data.title === "string" && data.title) return data.title;
-  if (typeof data.slug === "string" && productTitles.has(data.slug)) {
-    return productTitles.get(data.slug);
-  }
   if (typeof data.slug === "string" && data.slug) return data.slug;
   if (typeof data.skuCode === "string" && data.skuCode) return data.skuCode;
   if (typeof data.orderId === "string" && data.orderId) return data.orderId;
   return null;
 }
 
-function adminListItem(row: AdminEntryRow, productTitles: Map<string, string>): {
+function adminListItem(row: AdminEntryRow): {
   id: string;
   collection: string;
   locale: string | null;
@@ -497,7 +461,7 @@ function adminListItem(row: AdminEntryRow, productTitles: Map<string, string>): 
     locale: row.locale ?? null,
     status: row.status,
     version: row.version,
-    title: adminEntryTitle(row.data, productTitles),
+    title: adminEntryTitle(row.data),
     updated_at: row.updatedAt,
   };
 }
@@ -524,47 +488,6 @@ type AdminEntryDbRow = {
   readonly created_at: number;
   readonly updated_at: number;
 };
-
-async function readAdminEntry(runtime: CmsRuntime, id: string): Promise<AdminEntryRow | null> {
-  const row = await runtime.db
-    .prepare(
-      `SELECT id, collection, status, version, data, author_id, created_at, updated_at
-       FROM entries WHERE id = ?`,
-    )
-    .bind(id)
-    .first<AdminEntryDbRow>();
-  return row ? adminRowFromDb(row) : null;
-}
-
-async function updateAdminEntryTitle(
-  runtime: CmsRuntime,
-  row: AdminEntryRow,
-  title: string,
-  requestedLocale: string | undefined,
-): Promise<void> {
-  if (row.collection === "products" && typeof row.data.slug === "string") {
-    const locale = requestedLocale ?? "zh-TW";
-    const translation = await findProductTranslation(runtime, row.data.slug, locale);
-    if (translation) {
-      const updated = await updateAdminEntryData(runtime, translation, { ...translation.data, title });
-      await republishIfPublished(runtime, updated);
-      await republishIfPublished(runtime, row);
-      return;
-    }
-    const inserted = await insertAdminEntry(runtime, {
-      id: adminId("entry_admin_translation"),
-      collection: "product-translations",
-      status: row.status,
-      data: { slug: row.data.slug, locale, title },
-      authorId: row.authorId,
-    });
-    await republishIfPublished(runtime, inserted);
-    await republishIfPublished(runtime, row);
-    return;
-  }
-  const updated = await updateAdminEntryData(runtime, row, { ...row.data, title });
-  await republishIfPublished(runtime, updated);
-}
 
 async function entryEditorPayload(
   runtime: CmsRuntime,
@@ -860,157 +783,6 @@ async function writeSiteSettings(
   if (stmts.length > 0) await runtime.db.batch(stmts);
 }
 
-async function duplicateGenericEntry(
-  runtime: CmsRuntime,
-  row: AdminEntryRow,
-  authorId: string | null,
-): Promise<AdminEntryRow> {
-  const data = { ...row.data };
-  if (typeof data.slug === "string") {
-    data.slug = await uniqueDataField(runtime, row.collection, "slug", `${data.slug}-copy`);
-  }
-  if (typeof data.title === "string") data.title = `${data.title}（副本）`;
-  return insertAdminEntry(runtime, {
-    id: adminId("entry_admin_copy"),
-    collection: row.collection,
-    status: row.status,
-    data,
-    authorId,
-  });
-}
-
-async function deleteAdminEntry(
-  runtime: CmsRuntime,
-  row: AdminEntryRow,
-): Promise<{ readonly removed: boolean }> {
-  await unpublishIfPublished(runtime, row);
-  return runtime.deleteEntry.execute({ id: row.id });
-}
-
-async function republishIfPublished(
-  runtime: CmsRuntime,
-  row: AdminEntryRow,
-): Promise<void> {
-  if (row.status !== "published") return;
-  const site = await runtime.siteConfig.load();
-  await runtime.publishOrchestrator.publish({
-    entryId: row.id,
-    site,
-    templates: runtime.templates,
-  });
-}
-
-async function unpublishIfPublished(
-  runtime: CmsRuntime,
-  row: AdminEntryRow,
-): Promise<void> {
-  if (row.status !== "published") return;
-  const site = await runtime.siteConfig.load();
-  await runtime.publishOrchestrator.unpublish({
-    entryId: row.id,
-    site,
-    templates: runtime.templates,
-  });
-}
-
-async function updateAdminEntryData(
-  runtime: CmsRuntime,
-  row: AdminEntryRow,
-  data: Record<string, unknown>,
-): Promise<AdminEntryRow> {
-  const updated = await runtime.db
-    .prepare(
-      `UPDATE entries SET data = ?, version = version + 1, updated_at = ?
-       WHERE id = ?
-       RETURNING id, collection, status, version, data, author_id, created_at, updated_at`,
-    )
-    .bind(JSON.stringify(data), Date.now(), row.id)
-    .first<AdminEntryDbRow>();
-  if (!updated) throw new DiagnosticError(adminNotFoundDiagnostic("admin/updateEntryData", row.id));
-  return adminRowFromDb(updated);
-}
-
-async function insertAdminEntry(
-  runtime: CmsRuntime,
-  args: {
-    id: string;
-    collection: string;
-    status: ContentState;
-    data: Record<string, unknown>;
-    authorId: string | null;
-  },
-): Promise<AdminEntryRow> {
-  const now = Date.now();
-  await runtime.db
-    .prepare(
-      `INSERT INTO entries (id, collection, status, version, data, author_id, created_at, updated_at)
-       VALUES (?, ?, ?, 1, ?, ?, ?, ?)`,
-    )
-    .bind(args.id, args.collection, args.status, JSON.stringify(args.data), args.authorId, now, now)
-    .run();
-  const row = await readAdminEntry(runtime, args.id);
-  if (!row) throw new DiagnosticError(adminNotFoundDiagnostic("admin/insertEntry", args.id));
-  return row;
-}
-
-async function findProductTranslation(
-  runtime: CmsRuntime,
-  slug: string,
-  locale: string,
-): Promise<AdminEntryRow | null> {
-  const row = await runtime.db
-    .prepare(
-      `SELECT id, collection, status, version, data, author_id, created_at, updated_at
-       FROM entries
-       WHERE collection = 'product-translations' AND json_extract(data, '$.slug') = ?
-       ORDER BY CASE WHEN json_extract(data, '$.locale') = ? THEN 0 ELSE 1 END, updated_at DESC
-       LIMIT 1`,
-    )
-    .bind(slug, locale)
-    .first<AdminEntryDbRow>();
-  return row ? adminRowFromDb(row) : null;
-}
-
-async function entriesByDataField(
-  runtime: CmsRuntime,
-  collection: string,
-  field: string,
-  value: string,
-): Promise<AdminEntryRow[]> {
-  const rows = await runtime.db
-    .prepare(
-      `SELECT id, collection, status, version, data, author_id, created_at, updated_at
-       FROM entries
-       WHERE collection = ? AND json_extract(data, ?) = ?
-       ORDER BY updated_at DESC, id DESC`,
-    )
-    .bind(collection, `$.${field}`, value)
-    .all<AdminEntryDbRow>();
-  return rows.map(adminRowFromDb);
-}
-
-async function uniqueDataField(
-  runtime: CmsRuntime,
-  collection: string,
-  field: string,
-  preferred: string,
-): Promise<string> {
-  const base = slugifyIdentifier(preferred);
-  for (let i = 0; i < 100; i += 1) {
-    const candidate = i === 0 ? base : `${base}-${i + 1}`;
-    const row = await runtime.db
-      .prepare(
-        `SELECT id FROM entries
-         WHERE collection = ? AND json_extract(data, ?) = ?
-         LIMIT 1`,
-      )
-      .bind(collection, `$.${field}`, candidate)
-      .first<{ id: string }>();
-    if (!row) return candidate;
-  }
-  return `${base}-${Date.now()}`;
-}
-
 function adminRowFromDb(row: AdminEntryDbRow): AdminEntryRow {
   const data = JSON.parse(row.data) as Record<string, unknown>;
   const locale = typeof data.locale === "string" ? data.locale : undefined;
@@ -1027,29 +799,37 @@ function adminRowFromDb(row: AdminEntryDbRow): AdminEntryRow {
   };
 }
 
-function adminId(prefix: string): string {
-  const raw = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  return `${prefix}_${raw.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+function adminRowFromRuntime(row: AdminEntryRow): AdminEntryRow {
+  return {
+    id: row.id,
+    collection: row.collection,
+    status: row.status,
+    version: row.version,
+    data: row.data,
+    locale: row.locale,
+    authorId: row.authorId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
-function slugifyIdentifier(value: string): string {
-  const slug = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || `copy-${Date.now()}`;
+function duplicateEntryData(data: Record<string, unknown>): Record<string, unknown> {
+  const copy = { ...data };
+  if (typeof copy.title === "string" && copy.title) copy.title = `${copy.title} (copy)`;
+  return copy;
 }
 
-function adminNotFoundDiagnostic(path: string, id: string): Diagnostic {
-  return runtimeDiagnostic({
-    code: "NOT_FOUND",
-    severity: "error",
-    path,
-    value: id,
-    expected: "existing entry id",
-    message: `Entry '${id}' was not found.`,
-  });
+function expectedVersionField(value: unknown, path: string): number {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return value;
+  throw new DiagnosticError(
+    runtimeDiagnostic({
+      code: "INPUT_VALIDATION_FAILED",
+      severity: "error",
+      path,
+      expected: "non-negative integer",
+      message: "`expectedVersion` is required for draft updates.",
+    }),
+  );
 }
 
 function stringField(value: unknown): string | undefined {
@@ -1071,6 +851,14 @@ type StaffGate =
       login: string | null;
       role: StaffRole;
     };
+
+function adminHandlerContext(gate: Extract<StaffGate, { kind: "ok" }>): HandlerContext {
+  return {
+    user: { id: gate.userId },
+    staff: { id: gate.userId, role: gate.role },
+    env: {},
+  };
+}
 
 async function readStaffGate(c: Context, auth: Auth): Promise<StaffGate> {
   const session = await auth.getSession(c.req.raw);
