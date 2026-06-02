@@ -7,6 +7,7 @@ import { api } from "../../lib/api";
 import type { Collection, EntryRow, ListEntriesResult } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { ResourceListSkeleton } from "../../ui/resource";
 import { StatusBadge } from "../../ui/status-badge";
 import { collectionTitle } from "../content/collection-labels";
 import { statusLabel } from "../content/status";
@@ -142,20 +143,7 @@ function ApprovalRow({
 }
 
 function ApprovalsSkeleton(): React.ReactElement {
-  return (
-    <div className="glass-card overflow-hidden">
-      {[0, 1, 2].map((index) => (
-        <div
-          key={index}
-          className="flex items-center gap-4 border-b border-[var(--glass-border)] p-4 last:border-b-0"
-        >
-          <div className="h-3 w-32 animate-pulse rounded bg-muted" />
-          <div className="h-3 flex-1 animate-pulse rounded bg-muted" />
-          <div className="h-8 w-24 animate-pulse rounded bg-muted" />
-        </div>
-      ))}
-    </div>
-  );
+  return <ResourceListSkeleton rows={3} />;
 }
 
 function entryTitle(entry: EntryRow, language: AdminLanguage): string {

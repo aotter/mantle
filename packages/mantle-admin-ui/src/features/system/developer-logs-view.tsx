@@ -1,19 +1,18 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, ChevronLeft, ChevronRight, ExternalLink, Save, ShieldCheck, TerminalSquare } from "lucide-react";
+import { Activity, ExternalLink, Save, ShieldCheck, TerminalSquare } from "lucide-react";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import type { CoverageItem, CoverageReport, DeveloperLogItem } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { PaginationControls, type PageSize, paginate, SegmentedTabs } from "../../ui/resource";
 
 const TIMESTAMP_FMT = new Intl.DateTimeFormat(undefined, {
   dateStyle: "short",
   timeStyle: "short",
 });
-
-const PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
 
 type DeveloperLogsTab = "logs" | "coverage";
 
@@ -43,9 +42,9 @@ export function DeveloperLogsView(): React.ReactElement {
   });
   const [activeTab, setActiveTab] = React.useState<DeveloperLogsTab>("logs");
   const [logPage, setLogPage] = React.useState(1);
-  const [logPageSize, setLogPageSize] = React.useState<(typeof PAGE_SIZE_OPTIONS)[number]>(10);
+  const [logPageSize, setLogPageSize] = React.useState<PageSize>(10);
   const [coveragePage, setCoveragePage] = React.useState(1);
-  const [coveragePageSize, setCoveragePageSize] = React.useState<(typeof PAGE_SIZE_OPTIONS)[number]>(10);
+  const [coveragePageSize, setCoveragePageSize] = React.useState<PageSize>(10);
   const createLog = useMutation({
     mutationFn: (next: LogForm) => api.post<DeveloperLogItem>("/developer-logs", next),
     onSuccess: () => {
@@ -62,28 +61,16 @@ export function DeveloperLogsView(): React.ReactElement {
         description={t(language, "developerLogs.body")}
       />
 
-      <div className="segmented-control w-fit max-w-full overflow-x-auto" role="tablist" aria-label={t(language, "developerLogs.tabsLabel")}>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === "logs"}
-          data-active={activeTab === "logs" ? "true" : undefined}
-          onClick={() => setActiveTab("logs")}
-        >
-          <Activity className="size-4" aria-hidden />
-          {t(language, "developerLogs.tab.logs")}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === "coverage"}
-          data-active={activeTab === "coverage" ? "true" : undefined}
-          onClick={() => setActiveTab("coverage")}
-        >
-          <ShieldCheck className="size-4" aria-hidden />
-          {t(language, "developerLogs.tab.coverage")}
-        </button>
-      </div>
+      <SegmentedTabs
+        className="w-fit"
+        label={t(language, "developerLogs.tabsLabel")}
+        value={activeTab}
+        onChange={setActiveTab}
+        items={[
+          { value: "logs", label: t(language, "developerLogs.tab.logs"), icon: Activity },
+          { value: "coverage", label: t(language, "developerLogs.tab.coverage"), icon: ShieldCheck },
+        ]}
+      />
 
       {activeTab === "logs" ? (
         <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]" role="tabpanel">
@@ -305,85 +292,6 @@ function CoverageTable({ items }: { items: CoverageItem[] }): React.ReactElement
   );
 }
 
-function PaginationControls({
-  page,
-  pageSize,
-  totalItems,
-  onPageChange,
-  onPageSizeChange,
-}: {
-  page: number;
-  pageSize: (typeof PAGE_SIZE_OPTIONS)[number];
-  totalItems: number;
-  onPageChange: (page: number) => void;
-  onPageSizeChange: (pageSize: (typeof PAGE_SIZE_OPTIONS)[number]) => void;
-}): React.ReactElement {
-  const { language } = usePreferences();
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const start = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  const end = Math.min(totalItems, currentPage * pageSize);
-
-  React.useEffect(() => {
-    if (page > totalPages) onPageChange(totalPages);
-  }, [onPageChange, page, totalPages]);
-
-  return (
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-      <div>
-        {t(language, "developerLogs.paginationRange", {
-          start: String(start),
-          end: String(end),
-          total: String(totalItems),
-        })}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="inline-flex items-center gap-2">
-          <span>{t(language, "developerLogs.rowsPerPage")}</span>
-          <select
-            className="admin-input h-9 w-24 py-1 text-sm"
-            value={pageSize}
-            onChange={(event) => onPageSizeChange(toPageSize(event.target.value))}
-          >
-            {PAGE_SIZE_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="inline-flex items-center gap-1">
-          <Button
-            type="button"
-            variant="secondary"
-            size="icon"
-            className="size-9"
-            disabled={currentPage <= 1}
-            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-            aria-label={t(language, "developerLogs.previousPage")}
-          >
-            <ChevronLeft className="size-4" aria-hidden />
-          </Button>
-          <span className="min-w-20 text-center font-semibold text-foreground">
-            {currentPage} / {totalPages}
-          </span>
-          <Button
-            type="button"
-            variant="secondary"
-            size="icon"
-            className="size-9"
-            disabled={currentPage >= totalPages}
-            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-            aria-label={t(language, "developerLogs.nextPage")}
-          >
-            <ChevronRight className="size-4" aria-hidden />
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function StatusPill({ status }: { status: string }): React.ReactElement {
   const tone =
     status === "covered" || status === "success"
@@ -399,16 +307,4 @@ function StatusPill({ status }: { status: string }): React.ReactElement {
 function formatTimestamp(value: number): string {
   if (!value) return "-";
   return TIMESTAMP_FMT.format(new Date(value));
-}
-
-function paginate<T>(items: T[], page: number, pageSize: number): T[] {
-  const start = (page - 1) * pageSize;
-  return items.slice(start, start + pageSize);
-}
-
-function toPageSize(value: string): (typeof PAGE_SIZE_OPTIONS)[number] {
-  const numeric = Number(value);
-  return PAGE_SIZE_OPTIONS.includes(numeric as (typeof PAGE_SIZE_OPTIONS)[number])
-    ? (numeric as (typeof PAGE_SIZE_OPTIONS)[number])
-    : 10;
 }

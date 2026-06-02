@@ -5,13 +5,13 @@ import {
   Copy,
   Crop,
   ImagePlus,
-  Search,
   Tags,
 } from "lucide-react";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { Button } from "../../ui/button";
 import { PageHeader, SectionCard } from "../../ui/page";
+import { ResourceSearchField } from "../../ui/resource";
 import { MEDIA_ASSETS, type MediaAsset } from "./media-assets";
 
 type MediaFilter = "all" | MediaAsset["tag"];
@@ -65,14 +65,12 @@ export function MediaLibraryView(): React.ReactElement {
 
       <SectionCard className="media-album">
         <div className="media-toolbar">
-          <label className="admin-search media-search">
-            <Search className="size-4" aria-hidden />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t(language, "media.search")}
-            />
-          </label>
+          <ResourceSearchField
+            className="media-search"
+            value={query}
+            onChange={setQuery}
+            placeholder={t(language, "media.search")}
+          />
           <div className="segmented-control media-filter" aria-label={t(language, "media.filter")}>
             {(["all", "product", "brand", "content"] as const).map((value) => (
               <button

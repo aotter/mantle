@@ -1,13 +1,13 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, FileText, PencilLine, Plus, Search, Trash2, X } from "lucide-react";
+import { Check, Copy, FileText, PencilLine, Plus, Trash2, X } from "lucide-react";
 import { useAdminLocation } from "../../app/router";
 import { api } from "../../lib/api";
 import type { Collection, EntryRow, ListEntriesResult } from "../../lib/types";
-import { cn } from "../../lib/utils";
 import { TableCell, TableHeadCell, TableShell } from "../../ui/admin-table";
 import { Button } from "../../ui/button";
 import { EmptyState, ErrorBox, PageHeader } from "../../ui/page";
+import { ResourceFilterBar, ResourceFilterLink, ResourceListSkeleton, ResourceSearchField, ResourceToolbar } from "../../ui/resource";
 import { StatusBadge } from "../../ui/status-badge";
 import { statusLabel } from "./status";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
@@ -250,29 +250,21 @@ function CollectionSearch({
   const [draft, setDraft] = React.useState(searchTerm);
   React.useEffect(() => setDraft(searchTerm), [searchTerm]);
   return (
-    <form
-      className="mb-3 max-w-xl"
-      role="search"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const next = draft.trim();
-        const params = new URLSearchParams();
-        if (status) params.set("status", status);
-        if (next) params.set("search", next);
-        const suffix = params.toString();
-        window.location.href = `/admin/c/${encodeURIComponent(collectionName)}${suffix ? `?${suffix}` : ""}`;
-      }}
-    >
-      <label className="admin-search-field">
-        <Search className="admin-search-icon" aria-hidden />
-        <input
-          className="admin-input admin-search-input"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder={t(language, "collection.searchPlaceholder")}
-        />
-      </label>
-    </form>
+    <ResourceToolbar className="max-w-3xl">
+      <ResourceSearchField
+        value={draft}
+        onChange={setDraft}
+        placeholder={t(language, "collection.searchPlaceholder")}
+        onSubmit={() => {
+          const next = draft.trim();
+          const params = new URLSearchParams();
+          if (status) params.set("status", status);
+          if (next) params.set("search", next);
+          const suffix = params.toString();
+          window.location.href = `/admin/c/${encodeURIComponent(collectionName)}${suffix ? `?${suffix}` : ""}`;
+        }}
+      />
+    </ResourceToolbar>
   );
 }
 
@@ -327,23 +319,23 @@ function StatusFilter({
     : (["draft", "published", "archived"] as const);
 
   return (
-    <div className="mb-5 flex gap-2 overflow-x-auto pb-1" data-tour="status-filter">
-      <StatusFilterLink
+    <ResourceFilterBar>
+      <ResourceFilterLink
         href={collectionFilterHref(collection.name, undefined, searchTerm)}
         active={!activeStatus}
       >
         {t(language, "collection.filter.all")}
-      </StatusFilterLink>
+      </ResourceFilterLink>
       {statuses.map((s) => (
-        <StatusFilterLink
+        <ResourceFilterLink
           key={s}
           href={collectionFilterHref(collection.name, s, searchTerm)}
           active={activeStatus === s}
         >
           {statusLabel(language, s)}
-        </StatusFilterLink>
+        </ResourceFilterLink>
       ))}
-    </div>
+    </ResourceFilterBar>
   );
 }
 
@@ -359,47 +351,8 @@ function collectionFilterHref(
   return `/admin/c/${encodeURIComponent(collectionName)}${suffix ? `?${suffix}` : ""}`;
 }
 
-function StatusFilterLink({
-  href,
-  active,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  children: React.ReactNode;
-}): React.ReactElement {
-  return (
-    <a
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "inline-flex h-8 shrink-0 items-center justify-center rounded-lg border px-3 text-xs font-medium",
-        "transition-colors duration-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-        active
-          ? "border-[var(--glass-border)] bg-secondary text-secondary-foreground"
-          : "border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-      )}
-    >
-      {children}
-    </a>
-  );
-}
-
 function EntriesSkeleton(): React.ReactElement {
-  return (
-    <div className="glass-card overflow-hidden">
-      {[0, 1, 2, 3, 4].map((i) => (
-        <div
-          key={i}
-          className="flex items-center gap-4 border-b border-[var(--glass-border)] p-3 last:border-b-0"
-        >
-          <div className="h-3 w-16 animate-pulse rounded bg-muted" />
-          <div className="h-3 flex-1 animate-pulse rounded bg-muted" />
-          <div className="h-6 w-20 animate-pulse rounded-full bg-muted" />
-        </div>
-      ))}
-    </div>
-  );
+  return <ResourceListSkeleton />;
 }
 
 function EntryRowDisplay({
