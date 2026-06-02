@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   AlignCenter,
   AlignLeft,
@@ -36,31 +37,12 @@ import {
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
+import type { SiteInfo } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { MEDIA_ASSETS } from "../media/media-assets";
+import { primaryPublicUrl, uploadMediaAsset } from "../media/media-upload";
 
 export type EditorMode = "markdown" | "html" | "rich";
-
-type MediaUploadResponse = {
-  uploadGroupId: string;
-  capabilities: Array<{
-    mimeType: string;
-    role: "primary" | "alternate" | "fallback";
-    method: "PUT";
-    uploadUrl: string;
-    requiredHeaders?: Record<string, string>;
-  }>;
-};
-
-type CommittedMediaAsset = {
-  id: string;
-  alt?: string;
-  variants: Array<{
-    mimeType: string;
-    publicUrl: string;
-    role: "primary" | "alternate" | "fallback";
-  }>;
-};
 
 export function RichTextEditor({
   value,
@@ -88,6 +70,10 @@ export function RichTextEditor({
   const [uploading, setUploading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const activeMode = mode ?? "rich";
+  const site = useQuery<SiteInfo>({
+    queryKey: ["site"],
+    queryFn: () => api.get<SiteInfo>("/site"),
+  });
 
   const insert = React.useCallback(
     (before: string, after = "", placeholder = "") => {
@@ -123,26 +109,14 @@ export function RichTextEditor({
     setUploading(true);
     setError(null);
     try {
-      const created = await api.post<MediaUploadResponse>("/media/uploads", {
-        filename: file.name,
-        purpose: "content",
-        variants: [{ mimeType: file.type || "application/octet-stream", byteSize: file.size, role: "primary" }],
-        alt: file.name.replace(/\.[^.]+$/, ""),
+      const committed = await uploadMediaAsset({
+        file,
+        purposes: site.data?.media?.purposes ?? [],
+        preferredPurpose: "content",
       });
-      const primary = created.capabilities.find((cap) => cap.role === "primary") ?? created.capabilities[0];
-      if (!primary) throw new Error("Upload capability missing.");
-      await fetch(primary.uploadUrl, {
-        method: primary.method,
-        headers: primary.requiredHeaders ?? { "Content-Type": file.type },
-        body: file,
-      });
-      const committed = await api.post<CommittedMediaAsset>(
-        `/media/uploads/${encodeURIComponent(created.uploadGroupId)}/commit`,
-        { alt: file.name.replace(/\.[^.]+$/, "") },
-      );
-      const variant = committed.variants.find((v) => v.role === "primary") ?? committed.variants[0];
-      if (!variant) throw new Error("Uploaded media has no public URL.");
-      insertImage(variant.publicUrl, committed.alt ?? file.name);
+      const url = primaryPublicUrl(committed);
+      if (!url) throw new Error("Uploaded media has no public URL.");
+      insertImage(url, committed.alt ?? file.name);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

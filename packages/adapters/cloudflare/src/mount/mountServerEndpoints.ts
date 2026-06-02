@@ -251,7 +251,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
         collection: body.collection,
         data: objectField(body.data),
         authorId: gate.userId,
-        ctx: adminHandlerContext(gate),
+        ctx: adminHandlerContext(c, gate),
         originalInput: body,
       });
       return entryEditorPayload(runtime, adminRowFromRuntime(row), schemas);
@@ -270,7 +270,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
         id,
         expectedVersion: expectedVersionField(body.expectedVersion, `PATCH /admin/api/entries/${id}#/expectedVersion`),
         data: objectField(body.data),
-        ctx: adminHandlerContext(gate),
+        ctx: adminHandlerContext(c, gate),
         originalInput: body,
       });
       return entryEditorPayload(runtime, adminRowFromRuntime(updated), schemas);
@@ -284,7 +284,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       const body = await c.req.raw.json().catch(() => ({}));
       const row = await runtime.requestPublish.execute({
         id,
-        ctx: adminHandlerContext(gate),
+        ctx: adminHandlerContext(c, gate),
         originalInput: body,
       });
       return entryEditorPayload(runtime, adminRowFromRuntime(row), schemas);
@@ -298,27 +298,10 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       const body = await c.req.raw.json().catch(() => ({}));
       const row = await runtime.unpublish.execute({
         id,
-        ctx: adminHandlerContext(gate),
+        ctx: adminHandlerContext(c, gate),
         originalInput: body,
       });
       return entryEditorPayload(runtime, adminRowFromRuntime(row), schemas);
-    }),
-  );
-
-  guarded("post", "/admin/api/entries/:id/duplicate", async (c, gate) =>
-    runUseCase(`POST /admin/api/entries/${c.req.param("id")}/duplicate`, async () => {
-      const runtime = await ref.get();
-      const id = c.req.param("id")!;
-      const source = await runtime.getEntry.execute({ id });
-      const data = duplicateEntryData(source.data);
-      const row = await runtime.createDraft.execute({
-        collection: source.collection,
-        data,
-        authorId: gate.userId,
-        ctx: adminHandlerContext(gate),
-        originalInput: { sourceId: id, data },
-      });
-      return adminListItem(adminRowFromRuntime(row));
     }),
   );
 
@@ -329,7 +312,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       const body = await c.req.raw.json().catch(() => ({}));
       return runtime.deleteEntry.execute({
         id,
-        ctx: adminHandlerContext(gate),
+        ctx: adminHandlerContext(c, gate),
         originalInput: body,
       });
     }),
@@ -813,12 +796,6 @@ function adminRowFromRuntime(row: AdminEntryRow): AdminEntryRow {
   };
 }
 
-function duplicateEntryData(data: Record<string, unknown>): Record<string, unknown> {
-  const copy = { ...data };
-  if (typeof copy.title === "string" && copy.title) copy.title = `${copy.title} (copy)`;
-  return copy;
-}
-
 function expectedVersionField(value: unknown, path: string): number {
   if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return value;
   throw new DiagnosticError(
@@ -852,11 +829,13 @@ type StaffGate =
       role: StaffRole;
     };
 
-function adminHandlerContext(gate: Extract<StaffGate, { kind: "ok" }>): HandlerContext {
+function adminHandlerContext(c: Context, gate: Extract<StaffGate, { kind: "ok" }>): HandlerContext {
+  const waitUntil = readWaitUntil(c);
   return {
     user: { id: gate.userId },
     staff: { id: gate.userId, role: gate.role },
     env: {},
+    ...(waitUntil ? { waitUntil } : {}),
   };
 }
 

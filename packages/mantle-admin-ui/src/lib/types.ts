@@ -117,6 +117,30 @@ export interface SiteInfo {
   canonicalLocale: string | null;
   publicUrl: string;
   mcpUrl: string;
+  media?: {
+    purposes?: MediaPurposePolicy[];
+  };
+}
+
+export interface MediaPurposePolicy {
+  name: string;
+  required: string[];
+  maxBytes: Record<string, number>;
+}
+
+export interface MediaAssetVariant {
+  mimeType: string;
+  publicUrl: string;
+  storageKey?: string;
+  byteSize?: number;
+  role: "primary" | "alternate" | "fallback";
+}
+
+export interface CommittedMediaAsset {
+  id: string;
+  alt?: string;
+  caption?: string;
+  variants: MediaAssetVariant[];
 }
 
 export const EDITORIAL_STATUSES: SidebarStatus[] = [

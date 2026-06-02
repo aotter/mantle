@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, FileText, PencilLine, Trash2, X } from "lucide-react";
+import { Check, FileText, PencilLine, Trash2, X } from "lucide-react";
 import { useAdminLocation } from "../../app/router";
 import { api } from "../../lib/api";
 import type { Collection, EntryEditorPayload, EntryRow, ListEntriesResult } from "../../lib/types";
@@ -65,13 +65,6 @@ export function CollectionView({
       api.patch<EntryEditorPayload>(`/entries/${encodeURIComponent(id)}`, {
         data: { title },
         expectedVersion: version,
-      }),
-    onSuccess: refreshEntries,
-  });
-  const duplicateMutation = useMutation({
-    mutationFn: (id: string) =>
-      api.post<EntryRow>(`/entries/${encodeURIComponent(id)}/duplicate`, {
-        locale: language,
       }),
     onSuccess: refreshEntries,
   });
@@ -153,11 +146,9 @@ export function CollectionView({
                   language={language}
                   collection={collection}
                   onRename={(title) => titleMutation.mutateAsync({ id: row.id, title, version: row.version })}
-                  onDuplicate={() => duplicateMutation.mutateAsync(row.id)}
                   onDelete={() => deleteMutation.mutateAsync(row.id)}
                   busy={
                     (titleMutation.isPending && titleMutation.variables?.id === row.id) ||
-                    (duplicateMutation.isPending && duplicateMutation.variables === row.id) ||
                     (deleteMutation.isPending && deleteMutation.variables === row.id)
                   }
                 />
@@ -297,7 +288,6 @@ function EntryRowDisplay({
   language,
   collection,
   onRename,
-  onDuplicate,
   onDelete,
   busy,
 }: {
@@ -305,7 +295,6 @@ function EntryRowDisplay({
   language: AdminLanguage;
   collection: Collection | undefined;
   onRename: (title: string) => Promise<unknown>;
-  onDuplicate: () => Promise<unknown>;
   onDelete: () => Promise<unknown>;
   busy: boolean;
 }): React.ReactElement {
@@ -329,15 +318,6 @@ function EntryRowDisplay({
     try {
       await onRename(next);
       setEditing(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  async function duplicate(): Promise<void> {
-    setError(null);
-    try {
-      await onDuplicate();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -415,9 +395,6 @@ function EntryRowDisplay({
           <a className="row-action" title={t(language, "crud.editTooltip", { name: itemName })} href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}>
             <PencilLine className="size-3.5" aria-hidden />
           </a>
-          <button type="button" className="row-action" title={t(language, "crud.duplicateTooltip", { name: itemName })} disabled={busy} onClick={() => void duplicate()}>
-            <Copy className="size-3.5" aria-hidden />
-          </button>
           <button type="button" className="row-action" title={t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy} onClick={() => void remove()}>
             <Trash2 className="size-3.5" aria-hidden />
           </button>

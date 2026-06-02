@@ -1,14 +1,15 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, ImagePlus, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
-import type { EntryEditorPayload, JsonSchema, RelatedEntrySection } from "../../lib/types";
+import type { EntryEditorPayload, JsonSchema, MediaPurposePolicy, RelatedEntrySection, SiteInfo } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
 import { RichTextEditor } from "../editor/rich-text-editor";
+import { primaryPublicUrl, purposeForMediaField, uploadMediaAsset } from "../media/media-upload";
 import { collectionTitle } from "./collection-labels";
 
 export function EntryEditView({
@@ -25,10 +26,21 @@ export function EntryEditView({
     queryKey,
     queryFn: () => api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}`),
   });
+  const site = useQuery<SiteInfo>({
+    queryKey: ["site"],
+    queryFn: () => api.get<SiteInfo>("/site"),
+  });
   const [data, setData] = React.useState<Record<string, unknown> | null>(null);
   React.useEffect(() => {
     if (query.data) setData(query.data.entry.data);
   }, [query.data]);
+  const syncPayload = React.useCallback(
+    (payload: EntryEditorPayload) => {
+      setData(payload.entry.data);
+      queryClient.setQueryData(queryKey, payload);
+    },
+    [queryClient, queryKey],
+  );
 
   const save = useMutation({
     mutationFn: (nextData: Record<string, unknown>) =>
@@ -36,10 +48,15 @@ export function EntryEditView({
         data: nextData,
         expectedVersion: query.data?.entry.version,
       }),
-    onSuccess: (payload) => {
-      setData(payload.entry.data);
-      queryClient.setQueryData(queryKey, payload);
-    },
+    onSuccess: syncPayload,
+  });
+  const publish = useMutation({
+    mutationFn: () => api.post<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}/publish`, {}),
+    onSuccess: syncPayload,
+  });
+  const unpublish = useMutation({
+    mutationFn: () => api.post<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}/unpublish`, {}),
+    onSuccess: syncPayload,
   });
 
   if (query.isLoading) return <div className="glass-card h-64 animate-pulse" />;
@@ -49,6 +66,9 @@ export function EntryEditView({
   const payload = query.data;
   const title = entryTitle(data, payload.entry.id);
   const dirty = JSON.stringify(data) !== JSON.stringify(payload.entry.data);
+  const isDraft = payload.entry.status === "draft";
+  const actionPending = save.isPending || publish.isPending || unpublish.isPending;
+  const mediaPurposes = site.data?.media?.purposes ?? [];
 
   return (
     <div className="space-y-6">
@@ -69,10 +89,33 @@ export function EntryEditView({
         actions={
           <>
             <StatusBadge status={payload.entry.status} />
+            {isDraft ? (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => publish.mutate()}
+                disabled={actionPending || dirty}
+                title={dirty ? t(language, "entryEdit.publishDisabledDirty") : t(language, "entryEdit.publishTooltip")}
+              >
+                <Send className="size-4" aria-hidden />
+                {publish.isPending ? t(language, "entryEdit.publishing") : t(language, "entryEdit.publish")}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => unpublish.mutate()}
+                disabled={actionPending}
+                title={t(language, "entryEdit.unpublishTooltip")}
+              >
+                <RotateCcw className="size-4" aria-hidden />
+                {unpublish.isPending ? t(language, "entryEdit.unpublishing") : t(language, "entryEdit.unpublish")}
+              </Button>
+            )}
             <Button
               type="button"
               onClick={() => save.mutate(data)}
-              disabled={save.isPending || !dirty}
+              disabled={actionPending || !dirty || !isDraft}
               title={t(language, "entryEdit.saveTooltip")}
             >
               <Save className="size-4" aria-hidden />
@@ -83,6 +126,8 @@ export function EntryEditView({
       />
 
       {save.isError ? <ErrorBox error={save.error} /> : null}
+      {publish.isError ? <ErrorBox error={publish.error} /> : null}
+      {unpublish.isError ? <ErrorBox error={unpublish.error} /> : null}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <SectionCard>
@@ -96,6 +141,8 @@ export function EntryEditView({
             path={[]}
             onChange={setData}
             language={language}
+            collectionName={payload.collection.name}
+            mediaPurposes={mediaPurposes}
           />
         </SectionCard>
 
@@ -154,12 +201,16 @@ function SchemaFields({
   path,
   onChange,
   language,
+  collectionName,
+  mediaPurposes,
 }: {
   schema: JsonSchema;
   value: Record<string, unknown>;
   path: string[];
   onChange: (data: Record<string, unknown>) => void;
   language: AdminLanguage;
+  collectionName: string;
+  mediaPurposes: readonly MediaPurposePolicy[];
 }): React.ReactElement {
   const properties = schema.properties ?? {};
   const required = new Set(schema.required ?? []);
@@ -176,6 +227,8 @@ function SchemaFields({
           rootValue={value}
           onChange={onChange}
           language={language}
+          collectionName={collectionName}
+          mediaPurposes={mediaPurposes}
         />
       ))}
     </div>
@@ -191,6 +244,8 @@ function SchemaField({
   rootValue,
   onChange,
   language,
+  collectionName,
+  mediaPurposes,
 }: {
   name: string;
   schema: JsonSchema;
@@ -200,6 +255,8 @@ function SchemaField({
   rootValue: Record<string, unknown>;
   onChange: (data: Record<string, unknown>) => void;
   language: AdminLanguage;
+  collectionName: string;
+  mediaPurposes: readonly MediaPurposePolicy[];
 }): React.ReactElement {
   const type = schemaType(schema);
   const label = fieldLabel(name);
@@ -264,11 +321,22 @@ function SchemaField({
               path={path}
               onChange={onChange}
               language={language}
+              collectionName={collectionName}
+              mediaPurposes={mediaPurposes}
             />
           ) : (
             <JsonEditor value={value} onChange={setValue} />
           )}
         </div>
+      ) : isMediaAssetRef(schema) ? (
+        <MediaAssetField
+          value={value}
+          path={path}
+          collectionName={collectionName}
+          mediaPurposes={mediaPurposes}
+          language={language}
+          onChange={setValue}
+        />
       ) : type === "array" ? (
         <ArrayField
           schema={schema}
@@ -277,6 +345,8 @@ function SchemaField({
           rootValue={rootValue}
           onChange={onChange}
           language={language}
+          collectionName={collectionName}
+          mediaPurposes={mediaPurposes}
         />
       ) : multilineField(schema, name) ? (
         <RichTextEditor
@@ -303,6 +373,8 @@ function ArrayField({
   rootValue,
   onChange,
   language,
+  collectionName,
+  mediaPurposes,
 }: {
   schema: JsonSchema;
   value: unknown[];
@@ -310,6 +382,8 @@ function ArrayField({
   rootValue: Record<string, unknown>;
   onChange: (data: Record<string, unknown>) => void;
   language: AdminLanguage;
+  collectionName: string;
+  mediaPurposes: readonly MediaPurposePolicy[];
 }): React.ReactElement {
   const itemSchema = schema.items ?? {};
   const setArray = (next: unknown[]): void => onChange(writePath(rootValue, path, next));
@@ -335,6 +409,8 @@ function ArrayField({
               path={[...path, String(index)]}
               onChange={onChange}
               language={language}
+              collectionName={collectionName}
+              mediaPurposes={mediaPurposes}
             />
           ) : (
             <input
@@ -358,6 +434,87 @@ function ArrayField({
         <Plus className="size-3.5" aria-hidden />
         {t(language, "entryEdit.addItem")}
       </Button>
+    </div>
+  );
+}
+
+function MediaAssetField({
+  value,
+  path,
+  collectionName,
+  mediaPurposes,
+  language,
+  onChange,
+}: {
+  value: unknown;
+  path: string[];
+  collectionName: string;
+  mediaPurposes: readonly MediaPurposePolicy[];
+  language: AdminLanguage;
+  onChange: (value: unknown) => void;
+}): React.ReactElement {
+  const fileRef = React.useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [publicUrl, setPublicUrl] = React.useState<string | null>(null);
+  const purpose = purposeForMediaField(mediaPurposes, collectionName, path);
+
+  async function upload(file: File): Promise<void> {
+    setUploading(true);
+    setError(null);
+    try {
+      const asset = await uploadMediaAsset({
+        file,
+        purposes: mediaPurposes,
+        preferredPurpose: purpose,
+      });
+      onChange(asset.id);
+      setPublicUrl(primaryPublicUrl(asset));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <input
+          className="admin-input min-w-0 flex-1"
+          value={stringForInput(value)}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="media_assets id"
+        />
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading || mediaPurposes.length === 0}
+          title={purpose ?? t(language, "entryEdit.noMediaPurpose")}
+        >
+          <ImagePlus className="size-4" aria-hidden />
+          {uploading ? t(language, "entryEdit.uploadingMedia") : t(language, "entryEdit.uploadMedia")}
+        </Button>
+      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          if (file) void upload(file);
+        }}
+      />
+      {purpose ? <p className="text-xs text-muted-foreground">{purpose}</p> : null}
+      {publicUrl ? (
+        <a className="text-xs text-primary hover:underline" href={publicUrl} target="_blank" rel="noreferrer">
+          {publicUrl}
+        </a>
+      ) : null}
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
   );
 }
@@ -471,6 +628,10 @@ function multilineField(schema: JsonSchema, name: string): boolean {
     /body|description|content|intro|notes|summary/i.test(name) ||
     (typeof schema.maxLength === "number" && schema.maxLength > 160)
   );
+}
+
+function isMediaAssetRef(schema: JsonSchema): boolean {
+  return schema["x-mantle-ref"] === "media_assets";
 }
 
 function fieldLabel(name: string): string {
