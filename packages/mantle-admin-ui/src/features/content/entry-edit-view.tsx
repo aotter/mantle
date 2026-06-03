@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowLeft, ArrowUp, BadgePercent, Check, Clock3, Copy, ExternalLink, ImagePlus, Info, LayoutTemplate, Link2, PackageCheck, Plus, Save, Tag, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, BadgePercent, Check, Clock3, Copy, ExternalLink, ImagePlus, Info, LayoutTemplate, Link2, PackageCheck, Plus, Save, Tag, Trash2, Upload, X } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t, type I18nKey } from "../../app/i18n";
 import { api } from "../../lib/api";
@@ -260,6 +260,8 @@ function ProductCommerceFields({
   onChange: (data: Record<string, unknown>) => void;
   language: AdminLanguage;
 }): React.ReactElement {
+  const uploadInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [cropFile, setCropFile] = React.useState<File | null>(null);
   const setField = (field: string, next: unknown): void => onChange({ ...value, [field]: next });
   const coverAssetId = stringForInput(value["coverAssetId"]);
   const productImages = recordArray(value["images"]);
@@ -279,6 +281,15 @@ function ProductCommerceFields({
     });
   };
   const setCoverAssetId = (next: string): void => onChange({ ...value, coverAssetId: next });
+  const addUploadedAsset = (asset: AdminMediaAsset): void => {
+    const nextImage = { assetId: asset.id, alt: asset.alt ?? "" };
+    const nextImages = [...productImages.filter((image) => stringForInput(image["assetId"]) !== asset.id), nextImage];
+    onChange({
+      ...value,
+      images: nextImages,
+      coverAssetId: coverAssetId || asset.id,
+    });
+  };
   return (
     <>
       <SectionCard>
@@ -310,7 +321,7 @@ function ProductCommerceFields({
                 </code>
               ) : null}
             </div>
-            {galleryPreviewIds.length > 0 ? (
+            {galleryPreviewIds.length > 1 ? (
               <div className="mt-3 grid grid-cols-3 gap-2">
                 {galleryPreviewIds.slice(0, 6).map((assetId, index) => (
                   <MediaAssetThumb
@@ -324,6 +335,17 @@ function ProductCommerceFields({
             ) : null}
           </div>
           <div className="space-y-3">
+            <input
+              ref={uploadInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                if (file) setCropFile(file);
+                event.target.value = "";
+              }}
+            />
             <FieldShell label={t(language, "entryEdit.coverAsset")} hint={t(language, "entryEdit.coverAssetHint")}>
               <input
                 className="admin-input"
@@ -333,6 +355,10 @@ function ProductCommerceFields({
               />
             </FieldShell>
             <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" onClick={() => uploadInputRef.current?.click()}>
+                <Upload className="size-3.5" aria-hidden />
+                {t(language, "entryEdit.uploadAndCrop")}
+              </Button>
               <Button asChild variant="secondary" size="sm">
                 <a href="/admin/media">
                   <ImagePlus className="size-3.5" aria-hidden />
@@ -346,6 +372,17 @@ function ProductCommerceFields({
             </p>
           </div>
         </div>
+        {cropFile ? (
+          <ProductImageCropDialog
+            file={cropFile}
+            language={language}
+            onClose={() => setCropFile(null)}
+            onUploaded={(asset) => {
+              addUploadedAsset(asset);
+              setCropFile(null);
+            }}
+          />
+        ) : null}
         <ProductImageSliderEditor
           value={productImages}
           coverAssetId={coverAssetId}
@@ -440,6 +477,185 @@ function MediaAssetThumb({
 
 function mediaAssetUrl(asset: AdminMediaAsset | undefined): string | null {
   return asset?.primaryUrl ?? asset?.variants.find((variant) => variant.role === "primary")?.publicUrl ?? asset?.variants[0]?.publicUrl ?? null;
+}
+
+type ProductCropAspect = "16:10" | "4:3" | "1:1";
+
+function ProductImageCropDialog({
+  file,
+  language,
+  onClose,
+  onUploaded,
+}: {
+  file: File;
+  language: AdminLanguage;
+  onClose: () => void;
+  onUploaded: (asset: AdminMediaAsset) => void;
+}): React.ReactElement {
+  const [imageUrl, setImageUrl] = React.useState<string>("");
+  const [aspect, setAspect] = React.useState<ProductCropAspect>("16:10");
+  const [zoom, setZoom] = React.useState(1);
+  const [error, setError] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    const url = URL.createObjectURL(file);
+    setImageUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  const upload = useMutation({
+    mutationFn: async () => {
+      setError(null);
+      const blob = await cropImageFile(file, aspect, zoom);
+      return uploadProductMediaAsset(blob, file.name, file.type || blob.type);
+    },
+    onSuccess: onUploaded,
+    onError: (err) => setError(err instanceof Error ? err.message : String(err)),
+  });
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-3xl rounded-xl border border-[var(--glass-border)] bg-background p-5 shadow-2xl">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <p className="label-eyebrow">{t(language, "entryEdit.productVisual")}</p>
+            <h3 className="text-xl font-semibold">{t(language, "entryEdit.cropProductImage")}</h3>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">{t(language, "entryEdit.cropProductImageBody")}</p>
+          </div>
+          <button type="button" className="row-action" title={t(language, "guide.close")} onClick={onClose}>
+            <X className="size-4" aria-hidden />
+          </button>
+        </div>
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_14rem]">
+          <div className="rounded-lg border border-[var(--glass-border)] bg-muted/30 p-3">
+            <div className={`grid overflow-hidden rounded-md bg-background ${aspectClassName(aspect)}`}>
+              {imageUrl ? (
+                <img
+                  src={imageUrl}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  style={{ transform: `scale(${zoom})`, transformOrigin: "center" }}
+                />
+              ) : null}
+            </div>
+          </div>
+          <div className="space-y-4">
+            <FieldShell label={t(language, "entryEdit.cropAspect")}>
+              <select className="admin-input" value={aspect} onChange={(event) => setAspect(event.target.value as ProductCropAspect)}>
+                <option value="16:10">16:10</option>
+                <option value="4:3">4:3</option>
+                <option value="1:1">1:1</option>
+              </select>
+            </FieldShell>
+            <FieldShell label={t(language, "entryEdit.cropZoom")}>
+              <input
+                type="range"
+                min="1"
+                max="2"
+                step="0.05"
+                value={zoom}
+                onChange={(event) => setZoom(Number(event.target.value))}
+                className="w-full accent-[var(--primary)]"
+              />
+            </FieldShell>
+            <p className="text-xs leading-5 text-muted-foreground">{t(language, "entryEdit.productImageGuidance")}</p>
+          </div>
+        </div>
+        {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={upload.isPending}>
+            {t(language, "crud.cancelTitle")}
+          </Button>
+          <Button type="button" onClick={() => upload.mutate()} disabled={upload.isPending}>
+            <Upload className="size-4" aria-hidden />
+            {upload.isPending ? t(language, "media.uploading") : t(language, "entryEdit.cropAndUpload")}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+async function uploadProductMediaAsset(blob: Blob, filename: string, sourceType: string): Promise<AdminMediaAsset> {
+  const mimeType = supportedImageMime(sourceType || blob.type);
+  const uploadFile = new File([blob], croppedFilename(filename, mimeType), { type: mimeType });
+  const created = await api.post<MediaUploadResponse>("/media/uploads", {
+    filename: uploadFile.name,
+    purpose: "product-image",
+    variants: [{ mimeType, byteSize: uploadFile.size, role: "primary" }],
+    alt: filename.replace(/\.[^.]+$/, ""),
+  });
+  const primary = created.capabilities.find((cap) => cap.role === "primary") ?? created.capabilities[0];
+  if (!primary) throw new Error("Upload capability missing.");
+  await fetch(primary.uploadUrl, {
+    method: primary.method,
+    headers: primary.requiredHeaders ?? { "Content-Type": mimeType },
+    body: uploadFile,
+  });
+  return api.post<AdminMediaAsset>(
+    `/media/uploads/${encodeURIComponent(created.uploadGroupId)}/commit`,
+    { alt: filename.replace(/\.[^.]+$/, "") },
+  );
+}
+
+async function cropImageFile(file: File, aspect: ProductCropAspect, zoom: number): Promise<Blob> {
+  const bitmap = await createImageBitmap(file);
+  const ratio = aspectRatioValue(aspect);
+  const sourceWidth = bitmap.width / zoom;
+  const sourceHeight = bitmap.height / zoom;
+  let cropWidth = sourceWidth;
+  let cropHeight = cropWidth / ratio;
+  if (cropHeight > sourceHeight) {
+    cropHeight = sourceHeight;
+    cropWidth = cropHeight * ratio;
+  }
+  const sourceX = Math.max(0, (bitmap.width - cropWidth) / 2);
+  const sourceY = Math.max(0, (bitmap.height - cropHeight) / 2);
+  const outputWidth = aspect === "1:1" ? 1200 : 1600;
+  const outputHeight = Math.round(outputWidth / ratio);
+  const canvas = document.createElement("canvas");
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas is not available.");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, outputWidth, outputHeight);
+  ctx.drawImage(bitmap, sourceX, sourceY, cropWidth, cropHeight, 0, 0, outputWidth, outputHeight);
+  bitmap.close?.();
+  const mimeType = supportedImageMime(file.type);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, mimeType, mimeType === "image/png" ? undefined : 0.9));
+  if (!blob) throw new Error("Unable to crop image.");
+  return blob;
+}
+
+function aspectRatioValue(aspect: ProductCropAspect): number {
+  if (aspect === "4:3") return 4 / 3;
+  if (aspect === "1:1") return 1;
+  return 16 / 10;
+}
+
+function aspectClassName(aspect: ProductCropAspect): string {
+  if (aspect === "4:3") return "aspect-[4/3]";
+  if (aspect === "1:1") return "aspect-square";
+  return "aspect-[16/10]";
+}
+
+function supportedImageMime(type: string): string {
+  return type === "image/png" || type === "image/webp" || type === "image/jpeg" ? type : "image/jpeg";
+}
+
+function croppedFilename(filename: string, mimeType: string): string {
+  const base = filename.replace(/\.[^.]+$/, "") || "product-image";
+  const ext = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
+  return `${base}-cropped.${ext}`;
+}
+
+interface MediaUploadResponse {
+  uploadGroupId: string;
+  capabilities: Array<{
+    mimeType: string;
+    role: string;
+    method: "PUT";
+    uploadUrl: string;
+    requiredHeaders?: Record<string, string>;
+  }>;
 }
 
 function ProductImageSliderEditor({
