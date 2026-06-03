@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, BadgePercent, Check, Clock3, Copy, ExternalLink, ImagePlus, Info, LayoutTemplate, Link2, PackageCheck, Plus, Save, Tag, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, BadgePercent, Check, Clock3, Copy, ExternalLink, ImagePlus, Info, LayoutTemplate, Link2, PackageCheck, Plus, Save, Tag, Trash2, X } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t, type I18nKey } from "../../app/i18n";
 import { api } from "../../lib/api";
@@ -261,6 +261,21 @@ function ProductCommerceFields({
   language: AdminLanguage;
 }): React.ReactElement {
   const setField = (field: string, next: unknown): void => onChange({ ...value, [field]: next });
+  const coverAssetId = stringForInput(value["coverAssetId"]);
+  const productImages = recordArray(value["images"]);
+  const galleryPreviewIds = uniqueStrings([
+    ...productImages.map((image) => stringForInput(image["assetId"])),
+    coverAssetId,
+  ]);
+  const setImages = (nextImages: Record<string, unknown>[]): void => {
+    const firstAssetId = stringForInput(nextImages[0]?.["assetId"]);
+    onChange({
+      ...value,
+      images: nextImages,
+      coverAssetId: coverAssetId || firstAssetId,
+    });
+  };
+  const setCoverAssetId = (next: string): void => onChange({ ...value, coverAssetId: next });
   return (
     <>
       <SectionCard>
@@ -270,15 +285,23 @@ function ProductCommerceFields({
         />
         <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
           <div className="relative min-h-48 overflow-hidden rounded-lg border border-[var(--glass-border)] bg-[radial-gradient(circle_at_30%_20%,rgba(124,184,255,0.34),transparent_32%),linear-gradient(135deg,rgba(26,48,98,0.16),rgba(127,231,210,0.18))]">
-            <div className="absolute inset-4 flex flex-col items-center justify-center rounded-md border border-white/35 bg-white/20 text-center backdrop-blur-md dark:bg-slate-950/20">
+            <div className="absolute inset-4 flex flex-col items-center justify-center rounded-md border border-white/35 bg-white/20 p-4 text-center backdrop-blur-md dark:bg-slate-950/20">
               <ImagePlus className="mb-2 size-7 text-primary" aria-hidden />
               <p className="text-sm font-semibold text-foreground">
-                {value["coverAssetId"] ? t(language, "entryEdit.coverLinked") : t(language, "entryEdit.coverEmpty")}
+                {galleryPreviewIds.length > 0 ? t(language, "entryEdit.coverLinked") : t(language, "entryEdit.coverEmpty")}
               </p>
-              {value["coverAssetId"] ? (
-                <code className="mt-2 max-w-[14rem] truncate text-xs text-muted-foreground">
-                  {stringForInput(value["coverAssetId"])}
-                </code>
+              {galleryPreviewIds.length > 0 ? (
+                <div className="mt-3 grid w-full grid-cols-3 gap-2">
+                  {galleryPreviewIds.slice(0, 6).map((assetId, index) => (
+                    <div
+                      key={`${assetId}:${index}`}
+                      className="min-w-0 rounded-md border border-white/35 bg-white/35 px-2 py-2 text-left shadow-sm dark:bg-slate-950/30"
+                    >
+                      <span className="label-eyebrow">{index === 0 ? t(language, "entryEdit.coverSlide") : t(language, "entryEdit.slideNumber", { number: String(index + 1) })}</span>
+                      <code className="block truncate text-[11px] text-muted-foreground">{assetId}</code>
+                    </div>
+                  ))}
+                </div>
               ) : null}
             </div>
           </div>
@@ -286,8 +309,8 @@ function ProductCommerceFields({
             <FieldShell label={t(language, "entryEdit.coverAsset")} hint={t(language, "entryEdit.coverAssetHint")}>
               <input
                 className="admin-input"
-                value={stringForInput(value["coverAssetId"])}
-                onChange={(event) => setField("coverAssetId", event.target.value)}
+                value={coverAssetId}
+                onChange={(event) => setCoverAssetId(event.target.value)}
                 placeholder="media asset id"
               />
             </FieldShell>
@@ -298,10 +321,17 @@ function ProductCommerceFields({
                   {t(language, "media.page.title")}
                 </a>
               </Button>
-              <CopyValueButton value={stringForInput(value["coverAssetId"])} language={language} />
+              <CopyValueButton value={coverAssetId} language={language} />
             </div>
           </div>
         </div>
+        <ProductImageSliderEditor
+          value={productImages}
+          coverAssetId={coverAssetId}
+          onChange={setImages}
+          onUseAsCover={setCoverAssetId}
+          language={language}
+        />
       </SectionCard>
 
       <SectionCard>
@@ -338,6 +368,124 @@ function ProductCommerceFields({
         </div>
       </SectionCard>
     </>
+  );
+}
+
+function ProductImageSliderEditor({
+  value,
+  coverAssetId,
+  onChange,
+  onUseAsCover,
+  language,
+}: {
+  value: Record<string, unknown>[];
+  coverAssetId: string;
+  onChange: (value: Record<string, unknown>[]) => void;
+  onUseAsCover: (assetId: string) => void;
+  language: AdminLanguage;
+}): React.ReactElement {
+  const update = (index: number, field: string, nextValue: unknown): void => {
+    const next = value.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: nextValue } : item);
+    onChange(next);
+  };
+  const move = (index: number, direction: -1 | 1): void => {
+    const target = index + direction;
+    if (target < 0 || target >= value.length) return;
+    const next = [...value];
+    const [item] = next.splice(index, 1);
+    next.splice(target, 0, item);
+    onChange(next);
+  };
+  return (
+    <div className="mt-5 rounded-lg border border-[var(--glass-border)] bg-background/40 p-4">
+      <SectionTitle
+        title={t(language, "entryEdit.productSlides")}
+        body={t(language, "entryEdit.productSlidesBody")}
+      />
+      <div className="space-y-3">
+        {value.map((item, index) => {
+          const assetId = stringForInput(item["assetId"]);
+          return (
+            <div key={index} className="rounded-md border border-[var(--glass-border)] bg-background/45 p-3">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="label-eyebrow">{t(language, "entryEdit.slideNumber", { number: String(index + 1) })}</p>
+                  {assetId && assetId === coverAssetId ? (
+                    <span className="mt-1 inline-flex rounded-full bg-primary/12 px-2 py-0.5 text-xs font-semibold text-primary">
+                      {t(language, "entryEdit.coverSlide")}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="row-action"
+                    title={t(language, "entryEdit.moveItemUp")}
+                    disabled={index === 0}
+                    onClick={() => move(index, -1)}
+                  >
+                    <ArrowUp className="size-3.5" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="row-action"
+                    title={t(language, "entryEdit.moveItemDown")}
+                    disabled={index === value.length - 1}
+                    onClick={() => move(index, 1)}
+                  >
+                    <ArrowDown className="size-3.5" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="row-action row-action-label"
+                    title={t(language, "entryEdit.useAsCover")}
+                    disabled={!assetId || assetId === coverAssetId}
+                    onClick={() => onUseAsCover(assetId)}
+                  >
+                    <ImagePlus className="size-3.5" aria-hidden />
+                    <span>{t(language, "entryEdit.useAsCover")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="row-action"
+                    title={t(language, "entryEdit.removeItem")}
+                    onClick={() => onChange(value.filter((_, itemIndex) => itemIndex !== index))}
+                  >
+                    <Trash2 className="size-3.5" aria-hidden />
+                  </button>
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                <FieldShell label={t(language, "entryEdit.coverAsset")}>
+                  <input
+                    className="admin-input"
+                    value={assetId}
+                    onChange={(event) => update(index, "assetId", event.target.value)}
+                    placeholder="media asset id"
+                  />
+                </FieldShell>
+                <FieldShell label={t(language, "entryEdit.coverAlt")}>
+                  <input
+                    className="admin-input"
+                    value={stringForInput(item["alt"])}
+                    onChange={(event) => update(index, "alt", event.target.value)}
+                  />
+                </FieldShell>
+              </div>
+            </div>
+          );
+        })}
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => onChange([...value, { assetId: "", alt: "" }])}
+        >
+          <Plus className="size-3.5" aria-hidden />
+          {t(language, "entryEdit.addProductSlide")}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -2719,6 +2867,17 @@ function recordArray(value: unknown): Record<string, unknown>[] {
 
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map((item) => stringForInput(item)) : [];
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const next: string[] = [];
+  for (const value of values) {
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    next.push(value);
+  }
+  return next;
 }
 
 function isArrayIndex(value: string): boolean {
