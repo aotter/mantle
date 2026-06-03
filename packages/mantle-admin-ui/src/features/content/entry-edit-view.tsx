@@ -1,8 +1,8 @@
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, BadgePercent, Check, Clock3, Copy, ExternalLink, ImagePlus, LayoutTemplate, Link2, PackageCheck, Plus, Save, Tag, Trash2 } from "lucide-react";
+import { ArrowLeft, BadgePercent, Check, CircleHelp, Clock3, Copy, ExternalLink, ImagePlus, LayoutTemplate, Link2, PackageCheck, Plus, Save, Tag, Trash2, X } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
-import { t } from "../../app/i18n";
+import { t, type I18nKey } from "../../app/i18n";
 import { api } from "../../lib/api";
 import type { EntryEditorPayload, JsonSchema, RelatedEntrySection } from "../../lib/types";
 import { Button } from "../../ui/button";
@@ -191,13 +191,18 @@ export function EntryEditView({
 function SectionTitle({
   title,
   body,
+  action,
 }: {
   title: string;
   body?: React.ReactNode;
+  action?: React.ReactNode;
 }): React.ReactElement {
   return (
     <div className="mb-4">
-      <h2 className="text-lg font-semibold">{title}</h2>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        {action}
+      </div>
       {body ? <p className="mt-1 text-sm leading-6 text-muted-foreground">{body}</p> : null}
     </div>
   );
@@ -906,6 +911,7 @@ function ProductTranslationSection({
       <SectionTitle
         title={t(language, "entryEdit.productInfo")}
         body={t(language, "entryEdit.productInfoBody")}
+        action={<SectionPreviewButton language={language} kind="productInfo" />}
       />
       {section.entries.length === 0 ? (
         <CreateRelatedEntryPrompt
@@ -1382,6 +1388,7 @@ function MerchandisingEditor({
         value={stringArray(value["highlights"])}
         onChange={(next) => setMerchandisingField("highlights", next)}
         language={language}
+        previewKind="highlights"
       />
 
       <StructuredListEditor
@@ -1396,6 +1403,7 @@ function MerchandisingEditor({
           { name: "title", label: t(language, "entryEdit.sectionTitle") },
           { name: "body", label: t(language, "entryEdit.sectionBody"), kind: "rich" },
         ]}
+        previewKind="introSections"
       />
 
       <StructuredListEditor
@@ -1413,6 +1421,7 @@ function MerchandisingEditor({
           { name: "relatedSkuCode", label: t(language, "entryEdit.relatedSkuCode") },
           { name: "discountPercent", label: t(language, "entryEdit.discountPercent"), kind: "number" },
         ]}
+        previewKind="promotions"
       />
 
       <StructuredListEditor
@@ -1427,6 +1436,7 @@ function MerchandisingEditor({
           { name: "title", label: t(language, "entryEdit.sectionTitle") },
           { name: "body", label: t(language, "entryEdit.sectionBody"), kind: "textarea" },
         ]}
+        previewKind="purchaseNotes"
       />
 
       <div className="rounded-lg border border-[var(--glass-border)] bg-background/40 p-4">
@@ -1536,6 +1546,167 @@ function marketingRuleFields(language: AdminLanguage): StructuredField[] {
   ];
 }
 
+type ProductSectionPreviewKind =
+  | "productInfo"
+  | "highlights"
+  | "introSections"
+  | "promotions"
+  | "purchaseNotes";
+
+function SectionPreviewButton({
+  language,
+  kind,
+}: {
+  language: AdminLanguage;
+  kind: ProductSectionPreviewKind;
+}): React.ReactElement {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="shrink-0"
+        onClick={() => setOpen(true)}
+        title={t(language, "entryEdit.previewPosition")}
+      >
+        <CircleHelp className="size-3.5" aria-hidden />
+        {t(language, "entryEdit.previewPosition")}
+      </Button>
+      {open ? (
+        <ProductSectionPreview
+          language={language}
+          kind={kind}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function ProductSectionPreview({
+  language,
+  kind,
+  onClose,
+}: {
+  language: AdminLanguage;
+  kind: ProductSectionPreviewKind;
+  onClose: () => void;
+}): React.ReactElement {
+  const meta = productPreviewMeta(language, kind);
+  const activeClass = (target: ProductSectionPreviewKind): string =>
+    target === kind
+      ? "product-section-preview-active"
+      : "product-section-preview-inactive";
+  const highlightKeys: I18nKey[] = [
+    "entryEdit.previewHighlight1",
+    "entryEdit.previewHighlight2",
+    "entryEdit.previewHighlight3",
+  ];
+  return (
+    <div className="rich-editor-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <div
+        className="rich-editor-dialog product-section-preview-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={meta.title}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <p className="label-eyebrow">{t(language, "entryEdit.previewModalEyebrow")}</p>
+            <h2 className="mt-1 text-xl font-semibold">{meta.title}</h2>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">{meta.body}</p>
+          </div>
+          <button type="button" className="row-action" title={t(language, "guide.close")} onClick={onClose}>
+            <X className="size-4" aria-hidden />
+          </button>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)]">
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+              <div className="aspect-[4/3] border border-border bg-[linear-gradient(135deg,#e2e8f0,#b7cec4_54%,#25534e)]" />
+              <section className={`border p-4 transition ${activeClass("productInfo")}`}>
+                <p className="label-eyebrow">{t(language, "entryEdit.previewProductLabel")}</p>
+                <h3 className="mt-2 text-2xl font-semibold">{t(language, "entryEdit.previewProductTitle")}</h3>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">{t(language, "entryEdit.previewProductCopy")}</p>
+              </section>
+            </div>
+
+            <section className={`border p-4 transition ${activeClass("highlights")}`}>
+              <h3 className="text-base font-semibold">{t(language, "entryEdit.highlights")}</h3>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                {highlightKeys.map((key) => (
+                  <div key={key} className="border border-border bg-card p-3 text-sm">
+                    {t(language, key)}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className={`border p-4 transition ${activeClass("introSections")}`}>
+              <h3 className="text-base font-semibold">{t(language, "entryEdit.introSections")}</h3>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">{t(language, "entryEdit.previewIntroCopy")}</p>
+              <div className="mt-4 h-24 border border-dashed border-border bg-muted" />
+            </section>
+          </div>
+
+          <aside className="space-y-4">
+            <section className={`border p-4 transition ${activeClass("promotions")}`}>
+              <p className="label-eyebrow">{t(language, "entryEdit.promotions")}</p>
+              <h3 className="mt-2 text-lg font-semibold">{t(language, "entryEdit.previewPromotionTitle")}</h3>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{t(language, "entryEdit.previewPromotionBody")}</p>
+            </section>
+            <section className="border border-border bg-card p-4">
+              <p className="label-eyebrow">CTA</p>
+              <div className="mt-3 h-10 bg-primary" />
+              <div className="mt-2 h-10 border border-border bg-background" />
+            </section>
+            <section className={`border p-4 transition ${activeClass("purchaseNotes")}`}>
+              <h3 className="text-base font-semibold">{t(language, "entryEdit.previewPurchaseTitle")}</h3>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{t(language, "entryEdit.previewPurchaseBody")}</p>
+            </section>
+          </aside>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function productPreviewMeta(
+  language: AdminLanguage,
+  kind: ProductSectionPreviewKind,
+): { title: string; body: string } {
+  const keys: Record<ProductSectionPreviewKind, { title: I18nKey; body: I18nKey }> = {
+    productInfo: {
+      title: "entryEdit.previewProductInfoTitle",
+      body: "entryEdit.previewProductInfoBody",
+    },
+    highlights: {
+      title: "entryEdit.previewHighlightsTitle",
+      body: "entryEdit.previewHighlightsBody",
+    },
+    introSections: {
+      title: "entryEdit.previewIntroSectionsTitle",
+      body: "entryEdit.previewIntroSectionsBody",
+    },
+    promotions: {
+      title: "entryEdit.previewPromotionsTitle",
+      body: "entryEdit.previewPromotionsBody",
+    },
+    purchaseNotes: {
+      title: "entryEdit.previewPurchaseNotesTitle",
+      body: "entryEdit.previewPurchaseNotesBody",
+    },
+  };
+  return {
+    title: t(language, keys[kind].title),
+    body: t(language, keys[kind].body),
+  };
+}
+
 function StringListEditor({
   title,
   body,
@@ -1543,6 +1714,7 @@ function StringListEditor({
   value,
   onChange,
   language,
+  previewKind,
 }: {
   title: string;
   body: string;
@@ -1550,6 +1722,7 @@ function StringListEditor({
   value: string[];
   onChange: (value: string[]) => void;
   language: AdminLanguage;
+  previewKind?: ProductSectionPreviewKind;
 }): React.ReactElement {
   const update = (index: number, nextValue: string): void => {
     const next = [...value];
@@ -1558,7 +1731,11 @@ function StringListEditor({
   };
   return (
     <div className="rounded-lg border border-[var(--glass-border)] bg-background/40 p-4">
-      <SectionTitle title={title} body={body} />
+      <SectionTitle
+        title={title}
+        body={body}
+        action={previewKind ? <SectionPreviewButton language={language} kind={previewKind} /> : undefined}
+      />
       <div className="space-y-2">
         {value.map((item, index) => (
           <div key={index} className="flex items-center gap-2">
@@ -1601,6 +1778,7 @@ function StructuredListEditor({
   emptyItem,
   fields,
   icon,
+  previewKind,
 }: {
   title: string;
   body: string;
@@ -1611,6 +1789,7 @@ function StructuredListEditor({
   emptyItem: Record<string, unknown>;
   fields: StructuredField[];
   icon?: React.ReactNode;
+  previewKind?: ProductSectionPreviewKind;
 }): React.ReactElement {
   const updateItem = (index: number, field: string, nextValue: unknown): void => {
     const next = value.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: nextValue } : item);
@@ -1620,7 +1799,11 @@ function StructuredListEditor({
     <div className="rounded-lg border border-[var(--glass-border)] bg-background/40 p-4">
       <div className="flex items-start gap-3">
         {icon ? <span className="mt-1 grid size-8 shrink-0 place-items-center rounded-md bg-accent text-primary">{icon}</span> : null}
-        <SectionTitle title={title} body={body} />
+        <SectionTitle
+          title={title}
+          body={body}
+          action={previewKind ? <SectionPreviewButton language={language} kind={previewKind} /> : undefined}
+        />
       </div>
       <div className="space-y-3">
         {value.map((item, index) => (
