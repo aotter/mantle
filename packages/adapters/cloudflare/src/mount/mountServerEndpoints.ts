@@ -1241,6 +1241,14 @@ function discoverChildRelationships(
       continue;
     }
 
+    const explicitParent = explicitParentRelationship(childSchema, schemas);
+    if (explicitParent) {
+      if (explicitParent.collection === parentName) {
+        add(childSchema, "field", explicitParent.parentField, explicitParent.childField);
+      }
+      continue;
+    }
+
     for (const [parentField] of Object.entries(parentProps)) {
       if (!isLikelyJoinField(parentField)) continue;
       if (!Object.prototype.hasOwnProperty.call(childProps, parentField)) continue;
@@ -1292,6 +1300,9 @@ function collectionParentFor(
     };
   }
 
+  const explicitParent = explicitParentRelationship(childSchema, schemas);
+  if (explicitParent) return explicitParent;
+
   const childProps = childSchema.spec.schema.properties ?? {};
   for (const parentSchema of schemas) {
     if (parentSchema.metadata.name === childSchema.metadata.name) continue;
@@ -1320,6 +1331,29 @@ function collectionParentFor(
     }
   }
 
+  return null;
+}
+
+function explicitParentRelationship(
+  childSchema: SchemaManifest,
+  schemas: SchemaManifest[],
+): { collection: string; parentField: string; childField: string } | null {
+  const childName = childSchema.metadata.name;
+  const childProps = childSchema.spec.schema.properties ?? {};
+  if (
+    childName === "order_items" &&
+    Object.prototype.hasOwnProperty.call(childProps, "orderNumber")
+  ) {
+    const orderSchema = schemas.find((schema) => schema.metadata.name === "orders");
+    const orderProps = orderSchema?.spec.schema.properties ?? {};
+    if (Object.prototype.hasOwnProperty.call(orderProps, "orderNumber")) {
+      return {
+        collection: "orders",
+        parentField: "orderNumber",
+        childField: "orderNumber",
+      };
+    }
+  }
   return null;
 }
 

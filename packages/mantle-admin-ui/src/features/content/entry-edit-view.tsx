@@ -50,6 +50,10 @@ export function EntryEditView({
   const sidebarRelated = payload.related.filter((section) => !isPrimaryCommerceSection(section, payload.collection.name));
   const productTranslations = inlineRelated.filter((section) => section.collection.name === "product-translations");
   const productSkus = inlineRelated.filter((section) => section.collection.name === "product-skus");
+  const orderItems = inlineRelated.filter((section) => section.collection.name === "order_items");
+  const genericInlineRelated = inlineRelated.filter(
+    (section) => !(payload.collection.name === "orders" && section.collection.name === "order_items"),
+  );
   const isProduct = payload.collection.name === "products";
   const isProductSku = payload.collection.name === "product-skus";
   const isProductTranslation = payload.collection.name === "product-translations";
@@ -133,6 +137,7 @@ export function EntryEditView({
               value={data}
               onChange={setData}
               language={language}
+              showEmbeddedItems={orderItems.length === 0}
             />
           ) : isOrderItem ? (
             <OrderLineItemFields
@@ -180,9 +185,17 @@ export function EntryEditView({
             />
           ) : null}
 
-          {!isProduct && inlineRelated.length > 0 ? (
+          {orderItems.length > 0 ? (
+            <OrderLineItemsSection
+              section={orderItems[0]}
+              language={language}
+              onSaved={() => void query.refetch()}
+            />
+          ) : null}
+
+          {!isProduct && genericInlineRelated.length > 0 ? (
             <RelatedSections
-              sections={inlineRelated}
+              sections={genericInlineRelated}
               language={language}
               parentTitle={title}
               onSaved={() => void query.refetch()}
@@ -493,10 +506,12 @@ function OrderManagementFields({
   value,
   onChange,
   language,
+  showEmbeddedItems = true,
 }: {
   value: Record<string, unknown>;
   onChange: (data: Record<string, unknown>) => void;
   language: AdminLanguage;
+  showEmbeddedItems?: boolean;
 }): React.ReactElement {
   const setField = (field: string, next: unknown): void => onChange({ ...value, [field]: next });
   const shippingAddress = objectValue(value["shippingAddress"]);
@@ -610,23 +625,25 @@ function OrderManagementFields({
         </div>
       </SectionCard>
 
-      <StructuredListEditor
-        title={t(language, "entryEdit.orderItems")}
-        body={t(language, "entryEdit.orderItemsBody")}
-        addLabel={t(language, "entryEdit.addOrderItem")}
-        value={recordArray(value["items"])}
-        onChange={(next) => setField("items", next)}
-        language={language}
-        emptyItem={{ skuCode: "", productSlug: "", qty: 1, priceMinorAtPurchase: 0, title: "", imageAssetId: "" }}
-        fields={[
-          { name: "title", label: t(language, "entryEdit.title") },
-          { name: "skuCode", label: t(language, "entryEdit.skuCode") },
-          { name: "productSlug", label: t(language, "entryEdit.productSlug") },
-          { name: "qty", label: t(language, "entryEdit.quantity"), kind: "number" },
-          { name: "priceMinorAtPurchase", label: t(language, "entryEdit.priceMinor"), kind: "number" },
-          { name: "imageAssetId", label: t(language, "entryEdit.coverAsset") },
-        ]}
-      />
+      {showEmbeddedItems ? (
+        <StructuredListEditor
+          title={t(language, "entryEdit.orderItems")}
+          body={t(language, "entryEdit.orderItemsBody")}
+          addLabel={t(language, "entryEdit.addOrderItem")}
+          value={recordArray(value["items"])}
+          onChange={(next) => setField("items", next)}
+          language={language}
+          emptyItem={{ skuCode: "", productSlug: "", qty: 1, priceMinorAtPurchase: 0, title: "", imageAssetId: "" }}
+          fields={[
+            { name: "title", label: t(language, "entryEdit.title") },
+            { name: "skuCode", label: t(language, "entryEdit.skuCode") },
+            { name: "productSlug", label: t(language, "entryEdit.productSlug") },
+            { name: "qty", label: t(language, "entryEdit.quantity"), kind: "number" },
+            { name: "priceMinorAtPurchase", label: t(language, "entryEdit.priceMinor"), kind: "number" },
+            { name: "imageAssetId", label: t(language, "entryEdit.coverAsset") },
+          ]}
+        />
+      ) : null}
 
       <StructuredListEditor
         title={t(language, "entryEdit.orderDiscounts")}
@@ -649,6 +666,92 @@ function OrderManagementFields({
         ]}
       />
     </>
+  );
+}
+
+function OrderLineItemsSection({
+  section,
+  language,
+  onSaved,
+}: {
+  section: RelatedEntrySection;
+  language: AdminLanguage;
+  onSaved?: () => void;
+}): React.ReactElement {
+  return (
+    <SectionCard>
+      <SectionTitle
+        title={t(language, "entryEdit.orderItems")}
+        body={t(language, "entryEdit.orderItemsBody")}
+      />
+      {section.entries.length === 0 ? (
+        <CreateRelatedEntryPrompt
+          section={section}
+          language={language}
+          label={t(language, "entryEdit.addOrderItem")}
+          seedData={{
+            title: "",
+            skuCode: "",
+            productSlug: "",
+            variantLabel: "",
+            qty: 1,
+            priceMinorAtPurchase: 0,
+            lineTotalMinor: 0,
+            imageAssetId: "",
+          }}
+          onSaved={onSaved}
+        />
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-[var(--glass-border)] bg-background/35">
+          <table className="w-full min-w-[48rem] text-left text-sm">
+            <thead className="border-b border-[var(--glass-border)] bg-background/55 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3">{t(language, "entryEdit.title")}</th>
+                <th className="px-4 py-3">{t(language, "entryEdit.skuCode")}</th>
+                <th className="px-4 py-3">{t(language, "entryEdit.quantity")}</th>
+                <th className="px-4 py-3">{t(language, "entryEdit.priceMinorAtPurchase")}</th>
+                <th className="px-4 py-3">{t(language, "entryEdit.lineTotalMinor")}</th>
+                <th className="px-4 py-3 text-right">{t(language, "collection.table.actions")}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--glass-border)]">
+              {section.entries.map((entry) => (
+                <tr key={entry.id} className="transition hover:bg-accent/60">
+                  <td className="px-4 py-3">
+                    <span className="block font-semibold text-foreground">
+                      {stringForInput(entry.data["title"]) || entryTitle(entry.data, entry.id)}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {stringForInput(entry.data["variantLabel"]) || stringForInput(entry.data["productSlug"]) || "-"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                    {stringForInput(entry.data["skuCode"]) || "-"}
+                  </td>
+                  <td className="px-4 py-3">{numberForInput(entry.data["qty"]) || "-"}</td>
+                  <td className="px-4 py-3">{numberForInput(entry.data["priceMinorAtPurchase"]) || "-"}</td>
+                  <td className="px-4 py-3 font-semibold">
+                    {numberForInput(entry.data["lineTotalMinor"]) || String(numericValue(entry.data["qty"]) * numericValue(entry.data["priceMinorAtPurchase"]))}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end">
+                      <a
+                        className="row-action row-action-label"
+                        title={t(language, "entryEdit.openAdvanced")}
+                        href={`/admin/c/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}
+                      >
+                        <ExternalLink className="size-3.5" aria-hidden />
+                        <span>{t(language, "entryEdit.openAdvanced")}</span>
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </SectionCard>
   );
 }
 
@@ -2446,11 +2549,18 @@ function parentAdminLink(
 ): { href: string; label: string } | null {
   if (!collection.parent) return null;
   const parentValue = data[collection.parent.childField];
-  if (typeof parentValue !== "string" || !parentValue) return null;
+  if ((typeof parentValue !== "string" && typeof parentValue !== "number") || parentValue === "") return null;
+  const searchableParentValue = String(parentValue);
   if (collection.parent.collection === "products") {
     return {
-      href: `/admin/c/products?search=${encodeURIComponent(parentValue)}`,
-      label: `products / ${parentValue}`,
+      href: `/admin/c/products?search=${encodeURIComponent(searchableParentValue)}`,
+      label: `products / ${searchableParentValue}`,
+    };
+  }
+  if (collection.parent.collection === "orders") {
+    return {
+      href: `/admin/c/orders?search=${encodeURIComponent(searchableParentValue)}`,
+      label: `orders / ${searchableParentValue}`,
     };
   }
   return {
@@ -2460,6 +2570,7 @@ function parentAdminLink(
 }
 
 function isPrimaryCommerceSection(section: RelatedEntrySection, parentCollection: string): boolean {
+  if (parentCollection === "orders" && section.collection.name === "order_items") return true;
   return parentCollection === "products" && (
     section.collection.name === "product-skus" ||
     section.collection.name === "product-translations"
