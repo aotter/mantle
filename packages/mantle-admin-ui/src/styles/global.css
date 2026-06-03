@@ -508,10 +508,17 @@ code, kbd, pre { font-family: var(--font-mono); }
 .admin-search {
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
   border: 1px solid var(--glass-border);
   background: rgba(255, 255, 255, 0.60);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+.segmented-control {
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
 }
 
 .segmented-control button,
@@ -524,6 +531,21 @@ code, kbd, pre { font-family: var(--font-mono); }
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+}
+
+.segmented-control button {
+  display: inline-flex;
+  min-width: max-content;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  white-space: nowrap;
+  padding: 0 1.05rem;
+  line-height: 1;
+}
+
+.segmented-control button svg {
+  flex: 0 0 auto;
 }
 
 .segmented-control button[data-active="true"],
