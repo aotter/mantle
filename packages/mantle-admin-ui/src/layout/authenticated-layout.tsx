@@ -108,6 +108,7 @@ export function AuthenticatedLayout({
           <Header
             fixed
             site={resolvedBrand}
+            publicUrl={site.data?.publicUrl}
             onOpenGuide={guide.showGuide}
             user={{
               login: me.data?.login ?? null,
