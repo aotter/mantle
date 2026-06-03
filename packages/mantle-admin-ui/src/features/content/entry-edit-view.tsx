@@ -4,7 +4,7 @@ import { ArrowDown, ArrowLeft, ArrowUp, BadgePercent, Check, Clock3, Copy, Exter
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t, type I18nKey } from "../../app/i18n";
 import { api } from "../../lib/api";
-import type { EntryEditorPayload, JsonSchema, RelatedEntrySection } from "../../lib/types";
+import type { AdminMediaAsset, EntryEditorPayload, JsonSchema, ListMediaAssetsResult, RelatedEntrySection } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
@@ -267,6 +267,9 @@ function ProductCommerceFields({
     ...productImages.map((image) => stringForInput(image["assetId"])),
     coverAssetId,
   ]);
+  const mediaAssets = useMediaAssetsById(galleryPreviewIds);
+  const primaryAssetId = coverAssetId || galleryPreviewIds[0] || "";
+  const primaryAsset = primaryAssetId ? mediaAssets.get(primaryAssetId) : undefined;
   const setImages = (nextImages: Record<string, unknown>[]): void => {
     const firstAssetId = stringForInput(nextImages[0]?.["assetId"]);
     onChange({
@@ -284,22 +287,34 @@ function ProductCommerceFields({
           body={t(language, "entryEdit.productVisualBody")}
         />
         <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
-          <div className="relative min-h-48 overflow-hidden rounded-lg border border-[var(--glass-border)] bg-[radial-gradient(circle_at_30%_20%,rgba(124,184,255,0.34),transparent_32%),linear-gradient(135deg,rgba(26,48,98,0.16),rgba(127,231,210,0.18))]">
-            <div className="absolute inset-4 flex flex-col items-center justify-center rounded-md border border-white/35 bg-white/20 p-4 text-center backdrop-blur-md dark:bg-slate-950/20">
-              <ImagePlus className="mb-2 size-7 text-primary" aria-hidden />
-              <p className="text-sm font-semibold text-foreground">
-                {galleryPreviewIds.length > 0 ? t(language, "entryEdit.coverLinked") : t(language, "entryEdit.coverEmpty")}
-              </p>
+          <div className="relative min-h-56 overflow-hidden rounded-lg border border-[var(--glass-border)] bg-[radial-gradient(circle_at_30%_20%,rgba(124,184,255,0.34),transparent_32%),linear-gradient(135deg,rgba(26,48,98,0.16),rgba(127,231,210,0.18))]">
+            {mediaAssetUrl(primaryAsset) ? (
+              <img
+                src={mediaAssetUrl(primaryAsset) ?? undefined}
+                alt={primaryAsset?.alt ?? t(language, "entryEdit.productVisual")}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : null}
+            <div className="absolute inset-0 bg-gradient-to-t from-background/70 via-background/10 to-transparent" />
+            <div className="absolute inset-x-4 bottom-4 rounded-md border border-white/35 bg-white/70 p-3 shadow-sm backdrop-blur-md dark:bg-slate-950/55">
+              <div className="flex items-center gap-2">
+                <ImagePlus className="size-4 text-primary" aria-hidden />
+                <p className="min-w-0 text-sm font-semibold text-foreground">
+                  {galleryPreviewIds.length > 0 ? t(language, "entryEdit.coverLinked") : t(language, "entryEdit.coverEmpty")}
+                </p>
+              </div>
+              {primaryAssetId ? (
+                <code className="mt-1 block truncate text-xs text-muted-foreground">{primaryAssetId}</code>
+              ) : null}
               {galleryPreviewIds.length > 0 ? (
-                <div className="mt-3 grid w-full grid-cols-3 gap-2">
+                <div className="mt-3 grid grid-cols-3 gap-2">
                   {galleryPreviewIds.slice(0, 6).map((assetId, index) => (
-                    <div
+                    <MediaAssetThumb
                       key={`${assetId}:${index}`}
-                      className="min-w-0 rounded-md border border-white/35 bg-white/35 px-2 py-2 text-left shadow-sm dark:bg-slate-950/30"
-                    >
-                      <span className="label-eyebrow">{index === 0 ? t(language, "entryEdit.coverSlide") : t(language, "entryEdit.slideNumber", { number: String(index + 1) })}</span>
-                      <code className="block truncate text-[11px] text-muted-foreground">{assetId}</code>
-                    </div>
+                      assetId={assetId}
+                      asset={mediaAssets.get(assetId)}
+                      label={index === 0 ? t(language, "entryEdit.coverSlide") : t(language, "entryEdit.slideNumber", { number: String(index + 1) })}
+                    />
                   ))}
                 </div>
               ) : null}
@@ -369,6 +384,56 @@ function ProductCommerceFields({
       </SectionCard>
     </>
   );
+}
+
+function useMediaAssetsById(ids: string[]): ReadonlyMap<string, AdminMediaAsset> {
+  const uniqueIds = React.useMemo(() => uniqueStrings(ids), [ids.join("|")]);
+  const query = useQuery({
+    queryKey: ["media-assets-by-id", uniqueIds],
+    enabled: uniqueIds.length > 0,
+    queryFn: async () => {
+      const pairs = await Promise.all(uniqueIds.map(async (id) => {
+        const params = new URLSearchParams({ search: id, limit: "10" });
+        const result = await api.get<ListMediaAssetsResult>(`/media/assets?${params.toString()}`);
+        return [id, result.items.find((asset) => asset.id === id) ?? null] as const;
+      }));
+      return new Map(pairs.filter((pair): pair is readonly [string, AdminMediaAsset] => pair[1] !== null));
+    },
+  });
+  return query.data ?? new Map<string, AdminMediaAsset>();
+}
+
+function MediaAssetThumb({
+  assetId,
+  asset,
+  label,
+}: {
+  assetId: string;
+  asset?: AdminMediaAsset;
+  label: string;
+}): React.ReactElement {
+  const url = mediaAssetUrl(asset);
+  return (
+    <div className="min-w-0 overflow-hidden rounded-md border border-white/35 bg-white/55 shadow-sm dark:bg-slate-950/45">
+      <div className="aspect-[4/3] bg-muted/50">
+        {url ? (
+          <img src={url} alt={asset?.alt ?? label} className="h-full w-full object-cover" />
+        ) : (
+          <div className="grid h-full place-items-center">
+            <ImagePlus className="size-4 text-muted-foreground" aria-hidden />
+          </div>
+        )}
+      </div>
+      <div className="px-2 py-1.5">
+        <span className="label-eyebrow">{label}</span>
+        <code className="block truncate text-[11px] text-muted-foreground">{assetId}</code>
+      </div>
+    </div>
+  );
+}
+
+function mediaAssetUrl(asset: AdminMediaAsset | undefined): string | null {
+  return asset?.primaryUrl ?? asset?.variants.find((variant) => variant.role === "primary")?.publicUrl ?? asset?.variants[0]?.publicUrl ?? null;
 }
 
 function ProductImageSliderEditor({
