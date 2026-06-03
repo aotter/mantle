@@ -932,6 +932,13 @@ code, kbd, pre { font-family: var(--font-mono); }
   padding: 0;
 }
 
+.row-action-label {
+  width: auto;
+  min-width: 4.25rem;
+  padding: 0 0.7rem;
+  white-space: nowrap;
+}
+
 .quick-action:hover,
 .inline-admin-action:hover,
 .row-action:hover {

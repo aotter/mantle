@@ -501,29 +501,39 @@ function EntryRowDisplay({
         {formatTimestamp(row.updated_at)}
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-1" data-tour="entry-actions">
+        <div className="flex flex-nowrap items-center gap-2" data-tour="entry-actions">
+          <a
+            className="row-action row-action-label"
+            title={t(language, "crud.editTooltip", { name: itemName })}
+            aria-label={t(language, "crud.editTooltip", { name: itemName })}
+            href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}
+          >
+            <PencilLine className="size-3.5" aria-hidden />
+            <span>{t(language, "crud.edit")}</span>
+          </a>
           {row.status !== "published" ? (
-            <button type="button" className="row-action" title={t(language, "crud.publishTooltip", { name: itemName })} disabled={busy} onClick={() => void changeStatus("published")}>
+            <button type="button" className="row-action row-action-label" title={t(language, "crud.publishTooltip", { name: itemName })} aria-label={t(language, "crud.publishTooltip", { name: itemName })} disabled={busy} onClick={() => void changeStatus("published")}>
               <Send className="size-3.5" aria-hidden />
+              <span>{t(language, "crud.publish")}</span>
             </button>
           ) : null}
           {row.status !== "draft" ? (
-            <button type="button" className="row-action" title={t(language, "crud.draftTooltip", { name: itemName })} disabled={busy} onClick={() => void changeStatus("draft")}>
+            <button type="button" className="row-action row-action-label" title={t(language, "crud.draftTooltip", { name: itemName })} aria-label={t(language, "crud.draftTooltip", { name: itemName })} disabled={busy} onClick={() => void changeStatus("draft")}>
               <RotateCcw className="size-3.5" aria-hidden />
+              <span>{t(language, "crud.draft")}</span>
             </button>
           ) : null}
           {row.status !== "archived" ? (
-            <button type="button" className="row-action" title={t(language, "crud.archiveTooltip", { name: itemName })} disabled={busy} onClick={() => void changeStatus("archived")}>
+            <button type="button" className="row-action row-action-label" title={t(language, "crud.archiveTooltip", { name: itemName })} aria-label={t(language, "crud.archiveTooltip", { name: itemName })} disabled={busy} onClick={() => void changeStatus("archived")}>
               <Archive className="size-3.5" aria-hidden />
+              <span>{t(language, "crud.archive")}</span>
             </button>
           ) : null}
-          <a className="row-action" title={t(language, "crud.editTooltip", { name: itemName })} href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}>
-            <PencilLine className="size-3.5" aria-hidden />
-          </a>
-          <button type="button" className="row-action" title={t(language, "crud.duplicateTooltip", { name: itemName })} disabled={busy} onClick={() => void duplicate()}>
+          <button type="button" className="row-action row-action-label" title={t(language, "crud.duplicateTooltip", { name: itemName })} aria-label={t(language, "crud.duplicateTooltip", { name: itemName })} disabled={busy} onClick={() => void duplicate()}>
             <Copy className="size-3.5" aria-hidden />
+            <span>{t(language, "crud.duplicate")}</span>
           </button>
-          <button type="button" className="row-action" title={t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy} onClick={() => void remove()}>
+          <button type="button" className="row-action" title={t(language, "crud.deleteTooltip", { name: itemName })} aria-label={t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy} onClick={() => void remove()}>
             <Trash2 className="size-3.5" aria-hidden />
           </button>
         </div>
