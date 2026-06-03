@@ -23,6 +23,7 @@ const site: SiteConfig = {
   locales: [],
   canonicalLocale: null,
   brand: "Blog",
+  media: { purposes: [] },
 };
 
 function seedEntry(
@@ -42,6 +43,41 @@ function seedEntry(
 }
 
 describe("HtmlPublishOrchestrator", () => {
+  it("injects configured tracking scripts into rendered entry HTML", async () => {
+    const db = new InMemoryDatabase();
+    seedEntry(db, { id: "p1", data: { title: "Hi", slug: "hi", locale: "en" } });
+    const templates = new TemplateRegistry();
+    templates.registerEntryTemplate(
+      "posts",
+      ({ entry }) => `<html><head><title>${entry.data["title"]}</title></head><body>Hi</body></html>`,
+    );
+    const usecase = new RenderEntryLiveUseCase(
+      db,
+      templates,
+      null,
+      { execute: async () => ({ title: "", description: "" }) },
+      new Map(),
+      new MemoryMediaAssets(),
+    );
+
+    const html = await usecase.execute({
+      collection: "posts",
+      slug: "hi",
+      locale: "en",
+      site: {
+        ...site,
+        ga4MeasurementId: "G-ABC1234567",
+        facebookPixelId: "123456789012345",
+      },
+    });
+
+    expect(html).toContain("https://www.googletagmanager.com/gtag/js?id=G-ABC1234567");
+    expect(html).toContain("gtag('config','G-ABC1234567')");
+    expect(html).toContain("fbq('init','123456789012345')");
+    expect(html).toContain("https://www.facebook.com/tr?id=123456789012345");
+    expect(html?.indexOf("googletagmanager.com")).toBeLessThan(html?.indexOf("</head>") ?? 0);
+  });
+
   it("threads resolved media assets into live entry templates", async () => {
     const db = new InMemoryDatabase();
     seedEntry(db, {

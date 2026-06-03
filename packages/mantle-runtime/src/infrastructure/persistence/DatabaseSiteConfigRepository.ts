@@ -35,6 +35,8 @@ const KEYS = {
   origin: "origin",
   locales: "locales",
   faviconUrl: "faviconUrl",
+  ga4MeasurementId: "ga4MeasurementId",
+  facebookPixelId: "facebookPixelId",
   mediaPurposes: "mediaPurposes",
 } as const;
 
@@ -80,6 +82,12 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
     if (defaults.faviconUrl && defaults.faviconUrl.length > 0) {
       stmts.push(insert(KEYS.faviconUrl, defaults.faviconUrl));
     }
+    if (defaults.ga4MeasurementId && defaults.ga4MeasurementId.length > 0) {
+      stmts.push(insert(KEYS.ga4MeasurementId, defaults.ga4MeasurementId));
+    }
+    if (defaults.facebookPixelId && defaults.facebookPixelId.length > 0) {
+      stmts.push(insert(KEYS.facebookPixelId, defaults.facebookPixelId));
+    }
     if (defaults.locales && defaults.locales.length > 0) {
       stmts.push(insert(KEYS.locales, defaults.locales.join(",")));
     }
@@ -107,6 +115,8 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
       canonicalLocale: locales[0] ?? null,
       brand: m.get(KEYS.brand) ?? "AotterMantle",
       faviconUrl: m.get(KEYS.faviconUrl) || undefined,
+      ga4MeasurementId: m.get(KEYS.ga4MeasurementId) || undefined,
+      facebookPixelId: m.get(KEYS.facebookPixelId) || undefined,
       media: { purposes },
     };
   }
