@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Check, Copy, ExternalLink, ImagePlus, PackageCheck, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, BadgePercent, Check, Clock3, Copy, ExternalLink, ImagePlus, Link2, PackageCheck, Plus, Save, Tag, Trash2 } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
@@ -790,6 +790,11 @@ function ProductTranslationCard({
           />
         </FieldShell>
       </div>
+      <MerchandisingEditor
+        value={objectValue(draft["merchandising"])}
+        onChange={(value) => setField("merchandising", value)}
+        language={language}
+      />
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">{t(language, "entryEdit.productInfoHint")}</p>
         <Button
@@ -804,6 +809,400 @@ function ProductTranslationCard({
       </div>
       {save.isError ? <p className="mt-2 text-xs text-destructive">{save.error instanceof Error ? save.error.message : String(save.error)}</p> : null}
     </div>
+  );
+}
+
+function MerchandisingEditor({
+  value,
+  onChange,
+  language,
+}: {
+  value: Record<string, unknown>;
+  onChange: (value: Record<string, unknown>) => void;
+  language: AdminLanguage;
+}): React.ReactElement {
+  const brand = objectValue(value["brand"]);
+  const marketing = objectValue(value["marketing"]);
+  const setMerchandisingField = (field: string, next: unknown): void => onChange({ ...value, [field]: next });
+  const setBrandField = (field: string, next: unknown): void => {
+    setMerchandisingField("brand", { ...brand, [field]: next });
+  };
+  const setMarketingField = (field: string, next: unknown): void => {
+    setMerchandisingField("marketing", { ...marketing, [field]: next });
+  };
+
+  return (
+    <div className="mt-5 space-y-4">
+      <div className="rounded-lg border border-[var(--glass-border)] bg-background/40 p-4">
+        <div className="mb-4 flex items-start gap-3">
+          <span className="grid size-9 shrink-0 place-items-center rounded-md bg-accent text-primary">
+            <Tag className="size-4" aria-hidden />
+          </span>
+          <SectionTitle
+            title={t(language, "entryEdit.merchandising")}
+            body={t(language, "entryEdit.merchandisingBody")}
+          />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <FieldShell label={t(language, "entryEdit.brandName")}>
+            <input
+              className="admin-input"
+              value={stringForInput(brand["name"])}
+              onChange={(event) => setBrandField("name", event.target.value)}
+            />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.brandTagline")}>
+            <input
+              className="admin-input"
+              value={stringForInput(brand["tagline"])}
+              onChange={(event) => setBrandField("tagline", event.target.value)}
+            />
+          </FieldShell>
+          <div className="md:col-span-2">
+            <FieldShell label={t(language, "entryEdit.brandIntro")}>
+              <RichTextEditor
+                compact
+                value={stringForInput(brand["intro"])}
+                onChange={(next) => setBrandField("intro", next)}
+              />
+            </FieldShell>
+          </div>
+        </div>
+      </div>
+
+      <StringListEditor
+        title={t(language, "entryEdit.highlights")}
+        body={t(language, "entryEdit.highlightsBody")}
+        addLabel={t(language, "entryEdit.addHighlight")}
+        value={stringArray(value["highlights"])}
+        onChange={(next) => setMerchandisingField("highlights", next)}
+        language={language}
+      />
+
+      <StructuredListEditor
+        title={t(language, "entryEdit.introSections")}
+        body={t(language, "entryEdit.introSectionsBody")}
+        addLabel={t(language, "entryEdit.addIntroSection")}
+        value={recordArray(value["introSections"])}
+        onChange={(next) => setMerchandisingField("introSections", next)}
+        language={language}
+        emptyItem={{ title: "", body: "" }}
+        fields={[
+          { name: "title", label: t(language, "entryEdit.sectionTitle") },
+          { name: "body", label: t(language, "entryEdit.sectionBody"), kind: "rich" },
+        ]}
+      />
+
+      <StructuredListEditor
+        title={t(language, "entryEdit.promotions")}
+        body={t(language, "entryEdit.promotionsBody")}
+        addLabel={t(language, "entryEdit.addPromotion")}
+        value={recordArray(value["promotions"])}
+        onChange={(next) => setMerchandisingField("promotions", next)}
+        language={language}
+        emptyItem={{ label: "", title: "", body: "", relatedSkuCode: "", discountPercent: null }}
+        fields={[
+          { name: "label", label: t(language, "entryEdit.promoLabel") },
+          { name: "title", label: t(language, "entryEdit.promoTitle") },
+          { name: "body", label: t(language, "entryEdit.promoBody"), kind: "textarea" },
+          { name: "relatedSkuCode", label: t(language, "entryEdit.relatedSkuCode") },
+          { name: "discountPercent", label: t(language, "entryEdit.discountPercent"), kind: "number" },
+        ]}
+      />
+
+      <StructuredListEditor
+        title={t(language, "entryEdit.shippingDeals")}
+        body={t(language, "entryEdit.shippingDealsBody")}
+        addLabel={t(language, "entryEdit.addShippingDeal")}
+        value={recordArray(value["shippingDeals"])}
+        onChange={(next) => setMerchandisingField("shippingDeals", next)}
+        language={language}
+        emptyItem={{ title: "", body: "" }}
+        fields={[
+          { name: "title", label: t(language, "entryEdit.sectionTitle") },
+          { name: "body", label: t(language, "entryEdit.sectionBody"), kind: "textarea" },
+        ]}
+      />
+
+      <div className="rounded-lg border border-[var(--glass-border)] bg-background/40 p-4">
+        <div className="mb-4 flex items-start gap-3">
+          <span className="grid size-9 shrink-0 place-items-center rounded-md bg-accent text-primary">
+            <BadgePercent className="size-4" aria-hidden />
+          </span>
+          <SectionTitle
+            title={t(language, "entryEdit.marketingRules")}
+            body={t(language, "entryEdit.marketingRulesBody")}
+          />
+        </div>
+        <div className="space-y-4">
+          <StructuredListEditor
+            title={t(language, "entryEdit.passphrases")}
+            body={t(language, "entryEdit.passphrasesBody")}
+            addLabel={t(language, "entryEdit.addPassphrase")}
+            value={recordArray(marketing["passphrases"])}
+            onChange={(next) => setMarketingField("passphrases", next)}
+            language={language}
+            emptyItem={{ code: "", title: "", body: "", productSlug: "", skuCode: "", discountPercent: null, discountMinor: null }}
+            fields={marketingRuleFields(language)}
+            icon={<Tag className="size-4" aria-hidden />}
+          />
+          <StructuredListEditor
+            title={t(language, "entryEdit.specialLinks")}
+            body={t(language, "entryEdit.specialLinksBody")}
+            addLabel={t(language, "entryEdit.addSpecialLink")}
+            value={recordArray(marketing["specialLinks"])}
+            onChange={(next) => setMarketingField("specialLinks", next)}
+            language={language}
+            emptyItem={{ code: "", title: "", source: "", productSlug: "", skuCode: "", fixedPriceMinor: null, discountPercent: null, discountMinor: null }}
+            fields={[
+              { name: "code", label: t(language, "entryEdit.campaignCode") },
+              { name: "title", label: t(language, "entryEdit.campaignTitle") },
+              { name: "source", label: t(language, "entryEdit.linkSource") },
+              { name: "productSlug", label: t(language, "entryEdit.productSlug") },
+              { name: "skuCode", label: t(language, "entryEdit.skuCode") },
+              { name: "fixedPriceMinor", label: t(language, "entryEdit.fixedPriceMinor"), kind: "number" },
+              { name: "discountPercent", label: t(language, "entryEdit.discountPercent"), kind: "number" },
+              { name: "discountMinor", label: t(language, "entryEdit.discountMinor"), kind: "number" },
+            ]}
+            icon={<Link2 className="size-4" aria-hidden />}
+          />
+          <StructuredListEditor
+            title={t(language, "entryEdit.timedCampaigns")}
+            body={t(language, "entryEdit.timedCampaignsBody")}
+            addLabel={t(language, "entryEdit.addTimedCampaign")}
+            value={recordArray(marketing["timedCampaigns"])}
+            onChange={(next) => setMarketingField("timedCampaigns", next)}
+            language={language}
+            emptyItem={{ title: "", body: "", productSlug: "", skuCode: "", startsAt: "", endsAt: "", salePriceMinor: null, discountPercent: null, discountMinor: null }}
+            fields={[
+              { name: "title", label: t(language, "entryEdit.campaignTitle") },
+              { name: "body", label: t(language, "entryEdit.campaignBody"), kind: "textarea" },
+              { name: "productSlug", label: t(language, "entryEdit.productSlug") },
+              { name: "skuCode", label: t(language, "entryEdit.skuCode") },
+              { name: "startsAt", label: t(language, "entryEdit.startsAt"), kind: "datetime" },
+              { name: "endsAt", label: t(language, "entryEdit.endsAt"), kind: "datetime" },
+              { name: "salePriceMinor", label: t(language, "entryEdit.salePriceMinor"), kind: "number" },
+              { name: "discountPercent", label: t(language, "entryEdit.discountPercent"), kind: "number" },
+              { name: "discountMinor", label: t(language, "entryEdit.discountMinor"), kind: "number" },
+            ]}
+            icon={<Clock3 className="size-4" aria-hidden />}
+          />
+          <StructuredListEditor
+            title={t(language, "entryEdit.bundles")}
+            body={t(language, "entryEdit.bundlesBody")}
+            addLabel={t(language, "entryEdit.addBundle")}
+            value={recordArray(marketing["bundles"])}
+            onChange={(next) => setMarketingField("bundles", next)}
+            language={language}
+            emptyItem={{ title: "", body: "", triggerProductSlug: "", triggerSkuCode: "", bundledProductSlug: "", bundledSkuCode: "", discountPercent: null, discountMinor: null }}
+            fields={[
+              { name: "title", label: t(language, "entryEdit.campaignTitle") },
+              { name: "body", label: t(language, "entryEdit.campaignBody"), kind: "textarea" },
+              { name: "triggerProductSlug", label: t(language, "entryEdit.triggerProductSlug") },
+              { name: "triggerSkuCode", label: t(language, "entryEdit.triggerSkuCode") },
+              { name: "bundledProductSlug", label: t(language, "entryEdit.bundledProductSlug") },
+              { name: "bundledSkuCode", label: t(language, "entryEdit.bundledSkuCode") },
+              { name: "discountPercent", label: t(language, "entryEdit.discountPercent"), kind: "number" },
+              { name: "discountMinor", label: t(language, "entryEdit.discountMinor"), kind: "number" },
+            ]}
+            icon={<PackageCheck className="size-4" aria-hidden />}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type StructuredField = {
+  name: string;
+  label: string;
+  kind?: "text" | "number" | "textarea" | "rich" | "datetime";
+};
+
+function marketingRuleFields(language: AdminLanguage): StructuredField[] {
+  return [
+    { name: "code", label: t(language, "entryEdit.campaignCode") },
+    { name: "title", label: t(language, "entryEdit.campaignTitle") },
+    { name: "body", label: t(language, "entryEdit.campaignBody"), kind: "textarea" },
+    { name: "productSlug", label: t(language, "entryEdit.productSlug") },
+    { name: "skuCode", label: t(language, "entryEdit.skuCode") },
+    { name: "discountPercent", label: t(language, "entryEdit.discountPercent"), kind: "number" },
+    { name: "discountMinor", label: t(language, "entryEdit.discountMinor"), kind: "number" },
+  ];
+}
+
+function StringListEditor({
+  title,
+  body,
+  addLabel,
+  value,
+  onChange,
+  language,
+}: {
+  title: string;
+  body: string;
+  addLabel: string;
+  value: string[];
+  onChange: (value: string[]) => void;
+  language: AdminLanguage;
+}): React.ReactElement {
+  const update = (index: number, nextValue: string): void => {
+    const next = [...value];
+    next[index] = nextValue;
+    onChange(next);
+  };
+  return (
+    <div className="rounded-lg border border-[var(--glass-border)] bg-background/40 p-4">
+      <SectionTitle title={title} body={body} />
+      <div className="space-y-2">
+        {value.map((item, index) => (
+          <div key={index} className="flex items-center gap-2">
+            <input
+              className="admin-input"
+              value={item}
+              onChange={(event) => update(index, event.target.value)}
+            />
+            <button
+              type="button"
+              className="row-action"
+              title={t(language, "entryEdit.removeItem")}
+              onClick={() => onChange(value.filter((_, itemIndex) => itemIndex !== index))}
+            >
+              <Trash2 className="size-3.5" aria-hidden />
+            </button>
+          </div>
+        ))}
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => onChange([...value, ""])}
+        >
+          <Plus className="size-3.5" aria-hidden />
+          {addLabel}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function StructuredListEditor({
+  title,
+  body,
+  addLabel,
+  value,
+  onChange,
+  language,
+  emptyItem,
+  fields,
+  icon,
+}: {
+  title: string;
+  body: string;
+  addLabel: string;
+  value: Record<string, unknown>[];
+  onChange: (value: Record<string, unknown>[]) => void;
+  language: AdminLanguage;
+  emptyItem: Record<string, unknown>;
+  fields: StructuredField[];
+  icon?: React.ReactNode;
+}): React.ReactElement {
+  const updateItem = (index: number, field: string, nextValue: unknown): void => {
+    const next = value.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: nextValue } : item);
+    onChange(next);
+  };
+  return (
+    <div className="rounded-lg border border-[var(--glass-border)] bg-background/40 p-4">
+      <div className="flex items-start gap-3">
+        {icon ? <span className="mt-1 grid size-8 shrink-0 place-items-center rounded-md bg-accent text-primary">{icon}</span> : null}
+        <SectionTitle title={title} body={body} />
+      </div>
+      <div className="space-y-3">
+        {value.map((item, index) => (
+          <div key={index} className="rounded-lg border border-border/70 bg-card/45 p-3">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-muted-foreground">#{index + 1}</span>
+              <button
+                type="button"
+                className="row-action"
+                title={t(language, "entryEdit.removeItem")}
+                onClick={() => onChange(value.filter((_, itemIndex) => itemIndex !== index))}
+              >
+                <Trash2 className="size-3.5" aria-hidden />
+              </button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {fields.map((field) => (
+                <div key={field.name} className={field.kind === "rich" || field.kind === "textarea" ? "md:col-span-2" : undefined}>
+                  <StructuredFieldInput
+                    field={field}
+                    value={item[field.name]}
+                    onChange={(next) => updateItem(index, field.name, next)}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => onChange([...value, { ...emptyItem }])}
+        >
+          <Plus className="size-3.5" aria-hidden />
+          {addLabel}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function StructuredFieldInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: StructuredField;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}): React.ReactElement {
+  return (
+    <FieldShell label={field.label}>
+      {field.kind === "rich" ? (
+        <RichTextEditor
+          compact
+          value={stringForInput(value)}
+          onChange={onChange}
+        />
+      ) : field.kind === "textarea" ? (
+        <textarea
+          className="admin-textarea admin-textarea-compact"
+          value={stringForInput(value)}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      ) : field.kind === "number" ? (
+        <input
+          className="admin-input"
+          type="number"
+          value={numberForInput(value)}
+          onChange={(event) => onChange(numberInputValue(event.target.value))}
+        />
+      ) : field.kind === "datetime" ? (
+        <input
+          className="admin-input"
+          type="datetime-local"
+          value={datetimeForInput(value)}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      ) : (
+        <input
+          className="admin-input"
+          value={stringForInput(value)}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      )}
+    </FieldShell>
   );
 }
 
@@ -1117,6 +1516,14 @@ function numberForInput(value: unknown): string | number {
   return "";
 }
 
+function datetimeForInput(value: unknown): string {
+  if (typeof value !== "string" || !value) return "";
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return value.slice(0, 16);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 16);
+}
+
 function defaultValueForSchema(schema: JsonSchema): unknown {
   if (schema.default !== undefined) return schema.default;
   const type = schemaType(schema);
@@ -1175,6 +1582,14 @@ function objectValue(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function recordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.map((item) => ({ ...objectValue(item) })) : [];
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((item) => stringForInput(item)) : [];
 }
 
 function isArrayIndex(value: string): boolean {
