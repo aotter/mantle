@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, BadgePercent, Check, CircleHelp, Clock3, Copy, ExternalLink, ImagePlus, LayoutTemplate, Link2, PackageCheck, Plus, Save, Tag, Trash2, X } from "lucide-react";
+import { ArrowLeft, BadgePercent, Check, Clock3, Copy, ExternalLink, ImagePlus, Info, LayoutTemplate, Link2, PackageCheck, Plus, Save, Tag, Trash2, X } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t, type I18nKey } from "../../app/i18n";
 import { api } from "../../lib/api";
@@ -192,14 +192,16 @@ function SectionTitle({
   title,
   body,
   action,
+  className,
 }: {
   title: string;
   body?: React.ReactNode;
   action?: React.ReactNode;
+  className?: string;
 }): React.ReactElement {
   return (
-    <div className="mb-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className={`mb-4 ${className ?? ""}`}>
+      <div className="flex items-start justify-between gap-3">
         <h2 className="text-lg font-semibold">{title}</h2>
         {action}
       </div>
@@ -1565,14 +1567,14 @@ function SectionPreviewButton({
     <>
       <Button
         type="button"
-        variant="secondary"
-        size="sm"
-        className="shrink-0"
+        variant="ghost"
+        size="icon"
+        className="size-8 shrink-0 border border-[var(--glass-border)] bg-card text-muted-foreground hover:border-primary hover:text-primary"
         onClick={() => setOpen(true)}
         title={t(language, "entryEdit.previewPosition")}
+        aria-label={t(language, "entryEdit.previewPosition")}
       >
-        <CircleHelp className="size-3.5" aria-hidden />
-        {t(language, "entryEdit.previewPosition")}
+        <Info className="size-4" aria-hidden />
       </Button>
       {open ? (
         <ProductSectionPreview
@@ -1802,6 +1804,7 @@ function StructuredListEditor({
         <SectionTitle
           title={title}
           body={body}
+          className="min-w-0 flex-1"
           action={previewKind ? <SectionPreviewButton language={language} kind={previewKind} /> : undefined}
         />
       </div>
