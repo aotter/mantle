@@ -52,6 +52,7 @@ export function EntryEditView({
   const productSkus = inlineRelated.filter((section) => section.collection.name === "product-skus");
   const isProduct = payload.collection.name === "products";
   const isOrder = payload.collection.name === "orders";
+  const isOrderItem = payload.collection.name === "order_items";
   const isInventorySnapshot = payload.collection.name === "inventory_snapshots";
 
   return (
@@ -108,6 +109,12 @@ export function EntryEditView({
             />
           ) : isOrder ? (
             <OrderManagementFields
+              value={data}
+              onChange={setData}
+              language={language}
+            />
+          ) : isOrderItem ? (
+            <OrderLineItemFields
               value={data}
               onChange={setData}
               language={language}
@@ -459,6 +466,126 @@ function OrderManagementFields({
           { name: "discountMinor", label: t(language, "entryEdit.discountMinor"), kind: "number" },
         ]}
       />
+    </>
+  );
+}
+
+function OrderLineItemFields({
+  value,
+  onChange,
+  language,
+}: {
+  value: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+  language: AdminLanguage;
+}): React.ReactElement {
+  const qty = numericValue(value["qty"]);
+  const unitPrice = numericValue(value["priceMinorAtPurchase"]);
+  const computedLineTotal = qty * unitPrice;
+  const setField = (field: string, next: unknown): void => {
+    const nextData = { ...value, [field]: next };
+    if (field === "qty" || field === "priceMinorAtPurchase") {
+      const nextQty = field === "qty" ? numericValue(next) : numericValue(value["qty"]);
+      const nextUnitPrice = field === "priceMinorAtPurchase" ? numericValue(next) : numericValue(value["priceMinorAtPurchase"]);
+      nextData["lineTotalMinor"] = nextQty * nextUnitPrice;
+    }
+    onChange(nextData);
+  };
+  const orderNumber = stringForInput(value["orderNumber"]);
+  const productSlug = stringForInput(value["productSlug"]);
+
+  return (
+    <>
+      <SectionCard>
+        <SectionTitle
+          title={t(language, "entryEdit.orderItemOrder")}
+          body={t(language, "entryEdit.orderItemOrderBody")}
+        />
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <FieldShell label={t(language, "entryEdit.orderNumber")} required>
+            <input
+              className="admin-input"
+              value={orderNumber}
+              onChange={(event) => setField("orderNumber", event.target.value)}
+            />
+          </FieldShell>
+          <Button asChild variant="secondary" className="w-full md:w-auto">
+            <a href={`/admin/c/orders${orderNumber ? `?search=${encodeURIComponent(orderNumber)}` : ""}`}>
+              <ExternalLink className="size-4" aria-hidden />
+              {t(language, "entryEdit.openOrder")}
+            </a>
+          </Button>
+        </div>
+      </SectionCard>
+
+      <SectionCard>
+        <SectionTitle
+          title={t(language, "entryEdit.orderItemSnapshot")}
+          body={t(language, "entryEdit.orderItemSnapshotBody")}
+        />
+        <div className="grid gap-4 lg:grid-cols-[14rem_minmax(0,1fr)]">
+          <div className="relative min-h-44 overflow-hidden rounded-lg border border-[var(--glass-border)] bg-[linear-gradient(135deg,#e2e8f0,#c9d8d2_54%,#214b46)]">
+            {stringForInput(value["imageAssetId"]) ? (
+              <div className="absolute inset-4 grid place-items-center rounded-md border border-white/35 bg-white/30 p-3 text-center text-xs font-semibold text-foreground backdrop-blur-md">
+                {stringForInput(value["imageAssetId"])}
+              </div>
+            ) : (
+              <div className="absolute inset-4 grid place-items-center rounded-md border border-white/35 bg-white/30 text-center backdrop-blur-md">
+                <PackageCheck className="mb-2 size-7 text-primary" aria-hidden />
+                <span className="text-sm font-semibold">{t(language, "entryEdit.orderItemSnapshotEmpty")}</span>
+              </div>
+            )}
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <FieldShell label={t(language, "entryEdit.title")}>
+              <input className="admin-input" value={stringForInput(value["title"])} onChange={(event) => setField("title", event.target.value)} />
+            </FieldShell>
+            <FieldShell label={t(language, "entryEdit.variantLabel")}>
+              <input className="admin-input" value={stringForInput(value["variantLabel"])} onChange={(event) => setField("variantLabel", event.target.value)} />
+            </FieldShell>
+            <FieldShell label={t(language, "entryEdit.productSlug")}>
+              <input className="admin-input" value={productSlug} onChange={(event) => setField("productSlug", event.target.value)} />
+            </FieldShell>
+            <FieldShell label={t(language, "entryEdit.skuCode")} required>
+              <input className="admin-input" value={stringForInput(value["skuCode"])} onChange={(event) => setField("skuCode", event.target.value)} />
+            </FieldShell>
+            <FieldShell label={t(language, "entryEdit.coverAsset")}>
+              <input className="admin-input" value={stringForInput(value["imageAssetId"])} onChange={(event) => setField("imageAssetId", event.target.value)} />
+            </FieldShell>
+            <div className="flex items-end">
+              <Button asChild variant="secondary" className="w-full">
+                <a href={`/admin/c/products${productSlug ? `?search=${encodeURIComponent(productSlug)}` : ""}`}>
+                  <ExternalLink className="size-4" aria-hidden />
+                  {t(language, "entryEdit.openProduct")}
+                </a>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard>
+        <SectionTitle
+          title={t(language, "entryEdit.orderItemMoney")}
+          body={t(language, "entryEdit.orderItemMoneyBody")}
+        />
+        <div className="grid gap-4 md:grid-cols-3">
+          <FieldShell label={t(language, "entryEdit.quantity")} required>
+            <input className="admin-input" type="number" min={0} value={numberForInput(value["qty"])} onChange={(event) => setField("qty", numberInputValue(event.target.value))} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.priceMinorAtPurchase")} required>
+            <input className="admin-input" type="number" min={0} value={numberForInput(value["priceMinorAtPurchase"])} onChange={(event) => setField("priceMinorAtPurchase", numberInputValue(event.target.value))} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.lineTotalMinor")}>
+            <input className="admin-input" type="number" value={numberForInput(value["lineTotalMinor"])} onChange={(event) => setField("lineTotalMinor", numberInputValue(event.target.value))} />
+          </FieldShell>
+        </div>
+        <div className="mt-4 rounded-lg border border-[var(--glass-border)] bg-background/45 p-4">
+          <p className="label-eyebrow">{t(language, "entryEdit.orderItemComputedTotal")}</p>
+          <p className="mt-1 text-2xl font-semibold">{computedLineTotal}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t(language, "entryEdit.orderItemComputedTotalBody")}</p>
+        </div>
+      </SectionCard>
     </>
   );
 }
@@ -2122,6 +2249,15 @@ function numberInputValue(value: string): number | null {
   return value === "" ? null : Number(value);
 }
 
+function numericValue(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
 function parentAdminLink(
   collection: EntryEditorPayload["collection"],
   data: Record<string, unknown>,
@@ -2149,7 +2285,7 @@ function isPrimaryCommerceSection(section: RelatedEntrySection, parentCollection
 }
 
 function entryTitle(data: Record<string, unknown>, fallback: string): string {
-  for (const key of ["title", "name", "slug", "skuCode", "orderId", "id"]) {
+  for (const key of ["title", "name", "slug", "skuCode", "orderNumber", "orderId", "productSlug", "id"]) {
     const value = data[key];
     if (typeof value === "string" && value.trim()) return value;
   }
