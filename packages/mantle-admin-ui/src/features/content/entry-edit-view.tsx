@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, BadgePercent, Check, Clock3, Copy, ExternalLink, ImagePlus, Link2, PackageCheck, Plus, Save, Tag, Trash2 } from "lucide-react";
+import { ArrowLeft, BadgePercent, Check, Clock3, Copy, ExternalLink, ImagePlus, LayoutTemplate, Link2, PackageCheck, Plus, Save, Tag, Trash2 } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
@@ -841,6 +841,13 @@ function RelatedSections({
             language={language}
             onSaved={onSaved}
           />
+        ) : section.collection.name === "page-translations" ? (
+          <PageTranslationSection
+            key={`${section.collection.name}:${section.relationship.childField}`}
+            section={section}
+            language={language}
+            onSaved={onSaved}
+          />
         ) : (
           <SectionCard key={`${section.collection.name}:${section.relationship.childField}`}>
             <SectionTitle
@@ -1024,6 +1031,290 @@ function ProductTranslationCard({
       {save.isError ? <p className="mt-2 text-xs text-destructive">{save.error instanceof Error ? save.error.message : String(save.error)}</p> : null}
     </div>
   );
+}
+
+function PageTranslationSection({
+  section,
+  language,
+  onSaved,
+}: {
+  section: RelatedEntrySection;
+  language: AdminLanguage;
+  onSaved?: () => void;
+}): React.ReactElement {
+  return (
+    <SectionCard>
+      <SectionTitle
+        title={t(language, "entryEdit.pageContent")}
+        body={t(language, "entryEdit.pageContentBody")}
+      />
+      {section.entries.length === 0 ? (
+        <CreateRelatedEntryPrompt
+          section={section}
+          language={language}
+          label={t(language, "entryEdit.createPageContent")}
+          seedData={{
+            locale: language,
+            title: "",
+            summary: "",
+            body: "",
+            blocks: [],
+          }}
+          onSaved={onSaved}
+        />
+      ) : (
+        <div className="space-y-4">
+          {section.entries.map((entry) => (
+            <PageTranslationCard key={entry.id} entry={entry} language={language} onSaved={onSaved} />
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function PageTranslationCard({
+  entry,
+  language,
+  onSaved,
+}: {
+  entry: RelatedEntrySection["entries"][number];
+  language: AdminLanguage;
+  onSaved?: () => void;
+}): React.ReactElement {
+  const [draft, setDraft] = React.useState<Record<string, unknown>>(entry.data);
+  React.useEffect(() => setDraft(entry.data), [entry.data]);
+  const save = useMutation({
+    mutationFn: (nextData: Record<string, unknown>) =>
+      api.patch<EntryEditorPayload>(`/entries/${encodeURIComponent(entry.id)}/editor`, {
+        data: nextData,
+      }),
+    onSuccess: (payload) => {
+      setDraft(payload.entry.data);
+      onSaved?.();
+    },
+  });
+  const dirty = JSON.stringify(draft) !== JSON.stringify(entry.data);
+  const setField = (field: string, value: unknown): void => {
+    setDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  return (
+    <div className="rounded-lg border border-[var(--glass-border)] bg-background/35 p-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="label-eyebrow">{stringForInput(draft["locale"]) || entry.locale || "-"}</p>
+          <h3 className="text-base font-semibold">{stringForInput(draft["title"]) || entryTitle(entry.data, entry.id)}</h3>
+        </div>
+        <a
+          className="row-action"
+          title={t(language, "entryEdit.openAdvanced")}
+          href={`/admin/c/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}
+        >
+          <ExternalLink className="size-3.5" aria-hidden />
+        </a>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <FieldShell label={t(language, "entryEdit.title")} required>
+          <input className="admin-input" value={stringForInput(draft["title"])} onChange={(event) => setField("title", event.target.value)} />
+        </FieldShell>
+        <FieldShell label={t(language, "entryEdit.slug")} required>
+          <input className="admin-input" value={stringForInput(draft["slug"])} onChange={(event) => setField("slug", event.target.value)} />
+        </FieldShell>
+      </div>
+      <div className="mt-4">
+        <FieldShell label={t(language, "entryEdit.summary")}>
+          <textarea className="admin-textarea admin-textarea-compact" value={stringForInput(draft["summary"])} onChange={(event) => setField("summary", event.target.value)} />
+        </FieldShell>
+      </div>
+      <div className="mt-4">
+        <FieldShell label={t(language, "entryEdit.bodyMarkdown")}>
+          <RichTextEditor compact value={stringForInput(draft["body"])} onChange={(value) => setField("body", value)} />
+        </FieldShell>
+      </div>
+      <PageBlocksEditor
+        value={recordArray(draft["blocks"])}
+        onChange={(blocks) => setField("blocks", blocks)}
+        language={language}
+      />
+      <div className="mt-4 flex flex-wrap justify-end gap-3">
+        <Button type="button" size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate(draft)}>
+          <Save className="size-3.5" aria-hidden />
+          {save.isPending ? t(language, "crud.saving") : t(language, "entryEdit.save")}
+        </Button>
+      </div>
+      {save.isError ? <p className="mt-2 text-xs text-destructive">{save.error instanceof Error ? save.error.message : String(save.error)}</p> : null}
+    </div>
+  );
+}
+
+type PageBlockType = "hero" | "features" | "prose" | "cta" | "media";
+
+function PageBlocksEditor({
+  value,
+  onChange,
+  language,
+}: {
+  value: Record<string, unknown>[];
+  onChange: (value: Record<string, unknown>[]) => void;
+  language: AdminLanguage;
+}): React.ReactElement {
+  const updateBlock = (index: number, nextBlock: Record<string, unknown>): void => {
+    onChange(value.map((block, itemIndex) => itemIndex === index ? nextBlock : block));
+  };
+  return (
+    <div className="mt-5 rounded-lg border border-[var(--glass-border)] bg-background/40 p-4">
+      <div className="mb-4 flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-md bg-accent text-primary">
+          <LayoutTemplate className="size-4" aria-hidden />
+        </span>
+        <SectionTitle
+          title={t(language, "entryEdit.pageBlocks")}
+          body={t(language, "entryEdit.pageBlocksBody")}
+        />
+      </div>
+      <div className="space-y-3">
+        {value.map((block, index) => (
+          <PageBlockCard
+            key={index}
+            index={index}
+            value={block}
+            onChange={(next) => updateBlock(index, next)}
+            onDelete={() => onChange(value.filter((_, itemIndex) => itemIndex !== index))}
+            language={language}
+          />
+        ))}
+        <div className="flex flex-wrap gap-2">
+          {(["hero", "features", "prose", "cta", "media"] as const).map((type) => (
+            <Button key={type} type="button" variant="secondary" size="sm" onClick={() => onChange([...value, defaultPageBlock(type)])}>
+              <Plus className="size-3.5" aria-hidden />
+              {pageBlockTypeLabel(language, type)}
+            </Button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PageBlockCard({
+  index,
+  value,
+  onChange,
+  onDelete,
+  language,
+}: {
+  index: number;
+  value: Record<string, unknown>;
+  onChange: (value: Record<string, unknown>) => void;
+  onDelete: () => void;
+  language: AdminLanguage;
+}): React.ReactElement {
+  const type = pageBlockType(value["type"]);
+  const setField = (field: string, next: unknown): void => onChange({ ...value, [field]: next });
+  const cards = recordArray(value["cards"]);
+
+  return (
+    <div className="rounded-lg border border-border/70 bg-card/45 p-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-muted-foreground">#{index + 1}</span>
+          <select className="admin-input h-9 w-40 py-1 text-sm" value={type} onChange={(event) => onChange(defaultPageBlock(event.target.value as PageBlockType, value))}>
+            {(["hero", "features", "prose", "cta", "media"] as const).map((option) => (
+              <option key={option} value={option}>{pageBlockTypeLabel(language, option)}</option>
+            ))}
+          </select>
+        </div>
+        <button type="button" className="row-action" title={t(language, "entryEdit.removeItem")} onClick={onDelete}>
+          <Trash2 className="size-3.5" aria-hidden />
+        </button>
+      </div>
+
+      {type === "hero" ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          <StructuredFieldInput field={{ name: "eyebrow", label: t(language, "entryEdit.eyebrow") }} value={value["eyebrow"]} onChange={(next) => setField("eyebrow", next)} />
+          <StructuredFieldInput field={{ name: "headline", label: t(language, "entryEdit.headline") }} value={value["headline"]} onChange={(next) => setField("headline", next)} />
+          <div className="md:col-span-2">
+            <StructuredFieldInput field={{ name: "paragraph", label: t(language, "entryEdit.paragraph"), kind: "textarea" }} value={value["paragraph"]} onChange={(next) => setField("paragraph", next)} />
+          </div>
+          <StructuredFieldInput field={{ name: "imageAssetId", label: t(language, "entryEdit.imageAssetId") }} value={value["imageAssetId"]} onChange={(next) => setField("imageAssetId", next)} />
+          <StructuredFieldInput field={{ name: "imageAlt", label: t(language, "entryEdit.imageAlt") }} value={value["imageAlt"]} onChange={(next) => setField("imageAlt", next)} />
+        </div>
+      ) : null}
+
+      {type === "features" ? (
+        <div className="space-y-3">
+          <StructuredFieldInput field={{ name: "heading", label: t(language, "entryEdit.heading") }} value={value["heading"]} onChange={(next) => setField("heading", next)} />
+          <StructuredListEditor
+            title={t(language, "entryEdit.featureCards")}
+            body={t(language, "entryEdit.featureCardsBody")}
+            addLabel={t(language, "entryEdit.addFeatureCard")}
+            value={cards}
+            onChange={(next) => setField("cards", next)}
+            language={language}
+            emptyItem={{ variant: "white", tag: "", title: "", body: "", sideImageAssetId: "", sideImageAlt: "" }}
+            fields={[
+              { name: "variant", label: t(language, "entryEdit.variant") },
+              { name: "tag", label: t(language, "entryEdit.tag") },
+              { name: "title", label: t(language, "entryEdit.title") },
+              { name: "body", label: t(language, "entryEdit.sectionBody"), kind: "textarea" },
+              { name: "sideImageAssetId", label: t(language, "entryEdit.sideImageAssetId") },
+              { name: "sideImageAlt", label: t(language, "entryEdit.sideImageAlt") },
+            ]}
+          />
+        </div>
+      ) : null}
+
+      {type === "prose" ? (
+        <StructuredFieldInput field={{ name: "markdown", label: t(language, "entryEdit.markdown"), kind: "rich" }} value={value["markdown"]} onChange={(next) => setField("markdown", next)} />
+      ) : null}
+
+      {type === "cta" ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          <StructuredFieldInput field={{ name: "heading", label: t(language, "entryEdit.heading") }} value={value["heading"]} onChange={(next) => setField("heading", next)} />
+          <StructuredFieldInput field={{ name: "buttonLabel", label: t(language, "entryEdit.buttonLabel") }} value={value["buttonLabel"]} onChange={(next) => setField("buttonLabel", next)} />
+          <StructuredFieldInput field={{ name: "buttonHref", label: t(language, "entryEdit.buttonHref") }} value={value["buttonHref"]} onChange={(next) => setField("buttonHref", next)} />
+          <div className="md:col-span-2">
+            <StructuredFieldInput field={{ name: "body", label: t(language, "entryEdit.sectionBody"), kind: "textarea" }} value={value["body"]} onChange={(next) => setField("body", next)} />
+          </div>
+        </div>
+      ) : null}
+
+      {type === "media" ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          <StructuredFieldInput field={{ name: "sectionEyebrow", label: t(language, "entryEdit.sectionEyebrow") }} value={value["sectionEyebrow"]} onChange={(next) => setField("sectionEyebrow", next)} />
+          <StructuredFieldInput field={{ name: "assetId", label: t(language, "entryEdit.assetId") }} value={value["assetId"]} onChange={(next) => setField("assetId", next)} />
+          <StructuredFieldInput field={{ name: "assetAlt", label: t(language, "entryEdit.assetAlt") }} value={value["assetAlt"]} onChange={(next) => setField("assetAlt", next)} />
+          <StructuredFieldInput field={{ name: "caption", label: t(language, "media.caption") }} value={value["caption"]} onChange={(next) => setField("caption", next)} />
+          <div className="md:col-span-2">
+            <StructuredFieldInput field={{ name: "body", label: t(language, "entryEdit.sectionBody"), kind: "textarea" }} value={value["body"]} onChange={(next) => setField("body", next)} />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function pageBlockType(value: unknown): PageBlockType {
+  return value === "features" || value === "prose" || value === "cta" || value === "media" ? value : "hero";
+}
+
+function defaultPageBlock(type: PageBlockType, previous: Record<string, unknown> = {}): Record<string, unknown> {
+  if (type === "hero") return { type, eyebrow: previous["eyebrow"] ?? "", headline: previous["headline"] ?? "", paragraph: previous["paragraph"] ?? "", imageAssetId: previous["imageAssetId"] ?? "", imageAlt: previous["imageAlt"] ?? "" };
+  if (type === "features") return { type, heading: previous["heading"] ?? "", cards: Array.isArray(previous["cards"]) ? previous["cards"] : [] };
+  if (type === "prose") return { type, markdown: previous["markdown"] ?? previous["body"] ?? "" };
+  if (type === "cta") return { type, heading: previous["heading"] ?? "", body: previous["body"] ?? "", buttonLabel: previous["buttonLabel"] ?? "", buttonHref: previous["buttonHref"] ?? "" };
+  return { type, sectionEyebrow: previous["sectionEyebrow"] ?? "", assetId: previous["assetId"] ?? previous["imageAssetId"] ?? "", assetAlt: previous["assetAlt"] ?? previous["imageAlt"] ?? "", caption: previous["caption"] ?? "", body: previous["body"] ?? "" };
+}
+
+function pageBlockTypeLabel(language: AdminLanguage, type: PageBlockType): string {
+  switch (type) {
+    case "hero": return t(language, "entryEdit.blockHero");
+    case "features": return t(language, "entryEdit.blockFeatures");
+    case "prose": return t(language, "entryEdit.blockProse");
+    case "cta": return t(language, "entryEdit.blockCta");
+    case "media": return t(language, "entryEdit.blockMedia");
+  }
 }
 
 function MerchandisingEditor({
