@@ -150,6 +150,23 @@ export interface CoverageReport {
   items: CoverageItem[];
 }
 
+export interface AdminActionItem {
+  name: string;
+  input: JsonSchema;
+  output: JsonSchema;
+  requiresAuth: boolean;
+  handlerKind: string;
+}
+
+export interface AdminActionsResult {
+  items: AdminActionItem[];
+}
+
+export interface AdminActionRunResult {
+  ok: true;
+  data: unknown;
+}
+
 export interface AdminMediaVariant {
   mimeType: string;
   publicUrl: string;

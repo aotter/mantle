@@ -13,6 +13,12 @@ interface SiteSettings {
   description: string;
   brandIntro: string;
   serviceIncludes: string;
+  currency: string;
+  paymentProvider: string;
+  paymentMerchantId: string;
+  checkoutReturnPath: string;
+  checkoutCallbackPath: string;
+  checkoutTermsUrl: string;
 }
 
 export function SettingsView(): React.ReactElement {
@@ -48,23 +54,59 @@ export function SettingsView(): React.ReactElement {
         }
       />
       {save.isError ? <ErrorBox error={save.error} /> : null}
-      <SectionCard className="grid gap-4">
-        <Field label={t(language, "settings.siteBrand")}>
-          <input className="admin-input" value={form.brand} onChange={(event) => setField(setForm, "brand", event.target.value)} />
-        </Field>
-        <Field label={t(language, "settings.siteTitle")}>
-          <input className="admin-input" value={form.title} onChange={(event) => setField(setForm, "title", event.target.value)} />
-        </Field>
-        <Field label={t(language, "settings.siteDescription")}>
-          <textarea className="admin-textarea min-h-24" value={form.description} onChange={(event) => setField(setForm, "description", event.target.value)} />
-        </Field>
-        <Field label={t(language, "productEdit.brandIntro")}>
-          <textarea className="admin-textarea min-h-32" value={form.brandIntro} onChange={(event) => setField(setForm, "brandIntro", event.target.value)} />
-        </Field>
-        <Field label={t(language, "productEdit.serviceIncludes")}>
-          <textarea className="admin-textarea min-h-32" value={form.serviceIncludes} onChange={(event) => setField(setForm, "serviceIncludes", event.target.value)} />
-        </Field>
-      </SectionCard>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]">
+        <SectionCard className="grid gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">{t(language, "settings.brandSection")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{t(language, "settings.brandSectionBody")}</p>
+          </div>
+          <Field label={t(language, "settings.siteBrand")}>
+            <input className="admin-input" value={form.brand} onChange={(event) => setField(setForm, "brand", event.target.value)} />
+          </Field>
+          <Field label={t(language, "settings.siteTitle")}>
+            <input className="admin-input" value={form.title} onChange={(event) => setField(setForm, "title", event.target.value)} />
+          </Field>
+          <Field label={t(language, "settings.siteDescription")}>
+            <textarea className="admin-textarea min-h-24" value={form.description} onChange={(event) => setField(setForm, "description", event.target.value)} />
+          </Field>
+          <Field label={t(language, "productEdit.brandIntro")}>
+            <textarea className="admin-textarea min-h-32" value={form.brandIntro} onChange={(event) => setField(setForm, "brandIntro", event.target.value)} />
+          </Field>
+          <Field label={t(language, "productEdit.serviceIncludes")}>
+            <textarea className="admin-textarea min-h-32" value={form.serviceIncludes} onChange={(event) => setField(setForm, "serviceIncludes", event.target.value)} />
+          </Field>
+        </SectionCard>
+
+        <SectionCard className="grid gap-4 content-start">
+          <div>
+            <h2 className="text-lg font-semibold">{t(language, "settings.checkoutSection")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{t(language, "settings.checkoutSectionBody")}</p>
+          </div>
+          <Field label={t(language, "settings.currency")}>
+            <input className="admin-input" value={form.currency} placeholder="TWD" onChange={(event) => setField(setForm, "currency", event.target.value)} />
+          </Field>
+          <Field label={t(language, "settings.paymentProvider")}>
+            <select className="admin-input" value={form.paymentProvider} onChange={(event) => setField(setForm, "paymentProvider", event.target.value)}>
+              <option value="">{t(language, "settings.paymentProviderUnset")}</option>
+              <option value="ecpay">ECPay</option>
+              <option value="stripe">Stripe</option>
+              <option value="manual">{t(language, "settings.paymentProviderManual")}</option>
+            </select>
+          </Field>
+          <Field label={t(language, "settings.paymentMerchantId")}>
+            <input className="admin-input" value={form.paymentMerchantId} onChange={(event) => setField(setForm, "paymentMerchantId", event.target.value)} />
+          </Field>
+          <Field label={t(language, "settings.checkoutReturnPath")}>
+            <input className="admin-input" value={form.checkoutReturnPath} placeholder="/checkout/return" onChange={(event) => setField(setForm, "checkoutReturnPath", event.target.value)} />
+          </Field>
+          <Field label={t(language, "settings.checkoutCallbackPath")}>
+            <input className="admin-input" value={form.checkoutCallbackPath} placeholder="/api/checkout/callback" onChange={(event) => setField(setForm, "checkoutCallbackPath", event.target.value)} />
+          </Field>
+          <Field label={t(language, "settings.checkoutTermsUrl")}>
+            <input className="admin-input" value={form.checkoutTermsUrl} onChange={(event) => setField(setForm, "checkoutTermsUrl", event.target.value)} />
+          </Field>
+        </SectionCard>
+      </div>
     </div>
   );
 }

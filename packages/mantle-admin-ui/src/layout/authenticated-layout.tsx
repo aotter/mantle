@@ -6,6 +6,7 @@ import {
   Folder,
   Globe,
   Home,
+  PlaySquare,
   TerminalSquare,
   Settings as SettingsIcon,
 } from "lucide-react";
@@ -169,6 +170,7 @@ function buildNavGroups(
     items: [
       { title: t(language, "nav.media"), url: "/admin/media", icon: Images },
       { title: t(language, "nav.approvals"), url: "/admin/approvals", icon: ClipboardList },
+      { title: t(language, "nav.actions"), url: "/admin/actions", icon: PlaySquare },
       { title: t(language, "nav.developerLogs"), url: "/admin/developer-logs", icon: TerminalSquare },
       { title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon },
     ],

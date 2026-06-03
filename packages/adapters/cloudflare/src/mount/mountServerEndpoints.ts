@@ -114,6 +114,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     "/admin/editor",
     "/admin/media",
     "/admin/approvals",
+    "/admin/actions",
     "/admin/developer-logs",
     "/admin/preferences",
     "/admin/settings",
@@ -165,6 +166,51 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
 
   guarded("get", "/admin/api/system/coverage", () =>
     jsonResponse(200, buildAdminCoverageReport(ref.manifests, collections)),
+  );
+
+  guarded("get", "/admin/api/actions", () =>
+    jsonResponse(200, {
+      items: ref.manifests
+        .filter((manifest) => manifest.kind === "Procedure")
+        .map((manifest) => ({
+          name: manifest.metadata.name,
+          input: manifest.spec.input,
+          output: manifest.spec.output,
+          requiresAuth: Boolean(manifest.spec.requires?.auth),
+          handlerKind: manifest.spec.handler.kind,
+        })),
+    }),
+  );
+
+  guarded("post", "/admin/api/actions/:name/run", async (c, gate) =>
+    runUseCase("POST /admin/api/actions/:name/run", async () => {
+      const runtime = await ref.get();
+      const name = c.req.param("name") ?? "";
+      const procedure = runtime.proceduresByName.get(name);
+      if (!procedure) {
+        throw new DiagnosticError(
+          runtimeDiagnostic({
+            code: "NOT_FOUND",
+            severity: "error",
+            path: "POST /admin/api/actions/:name/run",
+            value: name,
+            expected: "registered Procedure manifest",
+            message: `Procedure '${name}' was not found.`,
+          }),
+        );
+      }
+      const body = (await c.req.raw.json().catch(() => ({}))) as { input?: unknown };
+      const waitUntil = readWaitUntil(c);
+      const invokeCtx = adminProcedureContext(gate, waitUntil);
+      const result = await runtime.invokeProcedure.execute({
+        procedure,
+        input: body.input ?? {},
+        ctx: invokeCtx,
+        pathPrefix: `POST /admin/api/actions/${name}/run`,
+      });
+      if (result.ok) return { ok: true, data: result.data };
+      throw new DiagnosticError(result.diagnostic);
+    }),
   );
 
   guarded("get", "/admin/api/developer-logs", async (c) =>
@@ -265,6 +311,12 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
         description: stringField(body.description),
         brandIntro: stringField(body.brandIntro),
         serviceIncludes: stringField(body.serviceIncludes),
+        currency: stringField(body.currency),
+        paymentProvider: stringField(body.paymentProvider),
+        paymentMerchantId: stringField(body.paymentMerchantId),
+        checkoutReturnPath: stringField(body.checkoutReturnPath),
+        checkoutCallbackPath: stringField(body.checkoutCallbackPath),
+        checkoutTermsUrl: stringField(body.checkoutTermsUrl),
       });
       const site = await runtime.siteConfig.load();
       const extra = await readSiteSettings(runtime);
@@ -878,9 +930,9 @@ function buildAdminCoverageReport(
       items.push({
         kind: "Procedure",
         name: manifest.metadata.name,
-        status: "api-only",
-        href: null,
-        note: "Callable by MCP/agent flows; add an admin action panel when this needs manual operation.",
+        status: "covered",
+        href: "/admin/actions",
+        note: "Callable by MCP/agent flows and available in the admin action panel for manual operation.",
       });
       continue;
     }
@@ -1319,14 +1371,38 @@ async function entriesByDataValue(
 async function readSiteSettings(runtime: CmsRuntime): Promise<{
   brandIntro: string;
   serviceIncludes: string;
+  currency: string;
+  paymentProvider: string;
+  paymentMerchantId: string;
+  checkoutReturnPath: string;
+  checkoutCallbackPath: string;
+  checkoutTermsUrl: string;
 }> {
   const rows = await runtime.db
-    .prepare(`SELECT key, value FROM site_config WHERE key IN ('brandIntro', 'serviceIncludes')`)
+    .prepare(
+      `SELECT key, value FROM site_config
+       WHERE key IN (
+         'brandIntro',
+         'serviceIncludes',
+         'currency',
+         'paymentProvider',
+         'paymentMerchantId',
+         'checkoutReturnPath',
+         'checkoutCallbackPath',
+         'checkoutTermsUrl'
+       )`,
+    )
     .all<{ key: string; value: string }>();
   const map = new Map(rows.map((row) => [row.key, row.value]));
   return {
     brandIntro: map.get("brandIntro") ?? "",
     serviceIncludes: map.get("serviceIncludes") ?? "",
+    currency: map.get("currency") ?? "",
+    paymentProvider: map.get("paymentProvider") ?? "",
+    paymentMerchantId: map.get("paymentMerchantId") ?? "",
+    checkoutReturnPath: map.get("checkoutReturnPath") ?? "",
+    checkoutCallbackPath: map.get("checkoutCallbackPath") ?? "",
+    checkoutTermsUrl: map.get("checkoutTermsUrl") ?? "",
   };
 }
 
@@ -1338,6 +1414,12 @@ async function writeSiteSettings(
     description?: string;
     brandIntro?: string;
     serviceIncludes?: string;
+    currency?: string;
+    paymentProvider?: string;
+    paymentMerchantId?: string;
+    checkoutReturnPath?: string;
+    checkoutCallbackPath?: string;
+    checkoutTermsUrl?: string;
   },
 ): Promise<void> {
   const stmts = Object.entries(values)
@@ -1831,6 +1913,19 @@ function objectField(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function adminProcedureContext(
+  gate: Extract<StaffGate, { kind: "ok" }>,
+  waitUntil: ((p: Promise<unknown>) => void) | undefined,
+): HandlerContext {
+  const wu = waitUntil ? { waitUntil } : {};
+  return {
+    user: { id: gate.userId },
+    staff: { id: gate.userId, role: gate.role },
+    env: {},
+    ...wu,
+  };
 }
 
 type StaffGate =
