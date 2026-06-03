@@ -1,11 +1,12 @@
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Save } from "lucide-react";
+import { BarChart3, CreditCard, Save, Store } from "lucide-react";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import { Button } from "../../ui/button";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { SegmentedTabs } from "../../ui/resource";
 
 interface SiteSettings {
   brand: string;
@@ -19,7 +20,11 @@ interface SiteSettings {
   checkoutReturnPath: string;
   checkoutCallbackPath: string;
   checkoutTermsUrl: string;
+  ga4MeasurementId: string;
+  facebookPixelId: string;
 }
+
+type SettingsTab = "brand" | "checkout" | "tracking";
 
 export function SettingsView(): React.ReactElement {
   const { language } = usePreferences();
@@ -28,6 +33,7 @@ export function SettingsView(): React.ReactElement {
     queryFn: () => api.get<SiteSettings>("/site-settings"),
   });
   const [form, setForm] = React.useState<SiteSettings | null>(null);
+  const [activeTab, setActiveTab] = React.useState<SettingsTab>("brand");
   React.useEffect(() => {
     if (query.data) setForm(query.data);
   }, [query.data]);
@@ -54,12 +60,22 @@ export function SettingsView(): React.ReactElement {
         }
       />
       {save.isError ? <ErrorBox error={save.error} /> : null}
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]">
-        <SectionCard className="grid gap-4">
-          <div>
-            <h2 className="text-lg font-semibold">{t(language, "settings.brandSection")}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{t(language, "settings.brandSectionBody")}</p>
-          </div>
+
+      <SegmentedTabs
+        className="w-fit"
+        label={t(language, "settings.tabsLabel")}
+        value={activeTab}
+        onChange={setActiveTab}
+        items={[
+          { value: "brand", label: t(language, "settings.tab.brand"), icon: Store },
+          { value: "checkout", label: t(language, "settings.tab.checkout"), icon: CreditCard },
+          { value: "tracking", label: t(language, "settings.tab.tracking"), icon: BarChart3 },
+        ]}
+      />
+
+      {activeTab === "brand" ? (
+        <SectionCard className="grid max-w-5xl gap-4">
+          <SectionIntro title={t(language, "settings.brandSection")} body={t(language, "settings.brandSectionBody")} />
           <Field label={t(language, "settings.siteBrand")}>
             <input className="admin-input" value={form.brand} onChange={(event) => setField(setForm, "brand", event.target.value)} />
           </Field>
@@ -76,45 +92,78 @@ export function SettingsView(): React.ReactElement {
             <textarea className="admin-textarea min-h-32" value={form.serviceIncludes} onChange={(event) => setField(setForm, "serviceIncludes", event.target.value)} />
           </Field>
         </SectionCard>
+      ) : null}
 
-        <SectionCard className="grid gap-4 content-start">
-          <div>
-            <h2 className="text-lg font-semibold">{t(language, "settings.checkoutSection")}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{t(language, "settings.checkoutSectionBody")}</p>
+      {activeTab === "checkout" ? (
+        <SectionCard className="grid max-w-5xl gap-4">
+          <SectionIntro title={t(language, "settings.checkoutSection")} body={t(language, "settings.checkoutSectionBody")} />
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label={t(language, "settings.currency")}>
+              <input className="admin-input" value={form.currency} placeholder="TWD" onChange={(event) => setField(setForm, "currency", event.target.value)} />
+            </Field>
+            <Field label={t(language, "settings.paymentProvider")}>
+              <select className="admin-input" value={form.paymentProvider} onChange={(event) => setField(setForm, "paymentProvider", event.target.value)}>
+                <option value="">{t(language, "settings.paymentProviderUnset")}</option>
+                <option value="ecpay">ECPay</option>
+                <option value="stripe">Stripe</option>
+                <option value="manual">{t(language, "settings.paymentProviderManual")}</option>
+              </select>
+            </Field>
+            <Field label={t(language, "settings.paymentMerchantId")}>
+              <input className="admin-input" value={form.paymentMerchantId} onChange={(event) => setField(setForm, "paymentMerchantId", event.target.value)} />
+            </Field>
+            <Field label={t(language, "settings.checkoutTermsUrl")}>
+              <input className="admin-input" value={form.checkoutTermsUrl} onChange={(event) => setField(setForm, "checkoutTermsUrl", event.target.value)} />
+            </Field>
+            <Field label={t(language, "settings.checkoutReturnPath")}>
+              <input className="admin-input" value={form.checkoutReturnPath} placeholder="/checkout/return" onChange={(event) => setField(setForm, "checkoutReturnPath", event.target.value)} />
+            </Field>
+            <Field label={t(language, "settings.checkoutCallbackPath")}>
+              <input className="admin-input" value={form.checkoutCallbackPath} placeholder="/api/checkout/callback" onChange={(event) => setField(setForm, "checkoutCallbackPath", event.target.value)} />
+            </Field>
           </div>
-          <Field label={t(language, "settings.currency")}>
-            <input className="admin-input" value={form.currency} placeholder="TWD" onChange={(event) => setField(setForm, "currency", event.target.value)} />
-          </Field>
-          <Field label={t(language, "settings.paymentProvider")}>
-            <select className="admin-input" value={form.paymentProvider} onChange={(event) => setField(setForm, "paymentProvider", event.target.value)}>
-              <option value="">{t(language, "settings.paymentProviderUnset")}</option>
-              <option value="ecpay">ECPay</option>
-              <option value="stripe">Stripe</option>
-              <option value="manual">{t(language, "settings.paymentProviderManual")}</option>
-            </select>
-          </Field>
-          <Field label={t(language, "settings.paymentMerchantId")}>
-            <input className="admin-input" value={form.paymentMerchantId} onChange={(event) => setField(setForm, "paymentMerchantId", event.target.value)} />
-          </Field>
-          <Field label={t(language, "settings.checkoutReturnPath")}>
-            <input className="admin-input" value={form.checkoutReturnPath} placeholder="/checkout/return" onChange={(event) => setField(setForm, "checkoutReturnPath", event.target.value)} />
-          </Field>
-          <Field label={t(language, "settings.checkoutCallbackPath")}>
-            <input className="admin-input" value={form.checkoutCallbackPath} placeholder="/api/checkout/callback" onChange={(event) => setField(setForm, "checkoutCallbackPath", event.target.value)} />
-          </Field>
-          <Field label={t(language, "settings.checkoutTermsUrl")}>
-            <input className="admin-input" value={form.checkoutTermsUrl} onChange={(event) => setField(setForm, "checkoutTermsUrl", event.target.value)} />
-          </Field>
         </SectionCard>
-      </div>
+      ) : null}
+
+      {activeTab === "tracking" ? (
+        <SectionCard className="grid max-w-5xl gap-4">
+          <SectionIntro title={t(language, "settings.trackingSection")} body={t(language, "settings.trackingSectionBody")} />
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label={t(language, "settings.ga4MeasurementId")} description={t(language, "settings.ga4MeasurementIdHelp")}>
+              <input className="admin-input" value={form.ga4MeasurementId} placeholder="G-XXXXXXXXXX" onChange={(event) => setField(setForm, "ga4MeasurementId", event.target.value)} />
+            </Field>
+            <Field label={t(language, "settings.facebookPixelId")} description={t(language, "settings.facebookPixelIdHelp")}>
+              <input className="admin-input" value={form.facebookPixelId} placeholder="123456789012345" onChange={(event) => setField(setForm, "facebookPixelId", event.target.value)} />
+            </Field>
+          </div>
+        </SectionCard>
+      ) : null}
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }): React.ReactElement {
+function SectionIntro({ title, body }: { title: string; body: string }): React.ReactElement {
+  return (
+    <div>
+      <h2 className="text-lg font-semibold">{title}</h2>
+      <p className="mt-1 text-sm text-muted-foreground">{body}</p>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  description,
+  children,
+}: {
+  label: string;
+  description?: React.ReactNode;
+  children: React.ReactNode;
+}): React.ReactElement {
   return (
     <label className="grid gap-1.5 text-sm font-medium">
       <span>{label}</span>
+      {description ? <span className="text-xs font-normal text-muted-foreground">{description}</span> : null}
       {children}
     </label>
   );

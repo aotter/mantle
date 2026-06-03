@@ -317,7 +317,10 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
         checkoutReturnPath: stringField(body.checkoutReturnPath),
         checkoutCallbackPath: stringField(body.checkoutCallbackPath),
         checkoutTermsUrl: stringField(body.checkoutTermsUrl),
+        ga4MeasurementId: stringField(body.ga4MeasurementId),
+        facebookPixelId: stringField(body.facebookPixelId),
       });
+      await invalidatePublicRenderCache(runtime);
       const site = await runtime.siteConfig.load();
       const extra = await readSiteSettings(runtime);
       return { ...site, ...extra };
@@ -1377,6 +1380,8 @@ async function readSiteSettings(runtime: CmsRuntime): Promise<{
   checkoutReturnPath: string;
   checkoutCallbackPath: string;
   checkoutTermsUrl: string;
+  ga4MeasurementId: string;
+  facebookPixelId: string;
 }> {
   const rows = await runtime.db
     .prepare(
@@ -1389,7 +1394,9 @@ async function readSiteSettings(runtime: CmsRuntime): Promise<{
          'paymentMerchantId',
          'checkoutReturnPath',
          'checkoutCallbackPath',
-         'checkoutTermsUrl'
+         'checkoutTermsUrl',
+         'ga4MeasurementId',
+         'facebookPixelId'
        )`,
     )
     .all<{ key: string; value: string }>();
@@ -1403,6 +1410,8 @@ async function readSiteSettings(runtime: CmsRuntime): Promise<{
     checkoutReturnPath: map.get("checkoutReturnPath") ?? "",
     checkoutCallbackPath: map.get("checkoutCallbackPath") ?? "",
     checkoutTermsUrl: map.get("checkoutTermsUrl") ?? "",
+    ga4MeasurementId: map.get("ga4MeasurementId") ?? "",
+    facebookPixelId: map.get("facebookPixelId") ?? "",
   };
 }
 
@@ -1420,6 +1429,8 @@ async function writeSiteSettings(
     checkoutReturnPath?: string;
     checkoutCallbackPath?: string;
     checkoutTermsUrl?: string;
+    ga4MeasurementId?: string;
+    facebookPixelId?: string;
   },
 ): Promise<void> {
   const stmts = Object.entries(values)
@@ -1430,6 +1441,23 @@ async function writeSiteSettings(
         .bind(key, value),
     );
   if (stmts.length > 0) await runtime.db.batch(stmts);
+}
+
+async function invalidatePublicRenderCache(runtime: CmsRuntime): Promise<void> {
+  await Promise.all([
+    deleteKvPrefix(runtime, "entry:html:"),
+    deleteKvPrefix(runtime, "list:html:"),
+    deleteKvPrefix(runtime, "llms:"),
+  ]);
+}
+
+async function deleteKvPrefix(runtime: CmsRuntime, prefix: string): Promise<void> {
+  let cursor: string | null = null;
+  do {
+    const page = await runtime.kv.list(prefix, cursor);
+    await Promise.all(page.keys.map((key) => runtime.kv.delete(key)));
+    cursor = page.cursor;
+  } while (cursor);
 }
 
 async function duplicateGenericEntry(
