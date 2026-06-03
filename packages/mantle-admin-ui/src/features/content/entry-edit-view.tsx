@@ -51,6 +51,9 @@ export function EntryEditView({
   const productTranslations = inlineRelated.filter((section) => section.collection.name === "product-translations");
   const productSkus = inlineRelated.filter((section) => section.collection.name === "product-skus");
   const isProduct = payload.collection.name === "products";
+  const isProductSku = payload.collection.name === "product-skus";
+  const isProductTranslation = payload.collection.name === "product-translations";
+  const isPageTranslation = payload.collection.name === "page-translations";
   const isOrder = payload.collection.name === "orders";
   const isOrderItem = payload.collection.name === "order_items";
   const isInventorySnapshot = payload.collection.name === "inventory_snapshots";
@@ -103,6 +106,24 @@ export function EntryEditView({
         <div className="space-y-5">
           {isProduct ? (
             <ProductCommerceFields
+              value={data}
+              onChange={setData}
+              language={language}
+            />
+          ) : isProductSku ? (
+            <ProductSkuEntryFields
+              value={data}
+              onChange={setData}
+              language={language}
+            />
+          ) : isProductTranslation ? (
+            <ProductTranslationEntryFields
+              value={data}
+              onChange={setData}
+              language={language}
+            />
+          ) : isPageTranslation ? (
+            <PageTranslationEntryFields
               value={data}
               onChange={setData}
               language={language}
@@ -304,6 +325,167 @@ function ProductCommerceFields({
         </div>
       </SectionCard>
     </>
+  );
+}
+
+function ProductSkuEntryFields({
+  value,
+  onChange,
+  language,
+}: {
+  value: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+  language: AdminLanguage;
+}): React.ReactElement {
+  const setField = (field: string, next: unknown): void => onChange({ ...value, [field]: next });
+  return (
+    <>
+      <SectionCard>
+        <SectionTitle
+          title={t(language, "entryEdit.skus")}
+          body={t(language, "entryEdit.skuInlineHint")}
+        />
+        <div className="grid gap-4 md:grid-cols-2">
+          <FieldShell label={t(language, "entryEdit.skuCode")} required>
+            <input className="admin-input" value={stringForInput(value["skuCode"])} onChange={(event) => setField("skuCode", event.target.value)} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.productSlug")}>
+            <input className="admin-input" value={stringForInput(value["productSlug"])} onChange={(event) => setField("productSlug", event.target.value)} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.priceMinor")} required>
+            <input className="admin-input" type="number" min={0} value={numberForInput(value["priceMinor"])} onChange={(event) => setField("priceMinor", numberInputValue(event.target.value))} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.compareAtPriceMinor")}>
+            <input className="admin-input" type="number" min={0} value={numberForInput(value["compareAtPriceMinor"])} onChange={(event) => setField("compareAtPriceMinor", numberInputValue(event.target.value))} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.inventoryMode")}>
+            <select className="admin-input" value={stringForInput(value["inventoryMode"])} onChange={(event) => setField("inventoryMode", event.target.value)}>
+              <option value="tracked">{t(language, "entryEdit.inventoryTracked")}</option>
+              <option value="untracked">{t(language, "entryEdit.inventoryUntracked")}</option>
+            </select>
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.currency")}>
+            <input className="admin-input" value={stringForInput(value["currency"])} onChange={(event) => setField("currency", event.target.value.toUpperCase())} />
+          </FieldShell>
+        </div>
+      </SectionCard>
+
+      <SectionCard>
+        <SectionTitle
+          title={t(language, "entryEdit.optionValues")}
+          body={t(language, "entryEdit.optionValuesBody")}
+        />
+        <JsonEditor value={objectValue(value["optionValues"])} onChange={(next) => setField("optionValues", next)} />
+      </SectionCard>
+
+      <StructuredListEditor
+        title={t(language, "entryEdit.productVisual")}
+        body={t(language, "entryEdit.productVisualBody")}
+        addLabel={t(language, "entryEdit.addItem")}
+        value={recordArray(value["images"])}
+        onChange={(next) => setField("images", next)}
+        language={language}
+        emptyItem={{ assetId: "", alt: "" }}
+        fields={[
+          { name: "assetId", label: t(language, "entryEdit.assetId") },
+          { name: "alt", label: t(language, "entryEdit.imageAlt") },
+        ]}
+        icon={<ImagePlus className="size-4" aria-hidden />}
+      />
+    </>
+  );
+}
+
+function ProductTranslationEntryFields({
+  value,
+  onChange,
+  language,
+}: {
+  value: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+  language: AdminLanguage;
+}): React.ReactElement {
+  const setField = (field: string, next: unknown): void => onChange({ ...value, [field]: next });
+  return (
+    <>
+      <SectionCard>
+        <SectionTitle
+          title={t(language, "entryEdit.productInfo")}
+          body={t(language, "entryEdit.productInfoBody")}
+          action={<SectionPreviewButton language={language} kind="productInfo" />}
+        />
+        <div className="grid gap-4 md:grid-cols-2">
+          <FieldShell label={t(language, "collection.table.locale")}>
+            <input className="admin-input" value={stringForInput(value["locale"])} onChange={(event) => setField("locale", event.target.value)} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.title")} required>
+            <input className="admin-input" value={stringForInput(value["title"])} onChange={(event) => setField("title", event.target.value)} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.coverAlt")}>
+            <input className="admin-input" value={stringForInput(value["coverAlt"])} onChange={(event) => setField("coverAlt", event.target.value)} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.shortDescription")}>
+            <input className="admin-input" value={stringForInput(value["shortDescription"])} onChange={(event) => setField("shortDescription", event.target.value)} />
+          </FieldShell>
+        </div>
+        <div className="mt-4">
+          <FieldShell label={t(language, "entryEdit.bodyMarkdown")}>
+            <RichTextEditor compact value={stringForInput(value["body"])} onChange={(next) => setField("body", next)} />
+          </FieldShell>
+        </div>
+      </SectionCard>
+      <MerchandisingEditor
+        value={objectValue(value["merchandising"])}
+        onChange={(next) => setField("merchandising", next)}
+        language={language}
+      />
+    </>
+  );
+}
+
+function PageTranslationEntryFields({
+  value,
+  onChange,
+  language,
+}: {
+  value: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+  language: AdminLanguage;
+}): React.ReactElement {
+  const setField = (field: string, next: unknown): void => onChange({ ...value, [field]: next });
+  return (
+    <SectionCard>
+      <SectionTitle
+        title={t(language, "entryEdit.pageContent")}
+        body={t(language, "entryEdit.pageContentBody")}
+      />
+      <div className="grid gap-4 md:grid-cols-2">
+        <FieldShell label={t(language, "collection.table.locale")}>
+          <input className="admin-input" value={stringForInput(value["locale"])} onChange={(event) => setField("locale", event.target.value)} />
+        </FieldShell>
+        <FieldShell label={t(language, "entryEdit.title")} required>
+          <input className="admin-input" value={stringForInput(value["title"])} onChange={(event) => setField("title", event.target.value)} />
+        </FieldShell>
+        <FieldShell label={t(language, "entryEdit.slug")} required>
+          <input className="admin-input" value={stringForInput(value["slug"])} onChange={(event) => setField("slug", event.target.value)} />
+        </FieldShell>
+      </div>
+      <div className="mt-4">
+        <FieldShell label={t(language, "entryEdit.summary")}>
+          <textarea className="admin-textarea admin-textarea-compact" value={stringForInput(value["summary"])} onChange={(event) => setField("summary", event.target.value)} />
+        </FieldShell>
+      </div>
+      <div className="mt-4">
+        <FieldShell label={t(language, "entryEdit.bodyMarkdown")}>
+          <RichTextEditor compact value={stringForInput(value["body"])} onChange={(next) => setField("body", next)} />
+        </FieldShell>
+      </div>
+      <PageBlocksEditor
+        value={recordArray(value["blocks"])}
+        onChange={(next) => setField("blocks", next)}
+        language={language}
+      />
+    </SectionCard>
   );
 }
 
