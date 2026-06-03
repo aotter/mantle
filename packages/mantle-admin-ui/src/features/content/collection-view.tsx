@@ -141,24 +141,17 @@ export function CollectionView({
             {collection ? (
               <Button
                 type="button"
-                size="sm"
+                size="lg"
+                className="text-base"
                 onClick={() => createMutation.mutate()}
                 disabled={createMutation.isPending}
                 title={t(language, "crud.createTooltip", { name: heading })}
               >
-                <Plus className="size-3.5" aria-hidden />
+                <Plus className="size-4" aria-hidden />
                 {createMutation.isPending ? t(language, "crud.saving") : t(language, "crud.create")}
               </Button>
             ) : null}
             {status ? <StatusBadge status={status} /> : null}
-            {collection?.hasTranslations ? (
-              <span className="badge-status bg-accent text-accent-foreground">i18n</span>
-            ) : null}
-            {collection?.mediaFields?.length ? (
-              <span className="badge-status bg-[color-mix(in_srgb,var(--success)_16%,transparent)] text-[color:var(--success)]">
-                media
-              </span>
-            ) : null}
           </div>
         }
       />
