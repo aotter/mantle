@@ -286,39 +286,42 @@ function ProductCommerceFields({
           title={t(language, "entryEdit.productVisual")}
           body={t(language, "entryEdit.productVisualBody")}
         />
-        <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
-          <div className="relative min-h-56 overflow-hidden rounded-lg border border-[var(--glass-border)] bg-[radial-gradient(circle_at_30%_20%,rgba(124,184,255,0.34),transparent_32%),linear-gradient(135deg,rgba(26,48,98,0.16),rgba(127,231,210,0.18))]">
-            {mediaAssetUrl(primaryAsset) ? (
-              <img
-                src={mediaAssetUrl(primaryAsset) ?? undefined}
-                alt={primaryAsset?.alt ?? t(language, "entryEdit.productVisual")}
-                className="absolute inset-0 h-full w-full object-cover"
-              />
-            ) : null}
-            <div className="absolute inset-0 bg-gradient-to-t from-background/70 via-background/10 to-transparent" />
-            <div className="absolute inset-x-4 bottom-4 rounded-md border border-white/35 bg-white/70 p-3 shadow-sm backdrop-blur-md dark:bg-slate-950/55">
-              <div className="flex items-center gap-2">
-                <ImagePlus className="size-4 text-primary" aria-hidden />
-                <p className="min-w-0 text-sm font-semibold text-foreground">
-                  {galleryPreviewIds.length > 0 ? t(language, "entryEdit.coverLinked") : t(language, "entryEdit.coverEmpty")}
-                </p>
+        <div className="grid gap-5 lg:grid-cols-[minmax(24rem,34rem)_minmax(0,1fr)]">
+          <div className="overflow-hidden rounded-lg border border-[var(--glass-border)] bg-background/50 p-3 shadow-sm">
+            <div className="relative grid min-h-80 place-items-center overflow-hidden rounded-md border border-[var(--glass-border)] bg-[radial-gradient(circle_at_30%_20%,rgba(124,184,255,0.22),transparent_32%),linear-gradient(135deg,rgba(26,48,98,0.08),rgba(127,231,210,0.12))]">
+              {mediaAssetUrl(primaryAsset) ? (
+                <img
+                  src={mediaAssetUrl(primaryAsset) ?? undefined}
+                  alt={primaryAsset?.alt ?? t(language, "entryEdit.productVisual")}
+                  className="h-full max-h-[26rem] w-full object-contain p-2"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center">
+                  <ImagePlus className="mb-2 size-8 text-primary" aria-hidden />
+                  <p className="text-sm font-semibold text-foreground">{t(language, "entryEdit.coverEmpty")}</p>
+                </div>
+              )}
+              <div className="absolute left-3 top-3 rounded-full border border-white/50 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-foreground shadow-sm backdrop-blur-md dark:bg-slate-950/65">
+                {galleryPreviewIds.length > 0 ? t(language, "entryEdit.coverLinked") : t(language, "entryEdit.coverEmpty")}
               </div>
               {primaryAssetId ? (
-                <code className="mt-1 block truncate text-xs text-muted-foreground">{primaryAssetId}</code>
-              ) : null}
-              {galleryPreviewIds.length > 0 ? (
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                  {galleryPreviewIds.slice(0, 6).map((assetId, index) => (
-                    <MediaAssetThumb
-                      key={`${assetId}:${index}`}
-                      assetId={assetId}
-                      asset={mediaAssets.get(assetId)}
-                      label={index === 0 ? t(language, "entryEdit.coverSlide") : t(language, "entryEdit.slideNumber", { number: String(index + 1) })}
-                    />
-                  ))}
-                </div>
+                <code className="absolute bottom-3 left-3 max-w-[calc(100%-1.5rem)] truncate rounded-md bg-background/80 px-2 py-1 text-[11px] text-muted-foreground shadow-sm backdrop-blur-md">
+                  {primaryAssetId}
+                </code>
               ) : null}
             </div>
+            {galleryPreviewIds.length > 0 ? (
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {galleryPreviewIds.slice(0, 6).map((assetId, index) => (
+                  <MediaAssetThumb
+                    key={`${assetId}:${index}`}
+                    assetId={assetId}
+                    asset={mediaAssets.get(assetId)}
+                    label={index === 0 ? t(language, "entryEdit.coverSlide") : t(language, "entryEdit.slideNumber", { number: String(index + 1) })}
+                  />
+                ))}
+              </div>
+            ) : null}
           </div>
           <div className="space-y-3">
             <FieldShell label={t(language, "entryEdit.coverAsset")} hint={t(language, "entryEdit.coverAssetHint")}>
@@ -338,6 +341,9 @@ function ProductCommerceFields({
               </Button>
               <CopyValueButton value={coverAssetId} language={language} />
             </div>
+            <p className="text-xs leading-5 text-muted-foreground">
+              {t(language, "entryEdit.productImageGuidance")}
+            </p>
           </div>
         </div>
         <ProductImageSliderEditor
@@ -417,7 +423,7 @@ function MediaAssetThumb({
     <div className="min-w-0 overflow-hidden rounded-md border border-white/35 bg-white/55 shadow-sm dark:bg-slate-950/45">
       <div className="aspect-[4/3] bg-muted/50">
         {url ? (
-          <img src={url} alt={asset?.alt ?? label} className="h-full w-full object-cover" />
+          <img src={url} alt={asset?.alt ?? label} className="h-full w-full object-contain p-1" />
         ) : (
           <div className="grid h-full place-items-center">
             <ImagePlus className="size-4 text-muted-foreground" aria-hidden />
