@@ -51,6 +51,8 @@ export function EntryEditView({
   const productTranslations = inlineRelated.filter((section) => section.collection.name === "product-translations");
   const productSkus = inlineRelated.filter((section) => section.collection.name === "product-skus");
   const isProduct = payload.collection.name === "products";
+  const isOrder = payload.collection.name === "orders";
+  const isInventorySnapshot = payload.collection.name === "inventory_snapshots";
 
   return (
     <div className="space-y-6">
@@ -100,6 +102,18 @@ export function EntryEditView({
         <div className="space-y-5">
           {isProduct ? (
             <ProductCommerceFields
+              value={data}
+              onChange={setData}
+              language={language}
+            />
+          ) : isOrder ? (
+            <OrderManagementFields
+              value={data}
+              onChange={setData}
+              language={language}
+            />
+          ) : isInventorySnapshot ? (
+            <InventorySnapshotFields
               value={data}
               onChange={setData}
               language={language}
@@ -276,6 +290,206 @@ function ProductCommerceFields({
         </div>
       </SectionCard>
     </>
+  );
+}
+
+function OrderManagementFields({
+  value,
+  onChange,
+  language,
+}: {
+  value: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+  language: AdminLanguage;
+}): React.ReactElement {
+  const setField = (field: string, next: unknown): void => onChange({ ...value, [field]: next });
+  const shippingAddress = objectValue(value["shippingAddress"]);
+  const marketingAttribution = objectValue(value["marketingAttribution"]);
+  const setShippingField = (field: string, next: unknown): void => {
+    setField("shippingAddress", { ...shippingAddress, [field]: next });
+  };
+  const setAttributionField = (field: string, next: unknown): void => {
+    setField("marketingAttribution", { ...marketingAttribution, [field]: next });
+  };
+
+  return (
+    <>
+      <SectionCard>
+        <SectionTitle
+          title={t(language, "entryEdit.orderWorkflow")}
+          body={t(language, "entryEdit.orderWorkflowBody")}
+        />
+        <div className="grid gap-4 md:grid-cols-3">
+          <FieldShell label={t(language, "entryEdit.orderNumber")}>
+            <input className="admin-input" value={stringForInput(value["orderNumber"])} onChange={(event) => setField("orderNumber", event.target.value)} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.orderStatus")}>
+            <select className="admin-input" value={stringForInput(value["orderStatus"])} onChange={(event) => setField("orderStatus", event.target.value)}>
+              {["placed", "fulfilling", "shipped", "completed", "cancelled", "refunded"].map((status) => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.currency")}>
+            <input className="admin-input" value={stringForInput(value["currency"])} onChange={(event) => setField("currency", event.target.value.toUpperCase())} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.placedAt")}>
+            <input className="admin-input" type="datetime-local" value={datetimeForInput(value["placedAt"])} onChange={(event) => setField("placedAt", dateTimeInputMs(event.target.value))} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.fulfilledAt")}>
+            <input className="admin-input" type="datetime-local" value={datetimeForInput(value["fulfilledAt"])} onChange={(event) => setField("fulfilledAt", dateTimeInputMs(event.target.value))} />
+          </FieldShell>
+        </div>
+      </SectionCard>
+
+      <SectionCard>
+        <SectionTitle
+          title={t(language, "entryEdit.orderMoney")}
+          body={t(language, "entryEdit.orderMoneyBody")}
+        />
+        <div className="grid gap-4 md:grid-cols-4">
+          {[
+            ["subtotalMinor", t(language, "entryEdit.subtotalMinor")],
+            ["discountMinor", t(language, "entryEdit.discountMinor")],
+            ["shippingMinor", t(language, "entryEdit.shippingMinor")],
+            ["totalMinor", t(language, "entryEdit.totalMinor")],
+          ].map(([field, label]) => (
+            <FieldShell key={field} label={label}>
+              <input className="admin-input" type="number" value={numberForInput(value[field])} onChange={(event) => setField(field, numberInputValue(event.target.value))} />
+            </FieldShell>
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard>
+        <SectionTitle
+          title={t(language, "entryEdit.orderCustomer")}
+          body={t(language, "entryEdit.orderCustomerBody")}
+        />
+        <div className="grid gap-4 md:grid-cols-3">
+          <FieldShell label={t(language, "entryEdit.customerName")}>
+            <input className="admin-input" value={stringForInput(value["customerName"])} onChange={(event) => setField("customerName", event.target.value)} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.customerEmail")}>
+            <input className="admin-input" type="email" value={stringForInput(value["customerEmail"])} onChange={(event) => setField("customerEmail", event.target.value)} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.userId")}>
+            <input className="admin-input" value={stringForInput(value["userId"])} onChange={(event) => setField("userId", event.target.value)} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.paymentProvider")}>
+            <input className="admin-input" value={stringForInput(value["paymentProvider"])} onChange={(event) => setField("paymentProvider", event.target.value)} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.paymentIntentId")}>
+            <input className="admin-input" value={stringForInput(value["paymentIntentId"])} onChange={(event) => setField("paymentIntentId", event.target.value)} />
+          </FieldShell>
+        </div>
+      </SectionCard>
+
+      <SectionCard>
+        <SectionTitle
+          title={t(language, "entryEdit.shippingAddress")}
+          body={t(language, "entryEdit.shippingAddressBody")}
+        />
+        <div className="grid gap-4 md:grid-cols-3">
+          {["name", "phone", "line1", "line2", "city", "region", "postalCode", "country"].map((field) => (
+            <FieldShell key={field} label={fieldLabel(field)}>
+              <input className="admin-input" value={stringForInput(shippingAddress[field])} onChange={(event) => setShippingField(field, event.target.value)} />
+            </FieldShell>
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard>
+        <SectionTitle
+          title={t(language, "entryEdit.marketingAttribution")}
+          body={t(language, "entryEdit.marketingAttributionBody")}
+        />
+        <div className="grid gap-4 md:grid-cols-2">
+          <FieldShell label={t(language, "entryEdit.promoCode")}>
+            <input className="admin-input" value={stringForInput(marketingAttribution["promoCode"])} onChange={(event) => setAttributionField("promoCode", event.target.value)} />
+          </FieldShell>
+          <FieldShell label={t(language, "entryEdit.specialLinkCode")}>
+            <input className="admin-input" value={stringForInput(marketingAttribution["specialLinkCode"])} onChange={(event) => setAttributionField("specialLinkCode", event.target.value)} />
+          </FieldShell>
+        </div>
+      </SectionCard>
+
+      <StructuredListEditor
+        title={t(language, "entryEdit.orderItems")}
+        body={t(language, "entryEdit.orderItemsBody")}
+        addLabel={t(language, "entryEdit.addOrderItem")}
+        value={recordArray(value["items"])}
+        onChange={(next) => setField("items", next)}
+        language={language}
+        emptyItem={{ skuCode: "", productSlug: "", qty: 1, priceMinorAtPurchase: 0, title: "", imageAssetId: "" }}
+        fields={[
+          { name: "title", label: t(language, "entryEdit.title") },
+          { name: "skuCode", label: t(language, "entryEdit.skuCode") },
+          { name: "productSlug", label: t(language, "entryEdit.productSlug") },
+          { name: "qty", label: t(language, "entryEdit.quantity"), kind: "number" },
+          { name: "priceMinorAtPurchase", label: t(language, "entryEdit.priceMinor"), kind: "number" },
+          { name: "imageAssetId", label: t(language, "entryEdit.coverAsset") },
+        ]}
+      />
+
+      <StructuredListEditor
+        title={t(language, "entryEdit.orderDiscounts")}
+        body={t(language, "entryEdit.orderDiscountsBody")}
+        addLabel={t(language, "entryEdit.addOrderDiscount")}
+        value={recordArray(value["discounts"])}
+        onChange={(next) => setField("discounts", next)}
+        language={language}
+        emptyItem={{ kind: "", label: "", title: "", code: "", productSlug: "", skuCode: "", relatedSkuCode: "", discountPercent: null, discountMinor: null }}
+        fields={[
+          { name: "kind", label: t(language, "entryEdit.discountKind") },
+          { name: "label", label: t(language, "entryEdit.promoLabel") },
+          { name: "title", label: t(language, "entryEdit.campaignTitle") },
+          { name: "code", label: t(language, "entryEdit.campaignCode") },
+          { name: "productSlug", label: t(language, "entryEdit.productSlug") },
+          { name: "skuCode", label: t(language, "entryEdit.skuCode") },
+          { name: "relatedSkuCode", label: t(language, "entryEdit.relatedSkuCode") },
+          { name: "discountPercent", label: t(language, "entryEdit.discountPercent"), kind: "number" },
+          { name: "discountMinor", label: t(language, "entryEdit.discountMinor"), kind: "number" },
+        ]}
+      />
+    </>
+  );
+}
+
+function InventorySnapshotFields({
+  value,
+  onChange,
+  language,
+}: {
+  value: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+  language: AdminLanguage;
+}): React.ReactElement {
+  const setField = (field: string, next: unknown): void => onChange({ ...value, [field]: next });
+  return (
+    <SectionCard>
+      <SectionTitle
+        title={t(language, "entryEdit.inventorySnapshot")}
+        body={t(language, "entryEdit.inventorySnapshotBody")}
+      />
+      <div className="grid gap-4 md:grid-cols-2">
+        <FieldShell label={t(language, "entryEdit.skuCode")} required>
+          <input className="admin-input" value={stringForInput(value["skuCode"])} onChange={(event) => setField("skuCode", event.target.value)} />
+        </FieldShell>
+        <FieldShell label={t(language, "entryEdit.available")}>
+          <input className="admin-input" type="number" value={numberForInput(value["available"])} onChange={(event) => setField("available", numberInputValue(event.target.value))} />
+        </FieldShell>
+        <FieldShell label={t(language, "entryEdit.reserved")}>
+          <input className="admin-input" type="number" value={numberForInput(value["reserved"])} onChange={(event) => setField("reserved", numberInputValue(event.target.value))} />
+        </FieldShell>
+        <FieldShell label={t(language, "entryEdit.restockedAt")}>
+          <input className="admin-input" type="datetime-local" value={datetimeForInput(value["restockedAt"])} onChange={(event) => setField("restockedAt", dateTimeInputMs(event.target.value))} />
+        </FieldShell>
+        <FieldShell label={t(language, "entryEdit.updatedAt")}>
+          <input className="admin-input" type="datetime-local" value={datetimeForInput(value["updatedAt"])} onChange={(event) => setField("updatedAt", dateTimeInputMs(event.target.value))} />
+        </FieldShell>
+      </div>
+    </SectionCard>
   );
 }
 
@@ -1517,11 +1731,20 @@ function numberForInput(value: unknown): string | number {
 }
 
 function datetimeForInput(value: unknown): string {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return new Date(value).toISOString().slice(0, 16);
+  }
   if (typeof value !== "string" || !value) return "";
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return value.slice(0, 16);
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toISOString().slice(0, 16);
+}
+
+function dateTimeInputMs(value: string): number | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.getTime();
 }
 
 function defaultValueForSchema(schema: JsonSchema): unknown {
