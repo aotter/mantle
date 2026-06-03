@@ -23,7 +23,7 @@ export function Main({
         "@container/content",
         "w-full px-4 py-6 sm:px-6",
         fixed && "flex grow flex-col overflow-hidden",
-        !fluid && "mx-auto max-w-[1180px]",
+        !fluid && "mx-auto max-w-[1440px]",
         "flex-1",
         className,
       )}
