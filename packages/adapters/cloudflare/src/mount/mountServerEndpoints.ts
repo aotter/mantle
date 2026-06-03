@@ -436,6 +436,52 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     }),
   );
 
+  guarded("post", "/admin/api/entries/:id/status", async (c) =>
+    runUseCase(`POST /admin/api/entries/${c.req.param("id")}/status`, async () => {
+      const runtime = await ref.get();
+      const id = c.req.param("id")!;
+      const body = (await c.req.raw.json().catch(() => ({}))) as { status?: unknown };
+      const target = body.status;
+      if (target !== "draft" && target !== "published" && target !== "archived") {
+        throw new DiagnosticError(
+          runtimeDiagnostic({
+            code: "INPUT_VALIDATION_FAILED",
+            severity: "error",
+            path: `POST /admin/api/entries/${id}/status#/status`,
+            value: target,
+            expected: "'draft', 'published', or 'archived'",
+            message: "A supported target status is required.",
+          }),
+        );
+      }
+      const current = await readAdminEntry(runtime, id);
+      if (!current) {
+        throw new DiagnosticError(adminNotFoundDiagnostic(`POST /admin/api/entries/${id}/status`, id));
+      }
+      if (current.status === target) {
+        return adminListItem(
+          current,
+          current.collection === "products"
+            ? await localizedProductTitles(runtime, undefined)
+            : new Map<string, string>(),
+        );
+      }
+      if (target === "published") await runtime.requestPublish.execute({ id });
+      else if (target === "draft") await runtime.unpublish.execute({ id });
+      else await runtime.archive.execute({ id });
+      const updated = await readAdminEntry(runtime, id);
+      if (!updated) {
+        throw new DiagnosticError(adminNotFoundDiagnostic(`POST /admin/api/entries/${id}/status`, id));
+      }
+      return adminListItem(
+        updated,
+        updated.collection === "products"
+          ? await localizedProductTitles(runtime, undefined)
+          : new Map<string, string>(),
+      );
+    }),
+  );
+
   guarded("post", "/admin/api/entries/:id/duplicate", async (c, gate) =>
     runUseCase(`POST /admin/api/entries/${c.req.param("id")}/duplicate`, async () => {
       const runtime = await ref.get();
@@ -570,6 +616,58 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       }),
     );
   });
+
+  guarded("get", "/admin/api/media/assets", async (c) =>
+    runUseCase("GET /admin/api/media/assets", async () => {
+      const runtime = await ref.get();
+      const rawLimit = c.req.query("limit");
+      const parsedLimit = rawLimit ? Number.parseInt(rawLimit, 10) : NaN;
+      const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 100) : 50;
+      const cursor = c.req.query("cursor");
+      return listAdminMediaAssets(runtime, {
+        limit,
+        cursor: cursor ? Number.parseInt(cursor, 10) : undefined,
+        search: c.req.query("search") ?? "",
+      });
+    }),
+  );
+
+  guarded("patch", "/admin/api/media/assets/:id", async (c) =>
+    runUseCase(`PATCH /admin/api/media/assets/${c.req.param("id")}`, async () => {
+      const runtime = await ref.get();
+      const id = c.req.param("id")!;
+      const body = (await c.req.raw.json().catch(() => ({}))) as {
+        alt?: unknown;
+        caption?: unknown;
+      };
+      const saved = await updateAdminMediaAsset(runtime, id, {
+        alt: stringField(body.alt),
+        caption: stringField(body.caption),
+      });
+      if (!saved) {
+        throw new DiagnosticError(adminNotFoundDiagnostic(`PATCH /admin/api/media/assets/${id}`, id));
+      }
+      return saved;
+    }),
+  );
+
+  guarded("delete", "/admin/api/media/assets/:id", async (c) =>
+    runUseCase(`DELETE /admin/api/media/assets/${c.req.param("id")}`, async () => {
+      const runtime = await ref.get();
+      const id = c.req.param("id")!;
+      const asset = await readAdminMediaAsset(runtime, id);
+      if (!asset) {
+        throw new DiagnosticError(adminNotFoundDiagnostic(`DELETE /admin/api/media/assets/${id}`, id));
+      }
+      if (runtime.media) {
+        for (const variant of asset.variants) {
+          await runtime.media.storage.deleteObject({ storageKey: variant.storageKey });
+        }
+      }
+      await runtime.db.prepare(`DELETE FROM media_assets WHERE id = ?`).bind(id).run();
+      return { removed: true };
+    }),
+  );
 }
 
 async function localizedProductTitles(
@@ -657,6 +755,37 @@ type AdminDeveloperLogDbRow = {
   readonly details: string | null;
   readonly actor: string | null;
   readonly created_at: number;
+};
+
+type AdminMediaAssetDbRow = {
+  readonly id: string;
+  readonly created_at: number;
+  readonly owner_id: string | null;
+  readonly alt: string | null;
+  readonly caption: string | null;
+  readonly variants: string;
+  readonly metadata: string | null;
+};
+
+type AdminMediaVariant = {
+  readonly mimeType: string;
+  readonly publicUrl: string;
+  readonly storageKey: string;
+  readonly byteSize: number;
+  readonly role: string;
+};
+
+type AdminMediaAsset = {
+  readonly id: string;
+  readonly alt: string | null;
+  readonly caption: string | null;
+  readonly createdAt: number;
+  readonly ownerId: string | null;
+  readonly variants: ReadonlyArray<AdminMediaVariant>;
+  readonly primaryUrl: string | null;
+  readonly primaryMimeType: string | null;
+  readonly totalBytes: number;
+  readonly metadata: Readonly<Record<string, string>> | null;
 };
 
 type AdminCoverageCollection = {
@@ -1453,6 +1582,123 @@ async function updateAdminEntryData(
     .first<AdminEntryDbRow>();
   if (!updated) throw new DiagnosticError(adminNotFoundDiagnostic("admin/updateEntryData", row.id));
   return adminRowFromDb(updated);
+}
+
+async function listAdminMediaAssets(
+  runtime: CmsRuntime,
+  args: {
+    limit: number;
+    cursor?: number;
+    search: string;
+  },
+): Promise<{
+  readonly items: ReadonlyArray<AdminMediaAsset>;
+  readonly next_cursor: string | null;
+}> {
+  const offset = Number.isFinite(args.cursor) && args.cursor ? Math.max(0, args.cursor) : 0;
+  const search = args.search.trim();
+  const limit = Math.max(1, Math.min(args.limit, 100));
+  const sql = search
+    ? `SELECT id, created_at, owner_id, alt, caption, variants, metadata
+       FROM media_assets
+       WHERE id LIKE ? OR alt LIKE ? OR caption LIKE ? OR variants LIKE ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT ? OFFSET ?`
+    : `SELECT id, created_at, owner_id, alt, caption, variants, metadata
+       FROM media_assets
+       ORDER BY created_at DESC, id DESC
+       LIMIT ? OFFSET ?`;
+  const rows = search
+    ? await runtime.db
+        .prepare(sql)
+        .bind(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, limit + 1, offset)
+        .all<AdminMediaAssetDbRow>()
+    : await runtime.db
+        .prepare(sql)
+        .bind(limit + 1, offset)
+        .all<AdminMediaAssetDbRow>();
+  const items = rows.slice(0, limit).map(adminMediaAssetFromDb);
+  return {
+    items,
+    next_cursor: rows.length > limit ? String(offset + limit) : null,
+  };
+}
+
+async function readAdminMediaAsset(
+  runtime: CmsRuntime,
+  id: string,
+): Promise<AdminMediaAsset | null> {
+  const row = await runtime.db
+    .prepare(
+      `SELECT id, created_at, owner_id, alt, caption, variants, metadata
+       FROM media_assets WHERE id = ?`,
+    )
+    .bind(id)
+    .first<AdminMediaAssetDbRow>();
+  return row ? adminMediaAssetFromDb(row) : null;
+}
+
+async function updateAdminMediaAsset(
+  runtime: CmsRuntime,
+  id: string,
+  values: {
+    alt?: string;
+    caption?: string;
+  },
+): Promise<AdminMediaAsset | null> {
+  const existing = await readAdminMediaAsset(runtime, id);
+  if (!existing) return null;
+  await runtime.db
+    .prepare(
+      `UPDATE media_assets
+       SET alt = ?, caption = ?
+       WHERE id = ?`,
+    )
+    .bind(
+      values.alt ?? existing.alt,
+      values.caption ?? existing.caption,
+      id,
+    )
+    .run();
+  return readAdminMediaAsset(runtime, id);
+}
+
+function adminMediaAssetFromDb(row: AdminMediaAssetDbRow): AdminMediaAsset {
+  const variants = safeParseArray<AdminMediaVariant>(row.variants);
+  const primary = variants.find((variant) => variant.role === "primary") ?? variants[0] ?? null;
+  const metadata = row.metadata ? safeParseRecord(row.metadata) : null;
+  return {
+    id: row.id,
+    alt: row.alt,
+    caption: row.caption,
+    createdAt: row.created_at,
+    ownerId: row.owner_id,
+    variants,
+    primaryUrl: primary?.publicUrl ?? null,
+    primaryMimeType: primary?.mimeType ?? null,
+    totalBytes: variants.reduce((sum, variant) => sum + (Number.isFinite(variant.byteSize) ? variant.byteSize : 0), 0),
+    metadata,
+  };
+}
+
+function safeParseArray<T>(value: string): T[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function safeParseRecord(value: string): Record<string, string> | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, string>)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 async function insertAdminEntry(

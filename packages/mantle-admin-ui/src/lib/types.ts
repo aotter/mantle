@@ -150,6 +150,32 @@ export interface CoverageReport {
   items: CoverageItem[];
 }
 
+export interface AdminMediaVariant {
+  mimeType: string;
+  publicUrl: string;
+  storageKey: string;
+  byteSize: number;
+  role: string;
+}
+
+export interface AdminMediaAsset {
+  id: string;
+  alt: string | null;
+  caption: string | null;
+  createdAt: number;
+  ownerId: string | null;
+  variants: AdminMediaVariant[];
+  primaryUrl: string | null;
+  primaryMimeType: string | null;
+  totalBytes: number;
+  metadata: Record<string, string> | null;
+}
+
+export interface ListMediaAssetsResult {
+  items: AdminMediaAsset[];
+  next_cursor: string | null;
+}
+
 export const EDITORIAL_STATUSES: SidebarStatus[] = [
   "draft",
   "review",

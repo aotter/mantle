@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, FileText, PencilLine, Plus, Trash2, X } from "lucide-react";
+import { Archive, Check, Copy, FileText, PencilLine, Plus, RotateCcw, Send, Trash2, X } from "lucide-react";
 import { useAdminLocation } from "../../app/router";
 import { api } from "../../lib/api";
 import type { Collection, EntryRow, ListEntriesResult } from "../../lib/types";
@@ -30,6 +30,8 @@ export function CollectionView({
   const params = new URLSearchParams(location.search);
   const status = params.get("status") ?? undefined;
   const searchTerm = params.get("search")?.trim() ?? "";
+  const cursor = params.get("cursor") ?? undefined;
+  const cursorOffset = cursor ? Math.max(0, Number.parseInt(cursor, 10) || 0) : 0;
 
   const collectionsQuery = useQuery<Collection[]>({
     queryKey: ["collections"],
@@ -39,14 +41,15 @@ export function CollectionView({
     },
   });
   const entries = useQuery<ListEntriesResult>({
-    queryKey: ["entries", collectionName, status ?? "all", language],
+    queryKey: ["entries", collectionName, status ?? "all", language, cursor ?? "0"],
     queryFn: () => {
       const qs = new URLSearchParams({
         collection: collectionName,
-        limit: "99",
+        limit: "30",
         locale: language,
       });
       if (status) qs.set("status", status);
+      if (cursor) qs.set("cursor", cursor);
       return api.get<ListEntriesResult>(`/entries?${qs.toString()}`);
     },
   });
@@ -108,6 +111,14 @@ export function CollectionView({
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
       api.delete<{ removed: boolean }>(`/entries/${encodeURIComponent(id)}`),
+    onSuccess: refreshEntries,
+  });
+  const statusMutation = useMutation({
+    mutationFn: ({ id, nextStatus }: { id: string; nextStatus: "draft" | "published" | "archived" }) =>
+      api.post<EntryRow>(`/entries/${encodeURIComponent(id)}/status`, {
+        status: nextStatus,
+        locale: language,
+      }),
     onSuccess: refreshEntries,
   });
 
@@ -211,10 +222,12 @@ export function CollectionView({
                   onRename={(title) => titleMutation.mutateAsync({ id: row.id, title })}
                   onDuplicate={() => duplicateMutation.mutateAsync(row.id)}
                   onDelete={() => deleteMutation.mutateAsync(row.id)}
+                  onStatusChange={(nextStatus) => statusMutation.mutateAsync({ id: row.id, nextStatus })}
                   busy={
                     (titleMutation.isPending && titleMutation.variables?.id === row.id) ||
                     (duplicateMutation.isPending && duplicateMutation.variables === row.id) ||
-                    (deleteMutation.isPending && deleteMutation.variables === row.id)
+                    (deleteMutation.isPending && deleteMutation.variables === row.id) ||
+                    (statusMutation.isPending && statusMutation.variables?.id === row.id)
                   }
                 />
               ))}
@@ -225,11 +238,14 @@ export function CollectionView({
               {t(language, "collection.refreshing")}
             </p>
           ) : null}
-          {filteredEntries.next_cursor ? (
-            <p className="mt-3 text-xs text-muted-foreground">
-              {t(language, "collection.moreRows")}
-            </p>
-          ) : null}
+          <CursorPagination
+            collectionName={collectionName}
+            status={status}
+            searchTerm={searchTerm}
+            cursorOffset={cursorOffset}
+            nextCursor={filteredEntries.next_cursor}
+            language={language}
+          />
         </>
       )}
     </div>
@@ -362,6 +378,7 @@ function EntryRowDisplay({
   onRename,
   onDuplicate,
   onDelete,
+  onStatusChange,
   busy,
 }: {
   row: EntryRow;
@@ -370,6 +387,7 @@ function EntryRowDisplay({
   onRename: (title: string) => Promise<unknown>;
   onDuplicate: () => Promise<unknown>;
   onDelete: () => Promise<unknown>;
+  onStatusChange: (status: "draft" | "published" | "archived") => Promise<unknown>;
   busy: boolean;
 }): React.ReactElement {
   const itemName = renderTitleText(row.title, language);
@@ -413,6 +431,15 @@ function EntryRowDisplay({
     setError(null);
     try {
       await onDelete();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function changeStatus(nextStatus: "draft" | "published" | "archived"): Promise<void> {
+    setError(null);
+    try {
+      await onStatusChange(nextStatus);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -475,6 +502,21 @@ function EntryRowDisplay({
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-1" data-tour="entry-actions">
+          {row.status !== "published" ? (
+            <button type="button" className="row-action" title={t(language, "crud.publishTooltip", { name: itemName })} disabled={busy} onClick={() => void changeStatus("published")}>
+              <Send className="size-3.5" aria-hidden />
+            </button>
+          ) : null}
+          {row.status !== "draft" ? (
+            <button type="button" className="row-action" title={t(language, "crud.draftTooltip", { name: itemName })} disabled={busy} onClick={() => void changeStatus("draft")}>
+              <RotateCcw className="size-3.5" aria-hidden />
+            </button>
+          ) : null}
+          {row.status !== "archived" ? (
+            <button type="button" className="row-action" title={t(language, "crud.archiveTooltip", { name: itemName })} disabled={busy} onClick={() => void changeStatus("archived")}>
+              <Archive className="size-3.5" aria-hidden />
+            </button>
+          ) : null}
           <a className="row-action" title={t(language, "crud.editTooltip", { name: itemName })} href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}>
             <PencilLine className="size-3.5" aria-hidden />
           </a>
@@ -489,6 +531,65 @@ function EntryRowDisplay({
       </TableCell>
     </tr>
   );
+}
+
+function CursorPagination({
+  collectionName,
+  status,
+  searchTerm,
+  cursorOffset,
+  nextCursor,
+  language,
+}: {
+  collectionName: string;
+  status: string | undefined;
+  searchTerm: string;
+  cursorOffset: number;
+  nextCursor: string | null;
+  language: AdminLanguage;
+}): React.ReactElement | null {
+  if (cursorOffset === 0 && !nextCursor) return null;
+  const previousCursor = Math.max(0, cursorOffset - 30);
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+      <span>
+        {t(language, "collection.cursorRange", {
+          start: String(cursorOffset + 1),
+          end: String(cursorOffset + 30),
+        })}
+      </span>
+      <div className="flex items-center gap-2">
+        <a
+          className="row-action h-9 min-w-24 px-3"
+          aria-disabled={cursorOffset === 0}
+          href={cursorOffset === 0 ? undefined : collectionPageHref(collectionName, status, searchTerm, previousCursor === 0 ? undefined : String(previousCursor))}
+        >
+          {t(language, "resource.previousPage")}
+        </a>
+        <a
+          className="row-action h-9 min-w-24 px-3"
+          aria-disabled={!nextCursor}
+          href={nextCursor ? collectionPageHref(collectionName, status, searchTerm, nextCursor) : undefined}
+        >
+          {t(language, "resource.nextPage")}
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function collectionPageHref(
+  collectionName: string,
+  status: string | undefined,
+  searchTerm: string,
+  cursor: string | undefined,
+): string {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (searchTerm) params.set("search", searchTerm);
+  if (cursor) params.set("cursor", cursor);
+  const suffix = params.toString();
+  return `/admin/c/${encodeURIComponent(collectionName)}${suffix ? `?${suffix}` : ""}`;
 }
 
 function renderTitle(
