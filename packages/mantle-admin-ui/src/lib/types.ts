@@ -156,10 +156,27 @@ export interface AdminActionItem {
   output: JsonSchema;
   requiresAuth: boolean;
   handlerKind: string;
+  handlerRef?: string;
+  description?: string;
+  outputDescription?: string;
+  operationKind?: "checkout" | "inventory" | "orders" | "system" | "generic" | string;
+  audience?: "staff" | "storefront" | "system" | "agent" | string;
+  manualRun?: "recommended" | "debug" | "advanced" | string;
+  triggers?: AdminActionTrigger[];
 }
 
 export interface AdminActionsResult {
   items: AdminActionItem[];
+}
+
+export interface AdminActionTrigger {
+  name: string;
+  sourceKind: string;
+  method?: string;
+  path?: string;
+  schema?: string;
+  hooks?: string[];
+  surface?: string;
 }
 
 export interface AdminActionRunResult {

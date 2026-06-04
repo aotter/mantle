@@ -169,17 +169,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   );
 
   guarded("get", "/admin/api/actions", () =>
-    jsonResponse(200, {
-      items: ref.manifests
-        .filter((manifest) => manifest.kind === "Procedure")
-        .map((manifest) => ({
-          name: manifest.metadata.name,
-          input: manifest.spec.input,
-          output: manifest.spec.output,
-          requiresAuth: Boolean(manifest.spec.requires?.auth),
-          handlerKind: manifest.spec.handler.kind,
-        })),
-    }),
+    jsonResponse(200, { items: buildAdminActionItems(ref.manifests) }),
   );
 
   guarded("post", "/admin/api/actions/:name/run", async (c, gate) =>
@@ -852,6 +842,125 @@ type AdminCoverageCollection = {
     readonly childField: string;
   } | null;
 };
+
+type AdminActionTriggerSummary = {
+  readonly name: string;
+  readonly sourceKind: string;
+  readonly method?: string;
+  readonly path?: string;
+  readonly schema?: string;
+  readonly hooks?: readonly string[];
+  readonly surface?: string;
+};
+
+function buildAdminActionItems(manifests: CmsRuntimeRef["manifests"]): ReadonlyArray<{
+  readonly name: string;
+  readonly input: JsonSchema;
+  readonly output: JsonSchema;
+  readonly requiresAuth: boolean;
+  readonly handlerKind: string;
+  readonly handlerRef?: string;
+  readonly description?: string;
+  readonly outputDescription?: string;
+  readonly operationKind: "checkout" | "inventory" | "orders" | "system" | "generic";
+  readonly audience: "staff" | "storefront" | "system" | "agent";
+  readonly manualRun: "recommended" | "debug" | "advanced";
+  readonly triggers: ReadonlyArray<AdminActionTriggerSummary>;
+}> {
+  const triggersByProcedure = new Map<string, Array<(typeof manifests)[number]>>();
+  for (const manifest of manifests) {
+    if (manifest.kind !== "Trigger") continue;
+    const items = triggersByProcedure.get(manifest.spec.target.procedure) ?? [];
+    items.push(manifest);
+    triggersByProcedure.set(manifest.spec.target.procedure, items);
+  }
+
+  return manifests
+    .filter((manifest) => manifest.kind === "Procedure")
+    .map((manifest) => {
+      const triggers: AdminActionTriggerSummary[] = [];
+      for (const trigger of triggersByProcedure.get(manifest.metadata.name) ?? []) {
+        if (trigger.kind !== "Trigger") continue;
+        const source = trigger.spec.source;
+        if (source.kind === "http") {
+          triggers.push({
+            name: trigger.metadata.name,
+            sourceKind: source.kind,
+            method: source.method,
+            path: source.path,
+          });
+          continue;
+        }
+        if (source.kind === "lifecycle") {
+          triggers.push({
+            name: trigger.metadata.name,
+            sourceKind: source.kind,
+            schema: source.schema,
+            hooks: source.on,
+          });
+          continue;
+        }
+        triggers.push({
+          name: trigger.metadata.name,
+          sourceKind: source.kind,
+          surface: source.surface,
+        });
+      }
+      const operationKind = inferActionOperationKind(manifest.metadata.name, triggers);
+      const audience = inferActionAudience(manifest.metadata.name, Boolean(manifest.spec.requires?.auth), triggers);
+      const manualRun = inferManualRunMode(operationKind, audience, Boolean(manifest.spec.requires?.auth));
+      return {
+        name: manifest.metadata.name,
+        input: manifest.spec.input,
+        output: manifest.spec.output,
+        requiresAuth: Boolean(manifest.spec.requires?.auth),
+        handlerKind: manifest.spec.handler.kind,
+        handlerRef: manifest.spec.handler.kind === "ref" ? manifest.spec.handler.ref : undefined,
+        description: typeof manifest.spec.input.description === "string" ? manifest.spec.input.description : undefined,
+        outputDescription: typeof manifest.spec.output.description === "string" ? manifest.spec.output.description : undefined,
+        operationKind,
+        audience,
+        manualRun,
+        triggers,
+      };
+    });
+}
+
+function inferActionOperationKind(
+  name: string,
+  triggers: ReadonlyArray<{ readonly sourceKind: string; readonly path?: string; readonly schema?: string }>,
+): "checkout" | "inventory" | "orders" | "system" | "generic" {
+  const key = `${name} ${triggers.map((trigger) => `${trigger.sourceKind} ${trigger.path ?? ""} ${trigger.schema ?? ""}`).join(" ")}`.toLowerCase();
+  if (/(enqueue|callback|webhook|lifecycle|cron|queue|internal)/.test(key)) return "system";
+  if (/(cart|checkout|payment|promo|coupon)/.test(key)) return "checkout";
+  if (/(inventory|stock|restock|sku)/.test(key)) return "inventory";
+  if (/(order)/.test(key)) return "orders";
+  return "generic";
+}
+
+function inferActionAudience(
+  name: string,
+  requiresAuth: boolean,
+  triggers: ReadonlyArray<{ readonly sourceKind: string; readonly path?: string; readonly surface?: string }>,
+): "staff" | "storefront" | "system" | "agent" {
+  const key = `${name} ${triggers.map((trigger) => `${trigger.sourceKind} ${trigger.path ?? ""} ${trigger.surface ?? ""}`).join(" ")}`.toLowerCase();
+  if (/(lifecycle|callback|webhook|enqueue|queue|payment\/callback)/.test(key)) return "system";
+  if (/(mcp|agent)/.test(key)) return "agent";
+  if (requiresAuth || /(\/staff\/|restock|inventory)/.test(key)) return "staff";
+  if (/(\/api\/|cart|checkout|payment\/return|order\/status)/.test(key)) return "storefront";
+  return "staff";
+}
+
+function inferManualRunMode(
+  operationKind: "checkout" | "inventory" | "orders" | "system" | "generic",
+  audience: "staff" | "storefront" | "system" | "agent",
+  requiresAuth: boolean,
+): "recommended" | "debug" | "advanced" {
+  if (audience === "system" || operationKind === "system") return "advanced";
+  if (audience === "storefront" || audience === "agent") return "debug";
+  if (requiresAuth || audience === "staff") return "recommended";
+  return "debug";
+}
 
 function buildAdminCoverageReport(
   manifests: CmsRuntimeRef["manifests"],
