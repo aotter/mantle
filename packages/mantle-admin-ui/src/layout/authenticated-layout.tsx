@@ -6,6 +6,7 @@ import {
   Folder,
   Globe,
   Home,
+  Workflow,
   Settings as SettingsIcon,
 } from "lucide-react";
 
@@ -166,6 +167,7 @@ function buildNavGroups(
     title: t(language, "nav.more"),
     items: [
       { title: t(language, "nav.media"), url: "/admin/media", icon: Images },
+      { title: t(language, "nav.actions"), url: "/admin/actions", icon: Workflow },
       { title: t(language, "nav.approvals"), url: "/admin/approvals", icon: ClipboardList },
       { title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon },
     ],

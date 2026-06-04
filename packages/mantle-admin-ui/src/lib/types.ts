@@ -128,6 +128,40 @@ export interface MediaPurposePolicy {
   maxBytes: Record<string, number>;
 }
 
+export interface AdminActionItem {
+  name: string;
+  input: JsonSchema;
+  output: JsonSchema;
+  requiresAuth: boolean;
+  handlerKind: string;
+  handlerRef?: string;
+  description?: string;
+  outputDescription?: string;
+  operationKind?: "checkout" | "inventory" | "orders" | "system" | "generic" | string;
+  audience?: "staff" | "storefront" | "system" | "agent" | string;
+  manualRun?: "recommended" | "debug" | "advanced" | string;
+  triggers?: AdminActionTrigger[];
+}
+
+export interface AdminActionsResult {
+  items: AdminActionItem[];
+}
+
+export interface AdminActionTrigger {
+  name: string;
+  sourceKind: string;
+  method?: string;
+  path?: string;
+  schema?: string;
+  hooks?: string[];
+  surface?: string;
+}
+
+export interface AdminActionRunResult {
+  ok: true;
+  data: unknown;
+}
+
 export interface MediaAssetVariant {
   mimeType: string;
   publicUrl: string;
