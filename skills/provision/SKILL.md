@@ -39,6 +39,8 @@ Provision does **not** seed content. First real content is created after owner s
 
 7. **`BETTER_AUTH_SECRET` is auto-generated and load-bearing.** `provision:up` mints a fresh 32-byte secret on every run and pipes it in as a worker secret — the user never sees the value, and `wrangler secret list` shows names only, not values. The secret signs session cookies + JWTs, and (if the JWT plugin is enabled) encrypts JWK private keys at rest. Consequences worth saying out loud during handoff: re-running `provision:up` on the same worker, deleting and recreating the worker, or migrating to a new account all mint a fresh secret — every existing session is invalidated and any stored JWK row stops decrypting. There is no in-flow recovery path; if the user wants graceful rotation later, surface `BETTER_AUTH_SECRETS` (comma-separated, plural — old values kept for verification) as the path.
 
+8. **Launch state is context, not provider authority.** If install came from `create-mantle launch --session ...`, read `.mantle/launch-state.json` before preflight. It can supply `github.owner`, `github.admin_login`, repo intent, and the fact that the raw session URL was already claimed. It does not authorize Cloudflare operations, billing-gated features, OAuth App secrets, or custom domains. Keep asking for the Cloudflare API token and GitHub OAuth App secret exactly as this Skill describes.
+
 ## CLI surface
 
 ```bash
@@ -69,7 +71,7 @@ Don't run `wrangler d1 create` / `wrangler kv namespace create` / `wrangler secr
 
 ## Flow
 
-1. **Preflight** — `pnpm validate --phase deploy` (or `pnpm validate:deploy`) + `pnpm typecheck` + `gh auth status` (confirm gh-login matches `ADMIN_GITHUB_LOGIN`). The `--phase deploy` flag is the readiness gate: it re-enables `MANTLE_LETTER_NOT_WRITTEN` plus any future pre-deploy-only checks. If the install Skill's Mantle subagent (step 9) didn't fill the welcome cards, this is where it surfaces — return to install before continuing.
+1. **Preflight** — if `.mantle/launch-state.json` exists, read it first and use `github.admin_login` / `github.owner` as the expected GitHub identity unless the user explicitly overrides it. Then run `pnpm validate --phase deploy` (or `pnpm validate:deploy`) + `pnpm typecheck` + `gh auth status` (confirm gh-login matches `ADMIN_GITHUB_LOGIN`). The `--phase deploy` flag is the readiness gate: it re-enables `MANTLE_LETTER_NOT_WRITTEN` plus any future pre-deploy-only checks. If the install Skill's Mantle subagent (step 9) didn't fill the welcome cards, this is where it surfaces — return to install before continuing.
 
    If GitHub CLI auth fails or shows the wrong login, pause provision as a recoverable auth step. Tell the user the local install is already committed/validated, state the expected GitHub login, ask them to run `gh auth login -h github.com` or switch to the expected account, and ask them to reply when done. Do not ask for Cloudflare credentials yet. When they return, re-run `gh auth status`, then continue with step 2. Keep the project path, commit SHA, validation status, and expected login in your status message so the next turn can resume without rediscovery.
 

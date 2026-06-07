@@ -14,14 +14,17 @@ mantle is not optimized for a human developer reading a long
 installation guide and hand-editing boilerplate. The intended v0.1.0
 entry path is:
 
-1. The official site asks for a small set of choices: GitHub username,
-   starter, locale(s), and enough public copy to make the first site
-   useful.
-2. The site produces a localized starting prompt plus a pinned Skill
-   URL.
-3. A coder agent runs in the user's new repository, copies the chosen
-   starter, configures it, installs npm packages, validates it, and
-   provisions Cloudflare resources.
+1. The official site asks for a small set of launch choices: site name,
+   project/repo slug, starter/theme, locale(s), visibility, and GitHub
+   account context supplied through the Mantle GitHub App when present.
+2. The site creates a short-lived launch session and produces a one-line
+   `create-mantle launch --session ...` command for the user's agent.
+   The older localized starting prompt plus pinned Skill URL remains a
+   fallback when the session path is unavailable.
+3. A coder agent runs in the user's chosen parent directory, claims the
+   session, scaffolds immediately, initializes local launch state, installs
+   npm packages, validates it, and then proceeds toward Cloudflare
+   provision.
 4. The deployed site gives the owner an admin sign-in path and an MCP
    URL for ongoing content operations.
 
@@ -35,12 +38,20 @@ depend on an operator MCP session that does not exist yet.
 Consumer projects are provisioned by an agent, using repo-hosted
 Skills as the operational contract.
 
-The source of truth for first-run intent is the website-generated
-starting prompt. It may be localized to the user's preferred language,
-and it carries structured values such as `starter`, `github_username`,
-`locales`, `project_name`, `mantle_version`, `template_ref`, and
-`skill_url`. The Skill should consume those values instead of running a
-long generic interview.
+The source of truth for first-run scaffold intent is the website-created
+launch session. It carries structured values such as `archetype`,
+`theme`, `features`, `locales`, `project_name`, `site_name`,
+`github_owner`, `admin_github_login`, and `repo` intent. The install
+Skill should consume a valid launch session instead of running a long
+generic interview before scaffold. Prompt-first install remains the
+fallback when no valid launch session is available.
+
+The launch session is not a general provider credential. It authorizes
+the scaffold values the website just collected, and the agent writes
+only non-secret resumable state such as `.mantle/launch-state.json`.
+Cloudflare API tokens, GitHub OAuth App client secrets, paid-provider
+features, and custom domains still require explicit user authorization
+during provision.
 
 Published npm packages are the runtime dependency source. Starter files
 may still be copied from the GitHub repo or a release tag, but
@@ -110,8 +121,11 @@ they are debugging a failed provision.
 
 ## How to apply
 
-- If a website prompt supplies structured install values, consume them
-  directly and only confirm public/resource-name-impacting details.
+- If a website launch session supplies structured install values, run
+  `create-mantle launch --session ...` first and ask content/voice
+  questions later.
+- If only a website prompt supplies structured install values, consume
+  them directly and only confirm public/resource-name-impacting details.
 - Run the starter's `setup:site` script before installing
   dependencies.
 - Download starter source as a pinned tarball/zip, extract it, run
@@ -124,9 +138,10 @@ they are debugging a failed provision.
 ## Implementation status
 
 - `skills/install/SKILL.md` and `skills/provision/SKILL.md` encode the
-  current agent workflow.
-- `aotter/mantle-starter-publication` and `starters/blank` both
-  ship `setup:site`.
-- The publication starter ships `provision:up`; `seed:initial` remains
+  current agent workflow, including the launch-session fast path.
+- `aotter/mantle-starters` hosts `packages/create-mantle`, whose
+  `launch --session` mode validates the session before writing files.
+- Starters ship `provision:up` where supported; `seed:initial` remains
   a test/contributor utility, not part of real-user provisioning.
-- `0.0.7-alpha` npm packages are the current install target.
+- Current prerelease package versions are documented in
+  `docs/release-process.md`.
