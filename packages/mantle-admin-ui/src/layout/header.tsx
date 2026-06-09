@@ -1,5 +1,5 @@
 import * as React from "react";
-import { CircleHelp } from "lucide-react";
+import { CircleHelp, ExternalLink } from "lucide-react";
 import { ProfileDropdown } from "./profile-dropdown";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
@@ -26,6 +26,7 @@ interface HeaderProps {
     role: "owner" | "editor" | "contributor" | null;
   };
   site?: AdminBrand;
+  publicUrl?: string;
   onOpenGuide?: () => void;
 }
 
@@ -35,6 +36,7 @@ export function Header({
   children,
   user,
   site,
+  publicUrl,
   onOpenGuide,
 }: HeaderProps): React.ReactElement {
   const { language } = usePreferences();
@@ -65,6 +67,14 @@ export function Header({
           <span>{site.title}</span>
           {site.subtitle ? <small>{site.subtitle}</small> : null}
         </div>
+      ) : null}
+      {publicUrl ? (
+        <Button asChild variant="secondary" size="sm" className="shrink-0">
+          <a href={publicUrl} target="_blank" rel="noreferrer" title={t(language, "common.viewSite")}>
+            <ExternalLink className="size-3.5" aria-hidden />
+            <span className="hidden sm:inline">{t(language, "common.viewSite")}</span>
+          </a>
+        </Button>
       ) : null}
       {children}
       {user ? (

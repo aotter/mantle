@@ -1,8 +1,7 @@
-/* Distinctive type pairing: Fraunces (variable serif) for display
-   headings, IBM Plex Sans for body, IBM Plex Mono for code. The
-   @import MUST sit before the Tailwind import — CSS @import rules
-   are only valid before all other rule statements. */
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..700,0..100&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap");
+/* Admin typography: Noto Sans TC for the UI/display stack and IBM Plex Mono
+   for code. The @import MUST sit before the Tailwind import — CSS @import
+   rules are only valid before all other rule statements. */
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;600;700;800;900&display=swap");
 
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -250,23 +249,23 @@
 
 @theme {
   --text-xs:                0.75rem;
-  --text-xs--line-height:   1rem;
+  --text-xs--line-height:   1.45;
   --text-sm:                0.9375rem;
-  --text-sm--line-height:   1.55;
-  --text-base:              1.0625rem;
-  --text-base--line-height: 1.6;
-  --text-lg:                1.1875rem;
-  --text-lg--line-height:   1.5;
-  --text-xl:                1.3125rem;
-  --text-xl--line-height:   1.35;
+  --text-sm--line-height:   1.6;
+  --text-base:              1rem;
+  --text-base--line-height: 1.68;
+  --text-lg:                1.125rem;
+  --text-lg--line-height:   1.58;
+  --text-xl:                1.25rem;
+  --text-xl--line-height:   1.45;
   --text-2xl:               1.5rem;
-  --text-2xl--line-height:  1.25;
+  --text-2xl--line-height:  1.34;
   --text-3xl:               1.875rem;
-  --text-3xl--line-height:  1.15;
+  --text-3xl--line-height:  1.24;
 
-  --font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-display: "Fraunces", "IBM Plex Sans", Georgia, serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "Noto Sans TC", "PingFang TC", "Heiti TC", "Microsoft JhengHei", "Source Han Sans TC", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Noto Sans TC", "PingFang TC", "Heiti TC", "Microsoft JhengHei", "Source Han Sans TC", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /* html owns the flat base; body::before paints the gradient mesh
@@ -278,11 +277,13 @@ html {
 body {
   margin: 0;
   font-family: var(--font-sans);
-  font-feature-settings: "ss01", "cv11";
+  font-size: var(--text-base);
+  font-feature-settings: "kern", "liga";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: var(--foreground);
-  line-height: 1.6;
+  line-height: 1.68;
+  letter-spacing: 0;
   transition: color 0.2s;
 }
 
@@ -409,12 +410,12 @@ body::before {
 
 h1, h2, h3, h4 {
   font-family: var(--font-display);
-  font-feature-settings: "ss01";
-  font-variation-settings: "opsz" 144, "SOFT" 50;
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  font-feature-settings: "kern", "liga";
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.22;
 }
-h1 { font-variation-settings: "opsz" 144, "SOFT" 80; }
+h1 { line-height: 1.18; }
 
 code, kbd, pre { font-family: var(--font-mono); }
 
@@ -446,7 +447,39 @@ code, kbd, pre { font-family: var(--font-mono); }
 .admin-input,
 .admin-search input {
   min-height: 2.85rem;
-  padding: 0 0.85rem;
+  padding: 0 1rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+
+.admin-search-field {
+  position: relative;
+  display: block;
+}
+
+.admin-search-icon {
+  pointer-events: none;
+  position: absolute;
+  inset-inline-start: 1rem;
+  top: 50%;
+  width: 1rem;
+  height: 1rem;
+  transform: translateY(-50%);
+  color: var(--muted-foreground);
+}
+
+.admin-search-input {
+  min-height: 2.85rem;
+  padding-inline-start: 2.75rem !important;
+  padding-inline-end: 1rem !important;
+}
+
+.admin-input::placeholder,
+.admin-textarea::placeholder,
+.admin-search input::placeholder {
+  color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
+  opacity: 1;
 }
 
 .admin-textarea {
@@ -474,10 +507,17 @@ code, kbd, pre { font-family: var(--font-mono); }
 .admin-search {
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
   border: 1px solid var(--glass-border);
   background: rgba(255, 255, 255, 0.60);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+.segmented-control {
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
 }
 
 .segmented-control button,
@@ -490,6 +530,21 @@ code, kbd, pre { font-family: var(--font-mono); }
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+}
+
+.segmented-control button {
+  display: inline-flex;
+  min-width: max-content;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  white-space: nowrap;
+  padding: 0 1.05rem;
+  line-height: 1;
+}
+
+.segmented-control button svg {
+  flex: 0 0 auto;
 }
 
 .segmented-control button[data-active="true"],
@@ -558,16 +613,21 @@ code, kbd, pre { font-family: var(--font-mono); }
 
 .rich-editor-toolbar button,
 .rich-editor-select {
-  min-height: 2.65rem;
+  min-height: 2.25rem;
   border: 0;
   background: transparent;
   color: var(--foreground);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
-  padding: 0 0.72rem;
+  gap: 0.35rem;
+  padding: 0 0.5rem;
   white-space: nowrap;
+}
+
+.rich-editor-toolbar svg {
+  width: 0.9rem;
+  height: 0.9rem;
 }
 
 .rich-editor-toolbar button {
@@ -591,23 +651,14 @@ code, kbd, pre { font-family: var(--font-mono); }
 }
 
 .rich-editor-select select {
-  min-width: 6.75rem;
+  min-width: 7.25rem;
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
+  font-size: 0.88rem;
   font-weight: 700;
   outline: none;
-}
-
-.rich-editor-size {
-  min-width: 2.5rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--foreground);
-  font-weight: 700;
-  border-inline: 1px solid var(--glass-border);
 }
 
 .rich-editor-divider {
@@ -646,6 +697,26 @@ code, kbd, pre { font-family: var(--font-mono); }
   background: color-mix(in srgb, var(--glass-bg-elevated) 90%, transparent);
   box-shadow: 0 24px 80px rgba(16, 24, 40, 0.28);
   padding: 1.25rem;
+}
+
+.product-section-preview-dialog {
+  width: min(58rem, 100%);
+  border-color: var(--border);
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow: 0 24px 80px rgba(16, 24, 40, 0.32);
+}
+
+.product-section-preview-active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, var(--card));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 32%, transparent);
+}
+
+.product-section-preview-inactive {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--muted) 44%, var(--card));
+  opacity: 0.78;
 }
 
 .rich-editor-media-list {
@@ -738,6 +809,28 @@ code, kbd, pre { font-family: var(--font-mono); }
   outline: none;
 }
 
+.media-view-toggle {
+  min-height: 2.85rem;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.60);
+}
+
+.media-view-toggle button {
+  display: inline-grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  color: var(--muted-foreground);
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.media-view-toggle button.is-active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
 .media-dropzone-compact {
   min-height: 4.6rem;
   display: grid;
@@ -765,10 +858,16 @@ code, kbd, pre { font-family: var(--font-mono); }
 }
 
 .media-card {
+  position: relative;
   overflow: hidden;
   border: 1px solid var(--glass-border);
   background: rgba(255, 255, 255, 0.72);
   box-shadow: var(--glass-shadow);
+}
+
+.media-card.is-selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 44%, transparent), var(--glass-shadow-lg);
 }
 
 .album-card {
@@ -794,6 +893,26 @@ code, kbd, pre { font-family: var(--font-mono); }
   background:
     linear-gradient(135deg, rgba(255,255,255,.42), transparent 52%),
     var(--media-tone, linear-gradient(135deg, var(--palette-primary-light), var(--palette-secondary-light)));
+}
+
+.media-card-select {
+  position: absolute;
+  inset-inline-start: 0.65rem;
+  inset-block-start: 0.65rem;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  box-shadow: 0 8px 22px rgba(9, 17, 37, 0.16);
+}
+
+.media-card-select input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--primary);
 }
 
 .media-kind {
@@ -837,9 +956,115 @@ code, kbd, pre { font-family: var(--font-mono); }
   flex-wrap: wrap;
 }
 
+.media-bulk-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid var(--glass-border);
+  background: color-mix(in srgb, var(--card) 82%, transparent);
+  padding: 0.75rem;
+}
+
+.media-list-shell {
+  overflow-x: auto;
+  border: 1px solid var(--glass-border);
+  background: var(--card);
+}
+
+.media-list-table {
+  width: 100%;
+  min-width: 48rem;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.media-list-table th,
+.media-list-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.85rem;
+  text-align: start;
+  vertical-align: middle;
+}
+
+.media-list-table th {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.media-list-table tbody tr {
+  transition: background 0.16s ease;
+}
+
+.media-list-table tbody tr:hover,
+.media-list-table tbody tr.is-selected {
+  background: color-mix(in srgb, var(--primary) 9%, var(--card));
+}
+
+.media-list-asset {
+  display: grid;
+  grid-template-columns: 3.25rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.media-list-thumb {
+  width: 3.25rem;
+  height: 3.25rem;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.media-list-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-list-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.media-pagination {
+  display: grid;
+  grid-template-columns: minmax(9rem, 1fr) auto auto;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.media-page-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+}
+
+.media-page-size select {
+  min-height: 2.25rem;
+  border: 1px solid var(--glass-border);
+  background: var(--card);
+  color: var(--foreground);
+  padding: 0 0.65rem;
+  font-weight: 700;
+}
+
 .dark .media-sort,
+.dark .media-view-toggle,
 .dark .media-card,
-.dark .media-dropzone-compact {
+.dark .media-dropzone-compact,
+.dark .media-bulk-toolbar {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(151, 169, 211, 0.34);
 }
@@ -847,6 +1072,23 @@ code, kbd, pre { font-family: var(--font-mono); }
 .dark .media-kind {
   background: rgba(9, 17, 37, 0.62);
   color: var(--foreground);
+}
+
+@media (max-width: 860px) {
+  .media-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .media-sort,
+  .media-view-toggle {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .media-pagination {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
 }
 
 .quick-action,
@@ -878,6 +1120,13 @@ code, kbd, pre { font-family: var(--font-mono); }
   width: 2.25rem;
   height: 2.25rem;
   padding: 0;
+}
+
+.row-action-label {
+  width: auto;
+  min-width: 4.25rem;
+  padding: 0 0.7rem;
+  white-space: nowrap;
 }
 
 .quick-action:hover,
@@ -1108,8 +1357,9 @@ code, kbd, pre { font-family: var(--font-mono); }
 .label-eyebrow {
   font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
-  font-weight: 500;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  line-height: 1.45;
   color: var(--muted-foreground);
 }
 
