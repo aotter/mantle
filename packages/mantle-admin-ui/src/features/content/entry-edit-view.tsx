@@ -1,10 +1,10 @@
 import * as React from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowLeft, ArrowUp, BadgePercent, Check, Clock3, Copy, ExternalLink, ImagePlus, Info, LayoutTemplate, Link2, PackageCheck, Plus, Save, Tag, Trash2, Upload, X } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t, type I18nKey } from "../../app/i18n";
 import { api } from "../../lib/api";
-import type { AdminMediaAsset, EntryEditorPayload, JsonSchema, ListMediaAssetsResult, RelatedEntrySection } from "../../lib/types";
+import type { AdminMediaAsset, EntryEditorPayload, JsonSchema, ListMediaAssetsResult, RelatedEntrySection, SiteSettings } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
@@ -19,6 +19,7 @@ export function EntryEditView({
   entryId: string;
 }): React.ReactElement {
   const { language } = usePreferences();
+  const queryClient = useQueryClient();
   const query = useQuery<EntryEditorPayload>({
     queryKey: ["entry-editor", collectionName, entryId],
     queryFn: () => api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}/editor`),
@@ -35,6 +36,13 @@ export function EntryEditView({
       }),
     onSuccess: (payload) => {
       setData(payload.entry.data);
+    },
+  });
+  const deleteEntry = useMutation({
+    mutationFn: () => api.delete<{ removed: boolean }>(`/entries/${encodeURIComponent(entryId)}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["entries", collectionName] });
+      window.location.href = `/admin/c/${encodeURIComponent(collectionName)}`;
     },
   });
 
@@ -61,6 +69,7 @@ export function EntryEditView({
   const isOrder = payload.collection.name === "orders";
   const isOrderItem = payload.collection.name === "order_items";
   const isInventorySnapshot = payload.collection.name === "inventory_snapshots";
+  const showDeleteAction = isProduct || isProductSku || isProductTranslation;
 
   return (
     <div className="space-y-6">
@@ -105,6 +114,7 @@ export function EntryEditView({
       />
 
       {save.isError ? <ErrorBox error={save.error} /> : null}
+      {deleteEntry.isError ? <ErrorBox error={deleteEntry.error} /> : null}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-5">
@@ -215,6 +225,31 @@ export function EntryEditView({
               <MetaRow label={t(language, "collection.table.version")} value={`v${payload.entry.version}`} />
             </dl>
           </SectionCard>
+          {showDeleteAction ? (
+            <SectionCard className="border-destructive/20 bg-destructive/5 shadow-sm">
+              <SectionTitle
+                title={t(language, "entryEdit.dangerZone")}
+                body={t(language, "entryEdit.deleteBody")}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                disabled={deleteEntry.isPending}
+                title={t(language, "crud.deleteTooltip", { name: title })}
+                onClick={() => {
+                  if (typeof window !== "undefined" && !window.confirm(t(language, "crud.deleteConfirm", { name: title }))) {
+                    return;
+                  }
+                  deleteEntry.mutate();
+                }}
+              >
+                <Trash2 className="size-3.5" aria-hidden />
+                {deleteEntry.isPending ? t(language, "crud.saving") : t(language, "crud.delete")}
+              </Button>
+            </SectionCard>
+          ) : null}
           {sidebarRelated.length > 0 ? (
             <RelatedSections
               sections={sidebarRelated}
@@ -853,7 +888,19 @@ function ProductTranslationEntryFields({
   onChange: (data: Record<string, unknown>) => void;
   language: AdminLanguage;
 }): React.ReactElement {
+  const defaultSettings = useQuery<SiteSettings>({
+    queryKey: ["site-settings"],
+    queryFn: () => api.get<SiteSettings>("/site-settings"),
+  });
+  const didApplyDefaults = React.useRef(false);
   const setField = (field: string, next: unknown): void => onChange({ ...value, [field]: next });
+  React.useEffect(() => {
+    if (didApplyDefaults.current || !defaultSettings.data) return;
+    const next = applyBrandDefaultsToEntryData(value, defaultSettings.data);
+    if (next === value) return;
+    didApplyDefaults.current = true;
+    onChange(next);
+  }, [defaultSettings.data, onChange, value]);
   return (
     <>
       <SectionCard>
@@ -889,6 +936,40 @@ function ProductTranslationEntryFields({
       />
     </>
   );
+}
+
+function applyBrandDefaultsToEntryData(
+  value: Record<string, unknown>,
+  settings: SiteSettings,
+): Record<string, unknown> {
+  const merchandising = objectValue(value["merchandising"]);
+  const brand = objectValue(merchandising["brand"]);
+  if (hasBrandContent(brand)) return value;
+  const defaultBrand = brandDefaultsFromSettings(settings);
+  if (!hasBrandContent(defaultBrand)) return value;
+  return {
+    ...value,
+    merchandising: {
+      ...merchandising,
+      brand: {
+        ...brand,
+        ...defaultBrand,
+      },
+    },
+  };
+}
+
+function brandDefaultsFromSettings(settings: SiteSettings | undefined): Record<string, unknown> {
+  if (!settings) return {};
+  return {
+    name: settings.brand,
+    tagline: settings.description,
+    intro: settings.brandIntro,
+  };
+}
+
+function hasBrandContent(brand: Record<string, unknown>): boolean {
+  return ["name", "tagline", "intro"].some((field) => stringForInput(brand[field]).trim().length > 0);
 }
 
 function PageTranslationEntryFields({
@@ -1755,6 +1836,10 @@ function ProductTranslationSection({
   language: AdminLanguage;
   onSaved?: () => void;
 }): React.ReactElement {
+  const defaultSettings = useQuery<SiteSettings>({
+    queryKey: ["site-settings"],
+    queryFn: () => api.get<SiteSettings>("/site-settings"),
+  });
   return (
     <SectionCard>
       <SectionTitle
@@ -1773,6 +1858,9 @@ function ProductTranslationSection({
             shortDescription: "",
             body: "",
             coverAlt: "",
+            merchandising: {
+              brand: brandDefaultsFromSettings(defaultSettings.data),
+            },
           }}
           onSaved={onSaved}
         />
@@ -1801,8 +1889,21 @@ function ProductTranslationCard({
   language: AdminLanguage;
   onSaved?: () => void;
 }): React.ReactElement {
+  const defaultSettings = useQuery<SiteSettings>({
+    queryKey: ["site-settings"],
+    queryFn: () => api.get<SiteSettings>("/site-settings"),
+  });
+  const didApplyDefaults = React.useRef(false);
   const [draft, setDraft] = React.useState<Record<string, unknown>>(entry.data);
   React.useEffect(() => setDraft(entry.data), [entry.data]);
+  React.useEffect(() => {
+    if (didApplyDefaults.current || !defaultSettings.data) return;
+    setDraft((current) => {
+      const next = applyBrandDefaultsToEntryData(current, defaultSettings.data);
+      if (next !== current) didApplyDefaults.current = true;
+      return next;
+    });
+  }, [defaultSettings.data]);
   const save = useMutation({
     mutationFn: (nextData: Record<string, unknown>) =>
       api.patch<EntryEditorPayload>(`/entries/${encodeURIComponent(entry.id)}/editor`, {
@@ -2181,6 +2282,11 @@ function MerchandisingEditor({
   onChange: (value: Record<string, unknown>) => void;
   language: AdminLanguage;
 }): React.ReactElement {
+  const queryClient = useQueryClient();
+  const siteSettings = useQuery<SiteSettings>({
+    queryKey: ["site-settings"],
+    queryFn: () => api.get<SiteSettings>("/site-settings"),
+  });
   const brand = objectValue(value["brand"]);
   const marketing = objectValue(value["marketing"]);
   const setMerchandisingField = (field: string, next: unknown): void => onChange({ ...value, [field]: next });
@@ -2190,6 +2296,20 @@ function MerchandisingEditor({
   const setMarketingField = (field: string, next: unknown): void => {
     setMerchandisingField("marketing", { ...marketing, [field]: next });
   };
+  const saveBrandDefault = useMutation({
+    mutationFn: async () => {
+      const current = siteSettings.data ?? await api.get<SiteSettings>("/site-settings");
+      return api.patch<SiteSettings>("/site-settings", {
+        ...current,
+        brand: stringForInput(brand["name"]) || current.brand,
+        description: stringForInput(brand["tagline"]) || current.description,
+        brandIntro: stringForInput(brand["intro"]),
+      });
+    },
+    onSuccess: (settings) => {
+      queryClient.setQueryData(["site-settings"], settings);
+    },
+  });
 
   return (
     <div className="mt-5 space-y-4">
@@ -2228,6 +2348,29 @@ function MerchandisingEditor({
             </FieldShell>
           </div>
         </div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--glass-border)] pt-4">
+          <p className="text-xs leading-5 text-muted-foreground">
+            {saveBrandDefault.isSuccess
+              ? t(language, "entryEdit.brandDefaultsSaved")
+              : t(language, "entryEdit.brandDefaultsHint")}
+          </p>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={saveBrandDefault.isPending || !hasBrandContent(brand)}
+            title={t(language, "entryEdit.saveBrandDefaultsTooltip")}
+            onClick={() => saveBrandDefault.mutate()}
+          >
+            <Save className="size-3.5" aria-hidden />
+            {saveBrandDefault.isPending ? t(language, "crud.saving") : t(language, "entryEdit.saveBrandDefaults")}
+          </Button>
+        </div>
+        {saveBrandDefault.isError ? (
+          <p className="mt-2 text-xs text-destructive">
+            {saveBrandDefault.error instanceof Error ? saveBrandDefault.error.message : String(saveBrandDefault.error)}
+          </p>
+        ) : null}
       </div>
 
       <StringListEditor

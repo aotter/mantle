@@ -4,25 +4,10 @@ import { BarChart3, CreditCard, Save, Store } from "lucide-react";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
+import type { SiteSettings } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { SegmentedTabs } from "../../ui/resource";
-
-interface SiteSettings {
-  brand: string;
-  title: string;
-  description: string;
-  brandIntro: string;
-  serviceIncludes: string;
-  currency: string;
-  paymentProvider: string;
-  paymentMerchantId: string;
-  checkoutReturnPath: string;
-  checkoutCallbackPath: string;
-  checkoutTermsUrl: string;
-  ga4MeasurementId: string;
-  facebookPixelId: string;
-}
 
 type SettingsTab = "brand" | "checkout" | "tracking";
 

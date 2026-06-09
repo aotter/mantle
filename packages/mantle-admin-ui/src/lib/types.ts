@@ -120,6 +120,22 @@ export interface SiteInfo {
   mcpUrl: string;
 }
 
+export interface SiteSettings {
+  brand: string;
+  title: string;
+  description: string;
+  brandIntro: string;
+  serviceIncludes: string;
+  currency: string;
+  paymentProvider: string;
+  paymentMerchantId: string;
+  checkoutReturnPath: string;
+  checkoutCallbackPath: string;
+  checkoutTermsUrl: string;
+  ga4MeasurementId: string;
+  facebookPixelId: string;
+}
+
 export interface DeveloperLogItem {
   id: string;
   source: "llm" | "tui" | "agent" | "manual" | "system" | string;
