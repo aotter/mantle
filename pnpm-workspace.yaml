@@ -31,7 +31,7 @@ catalogs:
 
 catalog:
   # Shared runtime deps — tracked via lockfile, bumped by dependabot.
-  hono: ^4.12.21
+  hono: ^4.12.23
   zod: ^4.4.2
   better-auth: ^1.6.11
   aws4fetch: ^1.0.20
