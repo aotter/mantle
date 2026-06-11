@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { stdout, stderr } from "node:process";
 import { EmitOpenapiUseCase } from "../../usecase/EmitOpenapiUseCase.js";
 import { loadManifestsFromRoot } from "./loadManifests.js";
@@ -7,6 +8,7 @@ export interface EmitOpenapiArgs {
   readonly title: string;
   readonly version: string;
   readonly sessionCookieName?: string;
+  readonly output?: string;
 }
 
 export type ParseResult = { kind: "args"; args: EmitOpenapiArgs } | { kind: "help" };
@@ -16,24 +18,30 @@ export function parseArgs(rawArgs: ReadonlyArray<string>): ParseResult {
   let title = "mantle";
   let version = "0.1.0";
   let sessionCookieName: string | undefined;
+  let output: string | undefined;
   for (let i = 0; i < rawArgs.length; i++) {
     const a = rawArgs[i];
     if (a === "--manifests") manifests = rawArgs[++i] ?? manifests;
     else if (a === "--title") title = rawArgs[++i] ?? title;
     else if (a === "--version") version = rawArgs[++i] ?? version;
     else if (a === "--session-cookie-name") sessionCookieName = rawArgs[++i];
+    else if (a === "--output" || a === "-o") {
+      const v = rawArgs[++i];
+      if (!v) throw new Error("--output requires a file path");
+      output = v;
+    }
     else if (a === "--help" || a === "-h") return { kind: "help" };
     else if (a !== undefined) {
       throw new Error(`Unknown argument: ${a}`);
     }
   }
-  return { kind: "args", args: { manifests, title, version, sessionCookieName } };
+  return { kind: "args", args: { manifests, title, version, sessionCookieName, output } };
 }
 
 function printHelp(): void {
   stdout.write(`mantle emit-openapi — emit OpenAPI 3.1 from manifests
 
-Usage: mantle emit-openapi [options] > openapi.json
+Usage: mantle emit-openapi [options]
 
 Options:
   --manifests <dir>            Manifest root (default: ./manifests)
@@ -46,9 +54,11 @@ Options:
                                (production, HTTPS); pass
                                'better-auth.session_token' for local
                                non-secure deploys.
+  -o, --output <file>          Write UTF-8 JSON to a file. Prefer this
+                               over shell redirection on Windows.
   -h, --help                   This help
 
-Output: OpenAPI 3.1 JSON on stdout.
+Output: OpenAPI 3.1 JSON on stdout unless --output is set.
 
 Covers HTTP Triggers (POST/PUT/PATCH/DELETE) and View REST routes
 (GET /api/views/<name>). MCP is out of scope.
@@ -79,6 +89,11 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
     version: args.version,
     sessionCookieName: args.sessionCookieName,
   });
-  stdout.write(JSON.stringify(document, null, 2) + "\n");
+  const body = JSON.stringify(document, null, 2) + "\n";
+  if (args.output) {
+    await writeFile(args.output, body, "utf8");
+  } else {
+    stdout.write(body);
+  }
   return 0;
 }
