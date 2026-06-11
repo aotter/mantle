@@ -290,9 +290,10 @@ forces it.
 **View (v0.1)**:
 - `spec.from:` (source Schema)
 - `spec.fields:` (projected fields)
-- `spec.filter:` AST — `eq`, `and`, `or` only
+- `spec.filter:` AST — `eq`, `gt`, `gte`, `lt`, `lte`, `and`, `or`
 - `spec.orderBy:`
 - `spec.limit:`
+- `spec.params:` (required query params referenced by filter values)
 
 **Procedure (v0.1)**:
 - `spec.requires.auth.all:` (closed predicate vocabulary)
@@ -329,9 +330,8 @@ forces it.
 - Schema: `policies.{visible, readable, writable, owner}`,
   `indexedFields:`, `x-mantle-ref` auto-lift to virtual column,
   computed columns via projection Trigger
-- View: `recursive`, `params`, `gatedBy`, `join`,
-  `policies.skip`, filter AST extensions (`contains`, `not`,
-  `in`, `like`)
+- View: `recursive`, `gatedBy`, `join`, `policies.skip`,
+  filter AST extensions (`contains`, `not`, `in`, `like`)
 - Procedure: `requires.auth.{any | all}` with disjunction;
   `owns:`, `contains:`, `withinMinutes:`, `requires.window`,
   `requires.quota`, `errors`, `retry`

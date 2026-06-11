@@ -44,11 +44,11 @@ Public callers pass `?page=<1-indexed>&show=<page-size>`. Internally the runtime
 
 `page` / `show` / `cursor` are reserved names. The parser rejects any `View.spec.params.properties.<name>` colliding with these (`VIEW_PARAMS_RESERVED_NAME`). The author owns the rest of the query-string namespace.
 
-The alternative ("let `filter` express arithmetic so the author writes their own page→offset math") was rejected as a grammar-discipline violation: v0.1 filter is `eq | and | or` and adding arithmetic would drag in operator precedence, type coercion, and a closed-enum-vs-expression debate that distracts from shipping.
+The alternative ("let `filter` express arithmetic so the author writes their own page→offset math") was rejected as a grammar-discipline violation: v0.1 filter is a closed AST (`eq` / `gt` / `gte` / `lt` / `lte` plus boolean `and` / `or`) and adding arithmetic would drag in operator precedence, type coercion, and a closed-enum-vs-expression debate that distracts from shipping.
 
 `View.spec.limit` is the **server-enforced cap** on `show`; if the caller passes `?show=10000` and the View declares `limit: 50`, the runtime trims to 50.
 
-### 5. Filter `eq.value` accepts a `{ $param: <name> }` sentinel
+### 5. Filter comparison `value` accepts a `{ $param: <name> }` sentinel
 
 Static Views are useful (`recent-posts`); param-driven Views are essential (`posts-by-locale?locale=zh-TW`). Until this ADR, filter values were literals, which forced one View per parameter combination — unworkable for `tag` / `locale` / `author` queries.
 
@@ -113,7 +113,7 @@ Required params not present → `400 INPUT_VALIDATION_FAILED`. Coercion failure 
 - **`Trigger.target.view`** (lifecycle/projection triggers fired by Views). Tracked separately as a v0.2 grammar move.
 - **`spec.output.kind`** (declaring scalar / tree / tabular result shape per View). Lands with join + group-by support in v0.1.x.
 - **Optional param-ref drop semantics in the parser.** Runtime is already implemented; parser promotes when v0.1.x lands.
-- **DRAFT filter operators** (`gte` / `lte` / `contains` / `in` / `like` / `not`). v0.1 stays at `eq | and | or`. Required-only param refs partially compensate (one View per filter combination) but the real fix is grammar promotion.
+- **DRAFT filter operators** (`contains` / `in` / `like` / `not`). v0.1 keeps comparison operators closed to `eq` / `gt` / `gte` / `lt` / `lte`; field-to-field comparisons remain out of scope.
 - **Auth on the public View REST surface.** v0.1.0 Views are public-read by definition. Member-gated reads land with the member system in v0.2.
 
 ## Consequences

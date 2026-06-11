@@ -10,6 +10,7 @@ import {
   LIFECYCLE_HOOKS,
   MCP_TRIGGER_SURFACES,
   STAFF_ROLES,
+  FILTER_COMPARISON_OPS,
   VIEW_PARAMS_RESERVED,
   isParamRef,
   isStaffRole,
@@ -95,6 +96,7 @@ const V01_LIFECYCLE_HOOKS: ReadonlySet<LifecycleHook> = new Set(LIFECYCLE_HOOKS)
 const V01_HOOK_ERROR_POLICIES: ReadonlySet<string> = new Set(["abort", "continue"]);
 const V01_MCP_TRIGGER_SURFACES: ReadonlySet<string> = new Set(MCP_TRIGGER_SURFACES);
 const DRAFT_FILTER_OPS: ReadonlySet<string> = new Set(["contains", "not", "in", "like"]);
+const FILTER_COMPARISON_OP_SET: ReadonlySet<string> = new Set(FILTER_COMPARISON_OPS);
 const V01_LIFECYCLE_MODES: ReadonlySet<string> = new Set(["simple", "editorial"]);
 
 /** Result of `parseManifests`. */
@@ -426,32 +428,40 @@ function validateFilterAst(
   paramSchema: JsonSchema | undefined,
 ): void {
   if (typeof node !== "object" || node === null || Array.isArray(node)) {
-    throw new ManifestParseError(`${path} must be an object node (eq | and | or)`, idx, jsonPointer);
+    throw new ManifestParseError(
+      `${path} must be an object node (${FILTER_COMPARISON_OPS.join(" | ")} | and | or)`,
+      idx,
+      jsonPointer,
+    );
   }
   const n = node as Record<string, unknown>;
   const keys = Object.keys(n);
   if (keys.length !== 1) {
     throw new ManifestParseError(
-      `${path} must have exactly one key (eq | and | or); got ${JSON.stringify(keys)}`,
+      `${path} must have exactly one key (${FILTER_COMPARISON_OPS.join(" | ")} | and | or); got ${JSON.stringify(keys)}`,
       idx,
       jsonPointer,
     );
   }
   const op = keys[0]!;
-  if (op === "eq") {
-    const eq = n["eq"];
-    if (typeof eq !== "object" || eq === null) {
-      throw new ManifestParseError(`${path}.eq must be an object`, idx, `${jsonPointer}/eq`);
+  if (FILTER_COMPARISON_OP_SET.has(op)) {
+    const comparison = n[op];
+    if (typeof comparison !== "object" || comparison === null || Array.isArray(comparison)) {
+      throw new ManifestParseError(`${path}.${op} must be an object`, idx, `${jsonPointer}/${op}`);
     }
-    const e = eq as Record<string, unknown>;
+    const e = comparison as Record<string, unknown>;
     if (typeof e["field"] !== "string" || (e["field"] as string).length === 0) {
-      throw new ManifestParseError(`${path}.eq.field is required (non-empty string)`, idx, `${jsonPointer}/eq/field`);
+      throw new ManifestParseError(
+        `${path}.${op}.field is required (non-empty string)`,
+        idx,
+        `${jsonPointer}/${op}/field`,
+      );
     }
     if (!("value" in e)) {
-      throw new ManifestParseError(`${path}.eq.value is required`, idx, `${jsonPointer}/eq/value`);
+      throw new ManifestParseError(`${path}.${op}.value is required`, idx, `${jsonPointer}/${op}/value`);
     }
     if (isParamRef(e["value"])) {
-      validateParamRef(e["value"].$param, idx, `${jsonPointer}/eq/value/$param`, paramSchema);
+      validateParamRef(e["value"].$param, idx, `${jsonPointer}/${op}/value/$param`, paramSchema);
     }
     return;
   }
@@ -474,7 +484,7 @@ function validateFilterAst(
     );
   }
   throw new ManifestParseError(
-    `${path} operator must be one of eq, and, or; got '${op}'`,
+    `${path} operator must be one of ${FILTER_COMPARISON_OPS.join(", ")}, and, or; got '${op}'`,
     idx,
     jsonPointer,
   );

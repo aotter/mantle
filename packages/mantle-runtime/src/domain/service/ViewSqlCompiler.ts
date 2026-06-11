@@ -15,8 +15,9 @@ import { clampPage, clampShow } from "./Pagination.js";
  * `?` parameters; field-name escapes are defense-in-depth on top of
  * the Schema validator gate.
  *
- * v0.1 filter AST is `eq | and | or`; `eq.value` may be a literal or a
- * `{ $param: <name> }` sentinel substituted from `options.params` at
+ * v0.1 filter AST supports comparison operators (`eq`, `gt`, `gte`,
+ * `lt`, `lte`) plus `and` / `or`; comparison values may be literals or
+ * `{ $param: <name> }` sentinels substituted from `options.params` at
  * compile time. Pagination knobs `page` / `show` come in via
  * `options`; the runtime owns the LIMIT/OFFSET emission.
  */
@@ -55,6 +56,20 @@ void _aliasCheck;
 const DEFAULT_PROJECTION = Object.entries(RESERVED_COLUMN)
   .map(([alias, col]) => (alias === col ? col : `${col} AS ${alias}`))
   .join(", ");
+
+type FilterComparisonOp = "eq" | "gt" | "gte" | "lt" | "lte";
+interface FilterComparisonNode {
+  readonly field: string;
+  readonly value: unknown;
+}
+
+const SQL_COMPARISON_OP: Readonly<Record<FilterComparisonOp, string>> = {
+  eq: "=",
+  gt: ">",
+  gte: ">=",
+  lt: "<",
+  lte: "<=",
+};
 
 export function compileView(view: ViewManifest, options: CompileViewOptions = {}): CompiledView {
   const sqlParams: unknown[] = [view.spec.from];
@@ -115,8 +130,9 @@ function compileFilter(
   node: FilterAst,
   paramValues: Record<string, unknown>,
 ): CompiledFragment | null {
-  if ("eq" in node) {
-    const value = node.eq.value;
+  const comparison = getFilterComparison(node);
+  if (comparison) {
+    const value = comparison.node.value;
     let bound: unknown;
     if (isParamRef(value)) {
       const resolved = paramValues[value.$param];
@@ -125,10 +141,13 @@ function compileFilter(
     } else {
       bound = value;
     }
-    return { sql: `${fieldRefExpr(node.eq.field)} = ?`, params: [bound] };
+    return {
+      sql: `${fieldRefExpr(comparison.node.field)} ${SQL_COMPARISON_OP[comparison.op]} ?`,
+      params: [bound],
+    };
   }
   const op = "and" in node ? "AND" : "OR";
-  const children = "and" in node ? node.and : node.or;
+  const children = "and" in node ? node.and : "or" in node ? node.or : [];
   const compiled = children
     .map((c) => compileFilter(c, paramValues))
     .filter((c): c is CompiledFragment => c !== null);
@@ -137,6 +156,17 @@ function compileFilter(
     sql: compiled.map((c) => `(${c.sql})`).join(` ${op} `),
     params: compiled.flatMap((c) => c.params),
   };
+}
+
+function getFilterComparison(
+  node: FilterAst,
+): { readonly op: FilterComparisonOp; readonly node: FilterComparisonNode } | null {
+  if ("eq" in node) return { op: "eq", node: node.eq as FilterComparisonNode };
+  if ("gt" in node) return { op: "gt", node: node.gt as FilterComparisonNode };
+  if ("gte" in node) return { op: "gte", node: node.gte as FilterComparisonNode };
+  if ("lt" in node) return { op: "lt", node: node.lt as FilterComparisonNode };
+  if ("lte" in node) return { op: "lte", node: node.lte as FilterComparisonNode };
+  return null;
 }
 
 function buildOrderBy(

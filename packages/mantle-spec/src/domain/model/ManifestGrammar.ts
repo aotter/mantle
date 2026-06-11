@@ -174,8 +174,9 @@ export interface ViewManifestSpec {
   readonly requires?: {
     readonly auth?: { readonly all: readonly AuthPredicate[] };
   };
-  /** Filter AST. v0.1 grammar: eq | and | or. `eq.value` may be a literal
-   *  or a `{ $param: <name> }` sentinel referencing `spec.params`. */
+  /** Filter AST. v0.1 grammar: comparison ops plus and/or. Comparison
+   *  values may be literals or `{ $param: <name> }` sentinels referencing
+   *  `spec.params`. */
   readonly filter?: FilterAst;
   /** Projection. */
   readonly fields?: readonly string[];
@@ -192,17 +193,35 @@ export interface ViewManifestSpec {
   readonly params?: JsonSchema;
 }
 
-/** v0.1 filter AST. Anything beyond eq/and/or is DRAFT (`contains`, `not`,
- *  `in`, `like`, `recursive`, `gatedBy`, `join.aggregate`). */
-export type FilterAst = FilterEq | FilterAnd | FilterOr;
+/** v0.1 View filter comparison operators. */
+export const FILTER_COMPARISON_OPS = ["eq", "gt", "gte", "lt", "lte"] as const;
+export type FilterComparisonOp = (typeof FILTER_COMPARISON_OPS)[number];
+
+/** v0.1 filter AST. Anything beyond comparison/and/or is DRAFT (`contains`,
+ *  `not`, `in`, `like`, `recursive`, `gatedBy`, `join.aggregate`). */
+export type FilterAst = FilterComparison | FilterAnd | FilterOr;
+export type FilterComparison = FilterEq | FilterGt | FilterGte | FilterLt | FilterLte;
+interface FilterComparisonNode {
+  readonly field: string;
+  /** Comparison value. Either a literal or a `ParamRef` sentinel
+   *  (`{ $param: <name> }`) substituted at request time from
+   *  `View.spec.params`. See `isParamRef`. */
+  readonly value: unknown;
+}
 export interface FilterEq {
-  readonly eq: {
-    readonly field: string;
-    /** Comparison value. Either a literal or a `ParamRef` sentinel
-     *  (`{ $param: <name> }`) substituted at request time from
-     *  `View.spec.params`. See `isParamRef`. */
-    readonly value: unknown;
-  };
+  readonly eq: FilterComparisonNode;
+}
+export interface FilterGt {
+  readonly gt: FilterComparisonNode;
+}
+export interface FilterGte {
+  readonly gte: FilterComparisonNode;
+}
+export interface FilterLt {
+  readonly lt: FilterComparisonNode;
+}
+export interface FilterLte {
+  readonly lte: FilterComparisonNode;
 }
 
 /** Sentinel object form for filter values that pull from caller-supplied

@@ -93,6 +93,30 @@ describe("check()", () => {
     expect(result.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
   });
 
+  it("validates comparison filter field references against the source Schema", () => {
+    const result = check({
+      manifests: [
+        schema("products", {
+          schema: {
+            type: "object",
+            properties: {
+              currentStock: { type: "integer" },
+            },
+          },
+        }),
+        view("belowSafetyStock", "products", {
+          filter: { lte: { field: "safetyStock", value: 10 } },
+        }),
+      ],
+    });
+
+    const diagnostic = result.diagnostics.find(
+      (d) => d.code === "VIEW_FILTER_FIELD_NOT_IN_SCHEMA",
+    );
+    expect(diagnostic?.path).toContain("/spec/filter/lte/field");
+    expect(diagnostic?.value).toBe("safetyStock");
+  });
+
   it("emits TRIGGER_PATH_INVALID when an http Trigger path does not start with /api/", () => {
     const t: TriggerManifest = {
       apiVersion,
@@ -552,6 +576,26 @@ spec:
     expect(v.spec.params?.required).toEqual(["locale"]);
   });
 
+  it("accepts comparison filters with literal and param-ref values", () => {
+    acceptYaml(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: stockMovementsInRange }
+spec:
+  from: stock-movements
+  params:
+    type: object
+    properties:
+      startAt: { type: string }
+      endAt: { type: string }
+    required: [startAt, endAt]
+  filter:
+    and:
+      - gte: { field: occurredAt, value: { $param: startAt } }
+      - lt: { field: occurredAt, value: { $param: endAt } }
+      - gt: { field: quantity, value: 0 }
+`);
+  });
+
   it("rejects View.spec.params when type !== object", () => {
     const r = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
 kind: View
@@ -639,6 +683,24 @@ spec:
     eq: { field: tag, value: { $param: tag } }
 `);
     expect(r.diagnostics.map((d) => d.code)).toContain("VIEW_FILTER_PARAM_REF_UNKNOWN");
+  });
+
+  it("rejects comparison filter param-ref to a param not in required", () => {
+    const r = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: bad }
+spec:
+  from: posts
+  params:
+    type: object
+    properties:
+      minStock: { type: integer }
+  filter:
+    lt: { field: currentStock, value: { $param: minStock } }
+`);
+    expect(r.diagnostics.map((d) => d.code)).toContain(
+      "VIEW_FILTER_PARAM_REF_NOT_REQUIRED",
+    );
   });
 });
 
