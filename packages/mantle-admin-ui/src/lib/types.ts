@@ -143,6 +143,24 @@ export interface CommittedMediaAsset {
   variants: MediaAssetVariant[];
 }
 
+export interface AdminMediaAsset {
+  id: string;
+  alt: string | null;
+  caption: string | null;
+  createdAt: number;
+  ownerId: string | null;
+  variants: MediaAssetVariant[];
+  primaryUrl: string | null;
+  primaryMimeType: string | null;
+  totalBytes: number;
+  metadata: Record<string, string> | null;
+}
+
+export interface ListMediaAssetsResult {
+  items: AdminMediaAsset[];
+  next_cursor: string | null;
+}
+
 export const EDITORIAL_STATUSES: SidebarStatus[] = [
   "draft",
   "review",
