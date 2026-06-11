@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, ImagePlus, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, ImagePlus, PackageCheck, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
@@ -69,18 +69,31 @@ export function EntryEditView({
   const isDraft = payload.entry.status === "draft";
   const actionPending = save.isPending || publish.isPending || unpublish.isPending;
   const mediaPurposes = site.data?.media?.purposes ?? [];
+  const parentLink = parentAdminLink(payload.collection, data);
+  const inlineRelated = payload.related.filter(isPrimaryInlineSection);
+  const sidebarRelated = payload.related.filter((section) => !isPrimaryInlineSection(section));
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow={
-          <a
-            href={`/admin/c/${encodeURIComponent(collectionName)}`}
-            className="inline-flex items-center gap-2 hover:underline"
-          >
-            <ArrowLeft className="size-3.5" aria-hidden />
-            {t(language, "entryEdit.back", { name: collectionTitle(payload.collection, language) })}
-          </a>
+          <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+            <a
+              href={`/admin/c/${encodeURIComponent(collectionName)}`}
+              className="inline-flex items-center gap-2 hover:underline"
+            >
+              <ArrowLeft className="size-3.5" aria-hidden />
+              {t(language, "entryEdit.back", { name: collectionTitle(payload.collection, language) })}
+            </a>
+            {parentLink ? (
+              <>
+                <span className="text-foreground/30">/</span>
+                <a href={parentLink.href} className="hover:underline">
+                  {t(language, "entryEdit.parent", { name: parentLink.label })}
+                </a>
+              </>
+            ) : null}
+          </span>
         }
         title={title}
         description={t(language, "entryEdit.body", {
@@ -130,21 +143,32 @@ export function EntryEditView({
       {unpublish.isError ? <ErrorBox error={unpublish.error} /> : null}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <SectionCard>
-          <SectionTitle
-            title={t(language, "entryEdit.fields")}
-            body={payload.collection.description}
-          />
-          <SchemaFields
-            schema={payload.collection.schema}
-            value={data}
-            path={[]}
-            onChange={setData}
-            language={language}
-            collectionName={payload.collection.name}
-            mediaPurposes={mediaPurposes}
-          />
-        </SectionCard>
+        <div className="space-y-5">
+          <SectionCard>
+            <SectionTitle
+              title={t(language, "entryEdit.fields")}
+              body={payload.collection.description}
+            />
+            <SchemaFields
+              schema={payload.collection.schema}
+              value={data}
+              path={[]}
+              onChange={setData}
+              language={language}
+              collectionName={payload.collection.name}
+              mediaPurposes={mediaPurposes}
+            />
+          </SectionCard>
+
+          {inlineRelated.length > 0 ? (
+            <RelatedSections
+              sections={inlineRelated}
+              language={language}
+              parentTitle={title}
+              onSaved={() => void query.refetch()}
+            />
+          ) : null}
+        </div>
 
         <div className="space-y-4">
           <SectionCard>
@@ -158,7 +182,14 @@ export function EntryEditView({
               <MetaRow label={t(language, "collection.table.version")} value={`v${payload.entry.version}`} />
             </dl>
           </SectionCard>
-          <RelatedSections sections={payload.related} language={language} />
+          {sidebarRelated.length > 0 ? (
+            <RelatedSections
+              sections={sidebarRelated}
+              language={language}
+              parentTitle={title}
+              onSaved={() => void query.refetch()}
+            />
+          ) : null}
         </div>
       </div>
     </div>
@@ -555,9 +586,13 @@ function JsonEditor({
 function RelatedSections({
   sections,
   language,
+  parentTitle,
+  onSaved,
 }: {
   sections: RelatedEntrySection[];
   language: AdminLanguage;
+  parentTitle: string;
+  onSaved?: () => void;
 }): React.ReactElement {
   if (sections.length === 0) {
     return (
@@ -569,38 +604,236 @@ function RelatedSections({
   return (
     <>
       {sections.map((section) => (
-        <SectionCard key={`${section.collection.name}:${section.relationship.childField}`}>
-          <SectionTitle
-            title={collectionTitle(section.collection, language)}
-            body={t(language, "entryEdit.relationship", {
-              child: section.relationship.childField,
-              parent: section.relationship.parentField,
-            })}
+        isSellableVariantCollection(section.collection) ? (
+          <ProductSkuSection
+            key={`${section.collection.name}:${section.relationship.childField}`}
+            section={section}
+            language={language}
+            parentTitle={parentTitle}
+            onSaved={onSaved}
           />
-          <div className="space-y-2">
-            {section.entries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t(language, "entryEdit.noChildEntries")}</p>
-            ) : (
-              section.entries.map((entry) => (
-                <a
-                  key={entry.id}
-                  href={`/admin/c/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-[var(--glass-border)] bg-background/35 p-3 text-sm text-foreground transition hover:border-primary hover:bg-accent"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate font-semibold">{entryTitle(entry.data, entry.id)}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      {entry.collection} / v{entry.version}
+        ) : (
+          <SectionCard key={`${section.collection.name}:${section.relationship.childField}`}>
+            <SectionTitle
+              title={collectionTitle(section.collection, language)}
+              body={t(language, "entryEdit.relationship", {
+                child: section.relationship.childField,
+                parent: section.relationship.parentField,
+              })}
+            />
+            <div className="space-y-2">
+              {section.entries.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t(language, "entryEdit.noChildEntries")}</p>
+              ) : (
+                section.entries.map((entry) => (
+                  <a
+                    key={entry.id}
+                    href={`/admin/c/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-[var(--glass-border)] bg-background/35 p-3 text-sm text-foreground transition hover:border-primary hover:bg-accent"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold">{entryTitle(entry.data, entry.id)}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {entry.collection} / v{entry.version}
+                      </span>
                     </span>
-                  </span>
-                  <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                </a>
-              ))
-            )}
-          </div>
-        </SectionCard>
+                    <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                  </a>
+                ))
+              )}
+            </div>
+          </SectionCard>
+        )
       ))}
     </>
+  );
+}
+
+function ProductSkuSection({
+  section,
+  language,
+  parentTitle,
+  onSaved,
+}: {
+  section: RelatedEntrySection;
+  language: AdminLanguage;
+  parentTitle: string;
+  onSaved?: () => void;
+}): React.ReactElement {
+  return (
+    <SectionCard>
+      <SectionTitle
+        title={t(language, "entryEdit.skus")}
+        body={t(language, "entryEdit.skusBody", { name: parentTitle })}
+      />
+      {section.entries.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t(language, "entryEdit.noChildEntries")}</p>
+      ) : (
+        <div className="space-y-3">
+          {section.entries.map((entry) => (
+            <ProductSkuRow key={entry.id} entry={entry} language={language} onSaved={onSaved} />
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function ProductSkuRow({
+  entry,
+  language,
+  onSaved,
+}: {
+  entry: RelatedEntrySection["entries"][number];
+  language: AdminLanguage;
+  onSaved?: () => void;
+}): React.ReactElement {
+  const [draft, setDraft] = React.useState<Record<string, unknown>>(entry.data);
+  React.useEffect(() => setDraft(entry.data), [entry.data]);
+  const save = useMutation({
+    mutationFn: (nextData: Record<string, unknown>) =>
+      api.patch<EntryEditorPayload>(`/entries/${encodeURIComponent(entry.id)}`, {
+        data: nextData,
+        expectedVersion: entry.version,
+      }),
+    onSuccess: (payload) => {
+      setDraft(payload.entry.data);
+      onSaved?.();
+    },
+  });
+  const dirty = JSON.stringify(draft) !== JSON.stringify(entry.data);
+  const setField = (field: string, value: unknown): void => {
+    setDraft((current) => ({ ...current, [field]: value }));
+  };
+  return (
+    <div className="rounded-lg border border-[var(--glass-border)] bg-background/35 p-3">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <PackageCheck className="size-4 shrink-0 text-primary" aria-hidden />
+            <h3 className="truncate text-sm font-semibold" title={stringForInput(draft["skuCode"])}>
+              {stringForInput(draft["skuCode"]) || entryTitle(entry.data, entry.id)}
+            </h3>
+          </div>
+          <OptionValueChecklist value={draft["optionValues"]} />
+        </div>
+        <a
+          className="row-action"
+          title={t(language, "entryEdit.openAdvanced")}
+          href={`/admin/c/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}
+        >
+          <ExternalLink className="size-3.5" aria-hidden />
+        </a>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="space-y-1 text-xs font-semibold text-muted-foreground">
+          <span>{t(language, "entryEdit.priceMinor")}</span>
+          <input
+            className="admin-input"
+            type="number"
+            min={0}
+            value={numberForInput(draft["priceMinor"])}
+            onChange={(event) => setField("priceMinor", numberInputValue(event.target.value))}
+          />
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-muted-foreground">
+          <span>{t(language, "entryEdit.compareAtPriceMinor")}</span>
+          <input
+            className="admin-input"
+            type="number"
+            min={0}
+            value={numberForInput(draft["compareAtPriceMinor"])}
+            onChange={(event) => setField("compareAtPriceMinor", numberInputValue(event.target.value))}
+          />
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-muted-foreground">
+          <span>{t(language, "entryEdit.inventoryMode")}</span>
+          <select
+            className="admin-input"
+            value={stringForInput(draft["inventoryMode"])}
+            onChange={(event) => setField("inventoryMode", event.target.value)}
+          >
+            <option value="tracked">{t(language, "entryEdit.inventoryTracked")}</option>
+            <option value="untracked">{t(language, "entryEdit.inventoryUntracked")}</option>
+          </select>
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-muted-foreground">
+          <span>{t(language, "entryEdit.currency")}</span>
+          <input
+            className="admin-input"
+            value={stringForInput(draft["currency"])}
+            onChange={(event) => setField("currency", event.target.value.toUpperCase())}
+          />
+        </label>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">
+          {t(language, "entryEdit.skuInlineHint")}
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          disabled={!dirty || save.isPending}
+          onClick={() => save.mutate(draft)}
+        >
+          <Save className="size-3.5" aria-hidden />
+          {save.isPending ? t(language, "crud.saving") : t(language, "entryEdit.save")}
+        </Button>
+      </div>
+      {save.isError ? <p className="mt-2 text-xs text-destructive">{save.error instanceof Error ? save.error.message : String(save.error)}</p> : null}
+    </div>
+  );
+}
+
+function OptionValueChecklist({
+  value,
+}: {
+  value: unknown;
+}): React.ReactElement | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const entries = Object.entries(value as Record<string, unknown>).filter(([, item]) => item != null && item !== "");
+  if (entries.length === 0) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {entries.map(([key, item]) => (
+        <span key={key} className="inline-flex items-center gap-1 rounded-md border border-border bg-card/70 px-2 py-1 text-xs text-muted-foreground">
+          <input type="checkbox" checked readOnly className="size-3 accent-[var(--primary)]" />
+          <span className="font-medium text-foreground/80">{fieldLabel(key)}</span>
+          <span>{stringForInput(item)}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function numberInputValue(value: string): number | null {
+  return value === "" ? null : Number(value);
+}
+
+function parentAdminLink(
+  collection: EntryEditorPayload["collection"],
+  data: Record<string, unknown>,
+): { href: string; label: string } | null {
+  if (!collection.parent) return null;
+  const parentValue = data[collection.parent.childField];
+  if (typeof parentValue !== "string" || !parentValue) return null;
+  return {
+    href: `/admin/c/${encodeURIComponent(collection.parent.collection)}?search=${encodeURIComponent(parentValue)}`,
+    label: `${collection.parent.collection} / ${parentValue}`,
+  };
+}
+
+function isPrimaryInlineSection(section: RelatedEntrySection): boolean {
+  return section.relationship.kind === "field";
+}
+
+function isSellableVariantCollection(collection: EntryEditorPayload["collection"]): boolean {
+  const properties = collection.schema.properties ?? {};
+  return (
+    ("sku" in properties || "skuCode" in properties) &&
+    "priceMinor" in properties &&
+    "currency" in properties &&
+    "inventoryMode" in properties
   );
 }
 

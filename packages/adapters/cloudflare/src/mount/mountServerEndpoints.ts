@@ -503,6 +503,11 @@ type AdminEditorCollection = {
   readonly title: string;
   readonly description: string | null;
   readonly lifecycle: "simple" | "editorial";
+  readonly parent: {
+    readonly collection: string;
+    readonly parentField: string;
+    readonly childField: string;
+  } | null;
   readonly hasTranslations: boolean;
   readonly localized: boolean;
   readonly translates: SchemaManifest["spec"]["translates"] | null;
@@ -547,6 +552,7 @@ function adminEditorCollection(
     title: schema.spec.title,
     description: schema.spec.description ?? null,
     lifecycle: schema.spec.lifecycle ?? "simple",
+    parent: collectionParentFor(schema, schemas),
     hasTranslations: schemas.some((candidate) => candidate.spec.translates?.parent === schema.metadata.name),
     localized: schema.spec.localized ?? Boolean(schema.spec.translates),
     translates: schema.spec.translates ?? null,
@@ -645,12 +651,6 @@ function discoverChildRelationships(
       continue;
     }
 
-    for (const [parentField] of Object.entries(parentProps)) {
-      if (!isLikelyJoinField(parentField)) continue;
-      if (!Object.prototype.hasOwnProperty.call(childProps, parentField)) continue;
-      add(childSchema, "field", parentField, parentField);
-    }
-
     for (const [childField] of Object.entries(childProps)) {
       const parentField = conventionalParentField(parentName, childField, parentProps);
       if (parentField) add(childSchema, "field", parentField, childField);
@@ -658,10 +658,6 @@ function discoverChildRelationships(
   }
 
   return relationships;
-}
-
-function isLikelyJoinField(field: string): boolean {
-  return /^(id|slug|sku|skuCode|code|key)$/i.test(field);
 }
 
 function conventionalParentField(
@@ -673,14 +669,53 @@ function conventionalParentField(
     camelCaseIdentifier(parentCollectionName),
     singularizeIdentifier(camelCaseIdentifier(parentCollectionName)),
   ]);
-  const candidates = ["slug", "id", "sku", "code"].filter((field) =>
-    Object.prototype.hasOwnProperty.call(parentProps, field),
-  );
   for (const base of bases) {
-    for (const parentField of candidates) {
+    for (const [parentField, parentSchema] of Object.entries(parentProps)) {
+      if (!isPrimitiveJoinSchema(parentSchema)) continue;
       if (childField === `${base}${capitalizeIdentifier(parentField)}`) return parentField;
     }
   }
+  return null;
+}
+
+function isPrimitiveJoinSchema(schema: JsonSchema): boolean {
+  const rawType = schema.type;
+  const types = Array.isArray(rawType) ? rawType : rawType ? [rawType] : [];
+  if (types.length === 0 && schema.enum) return true;
+  return types.some((type) => type === "string" || type === "number" || type === "integer" || type === "boolean");
+}
+
+function collectionParentFor(
+  childSchema: SchemaManifest,
+  schemas: SchemaManifest[],
+): { collection: string; parentField: string; childField: string } | null {
+  if (childSchema.spec.translates) {
+    return {
+      collection: childSchema.spec.translates.parent,
+      parentField: childSchema.spec.translates.on,
+      childField: childSchema.spec.translates.on,
+    };
+  }
+
+  const childProps = childSchema.spec.schema.properties ?? {};
+  for (const parentSchema of schemas) {
+    if (parentSchema.metadata.name === childSchema.metadata.name) continue;
+    if (parentSchema.spec.translates) continue;
+    const parentProps = parentSchema.spec.schema.properties ?? {};
+
+    for (const [childField] of Object.entries(childProps)) {
+      const parentField = conventionalParentField(parentSchema.metadata.name, childField, parentProps);
+      if (parentField) {
+        return {
+          collection: parentSchema.metadata.name,
+          parentField,
+          childField,
+        };
+      }
+    }
+
+  }
+
   return null;
 }
 
