@@ -116,6 +116,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     "/admin/approvals",
     "/admin/preferences",
     "/admin/settings",
+    "/admin/staff",
   ]) {
     app.get(path, spa);
   }
@@ -144,9 +145,126 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     });
   };
 
+  // Staff management is owner-only — a step above `guarded` (any
+  // staff). Role semantics follow StaffRoleHierarchy: only `owner`
+  // "manages staff".
+  const ownerGuarded = (
+    method: "get" | "post" | "patch" | "delete",
+    path: string,
+    body: (c: Context, gate: StaffGateOk) => Response | Promise<Response>,
+  ): void => {
+    guarded(method, path, (c, gate) => {
+      if (gate.role !== "owner") return adminNotOwner(c, path);
+      return body(c, gate);
+    });
+  };
+
   guarded("get", "/admin/api/me", (_c, gate) =>
     jsonResponse(200, { login: gate.login, role: gate.role, userId: gate.userId }),
   );
+
+  ownerGuarded("get", "/admin/api/staff", async () =>
+    jsonResponse(200, { users: await auth.listUsers() }),
+  );
+
+  ownerGuarded("patch", "/admin/api/staff/:id/role", async (c, gate) => {
+    const userId = c.req.param("id") ?? "";
+    const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
+    const role = body.role === null ? null : typeof body.role === "string" ? body.role : undefined;
+    if (role === undefined || (role !== null && !STAFF_ROLE_SET.has(role))) {
+      return jsonResponse(400, {
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "INPUT_VALIDATION_FAILED",
+          severity: "error",
+          path: `PATCH /admin/api/staff/:id/role`,
+          expected: `body.role in [${[...STAFF_ROLE_SET].join(", ")}] or null`,
+          message: "`role` must be a staff role string or null (revoke).",
+        }),
+      });
+    }
+    // An owner cannot change their own role. Demoting the only owner
+    // would lock everyone out of staff management with no SDK-side
+    // recovery path (the fix would be a manual D1 UPDATE).
+    if (userId === gate.userId) {
+      return jsonResponse(403, {
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "AUTH_DENIED",
+          severity: "error",
+          path: `PATCH /admin/api/staff/:id/role`,
+          expected: "target user is not the caller",
+          message: "You cannot change your own role.",
+        }),
+      });
+    }
+    const changed = await auth.setUserRole(userId, role as StaffRole | null);
+    if (!changed) {
+      return jsonResponse(404, {
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "NOT_FOUND",
+          severity: "error",
+          path: `PATCH /admin/api/staff/:id/role`,
+          expected: "an existing user id",
+          message: "No user matched that id.",
+        }),
+      });
+    }
+    return jsonResponse(200, { ok: true });
+  });
+
+  ownerGuarded("post", "/admin/api/staff/invitations", async (c) => {
+    const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const role = typeof body.role === "string" ? body.role : "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !STAFF_ROLE_SET.has(role)) {
+      return jsonResponse(400, {
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "INPUT_VALIDATION_FAILED",
+          severity: "error",
+          path: "POST /admin/api/staff/invitations",
+          expected: `body.email is an address and body.role in [${[...STAFF_ROLE_SET].join(", ")}]`,
+          message: "Invitation needs a valid `email` and a staff `role`.",
+        }),
+      });
+    }
+    const result = await auth.inviteUser(email, role as StaffRole);
+    if (result.kind === "exists") {
+      return jsonResponse(409, {
+        ok: false,
+        userId: result.id,
+        diagnostic: runtimeDiagnostic({
+          code: "CONFLICT",
+          severity: "error",
+          path: "POST /admin/api/staff/invitations",
+          expected: "an email without an existing user row",
+          message:
+            "That email already has an account — adjust its role in the staff list instead.",
+        }),
+      });
+    }
+    return jsonResponse(200, { ok: true, userId: result.id });
+  });
+
+  ownerGuarded("delete", "/admin/api/staff/invitations/:id", async (c) => {
+    const revoked = await auth.revokeInvite(c.req.param("id") ?? "");
+    if (!revoked) {
+      return jsonResponse(409, {
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "CONFLICT",
+          severity: "error",
+          path: "DELETE /admin/api/staff/invitations/:id",
+          expected: "an invitation nobody has signed in to",
+          message:
+            "Only never-signed-in invitations can be revoked. For an active user, clear the role instead.",
+        }),
+      });
+    }
+    return jsonResponse(200, { ok: true });
+  });
 
   guarded("get", "/admin/api/collections", () => jsonResponse(200, { collections }));
 
@@ -1196,6 +1314,18 @@ function adminUnauthenticated(c: Context, path: string): Response {
 // instead of bouncing them back to /admin/sign-in (which the OAuth
 // re-auth then silently fast-forwards through, producing a visible
 // 5-step redirect chain that looks like an infinite loop).
+function adminNotOwner(c: Context, path: string): Response {
+  return jsonResponse(403, {
+    ok: false,
+    diagnostic: runtimeDiagnostic({
+      code: "AUTH_DENIED",
+      severity: "error",
+      path: `${c.req.method} ${path}`,
+      expected: "owner role for the signed-in user",
+      message: "Staff management is owner-only.",
+    }),
+  });
+}
 function adminNotStaff(c: Context, path: string, login: string | null): Response {
   return jsonResponse(403, {
     ok: false,

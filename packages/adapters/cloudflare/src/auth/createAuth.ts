@@ -758,6 +758,32 @@ export interface LinkedAccountInfo {
   readonly updatedAt: Date;
 }
 
+/**
+ * User row as exposed to the staff-management surface. Mirrors the BA
+ * `user` table's identity columns; password hashes, ban metadata, and
+ * other secret-shaped columns are intentionally excluded.
+ *
+ * `emailVerified: false` + a `null` role is the resting state of an
+ * *invitation* (a row pre-created by `inviteUser` that nobody has
+ * signed in to yet) — the admin SPA renders those as "invited".
+ */
+export interface StaffUserInfo {
+  readonly id: string;
+  readonly email: string;
+  readonly name: string;
+  readonly role: string | null;
+  readonly githubLogin: string | null;
+  readonly emailVerified: boolean;
+  readonly createdAt: Date;
+}
+
+/** Result of `inviteUser`. `exists` carries the prior row's id so the
+ *  caller can point the operator at the existing user instead of
+ *  surfacing a bare failure. */
+export type InviteUserResult =
+  | { readonly kind: "created"; readonly id: string }
+  | { readonly kind: "exists"; readonly id: string };
+
 // Better Auth's full inferred type pulls plugin internals
 // (`AdminOptions`) that aren't re-exported, so emitting a .d.ts that
 // names that type fails (TS4058). The structural facade keeps the
@@ -803,6 +829,40 @@ export interface Auth {
     userId: string,
     providerId: string,
   ) => Promise<boolean>;
+  /** List every user row for the staff-management surface, ordered by
+   *  `createdAt` ascending. Read-only — uses the underlying D1 binding
+   *  directly. Owner-only enforcement is the mount layer's job
+   *  (`/admin/api/staff`); this method does not gate. */
+  readonly listUsers: () => Promise<readonly StaffUserInfo[]>;
+  /** Assign or clear a user's staff role. `null` revokes staff access
+   *  (the row keeps existing — the user can still sign in, but every
+   *  staff-gated surface 403s). Returns false when no row matched.
+   *  Throws on a non-staff role string — programmer error, not an
+   *  operator input path (endpoints validate before calling). Does NOT
+   *  guard self-demotion; that's session-aware and lives in the mount
+   *  layer. */
+  readonly setUserRole: (
+    userId: string,
+    role: StaffRole | null,
+  ) => Promise<boolean>;
+  /** Invite a staff member by email: pre-create the user row
+   *  (`emailVerified: 0`) with the role already assigned, so the
+   *  invitee's FIRST sign-in with that email lands with the role in
+   *  effect — no second assignment step. Magic-link / email-OTP
+   *  sign-ins match the row by email; social sign-ins with the same
+   *  email link onto it only when the provider is listed in
+   *  `accountLinking.trustedProviders` (document this to operators).
+   *  Email is normalized (trim + lowercase). Returns `exists` instead
+   *  of throwing when the email already has a row. */
+  readonly inviteUser: (
+    email: string,
+    role: StaffRole,
+  ) => Promise<InviteUserResult>;
+  /** Delete an invitation row. Guarded to rows nobody ever signed in
+   *  to (`emailVerified = 0` AND no linked `account` row) so a real
+   *  user with sessions/accounts can never be cascade-deleted through
+   *  this path. Returns false when the row didn't match the guard. */
+  readonly revokeInvite: (userId: string) => Promise<boolean>;
 }
 
 export function createAuth(config: CreateAuthConfig): Auth {
@@ -853,5 +913,89 @@ export function createAuth(config: CreateAuthConfig): Auth {
         .run();
       return (result.meta?.changes ?? 0) > 0;
     },
+    listUsers: async () => {
+      const result = await config.database
+        .prepare(
+          "SELECT id, email, name, role, githubLogin, emailVerified, createdAt FROM user ORDER BY createdAt ASC, id ASC",
+        )
+        .all<{
+          id: string;
+          email: string;
+          name: string;
+          role: string | null;
+          githubLogin: string | null;
+          emailVerified: number;
+          createdAt: string;
+        }>();
+      return (result.results ?? []).map((row) => ({
+        id: row.id,
+        email: row.email,
+        name: row.name,
+        role: row.role,
+        githubLogin: row.githubLogin,
+        emailVerified: row.emailVerified !== 0,
+        createdAt: new Date(row.createdAt),
+      }));
+    },
+    setUserRole: async (userId, role) => {
+      if (role !== null && !STAFF_ROLE_SET.has(role)) {
+        throw new Error(
+          `setUserRole: '${role}' is not a staff role — expected one of [${STAFF_ROLES.join(", ")}] or null.`,
+        );
+      }
+      const result = await config.database
+        .prepare("UPDATE user SET role = ?, updatedAt = ? WHERE id = ?")
+        .bind(role, new Date().toISOString(), userId)
+        .run();
+      return (result.meta?.changes ?? 0) > 0;
+    },
+    inviteUser: async (email, role) => {
+      if (!STAFF_ROLE_SET.has(role)) {
+        throw new Error(
+          `inviteUser: '${role}' is not a staff role — expected one of [${STAFF_ROLES.join(", ")}].`,
+        );
+      }
+      const normalized = email.trim().toLowerCase();
+      const existing = await config.database
+        .prepare("SELECT id FROM user WHERE email = ? LIMIT 1")
+        .bind(normalized)
+        .first<{ id: string }>();
+      if (existing) return { kind: "exists", id: existing.id };
+      const id = generateUserId();
+      const now = new Date().toISOString();
+      // `name` defaults to the address's local part — Better Auth
+      // requires NOT NULL, and the invitee's real display name arrives
+      // with their first sign-in (social) or stays editable later.
+      await config.database
+        .prepare(
+          "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt, role) VALUES (?, ?, ?, 0, ?, ?, ?)",
+        )
+        .bind(id, normalized.split("@")[0] ?? normalized, normalized, now, now, role)
+        .run();
+      return { kind: "created", id };
+    },
+    revokeInvite: async (userId) => {
+      const result = await config.database
+        .prepare(
+          "DELETE FROM user WHERE id = ? AND emailVerified = 0 AND NOT EXISTS (SELECT 1 FROM account WHERE account.userId = user.id)",
+        )
+        .bind(userId)
+        .run();
+      return (result.meta?.changes ?? 0) > 0;
+    },
   };
+}
+
+/** Random 32-char alphanumeric id, shaped like Better Auth's own user
+ *  ids so invited rows are indistinguishable from organically-created
+ *  ones. Modulo bias over 62 symbols is irrelevant here — ids need
+ *  uniqueness, not uniform entropy. */
+function generateUserId(): string {
+  const alphabet =
+    "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let id = "";
+  for (const b of bytes) id += alphabet[b % alphabet.length]!;
+  return id;
 }
