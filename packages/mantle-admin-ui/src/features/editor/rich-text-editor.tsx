@@ -18,12 +18,8 @@ import {
   List,
   ListChecks,
   ListOrdered,
-  Minus,
-  Music,
   Palette,
-  Plus,
   Redo2,
-  Smile,
   Strikethrough,
   Table2,
   Type,
@@ -64,7 +60,6 @@ export function RichTextEditor({
   const { language } = usePreferences();
   const textRef = React.useRef<HTMLTextAreaElement | null>(null);
   const fileRef = React.useRef<HTMLInputElement | null>(null);
-  const [fontSize, setFontSize] = React.useState(16);
   const [mediaOpen, setMediaOpen] = React.useState(false);
   const [videoOpen, setVideoOpen] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
@@ -135,6 +130,17 @@ export function RichTextEditor({
     setVideoOpen(false);
   }
 
+  function applyTextStyle(style: string): void {
+    if (style === "paragraph") return;
+    if (/^h[1-6]$/.test(style)) {
+      const level = Number(style.slice(1));
+      insert(`${"#".repeat(level)} `, "", t(language, "editor.headingPlaceholder"));
+      return;
+    }
+    if (style === "quote") insertBlock("> ");
+    if (style === "code") insert("```\n", "\n```", "code");
+  }
+
   return (
     <div className="rich-editor">
       <div className="rich-editor-topline">
@@ -180,35 +186,26 @@ export function RichTextEditor({
           }}
         />
         <ToolbarDivider />
-        <ToolbarButton title={t(language, "editor.insertBlock")} onClick={() => insertBlock("## ")}>
-          <Plus className="size-4" aria-hidden />
-        </ToolbarButton>
         <label className="rich-editor-select" title={t(language, "editor.textStyle")}>
           <Type className="size-4" aria-hidden />
           <select
             onChange={(event) => {
-              const next = event.target.value;
-              if (next === "h2") insert("## ", "", t(language, "editor.headingPlaceholder"));
-              if (next === "quote") insertBlock("> ");
-              if (next === "code") insert("```\n", "\n```", "code");
-              event.target.value = "text";
+              applyTextStyle(event.target.value);
+              event.target.value = "paragraph";
             }}
-            defaultValue="text"
+            defaultValue="paragraph"
           >
-            <option value="text">Text</option>
+            <option value="paragraph">Paragraph</option>
+            <option value="h1">H1</option>
             <option value="h2">H2</option>
+            <option value="h3">H3</option>
+            <option value="h4">H4</option>
+            <option value="h5">H5</option>
+            <option value="h6">H6</option>
             <option value="quote">Quote</option>
             <option value="code">Code</option>
           </select>
         </label>
-        <ToolbarDivider />
-        <ToolbarButton title={t(language, "editor.decreaseFont")} onClick={() => setFontSize((n) => Math.max(12, n - 1))}>
-          <Minus className="size-4" aria-hidden />
-        </ToolbarButton>
-        <span className="rich-editor-size">{fontSize}</span>
-        <ToolbarButton title={t(language, "editor.increaseFont")} onClick={() => setFontSize((n) => Math.min(32, n + 1))}>
-          <Plus className="size-4" aria-hidden />
-        </ToolbarButton>
         <ToolbarDivider />
         <ToolbarButton title={t(language, "editor.bold")} onClick={() => insert("**", "**", t(language, "editor.selectedText"))}>
           <Bold className="size-4" aria-hidden />
@@ -263,9 +260,6 @@ export function RichTextEditor({
         <ToolbarButton title={t(language, "editor.table")} onClick={() => insertBlock("| 欄位 | 說明 |\n| --- | --- |\n|  |  |")}>
           <Table2 className="size-4" aria-hidden />
         </ToolbarButton>
-        <ToolbarButton title={t(language, "editor.emoji")} onClick={() => insert(" ", "", "😊")}>
-          <Smile className="size-4" aria-hidden />
-        </ToolbarButton>
         <ToolbarButton title={t(language, "editor.mediaLibrary")} onClick={() => setMediaOpen(true)}>
           <Images className="size-4" aria-hidden />
         </ToolbarButton>
@@ -275,15 +269,11 @@ export function RichTextEditor({
         <ToolbarButton title={t(language, "editor.videoUrl")} onClick={() => setVideoOpen(true)}>
           <Video className="size-4" aria-hidden />
         </ToolbarButton>
-        <ToolbarButton title={t(language, "editor.audioHint")} onClick={() => insertBlock("<audio controls src=\"\"></audio>")}>
-          <Music className="size-4" aria-hidden />
-        </ToolbarButton>
       </div>
 
       <textarea
         ref={textRef}
         className={compact ? "admin-textarea admin-textarea-compact rich-editor-textarea" : "admin-textarea rich-editor-textarea"}
-        style={{ fontSize }}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
