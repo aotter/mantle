@@ -41,6 +41,13 @@ export interface SiteConfig {
   /** Absolute or root-relative favicon URL. Omit to use the SDK's
    *  default AotterMantle mark at `/favicon.svg`. */
   readonly faviconUrl?: string;
+  /** GA4 Measurement ID (for example `G-XXXXXXXXXX`). When present,
+   *  the runtime injects the standard gtag snippet into rendered
+   *  storefront HTML. */
+  readonly ga4MeasurementId?: string;
+  /** Facebook/Meta Pixel ID. When present, the runtime injects the
+   *  standard Pixel base snippet into rendered storefront HTML. */
+  readonly facebookPixelId?: string;
   /** Starter-declared media taxonomy. Empty array = no first-party
    *  media uploads permitted; the runtime disables the
    *  `create_media_upload` / `commit_media_upload` MCP tools and the
@@ -147,6 +154,10 @@ export interface SiteDefaults {
   readonly origin?: string;
   /** Absolute or root-relative favicon URL. */
   readonly faviconUrl?: string;
+  /** Optional first-deploy GA4 Measurement ID seed. */
+  readonly ga4MeasurementId?: string;
+  /** Optional first-deploy Facebook/Meta Pixel ID seed. */
+  readonly facebookPixelId?: string;
   /** Starter-declared media taxonomy. See `SiteConfig.media` for
    *  runtime semantics. Omit the whole `media` key (or declare it
    *  with an empty `purposes` array) on archetypes that don't
