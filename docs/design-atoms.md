@@ -334,11 +334,13 @@ Response envelope:
 `hasMore` is the lazy form: `rows.length === show` ⇒ `true`. No COUNT
 query, no `LIMIT n+1` probe.
 
-**v0.1 filter AST**: `eq`, `and`, `or` only. `eq.value` may be a
-literal or a `{ $param: <name> }` sentinel. v0.1.0 enforces required-only
-param refs; optional-with-skip semantics are reserved for v0.1.x.
-Anything else (`contains`, `recursive`, `gatedBy`, `join.aggregate`,
-`policies.skip`) is DRAFT.
+**v0.1 filter AST**: comparison operators (`eq`, `gt`, `gte`, `lt`,
+`lte`) plus `and` / `or`. Comparison `value` may be a literal or a
+`{ $param: <name> }` sentinel. v0.1.0 enforces required-only param refs;
+optional-with-skip semantics are reserved for v0.1.x. Field-to-field
+comparisons are not supported yet; compare a field to a literal or
+param. Anything else (`contains`, `recursive`, `gatedBy`,
+`join.aggregate`, `policies.skip`) is DRAFT.
 
 **Postgres analogue**: `CREATE VIEW recent_published AS SELECT ...
 FROM posts WHERE status = 'published' ORDER BY updated_at DESC LIMIT

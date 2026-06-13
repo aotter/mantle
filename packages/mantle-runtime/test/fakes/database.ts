@@ -421,8 +421,8 @@ function fieldFromJsonPath(path: string): string {
 /**
  * Runs a compiled View SELECT against the in-memory store. Supports
  * the projection + filter shapes the View compiler emits — reserved
- * columns, `json_extract(data, '$.field')` extraction, `eq` filters
- * combined with AND/OR.
+ * columns, `json_extract(data, '$.field')` extraction, comparison
+ * filters combined with AND/OR.
  */
 function runCompiledViewQuery(
   db: InMemoryDatabase,
@@ -491,11 +491,12 @@ function runCompiledViewQuery(
     atom: string,
     ctx: { atomIndex: number },
   ): boolean => {
-    const eqMatch = atom.match(/^(.+?)\s*=\s*\?$/);
-    if (!eqMatch) throw new Error(`fake DB: unsupported atom '${atom}'`);
-    const lhs = eqMatch[1]!.trim();
+    const comparisonMatch = atom.match(/^(.+?)\s*(=|>=|<=|>|<)\s*\?$/);
+    if (!comparisonMatch) throw new Error(`fake DB: unsupported atom '${atom}'`);
+    const lhs = comparisonMatch[1]!.trim();
+    const op = comparisonMatch[2]!;
     const value = atomParams[ctx.atomIndex++];
-    return readValue(row, lhs) === value;
+    return compareValues(readValue(row, lhs), op, value);
   };
 
   const filtered = [...db.entries.values()]
@@ -520,6 +521,23 @@ function runCompiledViewQuery(
   }
 
   return filtered.slice(offset, offset + limit).map((r) => projectRow(r, projection));
+}
+
+function compareValues(left: unknown, op: string, right: unknown): boolean {
+  if (op === "=") return left === right;
+  if (left === null || left === undefined || right === null || right === undefined) return false;
+  switch (op) {
+    case ">":
+      return (left as number | string) > (right as number | string);
+    case ">=":
+      return (left as number | string) >= (right as number | string);
+    case "<":
+      return (left as number | string) < (right as number | string);
+    case "<=":
+      return (left as number | string) <= (right as number | string);
+    default:
+      throw new Error(`fake DB: unsupported comparison operator '${op}'`);
+  }
 }
 
 function readValue(row: EntryRecord, ref: string): unknown {

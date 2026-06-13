@@ -29,6 +29,44 @@ describe("compileView", () => {
     expect(c.sql).toMatch(/status = \?/);
   });
 
+  it("compiles comparison filters with literal and param-ref values", () => {
+    const c = compileView(
+      view({
+        from: "stock-movements",
+        params: {
+          type: "object",
+          properties: {
+            startAt: { type: "string" },
+            endAt: { type: "string" },
+          },
+          required: ["startAt", "endAt"],
+        },
+        filter: {
+          and: [
+            { gte: { field: "occurredAt", value: { $param: "startAt" } } },
+            { lt: { field: "occurredAt", value: { $param: "endAt" } } },
+            { gt: { field: "quantity", value: 0 } },
+          ],
+        },
+      }),
+      {
+        params: {
+          startAt: "2026-06-01T00:00:00Z",
+          endAt: "2026-07-01T00:00:00Z",
+        },
+      },
+    );
+    expect(c.params).toEqual([
+      "stock-movements",
+      "2026-06-01T00:00:00Z",
+      "2026-07-01T00:00:00Z",
+      0,
+    ]);
+    expect(c.sql).toContain(`json_extract(data, '$."occurredAt"') >= ?`);
+    expect(c.sql).toContain(`json_extract(data, '$."occurredAt"') < ?`);
+    expect(c.sql).toContain(`json_extract(data, '$."quantity"') > ?`);
+  });
+
   it("non-reserved field uses json_extract", () => {
     const c = compileView(
       view({
@@ -241,6 +279,58 @@ describe("ExecuteViewUseCase", () => {
     expect((result.result.rows[0] as { id: string }).id).toBe("p1");
     expect(result.result.page).toBe(1);
     expect(result.result.hasMore).toBe(false);
+  });
+
+  it("returns entries matching comparison filter ranges", async () => {
+    const db = new InMemoryDatabase();
+    db.entries.set("m1", {
+      id: "m1",
+      collection: "stock-movements",
+      status: "published",
+      version: 1,
+      data: JSON.stringify({ occurredAt: "2026-06-10T00:00:00Z", quantity: 3 }),
+      author_id: null,
+      created_at: 1,
+      updated_at: 1,
+    });
+    db.entries.set("m2", {
+      id: "m2",
+      collection: "stock-movements",
+      status: "published",
+      version: 1,
+      data: JSON.stringify({ occurredAt: "2026-07-02T00:00:00Z", quantity: 5 }),
+      author_id: null,
+      created_at: 2,
+      updated_at: 2,
+    });
+    db.entries.set("m3", {
+      id: "m3",
+      collection: "stock-movements",
+      status: "published",
+      version: 1,
+      data: JSON.stringify({ occurredAt: "2026-06-15T00:00:00Z", quantity: -1 }),
+      author_id: null,
+      created_at: 3,
+      updated_at: 3,
+    });
+
+    const useCase = new ExecuteViewUseCase(db);
+    const result = await useCase.execute({
+      view: view({
+        from: "stock-movements",
+        filter: {
+          and: [
+            { gte: { field: "occurredAt", value: "2026-06-01T00:00:00Z" } },
+            { lt: { field: "occurredAt", value: "2026-07-01T00:00:00Z" } },
+            { gt: { field: "quantity", value: 0 } },
+          ],
+        },
+      }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.result.rows.map((r) => (r as { id: string }).id)).toEqual(["m1"]);
   });
 
   it("rejects an auth-gated View when ctx is missing (UNAUTHENTICATED)", async () => {

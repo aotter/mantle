@@ -4,6 +4,7 @@ import {
 } from "../kernel/diagnostic.js";
 import {
   MANTLE_BIND_VALUES,
+  FILTER_COMPARISON_OPS,
   type AuthPredicate,
   type FilterAst,
   type ProcedureManifest,
@@ -287,18 +288,24 @@ function checkFilterFields(
   jsonPointer: string,
   filePaths?: ManifestFilePaths,
 ): Diagnostic[] {
-  if ("eq" in node) {
-    if (!validFields.has(node.eq.field)) {
+  const comparison = getFilterComparison(node);
+  if (comparison) {
+    if (!validFields.has(comparison.node.field)) {
       return [
         validateDiagnostic({
           code: "VIEW_FILTER_FIELD_NOT_IN_SCHEMA",
           severity: "error",
-          path: manifestPath("View", viewName, `${jsonPointer}/eq/field`, filePaths),
-          value: node.eq.field,
+          path: manifestPath(
+            "View",
+            viewName,
+            `${jsonPointer}/${comparison.op}/field`,
+            filePaths,
+          ),
+          value: comparison.node.field,
           expected: `property of Schema '${schemaName}' or a reserved metadata field`,
           candidates: [...validFields].sort(),
-          suggestion: bestMatch(node.eq.field, [...validFields]),
-          message: `View '${viewName}' filter references unknown field '${node.eq.field}'.`,
+          suggestion: bestMatch(comparison.node.field, [...validFields]),
+          message: `View '${viewName}' filter references unknown field '${comparison.node.field}'.`,
         }),
       ];
     }
@@ -309,9 +316,23 @@ function checkFilterFields(
       checkFilterFields(c, validFields, viewName, schemaName, `${jsonPointer}/and/${i}`, filePaths),
     );
   }
-  return node.or.flatMap((c, i) =>
-    checkFilterFields(c, validFields, viewName, schemaName, `${jsonPointer}/or/${i}`, filePaths),
-  );
+  if ("or" in node) {
+    return node.or.flatMap((c, i) =>
+      checkFilterFields(c, validFields, viewName, schemaName, `${jsonPointer}/or/${i}`, filePaths),
+    );
+  }
+  return [];
+}
+
+function getFilterComparison(
+  node: FilterAst,
+): { readonly op: (typeof FILTER_COMPARISON_OPS)[number]; readonly node: { readonly field: string; readonly value: unknown } } | null {
+  if ("eq" in node) return { op: "eq", node: node.eq };
+  if ("gt" in node) return { op: "gt", node: node.gt };
+  if ("gte" in node) return { op: "gte", node: node.gte };
+  if ("lt" in node) return { op: "lt", node: node.lt };
+  if ("lte" in node) return { op: "lte", node: node.lte };
+  return null;
 }
 
 function checkBuiltinHandler(
