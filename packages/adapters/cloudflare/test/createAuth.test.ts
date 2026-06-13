@@ -586,6 +586,7 @@ describe("AuthMethodConfig — type narrowing smoke", () => {
 interface FakeDbBehaviour {
   readonly allResults?: ReadonlyArray<Record<string, unknown>>;
   readonly runChanges?: number;
+  readonly firstResult?: Record<string, unknown> | null;
   readonly onPrepare?: (sql: string) => void;
   readonly onBind?: (args: ReadonlyArray<unknown>) => void;
 }
@@ -605,7 +606,7 @@ function fakeDbWith(behaviour: FakeDbBehaviour): D1Database {
       success: true,
       meta: { changes: behaviour.runChanges ?? 0 },
     }),
-    first: async () => null,
+    first: async () => behaviour.firstResult ?? null,
   };
   return {
     prepare: (sql: string) => {
@@ -719,5 +720,154 @@ describe("Auth.unlinkAccount", () => {
       baseConfig({ database: fakeDbWith({ runChanges: 1 }) }),
     );
     expect(await auth.unlinkAccount("user-1", "github")).toBe(true);
+  });
+});
+
+// --- listUsers / setUserRole / inviteUser / revokeInvite (staff management) ---
+
+describe("Auth.listUsers", () => {
+  it("maps rows, coercing emailVerified to boolean and createdAt to Date", async () => {
+    const auth = createAuth(
+      baseConfig({
+        database: fakeDbWith({
+          allResults: [
+            {
+              id: "u-1",
+              email: "a@example.com",
+              name: "a",
+              role: "owner",
+              githubLogin: "a-gh",
+              emailVerified: 1,
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+            {
+              id: "u-2",
+              email: "b@example.com",
+              name: "b",
+              role: null,
+              githubLogin: null,
+              emailVerified: 0,
+              createdAt: "2026-01-02T00:00:00.000Z",
+            },
+          ],
+        }),
+      }),
+    );
+    const users = await auth.listUsers();
+    expect(users).toHaveLength(2);
+    expect(users[0]).toMatchObject({ id: "u-1", emailVerified: true });
+    expect(users[0]!.createdAt).toBeInstanceOf(Date);
+    expect(users[1]).toMatchObject({ id: "u-2", role: null, emailVerified: false });
+  });
+});
+
+describe("Auth.setUserRole", () => {
+  it("throws on a non-staff role string — programmer error, not operator input", async () => {
+    const auth = createAuth(baseConfig({ database: fakeDbWith({}) }));
+    await expect(
+      auth.setUserRole("u-1", "superadmin" as never),
+    ).rejects.toThrow(/not a staff role/);
+  });
+
+  it("binds (role, updatedAt, userId) and reports whether a row changed", async () => {
+    const binds: unknown[][] = [];
+    const auth = createAuth(
+      baseConfig({
+        database: fakeDbWith({
+          runChanges: 1,
+          onBind: (args) => binds.push([...args]),
+        }),
+      }),
+    );
+    expect(await auth.setUserRole("u-2", "editor")).toBe(true);
+    const last = binds.at(-1)!;
+    expect(last[0]).toBe("editor");
+    expect(last[2]).toBe("u-2");
+  });
+
+  it("accepts null to revoke staff access", async () => {
+    const binds: unknown[][] = [];
+    const auth = createAuth(
+      baseConfig({
+        database: fakeDbWith({
+          runChanges: 1,
+          onBind: (args) => binds.push([...args]),
+        }),
+      }),
+    );
+    expect(await auth.setUserRole("u-2", null)).toBe(true);
+    expect(binds.at(-1)![0]).toBeNull();
+  });
+});
+
+describe("Auth.inviteUser", () => {
+  it("returns exists with the prior row's id instead of inserting", async () => {
+    const prepared: string[] = [];
+    const auth = createAuth(
+      baseConfig({
+        database: fakeDbWith({
+          firstResult: { id: "old-id" },
+          onPrepare: (sql) => prepared.push(sql),
+        }),
+      }),
+    );
+    const result = await auth.inviteUser("Dup@Example.com", "editor");
+    expect(result).toEqual({ kind: "exists", id: "old-id" });
+    expect(prepared.some((sql) => sql.startsWith("INSERT"))).toBe(false);
+  });
+
+  it("normalizes the email (trim + lowercase) and pre-creates the row with the role", async () => {
+    const binds: unknown[][] = [];
+    const prepared: string[] = [];
+    const auth = createAuth(
+      baseConfig({
+        database: fakeDbWith({
+          onPrepare: (sql) => prepared.push(sql),
+          onBind: (args) => binds.push([...args]),
+        }),
+      }),
+    );
+    const result = await auth.inviteUser("  New@Example.COM ", "contributor");
+    expect(result.kind).toBe("created");
+    expect(result.id).toMatch(/^[0-9A-Za-z]{32}$/);
+    const insertSql = prepared.find((sql) => sql.startsWith("INSERT"));
+    expect(insertSql).toContain("emailVerified");
+    const insertBinds = binds.at(-1)!;
+    // (id, name, email, createdAt, updatedAt, role) — emailVerified is a literal 0
+    expect(insertBinds[1]).toBe("new");
+    expect(insertBinds[2]).toBe("new@example.com");
+    expect(insertBinds[5]).toBe("contributor");
+  });
+
+  it("throws on a non-staff role", async () => {
+    const auth = createAuth(baseConfig({ database: fakeDbWith({}) }));
+    await expect(auth.inviteUser("x@example.com", "user" as never)).rejects.toThrow(
+      /not a staff role/,
+    );
+  });
+});
+
+describe("Auth.revokeInvite", () => {
+  it("issues a guarded DELETE (never-signed-in only) and reports the outcome", async () => {
+    const prepared: string[] = [];
+    const auth = createAuth(
+      baseConfig({
+        database: fakeDbWith({
+          runChanges: 1,
+          onPrepare: (sql) => prepared.push(sql),
+        }),
+      }),
+    );
+    expect(await auth.revokeInvite("u-2")).toBe(true);
+    const deleteSql = prepared.find((sql) => sql.startsWith("DELETE FROM user"));
+    expect(deleteSql).toContain("emailVerified = 0");
+    expect(deleteSql).toContain("NOT EXISTS");
+  });
+
+  it("returns false when the guard filtered the row out", async () => {
+    const auth = createAuth(
+      baseConfig({ database: fakeDbWith({ runChanges: 0 }) }),
+    );
+    expect(await auth.revokeInvite("active-user")).toBe(false);
   });
 });

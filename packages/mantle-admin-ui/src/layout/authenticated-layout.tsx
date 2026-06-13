@@ -7,6 +7,7 @@ import {
   Globe,
   Home,
   Settings as SettingsIcon,
+  Users,
 } from "lucide-react";
 
 import { LayoutProvider } from "../context/layout-provider";
@@ -84,8 +85,8 @@ export function AuthenticatedLayout({
   );
 
   const groups = React.useMemo<ReadonlyArray<NavGroupData>>(
-    () => buildNavGroups(collectionsQuery.data ?? [], language),
-    [collectionsQuery.data, language],
+    () => buildNavGroups(collectionsQuery.data ?? [], language, me.data?.role ?? null),
+    [collectionsQuery.data, language, me.data?.role],
   );
 
   return (
@@ -129,6 +130,7 @@ export function AuthenticatedLayout({
 function buildNavGroups(
   collections: ReadonlyArray<Collection>,
   language: AdminLanguage,
+  role: AdminUser["role"],
 ): ReadonlyArray<NavGroupData> {
   const primaryCollections = collections.filter((collection) => !collection.parent);
   const homeGroup: NavGroupData = {
@@ -170,6 +172,11 @@ function buildNavGroups(
       { title: t(language, "nav.media"), url: "/admin/media", icon: Images },
       { title: t(language, "nav.approvals"), url: "/admin/approvals", icon: ClipboardList },
       { title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon },
+      // Staff management is owner-only server-side; hide the entry for
+      // everyone else rather than render a guaranteed 403.
+      ...(role === "owner"
+        ? [{ title: t(language, "nav.staff"), url: "/admin/staff", icon: Users }]
+        : []),
     ],
   };
 

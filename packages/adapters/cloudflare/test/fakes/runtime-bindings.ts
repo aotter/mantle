@@ -38,4 +38,10 @@ export const stubAuth: Auth = {
   getSession: async () => null,
   getUserRole: async () => null,
   methods: [],
+  listLinkedAccounts: async () => [],
+  unlinkAccount: async () => false,
+  listUsers: async () => [],
+  setUserRole: async () => false,
+  inviteUser: async () => ({ kind: "created", id: "stub-invite-id" }),
+  revokeInvite: async () => false,
 };

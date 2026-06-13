@@ -92,10 +92,25 @@ export interface EntryEditorPayload {
   related: RelatedEntrySection[];
 }
 
+export type StaffRole = "owner" | "editor" | "contributor";
+
 export interface AdminUser {
   login: string | null;
-  role: "owner" | "editor" | "contributor" | null;
+  role: StaffRole | null;
   userId?: string;
+}
+
+/** Row from `GET /admin/api/staff` (owner-only). `createdAt` arrives
+ *  as an ISO string over the wire. `emailVerified: false` with no
+ *  `githubLogin` marks a pending invitation nobody has signed in to. */
+export interface StaffUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string | null;
+  githubLogin: string | null;
+  emailVerified: boolean;
+  createdAt: string;
 }
 
 export interface EntryRow {
