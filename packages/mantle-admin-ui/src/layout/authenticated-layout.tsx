@@ -130,6 +130,7 @@ function buildNavGroups(
   collections: ReadonlyArray<Collection>,
   language: AdminLanguage,
 ): ReadonlyArray<NavGroupData> {
+  const primaryCollections = collections.filter((collection) => !collection.parent);
   const homeGroup: NavGroupData = {
     items: [
       {
@@ -142,7 +143,7 @@ function buildNavGroups(
 
   const contentGroup: NavGroupData = {
     title: t(language, "nav.content"),
-    items: collections.map<NavItem>((c) => ({
+    items: primaryCollections.map<NavItem>((c) => ({
       title: collectionTitle(c, language),
       // Leading icon is always Folder so every content row reads the
       // same. The Globe sits in the trailing `marker` slot to mark
