@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, writeFile, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadManifestsFromRoot } from "../src/infrastructure/cli/loadManifests.js";
 import { partitionManifests } from "../src/domain/service/ManifestParser.js";
+import {
+  parseArgs as parseOpenapiArgs,
+  run as runEmitOpenapi,
+} from "../src/infrastructure/cli/EmitOpenapiCommand.js";
+import {
+  parseArgs as parseTypesArgs,
+  run as runEmitTypes,
+} from "../src/infrastructure/cli/EmitTypesCommand.js";
 
 const SCHEMA_YAML = `apiVersion: cms.mantle.aotter.net/v1
 kind: Schema
@@ -92,5 +100,42 @@ describe("loadManifestsFromRoot + partition", () => {
     const { manifests, parseErrors } = await loadManifestsFromRoot("/nonexistent/path/mantle");
     expect(manifests).toHaveLength(0);
     expect(parseErrors[0]?.code).toBe("MANIFEST_ROOT_NOT_FOUND");
+  });
+});
+
+describe("emit CLI --output", () => {
+  it("writes OpenAPI JSON to a UTF-8 file without shell redirection", async () => {
+    const root = await fixtureRoot();
+    const output = join(await mkdtemp(join(tmpdir(), "mantle emit out ")), "openapi.json");
+
+    await expect(runEmitOpenapi(["--manifests", root, "--output", output])).resolves.toBe(0);
+
+    const bytes = await readFile(output);
+    expect([...bytes.subarray(0, 3)]).not.toEqual([0xef, 0xbb, 0xbf]);
+    const text = bytes.toString("utf8");
+    expect(JSON.parse(text)).toMatchObject({
+      openapi: "3.1.0",
+      info: { title: "mantle", version: "0.1.0" },
+    });
+  });
+
+  it("writes TypeScript declarations to a UTF-8 file without shell redirection", async () => {
+    const root = await fixtureRoot();
+    const output = join(await mkdtemp(join(tmpdir(), "mantle emit out ")), "mantle-types.d.ts");
+
+    await expect(
+      runEmitTypes(["--manifests", root, "--namespace", "BlankCms", "--output", output]),
+    ).resolves.toBe(0);
+
+    const bytes = await readFile(output);
+    expect([...bytes.subarray(0, 3)]).not.toEqual([0xef, 0xbb, 0xbf]);
+    const text = bytes.toString("utf8");
+    expect(text).toContain("export namespace BlankCms");
+    expect(text).toContain("interface Entry_posts");
+  });
+
+  it("rejects --output without a file path", () => {
+    expect(() => parseOpenapiArgs(["--output"])).toThrowError(/--output requires/);
+    expect(() => parseTypesArgs(["-o"])).toThrowError(/--output requires/);
   });
 });

@@ -471,7 +471,7 @@ tooling (Swagger UI, Redoc, openapi-generator, Stainless, Speakeasy)
 works unchanged:
 
 ```bash
-$ mantle emit-openapi > ./openapi.json
+$ mantle emit-openapi --output ./openapi.json
 ```
 
 Mapping:
