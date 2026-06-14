@@ -49,7 +49,7 @@ You're an agent helping a (likely non-technical) user install or extend a mantle
 
 → **Install a fresh publication/site** — start at [`skills/install/SKILL.md`](skills/install/SKILL.md).
 → **Add a new atom** (Schema / View / Procedure + http Trigger) to an existing starter — start at [`skills/extend/SKILL.md`](skills/extend/SKILL.md).
-→ **Provision Cloudflare resources** (D1, KV, Turnstile) and deploy — start at [`skills/provision/SKILL.md`](skills/provision/SKILL.md).
+→ **Finish production deploy** (GitHub repo, Cloudflare dashboard first deploy, OAuth App, Wrangler secrets, smoke) — start at [`skills/provision/SKILL.md`](skills/provision/SKILL.md).
 
 ## For humans
 
