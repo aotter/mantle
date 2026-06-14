@@ -12,4 +12,5 @@ repo root only points you at the right place.
 - Contribution contract → [CONTRIBUTING.md](./CONTRIBUTING.md)
 - Architecture rules / clean-arch layout → [CLAUDE.md](./CLAUDE.md)
 - Decision history (irreversible choices) → [`docs/adr/`](./docs/adr/)
+- Release / fanout guardrail → [`.agent/skills/mantle-release/SKILL.md`](./.agent/skills/mantle-release/SKILL.md)
 - Skills for end-user flows → [`skills/install/SKILL.md`](./skills/install/SKILL.md), [`skills/extend/SKILL.md`](./skills/extend/SKILL.md), [`skills/provision/SKILL.md`](./skills/provision/SKILL.md)

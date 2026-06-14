@@ -33,6 +33,7 @@ This is the lens for every architectural decision in this codebase.
 | `docs/release-process.md` | Release + publish discipline. Branch model (`develop` → `main`), channel rules (alpha / beta / RC / stable), npm dist-tags, dependency-order publish, deprecation policy. Read before any version bump or publish. |
 | `CONTRIBUTING.md` | Workflow contract for AI + human contributors. Branch prefixes, commit shape, PR template, architecture gates. Entry point for anyone (or any agent) about to file an issue or open a PR. |
 | `CHANGELOG.md` | Versioned change log. Each release tag gets an entry here before the release PR merges. |
+| `.claude/skills/mantle-release/SKILL.md` | Repo-local release agent skill. Read before any version bump, tag, npm publish, starter fanout, or landing deploy. |
 | `skills/<name>/SKILL.md` | AI-agent-readable briefs for install / provision / extend / customize-design flows. Discoverable by URL — no Claude plugin install required. |
 | `packages/mantle-spec/` | Spec engine. ESM, `sideEffects: false`, zero env / adapter deps. |
 | `packages/mantle-runtime/` | Runtime engine. Defines the required adapter ports plus optional feature ports. Adapter-agnostic — see "MUST NOT" rule below. |
