@@ -6,6 +6,41 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.18] - 2026-06-14
+
+### Added
+
+- **`@aotter/mantle`**: the umbrella npm tarball now embeds Mantle
+  docs and agent Skills under `docs/` and `skills/`, so generated-site
+  agents can read versioned local references from
+  `node_modules/@aotter/mantle/...` instead of depending on live GitHub
+  raw URLs (#345).
+- **`@aotter/mantle-spec`**: Views now support explicit comparison
+  filter operators (`gt`, `gte`, `lt`, `lte`) for range-style queries.
+- **`@aotter/mantle-cloudflare` / admin UI**: staff management,
+  approvals, storefront tracking settings, schema-driven commerce
+  relationships, richer media editing, and the develop admin visual
+  refresh are included from the post-alpha.16 develop line.
+
+### Changed
+
+- **skills**: install/provision guidance now matches the landing-driven
+  user-owned provisioning flow: the user's coding agent creates/pushes
+  the private repo, Cloudflare Dashboard performs the first deploy,
+  the user owns the per-site GitHub OAuth App, and Wrangler performs
+  post-deploy secret/config updates. The base flow no longer asks for a
+  broad Cloudflare API token (#345).
+- **docs**: locale guidance now clarifies script-subtag rejection, and
+  Skill docs align with starter feature overlays and launch-session
+  handoff behavior.
+
+### Fixed
+
+- **`@aotter/mantle-spec`**: CLI emit paths are safer on Windows and no
+  longer rely on shell redirection for generated artifacts.
+- **`@aotter/mantle-cloudflare` / admin UI**: schema editor publishing
+  and media upload flows were tightened around runtime use cases.
+
 ## [0.0.11-alpha.16] - 2026-05-25
 
 ### Added

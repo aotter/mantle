@@ -64,7 +64,7 @@ The launch session is an authorization artifact for initial scaffold values only
 - It may authorize `project_name`, `brand`/site name, `archetype`, `theme`, `features`, `locales`, `github_owner` / `admin_github_login`, and repo intent.
 - It must be short-lived. If `create-mantle launch` reports an expired/invalid session, stop and send the user back to the landing page to create a new session.
 - It must not be copied into committed files, shell history snippets, issue comments, or handoff text. The scaffolder writes `.mantle/launch-state.json` with non-secret resumable metadata and intentionally redacts the raw session URL.
-- It does **not** authorize Cloudflare resources, provider billing, custom domains, or production secrets. Provision still asks for an explicit Cloudflare API token later.
+- It does **not** authorize Cloudflare resources, provider billing, custom domains, or production secrets. Provision still asks the user to complete the Cloudflare Dashboard first deploy and GitHub OAuth App setup in their own accounts.
 
 ### Fast-path preflight
 
