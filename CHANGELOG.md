@@ -6,6 +6,16 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.19] - 2026-06-14
+
+### Changed
+
+- No SDK runtime code changes. alpha.19 re-spins the release fanout so
+  the paired `mantle-starters` release tarball includes repo-local
+  `.agent/` and `.claude/` Mantle skills, plus generated-site
+  references to the embedded docs/skills shipped in
+  `node_modules/@aotter/mantle/...` (#345, aotter/mantle-starters#274).
+
 ## [0.0.11-alpha.18] - 2026-06-14
 
 ### Added
