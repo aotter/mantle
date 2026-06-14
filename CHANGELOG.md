@@ -6,6 +6,24 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.20] - 2026-06-14
+
+### Changed
+
+- No SDK runtime code changes. alpha.20 re-spins the release fanout so
+  the paired `mantle-starters` release tarball includes the Mantle
+  Claude plugin marketplace, `mantle-companion-upload`, and the
+  provisioning handoff's operator setup URL for Staff/User MCP plus
+  upload-plugin pairing (#324, #349, aotter/mantle-starters#278,
+  aotter/mantle-landing#100).
+- **skills**: the provision Skill now treats
+  `https://mantle.tools/connect?site=...` as part of the final
+  owner/operator handoff, including the no-base64 companion upload
+  contract (#349).
+- **repo**: a Mantle release Skill now documents the release/fanout
+  guardrails so future release agents verify downstream starter and
+  landing state before tagging (#348).
+
 ## [0.0.11-alpha.19] - 2026-06-14
 
 ### Changed
