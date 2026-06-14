@@ -6,6 +6,19 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.21] - 2026-06-14
+
+### Changed
+
+- No SDK runtime code changes. alpha.21 re-spins the release fanout so
+  the paired `mantle-starters` release tarball includes the Windows
+  local-dev hardening that should be available before the next
+  landing-driven e2e test: starter `emit-openapi` / `emit-types`
+  scripts now use Node + `--output` instead of shell redirection, and
+  starter `wrangler-dev.mjs` isolates Windows `USERPROFILE`,
+  `APPDATA`, `LOCALAPPDATA`, and `WRANGLER_HOME` under the project-local
+  `.wrangler-home` (#327, #328, aotter/mantle-starters#264).
+
 ## [0.0.11-alpha.20] - 2026-06-14
 
 ### Changed
