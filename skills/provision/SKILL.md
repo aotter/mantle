@@ -37,6 +37,8 @@ coding agent.
 - `mantle/site.md` frontmatter `site_url:` and `AGENTS.md` `Public
   site:` point at the deployed Worker URL.
 - Staff MCP and browser admin sign-in are ready to test.
+- Operator setup URL is ready to hand to the owner:
+  `https://mantle.tools/connect?site=<url-encoded-worker-url>`.
 
 Provision does not seed production content. First real content is
 created after owner sign-in through Staff MCP / admin authoring.
@@ -100,7 +102,8 @@ requirement, and feature-specific notes.
 - `GITHUB_CLIENT_SECRET` in the environment or stdin.
 
 It writes non-secret config, sets Worker secrets with Wrangler, updates
-`mantle/site.md` and `AGENTS.md`, then prints public/admin/MCP URLs.
+`mantle/site.md` and `AGENTS.md`, then prints public/admin/MCP and
+operator setup URLs.
 
 Do not pass `GITHUB_CLIENT_SECRET` as a visible command argument.
 
@@ -183,7 +186,19 @@ pnpm run provision:up -- --worker-url <worker-url> --github-username <gh-login> 
    `<worker-url>/admin/sign-in` and connect an MCP-capable client to
    `<worker-url>/mcp/staff`.
 
-9. **Second-agent proof.** Connect a second agent through Staff MCP and
+9. **Operator setup proof.** Open the operator setup URL:
+
+   ```text
+   https://mantle.tools/connect?site=<url-encoded-worker-url>
+   ```
+
+   Confirm it shows the Staff MCP URL, User MCP URL, Claude connector
+   entry, and `mantle-companion-upload` plugin install commands. The
+   companion upload path must pass file references/metadata only; large
+   binary payloads go through Mantle upload sessions and signed URLs,
+   not base64 MCP tool arguments.
+
+10. **Second-agent proof.** Connect a second agent through Staff MCP and
    run the starter's core workflow: list collections, create/update a
    draft, publish or submit the starter's natural operation, and confirm
    a public read path. Do not create throwaway production submissions
@@ -210,6 +225,8 @@ language:
 - Public URL.
 - Admin sign-in URL.
 - Staff MCP URL.
+- Operator setup URL (`https://mantle.tools/connect?site=...`) for
+  Staff/User MCP connection and the companion upload plugin.
 - What changed locally and what was committed.
 - Any intentionally deferred feature setup.
 
