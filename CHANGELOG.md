@@ -6,6 +6,27 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.23] - 2026-06-15
+
+### Added
+
+- **`@aotter/mantle-cloudflare`**: add
+  `createSetupIncompleteAuth()` for first-deploy bootstrap windows where
+  public Worker routes must boot before staff sign-in providers are
+  provisioned (#353).
+
+### Fixed
+
+- **starters fanout**: alpha.23 ships the paired
+  `mantle-starters` first-deploy provisioning hardening so public
+  routes no longer throw `createAuth: methods[] is empty` before
+  GitHub OAuth is configured, while auth/admin/MCP staff routes keep
+  returning `setup_incomplete` (aotter/mantle-starters#288).
+- **provisioning handoff**: the paired starter release prints a
+  concrete Cloudflare Workers & Pages import link, repo/worker-name
+  guidance, and the exact values the user should report back before
+  `provision:up` (aotter/mantle-starters#288).
+
 ## [0.0.11-alpha.22] - 2026-06-15
 
 ### Changed
