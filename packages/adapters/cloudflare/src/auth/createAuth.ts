@@ -986,6 +986,44 @@ export function createAuth(config: CreateAuthConfig): Auth {
   };
 }
 
+export interface SetupIncompleteAuthOptions {
+  readonly message?: string;
+  readonly response?: () => Response | Promise<Response>;
+}
+
+/**
+ * Safe Auth facade for first-deploy/bootstrap windows where an
+ * adopter's public Worker should boot before staff sign-in providers
+ * have been provisioned. Auth-gated routes should still be blocked by
+ * the consumer; this facade never authenticates anyone.
+ */
+export function createSetupIncompleteAuth(
+  options: SetupIncompleteAuthOptions = {},
+): Auth {
+  const message = options.message ?? "Auth is not configured yet.";
+  const response =
+    options.response ??
+    (() =>
+      Response.json(
+        { error: "setup_incomplete", message },
+        { status: 503, headers: { "cache-control": "no-store" } },
+      ));
+  return {
+    handler: async () => response(),
+    getSession: async () => null,
+    getUserRole: async () => null,
+    methods: [],
+    listLinkedAccounts: async () => [],
+    unlinkAccount: async () => false,
+    listUsers: async () => [],
+    setUserRole: async () => false,
+    inviteUser: async () => {
+      throw new Error(message);
+    },
+    revokeInvite: async () => false,
+  };
+}
+
 /** Random 32-char alphanumeric id, shaped like Better Auth's own user
  *  ids so invited rows are indistinguishable from organically-created
  *  ones. Modulo bias over 62 symbols is irrelevant here — ids need

@@ -3,6 +3,7 @@ import type { EmailSender } from "@aotter/mantle-runtime";
 import {
   buildSocialProviders,
   createAuth,
+  createSetupIncompleteAuth,
   pickLocale,
   shouldPromoteToOwner,
   validateBootstrap,
@@ -357,6 +358,27 @@ describe("buildSocialProviders", () => {
 describe("createAuth — boot invariants", () => {
   it("throws when methods[] is empty", () => {
     expect(() => createAuth(baseConfig({ methods: [] }))).toThrow(/empty/i);
+  });
+
+  it("offers a setup-incomplete facade for first-deploy public boot", async () => {
+    const auth = createSetupIncompleteAuth({
+      message: "setup pending",
+      response: () => new Response("setup pending", { status: 503 }),
+    });
+    const req = new Request("https://example.test/admin/sign-in");
+
+    expect(auth.methods).toEqual([]);
+    expect(await auth.getSession(req)).toBeNull();
+    expect(await auth.getUserRole("user_1")).toBeNull();
+    expect(await auth.handler(req)).toMatchObject({ status: 503 });
+    expect(await auth.listLinkedAccounts("user_1")).toEqual([]);
+    expect(await auth.unlinkAccount("user_1", "github")).toBe(false);
+    expect(await auth.listUsers()).toEqual([]);
+    expect(await auth.setUserRole("user_1", "editor")).toBe(false);
+    await expect(auth.inviteUser("owner@example.test", "owner")).rejects.toThrow(
+      /setup pending/,
+    );
+    expect(await auth.revokeInvite("user_1")).toBe(false);
   });
 
   it("throws when bootstrapOwner.match='github-login' but no github method", () => {
