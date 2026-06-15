@@ -326,6 +326,34 @@ class InMemoryStatement implements PreparedStatement {
       return { rows: rows as unknown as Record<string, unknown>[], changes: 0 };
     }
 
+    // SELECT ... FROM media_assets [WHERE ...] ORDER BY created_at DESC, id DESC LIMIT ?
+    if (
+      sql.startsWith("SELECT id, created_at, owner_id, alt, caption, variants, metadata FROM media_assets") &&
+      sql.includes("ORDER BY created_at DESC, id DESC")
+    ) {
+      const limit = p[p.length - 1] as number;
+      let rows = [...this.db.mediaAssets.values()];
+      let index = 0;
+      if (sql.includes("id LIKE ?")) {
+        const search = likeToIncludes(p[index] as string);
+        index += 3;
+        rows = rows.filter((r) =>
+          r.id.includes(search) ||
+          (r.alt ?? "").includes(search) ||
+          (r.caption ?? "").includes(search),
+        );
+      }
+      if (sql.includes("(created_at < ? OR (created_at = ? AND id < ?))")) {
+        const createdAt = p[index] as number;
+        const id = p[index + 2] as string;
+        rows = rows.filter((r) => r.created_at < createdAt || (r.created_at === createdAt && r.id < id));
+      }
+      rows.sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id));
+      return { rows: rows.slice(0, limit) as unknown as Record<string, unknown>[], changes: 0 };
+    }
+
+    // UPDATE media_assets via DatabaseMediaAssetRepository.save() ON CONFLICT path handles writes.
+
     // DELETE FROM media_assets WHERE id = ?
     if (sql.startsWith("DELETE FROM media_assets WHERE id = ?")) {
       const id = p[0] as string;
@@ -408,6 +436,10 @@ class InMemoryStatement implements PreparedStatement {
 
 function normalize(sql: string): string {
   return sql.replace(/\s+/g, " ").trim();
+}
+
+function likeToIncludes(value: string): string {
+  return value.replace(/^%|%$/g, "").replace(/\\([\\%_])/g, "$1");
 }
 
 function fieldFromJsonPath(path: string): string {

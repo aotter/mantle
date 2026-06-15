@@ -56,6 +56,7 @@ import {
   RenderListLiveUseCase,
 } from "./usecase/render/index.js";
 import {
+  AdminMediaLibraryUseCase,
   CommitMediaUploadUseCase,
   CreateMediaUploadUseCase,
   UploadMediaVariantUseCase,
@@ -168,6 +169,7 @@ export interface CmsRuntime {
     readonly createUpload: CreateMediaUploadUseCase;
     readonly uploadVariant: UploadMediaVariantUseCase;
     readonly commitUpload: CommitMediaUploadUseCase;
+    readonly library: AdminMediaLibraryUseCase;
     resolve(id: string): Promise<MediaAsset | null>;
     resolveMany(ids: readonly string[]): Promise<ReadonlyMap<string, MediaAsset>>;
   } | null;
@@ -324,6 +326,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
           clock,
           mediaAssets,
         ),
+        library: new AdminMediaLibraryUseCase(mediaAssets, args.mediaStorage),
         resolve: (id: string) => mediaAssets.findById(id),
         resolveMany: (ids: readonly string[]) => mediaAssets.findManyByIds(ids),
       }

@@ -540,6 +540,47 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       }),
     );
   });
+
+  guarded("get", "/admin/api/media/assets", async (c) => {
+    const runtime = await ref.get();
+    const media = runtime.media;
+    if (!media) return mediaNotConfiguredResponse("GET /admin/api/media/assets");
+    return runUseCase("GET /admin/api/media/assets", async () => {
+      const rawLimit = c.req.query("limit");
+      const parsedLimit = rawLimit ? Number.parseInt(rawLimit, 10) : NaN;
+      return media.library.list({
+        limit: Number.isFinite(parsedLimit) ? parsedLimit : 30,
+        cursor: c.req.query("cursor") ?? undefined,
+        search: c.req.query("search") ?? "",
+      });
+    });
+  });
+
+  guarded("patch", "/admin/api/media/assets/:id", async (c) => {
+    const runtime = await ref.get();
+    const media = runtime.media;
+    if (!media) return mediaNotConfiguredResponse(`PATCH /admin/api/media/assets/${c.req.param("id")}`);
+    return runUseCase(`PATCH /admin/api/media/assets/${c.req.param("id")}`, async () => {
+      const body = (await c.req.raw.json().catch(() => ({}))) as {
+        alt?: unknown;
+        caption?: unknown;
+      };
+      return media.library.update({
+        id: c.req.param("id")!,
+        alt: stringField(body.alt),
+        caption: stringField(body.caption),
+      });
+    });
+  });
+
+  guarded("delete", "/admin/api/media/assets/:id", async (c) => {
+    const runtime = await ref.get();
+    const media = runtime.media;
+    if (!media) return mediaNotConfiguredResponse(`DELETE /admin/api/media/assets/${c.req.param("id")}`);
+    return runUseCase(`DELETE /admin/api/media/assets/${c.req.param("id")}`, async () => {
+      return media.library.delete({ id: c.req.param("id")! });
+    });
+  });
 }
 
 function adminEntryTitle(data: Record<string, unknown>): unknown {

@@ -10,6 +10,7 @@ import type {
   UploadCapability,
 } from "@aotter/mantle-runtime";
 import type { MediaPurposePolicy } from "@aotter/mantle-spec";
+import { DatabaseMediaAssetRepository } from "../../../mantle-runtime/src/infrastructure/persistence/DatabaseMediaAssetRepository.js";
 import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
 import { createMcpApiHandler } from "../src/mount/mountMcp.js";
 import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
@@ -35,6 +36,7 @@ import {
 class FakeMediaStorage implements MediaStorage {
   public createCalls: CreateUploadArgs[] = [];
   public commitCalls: CommitUploadArgs[] = [];
+  public deleteCalls: Parameters<MediaStorage["deleteObject"]>[0][] = [];
 
   async createUpload(args: CreateUploadArgs) {
     this.createCalls.push(args);
@@ -76,8 +78,8 @@ class FakeMediaStorage implements MediaStorage {
     return `https://media.example/${args.storageKey}`;
   }
 
-  async deleteObject() {
-    /* noop */
+  async deleteObject(args: Parameters<MediaStorage["deleteObject"]>[0]) {
+    this.deleteCalls.push(args);
   }
 
   async putVariantBytes(args: Parameters<MediaStorage["putVariantBytes"]>[0]) {
@@ -132,6 +134,7 @@ function staffAuth(): Auth {
 interface Harness {
   app: Hono;
   storage: FakeMediaStorage | null;
+  db: InMemoryDatabase;
 }
 
 function postCoverPolicy(): MediaPurposePolicy {
@@ -156,13 +159,14 @@ function harness(opts: {
   mediaPurposes?: readonly MediaPurposePolicy[];
 }): Harness {
   const storage = opts.withMedia ? new FakeMediaStorage() : null;
+  const db = new InMemoryDatabase();
   const ref = createCmsRef({
     manifests: manifests(),
     siteDefaults: {
       media: { purposes: opts.mediaPurposes ?? [postCoverPolicy()] },
     },
     bindings: {
-      db: new InMemoryDatabase(),
+      db,
       kv: new InMemoryKv(),
       assets: new StubAssetServer(),
       ...(storage ? { mediaStorage: storage } : {}),
@@ -171,7 +175,7 @@ function harness(opts: {
   });
   const app = new Hono();
   mountServerEndpoints(app, ref);
-  return { app, storage };
+  return { app, storage, db };
 }
 
 const THREE_VARIANT_BODY = {
@@ -342,6 +346,47 @@ describe("smoke: /admin/api/media/uploads", () => {
     expect(asset.alt).toBe("the cover");
     expect(h.storage!.commitCalls).toHaveLength(1);
   });
+
+  it("lists, updates, and deletes committed media assets through runtime use cases", async () => {
+    const h = harness({ withMedia: true, auth: staffAuth() });
+    const repo = new DatabaseMediaAssetRepository(h.db);
+    await repo.save(mediaAsset("asset-old", 10, "Old cover", "Archive"));
+    await repo.save(mediaAsset("asset-new", 20, "New cover", "Searchable caption"));
+
+    const list = await h.app.request("/admin/api/media/assets?limit=1");
+    expect(list.status).toBe(200);
+    const listBody = (await list.json()) as {
+      items: Array<{ id: string; alt: string | null }>;
+      next_cursor: string | null;
+    };
+    expect(listBody.items).toMatchObject([{ id: "asset-new", alt: "New cover" }]);
+    expect(listBody.next_cursor).toBeTruthy();
+
+    const search = await h.app.request("/admin/api/media/assets?search=Searchable");
+    expect(search.status).toBe(200);
+    const searchBody = (await search.json()) as { items: Array<{ id: string }> };
+    expect(searchBody.items.map((item) => item.id)).toEqual(["asset-new"]);
+
+    const update = await h.app.request("/admin/api/media/assets/asset-new", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ alt: "Updated alt", caption: "Updated caption" }),
+    });
+    expect(update.status).toBe(200);
+    await expect(update.json()).resolves.toMatchObject({
+      id: "asset-new",
+      alt: "Updated alt",
+      caption: "Updated caption",
+    });
+
+    const remove = await h.app.request("/admin/api/media/assets/asset-new", {
+      method: "DELETE",
+    });
+    expect(remove.status).toBe(200);
+    await expect(remove.json()).resolves.toEqual({ removed: true });
+    expect(h.storage!.deleteCalls.map((call) => call.storageKey)).toEqual(["asset-new/primary"]);
+    await expect(repo.findById("asset-new")).resolves.toBeNull();
+  });
 });
 
 describe("smoke: MCP media tool catalog", () => {
@@ -411,4 +456,22 @@ function jsonRpcReq(method: string, params?: unknown): Request {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   });
+}
+
+function mediaAsset(id: string, createdAt: number, alt: string, caption: string): MediaAsset {
+  return {
+    id,
+    alt,
+    caption,
+    createdAt,
+    variants: [
+      {
+        role: "primary",
+        mimeType: "image/jpeg",
+        storageKey: `${id}/primary`,
+        publicUrl: `https://media.example/${id}/primary`,
+        byteSize: 1024,
+      },
+    ],
+  };
 }

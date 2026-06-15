@@ -29,6 +29,28 @@ import type { MediaAsset } from "./MediaStorage.js";
 export interface MediaAssetRepository {
   findById(id: string): Promise<MediaAsset | null>;
   findManyByIds(ids: readonly string[]): Promise<ReadonlyMap<string, MediaAsset>>;
+  list(args: ListMediaAssetsArgs): Promise<ListMediaAssetsResult>;
+  update(id: string, values: UpdateMediaAssetValues): Promise<MediaAsset | null>;
   save(asset: MediaAsset): Promise<void>;
   delete(id: string): Promise<void>;
+}
+
+export interface ListMediaAssetsArgs {
+  readonly limit: number;
+  readonly cursor?: string;
+  readonly search?: string;
+}
+
+export interface ListMediaAssetsResult {
+  readonly items: ReadonlyArray<ListedMediaAsset>;
+  readonly nextCursor?: string;
+}
+
+export interface ListedMediaAsset extends MediaAsset {
+  readonly ownerId?: string;
+}
+
+export interface UpdateMediaAssetValues {
+  readonly alt?: string;
+  readonly caption?: string;
 }

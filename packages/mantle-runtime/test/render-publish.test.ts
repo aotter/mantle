@@ -223,6 +223,14 @@ class MemoryMediaAssets implements MediaAssetRepository {
     return out;
   }
 
+  async list(): Promise<{ items: readonly MediaAsset[]; nextCursor?: string }> {
+    return { items: [...this.assets.values()] };
+  }
+
+  async update(id: string): Promise<MediaAsset | null> {
+    return this.assets.get(id) ?? null;
+  }
+
   async save(): Promise<void> {}
 
   async delete(): Promise<void> {}

@@ -2,11 +2,14 @@ import { describe, it, expect } from "vitest";
 import type { MediaAsset, MediaStorage, MediaVariant } from "../src/domain/port/MediaStorage.js";
 import type { MediaAssetRepository } from "../src/domain/port/MediaAssetRepository.js";
 import {
+  AdminMediaLibraryUseCase,
   CommitMediaUploadUseCase,
   CreateMediaUploadUseCase,
   UploadMediaVariantUseCase,
 } from "../src/usecase/media/index.js";
+import { DatabaseMediaAssetRepository } from "../src/infrastructure/persistence/DatabaseMediaAssetRepository.js";
 import { InMemoryKv } from "./fakes/kv.js";
+import { InMemoryDatabase } from "./fakes/database.js";
 import { InMemorySiteConfigRepository } from "./fakes/site-config.js";
 
 const DEFAULT_PURPOSES = ["post-cover", "product-cover"] as const;
@@ -15,6 +18,8 @@ class FakeMediaStorage implements MediaStorage {
   public createCalls: Parameters<MediaStorage["createUpload"]>[0][] = [];
   public commitCalls: Parameters<MediaStorage["commitUpload"]>[0][] = [];
   public putVariantCalls: Parameters<MediaStorage["putVariantBytes"]>[0][] = [];
+  public deleteCalls: Parameters<MediaStorage["deleteObject"]>[0][] = [];
+  public failDelete = false;
 
   async createUpload(args: Parameters<MediaStorage["createUpload"]>[0]) {
     this.createCalls.push(args);
@@ -55,8 +60,9 @@ class FakeMediaStorage implements MediaStorage {
     return `https://media.example/${args.storageKey}`;
   }
 
-  async deleteObject(): Promise<void> {
-    /* noop */
+  async deleteObject(args: Parameters<MediaStorage["deleteObject"]>[0]): Promise<void> {
+    this.deleteCalls.push(args);
+    if (this.failDelete) throw new Error("delete failed");
   }
 
   async putVariantBytes(args: Parameters<MediaStorage["putVariantBytes"]>[0]) {
@@ -82,6 +88,18 @@ class InMemoryMediaAssetRepository implements MediaAssetRepository {
       if (a) out.set(id, a);
     }
     return out;
+  }
+
+  async list(): Promise<{ items: MediaAsset[]; nextCursor?: string }> {
+    return { items: [...this.store.values()] };
+  }
+
+  async update(id: string, values: { alt?: string; caption?: string }): Promise<MediaAsset | null> {
+    const existing = this.store.get(id);
+    if (!existing) return null;
+    const next = { ...existing, alt: values.alt ?? existing.alt, caption: values.caption ?? existing.caption };
+    this.store.set(id, next);
+    return next;
   }
 
   async save(asset: MediaAsset): Promise<void> {
@@ -630,6 +648,109 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
     expect(r.uploadGroupId).toBe("asset-1");
   });
 });
+
+describe("AdminMediaLibraryUseCase", () => {
+  it("lists media with stable cursors and searches names without variants JSON", async () => {
+    const repo = new DatabaseMediaAssetRepository(new InMemoryDatabase());
+    await repo.save(asset("asset-a", 30, "Cover", "visible caption", "hidden-variant-name"));
+    await repo.save(asset("asset-b", 20, "Gallery", "secondary", "plain"));
+    await repo.save(asset("asset-c", 10, "Manual", "docs", "plain"));
+    const useCase = new AdminMediaLibraryUseCase(repo, new FakeMediaStorage());
+
+    const first = await useCase.list({ limit: 2 });
+    expect(first.items.map((item) => item.id)).toEqual(["asset-a", "asset-b"]);
+    expect(first.next_cursor).toBeTruthy();
+
+    const second = await useCase.list({ limit: 2, cursor: first.next_cursor ?? undefined });
+    expect(second.items.map((item) => item.id)).toEqual(["asset-c"]);
+    expect(second.next_cursor).toBeNull();
+
+    const searched = await useCase.list({ limit: 10, search: "hidden-variant-name" });
+    expect(searched.items).toEqual([]);
+    const caption = await useCase.list({ limit: 10, search: "visible" });
+    expect(caption.items.map((item) => item.id)).toEqual(["asset-a"]);
+  });
+
+  it("updates alt and caption through the repository", async () => {
+    const repo = new DatabaseMediaAssetRepository(new InMemoryDatabase());
+    await repo.save(asset("asset-a", 30, "Old alt", "Old caption"));
+    const useCase = new AdminMediaLibraryUseCase(repo, new FakeMediaStorage());
+
+    const updated = await useCase.update({
+      id: "asset-a",
+      alt: "New alt",
+      caption: "New caption",
+    });
+
+    expect(updated).toMatchObject({
+      id: "asset-a",
+      alt: "New alt",
+      caption: "New caption",
+      primaryUrl: "https://media.example/asset-a/primary",
+    });
+  });
+
+  it("deletes storage variants before deleting the database row", async () => {
+    const repo = new DatabaseMediaAssetRepository(new InMemoryDatabase());
+    await repo.save(asset("asset-a", 30, "Cover", "Caption", "primary", true));
+    const storage = new FakeMediaStorage();
+    const useCase = new AdminMediaLibraryUseCase(repo, storage);
+
+    await expect(useCase.delete({ id: "asset-a" })).resolves.toEqual({ removed: true });
+
+    expect(storage.deleteCalls.map((call) => call.storageKey)).toEqual([
+      "asset-a/primary",
+      "asset-a/alternate",
+    ]);
+    await expect(repo.findById("asset-a")).resolves.toBeNull();
+  });
+
+  it("keeps the database row when storage deletion fails", async () => {
+    const repo = new DatabaseMediaAssetRepository(new InMemoryDatabase());
+    await repo.save(asset("asset-a", 30, "Cover", "Caption"));
+    const storage = new FakeMediaStorage();
+    storage.failDelete = true;
+    const useCase = new AdminMediaLibraryUseCase(repo, storage);
+
+    await expect(useCase.delete({ id: "asset-a" })).rejects.toThrow("delete failed");
+
+    await expect(repo.findById("asset-a")).resolves.toMatchObject({ id: "asset-a" });
+  });
+});
+
+function asset(
+  id: string,
+  createdAt: number,
+  alt?: string,
+  caption?: string,
+  storageName = "primary",
+  includeAlternate = false,
+): MediaAsset {
+  return {
+    id,
+    alt,
+    caption,
+    createdAt,
+    variants: [
+      {
+        role: "primary",
+        mimeType: "image/jpeg",
+        storageKey: `${id}/${storageName}`,
+        publicUrl: `https://media.example/${id}/${storageName}`,
+        byteSize: 100,
+      },
+      ...(includeAlternate
+        ? [{
+            role: "alternate" as const,
+            mimeType: "image/webp",
+            storageKey: `${id}/alternate`,
+            publicUrl: `https://media.example/${id}/alternate`,
+            byteSize: 80,
+          }]
+        : []),
+    ],
+  };
+}
 
 describe("UploadMediaVariantUseCase (#283 sandboxed-agent path)", () => {
   async function seedPendingUpload(opts: {

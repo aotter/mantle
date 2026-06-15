@@ -1,5 +1,11 @@
 import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
-import type { MediaAssetRepository } from "../../domain/port/MediaAssetRepository.js";
+import type {
+  ListedMediaAsset,
+  ListMediaAssetsArgs,
+  ListMediaAssetsResult,
+  MediaAssetRepository,
+  UpdateMediaAssetValues,
+} from "../../domain/port/MediaAssetRepository.js";
 import type {
   MediaAsset,
   MediaVariant,
@@ -54,6 +60,56 @@ export class DatabaseMediaAssetRepository implements MediaAssetRepository {
     return out;
   }
 
+  async list(args: ListMediaAssetsArgs): Promise<ListMediaAssetsResult> {
+    const limit = clampLimit(args.limit);
+    const cursor = decodeCursor(args.cursor);
+    const search = args.search?.trim();
+    const clauses: string[] = [];
+    const params: unknown[] = [];
+
+    if (search) {
+      const term = `%${escapeLike(search)}%`;
+      clauses.push(
+        `(id LIKE ? ESCAPE '\\' OR alt LIKE ? ESCAPE '\\' OR caption LIKE ? ESCAPE '\\')`,
+      );
+      params.push(term, term, term);
+    }
+    if (cursor) {
+      clauses.push(`(created_at < ? OR (created_at = ? AND id < ?))`);
+      params.push(cursor.createdAt, cursor.createdAt, cursor.id);
+    }
+
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+    const rows = await this.db
+      .prepare(
+        `SELECT id, created_at, owner_id, alt, caption, variants, metadata
+         FROM media_assets
+         ${where}
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
+      )
+      .bind(...params, limit + 1)
+      .all<MediaAssetRow>();
+
+    const page = rows.slice(0, limit);
+    const last = page[page.length - 1];
+    return {
+      items: page.map(rowToListedAsset),
+      nextCursor: rows.length > limit && last ? encodeCursor(last.created_at, last.id) : undefined,
+    };
+  }
+
+  async update(id: string, values: UpdateMediaAssetValues): Promise<MediaAsset | null> {
+    const existing = await this.findById(id);
+    if (!existing) return null;
+    await this.save({
+      ...existing,
+      alt: values.alt ?? existing.alt,
+      caption: values.caption ?? existing.caption,
+    });
+    return this.findById(id);
+  }
+
   async save(asset: MediaAsset): Promise<void> {
     await this.db
       .prepare(
@@ -95,6 +151,10 @@ interface MediaAssetRow {
 }
 
 function rowToAsset(row: MediaAssetRow): MediaAsset {
+  return rowToListedAsset(row);
+}
+
+function rowToListedAsset(row: MediaAssetRow): ListedMediaAsset {
   const variants = JSON.parse(row.variants) as ReadonlyArray<MediaVariant>;
   const metadata = row.metadata
     ? (JSON.parse(row.metadata) as Readonly<Record<string, string>>)
@@ -106,5 +166,26 @@ function rowToAsset(row: MediaAssetRow): MediaAsset {
     caption: row.caption ?? undefined,
     createdAt: row.created_at,
     metadata,
+    ownerId: row.owner_id ?? undefined,
   };
+}
+
+function clampLimit(limit: number): number {
+  return Number.isFinite(limit) ? Math.max(1, Math.min(Math.trunc(limit), 100)) : 30;
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+function encodeCursor(createdAt: number, id: string): string {
+  return `${createdAt}:${encodeURIComponent(id)}`;
+}
+
+function decodeCursor(value: string | undefined): { createdAt: number; id: string } | null {
+  if (!value) return null;
+  const [rawCreatedAt, rawId] = value.split(":", 2);
+  const createdAt = Number.parseInt(rawCreatedAt ?? "", 10);
+  if (!Number.isFinite(createdAt) || !rawId) return null;
+  return { createdAt, id: decodeURIComponent(rawId) };
 }

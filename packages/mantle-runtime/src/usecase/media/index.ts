@@ -1,6 +1,16 @@
 export { CreateMediaUploadUseCase } from "./CreateMediaUploadUseCase.js";
 export { CommitMediaUploadUseCase } from "./CommitMediaUploadUseCase.js";
 export { UploadMediaVariantUseCase } from "./UploadMediaVariantUseCase.js";
+export { AdminMediaLibraryUseCase } from "./AdminMediaLibraryUseCase.js";
+export type {
+  AdminMediaAsset,
+  AdminMediaVariant,
+  DeleteAdminMediaAssetRequest,
+  DeleteAdminMediaAssetResponse,
+  ListAdminMediaAssetsRequest,
+  ListAdminMediaAssetsResponse,
+  UpdateAdminMediaAssetRequest,
+} from "./AdminMediaLibraryUseCase.js";
 export {
   DEFAULT_MAX_BYTES,
   MEDIA_MIME_ALLOWLIST,
