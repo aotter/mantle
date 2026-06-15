@@ -6,6 +6,25 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.24] - 2026-06-15
+
+### Changed
+
+- **provision skill**: the provision handoff is now non-coder-first. The
+  skill instructs the agent to walk the Cloudflare / GitHub-OAuth browser
+  steps one task at a time in plain language — numbered `STEP 1/2 of 2`,
+  full-sentence click paths, "what you'll see / what to copy" landmarks,
+  a screenshot escape hatch, and a natural reply instead of a `KEY=value`
+  contract — replacing the terse engineer checklist (orphan step numbers,
+  `A → B → C` breadcrumbs, internal `127.0.0.1` warnings) that a live
+  provision run surfaced to a non-coder (#356).
+- **starters fanout**: the paired `mantle-starters` release mirrors the
+  non-coder handoff guidance in the starter-baked provision skill and
+  softens the `provision:plan` report text
+  (aotter/mantle-starters#292), and rewrites the generated `site.md`
+  `site` / `voice` purpose hints in English
+  (aotter/mantle-starters#291).
+
 ## [0.0.11-alpha.23] - 2026-06-15
 
 ### Added
