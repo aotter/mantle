@@ -112,6 +112,45 @@ read -rsp "GitHub OAuth client secret: " GITHUB_CLIENT_SECRET && export GITHUB_C
 pnpm run provision:up -- --worker-url <worker-url> --github-username <gh-login> --client-id <client-id>
 ```
 
+## Presenting browser steps (non-coder handoff)
+
+Flow steps 3 and 5 hand the user into a browser. That user is usually a
+non-coder who is trusting the agent — present those steps the way you'd
+guide someone over the phone, not as a terse engineer checklist. The
+plan that `provision:plan` prints is *your* reference; re-present it, do
+not paste it through.
+
+Rules:
+
+- **One task at a time.** Send the Cloudflare deploy, wait for the URL,
+  *then* send the GitHub OAuth App. Never dump both browser tasks in one
+  message.
+- **Number only what they see.** Label the block `STEP 1 of 2` /
+  `STEP 2 of 2`. Do not leak your internal plan numbering — a user
+  seeing "Step 2" and "Step 4" with gaps assumes they missed something.
+- **Lead with one plain "why".** A single sentence on what the step
+  accomplishes ("this is what puts your site on the internet").
+- **Full-sentence click paths, not arrows.** "Click *Create
+  application*, then open the *Import a repository* tab" — not
+  `Create application → Import a repository`. Quote the exact labels the
+  user sees on screen.
+- **Say what they'll see and what to copy.** Name the landmark and the
+  success signal ("a link ending in `.workers.dev` — copy that"), and a
+  rough time ("about a minute").
+- **Ask for values in plain language.** "Paste me the live link, and
+  the Client ID." Never ask for `KEY=value` shell syntax, and never make
+  them type literal `<...>` placeholders.
+- **Protect the secret in words, not jargon.** Tell them to copy the
+  Client Secret and keep it on their clipboard, and that you'll ask for
+  it privately so it never lands in the chat. Don't say "stdin" or "env".
+- **Give an escape hatch.** "If a screen doesn't match what I describe,
+  paste a screenshot and I'll point you to the right button."
+
+Keep agent-internal correctness rules out of the user-facing text. The
+`localhost` / `127.0.0.1` callback rule (see Don't) governs what *you*
+write; a dashboard user is handed the real Worker URL and never needs to
+hear that warning.
+
 ## Flow
 
 1. **Preflight.** Read `.mantle/launch-state.json` if present, then
@@ -136,6 +175,8 @@ pnpm run provision:up -- --worker-url <worker-url> --github-username <gh-login> 
    Cloudflare Dashboard, create a Worker, choose GitHub as source, pick
    the repo, keep the Worker name aligned with the repo/project name,
    and run the first deploy. They report the deployed Worker URL back.
+   Present this as `STEP 1 of 2` per **Presenting browser steps** above,
+   and wait for the Worker URL before moving on.
 
 4. **Print the plan.**
 
@@ -156,7 +197,10 @@ pnpm run provision:up -- --worker-url <worker-url> --github-username <gh-login> 
      `<worker-url>/api/auth/callback/github`
    - Device Flow: unchecked
 
-   The user returns Client ID and Client Secret.
+   Present this as `STEP 2 of 2` per **Presenting browser steps** above.
+   Ask for the Client ID in chat; have them keep the Client Secret on
+   the clipboard for the hidden prompt in step 6 — do not ask them to
+   paste the secret in chat.
 
 6. **Authorize Wrangler and run provision.**
 
@@ -220,7 +264,7 @@ accepts any extra provider/billing requirement.
 ## Handoff
 
 After smoke checks pass, render a short final handoff in the user's
-language:
+language, in plain words (no `wrangler.toml` / secret / CLI jargon):
 
 - Public URL.
 - Admin sign-in URL.
@@ -253,3 +297,7 @@ repo-local `.agent/skills/` directory.
   locally and the real Worker URL in production.
 - Don't use `/admin/auth/github/callback`; the Better Auth callback path
   is `/api/auth/callback/github`.
+- Don't recite a browser step to a non-coder as a terse `A → B → C`
+  breadcrumb, a `KEY=value` reply contract, a `<placeholder>` they might
+  paste literally, or an internal correctness warning (e.g. the
+  `127.0.0.1` rule). See **Presenting browser steps**.
