@@ -6,6 +6,16 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.22] - 2026-06-15
+
+### Changed
+
+- No SDK runtime code changes. alpha.22 re-spins the release fanout so
+  the paired `mantle-starters` release tarball includes the generated
+  repo-local `mantle:*` skills, including `mantle:update`, plus the
+  generated-site update report/check script for coding agents
+  (aotter/mantle-starters#282).
+
 ## [0.0.11-alpha.21] - 2026-06-14
 
 ### Changed
