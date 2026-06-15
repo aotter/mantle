@@ -79,6 +79,57 @@ describe("IntrospectManifestsUseCase", () => {
     expect(out.procedures).toHaveLength(1);
     expect(out.procedures[0]!.auth?.all).toEqual(["ctx.user"]);
     expect(out.triggers).toHaveLength(1);
+    expect(out.adminActions).toHaveLength(1);
+    expect(out.adminActions[0]).toMatchObject({
+      name: "submitContact",
+      operationKind: "generic",
+      audience: "staff",
+      manualRun: "recommended",
+    });
+    expect(out.adminActions[0]!.triggers[0]).toMatchObject({
+      name: "submitContactHttp",
+      sourceKind: "http",
+      method: "POST",
+      path: "/api/contact",
+    });
+  });
+
+  it("projects admin action metadata only from explicit manifest declarations", () => {
+    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: totallyNeutralName }
+spec:
+  input: { type: object, description: Import contacts }
+  output: { type: object, description: Import result }
+  handler: { kind: ref, ref: contacts.import }
+  admin:
+    operationKind: system
+    audience: agent
+    manualRun: advanced
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: neutralTrigger }
+spec:
+  source: { kind: mcp, surface: staff }
+  target: { procedure: totallyNeutralName }
+`);
+    expect(parsed.diagnostics).toEqual([]);
+    const out = IntrospectManifestsUseCase.run({ manifests: parsed.manifests, parseErrors: [] });
+    expect(out.adminActions).toHaveLength(1);
+    expect(out.adminActions[0]).toMatchObject({
+      name: "totallyNeutralName",
+      description: "Import contacts",
+      outputDescription: "Import result",
+      operationKind: "system",
+      audience: "agent",
+      manualRun: "advanced",
+    });
+    expect(out.adminActions[0]!.triggers[0]).toMatchObject({
+      name: "neutralTrigger",
+      sourceKind: "mcp",
+      surface: "staff",
+    });
   });
 });
 

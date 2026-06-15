@@ -8,6 +8,7 @@ import {
   Home,
   Settings as SettingsIcon,
   Users,
+  Workflow,
 } from "lucide-react";
 
 import { LayoutProvider } from "../context/layout-provider";
@@ -170,6 +171,7 @@ function buildNavGroups(
     title: t(language, "nav.more"),
     items: [
       { title: t(language, "nav.media"), url: "/admin/media", icon: Images },
+      { title: t(language, "nav.actions"), url: "/admin/actions", icon: Workflow },
       { title: t(language, "nav.approvals"), url: "/admin/approvals", icon: ClipboardList },
       { title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon },
       // Staff management is owner-only server-side; hide the entry for

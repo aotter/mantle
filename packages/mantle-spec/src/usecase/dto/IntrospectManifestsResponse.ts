@@ -1,4 +1,7 @@
 import type {
+  AdminActionAudience,
+  AdminActionManualRunMode,
+  AdminActionOperationKind,
   AuthPredicate,
   FilterAst,
   HandlerBinding,
@@ -42,10 +45,36 @@ export interface IntrospectedTrigger {
   readonly target: { readonly procedure: string };
 }
 
+export interface IntrospectedAdminActionTrigger {
+  readonly name: string;
+  readonly sourceKind: string;
+  readonly method?: string;
+  readonly path?: string;
+  readonly schema?: string;
+  readonly hooks?: ReadonlyArray<string>;
+  readonly surface?: string;
+}
+
+export interface IntrospectedAdminAction {
+  readonly name: string;
+  readonly input: JsonSchema;
+  readonly output: JsonSchema;
+  readonly requiresAuth: boolean;
+  readonly handlerKind: string;
+  readonly handlerRef?: string;
+  readonly description?: string;
+  readonly outputDescription?: string;
+  readonly operationKind: AdminActionOperationKind;
+  readonly audience: AdminActionAudience;
+  readonly manualRun: AdminActionManualRunMode;
+  readonly triggers: ReadonlyArray<IntrospectedAdminActionTrigger>;
+}
+
 export interface IntrospectManifestsResponse {
   readonly schemas: ReadonlyArray<IntrospectedSchema>;
   readonly views: ReadonlyArray<IntrospectedView>;
   readonly procedures: ReadonlyArray<IntrospectedProcedure>;
   readonly triggers: ReadonlyArray<IntrospectedTrigger>;
+  readonly adminActions: ReadonlyArray<IntrospectedAdminAction>;
   readonly parseErrors: ReadonlyArray<Diagnostic>;
 }

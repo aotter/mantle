@@ -1,8 +1,18 @@
 import { partitionManifests } from "../domain/service/ManifestParser.js";
 import type {
+  AdminActionAudience,
+  AdminActionManualRunMode,
+  AdminActionMetadata,
+  AdminActionOperationKind,
+  ProcedureManifest,
+  TriggerManifest,
+} from "../domain/model/ManifestGrammar.js";
+import type {
   IntrospectManifestsRequest,
 } from "./dto/IntrospectManifestsRequest.js";
 import type {
+  IntrospectedAdminAction,
+  IntrospectedAdminActionTrigger,
   IntrospectManifestsResponse,
   IntrospectedProcedure,
   IntrospectedSchema,
@@ -52,10 +62,107 @@ export class IntrospectManifestsUseCase {
       source: t.spec.source,
       target: t.spec.target,
     }));
-    return { schemas, views, procedures, triggers, parseErrors: request.parseErrors };
+    const adminActions = buildAdminActionItems(partitioned.procedures, partitioned.triggers);
+    return { schemas, views, procedures, triggers, adminActions, parseErrors: request.parseErrors };
   }
 
   static run(request: IntrospectManifestsRequest): IntrospectManifestsResponse {
     return new IntrospectManifestsUseCase().execute(request);
   }
+}
+
+function buildAdminActionItems(
+  procedures: readonly ProcedureManifest[],
+  triggers: readonly TriggerManifest[],
+): readonly IntrospectedAdminAction[] {
+  const triggersByProcedure = new Map<string, TriggerManifest[]>();
+  for (const trigger of triggers) {
+    const list = triggersByProcedure.get(trigger.spec.target.procedure) ?? [];
+    list.push(trigger);
+    triggersByProcedure.set(trigger.spec.target.procedure, list);
+  }
+
+  return procedures.map((procedure) => {
+    const actionTriggers = triggersByProcedure.get(procedure.metadata.name) ?? [];
+    const declared = readAdminActionMetadata(procedure.spec.admin);
+    const triggerMetadata = firstDeclaredTriggerMetadata(actionTriggers);
+    const operationKind = declared.operationKind ?? triggerMetadata.operationKind ?? "generic";
+    const audience = declared.audience ?? triggerMetadata.audience ?? "staff";
+    const manualRun = declared.manualRun ?? triggerMetadata.manualRun ?? "recommended";
+    return {
+      name: procedure.metadata.name,
+      input: procedure.spec.input,
+      output: procedure.spec.output,
+      requiresAuth: Boolean(procedure.spec.requires?.auth),
+      handlerKind: procedure.spec.handler.kind,
+      handlerRef: procedure.spec.handler.kind === "ref" ? procedure.spec.handler.ref : undefined,
+      description: declared.description ?? stringDescription(procedure.spec.input),
+      outputDescription: declared.outputDescription ?? stringDescription(procedure.spec.output),
+      operationKind,
+      audience,
+      manualRun,
+      triggers: actionTriggers.map(triggerSummary),
+    };
+  });
+}
+
+function firstDeclaredTriggerMetadata(triggers: readonly TriggerManifest[]): Partial<AdminActionMetadata> {
+  for (const trigger of triggers) {
+    const metadata = readAdminActionMetadata(trigger.spec.admin);
+    if (metadata.operationKind || metadata.audience || metadata.manualRun) return metadata;
+  }
+  return {};
+}
+
+function triggerSummary(trigger: TriggerManifest): IntrospectedAdminActionTrigger {
+  const source = trigger.spec.source;
+  if (source.kind === "http") {
+    return {
+      name: trigger.metadata.name,
+      sourceKind: source.kind,
+      method: source.method,
+      path: source.path,
+    };
+  }
+  if (source.kind === "lifecycle") {
+    return {
+      name: trigger.metadata.name,
+      sourceKind: source.kind,
+      schema: source.schema,
+      hooks: source.on,
+    };
+  }
+  return {
+    name: trigger.metadata.name,
+    sourceKind: source.kind,
+    surface: source.surface,
+  };
+}
+
+function readAdminActionMetadata(value: unknown): Partial<AdminActionMetadata> {
+  if (value === null || typeof value !== "object") return {};
+  const record = value as Record<string, unknown>;
+  return {
+    description: typeof record.description === "string" ? record.description : undefined,
+    outputDescription: typeof record.outputDescription === "string" ? record.outputDescription : undefined,
+    operationKind: isOperationKind(record.operationKind) ? record.operationKind : undefined,
+    audience: isAudience(record.audience) ? record.audience : undefined,
+    manualRun: isManualRun(record.manualRun) ? record.manualRun : undefined,
+  };
+}
+
+function stringDescription(schema: { readonly description?: unknown }): string | undefined {
+  return typeof schema.description === "string" ? schema.description : undefined;
+}
+
+function isOperationKind(value: unknown): value is AdminActionOperationKind {
+  return value === "checkout" || value === "inventory" || value === "orders" || value === "system" || value === "generic";
+}
+
+function isAudience(value: unknown): value is AdminActionAudience {
+  return value === "staff" || value === "storefront" || value === "system" || value === "agent";
+}
+
+function isManualRun(value: unknown): value is AdminActionManualRunMode {
+  return value === "recommended" || value === "debug" || value === "advanced";
 }

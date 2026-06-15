@@ -2,6 +2,7 @@ import type { Context, Hono } from "hono";
 import {
   DiagnosticError,
   HTTP_STATUS_BY_CODE,
+  IntrospectManifestsUseCase,
   MCP_HINT_KEYWORD,
   VIEW_PARAMS_RESERVED,
   isMediaMcpHint,
@@ -113,6 +114,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     "/admin/c/:collection/:id",
     "/admin/editor",
     "/admin/media",
+    "/admin/actions",
     "/admin/approvals",
     "/admin/preferences",
     "/admin/settings",
@@ -130,6 +132,10 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   const collections = schemas
     .filter((s) => !s.spec.translates)
     .map((s) => adminEditorCollection(s, schemas));
+  const adminActions = IntrospectManifestsUseCase.run({
+    manifests: ref.manifests,
+    parseErrors: [],
+  }).adminActions;
 
   type StaffGateOk = Extract<StaffGate, { kind: "ok" }>;
   const guarded = (
@@ -267,6 +273,37 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   });
 
   guarded("get", "/admin/api/collections", () => jsonResponse(200, { collections }));
+
+  guarded("get", "/admin/api/actions", () => jsonResponse(200, { items: adminActions }));
+
+  guarded("post", "/admin/api/actions/:name/run", async (c, gate) =>
+    runUseCase("POST /admin/api/actions/:name/run", async () => {
+      const runtime = await ref.get();
+      const name = c.req.param("name") ?? "";
+      const procedure = runtime.proceduresByName.get(name);
+      if (!procedure) {
+        throw new DiagnosticError(
+          runtimeDiagnostic({
+            code: "NOT_FOUND",
+            severity: "error",
+            path: "POST /admin/api/actions/:name/run",
+            value: name,
+            expected: "registered Procedure manifest",
+            message: `Procedure '${name}' was not found.`,
+          }),
+        );
+      }
+      const body = (await c.req.raw.json().catch(() => ({}))) as { input?: unknown };
+      const result = await runtime.invokeProcedure.execute({
+        procedure,
+        input: body.input ?? {},
+        ctx: adminHandlerContext(c, gate),
+        pathPrefix: `POST /admin/api/actions/${name}/run`,
+      });
+      if (result.ok) return { ok: true, data: result.data };
+      throw new DiagnosticError(result.diagnostic);
+    }),
+  );
 
   guarded("get", "/admin/api/site", async (c) => {
     const runtime = await ref.get();

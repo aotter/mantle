@@ -274,6 +274,33 @@ export interface ProcedureManifestSpec {
    *  a handler map) and `kind: "builtin"` (5-op CRUD shortcut over
    *  the entry-writer chokepoint). */
   readonly handler: HandlerBinding;
+  /** Optional admin-console projection metadata. When present, admin
+   *  surfaces read these declared values directly instead of guessing
+   *  intent from Procedure names, Trigger paths, or collection names. */
+  readonly admin?: AdminActionMetadata;
+}
+
+export const ADMIN_ACTION_OPERATION_KINDS = [
+  "checkout",
+  "inventory",
+  "orders",
+  "system",
+  "generic",
+] as const;
+export type AdminActionOperationKind = (typeof ADMIN_ACTION_OPERATION_KINDS)[number];
+
+export const ADMIN_ACTION_AUDIENCES = ["staff", "storefront", "system", "agent"] as const;
+export type AdminActionAudience = (typeof ADMIN_ACTION_AUDIENCES)[number];
+
+export const ADMIN_ACTION_MANUAL_RUN_MODES = ["recommended", "debug", "advanced"] as const;
+export type AdminActionManualRunMode = (typeof ADMIN_ACTION_MANUAL_RUN_MODES)[number];
+
+export interface AdminActionMetadata {
+  readonly description?: string;
+  readonly outputDescription?: string;
+  readonly operationKind?: AdminActionOperationKind;
+  readonly audience?: AdminActionAudience;
+  readonly manualRun?: AdminActionManualRunMode;
 }
 
 export type HandlerBinding = HandlerRefBinding | HandlerBuiltinBinding;
@@ -347,6 +374,8 @@ export interface TriggerManifestSpec {
   readonly source: TriggerSource;
   /** The Procedure invoked when this Trigger fires. */
   readonly target: { readonly procedure: string };
+  /** Optional admin-console projection metadata for this Trigger. */
+  readonly admin?: Pick<AdminActionMetadata, "operationKind" | "audience" | "manualRun">;
 }
 
 /** v0.1.0 ships `http`, `lifecycle`, and `mcp`. `cron` / `queue` stay
