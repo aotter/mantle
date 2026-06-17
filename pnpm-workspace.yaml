@@ -39,4 +39,4 @@ catalog:
   # Shared toolchain — every package's devDeps.
   typescript: ^6.0.3
   '@types/node': ^25
-  vitest: ^4.1.7
+  vitest: ^4.1.8
