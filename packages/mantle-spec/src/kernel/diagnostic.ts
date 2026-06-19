@@ -95,10 +95,6 @@ export const DIAGNOSTIC_CODES = [
   "MEDIA_VARIANT_SIZE_EXCEEDED",
   "MEDIA_VARIANTS_SUSPICIOUS_SIZE",
   "MEDIA_ASSET_NOT_FOUND",
-  // Mantle agent-memory layer (ADR-0016). Validate-time CLI check
-  // gates deploy until the install agent's Mantle subagent has
-  // written the 5-card welcome letter into mantle/site.md.
-  "MANTLE_LETTER_NOT_WRITTEN",
 ] as const;
 
 export type DiagnosticCode = (typeof DIAGNOSTIC_CODES)[number];

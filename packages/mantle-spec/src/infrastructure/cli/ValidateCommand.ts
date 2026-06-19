@@ -1,4 +1,4 @@
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { join, resolve, relative } from "node:path";
 import { exit, stdout, stderr, cwd } from "node:process";
 import {
@@ -26,7 +26,7 @@ import { loadManifestsFromRoot } from "./loadManifests.js";
  *
  * Phase (which gates are active — see Phase doc below):
  *   --phase preview  → grammar checks only; deploy-only gates skipped (default)
- *   --phase deploy   → all checks including the Mantle welcome letter
+ *   --phase deploy   → production/deploy checks
  *
  * Per the clean-architecture rules this is a thin adapter: it loads
  * files, constructs the request DTO, calls the use case, formats the
@@ -95,8 +95,7 @@ Options:
                         preview: grammar + cross-Schema checks only.
                                  Suitable right after \`create-mantle\`
                                  and during local \`pnpm dev\`.
-                        deploy:  adds the Mantle welcome letter gate
-                                 + any other pre-deploy-only checks.
+                        deploy:  adds any pre-deploy-only checks.
                                  Run this before \`wrangler deploy\`.
   --format <fmt>      'json' or 'text' (default: auto by isTTY)
   --json              Alias for --format json
@@ -112,16 +111,13 @@ Exit codes:
 /**
  * Which diagnostic codes are gated to which phase. Codes not listed
  * here fire in every phase. The list is small on purpose — most
- * grammar checks belong in every phase; only the lifecycle-stage gates
- * (Mantle letter, future production secret checks) live here.
+ * grammar checks belong in every phase; only lifecycle-stage gates
+ * (for example future production secret checks) live here.
  *
  * "deploy" entries mean: the diagnostic is emitted only when phase
- * === "deploy". In preview the check still runs (cheap) but the
- * diagnostic is dropped before counting + printing.
+ * === "deploy".
  */
-const PHASE_GATED_CODES: Readonly<Record<string, Phase>> = {
-  MANTLE_LETTER_NOT_WRITTEN: "deploy",
-};
+const PHASE_GATED_CODES: Readonly<Record<string, Phase>> = {};
 
 function isVisibleInPhase(code: string, phase: Phase): boolean {
   const gate = PHASE_GATED_CODES[code];
@@ -181,17 +177,10 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
     );
   }
 
-  // The Mantle welcome letter check — only fires when mantle/site.md
-  // exists at the cwd (legacy projects predating ADR-0016 skip silently).
-  // See § Mantle letter check below for why this lives here.
-  const mantleDiagnostics = await runMantleLetterCheck();
-
-  const rawDiagnostics = [...parseErrors, ...result.diagnostics, ...cliWarnings, ...mantleDiagnostics];
+  const rawDiagnostics = [...parseErrors, ...result.diagnostics, ...cliWarnings];
 
   // Apply phase gating — diagnostics for codes only valid in another
-  // phase are dropped before counting. Preview hides
-  // `MANTLE_LETTER_NOT_WRITTEN` so a fresh-scaffold `pnpm validate`
-  // exits 0; deploy keeps it.
+  // phase are dropped before counting.
   const diagnostics = rawDiagnostics.filter((d) => isVisibleInPhase(d.code, args.phase));
   const suppressedCount = rawDiagnostics.length - diagnostics.length;
 
@@ -244,62 +233,6 @@ async function loadHandlerSource(root: string): Promise<string> {
   }
   await walk(root);
   return chunks.join("\n");
-}
-
-/**
- * Mantle welcome letter check (ADR-0016).
- *
- * `mantle/site.md` is the agent-memory semantic layer. Its `## welcome`
- * section ships with 5 HTML-comment placeholders (`<!-- Mantle: ... -->`)
- * inside `### card1` … `### card5` that the install agent's Mantle
- * subagent replaces with prose. If those placeholders still exist at
- * validate time, the welcome letter wasn't written — block deploy.
- *
- * Lives in the CLI rather than ValidateManifestsUseCase because it's a
- * filesystem-state check (mantle/site.md presence + contents), not a
- * manifest grammar check.
- *
- * Silently no-ops on projects without `mantle/site.md` (legacy installs
- * predating ADR-0016).
- */
-async function runMantleLetterCheck(): Promise<ReadonlyArray<Diagnostic>> {
-  const path = resolve(cwd(), "mantle", "site.md");
-  try {
-    const s = await stat(path);
-    if (!s.isFile()) return [];
-  } catch {
-    return [];
-  }
-  let content: string;
-  try {
-    content = await readFile(path, "utf8");
-  } catch {
-    return [];
-  }
-  const cardsWithPlaceholder: number[] = [];
-  for (let n = 1; n <= 5; n++) {
-    const cardRe = new RegExp(
-      `### card${n}\\s*\\n([\\s\\S]*?)(?=\\n### card|\\n## |$)`,
-    );
-    const m = content.match(cardRe);
-    if (!m) continue;
-    const body = m[1] ?? "";
-    if (/<!--[\s\S]*?-->/.test(body) || body.trim() === "") {
-      cardsWithPlaceholder.push(n);
-    }
-  }
-  if (cardsWithPlaceholder.length === 0) return [];
-  return [
-    validateDiagnostic({
-      code: "MANTLE_LETTER_NOT_WRITTEN",
-      severity: "error",
-      path: `mantle/site.md#welcome:${cardsWithPlaceholder.map((n) => `card${n}`).join(",")}`,
-      expected: "all 5 ## welcome cards (card1..card5) written in Mantle's voice",
-      suggestion:
-        "Run `pnpm mantle:prompt > /tmp/mantle-letter-prompt.md`, then dispatch the Mantle subagent with that prompt body to fill the cards. See the install Skill for the full flow.",
-      message: `Mantle welcome letter incomplete — card${cardsWithPlaceholder.length === 1 ? "" : "s"} ${cardsWithPlaceholder.join(", ")} still contain template placeholders.`,
-    }),
-  ];
 }
 
 function emitText(

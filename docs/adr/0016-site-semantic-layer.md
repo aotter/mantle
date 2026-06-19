@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (slimmed 2026-05-12 per Epic #116; original 2026-05-12).
+Accepted (slimmed 2026-05-12 per Epic #116; letter surface suspended 2026-06-19).
 
 ## Decision
 
@@ -11,12 +11,14 @@ Every agent-authored mantle project carries two files at fixed paths. They serve
 | File | Audience | Size budget | Format |
 |---|---|---|---|
 | `AGENTS.md` | Any cross-tool agent harness (Codex / Cursor / Aider / Amp / Factory / Claude Code) | ~30 lines | Plain markdown |
-| `mantle/site.md` | Mantle (install / customize / deploy persona — Epic #47, scoped per Epic #116) | ~300 lines | Frontmatter + section bodies |
+| `mantle/site.md` | Mantle install / customize / deploy context | ~300 lines | Frontmatter + section bodies |
 
 `AGENTS.md` answers "what is this and how do I run it." `mantle/site.md` carries the site's semantic layer:
 
 - Frontmatter: machine-readable (`archetype`, `brand`, `locales`, `site_url`, `revisions[]`, `futures[]`, `dont_touch[]`).
-- Body sections (`## site`, `## voice`, `## welcome` (5 cards), `## editor`, `## history`) each open with a `> purpose:` header so agents can route reads without parsing prose. Mantle reads the whole file on return, edits sections, writes the whole file back. **Atomic replace, not append.**
+- Body sections (`## site`, `## voice`, `## editor`, `## history`) each open with a `> purpose:` header so agents can route reads without parsing prose. Mantle reads the whole file on return, edits sections, writes the whole file back. **Atomic replace, not append.**
+
+The earlier `## welcome` 5-card letter surface is suspended. Provisioning must not block on prose completion in `mantle/site.md`; a first deploy should be possible from deterministic scaffold state.
 
 ## Placeholder macros
 
@@ -38,7 +40,7 @@ New macros must be added here, to `_common/*.template`, and to the substitution 
 
 ## Update rules
 
-- **Mantle on return**: read whole `mantle/site.md`, edit relevant sections, write whole atomically, append one paragraph to `## history`. Voice rules (Epic #116 scope-narrow) apply only when editing the `## welcome` 5 cards and the closing handoff line.
+- **Mantle on return**: read whole `mantle/site.md`, edit relevant sections, write whole atomically, append one paragraph to `## history`.
 - **provision on deploy**: rewrite frontmatter `site_url:` placeholder → real Workers URL; append a `revisions:` entry. Same `Public site:` rewrite in `AGENTS.md`. Single commit at end of provision.
 - **No mid-section staged-and-running mutation.** A section is prose-replaced atomically, or a frontmatter scalar/list is replaced — never partial writes.
 
@@ -50,6 +52,6 @@ New macros must be added here, to `_common/*.template`, and to the substitution 
 
 - Templates: `mantle-starters/_common/AGENTS.md.template` and `mantle-starters/_common/mantle/site.md.template`.
 - Substitution: `packages/create-mantle/src/placeholder.ts`.
-- Install handoff: `skills/install/SKILL.md` describes the post-substitution prose-fill (HTML comments → prose drawn from interview).
+- Install handoff: `skills/install/SKILL.md` describes deterministic scaffold validation and the short post-substitution notes fill.
 - Provision update: `skills/provision/SKILL.md` describes the `site_url:` + `revisions:` write after deploy.
 - Theme overlay merge (Epic #116): `themes/<theme-key>/` overlay applies after the archetype starter and may touch `src/theme/` — never these two files.
