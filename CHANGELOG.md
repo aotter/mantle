@@ -6,6 +6,19 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.31] - 2026-06-20
+
+### Fixed
+
+- **starters fanout**: no SDK code changes. alpha.31 re-spins the
+  release fanout so starter Workers keep auth disabled until
+  `provision:up` has written all required GitHub OAuth and Better Auth
+  settings, allowing Cloudflare's first Git deploy to boot public routes
+  instead of throwing during the setup window.
+- **landing fanout**: no SDK code changes. alpha.31 also carries the
+  deterministic launch handoff copy that removes the remaining old
+  interview-harness wording from production launch instructions.
+
 ## [0.0.11-alpha.30] - 2026-06-19
 
 ### Changed
