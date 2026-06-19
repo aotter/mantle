@@ -49,7 +49,6 @@ After `create-mantle` runs, the scaffold's ground truth lives in:
 | `src/.mantle/generated.*.ts` | Scaffolder-owned feature glue |
 | `.mantle/features.json` | Selected feature overlays |
 | `.mantle/launch-state.json` | Non-secret launch choices from landing |
-| `mantle/site.md` | Site semantic layer |
 | `AGENTS.md` | Cross-tool agent entry |
 
 ## Accepted Inputs
@@ -214,7 +213,7 @@ from the landing answers or the user's explicit request:
 - delete an unused manifest;
 - add one clearly requested field to an existing Schema;
 - correct site defaults in `src/mantleConfig.ts`;
-- fix a typo in `mantle/site.md` or `AGENTS.md`.
+- fix a typo in `AGENTS.md`.
 
 Run `pnpm validate` after every edit. Route larger feature work to
 `mantle:development` after production provision.
@@ -222,7 +221,7 @@ Run `pnpm validate` after every edit. Route larger feature work to
 ## Don't
 
 - Don't resurrect the manual interview / prompt-composition harness.
-- Don't block first deploy on polishing `mantle/site.md` prose.
+- Don't block first deploy on polishing prose or writing a site letter.
 - Don't ask for a Cloudflare API token in the base first-run path.
 - Don't commit provider secrets.
 - Don't use `127.0.0.1` in OAuth callback examples; use `localhost`

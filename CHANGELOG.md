@@ -6,6 +6,21 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.29] - 2026-06-19
+
+### Removed
+
+- **skills / ADR-0016**: remove `mantle/site.md` from the first-run
+  install/provision contract. New scaffolds use deterministic
+  `.mantle/launch-state.json` plus `AGENTS.md`; site prose/letter
+  state no longer blocks or participates in production provision.
+
+### Changed
+
+- **starters fanout**: alpha.29 re-spins the release fanout so the
+  paired starter tarball no longer generates `mantle/site.md` or
+  repo-local skill instructions that depend on it.
+
 ## [0.0.11-alpha.28] - 2026-06-19
 
 ### Changed

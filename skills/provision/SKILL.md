@@ -38,8 +38,7 @@ expected result, and what value the user should report back.
   `ADMIN_GITHUB_LOGIN`, and the correct Worker name.
 - Worker secrets are set: `GITHUB_CLIENT_SECRET`,
   `BETTER_AUTH_SECRET`, and optional feature/provider secrets.
-- `mantle/site.md` frontmatter `site_url:` and `AGENTS.md` `Public
-  site:` point at the deployed Worker URL.
+- `AGENTS.md` `Public site:` points at the deployed Worker URL.
 - Staff MCP and browser admin sign-in are ready to test.
 - Operator setup URL is ready to hand to the owner:
   `https://mantle.tools/connect?site=<url-encoded-worker-url>`.
@@ -136,8 +135,8 @@ unset GITHUB_CLIENT_SECRET
 8. Commit and push generated non-secret outputs:
 
 ```bash
-git status --short -- wrangler.toml src/mantleConfig.ts mantle/site.md AGENTS.md
-git add wrangler.toml src/mantleConfig.ts mantle/site.md AGENTS.md
+git status --short -- wrangler.toml src/mantleConfig.ts AGENTS.md
+git add wrangler.toml src/mantleConfig.ts AGENTS.md
 git commit -m "mantle: wire production provision"
 git push
 ```
@@ -183,8 +182,8 @@ language:
 - What changed locally and what was committed.
 - Any intentionally deferred feature setup.
 
-Point future agents at `mantle/site.md`, `AGENTS.md`, and the repo-local
-`.agent/skills/` directory.
+Point future agents at `AGENTS.md`, `.mantle/launch-state.json`, and the
+repo-local `.agent/skills/` directory.
 
 ## Diagnostics
 
