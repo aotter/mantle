@@ -6,6 +6,24 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.28] - 2026-06-19
+
+### Changed
+
+- **skills/install**: remove the old manual interview / prompt harness
+  from the install skill. The user-facing path is now landing session
+  -> deterministic scaffold -> repo-local provision.
+- **skills/provision**: make the provision handoff explicitly
+  provider-first: the agent validates and pushes the repo, guides the
+  user through Cloudflare's GitHub-backed first deploy and per-site
+  GitHub OAuth App, then uses Wrangler for non-secret config and
+  secrets.
+- **starters fanout**: alpha.28 re-spins the release fanout so the
+  paired starter tarball includes direct scaffold launch-state
+  persistence, idempotent top-level Worker var updates, and the
+  provider-first `mantle:provision` handoff
+  (aotter/mantle-starters#305, #306, #307).
+
 ## [0.0.11-alpha.27] - 2026-06-19
 
 ### Changed
