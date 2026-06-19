@@ -6,6 +6,27 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.26] - 2026-06-19
+
+### Removed
+
+- **skills/docs**: remove the retired two-URL starting prompt docs and
+  prompt-composition fallback language so the install path is
+  launch-session-first, with direct scaffolder flags only as a manual
+  fallback (#369).
+
+### Changed
+
+- **skills/provision**: simplify the provision contract around the
+  deterministic flow: validate and push the repo first, guide the user
+  through Cloudflare's GitHub-backed first deploy and per-site GitHub
+  OAuth App, then let Wrangler write secrets and config (#369).
+- **starters fanout**: the paired `mantle-starters` release updates
+  scaffolded `mantle/site.md`, repo-local `mantle:provision`, starter
+  READMEs, and archetype hints so new generated projects no longer carry
+  install-agent prose or first-prompt harness leftovers
+  (aotter/mantle-starters#300).
+
 ## [0.0.11-alpha.25] - 2026-06-19
 
 ### Removed
