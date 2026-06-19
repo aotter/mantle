@@ -10,8 +10,7 @@ when_to_invoke: |
 You're installing a mantle site for the user. If the user arrived from
 the landing launch flow, a short-lived launch session already carries
 the launch-critical values. Treat that session as the source of truth
-and scaffold first. Do not switch to the retired prompt-composition
-flow.
+and scaffold first.
 
 ## Ground truth
 

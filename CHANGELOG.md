@@ -6,6 +6,14 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.27] - 2026-06-19
+
+### Changed
+
+- **skills/install**: remove the last historical prompt-composition
+  warning from the install skill so handoff text describes only the
+  deterministic launch-session scaffold path.
+
 ## [0.0.11-alpha.26] - 2026-06-19
 
 ### Removed
