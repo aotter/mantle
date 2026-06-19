@@ -26,6 +26,10 @@ The base flow is deterministic first, provider-browser second:
 Mantle landing is not the executor. It provides launch context and a
 handoff; provider authority stays with the user and their coding agent.
 
+Do deterministic work before interrupting the user. When provider UI is
+required, give one exact browser task at a time: link, button path,
+expected result, and what value the user should report back.
+
 ## End State
 
 - The scaffold is committed and pushed to the user's private GitHub repo.
@@ -84,7 +88,13 @@ ask the user to switch/login before creating the repo.
 2. Create a private GitHub repo in the selected owner, add the remote,
    commit the scaffold, and push. Use the user's GitHub auth context.
 
-3. Hand the user directly to Cloudflare's Git import path:
+3. Print the deterministic browser plan:
+
+```bash
+pnpm run provision:plan
+```
+
+4. Hand the user directly to Cloudflare's Git import path:
 
 ```text
 https://dash.cloudflare.com/?to=%2F%3Aaccount%2Fworkers-and-pages
@@ -92,18 +102,19 @@ https://dash.cloudflare.com/?to=%2F%3Aaccount%2Fworkers-and-pages
 
 Ask them to create a Worker from the pushed GitHub repo, keep the Worker
 name equal to `wrangler.toml` `name`, wait for deploy, and send back the
-live `*.workers.dev` URL.
+live `*.workers.dev` URL. Ask for the Worker name only if Cloudflare
+forced a name different from the repo/project name.
 
-4. Print the deterministic plan:
+5. After the Worker URL is known, print the worker-specific plan:
 
 ```bash
-pnpm run provision:plan
+pnpm run provision:plan -- --worker-url <worker-url>
 ```
 
 Read only the values needed for the current project. Do not dump
 internal notes or placeholder syntax onto a non-coder.
 
-5. Ask the user to create the per-site GitHub OAuth App after the Worker
+6. Ask the user to create the per-site GitHub OAuth App after the Worker
    URL is known:
 
 - Homepage URL: `<worker-url>`
@@ -113,7 +124,7 @@ internal notes or placeholder syntax onto a non-coder.
 Ask for the Client ID in chat. Keep the Client Secret out of chat and
 pass it through the hidden shell prompt below.
 
-6. Authorize Wrangler and apply provision:
+7. Authorize Wrangler and apply provision:
 
 ```bash
 pnpm exec wrangler login
@@ -122,19 +133,30 @@ pnpm run provision:up -- --worker-url <worker-url> --github-username <gh-login> 
 unset GITHUB_CLIENT_SECRET
 ```
 
-7. Commit and push generated non-secret outputs:
+8. Commit and push generated non-secret outputs:
 
 ```bash
 git status --short -- wrangler.toml src/mantleConfig.ts mantle/site.md AGENTS.md
+git add wrangler.toml src/mantleConfig.ts mantle/site.md AGENTS.md
+git commit -m "mantle: wire production provision"
+git push
 ```
 
-8. Smoke test:
+Wait for Cloudflare Workers Builds to redeploy from the pushed commit. If
+the dashboard build is unavailable, run `pnpm deploy` from this repo as a
+fallback and explain that fallback to the user.
+
+9. Smoke test:
 
 - public home route;
 - `/admin/sign-in`;
 - GitHub admin sign-in;
 - `/mcp/staff` with an agent client when available;
 - a starter-specific core workflow.
+
+A fresh site may have no public home content yet. A 404 on the locale
+homepage is acceptable only after the Worker boots, `/admin/sign-in`
+loads, and auth/MCP boundaries behave correctly.
 
 ## Feature Overlays
 
