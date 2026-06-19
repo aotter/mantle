@@ -6,6 +6,26 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.25] - 2026-06-19
+
+### Removed
+
+- **`@aotter/mantle-spec`**: remove the `MANTLE_LETTER_NOT_WRITTEN`
+  deploy gate. `mantle validate --phase deploy` no longer blocks a
+  fresh scaffold on unfinished prose in `mantle/site.md` (#367).
+
+### Changed
+
+- **skills**: the install handoff now matches the deterministic
+  provision-first flow: scaffold, validate, create/push the GitHub repo,
+  hand the user through Cloudflare's GitHub-backed first deploy, then
+  let Wrangler take over follow-up provider setup (#367).
+- **starters fanout**: the paired `mantle-starters` release removes the
+  generated letter harness (`mantle:prompt`, the subagent prompt
+  template, and `## welcome` card placeholders) and updates repo-local
+  `mantle:provision` so missing `pnpm test` scripts are skipped instead
+  of reported as failures (aotter/mantle-starters#297).
+
 ## [0.0.11-alpha.24] - 2026-06-15
 
 ### Changed
