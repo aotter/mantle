@@ -242,17 +242,20 @@ The pivot point — when to extract — is when the second adapter (`mantle-netl
 
 None. Pre-v0.1.0 has no external consumers. Existing demo deployments tear down + re-bootstrap from the migrated `0.0.x-alpha` release.
 
-### Skills + prompts
+### Skills + launch handoff
 
-`docs/prompts/publication.{en,zh-TW}.md` reference `<worker_url>/staff/mcp` for staff-targeted MCP handoff. `skills/install/SKILL.md` and `skills/provision/SKILL.md` document the dual handoff. Provision Skill's final report distinguishes:
+The Mantle landing launch session and generated repo-local
+`mantle:provision` skill document the dual MCP handoff. Provision's final
+report distinguishes:
 
 ```
 Public site:    https://<worker>.workers.dev/
-Staff MCP URL:  https://<worker>.workers.dev/staff/mcp     (give to your owner agent)
+Staff MCP URL:  https://<worker>.workers.dev/mcp/staff     (give to your owner agent)
 User MCP URL:   https://<worker>.workers.dev/mcp           (give to visitors / their agents)
 ```
 
-The publication starter repo's production smoke recipe uses `/staff/mcp` for the MCP operator smoke step.
+The publication starter repo's production smoke recipe uses `/mcp/staff`
+for the MCP operator smoke step.
 
 ### Future-proof for v0.2
 

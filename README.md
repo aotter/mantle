@@ -22,9 +22,16 @@ Agent-native headless CMS where AI agents are first-class authors — locked-gra
 
 ## Try it cold
 
-Recommended path: open the Mantle landing page, pick an archetype/theme, provide or authorize the GitHub owner context, then hand the generated one-line launch command to Claude Code / Cursor / Codex. The command runs `create-mantle launch --session <session-url>`; the short-lived session carries the site name, locales, GitHub owner/admin login, starter choices, and repo intent so the agent can scaffold first and ask content/voice questions after launch.
+Recommended path: open the Mantle landing page, answer the launch
+questions, sign in with GitHub, then hand the generated one-line launch
+command to Claude Code / Cursor / Codex. The command runs
+`create-mantle launch --session <session-url>`; the short-lived session
+carries the site name, locales, GitHub owner/admin login, starter
+choices, and repo intent so the agent scaffolds deterministically first.
 
-The older prompt-first path remains available when a launch session is not present: the install Skill asks the right follow-up questions and then runs the scaffolder for you.
+When a launch session is not present, the install Skill can still collect
+the exact scaffolder flags manually. That path is a fallback, not the
+primary onboarding UX.
 
 Starter source and direct scaffolder usage live in [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters); this repo carries the SDK, runtime, adapter packages, and agent skills.
 

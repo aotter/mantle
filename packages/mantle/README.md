@@ -31,7 +31,11 @@ import { mountServerEndpoints } from "@aotter/mantle/cloudflare";
 
 ## Getting started
 
-Recommended path: open the Mantle landing page, pick an archetype and theme, then paste the generated prompt into Claude Code / Cursor / Codex. The install Skill asks the right follow-up questions and then runs the scaffolder for you.
+Recommended path: open the Mantle landing page, answer the launch
+questions, sign in with GitHub, then paste the generated launch command
+into Claude Code / Cursor / Codex. The short-lived launch session carries
+the scaffold values, so the agent can run `create-mantle launch` first
+and continue with provisioning.
 
 Available starter keys and direct scaffolder usage live in [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters): `presence`, `publication`, `intake`, `transaction`, and `blank`. See `skills/install` in the [Mantle repo](https://github.com/aotter/mantle/tree/develop/skills/install) for the full agent-driven install flow.
 
