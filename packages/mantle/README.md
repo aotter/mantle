@@ -32,12 +32,13 @@ import { mountServerEndpoints } from "@aotter/mantle/cloudflare";
 ## Getting started
 
 Recommended path: open the Mantle landing page, answer the launch
-questions, sign in with GitHub, then paste the generated launch command
-into Claude Code / Cursor / Codex. The short-lived launch session carries
-the scaffold values, so the agent can run `create-mantle launch` first
-and continue with provisioning.
+questions, and sign in with GitHub and Cloudflare. Landing provisions the
+site server-side — it creates the private GitHub repo, commits a blank
+deployable Mantle site, and connects the first Cloudflare deploy. Then
+point your coding agent (Claude Code / Cursor / Codex) at the provisioned
+repo to continue.
 
-Available starter keys and direct scaffolder usage live in [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters): `presence`, `publication`, `intake`, `transaction`, and `blank`. See `skills/install` in the [Mantle repo](https://github.com/aotter/mantle/tree/develop/skills/install) for the full agent-driven install flow.
+Starter source and provision bundles live in [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters); launch starts from the blank base and the agent applies the selected type as a post-launch overlay. See `skills/install` in the [Mantle repo](https://github.com/aotter/mantle/tree/develop/skills/install) for how the agent continues a provisioned repo.
 
 ## Adapter targets
 

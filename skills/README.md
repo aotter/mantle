@@ -4,10 +4,10 @@ Agent-readable skill briefs for consumers of `@aotter/mantle-*`. Discoverable by
 
 | Skill | When to invoke |
 |---|---|
-| [`install`](install/SKILL.md) | User wants to start a new mantle project. Preferred path consumes a landing-created launch session and runs the generated `create-mantle` command from the [starters monorepo](https://github.com/aotter/mantle-starters), including any selected source feature overlays. |
+| [`install`](install/SKILL.md) | User wants to start or continue a Mantle site. Sites launch on [Mantle landing](https://mantle.tools), which provisions the GitHub repo and first Cloudflare deploy; this brief orients the agent to take over and continue the provisioned repo. |
 | [`customize-design`](customize-design/SKILL.md) | User wants to rebrand or restyle a publication starter project. Walks the L1–L4 theme stack (tokens / extraCss+icons+i18n / Header+Footer / whole-template). |
 | [`extend`](extend/SKILL.md) | User has an existing project and wants to add a Schema / View / Procedure / Trigger or wire a feature (contact form, search, newsletter signup). |
-| [`provision`](provision/SKILL.md) | User wants to deploy to production through starter-owned lifecycle scripts: OAuth verifier swap, secrets, prod D1/KV, custom domain, and explicitly selected feature resources. |
+| [`provision`](provision/SKILL.md) | User wants production fully usable after a landing launch. Verify the Cloudflare deploy, wire per-site staff auth (GitHub OAuth App + Worker secrets), smoke test, and hand off the operator setup URL. |
 
 The skills target `mantle@v0.1.0`. Each one names its assumed grammar version in the front-matter `applies_to:` field; future versions add a sibling SKILL.md or update the existing one.
 
