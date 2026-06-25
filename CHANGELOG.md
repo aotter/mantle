@@ -6,6 +6,17 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.33] - 2026-06-25
+
+### Removed
+
+- **@aotter/mantle-runtime**: remove the MCP `upload_media_variant` base64 byte-upload path. Media uploads now use `create_media_upload` presigned PUT capabilities plus `commit_media_upload` only.
+
+### Changed
+
+- **@aotter/mantle-runtime**: make `create_media_upload` self-guiding for pure MCP agents: process chat/session image attachments in the agent runtime, preserve PNG transparency and GIF animation, use available Node/Python image tooling when possible, and remember the workflow via host memory/skills when supported without asking users to open a terminal.
+- **release fanout**: alpha.33 carries the paired starter cleanup that removes the retired companion upload plugin and media helper package.
+
 ## [0.0.11-alpha.31] - 2026-06-20
 
 ### Fixed

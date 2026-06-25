@@ -61,50 +61,8 @@ export interface MediaStorage {
    *  delete media_assets row" by calling this once per variant. */
   deleteObject(args: DeleteObjectArgs): Promise<void>;
 
-  /** Server-side variant byte write — the sandboxed-agent alternative
-   *  to the presigned-PUT path produced by `createUpload`. Used by
-   *  the `upload_media_variant` MCP tool when the caller cannot reach
-   *  the storage backend directly (e.g. Claude Cowork agents — the
-   *  outbound proxy doesn't allowlist R2 hosts). The adapter writes
-   *  via its privileged binding (R2 binding for Cloudflare; AWS SDK
-   *  PUT for a future S3 adapter; etc.) with no signed URL involved.
-   *
-   *  The storage-key layout matches what `createUpload` would have
-   *  produced for the same `(uploadGroupId, purpose, role, mimeType)`
-   *  so `commitUpload`'s HEAD-verify still resolves the right object
-   *  regardless of which path the bytes arrived on.
-   *
-   *  Every adapter MUST implement this method (the interface is
-   *  required-shaped, not optional). Adapters without a privileged
-   *  write path implement it as a thrower — typically raising
-   *  `DiagnosticError(MEDIA_NOT_CONFIGURED)` so the use case surfaces
-   *  the failure with the expected diagnostic shape. */
-  putVariantBytes(args: PutVariantBytesArgs): Promise<PutVariantBytesResult>;
 }
 
-export interface PutVariantBytesArgs {
-  /** Logical asset id — matches the same group's `createUpload`. */
-  readonly uploadGroupId: string;
-  /** Drives the storage-key prefix. Must match the pending upload's
-   *  declared purpose. */
-  readonly purpose: string;
-  readonly role: MediaVariantRole;
-  readonly mimeType: string;
-  /** Original filename — preserved on the stored object's metadata
-   *  alongside the variant role + group id, matching createUpload's
-   *  customMetadata shape so commit's HEAD-verify reads the same
-   *  fields whether the bytes arrived via presigned PUT or via this
-   *  server-side path. */
-  readonly filename: string;
-  readonly bytes: Uint8Array;
-}
-
-export interface PutVariantBytesResult {
-  /** Adapter-minted storage key. Use-case persists this back into the
-   *  matching `PendingUploadVariant` so commit verifies the right
-   *  object. */
-  readonly storageKey: string;
-}
 
 /** Variant role within a logical asset.
  *

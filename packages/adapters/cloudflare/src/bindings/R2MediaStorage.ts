@@ -14,8 +14,6 @@ import {
   type MediaAsset,
   type MediaStorage,
   type MediaVariant,
-  type PutVariantBytesArgs,
-  type PutVariantBytesResult,
   type UploadCapability,
 } from "@aotter/mantle-runtime";
 
@@ -205,36 +203,6 @@ export class R2MediaStorage implements MediaStorage {
     await this.bucket.delete(args.storageKey);
   }
 
-  /** Server-side variant byte write — the no-presigned-URL path used
-   *  by the `upload_media_variant` MCP tool for sandboxed-agent
-   *  uploads (#283). Writes via the bound R2 binding directly; the
-   *  storage-key layout matches what `createUpload` would have
-   *  produced for the same `(uploadGroupId, purpose, role, mimeType)`
-   *  so `commitUpload`'s HEAD-verify still resolves the right object.
-   *
-   *  No size / mime enforcement here — the use case checks the
-   *  pending record's `maxBytes` against `args.bytes.byteLength`
-   *  BEFORE calling. This method is the pure write; commit stamps
-   *  customMetadata.committedAt + role + filename as usual. */
-  async putVariantBytes(
-    args: PutVariantBytesArgs,
-  ): Promise<PutVariantBytesResult> {
-    const storageKey = this.buildVariantStorageKey(args.uploadGroupId, args.purpose, {
-      mimeType: args.mimeType,
-      role: args.role,
-      byteSize: args.bytes.byteLength,
-      maxBytes: args.bytes.byteLength,
-    });
-    await this.bucket.put(storageKey, args.bytes, {
-      httpMetadata: { contentType: args.mimeType },
-      customMetadata: {
-        uploadGroupId: args.uploadGroupId,
-        role: args.role,
-        filename: args.filename,
-      },
-    });
-    return { storageKey };
-  }
 
   private async verifyAndCommitVariant(
     args: CommitUploadArgs,

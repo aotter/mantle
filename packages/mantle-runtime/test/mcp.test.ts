@@ -239,6 +239,7 @@ describe("McpJsonRpcDispatcher", () => {
       result: {
         tools: Array<{
           name: string;
+          description: string;
           inputSchema: {
             required?: string[];
             properties?: Record<string, Record<string, unknown>>;
@@ -246,12 +247,27 @@ describe("McpJsonRpcDispatcher", () => {
         }>;
       };
     };
+    const names = body.result.tools.map((t) => t.name);
+    expect(names).toContain("create_media_upload");
+    expect(names).toContain("commit_media_upload");
+    expect(names).not.toContain("upload_media_variant");
     const mediaTool = body.result.tools.find((t) => t.name === "create_media_upload");
     expect(mediaTool?.inputSchema.required).toContain("purpose");
     expect(mediaTool?.inputSchema.properties?.purpose?.enum).toEqual([
       "post-cover",
       "product-gallery",
     ]);
+    expect(mediaTool?.description).toContain("image in chat");
+    expect(mediaTool?.description).toContain("Do not ask the user to open a terminal");
+    expect(mediaTool?.description).toContain("transparent PNG");
+    expect(mediaTool?.description).toContain("animated GIFs must stay animated");
+    expect(mediaTool?.description).toContain("does not expose a base64 upload tool");
+    expect(mediaTool?.description).toContain("already-installed dependency");
+    expect(mediaTool?.description).toContain("install a standard image processing package");
+    expect(mediaTool?.description).toContain("Node agents should prefer sharp");
+    expect(mediaTool?.description).toContain("Python agents should prefer Pillow");
+    expect(mediaTool?.description).toContain("reusable agent memory or skills");
+    expect(mediaTool?.description).not.toContain("mantle-media-tools");
   });
 
   it("tools/call create_draft_posts creates an entry through the use case", async () => {
