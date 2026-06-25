@@ -47,9 +47,9 @@ encode step to where it already runs in a real Node-like runtime:
 - Scaffolders, ops scripts, the admin SPA's local helper, and MCP
   agents (Claude Code, etc.) all execute in environments where
   `sharp` works.
-- A dedicated `@aotter/mantle-media-tools` package ships agent-side
-  CLI + library helpers that take a source file, produce the format
-  set, call `create_media_upload`, upload every variant, and call
+- The MCP client or operator tooling runs the agent-side image
+  processor: take a source file, produce the format set, call
+  `create_media_upload`, upload every variant, and call
   `commit_media_upload`.
 - The Worker only **enforces policy**: required mime set, per-mime
   byte caps, suspicious-shape heuristic (modern format must not be
@@ -178,4 +178,4 @@ use case layer via the repository. The R2 adapter:
 - `packages/mantle-runtime/src/infrastructure/persistence/DatabaseMediaAssetRepository.ts`
 - `packages/mantle-spec/src/domain/model/SiteConfig.ts` (MediaPurposePolicy)
 - `packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts`
-- `mantle-starters/packages/mantle-media-tools/` (agent-side helper)
+- MCP client / operator-side image processing tools

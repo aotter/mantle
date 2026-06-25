@@ -6,6 +6,13 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.34] - 2026-06-25
+
+### Changed
+
+- **@aotter/mantle-runtime**: tighten MCP media-upload guidance so agents read the live purpose policy, do not default to JPEG, preserve transparency and animation, ask before uploading obviously wasteful assets, and suggest another capable agent/runtime when the current host blocks direct presigned PUT uploads.
+- **@aotter/mantle-runtime / docs**: remove current references to the retired `@aotter/mantle-media-tools` helper from media-upload comments, diagnostics, and ADR guidance.
+
 ## [0.0.11-alpha.33] - 2026-06-25
 
 ### Removed

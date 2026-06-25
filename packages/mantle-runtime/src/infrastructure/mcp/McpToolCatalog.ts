@@ -98,7 +98,7 @@ function buildCreateMediaUploadTool(
             const caps = Object.entries(p.maxBytes)
               .map(([m, b]) => `${m}=${b}`)
               .join(", ");
-            return `  • ${p.name} — ${slots}; maxBytes: ${caps}`;
+            return `  • ${p.name} upload rules — ${slots}; choose exactly one mime per slot from this live policy; maxBytes: ${caps}`;
           })
           .join("\n")
       : "";
@@ -110,9 +110,9 @@ function buildCreateMediaUploadTool(
       "If the user provides an image in chat or the current session, the MCP client/agent must handle it directly: read the attachment bytes in the agent runtime, prepare the required variants locally, call create_media_upload with the variant manifest and byte sizes, HTTP PUT each returned uploadUrl using requiredHeaders, then call commit_media_upload. Do not ask the user to open a terminal. Do not send image bytes through MCP; this server intentionally does not expose a base64 upload tool. " +
       "Multi-variant by default (#272): one call yields N presigned PUTs (one per declared slot). " +
       "Per-asset, the agent picks ONE mime per slot from that slot's acceptable set (#282); a " +
-      "single purpose declared with slot 0 = `image/jpeg,image/png,image/gif` accepts jpeg photo primary, png alpha/logo primary, or gif primary when animation is preserved. " +
-      "Preserve source semantics while preparing variants: photos may use JPEG primary plus WebP/AVIF alternates; transparent PNG/logo artwork must keep alpha using PNG primary plus alpha-preserving WebP/AVIF; animated GIFs must stay animated in every generated variant. If the available processor would flatten animation or drop transparency, stop and report that limitation instead of uploading degraded media. " +
-      "Optimization runs agent-side with whatever image processor the MCP client has available; prefer an already-installed dependency, otherwise install a standard image processing package in the agent workspace if the host permits package installs. Node agents should prefer sharp; Python agents should prefer Pillow. If the host supports reusable agent memory or skills, remember this media-variant workflow for reuse. The Worker only verifies policy. After uploading every variant, call commit_media_upload with the returned uploadGroupId. Only registered when the runtime " +
+      "single purpose declared with slot 0 = `image/jpeg,image/png,image/gif` accepts jpeg photo primary, png alpha/logo primary, or gif primary when animation is preserved. The primary/fallback variant is not always JPEG. Do NOT default to JPEG just because it appears in the policy: read the upload rules below and choose the mime that preserves the source. " +
+      "Preserve source semantics while preparing variants: opaque photos may use JPEG primary plus WebP/AVIF alternates; transparent PNG/logo artwork must keep alpha using PNG primary plus alpha-preserving WebP/AVIF; animated GIFs must stay animated in every generated variant. If the available processor would flatten animation or drop transparency, stop and report that limitation instead of uploading degraded media. maxBytes is a hard safety cap, not a web-performance target. If the source or prepared variants are obviously wasteful for website delivery, ask the user in chat before uploading whether to optimize/compress/resize for faster page loads while preserving alpha/animation semantics. " +
+      "Optimization runs agent-side with whatever image processor the MCP client has available; prefer an already-installed dependency, otherwise install a standard image processing package in the agent workspace if the host permits package installs. Node agents should prefer sharp; Python agents should prefer Pillow. If the host supports reusable agent memory or skills, remember this media-variant workflow for reuse. If the current MCP host/runtime harness blocks direct HTTP PUT requests to the presigned uploadUrl, tell the user this host cannot complete the media upload and suggest retrying from an agent/runtime that allows outbound HTTP file uploads; do not ask the user to run terminal upload commands. The Worker only verifies policy. After uploading every variant, call commit_media_upload with the returned uploadGroupId. Only registered when the runtime " +
       "has a media storage adapter bound and a media.purposes taxonomy declared." +
       (policySummary ? `\n\n${policySummary}` : ""),
     inputSchema: {
@@ -128,7 +128,7 @@ function buildCreateMediaUploadTool(
           type: "array",
           minItems: 1,
           description:
-            "One entry per format the agent has prepared. Must cover every slot in the purpose's `required` set; one variant must carry role='primary' (the format `<img>` falls back to). Pick jpeg primary for photos, png primary when alpha/transparency must be preserved, and gif primary only when animation is preserved. Modern formats (avif/webp) MUST NOT exceed the fallback's byteSize — the runtime rejects suspicious sizing.",
+            "One entry per format the agent has prepared. Must cover every slot in the purpose's `required` set. Read the dynamic upload rules in the tool description: if a slot lists alternatives like `image/jpeg,image/png,image/gif`, choose exactly one of them for this asset. Use JPEG only for opaque photos, PNG when alpha/transparency must be preserved, and GIF only when animation is preserved. Modern formats (avif/webp) MUST NOT exceed the fallback's byteSize — the runtime rejects suspicious sizing.",
           items: {
             type: "object",
             properties: {
@@ -146,7 +146,7 @@ function buildCreateMediaUploadTool(
                 type: "string",
                 enum: ["primary", "alternate", "fallback"],
                 description:
-                  "`primary` is the `<img>` fallback (typically jpeg/png); `alternate` is preferred via `<picture><source>` (avif/webp).",
+                  "`primary` is the `<img>` fallback chosen from the purpose's live policy for this asset; it is not always JPEG. `alternate` is preferred via `<picture><source>` (avif/webp).",
               },
             },
             required: ["mimeType", "byteSize", "role"],

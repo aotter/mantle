@@ -8,8 +8,8 @@
  * The shape is multi-variant from the start (#272): one
  * `create_media_upload` call yields N presigned URLs (one per
  * format), and one `commit_media_upload` finalises the whole
- * bundle. Optimization runs agent-side via
- * `@aotter/mantle-media-tools` — the runtime never transforms bytes.
+ * bundle. Optimization runs agent-side in the MCP client's runtime
+ * or operator tooling — the runtime never transforms bytes.
  */
 
 import type { MediaVariantRole } from "../../../domain/port/MediaStorage.js";

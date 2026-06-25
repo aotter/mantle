@@ -42,7 +42,7 @@ import type {
  * minted here and surfaces as `uploadGroupId` in the response — the
  * caller passes it back to `commit_media_upload`.
  *
- * Optimization runs agent-side via `@aotter/mantle-media-tools`. This
+ * Optimization runs agent-side in the MCP client's runtime. This
  * use case enforces policy only — never transforms bytes:
  *  - purpose must be declared in `siteDefaults.media.purposes`
  *  - variants must cover every required mime for that purpose
@@ -304,4 +304,3 @@ function pickFallbackForSizing(
   }
   return undefined;
 }
-

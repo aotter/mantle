@@ -50,7 +50,7 @@ import {
  * the variant set in R2 dashboards, and the orphan sweeper (#254)
  * can identify partially-committed groups by listing the prefix.
  *
- * Optimization runs agent-side via `@aotter/mantle-media-tools`. The
+ * Optimization runs agent-side in the MCP client's runtime. The
  * Worker never decodes / re-encodes bytes — it only verifies content-
  * type + size on the metadata returned by R2's HEAD-equivalent path
  * (`bucket.get` + `httpMetadata`).

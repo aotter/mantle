@@ -259,6 +259,14 @@ describe("McpJsonRpcDispatcher", () => {
     ]);
     expect(mediaTool?.description).toContain("image in chat");
     expect(mediaTool?.description).toContain("Do not ask the user to open a terminal");
+    expect(mediaTool?.description).toContain("post-cover upload rules");
+    expect(mediaTool?.description).toContain("choose exactly one mime per slot from this live policy");
+    expect(mediaTool?.description).toContain("Do NOT default to JPEG");
+    expect(mediaTool?.description).toContain("not always JPEG");
+    expect(mediaTool?.description).toContain("maxBytes is a hard safety cap");
+    expect(mediaTool?.description).toContain("ask the user in chat before uploading whether to optimize");
+    expect(mediaTool?.description).toContain("harness blocks direct HTTP PUT");
+    expect(mediaTool?.description).toContain("agent/runtime that allows outbound HTTP file uploads");
     expect(mediaTool?.description).toContain("transparent PNG");
     expect(mediaTool?.description).toContain("animated GIFs must stay animated");
     expect(mediaTool?.description).toContain("does not expose a base64 upload tool");

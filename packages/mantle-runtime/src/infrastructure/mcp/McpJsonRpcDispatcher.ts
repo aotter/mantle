@@ -148,7 +148,7 @@ export class McpJsonRpcDispatcher {
         return jsonRpcOk(id, {
           protocolVersion: "2025-03-26",
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "@aotter/mantle-runtime/mcp", version: "0.0.7-alpha" },
+          serverInfo: { name: "@aotter/mantle-runtime/mcp", version: "0.0.11-alpha.34" },
         });
       case "tools/list":
         return jsonRpcOkRaw(id, this.catalogWireJson);
@@ -415,4 +415,3 @@ function stripViewReservedArgs(args: Record<string, unknown>): Record<string, un
   }
   return out;
 }
-

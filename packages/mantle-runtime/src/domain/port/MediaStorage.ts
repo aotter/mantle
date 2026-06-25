@@ -8,8 +8,8 @@
  * Every committed `MediaAsset` carries one or more `variants` — at
  * minimum the format `<img>` falls back to (`role: "primary"`), and
  * typically additional formats (`webp`, `avif`) the renderer prefers
- * via `<picture>`. Variant *bytes* are produced agent-side by
- * `@aotter/mantle-media-tools` (sharp / libvips); the Worker only
+ * via `<picture>`. Variant *bytes* are produced agent-side by the
+ * MCP client or operator tooling (sharp / libvips); the Worker only
  * receives already-processed uploads and enforces policy. workerd
  * has no usable image-processing stack — pushing optimization onto
  * the agent sidesteps that entirely.
@@ -71,8 +71,8 @@ export interface MediaStorage {
  * - `alternate` — additional format candidates the renderer prefers
  *   via `<picture><source>`. Modern formats (avif, webp).
  * - `fallback` — reserved for future use (e.g. very-small thumbnail
- *   for above-the-fold inlining). Not currently emitted by the
- *   `media-tools` agent script.
+ *   for above-the-fold inlining). Not currently emitted by the MCP
+ *   media upload flow.
  */
 export type MediaVariantRole = "primary" | "alternate" | "fallback";
 

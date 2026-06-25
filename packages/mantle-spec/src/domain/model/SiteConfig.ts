@@ -72,7 +72,7 @@ export interface SiteMediaConfig {
  * the variants manifest MUST cover; `maxBytes` caps each variant's
  * byteSize keyed by its declared mime.
  *
- * Optimization runs agent-side (`@aotter/mantle-media-tools`); the
+ * Optimization runs agent-side in the MCP client's runtime; the
  * Worker only verifies the uploaded bytes match the policy. The
  * runtime also enforces a "suspicious shape" heuristic so an uploader
  * that ships a 200KB jpeg + a 400KB "avif" (i.e. forgot to optimize)

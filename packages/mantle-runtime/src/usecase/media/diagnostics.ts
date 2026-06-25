@@ -169,7 +169,7 @@ export function mediaVariantsSuspiciousSizeDiagnostic(
       "modern formats no larger than their fallback (e.g. avif <= jpeg, webp <= jpeg)",
     value: detail,
     suggestion:
-      "run @aotter/mantle-media-tools' optimize step before upload — the modern variant looks unprocessed",
+      "optimize this variant in the agent runtime before upload — the modern variant looks unprocessed",
   });
 }
 
