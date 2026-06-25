@@ -42,50 +42,10 @@ export interface McpToolDefinition {
   readonly inputSchema: Record<string, unknown>;
 }
 
-export const UPLOAD_MEDIA_VARIANT_TOOL: McpToolDefinition = {
-  name: "upload_media_variant",
-  description:
-    "Upload one variant's bytes for an in-flight media upload as a base64 " +
-    "payload over MCP — sandboxed-agent alternative to the presigned PUT URLs " +
-    "from create_media_upload. Use this when the agent can't reach the storage " +
-    "backend directly (e.g. Claude Cowork's outbound proxy doesn't allowlist R2 " +
-    "hosts; MCP traffic gets to the Worker via api.anthropic.com). Worker writes " +
-    "server-side via the bound MediaStorage adapter; the storage-key layout " +
-    "matches the presigned path so commit verifies the same object. Editor / " +
-    "browser uploads should continue using create_media_upload + direct PUT — " +
-    "this tool is the agent-side fallback, not a replacement.",
-  inputSchema: {
-    type: "object",
-    properties: {
-      uploadGroupId: {
-        type: "string",
-        description: "Logical asset id from create_media_upload, passed verbatim.",
-      },
-      role: {
-        type: "string",
-        enum: ["primary", "alternate", "fallback"],
-        description:
-          "Role of the variant being uploaded; must match a declared role in the create_media_upload manifest.",
-      },
-      mimeType: {
-        type: "string",
-        description:
-          "Variant mime type; must match the mime declared for this role in create_media_upload.",
-      },
-      bytesBase64: {
-        type: "string",
-        description:
-          "Base64-encoded raw variant bytes. Roughly 33% size inflation over the binary payload; for variants larger than a few MB use the presigned-PUT path instead.",
-      },
-    },
-    required: ["uploadGroupId", "role", "mimeType", "bytesBase64"],
-  },
-};
-
 export const COMMIT_MEDIA_UPLOAD_TOOL: McpToolDefinition = {
   name: "commit_media_upload",
   description:
-    "Commit a previously-PUT variant bundle. Verifies every variant landed at the storage backend (HEAD + bytes per declared mime) and writes the committed MediaAsset to the media_assets table. Returns the asset with its variants populated. Only registered when the runtime has a media storage adapter bound and a media.purposes taxonomy declared.",
+    "Commit a previously-PUT variant bundle. Verifies every variant landed at the storage backend (HEAD + bytes per declared mime) and writes the committed MediaAsset to the media_assets table. Returns the asset with its variants populated; write the returned MediaAsset.id into the relevant media asset id field via the authoring tools. Only registered when the runtime has a media storage adapter bound and a media.purposes taxonomy declared.",
   inputSchema: {
     type: "object",
     properties: {
@@ -106,7 +66,6 @@ function buildMediaTools(
 ): readonly McpToolDefinition[] {
   return [
     buildCreateMediaUploadTool(mediaPurposes),
-    UPLOAD_MEDIA_VARIANT_TOOL,
     COMMIT_MEDIA_UPLOAD_TOOL,
   ];
 }
@@ -148,12 +107,12 @@ function buildCreateMediaUploadTool(
     name: "create_media_upload",
     description:
       "Issue short-lived direct-upload capabilities for every variant of one logical media asset. " +
+      "If the user provides an image in chat or the current session, the MCP client/agent must handle it directly: read the attachment bytes in the agent runtime, prepare the required variants locally, call create_media_upload with the variant manifest and byte sizes, HTTP PUT each returned uploadUrl using requiredHeaders, then call commit_media_upload. Do not ask the user to open a terminal. Do not send image bytes through MCP; this server intentionally does not expose a base64 upload tool. " +
       "Multi-variant by default (#272): one call yields N presigned PUTs (one per declared slot). " +
       "Per-asset, the agent picks ONE mime per slot from that slot's acceptable set (#282); a " +
-      "single purpose declared with slot 0 = `image/jpg,image/png` accepts either a jpeg primary " +
-      "(photos) or a png primary (logos / transparent assets). Optimization runs agent-side via " +
-      "@aotter/mantle-media-tools; the Worker only verifies policy. After uploading every variant, " +
-      "call commit_media_upload with the returned uploadGroupId. Only registered when the runtime " +
+      "single purpose declared with slot 0 = `image/jpeg,image/png,image/gif` accepts jpeg photo primary, png alpha/logo primary, or gif primary when animation is preserved. " +
+      "Preserve source semantics while preparing variants: photos may use JPEG primary plus WebP/AVIF alternates; transparent PNG/logo artwork must keep alpha using PNG primary plus alpha-preserving WebP/AVIF; animated GIFs must stay animated in every generated variant. If the available processor would flatten animation or drop transparency, stop and report that limitation instead of uploading degraded media. " +
+      "Optimization runs agent-side with whatever image processor the MCP client has available; prefer an already-installed dependency, otherwise install a standard image processing package in the agent workspace if the host permits package installs. Node agents should prefer sharp; Python agents should prefer Pillow. If the host supports reusable agent memory or skills, remember this media-variant workflow for reuse. The Worker only verifies policy. After uploading every variant, call commit_media_upload with the returned uploadGroupId. Only registered when the runtime " +
       "has a media storage adapter bound and a media.purposes taxonomy declared." +
       (policySummary ? `\n\n${policySummary}` : ""),
     inputSchema: {
@@ -169,7 +128,7 @@ function buildCreateMediaUploadTool(
           type: "array",
           minItems: 1,
           description:
-            "One entry per format the agent has prepared. Must cover every mime in the purpose's `required` set; one variant must carry role='primary' (the format `<img>` falls back to). Modern formats (avif/webp) MUST NOT exceed the fallback's byteSize — the runtime rejects suspicious sizing.",
+            "One entry per format the agent has prepared. Must cover every slot in the purpose's `required` set; one variant must carry role='primary' (the format `<img>` falls back to). Pick jpeg primary for photos, png primary when alpha/transparency must be preserved, and gif primary only when animation is preserved. Modern formats (avif/webp) MUST NOT exceed the fallback's byteSize — the runtime rejects suspicious sizing.",
           items: {
             type: "object",
             properties: {

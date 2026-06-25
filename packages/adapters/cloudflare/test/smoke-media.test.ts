@@ -80,11 +80,6 @@ class FakeMediaStorage implements MediaStorage {
     /* noop */
   }
 
-  async putVariantBytes(args: Parameters<MediaStorage["putVariantBytes"]>[0]) {
-    return {
-      storageKey: `${args.purpose}/${args.uploadGroupId}/${args.role}`,
-    };
-  }
 }
 
 function manifests(): Manifest[] {
@@ -376,6 +371,10 @@ describe("smoke: MCP media tool catalog", () => {
         }>;
       };
     };
+    const firstNames = firstBody.result.tools.map((t) => t.name);
+    expect(firstNames).toContain("create_media_upload");
+    expect(firstNames).toContain("commit_media_upload");
+    expect(firstNames).not.toContain("upload_media_variant");
     expect(
       firstBody.result.tools.find((t) => t.name === "create_media_upload")
         ?.inputSchema.properties?.purpose?.enum,

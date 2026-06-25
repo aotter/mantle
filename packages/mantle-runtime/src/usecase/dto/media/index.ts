@@ -51,15 +51,3 @@ export interface CommitMediaUploadRequest {
   readonly alt?: string;
   readonly caption?: string;
 }
-
-/**
- * Server-side variant byte write — the sandboxed-agent alternative
- * to the presigned-PUT path (#283). One call per variant; commit
- * still finalises the bundle.
- */
-export interface UploadMediaVariantRequest {
-  readonly uploadGroupId: string;
-  readonly role: MediaVariantRole;
-  readonly mimeType: string;
-  readonly bytes: Uint8Array;
-}

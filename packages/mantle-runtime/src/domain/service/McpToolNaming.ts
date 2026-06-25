@@ -19,7 +19,7 @@ export function mcpToolNameSegment(collection: string): string {
  * routes by tool name and a collision would shadow the built-in.
  *
  * Mirror of the `name` fields in `McpToolCatalog.GENERIC_TOOLS` plus
- * the three media tool names. Lives here so the boot validator can
+ * the two media tool names. Lives here so the boot validator can
  * reference them without an infrastructure→usecase import.
  */
 export const RESERVED_MCP_GENERIC_TOOL_NAMES: ReadonlySet<string> = new Set([
@@ -30,7 +30,6 @@ export const RESERVED_MCP_GENERIC_TOOL_NAMES: ReadonlySet<string> = new Set([
   "archive_entry",
   "delete_entry",
   "create_media_upload",
-  "upload_media_variant",
   "commit_media_upload",
 ]);
 

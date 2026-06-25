@@ -22,7 +22,6 @@ import {
 import {
   CommitMediaUploadUseCase,
   CreateMediaUploadUseCase,
-  UploadMediaVariantUseCase,
 } from "../../usecase/media/index.js";
 import { mcpToolNameSegment } from "../../domain/service/McpToolNaming.js";
 import { ExecuteViewUseCase } from "../../usecase/view/index.js";
@@ -71,14 +70,13 @@ export interface McpUseCases {
    *  Procedure's `requires.auth` against the McpAuthContext before
    *  invoking. */
   readonly invokeProcedure?: InvokeProcedureUseCase;
-  /** Optional. When set, `create_media_upload`, `upload_media_variant`,
-   *  and `commit_media_upload` appear in the catalog and route here.
+  /** Optional. When set, `create_media_upload` and
+   *  `commit_media_upload` appear in the catalog and route here.
    *  `purposes` is the declared taxonomy (#272 shape — name +
    *  required mimes + maxBytes per mime); the catalog inlines the
    *  policy summary into the create tool's description. */
   readonly media?: {
     readonly createUpload: CreateMediaUploadUseCase;
-    readonly uploadVariant: UploadMediaVariantUseCase;
     readonly commitUpload: CommitMediaUploadUseCase;
     readonly purposes: readonly MediaPurposePolicy[];
   };
@@ -179,9 +177,6 @@ export class McpJsonRpcDispatcher {
       }
       if (result === MISSING_ARG) {
         return jsonRpcError(reqId, -32602, "missing required arg");
-      }
-      if (result === TOO_LARGE) {
-        return jsonRpcError(reqId, -32602, "payload too large");
       }
       return jsonRpcOk(reqId, {
         content: [{ type: "text", text: JSON.stringify(result) }],
@@ -336,41 +331,6 @@ export class McpJsonRpcDispatcher {
           caption: typeof args["caption"] === "string" ? args["caption"] : undefined,
         });
       }
-      case "upload_media_variant": {
-        if (!this.useCases.media) return UNKNOWN_TOOL;
-        const uploadGroupId = args["uploadGroupId"];
-        const role = args["role"];
-        const mimeType = args["mimeType"];
-        const bytesBase64 = args["bytesBase64"];
-        if (
-          typeof uploadGroupId !== "string" ||
-          typeof mimeType !== "string" ||
-          typeof bytesBase64 !== "string" ||
-          (role !== "primary" && role !== "alternate" && role !== "fallback")
-        ) {
-          return MISSING_ARG;
-        }
-        // Hard cap on the base64 string length before `atob` allocates
-        // a `Uint8Array` of the decoded length. Base64 inflates the
-        // binary size by ~33%, so an N-byte cap on the wire corresponds
-        // to roughly `Math.ceil(N * 0.75)` bytes after decode. Without
-        // this guard, an oversized payload allocates twice — once for
-        // the encoded string, once for the decoded buffer — before the
-        // use case's per-purpose `maxBytes` check fires.
-        // The cap intentionally exceeds any realistic per-purpose
-        // `maxBytes` so the use case's per-mime cap remains the
-        // primary policy gate; this gate exists only to prevent
-        // worker OOM on adversarial payloads.
-        if (bytesBase64.length > UPLOAD_BASE64_MAX_LENGTH) {
-          return TOO_LARGE;
-        }
-        return this.useCases.media.uploadVariant.execute({
-          uploadGroupId,
-          role,
-          mimeType,
-          bytes: decodeBase64(bytesBase64),
-        });
-      }
       case "commit_media_upload": {
         if (!this.useCases.media) return UNKNOWN_TOOL;
         const uploadGroupId = args["uploadGroupId"];
@@ -429,17 +389,6 @@ export class McpJsonRpcDispatcher {
 
 const UNKNOWN_TOOL = Symbol("unknown-tool");
 const MISSING_ARG = Symbol("missing-arg");
-const TOO_LARGE = Symbol("too-large");
-
-/** Hard cap on the base64-encoded payload accepted by
- *  `upload_media_variant`. 16 MiB encoded ≈ 12 MiB decoded — well
- *  above any realistic per-purpose `maxBytes` for media variants
- *  (avif/webp/jpeg images), and small enough that Worker memory
- *  isn't blown by a single oversized request. The use case's per-
- *  mime cap (`policy.maxBytes[mime]`) remains the primary gate;
- *  this constant only exists to prevent OOM on adversarial inputs
- *  before that gate fires. */
-const UPLOAD_BASE64_MAX_LENGTH = 16 * 1024 * 1024;
 
 /**
  * Strip the `id` + `expected_version` envelope keys before passing
@@ -467,13 +416,3 @@ function stripViewReservedArgs(args: Record<string, unknown>): Record<string, un
   return out;
 }
 
-/** Decode a base64 string to a Uint8Array. Used by `upload_media_variant`
- *  to deserialize the agent-supplied bytes payload before the use case
- *  hands it to the storage adapter. `atob` is available in V8 + workerd;
- *  no Node-only `Buffer` reach. */
-function decodeBase64(input: string): Uint8Array {
-  const bin = atob(input);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
