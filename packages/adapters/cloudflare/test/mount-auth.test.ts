@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
+import { mountAuthorize } from "../src/oauth/mountOAuth.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
   InMemoryKv,
@@ -65,5 +66,28 @@ describe("mountServerEndpoints: /api/auth/* surface", () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("ok-from-better-auth");
     expect(handlerCalls).toHaveLength(1);
+  });
+});
+
+describe("mountAuthorize", () => {
+  it("redirects anonymous OAuth clients to the admin sign-in return parameter", async () => {
+    const app = new Hono();
+    mountAuthorize(app, { auth: stubAuth });
+
+    const res = await app.request(
+      "https://example.test/oauth/authorize?client_id=claude&redirect_uri=claude%3A%2F%2Fcallback&response_type=code&state=s&code_challenge=c&code_challenge_method=S256&scope=mcp",
+      {},
+      { OAUTH_PROVIDER: {} },
+    );
+
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location");
+    expect(location).toContain("/admin/sign-in?return=");
+    expect(location).not.toContain("return_to=");
+
+    const redirected = new URL(location!, "https://example.test");
+    expect(redirected.searchParams.get("return")).toBe(
+      "/oauth/authorize?client_id=claude&redirect_uri=claude%3A%2F%2Fcallback&response_type=code&state=s&code_challenge=c&code_challenge_method=S256&scope=mcp",
+    );
   });
 });

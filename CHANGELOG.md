@@ -6,6 +6,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.35] - 2026-06-26
+
+### Fixed
+
+- **@aotter/mantle-cloudflare**: fix first-time MCP OAuth connect from desktop clients by redirecting anonymous `/oauth/authorize` requests to the admin sign-in page with the `return` parameter that the admin SPA already preserves for Better Auth callbacks. This keeps the post-login flow on the OAuth consent request instead of landing in `/admin` first.
+
 ## [0.0.11-alpha.34] - 2026-06-25
 
 ### Changed

@@ -11,7 +11,7 @@ export interface MountAuthorizeOptions {
   readonly auth: Auth;
   /** Path that anonymous /authorize visitors get redirected to.
    *  Defaults to `/admin/sign-in`. The original `/authorize?...` URL
-   *  is appended as `?return_to=...` so the sign-in page can bounce
+   *  is appended as `?return=...` so the sign-in page can bounce
    *  back after Better Auth completes. */
   readonly loginPath?: string;
 }
@@ -48,7 +48,7 @@ export function mountAuthorize(app: Hono, options: MountAuthorizeOptions): void 
       const returnTo = encodeURIComponent(u.pathname + u.search);
       return new Response(null, {
         status: 302,
-        headers: { location: `${loginPath}?return_to=${returnTo}` },
+        headers: { location: `${loginPath}?return=${returnTo}` },
       });
     }
 
