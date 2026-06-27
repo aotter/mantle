@@ -3,7 +3,8 @@
 ## Status
 
 Accepted (slimmed 2026-05-12 per Epic #116; `mantle/site.md` letter
-surface suspended 2026-06-19 and removed from first-run scaffolds).
+surface suspended 2026-06-19 and removed from first-run scaffolds;
+amended 2026-06-27 for landing provision bundles).
 
 ## Decision
 
@@ -27,7 +28,8 @@ from deterministic scaffold state.
 
 ## Placeholder macros
 
-`create-mantle` substitutes these across `_common/*.template` files in a single pass:
+Mantle landing substitutes these across provision-bundle `*.template`
+files in a single pass:
 
 | Macro | Source | Example |
 |---|---|---|
@@ -41,7 +43,8 @@ from deterministic scaffold state.
 | `{{INSTALL_TIMESTAMP}}` | ISO 8601 of install run | `2026-05-12T14:03:00Z` |
 | `{{INSTALL_SUMMARY}}` | CLI flag | `bootstrapped publication site for Lab Cafe in zh-TW/en` |
 
-New macros must be added here, to `_common/*.template`, and to the substitution pass in `create-mantle`.
+New macros must be added here, to `mantle-starters` bundle templates,
+and to the landing substitution pass.
 
 ## Update rules
 
@@ -58,8 +61,9 @@ New macros must be added here, to `_common/*.template`, and to the substitution 
 
 ## Implementation
 
-- Templates: `mantle-starters/_common/AGENTS.md.template`.
-- Substitution: `packages/create-mantle/src/placeholder.ts`.
-- Install handoff: `skills/install/SKILL.md` describes deterministic scaffold validation and the short post-substitution notes fill.
+- Templates: `mantle-starters/blank/AGENTS.md.template` and
+  generated `.mantle/*.template` bundle files.
+- Substitution: Mantle landing provision-bundle substitution.
+- Install handoff: `skills/install/SKILL.md` describes how agents continue from the landing-provisioned repo.
 - Provision update: `skills/provision/SKILL.md` describes the `AGENTS.md` public-site rewrite after deploy.
-- Theme overlay merge (Epic #116): `themes/<theme-key>/` overlay applies after the archetype starter and may touch `src/theme/` — never these two files.
+- Type overlays are applied while building `provision-bundles/<type>.json`; generated repos should not need a second overlay step.

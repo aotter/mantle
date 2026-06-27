@@ -23,17 +23,13 @@ Agent-native headless CMS where AI agents are first-class authors — locked-gra
 ## Try it cold
 
 Recommended path: open the Mantle landing page, answer the launch
-questions, sign in with GitHub, then hand the generated one-line launch
-command to Claude Code / Cursor / Codex. The command runs
-`create-mantle launch --session <session-url>`; the short-lived session
-carries the site name, locales, GitHub owner/admin login, starter
-choices, and repo intent so the agent scaffolds deterministically first.
+questions, sign in with GitHub and Cloudflare, then let landing create
+the private GitHub repo from a generated provision bundle. The repo
+carries `.mantle/launch-state.json`, `.mantle/handoff.md`, and
+repo-local skills so Claude Code / Cursor / Codex can continue from the
+real repo instead of scaffolding locally.
 
-When a launch session is not present, the install Skill can still collect
-the exact scaffolder flags manually. That path is a fallback, not the
-primary onboarding UX.
-
-Starter source and direct scaffolder usage live in [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters); this repo carries the SDK, runtime, adapter packages, and agent skills.
+Starter bundle source lives in [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters); this repo carries the SDK, runtime, adapter packages, and agent skills.
 
 > **Prerelease.** This repo is a clean rebuild of the v0.0.x POC. Until v0.1.0 tags, the API surface is in flux — alpha and beta releases may introduce breaking changes. Current published versions and channel policy are documented in [`docs/release-process.md`](docs/release-process.md). Track the rebuild plan at [#1](https://github.com/aotter/mantle/issues/1).
 
@@ -84,20 +80,17 @@ For a guided install, follow the steps in [`skills/install/SKILL.md`](skills/ins
 
 ## Starters
 
-Starter taxonomy. v0.1.0 ships the available rows; the rest are roadmap so agents can pick the closest fit and either fall back to `blank` or wait for the family to land.
+Starter taxonomy. Mantle landing fetches `provision-bundles/<type>.json` from [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters), substitutes launch facts, commits the repo, and connects Cloudflare Workers CI when possible.
 
-End-user starters live in the [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters) monorepo. The install Skill invokes the scaffolder distributed by that repo, which downloads a pinned source tarball, merges `_common/` + `<archetype>/` + optional theme overlays, and initializes a fresh user-owned Git repo without `origin` set. See the [starter README](https://github.com/aotter/mantle-starters#readme) for the current archetype/theme keys, direct invocation, and source layout. Premium / per-customer starters live in the private sibling [`aotter/mantle-starters-premium`](https://github.com/aotter/mantle-starters-premium).
+The starter repo owns blank source, small type overlays, vendored Kiwa source, and deterministic provision bundles. Theme selection is not a first-run path; agents continue from the generated repo and the after-launch handoff shown by landing.
 
 | Starter | Family | Status | What |
 |---|---|---|---|
-| [`mantle-starters/presence`](https://github.com/aotter/mantle-starters/tree/develop/presence) | presence | available | Brand / service presence site with pages and a contact surface. |
-| [`mantle-starters/publication`](https://github.com/aotter/mantle-starters/tree/develop/publication) | publication | available | Owner-published content — landing pages, articles, docs-lite, project updates, basic contact form. Multi-locale posts/pages, Cloudflare Turnstile, per-slug `.md` mirror, llms.txt, SEO/AEO. |
-| [`mantle-starters/intake`](https://github.com/aotter/mantle-starters/tree/develop/intake) | intake | available | Publication shape plus structured `leads` Schema, staff-only lead View, and anonymous lead submission. |
-| [`mantle-starters/transaction`](https://github.com/aotter/mantle-starters/tree/develop/transaction) | transaction | available | Small catalog + cart + checkout/order workflow on Cloudflare primitives; sized for low-volume direct commerce. |
-| [`mantle-starters/blank`](https://github.com/aotter/mantle-starters/tree/develop/blank) | — | available | Headless API + MCP only. Drop-in backend for consumers bringing their own frontend (Next.js / Astro / native / partner). |
-| [`mantle-starters/reservation`](https://github.com/aotter/mantle-starters/tree/develop/reservation) | reservation | roadmap note | Routes users to `intake` as the v0.1 holding pattern until booking primitives land. |
-| `community` | community | roadmap | Member posts, comments, likes, reactions, moderation queue, agent-assisted moderation. Blocks on end-user auth. |
-| `membership` | membership | roadmap | Private posts, paid newsletters, portals, or fan-club style content. Blocks on end-user auth + row-level visibility grammar + provider-backed entitlements. |
+| [`mantle-starters/blank`](https://github.com/aotter/mantle-starters/tree/develop/blank) | blank | available | Headless API + MCP only. Drop-in backend for consumers bringing their own frontend. |
+| `provision-bundles/publication.json` | publication | available | Owner-published content intent: pages, posts, docs-lite, project updates, and contact flow atoms. |
+| `provision-bundles/transaction.json` | transaction | available | Small catalog/order workflow intent on Mantle atoms, with payment/provider details left to post-launch work. |
+| `provision-bundles/reservation.json` | reservation | available | Booking/request intent with schedule/resource atoms and provider-specific fulfillment left to post-launch work. |
+| `provision-bundles/community.json` | community | available | Member/community intent with moderation and participation atoms; auth depth is post-launch work. |
 
 ## Repo conventions
 
