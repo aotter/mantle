@@ -2,10 +2,10 @@
 
 This SDK repo's agent entry point is **[CLAUDE.md](./CLAUDE.md)** — read that first.
 
-Consumer projects scaffolded via `create-mantle` get a different, mantle-aware `AGENTS.md` templated
-from [`_common/AGENTS.md.template`](https://github.com/aotter/mantle-starters/blob/main/_common/AGENTS.md.template)
-on the starters repo (per [ADR-0016](./docs/adr/0016-agents-md-and-macros.md)). This file at the SDK
-repo root only points you at the right place.
+Consumer projects provisioned by Mantle landing get a different,
+mantle-aware `AGENTS.md` templated from
+[`blank/AGENTS.md.template`](https://github.com/aotter/mantle-starters/blob/develop/blank/AGENTS.md.template)
+in the starters repo (per [ADR-0016](./docs/adr/0016-site-semantic-layer.md)). This SDK repo root file only points you at the right place.
 
 ## Quick links for contributing agents
 

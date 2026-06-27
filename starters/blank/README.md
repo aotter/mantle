@@ -9,10 +9,11 @@ the original `mantle-starter-publication`, GitHub auto-redirects.)
 
 ## Why this moved
 
-Real-user installs go through the `create-mantle` scaffolder distributed
-by the starters monorepo, which fetches a tagged tarball and merges
-`_common/` + `<archetype>/` into the user's empty directory. Keeping
-`starters/blank` inside this SDK monorepo created two problems:
+Real-user launches go through Mantle landing, which fetches a generated
+`provision-bundles/<type>.json` artifact from the starters monorepo,
+substitutes launch facts, commits the user's GitHub repo, and connects
+Cloudflare Workers CI when possible. Keeping `starters/blank` inside this
+SDK monorepo created two problems:
 
 - Workspace-rooted `workspace:*` deps that don't resolve when
   end-users extract the starter standalone.

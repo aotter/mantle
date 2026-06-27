@@ -14,7 +14,7 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0010](0010-locale-and-translates.md) | Locale 3-layer (manifest / D1 site_config / data field) + translates pattern. Boot decoupled from `site_config` (issue #60 fix). | Accepted (refreshed) |
 | [0011](0011-adapter-port-spec.md) | Adapter port spec. Required runtime ports plus optional feature ports. CF impl + Netlify stub. | Accepted (new) |
 | [0012](0012-views-as-public-rest.md) | Views auto-expose `GET /api/views/<name>` as the public REST read surface. Schemas never get a public REST endpoint. Filter comparison values accept `{ $param: <name> }`; `?page=&show=` reserved for pagination. | Accepted (new) |
-| [0013](0013-agent-provisioned-consumer-projects.md) | Agent-provisioned consumer projects: website prompt → Skill → npm packages → starter setup → first-run provision/seed → owner/MCP handoff. | Accepted (new) |
+| [0013](0013-agent-provisioned-consumer-projects.md) | Historical agent-provisioned consumer projects path. Superseded for first launch by landing provision bundles. | Superseded |
 | [0014](0014-auth-better-auth-and-multi-tenant-mcp.md) | Better Auth for staff sign-in (D1 session); the MCP OAuth surface carves out to `@cloudflare/workers-oauth-provider` (KV grant store) at top level. The two meet at `/oauth/authorize` where the consent handler reads the Better Auth session. MCP splits into `/mcp/staff` (write, admin-role) and `/mcp` (read, any signed-in). Scope advertised as `["mcp"]` (single non-colon) because claude.ai rejects colon-shaped scopes. Auth port disappears; runtime takes Better Auth instance directly. See § "Amendment 2026-05-15". | Accepted + amended |
 | [0016](0016-site-semantic-layer.md) | Site semantic layer: `AGENTS.md` (cross-tool entry) + `.mantle/launch-state.json` (deterministic install context). The older `mantle/site.md` letter surface is suspended from first-run scaffolds. | Accepted (slimmed) |
 
@@ -27,7 +27,7 @@ If you're new to the codebase:
 3. **0007** — what running the SDK feels like as an AI author (and as the operator agent).
 4. **0011** — the boundary between the runtime and the adapter (most load-bearing for the rebuild).
 5. **0010** — how locale flows through the system.
-6. **0013** — how the website prompt, Skills, npm packages, starters, seed, provision, and handoff fit together.
+6. **0013** — historical install-session context; current first launch is landing provision bundles plus repo-local handoff.
 7. **0002, 0008** — the two ADRs that touch every diagnostic and every binding.
 
 ## What's NOT here (and why)

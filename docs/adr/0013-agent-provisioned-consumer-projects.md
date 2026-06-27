@@ -2,13 +2,20 @@
 
 ## Status
 
-Accepted (new)
+Superseded for first launch by provisioning v2 (2026-06-27). Historical
+record only.
 
 ## Date
 
 2026-05-09
 
 ## Context
+
+> **Current direction:** Mantle landing creates the GitHub repo from
+> `mantle-starters` `provision-bundles/<type>.json`, commits the blank
+> or type bundle, and connects Cloudflare Workers CI when possible.
+> Do not extend the old `create-mantle launch --session` or
+> `provision:up` path.
 
 mantle is not optimized for a human developer reading a long
 installation guide and hand-editing boilerplate. The intended v0.1.0

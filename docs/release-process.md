@@ -139,7 +139,7 @@ The audit takes ~30 seconds and rules out the most common fanout failure. Do it 
 `bump-from-sdk.yml` / `bump-from-starters.yml` failed at the validate / typecheck gate because the SDK release introduced a code-shape break? Re-firing the workflow won't help — it'll fail the same gate on the same source. The fix-forward path:
 
 1. Branch off `develop` (starters) or `main` (landing): `release/vX.Y.Z`.
-2. Replicate what the bump workflow would have done — bump every `@aotter/mantle*` dep + own `version` in package.json files, refresh lockfile via `pnpm install --no-frozen-lockfile`, update `sources.json.version` (starters only).
+2. Replicate what the bump workflow would have done — bump every `@aotter/mantle*` dep + own `version` in package.json files, refresh lockfiles via `pnpm install --no-frozen-lockfile`, and rebuild starter provision bundles when starters source changed.
 3. Add whatever source-code fixes satisfy the new SDK shape.
 4. Commit subject MUST be `release: bump @aotter/mantle* to vX.Y.Z` (starters) or `release: bump @aotter/mantle to vX.Y.Z` (landing) — `tag-and-dispatch-landing.yml` filters on this in starters; landing has no equivalent filter but the convention keeps history consistent.
 5. Open PR base=`main` (starters and landing), CI passes now that lockfile + source are in sync, rebase-merge.
@@ -148,11 +148,11 @@ The audit takes ~30 seconds and rules out the most common fanout failure. Do it 
 
 ### Re-spin release for a downstream-content-only fix
 
-Sometimes the SDK npm artifact is fine but the GitHub release tarball — used by `create-mantle` to scaffold starters — is broken (e.g. starter content didn't include a freshly-required field at release time). Per `§ Rollback / yanking policy`, the right path is to publish the next alpha as a no-op SDK bump that re-spins the fanout:
+Sometimes the SDK npm artifact is fine but the generated starter provision bundle is broken (e.g. starter content didn't include a freshly-required field at release time). Per `§ Rollback / yanking policy`, the right path is to publish the next alpha as a no-op SDK bump that re-spins the fanout:
 
 1. Cut alpha.N+1 in `mantle/` with empty SDK diff (versions + CHANGELOG only).
 2. CHANGELOG entry MUST say explicitly: `No SDK code changes. alpha.N+1 re-spins the release fanout to ship starter content that should have been part of alpha.N (see #XXX).`
-3. Tag + push → full fanout produces fresh `mantle-starters` tag + GitHub release tarball with the corrected content.
+3. Tag + push -> full fanout produces fresh `mantle-starters` provision bundles with the corrected content.
 
 Don't force-retag the broken alpha. Don't introduce a starter-only sub-tag like `vX.Y.Z-starter.N`. Either breaks the convention that starter version === SDK version.
 
@@ -173,7 +173,7 @@ release.yml: pnpm install → build → test (gate) → verify package.json
                    │
                    ▼
 mantle-starters/bump-from-sdk.yml: bump @aotter/mantle* deps
-             + own version + sources.json.version → pnpm install →
+             + own version → pnpm install + rebuild bundles →
              validate × 5 starters (gate) → typecheck × 5 (gate) →
              PR onto main → auto-approve + auto-merge
                    │
@@ -271,22 +271,20 @@ stay individually installable for tooling / alt-adapter authors.
 
 Do **not** publish starter packages during alpha unless a separate PR
 explicitly prepares their package allowlists and verifies the tarballs.
-Current starter install flow downloads starter source tarballs from
-GitHub/template refs, extracts them without preserving the template
-repo remote, and uses npm as the runtime dependency source.
+Current starter launch flow is landing-driven: landing fetches generated
+`provision-bundles/<type>.json` artifacts from `aotter/mantle-starters`,
+commits the user's GitHub repo, and uses npm as the runtime dependency
+source.
 
 Do **not** publish `@aotter/mantle-netlify` while it is a stub.
 
-`create-mantle` lives in `aotter/mantle-starters`, not here. The
-scaffolder couples to starter content (sources.json, merge layout,
-placeholder macros) and has zero coupling to SDK runtime, so it ships
-from the starters repo as a GitHub release tarball. Releases on this SDK
-repo do not attach a create-mantle tarball and must not publish
-`@aotter/create-mantle`.
+The retired `create-mantle` scaffolder is not shipped by this SDK repo.
+Releases on this SDK repo must not attach a create-mantle tarball and
+must not publish `@aotter/create-mantle`.
 
-`skills/install/SKILL.md` consumes the command composed by the landing
-page. Human-facing direct usage belongs in the `mantle-starters` README,
-not this SDK repo.
+`skills/install/SKILL.md` consumes the repo and handoff created by the
+landing page. Human-facing starter bundle details belong in the
+`mantle-starters` README, not this SDK repo.
 
 ### Pre-publish checks
 
