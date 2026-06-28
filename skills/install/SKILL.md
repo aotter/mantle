@@ -102,8 +102,8 @@ consumer recipe:
 
 For media maintenance, prefer Claude Code, Codex, Cursor, or another
 local/non-sandboxed coding agent that can read files and make outbound PUT
-requests. Do not rely on Claude Cowork for R2 uploads unless its sandbox
-egress allowlist includes `*.r2.cloudflarestorage.com`.
+requests. Do not rely on Claude Cowork for R2 uploads; use a
+non-sandboxed agent instead.
 
 ## Local Preview
 

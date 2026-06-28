@@ -19,8 +19,7 @@ Enable this after the site already has:
 Use Claude Code, Codex, Cursor, or another local/non-sandboxed coding
 agent for media maintenance. Claude Cowork often cannot complete this
 flow because the final upload is a direct HTTP PUT to
-`*.r2.cloudflarestorage.com`; only use Cowork if its sandbox egress
-allowlist includes that host.
+`*.r2.cloudflarestorage.com`.
 
 ## How It Works
 
@@ -124,12 +123,12 @@ siteDefaults: {
     purposes: [
       {
         name: "page-image",
-        required: ["image/jpeg,image/png,image/webp,image/gif"],
+        required: ["image/jpeg,image/png", "image/webp", "image/avif"],
         maxBytes: {
           "image/jpeg": 5_000_000,
           "image/png": 5_000_000,
-          "image/webp": 5_000_000,
-          "image/gif": 10_000_000,
+          "image/webp": 3_000_000,
+          "image/avif": 2_000_000,
         },
       },
     ],
@@ -140,10 +139,19 @@ bindings: {
 },
 ```
 
-`required` is slot-based. The example above has one slot, so the agent
-must choose exactly one mime type from the comma-separated list for that
-slot. It should not upload one variant per listed mime unless the policy
-declares multiple slots.
+`required` is slot-based. The example above declares three slots:
+
+- slot 0: choose exactly one fallback mime, preserving the source
+  semantics (`image/jpeg` for opaque photos, `image/png` when alpha must
+  be preserved);
+- slot 1: include a WebP variant;
+- slot 2: include an AVIF variant.
+
+This models the ADR-0017 multi-variant `<picture>` shape. If a site wants
+a simpler single-variant upload for a narrow purpose, it may declare one
+slot such as `["image/jpeg,image/png,image/webp,image/gif"]`; in that
+case, the agent chooses exactly one mime from the comma-separated list and
+must not upload one variant per listed mime.
 
 ## Tool Visibility
 
@@ -159,8 +167,7 @@ If either side is missing, `create_media_upload` and
 
 For image maintenance, prefer Claude Code or another coding agent that can
 read local files, process images, and make outbound PUT requests to R2.
-Avoid Claude Cowork for this workflow unless its egress allowlist includes
-`*.r2.cloudflarestorage.com`.
+Avoid Claude Cowork for this workflow; use a non-sandboxed agent instead.
 
 Preserve source semantics:
 

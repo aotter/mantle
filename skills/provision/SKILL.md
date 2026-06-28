@@ -45,8 +45,8 @@ setup may require billing or a credit card. If the owner asks for staff
 image/file uploads later, follow
 <https://raw.githubusercontent.com/aotter/mantle/develop/docs/media-uploads.md>
 and use Claude Code or another local/non-sandboxed coding agent for the
-upload workflow. Do not use Claude Cowork for R2 uploads unless its
-sandbox egress allowlist includes `*.r2.cloudflarestorage.com`.
+upload workflow. Do not use Claude Cowork for R2 uploads; use a
+non-sandboxed agent instead.
 
 ## Principles
 
@@ -159,7 +159,7 @@ repo-local `.agent/skills/` directory (`mantle:develop`, `mantle:overlay`,
 | Owner signs in but admin / MCP returns 403 | `ADMIN_GITHUB_LOGIN` does not match the signed-in GitHub login | Fix the `ADMIN_GITHUB_LOGIN` value and redeploy. |
 | Worker boots but sessions fail after a rerun | `BETTER_AUTH_SECRET` changed or was deleted | Restore the old secret if available; otherwise users must sign in again. |
 | `create_media_upload` is missing from Staff MCP | Optional R2 media is not configured, or `media.purposes` is empty | Only fix this if the owner explicitly wants media uploads; follow `docs/media-uploads.md`. |
-| Upload session works but the PUT to R2 fails from Claude Cowork | Cowork sandbox egress blocks `*.r2.cloudflarestorage.com` | Retry from Claude Code / another non-sandboxed agent, or allowlist that host in Cowork. |
+| Upload session works but the PUT to R2 fails from Claude Cowork | Cowork sandbox egress blocks direct R2 uploads | Retry from Claude Code / another non-sandboxed agent. |
 
 ## Don't
 
