@@ -90,6 +90,21 @@ The generated repo ships its own skills under `.agent/skills/` and
 Remove the placeholder blank homepage once the selected type ships a real
 homepage.
 
+## Optional Media Uploads
+
+R2-backed media uploads are a post-launch opt-in, not part of Day 1
+provisioning. R2 setup may require Cloudflare billing or a credit card, so
+do not block the first deploy or first useful page on it.
+
+When the site really needs staff-managed images or files, follow the
+consumer recipe:
+<https://raw.githubusercontent.com/aotter/mantle/develop/docs/media-uploads.md>.
+
+For media maintenance, prefer Claude Code, Codex, Cursor, or another
+local/non-sandboxed coding agent that can read files and make outbound PUT
+requests. Do not rely on Claude Cowork for R2 uploads; use a
+non-sandboxed agent instead.
+
 ## Local Preview
 
 To see the site locally before pushing:
@@ -122,6 +137,8 @@ skill:
 - Don't scaffold a project from scratch locally; launch happens on landing.
 - Don't block the first useful page on polishing prose or writing a site letter.
 - Don't ask for a Cloudflare API token in the base flow.
+- Don't require R2 media setup in the base flow; it is optional
+  post-launch work.
 - Don't commit provider secrets.
 - Don't use `127.0.0.1` in OAuth callback examples; use `localhost` locally
   and the real Worker URL in production.

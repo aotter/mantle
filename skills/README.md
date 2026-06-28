@@ -9,6 +9,10 @@ Agent-readable skill briefs for consumers of `@aotter/mantle-*`. Discoverable by
 | [`extend`](extend/SKILL.md) | User has an existing project and wants to add a Schema / View / Procedure / Trigger or wire a feature (contact form, search, newsletter signup). |
 | [`provision`](provision/SKILL.md) | User wants production fully usable after a landing launch. Verify the Cloudflare deploy, wire per-site staff auth (GitHub OAuth App + Worker secrets), smoke test, and hand off the operator setup URL. |
 
+Optional R2 media uploads are documented in
+[`../docs/media-uploads.md`](../docs/media-uploads.md). They are
+post-launch opt-in work, not part of first provisioning.
+
 The skills target `mantle@v0.1.0`. Each one names its assumed grammar version in the front-matter `applies_to:` field; future versions add a sibling SKILL.md or update the existing one.
 
 ## Audience
