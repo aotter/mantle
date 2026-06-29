@@ -42,13 +42,13 @@ A landing-provisioned repo carries its launch context and ground truth in:
 | Path | Contents |
 |---|---|
 | `.mantle/launch-state.json` | Non-secret launch choices: type, purpose, locales, repo, owner, suggested overlay |
-| `.mantle/features.json` | Selected feature overlays and applied state |
+| `.mantle/features.json` | Starter launch context and applied starter state |
 | `.mantle/handoff.md` | The launch handoff note written for you |
 | `manifests/*.yaml` | Schemas / Views / Procedures / Triggers |
 | `src/mantleConfig.ts` | Site defaults, handler registration, runtime bindings |
 | `src/handlers/` | Handler implementations |
 | `AGENTS.md` | Cross-tool agent entry |
-| `.agent/skills/` + `.claude/skills/` | Repo-local skills: `mantle:develop`, `mantle:overlay`, `mantle:theme`, `mantle:update` |
+| `.agent/skills/` + `.claude/skills/` | Vendored Core skills from `@aotter/mantle`: `mantle:develop`, `mantle:plugin`, `mantle:theme`, `mantle:update` |
 
 ## Take Over a Provisioned Repo
 
@@ -73,19 +73,19 @@ Surface both verbatim when validation fails.
 
 ## Continue With Repo-Local Skills
 
-The generated repo ships its own skills under `.agent/skills/` and
-`.claude/skills/`. Hand off to the one that fits the work:
+The generated repo vendors Core-owned skills under `.agent/skills/` and
+`.claude/skills/`. The starter carries local copies for offline/pinned use; it
+does not own a separate skill contract.
 
-- **`mantle:overlay`** — apply the selected launch type as a small
-  post-launch overlay (first useful pages plus tiny seed data in the
-  user's language). This is the usual first step on a fresh blank launch.
 - **`mantle:develop`** — manifest, runtime, content-model, layout,
   bug-fix, and validation work on the site.
+- **`mantle:plugin`** — install repeatable marketplace capabilities using
+  a plan-first Core workflow.
 - **`mantle:theme`** — brand and visual direction via Mantle / Kiwa tokens
   and source. There is no premade theme picker; visual direction is agent
   work after launch.
 - **`mantle:update`** — compare the repo against its upstream provision
-  bundle.
+  bundle or installed plugin locks.
 
 Remove the placeholder blank homepage once the selected type ships a real
 homepage.
