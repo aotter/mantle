@@ -92,12 +92,11 @@ homepage.
 
 ## Optional Media Uploads
 
-R2-backed media uploads are a post-launch opt-in, not part of Day 1
-provisioning. R2 setup may require Cloudflare billing or a credit card, so
-do not block the first deploy or first useful page on it.
+Media uploads are a post-launch opt-in, not part of Day 1 provisioning. Do
+not block the first deploy or first useful page on storage setup.
 
-When the site really needs staff-managed images or files, follow the
-consumer recipe:
+When the current repo uses the Cloudflare adapter and really needs
+staff-managed images or files, follow the Cloudflare R2 recipe:
 <https://raw.githubusercontent.com/aotter/mantle/develop/docs/media-uploads.md>.
 
 For media maintenance, prefer Claude Code, Codex, Cursor, or another

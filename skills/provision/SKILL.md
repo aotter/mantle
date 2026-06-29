@@ -39,10 +39,10 @@ with v2.
 Provision does not seed production content. First real content is created
 after owner sign-in through Staff MCP / admin authoring.
 
-R2-backed media uploads are optional post-launch work. Do not require R2
-or media upload credentials to finish first production provisioning; R2
-setup may require billing or a credit card. If the owner asks for staff
-image/file uploads later, follow
+Media uploads are optional post-launch work. Do not require storage or media
+upload credentials to finish first production provisioning. If the current
+repo uses the Cloudflare adapter and the owner asks for staff image/file
+uploads later, follow the Cloudflare R2 recipe:
 <https://raw.githubusercontent.com/aotter/mantle/develop/docs/media-uploads.md>
 and use Claude Code or another local/non-sandboxed coding agent for the
 upload workflow. Do not use Claude Cowork for R2 uploads; use a

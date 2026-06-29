@@ -1,8 +1,9 @@
-# Optional R2 Media Uploads
+# Cloudflare R2 Media Uploads
 
 Mantle supports staff media uploads through Staff MCP tools:
 `create_media_upload` and `commit_media_upload`. This is an optional
-post-launch feature for sites that need staff-managed images or files.
+post-launch feature for sites that use the Cloudflare adapter and need
+staff-managed images or files.
 
 Do not make R2 part of the Day 1 launch path. Cloudflare R2 setup may
 require billing or a credit card, so landing and the blank starter do not

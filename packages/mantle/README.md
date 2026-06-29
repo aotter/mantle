@@ -70,7 +70,7 @@ The `mantle-runtime` package never imports Cloudflare-specific types — adapter
 - Embedded docs and agent skills ship inside this npm package for
   generated-site agents:
   - `node_modules/@aotter/mantle/docs/design-atoms.md`
-  - `node_modules/@aotter/mantle/docs/media-uploads.md`
+  - `node_modules/@aotter/mantle/docs/media-uploads.md` (Cloudflare R2 adapter recipe)
   - `node_modules/@aotter/mantle/docs/adr/`
   - `node_modules/@aotter/mantle/skills/develop/SKILL.md`
   - `node_modules/@aotter/mantle/skills/plugin/SKILL.md`

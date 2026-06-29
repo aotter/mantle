@@ -11,11 +11,7 @@ Agent-readable skill briefs for consumers of `@aotter/mantle-*`. Discoverable by
 | [`install`](install/SKILL.md) | User wants to start or continue a Mantle site. Sites launch on [Mantle landing](https://mantle.tools), which provisions the GitHub repo and first Cloudflare deploy; this brief orients the agent to take over and continue the provisioned repo. |
 | [`customize-design`](customize-design/SKILL.md) | Legacy publication-specific design guide. Prefer `mantle:theme` for generated repos. |
 | [`extend`](extend/SKILL.md) | Legacy atom-authoring guide. Prefer `mantle:develop` or `mantle:plugin` depending on whether the work is one-off or installable. |
-| [`provision`](provision/SKILL.md) | User wants production fully usable after a landing launch. Verify the Cloudflare deploy, wire per-site staff auth (GitHub OAuth App + Worker secrets), smoke test, and hand off the operator setup URL. |
-
-Optional R2 media uploads are documented in
-[`../docs/media-uploads.md`](../docs/media-uploads.md). They are
-post-launch opt-in work, not part of first provisioning.
+| [`provision`](provision/SKILL.md) | User wants production fully usable after a landing launch. Verify the current landing deploy, wire per-site staff auth, smoke test, and hand off the operator setup URL. |
 
 The skills target `mantle@v0.1.0`. Each one names its assumed grammar version in the front-matter `applies_to:` field; future versions add a sibling SKILL.md or update the existing one.
 
