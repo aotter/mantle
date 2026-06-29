@@ -46,6 +46,8 @@ In a generated repo, tell your coding agent:
 
 ```txt
 Use repo-local mantle:plugin to install <plugin slug or recipe URL> in this repo.
+Use repo-local mantle:plugin to update <plugin id> in this repo.
+Use repo-local mantle:plugin to remove <plugin id> from this repo.
 ```
 
 Mantle marketplace entries are agent-installable recipes. They declare the

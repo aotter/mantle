@@ -70,6 +70,13 @@ Tell your coding agent:
 Use repo-local mantle:plugin to install <plugin slug or recipe URL> in this repo.
 ```
 
+Update or remove an installed capability the same way:
+
+```txt
+Use repo-local mantle:plugin to update <plugin id> in this repo.
+Use repo-local mantle:plugin to remove <plugin id> from this repo.
+```
+
 A Mantle marketplace entry must be agent-installable: it names the plugin,
 Mantle version range, source package or recipe URL, files/atoms/routes/tools it
 will add, adapter capabilities, required secrets, and checks. The agent reads

@@ -27,6 +27,8 @@ The user-facing install path is:
 
 ```txt
 Use repo-local mantle:plugin to install <plugin slug or recipe URL> in this repo.
+Use repo-local mantle:plugin to update <plugin id> in this repo.
+Use repo-local mantle:plugin to remove <plugin id> from this repo.
 ```
 
 There is no `mantle plugin add` CLI yet. Do not invent one. Install from a
@@ -82,6 +84,19 @@ Suggested ledger paths:
 
 Keep starter launch state separate from plugin state. `.mantle/features.json`
 is launch/starter context, not the Core plugin ledger.
+
+## Update
+
+Compare the installed lock entry against the marketplace entry or recipe URL.
+Apply only the declared version diff, update `.mantle/plugins.lock.json`, then
+run the same verification checks.
+
+## Remove
+
+Use the lock entry as the removal manifest. Delete only files and atoms owned
+by that plugin, unwind handler registrations it added, remove its ledger entry,
+then validate. If another plugin or local code depends on a removed atom, stop
+and report the dependency instead of deleting through it.
 
 ## Verify
 
