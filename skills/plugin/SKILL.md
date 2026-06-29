@@ -21,6 +21,30 @@ A plugin may contribute:
 - expected HTTP, admin, and MCP surfaces;
 - adapter capability requirements and provider setup notes.
 
+## User Install Entry
+
+The user-facing install path is:
+
+```txt
+Use repo-local mantle:plugin to install <plugin slug or recipe URL> in this repo.
+```
+
+There is no `mantle plugin add` CLI yet. Do not invent one. Install from a
+marketplace entry, plugin package, or recipe URL that declares enough data for
+an agent to apply the capability deterministically.
+
+A valid marketplace entry must include:
+
+- plugin id, title, source, and version;
+- supported Mantle version range;
+- files, manifests, handlers, routes, MCP tools, and admin surfaces it adds;
+- adapter capabilities and provider resources it requires;
+- required env vars and secrets, without secret values;
+- verification commands and expected surfaces.
+
+If the marketplace page is only marketing copy or lacks an install recipe,
+stop and ask for the recipe instead of guessing.
+
 ## First Read
 
 1. `package.json` for Mantle version and adapter package.

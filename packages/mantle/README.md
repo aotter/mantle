@@ -40,6 +40,20 @@ repo to continue.
 
 Starter source and provision bundles live in [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters); launch starts from the blank base and the agent applies the selected type as a post-launch overlay. Generated repos vendor Core-owned `mantle:*` skills from this package for repo-local use. See `skills/install` in the [Mantle repo](https://github.com/aotter/mantle/tree/develop/skills/install) for how the agent continues a provisioned repo.
 
+## Marketplace capability installs
+
+In a generated repo, tell your coding agent:
+
+```txt
+Use repo-local mantle:plugin to install <plugin slug or recipe URL> in this repo.
+```
+
+Mantle marketplace entries are agent-installable recipes. They declare the
+plugin source, Mantle version range, files/atoms/routes/tools, adapter
+requirements, secrets, and checks. The agent applies the recipe through the
+Core-owned `mantle:plugin` skill and records it in `.mantle/plugins.json` plus
+`.mantle/plugins.lock.json`. There is no `mantle plugin add` CLI yet.
+
 ## Adapter targets
 
 | Adapter | Status |

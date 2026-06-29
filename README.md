@@ -62,6 +62,24 @@ vendor exact copies for offline/repo-local use; `.mantle/*` launch files
 and plugin recipes are context read by Core skills, not a second skill
 contract.
 
+### Marketplace capability installs
+
+Tell your coding agent:
+
+```txt
+Use repo-local mantle:plugin to install <plugin slug or recipe URL> in this repo.
+```
+
+A Mantle marketplace entry must be agent-installable: it names the plugin,
+Mantle version range, source package or recipe URL, files/atoms/routes/tools it
+will add, adapter capabilities, required secrets, and checks. The agent reads
+that entry, plans the diff, applies the declared files, updates
+`.mantle/plugins.json` and `.mantle/plugins.lock.json`, then runs
+`pnpm validate` and `pnpm typecheck`.
+
+There is no `mantle plugin add` CLI yet. The current install surface is the
+Core-owned `mantle:plugin` skill plus deterministic plugin recipes.
+
 ## For humans
 
 End state: a Cloudflare Worker at `https://<your-site>.<your-account>.workers.dev` with:
