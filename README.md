@@ -26,10 +26,10 @@ Recommended path: open the Mantle landing page, answer the launch
 questions, sign in with GitHub and Cloudflare, then let landing create
 the private GitHub repo from a generated provision bundle. The repo
 carries `.mantle/launch-state.json`, `.mantle/handoff.md`, and
-repo-local skills so Claude Code / Cursor / Codex can continue from the
-real repo instead of scaffolding locally.
+repo-local vendored Core skills so Claude Code / Cursor / Codex can
+continue from the real repo instead of scaffolding locally.
 
-Starter bundle source lives in [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters); this repo carries the SDK, runtime, adapter packages, and agent skills.
+Starter bundle source lives in [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters); this repo carries the SDK, runtime, adapter packages, and the authoritative `mantle:*` agent skills.
 
 > **Prerelease.** This repo is a clean rebuild of the v0.0.x POC. Until v0.1.0 tags, the API surface is in flux — alpha and beta releases may introduce breaking changes. Current published versions and channel policy are documented in [`docs/release-process.md`](docs/release-process.md). Track the rebuild plan at [#1](https://github.com/aotter/mantle/issues/1).
 
@@ -51,8 +51,16 @@ This repo is the OLTP side of that thesis applied to web content.
 You're an agent helping a (likely non-technical) user install or extend a mantle project.
 
 → **Install a fresh publication/site** — start at [`skills/install/SKILL.md`](skills/install/SKILL.md).
-→ **Add a new atom** (Schema / View / Procedure + http Trigger) to an existing starter — start at [`skills/extend/SKILL.md`](skills/extend/SKILL.md).
+→ **Work inside an existing project** — start at [`skills/develop/SKILL.md`](skills/develop/SKILL.md).
+→ **Install a repeatable marketplace capability** — start at [`skills/plugin/SKILL.md`](skills/plugin/SKILL.md).
+→ **Adjust brand and visual direction** — start at [`skills/theme/SKILL.md`](skills/theme/SKILL.md).
+→ **Check SDK / starter / plugin drift** — start at [`skills/update/SKILL.md`](skills/update/SKILL.md).
 → **Finish production deploy** (GitHub repo, Cloudflare dashboard first deploy, OAuth App, Wrangler secrets, smoke) — start at [`skills/provision/SKILL.md`](skills/provision/SKILL.md).
+
+The `mantle:*` namespace is owned by `@aotter/mantle`. Starter templates
+vendor exact copies for offline/repo-local use; `.mantle/*` launch files
+and plugin recipes are context read by Core skills, not a second skill
+contract.
 
 ## For humans
 
@@ -83,6 +91,9 @@ For a guided install, follow the steps in [`skills/install/SKILL.md`](skills/ins
 Starter taxonomy. Mantle landing fetches `provision-bundles/<type>.json` from [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters), substitutes launch facts, commits the repo, and connects Cloudflare Workers CI when possible.
 
 The starter repo owns blank source, small type overlays, vendored Kiwa source, and deterministic provision bundles. Theme selection is not a first-run path; agents continue from the generated repo and the after-launch handoff shown by landing.
+
+Generated repos carry vendored copies of Core-owned `mantle:*` skills from
+`@aotter/mantle`, including `mantle:plugin` for marketplace capability work.
 
 | Starter | Family | Status | What |
 |---|---|---|---|

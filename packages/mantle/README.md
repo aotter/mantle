@@ -38,7 +38,7 @@ deployable Mantle site, and connects the first Cloudflare deploy. Then
 point your coding agent (Claude Code / Cursor / Codex) at the provisioned
 repo to continue.
 
-Starter source and provision bundles live in [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters); launch starts from the blank base and the agent applies the selected type as a post-launch overlay. See `skills/install` in the [Mantle repo](https://github.com/aotter/mantle/tree/develop/skills/install) for how the agent continues a provisioned repo.
+Starter source and provision bundles live in [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters); launch starts from the blank base and the agent applies the selected type as a post-launch overlay. Generated repos vendor Core-owned `mantle:*` skills from this package for repo-local use. See `skills/install` in the [Mantle repo](https://github.com/aotter/mantle/tree/develop/skills/install) for how the agent continues a provisioned repo.
 
 ## Adapter targets
 
@@ -56,6 +56,10 @@ The `mantle-runtime` package never imports Cloudflare-specific types — adapter
   - `node_modules/@aotter/mantle/docs/design-atoms.md`
   - `node_modules/@aotter/mantle/docs/media-uploads.md`
   - `node_modules/@aotter/mantle/docs/adr/`
+  - `node_modules/@aotter/mantle/skills/develop/SKILL.md`
+  - `node_modules/@aotter/mantle/skills/plugin/SKILL.md`
+  - `node_modules/@aotter/mantle/skills/theme/SKILL.md`
+  - `node_modules/@aotter/mantle/skills/update/SKILL.md`
   - `node_modules/@aotter/mantle/skills/install/SKILL.md`
   - `node_modules/@aotter/mantle/skills/provision/SKILL.md`
 - [Repo](https://github.com/aotter/mantle)
