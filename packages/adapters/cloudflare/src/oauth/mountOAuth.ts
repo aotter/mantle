@@ -53,6 +53,22 @@ export function mountAuthorize(app: Hono, options: MountAuthorizeOptions): void 
     }
 
     if (c.req.method === "POST") {
+      // CSRF defense that does NOT depend on the session cookie's
+      // SameSite attribute (which is forced to `none` globally when an
+      // Apple social method is registered). A cross-site auto-submitting
+      // form would otherwise mint an authorization code for an
+      // attacker-registered client using the victim's session. Reject
+      // any request a browser flags as cross-site / cross-origin; browsers
+      // always send these on a real consent submit, and non-browser
+      // clients can't ride a victim's cookie cross-site anyway. (#389)
+      const secFetchSite = c.req.header("sec-fetch-site");
+      if (secFetchSite && secFetchSite !== "same-origin" && secFetchSite !== "none") {
+        return new Response("cross-site consent submission rejected", { status: 403 });
+      }
+      const origin = c.req.header("origin");
+      if (origin && origin !== new URL(c.req.url).origin) {
+        return new Response("origin mismatch", { status: 403 });
+      }
       const form = await c.req.raw.formData();
       const oauthRequestJson = form.get("oauth_request");
       if (typeof oauthRequestJson !== "string") {

@@ -1618,7 +1618,14 @@ async function handleHttpTrigger(
     return Response.json({ ok: true, data: result.data });
   }
   const status = HTTP_STATUS_BY_CODE[result.diagnostic.code] ?? 500;
-  return Response.json({ ok: false, diagnostic: result.diagnostic }, { status });
+  // Redact before egress: use-case diagnostics (e.g. HANDLER_NOT_REGISTERED,
+  // or an EntryWriteGuard diagnostic from a builtin create/update Procedure)
+  // can carry `candidates` listing internal handler/schema names. The wire
+  // contract (ADR-0008, runUseCase, diagnosticResponse) strips those. (#396)
+  return Response.json(
+    { ok: false, diagnostic: redactForWire(result.diagnostic) },
+    { status },
+  );
 }
 
 async function handleViewRequest(
@@ -1702,7 +1709,11 @@ async function handleViewRequest(
     return Response.json({ ok: true, data: result.result });
   }
   const status = HTTP_STATUS_BY_CODE[result.diagnostic.code] ?? 500;
-  return Response.json({ ok: false, diagnostic: result.diagnostic }, { status });
+  // Same wire-redaction contract as the HTTP Trigger egress above (#396).
+  return Response.json(
+    { ok: false, diagnostic: redactForWire(result.diagnostic) },
+    { status },
+  );
 }
 
 function parsePositiveInt(raw: string | null): number | undefined {
