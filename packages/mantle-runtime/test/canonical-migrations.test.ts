@@ -7,35 +7,46 @@ function migrationSql(id: string): string {
   return migration.sql;
 }
 
+function tableSql(sql: string, table: string): string {
+  const match = sql.match(
+    new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\s*\\([\\s\\S]*?\\n\\s*\\);`),
+  );
+  if (!match) throw new Error(`missing table ${table}`);
+  return match[0];
+}
+
 describe("CANONICAL_MIGRATIONS", () => {
-  it("keeps Better Auth OAuth provider table takeover as a forward migration", () => {
+  it("keeps Better Auth OAuth provider tables in the canonical init schema", () => {
     const init = migrationSql("0001-init");
     expect(init).not.toMatch(/CREATE TABLE IF NOT EXISTS oauthApplication\b/);
-    expect(init).not.toMatch(/CREATE TABLE IF NOT EXISTS oauthAccessToken\b/);
-    expect(init).not.toMatch(/CREATE TABLE IF NOT EXISTS oauthConsent\b/);
+    expect(CANONICAL_MIGRATIONS.map((migration) => migration.id)).not.toContain(
+      "0003-better-auth-oauth-provider",
+    );
 
-    const oauth = migrationSql("0003-better-auth-oauth-provider");
     for (const table of [
+      "oauthClient",
+      "oauthRefreshToken",
       "oauthAccessToken",
       "oauthConsent",
-      "oauthApplication",
-      "oauthRefreshToken",
-      "oauthClient",
     ]) {
-      expect(oauth).toContain(`DROP TABLE IF EXISTS ${table};`);
+      expect(init).toContain(`CREATE TABLE IF NOT EXISTS ${table}`);
     }
 
-    expect(oauth).toMatch(
+    const accessToken = tableSql(init, "oauthAccessToken");
+    const refreshToken = tableSql(init, "oauthRefreshToken");
+    const consent = tableSql(init, "oauthConsent");
+
+    expect(accessToken).toMatch(
       /CREATE TABLE IF NOT EXISTS oauthAccessToken\s*\([\s\S]*\btoken\s+TEXT NOT NULL UNIQUE/,
     );
-    expect(oauth).toMatch(
+    expect(refreshToken).toMatch(
       /CREATE TABLE IF NOT EXISTS oauthRefreshToken\s*\([\s\S]*\btoken\s+TEXT NOT NULL UNIQUE/,
     );
-    expect(oauth).toMatch(
+    expect(consent).toMatch(
       /CREATE TABLE IF NOT EXISTS oauthConsent\s*\([\s\S]*\breferenceId\s+TEXT/,
     );
-    expect(oauth).not.toMatch(/\baccessToken\s+TEXT/);
-    expect(oauth).not.toMatch(/\brefreshToken\s+TEXT/);
-    expect(oauth).not.toMatch(/\bconsentGiven\b/);
+    expect(accessToken).not.toMatch(/\baccessToken\s+TEXT/);
+    expect(refreshToken).not.toMatch(/\brefreshToken\s+TEXT/);
+    expect(consent).not.toMatch(/\bconsentGiven\b/);
   });
 });

@@ -117,41 +117,6 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
       );
       CREATE INDEX IF NOT EXISTS verification_identifier_idx ON verification (identifier);
 
-    `,
-  },
-  {
-    id: "0002-media-assets",
-    description:
-      "media_assets table — committed MediaAsset rows for #272 multi-variant uploads. Entry data references rows by id (x-mantle-ref: media_assets); runtime.media.resolve materialises the variants set at render time.",
-    sql: `
-      CREATE TABLE IF NOT EXISTS media_assets (
-        id          TEXT PRIMARY KEY,
-        created_at  INTEGER NOT NULL,
-        owner_id    TEXT,
-        alt         TEXT,
-        caption     TEXT,
-        variants    TEXT NOT NULL,
-        metadata    TEXT
-      );
-      CREATE INDEX IF NOT EXISTS media_assets_by_owner_created
-        ON media_assets (owner_id, created_at DESC);
-    `,
-  },
-  {
-    id: "0003-better-auth-oauth-provider",
-    description:
-      "Replace the unused pre-alpha OAuth application tables with Better Auth OAuth Provider's client, token, refresh-token, and consent tables.",
-    // Keep this as a forward migration: alpha.36 created pre-alpha
-    // OAuth tables from 0001, and DBs that recorded 0001 will not rerun it.
-    // These OAuth rows were never product data, so Better Auth owns the
-    // canonical table names from here onward.
-    sql: `
-      DROP TABLE IF EXISTS oauthAccessToken;
-      DROP TABLE IF EXISTS oauthConsent;
-      DROP TABLE IF EXISTS oauthApplication;
-      DROP TABLE IF EXISTS oauthRefreshToken;
-      DROP TABLE IF EXISTS oauthClient;
-
       CREATE TABLE IF NOT EXISTS oauthClient (
         id                      TEXT PRIMARY KEY NOT NULL,
         clientId                TEXT NOT NULL UNIQUE,
@@ -231,6 +196,24 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
       );
       CREATE INDEX IF NOT EXISTS oauthConsent_clientId_idx ON oauthConsent (clientId);
       CREATE INDEX IF NOT EXISTS oauthConsent_userId_idx ON oauthConsent (userId);
+    `,
+  },
+  {
+    id: "0002-media-assets",
+    description:
+      "media_assets table — committed MediaAsset rows for #272 multi-variant uploads. Entry data references rows by id (x-mantle-ref: media_assets); runtime.media.resolve materialises the variants set at render time.",
+    sql: `
+      CREATE TABLE IF NOT EXISTS media_assets (
+        id          TEXT PRIMARY KEY,
+        created_at  INTEGER NOT NULL,
+        owner_id    TEXT,
+        alt         TEXT,
+        caption     TEXT,
+        variants    TEXT NOT NULL,
+        metadata    TEXT
+      );
+      CREATE INDEX IF NOT EXISTS media_assets_by_owner_created
+        ON media_assets (owner_id, created_at DESC);
     `,
   },
 ];
