@@ -62,6 +62,7 @@ export function mountServerEndpoints(
 }
 
 function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
+  const authBasePath = auth.basePath;
   const spa = (): Response =>
     new Response(indexHtml, {
       headers: { "content-type": "text/html; charset=utf-8" },
@@ -84,18 +85,19 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   // `Cache-Control: no-store` because the list reflects deploy-time
   // config; if the operator rolls a new method, a CDN-cached response
   // would silently misroute the sign-in UI until the cache expires.
-  app.get("/api/auth/methods", () =>
+  app.get(`${authBasePath}/methods`, () =>
     Response.json({ methods: auth.methods }, {
       headers: { "cache-control": "no-store" },
     }),
   );
 
-  // Better Auth handles the rest of `/api/auth/*` (sign-in, callback,
+  // Better Auth handles the rest of the configured auth base path
+  // (sign-in, callback,
   // session, magic-link, OTP, OAuth provider routes). Owned by the SDK
   // so consumers don't have to wire — and can't accidentally register a
   // catch-all BEFORE the specific routes above and silently swallow
   // them. Hono matches in registration order; this catch-all sits last.
-  app.all("/api/auth/*", (c) => auth.handler(c.req.raw));
+  app.all(`${authBasePath}/*`, (c) => auth.handler(c.req.raw));
 
   // Well-known OAuth endpoints (RFC 8414 + RFC 9728) used to be
   // forwarded to Better Auth's mcp() plugin here. With the carve-out

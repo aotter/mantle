@@ -334,6 +334,10 @@ export interface RegisteredOAuthClient {
 export interface CreateAuthConfig {
   readonly database: D1Database;
   readonly baseURL: string;
+  /** Better Auth route prefix. Defaults to `/api/auth`. Set this when
+   *  multiple auth instances live in one Worker, e.g. hosted platform
+   *  provider + site staff auth + launch GitHub auth. */
+  readonly basePath?: string;
   readonly secret: string;
   /** Registered auth methods. Boot fails fast if empty. */
   readonly methods: ReadonlyArray<AuthMethodConfig>;
@@ -365,6 +369,22 @@ export interface CreateAuthConfig {
    *  Consumer sites should use `methods: [{ kind: "oauth", ... }]`
    *  against its discovery document. */
   readonly oauthProvider?: OAuthProviderConfig;
+}
+
+function normalizeAuthBasePath(basePath: string | undefined): string {
+  if (basePath === undefined) return "/api/auth";
+  const trimmed = basePath.trim();
+  if (trimmed === "") return "/api/auth";
+  if (!trimmed.startsWith("/")) {
+    throw new Error("createAuth: basePath must start with '/'.");
+  }
+  if (trimmed === "/") {
+    throw new Error("createAuth: basePath must not be '/'.");
+  }
+  if (trimmed.endsWith("/")) {
+    return trimmed.replace(/\/+$/, "");
+  }
+  return trimmed;
 }
 
 const ac = createAccessControl(defaultStatements);
@@ -968,6 +988,7 @@ function buildAuth(config: CreateAuthConfig) {
     database: config.database,
     secret: config.secret,
     baseURL: config.baseURL,
+    basePath: normalizeAuthBasePath(config.basePath),
     socialProviders,
     user: userConfig,
     ...(rateLimit ? { rateLimit } : {}),
@@ -1050,6 +1071,7 @@ export type InviteUserResult =
 // names that type fails (TS4058). The structural facade keeps the
 // public surface stable.
 export interface Auth {
+  readonly basePath: string;
   readonly handler: (request: Request) => Promise<Response>;
   readonly getSession: (request: Request) => Promise<{
     session: { id: string; userId: string; expiresAt: Date };
@@ -1135,9 +1157,11 @@ export interface Auth {
 
 export function createAuth(config: CreateAuthConfig): Auth {
   const auth = buildAuth(config);
+  const basePath = normalizeAuthBasePath(config.basePath);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const api = auth.api as any;
   return {
+    basePath,
     handler: (request) => auth.handler(request),
     getSession: (request) =>
       api.getSession({ headers: request.headers }).then((r: unknown) => r ?? null),
@@ -1300,6 +1324,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
 }
 
 export interface SetupIncompleteAuthOptions {
+  readonly basePath?: string;
   readonly message?: string;
   readonly response?: () => Response | Promise<Response>;
 }
@@ -1313,6 +1338,7 @@ export interface SetupIncompleteAuthOptions {
 export function createSetupIncompleteAuth(
   options: SetupIncompleteAuthOptions = {},
 ): Auth {
+  const basePath = normalizeAuthBasePath(options.basePath);
   const message = options.message ?? "Auth is not configured yet.";
   const response =
     options.response ??
@@ -1322,6 +1348,7 @@ export function createSetupIncompleteAuth(
         { status: 503, headers: { "cache-control": "no-store" } },
       ));
   return {
+    basePath,
     handler: async () => response(),
     getSession: async () => null,
     getUserRole: async () => null,

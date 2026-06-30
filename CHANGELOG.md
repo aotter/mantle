@@ -6,6 +6,21 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.38] - 2026-06-30
+
+### Added
+
+- **@aotter/mantle-cloudflare**: add `CreateAuthConfig.basePath`
+  and expose `Auth.basePath` so one Worker can host multiple Better
+  Auth instances without route collisions, e.g. Mantle Platform auth,
+  site staff auth, and launch-time GitHub auth.
+
+### Changed
+
+- **@aotter/mantle-cloudflare**: mount the SDK-managed Better Auth
+  methods endpoint and catch-all under `Auth.basePath`; the default
+  remains `/api/auth`.
+
 ## [0.0.11-alpha.37] - 2026-06-30
 
 ### Added
