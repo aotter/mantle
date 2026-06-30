@@ -141,6 +141,10 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
     id: "0003-better-auth-oauth-provider",
     description:
       "Replace the unused pre-alpha OAuth application tables with Better Auth OAuth Provider's client, token, refresh-token, and consent tables.",
+    // Keep this as a forward migration: alpha.36 created pre-alpha
+    // OAuth tables from 0001, and DBs that recorded 0001 will not rerun it.
+    // These OAuth rows were never product data, so Better Auth owns the
+    // canonical table names from here onward.
     sql: `
       DROP TABLE IF EXISTS oauthAccessToken;
       DROP TABLE IF EXISTS oauthConsent;
