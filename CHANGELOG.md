@@ -6,6 +6,32 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.37] - 2026-06-30
+
+### Added
+
+- **@aotter/mantle-cloudflare**: add first-class Better Auth generic
+  OAuth/OIDC consumer support via `AuthMethodConfig.kind = "oauth"` so
+  Mantle sites can sign staff in through a hosted Mantle Platform
+  provider without custom token plumbing.
+- **@aotter/mantle-cloudflare**: expose hosted OAuth provider wiring on
+  `createAuth()` using `@better-auth/oauth-provider`, including OIDC
+  discovery, authorization, consent, token, userinfo, and dynamic client
+  registration surfaces.
+- **@aotter/mantle-cloudflare**: add `registerOAuthClient()` to the
+  auth facade so a platform site can register downstream Mantle sites as
+  OAuth clients through the same auth boundary.
+
+### Changed
+
+- **@aotter/mantle-admin-ui**: render generic OAuth sign-in methods in
+  the staff sign-in UI alongside GitHub and email-based methods.
+- **@aotter/mantle-runtime**: replace the pre-ship legacy OAuth table
+  shape with Better Auth OAuth provider tables. Existing alpha-only
+  `oauthApplication`, `oauthAccessToken`, `oauthRefreshToken`,
+  `oauthClient`, and `oauthConsent` tables are dropped and recreated by
+  migration `0003-better-auth-oauth-provider`.
+
 ## [0.0.11-alpha.36] - 2026-06-30
 
 ### Added

@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle-cloudflare",
-  "version": "0.0.11-alpha.36",
+  "version": "0.0.11-alpha.37",
   "description": "Cloudflare Workers adapter for mantle. Hono-based mountServerEndpoints / createMcpApiHandler / mountAuthorize / mountPublicRoutes. Better Auth for staff sign-in; @cloudflare/workers-oauth-provider for the MCP OAuth AS surface.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
@@ -37,7 +37,8 @@
   "dependencies": {
     "@aotter/mantle-admin-ui": "workspace:*",
     "@aotter/mantle-runtime": "workspace:*",
-    "@aotter/mantle-spec": "workspace:*"
+    "@aotter/mantle-spec": "workspace:*",
+    "@better-auth/oauth-provider": "catalog:"
   },
   "peerDependencies": {
     "@cloudflare/workers-oauth-provider": "catalog:peer",

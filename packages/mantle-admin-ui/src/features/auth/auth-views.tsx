@@ -71,7 +71,8 @@ export function AccessDeniedView({
 type AuthMethodInfo =
   | { kind: "email-otp" }
   | { kind: "magic-link" }
-  | { kind: "social"; provider: string };
+  | { kind: "social"; provider: string }
+  | { kind: "oauth"; providerId: string; displayName?: string };
 
 // Shared input styling for the email-otp form. Lives at module scope
 // so we don't reallocate the string on every render and so a future
@@ -150,7 +151,13 @@ export function SignInView(): React.ReactElement {
           <div>
             {methods.map((m) => (
               <MethodSection
-                key={m.kind === "social" ? `social:${m.provider}` : m.kind}
+                key={
+                  m.kind === "social"
+                    ? `social:${m.provider}`
+                    : m.kind === "oauth"
+                      ? `oauth:${m.providerId}`
+                      : m.kind
+                }
                 method={m}
                 returnTo={ret}
               />
@@ -176,6 +183,14 @@ function MethodSection({
   switch (method.kind) {
     case "social":
       return <SocialSignInSection provider={method.provider} returnTo={returnTo} />;
+    case "oauth":
+      return (
+        <OAuthSignInSection
+          providerId={method.providerId}
+          displayName={method.displayName ?? method.providerId}
+          returnTo={returnTo}
+        />
+      );
     case "email-otp":
       return <EmailOtpSection returnTo={returnTo} />;
     case "magic-link":
@@ -265,6 +280,36 @@ function SocialSignInSection({
     <div className={SECTION_PLAIN}>
       <Button onClick={() => void startSocial()} className="w-full">
         {t(language, "auth.signIn.method.social.button", { provider: displayName })}
+      </Button>
+    </div>
+  );
+}
+
+function OAuthSignInSection({
+  providerId,
+  displayName,
+  returnTo,
+}: {
+  providerId: string;
+  displayName: string;
+  returnTo: string;
+}): React.ReactElement {
+  const { language } = usePreferences();
+  const startOAuth = async (): Promise<void> => {
+    const res = await fetch("/api/auth/sign-in/oauth2", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ providerId, callbackURL: returnTo }),
+    });
+    if (!res.ok) return;
+    const data = (await res.json()) as { url?: string };
+    if (data.url) window.location.href = data.url;
+  };
+  return (
+    <div className={SECTION_PLAIN}>
+      <Button onClick={() => void startOAuth()} className="w-full">
+        {t(language, "auth.signIn.method.oauth.button", { provider: displayName })}
       </Button>
     </div>
   );
