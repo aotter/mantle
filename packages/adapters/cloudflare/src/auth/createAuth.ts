@@ -1,7 +1,9 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
-import { admin, emailOTP, magicLink } from "better-auth/plugins";
+import { admin, emailOTP, jwt, magicLink } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
+import { genericOAuth } from "better-auth/plugins/generic-oauth";
+import { oauthProvider, type Scope } from "@better-auth/oauth-provider";
 import type { EmailSender } from "@aotter/mantle-runtime";
 import { STAFF_ROLES, type StaffRole } from "@aotter/mantle-spec";
 
@@ -97,6 +99,39 @@ export type AuthMethodConfig =
        *  privateKey via Better Auth — its `clientSecret` is the
        *  pre-signed ES256 JWT the adopter generates out-of-band. */
       readonly extras?: Readonly<Record<string, unknown>>;
+    }
+  | {
+      readonly kind: "oauth";
+      /** Better Auth generic OAuth provider id. Stable across sign-in
+       *  start (`/sign-in/oauth2`) and callback
+       *  (`/oauth2/callback/:providerId`). */
+      readonly providerId: string;
+      /** Human label surfaced by `/api/auth/methods` so the admin SPA
+       *  can render "Continue with Mantle Platform" without knowing
+       *  product-specific provider ids. */
+      readonly displayName?: string;
+      readonly clientId: string;
+      readonly clientSecret?: string;
+      /** OIDC discovery document URL. Prefer this over hand-wiring
+       *  authorization/token/userinfo URLs. */
+      readonly discoveryUrl?: string;
+      readonly issuer?: string;
+      readonly requireIssuerValidation?: boolean;
+      readonly authorizationUrl?: string;
+      readonly tokenUrl?: string;
+      readonly userInfoUrl?: string;
+      readonly scopes?: ReadonlyArray<string>;
+      readonly redirectURI?: string;
+      readonly pkce?: boolean;
+      readonly authentication?: "basic" | "post";
+      readonly prompt?:
+        | "none"
+        | "login"
+        | "create"
+        | "consent"
+        | "select_account"
+        | "select_account consent"
+        | "login consent";
     }
   | {
       readonly kind: "email-otp";
@@ -230,6 +265,72 @@ export interface CrossSubDomainCookiesConfig {
   readonly domain?: string;
 }
 
+export interface OAuthProviderConfig {
+  /** Provider scopes. Include `openid` to expose a real OIDC server. */
+  readonly scopes?: ReadonlyArray<Scope>;
+  /** Better Auth OAuth provider login page. Usually `/admin/sign-in`
+   *  or a platform owner sign-in route. */
+  readonly loginPage: string;
+  /** Page that calls `/oauth2/consent` after owner approval. */
+  readonly consentPage: string;
+  readonly allowDynamicClientRegistration?: boolean;
+  readonly allowUnauthenticatedClientRegistration?: boolean;
+  readonly allowPublicClientPrelogin?: boolean;
+  readonly clientRegistrationDefaultScopes?: ReadonlyArray<Scope>;
+  readonly clientRegistrationAllowedScopes?: ReadonlyArray<Scope>;
+  readonly accessTokenExpiresIn?: number;
+  readonly idTokenExpiresIn?: number;
+  readonly refreshTokenExpiresIn?: number;
+  readonly cachedTrustedClients?: ReadonlySet<string>;
+  readonly clientPrivileges?: (context: {
+    readonly headers: Headers;
+    readonly action: "create" | "read" | "update" | "delete" | "list" | "rotate";
+    readonly user?: { readonly id: string; readonly email: string } & Record<string, unknown>;
+    readonly session?: { readonly id: string; readonly userId: string } & Record<
+      string,
+      unknown
+    >;
+  }) => boolean | undefined | Promise<boolean | undefined>;
+}
+
+export interface RegisterOAuthClientInput {
+  readonly redirectUris: ReadonlyArray<string>;
+  readonly scope?: ReadonlyArray<string>;
+  readonly clientName?: string;
+  readonly clientUri?: string;
+  readonly logoUri?: string;
+  readonly contacts?: ReadonlyArray<string>;
+  readonly tosUri?: string;
+  readonly policyUri?: string;
+  readonly postLogoutRedirectUris?: ReadonlyArray<string>;
+  readonly tokenEndpointAuthMethod?:
+    | "none"
+    | "client_secret_basic"
+    | "client_secret_post";
+  readonly grantTypes?: ReadonlyArray<
+    "authorization_code" | "client_credentials" | "refresh_token"
+  >;
+  readonly responseTypes?: ReadonlyArray<"code">;
+  readonly type?: "web" | "native" | "user-agent-based";
+  readonly skipConsent?: boolean;
+  readonly enableEndSession?: boolean;
+  readonly requirePKCE?: boolean;
+  readonly subjectType?: "public" | "pairwise";
+  readonly metadata?: Record<string, unknown>;
+}
+
+export interface RegisteredOAuthClient {
+  readonly clientId: string;
+  readonly clientSecret?: string;
+  readonly redirectUris: readonly string[];
+  readonly scope?: readonly string[];
+  readonly clientName?: string;
+  readonly clientUri?: string;
+  readonly tokenEndpointAuthMethod?: string;
+  readonly type?: string;
+  readonly public?: boolean;
+}
+
 export interface CreateAuthConfig {
   readonly database: D1Database;
   readonly baseURL: string;
@@ -260,6 +361,10 @@ export interface CreateAuthConfig {
   /** Forwarded to Better Auth's `advanced.cookiePrefix`. Set this
    *  when multiple Better Auth apps share a parent cookie domain. */
   readonly cookiePrefix?: string;
+  /** Turn this Better Auth instance into an OAuth/OIDC provider.
+   *  Consumer sites should use `methods: [{ kind: "oauth", ... }]`
+   *  against its discovery document. */
+  readonly oauthProvider?: OAuthProviderConfig;
 }
 
 const ac = createAccessControl(defaultStatements);
@@ -354,6 +459,65 @@ export function buildSocialProviders(
     };
   }
   return out as BetterAuthOptions["socialProviders"];
+}
+
+/** @internal exported for unit tests; not part of the public API. */
+export function buildGenericOAuthProviders(
+  methods: ReadonlyArray<AuthMethodConfig>,
+): Array<{
+  providerId: string;
+  displayName?: string;
+  clientId: string;
+  clientSecret?: string;
+  discoveryUrl?: string;
+  issuer?: string;
+  requireIssuerValidation?: boolean;
+  authorizationUrl?: string;
+  tokenUrl?: string;
+  userInfoUrl?: string;
+  scopes?: string[];
+  redirectURI?: string;
+  pkce?: boolean;
+  authentication?: "basic" | "post";
+  prompt?: Extract<AuthMethodConfig, { kind: "oauth" }>["prompt"];
+}> {
+  const seenProviderIds = new Set<string>();
+  const out: ReturnType<typeof buildGenericOAuthProviders> = [];
+  for (const method of methods) {
+    if (method.kind !== "oauth") continue;
+    if (seenProviderIds.has(method.providerId)) {
+      throw new Error(
+        `createAuth: OAuth provider '${method.providerId}' is registered more than once; ` +
+          `each providerId can have only one methods[] entry.`,
+      );
+    }
+    seenProviderIds.add(method.providerId);
+    if (!method.discoveryUrl && !(method.authorizationUrl && method.tokenUrl)) {
+      throw new Error(
+        `createAuth: OAuth provider '${method.providerId}' needs either discoveryUrl or both authorizationUrl and tokenUrl.`,
+      );
+    }
+    out.push({
+      providerId: method.providerId,
+      ...(method.displayName ? { displayName: method.displayName } : {}),
+      clientId: method.clientId,
+      ...(method.clientSecret ? { clientSecret: method.clientSecret } : {}),
+      ...(method.discoveryUrl ? { discoveryUrl: method.discoveryUrl } : {}),
+      ...(method.issuer ? { issuer: method.issuer } : {}),
+      ...(method.requireIssuerValidation !== undefined
+        ? { requireIssuerValidation: method.requireIssuerValidation }
+        : {}),
+      ...(method.authorizationUrl ? { authorizationUrl: method.authorizationUrl } : {}),
+      ...(method.tokenUrl ? { tokenUrl: method.tokenUrl } : {}),
+      ...(method.userInfoUrl ? { userInfoUrl: method.userInfoUrl } : {}),
+      ...(method.scopes ? { scopes: [...method.scopes] } : {}),
+      ...(method.redirectURI ? { redirectURI: method.redirectURI } : {}),
+      ...(method.pkce !== undefined ? { pkce: method.pkce } : {}),
+      ...(method.authentication ? { authentication: method.authentication } : {}),
+      ...(method.prompt ? { prompt: method.prompt } : {}),
+    });
+  }
+  return out;
 }
 
 /**
@@ -545,6 +709,7 @@ function buildAuth(config: CreateAuthConfig) {
     validateBootstrap(config.bootstrapOwner, config.methods);
   }
   const socialProviders = buildSocialProviders(config.methods);
+  const genericOAuthProviders = buildGenericOAuthProviders(config.methods);
   const bootstrap = config.bootstrapOwner;
   const emailOtpMethod = pickSingleton(config.methods, "email-otp");
   const magicLinkMethod = pickSingleton(config.methods, "magic-link");
@@ -580,8 +745,80 @@ function buildAuth(config: CreateAuthConfig) {
         user: userAc,
       },
     }),
+    ...(genericOAuthProviders.length > 0
+      ? [
+          genericOAuth({
+            config: genericOAuthProviders.map(
+              ({ displayName: _displayName, ...provider }) => provider,
+            ),
+          }),
+        ]
+      : []),
     ...(emailOtpMethod ? [buildEmailOTPPlugin(emailOtpMethod)] : []),
     ...(magicLinkMethod ? [buildMagicLinkPlugin(magicLinkMethod)] : []),
+    ...(config.oauthProvider
+      ? [
+          jwt(),
+          oauthProvider({
+            loginPage: config.oauthProvider.loginPage,
+            consentPage: config.oauthProvider.consentPage,
+            ...(config.oauthProvider.scopes
+              ? { scopes: [...config.oauthProvider.scopes] }
+              : {}),
+            ...(config.oauthProvider.allowDynamicClientRegistration !== undefined
+              ? {
+                  allowDynamicClientRegistration:
+                    config.oauthProvider.allowDynamicClientRegistration,
+                }
+              : {}),
+            ...(config.oauthProvider.allowUnauthenticatedClientRegistration !== undefined
+              ? {
+                  allowUnauthenticatedClientRegistration:
+                    config.oauthProvider.allowUnauthenticatedClientRegistration,
+                }
+              : {}),
+            ...(config.oauthProvider.allowPublicClientPrelogin !== undefined
+              ? {
+                  allowPublicClientPrelogin:
+                    config.oauthProvider.allowPublicClientPrelogin,
+                }
+              : {}),
+            ...(config.oauthProvider.clientRegistrationDefaultScopes
+              ? {
+                  clientRegistrationDefaultScopes: [
+                    ...config.oauthProvider.clientRegistrationDefaultScopes,
+                  ],
+                }
+              : {}),
+            ...(config.oauthProvider.clientRegistrationAllowedScopes
+              ? {
+                  clientRegistrationAllowedScopes: [
+                    ...config.oauthProvider.clientRegistrationAllowedScopes,
+                  ],
+                }
+              : {}),
+            ...(config.oauthProvider.accessTokenExpiresIn !== undefined
+              ? { accessTokenExpiresIn: config.oauthProvider.accessTokenExpiresIn }
+              : {}),
+            ...(config.oauthProvider.idTokenExpiresIn !== undefined
+              ? { idTokenExpiresIn: config.oauthProvider.idTokenExpiresIn }
+              : {}),
+            ...(config.oauthProvider.refreshTokenExpiresIn !== undefined
+              ? { refreshTokenExpiresIn: config.oauthProvider.refreshTokenExpiresIn }
+              : {}),
+            ...(config.oauthProvider.cachedTrustedClients
+              ? {
+                  cachedTrustedClients: new Set(
+                    config.oauthProvider.cachedTrustedClients,
+                  ),
+                }
+              : {}),
+            ...(config.oauthProvider.clientPrivileges
+              ? { clientPrivileges: config.oauthProvider.clientPrivileges }
+              : {}),
+          }),
+        ]
+      : []),
   ];
 
   // `user.additionalFields`: SDK owns `githubLogin` only.
@@ -761,7 +998,12 @@ export type AuthMethodKind = AuthMethodConfig["kind"];
 export type AuthMethodInfo =
   | { readonly kind: "email-otp" }
   | { readonly kind: "magic-link" }
-  | { readonly kind: "social"; readonly provider: SocialProviderId };
+  | { readonly kind: "social"; readonly provider: SocialProviderId }
+  | {
+      readonly kind: "oauth";
+      readonly providerId: string;
+      readonly displayName?: string;
+    };
 
 /**
  * Linked-account row as exposed to consumers. Mirrors the BA `account`
@@ -882,6 +1124,13 @@ export interface Auth {
    *  user with sessions/accounts can never be cascade-deleted through
    *  this path. Returns false when the row didn't match the guard. */
   readonly revokeInvite: (userId: string) => Promise<boolean>;
+  /** Register an OAuth/OIDC client when `oauthProvider` is configured.
+   *  Uses Better Auth's own provider plugin endpoint and returns the
+   *  client secret only on creation, exactly like OAuth dynamic client
+   *  registration. */
+  readonly registerOAuthClient: (
+    input: RegisterOAuthClientInput,
+  ) => Promise<RegisteredOAuthClient>;
 }
 
 export function createAuth(config: CreateAuthConfig): Auth {
@@ -899,11 +1148,21 @@ export function createAuth(config: CreateAuthConfig): Auth {
         .first<{ role: string | null }>();
       return row?.role ?? null;
     },
-    methods: config.methods.map<AuthMethodInfo>((m) =>
-      m.kind === "social"
-        ? { kind: "social", provider: m.provider }
-        : { kind: m.kind },
-    ),
+    methods: config.methods.map<AuthMethodInfo>((m) => {
+      switch (m.kind) {
+        case "social":
+          return { kind: "social", provider: m.provider };
+        case "oauth":
+          return {
+            kind: "oauth",
+            providerId: m.providerId,
+            ...(m.displayName ? { displayName: m.displayName } : {}),
+          };
+        case "email-otp":
+        case "magic-link":
+          return { kind: m.kind };
+      }
+    }),
     listLinkedAccounts: async (userId) => {
       const result = await config.database
         .prepare(
@@ -1002,6 +1261,41 @@ export function createAuth(config: CreateAuthConfig): Auth {
         .run();
       return (result.meta?.changes ?? 0) > 0;
     },
+    registerOAuthClient: async (input) => {
+      if (!config.oauthProvider) {
+        throw new Error("registerOAuthClient: oauthProvider is not configured.");
+      }
+      const created = await api.adminCreateOAuthClient({
+        headers: new Headers(),
+        body: {
+          redirect_uris: [...input.redirectUris],
+          ...(input.scope ? { scope: input.scope.join(" ") } : {}),
+          ...(input.clientName ? { client_name: input.clientName } : {}),
+          ...(input.clientUri ? { client_uri: input.clientUri } : {}),
+          ...(input.logoUri ? { logo_uri: input.logoUri } : {}),
+          ...(input.contacts ? { contacts: [...input.contacts] } : {}),
+          ...(input.tosUri ? { tos_uri: input.tosUri } : {}),
+          ...(input.policyUri ? { policy_uri: input.policyUri } : {}),
+          ...(input.postLogoutRedirectUris
+            ? { post_logout_redirect_uris: [...input.postLogoutRedirectUris] }
+            : {}),
+          ...(input.tokenEndpointAuthMethod
+            ? { token_endpoint_auth_method: input.tokenEndpointAuthMethod }
+            : {}),
+          ...(input.grantTypes ? { grant_types: [...input.grantTypes] } : {}),
+          ...(input.responseTypes ? { response_types: [...input.responseTypes] } : {}),
+          ...(input.type ? { type: input.type } : {}),
+          ...(input.skipConsent !== undefined ? { skip_consent: input.skipConsent } : {}),
+          ...(input.enableEndSession !== undefined
+            ? { enable_end_session: input.enableEndSession }
+            : {}),
+          ...(input.requirePKCE !== undefined ? { require_pkce: input.requirePKCE } : {}),
+          ...(input.subjectType ? { subject_type: input.subjectType } : {}),
+          ...(input.metadata ? { metadata: input.metadata } : {}),
+        },
+      });
+      return mapRegisteredOAuthClient(created);
+    },
   };
 }
 
@@ -1040,6 +1334,39 @@ export function createSetupIncompleteAuth(
       throw new Error(message);
     },
     revokeInvite: async () => false,
+    registerOAuthClient: async () => {
+      throw new Error(message);
+    },
+  };
+}
+
+function mapRegisteredOAuthClient(value: unknown): RegisteredOAuthClient {
+  const row = value as {
+    client_id?: string;
+    client_secret?: string;
+    redirect_uris?: string[];
+    scope?: string;
+    client_name?: string;
+    client_uri?: string;
+    token_endpoint_auth_method?: string;
+    type?: string;
+    public?: boolean;
+  };
+  if (!row.client_id || !Array.isArray(row.redirect_uris)) {
+    throw new Error("registerOAuthClient: Better Auth returned an invalid client.");
+  }
+  return {
+    clientId: row.client_id,
+    ...(row.client_secret ? { clientSecret: row.client_secret } : {}),
+    redirectUris: row.redirect_uris,
+    ...(row.scope ? { scope: row.scope.split(" ").filter(Boolean) } : {}),
+    ...(row.client_name ? { clientName: row.client_name } : {}),
+    ...(row.client_uri ? { clientUri: row.client_uri } : {}),
+    ...(row.token_endpoint_auth_method
+      ? { tokenEndpointAuthMethod: row.token_endpoint_auth_method }
+      : {}),
+    ...(row.type ? { type: row.type } : {}),
+    ...(row.public !== undefined ? { public: row.public } : {}),
   };
 }
 

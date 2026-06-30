@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EmailSender } from "@aotter/mantle-runtime";
 import {
+  buildGenericOAuthProviders,
   buildSocialProviders,
   buildTrustedOriginsFor,
   createAuth,
@@ -356,6 +357,66 @@ describe("buildSocialProviders", () => {
   });
 });
 
+describe("buildGenericOAuthProviders", () => {
+  it("emits Better Auth generic OAuth config and keeps displayName for the public method descriptor", () => {
+    const out = buildGenericOAuthProviders([
+      {
+        kind: "oauth",
+        providerId: "mantle-platform",
+        displayName: "Mantle Platform",
+        clientId: "client",
+        clientSecret: "secret",
+        discoveryUrl: "https://platform.mantle.tools/.well-known/openid-configuration",
+        issuer: "https://platform.mantle.tools",
+        requireIssuerValidation: true,
+        scopes: ["openid", "profile", "email"],
+        pkce: true,
+      },
+    ]);
+
+    expect(out).toEqual([
+      {
+        providerId: "mantle-platform",
+        displayName: "Mantle Platform",
+        clientId: "client",
+        clientSecret: "secret",
+        discoveryUrl: "https://platform.mantle.tools/.well-known/openid-configuration",
+        issuer: "https://platform.mantle.tools",
+        requireIssuerValidation: true,
+        scopes: ["openid", "profile", "email"],
+        pkce: true,
+      },
+    ]);
+  });
+
+  it("throws when an oauth method has no discoveryUrl or endpoint pair", () => {
+    expect(() =>
+      buildGenericOAuthProviders([
+        { kind: "oauth", providerId: "broken", clientId: "c" },
+      ]),
+    ).toThrow(/discoveryUrl.*authorizationUrl.*tokenUrl/i);
+  });
+
+  it("throws when the same oauth providerId is registered twice", () => {
+    expect(() =>
+      buildGenericOAuthProviders([
+        {
+          kind: "oauth",
+          providerId: "mantle-platform",
+          clientId: "a",
+          discoveryUrl: "https://platform.mantle.tools/.well-known/openid-configuration",
+        },
+        {
+          kind: "oauth",
+          providerId: "mantle-platform",
+          clientId: "b",
+          discoveryUrl: "https://platform.mantle.tools/.well-known/openid-configuration",
+        },
+      ]),
+    ).toThrow(/mantle-platform.*registered more than once/i);
+  });
+});
+
 describe("createAuth — boot invariants", () => {
   it("throws when methods[] is empty", () => {
     expect(() => createAuth(baseConfig({ methods: [] }))).toThrow(/empty/i);
@@ -380,6 +441,9 @@ describe("createAuth — boot invariants", () => {
       /setup pending/,
     );
     expect(await auth.revokeInvite("user_1")).toBe(false);
+    await expect(
+      auth.registerOAuthClient({ redirectUris: ["https://site.test/api/auth/callback"] }),
+    ).rejects.toThrow(/setup pending/);
   });
 
   it("throws when bootstrapOwner.match='github-login' but no github method", () => {
@@ -450,6 +514,14 @@ describe("createAuth — boot invariants", () => {
             clientId: "o",
             clientSecret: "o",
           },
+          {
+            kind: "oauth",
+            providerId: "mantle-platform",
+            displayName: "Mantle Platform",
+            clientId: "platform-client",
+            clientSecret: "platform-secret",
+            discoveryUrl: "https://platform.mantle.tools/.well-known/openid-configuration",
+          },
         ],
         bootstrapOwner: { match: "email", value: "alice@example.com" },
       }),
@@ -459,6 +531,11 @@ describe("createAuth — boot invariants", () => {
       { kind: "email-otp" },
       { kind: "magic-link" },
       { kind: "social", provider: "google" },
+      {
+        kind: "oauth",
+        providerId: "mantle-platform",
+        displayName: "Mantle Platform",
+      },
     ]);
   });
 
@@ -467,6 +544,20 @@ describe("createAuth — boot invariants", () => {
     expect(typeof auth.handler).toBe("function");
     expect(typeof auth.getSession).toBe("function");
     expect(typeof auth.getUserRole).toBe("function");
+    expect(typeof auth.registerOAuthClient).toBe("function");
+  });
+
+  it("constructs an OAuth/OIDC provider when oauthProvider is configured", () => {
+    const auth = createAuth(
+      baseConfig({
+        oauthProvider: {
+          loginPage: "/admin/sign-in",
+          consentPage: "/oauth/consent",
+          scopes: ["openid", "profile", "email"],
+        },
+      }),
+    );
+    expect(typeof auth.registerOAuthClient).toBe("function");
   });
 
   it("registers apple → constructs without throwing (auto-trustedOrigins ride internally)", () => {
