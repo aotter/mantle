@@ -206,6 +206,62 @@ describe("InvokeBuiltinUseCase — update / delete / upsert", () => {
     expect((updated.data as { data: { title: string } }).data.title).toBe("v2");
   });
 
+  it("update PATCHES: omitted fields + author binding survive (regression #390)", async () => {
+    const h = harness();
+    const created = await h.invoke.execute({
+      procedure: createPostFullInput,
+      input: { title: "v1", body: "original body" },
+      ctx: { user: { id: "user-A" }, staff: null, env: {} },
+    });
+    if (!created.ok) throw new Error("create failed");
+    const row = created.data as { id: string; version: number };
+
+    // User B updates ONLY the title. Pre-#390 this routed through the
+    // create projector: `body` would be wiped and `authorId` re-stamped
+    // to user-B. The PATCH path must preserve both.
+    const updated = await h.invoke.execute({
+      procedure: builtinProcedure({
+        name: "updatePost",
+        op: "update",
+        schema: "posts",
+        inputProperties: {
+          id: { type: "string" },
+          expectedVersion: { type: "number" },
+          title: { type: "string" },
+        },
+      }),
+      input: { id: row.id, expectedVersion: row.version, title: "v2" },
+      ctx: { user: { id: "user-B" }, staff: null, env: {} },
+    });
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) return;
+    const data = (updated.data as { data: Record<string, unknown> }).data;
+    expect(data["title"]).toBe("v2");
+    expect(data["body"]).toBe("original body"); // not wiped
+    expect(data["authorId"]).toBe("user-A"); // not re-stamped to user-B
+  });
+
+  it("update on unknown id returns NOT_FOUND (regression #390)", async () => {
+    const h = harness();
+    const result = await h.invoke.execute({
+      procedure: builtinProcedure({
+        name: "updatePost",
+        op: "update",
+        schema: "posts",
+        inputProperties: {
+          id: { type: "string" },
+          expectedVersion: { type: "number" },
+          title: { type: "string" },
+        },
+      }),
+      input: { id: "ghost", expectedVersion: 1, title: "x" },
+      ctx: { user: { id: "user-A" }, staff: null, env: {} },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostic.code).toBe("NOT_FOUND");
+  });
+
   it("delete returns { removed: true }", async () => {
     const h = harness();
     const created = await h.invoke.execute({

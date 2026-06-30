@@ -10,7 +10,10 @@ import type { Clock } from "../../domain/port/Clock.js";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
 import type { IdGenerator } from "../../domain/port/IdGenerator.js";
 import type { SiteConfigRepository } from "../../domain/port/SiteConfigRepository.js";
-import { projectAndStamp } from "../../domain/service/BuiltinProjector.js";
+import {
+  projectAndStamp,
+  projectUpdateAndStamp,
+} from "../../domain/service/BuiltinProjector.js";
 import { assertEntryWritable } from "../../domain/service/io/EntryWriteGuard.js";
 import type { InvokeBuiltinRequest } from "../dto/procedure/index.js";
 
@@ -137,11 +140,37 @@ export class InvokeBuiltinUseCase {
     input: Record<string, unknown>,
     ctx: HandlerContext,
     now: number,
+    preloaded?: EntryRow,
   ): Promise<EntryRow> {
     const opPath = `usecase/InvokeBuiltin/${schema.metadata.name}/update`;
     const id = requireField(input, "id", "string");
     const expectedVersion = requireField(input, "expectedVersion", "number");
-    const data = projectAndStamp({ schema, input, ctx, clockNow: now });
+    // Read the existing row and PATCH it. The create projector
+    // (`projectAndStamp`) would drop every Schema field the caller
+    // omitted and re-stamp `x-mantle-bind` fields (author → current
+    // caller, `now` → this edit) — silent data loss. Mirror
+    // UpdateDraftUseCase: merge via `projectUpdateAndStamp` so omitted
+    // fields and server-stamped values (author, created-at) survive.
+    const existing = preloaded ?? (await this.entries.get(id));
+    if (!existing) {
+      throw new DiagnosticError(
+        runtimeDiagnostic({
+          code: "NOT_FOUND",
+          severity: "error",
+          path: `${opPath}/${id}`,
+          value: id,
+          expected: "id of an existing entry",
+          message: `Entry not found: ${id}.`,
+        }),
+      );
+    }
+    const data = projectUpdateAndStamp({
+      schema,
+      existing: existing.data,
+      patch: input,
+      ctx,
+      clockNow: now,
+    });
     await assertEntryWritable({
       opPath,
       entries: this.entries,
@@ -170,7 +199,7 @@ export class InvokeBuiltinUseCase {
     const id = typeof input["id"] === "string" ? input["id"] : undefined;
     if (id) {
       const existing = await this.entries.get(id);
-      if (existing) return this.opUpdate(schema, input, ctx, now);
+      if (existing) return this.opUpdate(schema, input, ctx, now, existing);
     }
     return this.opCreate(schema, input, ctx, now);
   }
