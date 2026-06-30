@@ -6,6 +6,16 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.40] - 2026-06-30
+
+### Removed
+
+- **@aotter/mantle-cloudflare**: remove the alpha.39
+  `oauthProvider.trustedClients` config surface before adoption. The
+  active Better Auth OAuth provider package is DB/DCR-backed; hosted
+  platform clients should be created through dynamic client
+  registration or the SDK `registerOAuthClient()` facade.
+
 ## [0.0.11-alpha.39] - 2026-06-30
 
 ### Added
