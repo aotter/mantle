@@ -6,6 +6,16 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.39] - 2026-06-30
+
+### Added
+
+- **@aotter/mantle-cloudflare**: expose Better Auth OIDC
+  `trustedClients` through `createAuth().oauthProvider` so hosted
+  Mantle Platform deployments can register first-party public PKCE
+  clients in code while external Mantle sites continue to use dynamic
+  client registration.
+
 ## [0.0.11-alpha.38] - 2026-06-30
 
 ### Added
