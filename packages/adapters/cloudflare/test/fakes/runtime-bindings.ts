@@ -34,6 +34,7 @@ export class StubAssetServer implements AssetServer {
 /** Auth fake that denies every session — for tests that exercise the
  *  public surface without going through Better Auth. */
 export const stubAuth: Auth = {
+  basePath: "/api/auth",
   handler: async () => new Response(null, { status: 404 }),
   getSession: async () => null,
   getUserRole: async () => null,
@@ -44,4 +45,7 @@ export const stubAuth: Auth = {
   setUserRole: async () => false,
   inviteUser: async () => ({ kind: "created", id: "stub-invite-id" }),
   revokeInvite: async () => false,
+  registerOAuthClient: async () => {
+    throw new Error("stub auth cannot register OAuth clients");
+  },
 };

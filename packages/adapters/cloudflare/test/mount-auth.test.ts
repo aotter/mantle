@@ -67,6 +67,29 @@ describe("mountServerEndpoints: /api/auth/* surface", () => {
     expect(await res.text()).toBe("ok-from-better-auth");
     expect(handlerCalls).toHaveLength(1);
   });
+
+  it("mounts methods and catch-all under a custom auth base path", async () => {
+    const handlerCalls: Request[] = [];
+    const { app } = harness({
+      basePath: "/api/platform/auth",
+      methods: [{ kind: "social", provider: "github" }],
+      handler: async (req) => {
+        handlerCalls.push(req);
+        return new Response("ok-from-platform-auth", { status: 200 });
+      },
+    });
+
+    const methods = await app.request("/api/platform/auth/methods");
+    expect(methods.status).toBe(200);
+    expect(await methods.json()).toEqual({
+      methods: [{ kind: "social", provider: "github" }],
+    });
+
+    const res = await app.request("/api/platform/auth/sign-in/social");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("ok-from-platform-auth");
+    expect(handlerCalls).toHaveLength(1);
+  });
 });
 
 describe("mountAuthorize", () => {

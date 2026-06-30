@@ -429,6 +429,7 @@ describe("createAuth — boot invariants", () => {
     });
     const req = new Request("https://example.test/admin/sign-in");
 
+    expect(auth.basePath).toBe("/api/auth");
     expect(auth.methods).toEqual([]);
     expect(await auth.getSession(req)).toBeNull();
     expect(await auth.getUserRole("user_1")).toBeNull();
@@ -541,10 +542,40 @@ describe("createAuth — boot invariants", () => {
 
   it("returns an Auth surface with handler / getSession / getUserRole", () => {
     const auth = createAuth(baseConfig());
+    expect(auth.basePath).toBe("/api/auth");
     expect(typeof auth.handler).toBe("function");
     expect(typeof auth.getSession).toBe("function");
     expect(typeof auth.getUserRole).toBe("function");
     expect(typeof auth.registerOAuthClient).toBe("function");
+  });
+
+  it("accepts a custom Better Auth base path", () => {
+    const auth = createAuth(
+      baseConfig({
+        basePath: "/api/platform/auth",
+      }),
+    );
+    expect(auth.basePath).toBe("/api/platform/auth");
+  });
+
+  it("rejects an auth base path without a leading slash", () => {
+    expect(() =>
+      createAuth(
+        baseConfig({
+          basePath: "api/platform/auth",
+        }),
+      ),
+    ).toThrow(/basePath.*start with/i);
+  });
+
+  it("rejects the root auth base path", () => {
+    expect(() =>
+      createAuth(
+        baseConfig({
+          basePath: "/",
+        }),
+      ),
+    ).toThrow(/basePath.*not be/i);
   });
 
   it("constructs an OAuth/OIDC provider when oauthProvider is configured", () => {
