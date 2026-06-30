@@ -210,6 +210,13 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
 async function loadHandlerSource(root: string): Promise<string> {
   const exts = [".ts", ".tsx", ".js", ".mjs", ".cjs"];
   const chunks: string[] = [];
+  // Probe the root explicitly. walk() swallows readdir errors so it can
+  // best-effort skip unreadable SUBdirectories — but that same swallow
+  // turns a missing/unreadable source ROOT into an empty string, which
+  // then makes every `handler.kind: ref` Procedure emit a spurious
+  // HANDLER_NOT_REGISTERED warning instead of a clear "could not read
+  // source root" exit-2. Surface the root error here. (#393)
+  await readdir(root, { withFileTypes: true });
   async function walk(dir: string): Promise<void> {
     let items;
     try {

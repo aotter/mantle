@@ -25,6 +25,7 @@ spec:
       slug: { type: string }
       title: { type: string }
       body: { type: string }
+      locale: { type: string }
 `;
 
 const VIEW_YAML = `apiVersion: cms.mantle.aotter.net/v1
@@ -137,5 +138,32 @@ describe("emit CLI --output", () => {
   it("rejects --output without a file path", () => {
     expect(() => parseOpenapiArgs(["--output"])).toThrowError(/--output requires/);
     expect(() => parseTypesArgs(["-o"])).toThrowError(/--output requires/);
+  });
+
+  it("fails (exit 1) instead of silently dropping a route on a method+path collision (#398)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mantle-collide-"));
+    const m = join(dir, "manifests");
+    await mkdir(m, { recursive: true });
+    const proc = (name: string) => `apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: ${name} }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: ${name} }
+`;
+    const trig = (name: string, target: string) => `apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: ${name} }
+spec:
+  source: { kind: http, method: POST, path: /api/foo }
+  target: { procedure: ${target} }
+`;
+    await writeFile(join(m, "p1.yaml"), proc("alpha"));
+    await writeFile(join(m, "p2.yaml"), proc("beta"));
+    await writeFile(join(m, "t1.yaml"), trig("tAlpha", "alpha"));
+    await writeFile(join(m, "t2.yaml"), trig("tBeta", "beta"));
+
+    await expect(runEmitOpenapi(["--manifests", m])).resolves.toBe(1);
   });
 });

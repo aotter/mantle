@@ -113,7 +113,18 @@ function stringShape(schema: JsonSchema): ZodType {
   let s = z.string();
   if (typeof schema.minLength === "number") s = s.min(schema.minLength);
   if (typeof schema.maxLength === "number") s = s.max(schema.maxLength);
-  if (typeof schema.pattern === "string") s = s.regex(new RegExp(schema.pattern));
+  if (typeof schema.pattern === "string") {
+    // `new RegExp` throws SyntaxError on a malformed pattern. This runs
+    // at zod-BUILD time (before any safeParse), so an uncaught throw
+    // here crashes the request handler instead of surfacing a
+    // Diagnostic. Pre-deploy `validate` is the real gate (INVALID_PATTERN);
+    // at runtime we skip an uncompilable constraint rather than crash.
+    try {
+      s = s.regex(new RegExp(schema.pattern));
+    } catch {
+      /* invalid pattern — already an INVALID_PATTERN validate error */
+    }
+  }
   if (typeof schema.format === "string") {
     switch (schema.format) {
       case "email":
