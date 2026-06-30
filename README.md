@@ -149,6 +149,12 @@ For a guided install, follow the steps in [`skills/install/SKILL.md`](skills/ins
 | `@aotter/mantle-cloudflare` | Cloudflare Workers adapter. Implements ports against D1 / KV / ASSETS. Ships `createAuth()` — the Better Auth-backed *default* implementation of the SDK's `Auth` contract (see [ADR-0014](docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md) § "Auth as contract, Better Auth as default"); replace by passing your own `Auth` instance. |
 | `@aotter/mantle-netlify` | **Stub.** Coming v0.2. Engineering forcing function: keeps `mantle-runtime` adapter-agnostic. |
 
+Auth and hosted-identity boundaries are documented in
+[`docs/auth-hosting-model.md`](docs/auth-hosting-model.md). Free Mantle
+sites can self-host supported login methods; Mantle Platform can offer
+hosted identity, email, and entitlement-backed convenience without
+owning a generated site's local grants or member records.
+
 ## Starters
 
 Starter taxonomy. Mantle landing fetches `provision-bundles/<type>.json` from [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters), substitutes launch facts, commits the repo, and connects Cloudflare Workers CI when possible.

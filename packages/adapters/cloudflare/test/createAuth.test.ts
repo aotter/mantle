@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EmailSender } from "@aotter/mantle-runtime";
 import {
   buildSocialProviders,
+  buildTrustedOriginsFor,
   createAuth,
   createSetupIncompleteAuth,
   pickLocale,
@@ -510,6 +511,40 @@ describe("createAuth — boot invariants", () => {
       }),
     );
     expect(auth.methods).toEqual([{ kind: "social", provider: "apple" }]);
+  });
+
+  it("merges provider-required trustedOrigins with configured trusted origins", () => {
+    expect(
+      buildTrustedOriginsFor(
+        [
+          {
+            kind: "social",
+            provider: "apple",
+            clientId: "com.example.web",
+            clientSecret: "JWT-placeholder",
+          },
+        ],
+        ["https://platform.mantle.tools", "https://landing.mantle.tools"],
+      ),
+    ).toEqual([
+      "https://appleid.apple.com",
+      "https://platform.mantle.tools",
+      "https://landing.mantle.tools",
+    ]);
+  });
+
+  it("constructs when cross-subdomain cookies are configured", () => {
+    const auth = createAuth(
+      baseConfig({
+        trustedOrigins: ["https://platform.mantle.tools", "https://landing.mantle.tools"],
+        cookiePrefix: "mantle-platform",
+        crossSubDomainCookies: {
+          enabled: true,
+          domain: "mantle.tools",
+        },
+      }),
+    );
+    expect(typeof auth.handler).toBe("function");
   });
 
   it("constructs without throwing when accountLinking is configured", () => {

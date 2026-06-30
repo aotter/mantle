@@ -225,6 +225,11 @@ export interface EmailVerificationConfig {
   readonly expiresIn?: number;
 }
 
+export interface CrossSubDomainCookiesConfig {
+  readonly enabled: boolean;
+  readonly domain?: string;
+}
+
 export interface CreateAuthConfig {
   readonly database: D1Database;
   readonly baseURL: string;
@@ -246,6 +251,15 @@ export interface CreateAuthConfig {
   /** Forwarded to Better Auth's `emailVerification`. Omit for Better
    *  Auth's defaults. */
   readonly emailVerification?: EmailVerificationConfig;
+  /** Additional Better Auth trusted origins. SDK still injects
+   *  provider-required origins such as Apple automatically. */
+  readonly trustedOrigins?: ReadonlyArray<string>;
+  /** Forwarded to Better Auth's `advanced.crossSubDomainCookies`.
+   *  Use only for trusted first-party app families. */
+  readonly crossSubDomainCookies?: CrossSubDomainCookiesConfig;
+  /** Forwarded to Better Auth's `advanced.cookiePrefix`. Set this
+   *  when multiple Better Auth apps share a parent cookie domain. */
+  readonly cookiePrefix?: string;
 }
 
 const ac = createAccessControl(defaultStatements);
@@ -496,13 +510,14 @@ const SOCIAL_PROVIDER_TRUSTED_ORIGINS: Readonly<
   apple: ["https://appleid.apple.com"],
 };
 
-function autoTrustedOriginsFor(
+export function buildTrustedOriginsFor(
   methods: ReadonlyArray<AuthMethodConfig>,
+  configured: ReadonlyArray<string> = [],
 ): string[] {
   const origins = methods.flatMap((m) =>
     m.kind === "social" ? SOCIAL_PROVIDER_TRUSTED_ORIGINS[m.provider] ?? [] : [],
   );
-  return [...new Set(origins)];
+  return [...new Set([...origins, ...configured])];
 }
 
 /**
@@ -549,9 +564,9 @@ function buildAuth(config: CreateAuthConfig) {
     : rateLimitDefault;
 
   // `trustedOrigins`: per-provider auto-origins (Apple needs
-  // `https://appleid.apple.com`). No adopter override — Better Auth
-  // configuration is fully owned by the SDK (no escape hatch).
-  const trustedOrigins = autoTrustedOriginsFor(config.methods);
+  // `https://appleid.apple.com`) plus adopter-owned first-party
+  // origins for flows such as hosted auth across trusted subdomains.
+  const trustedOrigins = buildTrustedOriginsFor(config.methods, config.trustedOrigins);
 
   const sdkPlugins = [
     admin({
@@ -592,6 +607,10 @@ function buildAuth(config: CreateAuthConfig) {
           defaultCookieAttributes: { secure: true, sameSite: "none" as const },
         }
       : {}),
+    ...(config.crossSubDomainCookies
+      ? { crossSubDomainCookies: config.crossSubDomainCookies }
+      : {}),
+    ...(config.cookiePrefix ? { cookiePrefix: config.cookiePrefix } : {}),
     // Fire-and-forget hook closes the user-existence timing oracle
     // on OTP send — see § "Auth as contract" notes in ADR-0014.
     backgroundTasks: {

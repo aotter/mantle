@@ -419,3 +419,42 @@ The original ADR-0014 §"Auth as contract, Better Auth as default" framing stays
 - A `@cloudflare/vitest-pool-workers`-based integration test covering the full OAuth flow (DCR → consent → token → MCP RPC). Node-vitest can't load `@cloudflare/workers-oauth-provider` because it imports from `cloudflare:workers`.
 - Starters (`aotter/mantle-starters`) migration to the same top-level OAuthProvider shape. All 8 archetypes currently use the pre-carve-out `mountMcp` API and need updating before the next starter tag.
 - Track whether Anthropic relaxes (1) the `/mcp` resource-path-prefix requirement and (2) the no-colon-in-scope requirement. Both are de-facto MCP client behaviors, not RFC requirements; if upstream relaxes them, the SDK can re-introduce `mcp:read` / `mcp:staff` scopes for finer-grained delegation.
+
+## Amendment — 2026-06-30: Hosted-auth boundary and first-party cookie fields
+
+Mantle Platform introduces a first-party hosted-auth use case:
+`platform.mantle.tools` owns site-owner account, billing, hosted
+identity, and platform email, while generated sites still own local
+grants, member records, content, commerce, forms, and legal copy. The
+product boundary is documented in
+[`docs/auth-hosting-model.md`](../auth-hosting-model.md).
+
+This does not change ADR-0014's core rule: Mantle does not expose an
+un-curated `betterAuthOptions` or `advanced` passthrough. Missing Better
+Auth knobs become first-class SDK fields only when a real Mantle use
+case needs them.
+
+The first-party SSO use case needs exactly three Better Auth fields:
+
+- `trustedOrigins` — app-owned origins that Better Auth should trust for
+  auth flows. SDK-managed provider origins, such as Apple, are still
+  injected automatically.
+- `crossSubDomainCookies` — Better Auth's same-parent-domain cookie
+  support for a trusted first-party app family.
+- `cookiePrefix` — required when two Better Auth apps can write cookies
+  under the same parent domain, so Platform cookies do not collide with
+  Landing or generated-site cookies.
+
+These fields are additive. Existing consumers that do not pass them keep
+the previous cookie/session behavior.
+
+The boundary is deliberately narrower than "hosted auth everywhere":
+
+- Free users can still self-host every login method Mantle exposes
+  through `createAuth()`.
+- Same-parent-domain SSO can use `crossSubDomainCookies` when the same
+  party controls all participating subdomains.
+- Customer-owned domains cannot receive `mantle.tools` cookies. Paid
+  hosted auth for `customer.com` must use an OAuth/OIDC broker flow:
+  Platform authenticates and returns identity; the customer site creates
+  its own local session and maps identity into local grants.

@@ -6,6 +6,21 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.36] - 2026-06-30
+
+### Added
+
+- **@aotter/mantle-cloudflare**: expose curated Better Auth first-party
+  SSO configuration fields on `createAuth()`:
+  `trustedOrigins`, `crossSubDomainCookies`, and `cookiePrefix`.
+  Existing consumers that do not pass these fields keep the previous
+  cookie and session behavior.
+- **docs**: document Mantle's auth hosting boundary: free users can
+  self-host supported login methods, Mantle Platform can provide hosted
+  identity and email as paid convenience, same-parent-domain SSO uses
+  cookies, and customer-domain hosted auth must use an OAuth/OIDC broker
+  flow.
+
 ## [0.0.11-alpha.35] - 2026-06-26
 
 ### Fixed
