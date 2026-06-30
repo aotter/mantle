@@ -1,0 +1,39 @@
+{
+  "name": "mantle",
+  "version": "0.0.11-alpha.35",
+  "description": "Core Mantle SDK skills for generated sites, marketplace capabilities, theming, updates, and production handoff.",
+  "author": {
+    "name": "Aotter",
+    "url": "https://mantle.tools/"
+  },
+  "homepage": "https://mantle.tools/",
+  "repository": "https://github.com/aotter/mantle",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mantle",
+    "cms",
+    "agent-skills",
+    "marketplace",
+    "sdk"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Mantle",
+    "shortDescription": "Core SDK skills for Mantle sites",
+    "longDescription": "Work on Mantle generated sites with Core-owned agent skills for project development, marketplace capability installs, visual theming, update checks, and production handoff. Starter repos may vendor these same skills, but @aotter/mantle owns their meaning.",
+    "developerName": "Aotter",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://mantle.tools/",
+    "defaultPrompt": [
+      "Use Mantle skills to continue this generated site",
+      "Install a Mantle marketplace capability",
+      "Check this Mantle repo for starter or plugin drift"
+    ],
+    "brandColor": "#0F766E",
+    "screenshots": []
+  }
+}

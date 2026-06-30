@@ -1,0 +1,14 @@
+{
+  "name": "mantle",
+  "owner": {
+    "name": "Aotter"
+  },
+  "description": "Mantle Core SDK agent skills and marketplace capability workflow.",
+  "plugins": [
+    {
+      "name": "mantle",
+      "source": "./",
+      "description": "Core Mantle SDK skills for generated sites, marketplace capabilities, theming, updates, and production handoff."
+    }
+  ]
+}

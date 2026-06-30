@@ -22,6 +22,15 @@ repos may vendor exact copies for offline/repo-local use, but they must not
 fork the meaning of a `mantle:*` skill. Starter launch files and plugin recipes
 are context that Core skills read, not competing skill contracts.
 
+## Marketplace install
+
+The repo is also an agent plugin bundle:
+
+- Claude Code: `.claude-plugin/plugin.json` plus `.claude-plugin/marketplace.json`.
+- Codex: `.codex-plugin/plugin.json` plus `.agents/plugins/marketplace.json`.
+- Cursor: `.cursor-plugin/plugin.json`.
+- VS Code + GitHub Copilot: `.copilot-plugin/plugin.json`.
+
 ## Audience
 
 These are written for **AI agents acting on behalf of consumers of mantle**, not for agents maintaining the mantle SDK itself. SDK-internal guidance lives in [`/CLAUDE.md`](../CLAUDE.md). Two audiences, two artifacts.

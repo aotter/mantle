@@ -62,6 +62,44 @@ vendor exact copies for offline/repo-local use; `.mantle/*` launch files
 and plugin recipes are context read by Core skills, not a second skill
 contract.
 
+### Install Mantle Core skills
+
+Install the Core skill bundle into your agent first. Generated starter repos
+also vendor the same skills locally, so cloning a starter does not create a
+second skill contract.
+
+**Claude Code**
+
+```bash
+/plugin marketplace add aotter/mantle
+/plugin install mantle
+```
+
+**Codex**
+
+```bash
+codex plugin marketplace add aotter/mantle --ref develop
+codex plugin add mantle@mantle
+```
+
+**Cursor**
+
+Cursor can auto-discover this repo through `.cursor-plugin/plugin.json` after
+the repo is cloned. If auto-discovery does not pick it up, open Cursor
+Settings -> Plugins, paste `https://github.com/aotter/mantle`, and add Mantle.
+
+**VS Code + GitHub Copilot**
+
+Copilot can auto-discover this repo through `.copilot-plugin/plugin.json` after
+the repo is cloned or opened.
+
+| Agent | Status | Install method |
+|---|---|---|
+| Claude Code | supported | `/plugin marketplace add aotter/mantle` then `/plugin install mantle` |
+| Codex | supported | `codex plugin marketplace add aotter/mantle --ref develop` then `codex plugin add mantle@mantle` |
+| Cursor | supported | Auto-discovery via `.cursor-plugin/plugin.json` |
+| VS Code + GitHub Copilot | supported | Auto-discovery via `.copilot-plugin/plugin.json` |
+
 ### Marketplace capability installs
 
 Tell your coding agent:
