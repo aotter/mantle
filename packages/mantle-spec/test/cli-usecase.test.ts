@@ -352,4 +352,20 @@ describe("EmitTypesUseCase", () => {
     // Reserved columns surface on every ViewRow
     expect(source).toContain("status: \"draft\" | \"published\" | \"archived\"");
   });
+
+  it("emits a `type` alias (not an interface) for a non-object top-level schema (#394)", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: ping }
+spec:
+  input: { type: string }
+  output: { type: object }
+  handler: { kind: ref, ref: ping }
+`;
+    const { manifests } = parseManifests(yaml);
+    const { source } = EmitTypesUseCase.run({ manifests, namespace: "Test" });
+    // `export interface ProcInput_ping string` would be a TS syntax error.
+    expect(source).toContain("export type ProcInput_ping = string;");
+    expect(source).not.toMatch(/export interface ProcInput_ping\s+string/);
+  });
 });

@@ -42,16 +42,16 @@ export class EmitTypesUseCase {
 
     for (const s of schemas) {
       out.push(`  /** Entry data for Schema '${s.metadata.name}' */`);
-      out.push(`  export interface Entry_${tsId(s.metadata.name)} ${renderType(s.spec.schema, "  ")}`);
+      out.push(declLine(`Entry_${tsId(s.metadata.name)}`, s.spec.schema));
       out.push("");
     }
 
     for (const p of procedures) {
       out.push(`  /** Procedure '${p.metadata.name}' input */`);
-      out.push(`  export interface ProcInput_${tsId(p.metadata.name)} ${renderType(p.spec.input, "  ")}`);
+      out.push(declLine(`ProcInput_${tsId(p.metadata.name)}`, p.spec.input));
       out.push("");
       out.push(`  /** Procedure '${p.metadata.name}' output */`);
-      out.push(`  export interface ProcOutput_${tsId(p.metadata.name)} ${renderType(p.spec.output, "  ")}`);
+      out.push(declLine(`ProcOutput_${tsId(p.metadata.name)}`, p.spec.output));
       out.push("");
     }
 
@@ -92,6 +92,20 @@ export class EmitTypesUseCase {
 
 function tsId(name: string): string {
   return name.replace(/[^a-zA-Z0-9_$]+/g, "_");
+}
+
+/**
+ * Emit a top-level declaration. Object schemas become an `interface`
+ * (with a brace body); any non-object top-level (array / primitive /
+ * union / enum) becomes a `type` alias — `interface X string[]` is a
+ * TypeScript syntax error that would silently break the consumer's
+ * generated .d.ts. (#394)
+ */
+function declLine(name: string, schema: JsonSchema): string {
+  if (schema.type === "object") {
+    return `  export interface ${name} ${renderType(schema, "  ")}`;
+  }
+  return `  export type ${name} = ${renderTypeInline(schema)};`;
 }
 
 function renderType(schema: JsonSchema, indent: string): string {

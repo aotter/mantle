@@ -1021,3 +1021,68 @@ describe("checkHandlerRefsInSource — HANDLER_NOT_REGISTERED", () => {
     expect(diag).toBeDefined();
   });
 });
+
+describe("View orderBy direction (#392)", () => {
+  it("rejects an orderBy direction outside asc/desc at parse time", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: posts-sorted }
+spec:
+  from: posts
+  orderBy:
+    - { field: id, direction: "DESC LIMIT 0 --" }
+`;
+    const result = parseManifests(yaml);
+    expect(result.manifests).toHaveLength(0);
+    expect(result.diagnostics.map((d) => d.code)).toContain("VIEW_ORDERBY_INVALID");
+  });
+
+  it("accepts asc/desc and a bare field", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: posts-sorted }
+spec:
+  from: posts
+  orderBy:
+    - { field: createdAt, direction: desc }
+    - { field: id }
+`;
+    expect(parseManifests(yaml).diagnostics).toEqual([]);
+  });
+});
+
+describe("required field absent from properties (#399)", () => {
+  it("flags a required entry not declared in properties", () => {
+    const result = check({
+      manifests: [
+        schema("posts", {
+          schema: {
+            type: "object",
+            properties: { title: { type: "string" } },
+            required: ["title", "slug"],
+          },
+        }),
+      ],
+    });
+    const diag = result.diagnostics.find((d) => d.code === "REQUIRED_FIELD_UNKNOWN");
+    expect(diag).toBeDefined();
+    expect(diag?.value).toBe("slug");
+  });
+});
+
+describe("uncompilable regex pattern (#395)", () => {
+  it("flags a malformed `pattern` at validate time instead of crashing at runtime", () => {
+    const result = check({
+      manifests: [
+        schema("posts", {
+          schema: {
+            type: "object",
+            properties: { slug: { type: "string", pattern: "(unterminated" } },
+          },
+        }),
+      ],
+    });
+    const diag = result.diagnostics.find((d) => d.code === "INVALID_PATTERN");
+    expect(diag).toBeDefined();
+  });
+});

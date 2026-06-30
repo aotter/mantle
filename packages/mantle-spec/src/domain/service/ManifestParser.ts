@@ -469,6 +469,9 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   if ("filter" in s && s["filter"] != null) {
     validateFilterAst(s["filter"], idx, "View.spec.filter", "/spec/filter", paramSchema);
   }
+  if ("orderBy" in s && s["orderBy"] != null) {
+    validateViewOrderBy(s["orderBy"], idx);
+  }
   for (const draft of ["recursive", "gatedBy", "join", "policies"] as const) {
     if (draft in s) {
       throw new ManifestParseError(
@@ -480,6 +483,50 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
     }
   }
   return m;
+}
+
+/**
+ * `direction` is typed `"asc" | "desc"`, but manifests are parsed from
+ * YAML so any string can arrive at runtime. The compiler maps it to a
+ * closed set, but an out-of-enum value is an authoring mistake we must
+ * surface as a pre-deploy Diagnostic rather than silently coerce.
+ */
+function validateViewOrderBy(raw: unknown, idx: number): void {
+  if (!Array.isArray(raw)) {
+    throw new ManifestParseError(
+      "View.spec.orderBy must be an array of { field, direction? }",
+      idx,
+      "/spec/orderBy",
+      "VIEW_ORDERBY_INVALID",
+    );
+  }
+  raw.forEach((entry, i) => {
+    if (typeof entry !== "object" || entry === null) {
+      throw new ManifestParseError(
+        "View.spec.orderBy entries must be objects with a `field`",
+        idx,
+        `/spec/orderBy/${i}`,
+        "VIEW_ORDERBY_INVALID",
+      );
+    }
+    const o = entry as Record<string, unknown>;
+    if (typeof o["field"] !== "string" || (o["field"] as string).length === 0) {
+      throw new ManifestParseError(
+        "View.spec.orderBy[].field is required (non-empty string)",
+        idx,
+        `/spec/orderBy/${i}/field`,
+        "VIEW_ORDERBY_INVALID",
+      );
+    }
+    if (o["direction"] !== undefined && o["direction"] !== "asc" && o["direction"] !== "desc") {
+      throw new ManifestParseError(
+        `View.spec.orderBy[].direction must be "asc" or "desc" (got ${JSON.stringify(o["direction"])})`,
+        idx,
+        `/spec/orderBy/${i}/direction`,
+        "VIEW_ORDERBY_INVALID",
+      );
+    }
+  });
 }
 
 function validateViewParams(raw: unknown, idx: number): JsonSchema {
