@@ -88,6 +88,18 @@ const SECTION_PLAIN = "first:mt-0 mt-4";
 const SECTION_DIVIDED = "first:mt-0 first:border-t-0 first:pt-0 mt-6 border-t border-border pt-4";
 
 /**
+ * Normalize the post-login `?return=` target to a same-origin path.
+ * Accepts only values that start with a single `/` (rejecting absolute
+ * `https://…` and protocol-relative `//host` URLs), falling back to
+ * `/admin`. Prevents an open redirect on the OTP success path, which
+ * navigates client-side with the raw value. (#387)
+ */
+export function safeReturnPath(raw: string | null | undefined): string {
+  if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  return "/admin";
+}
+
+/**
  * Data-driven sign-in. Fetches `/api/auth/methods` on mount; renders
  * one section per registered method. When `email-otp` is present, a
  * two-step inline form (email → OTP). When `github` is present, a
@@ -100,7 +112,12 @@ const SECTION_DIVIDED = "first:mt-0 first:border-t-0 first:pt-0 mt-6 border-t bo
 export function SignInView(): React.ReactElement {
   const { language } = usePreferences();
   const params = new URLSearchParams(window.location.search);
-  const ret = params.get("return") ?? "/admin";
+  // Only accept a same-origin path. The OTP success path navigates
+  // client-side via `window.location.assign(returnTo)`, so an absolute
+  // (`https://evil`) or protocol-relative (`//evil`) value would be a
+  // post-login open redirect. The gate that produces this param only
+  // ever emits `pathname+search`. (#387)
+  const ret = safeReturnPath(params.get("return"));
 
   const methods = useQuery<AuthMethodInfo[]>({
     queryKey: ["auth-methods"],
