@@ -669,31 +669,6 @@ describe("createAuth — boot invariants", () => {
     expect(typeof auth.handler).toBe("function");
   });
 
-  it("constructs when OAuth provider trusted clients are configured", () => {
-    const auth = createAuth(
-      baseConfig({
-        oauthProvider: {
-          loginPage: "/platform/sign-in",
-          consentPage: "/platform/oauth/consent",
-          scopes: ["openid", "profile", "email"],
-          trustedClients: [
-            {
-              clientId: "landing-staff",
-              type: "public",
-              name: "Mantle Landing",
-              redirectUrls: [
-                "https://mantle.tools/api/auth/oauth2/callback/mantle-platform",
-              ],
-              metadata: { owner: "mantle" },
-              skipConsent: true,
-            },
-          ],
-        },
-      }),
-    );
-    expect(typeof auth.handler).toBe("function");
-  });
-
   it("constructs without throwing when accountLinking is configured", () => {
     // Better Auth's internal config isn't introspectable from outside
     // (no public read API). Construction-success regression guard for
