@@ -265,6 +265,19 @@ export interface CrossSubDomainCookiesConfig {
   readonly domain?: string;
 }
 
+export interface OAuthProviderTrustedClient {
+  readonly clientId: string;
+  readonly clientSecret?: string;
+  readonly type?: "public" | "web" | "native" | "user-agent-based";
+  readonly name: string;
+  readonly icon?: string;
+  readonly metadata?: Record<string, unknown> | null;
+  readonly disabled?: boolean;
+  readonly redirectUrls: ReadonlyArray<string>;
+  readonly userId?: string;
+  readonly skipConsent?: boolean;
+}
+
 export interface OAuthProviderConfig {
   /** Provider scopes. Include `openid` to expose a real OIDC server. */
   readonly scopes?: ReadonlyArray<Scope>;
@@ -281,6 +294,11 @@ export interface OAuthProviderConfig {
   readonly accessTokenExpiresIn?: number;
   readonly idTokenExpiresIn?: number;
   readonly refreshTokenExpiresIn?: number;
+  /** First-party OAuth clients configured in code. Use this for
+   *  platform-owned clients that should not depend on DCR/bootstrap DB
+   *  rows existing before the first sign-in. External sites should still
+   *  use dynamic client registration. */
+  readonly trustedClients?: ReadonlyArray<OAuthProviderTrustedClient>;
   readonly cachedTrustedClients?: ReadonlySet<string>;
   readonly clientPrivileges?: (context: {
     readonly headers: Headers;
@@ -825,6 +843,28 @@ function buildAuth(config: CreateAuthConfig) {
               : {}),
             ...(config.oauthProvider.refreshTokenExpiresIn !== undefined
               ? { refreshTokenExpiresIn: config.oauthProvider.refreshTokenExpiresIn }
+              : {}),
+            ...(config.oauthProvider.trustedClients
+              ? {
+                  trustedClients: config.oauthProvider.trustedClients.map(
+                    (client) => ({
+                      clientId: client.clientId,
+                      ...(client.clientSecret
+                        ? { clientSecret: client.clientSecret }
+                        : {}),
+                      type: client.type ?? "public",
+                      name: client.name,
+                      ...(client.icon ? { icon: client.icon } : {}),
+                      metadata: client.metadata ?? null,
+                      disabled: client.disabled ?? false,
+                      redirectUrls: [...client.redirectUrls],
+                      ...(client.userId ? { userId: client.userId } : {}),
+                      ...(client.skipConsent !== undefined
+                        ? { skipConsent: client.skipConsent }
+                        : {}),
+                    }),
+                  ),
+                }
               : {}),
             ...(config.oauthProvider.cachedTrustedClients
               ? {
