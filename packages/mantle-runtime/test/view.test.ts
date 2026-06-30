@@ -241,6 +241,31 @@ describe("compileView", () => {
     const c = compileView(view({ from: "posts" }), { page: 0 });
     expect(c.effectivePage).toBe(1);
   });
+
+  it("maps orderBy direction to a closed ASC/DESC set, never the raw value (#392)", () => {
+    const c = compileView(
+      view({
+        from: "posts",
+        // Out-of-enum value that a YAML manifest could carry past the
+        // compile-time "asc"|"desc" type.
+        orderBy: [{ field: "id", direction: "DESC LIMIT 0 --" as "asc" }],
+      }),
+    );
+    expect(c.sql).not.toContain("LIMIT 0 --");
+    expect(c.sql).toMatch(/ORDER BY id ASC/); // anything not "desc" → ASC
+  });
+
+  it("emits DESC only for an exact \"desc\" (#392)", () => {
+    const c = compileView(view({ from: "posts", orderBy: [{ field: "id", direction: "desc" }] }));
+    expect(c.sql).toMatch(/ORDER BY id DESC/);
+  });
+
+  it("caps a huge ?page= so OFFSET stays a plain in-range integer (#397)", () => {
+    const c = compileView(view({ from: "posts" }), { page: 1e21, show: 50 });
+    const offset = c.sql.match(/OFFSET (\S+)/)?.[1] ?? "";
+    expect(offset).not.toMatch(/e/i); // no exponential notation
+    expect(Number(offset)).toBeLessThanOrEqual(Number.MAX_SAFE_INTEGER);
+  });
 });
 
 describe("ExecuteViewUseCase", () => {
