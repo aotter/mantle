@@ -1103,7 +1103,11 @@ async function handleHttpTrigger(
     return jsonResponse(200, { ok: true, data: result.data });
   }
   const status = HTTP_STATUS_BY_CODE[result.diagnostic.code] ?? 500;
-  return jsonResponse(status, { ok: false, diagnostic: result.diagnostic });
+  // Redact before egress: use-case diagnostics (e.g. HANDLER_NOT_REGISTERED,
+  // or an EntryWriteGuard diagnostic from a builtin create/update Procedure)
+  // can carry `candidates` listing internal handler/schema names. The wire
+  // contract (ADR-0008, runUseCase, diagnosticResponse) strips those. (#396)
+  return jsonResponse(status, { ok: false, diagnostic: redactForWire(result.diagnostic) });
 }
 
 async function handleViewRequest(
@@ -1186,7 +1190,8 @@ async function handleViewRequest(
     return jsonResponse(200, { ok: true, data: result.result });
   }
   const status = HTTP_STATUS_BY_CODE[result.diagnostic.code] ?? 500;
-  return jsonResponse(status, { ok: false, diagnostic: result.diagnostic });
+  // Same wire-redaction contract as the HTTP Trigger egress above (#396).
+  return jsonResponse(status, { ok: false, diagnostic: redactForWire(result.diagnostic) });
 }
 
 /**

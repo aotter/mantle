@@ -90,4 +90,46 @@ describe("mountAuthorize", () => {
       "/oauth/authorize?client_id=claude&redirect_uri=claude%3A%2F%2Fcallback&response_type=code&state=s&code_challenge=c&code_challenge_method=S256&scope=mcp",
     );
   });
+
+  describe("consent POST CSRF defense (#389)", () => {
+    const sessionAuth: Auth = {
+      ...stubAuth,
+      getSession: async () => ({
+        session: { id: "s1", userId: "u1", expiresAt: new Date(Date.now() + 60_000) },
+        user: { id: "u1", email: "u1@example.test", name: "U", role: "owner" },
+      }),
+    } as Auth;
+
+    function consentApp() {
+      const app = new Hono();
+      mountAuthorize(app, { auth: sessionAuth });
+      return app;
+    }
+
+    async function post(headers: Record<string, string>): Promise<Response> {
+      return consentApp().request(
+        "https://example.test/oauth/authorize",
+        { method: "POST", headers, body: new URLSearchParams({ decision: "approve" }) },
+        { OAUTH_PROVIDER: {} },
+      );
+    }
+
+    it("rejects a cross-site Sec-Fetch-Site POST with 403", async () => {
+      const res = await post({ "sec-fetch-site": "cross-site" });
+      expect(res.status).toBe(403);
+    });
+
+    it("rejects an Origin-mismatch POST with 403", async () => {
+      const res = await post({ origin: "https://evil.test" });
+      expect(res.status).toBe(403);
+    });
+
+    it("lets a same-origin POST past the CSRF guard", async () => {
+      // No oauth_request in the body → it should reach the 400 "missing
+      // oauth_request" branch, proving the CSRF guard did not block it.
+      const res = await post({ "sec-fetch-site": "same-origin" });
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain("missing oauth_request");
+    });
+  });
 });

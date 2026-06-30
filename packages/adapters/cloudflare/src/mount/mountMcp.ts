@@ -63,7 +63,13 @@ export function createMcpApiHandler(
     async fetch(request, _env, ctx) {
       const props = (ctx as unknown as { props?: OAuthApiProps }).props;
       if (!props?.userId) return forbidden();
-      const role = props.role;
+      // `props.role` is captured at OAuth consent time and frozen for the
+      // access/refresh token's whole lifetime. Re-read the live D1 role
+      // on the staff surface so a revoked or demoted staffer loses
+      // `/mcp/staff` access on their next request instead of at token
+      // expiry — the cookie paths (mountPublicRoutes / mountServerEndpoints)
+      // already pay this same per-request lookup. (#388)
+      const role = surface === "staff" ? await ref.auth.getUserRole(props.userId) : props.role;
       if (surface === "staff" && (!role || !STAFF_ROLE_SET.has(role))) {
         return forbidden();
       }

@@ -411,3 +411,47 @@ function jsonRpcReq(method: string, params?: unknown): Request {
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   });
 }
+
+describe("smoke: MCP staff gating reads live role (#388)", () => {
+  it("revokes /mcp/staff access when the live role is removed, same bearer token", async () => {
+    let liveRole: string | null = "owner";
+    const ref = createCmsRef({
+      manifests: manifests(),
+      bindings: {
+        db: new InMemoryDatabase(),
+        kv: new InMemoryKv(),
+        assets: new StubAssetServer(),
+      },
+      auth: {
+        handler: stubAuth.handler,
+        getSession: async () => ({
+          session: { id: "sess-1", userId: STAFF_USER.id, expiresAt: new Date(Date.now() + 60_000) },
+          user: STAFF_USER,
+        }),
+        // The operator-controlled live role; flips mid-test.
+        getUserRole: async () => liveRole,
+        methods: [],
+      } as unknown as Auth,
+    });
+    const handler = createMcpApiHandler({ ref, surface: "staff" });
+    // props.role is the role frozen into the grant at consent time.
+    const props = { props: { userId: STAFF_USER.id, role: "owner" } };
+
+    const ok = await handler.fetch!(
+      jsonRpcReq("tools/list"),
+      {},
+      props as unknown as ExecutionContext,
+    );
+    expect(ok.status).toBe(200);
+
+    // Operator revokes staff. The token still carries role:"owner" in
+    // its grant props, but the live D1 role is now null.
+    liveRole = null;
+    const denied = await handler.fetch!(
+      jsonRpcReq("tools/list"),
+      {},
+      props as unknown as ExecutionContext,
+    );
+    expect(denied.status).toBe(403);
+  });
+});
