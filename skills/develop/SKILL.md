@@ -4,7 +4,7 @@ description: Work on any Mantle project using the Core SDK contract. Use for man
 source: "@aotter/mantle"
 sourcePath: skills/develop/SKILL.md
 when_to_invoke: |
-  Working dir contains a Mantle project: package.json depends on @aotter/mantle or @aotter/mantle-*, and manifests/ or src/mantleConfig.ts exists.
+  Working dir contains a Mantle project: package.json depends on @aotter/mantle or @aotter/mantle-*, and manifests/ or src/mantle/config.ts exists. Legacy projects may still use src/mantleConfig.ts.
 applies_to: mantle@v0.1.0
 ---
 
@@ -17,7 +17,7 @@ owns the workflow vocabulary.
 ## First Read
 
 1. `package.json` for the installed `@aotter/mantle*` versions.
-2. `manifests/` and `src/mantleConfig.ts` for the active atoms and adapter wiring.
+2. `manifests/` and `src/mantle/config.ts` for the active atoms and adapter wiring. If the project is older, check `src/mantleConfig.ts`.
 3. Optional local context: `.mantle/launch-state.json`, `.mantle/handoff.md`,
    `.mantle/plugins.json`, `.mantle/plugins.lock.json`, and `.mantle/recipes/`.
 4. Installed Core docs in `node_modules/@aotter/mantle/docs/`.

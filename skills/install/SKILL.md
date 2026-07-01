@@ -45,7 +45,8 @@ A landing-provisioned repo carries its launch context and ground truth in:
 | `.mantle/features.json` | Starter launch context and applied starter state |
 | `.mantle/handoff.md` | The launch handoff note written for you |
 | `manifests/*.yaml` | Schemas / Views / Procedures / Triggers |
-| `src/mantleConfig.ts` | Site defaults, handler registration, runtime bindings |
+| `src/mantle/config.ts` | Site defaults, runtime bindings |
+| `src/mantle/handlers/index.ts` | Procedure handler registration |
 | `src/handlers/` | Handler implementations |
 | `AGENTS.md` | Cross-tool agent entry |
 | `.agent/skills/` + `.claude/skills/` | Vendored Core skills from `@aotter/mantle`: `mantle:develop`, `mantle:plugin`, `mantle:theme`, `mantle:update` |
