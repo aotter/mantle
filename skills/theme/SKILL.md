@@ -16,7 +16,7 @@ tokens, or recipes, but the skill contract is Core-owned.
 ## First Read
 
 1. `.mantle/handoff.md` and `.mantle/recipes/` if present.
-2. `styles/`, `components/`, `src/home.tsx`, `src/theme*`, and `kiwa-ui.json`
+2. `styles/`, `components/`, `src/web/`, `src/theme*`, and `kiwa-ui.json`
    if present.
 3. `manifests/` to understand which content shape drives the public UI.
 
