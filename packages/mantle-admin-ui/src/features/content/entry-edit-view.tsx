@@ -65,7 +65,12 @@ export function EntryEditView({
   const payload = query.data;
   const title = entryTitle(data, payload.entry.id, payload.collection.schema);
   const dirty = JSON.stringify(data) !== JSON.stringify(payload.entry.data);
+  // Operational records (lifecycle: none) have no content workflow:
+  // no publish/unpublish controls, and they save in place regardless
+  // of the stored status.
+  const isOperational = payload.collection.lifecycle === "none";
   const isDraft = payload.entry.status === "draft";
+  const canSave = dirty && (isDraft || isOperational);
   const actionPending = save.isPending || publish.isPending || unpublish.isPending;
   const mediaPurposes = site.data?.media?.purposes ?? [];
   const parentLink = parentAdminLink(payload.collection, data);
@@ -100,8 +105,8 @@ export function EntryEditView({
         })}
         actions={
           <>
-            <StatusBadge status={payload.entry.status} />
-            {isDraft ? (
+            {!isOperational && <StatusBadge status={payload.entry.status} />}
+            {!isOperational && (isDraft ? (
               <Button
                 type="button"
                 variant="secondary"
@@ -123,11 +128,11 @@ export function EntryEditView({
                 <RotateCcw className="size-4" aria-hidden />
                 {unpublish.isPending ? t(language, "entryEdit.unpublishing") : t(language, "entryEdit.unpublish")}
               </Button>
-            )}
+            ))}
             <Button
               type="button"
               onClick={() => save.mutate(data)}
-              disabled={actionPending || !dirty || !isDraft}
+              disabled={actionPending || !canSave}
               title={t(language, "entryEdit.saveTooltip")}
             >
               <Save className="size-4" aria-hidden />
@@ -184,7 +189,9 @@ export function EntryEditView({
               body={`${payload.entry.collection} / ${payload.entry.id}`}
             />
             <dl className="space-y-3 text-sm">
-              <MetaRow label={t(language, "collection.table.status")} value={<StatusBadge status={payload.entry.status} />} />
+              {!isOperational && (
+                <MetaRow label={t(language, "collection.table.status")} value={<StatusBadge status={payload.entry.status} />} />
+              )}
               <MetaRow label={t(language, "collection.table.locale")} value={payload.entry.locale ?? "-"} />
               <MetaRow label={t(language, "collection.table.version")} value={`v${payload.entry.version}`} />
             </dl>

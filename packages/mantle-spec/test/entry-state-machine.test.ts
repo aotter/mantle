@@ -11,6 +11,7 @@ import {
 const simpleSchema: LifecycleSchemaLike = { spec: {} };
 const explicitSimpleSchema: LifecycleSchemaLike = { spec: { lifecycle: "simple" } };
 const editorialSchema: LifecycleSchemaLike = { spec: { lifecycle: "editorial" } };
+const noneSchema: LifecycleSchemaLike = { spec: { lifecycle: "none" } };
 
 describe("ContentState const-object", () => {
   it("exports the documented status values", () => {
@@ -63,6 +64,25 @@ describe("getLifecycleStatuses", () => {
       "published",
       "archived",
     ]);
+  });
+
+  it("none: no status buckets — operational records render flat", () => {
+    expect(getLifecycleStatuses("none")).toEqual([]);
+  });
+});
+
+describe("canTransition — none lifecycle (operational records)", () => {
+  it("allows no transitions from any state", () => {
+    const states = ["draft", "review", "approved", "scheduled", "published", "archived"] as const;
+    for (const from of states) {
+      for (const to of states) {
+        expect(canTransition(noneSchema, from, to)).toBe(false);
+      }
+    }
+  });
+
+  it("does not require approval to publish (publish simply never applies)", () => {
+    expect(publishRequiresApproval(noneSchema)).toBe(false);
   });
 });
 

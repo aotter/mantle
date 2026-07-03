@@ -1,4 +1,4 @@
-export type Lifecycle = "simple" | "editorial";
+export type Lifecycle = "simple" | "editorial" | "none";
 
 export type ContentStatus =
   | "draft"

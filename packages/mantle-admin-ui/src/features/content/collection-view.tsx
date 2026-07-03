@@ -152,7 +152,7 @@ export function CollectionView({
         />
       ) : null}
 
-      {collection ? (
+      {collection && collection.lifecycle !== "none" ? (
         <StatusFilter
           collection={collection}
           activeStatus={status}

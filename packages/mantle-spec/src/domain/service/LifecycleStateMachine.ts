@@ -85,8 +85,22 @@ const EDITORIAL_TRANSITIONS: Readonly<Record<ContentState, ReadonlySet<ContentSt
   archived: new Set<ContentState>(["draft"]),
 };
 
+/** `lifecycle: none` — operational records (orders, snapshots, audit
+ *  rows). No content workflow: entries are live on creation, editable
+ *  in place, and never publish/unpublish/archive. */
+const NONE_TRANSITIONS: Readonly<Record<ContentState, ReadonlySet<ContentState>>> = {
+  draft: new Set(),
+  review: new Set(),
+  approved: new Set(),
+  scheduled: new Set(),
+  published: new Set(),
+  archived: new Set(),
+};
+
 function transitionsFor(mode: LifecycleMode): Readonly<Record<ContentState, ReadonlySet<ContentState>>> {
-  return mode === "editorial" ? EDITORIAL_TRANSITIONS : SIMPLE_TRANSITIONS;
+  if (mode === "editorial") return EDITORIAL_TRANSITIONS;
+  if (mode === "none") return NONE_TRANSITIONS;
+  return SIMPLE_TRANSITIONS;
 }
 
 /**
@@ -102,7 +116,9 @@ function transitionsFor(mode: LifecycleMode): Readonly<Record<ContentState, Read
  * extracted from the spec dependency graph.
  */
 export function getLifecycleStatuses(mode: LifecycleMode): readonly ContentState[] {
-  return mode === "editorial"
-    ? (["draft", "review", "published", "archived"] as const)
-    : (["draft", "published", "archived"] as const);
+  if (mode === "editorial") return ["draft", "review", "published", "archived"] as const;
+  // Operational records have no status buckets to browse — the admin
+  // renders a flat list with no draft/published filter chrome.
+  if (mode === "none") return [] as const;
+  return ["draft", "published", "archived"] as const;
 }

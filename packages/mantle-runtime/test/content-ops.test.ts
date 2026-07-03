@@ -127,6 +127,58 @@ describe("CreateDraftUseCase", () => {
     });
   });
 
+  describe("lifecycle: none (operational records)", () => {
+    const noneSchema = () => {
+      const base = postsSchema();
+      return { ...base, spec: { ...base.spec, lifecycle: "none" as const } };
+    };
+    const noneHarness = () => {
+      const schema = noneSchema();
+      return harness({ schemas: new Map([[schema.metadata.name, schema]]) });
+    };
+
+    it("creates entries live (published) — no draft step", async () => {
+      const h = noneHarness();
+      const row = await h.createDraft.execute({
+        collection: "posts",
+        data: { title: "op-record" },
+        authorId: null,
+      });
+      expect(row.status).toBe("published");
+    });
+
+    it("updates in place regardless of status", async () => {
+      const h = noneHarness();
+      const row = await h.createDraft.execute({
+        collection: "posts",
+        data: { title: "before" },
+        authorId: null,
+      });
+      const updated = await h.updateDraft.execute({
+        id: row.id,
+        expectedVersion: row.version,
+        data: { title: "after" },
+      });
+      expect(updated.data["title"]).toBe("after");
+      expect(updated.status).toBe("published");
+    });
+
+    it("rejects publish/unpublish — no content transitions exist", async () => {
+      const h = noneHarness();
+      const row = await h.createDraft.execute({
+        collection: "posts",
+        data: { title: "op-record" },
+        authorId: null,
+      });
+      await expect(h.requestPublish.execute({ id: row.id })).rejects.toMatchObject({
+        diagnostic: { code: "CONFLICT" },
+      });
+      await expect(h.unpublish.execute({ id: row.id })).rejects.toMatchObject({
+        diagnostic: { code: "CONFLICT" },
+      });
+    });
+  });
+
   it("strips reserved metadata keys from caller-supplied data", async () => {
     const h = harness();
     const row = await h.createDraft.execute({

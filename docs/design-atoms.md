@@ -148,11 +148,12 @@ admin UI surfaces the child only as locale tabs in the parent's editor.
 
 #### Lifecycle
 
-**`spec.lifecycle: 'simple' | 'editorial'`** — controls the entry's
-state machine.
+**`spec.lifecycle: 'simple' | 'editorial' | 'none'`** — controls the
+entry's state machine.
 
 - `simple` (default) — `draft → published → archived`. No approval
-  queue. **This is the only mode whose runtime ships in v0.1.0.**
+  queue. **This is the only content-workflow mode whose runtime ships
+  in v0.1.0.**
 - `editorial` — the six-state machine with an approval queue
   (`draft → review → approved → scheduled → published → archived`,
   with `published` returnable to `draft` for republish). **Grammar
@@ -161,10 +162,20 @@ state machine.
   with the diagnostic `LIFECYCLE_NOT_IN_V010` and a message
   pointing at the v0.1.x roadmap. Authors should not write
   `lifecycle: editorial` in v0.1.0 manifests; it will fail boot.
+- `none` — **operational records**, not authored content: orders,
+  inventory snapshots, grant/audit rows — anything written by
+  Procedures as a side effect rather than drafted by a person. No
+  content workflow applies: entries are live (`published`) the moment
+  they are created, are editable in place regardless of status, and
+  have **no** publish / unpublish / archive transitions (all reject
+  with `CONFLICT`). The admin console renders these collections flat —
+  no draft/published filter buckets, no publish controls. Declare it
+  on any Schema whose rows a human should *inspect and correct*, never
+  *stage and publish*.
 
-The two modes are **per-Schema and mix freely** within a site. There
-is no site-wide lifecycle setting; one Schema can be `simple` while
-another is `editorial`.
+The modes are **per-Schema and mix freely** within a site. There is no
+site-wide lifecycle setting; one Schema can be `simple` while another
+is `editorial` and a third is `none`.
 
 **Property-level extensions** (JSON Schema vendor keywords, all optional):
 

@@ -97,7 +97,7 @@ const V01_HOOK_ERROR_POLICIES: ReadonlySet<string> = new Set(["abort", "continue
 const V01_MCP_TRIGGER_SURFACES: ReadonlySet<string> = new Set(MCP_TRIGGER_SURFACES);
 const DRAFT_FILTER_OPS: ReadonlySet<string> = new Set(["contains", "not", "in", "like"]);
 const FILTER_COMPARISON_OP_SET: ReadonlySet<string> = new Set(FILTER_COMPARISON_OPS);
-const V01_LIFECYCLE_MODES: ReadonlySet<string> = new Set(["simple", "editorial"]);
+const V01_LIFECYCLE_MODES: ReadonlySet<string> = new Set(["simple", "editorial", "none"]);
 
 /** Result of `parseManifests`. */
 export interface ParseManifestsResult {

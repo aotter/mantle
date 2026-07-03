@@ -138,11 +138,15 @@ export interface SchemaManifestSpec {
    *  companion to a non-localized parent Schema, joined by a shared
    *  field. Implies `localized: true`. See ADR-0010. */
   readonly translates?: TranslatesBinding;
-  /** Editorial workflow opt-in. Default `'simple'` (draft → published →
-   *  archived, no approval queue). The v0.1.0 boot validator currently
-   *  rejects `'editorial'` with a clear "v0.1.x" message; starters use
-   *  `'simple'` only. The parser accepts both values structurally so
-   *  the schema stays stable across the v0.1 → v0.1.x bump. */
+  /** Content-workflow opt-in. Default `'simple'` (draft → published →
+   *  archived, no approval queue). `'none'` marks operational record
+   *  Schemas (orders, inventory snapshots, audit rows) that are written
+   *  by Procedures rather than authored: entries are live on creation,
+   *  editable in place, and have no publish/unpublish transitions — the
+   *  admin hides the content-lifecycle chrome for them. The v0.1.0 boot
+   *  validator currently rejects `'editorial'` with a clear "v0.1.x"
+   *  message; the parser accepts all three values structurally so the
+   *  schema stays stable across the v0.1 → v0.1.x bump. */
   readonly lifecycle?: LifecycleMode;
 }
 
@@ -157,7 +161,7 @@ export interface TranslatesBinding {
   readonly on: string;
 }
 
-export type LifecycleMode = "simple" | "editorial";
+export type LifecycleMode = "simple" | "editorial" | "none";
 
 /* ─── View ─── */
 

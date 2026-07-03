@@ -151,25 +151,36 @@ function buildNavGroups(
 
   const contentGroup: NavGroupData = {
     title: t(language, "nav.content"),
-    items: primaryCollections.map<NavItem>((c) => ({
-      title: c.title,
+    items: primaryCollections.map<NavItem>((c) => {
       // Leading icon is always Folder so every content row reads the
       // same. The Globe sits in the trailing `marker` slot to mark
       // collections that fold a translation-child schema underneath
       // — POC sidebar contract.
-      icon: Folder,
-      marker: c.hasTranslations ? Globe : undefined,
-      items: [
-        {
-          title: t(language, "collection.filter.all"),
-          url: `/admin/c/${c.name}`,
-        },
-        ...statusesFor(c).map<NavLink>((status) => ({
-          title: statusLabel(language, status),
-          url: `/admin/c/${c.name}?status=${status}`,
-        })),
-      ],
-    })),
+      const base = {
+        title: c.title,
+        icon: Folder,
+        marker: c.hasTranslations ? Globe : undefined,
+      };
+      const statuses = statusesFor(c);
+      // Operational records (lifecycle: none) have no status buckets —
+      // a plain link beats a collapsible with one child.
+      if (statuses.length === 0) {
+        return { ...base, url: `/admin/c/${c.name}` };
+      }
+      return {
+        ...base,
+        items: [
+          {
+            title: t(language, "collection.filter.all"),
+            url: `/admin/c/${c.name}`,
+          },
+          ...statuses.map<NavLink>((status) => ({
+            title: statusLabel(language, status),
+            url: `/admin/c/${c.name}?status=${status}`,
+          })),
+        ],
+      };
+    }),
   };
 
   const moreGroup: NavGroupData = {
@@ -189,5 +200,7 @@ function buildNavGroups(
 }
 
 function statusesFor(c: Collection): ReadonlyArray<SidebarStatus> {
-  return c.lifecycle === "editorial" ? EDITORIAL_STATUSES : SIMPLE_STATUSES;
+  if (c.lifecycle === "editorial") return EDITORIAL_STATUSES;
+  if (c.lifecycle === "none") return [];
+  return SIMPLE_STATUSES;
 }

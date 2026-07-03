@@ -644,7 +644,7 @@ type AdminEditorCollection = {
   readonly name: string;
   readonly title: string;
   readonly description: string | null;
-  readonly lifecycle: "simple" | "editorial";
+  readonly lifecycle: "simple" | "editorial" | "none";
   readonly parent: {
     readonly collection: string;
     readonly parentField: string;
