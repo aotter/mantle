@@ -1,16 +1,15 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, ImagePlus, PackageCheck, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, ImagePlus, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import type { EntryEditorPayload, JsonSchema, MediaPurposePolicy, RelatedEntrySection, SiteInfo } from "../../lib/types";
 import { Button } from "../../ui/button";
-import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { CollapsibleDescription, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
 import { RichTextEditor } from "../editor/rich-text-editor";
 import { primaryPublicUrl, purposeForMediaField, uploadMediaAsset } from "../media/media-upload";
-import { collectionTitle } from "./collection-labels";
 
 export function EntryEditView({
   collectionName,
@@ -64,7 +63,7 @@ export function EntryEditView({
   if (!query.data || !data) return <ErrorBox error={new Error("Missing entry editor payload.")} />;
 
   const payload = query.data;
-  const title = entryTitle(data, payload.entry.id);
+  const title = entryTitle(data, payload.entry.id, payload.collection.schema);
   const dirty = JSON.stringify(data) !== JSON.stringify(payload.entry.data);
   const isDraft = payload.entry.status === "draft";
   const actionPending = save.isPending || publish.isPending || unpublish.isPending;
@@ -83,7 +82,7 @@ export function EntryEditView({
               className="inline-flex items-center gap-2 hover:underline"
             >
               <ArrowLeft className="size-3.5" aria-hidden />
-              {t(language, "entryEdit.back", { name: collectionTitle(payload.collection, language) })}
+              {t(language, "entryEdit.back", { name: payload.collection.title })}
             </a>
             {parentLink ? (
               <>
@@ -97,7 +96,7 @@ export function EntryEditView({
         }
         title={title}
         description={t(language, "entryEdit.body", {
-          name: collectionTitle(payload.collection, language),
+          name: payload.collection.title,
         })}
         actions={
           <>
@@ -147,7 +146,17 @@ export function EntryEditView({
           <SectionCard>
             <SectionTitle
               title={t(language, "entryEdit.fields")}
-              body={payload.collection.description}
+              body={
+                payload.collection.description ? (
+                  <CollapsibleDescription
+                    description={payload.collection.description}
+                    summaryLabel={t(language, "collection.schemaDetails")}
+                    collapsedIntro={t(language, "collection.schemaSummary", {
+                      name: payload.collection.title,
+                    })}
+                  />
+                ) : undefined
+              }
             />
             <SchemaFields
               schema={payload.collection.schema}
@@ -164,8 +173,6 @@ export function EntryEditView({
             <RelatedSections
               sections={inlineRelated}
               language={language}
-              parentTitle={title}
-              onSaved={() => void query.refetch()}
             />
           ) : null}
         </div>
@@ -186,8 +193,6 @@ export function EntryEditView({
             <RelatedSections
               sections={sidebarRelated}
               language={language}
-              parentTitle={title}
-              onSaved={() => void query.refetch()}
             />
           ) : null}
         </div>
@@ -206,7 +211,7 @@ function SectionTitle({
   return (
     <div className="mb-4">
       <h2 className="text-lg font-semibold">{title}</h2>
-      {body ? <p className="mt-1 text-sm leading-6 text-muted-foreground">{body}</p> : null}
+      {body ? <div className="mt-1 text-sm leading-6 text-muted-foreground">{body}</div> : null}
     </div>
   );
 }
@@ -586,13 +591,9 @@ function JsonEditor({
 function RelatedSections({
   sections,
   language,
-  parentTitle,
-  onSaved,
 }: {
   sections: RelatedEntrySection[];
   language: AdminLanguage;
-  parentTitle: string;
-  onSaved?: () => void;
 }): React.ReactElement {
   if (sections.length === 0) {
     return (
@@ -604,210 +605,41 @@ function RelatedSections({
   return (
     <>
       {sections.map((section) => (
-        isSellableVariantCollection(section.collection) ? (
-          <ProductSkuSection
-            key={`${section.collection.name}:${section.relationship.childField}`}
-            section={section}
-            language={language}
-            parentTitle={parentTitle}
-            onSaved={onSaved}
+        <SectionCard key={`${section.collection.name}:${section.relationship.childField}`}>
+          <SectionTitle
+            title={section.collection.title}
+            body={t(language, "entryEdit.relationship", {
+              child: section.relationship.childField,
+              parent: section.relationship.parentField,
+            })}
           />
-        ) : (
-          <SectionCard key={`${section.collection.name}:${section.relationship.childField}`}>
-            <SectionTitle
-              title={collectionTitle(section.collection, language)}
-              body={t(language, "entryEdit.relationship", {
-                child: section.relationship.childField,
-                parent: section.relationship.parentField,
-              })}
-            />
-            <div className="space-y-2">
-              {section.entries.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t(language, "entryEdit.noChildEntries")}</p>
-              ) : (
-                section.entries.map((entry) => (
-                  <a
-                    key={entry.id}
-                    href={`/admin/c/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-[var(--glass-border)] bg-background/35 p-3 text-sm text-foreground transition hover:border-primary hover:bg-accent"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate font-semibold">{entryTitle(entry.data, entry.id)}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {entry.collection} / v{entry.version}
-                      </span>
+          <div className="space-y-2">
+            {section.entries.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t(language, "entryEdit.noChildEntries")}</p>
+            ) : (
+              section.entries.map((entry) => (
+                <a
+                  key={entry.id}
+                  href={`/admin/c/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-[var(--glass-border)] bg-background/35 p-3 text-sm text-foreground transition hover:border-primary hover:bg-accent"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold">
+                      {entryTitle(entry.data, entry.id, section.collection.schema)}
                     </span>
-                    <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                  </a>
-                ))
-              )}
-            </div>
-          </SectionCard>
-        )
+                    <span className="block text-xs text-muted-foreground">
+                      {entry.collection} / v{entry.version}
+                    </span>
+                  </span>
+                  <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                </a>
+              ))
+            )}
+          </div>
+        </SectionCard>
       ))}
     </>
   );
-}
-
-function ProductSkuSection({
-  section,
-  language,
-  parentTitle,
-  onSaved,
-}: {
-  section: RelatedEntrySection;
-  language: AdminLanguage;
-  parentTitle: string;
-  onSaved?: () => void;
-}): React.ReactElement {
-  return (
-    <SectionCard>
-      <SectionTitle
-        title={t(language, "entryEdit.skus")}
-        body={t(language, "entryEdit.skusBody", { name: parentTitle })}
-      />
-      {section.entries.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t(language, "entryEdit.noChildEntries")}</p>
-      ) : (
-        <div className="space-y-3">
-          {section.entries.map((entry) => (
-            <ProductSkuRow key={entry.id} entry={entry} language={language} onSaved={onSaved} />
-          ))}
-        </div>
-      )}
-    </SectionCard>
-  );
-}
-
-function ProductSkuRow({
-  entry,
-  language,
-  onSaved,
-}: {
-  entry: RelatedEntrySection["entries"][number];
-  language: AdminLanguage;
-  onSaved?: () => void;
-}): React.ReactElement {
-  const [draft, setDraft] = React.useState<Record<string, unknown>>(entry.data);
-  React.useEffect(() => setDraft(entry.data), [entry.data]);
-  const save = useMutation({
-    mutationFn: (nextData: Record<string, unknown>) =>
-      api.patch<EntryEditorPayload>(`/entries/${encodeURIComponent(entry.id)}`, {
-        data: nextData,
-        expectedVersion: entry.version,
-      }),
-    onSuccess: (payload) => {
-      setDraft(payload.entry.data);
-      onSaved?.();
-    },
-  });
-  const dirty = JSON.stringify(draft) !== JSON.stringify(entry.data);
-  const setField = (field: string, value: unknown): void => {
-    setDraft((current) => ({ ...current, [field]: value }));
-  };
-  return (
-    <div className="rounded-lg border border-[var(--glass-border)] bg-background/35 p-3">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <PackageCheck className="size-4 shrink-0 text-primary" aria-hidden />
-            <h3 className="truncate text-sm font-semibold" title={stringForInput(draft["skuCode"])}>
-              {stringForInput(draft["skuCode"]) || entryTitle(entry.data, entry.id)}
-            </h3>
-          </div>
-          <OptionValueChecklist value={draft["optionValues"]} />
-        </div>
-        <a
-          className="row-action"
-          title={t(language, "entryEdit.openAdvanced")}
-          href={`/admin/c/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}
-        >
-          <ExternalLink className="size-3.5" aria-hidden />
-        </a>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="space-y-1 text-xs font-semibold text-muted-foreground">
-          <span>{t(language, "entryEdit.priceMinor")}</span>
-          <input
-            className="admin-input"
-            type="number"
-            min={0}
-            value={numberForInput(draft["priceMinor"])}
-            onChange={(event) => setField("priceMinor", numberInputValue(event.target.value))}
-          />
-        </label>
-        <label className="space-y-1 text-xs font-semibold text-muted-foreground">
-          <span>{t(language, "entryEdit.compareAtPriceMinor")}</span>
-          <input
-            className="admin-input"
-            type="number"
-            min={0}
-            value={numberForInput(draft["compareAtPriceMinor"])}
-            onChange={(event) => setField("compareAtPriceMinor", numberInputValue(event.target.value))}
-          />
-        </label>
-        <label className="space-y-1 text-xs font-semibold text-muted-foreground">
-          <span>{t(language, "entryEdit.inventoryMode")}</span>
-          <select
-            className="admin-input"
-            value={stringForInput(draft["inventoryMode"])}
-            onChange={(event) => setField("inventoryMode", event.target.value)}
-          >
-            <option value="tracked">{t(language, "entryEdit.inventoryTracked")}</option>
-            <option value="untracked">{t(language, "entryEdit.inventoryUntracked")}</option>
-          </select>
-        </label>
-        <label className="space-y-1 text-xs font-semibold text-muted-foreground">
-          <span>{t(language, "entryEdit.currency")}</span>
-          <input
-            className="admin-input"
-            value={stringForInput(draft["currency"])}
-            onChange={(event) => setField("currency", event.target.value.toUpperCase())}
-          />
-        </label>
-      </div>
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">
-          {t(language, "entryEdit.skuInlineHint")}
-        </p>
-        <Button
-          type="button"
-          size="sm"
-          disabled={!dirty || save.isPending}
-          onClick={() => save.mutate(draft)}
-        >
-          <Save className="size-3.5" aria-hidden />
-          {save.isPending ? t(language, "crud.saving") : t(language, "entryEdit.save")}
-        </Button>
-      </div>
-      {save.isError ? <p className="mt-2 text-xs text-destructive">{save.error instanceof Error ? save.error.message : String(save.error)}</p> : null}
-    </div>
-  );
-}
-
-function OptionValueChecklist({
-  value,
-}: {
-  value: unknown;
-}): React.ReactElement | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const entries = Object.entries(value as Record<string, unknown>).filter(([, item]) => item != null && item !== "");
-  if (entries.length === 0) return null;
-  return (
-    <div className="mt-2 flex flex-wrap gap-1.5">
-      {entries.map(([key, item]) => (
-        <span key={key} className="inline-flex items-center gap-1 rounded-md border border-border bg-card/70 px-2 py-1 text-xs text-muted-foreground">
-          <input type="checkbox" checked readOnly className="size-3 accent-[var(--primary)]" />
-          <span className="font-medium text-foreground/80">{fieldLabel(key)}</span>
-          <span>{stringForInput(item)}</span>
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function numberInputValue(value: string): number | null {
-  return value === "" ? null : Number(value);
 }
 
 function parentAdminLink(
@@ -827,20 +659,24 @@ function isPrimaryInlineSection(section: RelatedEntrySection): boolean {
   return section.relationship.kind === "field";
 }
 
-function isSellableVariantCollection(collection: EntryEditorPayload["collection"]): boolean {
-  const properties = collection.schema.properties ?? {};
-  return (
-    ("sku" in properties || "skuCode" in properties) &&
-    "priceMinor" in properties &&
-    "currency" in properties &&
-    "inventoryMode" in properties
-  );
-}
-
-function entryTitle(data: Record<string, unknown>, fallback: string): string {
-  for (const key of ["title", "name", "slug", "skuCode", "orderId", "id"]) {
+function entryTitle(data: Record<string, unknown>, fallback: string, schema?: JsonSchema): string {
+  for (const key of ["title", "name", "slug", "id"]) {
     const value = data[key];
     if (typeof value === "string" && value.trim()) return value;
+  }
+  // Manifest-driven fallback: walk the schema's required properties in
+  // declaration order and use the first string-typed one with a
+  // non-empty value — this is how a collection with no `title`/`name`/
+  // `slug` (e.g. one keyed by a domain-specific field) still gets a
+  // readable label.
+  if (schema) {
+    const properties = schema.properties ?? {};
+    for (const key of schema.required ?? []) {
+      const fieldSchema = properties[key];
+      if (!fieldSchema || schemaType(fieldSchema) !== "string") continue;
+      const value = data[key];
+      if (typeof value === "string" && value.trim()) return value;
+    }
   }
   return fallback.slice(0, 8);
 }

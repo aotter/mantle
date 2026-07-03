@@ -2,7 +2,6 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ClipboardList,
-  Images,
   Folder,
   Globe,
   Home,
@@ -32,7 +31,6 @@ import { readSidebarOpenCookie } from "../context/layout-provider";
 import { t } from "../app/i18n";
 import { AdminAttribution } from "../brand/aotter-mantle";
 import type { AdminBrand, NavGroupData, NavItem, NavLink } from "./types";
-import { collectionTitle } from "../features/content/collection-labels";
 import { GuideOverlay, useGuideOverlay } from "../features/console/guide-overlay";
 
 interface AuthenticatedLayoutProps {
@@ -88,6 +86,10 @@ export function AuthenticatedLayout({
     () => buildNavGroups(collectionsQuery.data ?? [], language, me.data?.role ?? null),
     [collectionsQuery.data, language, me.data?.role],
   );
+  const firstCollection = React.useMemo<{ name: string; title: string } | null>(() => {
+    const first = (collectionsQuery.data ?? []).find((collection) => !collection.parent);
+    return first ? { name: first.name, title: first.title } : null;
+  }, [collectionsQuery.data]);
 
   return (
     <LayoutProvider>
@@ -120,7 +122,11 @@ export function AuthenticatedLayout({
         </SidebarInset>
           <AdminAttribution />
           {guide.open ? (
-            <GuideOverlay language={guide.language} onClose={guide.closeGuide} />
+            <GuideOverlay
+              language={guide.language}
+              firstCollection={firstCollection}
+              onClose={guide.closeGuide}
+            />
           ) : null}
         </SidebarProvider>
       </LayoutProvider>
@@ -146,7 +152,7 @@ function buildNavGroups(
   const contentGroup: NavGroupData = {
     title: t(language, "nav.content"),
     items: primaryCollections.map<NavItem>((c) => ({
-      title: collectionTitle(c, language),
+      title: c.title,
       // Leading icon is always Folder so every content row reads the
       // same. The Globe sits in the trailing `marker` slot to mark
       // collections that fold a translation-child schema underneath
@@ -169,7 +175,6 @@ function buildNavGroups(
   const moreGroup: NavGroupData = {
     title: t(language, "nav.more"),
     items: [
-      { title: t(language, "nav.media"), url: "/admin/media", icon: Images },
       { title: t(language, "nav.approvals"), url: "/admin/approvals", icon: ClipboardList },
       { title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon },
       // Staff management is owner-only server-side; hide the entry for

@@ -12,8 +12,6 @@ interface SiteSettings {
   brand: string;
   title: string;
   description: string;
-  brandIntro: string;
-  serviceIncludes: string;
   ga4MeasurementId: string;
   facebookPixelId: string;
 }
@@ -49,7 +47,7 @@ export function SettingsView(): React.ReactElement {
         actions={
           <Button onClick={() => save.mutate(form)} disabled={save.isPending}>
             <Save className="size-4" aria-hidden />
-            {save.isPending ? t(language, "crud.saving") : t(language, "productEdit.save")}
+            {save.isPending ? t(language, "crud.saving") : t(language, "entryEdit.save")}
           </Button>
         }
       />
@@ -85,12 +83,6 @@ export function SettingsView(): React.ReactElement {
           </Field>
           <Field label={t(language, "settings.siteDescription")}>
             <textarea className="admin-textarea min-h-24" value={form.description} onChange={(event) => setField(setForm, "description", event.target.value)} />
-          </Field>
-          <Field label={t(language, "productEdit.brandIntro")}>
-            <textarea className="admin-textarea min-h-32" value={form.brandIntro} onChange={(event) => setField(setForm, "brandIntro", event.target.value)} />
-          </Field>
-          <Field label={t(language, "productEdit.serviceIncludes")}>
-            <textarea className="admin-textarea min-h-32" value={form.serviceIncludes} onChange={(event) => setField(setForm, "serviceIncludes", event.target.value)} />
           </Field>
         </SectionCard>
       ) : null}

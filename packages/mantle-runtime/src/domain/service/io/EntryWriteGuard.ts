@@ -15,6 +15,10 @@ export interface AssertEntryWritableArgs {
   readonly data: Record<string, unknown>;
   readonly excludeId?: string;
   readonly siteConfig?: SiteConfigRepository;
+  /** Draft mode: skip required-field + locale-presence checks so a
+   *  work-in-progress entry can be saved incomplete. Publish paths
+   *  omit this, so completeness is enforced before an entry goes live. */
+  readonly partial?: boolean;
 }
 
 /** Shared post-projection guard for every authoring path.
@@ -25,7 +29,9 @@ export interface AssertEntryWritableArgs {
  */
 export async function assertEntryWritable(args: AssertEntryWritableArgs): Promise<void> {
   const validator = new EntryDataValidator();
-  const diagnostics = validator.validate(args.schema, dataForValidation(args.schema, args.data));
+  const diagnostics = validator.validate(args.schema, dataForValidation(args.schema, args.data), {
+    partial: args.partial ?? false,
+  });
   if (diagnostics.length > 0) throw new DiagnosticError(diagnostics);
   await assertLocale(args);
   await assertUniqueIndexes(args);
@@ -49,6 +55,8 @@ async function assertLocale(args: AssertEntryWritableArgs): Promise<void> {
   }
 
   if (typeof value !== "string" || value.length === 0) {
+    // Draft may not have picked a locale yet; publish re-checks.
+    if (args.partial) return;
     throw new DiagnosticError(
       runtimeDiagnostic({
         code: "INPUT_VALIDATION_FAILED",

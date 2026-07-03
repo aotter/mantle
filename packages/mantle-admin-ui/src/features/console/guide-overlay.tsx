@@ -6,17 +6,26 @@ import { useAdminRouter } from "../../app/router";
 
 const GUIDE_CLOSED_KEY = "mantle.admin.guide.closed";
 
-const TOUR_STEPS = [
-  { key: "products", selector: '[data-tour="nav-products"]' },
-  { key: "filters", selector: '[data-tour="status-filter"]', href: "/admin/c/products" },
-  { key: "actions", selector: '[data-tour="entry-actions"]', href: "/admin/c/products" },
-  { key: "reopen", selector: '[data-tour="guide-button"]' },
-] as const;
+interface TourStep {
+  readonly key: "collections" | "filters" | "actions" | "reopen";
+  readonly selector: string;
+  readonly href?: string;
+}
 
-type TourStep = (typeof TOUR_STEPS)[number];
+function tourSteps(firstCollection: { name: string; title: string } | null): readonly TourStep[] {
+  const reopen: TourStep = { key: "reopen", selector: '[data-tour="guide-button"]' };
+  if (!firstCollection) return [reopen];
+  const href = `/admin/c/${encodeURIComponent(firstCollection.name)}`;
+  return [
+    { key: "collections", selector: `[data-tour="nav-c-${firstCollection.name}"]` },
+    { key: "filters", selector: '[data-tour="status-filter"]', href },
+    { key: "actions", selector: '[data-tour="entry-actions"]', href },
+    reopen,
+  ];
+}
 
 const STEP_COPY: Record<TourStep["key"], { title: I18nKey; body: I18nKey }> = {
-  products: { title: "guide.products.title", body: "guide.products.body" },
+  collections: { title: "guide.collections.title", body: "guide.collections.body" },
   filters: { title: "guide.filters.title", body: "guide.filters.body" },
   actions: { title: "guide.actions.title", body: "guide.actions.body" },
   reopen: { title: "guide.reopen.title", body: "guide.reopen.body" },
@@ -31,20 +40,23 @@ interface Rect {
 
 export function GuideOverlay({
   language,
+  firstCollection,
   onClose,
 }: {
   language: AdminLanguage;
+  firstCollection: { name: string; title: string } | null;
   onClose: () => void;
 }): React.ReactElement {
   const [index, setIndex] = React.useState(0);
   const { location, navigate } = useAdminRouter();
-  const step = TOUR_STEPS[index] ?? TOUR_STEPS[0];
+  const steps = React.useMemo(() => tourSteps(firstCollection), [firstCollection]);
+  const step = steps[index] ?? steps[0]!;
   const rect = useTargetRect(step);
   const panelPosition = React.useMemo(() => panelStyle(rect), [rect]);
-  const isLast = index === TOUR_STEPS.length - 1;
+  const isLast = index === steps.length - 1;
 
   React.useEffect(() => {
-    if (!("href" in step) || !step.href) return;
+    if (!step.href) return;
     const current = `${location.pathname}${location.search}`;
     if (current !== step.href) navigate(step.href);
   }, [location.pathname, location.search, navigate, step]);
@@ -65,7 +77,7 @@ export function GuideOverlay({
       <section className="admin-guide-popover" style={panelPosition}>
         <div className="admin-guide-progress">
           <span>{index + 1}</span>
-          <small>{TOUR_STEPS.length}</small>
+          <small>{steps.length}</small>
         </div>
         <div className="admin-guide-copy">
           <p className="label-eyebrow">AotterMantle</p>
@@ -76,7 +88,7 @@ export function GuideOverlay({
           <button type="button" className="guide-icon-button" onClick={() => setIndex((v) => Math.max(0, v - 1))} disabled={index === 0} title={t(language, "guide.prev")}>
             <ChevronLeft className="size-4" aria-hidden />
           </button>
-          <button type="button" className="guide-primary-button" onClick={() => isLast ? onClose() : setIndex((v) => Math.min(TOUR_STEPS.length - 1, v + 1))}>
+          <button type="button" className="guide-primary-button" onClick={() => isLast ? onClose() : setIndex((v) => Math.min(steps.length - 1, v + 1))}>
             {isLast ? t(language, "guide.finish") : t(language, "guide.next")}
             {!isLast ? <ChevronRight className="size-4" aria-hidden /> : null}
           </button>

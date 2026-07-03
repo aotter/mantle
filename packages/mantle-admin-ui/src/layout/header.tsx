@@ -6,6 +6,7 @@ import { Button } from "../ui/button";
 import { usePreferences } from "../app/preferences";
 import { t } from "../app/i18n";
 import type { AdminBrand } from "./types";
+import { SidebarTrigger } from "../ui/sidebar";
 import {
   LanguagePreferenceDropdown,
   ThemePreferenceDropdown,
@@ -62,6 +63,10 @@ export function Header({
         className,
       )}
     >
+      {/* Mobile-only entry to the off-canvas sidebar. On md+ the sidebar
+          is docked and carries its own collapse trigger in its header, so
+          this stays hidden there to avoid two triggers side by side. */}
+      <SidebarTrigger className="-ms-1 md:hidden" />
       {site ? (
         <div className="admin-site-status" aria-label="Current admin site">
           <span>{site.title}</span>

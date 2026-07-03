@@ -77,6 +77,8 @@ export class UpdateDraftUseCase {
       data,
       excludeId: existing.id,
       siteConfig: this.siteConfig,
+      // Drafts save incomplete; publish enforces required + locale.
+      partial: true,
     });
     return withConflictDiagnostic(opPath, () =>
       this.entries.update({

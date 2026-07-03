@@ -41,9 +41,18 @@ export class EntryDataValidator {
    * array on success; on failure, returns one or more Diagnostics
    * with `code: "INPUT_VALIDATION_FAILED"` and `path` set to the
    * RFC 6901 JSON Pointer of the offending field (`""` = root).
+   *
+   * `opts.partial` drops the schema's top-level `required` so a
+   * work-in-progress draft can be saved with fields still blank. Types
+   * of whatever IS present are still checked. Completeness is enforced
+   * at publish time, which validates without `partial`.
    */
-  validate(manifest: SchemaManifest, data: unknown): readonly Diagnostic[] {
-    const compiled = this.compileFor(manifest);
+  validate(
+    manifest: SchemaManifest,
+    data: unknown,
+    opts?: { partial?: boolean },
+  ): readonly Diagnostic[] {
+    const compiled = this.compileFor(manifest, opts?.partial ?? false);
     const result = compiled.safeParse(data);
     if (result.success) return [];
     return result.error.issues.map((issue) =>
@@ -67,15 +76,28 @@ export class EntryDataValidator {
     return this.compiled.has(name);
   }
 
-  private compileFor(manifest: SchemaManifest): ZodType {
-    const name = manifest.metadata.name;
+  private compileFor(manifest: SchemaManifest, partial: boolean): ZodType {
+    const name = partial ? `${manifest.metadata.name}::partial` : manifest.metadata.name;
     let compiled = this.compiled.get(name);
     if (!compiled) {
-      compiled = jsonSchemaToZod(manifest.spec.schema);
+      const source = partial ? withoutTopLevelRequired(manifest.spec.schema) : manifest.spec.schema;
+      compiled = jsonSchemaToZod(source);
       this.compiled.set(name, compiled);
     }
     return compiled;
   }
+}
+
+/**
+ * Return a shallow copy of a JSON Schema with its top-level `required`
+ * dropped, so every top-level property becomes optional. Nested object
+ * `required` is left intact — it only bites when that nested object is
+ * actually present, which is the right rule for a partial draft.
+ */
+function withoutTopLevelRequired(schema: SchemaManifest["spec"]["schema"]): SchemaManifest["spec"]["schema"] {
+  if (!schema || typeof schema !== "object") return schema;
+  const { required: _dropped, ...rest } = schema as Record<string, unknown>;
+  return rest as SchemaManifest["spec"]["schema"];
 }
 
 /**

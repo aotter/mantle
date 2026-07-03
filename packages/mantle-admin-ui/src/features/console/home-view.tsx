@@ -4,7 +4,6 @@ import {
   Database,
   FileText,
   Globe,
-  Images,
   PencilLine,
   type LucideIcon,
 } from "lucide-react";
@@ -15,7 +14,6 @@ import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { statusLabel } from "../content/status";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
-import { collectionDescription, collectionTitle } from "../content/collection-labels";
 
 export function HomeView(): React.ReactElement {
   const { language } = usePreferences();
@@ -70,9 +68,14 @@ export function HomeView(): React.ReactElement {
             </div>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <QuickAction href="/admin/c/products" icon={PencilLine} label={t(language, "workspace.products")} />
-            <QuickAction href="/admin/c/pages" icon={FileText} label={t(language, "workspace.pages")} />
-            <QuickAction href="/admin/media" icon={Images} label={t(language, "workspace.media")} />
+            {primaryCollections.slice(0, 3).map((c) => (
+              <QuickAction
+                key={c.name}
+                href={`/admin/c/${encodeURIComponent(c.name)}`}
+                icon={PencilLine}
+                label={c.title}
+              />
+            ))}
           </div>
         </SectionCard>
       </div>
@@ -109,16 +112,16 @@ export function HomeView(): React.ReactElement {
               >
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h2 className="truncate text-lg" title={collectionTitle(c, language)}>
-                      {collectionTitle(c, language)}
+                    <h2 className="truncate text-lg" title={c.title}>
+                      {c.title}
                     </h2>
                     <p className="font-mono text-xs text-muted-foreground">{c.name}</p>
                   </div>
                   <FileText className="size-5 shrink-0 text-muted-foreground" aria-hidden />
                 </div>
-                {collectionDescription(c, language) ? (
+                {c.description ? (
                   <p className="line-clamp-2 text-sm text-muted-foreground">
-                    {collectionDescription(c, language)}
+                    {c.description}
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground">

@@ -216,9 +216,12 @@ function NavSubLink({
 function tourIdForUrl(url: string | undefined): string | undefined {
   if (!url) return undefined;
   if (url === "/admin") return "nav-home";
-  if (url.startsWith("/admin/c/products")) return "nav-products";
-  if (url === "/admin/media") return "nav-media";
   if (url === "/admin/settings") return "nav-settings";
+  // Only the plain collection link (no `?status=` filter) gets a tour
+  // id, so each collection's main nav item has exactly one stable
+  // anchor for the guide overlay to target.
+  const match = url.match(/^\/admin\/c\/([^/?]+)$/);
+  if (match) return `nav-c-${decodeURIComponent(match[1]!)}`;
   return undefined;
 }
 

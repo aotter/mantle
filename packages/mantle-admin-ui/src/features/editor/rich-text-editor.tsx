@@ -8,7 +8,6 @@ import {
   Bold,
   Check,
   Code2,
-  ExternalLink,
   Highlighter,
   ImageIcon,
   Images,
@@ -35,7 +34,6 @@ import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import type { SiteInfo } from "../../lib/types";
 import { Button } from "../../ui/button";
-import { MEDIA_ASSETS } from "../media/media-assets";
 import { primaryPublicUrl, uploadMediaAsset } from "../media/media-upload";
 
 export type EditorMode = "markdown" | "html" | "rich";
@@ -360,29 +358,6 @@ function MediaInsertDialog({
             <Check className="size-4" aria-hidden />
             {t(language, "editor.insertImage")}
           </Button>
-        </div>
-        <div className="rich-editor-media-list">
-          <div className="flex items-center justify-between gap-3">
-            <p className="label-eyebrow">{t(language, "media.page.title")}</p>
-            <a href="/admin/media" className="inline-flex items-center gap-1 text-xs font-semibold text-primary">
-              {t(language, "common.open")}
-              <ExternalLink className="size-3" aria-hidden />
-            </a>
-          </div>
-          {MEDIA_ASSETS.map((asset) => (
-            <button
-              key={asset.name}
-              type="button"
-              className="rich-editor-media-row"
-              onClick={() => onInsert(asset.url, asset.alt)}
-            >
-              <span className="rich-editor-media-thumb" style={{ "--media-tone": asset.tone } as React.CSSProperties} />
-              <span className="min-w-0 text-left">
-                <span className="block truncate font-semibold">{asset.name}</span>
-                <span className="block truncate text-xs text-muted-foreground">{asset.url}</span>
-              </span>
-            </button>
-          ))}
         </div>
       </div>
     </div>

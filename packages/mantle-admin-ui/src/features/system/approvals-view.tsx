@@ -8,7 +8,6 @@ import type { Collection, EntryRow, ListEntriesResult } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
-import { collectionTitle } from "../content/collection-labels";
 import { statusLabel } from "../content/status";
 
 const TIMESTAMP_FMT = new Intl.DateTimeFormat(undefined, {
@@ -51,7 +50,7 @@ export function ApprovalsView(): React.ReactElement {
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold">
-                    {collectionTitle(group.collection, language)}
+                    {group.collection.title}
                   </h2>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {t(language, "approvals.groupBody", {

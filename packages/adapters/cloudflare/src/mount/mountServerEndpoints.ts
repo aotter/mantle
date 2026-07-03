@@ -129,6 +129,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   const schemas = ref.manifests.filter(
     (m): m is SchemaManifest => m.kind === "Schema",
   );
+  const schemasByName = new Map(schemas.map((s) => [s.metadata.name, s]));
   const collections = schemas
     .filter((s) => !s.spec.translates)
     .map((s) => adminEditorCollection(s, schemas));
@@ -300,8 +301,6 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
         brand: stringField(body.brand),
         title: stringField(body.title),
         description: stringField(body.description),
-        brandIntro: stringField(body.brandIntro),
-        serviceIncludes: stringField(body.serviceIncludes),
         ga4MeasurementId: stringField(body.ga4MeasurementId),
         facebookPixelId: stringField(body.facebookPixelId),
       });
@@ -339,7 +338,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       limit: Number.isFinite(parsedLimit) ? parsedLimit : 99,
       cursor: c.req.query("cursor") ?? undefined,
     });
-    const items = result.rows.map(adminListItem);
+    const items = result.rows.map((row) => adminListItem(row, schemasByName));
     return jsonResponse(200, { items, next_cursor: result.nextCursor ?? null });
   });
 
@@ -544,15 +543,35 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   });
 }
 
-function adminEntryTitle(data: Record<string, unknown>): unknown {
+function adminEntryTitle(data: Record<string, unknown>, schema?: JsonSchema): unknown {
   if (typeof data.title === "string" && data.title) return data.title;
+  if (typeof data.name === "string" && data.name) return data.name;
   if (typeof data.slug === "string" && data.slug) return data.slug;
-  if (typeof data.skuCode === "string" && data.skuCode) return data.skuCode;
-  if (typeof data.orderId === "string" && data.orderId) return data.orderId;
+  // Manifest-driven fallback: walk the schema's required properties in
+  // declaration order and use the first string-typed one with a
+  // non-empty value. Mirrors the admin SPA's `entryTitle` rule.
+  if (schema) {
+    const properties = schema.properties ?? {};
+    for (const key of schema.required ?? []) {
+      const fieldSchema = properties[key];
+      if (!fieldSchema || !isStringTypedSchema(fieldSchema)) continue;
+      const value = data[key];
+      if (typeof value === "string" && value) return value;
+    }
+  }
   return null;
 }
 
-function adminListItem(row: AdminEntryRow): {
+function isStringTypedSchema(schema: JsonSchema): boolean {
+  const rawType = schema.type;
+  const types = Array.isArray(rawType) ? rawType : rawType ? [rawType] : [];
+  return types.includes("string");
+}
+
+function adminListItem(
+  row: AdminEntryRow,
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+): {
   id: string;
   collection: string;
   locale: string | null;
@@ -567,7 +586,7 @@ function adminListItem(row: AdminEntryRow): {
     locale: row.locale ?? null,
     status: row.status,
     version: row.version,
-    title: adminEntryTitle(row.data),
+    title: adminEntryTitle(row.data, schemasByName.get(row.collection)?.spec.schema),
     updated_at: row.updatedAt,
   };
 }
@@ -821,12 +840,17 @@ function collectionParentFor(
   }
 
   const childProps = childSchema.spec.schema.properties ?? {};
+  // Required ref = composition (the child can't exist without its
+  // parent, so it's buried under the parent in the sidebar). Optional
+  // ref = weak reference — the collection stays top-level.
+  const childRequired = new Set(childSchema.spec.schema.required ?? []);
   for (const parentSchema of schemas) {
     if (parentSchema.metadata.name === childSchema.metadata.name) continue;
     if (parentSchema.spec.translates) continue;
     const parentProps = parentSchema.spec.schema.properties ?? {};
 
     for (const [childField] of Object.entries(childProps)) {
+      if (!childRequired.has(childField)) continue;
       const parentField = conventionalParentField(parentSchema.metadata.name, childField, parentProps);
       if (parentField) {
         return {
@@ -891,8 +915,6 @@ async function entriesByDataValue(
 }
 
 async function readSiteSettings(runtime: CmsRuntime): Promise<{
-  brandIntro: string;
-  serviceIncludes: string;
   ga4MeasurementId: string;
   facebookPixelId: string;
 }> {
@@ -900,8 +922,6 @@ async function readSiteSettings(runtime: CmsRuntime): Promise<{
     .prepare(
       `SELECT key, value FROM site_config
        WHERE key IN (
-         'brandIntro',
-         'serviceIncludes',
          'ga4MeasurementId',
          'facebookPixelId'
        )`,
@@ -909,8 +929,6 @@ async function readSiteSettings(runtime: CmsRuntime): Promise<{
     .all<{ key: string; value: string }>();
   const map = new Map(rows.map((row) => [row.key, row.value]));
   return {
-    brandIntro: map.get("brandIntro") ?? "",
-    serviceIncludes: map.get("serviceIncludes") ?? "",
     ga4MeasurementId: map.get("ga4MeasurementId") ?? "",
     facebookPixelId: map.get("facebookPixelId") ?? "",
   };
@@ -922,8 +940,6 @@ async function writeSiteSettings(
     brand?: string;
     title?: string;
     description?: string;
-    brandIntro?: string;
-    serviceIncludes?: string;
     ga4MeasurementId?: string;
     facebookPixelId?: string;
   },

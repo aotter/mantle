@@ -87,6 +87,41 @@ export function ErrorBox({ error }: { error: unknown }): React.ReactElement | nu
   );
 }
 
+/** Renders `description` plainly unless it looks like raw schema notes
+ *  (long, or containing a backtick), in which case it collapses behind
+ *  a `<details>` toggle showing `collapsedIntro` up front. Callers own
+ *  i18n — `summaryLabel` and `collapsedIntro` arrive pre-translated so
+ *  this component stays i18n-free. */
+export function CollapsibleDescription({
+  description,
+  summaryLabel,
+  collapsedIntro,
+}: {
+  description: string;
+  summaryLabel: string;
+  collapsedIntro: string;
+}): React.ReactElement {
+  if (!looksLikeSchemaNotes(description)) return <>{description}</>;
+
+  return (
+    <div className="space-y-2">
+      <p>{collapsedIntro}</p>
+      <details className="group">
+        <summary className="inline-flex cursor-pointer list-none items-center rounded-md border border-border bg-card/70 px-2.5 py-1 text-xs font-semibold text-foreground/70 transition hover:bg-accent hover:text-accent-foreground">
+          {summaryLabel}
+        </summary>
+        <p className="mt-2 max-w-3xl rounded-md border border-border bg-card/55 p-3 text-xs leading-relaxed text-muted-foreground">
+          {description}
+        </p>
+      </details>
+    </div>
+  );
+}
+
+function looksLikeSchemaNotes(description: string): boolean {
+  return description.length > 180 || description.includes("`");
+}
+
 export function CopyField({
   label,
   value,

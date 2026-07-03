@@ -48,6 +48,8 @@ export class CreateDraftUseCase {
       schema,
       data,
       siteConfig: this.siteConfig,
+      // Drafts save incomplete; publish enforces required + locale.
+      partial: true,
     });
     return withConflictDiagnostic(opPath, () =>
       this.entries.create({

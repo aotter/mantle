@@ -1,17 +1,17 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, FileText, PencilLine, Search, Trash2, X } from "lucide-react";
+import { Check, FileText, PencilLine, Plus, Search, Trash2, X } from "lucide-react";
 import { useAdminLocation } from "../../app/router";
 import { api } from "../../lib/api";
 import type { Collection, EntryEditorPayload, EntryRow, ListEntriesResult } from "../../lib/types";
 import { cn } from "../../lib/utils";
+import { Button } from "../../ui/button";
 import { TableCell, TableHeadCell, TableShell } from "../../ui/admin-table";
-import { EmptyState, ErrorBox, PageHeader } from "../../ui/page";
+import { CollapsibleDescription, EmptyState, ErrorBox, PageHeader } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
 import { statusLabel } from "./status";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
-import { collectionDescription, collectionTitle } from "./collection-labels";
 
 const TIMESTAMP_FMT = new Intl.DateTimeFormat(undefined, {
   dateStyle: "short",
@@ -74,7 +74,7 @@ export function CollectionView({
   const isFirstLoad = entries.isLoading && !displayedEntries;
 
   const collection = collectionsQuery.data?.find((c) => c.name === collectionName);
-  const heading = collection ? collectionTitle(collection, language) : collectionName;
+  const heading = collection ? collection.title : collectionName;
   const refreshEntries = React.useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["entries", collectionName] });
   }, [collectionName, queryClient]);
@@ -91,6 +91,15 @@ export function CollectionView({
     mutationFn: (id: string) =>
       api.delete<{ removed: boolean }>(`/entries/${encodeURIComponent(id)}`),
     onSuccess: refreshEntries,
+  });
+  // POST an empty draft and land in the schema-driven editor — no
+  // modal, no pre-fill; the manifest form takes over from there.
+  const createMutation = useMutation({
+    mutationFn: () =>
+      api.post<EntryEditorPayload>("/entries", { collection: collectionName, data: {} }),
+    onSuccess: (payload) => {
+      window.location.href = `/admin/c/${encodeURIComponent(collectionName)}/${encodeURIComponent(payload.entry.id)}`;
+    },
   });
 
   return (
@@ -109,6 +118,16 @@ export function CollectionView({
         description={renderCollectionDescription(collection, language)}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              type="button"
+              onClick={() => createMutation.mutate()}
+              disabled={createMutation.isPending}
+            >
+              <Plus className="size-4" aria-hidden />
+              {createMutation.isPending
+                ? t(language, "crud.saving")
+                : t(language, "collection.create")}
+            </Button>
             {status ? <StatusBadge status={status} /> : null}
             {collection?.hasTranslations ? (
               <span className="badge-status bg-accent text-accent-foreground">i18n</span>
@@ -121,6 +140,8 @@ export function CollectionView({
           </div>
         }
       />
+
+      {createMutation.isError ? <ErrorBox error={createMutation.error} /> : null}
 
       {collection ? (
         <CollectionSearch
@@ -246,34 +267,17 @@ function renderCollectionDescription(
   collection: Collection | undefined,
   language: AdminLanguage,
 ): React.ReactNode {
-  const raw = collectionDescription(collection, language)?.trim();
+  const raw = collection?.description?.trim();
   if (!raw) return t(language, "collection.defaultDescription");
 
-  if (!looksLikeSchemaNotes(raw)) return raw;
-
   return (
-    <div className="space-y-2">
-      <p>
-        {t(language, "collection.schemaSummary", {
-          name: collection ? collectionTitle(collection, language) : "",
-        })}
-      </p>
-      <details className="group">
-        <summary className="inline-flex cursor-pointer list-none items-center rounded-md border border-border bg-card/70 px-2.5 py-1 text-xs font-semibold text-foreground/70 transition hover:bg-accent hover:text-accent-foreground">
-          {t(language, "collection.schemaDetails")}
-        </summary>
-        <p className="mt-2 max-w-3xl rounded-md border border-border bg-card/55 p-3 text-xs leading-relaxed text-muted-foreground">
-          {raw}
-        </p>
-      </details>
-    </div>
-  );
-}
-
-function looksLikeSchemaNotes(description: string): boolean {
-  return (
-    description.length > 180 ||
-    /`|SKU|BCP|ISO|ContentState|column|field|schema|locale|inventory/i.test(description)
+    <CollapsibleDescription
+      description={raw}
+      summaryLabel={t(language, "collection.schemaDetails")}
+      collapsedIntro={t(language, "collection.schemaSummary", {
+        name: collection ? collection.title : "",
+      })}
+    />
   );
 }
 
@@ -484,7 +488,7 @@ function EntryRowDisplay({
             <Trash2 className="size-3.5" aria-hidden />
           </button>
         </div>
-        <span className="sr-only">{collection ? collectionTitle(collection, language) : ""}</span>
+        <span className="sr-only">{collection ? collection.title : ""}</span>
       </TableCell>
     </tr>
   );
