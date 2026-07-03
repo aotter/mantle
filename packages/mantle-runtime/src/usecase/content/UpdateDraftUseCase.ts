@@ -1,5 +1,6 @@
 import {
   DiagnosticError,
+  resolveLifecycle,
   runtimeDiagnostic,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
@@ -35,7 +36,10 @@ export class UpdateDraftUseCase {
     if (!existing) {
       throw new DiagnosticError(notFoundDiagnostic(opPath, "<unknown>", request.id));
     }
-    if (existing.status !== "draft") {
+    // lifecycle: none records have no draft/published workflow — they
+    // are editable in place regardless of stored status.
+    const lifecycle = resolveLifecycle(this.schemas.get(existing.collection));
+    if (existing.status !== "draft" && lifecycle !== "none") {
       throw new DiagnosticError(
         runtimeDiagnostic({
           code: "CONFLICT",
@@ -77,6 +81,8 @@ export class UpdateDraftUseCase {
       data,
       excludeId: existing.id,
       siteConfig: this.siteConfig,
+      // Drafts save incomplete; publish enforces required + locale.
+      partial: true,
     });
     return withConflictDiagnostic(opPath, () =>
       this.entries.update({

@@ -2,6 +2,7 @@ import type { Context, Hono } from "hono";
 import {
   DiagnosticError,
   HTTP_STATUS_BY_CODE,
+  MANTLE_REF_KEYWORD,
   MCP_HINT_KEYWORD,
   VIEW_PARAMS_RESERVED,
   isMediaMcpHint,
@@ -10,7 +11,11 @@ import {
   type ContentState,
   type Diagnostic,
   type JsonSchema,
+  type LocalizedText,
+  type Manifest,
+  type ProcedureManifest,
   type SchemaManifest,
+  type ViewManifest,
 } from "@aotter/mantle-spec";
 import {
   ViewParamCoercionError,
@@ -119,6 +124,8 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     "/admin/preferences",
     "/admin/settings",
     "/admin/staff",
+    "/admin/ops",
+    "/admin/views/:name",
   ]) {
     app.get(path, spa);
   }
@@ -129,9 +136,37 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   const schemas = ref.manifests.filter(
     (m): m is SchemaManifest => m.kind === "Schema",
   );
+  const schemasByName = new Map(schemas.map((s) => [s.metadata.name, s]));
   const collections = schemas
     .filter((s) => !s.spec.translates)
     .map((s) => adminEditorCollection(s, schemas));
+
+  // Staff-operable Procedures (#426, extended #430 with rowBindings):
+  // precompute at mount, same as `collections` above — `ref.manifests`
+  // is immutable post-boot.
+  const operations = discoverStaffOperations(ref.manifests, schemasByName);
+  const operationsByName = new Map(operations.map((op) => [op.name, op]));
+
+  // Views projection (#426) — least-code option: a dedicated
+  // `/admin/api/views-manifest` endpoint rather than folding into
+  // `/admin/api/site`. Reasoning: `/admin/api/site` payload is
+  // site-config-shaped (title/brand/locales/mcp URLs) and consumed by
+  // several unrelated views (entry editor, settings) via a shared
+  // `SiteInfo` query key; growing it with an unrelated `views: [...]`
+  // array would force every one of those call sites to widen their
+  // type and would invalidate/refetch on unrelated site-settings
+  // changes. A dedicated guarded route mirrors the existing
+  // `/admin/api/collections` precedent exactly (same shape of
+  // "precompute at mount from ref.manifests, list on GET") and needs
+  // no changes to the `SiteInfo` type or its query key.
+  const viewsManifest = ref.manifests
+    .filter((m): m is ViewManifest => m.kind === "View")
+    .map((v) => ({
+      name: v.metadata.name,
+      from: v.spec.from,
+      params: v.spec.params ?? null,
+      fields: v.spec.fields ?? null,
+    }));
 
   type StaffGateOk = Extract<StaffGate, { kind: "ok" }>;
   const guarded = (
@@ -270,6 +305,58 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
 
   guarded("get", "/admin/api/collections", () => jsonResponse(200, { collections }));
 
+  guarded("get", "/admin/api/views-manifest", () => jsonResponse(200, { views: viewsManifest }));
+
+  guarded("get", "/admin/api/operations", () =>
+    jsonResponse(200, {
+      operations: operations.map((op) => ({
+        name: op.name,
+        title: op.title,
+        description: op.description,
+        input: op.input,
+        triggers: op.triggers,
+        rowBindings: op.rowBindings,
+      })),
+    }),
+  );
+
+  guarded("post", "/admin/api/operations/:name", async (c, gate) => {
+    const name = c.req.param("name") ?? "";
+    const op = operationsByName.get(name);
+    if (!op) {
+      return jsonResponse(404, {
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "NOT_FOUND",
+          severity: "error",
+          path: `POST /admin/api/operations/${name}`,
+          expected: "a staff-operable Procedure name from GET /admin/api/operations",
+          message: `No staff-operable operation named '${name}'.`,
+        }),
+      });
+    }
+    return runUseCase(`POST /admin/api/operations/${name}`, async () => {
+      const runtime = await ref.get();
+      const input = (await c.req.raw.json().catch(() => ({}))) as unknown;
+      // Reuse the exact use case the staff MCP surface invokes
+      // Procedures through (`McpJsonRpcDispatcher.dispatchToolByName`
+      // → `runtime.invokeProcedure.execute`) — same auth evaluation,
+      // same input/output validation, same handler dispatch. The
+      // staff HandlerContext below mirrors the MCP dispatcher's
+      // `procCtx` construction 1:1.
+      const result = await runtime.invokeProcedure.execute({
+        procedure: op.procedure,
+        input: objectField(input),
+        ctx: adminHandlerContext(c, gate),
+        pathPrefix: `POST /admin/api/operations/${name}`,
+      });
+      if (!result.ok) {
+        throw new DiagnosticError(result.diagnostic);
+      }
+      return { ok: true, output: result.data };
+    });
+  });
+
   guarded("get", "/admin/api/site", async (c) => {
     const runtime = await ref.get();
     const site = await runtime.siteConfig.load();
@@ -300,8 +387,6 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
         brand: stringField(body.brand),
         title: stringField(body.title),
         description: stringField(body.description),
-        brandIntro: stringField(body.brandIntro),
-        serviceIncludes: stringField(body.serviceIncludes),
         ga4MeasurementId: stringField(body.ga4MeasurementId),
         facebookPixelId: stringField(body.facebookPixelId),
       });
@@ -338,9 +423,53 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       status: statusQuery && statusQuery !== "all" ? (statusQuery as ContentState) : undefined,
       limit: Number.isFinite(parsedLimit) ? parsedLimit : 99,
       cursor: c.req.query("cursor") ?? undefined,
+      search: c.req.query("search") || undefined,
     });
-    const items = result.rows.map(adminListItem);
+    const items = result.rows.map((row) => adminListItem(row, schemasByName));
     return jsonResponse(200, { items, next_cursor: result.nextCursor ?? null });
+  });
+
+  guarded("get", "/admin/api/entries/export", async (c) => {
+    const collection = c.req.query("collection");
+    const schema = collection ? schemasByName.get(collection) : undefined;
+    if (!collection || !schema) {
+      return jsonResponse(404, {
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "NOT_FOUND",
+          severity: "error",
+          path: "GET /admin/api/entries/export",
+          expected: "?collection=<name> naming a declared Schema",
+          message: collection
+            ? `Schema '${collection}' was not found.`
+            : "Missing `collection` query parameter.",
+        }),
+      });
+    }
+    const runtime = await ref.get();
+    const propertyNames = Object.keys(schema.spec.schema.properties ?? {});
+    const columns = ["id", "status", "version", "updated_at", ...propertyNames];
+    const lines = [csvRow(columns)];
+    let cursor: string | undefined;
+    do {
+      const page = await runtime.listEntries.executePage({ collection, cursor });
+      for (const row of page.rows) {
+        lines.push(
+          csvRow(
+            columns.map((column) => csvValue(column, row, propertyNames)),
+          ),
+        );
+      }
+      cursor = page.nextCursor;
+    } while (cursor);
+    const csv = "﻿" + lines.join("\r\n") + "\r\n";
+    return new Response(csv, {
+      status: 200,
+      headers: {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename="${collection}.csv"`,
+      },
+    });
   });
 
   guarded("get", "/admin/api/entries/:id", async (c) =>
@@ -544,15 +673,243 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   });
 }
 
-function adminEntryTitle(data: Record<string, unknown>): unknown {
-  if (typeof data.title === "string" && data.title) return data.title;
-  if (typeof data.slug === "string" && data.slug) return data.slug;
-  if (typeof data.skuCode === "string" && data.skuCode) return data.skuCode;
-  if (typeof data.orderId === "string" && data.orderId) return data.orderId;
+type StaffOperationRowBinding = {
+  readonly collection: string;
+  readonly inputField: string;
+  readonly rowField: string;
+};
+
+type StaffOperation = {
+  readonly name: string;
+  readonly title: LocalizedText | null;
+  readonly description: LocalizedText | null;
+  readonly input: JsonSchema;
+  readonly triggers: ReadonlyArray<"mcp" | "http">;
+  readonly rowBindings: ReadonlyArray<StaffOperationRowBinding>;
+  readonly procedure: ProcedureManifest;
+};
+
+/**
+ * Derivation rule (#426, manifest-only, no new grammar): a Procedure
+ * is staff-operable iff some Trigger targets it with either
+ *   (a) `source.kind: "mcp"` and `source.surface === "staff"` — the
+ *       exact predicate `collectMcpProcedures` in `mountMcp.ts` uses
+ *       to build the `/mcp/staff` tool catalog, or
+ *   (b) `source.kind: "http"` AND the procedure's `spec.requires?.auth`
+ *       predicates include a `ctx.staff` entry.
+ *
+ * `triggers` on the result lists every distinct kind ("mcp" | "http")
+ * that qualified the procedure, in Trigger declaration order,
+ * deduplicated — a Procedure can be both an MCP staff tool and an
+ * HTTP Trigger simultaneously.
+ *
+ * `title`/`description` (#430) are raw passthroughs of
+ * `Procedure.spec.title`/`.description` — this REPLACES the pre-#430
+ * hack of reading `procedure.spec.input.description` as a fake
+ * "description". The wire shape (`string | LocalizedText | null`)
+ * stays compatible for plain-string manifests since a string
+ * title/description round-trips as a string; the SPA resolves
+ * locale-map values client-side.
+ */
+function discoverStaffOperations(
+  manifests: readonly Manifest[],
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+): readonly StaffOperation[] {
+  const procedures = new Map<string, ProcedureManifest>();
+  for (const m of manifests) {
+    if (m.kind === "Procedure") procedures.set(m.metadata.name, m);
+  }
+  const triggerKindsByProcedure = new Map<string, Set<"mcp" | "http">>();
+  for (const m of manifests) {
+    if (m.kind !== "Trigger") continue;
+    const source = m.spec.source;
+    const procedureName = m.spec.target.procedure;
+    const procedure = procedures.get(procedureName);
+    if (!procedure) continue;
+
+    const isStaffMcp = source.kind === "mcp" && source.surface === "staff";
+    const isStaffHttp = source.kind === "http" && hasCtxStaffPredicate(procedure);
+    if (!isStaffMcp && !isStaffHttp) continue;
+
+    const kind: "mcp" | "http" = source.kind === "mcp" ? "mcp" : "http";
+    const set = triggerKindsByProcedure.get(procedureName) ?? new Set();
+    set.add(kind);
+    triggerKindsByProcedure.set(procedureName, set);
+  }
+
+  const out: StaffOperation[] = [];
+  for (const [name, kinds] of triggerKindsByProcedure) {
+    const procedure = procedures.get(name);
+    if (!procedure) continue;
+    out.push({
+      name,
+      title: procedure.spec.title ?? null,
+      description: procedure.spec.description ?? null,
+      input: procedure.spec.input,
+      triggers: [...kinds],
+      rowBindings: discoverRowBindings(procedure, schemasByName),
+      procedure,
+    });
+  }
+  return out;
+}
+
+/**
+ * Row-action bindings (#430): which `x-mantle-ref` input properties on
+ * a staff-operable Procedure point at a real, non-"translates"
+ * collection, so the admin SPA can offer this operation from a row's
+ * "⋯" menu on that collection's table (with the ref field pre-filled
+ * and read-only).
+ *
+ * Skip conditions (no binding produced, no error):
+ *   - `input.type !== "object"` or `input.properties` absent — nothing
+ *     to walk.
+ *   - the `x-mantle-ref` target name isn't in `schemasByName` (unknown
+ *     collection).
+ *   - the target Schema has `spec.translates` set (it's a translation
+ *     child, not a real top-level collection).
+ *
+ * `rowField` derivation: if the target Schema's `spec.uniqueIndexes`
+ * has EXACTLY one entry and that entry names EXACTLY one field, use
+ * that field name (e.g. `sku`). In every other case (no unique
+ * indexes, more than one, or a composite/multi-field index) fall back
+ * to the reserved `id` column.
+ */
+function discoverRowBindings(
+  procedure: ProcedureManifest,
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+): StaffOperationRowBinding[] {
+  const input = procedure.spec.input;
+  const inputTypes = Array.isArray(input.type) ? input.type : input.type ? [input.type] : [];
+  if (input.type !== undefined && !inputTypes.includes("object")) return [];
+  const properties = input.properties;
+  if (!properties) return [];
+
+  const bindings: StaffOperationRowBinding[] = [];
+  for (const [propertyName, propertySchema] of Object.entries(properties)) {
+    const refTarget = propertySchema[MANTLE_REF_KEYWORD];
+    if (typeof refTarget !== "string" || refTarget.length === 0) continue;
+    const targetSchema = schemasByName.get(refTarget);
+    if (!targetSchema) continue;
+    if (targetSchema.spec.translates) continue;
+    bindings.push({
+      collection: refTarget,
+      inputField: propertyName,
+      // Same-name wins: when the target Schema declares a property
+      // with the input field's own name (skuCode → product-skus.
+      // skuCode, orderNumber → orders.orderNumber), that IS the value
+      // the input wants — prefilling the entry id there would feed
+      // the wrong value. Only refs with no same-name property fall
+      // back to the single-field unique index and finally the
+      // reserved id column (tierId-style inputs, where the id
+      // genuinely is the value).
+      rowField: sameNameField(propertyName, targetSchema)
+        ?? singleUniqueIndexField(targetSchema)
+        ?? "id",
+    });
+  }
+  return bindings;
+}
+
+/** `inputField` itself, when the target Schema declares a property of
+ *  that name; else `null`. */
+function sameNameField(inputField: string, schema: SchemaManifest): string | null {
+  const properties = schema.spec.schema.properties ?? {};
+  return inputField in properties ? inputField : null;
+}
+
+/** The lone field name of a Schema's single-field unique index, or
+ *  `null` when `uniqueIndexes` is absent, empty, has more than one
+ *  entry, or its one entry is a composite (multi-field) index. */
+function singleUniqueIndexField(schema: SchemaManifest): string | null {
+  const uniqueIndexes = schema.spec.uniqueIndexes;
+  if (!uniqueIndexes || uniqueIndexes.length !== 1) return null;
+  const [onlyIndex] = uniqueIndexes;
+  if (!onlyIndex || onlyIndex.length !== 1) return null;
+  return onlyIndex[0] ?? null;
+}
+
+function hasCtxStaffPredicate(procedure: ProcedureManifest): boolean {
+  const predicates = procedure.spec.requires?.auth?.all ?? [];
+  return predicates.some((pred) => typeof pred === "object" && pred !== null && "ctx.staff" in pred);
+}
+
+function adminEntryTitle(data: Record<string, unknown>, schema?: JsonSchema): unknown {
+  const key = titleFieldKey(data, schema);
+  return key ? data[key] : null;
+}
+
+/** Which data key `adminEntryTitle` would read, or `null` if none
+ *  matched. Split out from `adminEntryTitle` so `adminDataPreview` can
+ *  skip the same property instead of repeating it in a data column. */
+function titleFieldKey(data: Record<string, unknown>, schema?: JsonSchema): string | null {
+  if (typeof data.title === "string" && data.title) return "title";
+  if (typeof data.name === "string" && data.name) return "name";
+  if (typeof data.slug === "string" && data.slug) return "slug";
+  // Manifest-driven fallback: walk the schema's required properties in
+  // declaration order and use the first string-typed one with a
+  // non-empty value. Mirrors the admin SPA's `entryTitle` rule.
+  if (schema) {
+    const properties = schema.properties ?? {};
+    for (const key of schema.required ?? []) {
+      const fieldSchema = properties[key];
+      if (!fieldSchema || !isStringTypedSchema(fieldSchema)) continue;
+      const value = data[key];
+      if (typeof value === "string" && value) return key;
+    }
+  }
   return null;
 }
 
-function adminListItem(row: AdminEntryRow): {
+/** Operational (`lifecycle: none`) collections have no title/status
+ *  workflow worth a dedicated column — instead the admin list shows up
+ *  to 3 raw data columns. Mirrors the client-side column-picking rule
+ *  in `collection-view.tsx`: first 3 `required` properties, skipping
+ *  the schema-stable title field. Kept small on the wire on purpose —
+ *  this is a preview, not the full entry. */
+function adminDataPreview(
+  data: Record<string, unknown>,
+  manifest?: SchemaManifest,
+): Record<string, unknown> | undefined {
+  if (!manifest || manifest.spec.lifecycle !== "none") return undefined;
+  const schema = manifest.spec.schema;
+  // Schema-stable skip (not per-row): rows with a blank title field
+  // must still produce the same columns as every other row, or the
+  // client's fixed headers drift out of sync with the values.
+  const titleKey = schemaTitleKey(schema);
+  const fields = (schema.required ?? []).filter((key) => key !== titleKey).slice(0, 3);
+  if (fields.length === 0) return undefined;
+  const preview: Record<string, unknown> = {};
+  for (const key of fields) preview[key] = data[key];
+  return preview;
+}
+
+/** The property a row's title comes from, derived from the SCHEMA
+ *  alone (no row data): literal `title`/`name`/`slug` when declared,
+ *  else the first required string-typed property. Stable across all
+ *  rows of a collection, so preview columns never vary per row. */
+function schemaTitleKey(schema: JsonSchema): string | null {
+  const properties = schema.properties ?? {};
+  for (const key of ["title", "name", "slug"]) {
+    if (key in properties) return key;
+  }
+  for (const key of schema.required ?? []) {
+    const fieldSchema = properties[key];
+    if (fieldSchema && isStringTypedSchema(fieldSchema)) return key;
+  }
+  return null;
+}
+
+function isStringTypedSchema(schema: JsonSchema): boolean {
+  const rawType = schema.type;
+  const types = Array.isArray(rawType) ? rawType : rawType ? [rawType] : [];
+  return types.includes("string");
+}
+
+function adminListItem(
+  row: AdminEntryRow,
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+): {
   id: string;
   collection: string;
   locale: string | null;
@@ -560,16 +917,51 @@ function adminListItem(row: AdminEntryRow): {
   version: number;
   title: unknown;
   updated_at: number;
+  data_preview?: Record<string, unknown>;
 } {
+  const manifest = schemasByName.get(row.collection);
   return {
     id: row.id,
     collection: row.collection,
     locale: row.locale ?? null,
     status: row.status,
     version: row.version,
-    title: adminEntryTitle(row.data),
+    title: adminEntryTitle(row.data, manifest?.spec.schema),
     updated_at: row.updatedAt,
+    data_preview: adminDataPreview(row.data, manifest),
   };
+}
+
+/** RFC 4180 field quoting: quote whenever the value contains a comma,
+ *  quote, or newline; escape embedded quotes by doubling them. */
+function csvField(value: string): string {
+  if (/[",\r\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  return value;
+}
+
+function csvRow(fields: readonly string[]): string {
+  return fields.map(csvField).join(",");
+}
+
+/** Reads one CSV column's value off an entry row. The four leading
+ *  columns are row metadata; everything else is a Schema property
+ *  read from `data`. Non-scalar values (objects, arrays) are
+ *  JSON-stringified. */
+function csvValue(
+  column: string,
+  row: AdminEntryRow,
+  propertyNames: readonly string[],
+): string {
+  if (column === "id") return row.id;
+  if (column === "status") return row.status;
+  if (column === "version") return String(row.version);
+  if (column === "updated_at") return String(row.updatedAt);
+  if (!propertyNames.includes(column)) return "";
+  const value = row.data[column];
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return JSON.stringify(value);
 }
 
 type AdminEntryRow = {
@@ -623,9 +1015,9 @@ async function entryEditorPayload(
 
 type AdminEditorCollection = {
   readonly name: string;
-  readonly title: string;
-  readonly description: string | null;
-  readonly lifecycle: "simple" | "editorial";
+  readonly title: LocalizedText;
+  readonly description: LocalizedText | null;
+  readonly lifecycle: "simple" | "editorial" | "none";
   readonly parent: {
     readonly collection: string;
     readonly parentField: string;
@@ -821,12 +1213,17 @@ function collectionParentFor(
   }
 
   const childProps = childSchema.spec.schema.properties ?? {};
+  // Required ref = composition (the child can't exist without its
+  // parent, so it's buried under the parent in the sidebar). Optional
+  // ref = weak reference — the collection stays top-level.
+  const childRequired = new Set(childSchema.spec.schema.required ?? []);
   for (const parentSchema of schemas) {
     if (parentSchema.metadata.name === childSchema.metadata.name) continue;
     if (parentSchema.spec.translates) continue;
     const parentProps = parentSchema.spec.schema.properties ?? {};
 
     for (const [childField] of Object.entries(childProps)) {
+      if (!childRequired.has(childField)) continue;
       const parentField = conventionalParentField(parentSchema.metadata.name, childField, parentProps);
       if (parentField) {
         return {
@@ -891,8 +1288,6 @@ async function entriesByDataValue(
 }
 
 async function readSiteSettings(runtime: CmsRuntime): Promise<{
-  brandIntro: string;
-  serviceIncludes: string;
   ga4MeasurementId: string;
   facebookPixelId: string;
 }> {
@@ -900,8 +1295,6 @@ async function readSiteSettings(runtime: CmsRuntime): Promise<{
     .prepare(
       `SELECT key, value FROM site_config
        WHERE key IN (
-         'brandIntro',
-         'serviceIncludes',
          'ga4MeasurementId',
          'facebookPixelId'
        )`,
@@ -909,8 +1302,6 @@ async function readSiteSettings(runtime: CmsRuntime): Promise<{
     .all<{ key: string; value: string }>();
   const map = new Map(rows.map((row) => [row.key, row.value]));
   return {
-    brandIntro: map.get("brandIntro") ?? "",
-    serviceIncludes: map.get("serviceIncludes") ?? "",
     ga4MeasurementId: map.get("ga4MeasurementId") ?? "",
     facebookPixelId: map.get("facebookPixelId") ?? "",
   };
@@ -922,8 +1313,6 @@ async function writeSiteSettings(
     brand?: string;
     title?: string;
     description?: string;
-    brandIntro?: string;
-    serviceIncludes?: string;
     ga4MeasurementId?: string;
     facebookPixelId?: string;
   },

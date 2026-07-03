@@ -1,4 +1,14 @@
-export type Lifecycle = "simple" | "editorial";
+/** A human-facing label/blurb that is either a plain string or a map
+ *  of locale code → string (e.g. `{ en: "Products", "zh-TW": "商品" }`)
+ *  — mirrors `LocalizedText` in `@aotter/mantle-spec`'s manifest
+ *  grammar (#430). This package doesn't depend on `@aotter/mantle-spec`
+ *  (it only talks JSON over HTTP — same reasoning as the inlined
+ *  `VIEW_PARAMS_RESERVED` copy in `features/ops/view-page.tsx`), so the
+ *  type + its resolver are copied here rather than imported. See
+ *  `resolveLocalizedText` in `lib/localized-text.ts`. */
+export type LocalizedText = string | Readonly<Record<string, string>>;
+
+export type Lifecycle = "simple" | "editorial" | "none";
 
 export type ContentStatus =
   | "draft"
@@ -12,8 +22,8 @@ export type SidebarStatus = "draft" | "review" | "published" | "archived";
 
 export interface Collection {
   name: string;
-  title: string;
-  description: string | null;
+  title: LocalizedText;
+  description: LocalizedText | null;
   lifecycle: Lifecycle;
   parent?: {
     collection: string;
@@ -121,6 +131,9 @@ export interface EntryRow {
   version: number;
   title: unknown;
   updated_at: number;
+  /** First 3 `required` schema properties (skipping the one used as
+   *  the title), present only for `lifecycle: "none"` collections. */
+  data_preview?: Record<string, unknown>;
 }
 
 export interface ListEntriesResult {
@@ -161,6 +174,32 @@ export interface CommittedMediaAsset {
   alt?: string;
   caption?: string;
   variants: MediaAssetVariant[];
+}
+
+/** `GET /admin/api/operations` entry (#426, extended #430) — a
+ *  staff-operable Procedure derived from the manifest (some Trigger
+ *  targets it via `source.kind: "mcp"` + `surface: "staff"`, or
+ *  `source.kind: "http"` with a `ctx.staff` auth predicate). */
+export interface StaffOperation {
+  name: string;
+  title: LocalizedText | null;
+  description: LocalizedText | null;
+  input: JsonSchema;
+  triggers: Array<"mcp" | "http">;
+  /** Row-action bindings (#430): which `x-mantle-ref` input properties
+   *  point at a real (non-"translates") collection, so the admin SPA
+   *  can offer this operation from that collection's row "⋯" menu. */
+  rowBindings: Array<{ collection: string; inputField: string; rowField: string }>;
+}
+
+/** `GET /admin/api/views-manifest` entry (#426) — a read-only View
+ *  projection over a Schema. `params` is the View's declared
+ *  parameter JSON Schema, or `null` when the View takes none. */
+export interface ViewManifestInfo {
+  name: string;
+  from: string;
+  params: JsonSchema | null;
+  fields: string[] | null;
 }
 
 export const EDITORIAL_STATUSES: SidebarStatus[] = [

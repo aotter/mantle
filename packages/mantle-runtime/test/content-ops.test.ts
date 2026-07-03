@@ -97,6 +97,88 @@ describe("CreateDraftUseCase", () => {
     ).rejects.toBeInstanceOf(DiagnosticError);
   });
 
+  it("saves an incomplete draft but blocks publishing it (required enforced at publish)", async () => {
+    const h = harness(); // postsSchema requires `title`
+    // Empty draft is allowed — a work-in-progress entry with `title` blank.
+    const row = await h.createDraft.execute({
+      collection: "posts",
+      data: {},
+      authorId: "user-1",
+    });
+    expect(row.status).toBe("draft");
+    expect(row.data).toEqual({});
+    // Publishing re-validates in full: the missing required field bites here.
+    await expect(h.requestPublish.execute({ id: row.id })).rejects.toMatchObject({
+      diagnostic: { code: "INPUT_VALIDATION_FAILED", path: "/title" },
+    });
+  });
+
+  it("still type-checks present fields on an incomplete draft", async () => {
+    const h = harness();
+    // partial drops `required`, not type-safety: a wrong-typed value is rejected.
+    await expect(
+      h.createDraft.execute({
+        collection: "posts",
+        data: { title: 123 },
+        authorId: null,
+      }),
+    ).rejects.toMatchObject({
+      diagnostic: { code: "INPUT_VALIDATION_FAILED", path: "/title" },
+    });
+  });
+
+  describe("lifecycle: none (operational records)", () => {
+    const noneSchema = () => {
+      const base = postsSchema();
+      return { ...base, spec: { ...base.spec, lifecycle: "none" as const } };
+    };
+    const noneHarness = () => {
+      const schema = noneSchema();
+      return harness({ schemas: new Map([[schema.metadata.name, schema]]) });
+    };
+
+    it("creates entries live (published) — no draft step", async () => {
+      const h = noneHarness();
+      const row = await h.createDraft.execute({
+        collection: "posts",
+        data: { title: "op-record" },
+        authorId: null,
+      });
+      expect(row.status).toBe("published");
+    });
+
+    it("updates in place regardless of status", async () => {
+      const h = noneHarness();
+      const row = await h.createDraft.execute({
+        collection: "posts",
+        data: { title: "before" },
+        authorId: null,
+      });
+      const updated = await h.updateDraft.execute({
+        id: row.id,
+        expectedVersion: row.version,
+        data: { title: "after" },
+      });
+      expect(updated.data["title"]).toBe("after");
+      expect(updated.status).toBe("published");
+    });
+
+    it("rejects publish/unpublish — no content transitions exist", async () => {
+      const h = noneHarness();
+      const row = await h.createDraft.execute({
+        collection: "posts",
+        data: { title: "op-record" },
+        authorId: null,
+      });
+      await expect(h.requestPublish.execute({ id: row.id })).rejects.toMatchObject({
+        diagnostic: { code: "CONFLICT" },
+      });
+      await expect(h.unpublish.execute({ id: row.id })).rejects.toMatchObject({
+        diagnostic: { code: "CONFLICT" },
+      });
+    });
+  });
+
   it("strips reserved metadata keys from caller-supplied data", async () => {
     const h = harness();
     const row = await h.createDraft.execute({

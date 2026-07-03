@@ -66,6 +66,7 @@ export class ListEntriesUseCase {
       status: request.status,
       limit: clampLimit(request.limit),
       cursor: request.cursor,
+      search: request.search,
     });
   }
 }

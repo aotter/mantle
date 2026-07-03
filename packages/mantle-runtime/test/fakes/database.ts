@@ -237,17 +237,29 @@ class InMemoryStatement implements PreparedStatement {
       return { rows: filtered.map((r) => ({ ...r })), changes: 0 };
     }
 
-    // SELECT … FROM entries WHERE collection = ? [AND status = ?] ORDER BY updated_at DESC LIMIT ?
-    if (sql.startsWith("SELECT id, collection, status, version, data, author_id, created_at, updated_at FROM entries WHERE collection = ?")) {
+    // SELECT … FROM entries WHERE collection = ? [AND status = ?] [AND (id LIKE ... OR data LIKE ...)] ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?
+    if (
+      sql.startsWith("SELECT id, collection, status, version, data, author_id, created_at, updated_at FROM entries WHERE collection = ?") &&
+      sql.includes("ORDER BY updated_at DESC, id DESC")
+    ) {
       const hasStatus = sql.includes("AND status = ?");
+      const hasSearch = sql.includes("id LIKE");
       const collection = p[0] as string;
-      const status = hasStatus ? (p[1] as string) : null;
-      const limit = (hasStatus ? (p[2] as number) : (p[1] as number)) ?? 100;
+      let pi = 1;
+      const status = hasStatus ? (p[pi++] as string) : null;
+      let searchTerm: string | null = null;
+      if (hasSearch) {
+        searchTerm = p[pi++] as string;
+        pi++; // second bound param is the same term (id + data)
+      }
+      const limit = (p[pi++] as number) ?? 100;
+      const offset = (p[pi++] as number) ?? 0;
       const filtered = [...this.db.entries.values()]
         .filter((r) => r.collection === collection)
         .filter((r) => (status ? r.status === status : true))
-        .sort((a, b) => b.updated_at - a.updated_at)
-        .slice(0, limit);
+        .filter((r) => (searchTerm ? matchesLikeSearch(r, searchTerm) : true))
+        .sort((a, b) => b.updated_at - a.updated_at || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+        .slice(offset, offset + limit);
       return { rows: filtered.map((r) => ({ ...r })), changes: 0 };
     }
 
@@ -408,6 +420,17 @@ class InMemoryStatement implements PreparedStatement {
 
 function normalize(sql: string): string {
   return sql.replace(/\s+/g, " ").trim();
+}
+
+/** Mirrors `(id LIKE '%'||?||'%' ESCAPE '\' OR data LIKE '%'||?||'%' ESCAPE '\')`
+ *  against the in-memory store: unescape the caller's LIKE-escaped
+ *  term back to a literal substring and check `id`/`data` for it. */
+function matchesLikeSearch(row: EntryRecord, escapedTerm: string): boolean {
+  const literal = escapedTerm
+    .replace(/\\%/g, "%")
+    .replace(/\\_/g, "_")
+    .replace(/\\\\/g, "\\");
+  return row.id.includes(literal) || row.data.includes(literal);
 }
 
 function fieldFromJsonPath(path: string): string {

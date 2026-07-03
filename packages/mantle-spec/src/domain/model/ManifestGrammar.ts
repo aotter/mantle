@@ -36,6 +36,8 @@ export const MCP_HINTS = [
   "media-image",
   "media-video",
   "media-file",
+  "money-minor",
+  "timestamp-ms",
 ] as const;
 export type McpHint = (typeof MCP_HINTS)[number];
 
@@ -88,6 +90,47 @@ export const MCP_HINT_KEYWORD = "x-mcp-hint" as const;
 export const MANTLE_BIND_KEYWORD = "x-mantle-bind" as const;
 
 /**
+ * A human-facing label/blurb that is either a plain string (single
+ * language, the v0.1 shape) or a map of locale code → string (e.g.
+ * `{ en: "Products", "zh-TW": "商品" }`) so one manifest can serve a
+ * multi-language admin UI. `Schema.spec.title`/`.description` and
+ * `Procedure.spec.title`/`.description` use this shape; consumers
+ * resolve it to a single displayable string with `resolveLocalizedText`.
+ * View manifests are NOT included — LocalizedText is Schema + Procedure
+ * only per the #430 design.
+ */
+export type LocalizedText = string | Readonly<Record<string, string>>;
+
+/**
+ * Resolve a `LocalizedText` value to a single displayable string for
+ * `preferred` (typically the viewer's chosen admin language), falling
+ * back to `canonical` (the site's canonical locale) and finally to the
+ * record's first own-enumerable entry (insertion order). A plain
+ * string is returned as-is — even an empty string, since only
+ * `null`/`undefined` map to `null` here; shape validation (rejecting
+ * empty strings) is the parser's job, not this resolver's. `null` /
+ * `undefined` input (the field was never set) resolves to `null`, and
+ * an empty record (structurally invalid, but resolved defensively)
+ * also resolves to `null` since there is nothing to fall back to.
+ */
+export function resolveLocalizedText(
+  value: LocalizedText | null | undefined,
+  preferred: string,
+  canonical?: string | null,
+): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (Object.prototype.hasOwnProperty.call(value, preferred)) {
+    return value[preferred]!;
+  }
+  if (canonical && Object.prototype.hasOwnProperty.call(value, canonical)) {
+    return value[canonical]!;
+  }
+  const firstKey = Object.keys(value)[0];
+  return firstKey !== undefined ? value[firstKey]! : null;
+}
+
+/**
  * Four declarative atoms. Each maps 1-to-1 to a Postgres primitive — see
  * ADR-0001 / `docs/design-atoms.md` § TL;DR for the mapping. `Procedure`
  * is the only kind with a code seam (handler ref to consumer's TS file).
@@ -116,12 +159,17 @@ export type SchemaManifest = ManifestEnvelope<"Schema", SchemaManifestSpec>;
 export interface SchemaManifestSpec {
   /** Human-readable label for the admin UI. Required at v0.1.x —
    *  the SPA renders this in the sidebar and elsewhere instead of
-   *  the bare `metadata.name`. AI authors MUST populate it in the
-   *  user's primary language (the install-time chosen locale), since
-   *  end-admin users may not even read English. See ADR-0010 and
+   *  the bare `metadata.name`. Either a plain string, or a
+   *  `LocalizedText` map of locale → string (e.g.
+   *  `{ en: "Products", "zh-TW": "商品" }`) so one manifest can serve a
+   *  multi-language admin UI — the SPA resolves it client-side via
+   *  `resolveLocalizedText`. AI authors MUST populate it in the user's
+   *  primary language (the install-time chosen locale) at minimum,
+   *  since end-admin users may not even read English. See ADR-0010 and
    *  the authoring contract § Schema authoring. */
-  readonly title: string;
-  readonly description?: string;
+  readonly title: LocalizedText;
+  /** Same string-or-locale-map shape as `title`. Optional. */
+  readonly description?: LocalizedText;
   /** JSON Schema Draft 2020-12 describing per-entry data. May carry the
    *  v0.1 property extensions: `x-mantle-bind`, `x-mantle-ref`, `x-mcp-hint`. */
   readonly schema: JsonSchema;
@@ -138,11 +186,15 @@ export interface SchemaManifestSpec {
    *  companion to a non-localized parent Schema, joined by a shared
    *  field. Implies `localized: true`. See ADR-0010. */
   readonly translates?: TranslatesBinding;
-  /** Editorial workflow opt-in. Default `'simple'` (draft → published →
-   *  archived, no approval queue). The v0.1.0 boot validator currently
-   *  rejects `'editorial'` with a clear "v0.1.x" message; starters use
-   *  `'simple'` only. The parser accepts both values structurally so
-   *  the schema stays stable across the v0.1 → v0.1.x bump. */
+  /** Content-workflow opt-in. Default `'simple'` (draft → published →
+   *  archived, no approval queue). `'none'` marks operational record
+   *  Schemas (orders, inventory snapshots, audit rows) that are written
+   *  by Procedures rather than authored: entries are live on creation,
+   *  editable in place, and have no publish/unpublish transitions — the
+   *  admin hides the content-lifecycle chrome for them. The v0.1.0 boot
+   *  validator currently rejects `'editorial'` with a clear "v0.1.x"
+   *  message; the parser accepts all three values structurally so the
+   *  schema stays stable across the v0.1 → v0.1.x bump. */
   readonly lifecycle?: LifecycleMode;
 }
 
@@ -157,7 +209,7 @@ export interface TranslatesBinding {
   readonly on: string;
 }
 
-export type LifecycleMode = "simple" | "editorial";
+export type LifecycleMode = "simple" | "editorial" | "none";
 
 /* ─── View ─── */
 
@@ -259,6 +311,17 @@ export interface FilterOr {
 export type ProcedureManifest = ManifestEnvelope<"Procedure", ProcedureManifestSpec>;
 
 export interface ProcedureManifestSpec {
+  /** Human-readable label for the admin UI's staff-operations surface
+   *  (#430). Same string-or-locale-map `LocalizedText` shape as
+   *  `Schema.spec.title`. Optional — Procedures didn't carry a title
+   *  before v0.1.x; when absent the admin UI falls back to a
+   *  Title-Cased rendering of `metadata.name`. */
+  readonly title?: LocalizedText;
+  /** Same string-or-locale-map shape as `title`. Optional. Surfaced by
+   *  `GET /admin/api/operations` as the operation's `description`
+   *  field (replaces the pre-#430 hack of reading
+   *  `spec.input.description`). */
+  readonly description?: LocalizedText;
   /** Auth gate. v0.1: `requires.auth.all` only; predicate vocabulary
    *  closed to `ctx.user` and `{ ctx.staff: [<role>, ...] }`. DRAFT:
    *  `requires.auth.any`, `owns:`, `withinMinutes:`, `contains:`,

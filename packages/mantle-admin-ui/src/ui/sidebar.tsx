@@ -228,7 +228,16 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
     <main
       data-slot="sidebar-inset"
       className={cn(
-        "relative flex w-full flex-1 flex-col bg-background",
+        // min-w-0: without it this flex child keeps min-width:auto and a
+        // wide child (the min-w table) pushes the whole page past the
+        // viewport instead of scrolling inside its own overflow-x box.
+        // overflow-x-clip: a wide table's scroll container still bubbles
+        // its scrollWidth up to the document in this flex layout, letting
+        // the whole page rubber-band sideways; clip severs that at the
+        // content pane without creating a scroll box (so the sticky
+        // header keeps its viewport reference and the table's own
+        // overflow-x-auto still scrolls inside).
+        "relative flex w-full min-w-0 flex-1 flex-col overflow-x-clip bg-background",
         "md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm rtl:md:peer-data-[variant=inset]:ml-2 rtl:md:peer-data-[variant=inset]:mr-0",
         className,
       )}

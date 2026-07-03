@@ -115,6 +115,10 @@ export interface ListEntriesArgs {
   /** Opaque continuation token from a prior `ListEntriesResult.nextCursor`.
    *  Caller must round-trip without interpreting; format is impl-defined. */
   readonly cursor?: string;
+  /** Free-text filter matched against `id` and the raw `data` JSON
+   *  blob (substring, case-sensitive per SQLite's default `LIKE`).
+   *  Composes with `status` — both narrow the same query. */
+  readonly search?: string;
 }
 
 export interface ListEntriesResult {

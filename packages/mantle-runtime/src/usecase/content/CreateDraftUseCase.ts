@@ -8,6 +8,7 @@ import type { Clock } from "../../domain/port/Clock.js";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
 import type { IdGenerator } from "../../domain/port/IdGenerator.js";
 import type { SiteConfigRepository } from "../../domain/port/SiteConfigRepository.js";
+import { resolveLifecycle } from "@aotter/mantle-spec";
 import { projectAndStamp } from "../../domain/service/BuiltinProjector.js";
 import type { CreateDraftRequest } from "../dto/content/index.js";
 import {
@@ -48,12 +49,16 @@ export class CreateDraftUseCase {
       schema,
       data,
       siteConfig: this.siteConfig,
+      // Drafts save incomplete; publish enforces required + locale.
+      partial: true,
     });
     return withConflictDiagnostic(opPath, () =>
       this.entries.create({
         id,
         collection: request.collection,
-        status: "draft",
+        // Operational records (lifecycle: none) have no publish step —
+        // they are live the moment they exist.
+        status: resolveLifecycle(schema) === "none" ? "published" : "draft",
         data,
         authorId: request.authorId,
         now,
