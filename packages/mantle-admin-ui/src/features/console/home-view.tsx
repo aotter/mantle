@@ -8,6 +8,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { api } from "../../lib/api";
+import { resolveLocalizedText } from "../../lib/localized-text";
 import type { Collection, SiteInfo } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
@@ -32,6 +33,7 @@ export function HomeView(): React.ReactElement {
   const collections = collectionsQuery.data ?? [];
   const primaryCollections = collections.filter((collection) => !collection.parent);
   const siteInfo = site.data;
+  const canonical = siteInfo?.canonicalLocale ?? null;
 
   return (
     <div className="space-y-6">
@@ -74,7 +76,7 @@ export function HomeView(): React.ReactElement {
                 key={c.name}
                 href={`/admin/c/${encodeURIComponent(c.name)}`}
                 icon={QUICK_ACTION_ICONS[index % QUICK_ACTION_ICONS.length]!}
-                label={c.title}
+                label={resolveLocalizedText(c.title, language, canonical) ?? c.name}
               />
             ))}
           </div>
@@ -105,7 +107,10 @@ export function HomeView(): React.ReactElement {
         )}
         {primaryCollections.length > 0 && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {primaryCollections.map((c) => (
+            {primaryCollections.map((c) => {
+              const title = resolveLocalizedText(c.title, language, canonical) ?? c.name;
+              const description = resolveLocalizedText(c.description, language, canonical);
+              return (
               <a
                 key={c.name}
                 href={`/admin/c/${encodeURIComponent(c.name)}`}
@@ -113,16 +118,16 @@ export function HomeView(): React.ReactElement {
               >
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h2 className="truncate text-lg" title={c.title}>
-                      {c.title}
+                    <h2 className="truncate text-lg" title={title}>
+                      {title}
                     </h2>
                     <p className="font-mono text-xs text-muted-foreground">{c.name}</p>
                   </div>
                   <FileText className="size-5 shrink-0 text-muted-foreground" aria-hidden />
                 </div>
-                {c.description ? (
+                {description ? (
                   <p className="line-clamp-2 text-sm text-muted-foreground">
-                    {firstSentence(c.description)}
+                    {firstSentence(description)}
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground">
@@ -142,7 +147,8 @@ export function HomeView(): React.ReactElement {
                   ) : null}
                 </div>
               </a>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

@@ -14,6 +14,9 @@ import {
 import { LayoutProvider } from "../context/layout-provider";
 import { SidebarInset, SidebarProvider } from "../ui/sidebar";
 import { api } from "../lib/api";
+import { fieldLabel } from "../lib/field-label";
+import { operationsQueryOptions } from "../lib/queries";
+import { resolveLocalizedText } from "../lib/localized-text";
 import {
   EDITORIAL_STATUSES,
   SIMPLE_STATUSES,
@@ -78,13 +81,7 @@ export function AuthenticatedLayout({
   });
   // One extra query each (#426), cached under their own query keys so
   // they don't refetch alongside unrelated collection/site changes.
-  const operationsQuery = useQuery<StaffOperation[]>({
-    queryKey: ["operations"],
-    queryFn: async () => {
-      const res = await api.get<{ operations: StaffOperation[] }>("/operations");
-      return res.operations;
-    },
-  });
+  const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
   const viewsQuery = useQuery<ViewManifestInfo[]>({
     queryKey: ["views-manifest"],
     queryFn: async () => {
@@ -102,6 +99,7 @@ export function AuthenticatedLayout({
     [brand, site.data],
   );
 
+  const canonical = site.data?.canonicalLocale ?? null;
   const groups = React.useMemo<ReadonlyArray<NavGroupData>>(
     () =>
       buildNavGroups(
@@ -109,14 +107,17 @@ export function AuthenticatedLayout({
         operationsQuery.data ?? [],
         viewsQuery.data ?? [],
         language,
+        canonical,
         me.data?.role ?? null,
       ),
-    [collectionsQuery.data, operationsQuery.data, viewsQuery.data, language, me.data?.role],
+    [collectionsQuery.data, operationsQuery.data, viewsQuery.data, language, canonical, me.data?.role],
   );
   const firstCollection = React.useMemo<{ name: string; title: string } | null>(() => {
     const first = (collectionsQuery.data ?? []).find((collection) => !collection.parent);
-    return first ? { name: first.name, title: first.title } : null;
-  }, [collectionsQuery.data]);
+    if (!first) return null;
+    const title = resolveLocalizedText(first.title, language, canonical) ?? fieldLabel(first.name);
+    return { name: first.name, title };
+  }, [collectionsQuery.data, language, canonical]);
 
   return (
     <LayoutProvider>
@@ -165,6 +166,7 @@ function buildNavGroups(
   operations: ReadonlyArray<StaffOperation>,
   views: ReadonlyArray<ViewManifestInfo>,
   language: AdminLanguage,
+  canonical: string | null,
   role: AdminUser["role"],
 ): ReadonlyArray<NavGroupData> {
   const primaryCollections = collections.filter((collection) => !collection.parent);
@@ -183,14 +185,14 @@ function buildNavGroups(
 
   const contentGroup: NavGroupData = {
     title: t(language, "nav.content"),
-    items: contentCollections.map((c) => collectionNavItem(c, language)),
+    items: contentCollections.map((c) => collectionNavItem(c, language, canonical)),
   };
 
   const recordsGroup: NavGroupData | null =
     operationalCollections.length > 0
       ? {
           title: t(language, "nav.operations"),
-          items: operationalCollections.map((c) => collectionNavItem(c, language)),
+          items: operationalCollections.map((c) => collectionNavItem(c, language, canonical)),
         }
       : null;
 
@@ -201,7 +203,7 @@ function buildNavGroups(
       ? {
           title: t(language, "nav.ops"),
           items: operations.map((op) => ({
-            title: fieldLabel(op.name),
+            title: resolveLocalizedText(op.title, language, canonical) ?? fieldLabel(op.name),
             icon: Wrench,
             url: `/admin/ops#${op.name}`,
           })),
@@ -249,25 +251,13 @@ function buildNavGroups(
   ];
 }
 
-/** Mirrors the server's `fieldLabel` (mountServerEndpoints doesn't
- *  expose one for procedure/view names, so this is the client-side
- *  copy already used for Schema property labels in
- *  `entry-edit-view.tsx` / `collection-view.tsx`) — kebab/snake/camel
- *  procedure and View names read as "Title Case" nav labels. */
-function fieldLabel(name: string): string {
-  return name
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function collectionNavItem(c: Collection, language: AdminLanguage): NavItem {
+function collectionNavItem(c: Collection, language: AdminLanguage, canonical: string | null): NavItem {
   // Leading icon is always Folder so every content row reads the
   // same. The Globe sits in the trailing `marker` slot to mark
   // collections that fold a translation-child schema underneath
   // — POC sidebar contract.
   const base = {
-    title: c.title,
+    title: resolveLocalizedText(c.title, language, canonical) ?? fieldLabel(c.name),
     icon: Folder,
     marker: c.hasTranslations ? Globe : undefined,
   };

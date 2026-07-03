@@ -4,6 +4,7 @@ import { ArrowLeft, ExternalLink, ImagePlus, Plus, RotateCcw, Save, Send, Trash2
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
+import { resolveLocalizedText } from "../../lib/localized-text";
 import type { EntryEditorPayload, JsonSchema, MediaPurposePolicy, RelatedEntrySection, SiteInfo } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { CollapsibleDescription, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
@@ -64,7 +65,10 @@ export function EntryEditView({
   if (!query.data || !data) return <ErrorBox error={new Error("Missing entry editor payload.")} />;
 
   const payload = query.data;
+  const canonical = site.data?.canonicalLocale ?? null;
   const title = entryTitle(data, payload.entry.id, payload.collection.schema);
+  const collectionTitle = resolveLocalizedText(payload.collection.title, language, canonical) ?? payload.collection.name;
+  const collectionDescription = resolveLocalizedText(payload.collection.description, language, canonical);
   const dirty = JSON.stringify(data) !== JSON.stringify(payload.entry.data);
   // Operational records (lifecycle: none) have no content workflow:
   // no publish/unpublish controls, and they save in place regardless
@@ -88,7 +92,7 @@ export function EntryEditView({
               className="inline-flex items-center gap-2 hover:underline"
             >
               <ArrowLeft className="size-3.5" aria-hidden />
-              {t(language, "entryEdit.back", { name: payload.collection.title })}
+              {t(language, "entryEdit.back", { name: collectionTitle })}
             </a>
             {parentLink ? (
               <>
@@ -102,7 +106,7 @@ export function EntryEditView({
         }
         title={title}
         description={t(language, "entryEdit.body", {
-          name: payload.collection.title,
+          name: collectionTitle,
         })}
         actions={
           <>
@@ -157,12 +161,12 @@ export function EntryEditView({
             <SectionTitle
               title={t(language, "entryEdit.fields")}
               body={
-                payload.collection.description ? (
+                collectionDescription ? (
                   <CollapsibleDescription
-                    description={payload.collection.description}
+                    description={collectionDescription}
                     summaryLabel={t(language, "collection.schemaDetails")}
                     collapsedIntro={t(language, "collection.schemaSummary", {
-                      name: payload.collection.title,
+                      name: collectionTitle,
                     })}
                   />
                 ) : undefined
@@ -183,6 +187,7 @@ export function EntryEditView({
             <RelatedSections
               sections={inlineRelated}
               language={language}
+              canonical={canonical}
             />
           ) : null}
         </div>
@@ -205,6 +210,7 @@ export function EntryEditView({
             <RelatedSections
               sections={sidebarRelated}
               language={language}
+              canonical={canonical}
             />
           ) : null}
         </div>
@@ -638,9 +644,11 @@ function JsonEditor({
 function RelatedSections({
   sections,
   language,
+  canonical,
 }: {
   sections: RelatedEntrySection[];
   language: AdminLanguage;
+  canonical: string | null;
 }): React.ReactElement {
   if (sections.length === 0) {
     return (
@@ -654,7 +662,7 @@ function RelatedSections({
       {sections.map((section) => (
         <SectionCard key={`${section.collection.name}:${section.relationship.childField}`}>
           <SectionTitle
-            title={section.collection.title}
+            title={resolveLocalizedText(section.collection.title, language, canonical) ?? section.collection.name}
             body={t(language, "entryEdit.relationship", {
               child: section.relationship.childField,
               parent: section.relationship.parentField,

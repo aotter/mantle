@@ -3,13 +3,16 @@ import type {
   FilterAst,
   HandlerBinding,
   JsonSchema,
+  LocalizedText,
   TriggerSource,
 } from "../../domain/model/ManifestGrammar.js";
 import type { Diagnostic } from "../../kernel/diagnostic.js";
 
 export interface IntrospectedSchema {
   readonly name: string;
-  readonly title: string;
+  /** Raw passthrough of `Schema.spec.title` (#430) — string or a
+   *  locale-map `LocalizedText`; this CLI dump does no resolution. */
+  readonly title: LocalizedText;
   readonly localized: boolean;
   readonly lifecycle: string;
   readonly translates: { readonly parent: string; readonly on: string } | null;

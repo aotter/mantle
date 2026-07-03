@@ -2,6 +2,7 @@ import type { Context, Hono } from "hono";
 import {
   DiagnosticError,
   HTTP_STATUS_BY_CODE,
+  MANTLE_REF_KEYWORD,
   MCP_HINT_KEYWORD,
   VIEW_PARAMS_RESERVED,
   isMediaMcpHint,
@@ -10,6 +11,7 @@ import {
   type ContentState,
   type Diagnostic,
   type JsonSchema,
+  type LocalizedText,
   type Manifest,
   type ProcedureManifest,
   type SchemaManifest,
@@ -139,9 +141,10 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     .filter((s) => !s.spec.translates)
     .map((s) => adminEditorCollection(s, schemas));
 
-  // Staff-operable Procedures (#426): precompute at mount, same as
-  // `collections` above — `ref.manifests` is immutable post-boot.
-  const operations = discoverStaffOperations(ref.manifests);
+  // Staff-operable Procedures (#426, extended #430 with rowBindings):
+  // precompute at mount, same as `collections` above — `ref.manifests`
+  // is immutable post-boot.
+  const operations = discoverStaffOperations(ref.manifests, schemasByName);
   const operationsByName = new Map(operations.map((op) => [op.name, op]));
 
   // Views projection (#426) — least-code option: a dedicated
@@ -308,9 +311,11 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     jsonResponse(200, {
       operations: operations.map((op) => ({
         name: op.name,
+        title: op.title,
         description: op.description,
         input: op.input,
         triggers: op.triggers,
+        rowBindings: op.rowBindings,
       })),
     }),
   );
@@ -668,11 +673,19 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   });
 }
 
+type StaffOperationRowBinding = {
+  readonly collection: string;
+  readonly inputField: string;
+  readonly rowField: string;
+};
+
 type StaffOperation = {
   readonly name: string;
-  readonly description: string | null;
+  readonly title: LocalizedText | null;
+  readonly description: LocalizedText | null;
   readonly input: JsonSchema;
   readonly triggers: ReadonlyArray<"mcp" | "http">;
+  readonly rowBindings: ReadonlyArray<StaffOperationRowBinding>;
   readonly procedure: ProcedureManifest;
 };
 
@@ -689,8 +702,19 @@ type StaffOperation = {
  * that qualified the procedure, in Trigger declaration order,
  * deduplicated — a Procedure can be both an MCP staff tool and an
  * HTTP Trigger simultaneously.
+ *
+ * `title`/`description` (#430) are raw passthroughs of
+ * `Procedure.spec.title`/`.description` — this REPLACES the pre-#430
+ * hack of reading `procedure.spec.input.description` as a fake
+ * "description". The wire shape (`string | LocalizedText | null`)
+ * stays compatible for plain-string manifests since a string
+ * title/description round-trips as a string; the SPA resolves
+ * locale-map values client-side.
  */
-function discoverStaffOperations(manifests: readonly Manifest[]): readonly StaffOperation[] {
+function discoverStaffOperations(
+  manifests: readonly Manifest[],
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+): readonly StaffOperation[] {
   const procedures = new Map<string, ProcedureManifest>();
   for (const m of manifests) {
     if (m.kind === "Procedure") procedures.set(m.metadata.name, m);
@@ -719,13 +743,90 @@ function discoverStaffOperations(manifests: readonly Manifest[]): readonly Staff
     if (!procedure) continue;
     out.push({
       name,
-      description: procedure.spec.input.description ?? null,
+      title: procedure.spec.title ?? null,
+      description: procedure.spec.description ?? null,
       input: procedure.spec.input,
       triggers: [...kinds],
+      rowBindings: discoverRowBindings(procedure, schemasByName),
       procedure,
     });
   }
   return out;
+}
+
+/**
+ * Row-action bindings (#430): which `x-mantle-ref` input properties on
+ * a staff-operable Procedure point at a real, non-"translates"
+ * collection, so the admin SPA can offer this operation from a row's
+ * "⋯" menu on that collection's table (with the ref field pre-filled
+ * and read-only).
+ *
+ * Skip conditions (no binding produced, no error):
+ *   - `input.type !== "object"` or `input.properties` absent — nothing
+ *     to walk.
+ *   - the `x-mantle-ref` target name isn't in `schemasByName` (unknown
+ *     collection).
+ *   - the target Schema has `spec.translates` set (it's a translation
+ *     child, not a real top-level collection).
+ *
+ * `rowField` derivation: if the target Schema's `spec.uniqueIndexes`
+ * has EXACTLY one entry and that entry names EXACTLY one field, use
+ * that field name (e.g. `sku`). In every other case (no unique
+ * indexes, more than one, or a composite/multi-field index) fall back
+ * to the reserved `id` column.
+ */
+function discoverRowBindings(
+  procedure: ProcedureManifest,
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+): StaffOperationRowBinding[] {
+  const input = procedure.spec.input;
+  const inputTypes = Array.isArray(input.type) ? input.type : input.type ? [input.type] : [];
+  if (input.type !== undefined && !inputTypes.includes("object")) return [];
+  const properties = input.properties;
+  if (!properties) return [];
+
+  const bindings: StaffOperationRowBinding[] = [];
+  for (const [propertyName, propertySchema] of Object.entries(properties)) {
+    const refTarget = propertySchema[MANTLE_REF_KEYWORD];
+    if (typeof refTarget !== "string" || refTarget.length === 0) continue;
+    const targetSchema = schemasByName.get(refTarget);
+    if (!targetSchema) continue;
+    if (targetSchema.spec.translates) continue;
+    bindings.push({
+      collection: refTarget,
+      inputField: propertyName,
+      // Same-name wins: when the target Schema declares a property
+      // with the input field's own name (skuCode → product-skus.
+      // skuCode, orderNumber → orders.orderNumber), that IS the value
+      // the input wants — prefilling the entry id there would feed
+      // the wrong value. Only refs with no same-name property fall
+      // back to the single-field unique index and finally the
+      // reserved id column (tierId-style inputs, where the id
+      // genuinely is the value).
+      rowField: sameNameField(propertyName, targetSchema)
+        ?? singleUniqueIndexField(targetSchema)
+        ?? "id",
+    });
+  }
+  return bindings;
+}
+
+/** `inputField` itself, when the target Schema declares a property of
+ *  that name; else `null`. */
+function sameNameField(inputField: string, schema: SchemaManifest): string | null {
+  const properties = schema.spec.schema.properties ?? {};
+  return inputField in properties ? inputField : null;
+}
+
+/** The lone field name of a Schema's single-field unique index, or
+ *  `null` when `uniqueIndexes` is absent, empty, has more than one
+ *  entry, or its one entry is a composite (multi-field) index. */
+function singleUniqueIndexField(schema: SchemaManifest): string | null {
+  const uniqueIndexes = schema.spec.uniqueIndexes;
+  if (!uniqueIndexes || uniqueIndexes.length !== 1) return null;
+  const [onlyIndex] = uniqueIndexes;
+  if (!onlyIndex || onlyIndex.length !== 1) return null;
+  return onlyIndex[0] ?? null;
 }
 
 function hasCtxStaffPredicate(procedure: ProcedureManifest): boolean {
@@ -914,8 +1015,8 @@ async function entryEditorPayload(
 
 type AdminEditorCollection = {
   readonly name: string;
-  readonly title: string;
-  readonly description: string | null;
+  readonly title: LocalizedText;
+  readonly description: LocalizedText | null;
   readonly lifecycle: "simple" | "editorial" | "none";
   readonly parent: {
     readonly collection: string;

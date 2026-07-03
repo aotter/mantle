@@ -3,8 +3,12 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Play, Wrench } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
-import { api, ApiError } from "../../lib/api";
-import type { StaffOperation } from "../../lib/types";
+import { api } from "../../lib/api";
+import { asRenderable } from "../../lib/errors";
+import { fieldLabel } from "../../lib/field-label";
+import { resolveLocalizedText } from "../../lib/localized-text";
+import { operationsQueryOptions } from "../../lib/queries";
+import type { SiteInfo, StaffOperation } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { SchemaFields } from "../content/entry-edit-view";
@@ -18,14 +22,16 @@ import { SchemaFields } from "../content/entry-edit-view";
  *  the sidebar's per-procedure links land on the right card. */
 export function OperationsView(): React.ReactElement {
   const { language } = usePreferences();
-  const operations = useQuery<{ operations: StaffOperation[] }>({
-    queryKey: ["operations"],
-    queryFn: () => api.get<{ operations: StaffOperation[] }>("/operations"),
+  const operations = useQuery(operationsQueryOptions());
+  const site = useQuery<SiteInfo>({
+    queryKey: ["site"],
+    queryFn: () => api.get<SiteInfo>("/site"),
   });
+  const canonical = site.data?.canonicalLocale ?? null;
 
   if (operations.isLoading) return <div className="glass-card h-64 animate-pulse" />;
   if (operations.isError) return <ErrorBox error={operations.error} />;
-  const list = operations.data?.operations ?? [];
+  const list = operations.data ?? [];
 
   return (
     <div className="space-y-6">
@@ -43,7 +49,7 @@ export function OperationsView(): React.ReactElement {
       ) : (
         <div className="space-y-4">
           {list.map((op) => (
-            <OperationCard key={op.name} operation={op} language={language} />
+            <OperationCard key={op.name} operation={op} language={language} canonical={canonical} />
           ))}
         </div>
       )}
@@ -54,9 +60,11 @@ export function OperationsView(): React.ReactElement {
 function OperationCard({
   operation,
   language,
+  canonical,
 }: {
   operation: StaffOperation;
   language: AdminLanguage;
+  canonical: string | null;
 }): React.ReactElement {
   const [input, setInput] = React.useState<Record<string, unknown>>({});
   const ref = React.useRef<HTMLDivElement | null>(null);
@@ -73,16 +81,19 @@ function OperationCard({
       api.post<{ ok: true; output: unknown }>(`/operations/${encodeURIComponent(operation.name)}`, body),
   });
 
+  const title = resolveLocalizedText(operation.title, language, canonical) ?? fieldLabel(operation.name);
+  const description = resolveLocalizedText(operation.description, language, canonical);
+
   return (
     <SectionCard className="space-y-4 scroll-mt-20" id={operation.name}>
       <div ref={ref} className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="flex items-center gap-2 text-base font-semibold">
             <Wrench className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-            {operation.name}
+            {title}
           </h2>
-          {operation.description ? (
-            <p className="mt-1 text-sm text-muted-foreground">{operation.description}</p>
+          {description ? (
+            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
           ) : null}
         </div>
         <div className="flex shrink-0 gap-1">
@@ -132,15 +143,4 @@ function OperationCard({
       ) : null}
     </SectionCard>
   );
-}
-
-/** The server returns structured diagnostics; surface their `message`
- *  instead of the generic HTTP statusText — mirrors `staff-view.tsx`. */
-function asRenderable(error: unknown): unknown {
-  if (error instanceof ApiError) {
-    const body = error.body as { diagnostic?: { message?: string } } | null;
-    const message = body?.diagnostic?.message;
-    if (message) return new Error(message);
-  }
-  return error;
 }

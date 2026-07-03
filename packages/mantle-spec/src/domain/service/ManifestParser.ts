@@ -29,6 +29,80 @@ import {
 } from "../model/ManifestGrammar.js";
 
 /**
+ * Shared shape validator for `LocalizedText` fields (`Schema.spec.title`
+ * / `.description`, `Procedure.spec.title` / `.description` — #430).
+ * Accepts:
+ *   - a non-empty string, or
+ *   - a plain object (not an array) with at least one own-enumerable
+ *     key, where every key AND every value is a non-empty string.
+ * Rejects everything else — including an empty string, an empty
+ * object, an array (arrays are `typeof "object"` in JS so they need an
+ * explicit `Array.isArray` guard), and any non-string property value.
+ * When `required` is `false` and `value` is `undefined`, this is a
+ * silent no-op (the field is simply absent).
+ */
+function validateLocalizedText(
+  value: unknown,
+  idx: number,
+  pointer: string,
+  fieldLabel: string,
+  required: boolean,
+): void {
+  if (value === undefined) {
+    if (required) {
+      throw new ManifestParseError(
+        `${fieldLabel} is required (non-empty string, or an object mapping locale → non-empty string)`,
+        idx,
+        pointer,
+      );
+    }
+    return;
+  }
+  if (typeof value === "string") {
+    if (value.length === 0) {
+      throw new ManifestParseError(
+        `${fieldLabel} must be a non-empty string when present (or an object mapping locale → non-empty string)`,
+        idx,
+        pointer,
+      );
+    }
+    return;
+  }
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) {
+      throw new ManifestParseError(
+        `${fieldLabel} object form must have at least one locale → string entry; got {}`,
+        idx,
+        pointer,
+      );
+    }
+    for (const [key, entryValue] of entries) {
+      if (key.length === 0) {
+        throw new ManifestParseError(
+          `${fieldLabel} object form keys must be non-empty locale codes; got an empty key`,
+          idx,
+          pointer,
+        );
+      }
+      if (typeof entryValue !== "string" || entryValue.length === 0) {
+        throw new ManifestParseError(
+          `${fieldLabel} object form value for locale '${key}' must be a non-empty string; got ${JSON.stringify(entryValue)}`,
+          idx,
+          `${pointer}/${key}`,
+        );
+      }
+    }
+    return;
+  }
+  throw new ManifestParseError(
+    `${fieldLabel} must be a non-empty string, or an object mapping locale → non-empty string; got ${JSON.stringify(value)}`,
+    idx,
+    pointer,
+  );
+}
+
+/**
  * Day-1 envelope-and-shape parser. Loop 1 (`mantle validate`) does
  * the cross-manifest checks (Trigger.target.procedure exists, View.from
  * is a Schema, etc.) — see ADR-0007 / `docs/authoring-contract.md`.
@@ -284,13 +358,20 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
   if (typeof s["schema"] !== "object" || s["schema"] === null) {
     throw new ManifestParseError("Schema.spec.schema is required", idx, "/spec/schema");
   }
-  if (typeof s["title"] !== "string" || (s["title"] as string).length === 0) {
-    throw new ManifestParseError(
-      "Schema.spec.title is required (non-empty string). It's the admin UI label — populate it in the user's primary language, not the bare metadata.name.",
-      idx,
-      "/spec/title",
-    );
-  }
+  validateLocalizedText(
+    s["title"],
+    idx,
+    "/spec/title",
+    "Schema.spec.title",
+    true,
+  );
+  validateLocalizedText(
+    s["description"],
+    idx,
+    "/spec/description",
+    "Schema.spec.description",
+    false,
+  );
   if ("localized" in s && typeof s["localized"] !== "boolean") {
     throw new ManifestParseError(
       `Schema.spec.localized must be a boolean; got ${JSON.stringify(s["localized"])}`,
@@ -533,6 +614,20 @@ function validateParamRef(
 
 function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureManifest {
   const s = m.spec as unknown as Record<string, unknown>;
+  validateLocalizedText(
+    s["title"],
+    idx,
+    "/spec/title",
+    "Procedure.spec.title",
+    false,
+  );
+  validateLocalizedText(
+    s["description"],
+    idx,
+    "/spec/description",
+    "Procedure.spec.description",
+    false,
+  );
   if (typeof s["input"] !== "object" || s["input"] === null) {
     throw new ManifestParseError("Procedure.spec.input is required (JSON Schema)", idx, "/spec/input");
   }
