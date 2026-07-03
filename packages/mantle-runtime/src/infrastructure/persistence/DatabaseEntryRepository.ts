@@ -170,21 +170,29 @@ export class DatabaseEntryRepository implements EntryRepository {
     // Fetch limit+1 to detect a next page without a second query —
     // the extra row never reaches the caller.
     const probe = limit + 1;
-    const stmt = args.status
-      ? this.db
-          .prepare(
-            `SELECT id, collection, status, version, data, author_id, created_at, updated_at
-             FROM entries WHERE collection = ? AND status = ?
-             ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?`,
-          )
-          .bind(args.collection, args.status, probe, offset)
-      : this.db
-          .prepare(
-            `SELECT id, collection, status, version, data, author_id, created_at, updated_at
-             FROM entries WHERE collection = ?
-             ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?`,
-          )
-          .bind(args.collection, probe, offset);
+    const conditions = ["collection = ?"];
+    const binds: unknown[] = [args.collection];
+    if (args.status) {
+      conditions.push("status = ?");
+      binds.push(args.status);
+    }
+    if (args.search) {
+      // LIKE over the raw JSON blob is dumb but fine at this scale —
+      // there's no FTS index. Escape the caller's own wildcards so a
+      // search for "50%" or "a_b" doesn't turn into an unintended
+      // pattern.
+      const term = escapeLikeTerm(args.search);
+      conditions.push("(id LIKE '%'||?||'%' ESCAPE '\\' OR data LIKE '%'||?||'%' ESCAPE '\\')");
+      binds.push(term, term);
+    }
+    binds.push(probe, offset);
+    const stmt = this.db
+      .prepare(
+        `SELECT id, collection, status, version, data, author_id, created_at, updated_at
+         FROM entries WHERE ${conditions.join(" AND ")}
+         ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?`,
+      )
+      .bind(...binds);
     const rows = await stmt.all<EntryDbRow>();
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
@@ -286,6 +294,13 @@ function rowFromDb(row: EntryDbRow): EntryRow {
 
 function jsonPathForTopLevelField(field: string): string {
   return `$."${field.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/** Escape LIKE metacharacters (`%`, `_`, and the escape char itself)
+ *  so a search term is matched literally as a substring. Paired with
+ *  `ESCAPE '\'` in the LIKE clause. */
+function escapeLikeTerm(term: string): string {
+  return term.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
 /**

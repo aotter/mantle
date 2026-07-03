@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, FileText, PencilLine, Plus, Search, Trash2, X } from "lucide-react";
+import { Check, Download, FileText, PencilLine, Plus, Search, Trash2, X } from "lucide-react";
 import { useAdminLocation } from "../../app/router";
 import { api } from "../../lib/api";
 import type { Collection, EntryEditorPayload, EntryRow, ListEntriesResult } from "../../lib/types";
@@ -38,7 +38,7 @@ export function CollectionView({
     },
   });
   const entries = useQuery<ListEntriesResult>({
-    queryKey: ["entries", collectionName, status ?? "all", language],
+    queryKey: ["entries", collectionName, status ?? "all", language, searchTerm],
     queryFn: () => {
       const qs = new URLSearchParams({
         collection: collectionName,
@@ -46,6 +46,7 @@ export function CollectionView({
         locale: language,
       });
       if (status) qs.set("status", status);
+      if (searchTerm) qs.set("search", searchTerm);
       return api.get<ListEntriesResult>(`/entries?${qs.toString()}`);
     },
   });
@@ -53,31 +54,59 @@ export function CollectionView({
   React.useEffect(() => {
     if (entries.data) setVisibleEntries(entries.data);
   }, [entries.data]);
-  const displayedEntries = entries.data ?? visibleEntries;
-  const filteredEntries = React.useMemo(() => {
-    if (!displayedEntries || !searchTerm) return displayedEntries;
-    const needle = searchTerm.toLocaleLowerCase();
-    return {
-      ...displayedEntries,
-      items: displayedEntries.items.filter((row) => {
-        const title = renderTitleText(row.title, language);
-        return [
-          row.id,
-          row.collection,
-          row.status,
-          row.locale ?? "",
-          title,
-        ].some((value) => String(value).toLocaleLowerCase().includes(needle));
-      }),
-    };
-  }, [displayedEntries, language, searchTerm]);
+  // Appended "load more" pages live in their own state, separate from
+  // the page-1 query. Reset whenever page 1 itself changes — a new
+  // collection/status/search/language combo, or a refetch of the
+  // current combo after a mutation — since stale appended pages would
+  // otherwise duplicate or drift out of sync with a fresh page 1.
+  const [extraItems, setExtraItems] = React.useState<EntryRow[]>([]);
+  const [nextCursor, setNextCursor] = React.useState<string | null>(null);
+  const [loadMoreError, setLoadMoreError] = React.useState<unknown>(null);
+  const [isLoadingMore, setIsLoadingMore] = React.useState(false);
+  React.useEffect(() => {
+    setExtraItems([]);
+    setNextCursor(entries.data?.next_cursor ?? null);
+    setLoadMoreError(null);
+  }, [collectionName, status, searchTerm, language, entries.data]);
+  const displayedEntries = React.useMemo(() => {
+    const base = entries.data ?? visibleEntries;
+    if (!base) return base;
+    return { ...base, items: [...base.items, ...extraItems] };
+  }, [entries.data, visibleEntries, extraItems]);
   const isFirstLoad = entries.isLoading && !displayedEntries;
+
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const clearSelection = React.useCallback(() => setSelected(new Set()), []);
 
   const collection = collectionsQuery.data?.find((c) => c.name === collectionName);
   const heading = collection ? collection.title : collectionName;
   const refreshEntries = React.useCallback(() => {
+    clearSelection();
     void queryClient.invalidateQueries({ queryKey: ["entries", collectionName] });
-  }, [collectionName, queryClient]);
+  }, [collectionName, queryClient, clearSelection]);
+
+  async function loadMore(): Promise<void> {
+    if (!nextCursor) return;
+    setIsLoadingMore(true);
+    setLoadMoreError(null);
+    try {
+      const qs = new URLSearchParams({
+        collection: collectionName,
+        limit: "99",
+        locale: language,
+        cursor: nextCursor,
+      });
+      if (status) qs.set("status", status);
+      if (searchTerm) qs.set("search", searchTerm);
+      const page = await api.get<ListEntriesResult>(`/entries?${qs.toString()}`);
+      setExtraItems((prev) => [...prev, ...page.items]);
+      setNextCursor(page.next_cursor);
+    } catch (err) {
+      setLoadMoreError(err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }
 
   const titleMutation = useMutation({
     mutationFn: ({ id, title, version }: { id: string; title: string; version: number }) =>
@@ -118,6 +147,16 @@ export function CollectionView({
         description={renderCollectionDescription(collection, language)}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                window.location.href = `/admin/api/entries/export?collection=${encodeURIComponent(collectionName)}`;
+              }}
+            >
+              <Download className="size-4" aria-hidden />
+              {t(language, "collection.export")}
+            </Button>
             <Button
               type="button"
               onClick={() => createMutation.mutate()}
@@ -163,7 +202,7 @@ export function CollectionView({
 
       {isFirstLoad && <EntriesSkeleton />}
       {entries.isError && !displayedEntries && <ErrorBox error={entries.error} />}
-      {filteredEntries && filteredEntries.items.length === 0 && (
+      {displayedEntries && displayedEntries.items.length === 0 && (
         <EmptyState
           icon={FileText}
           title={t(language, "collection.empty.title")}
@@ -176,11 +215,44 @@ export function CollectionView({
           }
         />
       )}
-      {filteredEntries && filteredEntries.items.length > 0 && (
+      {displayedEntries && displayedEntries.items.length > 0 && (
         <>
+          {selected.size > 0 ? (
+            <BulkActionBar
+              language={language}
+              collection={collection}
+              selectedIds={[...selected]}
+              onDone={refreshEntries}
+              onClear={clearSelection}
+            />
+          ) : null}
           <TableShell>
             <thead>
               <tr className="border-b border-[var(--glass-border)]">
+                <TableHeadCell className="w-10">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-[var(--primary)]"
+                    aria-label={t(language, "collection.table.selectAll")}
+                    checked={selected.size > 0 && displayedEntries.items.every((row) => selected.has(row.id))}
+                    ref={(el) => {
+                      if (!el) return;
+                      const someSelected = displayedEntries.items.some((row) => selected.has(row.id));
+                      const allSelected = displayedEntries.items.every((row) => selected.has(row.id));
+                      el.indeterminate = someSelected && !allSelected;
+                    }}
+                    onChange={(event) => {
+                      setSelected((prev) => {
+                        const next = new Set(prev);
+                        for (const row of displayedEntries.items) {
+                          if (event.target.checked) next.add(row.id);
+                          else next.delete(row.id);
+                        }
+                        return next;
+                      });
+                    }}
+                  />
+                </TableHeadCell>
                 <TableHeadCell>{t(language, "collection.table.id")}</TableHeadCell>
                 <TableHeadCell>{t(language, "collection.table.title")}</TableHeadCell>
                 <TableHeadCell>{t(language, "collection.table.status")}</TableHeadCell>
@@ -191,12 +263,21 @@ export function CollectionView({
               </tr>
             </thead>
             <tbody>
-              {filteredEntries.items.map((row) => (
+              {displayedEntries.items.map((row) => (
                 <EntryRowDisplay
                   key={row.id}
                   row={row}
                   language={language}
                   collection={collection}
+                  selected={selected.has(row.id)}
+                  onToggleSelect={(checked) => {
+                    setSelected((prev) => {
+                      const next = new Set(prev);
+                      if (checked) next.add(row.id);
+                      else next.delete(row.id);
+                      return next;
+                    });
+                  }}
                   onRename={(title) => titleMutation.mutateAsync({ id: row.id, title, version: row.version })}
                   onDelete={() => deleteMutation.mutateAsync(row.id)}
                   busy={
@@ -212,13 +293,123 @@ export function CollectionView({
               {t(language, "collection.refreshing")}
             </p>
           ) : null}
-          {filteredEntries.next_cursor ? (
-            <p className="mt-3 text-xs text-muted-foreground">
-              {t(language, "collection.moreRows")}
-            </p>
+          {loadMoreError ? <ErrorBox error={loadMoreError} /> : null}
+          {nextCursor ? (
+            <div className="mt-3">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void loadMore()}
+                disabled={isLoadingMore}
+              >
+                {isLoadingMore ? t(language, "crud.saving") : t(language, "collection.loadMore")}
+              </Button>
+            </div>
           ) : null}
         </>
       )}
+    </div>
+  );
+}
+
+function BulkActionBar({
+  language,
+  collection,
+  selectedIds,
+  onDone,
+  onClear,
+}: {
+  language: AdminLanguage;
+  collection: Collection | undefined;
+  selectedIds: string[];
+  onDone: () => void;
+  onClear: () => void;
+}): React.ReactElement {
+  const [pending, setPending] = React.useState<"publish" | "unpublish" | "delete" | null>(null);
+  const [failures, setFailures] = React.useState<unknown[]>([]);
+  const canPublish = collection && collection.lifecycle !== "none";
+
+  async function runBulk(
+    action: "publish" | "unpublish" | "delete",
+    call: (id: string) => Promise<unknown>,
+  ): Promise<void> {
+    setPending(action);
+    setFailures([]);
+    const errors: unknown[] = [];
+    for (const id of selectedIds) {
+      try {
+        await call(id);
+      } catch (err) {
+        errors.push(err);
+      }
+    }
+    setPending(null);
+    setFailures(errors);
+    onDone();
+  }
+
+  function bulkDelete(): void {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(t(language, "collection.bulk.deleteConfirm", { count: String(selectedIds.length) }))
+    ) {
+      return;
+    }
+    void runBulk("delete", (id) => api.delete(`/entries/${encodeURIComponent(id)}`));
+  }
+
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--glass-border)] bg-accent/40 px-3 py-2">
+      <span className="text-sm font-medium">
+        {t(language, "collection.bulk.selectedCount", { count: String(selectedIds.length) })}
+      </span>
+      <div className="ml-auto flex items-center gap-2">
+        {canPublish ? (
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={pending !== null}
+              onClick={() =>
+                void runBulk("publish", (id) => api.post(`/entries/${encodeURIComponent(id)}/publish`, {}))
+              }
+            >
+              {t(language, "collection.bulk.publish")}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={pending !== null}
+              onClick={() =>
+                void runBulk("unpublish", (id) => api.post(`/entries/${encodeURIComponent(id)}/unpublish`, {}))
+              }
+            >
+              {t(language, "collection.bulk.unpublish")}
+            </Button>
+          </>
+        ) : null}
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          disabled={pending !== null}
+          onClick={bulkDelete}
+        >
+          {t(language, "collection.bulk.delete")}
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onClear}>
+          <X className="size-3.5" aria-hidden />
+        </Button>
+      </div>
+      {failures.length > 0 ? (
+        <div className="w-full space-y-1">
+          {failures.map((err, index) => (
+            <ErrorBox key={index} error={err} />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -376,6 +567,8 @@ function EntryRowDisplay({
   row,
   language,
   collection,
+  selected,
+  onToggleSelect,
   onRename,
   onDelete,
   busy,
@@ -383,6 +576,8 @@ function EntryRowDisplay({
   row: EntryRow;
   language: AdminLanguage;
   collection: Collection | undefined;
+  selected: boolean;
+  onToggleSelect: (checked: boolean) => void;
   onRename: (title: string) => Promise<unknown>;
   onDelete: () => Promise<unknown>;
   busy: boolean;
@@ -426,6 +621,15 @@ function EntryRowDisplay({
 
   return (
     <tr className="border-t border-[var(--glass-border)] hover:bg-accent/40">
+      <TableCell>
+        <input
+          type="checkbox"
+          className="size-4 accent-[var(--primary)]"
+          aria-label={t(language, "collection.table.selectRow", { name: itemName })}
+          checked={selected}
+          onChange={(event) => onToggleSelect(event.target.checked)}
+        />
+      </TableCell>
       <TableCell className="font-mono text-xs text-muted-foreground">
         {String(row.id).slice(0, 8)}
       </TableCell>

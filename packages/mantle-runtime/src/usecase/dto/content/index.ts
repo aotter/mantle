@@ -49,6 +49,8 @@ export interface ListEntriesRequest {
   readonly limit?: number;
   /** Opaque cursor from a prior `ListEntriesResponse.nextCursor`. */
   readonly cursor?: string;
+  /** Free-text filter matched against `id` and the raw data blob. */
+  readonly search?: string;
 }
 
 export interface ListEntriesResponse<R> {

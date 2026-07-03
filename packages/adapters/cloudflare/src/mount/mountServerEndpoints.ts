@@ -337,9 +337,53 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       status: statusQuery && statusQuery !== "all" ? (statusQuery as ContentState) : undefined,
       limit: Number.isFinite(parsedLimit) ? parsedLimit : 99,
       cursor: c.req.query("cursor") ?? undefined,
+      search: c.req.query("search") || undefined,
     });
     const items = result.rows.map((row) => adminListItem(row, schemasByName));
     return jsonResponse(200, { items, next_cursor: result.nextCursor ?? null });
+  });
+
+  guarded("get", "/admin/api/entries/export", async (c) => {
+    const collection = c.req.query("collection");
+    const schema = collection ? schemasByName.get(collection) : undefined;
+    if (!collection || !schema) {
+      return jsonResponse(404, {
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "NOT_FOUND",
+          severity: "error",
+          path: "GET /admin/api/entries/export",
+          expected: "?collection=<name> naming a declared Schema",
+          message: collection
+            ? `Schema '${collection}' was not found.`
+            : "Missing `collection` query parameter.",
+        }),
+      });
+    }
+    const runtime = await ref.get();
+    const propertyNames = Object.keys(schema.spec.schema.properties ?? {});
+    const columns = ["id", "status", "version", "updated_at", ...propertyNames];
+    const lines = [csvRow(columns)];
+    let cursor: string | undefined;
+    do {
+      const page = await runtime.listEntries.executePage({ collection, cursor });
+      for (const row of page.rows) {
+        lines.push(
+          csvRow(
+            columns.map((column) => csvValue(column, row, propertyNames)),
+          ),
+        );
+      }
+      cursor = page.nextCursor;
+    } while (cursor);
+    const csv = "﻿" + lines.join("\r\n") + "\r\n";
+    return new Response(csv, {
+      status: 200,
+      headers: {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename="${collection}.csv"`,
+      },
+    });
   });
 
   guarded("get", "/admin/api/entries/:id", async (c) =>
@@ -589,6 +633,38 @@ function adminListItem(
     title: adminEntryTitle(row.data, schemasByName.get(row.collection)?.spec.schema),
     updated_at: row.updatedAt,
   };
+}
+
+/** RFC 4180 field quoting: quote whenever the value contains a comma,
+ *  quote, or newline; escape embedded quotes by doubling them. */
+function csvField(value: string): string {
+  if (/[",\r\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  return value;
+}
+
+function csvRow(fields: readonly string[]): string {
+  return fields.map(csvField).join(",");
+}
+
+/** Reads one CSV column's value off an entry row. The four leading
+ *  columns are row metadata; everything else is a Schema property
+ *  read from `data`. Non-scalar values (objects, arrays) are
+ *  JSON-stringified. */
+function csvValue(
+  column: string,
+  row: AdminEntryRow,
+  propertyNames: readonly string[],
+): string {
+  if (column === "id") return row.id;
+  if (column === "status") return row.status;
+  if (column === "version") return String(row.version);
+  if (column === "updated_at") return String(row.updatedAt);
+  if (!propertyNames.includes(column)) return "";
+  const value = row.data[column];
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return JSON.stringify(value);
 }
 
 type AdminEntryRow = {
