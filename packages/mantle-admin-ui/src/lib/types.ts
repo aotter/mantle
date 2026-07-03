@@ -166,6 +166,27 @@ export interface CommittedMediaAsset {
   variants: MediaAssetVariant[];
 }
 
+/** `GET /admin/api/operations` entry (#426) — a staff-operable
+ *  Procedure derived from the manifest (some Trigger targets it via
+ *  `source.kind: "mcp"` + `surface: "staff"`, or `source.kind: "http"`
+ *  with a `ctx.staff` auth predicate). */
+export interface StaffOperation {
+  name: string;
+  description: string | null;
+  input: JsonSchema;
+  triggers: Array<"mcp" | "http">;
+}
+
+/** `GET /admin/api/views-manifest` entry (#426) — a read-only View
+ *  projection over a Schema. `params` is the View's declared
+ *  parameter JSON Schema, or `null` when the View takes none. */
+export interface ViewManifestInfo {
+  name: string;
+  from: string;
+  params: JsonSchema | null;
+  fields: string[] | null;
+}
+
 export const EDITORIAL_STATUSES: SidebarStatus[] = [
   "draft",
   "review",

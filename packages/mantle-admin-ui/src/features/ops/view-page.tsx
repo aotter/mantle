@@ -1,0 +1,261 @@
+import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Search } from "lucide-react";
+import { usePreferences } from "../../app/preferences";
+import { t } from "../../app/i18n";
+import { api } from "../../lib/api";
+import type { Collection, JsonSchema, ViewManifestInfo } from "../../lib/types";
+import { TableCell, TableHeadCell, TableShell } from "../../ui/admin-table";
+import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { Button } from "../../ui/button";
+import { SchemaFields } from "../content/entry-edit-view";
+import { formatMoneyMinor, formatTimestampMs, moneyMinorHint, timestampHint } from "../content/field-render";
+
+/** Mirrors `VIEW_PARAMS_RESERVED` in `@aotter/mantle-spec`'s manifest
+ *  grammar (`page`, `show`, plus `cursor` which the admin UI doesn't
+ *  surface a control for). `mantle-admin-ui` has no dependency on
+ *  `mantle-spec` — it only talks JSON over HTTP — so the two names the
+ *  UI needs are inlined here rather than adding that dependency. */
+const VIEW_RESERVED_PARAM_NAMES = ["page", "show"] as const;
+
+interface ViewQueryResult {
+  ok: true;
+  data: {
+    rows: Array<Record<string, unknown>>;
+    page: number;
+    show: number;
+    hasMore: boolean;
+  };
+}
+
+/** Fetches `GET /api/views/<name>` — the public REST surface Views
+ *  already have (no new server work needed for basic listing; see
+ *  #426 report). Distinct from `lib/api.ts`'s `api` helper because
+ *  that one is hardcoded to the `/admin/api` base path, while Views
+ *  are served at the site root so non-admin callers can reach them
+ *  too. Reuses the admin session cookie via `credentials: same-origin`
+ *  same as `lib/api.ts`. */
+async function fetchView(
+  name: string,
+  params: Record<string, unknown>,
+): Promise<ViewQueryResult> {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue;
+    qs.set(key, String(value));
+  }
+  const suffix = qs.toString();
+  const res = await fetch(`/api/views/${encodeURIComponent(name)}${suffix ? `?${suffix}` : ""}`, {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+  });
+  const body = (await res.json()) as ViewQueryResult | { ok: false; diagnostic: { message: string } };
+  if (!res.ok || !body.ok) {
+    const message = "diagnostic" in body ? body.diagnostic.message : `${res.status} ${res.statusText}`;
+    throw new Error(message);
+  }
+  return body;
+}
+
+/** #426 — read-only View page. Fetches the View's row set from the
+ *  existing public `/api/views/<name>` REST surface, renders a
+ *  SchemaFields-driven parameter form when the View declares
+ *  `params`, and a plain table for the rows. Column formatting
+ *  (money-minor / timestamp-ms) is resolved against the source
+ *  Schema's properties when that Schema is present in the
+ *  client-side collections list (already fetched by
+ *  `AuthenticatedLayout`); falls back to raw values when the View's
+ *  `from` is a translation-child Schema not exposed on
+ *  `/admin/api/collections`. */
+export function ViewPage({ name }: { name: string }): React.ReactElement {
+  const { language } = usePreferences();
+  const viewsQuery = useQuery<{ views: ViewManifestInfo[] }>({
+    queryKey: ["views-manifest"],
+    queryFn: () => api.get<{ views: ViewManifestInfo[] }>("/views-manifest"),
+  });
+  const collectionsQuery = useQuery<Collection[]>({
+    queryKey: ["collections"],
+    queryFn: async () => {
+      const res = await api.get<{ collections: Collection[] }>("/collections");
+      return res.collections;
+    },
+  });
+
+  const view = viewsQuery.data?.views.find((v) => v.name === name);
+  const sourceSchema = collectionsQuery.data?.find((c) => c.name === view?.from)?.schema;
+
+  const [params, setParams] = React.useState<Record<string, unknown>>({});
+  const [page, setPage] = React.useState<string>("");
+  const [show, setShow] = React.useState<string>("");
+
+  const query = useQuery<ViewQueryResult>({
+    queryKey: ["view", name, params, page, show],
+    queryFn: () =>
+      fetchView(name, {
+        ...params,
+        ...(page ? { page } : {}),
+        ...(show ? { show } : {}),
+      }),
+    enabled: !!view,
+  });
+
+  if (viewsQuery.isLoading || collectionsQuery.isLoading) {
+    return <div className="glass-card h-64 animate-pulse" />;
+  }
+  if (viewsQuery.isError) return <ErrorBox error={viewsQuery.error} />;
+  if (!view) {
+    return (
+      <div className="space-y-6">
+        <PageHeader eyebrow="AotterMantle" title={t(language, "views.notFound.title")} />
+      </div>
+    );
+  }
+
+  const rows = query.data?.data.rows ?? [];
+  const columns = viewColumns(view, rows);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="AotterMantle"
+        title={view.name}
+        description={t(language, "views.page.body", { schema: view.from })}
+      />
+
+      {view.params ? (
+        <SectionCard className="space-y-4">
+          <h2 className="text-sm font-semibold">{t(language, "views.params.title")}</h2>
+          <SchemaFields
+            schema={view.params}
+            value={params}
+            path={[]}
+            onChange={setParams}
+            language={language}
+            collectionName={view.name}
+            mediaPurposes={[]}
+          />
+          <ReservedParamInputs page={page} show={show} onPage={setPage} onShow={setShow} />
+          <Button type="button" onClick={() => void query.refetch()} disabled={query.isFetching}>
+            <Search className="size-4" aria-hidden />
+            {query.isFetching ? t(language, "views.running") : t(language, "views.run")}
+          </Button>
+        </SectionCard>
+      ) : (
+        <SectionCard className="space-y-4">
+          <ReservedParamInputs page={page} show={show} onPage={setPage} onShow={setShow} />
+          <Button type="button" onClick={() => void query.refetch()} disabled={query.isFetching}>
+            <Search className="size-4" aria-hidden />
+            {query.isFetching ? t(language, "views.running") : t(language, "views.run")}
+          </Button>
+        </SectionCard>
+      )}
+
+      {query.isError ? <ErrorBox error={query.error} /> : null}
+
+      {query.data && rows.length === 0 ? (
+        <EmptyState title={t(language, "views.empty.title")} description={t(language, "views.empty.body")} />
+      ) : null}
+
+      {rows.length > 0 ? (
+        <TableShell>
+          <thead>
+            <tr className="border-b border-[var(--glass-border)]">
+              {columns.map((col) => (
+                <TableHeadCell key={col}>{fieldLabel(col)}</TableHeadCell>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={index} className="border-t border-[var(--glass-border)]">
+                {columns.map((col) => (
+                  <TableCell key={col} className="text-muted-foreground">
+                    {renderViewValue(sourceSchema, col, row[col])}
+                  </TableCell>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </TableShell>
+      ) : null}
+    </div>
+  );
+}
+
+function ReservedParamInputs({
+  page,
+  show,
+  onPage,
+  onShow,
+}: {
+  page: string;
+  show: string;
+  onPage: (v: string) => void;
+  onShow: (v: string) => void;
+}): React.ReactElement {
+  const [pageParam, showParam] = VIEW_RESERVED_PARAM_NAMES;
+  return (
+    <div className="flex flex-wrap gap-3">
+      <label className="grid gap-1.5 text-sm font-medium">
+        <span>{fieldLabel(pageParam)}</span>
+        <input
+          className="admin-input w-28"
+          type="number"
+          min={1}
+          value={page}
+          onChange={(event) => onPage(event.target.value)}
+        />
+      </label>
+      <label className="grid gap-1.5 text-sm font-medium">
+        <span>{fieldLabel(showParam)}</span>
+        <input
+          className="admin-input w-28"
+          type="number"
+          min={1}
+          value={show}
+          onChange={(event) => onShow(event.target.value)}
+        />
+      </label>
+    </div>
+  );
+}
+
+/** Columns = the View's declared `fields` projection when present,
+ *  else every key seen across the returned rows (union, first-seen
+ *  order) — a View with no `fields` projects every source column and
+ *  the row shape is the only signal the client has. */
+function viewColumns(view: ViewManifestInfo, rows: ReadonlyArray<Record<string, unknown>>): string[] {
+  if (view.fields && view.fields.length > 0) return [...view.fields];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    for (const key of Object.keys(row)) seen.add(key);
+  }
+  return [...seen];
+}
+
+/** Reuses the money-minor / timestamp-ms formatting convention from
+ *  `field-render.ts` against the source Schema's property, when that
+ *  Schema was resolved. Falls back to raw values otherwise. */
+function renderViewValue(sourceSchema: JsonSchema | undefined, column: string, value: unknown): React.ReactNode {
+  const fieldSchema = sourceSchema?.properties?.[column];
+  if (moneyMinorHint(fieldSchema)) {
+    const formatted = formatMoneyMinor(value, undefined);
+    if (formatted) return formatted;
+  }
+  if (timestampHint(fieldSchema)) {
+    const formatted = formatTimestampMs(value);
+    if (formatted) return formatted;
+  }
+  if (value == null || value === "") return <span className="text-muted-foreground">-</span>;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return <span className="font-mono text-xs">{JSON.stringify(value)}</span>;
+}
+
+function fieldLabel(name: string): string {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}

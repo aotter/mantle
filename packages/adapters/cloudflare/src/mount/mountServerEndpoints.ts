@@ -10,7 +10,10 @@ import {
   type ContentState,
   type Diagnostic,
   type JsonSchema,
+  type Manifest,
+  type ProcedureManifest,
   type SchemaManifest,
+  type ViewManifest,
 } from "@aotter/mantle-spec";
 import {
   ViewParamCoercionError,
@@ -119,6 +122,8 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     "/admin/preferences",
     "/admin/settings",
     "/admin/staff",
+    "/admin/ops",
+    "/admin/views/:name",
   ]) {
     app.get(path, spa);
   }
@@ -133,6 +138,32 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   const collections = schemas
     .filter((s) => !s.spec.translates)
     .map((s) => adminEditorCollection(s, schemas));
+
+  // Staff-operable Procedures (#426): precompute at mount, same as
+  // `collections` above — `ref.manifests` is immutable post-boot.
+  const operations = discoverStaffOperations(ref.manifests);
+  const operationsByName = new Map(operations.map((op) => [op.name, op]));
+
+  // Views projection (#426) — least-code option: a dedicated
+  // `/admin/api/views-manifest` endpoint rather than folding into
+  // `/admin/api/site`. Reasoning: `/admin/api/site` payload is
+  // site-config-shaped (title/brand/locales/mcp URLs) and consumed by
+  // several unrelated views (entry editor, settings) via a shared
+  // `SiteInfo` query key; growing it with an unrelated `views: [...]`
+  // array would force every one of those call sites to widen their
+  // type and would invalidate/refetch on unrelated site-settings
+  // changes. A dedicated guarded route mirrors the existing
+  // `/admin/api/collections` precedent exactly (same shape of
+  // "precompute at mount from ref.manifests, list on GET") and needs
+  // no changes to the `SiteInfo` type or its query key.
+  const viewsManifest = ref.manifests
+    .filter((m): m is ViewManifest => m.kind === "View")
+    .map((v) => ({
+      name: v.metadata.name,
+      from: v.spec.from,
+      params: v.spec.params ?? null,
+      fields: v.spec.fields ?? null,
+    }));
 
   type StaffGateOk = Extract<StaffGate, { kind: "ok" }>;
   const guarded = (
@@ -270,6 +301,56 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   });
 
   guarded("get", "/admin/api/collections", () => jsonResponse(200, { collections }));
+
+  guarded("get", "/admin/api/views-manifest", () => jsonResponse(200, { views: viewsManifest }));
+
+  guarded("get", "/admin/api/operations", () =>
+    jsonResponse(200, {
+      operations: operations.map((op) => ({
+        name: op.name,
+        description: op.description,
+        input: op.input,
+        triggers: op.triggers,
+      })),
+    }),
+  );
+
+  guarded("post", "/admin/api/operations/:name", async (c, gate) => {
+    const name = c.req.param("name") ?? "";
+    const op = operationsByName.get(name);
+    if (!op) {
+      return jsonResponse(404, {
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "NOT_FOUND",
+          severity: "error",
+          path: `POST /admin/api/operations/${name}`,
+          expected: "a staff-operable Procedure name from GET /admin/api/operations",
+          message: `No staff-operable operation named '${name}'.`,
+        }),
+      });
+    }
+    return runUseCase(`POST /admin/api/operations/${name}`, async () => {
+      const runtime = await ref.get();
+      const input = (await c.req.raw.json().catch(() => ({}))) as unknown;
+      // Reuse the exact use case the staff MCP surface invokes
+      // Procedures through (`McpJsonRpcDispatcher.dispatchToolByName`
+      // → `runtime.invokeProcedure.execute`) — same auth evaluation,
+      // same input/output validation, same handler dispatch. The
+      // staff HandlerContext below mirrors the MCP dispatcher's
+      // `procCtx` construction 1:1.
+      const result = await runtime.invokeProcedure.execute({
+        procedure: op.procedure,
+        input: objectField(input),
+        ctx: adminHandlerContext(c, gate),
+        pathPrefix: `POST /admin/api/operations/${name}`,
+      });
+      if (!result.ok) {
+        throw new DiagnosticError(result.diagnostic);
+      }
+      return { ok: true, output: result.data };
+    });
+  });
 
   guarded("get", "/admin/api/site", async (c) => {
     const runtime = await ref.get();
@@ -585,6 +666,71 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       }),
     );
   });
+}
+
+type StaffOperation = {
+  readonly name: string;
+  readonly description: string | null;
+  readonly input: JsonSchema;
+  readonly triggers: ReadonlyArray<"mcp" | "http">;
+  readonly procedure: ProcedureManifest;
+};
+
+/**
+ * Derivation rule (#426, manifest-only, no new grammar): a Procedure
+ * is staff-operable iff some Trigger targets it with either
+ *   (a) `source.kind: "mcp"` and `source.surface === "staff"` — the
+ *       exact predicate `collectMcpProcedures` in `mountMcp.ts` uses
+ *       to build the `/mcp/staff` tool catalog, or
+ *   (b) `source.kind: "http"` AND the procedure's `spec.requires?.auth`
+ *       predicates include a `ctx.staff` entry.
+ *
+ * `triggers` on the result lists every distinct kind ("mcp" | "http")
+ * that qualified the procedure, in Trigger declaration order,
+ * deduplicated — a Procedure can be both an MCP staff tool and an
+ * HTTP Trigger simultaneously.
+ */
+function discoverStaffOperations(manifests: readonly Manifest[]): readonly StaffOperation[] {
+  const procedures = new Map<string, ProcedureManifest>();
+  for (const m of manifests) {
+    if (m.kind === "Procedure") procedures.set(m.metadata.name, m);
+  }
+  const triggerKindsByProcedure = new Map<string, Set<"mcp" | "http">>();
+  for (const m of manifests) {
+    if (m.kind !== "Trigger") continue;
+    const source = m.spec.source;
+    const procedureName = m.spec.target.procedure;
+    const procedure = procedures.get(procedureName);
+    if (!procedure) continue;
+
+    const isStaffMcp = source.kind === "mcp" && source.surface === "staff";
+    const isStaffHttp = source.kind === "http" && hasCtxStaffPredicate(procedure);
+    if (!isStaffMcp && !isStaffHttp) continue;
+
+    const kind: "mcp" | "http" = source.kind === "mcp" ? "mcp" : "http";
+    const set = triggerKindsByProcedure.get(procedureName) ?? new Set();
+    set.add(kind);
+    triggerKindsByProcedure.set(procedureName, set);
+  }
+
+  const out: StaffOperation[] = [];
+  for (const [name, kinds] of triggerKindsByProcedure) {
+    const procedure = procedures.get(name);
+    if (!procedure) continue;
+    out.push({
+      name,
+      description: procedure.spec.input.description ?? null,
+      input: procedure.spec.input,
+      triggers: [...kinds],
+      procedure,
+    });
+  }
+  return out;
+}
+
+function hasCtxStaffPredicate(procedure: ProcedureManifest): boolean {
+  const predicates = procedure.spec.requires?.auth?.all ?? [];
+  return predicates.some((pred) => typeof pred === "object" && pred !== null && "ctx.staff" in pred);
 }
 
 function adminEntryTitle(data: Record<string, unknown>, schema?: JsonSchema): unknown {

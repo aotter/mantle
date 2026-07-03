@@ -1,12 +1,14 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  BarChart3,
   ClipboardList,
   Folder,
   Globe,
   Home,
   Settings as SettingsIcon,
   Users,
+  Wrench,
 } from "lucide-react";
 
 import { LayoutProvider } from "../context/layout-provider";
@@ -19,6 +21,8 @@ import {
   type Collection,
   type SiteInfo,
   type SidebarStatus,
+  type StaffOperation,
+  type ViewManifestInfo,
 } from "../lib/types";
 import { useAdminLocation } from "../app/router";
 import { usePreferences, type AdminLanguage } from "../app/preferences";
@@ -72,6 +76,22 @@ export function AuthenticatedLayout({
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
   });
+  // One extra query each (#426), cached under their own query keys so
+  // they don't refetch alongside unrelated collection/site changes.
+  const operationsQuery = useQuery<StaffOperation[]>({
+    queryKey: ["operations"],
+    queryFn: async () => {
+      const res = await api.get<{ operations: StaffOperation[] }>("/operations");
+      return res.operations;
+    },
+  });
+  const viewsQuery = useQuery<ViewManifestInfo[]>({
+    queryKey: ["views-manifest"],
+    queryFn: async () => {
+      const res = await api.get<{ views: ViewManifestInfo[] }>("/views-manifest");
+      return res.views;
+    },
+  });
 
   const resolvedBrand = React.useMemo<AdminBrand>(
     () => ({
@@ -83,8 +103,15 @@ export function AuthenticatedLayout({
   );
 
   const groups = React.useMemo<ReadonlyArray<NavGroupData>>(
-    () => buildNavGroups(collectionsQuery.data ?? [], language, me.data?.role ?? null),
-    [collectionsQuery.data, language, me.data?.role],
+    () =>
+      buildNavGroups(
+        collectionsQuery.data ?? [],
+        operationsQuery.data ?? [],
+        viewsQuery.data ?? [],
+        language,
+        me.data?.role ?? null,
+      ),
+    [collectionsQuery.data, operationsQuery.data, viewsQuery.data, language, me.data?.role],
   );
   const firstCollection = React.useMemo<{ name: string; title: string } | null>(() => {
     const first = (collectionsQuery.data ?? []).find((collection) => !collection.parent);
@@ -135,6 +162,8 @@ export function AuthenticatedLayout({
 
 function buildNavGroups(
   collections: ReadonlyArray<Collection>,
+  operations: ReadonlyArray<StaffOperation>,
+  views: ReadonlyArray<ViewManifestInfo>,
   language: AdminLanguage,
   role: AdminUser["role"],
 ): ReadonlyArray<NavGroupData> {
@@ -157,11 +186,38 @@ function buildNavGroups(
     items: contentCollections.map((c) => collectionNavItem(c, language)),
   };
 
-  const operationsGroup: NavGroupData | null =
+  const recordsGroup: NavGroupData | null =
     operationalCollections.length > 0
       ? {
           title: t(language, "nav.operations"),
           items: operationalCollections.map((c) => collectionNavItem(c, language)),
+        }
+      : null;
+
+  // 「操作」— one item per staff-operable Procedure (#426), linking to
+  // the ops page anchored at that procedure's card.
+  const opsGroup: NavGroupData | null =
+    operations.length > 0
+      ? {
+          title: t(language, "nav.ops"),
+          items: operations.map((op) => ({
+            title: fieldLabel(op.name),
+            icon: Wrench,
+            url: `/admin/ops#${op.name}`,
+          })),
+        }
+      : null;
+
+  // 「報表」— one item per read-only View (#426).
+  const reportsGroup: NavGroupData | null =
+    views.length > 0
+      ? {
+          title: t(language, "nav.reports"),
+          items: views.map((v) => ({
+            title: fieldLabel(v.name),
+            icon: BarChart3,
+            url: `/admin/views/${encodeURIComponent(v.name)}`,
+          })),
         }
       : null;
 
@@ -183,9 +239,26 @@ function buildNavGroups(
     ],
   };
 
-  return operationsGroup
-    ? [homeGroup, contentGroup, operationsGroup, moreGroup]
-    : [homeGroup, contentGroup, moreGroup];
+  return [
+    homeGroup,
+    contentGroup,
+    ...(recordsGroup ? [recordsGroup] : []),
+    ...(opsGroup ? [opsGroup] : []),
+    ...(reportsGroup ? [reportsGroup] : []),
+    moreGroup,
+  ];
+}
+
+/** Mirrors the server's `fieldLabel` (mountServerEndpoints doesn't
+ *  expose one for procedure/view names, so this is the client-side
+ *  copy already used for Schema property labels in
+ *  `entry-edit-view.tsx` / `collection-view.tsx`) — kebab/snake/camel
+ *  procedure and View names read as "Title Case" nav labels. */
+function fieldLabel(name: string): string {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function collectionNavItem(c: Collection, language: AdminLanguage): NavItem {

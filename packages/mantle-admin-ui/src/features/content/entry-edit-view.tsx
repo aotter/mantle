@@ -243,7 +243,7 @@ function MetaRow({
   );
 }
 
-function SchemaFields({
+export function SchemaFields({
   schema,
   value,
   path,
@@ -310,6 +310,10 @@ function SchemaField({
   const label = fieldLabel(name);
   const description = typeof schema.description === "string" ? schema.description : undefined;
   const setValue = (next: unknown): void => onChange(writePath(rootValue, path, next));
+  // Server-stamped field (#428): the runtime writes `x-mantle-bind`
+  // properties itself (ctx.user / ctx.staff / now) — caller writes are
+  // rejected anyway, so render read-only instead of a live control.
+  const readOnly = isMantleBoundField(schema);
 
   return (
     <div className="space-y-2">
@@ -325,7 +329,11 @@ function SchemaField({
         ) : null}
       </label>
       {description ? <p className="text-xs leading-5 text-muted-foreground">{description}</p> : null}
-      {schema.enum ? (
+      {readOnly ? (
+        <p className="admin-input cursor-not-allowed bg-muted/40 text-muted-foreground" title={String(schema["x-mantle-bind"])}>
+          {stringForInput(value) || t(language, "entryEdit.emptyOption")}
+        </p>
+      ) : schema.enum ? (
         <select
           className="admin-input"
           value={stringForInput(value)}
@@ -740,6 +748,15 @@ function multilineField(schema: JsonSchema, name: string): boolean {
 
 function isMediaAssetRef(schema: JsonSchema): boolean {
   return schema["x-mantle-ref"] === "media_assets";
+}
+
+/** `x-mantle-bind` marks a Schema property the runtime stamps itself
+ *  (`ctx.user`, `ctx.staff`, or `now` — see `MANTLE_BIND_VALUES` in
+ *  the manifest grammar). Caller writes to these are rejected
+ *  server-side regardless of what the admin UI sends, so the field
+ *  renders read-only here rather than as a live, editable control. */
+function isMantleBoundField(schema: JsonSchema): boolean {
+  return typeof schema["x-mantle-bind"] === "string";
 }
 
 function fieldLabel(name: string): string {

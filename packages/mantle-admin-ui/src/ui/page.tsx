@@ -34,13 +34,19 @@ export function PageHeader({
 }
 
 export function SectionCard({
+  id,
   className,
   children,
 }: {
+  id?: string;
   className?: string;
   children: React.ReactNode;
 }): React.ReactElement {
-  return <section className={cn("glass-card p-5", className)}>{children}</section>;
+  return (
+    <section id={id} className={cn("glass-card p-5", className)}>
+      {children}
+    </section>
+  );
 }
 
 export function EmptyState({

@@ -10,6 +10,8 @@ import { HomeView } from "../features/console/home-view";
 import { CollectionView } from "../features/content/collection-view";
 import { EntryEditView } from "../features/content/entry-edit-view";
 import { EditorView } from "../features/editor/editor-view";
+import { OperationsView } from "../features/ops/operations-view";
+import { ViewPage } from "../features/ops/view-page";
 import { ApprovalsView } from "../features/system/approvals-view";
 import { NotFoundView } from "../features/system/not-found-view";
 import { PreferencesView } from "../features/system/preferences-view";
@@ -116,6 +118,23 @@ function Gate({ path }: { path: string }): React.ReactElement {
     return (
       <AuthenticatedLayout>
         <ApprovalsView />
+      </AuthenticatedLayout>
+    );
+  }
+
+  if (path === "/admin/ops") {
+    return (
+      <AuthenticatedLayout>
+        <OperationsView />
+      </AuthenticatedLayout>
+    );
+  }
+
+  const viewMatch = path.match(/^\/admin\/views\/([^/]+)\/?$/);
+  if (viewMatch) {
+    return (
+      <AuthenticatedLayout>
+        <ViewPage name={decodeURIComponent(viewMatch[1]!)} />
       </AuthenticatedLayout>
     );
   }
