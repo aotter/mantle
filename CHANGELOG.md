@@ -6,6 +6,33 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.42] - 2026-07-03
+
+### Added
+
+- **@aotter/mantle-spec**: add `lifecycle: none` for operational collections (#422).
+- **@aotter/mantle-spec / @aotter/mantle-admin-ui**: add `LocalizedText` titles, `Procedure.spec.title`/`description`, and row-level actions via `x-mantle-ref` (#430).
+- **@aotter/mantle-admin-ui**: add a staff operations page for invoking Procedures and read-only View pages (#426).
+- **@aotter/mantle-admin-ui**: add cursor pagination and server-side search to collection lists (#423).
+- **@aotter/mantle-admin-ui**: add CSV export and bulk actions to collection lists (#427).
+- **@aotter/mantle-admin-ui**: add money-minor/timestamp-ms render hints and `lifecycle: none` list columns (#424).
+- **@aotter/mantle-admin-ui**: add a create-entry button.
+- **@aotter/mantle-admin-ui**: group the sidebar into content/operations sections with approvals gating (#425).
+
+### Changed
+
+- **@aotter/mantle-admin-ui**: make the generated console fully manifest-driven — remove hardcoded ecommerce shapes (the collection labels map, SKU editor, fake media library, and storefront settings fields) (#422).
+- **@aotter/mantle-runtime**: draft saves are now partial; required-field enforcement happens at publish time.
+- **@aotter/mantle-admin-ui**: fields bound via `x-mantle-bind` render read-only.
+- **@aotter/mantle-admin-ui**: de-jargon operator-facing copy (#429).
+- **@aotter/mantle-spec**: `collectionParentFor` now requires refs to a required field.
+
+### Fixed
+
+- **@aotter/mantle-admin-ui**: derive dark-mode input/toolbar backgrounds from glass tokens.
+- **@aotter/mantle-admin-ui**: fix the mobile sidebar trigger.
+- **@aotter/mantle-admin-ui**: fix tablet horizontal overflow with `min-w-0`.
+
 ## [0.0.11-alpha.41] - 2026-07-01
 
 ### Changed
