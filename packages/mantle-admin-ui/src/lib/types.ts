@@ -121,6 +121,9 @@ export interface EntryRow {
   version: number;
   title: unknown;
   updated_at: number;
+  /** First 3 `required` schema properties (skipping the one used as
+   *  the title), present only for `lifecycle: "none"` collections. */
+  data_preview?: Record<string, unknown>;
 }
 
 export interface ListEntriesResult {

@@ -139,6 +139,9 @@ function buildNavGroups(
   role: AdminUser["role"],
 ): ReadonlyArray<NavGroupData> {
   const primaryCollections = collections.filter((collection) => !collection.parent);
+  const contentCollections = primaryCollections.filter((c) => c.lifecycle !== "none");
+  const operationalCollections = primaryCollections.filter((c) => c.lifecycle === "none");
+  const hasEditorial = collections.some((c) => c.lifecycle === "editorial");
   const homeGroup: NavGroupData = {
     items: [
       {
@@ -151,42 +154,26 @@ function buildNavGroups(
 
   const contentGroup: NavGroupData = {
     title: t(language, "nav.content"),
-    items: primaryCollections.map<NavItem>((c) => {
-      // Leading icon is always Folder so every content row reads the
-      // same. The Globe sits in the trailing `marker` slot to mark
-      // collections that fold a translation-child schema underneath
-      // — POC sidebar contract.
-      const base = {
-        title: c.title,
-        icon: Folder,
-        marker: c.hasTranslations ? Globe : undefined,
-      };
-      const statuses = statusesFor(c);
-      // Operational records (lifecycle: none) have no status buckets —
-      // a plain link beats a collapsible with one child.
-      if (statuses.length === 0) {
-        return { ...base, url: `/admin/c/${c.name}` };
-      }
-      return {
-        ...base,
-        items: [
-          {
-            title: t(language, "collection.filter.all"),
-            url: `/admin/c/${c.name}`,
-          },
-          ...statuses.map<NavLink>((status) => ({
-            title: statusLabel(language, status),
-            url: `/admin/c/${c.name}?status=${status}`,
-          })),
-        ],
-      };
-    }),
+    items: contentCollections.map((c) => collectionNavItem(c, language)),
   };
+
+  const operationsGroup: NavGroupData | null =
+    operationalCollections.length > 0
+      ? {
+          title: t(language, "nav.operations"),
+          items: operationalCollections.map((c) => collectionNavItem(c, language)),
+        }
+      : null;
 
   const moreGroup: NavGroupData = {
     title: t(language, "nav.more"),
     items: [
-      { title: t(language, "nav.approvals"), url: "/admin/approvals", icon: ClipboardList },
+      // Deep links to /admin/approvals stay live regardless; the nav
+      // entry only shows up when there's an editorial collection with
+      // an approval queue behind it.
+      ...(hasEditorial
+        ? [{ title: t(language, "nav.approvals"), url: "/admin/approvals", icon: ClipboardList }]
+        : []),
       { title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon },
       // Staff management is owner-only server-side; hide the entry for
       // everyone else rather than render a guaranteed 403.
@@ -196,7 +183,40 @@ function buildNavGroups(
     ],
   };
 
-  return [homeGroup, contentGroup, moreGroup];
+  return operationsGroup
+    ? [homeGroup, contentGroup, operationsGroup, moreGroup]
+    : [homeGroup, contentGroup, moreGroup];
+}
+
+function collectionNavItem(c: Collection, language: AdminLanguage): NavItem {
+  // Leading icon is always Folder so every content row reads the
+  // same. The Globe sits in the trailing `marker` slot to mark
+  // collections that fold a translation-child schema underneath
+  // — POC sidebar contract.
+  const base = {
+    title: c.title,
+    icon: Folder,
+    marker: c.hasTranslations ? Globe : undefined,
+  };
+  const statuses = statusesFor(c);
+  // Operational records (lifecycle: none) have no status buckets —
+  // a plain link beats a collapsible with one child.
+  if (statuses.length === 0) {
+    return { ...base, url: `/admin/c/${c.name}` };
+  }
+  return {
+    ...base,
+    items: [
+      {
+        title: t(language, "collection.filter.all"),
+        url: `/admin/c/${c.name}`,
+      },
+      ...statuses.map<NavLink>((status) => ({
+        title: statusLabel(language, status),
+        url: `/admin/c/${c.name}?status=${status}`,
+      })),
+    ],
+  };
 }
 
 function statusesFor(c: Collection): ReadonlyArray<SidebarStatus> {

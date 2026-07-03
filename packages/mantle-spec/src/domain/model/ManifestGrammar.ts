@@ -36,6 +36,8 @@ export const MCP_HINTS = [
   "media-image",
   "media-video",
   "media-file",
+  "money-minor",
+  "timestamp-ms",
 ] as const;
 export type McpHint = (typeof MCP_HINTS)[number];
 

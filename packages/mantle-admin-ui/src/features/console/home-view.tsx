@@ -11,9 +11,10 @@ import { api } from "../../lib/api";
 import type { Collection, SiteInfo } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
-import { statusLabel } from "../content/status";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
+
+const QUICK_ACTION_ICONS: readonly LucideIcon[] = [PencilLine, FileText, Database];
 
 export function HomeView(): React.ReactElement {
   const { language } = usePreferences();
@@ -68,11 +69,11 @@ export function HomeView(): React.ReactElement {
             </div>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {primaryCollections.slice(0, 3).map((c) => (
+            {primaryCollections.slice(0, 3).map((c, index) => (
               <QuickAction
                 key={c.name}
                 href={`/admin/c/${encodeURIComponent(c.name)}`}
-                icon={PencilLine}
+                icon={QUICK_ACTION_ICONS[index % QUICK_ACTION_ICONS.length]!}
                 label={c.title}
               />
             ))}
@@ -121,7 +122,7 @@ export function HomeView(): React.ReactElement {
                 </div>
                 {c.description ? (
                   <p className="line-clamp-2 text-sm text-muted-foreground">
-                    {c.description}
+                    {firstSentence(c.description)}
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground">
@@ -129,7 +130,6 @@ export function HomeView(): React.ReactElement {
                   </p>
                 )}
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <span className="badge-status bg-accent text-accent-foreground">{c.lifecycle}</span>
                   {c.hasTranslations ? (
                     <span className="badge-status bg-[color-mix(in_srgb,var(--info)_16%,transparent)] text-[color:var(--info)]">
                       i18n
@@ -140,9 +140,6 @@ export function HomeView(): React.ReactElement {
                       media
                     </span>
                   ) : null}
-                  <span className="badge-status bg-muted text-muted-foreground">
-                    {statusLabel(language, "published")}
-                  </span>
                 </div>
               </a>
             ))}
@@ -168,4 +165,13 @@ function QuickAction({
       <span>{label}</span>
     </a>
   );
+}
+
+/** Home cards show only the opening sentence — the full description
+ *  still renders on the collection page itself (`renderCollectionDescription`
+ *  in `collection-view.tsx`). Splits on the first full stop (ASCII or
+ *  ideographic) followed by a space or end of string. */
+function firstSentence(description: string): string {
+  const match = /^(.*?(?:。|\. ))/.exec(description);
+  return (match ? match[1] : description).trim();
 }

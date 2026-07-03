@@ -10,6 +10,7 @@ import { CollapsibleDescription, ErrorBox, PageHeader, SectionCard } from "../..
 import { StatusBadge } from "../../ui/status-badge";
 import { RichTextEditor } from "../editor/rich-text-editor";
 import { primaryPublicUrl, purposeForMediaField, uploadMediaAsset } from "../media/media-upload";
+import { formatMoneyMinor, formatTimestampMs, moneyMinorHint, timestampHint } from "./field-render";
 
 export function EntryEditView({
   collectionName,
@@ -141,6 +142,10 @@ export function EntryEditView({
           </>
         }
       />
+
+      {isOperational ? (
+        <p className="-mt-4 text-sm text-muted-foreground">{t(language, "entryEdit.operationalHint")}</p>
+      ) : null}
 
       {save.isError ? <ErrorBox error={save.error} /> : null}
       {publish.isError ? <ErrorBox error={publish.error} /> : null}
@@ -344,17 +349,20 @@ function SchemaField({
           {t(language, "entryEdit.boolean")}
         </label>
       ) : type === "number" || type === "integer" ? (
-        <input
-          className="admin-input"
-          type="number"
-          value={numberForInput(value)}
-          min={schema.minimum}
-          max={schema.maximum}
-          onChange={(event) => {
-            const raw = event.target.value;
-            setValue(raw === "" ? null : Number(raw));
-          }}
-        />
+        <div className="space-y-1">
+          <input
+            className="admin-input"
+            type="number"
+            value={numberForInput(value)}
+            min={schema.minimum}
+            max={schema.maximum}
+            onChange={(event) => {
+              const raw = event.target.value;
+              setValue(raw === "" ? null : Number(raw));
+            }}
+          />
+          <NumberFieldPreview schema={schema} value={value} rootValue={rootValue} />
+        </div>
       ) : type === "object" ? (
         <div className="rounded-lg border border-[var(--glass-border)] bg-background/30 p-4">
           {schema.properties ? (
@@ -407,6 +415,30 @@ function SchemaField({
       )}
     </div>
   );
+}
+
+/** Small muted preview beside a money-minor or timestamp-ms number
+ *  input, e.g. "= NT$1,299" or "= 2026/7/3 14:30". Reads the sibling
+ *  `currency` property off the entry root when present; omits it
+ *  otherwise (plain grouped number, no currency guess). */
+function NumberFieldPreview({
+  schema,
+  value,
+  rootValue,
+}: {
+  schema: JsonSchema;
+  value: unknown;
+  rootValue: Record<string, unknown>;
+}): React.ReactElement | null {
+  if (moneyMinorHint(schema)) {
+    const formatted = formatMoneyMinor(value, rootValue["currency"]);
+    return formatted ? <p className="text-xs text-muted-foreground">= {formatted}</p> : null;
+  }
+  if (timestampHint(schema)) {
+    const formatted = formatTimestampMs(value);
+    return formatted ? <p className="text-xs text-muted-foreground">= {formatted}</p> : null;
+  }
+  return null;
 }
 
 function ArrayField({

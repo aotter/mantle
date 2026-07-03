@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Download, FileText, PencilLine, Plus, Search, Trash2, X } from "lucide-react";
+import { Check, Copy, Download, FileText, PencilLine, Plus, Search, Trash2, X } from "lucide-react";
 import { useAdminLocation } from "../../app/router";
 import { api } from "../../lib/api";
 import type { Collection, EntryEditorPayload, EntryRow, ListEntriesResult } from "../../lib/types";
@@ -12,6 +12,7 @@ import { StatusBadge } from "../../ui/status-badge";
 import { statusLabel } from "./status";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
+import { formatMoneyMinor, formatTimestampMs, moneyMinorHint, timestampHint } from "./field-render";
 
 const TIMESTAMP_FMT = new Intl.DateTimeFormat(undefined, {
   dateStyle: "short",
@@ -80,6 +81,8 @@ export function CollectionView({
 
   const collection = collectionsQuery.data?.find((c) => c.name === collectionName);
   const heading = collection ? collection.title : collectionName;
+  const isOperationalCollection = collection?.lifecycle === "none";
+  const dataColumns = React.useMemo(() => dataPreviewColumns(collection), [collection]);
   const refreshEntries = React.useCallback(() => {
     clearSelection();
     void queryClient.invalidateQueries({ queryKey: ["entries", collectionName] });
@@ -159,6 +162,7 @@ export function CollectionView({
             </Button>
             <Button
               type="button"
+              variant={isOperationalCollection ? "ghost" : "default"}
               onClick={() => createMutation.mutate()}
               disabled={createMutation.isPending}
             >
@@ -255,9 +259,15 @@ export function CollectionView({
                 </TableHeadCell>
                 <TableHeadCell>{t(language, "collection.table.id")}</TableHeadCell>
                 <TableHeadCell>{t(language, "collection.table.title")}</TableHeadCell>
-                <TableHeadCell>{t(language, "collection.table.status")}</TableHeadCell>
-                <TableHeadCell>{t(language, "collection.table.locale")}</TableHeadCell>
-                <TableHeadCell>{t(language, "collection.table.version")}</TableHeadCell>
+                {isOperationalCollection ? (
+                  dataColumns.map((name) => <TableHeadCell key={name}>{fieldLabel(name)}</TableHeadCell>)
+                ) : (
+                  <>
+                    <TableHeadCell>{t(language, "collection.table.status")}</TableHeadCell>
+                    <TableHeadCell>{t(language, "collection.table.locale")}</TableHeadCell>
+                    <TableHeadCell>{t(language, "collection.table.version")}</TableHeadCell>
+                  </>
+                )}
                 <TableHeadCell>{t(language, "collection.table.updated")}</TableHeadCell>
                 <TableHeadCell>{t(language, "collection.table.actions")}</TableHeadCell>
               </tr>
@@ -269,6 +279,7 @@ export function CollectionView({
                   row={row}
                   language={language}
                   collection={collection}
+                  dataColumns={isOperationalCollection ? dataColumns : null}
                   selected={selected.has(row.id)}
                   onToggleSelect={(checked) => {
                     setSelected((prev) => {
@@ -563,10 +574,44 @@ function EntriesSkeleton(): React.ReactElement {
   );
 }
 
+/** Truncated ID cell that copies the full id on click, mirroring the
+ *  `CopyField` pattern in `ui/page.tsx` (brief check-mark state via a
+ *  timeout, no shared state beyond this row). */
+function CopyIdButton({ id, language }: { id: string; language: AdminLanguage }): React.ReactElement {
+  const [copied, setCopied] = React.useState(false);
+
+  async function copy(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(id);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      className="group inline-flex items-center gap-1 hover:text-foreground"
+      title={t(language, "collection.copyId")}
+      onClick={() => void copy()}
+    >
+      {id.slice(0, 8)}
+      {copied ? (
+        <Check className="size-3 text-[color:var(--success)]" aria-hidden />
+      ) : (
+        <Copy className="size-3 opacity-40 transition-opacity group-hover:opacity-80" aria-hidden />
+      )}
+    </button>
+  );
+}
+
 function EntryRowDisplay({
   row,
   language,
   collection,
+  dataColumns,
   selected,
   onToggleSelect,
   onRename,
@@ -576,6 +621,9 @@ function EntryRowDisplay({
   row: EntryRow;
   language: AdminLanguage;
   collection: Collection | undefined;
+  /** Non-null (possibly empty) for `lifecycle: "none"` collections —
+   *  swaps the status/locale/version cells for these data columns. */
+  dataColumns: string[] | null;
   selected: boolean;
   onToggleSelect: (checked: boolean) => void;
   onRename: (title: string) => Promise<unknown>;
@@ -631,7 +679,7 @@ function EntryRowDisplay({
         />
       </TableCell>
       <TableCell className="font-mono text-xs text-muted-foreground">
-        {String(row.id).slice(0, 8)}
+        <CopyIdButton id={String(row.id)} language={language} />
       </TableCell>
       <TableCell className="max-w-[28rem]">
         <div className="min-w-[16rem]">
@@ -673,13 +721,23 @@ function EntryRowDisplay({
           {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
         </div>
       </TableCell>
-      <TableCell>
-        <StatusBadge status={row.status} />
-      </TableCell>
-      <TableCell className="text-muted-foreground">{row.locale ?? "-"}</TableCell>
-      <TableCell className="font-mono text-xs text-muted-foreground">
-        v{row.version}
-      </TableCell>
+      {dataColumns ? (
+        dataColumns.map((name) => (
+          <TableCell key={name} className="text-muted-foreground">
+            {renderDataPreviewValue(collection, name, row.data_preview?.[name])}
+          </TableCell>
+        ))
+      ) : (
+        <>
+          <TableCell>
+            <StatusBadge status={row.status} />
+          </TableCell>
+          <TableCell className="text-muted-foreground">{row.locale ?? "-"}</TableCell>
+          <TableCell className="font-mono text-xs text-muted-foreground">
+            v{row.version}
+          </TableCell>
+        </>
+      )}
       <TableCell className="text-muted-foreground">
         {formatTimestamp(row.updated_at)}
       </TableCell>
@@ -726,4 +784,55 @@ function formatTimestamp(ms: number): string {
   } catch {
     return "-";
   }
+}
+
+/** For `lifecycle: "none"` collections: up to 3 data columns from the
+ *  schema's `required` properties, skipping the schema-stable title
+ *  field. MUST mirror `schemaTitleKey` / `adminDataPreview` server-side
+ *  in `mountServerEndpoints.ts` — both sides derive from the schema
+ *  alone so headers and cell values can never disagree. */
+function dataPreviewColumns(collection: Collection | undefined): string[] {
+  if (!collection || collection.lifecycle !== "none") return [];
+  const schema = collection.schema;
+  const required = schema?.required ?? [];
+  const properties = schema?.properties ?? {};
+  const titleKey =
+    ["title", "name", "slug"].find((key) => key in properties) ??
+    required.find((key) => {
+      const raw = properties[key]?.type;
+      const types = Array.isArray(raw) ? raw : raw ? [raw] : [];
+      return types.includes("string");
+    }) ??
+    null;
+  return required.filter((key) => key !== titleKey).slice(0, 3);
+}
+
+function fieldLabel(name: string): string {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+/** Renders one operational data-preview cell, applying money/timestamp
+ *  formatting when the schema property carries the matching hint. */
+function renderDataPreviewValue(
+  collection: Collection | undefined,
+  fieldName: string,
+  value: unknown,
+): React.ReactNode {
+  const fieldSchema = collection?.schema?.properties?.[fieldName];
+  if (moneyMinorHint(fieldSchema)) {
+    const formatted = formatMoneyMinor(value, undefined);
+    if (formatted) return formatted;
+  }
+  if (timestampHint(fieldSchema)) {
+    const formatted = formatTimestampMs(value);
+    if (formatted) return formatted;
+  }
+  if (value == null || value === "") return <span className="text-muted-foreground">-</span>;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return <span className="font-mono text-xs">{JSON.stringify(value)}</span>;
 }

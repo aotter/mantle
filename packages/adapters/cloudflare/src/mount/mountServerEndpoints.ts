@@ -588,9 +588,17 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
 }
 
 function adminEntryTitle(data: Record<string, unknown>, schema?: JsonSchema): unknown {
-  if (typeof data.title === "string" && data.title) return data.title;
-  if (typeof data.name === "string" && data.name) return data.name;
-  if (typeof data.slug === "string" && data.slug) return data.slug;
+  const key = titleFieldKey(data, schema);
+  return key ? data[key] : null;
+}
+
+/** Which data key `adminEntryTitle` would read, or `null` if none
+ *  matched. Split out from `adminEntryTitle` so `adminDataPreview` can
+ *  skip the same property instead of repeating it in a data column. */
+function titleFieldKey(data: Record<string, unknown>, schema?: JsonSchema): string | null {
+  if (typeof data.title === "string" && data.title) return "title";
+  if (typeof data.name === "string" && data.name) return "name";
+  if (typeof data.slug === "string" && data.slug) return "slug";
   // Manifest-driven fallback: walk the schema's required properties in
   // declaration order and use the first string-typed one with a
   // non-empty value. Mirrors the admin SPA's `entryTitle` rule.
@@ -600,8 +608,47 @@ function adminEntryTitle(data: Record<string, unknown>, schema?: JsonSchema): un
       const fieldSchema = properties[key];
       if (!fieldSchema || !isStringTypedSchema(fieldSchema)) continue;
       const value = data[key];
-      if (typeof value === "string" && value) return value;
+      if (typeof value === "string" && value) return key;
     }
+  }
+  return null;
+}
+
+/** Operational (`lifecycle: none`) collections have no title/status
+ *  workflow worth a dedicated column — instead the admin list shows up
+ *  to 3 raw data columns. Mirrors the client-side column-picking rule
+ *  in `collection-view.tsx`: first 3 `required` properties, skipping
+ *  the schema-stable title field. Kept small on the wire on purpose —
+ *  this is a preview, not the full entry. */
+function adminDataPreview(
+  data: Record<string, unknown>,
+  manifest?: SchemaManifest,
+): Record<string, unknown> | undefined {
+  if (!manifest || manifest.spec.lifecycle !== "none") return undefined;
+  const schema = manifest.spec.schema;
+  // Schema-stable skip (not per-row): rows with a blank title field
+  // must still produce the same columns as every other row, or the
+  // client's fixed headers drift out of sync with the values.
+  const titleKey = schemaTitleKey(schema);
+  const fields = (schema.required ?? []).filter((key) => key !== titleKey).slice(0, 3);
+  if (fields.length === 0) return undefined;
+  const preview: Record<string, unknown> = {};
+  for (const key of fields) preview[key] = data[key];
+  return preview;
+}
+
+/** The property a row's title comes from, derived from the SCHEMA
+ *  alone (no row data): literal `title`/`name`/`slug` when declared,
+ *  else the first required string-typed property. Stable across all
+ *  rows of a collection, so preview columns never vary per row. */
+function schemaTitleKey(schema: JsonSchema): string | null {
+  const properties = schema.properties ?? {};
+  for (const key of ["title", "name", "slug"]) {
+    if (key in properties) return key;
+  }
+  for (const key of schema.required ?? []) {
+    const fieldSchema = properties[key];
+    if (fieldSchema && isStringTypedSchema(fieldSchema)) return key;
   }
   return null;
 }
@@ -623,15 +670,18 @@ function adminListItem(
   version: number;
   title: unknown;
   updated_at: number;
+  data_preview?: Record<string, unknown>;
 } {
+  const manifest = schemasByName.get(row.collection);
   return {
     id: row.id,
     collection: row.collection,
     locale: row.locale ?? null,
     status: row.status,
     version: row.version,
-    title: adminEntryTitle(row.data, schemasByName.get(row.collection)?.spec.schema),
+    title: adminEntryTitle(row.data, manifest?.spec.schema),
     updated_at: row.updatedAt,
+    data_preview: adminDataPreview(row.data, manifest),
   };
 }
 
