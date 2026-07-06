@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, ImagePlus, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, Images, ImagePlus, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
@@ -11,6 +11,14 @@ import { CollapsibleDescription, ErrorBox, PageHeader, SectionCard } from "../..
 import { StatusBadge } from "../../ui/status-badge";
 import { RichTextEditor } from "../editor/rich-text-editor";
 import { primaryPublicUrl, purposeForMediaField, uploadMediaAsset } from "../media/media-upload";
+import { MediaBrowser } from "../media/media-library-view";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../../ui/dialog";
 import { formatMoneyMinor, formatTimestampMs, moneyMinorHint, timestampHint } from "./field-render";
 
 export function EntryEditView({
@@ -546,6 +554,7 @@ function MediaAssetField({
   const [uploading, setUploading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [publicUrl, setPublicUrl] = React.useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = React.useState(false);
   const purpose = purposeForMediaField(mediaPurposes, collectionName, path);
 
   async function upload(file: File): Promise<void> {
@@ -569,13 +578,21 @@ function MediaAssetField({
 
   return (
     <div className="space-y-2">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <input
           className="admin-input min-w-0 flex-1"
           value={stringForInput(value)}
           onChange={(event) => onChange(event.target.value)}
           placeholder="media_assets id"
         />
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => setPickerOpen(true)}
+        >
+          <Images className="size-4" aria-hidden />
+          {t(language, "media.pick")}
+        </Button>
         <Button
           type="button"
           variant="secondary"
@@ -604,6 +621,26 @@ function MediaAssetField({
         </a>
       ) : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
+
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="max-h-[85vh] w-full max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t(language, "media.pickTitle")}</DialogTitle>
+            <DialogDescription>{t(language, "media.pickDescription")}</DialogDescription>
+          </DialogHeader>
+          <MediaBrowser
+            language={language}
+            purposes={mediaPurposes}
+            searchTerm=""
+            emptyIcon={Images}
+            onPick={(item) => {
+              onChange(item.id);
+              setPublicUrl(item.primaryUrl);
+              setPickerOpen(false);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

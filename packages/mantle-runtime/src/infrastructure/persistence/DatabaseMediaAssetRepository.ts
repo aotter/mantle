@@ -1,9 +1,14 @@
 import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
-import type { MediaAssetRepository } from "../../domain/port/MediaAssetRepository.js";
+import type {
+  MediaAssetListArgs,
+  MediaAssetListResult,
+  MediaAssetRepository,
+} from "../../domain/port/MediaAssetRepository.js";
 import type {
   MediaAsset,
   MediaVariant,
 } from "../../domain/port/MediaStorage.js";
+import { clampLimit } from "../../domain/service/Pagination.js";
 
 /**
  * `media_assets` row read/write. The variants set + free-form
@@ -80,9 +85,64 @@ export class DatabaseMediaAssetRepository implements MediaAssetRepository {
   async delete(id: string): Promise<void> {
     await this.db.prepare(`DELETE FROM media_assets WHERE id = ?`).bind(id).run();
   }
+
+  async list(args: MediaAssetListArgs): Promise<MediaAssetListResult> {
+    const limit = clampLimit(args.limit);
+    const offset = decodeCursor(args.cursor);
+    // Fetch limit+1 to detect a next page without a second query — the
+    // extra row never reaches the caller (mirrors EntryRepository.list).
+    const probe = limit + 1;
+    const conditions: string[] = [];
+    const binds: unknown[] = [];
+    if (args.search) {
+      // LIKE over alt/caption/id — media_assets has no FTS index and no
+      // tag/folder column, so this is the whole filter surface. Escape
+      // the caller's own wildcards so "50%" stays a literal.
+      const term = escapeLikeTerm(args.search);
+      conditions.push(
+        "(id LIKE '%'||?||'%' ESCAPE '\\' OR alt LIKE '%'||?||'%' ESCAPE '\\' OR caption LIKE '%'||?||'%' ESCAPE '\\')",
+      );
+      binds.push(term, term, term);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    binds.push(probe, offset);
+    const rows = await this.db
+      .prepare(
+        `SELECT id, created_at, owner_id, alt, caption, variants, metadata
+         FROM media_assets ${where}
+         ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
+      )
+      .bind(...binds)
+      .all<MediaAssetRow>();
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    return {
+      rows: page.map(rowToAsset),
+      nextCursor: hasMore ? encodeCursor(offset + limit) : undefined,
+    };
+  }
 }
 
 const CHUNK = 100;
+
+/** Offset-based cursor, prefixed so a future row-value cursor can
+ *  coexist by switching on the prefix. Callers treat it as opaque.
+ *  Matches `DatabaseEntryRepository`'s scheme. */
+const CURSOR_PREFIX = "o:";
+function encodeCursor(offset: number): string {
+  return `${CURSOR_PREFIX}${offset}`;
+}
+function decodeCursor(cursor: string | undefined): number {
+  if (!cursor || !cursor.startsWith(CURSOR_PREFIX)) return 0;
+  const n = Number(cursor.slice(CURSOR_PREFIX.length));
+  return Number.isInteger(n) && n >= 0 ? n : 0;
+}
+
+/** Escape LIKE metacharacters in a user-supplied search term so `%`,
+ *  `_`, and `\` are matched literally (ESCAPE '\'). */
+function escapeLikeTerm(term: string): string {
+  return term.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
 
 interface MediaAssetRow {
   readonly id: string;

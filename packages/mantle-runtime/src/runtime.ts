@@ -58,6 +58,10 @@ import {
 import {
   CommitMediaUploadUseCase,
   CreateMediaUploadUseCase,
+  ListMediaAssetsUseCase,
+  GetMediaAssetUseCase,
+  UpdateMediaAssetUseCase,
+  DeleteMediaAssetUseCase,
 } from "./usecase/media/index.js";
 import type { PublicPathResolver } from "./domain/service/PublicPathResolver.js";
 
@@ -166,6 +170,12 @@ export interface CmsRuntime {
     readonly storage: MediaStorage;
     readonly createUpload: CreateMediaUploadUseCase;
     readonly commitUpload: CommitMediaUploadUseCase;
+    /** Admin media-library use cases (#434): list/get/patch/delete over
+     *  committed assets. Adapters route `/admin/api/media*` off these. */
+    readonly listAssets: ListMediaAssetsUseCase;
+    readonly getAsset: GetMediaAssetUseCase;
+    readonly updateAsset: UpdateMediaAssetUseCase;
+    readonly deleteAsset: DeleteMediaAssetUseCase;
     resolve(id: string): Promise<MediaAsset | null>;
     resolveMany(ids: readonly string[]): Promise<ReadonlyMap<string, MediaAsset>>;
   } | null;
@@ -321,6 +331,10 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
           clock,
           mediaAssets,
         ),
+        listAssets: new ListMediaAssetsUseCase(mediaAssets),
+        getAsset: new GetMediaAssetUseCase(mediaAssets),
+        updateAsset: new UpdateMediaAssetUseCase(mediaAssets),
+        deleteAsset: new DeleteMediaAssetUseCase(args.mediaStorage, mediaAssets),
         resolve: (id: string) => mediaAssets.findById(id),
         resolveMany: (ids: readonly string[]) => mediaAssets.findManyByIds(ids),
       }

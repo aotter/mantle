@@ -346,6 +346,34 @@ class InMemoryStatement implements PreparedStatement {
       return { rows: [], changes: had ? 1 : 0 };
     }
 
+    // SELECT ... FROM media_assets [WHERE (id/alt/caption LIKE ...)]
+    //   ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?  (#434 list)
+    if (
+      sql.startsWith("SELECT id, created_at, owner_id, alt, caption, variants, metadata") &&
+      sql.includes("FROM media_assets") &&
+      sql.includes("ORDER BY created_at DESC, id DESC")
+    ) {
+      const hasSearch = sql.includes("id LIKE");
+      // Binds: [term, term, term]? , limit, offset
+      const offset = p[p.length - 1] as number;
+      const limit = p[p.length - 2] as number;
+      const term = hasSearch ? String(p[0]) : null;
+      let rows = [...this.db.mediaAssets.values()];
+      if (term !== null) {
+        const needle = unescapeLike(term).toLowerCase();
+        rows = rows.filter((r) =>
+          r.id.toLowerCase().includes(needle) ||
+          (r.alt ?? "").toLowerCase().includes(needle) ||
+          (r.caption ?? "").toLowerCase().includes(needle),
+        );
+      }
+      rows.sort((a, b) =>
+        b.created_at - a.created_at || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0),
+      );
+      const windowed = rows.slice(offset, offset + limit);
+      return { rows: windowed as unknown as Record<string, unknown>[], changes: 0 };
+    }
+
     // SELECT user_id, role, granted_by, granted_at FROM staff WHERE user_id = ?
     if (sql.startsWith("SELECT user_id, role, granted_by, granted_at FROM staff WHERE user_id = ?")) {
       const r = this.db.staff.get(p[0] as string);
@@ -426,11 +454,17 @@ function normalize(sql: string): string {
  *  against the in-memory store: unescape the caller's LIKE-escaped
  *  term back to a literal substring and check `id`/`data` for it. */
 function matchesLikeSearch(row: EntryRecord, escapedTerm: string): boolean {
-  const literal = escapedTerm
+  const literal = unescapeLike(escapedTerm);
+  return row.id.includes(literal) || row.data.includes(literal);
+}
+
+/** Reverse the `ESCAPE '\'` LIKE-escaping the repos apply to search
+ *  terms, recovering the literal substring to match against. */
+function unescapeLike(escapedTerm: string): string {
+  return escapedTerm
     .replace(/\\%/g, "%")
     .replace(/\\_/g, "_")
     .replace(/\\\\/g, "\\");
-  return row.id.includes(literal) || row.data.includes(literal);
 }
 
 function fieldFromJsonPath(path: string): string {

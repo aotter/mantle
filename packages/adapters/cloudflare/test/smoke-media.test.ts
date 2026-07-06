@@ -35,6 +35,7 @@ import {
 class FakeMediaStorage implements MediaStorage {
   public createCalls: CreateUploadArgs[] = [];
   public commitCalls: CommitUploadArgs[] = [];
+  public deleteCalls: string[] = [];
 
   async createUpload(args: CreateUploadArgs) {
     this.createCalls.push(args);
@@ -76,8 +77,8 @@ class FakeMediaStorage implements MediaStorage {
     return `https://media.example/${args.storageKey}`;
   }
 
-  async deleteObject() {
-    /* noop */
+  async deleteObject(args: { storageKey: string }) {
+    this.deleteCalls.push(args.storageKey);
   }
 
 }
@@ -401,6 +402,214 @@ describe("smoke: MCP media tool catalog", () => {
       secondBody.result.tools.find((t) => t.name === "create_media_upload")
         ?.inputSchema.properties?.purpose?.enum,
     ).toEqual(["product-gallery"]);
+  });
+});
+
+/** Create + commit one asset through the wire path, returning its id.
+ *  The FakeMediaStorage commit persists a full MediaAsset row to the
+ *  InMemoryDatabase, so the library endpoints then read it back. */
+async function seedAsset(
+  app: Hono,
+  opts: { alt?: string; caption?: string } = {},
+): Promise<string> {
+  const createRes = await app.request("/admin/api/media/uploads", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(THREE_VARIANT_BODY),
+  });
+  const { uploadGroupId } = (await createRes.json()) as { uploadGroupId: string };
+  await app.request(`/admin/api/media/uploads/${uploadGroupId}/commit`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ alt: opts.alt, caption: opts.caption }),
+  });
+  return uploadGroupId;
+}
+
+describe("media library: /admin/api/media", () => {
+  it("401 on all four verbs without a staff session", async () => {
+    const h = harness({ withMedia: true, auth: stubAuth });
+    const list = await h.app.request("/admin/api/media");
+    const get = await h.app.request("/admin/api/media/some-id");
+    const patch = await h.app.request("/admin/api/media/some-id", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ alt: "x" }),
+    });
+    const del = await h.app.request("/admin/api/media/some-id", { method: "DELETE" });
+    expect(list.status).toBe(401);
+    expect(get.status).toBe(401);
+    expect(patch.status).toBe(401);
+    expect(del.status).toBe(401);
+  });
+
+  it("501 + MEDIA_NOT_CONFIGURED on all four verbs when no mediaStorage is bound", async () => {
+    const h = harness({ withMedia: false, auth: staffAuth() });
+    for (const req of [
+      h.app.request("/admin/api/media"),
+      h.app.request("/admin/api/media/some-id"),
+      h.app.request("/admin/api/media/some-id", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ alt: "x" }),
+      }),
+      h.app.request("/admin/api/media/some-id", { method: "DELETE" }),
+    ]) {
+      const res = await req;
+      expect(res.status).toBe(501);
+      const body = (await res.json()) as { diagnostic: { code: string } };
+      expect(body.diagnostic.code).toBe("MEDIA_NOT_CONFIGURED");
+    }
+  });
+
+  it("lists committed assets newest-first with primary variant surfaced", async () => {
+    const h = harness({ withMedia: true, auth: staffAuth() });
+    await seedAsset(h.app, { alt: "first" });
+    await seedAsset(h.app, { alt: "second" });
+    const res = await h.app.request("/admin/api/media");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      items: Array<{
+        id: string;
+        primaryUrl: string | null;
+        mime: string | null;
+        byteSize: number | null;
+        alt: string | null;
+        variants: Array<{ role: string }>;
+      }>;
+      next_cursor: string | null;
+    };
+    expect(body.items).toHaveLength(2);
+    expect(body.next_cursor).toBeNull();
+    const item = body.items[0]!;
+    expect(item.mime).toBe("image/jpeg");
+    expect(item.primaryUrl).toContain("https://media.example/");
+    expect(item.byteSize).toBe(4096);
+    expect(item.variants).toHaveLength(3);
+  });
+
+  it("paginates via next_cursor / cursor", async () => {
+    const h = harness({ withMedia: true, auth: staffAuth() });
+    await seedAsset(h.app);
+    await seedAsset(h.app);
+    await seedAsset(h.app);
+    const first = await h.app.request("/admin/api/media?limit=2");
+    const firstBody = (await first.json()) as {
+      items: Array<{ id: string }>;
+      next_cursor: string | null;
+    };
+    expect(firstBody.items).toHaveLength(2);
+    expect(firstBody.next_cursor).not.toBeNull();
+
+    const second = await h.app.request(
+      `/admin/api/media?limit=2&cursor=${encodeURIComponent(firstBody.next_cursor!)}`,
+    );
+    const secondBody = (await second.json()) as {
+      items: Array<{ id: string }>;
+      next_cursor: string | null;
+    };
+    expect(secondBody.items).toHaveLength(1);
+    expect(secondBody.next_cursor).toBeNull();
+    // No overlap between pages.
+    const firstIds = new Set(firstBody.items.map((i) => i.id));
+    expect(secondBody.items.every((i) => !firstIds.has(i.id))).toBe(true);
+  });
+
+  it("filters by search over alt/caption/id", async () => {
+    const h = harness({ withMedia: true, auth: staffAuth() });
+    await seedAsset(h.app, { alt: "sunset over the bay" });
+    await seedAsset(h.app, { alt: "product shot" });
+    const res = await h.app.request("/admin/api/media?search=sunset");
+    const body = (await res.json()) as { items: Array<{ alt: string | null }> };
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0]!.alt).toBe("sunset over the bay");
+  });
+
+  it("GET /:id returns one asset; 404 for a missing id", async () => {
+    const h = harness({ withMedia: true, auth: staffAuth() });
+    const id = await seedAsset(h.app, { alt: "hello" });
+    const ok = await h.app.request(`/admin/api/media/${id}`);
+    expect(ok.status).toBe(200);
+    const okBody = (await ok.json()) as { id: string; alt: string | null };
+    expect(okBody.id).toBe(id);
+    expect(okBody.alt).toBe("hello");
+
+    const missing = await h.app.request("/admin/api/media/does-not-exist");
+    expect(missing.status).toBe(404);
+    const body = (await missing.json()) as { diagnostic: { code: string } };
+    expect(body.diagnostic.code).toBe("MEDIA_ASSET_NOT_FOUND");
+  });
+
+  it("PATCH updates alt/caption and leaves variants intact", async () => {
+    const h = harness({ withMedia: true, auth: staffAuth() });
+    const id = await seedAsset(h.app, { alt: "before", caption: "keep me" });
+    const res = await h.app.request(`/admin/api/media/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ alt: "after" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      alt: string | null;
+      caption: string | null;
+      variants: Array<unknown>;
+    };
+    expect(body.alt).toBe("after");
+    expect(body.caption).toBe("keep me");
+    expect(body.variants).toHaveLength(3);
+
+    // Persisted: a fresh GET reflects the patch.
+    const after = await h.app.request(`/admin/api/media/${id}`);
+    const afterBody = (await after.json()) as { alt: string | null };
+    expect(afterBody.alt).toBe("after");
+  });
+
+  it("PATCH rejects non-string alt with INPUT_VALIDATION_FAILED", async () => {
+    const h = harness({ withMedia: true, auth: staffAuth() });
+    const id = await seedAsset(h.app);
+    const res = await h.app.request(`/admin/api/media/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ alt: 123 }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { diagnostic: { code: string } };
+    expect(body.diagnostic.code).toBe("INPUT_VALIDATION_FAILED");
+  });
+
+  it("PATCH a missing id returns 404 MEDIA_ASSET_NOT_FOUND", async () => {
+    const h = harness({ withMedia: true, auth: staffAuth() });
+    const res = await h.app.request("/admin/api/media/nope", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ alt: "x" }),
+    });
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { diagnostic: { code: string } };
+    expect(body.diagnostic.code).toBe("MEDIA_ASSET_NOT_FOUND");
+  });
+
+  it("DELETE removes the D1 row and calls deleteObject for every variant", async () => {
+    const h = harness({ withMedia: true, auth: staffAuth() });
+    const id = await seedAsset(h.app);
+    const res = await h.app.request(`/admin/api/media/${id}`, { method: "DELETE" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { deleted: boolean; variantsRemoved: number };
+    expect(body.deleted).toBe(true);
+    expect(body.variantsRemoved).toBe(3);
+    // One deleteObject call per variant.
+    expect(h.storage!.deleteCalls).toHaveLength(3);
+    // Row is gone: a follow-up GET 404s.
+    const after = await h.app.request(`/admin/api/media/${id}`);
+    expect(after.status).toBe(404);
+  });
+
+  it("DELETE a missing id returns 404 MEDIA_ASSET_NOT_FOUND", async () => {
+    const h = harness({ withMedia: true, auth: staffAuth() });
+    const res = await h.app.request("/admin/api/media/nope", { method: "DELETE" });
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { diagnostic: { code: string } };
+    expect(body.diagnostic.code).toBe("MEDIA_ASSET_NOT_FOUND");
   });
 });
 

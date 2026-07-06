@@ -1,5 +1,9 @@
 export { CreateMediaUploadUseCase } from "./CreateMediaUploadUseCase.js";
 export { CommitMediaUploadUseCase } from "./CommitMediaUploadUseCase.js";
+export { ListMediaAssetsUseCase } from "./ListMediaAssetsUseCase.js";
+export { GetMediaAssetUseCase } from "./GetMediaAssetUseCase.js";
+export { UpdateMediaAssetUseCase } from "./UpdateMediaAssetUseCase.js";
+export { DeleteMediaAssetUseCase } from "./DeleteMediaAssetUseCase.js";
 export {
   DEFAULT_MAX_BYTES,
   MEDIA_MIME_ALLOWLIST,
