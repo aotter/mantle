@@ -36,6 +36,9 @@ class FakeMediaStorage implements MediaStorage {
   public createCalls: CreateUploadArgs[] = [];
   public commitCalls: CommitUploadArgs[] = [];
   public deleteCalls: string[] = [];
+  /** storageKeys whose deleteObject should reject, to exercise the
+   *  resilient multi-variant delete path (F2). Substring match. */
+  public failDeleteKeys: string[] = [];
 
   async createUpload(args: CreateUploadArgs) {
     this.createCalls.push(args);
@@ -78,6 +81,9 @@ class FakeMediaStorage implements MediaStorage {
   }
 
   async deleteObject(args: { storageKey: string }) {
+    if (this.failDeleteKeys.some((k) => args.storageKey.includes(k))) {
+      throw new Error(`simulated R2 delete failure for ${args.storageKey}`);
+    }
     this.deleteCalls.push(args.storageKey);
   }
 
@@ -611,6 +617,26 @@ describe("media library: /admin/api/media", () => {
     const body = (await res.json()) as { diagnostic: { code: string } };
     expect(body.diagnostic.code).toBe("MEDIA_ASSET_NOT_FOUND");
   });
+
+  it("DELETE stays resilient: one variant's deleteObject rejecting still drops the row + deletes the other variants (F2)", async () => {
+    const h = harness({ withMedia: true, auth: staffAuth() });
+    const id = await seedAsset(h.app);
+    // Fail only the primary variant's object delete. The other two
+    // variants must still be deleted and the D1 row must still be gone.
+    h.storage!.failDeleteKeys = ["/primary"];
+    const res = await h.app.request(`/admin/api/media/${id}`, { method: "DELETE" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { deleted: boolean; variantsRemoved: number };
+    expect(body.deleted).toBe(true);
+    expect(body.variantsRemoved).toBe(3);
+    // The two non-failing variants were still deleted (the loop did not
+    // abort on the primary's rejection).
+    expect(h.storage!.deleteCalls).toHaveLength(2);
+    expect(h.storage!.deleteCalls.every((k) => !k.endsWith("/primary"))).toBe(true);
+    // Row is gone despite the object-delete failure: a follow-up GET 404s.
+    const after = await h.app.request(`/admin/api/media/${id}`);
+    expect(after.status).toBe(404);
+  });
 });
 
 function jsonRpcReq(method: string, params?: unknown): Request {
@@ -620,3 +646,94 @@ function jsonRpcReq(method: string, params?: unknown): Request {
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   });
 }
+
+/**
+ * F1 (#438): the public MCP surface must NOT expose Views declared
+ * `surface: "staff"`. `mountMcp.ts` filters `ref.manifests` by
+ * `(m.spec.surface ?? "public") === surface` before handing them to the
+ * dispatcher; without that filter a staff View leaked into the public
+ * `/mcp` tools/list AND became callable via `tools/call query_view_*`.
+ */
+describe("MCP View surface gating (#438)", () => {
+  function viewManifests(): Manifest[] {
+    return [
+      ...manifests(),
+      {
+        apiVersion: "cms.mantle.aotter.net/v1",
+        kind: "View",
+        metadata: { name: "public-posts" },
+        spec: { from: "posts", limit: 10 },
+      },
+      {
+        apiVersion: "cms.mantle.aotter.net/v1",
+        kind: "View",
+        metadata: { name: "staff-report" },
+        spec: { from: "posts", surface: "staff", limit: 10 },
+      },
+    ] as Manifest[];
+  }
+
+  function viewRef() {
+    return createCmsRef({
+      manifests: viewManifests(),
+      siteDefaults: { media: { purposes: [postCoverPolicy()] } },
+      bindings: {
+        db: new InMemoryDatabase(),
+        kv: new InMemoryKv(),
+        assets: new StubAssetServer(),
+      },
+      auth: staffAuth(),
+    });
+  }
+
+  const props = { props: { userId: STAFF_USER.id, role: "owner" } };
+
+  async function toolNames(surface: "public" | "staff"): Promise<string[]> {
+    const handler = createMcpApiHandler({ ref: viewRef(), surface });
+    const res = await handler.fetch!(
+      jsonRpcReq("tools/list"),
+      {},
+      props as unknown as ExecutionContext,
+    );
+    const body = (await res.json()) as {
+      result: { tools: Array<{ name: string }> };
+    };
+    return body.result.tools.map((t) => t.name);
+  }
+
+  it("public surface lists the public View but NOT the staff View", async () => {
+    const names = await toolNames("public");
+    expect(names).toContain("query_view_public_posts");
+    expect(names).not.toContain("query_view_staff_report");
+  });
+
+  it("public surface tools/call for a staff View returns unknown-tool", async () => {
+    const handler = createMcpApiHandler({ ref: viewRef(), surface: "public" });
+    const res = await handler.fetch!(
+      jsonRpcReq("tools/call", { name: "query_view_staff_report", arguments: {} }),
+      {},
+      props as unknown as ExecutionContext,
+    );
+    const body = (await res.json()) as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+      error?: { message?: string };
+    };
+    // The dispatcher reports an unknown tool either as a JSON-RPC error
+    // or an isError tool result naming the tool; either way the staff
+    // View must not be routable on the public surface.
+    const serialized = JSON.stringify(body);
+    expect(serialized).toContain("query_view_staff_report");
+    expect(serialized.toLowerCase()).toContain("unknown");
+  });
+
+  it("staff surface (authoring) does NOT surface the staff View as a query tool either, but the filter routes it to the staff dispatcher", async () => {
+    // v0.1 staff MCP surface exposes authoring tools, not query_view_*
+    // tools, so neither View name appears here. The security-relevant
+    // assertion is that the staff View is absent from the PUBLIC surface
+    // (covered above); this pins that the staff surface stays authoring-only.
+    const names = await toolNames("staff");
+    expect(names).not.toContain("query_view_public_posts");
+    expect(names).not.toContain("query_view_staff_report");
+    expect(names).toContain("create_draft_posts");
+  });
+});

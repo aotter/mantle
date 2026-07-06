@@ -312,8 +312,12 @@ const CURSOR_PREFIX = "o:";
 function encodeCursor(offset: number): string {
   return `${CURSOR_PREFIX}${offset}`;
 }
+/** Upper bound on a decoded offset. `Number("1e10")` passes
+ *  `Number.isInteger`, so an attacker-supplied cursor could otherwise
+ *  drive `OFFSET 10_000_000_000`. Reject anything past a sane cap. */
+const MAX_CURSOR_OFFSET = 1_000_000;
 function decodeCursor(cursor: string | undefined): number {
   if (!cursor || !cursor.startsWith(CURSOR_PREFIX)) return 0;
   const n = Number(cursor.slice(CURSOR_PREFIX.length));
-  return Number.isInteger(n) && n >= 0 ? n : 0;
+  return Number.isInteger(n) && n >= 0 && n <= MAX_CURSOR_OFFSET ? n : 0;
 }

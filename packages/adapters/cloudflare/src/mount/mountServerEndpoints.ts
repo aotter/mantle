@@ -66,7 +66,7 @@ export function mountServerEndpoints(
     app.get(`/api/views/${viewName}`, async (c) => {
       const runtime = await ref.get();
       const waitUntil = readWaitUntil(c);
-      return handleViewRequest(c.req.raw, runtime, viewName, ref.auth, waitUntil);
+      return handleViewRequest(c.req.raw, runtime, viewName, ref.auth, waitUntil, "/api/views");
     });
   }
   mountAdminBetterAuth(app, ref, ref.auth);
@@ -327,7 +327,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     guarded("get", `/admin/api/views/${viewName}`, async (c) => {
       const runtime = await ref.get();
       const waitUntil = readWaitUntil(c);
-      return handleViewRequest(c.req.raw, runtime, viewName, ref.auth, waitUntil);
+      return handleViewRequest(c.req.raw, runtime, viewName, ref.auth, waitUntil, "/admin/api/views");
     });
   }
 
@@ -1632,13 +1632,18 @@ async function handleViewRequest(
   viewName: string,
   auth: Auth,
   waitUntil: ((p: Promise<unknown>) => void) | undefined,
+  // Mount prefix for this View's route. Passed by the caller because
+  // the same handler serves BOTH the public mount (`/api/views`) and
+  // the staff mount (`/admin/api/views`); hardcoding the public prefix
+  // here mislabels staff-View diagnostics + pathPrefix (#F7).
+  mountPath: string,
 ): Promise<Response> {
   const view = runtime.viewsByName.get(viewName);
   if (!view) {
     return jsonError({ status: 500, code: "INTERNAL_ERROR", message: `View '${viewName}' missing post-boot.` });
   }
 
-  const viewPath = `GET /api/views/${viewName}`;
+  const viewPath = `GET ${mountPath}/${viewName}`;
 
   // Resolve caller identity FIRST and evaluate `requires.auth.all`
   // BEFORE param coercion. Two reasons:

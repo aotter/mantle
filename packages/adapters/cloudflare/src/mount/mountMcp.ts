@@ -108,7 +108,14 @@ export function createMcpApiHandler(
           [...runtime.schemasByName.values()],
           {
             surface,
-            views: ref.manifests.filter((m): m is ViewManifest => m.kind === "View"),
+            // A View belongs on surface S iff its declared surface
+            // (default "public") matches — mirrors how procedures are
+            // gated (#438). Without this, `surface: "staff"` Views leaked
+            // into the public `/mcp` tools/list + tools/call.
+            views: ref.manifests.filter(
+              (m): m is ViewManifest =>
+                m.kind === "View" && (m.spec.surface ?? "public") === surface,
+            ),
             procedures: collectMcpProcedures(runtime.triggers, runtime.proceduresByName, surface),
           },
         );

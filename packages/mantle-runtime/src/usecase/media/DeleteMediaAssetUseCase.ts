@@ -36,9 +36,30 @@ export class DeleteMediaAssetUseCase {
         mediaAssetNotFoundDiagnostic("usecase/DeleteMediaAsset", id),
       );
     }
-    for (const variant of asset.variants) {
-      await this.storage.deleteObject({ storageKey: variant.storageKey });
+    // Attempt EVERY reachable object delete before touching the row —
+    // a single rejecting deleteObject must not abort the loop (which
+    // would leave both partial R2 objects AND the D1 row, contradicting
+    // the docstring's crash-safety invariant). Failures are collected,
+    // not thrown: orphan objects are the sweeper's job. A variant with
+    // no storageKey has no object to drop, so skip it rather than call
+    // deleteObject with an empty key.
+    const deletable = asset.variants.filter((v) => v.storageKey);
+    const results = await Promise.allSettled(
+      deletable.map((variant) =>
+        this.storage.deleteObject({ storageKey: variant.storageKey }),
+      ),
+    );
+    for (const r of results) {
+      if (r.status === "rejected") {
+        console.warn(
+          "[DeleteMediaAsset] object delete failed; leaving orphan for sweeper",
+          r.reason,
+        );
+      }
     }
+    // Delete the row only after every reachable object delete was
+    // attempted — even if some failed (orphan objects are recoverable
+    // from a bucket listing; a dangling reference to gone bytes is not).
     await this.assets.delete(id);
     return { deleted: true, variantsRemoved: asset.variants.length };
   }
