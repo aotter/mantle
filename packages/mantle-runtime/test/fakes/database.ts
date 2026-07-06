@@ -302,6 +302,13 @@ class InMemoryStatement implements PreparedStatement {
       }
       return { rows: [], changes: 0 };
     }
+    // INSERT INTO site_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    if (sql.startsWith("INSERT INTO site_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")) {
+      const [key, value] = p as [string, string];
+      const changed = this.db.siteConfig.get(key) !== value;
+      this.db.siteConfig.set(key, value);
+      return { rows: [], changes: changed ? 1 : 0 };
+    }
     // SELECT key, value FROM site_config
     if (sql.startsWith("SELECT key, value FROM site_config")) {
       return {

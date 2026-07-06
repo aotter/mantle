@@ -8,10 +8,26 @@ import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
 import type { SiteConfigRepository } from "../../domain/port/SiteConfigRepository.js";
 
 /**
- * `site_config` row read/write. Ships the seed declared by
- * `mantleConfig.ts > siteDefaults` on first deploy via INSERT … ON
- * CONFLICT DO NOTHING so operator edits are never overwritten on
- * subsequent deploys.
+ * `site_config` row read/write. `seed` runs once per boot (called from
+ * `bootInit`) and treats keys differently depending on who owns them:
+ *
+ * - **UI-editable, seed-once** (`brand`, `title`, `description`,
+ *   `origin`, `faviconUrl`, `ga4MeasurementId`, `facebookPixelId`):
+ *   written via INSERT … ON CONFLICT DO NOTHING. The admin settings
+ *   UI (`/admin/api/site-settings`) can edit a subset of these
+ *   directly, and the rest are conceptually the same "operator can
+ *   override" bucket — either way, DB wins once the row exists, so a
+ *   later `mantleConfig.ts` edit never clobbers an operator's change.
+ *
+ * - **code-canonical, boot-synced** (`mediaPurposes`, `locales`):
+ *   these have no admin-UI edit path — `mantleConfig.ts` is the only
+ *   source of truth — so `seed` upserts them on every boot, writing
+ *   only when the serialized value actually differs from what's
+ *   stored (read-compare-write; avoids a write on every boot when
+ *   nothing changed). Fixes #441: pre-fix, both classes were
+ *   DO-NOTHING, so a `mediaPurposes` edit in code (new mime, new
+ *   purpose, adjusted `maxBytes`) silently never reached a
+ *   already-deployed site's D1 row.
  *
  * The runtime calls `seed` once during bootInit; the result of `load`
  * is what every render path and template sees.
@@ -63,41 +79,68 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
     if (!defaults) return;
     assertSiteDefaultsCanonical(defaults);
     const stmts = [];
-    const insert = (key: string, value: string) =>
+    const insertOnce = (key: string, value: string) =>
       this.db
         .prepare(`INSERT INTO site_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING`)
         .bind(key, value);
+    // UI-editable, seed-once — DB wins once the row exists.
     if (defaults.brand && defaults.brand.length > 0) {
-      stmts.push(insert(KEYS.brand, defaults.brand));
+      stmts.push(insertOnce(KEYS.brand, defaults.brand));
     }
     if (defaults.title && defaults.title.length > 0) {
-      stmts.push(insert(KEYS.title, defaults.title));
+      stmts.push(insertOnce(KEYS.title, defaults.title));
     }
     if (defaults.description && defaults.description.length > 0) {
-      stmts.push(insert(KEYS.description, defaults.description));
+      stmts.push(insertOnce(KEYS.description, defaults.description));
     }
     if (defaults.origin && defaults.origin.length > 0) {
-      stmts.push(insert(KEYS.origin, defaults.origin));
+      stmts.push(insertOnce(KEYS.origin, defaults.origin));
     }
     if (defaults.faviconUrl && defaults.faviconUrl.length > 0) {
-      stmts.push(insert(KEYS.faviconUrl, defaults.faviconUrl));
+      stmts.push(insertOnce(KEYS.faviconUrl, defaults.faviconUrl));
     }
     if (defaults.ga4MeasurementId && defaults.ga4MeasurementId.length > 0) {
-      stmts.push(insert(KEYS.ga4MeasurementId, defaults.ga4MeasurementId));
+      stmts.push(insertOnce(KEYS.ga4MeasurementId, defaults.ga4MeasurementId));
     }
     if (defaults.facebookPixelId && defaults.facebookPixelId.length > 0) {
-      stmts.push(insert(KEYS.facebookPixelId, defaults.facebookPixelId));
-    }
-    if (defaults.locales && defaults.locales.length > 0) {
-      stmts.push(insert(KEYS.locales, defaults.locales.join(",")));
-    }
-    const purposes = defaults.media?.purposes;
-    if (purposes && purposes.length > 0) {
-      stmts.push(insert(KEYS.mediaPurposes, JSON.stringify(purposes)));
+      stmts.push(insertOnce(KEYS.facebookPixelId, defaults.facebookPixelId));
     }
     if (stmts.length > 0) {
       await this.db.batch(stmts);
     }
+
+    // Code-canonical, boot-synced — no admin-UI edit path for these
+    // keys, so `mantleConfig.ts` is the only source of truth. Upsert
+    // whenever the serialized value differs from what's stored;
+    // read-compare-write avoids issuing a write on every boot when
+    // nothing actually changed (#441).
+    const syncedValues: Array<[string, string | undefined]> = [
+      [KEYS.locales, defaults.locales && defaults.locales.length > 0 ? defaults.locales.join(",") : undefined],
+      [
+        KEYS.mediaPurposes,
+        defaults.media?.purposes && defaults.media.purposes.length > 0
+          ? JSON.stringify(defaults.media.purposes)
+          : undefined,
+      ],
+    ];
+    for (const [key, value] of syncedValues) {
+      if (value === undefined) continue;
+      await this.upsertIfChanged(key, value);
+    }
+  }
+
+  private async upsertIfChanged(key: string, value: string): Promise<void> {
+    const current = await this.db
+      .prepare(`SELECT value FROM site_config WHERE key = ?`)
+      .bind(key)
+      .first<{ value: string }>();
+    if (current?.value === value) return;
+    await this.db
+      .prepare(
+        `INSERT INTO site_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      )
+      .bind(key, value)
+      .run();
   }
 
   async load(): Promise<SiteConfig> {
