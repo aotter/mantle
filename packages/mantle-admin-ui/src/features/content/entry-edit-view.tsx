@@ -1,11 +1,19 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Images, ImagePlus, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, Images, ImagePlus, MoreHorizontal, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import { resolveLocalizedText } from "../../lib/localized-text";
-import type { EntryEditorPayload, JsonSchema, MediaPurposePolicy, RelatedEntrySection, SiteInfo } from "../../lib/types";
+import { operationsQueryOptions } from "../../lib/queries";
+import type {
+  EntryEditorPayload,
+  JsonSchema,
+  MediaPurposePolicy,
+  RelatedEntrySection,
+  SiteInfo,
+  StaffOperation,
+} from "../../lib/types";
 import { Button } from "../../ui/button";
 import { CollapsibleDescription, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
@@ -20,6 +28,7 @@ import {
   DialogTitle,
 } from "../../ui/dialog";
 import { formatMoneyMinor, formatTimestampMs, moneyMinorHint, timestampHint } from "./field-render";
+import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
 
 export function EntryEditView({
   collectionName,
@@ -39,6 +48,16 @@ export function EntryEditView({
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
   });
+  // Row-bound operations (#430) for this entry's own collection — same
+  // query key as `collection-view.tsx`/`authenticated-layout.tsx`
+  // (`operationsQueryOptions()`), so this hits react-query's shared
+  // cache instead of a duplicate fetch (#442: this is what lets the
+  // entry editor surface e.g. "Restock" from its page header).
+  const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
+  const boundOperations = React.useMemo(
+    () => boundOperationsFor(operationsQuery.data, collectionName),
+    [operationsQuery.data, collectionName],
+  );
   const [data, setData] = React.useState<Record<string, unknown> | null>(null);
   React.useEffect(() => {
     if (query.data) setData(query.data.entry.data);
@@ -119,6 +138,19 @@ export function EntryEditView({
         actions={
           <>
             {!isOperational && <StatusBadge status={payload.entry.status} />}
+            <RowOperationsMenu
+              row={payload.entry}
+              operations={boundOperations}
+              language={language}
+              canonical={canonical}
+              onSuccess={() => void queryClient.invalidateQueries({ queryKey })}
+              trigger={
+                <Button type="button" variant="secondary">
+                  <MoreHorizontal className="size-4" aria-hidden />
+                  {t(language, "rowActions.menuLabel")}
+                </Button>
+              }
+            />
             {!isOperational && (isDraft ? (
               <Button
                 type="button"
@@ -196,6 +228,8 @@ export function EntryEditView({
               sections={inlineRelated}
               language={language}
               canonical={canonical}
+              operations={operationsQuery.data}
+              onOperationSuccess={() => void queryClient.invalidateQueries({ queryKey })}
             />
           ) : null}
         </div>
@@ -219,6 +253,8 @@ export function EntryEditView({
               sections={sidebarRelated}
               language={language}
               canonical={canonical}
+              operations={operationsQuery.data}
+              onOperationSuccess={() => void queryClient.invalidateQueries({ queryKey })}
             />
           ) : null}
         </div>
@@ -682,10 +718,19 @@ function RelatedSections({
   sections,
   language,
   canonical,
+  operations,
+  onOperationSuccess,
 }: {
   sections: RelatedEntrySection[];
   language: AdminLanguage;
   canonical: string | null;
+  /** All staff operations (#430); each row derives its own bound
+   *  subset via `boundOperationsFor(operations, section.collection.name)`
+   *  — the child collection, not the parent entry's collection (#442:
+   *  this is what lets e.g. a product's "Product SKUs" child rows
+   *  offer "Restock" without the parent editor knowing that name). */
+  operations: readonly StaffOperation[] | undefined;
+  onOperationSuccess: () => void;
 }): React.ReactElement {
   if (sections.length === 0) {
     return (
@@ -696,40 +741,54 @@ function RelatedSections({
   }
   return (
     <>
-      {sections.map((section) => (
-        <SectionCard key={`${section.collection.name}:${section.relationship.childField}`}>
-          <SectionTitle
-            title={resolveLocalizedText(section.collection.title, language, canonical) ?? section.collection.name}
-            body={t(language, "entryEdit.relationship", {
-              child: section.relationship.childField,
-              parent: section.relationship.parentField,
-            })}
-          />
-          <div className="space-y-2">
-            {section.entries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t(language, "entryEdit.noChildEntries")}</p>
-            ) : (
-              section.entries.map((entry) => (
-                <a
-                  key={entry.id}
-                  href={`/admin/c/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-[var(--glass-border)] bg-background/35 p-3 text-sm text-foreground transition hover:border-primary hover:bg-accent"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate font-semibold">
-                      {entryTitle(entry.data, entry.id, section.collection.schema)}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {entry.collection} / v{entry.version}
-                    </span>
-                  </span>
-                  <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                </a>
-              ))
-            )}
-          </div>
-        </SectionCard>
-      ))}
+      {sections.map((section) => {
+        const boundOperations = boundOperationsFor(operations, section.collection.name);
+        return (
+          <SectionCard key={`${section.collection.name}:${section.relationship.childField}`}>
+            <SectionTitle
+              title={resolveLocalizedText(section.collection.title, language, canonical) ?? section.collection.name}
+              body={t(language, "entryEdit.relationship", {
+                child: section.relationship.childField,
+                parent: section.relationship.parentField,
+              })}
+            />
+            <div className="space-y-2">
+              {section.entries.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t(language, "entryEdit.noChildEntries")}</p>
+              ) : (
+                section.entries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-[var(--glass-border)] bg-background/35 p-3 text-sm text-foreground transition hover:border-primary hover:bg-accent"
+                  >
+                    <a
+                      href={`/admin/c/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}
+                      className="flex min-w-0 flex-1 items-center gap-3"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold">
+                          {entryTitle(entry.data, entry.id, section.collection.schema)}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          {entry.collection} / v{entry.version}
+                        </span>
+                      </span>
+                      <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                    </a>
+                    <RowOperationsMenu
+                      row={entry}
+                      operations={boundOperations}
+                      language={language}
+                      canonical={canonical}
+                      onSuccess={onOperationSuccess}
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+          </SectionCard>
+        );
+      })}
     </>
   );
 }
