@@ -6,6 +6,21 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.43] - 2026-07-06
+
+### Added
+
+- **@aotter/mantle-spec / @aotter/mantle-admin-ui**: `View.spec.surface: "public" | "staff"` — staff-only Views mount gated under `/admin/api/views/` and drive the admin report sidebar (#433).
+- **@aotter/mantle-admin-ui / @aotter/mantle-runtime**: full media library — list/get/edit/delete media API plus admin browser and entry-editor picker (#434).
+
+### Changed
+
+- **@aotter/mantle-admin-ui**: the 報表 sidebar lists staff Views only (was: every View); the 操作 sidebar shows only operations without row-bindings (bound ones live in the entry-row action menu) (#433).
+
+### Security
+
+- **@aotter/mantle-runtime**: staff Views are no longer reachable on the public `/api/views/` path — closes the class of PII-via-View exposure (#433; see project-toa-shop#72).
+
 ## [0.0.11-alpha.42] - 2026-07-03
 
 ### Added
