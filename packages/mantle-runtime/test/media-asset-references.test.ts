@@ -71,7 +71,7 @@ function asset(id: string): MediaAsset {
 
 class MemoryMediaAssets implements MediaAssetRepository {
   readonly lookups: string[][] = [];
-  private readonly assets: ReadonlyMap<string, MediaAsset>;
+  private readonly assets: Map<string, MediaAsset>;
 
   constructor(assets: readonly MediaAsset[] = []) {
     this.assets = new Map(assets.map((item) => [item.id, item]));
@@ -91,5 +91,25 @@ class MemoryMediaAssets implements MediaAssetRepository {
     return out;
   }
 
-  async save(): Promise<void> {}
+  async save(asset: MediaAsset): Promise<void> {
+    this.assets.set(asset.id, asset);
+  }
+
+  async delete(id: string): Promise<void> {
+    this.assets.delete(id);
+  }
+
+  async list(
+    args: Parameters<MediaAssetRepository["list"]>[0],
+  ): ReturnType<MediaAssetRepository["list"]> {
+    const search = args.search?.toLowerCase();
+    const rows = [...this.assets.values()].filter(
+      (a) =>
+        !search ||
+        a.id.toLowerCase().includes(search) ||
+        (a.alt ?? "").toLowerCase().includes(search) ||
+        (a.caption ?? "").toLowerCase().includes(search),
+    );
+    return { rows };
+  }
 }

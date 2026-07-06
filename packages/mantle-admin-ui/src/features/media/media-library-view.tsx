@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, ExternalLink, Images, Search, Trash2, Upload, type LucideIcon } from "lucide-react";
-import { useAdminLocation } from "../../app/router";
+import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { t } from "../../app/i18n";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { api } from "../../lib/api";
@@ -81,15 +81,29 @@ export function MediaBrowser({
     },
   });
 
+  // Appended "load more" pages live in their own state, separate from
+  // the page-1 query. Reset ONLY when page 1's identity (the search
+  // term) changes — NOT on every refetch. An in-place mutation (alt /
+  // caption save, delete) refetches page 1 under the same key; resetting
+  // on `page1.data` there would silently drop every already-loaded extra
+  // page (#F3). `cursorAtSearch` is the cursor page 1 handed us for the
+  // current search; `loadedCursor` is set once the user loads more, and
+  // from then on it owns pagination independent of page-1 refetches.
   const [extraItems, setExtraItems] = React.useState<MediaLibraryItem[]>([]);
-  const [nextCursor, setNextCursor] = React.useState<string | null>(null);
+  const [loadedCursor, setLoadedCursor] = React.useState<string | null | undefined>(undefined);
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
   const [loadMoreError, setLoadMoreError] = React.useState<unknown>(null);
   React.useEffect(() => {
     setExtraItems([]);
-    setNextCursor(page1.data?.next_cursor ?? null);
+    setLoadedCursor(undefined);
     setLoadMoreError(null);
-  }, [searchTerm, page1.data]);
+  }, [searchTerm]);
+
+  // Effective next cursor: once the user has loaded extra pages,
+  // `loadedCursor` owns it (so a page-1 refetch doesn't rewind it);
+  // otherwise fall back to page 1's cursor.
+  const nextCursor =
+    loadedCursor !== undefined ? loadedCursor : page1.data?.next_cursor ?? null;
 
   const items = React.useMemo(
     () => [...(page1.data?.items ?? []), ...extraItems],
@@ -112,12 +126,29 @@ export function MediaBrowser({
     setUploading(true);
     setUploadError(null);
     try {
-      for (const file of list) {
-        await uploadMediaAsset({ file, purposes });
+      // Upload each file independently so one failure doesn't abort the
+      // rest — successfully-uploaded files must still land in the grid,
+      // and the operator should see how many failed rather than a single
+      // opaque error hiding partial success (#F4).
+      const results = await Promise.allSettled(
+        list.map((file) => uploadMediaAsset({ file, purposes })),
+      );
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      const failures = results.filter(
+        (r): r is PromiseRejectedResult => r.status === "rejected",
+      );
+      // Refresh if ANY upload succeeded so the new assets appear.
+      if (succeeded > 0) refresh();
+      if (failures.length > 0) {
+        const detail = failures[0]?.reason;
+        const detailMsg = detail instanceof Error ? detail.message : String(detail);
+        setUploadError(
+          `${t(language, "media.uploadFailed", {
+            count: String(failures.length),
+            total: String(list.length),
+          })} ${detailMsg}`.trim(),
+        );
       }
-      refresh();
-    } catch (err) {
-      setUploadError(err instanceof Error ? err.message : String(err));
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -133,7 +164,7 @@ export function MediaBrowser({
       if (searchTerm) qs.set("search", searchTerm);
       const page = await api.get<MediaLibraryListResult>(`/media?${qs.toString()}`);
       setExtraItems((prev) => [...prev, ...page.items]);
-      setNextCursor(page.next_cursor);
+      setLoadedCursor(page.next_cursor);
     } catch (err) {
       setLoadMoreError(err);
     } finally {
@@ -392,6 +423,7 @@ function MediaSearch({
   searchTerm: string;
   language: AdminLanguage;
 }): React.ReactElement {
+  const { navigate } = useAdminRouter();
   const [draft, setDraft] = React.useState(searchTerm);
   React.useEffect(() => setDraft(searchTerm), [searchTerm]);
   return (
@@ -404,7 +436,9 @@ function MediaSearch({
         const p = new URLSearchParams();
         if (next) p.set("search", next);
         const suffix = p.toString();
-        window.location.href = `/admin/media${suffix ? `?${suffix}` : ""}`;
+        // SPA navigation (#F8) — a hard reload here dropped the whole
+        // client app state on every search.
+        navigate(`/admin/media${suffix ? `?${suffix}` : ""}`);
       }}
     >
       <label className="relative block">

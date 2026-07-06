@@ -84,6 +84,20 @@ class InMemoryMediaAssetRepository implements MediaAssetRepository {
   async delete(id: string): Promise<void> {
     this.store.delete(id);
   }
+
+  async list(
+    args: Parameters<MediaAssetRepository["list"]>[0],
+  ): ReturnType<MediaAssetRepository["list"]> {
+    const search = args.search?.toLowerCase();
+    const rows = [...this.store.values()].filter(
+      (a) =>
+        !search ||
+        a.id.toLowerCase().includes(search) ||
+        (a.alt ?? "").toLowerCase().includes(search) ||
+        (a.caption ?? "").toLowerCase().includes(search),
+    );
+    return { rows };
+  }
 }
 
 const FROZEN_NOW = 1_700_000_000_000;
