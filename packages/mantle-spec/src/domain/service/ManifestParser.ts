@@ -437,6 +437,20 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   if (typeof s["from"] !== "string" || (s["from"] as string).length === 0) {
     throw new ManifestParseError("View.spec.from is required (non-empty string)", idx, "/spec/from");
   }
+  // `surface` is optional (absent ⇒ public). When present it reuses
+  // the `MCP_TRIGGER_SURFACES` vocabulary (`public` | `staff`) —
+  // `staff` moves the View off the public REST mount to the
+  // staff-gated admin path (#433).
+  if ("surface" in s && s["surface"] != null) {
+    const surface = s["surface"];
+    if (typeof surface !== "string" || !V01_MCP_TRIGGER_SURFACES.has(surface)) {
+      throw new ManifestParseError(
+        `View.spec.surface must be one of ${[...V01_MCP_TRIGGER_SURFACES].join(", ")}; got ${JSON.stringify(surface)}`,
+        idx,
+        "/spec/surface",
+      );
+    }
+  }
   if ("requires" in s && s["requires"] != null) {
     validateRequires(s["requires"], idx, "View");
   }

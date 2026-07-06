@@ -196,13 +196,17 @@ function buildNavGroups(
         }
       : null;
 
-  // 「操作」— one item per staff-operable Procedure (#426), linking to
-  // the ops page anchored at that procedure's card.
+  // 「操作」— one item per UNBOUND staff-operable Procedure (#426,
+  // narrowed #433). Operations with `rowBindings` already surface from
+  // the entry-row "⋯" menu of the bound collection, so listing them in
+  // the sidebar too is redundant (operator review Q1). Only operations
+  // with NO row bindings get a sidebar item; empty → group hidden.
+  const unboundOperations = operations.filter((op) => op.rowBindings.length === 0);
   const opsGroup: NavGroupData | null =
-    operations.length > 0
+    unboundOperations.length > 0
       ? {
           title: t(language, "nav.ops"),
-          items: operations.map((op) => ({
+          items: unboundOperations.map((op) => ({
             title: resolveLocalizedText(op.title, language, canonical) ?? fieldLabel(op.name),
             icon: Wrench,
             url: `/admin/ops#${op.name}`,

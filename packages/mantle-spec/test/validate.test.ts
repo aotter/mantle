@@ -509,6 +509,63 @@ spec:
   });
 });
 
+describe("parseManifests() — View.spec.surface (#433)", () => {
+  it("accepts surface: public", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: publicView }
+spec:
+  from: posts
+  surface: public
+`;
+    const result = parseManifests(yaml);
+    expect(result.diagnostics).toEqual([]);
+    const view = result.manifests[0] as ViewManifest;
+    expect(view.spec.surface).toBe("public");
+  });
+
+  it("accepts surface: staff", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: staffView }
+spec:
+  from: posts
+  surface: staff
+`;
+    const result = parseManifests(yaml);
+    expect(result.diagnostics).toEqual([]);
+    const view = result.manifests[0] as ViewManifest;
+    expect(view.spec.surface).toBe("staff");
+  });
+
+  it("accepts an absent surface (defaults to public semantics)", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: defaultView }
+spec:
+  from: posts
+`;
+    const result = parseManifests(yaml);
+    expect(result.diagnostics).toEqual([]);
+    const view = result.manifests[0] as ViewManifest;
+    expect(view.spec.surface).toBeUndefined();
+  });
+
+  it("rejects an unknown surface string", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: badView }
+spec:
+  from: posts
+  surface: admin
+`;
+    const result = parseManifests(yaml);
+    expect(result.diagnostics.map((d) => d.message)).toContainEqual(
+      expect.stringMatching(/View\.spec\.surface must be one of/),
+    );
+  });
+});
+
 describe("parseManifests() — YAML alias-bomb regression (#210 H4)", () => {
   it("surfaces an INVALID_MANIFEST_ENVELOPE diagnostic on exponentially-expanding aliases", () => {
     // Deep nested aliases: each level multiplies the expansion 10x.

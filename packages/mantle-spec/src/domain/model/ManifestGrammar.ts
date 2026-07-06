@@ -218,6 +218,16 @@ export type ViewManifest = ManifestEnvelope<"View", ViewManifestSpec>;
 export interface ViewManifestSpec {
   /** Source Schema name (bare; no namespace). */
   readonly from: string;
+  /** REST-surface visibility. Reuses the `"public" | "staff"`
+   *  vocabulary of `McpTriggerSurface` (see `MCP_TRIGGER_SURFACES`).
+   *  When absent or `"public"` the View auto-mounts at the public,
+   *  unauthenticated `GET /api/views/<name>` (v0.1 default; every
+   *  existing View keeps this behavior). When `"staff"` the View is
+   *  NOT mounted on the public path — it mounts at
+   *  `GET /admin/api/views/<name>` behind the staff gate and becomes
+   *  the report-sidebar source. Guards data behind a staff session; use
+   *  it for any View over sensitive rows. */
+  readonly surface?: McpTriggerSurface;
   /** Auth gate. Identical shape to `ProcedureManifestSpec.requires.auth`.
    *  When absent the View is public — `ExecuteViewUseCase` skips the
    *  predicate check. When present, ALL predicates must hold; the
