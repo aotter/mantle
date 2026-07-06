@@ -24,6 +24,7 @@ import {
   matchPath,
   type CmsRuntime,
   type HandlerContext,
+  type MediaAsset,
 } from "@aotter/mantle-runtime";
 import { indexHtml } from "@aotter/mantle-admin-ui";
 import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
@@ -694,6 +695,111 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       }),
     );
   });
+
+  // Media library (#434): list / get / patch / delete over committed
+  // assets. All staff-gated; all 501 + MEDIA_NOT_CONFIGURED when no
+  // `mediaStorage` is bound (mirrors the upload handlers above).
+  const MEDIA_LIST_PATH = "/admin/api/media";
+  const MEDIA_ASSET_PATH = "/admin/api/media/:id";
+
+  guarded("get", MEDIA_LIST_PATH, async (c) => {
+    const runtime = await ref.get();
+    const media = runtime.media;
+    if (!media) return mediaNotConfiguredResponse(`GET ${MEDIA_LIST_PATH}`);
+    const rawLimit = c.req.query("limit");
+    const parsedLimit = rawLimit ? Number.parseInt(rawLimit, 10) : NaN;
+    return runUseCase(`GET ${MEDIA_LIST_PATH}`, async () => {
+      const result = await media.listAssets.execute({
+        limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+        cursor: c.req.query("cursor") ?? undefined,
+        search: c.req.query("search") || undefined,
+      });
+      return {
+        items: result.rows.map(adminMediaItem),
+        next_cursor: result.nextCursor ?? null,
+      };
+    });
+  });
+
+  guarded("get", MEDIA_ASSET_PATH, async (c) => {
+    const runtime = await ref.get();
+    const media = runtime.media;
+    if (!media) return mediaNotConfiguredResponse(`GET ${MEDIA_ASSET_PATH}`);
+    const id = c.req.param("id")!;
+    return runUseCase(`GET ${MEDIA_ASSET_PATH}`, async () =>
+      adminMediaItem(await media.getAsset.execute(id)),
+    );
+  });
+
+  guarded("patch", MEDIA_ASSET_PATH, async (c) => {
+    const runtime = await ref.get();
+    const media = runtime.media;
+    if (!media) return mediaNotConfiguredResponse(`PATCH ${MEDIA_ASSET_PATH}`);
+    const id = c.req.param("id")!;
+    const body = (await c.req.raw.json().catch(() => ({}))) as {
+      alt?: unknown;
+      caption?: unknown;
+    };
+    if (
+      (body.alt !== undefined && typeof body.alt !== "string") ||
+      (body.caption !== undefined && typeof body.caption !== "string")
+    ) {
+      return jsonResponse(400, {
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "INPUT_VALIDATION_FAILED",
+          severity: "error",
+          path: `PATCH ${MEDIA_ASSET_PATH}`,
+          expected: "{ alt?: string, caption?: string }",
+          message: "`alt` and `caption` must be strings when present.",
+        }),
+      });
+    }
+    return runUseCase(`PATCH ${MEDIA_ASSET_PATH}`, async () =>
+      adminMediaItem(
+        await media.updateAsset.execute({
+          id,
+          alt: typeof body.alt === "string" ? body.alt : undefined,
+          caption: typeof body.caption === "string" ? body.caption : undefined,
+        }),
+      ),
+    );
+  });
+
+  guarded("delete", MEDIA_ASSET_PATH, async (c) => {
+    const runtime = await ref.get();
+    const media = runtime.media;
+    if (!media) return mediaNotConfiguredResponse(`DELETE ${MEDIA_ASSET_PATH}`);
+    const id = c.req.param("id")!;
+    return runUseCase(`DELETE ${MEDIA_ASSET_PATH}`, () => media.deleteAsset.execute(id));
+  });
+}
+
+/** Shape a committed `MediaAsset` for the admin media library wire
+ *  surface (#434): the full variants set plus a convenience
+ *  `primaryUrl` / `mime` / `byteSize` lifted off the primary variant so
+ *  the SPA grid can render a thumbnail without re-deriving it. */
+function adminMediaItem(asset: MediaAsset): {
+  id: string;
+  variants: MediaAsset["variants"];
+  primaryUrl: string | null;
+  mime: string | null;
+  byteSize: number | null;
+  alt: string | null;
+  caption: string | null;
+  createdAt: number;
+} {
+  const primary = asset.variants.find((v) => v.role === "primary") ?? asset.variants[0] ?? null;
+  return {
+    id: asset.id,
+    variants: asset.variants,
+    primaryUrl: primary?.publicUrl ?? null,
+    mime: primary?.mimeType ?? null,
+    byteSize: primary?.byteSize ?? null,
+    alt: asset.alt ?? null,
+    caption: asset.caption ?? null,
+    createdAt: asset.createdAt,
+  };
 }
 
 type StaffOperationRowBinding = {

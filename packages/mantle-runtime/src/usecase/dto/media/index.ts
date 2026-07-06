@@ -51,3 +51,21 @@ export interface CommitMediaUploadRequest {
   readonly alt?: string;
   readonly caption?: string;
 }
+
+/** Admin media library list request (#434). Cursor-paginated,
+ *  newest-first; `search` is an optional substring over id/alt/caption. */
+export interface ListMediaAssetsRequest {
+  readonly limit?: number;
+  readonly cursor?: string;
+  readonly search?: string;
+}
+
+/** Patch alt/caption on a committed asset (#434). Only these two
+ *  fields are operator-editable — variants/mime/bytes are frozen at
+ *  commit. `undefined` leaves a field unchanged; an empty string
+ *  clears it. */
+export interface UpdateMediaAssetRequest {
+  readonly id: string;
+  readonly alt?: string;
+  readonly caption?: string;
+}

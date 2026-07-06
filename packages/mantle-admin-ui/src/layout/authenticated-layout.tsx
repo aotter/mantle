@@ -6,6 +6,7 @@ import {
   Folder,
   Globe,
   Home,
+  Images,
   Settings as SettingsIcon,
   Users,
   Wrench,
@@ -236,6 +237,7 @@ function buildNavGroups(
       ...(hasEditorial
         ? [{ title: t(language, "nav.approvals"), url: "/admin/approvals", icon: ClipboardList }]
         : []),
+      { title: t(language, "nav.media"), url: "/admin/media", icon: Images },
       { title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon },
       // Staff management is owner-only server-side; hide the entry for
       // everyone else rather than render a guaranteed 403.

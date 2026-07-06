@@ -176,6 +176,25 @@ export interface CommittedMediaAsset {
   variants: MediaAssetVariant[];
 }
 
+/** `GET /admin/api/media` item + `GET|PATCH /admin/api/media/:id` body
+ *  (#434). The primary variant's url/mime/bytes are lifted to the top
+ *  level so the grid renders a thumbnail without walking `variants`. */
+export interface MediaLibraryItem {
+  id: string;
+  variants: MediaAssetVariant[];
+  primaryUrl: string | null;
+  mime: string | null;
+  byteSize: number | null;
+  alt: string | null;
+  caption: string | null;
+  createdAt: number;
+}
+
+export interface MediaLibraryListResult {
+  items: MediaLibraryItem[];
+  next_cursor: string | null;
+}
+
 /** `GET /admin/api/operations` entry (#426, extended #430) — a
  *  staff-operable Procedure derived from the manifest (some Trigger
  *  targets it via `source.kind: "mcp"` + `surface: "staff"`, or

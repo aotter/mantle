@@ -31,4 +31,24 @@ export interface MediaAssetRepository {
   findManyByIds(ids: readonly string[]): Promise<ReadonlyMap<string, MediaAsset>>;
   save(asset: MediaAsset): Promise<void>;
   delete(id: string): Promise<void>;
+  /**
+   * Newest-first page of committed assets for the admin media library
+   * (#434). Cursor-paginated like `EntryRepository.list` — offset-based
+   * behind an opaque token. `search` (optional) is a substring match
+   * over alt/caption/id; the store owns escaping. No tag/folder filter
+   * — `media_assets` carries no such column (see the repository impl).
+   */
+  list(args: MediaAssetListArgs): Promise<MediaAssetListResult>;
+}
+
+export interface MediaAssetListArgs {
+  readonly limit?: number;
+  readonly cursor?: string;
+  readonly search?: string;
+}
+
+export interface MediaAssetListResult {
+  readonly rows: readonly MediaAsset[];
+  /** Present when there may be more rows; pass back as `cursor`. */
+  readonly nextCursor?: string;
 }

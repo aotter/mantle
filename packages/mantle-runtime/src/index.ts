@@ -50,7 +50,11 @@ export type {
   MediaVariantRole,
 } from "./domain/port/MediaStorage.js";
 export { pickPrimaryVariant } from "./domain/port/MediaStorage.js";
-export type { MediaAssetRepository } from "./domain/port/MediaAssetRepository.js";
+export type {
+  MediaAssetRepository,
+  MediaAssetListArgs,
+  MediaAssetListResult,
+} from "./domain/port/MediaAssetRepository.js";
 export type {
   EmailSender,
   EmailSendArgs,
