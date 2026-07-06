@@ -28,13 +28,15 @@ interface ViewQueryResult {
   };
 }
 
-/** Fetches `GET /api/views/<name>` — the public REST surface Views
- *  already have (no new server work needed for basic listing; see
- *  #426 report). Distinct from `lib/api.ts`'s `api` helper because
- *  that one is hardcoded to the `/admin/api` base path, while Views
- *  are served at the site root so non-admin callers can reach them
- *  too. Reuses the admin session cookie via `credentials: same-origin`
- *  same as `lib/api.ts`. */
+/** Fetches `GET /admin/api/views/<name>` — the staff-gated View REST
+ *  surface (#433). Since `/admin/api/views-manifest` now returns ONLY
+ *  `surface: staff` Views, every View reachable from the 報表 sidebar
+ *  (which drives this page) is a staff View mounted behind the admin
+ *  gate; the public `/api/views/<name>` path no longer serves them.
+ *  We fetch directly rather than through `lib/api.ts`'s `api` helper so
+ *  we can pass the caller's page/show/param query string verbatim.
+ *  Reuses the admin session cookie via `credentials: same-origin` same
+ *  as `lib/api.ts`. */
 async function fetchView(
   name: string,
   params: Record<string, unknown>,
@@ -45,7 +47,7 @@ async function fetchView(
     qs.set(key, String(value));
   }
   const suffix = qs.toString();
-  const res = await fetch(`/api/views/${encodeURIComponent(name)}${suffix ? `?${suffix}` : ""}`, {
+  const res = await fetch(`/admin/api/views/${encodeURIComponent(name)}${suffix ? `?${suffix}` : ""}`, {
     credentials: "same-origin",
     headers: { Accept: "application/json" },
   });
@@ -58,7 +60,8 @@ async function fetchView(
 }
 
 /** #426 — read-only View page. Fetches the View's row set from the
- *  existing public `/api/views/<name>` REST surface, renders a
+ *  staff-gated `/admin/api/views/<name>` REST surface (#433 — the 報表
+ *  sidebar only lists staff Views now), renders a
  *  SchemaFields-driven parameter form when the View declares
  *  `params`, and a plain table for the rows. Column formatting
  *  (money-minor / timestamp-ms) is resolved against the source

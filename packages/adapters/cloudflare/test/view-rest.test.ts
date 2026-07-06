@@ -88,6 +88,51 @@ function harness(seed?: (db: InMemoryDatabase) => void) {
   return { app, db };
 }
 
+/** A staff session (owner) for exercising the `/admin/api/*` gate. */
+const staffAuth: Auth = {
+  handler: async () => new Response(null, { status: 404 }),
+  getSession: async () => ({
+    session: { id: "s", userId: "u", expiresAt: new Date(Date.now() + 60_000) },
+    user: { id: "u", email: "x@y.z", name: "Staff", role: "owner", githubLogin: null },
+  }),
+  getUserRole: async () => "owner",
+  methods: [],
+};
+
+/** Base fixture + one `surface: staff` View (`ordersRecent`), so the
+ *  same harness exercises both the public surface (`postsPublished`
+ *  stays public) and the staff surface (#433). `auth` defaults to a
+ *  staff session; override to `stubAuth` to test the unauthenticated
+ *  gate. */
+function staffHarness(
+  seed?: (db: InMemoryDatabase) => void,
+  auth: Auth = staffAuth,
+) {
+  const db = new InMemoryDatabase();
+  if (seed) seed(db);
+  const staffViewManifests: Manifest[] = [
+    ...manifests(),
+    {
+      apiVersion: "cms.mantle.aotter.net/v1",
+      kind: "View",
+      metadata: { name: "ordersRecent" },
+      spec: {
+        from: "posts",
+        surface: "staff",
+      },
+    },
+  ];
+  const ref = createCmsRef({
+    manifests: staffViewManifests,
+    siteDefaults: { locales: ["en", "zh-TW"] },
+    bindings: { db, kv: new InMemoryKv(), assets: new StubAssetServer() },
+    auth,
+  });
+  const app = new Hono();
+  mountServerEndpoints(app, ref);
+  return { app, db };
+}
+
 function row(id: string, data: Record<string, unknown>, status = "published") {
   return {
     id,
@@ -333,6 +378,22 @@ describe("GET /api/views/<name>", () => {
     expect(body.diagnostic?.message ?? "").not.toContain("secretKey");
   });
 
+  it("STAFF SURFACE (#433): a surface:staff View is unmounted at /api/views/<name> (404)", async () => {
+    const h = staffHarness();
+    const res = await h.app.request("/api/views/ordersRecent");
+    expect(res.status).toBe(404);
+  });
+
+  it("STAFF SURFACE (#433): a public View still serves at /api/views/<name>", async () => {
+    const h = staffHarness((db) => {
+      db.entries.set("p1", row("p1", { slug: "a", locale: "en" }));
+    });
+    const res = await h.app.request("/api/views/postsPublished");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(true);
+  });
+
   it("auth predicates evaluated BEFORE param coercion — wrong-role user doesn't leak param contract (codex follow-up)", async () => {
     // A logged-in user without the required staff role hitting a
     // staff-gated View with required params must get 403 AUTH_DENIED,
@@ -380,5 +441,47 @@ describe("GET /api/views/<name>", () => {
     const body = await res.json() as { diagnostic?: { code: string; message?: string } };
     expect(body.diagnostic?.code).toBe("AUTH_DENIED");
     expect(body.diagnostic?.message ?? "").not.toContain("secretKey");
+  });
+});
+
+describe("GET /admin/api/views/<name> — staff surface (#433)", () => {
+  it("serves a staff View at the admin path with a staff session (200)", async () => {
+    const h = staffHarness((db) => {
+      db.entries.set("p1", row("p1", { slug: "a", locale: "en" }));
+      db.entries.set("p2", row("p2", { slug: "b", locale: "zh-TW" }));
+    });
+    const res = await h.app.request("/admin/api/views/ordersRecent");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok: boolean;
+      data: { rows: unknown[]; page: number; show: number; hasMore: boolean };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.data.rows).toHaveLength(2);
+  });
+
+  it("returns 401 at the admin path without a session", async () => {
+    const h = staffHarness(undefined, stubAuth);
+    const res = await h.app.request("/admin/api/views/ordersRecent");
+    expect(res.status).toBe(401);
+  });
+
+  it("does NOT mount the staff View at the public path (404)", async () => {
+    const h = staffHarness();
+    const res = await h.app.request("/api/views/ordersRecent");
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /admin/api/views-manifest — staff-only filter (#433)", () => {
+  it("lists ONLY surface:staff Views (public storefront Views excluded)", async () => {
+    const h = staffHarness();
+    const res = await h.app.request("/admin/api/views-manifest");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { views: Array<{ name: string }> };
+    const names = body.views.map((v) => v.name).sort();
+    // Base fixture declares public Views `postsPublished` + `postsByLocale`
+    // (default surface); only the staff View `ordersRecent` must appear.
+    expect(names).toEqual(["ordersRecent"]);
   });
 });

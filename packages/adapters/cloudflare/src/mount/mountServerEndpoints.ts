@@ -56,6 +56,11 @@ export function mountServerEndpoints(
   }
   for (const v of ref.manifests) {
     if (v.kind !== "View") continue;
+    // Staff Views (#433) are NOT mounted on the public path — they
+    // register under the guarded `/admin/api/views/<name>` route
+    // inside `mountAdminBetterAuth` (which owns the staff gate).
+    // Public (default) Views keep the public REST surface.
+    if (v.spec.surface === "staff") continue;
     const viewName = v.metadata.name;
     app.get(`/api/views/${viewName}`, async (c) => {
       const runtime = await ref.get();
@@ -159,14 +164,18 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   // `/admin/api/collections` precedent exactly (same shape of
   // "precompute at mount from ref.manifests, list on GET") and needs
   // no changes to the `SiteInfo` type or its query key.
-  const viewsManifest = ref.manifests
-    .filter((m): m is ViewManifest => m.kind === "View")
-    .map((v) => ({
-      name: v.metadata.name,
-      from: v.spec.from,
-      params: v.spec.params ?? null,
-      fields: v.spec.fields ?? null,
-    }));
+  // Report-sidebar source (#433): ONLY `surface: staff` Views. Public
+  // storefront Views (default surface) auto-mount on the public REST
+  // path and must not appear in the admin report sidebar — listing
+  // them was noise + broke on param-driven storefront Views (see #433).
+  const staffViews = ref.manifests
+    .filter((m): m is ViewManifest => m.kind === "View" && m.spec.surface === "staff");
+  const viewsManifest = staffViews.map((v) => ({
+    name: v.metadata.name,
+    from: v.spec.from,
+    params: v.spec.params ?? null,
+    fields: v.spec.fields ?? null,
+  }));
 
   type StaffGateOk = Extract<StaffGate, { kind: "ok" }>;
   const guarded = (
@@ -306,6 +315,20 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   guarded("get", "/admin/api/collections", () => jsonResponse(200, { collections }));
 
   guarded("get", "/admin/api/views-manifest", () => jsonResponse(200, { views: viewsManifest }));
+
+  // Staff Views (#433): mounted behind the staff gate at
+  // `/admin/api/views/<name>` — NOT on the public `/api/views/<name>`
+  // path (the public mount loop skips `surface: staff`). Reuses the
+  // exact same `handleViewRequest` logic and response shape as the
+  // public surface; only the gate + path differ.
+  for (const v of staffViews) {
+    const viewName = v.metadata.name;
+    guarded("get", `/admin/api/views/${viewName}`, async (c) => {
+      const runtime = await ref.get();
+      const waitUntil = readWaitUntil(c);
+      return handleViewRequest(c.req.raw, runtime, viewName, ref.auth, waitUntil);
+    });
+  }
 
   guarded("get", "/admin/api/operations", () =>
     jsonResponse(200, {
