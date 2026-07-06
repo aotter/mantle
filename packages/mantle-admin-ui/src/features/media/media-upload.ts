@@ -1,3 +1,5 @@
+import { t } from "../../app/i18n";
+import type { AdminLanguage } from "../../app/preferences";
 import { api } from "../../lib/api";
 import type { CommittedMediaAsset, MediaPurposePolicy } from "../../lib/types";
 
@@ -26,12 +28,13 @@ export async function uploadMediaAsset(args: {
   preferredPurpose?: string;
   alt?: string;
   caption?: string;
+  language?: AdminLanguage;
 }): Promise<CommittedMediaAsset> {
   const purpose = selectPurpose(args.purposes, args.preferredPurpose);
   if (!purpose) {
     throw new Error("No media upload purpose is configured for this site.");
   }
-  const variants = await prepareImageVariants(args.file, purpose);
+  const variants = await prepareImageVariants(args.file, purpose, args.language ?? "en");
   const created = await api.post<MediaUploadResponse>("/media/uploads", {
     filename: args.file.name,
     purpose: purpose.name,
@@ -107,6 +110,7 @@ export function primaryPublicUrl(asset: CommittedMediaAsset): string | null {
 async function prepareImageVariants(
   file: File,
   policy: MediaPurposePolicy,
+  language: AdminLanguage,
 ): Promise<PreparedVariant[]> {
   if (!file.type.startsWith("image/") || file.type === "image/svg+xml") {
     throw new Error("Only raster image uploads are supported in the admin UI.");
@@ -117,7 +121,7 @@ async function prepareImageVariants(
   }
   const bitmap = await createImageBitmap(file);
   try {
-    const selected = slots.map((slot) => chooseMime(slot, policy));
+    const selected = await Promise.all(slots.map((slot) => chooseMime(slot, policy, language)));
     const primaryMime = selected.find(isClassicFallbackMime) ?? selected[0]!;
     const variants: PreparedVariant[] = [];
     for (const mimeType of selected) {
@@ -125,7 +129,7 @@ async function prepareImageVariants(
       variants.push({
         mimeType,
         role: mimeType === primaryMime ? "primary" : "alternate",
-        blob: await encodeBitmap(bitmap, mimeType, maxBytes),
+        blob: await encodeBitmap(bitmap, mimeType, maxBytes, language),
       });
     }
     return variants;
@@ -151,19 +155,58 @@ function normalizeMime(raw: string): string | null {
   return value.includes("/") ? value : null;
 }
 
-function chooseMime(slot: readonly string[], policy: MediaPurposePolicy): string {
+// Per-mime canvas encoder capability, probed once and cached for the life
+// of the module — `toBlob` is async, so there's no cheap synchronous way
+// to know whether e.g. image/avif is actually supported before trying it.
+// A mime is "encodable" iff a 1x1 canvas' `toBlob(mime)` returns a blob
+// whose `type` echoes back the requested mime (unsupported encoders
+// silently fall back to image/png instead of rejecting).
+const encoderProbeCache = new Map<string, Promise<boolean>>();
+
+function probeEncoderSupport(mimeType: string): Promise<boolean> {
+  let probe = encoderProbeCache.get(mimeType);
+  if (!probe) {
+    probe = (async () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = 1;
+        canvas.height = 1;
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, mimeType),
+        );
+        return blob?.type === mimeType;
+      } catch {
+        // Non-browser / unavailable canvas: probing is impossible, so
+        // fall back to the previous maxBytes-only behavior rather than
+        // failing every upload in an environment we can't inspect.
+        return true;
+      }
+    })();
+    encoderProbeCache.set(mimeType, probe);
+  }
+  return probe;
+}
+
+export async function chooseMime(
+  slot: readonly string[],
+  policy: MediaPurposePolicy,
+  language: AdminLanguage,
+): Promise<string> {
   for (const mime of slot) {
     if (!mime.startsWith("image/")) continue;
     if (policy.maxBytes[mime] == null) continue;
+    if (!(await probeEncoderSupport(mime))) continue;
     return mime;
   }
-  throw new Error(`No browser-supported image mime in purpose '${policy.name}'.`);
+  const attempted = slot.find((mime) => mime.startsWith("image/") && policy.maxBytes[mime] != null);
+  throw new Error(t(language, "media.encoderUnsupported", { mime: attempted ?? slot[0] ?? "?" }));
 }
 
-async function encodeBitmap(
+export async function encodeBitmap(
   bitmap: ImageBitmap,
   mimeType: string,
   maxBytes: number,
+  language: AdminLanguage,
 ): Promise<Blob> {
   let scale = 1;
   const qualitySteps = mimeType === "image/jpeg"
@@ -173,7 +216,16 @@ async function encodeBitmap(
   for (let attempt = 0; attempt < 6; attempt += 1) {
     for (const quality of qualitySteps) {
       const blob = await drawAndEncode(bitmap, mimeType, scale, quality);
-      if (blob.type !== mimeType) continue;
+      if (blob.type !== mimeType) {
+        // First attempt came back as a different type than requested —
+        // the encoder doesn't support this mime at all, so every further
+        // scale/quality retry would fail the same way. Bail immediately
+        // instead of burning 6 scales x 4 qualities on a lost cause (#440).
+        if (attempt === 0 && best === null) {
+          throw new Error(t(language, "media.encoderUnsupported", { mime: mimeType }));
+        }
+        continue;
+      }
       best = blob;
       if (blob.size <= maxBytes) return blob;
     }

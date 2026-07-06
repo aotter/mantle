@@ -601,6 +601,7 @@ function MediaAssetField({
         file,
         purposes: mediaPurposes,
         preferredPurpose: purpose,
+        language,
       });
       onChange(asset.id);
       setPublicUrl(primaryPublicUrl(asset));
