@@ -131,7 +131,7 @@ export function MediaBrowser({
       // and the operator should see how many failed rather than a single
       // opaque error hiding partial success (#F4).
       const results = await Promise.allSettled(
-        list.map((file) => uploadMediaAsset({ file, purposes })),
+        list.map((file) => uploadMediaAsset({ file, purposes, language })),
       );
       const succeeded = results.filter((r) => r.status === "fulfilled").length;
       const failures = results.filter(

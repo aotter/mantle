@@ -106,6 +106,7 @@ export function RichTextEditor({
         file,
         purposes: site.data?.media?.purposes ?? [],
         preferredPurpose: "content",
+        language,
       });
       const url = primaryPublicUrl(committed);
       if (!url) throw new Error("Uploaded media has no public URL.");
