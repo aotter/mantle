@@ -139,4 +139,89 @@ describe("createCmsRuntime + bootInit", () => {
     const site = await new DatabaseSiteConfigRepository(db).load();
     expect(site.brand).toBe("Operator-Edited");
   });
+
+  it("#441 re-boot syncs mediaPurposes from config even after first boot wrote a different value", async () => {
+    const db = new InMemoryDatabase();
+    const first = [
+      {
+        name: "post-cover",
+        required: ["image/jpeg"],
+        maxBytes: { "image/jpeg": 500_000 },
+      },
+    ] as const;
+    const runtime = createCmsRuntime({
+      manifests: [],
+      db,
+      kv: new InMemoryKv(),
+      assets: noopAssets,
+      siteDefaults: { media: { purposes: first } },
+    });
+    await runtime.bootInit();
+    const repo = new DatabaseSiteConfigRepository(db);
+    expect((await repo.readMediaPurposes()).map((p) => p.name)).toEqual(["post-cover"]);
+
+    // Config changes (new purpose, adjusted maxBytes) — as if a
+    // developer edited `mantleConfig.ts > siteDefaults.media.purposes`
+    // and redeployed. Boot again against the same DB.
+    const second = [
+      {
+        name: "post-cover",
+        required: ["image/jpeg"],
+        maxBytes: { "image/jpeg": 900_000 },
+      },
+      {
+        name: "product-gallery",
+        required: ["image/avif", "image/webp", "image/jpeg"],
+        maxBytes: { "image/avif": 250_000, "image/webp": 400_000, "image/jpeg": 600_000 },
+      },
+    ] as const;
+    const runtime2 = createCmsRuntime({
+      manifests: [],
+      db,
+      kv: new InMemoryKv(),
+      assets: noopAssets,
+      siteDefaults: { media: { purposes: second } },
+    });
+    await runtime2.bootInit();
+
+    const purposes = await repo.readMediaPurposes();
+    expect(purposes.map((p) => p.name).sort()).toEqual(["post-cover", "product-gallery"]);
+    expect(purposes.find((p) => p.name === "post-cover")?.maxBytes["image/jpeg"]).toBe(900_000);
+    const site = await repo.load();
+    expect(site.media.purposes.map((p) => p.name).sort()).toEqual([
+      "post-cover",
+      "product-gallery",
+    ]);
+  });
+
+  it("#441 re-boot syncs locales from config (no admin-UI edit path) while brand (UI-editable) stays operator-owned", async () => {
+    const db = new InMemoryDatabase();
+    const runtime = createCmsRuntime({
+      manifests: [],
+      db,
+      kv: new InMemoryKv(),
+      assets: noopAssets,
+      siteDefaults: { brand: "First", locales: ["en"] },
+    });
+    await runtime.bootInit();
+    const repo = new DatabaseSiteConfigRepository(db);
+    expect(await repo.readLocales()).toEqual(["en"]);
+
+    // Operator edits brand directly via the admin settings UI.
+    db.siteConfig.set("brand", "Operator-Edited");
+
+    // Developer adds a locale in `mantleConfig.ts` and redeploys.
+    const runtime2 = createCmsRuntime({
+      manifests: [],
+      db,
+      kv: new InMemoryKv(),
+      assets: noopAssets,
+      siteDefaults: { brand: "Second", locales: ["en", "ja"] },
+    });
+    await runtime2.bootInit();
+
+    expect(await repo.readLocales()).toEqual(["en", "ja"]);
+    const site = await repo.load();
+    expect(site.brand).toBe("Operator-Edited");
+  });
 });
