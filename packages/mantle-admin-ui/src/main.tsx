@@ -5,6 +5,8 @@ import { AdminApp } from "./app/admin-app";
 import { PreferencesProvider } from "./app/preferences";
 import { queryClient } from "./app/query-client";
 import { AdminRouterProvider } from "./app/router";
+import { ConfirmProvider } from "./ui/confirm-dialog";
+import { ToastProvider } from "./ui/toast";
 import "./styles/index.css";
 
 const rootElement = document.getElementById("root");
@@ -17,7 +19,11 @@ ReactDOM.createRoot(rootElement).render(
     <QueryClientProvider client={queryClient}>
       <PreferencesProvider>
         <AdminRouterProvider>
-          <AdminApp />
+          <ToastProvider>
+            <ConfirmProvider>
+              <AdminApp />
+            </ConfirmProvider>
+          </ToastProvider>
         </AdminRouterProvider>
       </PreferencesProvider>
     </QueryClientProvider>
