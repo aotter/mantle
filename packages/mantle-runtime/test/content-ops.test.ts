@@ -147,6 +147,19 @@ describe("CreateDraftUseCase", () => {
       expect(row.status).toBe("published");
     });
 
+    it("requires complete data because operational records are live immediately", async () => {
+      const h = noneHarness();
+      await expect(
+        h.createDraft.execute({
+          collection: "posts",
+          data: {},
+          authorId: null,
+        }),
+      ).rejects.toMatchObject({
+        diagnostic: { code: "INPUT_VALIDATION_FAILED", path: "/title" },
+      });
+    });
+
     it("updates in place regardless of status", async () => {
       const h = noneHarness();
       const row = await h.createDraft.execute({
