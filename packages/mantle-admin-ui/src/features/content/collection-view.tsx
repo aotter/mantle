@@ -5,7 +5,6 @@ import {
   Copy,
   Download,
   FileText,
-  MoreHorizontal,
   PencilLine,
   Plus,
   Search,
@@ -14,7 +13,6 @@ import {
 } from "lucide-react";
 import { useAdminLocation } from "../../app/router";
 import { api } from "../../lib/api";
-import { asRenderable } from "../../lib/errors";
 import { fieldLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { operationsQueryOptions } from "../../lib/queries";
@@ -31,25 +29,11 @@ import { Button } from "../../ui/button";
 import { TableCell, TableHeadCell, TableShell } from "../../ui/admin-table";
 import { CollapsibleDescription, EmptyState, ErrorBox, PageHeader } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../../ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../../ui/dropdown-menu";
 import { statusLabel } from "./status";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { formatMoneyMinor, formatTimestampMs, moneyMinorHint, timestampHint } from "./field-render";
-import { SchemaFields } from "./entry-edit-view";
+import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
 
 const TIMESTAMP_FMT = new Intl.DateTimeFormat(undefined, {
   dateStyle: "short",
@@ -85,7 +69,7 @@ export function CollectionView({
   // react-query's cache instead of triggering a duplicate fetch.
   const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
   const boundOperations = React.useMemo(
-    () => (operationsQuery.data ?? []).filter((op) => op.rowBindings.some((b) => b.collection === collectionName)),
+    () => boundOperationsFor(operationsQuery.data, collectionName),
     [operationsQuery.data, collectionName],
   );
   const entries = useQuery<ListEntriesResult>({
@@ -332,7 +316,6 @@ export function CollectionView({
                   language={language}
                   canonical={canonical}
                   collection={collection}
-                  collectionName={collectionName}
                   dataColumns={isOperationalCollection ? dataColumns : null}
                   boundOperations={boundOperations}
                   onOperationSuccess={refreshEntries}
@@ -670,7 +653,6 @@ function EntryRowDisplay({
   language,
   canonical,
   collection,
-  collectionName,
   dataColumns,
   boundOperations,
   onOperationSuccess,
@@ -684,7 +666,6 @@ function EntryRowDisplay({
   language: AdminLanguage;
   canonical: string | null;
   collection: Collection | undefined;
-  collectionName: string;
   /** Non-null (possibly empty) for `lifecycle: "none"` collections —
    *  swaps the status/locale/version cells for these data columns. */
   dataColumns: string[] | null;
@@ -702,7 +683,6 @@ function EntryRowDisplay({
   const [editing, setEditing] = React.useState(false);
   const [draftTitle, setDraftTitle] = React.useState(itemName);
   const [error, setError] = React.useState<string | null>(null);
-  const [activeOperation, setActiveOperation] = React.useState<StaffOperation | null>(null);
 
   React.useEffect(() => {
     if (!editing) setDraftTitle(itemName);
@@ -818,189 +798,20 @@ function EntryRowDisplay({
           <button type="button" className="row-action" title={t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy} onClick={() => void remove()}>
             <Trash2 className="size-3.5" aria-hidden />
           </button>
-          {boundOperations.length > 0 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="row-action"
-                  title={t(language, "rowActions.menuLabel")}
-                  aria-label={t(language, "rowActions.menuLabel")}
-                >
-                  <MoreHorizontal className="size-3.5" aria-hidden />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {boundOperations.map((op) => (
-                  <DropdownMenuItem key={op.name} onSelect={() => setActiveOperation(op)}>
-                    {resolveLocalizedText(op.title, language, canonical) ?? fieldLabel(op.name)}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
+          <RowOperationsMenu
+            row={row}
+            operations={boundOperations}
+            language={language}
+            canonical={canonical}
+            onSuccess={onOperationSuccess}
+          />
         </div>
         <span className="sr-only">
           {collection ? resolveLocalizedText(collection.title, language, canonical) ?? collection.name : ""}
         </span>
       </TableCell>
-      {activeOperation ? (
-        <RowActionDialog
-          operation={activeOperation}
-          binding={activeOperation.rowBindings.find((b) => b.collection === collectionName)}
-          row={row}
-          language={language}
-          canonical={canonical}
-          onClose={() => setActiveOperation(null)}
-          onSuccess={() => {
-            setActiveOperation(null);
-            onOperationSuccess();
-          }}
-        />
-      ) : null}
     </tr>
   );
-}
-
-/** Row-action modal (#430): pre-fills and locks the operation's bound
- *  `x-mantle-ref` input field to this row's identity, then renders the
- *  rest of the operation's `input` schema as an editable form.
- *
- *  Design decision: `SchemaFields`/`SchemaField` have no generic
- *  "render this one property read-only" prop (only the hardcoded
- *  `x-mantle-bind` check). Rather than thread a new prop through the
- *  whole recursive renderer for a single call site, the bound field is
- *  rendered here as its own read-only block (mirroring the existing
- *  read-only style block in `SchemaField`), and `SchemaFields` renders
- *  a shallow-cloned copy of `operation.input` with that ONE property
- *  omitted from `properties`/`required` — so the field can't be edited
- *  twice or shown twice. The bound value is merged back into the POST
- *  body from component state seeded on fetch, independent of whatever
- *  `SchemaFields`'s onChange produces for the remaining fields. */
-function RowActionDialog({
-  operation,
-  binding,
-  row,
-  language,
-  canonical,
-  onClose,
-  onSuccess,
-}: {
-  operation: StaffOperation;
-  binding: { collection: string; inputField: string; rowField: string } | undefined;
-  row: EntryRow;
-  language: AdminLanguage;
-  canonical: string | null;
-  onClose: () => void;
-  onSuccess: () => void;
-}): React.ReactElement {
-  const title = resolveLocalizedText(operation.title, language, canonical) ?? fieldLabel(operation.name);
-  const description = resolveLocalizedText(operation.description, language, canonical);
-  const rowField = binding?.rowField ?? "id";
-  const inputField = binding?.inputField;
-
-  const entryQuery = useQuery<EntryEditorPayload>({
-    queryKey: ["entry-editor", row.collection, row.id],
-    queryFn: () => api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(row.id)}`),
-  });
-
-  const prefillValue = React.useMemo(() => {
-    if (rowField === "id") return row.id;
-    return entryQuery.data?.entry.data[rowField] ?? undefined;
-  }, [entryQuery.data, rowField, row.id]);
-
-  const [formValue, setFormValue] = React.useState<Record<string, unknown>>({});
-  React.useEffect(() => {
-    if (prefillValue === undefined || !inputField) return;
-    setFormValue((prev) => ({ ...prev, [inputField]: prefillValue }));
-  }, [prefillValue, inputField]);
-
-  const editableSchema = React.useMemo(() => {
-    if (!inputField) return operation.input;
-    const properties = { ...(operation.input.properties ?? {}) };
-    delete properties[inputField];
-    const required = (operation.input.required ?? []).filter((name) => name !== inputField);
-    return { ...operation.input, properties, required };
-  }, [operation.input, inputField]);
-
-  const boundFieldLabel = inputField
-    ? resolveLocalizedText(operation.input.properties?.[inputField]?.description, language, canonical) ??
-      fieldLabel(inputField)
-    : null;
-
-  const invoke = useMutation({
-    mutationFn: (body: Record<string, unknown>) =>
-      api.post<{ ok: true; output: unknown }>(`/operations/${encodeURIComponent(operation.name)}`, body),
-    onSuccess,
-  });
-
-  const canSubmit = !inputField || prefillValue !== undefined;
-
-  return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          {description ? <DialogDescription>{description}</DialogDescription> : null}
-        </DialogHeader>
-
-        {entryQuery.isLoading ? (
-          <div className="glass-card h-24 animate-pulse" />
-        ) : (
-          <div className="space-y-5">
-            {inputField ? (
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">{boundFieldLabel}</label>
-                <p className="admin-input cursor-not-allowed bg-muted/40 text-muted-foreground">
-                  {stringifyBoundValue(prefillValue)}
-                </p>
-              </div>
-            ) : null}
-            <SchemaFields
-              schema={editableSchema}
-              value={formValue}
-              path={[]}
-              onChange={setFormValue}
-              language={language}
-              collectionName={operation.name}
-              mediaPurposes={[]}
-            />
-          </div>
-        )}
-
-        {entryQuery.isError ? <ErrorBox error={entryQuery.error} /> : null}
-        {invoke.isError ? (
-          <div>
-            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-destructive">
-              {t(language, "ops.error.title")}
-            </h3>
-            <ErrorBox error={asRenderable(invoke.error)} />
-          </div>
-        ) : null}
-
-        <DialogFooter>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={invoke.isPending}>
-            {t(language, "rowActions.cancel")}
-          </Button>
-          <Button
-            type="button"
-            onClick={() => invoke.mutate(formValue)}
-            disabled={invoke.isPending || !canSubmit}
-          >
-            {invoke.isPending ? t(language, "ops.running") : t(language, "ops.run")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function stringifyBoundValue(value: unknown): string {
-  if (value == null) return "";
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return JSON.stringify(value);
 }
 
 function renderTitle(
