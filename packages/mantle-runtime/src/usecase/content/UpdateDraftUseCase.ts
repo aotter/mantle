@@ -36,21 +36,6 @@ export class UpdateDraftUseCase {
     if (!existing) {
       throw new DiagnosticError(notFoundDiagnostic(opPath, "<unknown>", request.id));
     }
-    // lifecycle: none records have no draft/published workflow — they
-    // are editable in place regardless of stored status.
-    const lifecycle = resolveLifecycle(this.schemas.get(existing.collection));
-    if (existing.status !== "draft" && lifecycle !== "none") {
-      throw new DiagnosticError(
-        runtimeDiagnostic({
-          code: "CONFLICT",
-          severity: "error",
-          path: opPath,
-          value: existing.status,
-          expected: "row.status === 'draft'",
-          message: `Entry '${request.id}' is in status '${existing.status}'; only drafts are editable. Unpublish first.`,
-        }),
-      );
-    }
     const schema = this.schemas.get(existing.collection);
     if (!schema) {
       throw new DiagnosticError(
@@ -62,6 +47,21 @@ export class UpdateDraftUseCase {
           expected: "name of a declared Schema",
           candidates: [...this.schemas.keys()],
           message: `Entry '${request.id}' belongs to unknown Schema '${existing.collection}'.`,
+        }),
+      );
+    }
+    // lifecycle: none records have no draft/published workflow — they
+    // are editable in place regardless of stored status.
+    const lifecycle = resolveLifecycle(schema);
+    if (existing.status !== "draft" && lifecycle !== "none") {
+      throw new DiagnosticError(
+        runtimeDiagnostic({
+          code: "CONFLICT",
+          severity: "error",
+          path: opPath,
+          value: existing.status,
+          expected: "row.status === 'draft'",
+          message: `Entry '${request.id}' is in status '${existing.status}'; only drafts are editable. Unpublish first.`,
         }),
       );
     }
@@ -81,8 +81,8 @@ export class UpdateDraftUseCase {
       data,
       excludeId: existing.id,
       siteConfig: this.siteConfig,
-      // Drafts save incomplete; publish enforces required + locale.
-      partial: true,
+      // Real drafts save incomplete; lifecycle:none records are live immediately.
+      partial: lifecycle !== "none",
     });
     return withConflictDiagnostic(opPath, () =>
       this.entries.update({
