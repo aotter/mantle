@@ -34,3 +34,24 @@ export function propertyLabel(
 ): string {
   return resolveLocalizedText(schema?.title, language, canonical) ?? fieldLabel(name);
 }
+
+/**
+ * Help text for a JSON Schema property (#453, mirrors `propertyLabel`'s
+ * #443 `title` handling): the standard `description` keyword — either
+ * a plain string or the same `LocalizedText` locale-map shape used by
+ * `Schema.spec.description` — resolved via `resolveLocalizedText` for
+ * the viewer's language, falling back to the site canonical locale.
+ * Unlike `propertyLabel`, there is no humanized-name fallback: a
+ * property with no `description` simply has no help text, same as the
+ * pre-#453 behavior when the keyword was absent. Used by
+ * `entry-edit-view.tsx`'s `SchemaField` so form help text resolves the
+ * same way the row-operation dialog already resolves
+ * `operation.description` (`row-operations.tsx`).
+ */
+export function propertyDescription(
+  schema: JsonSchema | undefined,
+  language: AdminLanguage,
+  canonical: string | null,
+): string | undefined {
+  return resolveLocalizedText(schema?.description, language, canonical) ?? undefined;
+}

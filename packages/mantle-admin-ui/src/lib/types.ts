@@ -62,7 +62,11 @@ export interface JsonSchema {
   nullable?: boolean;
   default?: unknown;
   additionalProperties?: boolean | JsonSchema;
-  description?: string;
+  /** Standard JSON Schema keyword — plain string or the same
+   *  `LocalizedText` shape as `Collection.description` (#453, mirroring
+   *  the property `title` keyword's #443 shape). Optional; absent
+   *  renders no help text. */
+  description?: LocalizedText;
   /** Standard JSON Schema keyword (#443) — plain string or the same
    *  `LocalizedText` shape as `Collection.title`. Optional; absent
    *  means the consumer humanizes the property name instead. */
