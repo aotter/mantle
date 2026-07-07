@@ -9,6 +9,7 @@ import { operationsQueryOptions } from "../../lib/queries";
 import type {
   EntryEditorPayload,
   JsonSchema,
+  MediaLibraryItem,
   MediaPurposePolicy,
   RelatedEntrySection,
   SiteInfo,
@@ -27,7 +28,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../ui/dialog";
-import { formatMoneyMinor, formatTimestampMs, moneyMinorHint, timestampHint } from "./field-render";
+import { collectionSummaryKey } from "./collection-view";
+import { formatMoneyMinor, formatTimestampMs, hintBadgeLabel, moneyMinorHint, timestampHint } from "./field-render";
 import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
 
 export function EntryEditView({
@@ -205,7 +207,7 @@ export function EntryEditView({
                   <CollapsibleDescription
                     description={collectionDescription}
                     summaryLabel={t(language, "collection.schemaDetails")}
-                    collapsedIntro={t(language, "collection.schemaSummary", {
+                    collapsedIntro={t(language, collectionSummaryKey(payload.collection), {
                       name: collectionTitle,
                     })}
                   />
@@ -373,8 +375,11 @@ function SchemaField({
           {required ? <span className="ml-1 text-destructive">*</span> : null}
         </span>
         {schema["x-mcp-hint"] ? (
-          <span className="badge-status bg-accent text-accent-foreground" title={String(schema["x-mcp-hint"])}>
-            {String(schema["x-mcp-hint"])}
+          <span
+            className="badge-status bg-accent text-accent-foreground"
+            title={String(schema["x-mcp-hint"])}
+          >
+            {hintBadgeLabel(String(schema["x-mcp-hint"]), language)}
           </span>
         ) : null}
       </label>
@@ -592,6 +597,20 @@ function MediaAssetField({
   const [publicUrl, setPublicUrl] = React.useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const purpose = purposeForMediaField(mediaPurposes, collectionName, path);
+  const assetId = typeof value === "string" ? value : "";
+
+  // #444: a field that already has a value only ever showed the raw
+  // asset id/UUID — no confirmation of which image it actually points
+  // at. `publicUrl` is only populated in-memory right after an
+  // upload/pick in THIS session, so entries loaded with an existing
+  // value need their own fetch via the same `GET /admin/api/media/:id`
+  // the media library already uses.
+  const assetQuery = useQuery({
+    queryKey: ["media-asset", assetId],
+    queryFn: () => api.get<MediaLibraryItem>(`/media/${encodeURIComponent(assetId)}`),
+    enabled: assetId.length > 0,
+    retry: false,
+  });
 
   async function upload(file: File): Promise<void> {
     setUploading(true);
@@ -615,7 +634,8 @@ function MediaAssetField({
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <MediaAssetThumbnail assetId={assetId} asset={assetQuery.data} isError={assetQuery.isError} language={language} />
         <input
           className="admin-input min-w-0 flex-1"
           value={stringForInput(value)}
@@ -678,6 +698,38 @@ function MediaAssetField({
           />
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/** Small thumbnail chip (#444) next to an asset-id field: confirms
+ *  which image the stored id actually points at instead of leaving the
+ *  operator to trust a bare UUID. `isError` covers a deleted/missing
+ *  asset — the field must keep rendering normally rather than crash or
+ *  block editing, so this renders a neutral placeholder icon instead
+ *  of propagating the fetch error anywhere. */
+function MediaAssetThumbnail({
+  assetId,
+  asset,
+  isError,
+  language,
+}: {
+  assetId: string;
+  asset: MediaLibraryItem | undefined;
+  isError: boolean;
+  language: AdminLanguage;
+}): React.ReactElement | null {
+  if (!assetId) return null;
+  return (
+    <div
+      className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[var(--glass-border)] bg-muted/40"
+      title={isError ? t(language, "entryEdit.mediaMissing") : assetId}
+    >
+      {asset?.primaryUrl ? (
+        <img src={asset.primaryUrl} alt="" className="size-full object-cover" />
+      ) : (
+        <Images className="size-4 text-muted-foreground" aria-hidden />
+      )}
     </div>
   );
 }

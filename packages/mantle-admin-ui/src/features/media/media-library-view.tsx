@@ -13,6 +13,7 @@ import type {
 } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { Button } from "../../ui/button";
+import { useConfirm } from "../../ui/confirm-dialog";
 import { EmptyState, ErrorBox, PageHeader } from "../../ui/page";
 import { uploadMediaAsset } from "./media-upload";
 
@@ -288,10 +289,13 @@ function MediaTile({
     onSuccess: onChanged,
   });
 
-  function confirmDelete(): void {
-    if (typeof window !== "undefined" && !window.confirm(t(language, "media.deleteConfirm"))) {
-      return;
-    }
+  const confirm = useConfirm();
+
+  async function confirmDelete(): Promise<void> {
+    // #444: styled dialog instead of `window.confirm` — consistent with
+    // the rest of the app's modals and doesn't block automation drivers
+    // that can't dismiss native browser dialogs.
+    if (!(await confirm({ description: t(language, "media.deleteConfirm") }))) return;
     remove.mutate();
   }
 
@@ -385,7 +389,7 @@ function MediaTile({
                   className="row-action"
                   title={t(language, "media.delete")}
                   disabled={remove.isPending}
-                  onClick={confirmDelete}
+                  onClick={() => void confirmDelete()}
                 >
                   <Trash2 className="size-3.5" aria-hidden />
                 </button>
