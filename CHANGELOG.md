@@ -6,6 +6,20 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.45] - 2026-07-07
+
+### Added
+
+- **@aotter/mantle-spec / @aotter/mantle-admin-ui**: JSON Schema property `description` may now be a `LocalizedText` locale-map (string still accepted), mirroring property `title` (#443). The entry-editor renders field help text via `resolveLocalizedText`, so per-language operator-facing help works; `en` stays the OpenAPI/dev-doc string (#453).
+
+### Changed
+
+- **@aotter/mantle-admin-ui**: the sticky admin header glass is more opaque and more blurred so form content no longer bleeds through when scrolling (#452).
+
+### Fixed
+
+- **@aotter/mantle-spec / @aotter/mantle-runtime**: OpenAPI emit and the MCP tool catalog collapse a `LocalizedText` schema `description` to its `en` string, keeping emitted specs and MCP tool descriptions valid plain-string JSON Schema (#453).
+
 ## [0.0.11-alpha.44] - 2026-07-07
 
 ### Added
