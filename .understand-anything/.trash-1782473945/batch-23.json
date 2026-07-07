@@ -1,0 +1,678 @@
+{
+  "nodes": [
+    {
+      "id": "document:.agent/skills/mantle-release/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".agent/skills/mantle-release/SKILL.md",
+      "summary": "mantle-release agent skill 指令檔（.agent 版本），規範版本升版、tag、npm publish、starter fanout 與 landing 部署前必讀的 release 流程、Pre-Tag Gate 與失敗處理。",
+      "tags": ["documentation", "agent-skill", "release", "governance"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:.claude/skills/mantle-release/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/mantle-release/SKILL.md",
+      "summary": "mantle-release agent skill 指令檔（.claude 版本，與 .agent 版本內容對應），供 Claude Code 在 release 前讀取的版本升版與 fanout 監看流程契約。",
+      "tags": ["documentation", "agent-skill", "release", "governance"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:.github/CODEOWNERS",
+      "type": "config",
+      "name": "CODEOWNERS",
+      "filePath": ".github/CODEOWNERS",
+      "summary": "GitHub CODEOWNERS 設定，依路徑指派各 package 與治理檔案的預設審查者。",
+      "tags": ["configuration", "governance", "code-review", "github"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:.github/dependabot.yml",
+      "type": "config",
+      "name": "dependabot.yml",
+      "filePath": ".github/dependabot.yml",
+      "summary": "Dependabot 設定，定義 npm 與 GitHub Actions 各 package 目錄的相依套件自動更新排程與分組策略。",
+      "tags": ["configuration", "ci-cd", "dependencies", "automation", "github"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:.github/pull_request_template.md",
+      "type": "document",
+      "name": "pull_request_template.md",
+      "filePath": ".github/pull_request_template.md",
+      "summary": "GitHub Pull Request 範本，提供 Summary、Why、Scope、Test plan 與 Contributor checklist 等結構化區段。",
+      "tags": ["documentation", "governance", "pull-request", "github"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:.npmrc",
+      "type": "config",
+      "name": ".npmrc",
+      "filePath": ".npmrc",
+      "summary": "npm/pnpm registry 與安裝行為設定檔。",
+      "tags": ["configuration", "build-system", "npm"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:.nvmrc",
+      "type": "config",
+      "name": ".nvmrc",
+      "filePath": ".nvmrc",
+      "summary": "指定本專案使用的 Node.js 版本，供 nvm 等版本管理工具讀取。",
+      "tags": ["configuration", "build-system", "node"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:.understand-anything/.understandignore",
+      "type": "config",
+      "name": ".understandignore",
+      "filePath": ".understand-anything/.understandignore",
+      "summary": "Understand-Anything 分析工具的忽略規則檔，列出不納入知識圖譜掃描的路徑。",
+      "tags": ["configuration", "tooling", "ignore-rules"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:.understand-anything/config.json",
+      "type": "config",
+      "name": "config.json",
+      "filePath": ".understand-anything/config.json",
+      "summary": "Understand-Anything 工具設定檔，指定輸出語言等分析參數。",
+      "tags": ["configuration", "tooling", "json"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/design-references/editorial-blog-2026-05-05.md",
+      "type": "document",
+      "name": "editorial-blog-2026-05-05.md",
+      "filePath": "docs/design-references/editorial-blog-2026-05-05.md",
+      "summary": "已退役 editorial blog starter 的視覺系統設計參考，記錄設計主張、visual tokens、字體、版面、模板與 i18n surface，僅作設計參考非可執行模板。",
+      "tags": ["documentation", "design-reference", "visual-system", "blog"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/auth/appleClientSecret.ts",
+      "type": "file",
+      "name": "appleClientSecret.ts",
+      "filePath": "packages/adapters/cloudflare/src/auth/appleClientSecret.ts",
+      "summary": "在 Workers Web Crypto 上以 ES256 簽發 Sign in with Apple 的 client secret JWT，包含私鑰匯入與 base64url 編解碼輔助函式。",
+      "tags": ["auth", "oauth", "jwt", "cryptography", "utility"],
+      "complexity": "moderate",
+      "languageNotes": "全程使用 Workers 原生 crypto.subtle（ES256 / PKCS8）與 btoa/atob，避免 Node Buffer，確保 Workers CSP-safe。"
+    },
+    {
+      "id": "function:packages/adapters/cloudflare/src/auth/appleClientSecret.ts:appleClientSecret",
+      "type": "function",
+      "name": "appleClientSecret",
+      "filePath": "packages/adapters/cloudflare/src/auth/appleClientSecret.ts",
+      "lineRange": [75, 113],
+      "summary": "組裝並以 ES256 簽發 Apple client secret JWT，產出含 iss/sub/aud/iat/exp 的簽章字串。",
+      "tags": ["auth", "jwt", "oauth", "factory"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/adapters/cloudflare/src/auth/appleClientSecret.ts:importApplePrivateKey",
+      "type": "function",
+      "name": "importApplePrivateKey",
+      "filePath": "packages/adapters/cloudflare/src/auth/appleClientSecret.ts",
+      "lineRange": [119, 128],
+      "summary": "將 Apple PKCS8 私鑰解碼為 DER 並透過 crypto.subtle.importKey 匯入為 ECDSA P-256 簽章金鑰。",
+      "tags": ["cryptography", "auth", "key-import"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/adapters/cloudflare/src/auth/appleClientSecret.ts:decodePrivateKeyToDer",
+      "type": "function",
+      "name": "decodePrivateKeyToDer",
+      "filePath": "packages/adapters/cloudflare/src/auth/appleClientSecret.ts",
+      "lineRange": [130, 145],
+      "summary": "剝除 PEM 標記與空白後將 base64 私鑰內容解碼為 DER 位元組。",
+      "tags": ["cryptography", "serialization", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/auth/ConsoleEmailSender.ts",
+      "type": "file",
+      "name": "ConsoleEmailSender.ts",
+      "filePath": "packages/adapters/cloudflare/src/auth/ConsoleEmailSender.ts",
+      "summary": "EmailSender port 的開發用實作，將驗證信內容輸出到 console 而非實際寄送。",
+      "tags": ["auth", "email", "adapter", "development"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:packages/adapters/cloudflare/src/auth/ConsoleEmailSender.ts:ConsoleEmailSender",
+      "type": "class",
+      "name": "ConsoleEmailSender",
+      "filePath": "packages/adapters/cloudflare/src/auth/ConsoleEmailSender.ts",
+      "lineRange": [13, 22],
+      "summary": "將 email 內容印至 console 的 EmailSender 開發用替身實作。",
+      "tags": ["auth", "email", "adapter", "development"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/bindings/AssetsAssetServer.ts",
+      "type": "file",
+      "name": "AssetsAssetServer.ts",
+      "filePath": "packages/adapters/cloudflare/src/bindings/AssetsAssetServer.ts",
+      "summary": "以 Cloudflare Workers ASSETS binding 實作 runtime 的 AssetServer port，將請求轉送至靜態資產 fetcher。",
+      "tags": ["adapter", "cloudflare", "assets", "binding"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:packages/adapters/cloudflare/src/bindings/AssetsAssetServer.ts:AssetsAssetServer",
+      "type": "class",
+      "name": "AssetsAssetServer",
+      "filePath": "packages/adapters/cloudflare/src/bindings/AssetsAssetServer.ts",
+      "lineRange": [10, 18],
+      "summary": "包裝 ASSETS Fetcher 以實作 AssetServer port 的 fetch 方法。",
+      "tags": ["adapter", "cloudflare", "assets", "binding"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts",
+      "type": "file",
+      "name": "D1DatabaseDriver.ts",
+      "filePath": "packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts",
+      "summary": "以 Cloudflare D1 實作 runtime 的 DatabaseDriver port，包裝 prepared statement、batch，並提供向後相容的 _mantle_migrations → _migrations 遷移執行器。",
+      "tags": ["adapter", "cloudflare", "database", "d1", "migration"],
+      "complexity": "moderate",
+      "languageNotes": "以 WeakMap (NATIVE) 將 port-shaped statement 對映回原生 D1PreparedStatement，避免在 port 介面洩漏 Cloudflare 型別。"
+    },
+    {
+      "id": "class:packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts:D1DatabaseDriver",
+      "type": "class",
+      "name": "D1DatabaseDriver",
+      "filePath": "packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts",
+      "lineRange": [22, 42],
+      "summary": "DatabaseDriver port 的 D1 實作，提供 prepare、batch 與 migrations 入口。",
+      "tags": ["adapter", "cloudflare", "database", "d1"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts:D1Migrations",
+      "type": "class",
+      "name": "D1Migrations",
+      "filePath": "packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts",
+      "lineRange": [86, 131],
+      "summary": "管理 _migrations 表的建立、舊表相容遷移與待套用 migration 的批次執行。",
+      "tags": ["database", "migration", "d1"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/bindings/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/adapters/cloudflare/src/bindings/index.ts",
+      "summary": "bindings 資料夾的 barrel，re-export D1DatabaseDriver、KvCacheBinding、AssetsAssetServer、R2MediaStorage 與 queue dispatcher。",
+      "tags": ["barrel", "entry-point", "adapter", "cloudflare"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/bindings/KvCacheBinding.ts",
+      "type": "file",
+      "name": "KvCacheBinding.ts",
+      "filePath": "packages/adapters/cloudflare/src/bindings/KvCacheBinding.ts",
+      "summary": "以 Cloudflare KV 實作 runtime 的 KvCache port，提供 get/put/delete/list 等讀多寫少快取操作。",
+      "tags": ["adapter", "cloudflare", "cache", "kv", "binding"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:packages/adapters/cloudflare/src/bindings/KvCacheBinding.ts:KvCacheBinding",
+      "type": "class",
+      "name": "KvCacheBinding",
+      "filePath": "packages/adapters/cloudflare/src/bindings/KvCacheBinding.ts",
+      "lineRange": [7, 29],
+      "summary": "包裝 KVNamespace 以實作 KvCache port 的 get/put/delete/list 方法。",
+      "tags": ["adapter", "cloudflare", "cache", "kv"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts",
+      "type": "file",
+      "name": "R2MediaStorage.ts",
+      "filePath": "packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts",
+      "summary": "以 Cloudflare R2 實作選用的 MediaStorage port，處理預簽名上傳、變體驗證與 commit、公開 URL 產製與物件刪除，並以結構化 Diagnostic 回報錯誤。",
+      "tags": ["adapter", "cloudflare", "media", "r2", "storage"],
+      "complexity": "complex",
+      "languageNotes": "使用 S3 相容簽章（aws4fetch 風格）對 R2 產生預簽名 PUT URL；錯誤一律走 mediaDiagnostic 包裝的結構化 Diagnostic。"
+    },
+    {
+      "id": "class:packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts:R2MediaStorage",
+      "type": "class",
+      "name": "R2MediaStorage",
+      "filePath": "packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts",
+      "lineRange": [69, 277],
+      "summary": "MediaStorage port 的 R2 實作，涵蓋 createUpload、commitUpload、變體驗證、公開 URL 與刪除。",
+      "tags": ["adapter", "cloudflare", "media", "r2", "storage"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts:mediaDiagnostic",
+      "type": "function",
+      "name": "mediaDiagnostic",
+      "filePath": "packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts",
+      "lineRange": [279, 295],
+      "summary": "建構 media 相關錯誤的結構化 Diagnostic 工具函式。",
+      "tags": ["diagnostic", "error-handling", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts",
+      "type": "file",
+      "name": "WorkersQueueHookDispatcher.ts",
+      "filePath": "packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts",
+      "summary": "以 Cloudflare Workers Queue 實作 DeferredHookDispatcher port，enqueue 延遲 hook 並提供 queue consumer handler 執行 runDeferredHook。",
+      "tags": ["adapter", "cloudflare", "queue", "hook", "event-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts:WorkersQueueHookDispatcher",
+      "type": "class",
+      "name": "WorkersQueueHookDispatcher",
+      "filePath": "packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts",
+      "lineRange": [18, 24],
+      "summary": "包裝 Queue producer 以實作 DeferredHookDispatcher 的 enqueue 方法。",
+      "tags": ["adapter", "cloudflare", "queue", "hook"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts:createQueueHandler",
+      "type": "function",
+      "name": "createQueueHandler",
+      "filePath": "packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts",
+      "lineRange": [43, 77],
+      "summary": "建立 Workers Queue consumer handler，逐則訊息呼叫 runDeferredHook 並依結果 ack 或 retry。",
+      "tags": ["queue", "hook", "event-handler", "factory"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/handlers/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/adapters/cloudflare/src/handlers/index.ts",
+      "summary": "handlers 資料夾的 barrel，re-export cloudflareTurnstileCheck 與其選項型別。",
+      "tags": ["barrel", "entry-point", "adapter"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/handlers/turnstile.ts",
+      "type": "file",
+      "name": "turnstile.ts",
+      "filePath": "packages/adapters/cloudflare/src/handlers/turnstile.ts",
+      "summary": "提供 Cloudflare Turnstile 驗證的 Hono middleware，從請求取出 token 向 siteverify API 驗證，失敗時以結構化 Diagnostic 拒絕。",
+      "tags": ["middleware", "validation", "cloudflare", "turnstile", "api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/adapters/cloudflare/src/handlers/turnstile.ts:cloudflareTurnstileCheck",
+      "type": "function",
+      "name": "cloudflareTurnstileCheck",
+      "filePath": "packages/adapters/cloudflare/src/handlers/turnstile.ts",
+      "lineRange": [53, 75],
+      "summary": "建立驗證 Turnstile token 的 middleware，缺少或驗證失敗時回傳拒絕回應。",
+      "tags": ["middleware", "validation", "turnstile", "factory"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/adapters/cloudflare/src/handlers/turnstile.ts:verifyWithTurnstile",
+      "type": "function",
+      "name": "verifyWithTurnstile",
+      "filePath": "packages/adapters/cloudflare/src/handlers/turnstile.ts",
+      "lineRange": [77, 86],
+      "summary": "以 secret 與 token 呼叫 Turnstile siteverify API 並回傳驗證結果。",
+      "tags": ["validation", "turnstile", "http-client"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/adapters/cloudflare/src/index.ts",
+      "summary": "Cloudflare adapter 套件的公開入口 barrel，re-export ConsoleEmailSender、appleClientSecret 等對外 API。",
+      "tags": ["barrel", "entry-point", "adapter", "cloudflare"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/mount/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/adapters/cloudflare/src/mount/index.ts",
+      "summary": "mount 資料夾的 barrel，re-export server endpoint 掛載、MCP API handler、public routes 與 CmsConfig 等掛載相關 API。",
+      "tags": ["barrel", "entry-point", "adapter", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/oauth/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/adapters/cloudflare/src/oauth/index.ts",
+      "summary": "oauth 資料夾的 barrel，re-export OAuth 路徑常數、createOAuthProvider 與 authorize 掛載相關 API 與型別。",
+      "tags": ["barrel", "entry-point", "adapter", "oauth"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/oauth/oauthConstants.ts",
+      "type": "file",
+      "name": "oauthConstants.ts",
+      "filePath": "packages/adapters/cloudflare/src/oauth/oauthConstants.ts",
+      "summary": "定義 OAuth authorize / token / register 端點路徑常數，供 provider 與路由掛載共用。",
+      "tags": ["oauth", "constants", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/oauth/oauthSingleton.ts",
+      "type": "file",
+      "name": "oauthSingleton.ts",
+      "filePath": "packages/adapters/cloudflare/src/oauth/oauthSingleton.ts",
+      "summary": "建立並以單例方式快取 DCR 相容的 OAuth provider 實例，供 Cloudflare adapter 的 OAuth 端點共用。",
+      "tags": ["oauth", "singleton", "factory", "adapter"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/adapters/cloudflare/src/oauth/oauthSingleton.ts:createOAuthProvider",
+      "type": "function",
+      "name": "createOAuthProvider",
+      "filePath": "packages/adapters/cloudflare/src/oauth/oauthSingleton.ts",
+      "lineRange": [40, 49],
+      "summary": "依傳入參數建立或回傳已快取的 OAuth provider 單例實例。",
+      "tags": ["oauth", "singleton", "factory"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/adapters/cloudflare/src/auth/appleClientSecret.ts",
+      "target": "function:packages/adapters/cloudflare/src/auth/appleClientSecret.ts:appleClientSecret",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/auth/appleClientSecret.ts",
+      "target": "function:packages/adapters/cloudflare/src/auth/appleClientSecret.ts:appleClientSecret",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/auth/appleClientSecret.ts",
+      "target": "function:packages/adapters/cloudflare/src/auth/appleClientSecret.ts:importApplePrivateKey",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/auth/appleClientSecret.ts",
+      "target": "function:packages/adapters/cloudflare/src/auth/appleClientSecret.ts:decodePrivateKeyToDer",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "function:packages/adapters/cloudflare/src/auth/appleClientSecret.ts:appleClientSecret",
+      "target": "function:packages/adapters/cloudflare/src/auth/appleClientSecret.ts:importApplePrivateKey",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/adapters/cloudflare/src/auth/appleClientSecret.ts:importApplePrivateKey",
+      "target": "function:packages/adapters/cloudflare/src/auth/appleClientSecret.ts:decodePrivateKeyToDer",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/auth/ConsoleEmailSender.ts",
+      "target": "class:packages/adapters/cloudflare/src/auth/ConsoleEmailSender.ts:ConsoleEmailSender",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/auth/ConsoleEmailSender.ts",
+      "target": "class:packages/adapters/cloudflare/src/auth/ConsoleEmailSender.ts:ConsoleEmailSender",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/AssetsAssetServer.ts",
+      "target": "class:packages/adapters/cloudflare/src/bindings/AssetsAssetServer.ts:AssetsAssetServer",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/AssetsAssetServer.ts",
+      "target": "class:packages/adapters/cloudflare/src/bindings/AssetsAssetServer.ts:AssetsAssetServer",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts",
+      "target": "class:packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts:D1DatabaseDriver",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts",
+      "target": "class:packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts:D1DatabaseDriver",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts",
+      "target": "class:packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts:D1Migrations",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/KvCacheBinding.ts",
+      "target": "class:packages/adapters/cloudflare/src/bindings/KvCacheBinding.ts:KvCacheBinding",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/KvCacheBinding.ts",
+      "target": "class:packages/adapters/cloudflare/src/bindings/KvCacheBinding.ts:KvCacheBinding",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts",
+      "target": "class:packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts:R2MediaStorage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts",
+      "target": "class:packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts:R2MediaStorage",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts",
+      "target": "function:packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts:mediaDiagnostic",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts",
+      "target": "class:packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts:WorkersQueueHookDispatcher",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts",
+      "target": "class:packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts:WorkersQueueHookDispatcher",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts",
+      "target": "function:packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts:createQueueHandler",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts",
+      "target": "function:packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts:createQueueHandler",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/handlers/turnstile.ts",
+      "target": "function:packages/adapters/cloudflare/src/handlers/turnstile.ts:cloudflareTurnstileCheck",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/handlers/turnstile.ts",
+      "target": "function:packages/adapters/cloudflare/src/handlers/turnstile.ts:cloudflareTurnstileCheck",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/handlers/turnstile.ts",
+      "target": "function:packages/adapters/cloudflare/src/handlers/turnstile.ts:verifyWithTurnstile",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "function:packages/adapters/cloudflare/src/handlers/turnstile.ts:cloudflareTurnstileCheck",
+      "target": "function:packages/adapters/cloudflare/src/handlers/turnstile.ts:verifyWithTurnstile",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/oauth/oauthSingleton.ts",
+      "target": "function:packages/adapters/cloudflare/src/oauth/oauthSingleton.ts:createOAuthProvider",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/oauth/oauthSingleton.ts",
+      "target": "function:packages/adapters/cloudflare/src/oauth/oauthSingleton.ts:createOAuthProvider",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/oauth/oauthSingleton.ts",
+      "target": "file:packages/adapters/cloudflare/src/oauth/oauthConstants.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/index.ts",
+      "target": "file:packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/index.ts",
+      "target": "file:packages/adapters/cloudflare/src/bindings/KvCacheBinding.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/index.ts",
+      "target": "file:packages/adapters/cloudflare/src/bindings/AssetsAssetServer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/index.ts",
+      "target": "file:packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/index.ts",
+      "target": "file:packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/handlers/index.ts",
+      "target": "file:packages/adapters/cloudflare/src/handlers/turnstile.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/index.ts",
+      "target": "file:packages/adapters/cloudflare/src/auth/ConsoleEmailSender.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/index.ts",
+      "target": "file:packages/adapters/cloudflare/src/auth/appleClientSecret.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/oauth/index.ts",
+      "target": "file:packages/adapters/cloudflare/src/oauth/oauthConstants.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/oauth/index.ts",
+      "target": "file:packages/adapters/cloudflare/src/oauth/oauthSingleton.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts",
+      "target": "file:packages/adapters/cloudflare/test/R2MediaStorage.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/auth/appleClientSecret.ts",
+      "target": "file:packages/adapters/cloudflare/test/appleClientSecret.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts",
+      "target": "file:packages/adapters/cloudflare/test/mantle-internal-queue.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

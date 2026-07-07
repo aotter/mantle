@@ -1,0 +1,184 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 5,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "skills/install/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 127,
+      "nonEmptyLines": 101,
+      "sections": [
+        {
+          "heading": "mantle install",
+          "level": 1,
+          "line": 8
+        },
+        {
+          "heading": "Ground Truth",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Take Over a Provisioned Repo",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "Continue With Repo-Local Skills",
+          "level": 2,
+          "line": 74
+        },
+        {
+          "heading": "Local Preview",
+          "level": 2,
+          "line": 93
+        },
+        {
+          "heading": "Production",
+          "level": 2,
+          "line": 110
+        },
+        {
+          "heading": "Don't",
+          "level": 2,
+          "line": 118
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "skills/provision/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 164,
+      "nonEmptyLines": 130,
+      "sections": [
+        {
+          "heading": "Provision a Mantle Project",
+          "level": 1,
+          "line": 9
+        },
+        {
+          "heading": "End State",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "Principles",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "Flow",
+          "level": 2,
+          "line": 58
+        },
+        {
+          "heading": "Handoff",
+          "level": 2,
+          "line": 127
+        },
+        {
+          "heading": "Diagnostics",
+          "level": 2,
+          "line": 143
+        },
+        {
+          "heading": "Don't",
+          "level": 2,
+          "line": 153
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "skills/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 33,
+      "nonEmptyLines": 22,
+      "sections": [
+        {
+          "heading": "SKILL.md briefs (mantle)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Audience",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "Discoverability",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Conventions",
+          "level": 2,
+          "line": 22
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    },
+    {
+      "path": "starters/.keep",
+      "language": "unknown",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 0,
+      "metrics": {}
+    },
+    {
+      "path": "starters/blank/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 30,
+      "nonEmptyLines": 21,
+      "sections": [
+        {
+          "heading": "`starters/blank` — moved",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Why this moved",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "See also",
+          "level": 2,
+          "line": 27
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    }
+  ]
+}

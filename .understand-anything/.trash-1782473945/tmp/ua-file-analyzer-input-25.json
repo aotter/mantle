@@ -1,0 +1,31 @@
+{
+  "projectRoot": "/Users/aotter/projects/aotter-clam-mantle-workroot/mantle",
+  "batchFiles": [
+    {"path":"packages/mantle-runtime/src/usecase/dto/render/index.ts","language":"typescript","sizeLines":6,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/src/usecase/dto/view/index.ts","language":"typescript","sizeLines":1,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/src/usecase/index.ts","language":"typescript","sizeLines":15,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/test/dispatcher-match.test.ts","language":"typescript","sizeLines":43,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/test/locale-negotiator.test.ts","language":"typescript","sizeLines":54,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/test/view-param-coercer.test.ts","language":"typescript","sizeLines":134,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/vitest.config.ts","language":"typescript","sizeLines":8,"fileCategory":"code"},
+    {"path":"packages/mantle-spec/src/domain/index.ts","language":"typescript","sizeLines":2,"fileCategory":"code"},
+    {"path":"packages/mantle-spec/src/domain/service/index.ts","language":"typescript","sizeLines":15,"fileCategory":"code"},
+    {"path":"packages/mantle-spec/src/index.ts","language":"typescript","sizeLines":30,"fileCategory":"code"},
+    {"path":"packages/mantle-spec/src/infrastructure/cli/index.ts","language":"typescript","sizeLines":9,"fileCategory":"code"},
+    {"path":"packages/mantle-spec/src/infrastructure/index.ts","language":"typescript","sizeLines":1,"fileCategory":"code"},
+    {"path":"packages/mantle-spec/src/kernel/index.ts","language":"typescript","sizeLines":7,"fileCategory":"code"},
+    {"path":"packages/mantle-spec/src/usecase/dto/index.ts","language":"typescript","sizeLines":8,"fileCategory":"code"},
+    {"path":"packages/mantle-spec/src/usecase/index.ts","language":"typescript","sizeLines":11,"fileCategory":"code"},
+    {"path":"packages/mantle-spec/vitest.config.ts","language":"typescript","sizeLines":8,"fileCategory":"code"},
+    {"path":"packages/mantle/src/admin-ui.ts","language":"typescript","sizeLines":1,"fileCategory":"code"},
+    {"path":"packages/mantle/src/cloudflare.ts","language":"typescript","sizeLines":1,"fileCategory":"code"},
+    {"path":"packages/mantle/src/runtime.ts","language":"typescript","sizeLines":1,"fileCategory":"code"},
+    {"path":"packages/mantle/src/spec.ts","language":"typescript","sizeLines":1,"fileCategory":"code"},
+    {"path":"scripts/check-boundaries.mjs","language":"javascript","sizeLines":108,"fileCategory":"code"},
+    {"path":"scripts/sync-package-docs.mjs","language":"javascript","sizeLines":19,"fileCategory":"code"},
+    {"path":"skills/.keep","language":"unknown","sizeLines":0,"fileCategory":"code"},
+    {"path":"skills/customize-design/SKILL.md","language":"markdown","sizeLines":214,"fileCategory":"docs"},
+    {"path":"skills/extend/SKILL.md","language":"markdown","sizeLines":214,"fileCategory":"docs"}
+  ],
+  "batchImportData": {"packages/mantle-runtime/src/usecase/dto/render/index.ts":[],"packages/mantle-runtime/src/usecase/dto/view/index.ts":[],"packages/mantle-runtime/src/usecase/index.ts":[],"packages/mantle-runtime/test/dispatcher-match.test.ts":["packages/mantle-runtime/src/domain/service/PathMatcher.ts"],"packages/mantle-runtime/test/locale-negotiator.test.ts":["packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts"],"packages/mantle-runtime/test/view-param-coercer.test.ts":["packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts"],"packages/mantle-runtime/vitest.config.ts":[],"packages/mantle-spec/src/domain/index.ts":[],"packages/mantle-spec/src/domain/service/index.ts":[],"packages/mantle-spec/src/index.ts":[],"packages/mantle-spec/src/infrastructure/cli/index.ts":[],"packages/mantle-spec/src/infrastructure/index.ts":[],"packages/mantle-spec/src/kernel/index.ts":[],"packages/mantle-spec/src/usecase/dto/index.ts":[],"packages/mantle-spec/src/usecase/index.ts":[],"packages/mantle-spec/vitest.config.ts":[],"packages/mantle/src/admin-ui.ts":[],"packages/mantle/src/cloudflare.ts":[],"packages/mantle/src/runtime.ts":[],"packages/mantle/src/spec.ts":[],"scripts/check-boundaries.mjs":[],"scripts/sync-package-docs.mjs":[],"skills/.keep":[],"skills/customize-design/SKILL.md":[],"skills/extend/SKILL.md":[]}
+}

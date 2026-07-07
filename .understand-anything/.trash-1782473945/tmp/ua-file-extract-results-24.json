@@ -1,0 +1,1611 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 25,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/adapters/cloudflare/test/appleClientSecret.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 213,
+      "nonEmptyLines": 197,
+      "functions": [
+        {
+          "name": "generateEphemeralKeyPair",
+          "startLine": 14,
+          "endLine": 34,
+          "params": []
+        },
+        {
+          "name": "base64UrlDecode",
+          "startLine": 36,
+          "endLine": 43,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "verifyJwt",
+          "startLine": 45,
+          "endLine": 68,
+          "params": [
+            "jwt",
+            "publicKey"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "generateEphemeralKeyPair",
+          "callee": "crypto.subtle.generateKey",
+          "lineNumber": 19
+        },
+        {
+          "caller": "generateEphemeralKeyPair",
+          "callee": "crypto.subtle.exportKey",
+          "lineNumber": 24
+        },
+        {
+          "caller": "generateEphemeralKeyPair",
+          "callee": "btoa",
+          "lineNumber": 25
+        },
+        {
+          "caller": "generateEphemeralKeyPair",
+          "callee": "String.fromCharCode",
+          "lineNumber": 26
+        },
+        {
+          "caller": "generateEphemeralKeyPair",
+          "callee": "base64.match(/.{1,64}/g)?.join",
+          "lineNumber": 31
+        },
+        {
+          "caller": "generateEphemeralKeyPair",
+          "callee": "base64.match",
+          "lineNumber": 31
+        },
+        {
+          "caller": "base64UrlDecode",
+          "callee": "\"=\".repeat",
+          "lineNumber": 37
+        },
+        {
+          "caller": "base64UrlDecode",
+          "callee": "padded.replace(/-/g, \"+\").replace",
+          "lineNumber": 38
+        },
+        {
+          "caller": "base64UrlDecode",
+          "callee": "padded.replace",
+          "lineNumber": 38
+        },
+        {
+          "caller": "base64UrlDecode",
+          "callee": "atob",
+          "lineNumber": 39
+        },
+        {
+          "caller": "base64UrlDecode",
+          "callee": "bin.charCodeAt",
+          "lineNumber": 41
+        },
+        {
+          "caller": "verifyJwt",
+          "callee": "jwt.split",
+          "lineNumber": 49
+        },
+        {
+          "caller": "verifyJwt",
+          "callee": "expect(parts.length).toBe",
+          "lineNumber": 50
+        },
+        {
+          "caller": "verifyJwt",
+          "callee": "expect",
+          "lineNumber": 50
+        },
+        {
+          "caller": "verifyJwt",
+          "callee": "JSON.parse",
+          "lineNumber": 52
+        },
+        {
+          "caller": "verifyJwt",
+          "callee": "new TextDecoder().decode",
+          "lineNumber": 52
+        },
+        {
+          "caller": "verifyJwt",
+          "callee": "base64UrlDecode",
+          "lineNumber": 52
+        },
+        {
+          "caller": "verifyJwt",
+          "callee": "JSON.parse",
+          "lineNumber": 56
+        },
+        {
+          "caller": "verifyJwt",
+          "callee": "new TextDecoder().decode",
+          "lineNumber": 57
+        },
+        {
+          "caller": "verifyJwt",
+          "callee": "base64UrlDecode",
+          "lineNumber": 57
+        },
+        {
+          "caller": "verifyJwt",
+          "callee": "base64UrlDecode",
+          "lineNumber": 59
+        },
+        {
+          "caller": "verifyJwt",
+          "callee": "crypto.subtle.verify",
+          "lineNumber": 60
+        },
+        {
+          "caller": "verifyJwt",
+          "callee": "new TextEncoder().encode",
+          "lineNumber": 64
+        },
+        {
+          "caller": "verifyJwt",
+          "callee": "expect(ok).toBe",
+          "lineNumber": 66
+        },
+        {
+          "caller": "verifyJwt",
+          "callee": "expect",
+          "lineNumber": 66
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/mantle-internal-queue.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 190,
+      "nonEmptyLines": 180,
+      "functions": [
+        {
+          "name": "fakeQueue",
+          "startLine": 16,
+          "endLine": 28,
+          "params": []
+        },
+        {
+          "name": "fakeBatch",
+          "startLine": 36,
+          "endLine": 67,
+          "params": [
+            "envelopes"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "fakeQueue",
+          "callee": "captured.push",
+          "lineNumber": 21
+        },
+        {
+          "caller": "fakeQueue",
+          "callee": "captured.push",
+          "lineNumber": 24
+        },
+        {
+          "caller": "fakeBatch",
+          "callee": "envelopes.map",
+          "lineNumber": 40
+        },
+        {
+          "caller": "fakeBatch",
+          "callee": "messages.map",
+          "lineNumber": 47
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/R2MediaStorage.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 309,
+      "nonEmptyLines": 288,
+      "functions": [
+        {
+          "name": "fakeBucket",
+          "startLine": 35,
+          "endLine": 74,
+          "params": []
+        },
+        {
+          "name": "counterIdGenerator",
+          "startLine": 76,
+          "endLine": 79,
+          "params": [
+            "prefix"
+          ]
+        },
+        {
+          "name": "makeStorage",
+          "startLine": 81,
+          "endLine": 102,
+          "params": []
+        },
+        {
+          "name": "emptyStream",
+          "startLine": 104,
+          "endLine": 110,
+          "params": []
+        },
+        {
+          "name": "seedObject",
+          "startLine": 112,
+          "endLine": 129,
+          "params": [
+            "state",
+            "key",
+            "opts"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "get",
+          "callee": "state.objects.get",
+          "lineNumber": 43
+        },
+        {
+          "caller": "put",
+          "callee": "state.puts.push",
+          "lineNumber": 50
+        },
+        {
+          "caller": "put",
+          "callee": "state.objects.get",
+          "lineNumber": 55
+        },
+        {
+          "caller": "put",
+          "callee": "state.objects.set",
+          "lineNumber": 57
+        },
+        {
+          "caller": "delete",
+          "callee": "state.deletes.push",
+          "lineNumber": 66
+        },
+        {
+          "caller": "delete",
+          "callee": "state.objects.delete",
+          "lineNumber": 67
+        },
+        {
+          "caller": "makeStorage",
+          "callee": "fakeBucket",
+          "lineNumber": 85
+        },
+        {
+          "caller": "makeStorage",
+          "callee": "counterIdGenerator",
+          "lineNumber": 98
+        },
+        {
+          "caller": "start",
+          "callee": "controller.close",
+          "lineNumber": 107
+        },
+        {
+          "caller": "seedObject",
+          "callee": "state.objects.set",
+          "lineNumber": 122
+        },
+        {
+          "caller": "seedObject",
+          "callee": "emptyStream",
+          "lineNumber": 127
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/vitest.config.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 8,
+      "nonEmptyLines": 7,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/netlify/package.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 19,
+      "nonEmptyLines": 19,
+      "sections": [
+        {
+          "heading": "name",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "description",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "license",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "homepage",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "repository",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "type",
+          "level": 1,
+          "line": 8
+        },
+        {
+          "heading": "private",
+          "level": 1,
+          "line": 13
+        },
+        {
+          "heading": "scripts",
+          "level": 1,
+          "line": 14
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "packages/adapters/netlify/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 40,
+      "nonEmptyLines": 27,
+      "sections": [
+        {
+          "heading": "`@aotter/mantle-netlify` — STUB",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Why does this package exist if it has no code?",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "What v0.2 will ship",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Want this sooner?",
+          "level": 2,
+          "line": 34
+        },
+        {
+          "heading": "Until v0.2",
+          "level": 2,
+          "line": 38
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/env.d.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 7,
+      "nonEmptyLines": 6,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/styles/global.css",
+      "language": "css",
+      "fileCategory": "markup",
+      "totalLines": 1381,
+      "nonEmptyLines": 1169,
+      "metrics": {}
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/styles/index.css",
+      "language": "css",
+      "fileCategory": "markup",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "packages/mantle-admin-ui/vite.config.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 81,
+      "nonEmptyLines": 78,
+      "functions": [
+        {
+          "name": "inlineIndexHtmlPlugin",
+          "startLine": 60,
+          "endLine": 81,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "closeBundle",
+          "callee": "resolve",
+          "lineNumber": 65
+        },
+        {
+          "caller": "closeBundle",
+          "callee": "readFileSync",
+          "lineNumber": 66
+        },
+        {
+          "caller": "closeBundle",
+          "callee": "resolve",
+          "lineNumber": 66
+        },
+        {
+          "caller": "closeBundle",
+          "callee": "JSON.stringify",
+          "lineNumber": 67
+        },
+        {
+          "caller": "closeBundle",
+          "callee": "writeFileSync",
+          "lineNumber": 71
+        },
+        {
+          "caller": "closeBundle",
+          "callee": "resolve",
+          "lineNumber": 72
+        },
+        {
+          "caller": "closeBundle",
+          "callee": "writeFileSync",
+          "lineNumber": 75
+        },
+        {
+          "caller": "closeBundle",
+          "callee": "resolve",
+          "lineNumber": 76
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 3,
+      "nonEmptyLines": 3,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/model/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 12,
+      "nonEmptyLines": 12,
+      "exports": [
+        {
+          "name": "SeoMeta",
+          "line": 5,
+          "isDefault": false
+        },
+        {
+          "name": "TemplateRegistry",
+          "line": 6,
+          "isDefault": false
+        },
+        {
+          "name": "EntryContext",
+          "line": 6,
+          "isDefault": false
+        },
+        {
+          "name": "ListContext",
+          "line": 6,
+          "isDefault": false
+        },
+        {
+          "name": "EntryTemplate",
+          "line": 6,
+          "isDefault": false
+        },
+        {
+          "name": "ListTemplate",
+          "line": 6,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 6,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/EmailSender.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 31,
+      "nonEmptyLines": 30,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 27,
+      "nonEmptyLines": 27,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/io/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 8,
+      "nonEmptyLines": 8,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 67,
+      "nonEmptyLines": 63,
+      "functions": [
+        {
+          "name": "siteConfigFromDefaults",
+          "startLine": 28,
+          "endLine": 40,
+          "params": [
+            "defaults"
+          ]
+        },
+        {
+          "name": "inferLocaleFromPath",
+          "startLine": 42,
+          "endLine": 55,
+          "params": [
+            "path",
+            "site"
+          ]
+        },
+        {
+          "name": "isKnownLocale",
+          "startLine": 57,
+          "endLine": 62,
+          "params": [
+            "locale",
+            "site"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "siteConfigFromDefaults",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "inferLocaleFromPath",
+          "line": 42,
+          "isDefault": false
+        },
+        {
+          "name": "isKnownLocale",
+          "line": 57,
+          "isDefault": false
+        },
+        {
+          "name": "toUrlLocale",
+          "line": 67,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "inferLocaleFromPath",
+          "callee": "path.split",
+          "lineNumber": 43
+        },
+        {
+          "caller": "inferLocaleFromPath",
+          "callee": "URL_LOCALE.test",
+          "lineNumber": 48
+        },
+        {
+          "caller": "inferLocaleFromPath",
+          "callee": "seg.toLowerCase",
+          "lineNumber": 48
+        },
+        {
+          "caller": "inferLocaleFromPath",
+          "callee": "seg.toLowerCase",
+          "lineNumber": 49
+        },
+        {
+          "caller": "inferLocaleFromPath",
+          "callee": "toUrlLocale",
+          "lineNumber": 51
+        },
+        {
+          "caller": "isKnownLocale",
+          "callee": "locale.toLowerCase",
+          "lineNumber": 59
+        },
+        {
+          "caller": "isKnownLocale",
+          "callee": "URL_LOCALE.test",
+          "lineNumber": 60
+        },
+        {
+          "caller": "isKnownLocale",
+          "callee": "site.locales.some",
+          "lineNumber": 61
+        },
+        {
+          "caller": "isKnownLocale",
+          "callee": "toUrlLocale",
+          "lineNumber": 61
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 4,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/PathMatcher.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 54,
+      "nonEmptyLines": 52,
+      "functions": [
+        {
+          "name": "matchPath",
+          "startLine": 14,
+          "endLine": 41,
+          "params": [
+            "triggerPath",
+            "requestPath"
+          ]
+        },
+        {
+          "name": "safeDecode",
+          "startLine": 43,
+          "endLine": 49,
+          "params": [
+            "segment"
+          ]
+        },
+        {
+          "name": "stripTrailingSlash",
+          "startLine": 52,
+          "endLine": 54,
+          "params": [
+            "p"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "matchPath",
+          "line": 14,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "matchPath",
+          "callee": "stripTrailingSlash(triggerPath).split",
+          "lineNumber": 21
+        },
+        {
+          "caller": "matchPath",
+          "callee": "stripTrailingSlash",
+          "lineNumber": 21
+        },
+        {
+          "caller": "matchPath",
+          "callee": "stripTrailingSlash(requestPath).split",
+          "lineNumber": 22
+        },
+        {
+          "caller": "matchPath",
+          "callee": "stripTrailingSlash",
+          "lineNumber": 22
+        },
+        {
+          "caller": "matchPath",
+          "callee": "safeDecode",
+          "lineNumber": 30
+        },
+        {
+          "caller": "matchPath",
+          "callee": "t.startsWith",
+          "lineNumber": 32
+        },
+        {
+          "caller": "matchPath",
+          "callee": "t.endsWith",
+          "lineNumber": 32
+        },
+        {
+          "caller": "matchPath",
+          "callee": "t.slice",
+          "lineNumber": 33
+        },
+        {
+          "caller": "safeDecode",
+          "callee": "decodeURIComponent",
+          "lineNumber": 45
+        },
+        {
+          "caller": "stripTrailingSlash",
+          "callee": "p.endsWith",
+          "lineNumber": 53
+        },
+        {
+          "caller": "stripTrailingSlash",
+          "callee": "p.slice",
+          "lineNumber": 53
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 102,
+      "nonEmptyLines": 97,
+      "functions": [
+        {
+          "name": "coerceViewParams",
+          "startLine": 25,
+          "endLine": 47,
+          "params": [
+            "view",
+            "query"
+          ]
+        },
+        {
+          "name": "coerceScalar",
+          "startLine": 49,
+          "endLine": 63,
+          "params": [
+            "raw",
+            "schema",
+            "name"
+          ]
+        },
+        {
+          "name": "coerceByType",
+          "startLine": 65,
+          "endLine": 102,
+          "params": [
+            "raw",
+            "type",
+            "name"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "ViewParamCoercionError",
+          "startLine": 14,
+          "endLine": 19,
+          "methods": [
+            "constructor"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "ViewParamCoercionError",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "coerceViewParams",
+          "line": 25,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "super",
+          "lineNumber": 16
+        },
+        {
+          "caller": "coerceViewParams",
+          "callee": "Object.entries",
+          "lineNumber": 34
+        },
+        {
+          "caller": "coerceViewParams",
+          "callee": "query.get",
+          "lineNumber": 35
+        },
+        {
+          "caller": "coerceViewParams",
+          "callee": "required.includes",
+          "lineNumber": 37
+        },
+        {
+          "caller": "coerceViewParams",
+          "callee": "coerceScalar",
+          "lineNumber": 44
+        },
+        {
+          "caller": "coerceScalar",
+          "callee": "coerceByType",
+          "lineNumber": 54
+        },
+        {
+          "caller": "coerceScalar",
+          "callee": "Array.isArray",
+          "lineNumber": 55
+        },
+        {
+          "caller": "coerceScalar",
+          "callee": "schema.enum.includes",
+          "lineNumber": 56
+        },
+        {
+          "caller": "coerceScalar",
+          "callee": "schema.enum.join",
+          "lineNumber": 58
+        },
+        {
+          "caller": "coerceScalar",
+          "callee": "JSON.stringify",
+          "lineNumber": 58
+        },
+        {
+          "caller": "coerceByType",
+          "callee": "Number.parseInt",
+          "lineNumber": 68
+        },
+        {
+          "caller": "coerceByType",
+          "callee": "Number.isFinite",
+          "lineNumber": 72
+        },
+        {
+          "caller": "coerceByType",
+          "callee": "String",
+          "lineNumber": 72
+        },
+        {
+          "caller": "coerceByType",
+          "callee": "raw.trim",
+          "lineNumber": 72
+        },
+        {
+          "caller": "coerceByType",
+          "callee": "JSON.stringify",
+          "lineNumber": 74
+        },
+        {
+          "caller": "coerceByType",
+          "callee": "Number",
+          "lineNumber": 80
+        },
+        {
+          "caller": "coerceByType",
+          "callee": "Number.isFinite",
+          "lineNumber": 81
+        },
+        {
+          "caller": "coerceByType",
+          "callee": "JSON.stringify",
+          "lineNumber": 83
+        },
+        {
+          "caller": "coerceByType",
+          "callee": "JSON.stringify",
+          "lineNumber": 92
+        },
+        {
+          "caller": "coerceByType",
+          "callee": "String",
+          "lineNumber": 99
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 3,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 135,
+      "nonEmptyLines": 127,
+      "exports": [
+        {
+          "name": "createCmsRuntime",
+          "line": 19,
+          "isDefault": false
+        },
+        {
+          "name": "CreateCmsRuntimeArgs",
+          "line": 19,
+          "isDefault": false
+        },
+        {
+          "name": "CmsRuntime",
+          "line": 19,
+          "isDefault": false
+        },
+        {
+          "name": "DatabaseDriver",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "PreparedStatement",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "RunResult",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "BatchResult",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "MigrationRunner",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "Migration",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "KvCache",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "KvPutOptions",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "KvListResult",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "AssetServer",
+          "line": 37,
+          "isDefault": false
+        },
+        {
+          "name": "MediaStorage",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "CreateUploadArgs",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "CreateUploadVariantSpec",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "CreateUploadResult",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "UploadCapability",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "CommitUploadArgs",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "CommitUploadVariantSpec",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "GetPublicUrlArgs",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "DeleteObjectArgs",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "MediaAsset",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "MediaVariant",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "MediaVariantRole",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "pickPrimaryVariant",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "MediaAssetRepository",
+          "line": 53,
+          "isDefault": false
+        },
+        {
+          "name": "EmailSender",
+          "line": 54,
+          "isDefault": false
+        },
+        {
+          "name": "EmailSendArgs",
+          "line": 54,
+          "isDefault": false
+        },
+        {
+          "name": "extensionForMime",
+          "line": 58,
+          "isDefault": false
+        },
+        {
+          "name": "DeferredHookDispatcher",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "DeferredHookEnvelope",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "CtxSnapshot",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "IdGenerator",
+          "line": 68,
+          "isDefault": false
+        },
+        {
+          "name": "RandomUuidGenerator",
+          "line": 68,
+          "isDefault": false
+        },
+        {
+          "name": "AnyHandler",
+          "line": 71,
+          "isDefault": false
+        },
+        {
+          "name": "HandlerContext",
+          "line": 71,
+          "isDefault": false
+        },
+        {
+          "name": "SeoMeta",
+          "line": 75,
+          "isDefault": false
+        },
+        {
+          "name": "TemplateRegistry",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "EntryContext",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "ListContext",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "EntryTemplate",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "ListTemplate",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "createPublicPathResolver",
+          "line": 83,
+          "isDefault": false
+        },
+        {
+          "name": "PublicPathResolver",
+          "line": 83,
+          "isDefault": false
+        },
+        {
+          "name": "PublicPathResolverConfig",
+          "line": 83,
+          "isDefault": false
+        },
+        {
+          "name": "CollectionRoute",
+          "line": 83,
+          "isDefault": false
+        },
+        {
+          "name": "composeEntrySeoMeta",
+          "line": 89,
+          "isDefault": false
+        },
+        {
+          "name": "renderSeoTagsHtml",
+          "line": 89,
+          "isDefault": false
+        },
+        {
+          "name": "ComposeEntrySeoMetaArgs",
+          "line": 89,
+          "isDefault": false
+        },
+        {
+          "name": "SiblingTranslation",
+          "line": 89,
+          "isDefault": false
+        },
+        {
+          "name": "entryHtmlKey",
+          "line": 98,
+          "isDefault": false
+        },
+        {
+          "name": "entryMarkdownKey",
+          "line": 98,
+          "isDefault": false
+        },
+        {
+          "name": "entryHtmlKeyFromParts",
+          "line": 98,
+          "isDefault": false
+        },
+        {
+          "name": "entryMarkdownKeyFromParts",
+          "line": 98,
+          "isDefault": false
+        },
+        {
+          "name": "listHtmlKey",
+          "line": 98,
+          "isDefault": false
+        },
+        {
+          "name": "llmsTxtKey",
+          "line": 98,
+          "isDefault": false
+        },
+        {
+          "name": "serializeEntryAsMarkdown",
+          "line": 106,
+          "isDefault": false
+        },
+        {
+          "name": "readEntryBySlug",
+          "line": 107,
+          "isDefault": false
+        },
+        {
+          "name": "inferLocaleFromPath",
+          "line": 108,
+          "isDefault": false
+        },
+        {
+          "name": "isKnownLocale",
+          "line": 108,
+          "isDefault": false
+        },
+        {
+          "name": "siteConfigFromDefaults",
+          "line": 108,
+          "isDefault": false
+        },
+        {
+          "name": "toUrlLocale",
+          "line": 108,
+          "isDefault": false
+        },
+        {
+          "name": "matchPath",
+          "line": 114,
+          "isDefault": false
+        },
+        {
+          "name": "evaluateAuthAll",
+          "line": 115,
+          "isDefault": false
+        },
+        {
+          "name": "coerceViewParams",
+          "line": 116,
+          "isDefault": false
+        },
+        {
+          "name": "ViewParamCoercionError",
+          "line": 116,
+          "isDefault": false
+        },
+        {
+          "name": "McpJsonRpcDispatcher",
+          "line": 123,
+          "isDefault": false
+        },
+        {
+          "name": "McpAuthContext",
+          "line": 123,
+          "isDefault": false
+        },
+        {
+          "name": "McpUseCases",
+          "line": 123,
+          "isDefault": false
+        },
+        {
+          "name": "CANONICAL_MIGRATIONS",
+          "line": 131,
+          "isDefault": false
+        },
+        {
+          "name": "InvokeFailure",
+          "line": 135,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 72,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/http/DiagnosticResponse.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 18,
+      "nonEmptyLines": 17,
+      "functions": [
+        {
+          "name": "diagnosticResponse",
+          "startLine": 16,
+          "endLine": 18,
+          "params": [
+            "d"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "diagnosticResponse",
+          "line": 16,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "diagnosticResponse",
+          "callee": "Response.json",
+          "lineNumber": 17
+        },
+        {
+          "caller": "diagnosticResponse",
+          "callee": "redactForWire",
+          "lineNumber": 17
+        },
+        {
+          "caller": "diagnosticResponse",
+          "callee": "httpStatusFor",
+          "lineNumber": 17
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/http/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "exports": [
+        {
+          "name": "diagnosticResponse",
+          "line": 1,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 11,
+      "nonEmptyLines": 11,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/mcp/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 21,
+      "nonEmptyLines": 21,
+      "exports": [
+        {
+          "name": "GENERIC_TOOLS",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "CREATE_DRAFT_PREFIX",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "UPDATE_DRAFT_PREFIX",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "buildMcpToolCatalog",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "toolNameSegment",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "extractCollectionSegment",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "McpToolDefinition",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "jsonRpcOk",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "jsonRpcOkRaw",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "jsonRpcError",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "mcpJsonRpcError",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "mcpUnauthenticated",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "McpJsonRpcDispatcher",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "McpAuthContext",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "McpUseCases",
+          "line": 17,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 15,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/persistence/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 4,
+      "nonEmptyLines": 4,
+      "exports": [
+        {
+          "name": "DatabaseEntryRepository",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "DatabaseMediaAssetRepository",
+          "line": 2,
+          "isDefault": false
+        },
+        {
+          "name": "DatabaseSiteConfigRepository",
+          "line": 3,
+          "isDefault": false
+        },
+        {
+          "name": "LifecycleHookingEntryRepository",
+          "line": 4,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 4,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 12,
+      "nonEmptyLines": 12,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,1241 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/render/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/render/index.ts",
+      "summary": "render usecase 的 barrel，匯出 llms.txt/sitemap 組譯、即時渲染與 SEO meta 組譯等 usecase。",
+      "tags": [
+        "barrel",
+        "entry-point",
+        "render"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/view/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/view/index.ts",
+      "summary": "view usecase 的 barrel，匯出 ExecuteViewUseCase 及其回應型別。",
+      "tags": [
+        "barrel",
+        "entry-point",
+        "view"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/builtin-op.test.ts",
+      "type": "file",
+      "name": "builtin-op.test.ts",
+      "filePath": "packages/mantle-runtime/test/builtin-op.test.ts",
+      "summary": "內建 CRUD 操作的整合測試，透過 harness 組裝 InvokeBuiltin/InvokeProcedure 並驗證各 op 行為。",
+      "tags": [
+        "test",
+        "procedure",
+        "integration"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/builtin-op.test.ts:harness",
+      "type": "function",
+      "name": "harness",
+      "filePath": "packages/mantle-runtime/test/builtin-op.test.ts",
+      "lineRange": [
+        64,
+        108
+      ],
+      "summary": "組裝記憶體 repository、handler registry 與 invoke usecase 的測試夾具，回傳可操作的 entry/invoke 介面。",
+      "tags": [
+        "test",
+        "fixture"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/builtin-op.test.ts:builtinProcedure",
+      "type": "function",
+      "name": "builtinProcedure",
+      "filePath": "packages/mantle-runtime/test/builtin-op.test.ts",
+      "lineRange": [
+        44,
+        56
+      ],
+      "summary": "建構供測試使用的 builtin procedure manifest。",
+      "tags": [
+        "test",
+        "fixture"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/builtin-op.test.ts:nthIdGen",
+      "type": "function",
+      "name": "nthIdGen",
+      "filePath": "packages/mantle-runtime/test/builtin-op.test.ts",
+      "lineRange": [
+        20,
+        23
+      ],
+      "summary": "回傳依序產生帶前綴 id 的測試用 IdGenerator。",
+      "tags": [
+        "test",
+        "fixture"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/builtin-projector.test.ts",
+      "type": "file",
+      "name": "builtin-projector.test.ts",
+      "filePath": "packages/mantle-runtime/test/builtin-projector.test.ts",
+      "summary": "BuiltinProjector 投影與蓋章邏輯的單元測試。",
+      "tags": [
+        "test",
+        "data-model"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/content-ops.test.ts",
+      "type": "file",
+      "name": "content-ops.test.ts",
+      "filePath": "packages/mantle-runtime/test/content-ops.test.ts",
+      "summary": "內容操作 usecase（草稿/發佈/下架/列表/i18n）的大型整合測試套件。",
+      "tags": [
+        "test",
+        "content",
+        "integration"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/content-ops.test.ts:harness",
+      "type": "function",
+      "name": "harness",
+      "filePath": "packages/mantle-runtime/test/content-ops.test.ts",
+      "lineRange": [
+        54,
+        77
+      ],
+      "summary": "組裝記憶體 repository 與 content usecase 的測試夾具。",
+      "tags": [
+        "test",
+        "fixture"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/content-ops.test.ts:translatedSchemas",
+      "type": "function",
+      "name": "translatedSchemas",
+      "filePath": "packages/mantle-runtime/test/content-ops.test.ts",
+      "lineRange": [
+        626,
+        653
+      ],
+      "summary": "建構含翻譯關係的測試 schema 集合，驗證 i18n 發佈不變式。",
+      "tags": [
+        "test",
+        "fixture",
+        "i18n"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/content-ops.test.ts:fakeSiteConfig",
+      "type": "function",
+      "name": "fakeSiteConfig",
+      "filePath": "packages/mantle-runtime/test/content-ops.test.ts",
+      "lineRange": [
+        655,
+        667
+      ],
+      "summary": "依語系清單建構假的 SiteConfig 供測試使用。",
+      "tags": [
+        "test",
+        "fixture"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/dispatcher-boot.test.ts",
+      "type": "file",
+      "name": "dispatcher-boot.test.ts",
+      "filePath": "packages/mantle-runtime/test/dispatcher-boot.test.ts",
+      "summary": "boot 驗證流程的整合測試，覆蓋 manifest 校驗與 ValidateBootUseCase 行為。",
+      "tags": [
+        "test",
+        "integration",
+        "validation"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/dispatcher-invoke.test.ts",
+      "type": "file",
+      "name": "dispatcher-invoke.test.ts",
+      "filePath": "packages/mantle-runtime/test/dispatcher-invoke.test.ts",
+      "summary": "procedure 派發呼叫的整合測試，驗證 InvokeProcedureUseCase 與 handler registry 互動。",
+      "tags": [
+        "test",
+        "procedure",
+        "integration"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/dispatcher-invoke.test.ts:fresh",
+      "type": "function",
+      "name": "fresh",
+      "filePath": "packages/mantle-runtime/test/dispatcher-invoke.test.ts",
+      "lineRange": [
+        13,
+        16
+      ],
+      "summary": "建立全新的測試用 handler registry 與 invoke usecase。",
+      "tags": [
+        "test",
+        "fixture"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/entry-writer.test.ts",
+      "type": "file",
+      "name": "entry-writer.test.ts",
+      "filePath": "packages/mantle-runtime/test/entry-writer.test.ts",
+      "summary": "DatabaseEntryRepository 寫入路徑的整合測試，使用記憶體資料庫驗證持久化行為。",
+      "tags": [
+        "test",
+        "persistence",
+        "integration"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/fakes/in-memory-store.ts",
+      "type": "file",
+      "name": "in-memory-store.ts",
+      "filePath": "packages/mantle-runtime/test/fakes/in-memory-store.ts",
+      "summary": "測試用記憶體版 EntryRepository，以 Map 實作 CRUD、分頁與依資料欄位查詢。",
+      "tags": [
+        "test",
+        "fixture",
+        "persistence",
+        "data-model"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/mantle-runtime/test/fakes/in-memory-store.ts:InMemoryEntryRepository",
+      "type": "class",
+      "name": "InMemoryEntryRepository",
+      "filePath": "packages/mantle-runtime/test/fakes/in-memory-store.ts",
+      "lineRange": [
+        35,
+        163
+      ],
+      "summary": "EntryRepository port 的記憶體實作，支援 create/update/list/findByDataField 等供測試使用。",
+      "tags": [
+        "test",
+        "fixture",
+        "persistence"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/fakes/in-memory-store.ts:decodeOffsetCursor",
+      "type": "function",
+      "name": "decodeOffsetCursor",
+      "filePath": "packages/mantle-runtime/test/fakes/in-memory-store.ts",
+      "lineRange": [
+        21,
+        25
+      ],
+      "summary": "解碼偏移量分頁 cursor 字串為數字 offset。",
+      "tags": [
+        "test",
+        "utility",
+        "pagination"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "type": "file",
+      "name": "manifests.ts",
+      "filePath": "packages/mantle-runtime/test/fakes/manifests.ts",
+      "summary": "測試用 manifest 工廠集合，建構 schema/view/procedure/trigger 等假 manifest atom。",
+      "tags": [
+        "test",
+        "fixture",
+        "factory"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/fakes/manifests.ts:postsSchema",
+      "type": "function",
+      "name": "postsSchema",
+      "filePath": "packages/mantle-runtime/test/fakes/manifests.ts",
+      "lineRange": [
+        14,
+        34
+      ],
+      "summary": "建構測試用 postsSchema manifest atom。",
+      "tags": [
+        "test",
+        "fixture",
+        "factory"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/fakes/manifests.ts:recentPostsView",
+      "type": "function",
+      "name": "recentPostsView",
+      "filePath": "packages/mantle-runtime/test/fakes/manifests.ts",
+      "lineRange": [
+        36,
+        48
+      ],
+      "summary": "建構測試用 recentPostsView manifest atom。",
+      "tags": [
+        "test",
+        "fixture",
+        "factory"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/fakes/manifests.ts:makeProcedure",
+      "type": "function",
+      "name": "makeProcedure",
+      "filePath": "packages/mantle-runtime/test/fakes/manifests.ts",
+      "lineRange": [
+        64,
+        90
+      ],
+      "summary": "建構測試用 makeProcedure manifest atom。",
+      "tags": [
+        "test",
+        "fixture",
+        "factory"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/fakes/manifests.ts:makeHttpTrigger",
+      "type": "function",
+      "name": "makeHttpTrigger",
+      "filePath": "packages/mantle-runtime/test/fakes/manifests.ts",
+      "lineRange": [
+        92,
+        111
+      ],
+      "summary": "建構測試用 makeHttpTrigger manifest atom。",
+      "tags": [
+        "test",
+        "fixture",
+        "factory"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/fakes/manifests.ts:makeLifecycleTrigger",
+      "type": "function",
+      "name": "makeLifecycleTrigger",
+      "filePath": "packages/mantle-runtime/test/fakes/manifests.ts",
+      "lineRange": [
+        113,
+        134
+      ],
+      "summary": "建構測試用 makeLifecycleTrigger manifest atom。",
+      "tags": [
+        "test",
+        "fixture",
+        "factory"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/fakes/manifests.ts:makeMcpTrigger",
+      "type": "function",
+      "name": "makeMcpTrigger",
+      "filePath": "packages/mantle-runtime/test/fakes/manifests.ts",
+      "lineRange": [
+        136,
+        150
+      ],
+      "summary": "建構測試用 makeMcpTrigger manifest atom。",
+      "tags": [
+        "test",
+        "fixture",
+        "factory"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/fakes/manifests.ts:makeBuiltinProcedure",
+      "type": "function",
+      "name": "makeBuiltinProcedure",
+      "filePath": "packages/mantle-runtime/test/fakes/manifests.ts",
+      "lineRange": [
+        152,
+        163
+      ],
+      "summary": "建構測試用 makeBuiltinProcedure manifest atom。",
+      "tags": [
+        "test",
+        "fixture",
+        "factory"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/fakes/site-config.ts",
+      "type": "file",
+      "name": "site-config.ts",
+      "filePath": "packages/mantle-runtime/test/fakes/site-config.ts",
+      "summary": "測試用記憶體版 SiteConfigRepository，提供語系與媒體用途設定。",
+      "tags": [
+        "test",
+        "fixture",
+        "config"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/mantle-runtime/test/fakes/site-config.ts:InMemorySiteConfigRepository",
+      "type": "class",
+      "name": "InMemorySiteConfigRepository",
+      "filePath": "packages/mantle-runtime/test/fakes/site-config.ts",
+      "lineRange": [
+        9,
+        47
+      ],
+      "summary": "SiteConfigRepository port 的記憶體實作，供測試載入語系與媒體 purpose 設定。",
+      "tags": [
+        "test",
+        "fixture",
+        "config"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/fakes/site-config.ts:defaultPolicyForName",
+      "type": "function",
+      "name": "defaultPolicyForName",
+      "filePath": "packages/mantle-runtime/test/fakes/site-config.ts",
+      "lineRange": [
+        53,
+        66
+      ],
+      "summary": "依媒體用途名稱回傳預設政策設定。",
+      "tags": [
+        "test",
+        "fixture",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "type": "file",
+      "name": "lifecycle-hooks.test.ts",
+      "filePath": "packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "summary": "lifecycle hook 觸發與 deferred hook 派發的大型整合測試套件。",
+      "tags": [
+        "test",
+        "lifecycle",
+        "integration"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/lifecycle-hooks.test.ts:harness",
+      "type": "function",
+      "name": "harness",
+      "filePath": "packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "lineRange": [
+        48,
+        88
+      ],
+      "summary": "組裝 handler registry、TriggerIndex 與 invoke usecase 的 lifecycle 測試夾具。",
+      "tags": [
+        "test",
+        "fixture"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/mcp.test.ts",
+      "type": "file",
+      "name": "mcp.test.ts",
+      "filePath": "packages/mantle-runtime/test/mcp.test.ts",
+      "summary": "MCP JSON-RPC dispatcher 的整合測試，覆蓋工具列舉與 procedure 呼叫等 MCP 協定行為。",
+      "tags": [
+        "test",
+        "mcp",
+        "integration"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/mcp.test.ts:buildHarness",
+      "type": "function",
+      "name": "buildHarness",
+      "filePath": "packages/mantle-runtime/test/mcp.test.ts",
+      "lineRange": [
+        31,
+        77
+      ],
+      "summary": "組裝 McpJsonRpcDispatcher 與相依 usecase 的 MCP 測試夾具。",
+      "tags": [
+        "test",
+        "fixture",
+        "mcp"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/mcp.test.ts:minimalUseCases",
+      "type": "function",
+      "name": "minimalUseCases",
+      "filePath": "packages/mantle-runtime/test/mcp.test.ts",
+      "lineRange": [
+        85,
+        118
+      ],
+      "summary": "建構 MCP dispatcher 所需的最小 usecase 集合。",
+      "tags": [
+        "test",
+        "fixture"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/mcp.test.ts:jsonRpcReq",
+      "type": "function",
+      "name": "jsonRpcReq",
+      "filePath": "packages/mantle-runtime/test/mcp.test.ts",
+      "lineRange": [
+        120,
+        126
+      ],
+      "summary": "建構 JSON-RPC 請求物件供 MCP 測試使用。",
+      "tags": [
+        "test",
+        "fixture",
+        "mcp"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/mcp.test.ts:translatedSchemas",
+      "type": "function",
+      "name": "translatedSchemas",
+      "filePath": "packages/mantle-runtime/test/mcp.test.ts",
+      "lineRange": [
+        616,
+        642
+      ],
+      "summary": "建構含翻譯關係的測試 schema 集合。",
+      "tags": [
+        "test",
+        "fixture",
+        "i18n"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/runtime.test.ts",
+      "type": "file",
+      "name": "runtime.test.ts",
+      "filePath": "packages/mantle-runtime/test/runtime.test.ts",
+      "summary": "createCmsRuntime 組裝根的整合測試，驗證 port 綁定與 boot 流程的端到端行為。",
+      "tags": [
+        "test",
+        "integration",
+        "entry-point"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/trigger-index.test.ts",
+      "type": "file",
+      "name": "trigger-index.test.ts",
+      "filePath": "packages/mantle-runtime/test/trigger-index.test.ts",
+      "summary": "TriggerIndex 依 hook/HTTP/MCP 來源建索引與查詢的單元測試。",
+      "tags": [
+        "test",
+        "lifecycle"
+      ],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/mantle-runtime/test/builtin-op.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/Clock.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/builtin-op.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/HandlerRegistry.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/builtin-op.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/IdGenerator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/builtin-op.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/service/TriggerIndex.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/builtin-op.test.ts",
+      "target": "file:packages/mantle-runtime/src/infrastructure/persistence/LifecycleHookingEntryRepository.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/builtin-op.test.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/lifecycle/RunLifecycleHooksUseCase.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/builtin-op.test.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/procedure/InvokeBuiltinUseCase.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/builtin-op.test.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/builtin-op.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/in-memory-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/builtin-op.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/builtin-projector.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/service/BuiltinProjector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/content-ops.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/model/EntryRow.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/content-ops.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/Clock.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/content-ops.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/EntryRepository.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/content-ops.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/IdGenerator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/content-ops.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/SiteConfigRepository.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/content-ops.test.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/content/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/content-ops.test.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/dto/content/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/content-ops.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/in-memory-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/content-ops.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/dispatcher-boot.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/HandlerRegistry.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/dispatcher-boot.test.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/boot/ValidateBootUseCase.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/dispatcher-boot.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/dispatcher-invoke.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/model/HandlerContext.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/dispatcher-invoke.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/HandlerRegistry.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/dispatcher-invoke.test.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/dispatcher-invoke.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/entry-writer.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/model/EntryRow.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/entry-writer.test.ts",
+      "target": "file:packages/mantle-runtime/src/infrastructure/persistence/DatabaseEntryRepository.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/entry-writer.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/in-memory-store.ts",
+      "target": "file:packages/mantle-runtime/src/domain/model/EntryRow.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/in-memory-store.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/EntryRepository.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/site-config.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/SiteConfigRepository.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/Clock.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/DeferredHookDispatcher.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/HandlerRegistry.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/IdGenerator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/service/TriggerIndex.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "target": "file:packages/mantle-runtime/src/infrastructure/persistence/LifecycleHookingEntryRepository.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/content/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/lifecycle/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/in-memory-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/mcp.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/model/TemplateRegistry.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/mcp.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/Clock.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/mcp.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/HandlerRegistry.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/mcp.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/IdGenerator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/mcp.test.ts",
+      "target": "file:packages/mantle-runtime/src/infrastructure/mcp/McpJsonRpcDispatcher.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/mcp.test.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/content/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/mcp.test.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/mcp.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/in-memory-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/mcp.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/runtime.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/runtime.test.ts",
+      "target": "file:packages/mantle-runtime/src/infrastructure/persistence/DatabaseSiteConfigRepository.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/runtime.test.ts",
+      "target": "file:packages/mantle-runtime/src/runtime.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/runtime.test.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/boot/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/runtime.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/runtime.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/kv.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/runtime.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/trigger-index.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/service/TriggerIndex.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/trigger-index.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/builtin-op.test.ts",
+      "target": "function:packages/mantle-runtime/test/builtin-op.test.ts:harness",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/builtin-op.test.ts",
+      "target": "function:packages/mantle-runtime/test/builtin-op.test.ts:builtinProcedure",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/builtin-op.test.ts",
+      "target": "function:packages/mantle-runtime/test/builtin-op.test.ts:nthIdGen",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/content-ops.test.ts",
+      "target": "function:packages/mantle-runtime/test/content-ops.test.ts:harness",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/content-ops.test.ts",
+      "target": "function:packages/mantle-runtime/test/content-ops.test.ts:translatedSchemas",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/content-ops.test.ts",
+      "target": "function:packages/mantle-runtime/test/content-ops.test.ts:fakeSiteConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/dispatcher-invoke.test.ts",
+      "target": "function:packages/mantle-runtime/test/dispatcher-invoke.test.ts:fresh",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/in-memory-store.ts",
+      "target": "class:packages/mantle-runtime/test/fakes/in-memory-store.ts:InMemoryEntryRepository",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/in-memory-store.ts",
+      "target": "class:packages/mantle-runtime/test/fakes/in-memory-store.ts:InMemoryEntryRepository",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/in-memory-store.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/in-memory-store.ts:decodeOffsetCursor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/manifests.ts:postsSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/manifests.ts:postsSchema",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/manifests.ts:recentPostsView",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/manifests.ts:recentPostsView",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/manifests.ts:makeProcedure",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/manifests.ts:makeProcedure",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/manifests.ts:makeHttpTrigger",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/manifests.ts:makeHttpTrigger",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/manifests.ts:makeLifecycleTrigger",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/manifests.ts:makeLifecycleTrigger",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/manifests.ts:makeMcpTrigger",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/manifests.ts:makeMcpTrigger",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/manifests.ts:makeBuiltinProcedure",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/manifests.ts:makeBuiltinProcedure",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/site-config.ts",
+      "target": "class:packages/mantle-runtime/test/fakes/site-config.ts:InMemorySiteConfigRepository",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/site-config.ts",
+      "target": "class:packages/mantle-runtime/test/fakes/site-config.ts:InMemorySiteConfigRepository",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/site-config.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/site-config.ts:defaultPolicyForName",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "target": "function:packages/mantle-runtime/test/lifecycle-hooks.test.ts:harness",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/mcp.test.ts",
+      "target": "function:packages/mantle-runtime/test/mcp.test.ts:buildHarness",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/mcp.test.ts",
+      "target": "function:packages/mantle-runtime/test/mcp.test.ts:minimalUseCases",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/mcp.test.ts",
+      "target": "function:packages/mantle-runtime/test/mcp.test.ts:jsonRpcReq",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/mcp.test.ts",
+      "target": "function:packages/mantle-runtime/test/mcp.test.ts:translatedSchemas",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    }
+  ]
+}

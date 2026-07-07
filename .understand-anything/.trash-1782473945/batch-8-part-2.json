@@ -1,0 +1,1329 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts",
+      "type": "file",
+      "name": "EmitTypesCommand.ts",
+      "filePath": "packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts",
+      "summary": "mantle CLI 的 emit-types 子命令：解析參數、載入 manifest，委派 EmitTypesUseCase 產出 TypeScript 型別定義並寫檔。",
+      "tags": [
+        "cli",
+        "infrastructure",
+        "command",
+        "type-definition"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts:run",
+      "type": "function",
+      "name": "run",
+      "filePath": "packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts",
+      "lineRange": [
+        55,
+        80
+      ],
+      "summary": "emit-types 命令進入點：解析參數、載入 manifest、呼叫 use case 並輸出 .d.ts。",
+      "tags": [
+        "cli",
+        "command",
+        "entry-point",
+        "type-definition"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts:parseArgs",
+      "type": "function",
+      "name": "parseArgs",
+      "filePath": "packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts",
+      "lineRange": [
+        14,
+        33
+      ],
+      "summary": "解析 emit-types 命令列參數。",
+      "tags": [
+        "cli",
+        "command",
+        "arg-parsing"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts",
+      "type": "file",
+      "name": "IntrospectCommand.ts",
+      "filePath": "packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts",
+      "summary": "mantle CLI 的 introspect 子命令：載入 manifest 並委派 IntrospectManifestsUseCase 輸出結構化的 manifest 摘要 JSON。",
+      "tags": [
+        "cli",
+        "infrastructure",
+        "command",
+        "introspect"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts:run",
+      "type": "function",
+      "name": "run",
+      "filePath": "packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts",
+      "lineRange": [
+        40,
+        56
+      ],
+      "summary": "introspect 命令進入點：載入 manifest、呼叫 use case 並輸出 JSON 摘要。",
+      "tags": [
+        "cli",
+        "command",
+        "entry-point",
+        "introspect"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/infrastructure/cli/MantleCli.ts",
+      "type": "file",
+      "name": "MantleCli.ts",
+      "filePath": "packages/mantle-spec/src/infrastructure/cli/MantleCli.ts",
+      "summary": "mantle CLI 的主進入點，依子命令（validate/introspect/emit-openapi/emit-types）分派到對應的 command 模組。",
+      "tags": [
+        "cli",
+        "infrastructure",
+        "entry-point",
+        "dispatcher"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/infrastructure/cli/MantleCli.ts:main",
+      "type": "function",
+      "name": "main",
+      "filePath": "packages/mantle-spec/src/infrastructure/cli/MantleCli.ts",
+      "lineRange": [
+        12,
+        45
+      ],
+      "summary": "CLI 主函式，解析 argv 並依子命令分派到 validate/introspect/emit-openapi/emit-types。",
+      "tags": [
+        "cli",
+        "entry-point",
+        "dispatcher"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "type": "file",
+      "name": "ValidateCommand.ts",
+      "filePath": "packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "summary": "mantle CLI 的 validate 子命令：載入 manifest 與 handler 原始碼，呼叫 ValidateManifestsUseCase 並依 phase 過濾後以文字或 JSON 格式輸出 Diagnostic。",
+      "tags": [
+        "cli",
+        "infrastructure",
+        "command",
+        "validation"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts:run",
+      "type": "function",
+      "name": "run",
+      "filePath": "packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "lineRange": [
+        128,
+        208
+      ],
+      "summary": "validate 命令進入點：載入 manifest 與 handler 原始碼、呼叫 use case、依 phase 過濾並以文字或 JSON 輸出結果。",
+      "tags": [
+        "cli",
+        "command",
+        "entry-point",
+        "validation"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts:parseArgs",
+      "type": "function",
+      "name": "parseArgs",
+      "filePath": "packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "lineRange": [
+        44,
+        82
+      ],
+      "summary": "解析 validate 命令列參數（root、format、phase 等）。",
+      "tags": [
+        "cli",
+        "command",
+        "arg-parsing"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts:loadHandlerSource",
+      "type": "function",
+      "name": "loadHandlerSource",
+      "filePath": "packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "lineRange": [
+        210,
+        236
+      ],
+      "summary": "遞迴掃描專案目錄收集 handler 原始碼字串，供跨原始碼的 handler ref 驗證使用。",
+      "tags": [
+        "cli",
+        "filesystem",
+        "validation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts:emitText",
+      "type": "function",
+      "name": "emitText",
+      "filePath": "packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "lineRange": [
+        238,
+        271
+      ],
+      "summary": "以人類可讀文字格式輸出 Diagnostic 清單與錯誤/警告統計。",
+      "tags": [
+        "cli",
+        "diagnostic",
+        "formatting"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts",
+      "type": "file",
+      "name": "loadManifests.ts",
+      "filePath": "packages/mantle-spec/src/infrastructure/cli/loadManifests.ts",
+      "summary": "CLI 共用的 manifest 載入器：自指定根目錄遞迴收集 YAML 檔、讀取並交由 ManifestParser 解析，回傳 manifest、檔案路徑映射與解析錯誤。",
+      "tags": [
+        "cli",
+        "infrastructure",
+        "filesystem",
+        "loader"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts:loadManifestsFromRoot",
+      "type": "function",
+      "name": "loadManifestsFromRoot",
+      "filePath": "packages/mantle-spec/src/infrastructure/cli/loadManifests.ts",
+      "lineRange": [
+        34,
+        102
+      ],
+      "summary": "自根目錄收集並讀取 YAML 檔案、解析為 manifest、建立名稱到檔案路徑的映射，並累積解析錯誤。",
+      "tags": [
+        "cli",
+        "loader",
+        "filesystem",
+        "parser"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts:collectYamlFiles",
+      "type": "function",
+      "name": "collectYamlFiles",
+      "filePath": "packages/mantle-spec/src/infrastructure/cli/loadManifests.ts",
+      "lineRange": [
+        104,
+        123
+      ],
+      "summary": "遞迴走訪目錄收集所有 .yaml/.yml 檔案路徑並排序。",
+      "tags": [
+        "filesystem",
+        "utility",
+        "loader"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/kernel/diagnostic.ts",
+      "type": "file",
+      "name": "diagnostic.ts",
+      "filePath": "packages/mantle-spec/src/kernel/diagnostic.ts",
+      "summary": "kernel 層的 Diagnostic 核心：定義封閉的 DIAGNOSTIC_CODES、HTTP 狀態映射、Diagnostic 工廠（validate/test/boot/runtime 各 phase）、DiagnosticError 與 wire 序列化/反序列化，是整個套件結構化錯誤回報的基礎。",
+      "tags": [
+        "kernel",
+        "diagnostic",
+        "data-model",
+        "error",
+        "serialization"
+      ],
+      "complexity": "complex",
+      "languageNotes": "依 CLAUDE.md 的 kernel 規則，僅依賴外部 lib 與自身；以封閉 code 列舉與 phase 工廠統一錯誤語意。"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/kernel/diagnostic.ts:makeDiagnostic",
+      "type": "function",
+      "name": "makeDiagnostic",
+      "filePath": "packages/mantle-spec/src/kernel/diagnostic.ts",
+      "lineRange": [
+        173,
+        186
+      ],
+      "summary": "Diagnostic 工廠核心，組裝 code、path、message 與格式化的細節值。",
+      "tags": [
+        "diagnostic",
+        "factory",
+        "kernel"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/kernel/diagnostic.ts:parseWireDiagnostic",
+      "type": "function",
+      "name": "parseWireDiagnostic",
+      "filePath": "packages/mantle-spec/src/kernel/diagnostic.ts",
+      "lineRange": [
+        261,
+        282
+      ],
+      "summary": "從 wire JSON 文字反序列化並驗證 Diagnostic 清單，檢查 code 是否合法。",
+      "tags": [
+        "diagnostic",
+        "serialization",
+        "kernel"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/kernel/diagnostic.ts:readJsonPointer",
+      "type": "function",
+      "name": "readJsonPointer",
+      "filePath": "packages/mantle-spec/src/kernel/diagnostic.ts",
+      "lineRange": [
+        289,
+        301
+      ],
+      "summary": "依 RFC6901 JSON Pointer 在物件樹中讀取目標值，供 Diagnostic 定位用。",
+      "tags": [
+        "diagnostic",
+        "json-pointer",
+        "kernel"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/mantle-spec/src/kernel/diagnostic.ts:DiagnosticError",
+      "type": "class",
+      "name": "DiagnosticError",
+      "filePath": "packages/mantle-spec/src/kernel/diagnostic.ts",
+      "lineRange": [
+        224,
+        240
+      ],
+      "summary": "攜帶一或多個 Diagnostic 的 Error 子類別，供拋出結構化錯誤使用。",
+      "tags": [
+        "diagnostic",
+        "error",
+        "kernel"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts",
+      "type": "file",
+      "name": "EmitOpenapiUseCase.ts",
+      "filePath": "packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts",
+      "summary": "use case：將 manifest（Procedure/View/Trigger）轉為 OpenAPI 3 規格物件，組裝 HTTP 與 View 操作的 paths 及 Diagnostic schema。",
+      "tags": [
+        "usecase",
+        "openapi",
+        "code-generation",
+        "service"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts:EmitOpenapiUseCase",
+      "type": "class",
+      "name": "EmitOpenapiUseCase",
+      "filePath": "packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts",
+      "lineRange": [
+        19,
+        83
+      ],
+      "summary": "OpenAPI 產生 use case，execute 接收 manifest 並組出 OpenAPI 文件，run 為靜態便利進入點。",
+      "tags": [
+        "usecase",
+        "openapi",
+        "code-generation"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts:viewOperation",
+      "type": "function",
+      "name": "viewOperation",
+      "filePath": "packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts",
+      "lineRange": [
+        119,
+        186
+      ],
+      "summary": "由 View manifest 組出對應的 OpenAPI 操作物件，含參數與回應 schema。",
+      "tags": [
+        "openapi",
+        "view",
+        "code-generation"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts:httpOperation",
+      "type": "function",
+      "name": "httpOperation",
+      "filePath": "packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts",
+      "lineRange": [
+        85,
+        117
+      ],
+      "summary": "由 HTTP Trigger 與其 Procedure 組出對應的 OpenAPI 操作物件。",
+      "tags": [
+        "openapi",
+        "trigger",
+        "code-generation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "type": "file",
+      "name": "EmitTypesUseCase.ts",
+      "filePath": "packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "summary": "use case：將 Schema manifest 轉為 TypeScript 型別定義字串，遞迴渲染 object/array/enum/primitive 並產出 entry row 與保留欄位型別。",
+      "tags": [
+        "usecase",
+        "type-definition",
+        "code-generation",
+        "service"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts:EmitTypesUseCase",
+      "type": "class",
+      "name": "EmitTypesUseCase",
+      "filePath": "packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "lineRange": [
+        32,
+        91
+      ],
+      "summary": "TypeScript 型別產生 use case，execute 由 Schema 組出 .d.ts 內容，run 為靜態便利進入點。",
+      "tags": [
+        "usecase",
+        "type-definition",
+        "code-generation"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts:renderType",
+      "type": "function",
+      "name": "renderType",
+      "filePath": "packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "lineRange": [
+        97,
+        110
+      ],
+      "summary": "渲染 JSON Schema 的 object 型別為多行 TypeScript 介面內容，遞迴處理屬性。",
+      "tags": [
+        "type-definition",
+        "code-generation",
+        "render"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts:renderTypeInline",
+      "type": "function",
+      "name": "renderTypeInline",
+      "filePath": "packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "lineRange": [
+        112,
+        130
+      ],
+      "summary": "將 JSON Schema 渲染為單行 inline TypeScript 型別（enum union、array、primitive 等）。",
+      "tags": [
+        "type-definition",
+        "code-generation",
+        "render"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts:primitiveType",
+      "type": "function",
+      "name": "primitiveType",
+      "filePath": "packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "lineRange": [
+        132,
+        146
+      ],
+      "summary": "將 JSON Schema 的 primitive type 映射為對應的 TypeScript 型別字串。",
+      "tags": [
+        "type-definition",
+        "code-generation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts",
+      "type": "file",
+      "name": "IntrospectManifestsUseCase.ts",
+      "filePath": "packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts",
+      "summary": "use case：將 manifest 分割並彙整為結構化的 introspection 摘要（schemas/views/procedures/triggers 概要），供 CLI introspect 命令輸出。",
+      "tags": [
+        "usecase",
+        "introspect",
+        "service"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts:IntrospectManifestsUseCase",
+      "type": "class",
+      "name": "IntrospectManifestsUseCase",
+      "filePath": "packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts",
+      "lineRange": [
+        18,
+        61
+      ],
+      "summary": "introspection use case，execute 將 manifest 彙整為各 atom 摘要清單，run 為靜態便利進入點。",
+      "tags": [
+        "usecase",
+        "introspect"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "type": "file",
+      "name": "ValidateManifestsUseCase.ts",
+      "filePath": "packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "summary": "use case：manifest 的全套語意驗證協調器，串接重複檢查、Schema 內部一致性、locale/translates、View 引用、Procedure 授權與 builtin handler、Trigger 引用及原始碼 handler ref 檢查，彙總為 Diagnostic。",
+      "tags": [
+        "usecase",
+        "validation",
+        "service",
+        "cross-schema"
+      ],
+      "complexity": "complex",
+      "languageNotes": "562 行的驗證協調中樞，將跨 atom 的語意一致性檢查全部收斂為結構化 Diagnostic，是「fail-fast、runtime 承擔複雜度」原則的核心落點。"
+    },
+    {
+      "id": "class:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:ValidateManifestsUseCase",
+      "type": "class",
+      "name": "ValidateManifestsUseCase",
+      "filePath": "packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "lineRange": [
+        39,
+        92
+      ],
+      "summary": "驗證 use case，execute 依序呼叫各檢查函式並彙總 Diagnostic，run 為靜態便利進入點。",
+      "tags": [
+        "usecase",
+        "validation",
+        "orchestrator"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:checkViewRefs",
+      "type": "function",
+      "name": "checkViewRefs",
+      "filePath": "packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "lineRange": [
+        196,
+        281
+      ],
+      "summary": "驗證 View 引用的 Schema 是否存在、欄位/orderBy 是否屬合法欄位集合，並提供 did-you-mean 建議。",
+      "tags": [
+        "validation",
+        "view",
+        "cross-schema"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:checkTriggerRefs",
+      "type": "function",
+      "name": "checkTriggerRefs",
+      "filePath": "packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "lineRange": [
+        426,
+        509
+      ],
+      "summary": "驗證 Trigger 引用的 Procedure/Schema 是否存在、HTTP 路由是否衝突，並提供建議。",
+      "tags": [
+        "validation",
+        "trigger",
+        "cross-schema"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:checkSchemaInternals",
+      "type": "function",
+      "name": "checkSchemaInternals",
+      "filePath": "packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "lineRange": [
+        135,
+        194
+      ],
+      "summary": "驗證 Schema 內部一致性，包含 ui/composite 欄位引用與 x-mantle-bind 封閉值檢查。",
+      "tags": [
+        "validation",
+        "schema",
+        "binding"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:checkBuiltinHandler",
+      "type": "function",
+      "name": "checkBuiltinHandler",
+      "filePath": "packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "lineRange": [
+        338,
+        379
+      ],
+      "summary": "驗證 Procedure 的 builtin handler 所引用的 Schema 是否存在並合法。",
+      "tags": [
+        "validation",
+        "procedure",
+        "handler"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:checkHandlerRefsInSource",
+      "type": "function",
+      "name": "checkHandlerRefsInSource",
+      "filePath": "packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "lineRange": [
+        511,
+        553
+      ],
+      "summary": "在收集的 handler 原始碼中比對 Procedure 宣告的 handler ref 是否實際存在，缺漏時產出 Diagnostic。",
+      "tags": [
+        "validation",
+        "procedure",
+        "handler",
+        "source"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:checkDuplicates",
+      "type": "function",
+      "name": "checkDuplicates",
+      "filePath": "packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "lineRange": [
+        100,
+        133
+      ],
+      "summary": "檢查同 atom 種類內名稱是否重複，重複時對後續出現項產出 Diagnostic。",
+      "tags": [
+        "validation",
+        "duplicate",
+        "diagnostic"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:checkFilterFields",
+      "type": "function",
+      "name": "checkFilterFields",
+      "filePath": "packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "lineRange": [
+        283,
+        325
+      ],
+      "summary": "遞迴檢查 filter AST 引用的欄位是否屬合法欄位集合，並遞迴處理 and/or 子節點。",
+      "tags": [
+        "validation",
+        "filter",
+        "ast"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:checkProcedureAuth",
+      "type": "function",
+      "name": "checkProcedureAuth",
+      "filePath": "packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "lineRange": [
+        381,
+        408
+      ],
+      "summary": "驗證 Procedure 的授權 predicate 是否合法。",
+      "tags": [
+        "validation",
+        "procedure",
+        "auth"
+      ],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts:run",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts:parseArgs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts:run",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts:parseArgs",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts",
+      "target": "file:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts",
+      "target": "file:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts:run",
+      "target": "class:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts:EmitTypesUseCase",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts:run",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts:loadManifestsFromRoot",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts:run",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts:run",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts",
+      "target": "file:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts",
+      "target": "file:packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts:run",
+      "target": "class:packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts:IntrospectManifestsUseCase",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts:run",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts:loadManifestsFromRoot",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/MantleCli.ts",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/MantleCli.ts:main",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/MantleCli.ts",
+      "target": "file:packages/mantle-spec/src/infrastructure/cli/EmitOpenapiCommand.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/MantleCli.ts",
+      "target": "file:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/MantleCli.ts",
+      "target": "file:packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/MantleCli.ts",
+      "target": "file:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:packages/mantle-spec/src/infrastructure/cli/MantleCli.ts:main",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts:run",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/mantle-spec/src/infrastructure/cli/MantleCli.ts:main",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts:run",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/mantle-spec/src/infrastructure/cli/MantleCli.ts:main",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/EmitOpenapiCommand.ts:run",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/mantle-spec/src/infrastructure/cli/MantleCli.ts:main",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts:run",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts:run",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts:parseArgs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts:loadHandlerSource",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts:emitText",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts:run",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts:parseArgs",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "target": "file:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "target": "file:packages/mantle-spec/src/kernel/diagnostic.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "target": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts:run",
+      "target": "class:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:ValidateManifestsUseCase",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts:run",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts:loadManifestsFromRoot",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts:loadManifestsFromRoot",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts:collectYamlFiles",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts",
+      "target": "function:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts:loadManifestsFromRoot",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts",
+      "target": "file:packages/mantle-spec/src/domain/model/ManifestGrammar.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts",
+      "target": "file:packages/mantle-spec/src/domain/service/ManifestParser.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts",
+      "target": "file:packages/mantle-spec/src/kernel/diagnostic.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts:loadManifestsFromRoot",
+      "target": "function:packages/mantle-spec/src/domain/service/ManifestParser.ts:parseManifests",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/kernel/diagnostic.ts",
+      "target": "function:packages/mantle-spec/src/kernel/diagnostic.ts:makeDiagnostic",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/kernel/diagnostic.ts",
+      "target": "function:packages/mantle-spec/src/kernel/diagnostic.ts:parseWireDiagnostic",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/kernel/diagnostic.ts",
+      "target": "function:packages/mantle-spec/src/kernel/diagnostic.ts:readJsonPointer",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/kernel/diagnostic.ts",
+      "target": "class:packages/mantle-spec/src/kernel/diagnostic.ts:DiagnosticError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/kernel/diagnostic.ts",
+      "target": "function:packages/mantle-spec/src/kernel/diagnostic.ts:makeDiagnostic",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/kernel/diagnostic.ts",
+      "target": "function:packages/mantle-spec/src/kernel/diagnostic.ts:parseWireDiagnostic",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/kernel/diagnostic.ts",
+      "target": "function:packages/mantle-spec/src/kernel/diagnostic.ts:readJsonPointer",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/kernel/diagnostic.ts",
+      "target": "class:packages/mantle-spec/src/kernel/diagnostic.ts:DiagnosticError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts",
+      "target": "class:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts:EmitOpenapiUseCase",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts",
+      "target": "function:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts:viewOperation",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts",
+      "target": "function:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts:httpOperation",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts",
+      "target": "class:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts:EmitOpenapiUseCase",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts",
+      "target": "file:packages/mantle-spec/src/domain/model/ManifestGrammar.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts",
+      "target": "file:packages/mantle-spec/src/domain/service/ManifestParser.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts",
+      "target": "file:packages/mantle-spec/src/usecase/dto/EmitOpenapiRequest.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts",
+      "target": "file:packages/mantle-spec/src/usecase/dto/EmitOpenapiResponse.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "class:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts:EmitOpenapiUseCase",
+      "target": "function:packages/mantle-spec/src/domain/service/ManifestParser.ts:partitionManifests",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "target": "class:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts:EmitTypesUseCase",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "target": "function:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts:renderType",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "target": "function:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts:renderTypeInline",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "target": "function:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts:primitiveType",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "target": "class:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts:EmitTypesUseCase",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "target": "file:packages/mantle-spec/src/domain/model/ManifestGrammar.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "target": "file:packages/mantle-spec/src/domain/service/ManifestParser.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "target": "file:packages/mantle-spec/src/usecase/dto/EmitTypesRequest.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "target": "file:packages/mantle-spec/src/usecase/dto/EmitTypesResponse.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "class:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts:EmitTypesUseCase",
+      "target": "function:packages/mantle-spec/src/domain/service/ManifestParser.ts:partitionManifests",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts",
+      "target": "class:packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts:IntrospectManifestsUseCase",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts",
+      "target": "class:packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts:IntrospectManifestsUseCase",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts",
+      "target": "file:packages/mantle-spec/src/domain/service/ManifestParser.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts",
+      "target": "file:packages/mantle-spec/src/usecase/dto/IntrospectManifestsRequest.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts",
+      "target": "file:packages/mantle-spec/src/usecase/dto/IntrospectManifestsResponse.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "class:packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts:IntrospectManifestsUseCase",
+      "target": "function:packages/mantle-spec/src/domain/service/ManifestParser.ts:partitionManifests",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "class:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:ValidateManifestsUseCase",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "function:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:checkViewRefs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "function:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:checkTriggerRefs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "function:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:checkSchemaInternals",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "function:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:checkBuiltinHandler",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "function:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:checkHandlerRefsInSource",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "function:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:checkDuplicates",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "function:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:checkFilterFields",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "function:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:checkProcedureAuth",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "class:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:ValidateManifestsUseCase",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "file:packages/mantle-spec/src/domain/model/ManifestGrammar.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "file:packages/mantle-spec/src/domain/service/CrossSchemaChecker.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "file:packages/mantle-spec/src/domain/service/ManifestParser.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "file:packages/mantle-spec/src/domain/service/ManifestPathDiagnoser.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "file:packages/mantle-spec/src/kernel/diagnostic.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "file:packages/mantle-spec/src/usecase/dto/ValidateManifestsRequest.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "target": "file:packages/mantle-spec/src/usecase/dto/ValidateManifestsResponse.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "class:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:ValidateManifestsUseCase",
+      "target": "function:packages/mantle-spec/src/domain/service/ManifestParser.ts:partitionManifests",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts:ValidateManifestsUseCase",
+      "target": "function:packages/mantle-spec/src/domain/service/CrossSchemaChecker.ts:checkLocaleAndTranslates",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

@@ -1,0 +1,481 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 4,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/adapter-guide.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 108,
+      "nonEmptyLines": 77,
+      "sections": [
+        {
+          "heading": "Adapter implementation guide",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Required runtime ports",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "Optional capabilities",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Runtime boot",
+          "level": 2,
+          "line": 32
+        },
+        {
+          "heading": "HTTP and MCP surfaces",
+          "level": 2,
+          "line": 57
+        },
+        {
+          "heading": "Static assets",
+          "level": 2,
+          "line": 87
+        },
+        {
+          "heading": "Implementation checklist",
+          "level": 2,
+          "line": 91
+        },
+        {
+          "heading": "Current non-goals",
+          "level": 2,
+          "line": 105
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/design-atoms.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 962,
+      "nonEmptyLines": 799,
+      "sections": [
+        {
+          "heading": "Design atoms — the 4 things this SDK exposes",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Manifest envelope",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "Multi-doc YAML — keeping file count down",
+          "level": 3,
+          "line": 66
+        },
+        {
+          "heading": "What each atom is for (v0.1 minimum essential grammar)",
+          "level": 2,
+          "line": 99
+        },
+        {
+          "heading": "1. `Schema` — the entity (internal)",
+          "level": 3,
+          "line": 101
+        },
+        {
+          "heading": "Lifecycle",
+          "level": 4,
+          "line": 149
+        },
+        {
+          "heading": "`x-mantle-bind: <value>` — server-stamped fields",
+          "level": 4,
+          "line": 174
+        },
+        {
+          "heading": "`x-mantle-ref: <other-schema-name>` — cross-Schema reference",
+          "level": 4,
+          "line": 223
+        },
+        {
+          "heading": "`x-mcp-hint: <hint-string>` — agent / widget intent",
+          "level": 4,
+          "line": 243
+        },
+        {
+          "heading": "2. `View` — the read surface (auto-exposed)",
+          "level": 3,
+          "line": 279
+        },
+        {
+          "heading": "3. `Procedure` — the typed callable (internal until bound)",
+          "level": 3,
+          "line": 350
+        },
+        {
+          "heading": "4. `Trigger` — the event binding (the whole external surface for writes)",
+          "level": 3,
+          "line": 413
+        },
+        {
+          "heading": "OpenAPI emission — manifests in, OpenAPI out",
+          "level": 2,
+          "line": 462
+        },
+        {
+          "heading": "Manifest validation — JSON Schema in, zod at runtime",
+          "level": 2,
+          "line": 492
+        },
+        {
+          "heading": "Error code → HTTP status table",
+          "level": 2,
+          "line": 520
+        },
+        {
+          "heading": "RBAC — what v0.1 ships, what's DRAFT",
+          "level": 2,
+          "line": 541
+        },
+        {
+          "heading": "How to think when extending this CMS",
+          "level": 2,
+          "line": 558
+        },
+        {
+          "heading": "Postgres heuristic for \"is this an atom?\"",
+          "level": 3,
+          "line": 575
+        },
+        {
+          "heading": "Storage backend — D1 today, Postgres-via-Hyperdrive tomorrow",
+          "level": 2,
+          "line": 592
+        },
+        {
+          "heading": "How `Schema` data is stored on D1 today",
+          "level": 3,
+          "line": 598
+        },
+        {
+          "heading": "What works well on D1",
+          "level": 3,
+          "line": 630
+        },
+        {
+          "heading": "Where D1's JSON support has limits (vs Postgres)",
+          "level": 3,
+          "line": 640
+        },
+        {
+          "heading": "Practical scale envelope on D1",
+          "level": 3,
+          "line": 653
+        },
+        {
+          "heading": "Scale-up path: D1 → Postgres via Cloudflare Hyperdrive",
+          "level": 3,
+          "line": 669
+        },
+        {
+          "heading": "Roadmap — what's not in v0.1.0",
+          "level": 2,
+          "line": 706
+        },
+        {
+          "heading": "v0.1.0 shipped",
+          "level": 3,
+          "line": 724
+        },
+        {
+          "heading": "`Trigger.source.kind: lifecycle` — bind a Procedure to a Schema event",
+          "level": 4,
+          "line": 726
+        },
+        {
+          "heading": "`Procedure.handler.kind: builtin` — SDK-supplied CRUD Procedure",
+          "level": 4,
+          "line": 733
+        },
+        {
+          "heading": "v0.1.x committed",
+          "level": 3,
+          "line": 741
+        },
+        {
+          "heading": "`Schema.spec.lifecycle: editorial` runtime",
+          "level": 4,
+          "line": 748
+        },
+        {
+          "heading": "`handler.kind: builtin` — thin shortcut over the storage adapter for trivial CRUD-shaped Procedures",
+          "level": 4,
+          "line": 755
+        },
+        {
+          "heading": "`Trigger.source.kind: lifecycle` — bind a Procedure to a Schema event",
+          "level": 4,
+          "line": 790
+        },
+        {
+          "heading": "DRAFT (v0.2+, speculative)",
+          "level": 3,
+          "line": 847
+        },
+        {
+          "heading": "Schema future",
+          "level": 4,
+          "line": 853
+        },
+        {
+          "heading": "View future",
+          "level": 4,
+          "line": 880
+        },
+        {
+          "heading": "Procedure future",
+          "level": 4,
+          "line": 893
+        },
+        {
+          "heading": "Trigger future",
+          "level": 4,
+          "line": 909
+        },
+        {
+          "heading": "Cross-cutting future",
+          "level": 4,
+          "line": 931
+        },
+        {
+          "heading": "Lineage — the academic foundations",
+          "level": 2,
+          "line": 949
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 40
+      }
+    },
+    {
+      "path": "docs/labels.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 67,
+      "nonEmptyLines": 55,
+      "sections": [
+        {
+          "heading": "GitHub labels",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Kind and status",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Area",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Release and review gates",
+          "level": 2,
+          "line": 38
+        },
+        {
+          "heading": "Creating missing labels",
+          "level": 2,
+          "line": 49
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "docs/release-process.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 555,
+      "nonEmptyLines": 423,
+      "sections": [
+        {
+          "heading": "Release process",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Branch model",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Versioning",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Release channels",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Alpha",
+          "level": 3,
+          "line": 21
+        },
+        {
+          "heading": "Beta",
+          "level": 3,
+          "line": 42
+        },
+        {
+          "heading": "Release candidate",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "Stable",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "Normal release playbook",
+          "level": 2,
+          "line": 72
+        },
+        {
+          "heading": "Pre-v0.1 alpha cadence",
+          "level": 3,
+          "line": 106
+        },
+        {
+          "heading": "Cross-repo type-shape changes",
+          "level": 3,
+          "line": 114
+        },
+        {
+          "heading": "Fix-forward when bump fanout fails",
+          "level": 3,
+          "line": 137
+        },
+        {
+          "heading": "Re-spin release for a downstream-content-only fix",
+          "level": 3,
+          "line": 149
+        },
+        {
+          "heading": "Release fanout",
+          "level": 2,
+          "line": 159
+        },
+        {
+          "heading": "Operator setup (one-time)",
+          "level": 3,
+          "line": 198
+        },
+        {
+          "heading": "Manual fallback",
+          "level": 3,
+          "line": 220
+        },
+        {
+          "heading": "Channel-specific behavior",
+          "level": 3,
+          "line": 235
+        },
+        {
+          "heading": "npm publish",
+          "level": 2,
+          "line": 251
+        },
+        {
+          "heading": "Packages published in alpha",
+          "level": 3,
+          "line": 258
+        },
+        {
+          "heading": "Pre-publish checks",
+          "level": 3,
+          "line": 291
+        },
+        {
+          "heading": "Alpha publish command",
+          "level": 3,
+          "line": 321
+        },
+        {
+          "heading": "Rollback / yanking policy",
+          "level": 3,
+          "line": 399
+        },
+        {
+          "heading": "Cross-cutting rename playbook",
+          "level": 2,
+          "line": 430
+        },
+        {
+          "heading": "Step 1 — pre-flight grep for substring false-positives",
+          "level": 3,
+          "line": 437
+        },
+        {
+          "heading": "Step 2 — post-sed infra-config diff",
+          "level": 3,
+          "line": 461
+        },
+        {
+          "heading": "Step 3 — CI green ≠ deploy OK",
+          "level": 3,
+          "line": 475
+        },
+        {
+          "heading": "Step 4 — Cross-repo rename order",
+          "level": 3,
+          "line": 494
+        },
+        {
+          "heading": "Hotfix process",
+          "level": 2,
+          "line": 519
+        },
+        {
+          "heading": "Pre-flight checklist",
+          "level": 2,
+          "line": 535
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 29
+      }
+    }
+  ]
+}

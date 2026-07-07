@@ -1,0 +1,30 @@
+{
+  "projectRoot": "/Users/aotter/projects/aotter-clam-mantle-workroot/mantle",
+  "batchFiles": [
+    {"path":"packages/mantle-runtime/src/usecase/dto/render/ComposeSitemapRequest.ts","language":"typescript","sizeLines":11,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/src/usecase/dto/render/PreviewEntryRequest.ts","language":"typescript","sizeLines":27,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/src/usecase/dto/render/RenderEntryLiveRequest.ts","language":"typescript","sizeLines":17,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/src/usecase/dto/render/RenderListLiveRequest.ts","language":"typescript","sizeLines":11,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts","language":"typescript","sizeLines":68,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts","language":"typescript","sizeLines":306,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/src/usecase/media/PendingUploadRecord.ts","language":"typescript","sizeLines":37,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/src/usecase/media/diagnostics.ts","language":"typescript","sizeLines":187,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/src/usecase/media/mediaAllowlist.ts","language":"typescript","sizeLines":63,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts","language":"typescript","sizeLines":67,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts","language":"typescript","sizeLines":40,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts","language":"typescript","sizeLines":30,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/src/usecase/render/PreviewEntryUseCase.ts","language":"typescript","sizeLines":79,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/src/usecase/render/RenderEntryLiveUseCase.ts","language":"typescript","sizeLines":67,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/src/usecase/render/RenderListLiveUseCase.ts","language":"typescript","sizeLines":48,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/test/compose-render.test.ts","language":"typescript","sizeLines":172,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/test/fakes/kv.ts","language":"typescript","sizeLines":35,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/test/media-asset-references.test.ts","language":"typescript","sizeLines":95,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/test/media.test.ts","language":"typescript","sizeLines":667,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/test/preview-banner.test.ts","language":"typescript","sizeLines":44,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/test/public-path-resolver.test.ts","language":"typescript","sizeLines":77,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/test/render-markdown.test.ts","language":"typescript","sizeLines":82,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/test/render-publish.test.ts","language":"typescript","sizeLines":229,"fileCategory":"code"},
+    {"path":"packages/mantle-runtime/test/seo-meta.test.ts","language":"typescript","sizeLines":195,"fileCategory":"code"}
+  ],
+  "batchImportData": {}
+}

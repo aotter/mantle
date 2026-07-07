@@ -1,0 +1,5750 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 21,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/adapters/cloudflare/src/assets/aotterFavicon.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 4,
+      "nonEmptyLines": 4,
+      "exports": [
+        {
+          "name": "AOTTER_FAVICON_SVG",
+          "line": 1,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/auth/createAuth.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 1039,
+      "nonEmptyLines": 997,
+      "functions": [
+        {
+          "name": "buildSocialProviders",
+          "startLine": 285,
+          "endLine": 343,
+          "params": [
+            "methods"
+          ]
+        },
+        {
+          "name": "pickLocale",
+          "startLine": 350,
+          "endLine": 355,
+          "params": [
+            "req",
+            "fallback"
+          ]
+        },
+        {
+          "name": "buildMagicLinkPlugin",
+          "startLine": 370,
+          "endLine": 390,
+          "params": [
+            "method"
+          ]
+        },
+        {
+          "name": "buildEmailOTPPlugin",
+          "startLine": 392,
+          "endLine": 419,
+          "params": [
+            "method"
+          ]
+        },
+        {
+          "name": "validateBootstrap",
+          "startLine": 434,
+          "endLine": 449,
+          "params": [
+            "rule",
+            "methods"
+          ]
+        },
+        {
+          "name": "shouldPromoteToOwner",
+          "startLine": 452,
+          "endLine": 463,
+          "params": [
+            "rule",
+            "user"
+          ]
+        },
+        {
+          "name": "pickSingleton",
+          "startLine": 471,
+          "endLine": 484,
+          "params": [
+            "methods",
+            "kind"
+          ]
+        },
+        {
+          "name": "autoTrustedOriginsFor",
+          "startLine": 499,
+          "endLine": 506,
+          "params": [
+            "methods"
+          ]
+        },
+        {
+          "name": "methodsRequireSameSiteNone",
+          "startLine": 517,
+          "endLine": 521,
+          "params": [
+            "methods"
+          ]
+        },
+        {
+          "name": "buildAuth",
+          "startLine": 523,
+          "endLine": 726,
+          "params": [
+            "config"
+          ]
+        },
+        {
+          "name": "createAuth",
+          "startLine": 868,
+          "endLine": 987,
+          "params": [
+            "config"
+          ]
+        },
+        {
+          "name": "createSetupIncompleteAuth",
+          "startLine": 1000,
+          "endLine": 1025,
+          "params": [
+            "options"
+          ]
+        },
+        {
+          "name": "generateUserId",
+          "startLine": 1031,
+          "endLine": 1039,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "STAFF_ROLES",
+          "line": 8,
+          "isDefault": false
+        },
+        {
+          "name": "StaffRole",
+          "line": 8,
+          "isDefault": false
+        },
+        {
+          "name": "STAFF_ROLE_SET",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "buildSocialProviders",
+          "line": 285,
+          "isDefault": false
+        },
+        {
+          "name": "pickLocale",
+          "line": 350,
+          "isDefault": false
+        },
+        {
+          "name": "validateBootstrap",
+          "line": 434,
+          "isDefault": false
+        },
+        {
+          "name": "shouldPromoteToOwner",
+          "line": 452,
+          "isDefault": false
+        },
+        {
+          "name": "createAuth",
+          "line": 868,
+          "isDefault": false
+        },
+        {
+          "name": "createSetupIncompleteAuth",
+          "line": 1000,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "buildSocialProviders",
+          "callee": "seenProviders.has",
+          "lineNumber": 304
+        },
+        {
+          "caller": "buildSocialProviders",
+          "callee": "seenProviders.add",
+          "lineNumber": 310
+        },
+        {
+          "caller": "buildSocialProviders",
+          "callee": "Object.keys",
+          "lineNumber": 312
+        },
+        {
+          "caller": "buildSocialProviders",
+          "callee": "SOCIAL_EXTRAS_RESERVED_KEYS.has",
+          "lineNumber": 313
+        },
+        {
+          "caller": "pickLocale",
+          "callee": "req?.headers.get",
+          "lineNumber": 351
+        },
+        {
+          "caller": "pickLocale",
+          "callee": "header.split(\",\")[0]?.split(\";\")[0]?.trim",
+          "lineNumber": 353
+        },
+        {
+          "caller": "pickLocale",
+          "callee": "header.split(\",\")[0]?.split",
+          "lineNumber": 353
+        },
+        {
+          "caller": "pickLocale",
+          "callee": "header.split",
+          "lineNumber": 353
+        },
+        {
+          "caller": "buildMagicLinkPlugin",
+          "callee": "magicLink",
+          "lineNumber": 372
+        },
+        {
+          "caller": "buildMagicLinkPlugin",
+          "callee": "pickLocale",
+          "lineNumber": 380
+        },
+        {
+          "caller": "buildMagicLinkPlugin",
+          "callee": "method.sender.send",
+          "lineNumber": 381
+        },
+        {
+          "caller": "buildEmailOTPPlugin",
+          "callee": "emailOTP",
+          "lineNumber": 394
+        },
+        {
+          "caller": "buildEmailOTPPlugin",
+          "callee": "pickLocale",
+          "lineNumber": 409
+        },
+        {
+          "caller": "buildEmailOTPPlugin",
+          "callee": "method.sender.send",
+          "lineNumber": 410
+        },
+        {
+          "caller": "validateBootstrap",
+          "callee": "methods.some",
+          "lineNumber": 439
+        },
+        {
+          "caller": "shouldPromoteToOwner",
+          "callee": "rule.value.trim().toLowerCase",
+          "lineNumber": 456
+        },
+        {
+          "caller": "shouldPromoteToOwner",
+          "callee": "rule.value.trim",
+          "lineNumber": 456
+        },
+        {
+          "caller": "shouldPromoteToOwner",
+          "callee": "user.githubLogin.toLowerCase",
+          "lineNumber": 459
+        },
+        {
+          "caller": "shouldPromoteToOwner",
+          "callee": "user.email.toLowerCase",
+          "lineNumber": 461
+        },
+        {
+          "caller": "pickSingleton",
+          "callee": "methods.filter",
+          "lineNumber": 475
+        },
+        {
+          "caller": "autoTrustedOriginsFor",
+          "callee": "methods.flatMap",
+          "lineNumber": 502
+        },
+        {
+          "caller": "methodsRequireSameSiteNone",
+          "callee": "methods.some",
+          "lineNumber": 520
+        },
+        {
+          "caller": "buildAuth",
+          "callee": "validateBootstrap",
+          "lineNumber": 530
+        },
+        {
+          "caller": "buildAuth",
+          "callee": "buildSocialProviders",
+          "lineNumber": 532
+        },
+        {
+          "caller": "buildAuth",
+          "callee": "pickSingleton",
+          "lineNumber": 534
+        },
+        {
+          "caller": "buildAuth",
+          "callee": "pickSingleton",
+          "lineNumber": 535
+        },
+        {
+          "caller": "buildAuth",
+          "callee": "autoTrustedOriginsFor",
+          "lineNumber": 554
+        },
+        {
+          "caller": "buildAuth",
+          "callee": "admin",
+          "lineNumber": 557
+        },
+        {
+          "caller": "buildAuth",
+          "callee": "buildEmailOTPPlugin",
+          "lineNumber": 568
+        },
+        {
+          "caller": "buildAuth",
+          "callee": "buildMagicLinkPlugin",
+          "lineNumber": 569
+        },
+        {
+          "caller": "buildAuth",
+          "callee": "methodsRequireSameSiteNone",
+          "lineNumber": 587
+        },
+        {
+          "caller": "buildAuth",
+          "callee": "p.catch",
+          "lineNumber": 599
+        },
+        {
+          "caller": "buildAuth",
+          "callee": "console.error",
+          "lineNumber": 601
+        },
+        {
+          "caller": "sdkUserCreateAfter",
+          "callee": "shouldPromoteToOwner",
+          "lineNumber": 616
+        },
+        {
+          "caller": "sdkUserCreateAfter",
+          "callee": "STAFF_ROLES.map(() => \"?\").join",
+          "lineNumber": 623
+        },
+        {
+          "caller": "sdkUserCreateAfter",
+          "callee": "STAFF_ROLES.map",
+          "lineNumber": 623
+        },
+        {
+          "caller": "sdkUserCreateAfter",
+          "callee": "config.database\n      .prepare(\n        `UPDATE user SET role = ? WHERE id = ? AND NOT EXISTS (SELECT 1 FROM user WHERE role IN (${placeholders}))`,\n      )\n      .bind(\"owner\", u.id, ...STAFF_ROLES)\n      .run",
+          "lineNumber": 624
+        },
+        {
+          "caller": "sdkUserCreateAfter",
+          "callee": "config.database\n      .prepare(\n        `UPDATE user SET role = ? WHERE id = ? AND NOT EXISTS (SELECT 1 FROM user WHERE role IN (${placeholders}))`,\n      )\n      .bind",
+          "lineNumber": 624
+        },
+        {
+          "caller": "sdkUserCreateAfter",
+          "callee": "config.database\n      .prepare",
+          "lineNumber": 624
+        },
+        {
+          "caller": "sdkUserCreateAfter",
+          "callee": "console.warn",
+          "lineNumber": 635
+        },
+        {
+          "caller": "buildAuth",
+          "callee": "betterAuth",
+          "lineNumber": 711
+        },
+        {
+          "caller": "createAuth",
+          "callee": "buildAuth",
+          "lineNumber": 869
+        },
+        {
+          "caller": "createAuth",
+          "callee": "auth.handler",
+          "lineNumber": 873
+        },
+        {
+          "caller": "createAuth",
+          "callee": "api.getSession({ headers: request.headers }).then",
+          "lineNumber": 875
+        },
+        {
+          "caller": "createAuth",
+          "callee": "api.getSession",
+          "lineNumber": 875
+        },
+        {
+          "caller": "createAuth",
+          "callee": "await config.database\n        .prepare(\"SELECT role FROM user WHERE id = ? LIMIT 1\")\n        .bind(userId)\n        .first",
+          "lineNumber": 877
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare(\"SELECT role FROM user WHERE id = ? LIMIT 1\")\n        .bind",
+          "lineNumber": 877
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare",
+          "lineNumber": 877
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.methods.map",
+          "lineNumber": 883
+        },
+        {
+          "caller": "createAuth",
+          "callee": "await config.database\n        .prepare(\n          \"SELECT id, providerId, accountId, createdAt, updatedAt FROM account WHERE userId = ? ORDER BY createdAt ASC, id ASC\",\n        )\n        .bind(userId)\n        .all",
+          "lineNumber": 889
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare(\n          \"SELECT id, providerId, accountId, createdAt, updatedAt FROM account WHERE userId = ? ORDER BY createdAt ASC, id ASC\",\n        )\n        .bind",
+          "lineNumber": 889
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare",
+          "lineNumber": 889
+        },
+        {
+          "caller": "createAuth",
+          "callee": "(result.results ?? []).map",
+          "lineNumber": 901
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare(\"DELETE FROM account WHERE userId = ? AND providerId = ?\")\n        .bind(userId, providerId)\n        .run",
+          "lineNumber": 910
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare(\"DELETE FROM account WHERE userId = ? AND providerId = ?\")\n        .bind",
+          "lineNumber": 910
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare",
+          "lineNumber": 910
+        },
+        {
+          "caller": "createAuth",
+          "callee": "await config.database\n        .prepare(\n          \"SELECT id, email, name, role, githubLogin, emailVerified, createdAt FROM user ORDER BY createdAt ASC, id ASC\",\n        )\n        .all",
+          "lineNumber": 917
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare",
+          "lineNumber": 917
+        },
+        {
+          "caller": "createAuth",
+          "callee": "(result.results ?? []).map",
+          "lineNumber": 930
+        },
+        {
+          "caller": "createAuth",
+          "callee": "STAFF_ROLE_SET.has",
+          "lineNumber": 941
+        },
+        {
+          "caller": "createAuth",
+          "callee": "STAFF_ROLES.join",
+          "lineNumber": 943
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare(\"UPDATE user SET role = ?, updatedAt = ? WHERE id = ?\")\n        .bind(role, new Date().toISOString(), userId)\n        .run",
+          "lineNumber": 946
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare(\"UPDATE user SET role = ?, updatedAt = ? WHERE id = ?\")\n        .bind",
+          "lineNumber": 946
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare",
+          "lineNumber": 946
+        },
+        {
+          "caller": "createAuth",
+          "callee": "new Date().toISOString",
+          "lineNumber": 948
+        },
+        {
+          "caller": "createAuth",
+          "callee": "STAFF_ROLE_SET.has",
+          "lineNumber": 953
+        },
+        {
+          "caller": "createAuth",
+          "callee": "STAFF_ROLES.join",
+          "lineNumber": 955
+        },
+        {
+          "caller": "createAuth",
+          "callee": "email.trim().toLowerCase",
+          "lineNumber": 958
+        },
+        {
+          "caller": "createAuth",
+          "callee": "email.trim",
+          "lineNumber": 958
+        },
+        {
+          "caller": "createAuth",
+          "callee": "await config.database\n        .prepare(\"SELECT id FROM user WHERE email = ? LIMIT 1\")\n        .bind(normalized)\n        .first",
+          "lineNumber": 959
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare(\"SELECT id FROM user WHERE email = ? LIMIT 1\")\n        .bind",
+          "lineNumber": 959
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare",
+          "lineNumber": 959
+        },
+        {
+          "caller": "createAuth",
+          "callee": "generateUserId",
+          "lineNumber": 964
+        },
+        {
+          "caller": "createAuth",
+          "callee": "new Date().toISOString",
+          "lineNumber": 965
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare(\n          \"INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt, role) VALUES (?, ?, ?, 0, ?, ?, ?)\",\n        )\n        .bind(id, normalized.split(\"@\")[0] ?? normalized, normalized, now, now, role)\n        .run",
+          "lineNumber": 969
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare(\n          \"INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt, role) VALUES (?, ?, ?, 0, ?, ?, ?)\",\n        )\n        .bind",
+          "lineNumber": 969
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare",
+          "lineNumber": 969
+        },
+        {
+          "caller": "createAuth",
+          "callee": "normalized.split",
+          "lineNumber": 973
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare(\n          \"DELETE FROM user WHERE id = ? AND emailVerified = 0 AND NOT EXISTS (SELECT 1 FROM account WHERE account.userId = user.id)\",\n        )\n        .bind(userId)\n        .run",
+          "lineNumber": 978
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare(\n          \"DELETE FROM user WHERE id = ? AND emailVerified = 0 AND NOT EXISTS (SELECT 1 FROM account WHERE account.userId = user.id)\",\n        )\n        .bind",
+          "lineNumber": 978
+        },
+        {
+          "caller": "createAuth",
+          "callee": "config.database\n        .prepare",
+          "lineNumber": 978
+        },
+        {
+          "caller": "createSetupIncompleteAuth",
+          "callee": "Response.json",
+          "lineNumber": 1007
+        },
+        {
+          "caller": "createSetupIncompleteAuth",
+          "callee": "response",
+          "lineNumber": 1012
+        },
+        {
+          "caller": "generateUserId",
+          "callee": "crypto.getRandomValues",
+          "lineNumber": 1035
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 9,
+        "functionCount": 13,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/mount/bootRuntimeOnce.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 52,
+      "nonEmptyLines": 49,
+      "functions": [
+        {
+          "name": "createCmsRef",
+          "startLine": 21,
+          "endLine": 52,
+          "params": [
+            "config"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "createCmsRef",
+          "line": 21,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "createCmsRef",
+          "callee": "createCmsRuntime",
+          "lineNumber": 22
+        },
+        {
+          "caller": "get",
+          "callee": "runtime\n        .bootInit()\n        .then(() => runtime)\n        .catch",
+          "lineNumber": 42
+        },
+        {
+          "caller": "get",
+          "callee": "runtime\n        .bootInit()\n        .then",
+          "lineNumber": 42
+        },
+        {
+          "caller": "get",
+          "callee": "runtime\n        .bootInit",
+          "lineNumber": 42
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/mount/cmsConfig.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 36,
+      "nonEmptyLines": 35,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/mount/mountMcp.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 159,
+      "nonEmptyLines": 153,
+      "functions": [
+        {
+          "name": "protectedResourceMetadataPath",
+          "startLine": 20,
+          "endLine": 25,
+          "params": [
+            "resourcePath"
+          ]
+        },
+        {
+          "name": "createMcpApiHandler",
+          "startLine": 48,
+          "endLine": 126,
+          "params": [
+            "options"
+          ]
+        },
+        {
+          "name": "forbidden",
+          "startLine": 128,
+          "endLine": 136,
+          "params": []
+        },
+        {
+          "name": "collectMcpProcedures",
+          "startLine": 146,
+          "endLine": 159,
+          "params": [
+            "triggers",
+            "proceduresByName",
+            "surface"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "protectedResourceMetadataPath",
+          "line": 20,
+          "isDefault": false
+        },
+        {
+          "name": "createMcpApiHandler",
+          "line": 48,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "protectedResourceMetadataPath",
+          "callee": "resourcePath.replace",
+          "lineNumber": 21
+        },
+        {
+          "caller": "protectedResourceMetadataPath",
+          "callee": "trimmed.startsWith",
+          "lineNumber": 23
+        },
+        {
+          "caller": "fetch",
+          "callee": "forbidden",
+          "lineNumber": 65
+        },
+        {
+          "caller": "fetch",
+          "callee": "STAFF_ROLE_SET.has",
+          "lineNumber": 67
+        },
+        {
+          "caller": "fetch",
+          "callee": "forbidden",
+          "lineNumber": 68
+        },
+        {
+          "caller": "fetch",
+          "callee": "ref.get",
+          "lineNumber": 70
+        },
+        {
+          "caller": "fetch",
+          "callee": "runtime.siteConfig.readMediaPurposes",
+          "lineNumber": 78
+        },
+        {
+          "caller": "fetch",
+          "callee": "JSON.stringify",
+          "lineNumber": 84
+        },
+        {
+          "caller": "fetch",
+          "callee": "dispatcherCache.get",
+          "lineNumber": 85
+        },
+        {
+          "caller": "fetch",
+          "callee": "runtime.schemasByName.values",
+          "lineNumber": 108
+        },
+        {
+          "caller": "fetch",
+          "callee": "ref.manifests.filter",
+          "lineNumber": 111
+        },
+        {
+          "caller": "fetch",
+          "callee": "collectMcpProcedures",
+          "lineNumber": 112
+        },
+        {
+          "caller": "fetch",
+          "callee": "dispatcherCache.set",
+          "lineNumber": 116
+        },
+        {
+          "caller": "fetch",
+          "callee": "cached.dispatcher.dispatch",
+          "lineNumber": 118
+        },
+        {
+          "caller": "fetch",
+          "callee": "STAFF_ROLE_SET.has",
+          "lineNumber": 120
+        },
+        {
+          "caller": "collectMcpProcedures",
+          "callee": "proceduresByName.get",
+          "lineNumber": 155
+        },
+        {
+          "caller": "collectMcpProcedures",
+          "callee": "out.push",
+          "lineNumber": 156
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 2,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/mount/mountPublicRoutes.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 484,
+      "nonEmptyLines": 446,
+      "functions": [
+        {
+          "name": "mountPublicRoutes",
+          "startLine": 120,
+          "endLine": 204,
+          "params": [
+            "app",
+            "ref",
+            "options"
+          ]
+        },
+        {
+          "name": "mountCollection",
+          "startLine": 206,
+          "endLine": 328,
+          "params": [
+            "app",
+            "ref",
+            "options",
+            "route",
+            "liveDev",
+            "overrides"
+          ]
+        },
+        {
+          "name": "assertStaffSession",
+          "startLine": 336,
+          "endLine": 347,
+          "params": [
+            "ref",
+            "req"
+          ]
+        },
+        {
+          "name": "readKvText",
+          "startLine": 349,
+          "endLine": 359,
+          "params": [
+            "kv",
+            "key",
+            "headers"
+          ]
+        },
+        {
+          "name": "safeExecutionCtx",
+          "startLine": 365,
+          "endLine": 371,
+          "params": [
+            "c"
+          ]
+        },
+        {
+          "name": "readKvWithLiveFallback",
+          "startLine": 390,
+          "endLine": 409,
+          "params": [
+            "kv",
+            "key",
+            "headers",
+            "compose",
+            "executionCtx"
+          ]
+        },
+        {
+          "name": "composeRootLlmsTxt",
+          "startLine": 426,
+          "endLine": 439,
+          "params": [
+            "runtime",
+            "site"
+          ]
+        },
+        {
+          "name": "readThroughCache",
+          "startLine": 441,
+          "endLine": 456,
+          "params": [
+            "kv",
+            "key",
+            "headers",
+            "populate",
+            "fallback"
+          ]
+        },
+        {
+          "name": "buildCtx",
+          "startLine": 458,
+          "endLine": 465,
+          "params": [
+            "c",
+            "runtime",
+            "site",
+            "locale"
+          ]
+        },
+        {
+          "name": "canonicalLocaleParam",
+          "startLine": 467,
+          "endLine": 470,
+          "params": [
+            "locale",
+            "site"
+          ]
+        },
+        {
+          "name": "buildOverrideIndex",
+          "startLine": 472,
+          "endLine": 478,
+          "params": [
+            "overrides"
+          ]
+        },
+        {
+          "name": "overrideKey",
+          "startLine": 480,
+          "endLine": 482,
+          "params": [
+            "collection",
+            "slug"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "mountPublicRoutes",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "ContentState",
+          "line": 484,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "buildOverrideIndex",
+          "lineNumber": 126
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "app.get",
+          "lineNumber": 136
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "ref.get",
+          "lineNumber": 137
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "runtime.siteConfig.load",
+          "lineNumber": 138
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "readKvWithLiveFallback",
+          "lineNumber": 139
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "llmsTxtKey",
+          "lineNumber": 141
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "composeRootLlmsTxt",
+          "lineNumber": 143
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "safeExecutionCtx",
+          "lineNumber": 144
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "app.get",
+          "lineNumber": 148
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "ref.get",
+          "lineNumber": 149
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "runtime.siteConfig.load",
+          "lineNumber": 150
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "runtime.composeSitemap.execute",
+          "lineNumber": 156
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "runtime.publicPathResolver!.forEntry",
+          "lineNumber": 158
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "app.get",
+          "lineNumber": 164
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "ref.get",
+          "lineNumber": 165
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "runtime.siteConfig.load",
+          "lineNumber": 166
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "c.redirect",
+          "lineNumber": 168
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "toUrlLocale",
+          "lineNumber": 168
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "app.get",
+          "lineNumber": 170
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "ref.get",
+          "lineNumber": 171
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "runtime.siteConfig.load",
+          "lineNumber": 172
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "canonicalLocaleParam",
+          "lineNumber": 173
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "c.req.param",
+          "lineNumber": 173
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "buildCtx",
+          "lineNumber": 174
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "inferLocaleFromPath",
+          "lineNumber": 174
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "options.notFoundRenderer",
+          "lineNumber": 175
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "options.homeRenderer!",
+          "lineNumber": 176
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "app.get",
+          "lineNumber": 180
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "ref.get",
+          "lineNumber": 181
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "runtime.siteConfig.load",
+          "lineNumber": 182
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "canonicalLocaleParam",
+          "lineNumber": 183
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "c.req.param",
+          "lineNumber": 183
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "readKvWithLiveFallback",
+          "lineNumber": 185
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "llmsTxtKey",
+          "lineNumber": 187
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "runtime.composeLlmsTxt.execute",
+          "lineNumber": 189
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "safeExecutionCtx",
+          "lineNumber": 190
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "mountCollection",
+          "lineNumber": 195
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "app.notFound",
+          "lineNumber": 198
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "ref.get",
+          "lineNumber": 199
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "runtime.siteConfig.load",
+          "lineNumber": 200
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "inferLocaleFromPath",
+          "lineNumber": 201
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "options.notFoundRenderer",
+          "lineNumber": 202
+        },
+        {
+          "caller": "mountPublicRoutes",
+          "callee": "buildCtx",
+          "lineNumber": 202
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "app.get",
+          "lineNumber": 217
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "ref.get",
+          "lineNumber": 218
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "runtime.siteConfig.load",
+          "lineNumber": 219
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "canonicalLocaleParam",
+          "lineNumber": 220
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "c.req.param",
+          "lineNumber": 220
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "buildCtx",
+          "lineNumber": 221
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "inferLocaleFromPath",
+          "lineNumber": 221
+        },
+        {
+          "caller": "notFound",
+          "callee": "options.notFoundRenderer",
+          "lineNumber": 222
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "notFound",
+          "lineNumber": 223
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "runtime.renderListLive.execute",
+          "lineNumber": 225
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "notFound",
+          "lineNumber": 230
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "readThroughCache",
+          "lineNumber": 233
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "listHtmlKey",
+          "lineNumber": 233
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "runtime.renderListLive.execute",
+          "lineNumber": 234
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "app.get",
+          "lineNumber": 249
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "ref.get",
+          "lineNumber": 250
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "runtime.siteConfig.load",
+          "lineNumber": 251
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "canonicalLocaleParam",
+          "lineNumber": 252
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "c.req.param",
+          "lineNumber": 252
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "c.req.param",
+          "lineNumber": 253
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "slugParam.endsWith",
+          "lineNumber": 254
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "slugParam.slice",
+          "lineNumber": 254
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "notFound",
+          "lineNumber": 256
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "entryMarkdownKeyFromParts",
+          "lineNumber": 257
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "readThroughCache",
+          "lineNumber": 258
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "readEntryBySlug",
+          "lineNumber": 259
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "serializeEntryAsMarkdown",
+          "lineNumber": 266
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "app.get",
+          "lineNumber": 271
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "ref.get",
+          "lineNumber": 272
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "runtime.siteConfig.load",
+          "lineNumber": 273
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "canonicalLocaleParam",
+          "lineNumber": 274
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "c.req.param",
+          "lineNumber": 274
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "c.req.param",
+          "lineNumber": 275
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "buildCtx",
+          "lineNumber": 276
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "inferLocaleFromPath",
+          "lineNumber": 276
+        },
+        {
+          "caller": "notFound",
+          "callee": "options.notFoundRenderer",
+          "lineNumber": 277
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "notFound",
+          "lineNumber": 278
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "overrides.get",
+          "lineNumber": 280
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "overrideKey",
+          "lineNumber": 280
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "override.render",
+          "lineNumber": 281
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "c.req.query",
+          "lineNumber": 283
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "assertStaffSession",
+          "lineNumber": 284
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "runtime.previewEntry.execute",
+          "lineNumber": 286
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "notFound",
+          "lineNumber": 292
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "runtime.renderEntryLive.execute",
+          "lineNumber": 297
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "notFound",
+          "lineNumber": 303
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "entryHtmlKeyFromParts",
+          "lineNumber": 307
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "readThroughCache",
+          "lineNumber": 308
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "runtime.renderEntryLive.execute",
+          "lineNumber": 309
+        },
+        {
+          "caller": "mountCollection",
+          "callee": "console.warn",
+          "lineNumber": 323
+        },
+        {
+          "caller": "assertStaffSession",
+          "callee": "ref.auth.getSession",
+          "lineNumber": 340
+        },
+        {
+          "caller": "assertStaffSession",
+          "callee": "ref.auth.getUserRole",
+          "lineNumber": 342
+        },
+        {
+          "caller": "assertStaffSession",
+          "callee": "STAFF_ROLE_SET.has",
+          "lineNumber": 343
+        },
+        {
+          "caller": "readKvText",
+          "callee": "kv.get",
+          "lineNumber": 354
+        },
+        {
+          "caller": "readKvWithLiveFallback",
+          "callee": "kv.get",
+          "lineNumber": 397
+        },
+        {
+          "caller": "readKvWithLiveFallback",
+          "callee": "compose",
+          "lineNumber": 401
+        },
+        {
+          "caller": "readKvWithLiveFallback",
+          "callee": "kv.put",
+          "lineNumber": 402
+        },
+        {
+          "caller": "readKvWithLiveFallback",
+          "callee": "executionCtx.waitUntil",
+          "lineNumber": 404
+        },
+        {
+          "caller": "composeRootLlmsTxt",
+          "callee": "runtime.composeLlmsTxt.execute",
+          "lineNumber": 431
+        },
+        {
+          "caller": "composeRootLlmsTxt",
+          "callee": "runtime.composeLlmsTxt.execute",
+          "lineNumber": 435
+        },
+        {
+          "caller": "composeRootLlmsTxt",
+          "callee": "body.trim",
+          "lineNumber": 436
+        },
+        {
+          "caller": "composeRootLlmsTxt",
+          "callee": "parts.push",
+          "lineNumber": 436
+        },
+        {
+          "caller": "composeRootLlmsTxt",
+          "callee": "parts.join",
+          "lineNumber": 438
+        },
+        {
+          "caller": "readThroughCache",
+          "callee": "kv.get",
+          "lineNumber": 448
+        },
+        {
+          "caller": "readThroughCache",
+          "callee": "populate",
+          "lineNumber": 451
+        },
+        {
+          "caller": "readThroughCache",
+          "callee": "fallback",
+          "lineNumber": 452
+        },
+        {
+          "caller": "readThroughCache",
+          "callee": "kv.put",
+          "lineNumber": 454
+        },
+        {
+          "caller": "canonicalLocaleParam",
+          "callee": "isKnownLocale",
+          "lineNumber": 468
+        },
+        {
+          "caller": "canonicalLocaleParam",
+          "callee": "inferLocaleFromPath",
+          "lineNumber": 469
+        },
+        {
+          "caller": "buildOverrideIndex",
+          "callee": "map.set",
+          "lineNumber": 476
+        },
+        {
+          "caller": "buildOverrideIndex",
+          "callee": "overrideKey",
+          "lineNumber": 476
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 2,
+        "functionCount": 12,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/mount/mountServerEndpoints.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 1392,
+      "nonEmptyLines": 1294,
+      "functions": [
+        {
+          "name": "mountServerEndpoints",
+          "startLine": 35,
+          "endLine": 62,
+          "params": [
+            "app",
+            "ref"
+          ]
+        },
+        {
+          "name": "mountAdminBetterAuth",
+          "startLine": 64,
+          "endLine": 543,
+          "params": [
+            "app",
+            "ref",
+            "auth"
+          ]
+        },
+        {
+          "name": "adminEntryTitle",
+          "startLine": 545,
+          "endLine": 551,
+          "params": [
+            "data"
+          ]
+        },
+        {
+          "name": "adminListItem",
+          "startLine": 553,
+          "endLine": 571,
+          "params": [
+            "row"
+          ]
+        },
+        {
+          "name": "entryEditorPayload",
+          "startLine": 596,
+          "endLine": 620,
+          "params": [
+            "runtime",
+            "row",
+            "schemas"
+          ]
+        },
+        {
+          "name": "adminEditorCollection",
+          "startLine": 667,
+          "endLine": 684,
+          "params": [
+            "schema",
+            "schemas"
+          ]
+        },
+        {
+          "name": "adminEditorEntry",
+          "startLine": 686,
+          "endLine": 696,
+          "params": [
+            "row"
+          ]
+        },
+        {
+          "name": "relatedEntrySections",
+          "startLine": 698,
+          "endLine": 727,
+          "params": [
+            "runtime",
+            "parentSchema",
+            "parentRow",
+            "schemas"
+          ]
+        },
+        {
+          "name": "discoverChildRelationships",
+          "startLine": 737,
+          "endLine": 782,
+          "params": [
+            "parentSchema",
+            "parentRow",
+            "schemas"
+          ]
+        },
+        {
+          "name": "conventionalParentField",
+          "startLine": 784,
+          "endLine": 800,
+          "params": [
+            "parentCollectionName",
+            "childField",
+            "parentProps"
+          ]
+        },
+        {
+          "name": "isPrimitiveJoinSchema",
+          "startLine": 802,
+          "endLine": 807,
+          "params": [
+            "schema"
+          ]
+        },
+        {
+          "name": "collectionParentFor",
+          "startLine": 809,
+          "endLine": 841,
+          "params": [
+            "childSchema",
+            "schemas"
+          ]
+        },
+        {
+          "name": "primitiveJoinValue",
+          "startLine": 843,
+          "endLine": 848,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "camelCaseIdentifier",
+          "startLine": 850,
+          "endLine": 859,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "singularizeIdentifier",
+          "startLine": 861,
+          "endLine": 866,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "capitalizeIdentifier",
+          "startLine": 868,
+          "endLine": 870,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "entriesByDataValue",
+          "startLine": 872,
+          "endLine": 889,
+          "params": [
+            "runtime",
+            "collection",
+            "field",
+            "value"
+          ]
+        },
+        {
+          "name": "readSiteSettings",
+          "startLine": 891,
+          "endLine": 915,
+          "params": [
+            "runtime"
+          ]
+        },
+        {
+          "name": "writeSiteSettings",
+          "startLine": 917,
+          "endLine": 937,
+          "params": [
+            "runtime",
+            "values"
+          ]
+        },
+        {
+          "name": "invalidatePublicRenderCache",
+          "startLine": 939,
+          "endLine": 945,
+          "params": [
+            "runtime"
+          ]
+        },
+        {
+          "name": "deleteKvPrefix",
+          "startLine": 947,
+          "endLine": 954,
+          "params": [
+            "runtime",
+            "prefix"
+          ]
+        },
+        {
+          "name": "adminRowFromDb",
+          "startLine": 955,
+          "endLine": 969,
+          "params": [
+            "row"
+          ]
+        },
+        {
+          "name": "adminRowFromRuntime",
+          "startLine": 971,
+          "endLine": 983,
+          "params": [
+            "row"
+          ]
+        },
+        {
+          "name": "expectedVersionField",
+          "startLine": 985,
+          "endLine": 996,
+          "params": [
+            "value",
+            "path"
+          ]
+        },
+        {
+          "name": "stringField",
+          "startLine": 998,
+          "endLine": 1000,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "objectField",
+          "startLine": 1002,
+          "endLine": 1006,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "adminHandlerContext",
+          "startLine": 1018,
+          "endLine": 1026,
+          "params": [
+            "c",
+            "gate"
+          ]
+        },
+        {
+          "name": "readStaffGate",
+          "startLine": 1028,
+          "endLine": 1042,
+          "params": [
+            "c",
+            "auth"
+          ]
+        },
+        {
+          "name": "handleHttpTrigger",
+          "startLine": 1044,
+          "endLine": 1107,
+          "params": [
+            "req",
+            "runtime",
+            "auth",
+            "triggerName",
+            "triggerPath",
+            "waitUntil"
+          ]
+        },
+        {
+          "name": "handleViewRequest",
+          "startLine": 1109,
+          "endLine": 1190,
+          "params": [
+            "req",
+            "runtime",
+            "viewName",
+            "auth",
+            "waitUntil"
+          ]
+        },
+        {
+          "name": "buildCallerContext",
+          "startLine": 1210,
+          "endLine": 1223,
+          "params": [
+            "req",
+            "auth",
+            "waitUntil"
+          ]
+        },
+        {
+          "name": "parsePositiveInt",
+          "startLine": 1225,
+          "endLine": 1229,
+          "params": [
+            "raw"
+          ]
+        },
+        {
+          "name": "readBody",
+          "startLine": 1231,
+          "endLine": 1243,
+          "params": [
+            "req"
+          ]
+        },
+        {
+          "name": "openApiToHono",
+          "startLine": 1245,
+          "endLine": 1247,
+          "params": [
+            "path"
+          ]
+        },
+        {
+          "name": "readWaitUntil",
+          "startLine": 1255,
+          "endLine": 1262,
+          "params": [
+            "c"
+          ]
+        },
+        {
+          "name": "jsonResponse",
+          "startLine": 1264,
+          "endLine": 1269,
+          "params": [
+            "status",
+            "body"
+          ]
+        },
+        {
+          "name": "mediaFieldsForCollection",
+          "startLine": 1271,
+          "endLine": 1284,
+          "params": [
+            "schema",
+            "schemas"
+          ]
+        },
+        {
+          "name": "mediaFieldsForSchema",
+          "startLine": 1286,
+          "endLine": 1297,
+          "params": [
+            "schema"
+          ]
+        },
+        {
+          "name": "adminUnauthenticated",
+          "startLine": 1299,
+          "endLine": 1310,
+          "params": [
+            "c",
+            "path"
+          ]
+        },
+        {
+          "name": "adminNotOwner",
+          "startLine": 1317,
+          "endLine": 1328,
+          "params": [
+            "c",
+            "path"
+          ]
+        },
+        {
+          "name": "adminNotStaff",
+          "startLine": 1329,
+          "endLine": 1342,
+          "params": [
+            "c",
+            "path",
+            "login"
+          ]
+        },
+        {
+          "name": "jsonError",
+          "startLine": 1344,
+          "endLine": 1353,
+          "params": [
+            "args"
+          ]
+        },
+        {
+          "name": "runUseCase",
+          "startLine": 1355,
+          "endLine": 1377,
+          "params": [
+            "opPath",
+            "fn"
+          ]
+        },
+        {
+          "name": "mediaNotConfiguredResponse",
+          "startLine": 1379,
+          "endLine": 1390,
+          "params": [
+            "path"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "mountServerEndpoints",
+          "line": 35,
+          "isDefault": false
+        },
+        {
+          "name": "CmsRuntimeRef",
+          "line": 1392,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "mountServerEndpoints",
+          "callee": "openApiToHono",
+          "lineNumber": 44
+        },
+        {
+          "caller": "mountServerEndpoints",
+          "callee": "app.on",
+          "lineNumber": 46
+        },
+        {
+          "caller": "mountServerEndpoints",
+          "callee": "ref.get",
+          "lineNumber": 47
+        },
+        {
+          "caller": "mountServerEndpoints",
+          "callee": "readWaitUntil",
+          "lineNumber": 48
+        },
+        {
+          "caller": "mountServerEndpoints",
+          "callee": "handleHttpTrigger",
+          "lineNumber": 49
+        },
+        {
+          "caller": "mountServerEndpoints",
+          "callee": "app.get",
+          "lineNumber": 55
+        },
+        {
+          "caller": "mountServerEndpoints",
+          "callee": "ref.get",
+          "lineNumber": 56
+        },
+        {
+          "caller": "mountServerEndpoints",
+          "callee": "readWaitUntil",
+          "lineNumber": 57
+        },
+        {
+          "caller": "mountServerEndpoints",
+          "callee": "handleViewRequest",
+          "lineNumber": 58
+        },
+        {
+          "caller": "mountServerEndpoints",
+          "callee": "mountAdminBetterAuth",
+          "lineNumber": 61
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "app.get",
+          "lineNumber": 70
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "app.get",
+          "lineNumber": 87
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "Response.json",
+          "lineNumber": 88
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "app.all",
+          "lineNumber": 98
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "auth.handler",
+          "lineNumber": 98
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "app.get",
+          "lineNumber": 121
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ref.manifests.filter",
+          "lineNumber": 127
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "schemas\n    .filter((s) => !s.spec.translates)\n    .map",
+          "lineNumber": 130
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "schemas\n    .filter",
+          "lineNumber": 130
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "adminEditorCollection",
+          "lineNumber": 132
+        },
+        {
+          "caller": "guarded",
+          "callee": "app.on",
+          "lineNumber": 140
+        },
+        {
+          "caller": "guarded",
+          "callee": "method.toUpperCase",
+          "lineNumber": 140
+        },
+        {
+          "caller": "guarded",
+          "callee": "readStaffGate",
+          "lineNumber": 141
+        },
+        {
+          "caller": "guarded",
+          "callee": "adminUnauthenticated",
+          "lineNumber": 142
+        },
+        {
+          "caller": "guarded",
+          "callee": "adminNotStaff",
+          "lineNumber": 143
+        },
+        {
+          "caller": "guarded",
+          "callee": "body",
+          "lineNumber": 144
+        },
+        {
+          "caller": "ownerGuarded",
+          "callee": "guarded",
+          "lineNumber": 156
+        },
+        {
+          "caller": "ownerGuarded",
+          "callee": "adminNotOwner",
+          "lineNumber": 157
+        },
+        {
+          "caller": "ownerGuarded",
+          "callee": "body",
+          "lineNumber": 158
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "guarded",
+          "lineNumber": 162
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 163
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ownerGuarded",
+          "lineNumber": 166
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 167
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "auth.listUsers",
+          "lineNumber": 167
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ownerGuarded",
+          "lineNumber": 170
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.param",
+          "lineNumber": 171
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json().catch",
+          "lineNumber": 172
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json",
+          "lineNumber": 172
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "STAFF_ROLE_SET.has",
+          "lineNumber": 174
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 175
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 177
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "[...STAFF_ROLE_SET].join",
+          "lineNumber": 181
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 190
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 192
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "auth.setUserRole",
+          "lineNumber": 201
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 203
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 205
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 214
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ownerGuarded",
+          "lineNumber": 217
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json().catch",
+          "lineNumber": 218
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json",
+          "lineNumber": 218
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "body.email.trim().toLowerCase",
+          "lineNumber": 219
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "body.email.trim",
+          "lineNumber": 219
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test",
+          "lineNumber": 221
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "STAFF_ROLE_SET.has",
+          "lineNumber": 221
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 222
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 224
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "[...STAFF_ROLE_SET].join",
+          "lineNumber": 228
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "auth.inviteUser",
+          "lineNumber": 233
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 235
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 238
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 248
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ownerGuarded",
+          "lineNumber": 251
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "auth.revokeInvite",
+          "lineNumber": 252
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.param",
+          "lineNumber": 252
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 254
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 256
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 266
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "guarded",
+          "lineNumber": 269
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 269
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "guarded",
+          "lineNumber": 271
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ref.get",
+          "lineNumber": 272
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtime.siteConfig.load",
+          "lineNumber": 273
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 275
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "guarded",
+          "lineNumber": 284
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runUseCase",
+          "lineNumber": 285
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ref.get",
+          "lineNumber": 286
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtime.siteConfig.load",
+          "lineNumber": 287
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "readSiteSettings",
+          "lineNumber": 288
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "guarded",
+          "lineNumber": 293
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runUseCase",
+          "lineNumber": 294
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ref.get",
+          "lineNumber": 295
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json().catch",
+          "lineNumber": 296
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json",
+          "lineNumber": 296
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "writeSiteSettings",
+          "lineNumber": 297
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "stringField",
+          "lineNumber": 298
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "stringField",
+          "lineNumber": 299
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "stringField",
+          "lineNumber": 300
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "stringField",
+          "lineNumber": 301
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "stringField",
+          "lineNumber": 302
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "stringField",
+          "lineNumber": 303
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "stringField",
+          "lineNumber": 304
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "invalidatePublicRenderCache",
+          "lineNumber": 306
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtime.siteConfig.load",
+          "lineNumber": 307
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "readSiteSettings",
+          "lineNumber": 308
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "guarded",
+          "lineNumber": 313
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.query",
+          "lineNumber": 314
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 316
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 318
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ref.get",
+          "lineNumber": 327
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.query",
+          "lineNumber": 328
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "Number.parseInt",
+          "lineNumber": 329
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.query",
+          "lineNumber": 330
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtime.listEntries.executePage",
+          "lineNumber": 334
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "Number.isFinite",
+          "lineNumber": 337
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.query",
+          "lineNumber": 338
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "result.rows.map",
+          "lineNumber": 340
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 341
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "guarded",
+          "lineNumber": 344
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runUseCase",
+          "lineNumber": 345
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.param",
+          "lineNumber": 345
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ref.get",
+          "lineNumber": 346
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.param",
+          "lineNumber": 347
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtime.getEntry.execute",
+          "lineNumber": 348
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "entryEditorPayload",
+          "lineNumber": 349
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "adminRowFromRuntime",
+          "lineNumber": 349
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "guarded",
+          "lineNumber": 353
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runUseCase",
+          "lineNumber": 354
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ref.get",
+          "lineNumber": 355
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json().catch",
+          "lineNumber": 356
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json",
+          "lineNumber": 356
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 362
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtime.createDraft.execute",
+          "lineNumber": 371
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "objectField",
+          "lineNumber": 373
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "adminHandlerContext",
+          "lineNumber": 375
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "entryEditorPayload",
+          "lineNumber": 378
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "adminRowFromRuntime",
+          "lineNumber": 378
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "guarded",
+          "lineNumber": 382
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runUseCase",
+          "lineNumber": 383
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.param",
+          "lineNumber": 383
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ref.get",
+          "lineNumber": 384
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.param",
+          "lineNumber": 385
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json().catch",
+          "lineNumber": 386
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json",
+          "lineNumber": 386
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtime.updateDraft.execute",
+          "lineNumber": 390
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "expectedVersionField",
+          "lineNumber": 392
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "objectField",
+          "lineNumber": 393
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "adminHandlerContext",
+          "lineNumber": 394
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "entryEditorPayload",
+          "lineNumber": 397
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "adminRowFromRuntime",
+          "lineNumber": 397
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "guarded",
+          "lineNumber": 401
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runUseCase",
+          "lineNumber": 402
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.param",
+          "lineNumber": 402
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ref.get",
+          "lineNumber": 403
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.param",
+          "lineNumber": 404
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json().catch",
+          "lineNumber": 405
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json",
+          "lineNumber": 405
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtime.requestPublish.execute",
+          "lineNumber": 406
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "adminHandlerContext",
+          "lineNumber": 408
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "entryEditorPayload",
+          "lineNumber": 411
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "adminRowFromRuntime",
+          "lineNumber": 411
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "guarded",
+          "lineNumber": 415
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runUseCase",
+          "lineNumber": 416
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.param",
+          "lineNumber": 416
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ref.get",
+          "lineNumber": 417
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.param",
+          "lineNumber": 418
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json().catch",
+          "lineNumber": 419
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json",
+          "lineNumber": 419
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtime.unpublish.execute",
+          "lineNumber": 420
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "adminHandlerContext",
+          "lineNumber": 422
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "entryEditorPayload",
+          "lineNumber": 425
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "adminRowFromRuntime",
+          "lineNumber": 425
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "guarded",
+          "lineNumber": 429
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runUseCase",
+          "lineNumber": 430
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.param",
+          "lineNumber": 430
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ref.get",
+          "lineNumber": 431
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.param",
+          "lineNumber": 432
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json().catch",
+          "lineNumber": 433
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json",
+          "lineNumber": 433
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtime.deleteEntry.execute",
+          "lineNumber": 434
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "adminHandlerContext",
+          "lineNumber": 436
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "guarded",
+          "lineNumber": 448
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ref.get",
+          "lineNumber": 449
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "mediaNotConfiguredResponse",
+          "lineNumber": 451
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json().catch",
+          "lineNumber": 452
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json",
+          "lineNumber": 452
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "Array.isArray",
+          "lineNumber": 462
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 464
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 466
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 478
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 480
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "Number.isSafeInteger",
+          "lineNumber": 495
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "jsonResponse",
+          "lineNumber": 499
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 501
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "variants.push",
+          "lineNumber": 510
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runUseCase",
+          "lineNumber": 513
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "media.createUpload.execute",
+          "lineNumber": 514
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "guarded",
+          "lineNumber": 524
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "ref.get",
+          "lineNumber": 525
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "mediaNotConfiguredResponse",
+          "lineNumber": 527
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.param",
+          "lineNumber": 530
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json().catch",
+          "lineNumber": 531
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "c.req.raw.json",
+          "lineNumber": 531
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "runUseCase",
+          "lineNumber": 535
+        },
+        {
+          "caller": "mountAdminBetterAuth",
+          "callee": "media.commitUpload.execute",
+          "lineNumber": 536
+        },
+        {
+          "caller": "adminListItem",
+          "callee": "adminEntryTitle",
+          "lineNumber": 568
+        },
+        {
+          "caller": "entryEditorPayload",
+          "callee": "schemas.find",
+          "lineNumber": 601
+        },
+        {
+          "caller": "entryEditorPayload",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 604
+        },
+        {
+          "caller": "entryEditorPayload",
+          "callee": "relatedEntrySections",
+          "lineNumber": 614
+        },
+        {
+          "caller": "entryEditorPayload",
+          "callee": "adminEditorCollection",
+          "lineNumber": 616
+        },
+        {
+          "caller": "entryEditorPayload",
+          "callee": "adminEditorEntry",
+          "lineNumber": 617
+        },
+        {
+          "caller": "adminEditorCollection",
+          "callee": "collectionParentFor",
+          "lineNumber": 676
+        },
+        {
+          "caller": "adminEditorCollection",
+          "callee": "schemas.some",
+          "lineNumber": 677
+        },
+        {
+          "caller": "adminEditorCollection",
+          "callee": "Boolean",
+          "lineNumber": 678
+        },
+        {
+          "caller": "adminEditorCollection",
+          "callee": "mediaFieldsForCollection",
+          "lineNumber": 682
+        },
+        {
+          "caller": "relatedEntrySections",
+          "callee": "discoverChildRelationships",
+          "lineNumber": 704
+        },
+        {
+          "caller": "relatedEntrySections",
+          "callee": "schemas.find",
+          "lineNumber": 707
+        },
+        {
+          "caller": "relatedEntrySections",
+          "callee": "entriesByDataValue",
+          "lineNumber": 709
+        },
+        {
+          "caller": "relatedEntrySections",
+          "callee": "sections.push",
+          "lineNumber": 715
+        },
+        {
+          "caller": "relatedEntrySections",
+          "callee": "adminEditorCollection",
+          "lineNumber": 716
+        },
+        {
+          "caller": "relatedEntrySections",
+          "callee": "entries.map",
+          "lineNumber": 723
+        },
+        {
+          "caller": "add",
+          "callee": "primitiveJoinValue",
+          "lineNumber": 752
+        },
+        {
+          "caller": "add",
+          "callee": "String",
+          "lineNumber": 754
+        },
+        {
+          "caller": "add",
+          "callee": "seen.has",
+          "lineNumber": 755
+        },
+        {
+          "caller": "add",
+          "callee": "seen.add",
+          "lineNumber": 756
+        },
+        {
+          "caller": "add",
+          "callee": "relationships.push",
+          "lineNumber": 757
+        },
+        {
+          "caller": "discoverChildRelationships",
+          "callee": "add",
+          "lineNumber": 771
+        },
+        {
+          "caller": "discoverChildRelationships",
+          "callee": "Object.entries",
+          "lineNumber": 775
+        },
+        {
+          "caller": "discoverChildRelationships",
+          "callee": "conventionalParentField",
+          "lineNumber": 776
+        },
+        {
+          "caller": "discoverChildRelationships",
+          "callee": "add",
+          "lineNumber": 777
+        },
+        {
+          "caller": "conventionalParentField",
+          "callee": "camelCaseIdentifier",
+          "lineNumber": 790
+        },
+        {
+          "caller": "conventionalParentField",
+          "callee": "singularizeIdentifier",
+          "lineNumber": 791
+        },
+        {
+          "caller": "conventionalParentField",
+          "callee": "camelCaseIdentifier",
+          "lineNumber": 791
+        },
+        {
+          "caller": "conventionalParentField",
+          "callee": "Object.entries",
+          "lineNumber": 794
+        },
+        {
+          "caller": "conventionalParentField",
+          "callee": "isPrimitiveJoinSchema",
+          "lineNumber": 795
+        },
+        {
+          "caller": "conventionalParentField",
+          "callee": "capitalizeIdentifier",
+          "lineNumber": 796
+        },
+        {
+          "caller": "isPrimitiveJoinSchema",
+          "callee": "Array.isArray",
+          "lineNumber": 804
+        },
+        {
+          "caller": "isPrimitiveJoinSchema",
+          "callee": "types.some",
+          "lineNumber": 806
+        },
+        {
+          "caller": "collectionParentFor",
+          "callee": "Object.entries",
+          "lineNumber": 827
+        },
+        {
+          "caller": "collectionParentFor",
+          "callee": "conventionalParentField",
+          "lineNumber": 828
+        },
+        {
+          "caller": "primitiveJoinValue",
+          "callee": "Number.isFinite",
+          "lineNumber": 845
+        },
+        {
+          "caller": "camelCaseIdentifier",
+          "callee": "value\n    .split(/[^a-zA-Z0-9]+/)\n    .filter(Boolean)\n    .map((part, index) => {\n      const lower = part.charAt(0).toLowerCase() + part.slice(1);\n      return index === 0 ? lower : capitalizeIdentifier(lower);\n    })\n    .join",
+          "lineNumber": 851
+        },
+        {
+          "caller": "camelCaseIdentifier",
+          "callee": "value\n    .split(/[^a-zA-Z0-9]+/)\n    .filter(Boolean)\n    .map",
+          "lineNumber": 851
+        },
+        {
+          "caller": "camelCaseIdentifier",
+          "callee": "value\n    .split(/[^a-zA-Z0-9]+/)\n    .filter",
+          "lineNumber": 851
+        },
+        {
+          "caller": "camelCaseIdentifier",
+          "callee": "value\n    .split",
+          "lineNumber": 851
+        },
+        {
+          "caller": "camelCaseIdentifier",
+          "callee": "part.charAt(0).toLowerCase",
+          "lineNumber": 855
+        },
+        {
+          "caller": "camelCaseIdentifier",
+          "callee": "part.charAt",
+          "lineNumber": 855
+        },
+        {
+          "caller": "camelCaseIdentifier",
+          "callee": "part.slice",
+          "lineNumber": 855
+        },
+        {
+          "caller": "camelCaseIdentifier",
+          "callee": "capitalizeIdentifier",
+          "lineNumber": 856
+        },
+        {
+          "caller": "singularizeIdentifier",
+          "callee": "value.endsWith",
+          "lineNumber": 862
+        },
+        {
+          "caller": "singularizeIdentifier",
+          "callee": "value.slice",
+          "lineNumber": 862
+        },
+        {
+          "caller": "singularizeIdentifier",
+          "callee": "value.endsWith",
+          "lineNumber": 863
+        },
+        {
+          "caller": "singularizeIdentifier",
+          "callee": "value.slice",
+          "lineNumber": 863
+        },
+        {
+          "caller": "singularizeIdentifier",
+          "callee": "value.endsWith",
+          "lineNumber": 864
+        },
+        {
+          "caller": "singularizeIdentifier",
+          "callee": "value.slice",
+          "lineNumber": 864
+        },
+        {
+          "caller": "capitalizeIdentifier",
+          "callee": "value.charAt(0).toUpperCase",
+          "lineNumber": 869
+        },
+        {
+          "caller": "capitalizeIdentifier",
+          "callee": "value.charAt",
+          "lineNumber": 869
+        },
+        {
+          "caller": "capitalizeIdentifier",
+          "callee": "value.slice",
+          "lineNumber": 869
+        },
+        {
+          "caller": "entriesByDataValue",
+          "callee": "await runtime.db\n    .prepare(\n      `SELECT id, collection, status, version, data, author_id, created_at, updated_at\n       FROM entries\n       WHERE collection = ? AND json_extract(data, ?) = ?\n       ORDER BY updated_at DESC, id DESC\n       LIMIT 50`,\n    )\n    .bind(collection, `$.${field}`, value)\n    .all",
+          "lineNumber": 878
+        },
+        {
+          "caller": "entriesByDataValue",
+          "callee": "runtime.db\n    .prepare(\n      `SELECT id, collection, status, version, data, author_id, created_at, updated_at\n       FROM entries\n       WHERE collection = ? AND json_extract(data, ?) = ?\n       ORDER BY updated_at DESC, id DESC\n       LIMIT 50`,\n    )\n    .bind",
+          "lineNumber": 878
+        },
+        {
+          "caller": "entriesByDataValue",
+          "callee": "runtime.db\n    .prepare",
+          "lineNumber": 878
+        },
+        {
+          "caller": "entriesByDataValue",
+          "callee": "rows.map",
+          "lineNumber": 888
+        },
+        {
+          "caller": "readSiteSettings",
+          "callee": "await runtime.db\n    .prepare(\n      `SELECT key, value FROM site_config\n       WHERE key IN (\n         'brandIntro',\n         'serviceIncludes',\n         'ga4MeasurementId',\n         'facebookPixelId'\n       )`,\n    )\n    .all",
+          "lineNumber": 897
+        },
+        {
+          "caller": "readSiteSettings",
+          "callee": "runtime.db\n    .prepare",
+          "lineNumber": 897
+        },
+        {
+          "caller": "readSiteSettings",
+          "callee": "rows.map",
+          "lineNumber": 908
+        },
+        {
+          "caller": "readSiteSettings",
+          "callee": "map.get",
+          "lineNumber": 910
+        },
+        {
+          "caller": "readSiteSettings",
+          "callee": "map.get",
+          "lineNumber": 911
+        },
+        {
+          "caller": "readSiteSettings",
+          "callee": "map.get",
+          "lineNumber": 912
+        },
+        {
+          "caller": "readSiteSettings",
+          "callee": "map.get",
+          "lineNumber": 913
+        },
+        {
+          "caller": "writeSiteSettings",
+          "callee": "Object.entries(values)\n    .filter((entry): entry is [string, string] => typeof entry[1] === \"string\")\n    .map",
+          "lineNumber": 929
+        },
+        {
+          "caller": "writeSiteSettings",
+          "callee": "Object.entries(values)\n    .filter",
+          "lineNumber": 929
+        },
+        {
+          "caller": "writeSiteSettings",
+          "callee": "Object.entries",
+          "lineNumber": 929
+        },
+        {
+          "caller": "writeSiteSettings",
+          "callee": "runtime.db\n        .prepare(`INSERT INTO site_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`)\n        .bind",
+          "lineNumber": 932
+        },
+        {
+          "caller": "writeSiteSettings",
+          "callee": "runtime.db\n        .prepare",
+          "lineNumber": 932
+        },
+        {
+          "caller": "writeSiteSettings",
+          "callee": "runtime.db.batch",
+          "lineNumber": 936
+        },
+        {
+          "caller": "invalidatePublicRenderCache",
+          "callee": "Promise.all",
+          "lineNumber": 940
+        },
+        {
+          "caller": "invalidatePublicRenderCache",
+          "callee": "deleteKvPrefix",
+          "lineNumber": 941
+        },
+        {
+          "caller": "invalidatePublicRenderCache",
+          "callee": "deleteKvPrefix",
+          "lineNumber": 942
+        },
+        {
+          "caller": "invalidatePublicRenderCache",
+          "callee": "deleteKvPrefix",
+          "lineNumber": 943
+        },
+        {
+          "caller": "deleteKvPrefix",
+          "callee": "runtime.kv.list",
+          "lineNumber": 950
+        },
+        {
+          "caller": "deleteKvPrefix",
+          "callee": "Promise.all",
+          "lineNumber": 951
+        },
+        {
+          "caller": "deleteKvPrefix",
+          "callee": "page.keys.map",
+          "lineNumber": 951
+        },
+        {
+          "caller": "deleteKvPrefix",
+          "callee": "runtime.kv.delete",
+          "lineNumber": 951
+        },
+        {
+          "caller": "adminRowFromDb",
+          "callee": "JSON.parse",
+          "lineNumber": 956
+        },
+        {
+          "caller": "expectedVersionField",
+          "callee": "Number.isSafeInteger",
+          "lineNumber": 986
+        },
+        {
+          "caller": "expectedVersionField",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 988
+        },
+        {
+          "caller": "objectField",
+          "callee": "Array.isArray",
+          "lineNumber": 1003
+        },
+        {
+          "caller": "adminHandlerContext",
+          "callee": "readWaitUntil",
+          "lineNumber": 1019
+        },
+        {
+          "caller": "readStaffGate",
+          "callee": "auth.getSession",
+          "lineNumber": 1029
+        },
+        {
+          "caller": "readStaffGate",
+          "callee": "STAFF_ROLE_SET.has",
+          "lineNumber": 1033
+        },
+        {
+          "caller": "handleHttpTrigger",
+          "callee": "runtime.triggersByName.get",
+          "lineNumber": 1052
+        },
+        {
+          "caller": "handleHttpTrigger",
+          "callee": "jsonError",
+          "lineNumber": 1054
+        },
+        {
+          "caller": "handleHttpTrigger",
+          "callee": "runtime.proceduresByName.get",
+          "lineNumber": 1057
+        },
+        {
+          "caller": "handleHttpTrigger",
+          "callee": "jsonError",
+          "lineNumber": 1059
+        },
+        {
+          "caller": "handleHttpTrigger",
+          "callee": "matchPath",
+          "lineNumber": 1063
+        },
+        {
+          "caller": "handleHttpTrigger",
+          "callee": "readBody",
+          "lineNumber": 1064
+        },
+        {
+          "caller": "handleHttpTrigger",
+          "callee": "buildCallerContext",
+          "lineNumber": 1071
+        },
+        {
+          "caller": "handleHttpTrigger",
+          "callee": "jsonResponse",
+          "lineNumber": 1080
+        },
+        {
+          "caller": "handleHttpTrigger",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 1082
+        },
+        {
+          "caller": "handleHttpTrigger",
+          "callee": "runtime.invokeProcedure.execute",
+          "lineNumber": 1095
+        },
+        {
+          "caller": "handleHttpTrigger",
+          "callee": "jsonResponse",
+          "lineNumber": 1103
+        },
+        {
+          "caller": "handleHttpTrigger",
+          "callee": "jsonResponse",
+          "lineNumber": 1106
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "runtime.viewsByName.get",
+          "lineNumber": 1116
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "jsonError",
+          "lineNumber": 1118
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "buildCallerContext",
+          "lineNumber": 1132
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "jsonResponse",
+          "lineNumber": 1135
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 1137
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "evaluateAuthAll",
+          "lineNumber": 1146
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "jsonResponse",
+          "lineNumber": 1148
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "parsePositiveInt",
+          "lineNumber": 1156
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "url.searchParams.get",
+          "lineNumber": 1156
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "parsePositiveInt",
+          "lineNumber": 1157
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "url.searchParams.get",
+          "lineNumber": 1157
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "coerceViewParams",
+          "lineNumber": 1161
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "jsonResponse",
+          "lineNumber": 1164
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 1166
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "runtime.executeView.execute",
+          "lineNumber": 1178
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "jsonResponse",
+          "lineNumber": 1186
+        },
+        {
+          "caller": "handleViewRequest",
+          "callee": "jsonResponse",
+          "lineNumber": 1189
+        },
+        {
+          "caller": "buildCallerContext",
+          "callee": "auth.getSession",
+          "lineNumber": 1215
+        },
+        {
+          "caller": "buildCallerContext",
+          "callee": "auth.getUserRole",
+          "lineNumber": 1218
+        },
+        {
+          "caller": "buildCallerContext",
+          "callee": "STAFF_ROLE_SET.has",
+          "lineNumber": 1219
+        },
+        {
+          "caller": "parsePositiveInt",
+          "callee": "Number.parseInt",
+          "lineNumber": 1227
+        },
+        {
+          "caller": "parsePositiveInt",
+          "callee": "Number.isFinite",
+          "lineNumber": 1228
+        },
+        {
+          "caller": "readBody",
+          "callee": "req.headers.get",
+          "lineNumber": 1235
+        },
+        {
+          "caller": "readBody",
+          "callee": "ct.includes",
+          "lineNumber": 1236
+        },
+        {
+          "caller": "readBody",
+          "callee": "await req.json",
+          "lineNumber": 1238
+        },
+        {
+          "caller": "openApiToHono",
+          "callee": "path.replace",
+          "lineNumber": 1246
+        },
+        {
+          "caller": "readWaitUntil",
+          "callee": "ctx.waitUntil.bind",
+          "lineNumber": 1258
+        },
+        {
+          "caller": "jsonResponse",
+          "callee": "JSON.stringify",
+          "lineNumber": 1265
+        },
+        {
+          "caller": "mediaFieldsForCollection",
+          "callee": "schemas.filter",
+          "lineNumber": 1277
+        },
+        {
+          "caller": "mediaFieldsForCollection",
+          "callee": "out.push",
+          "lineNumber": 1281
+        },
+        {
+          "caller": "mediaFieldsForCollection",
+          "callee": "mediaFieldsForSchema",
+          "lineNumber": 1281
+        },
+        {
+          "caller": "mediaFieldsForSchema",
+          "callee": "Object.entries",
+          "lineNumber": 1290
+        },
+        {
+          "caller": "mediaFieldsForSchema",
+          "callee": "isMediaMcpHint",
+          "lineNumber": 1293
+        },
+        {
+          "caller": "mediaFieldsForSchema",
+          "callee": "out.push",
+          "lineNumber": 1294
+        },
+        {
+          "caller": "adminUnauthenticated",
+          "callee": "jsonResponse",
+          "lineNumber": 1300
+        },
+        {
+          "caller": "adminUnauthenticated",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 1302
+        },
+        {
+          "caller": "adminNotOwner",
+          "callee": "jsonResponse",
+          "lineNumber": 1318
+        },
+        {
+          "caller": "adminNotOwner",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 1320
+        },
+        {
+          "caller": "adminNotStaff",
+          "callee": "jsonResponse",
+          "lineNumber": 1330
+        },
+        {
+          "caller": "adminNotStaff",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 1333
+        },
+        {
+          "caller": "jsonError",
+          "callee": "jsonResponse",
+          "lineNumber": 1352
+        },
+        {
+          "caller": "runUseCase",
+          "callee": "fn",
+          "lineNumber": 1357
+        },
+        {
+          "caller": "runUseCase",
+          "callee": "jsonResponse",
+          "lineNumber": 1358
+        },
+        {
+          "caller": "runUseCase",
+          "callee": "jsonResponse",
+          "lineNumber": 1362
+        },
+        {
+          "caller": "runUseCase",
+          "callee": "redactForWire",
+          "lineNumber": 1362
+        },
+        {
+          "caller": "runUseCase",
+          "callee": "console.error",
+          "lineNumber": 1366
+        },
+        {
+          "caller": "runUseCase",
+          "callee": "jsonResponse",
+          "lineNumber": 1367
+        },
+        {
+          "caller": "runUseCase",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 1369
+        },
+        {
+          "caller": "mediaNotConfiguredResponse",
+          "callee": "jsonResponse",
+          "lineNumber": 1380
+        },
+        {
+          "caller": "mediaNotConfiguredResponse",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 1382
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 2,
+        "functionCount": 44,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/oauth/consentHtml.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 104,
+      "nonEmptyLines": 95,
+      "functions": [
+        {
+          "name": "detectConsentLocale",
+          "startLine": 15,
+          "endLine": 20,
+          "params": [
+            "acceptLanguage"
+          ]
+        },
+        {
+          "name": "escapeHtml",
+          "startLine": 47,
+          "endLine": 54,
+          "params": [
+            "s"
+          ]
+        },
+        {
+          "name": "renderConsentHtml",
+          "startLine": 76,
+          "endLine": 104,
+          "params": [
+            "locale",
+            "model"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "detectConsentLocale",
+          "line": 15,
+          "isDefault": false
+        },
+        {
+          "name": "renderConsentHtml",
+          "line": 76,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "detectConsentLocale",
+          "callee": "acceptLanguage.toLowerCase",
+          "lineNumber": 17
+        },
+        {
+          "caller": "detectConsentLocale",
+          "callee": "lower.includes",
+          "lineNumber": 18
+        },
+        {
+          "caller": "detectConsentLocale",
+          "callee": "lower.includes",
+          "lineNumber": 18
+        },
+        {
+          "caller": "escapeHtml",
+          "callee": "s\n    .replace(/&/g, \"&amp;\")\n    .replace(/</g, \"&lt;\")\n    .replace(/>/g, \"&gt;\")\n    .replace(/\"/g, \"&quot;\")\n    .replace",
+          "lineNumber": 48
+        },
+        {
+          "caller": "escapeHtml",
+          "callee": "s\n    .replace(/&/g, \"&amp;\")\n    .replace(/</g, \"&lt;\")\n    .replace(/>/g, \"&gt;\")\n    .replace",
+          "lineNumber": 48
+        },
+        {
+          "caller": "escapeHtml",
+          "callee": "s\n    .replace(/&/g, \"&amp;\")\n    .replace(/</g, \"&lt;\")\n    .replace",
+          "lineNumber": 48
+        },
+        {
+          "caller": "escapeHtml",
+          "callee": "s\n    .replace(/&/g, \"&amp;\")\n    .replace",
+          "lineNumber": 48
+        },
+        {
+          "caller": "escapeHtml",
+          "callee": "s\n    .replace",
+          "lineNumber": 48
+        },
+        {
+          "caller": "renderConsentHtml",
+          "callee": "model.scopes.map((s) => `<span class=\"scope\">${escapeHtml(s)}</span>`).join",
+          "lineNumber": 88
+        },
+        {
+          "caller": "renderConsentHtml",
+          "callee": "model.scopes.map",
+          "lineNumber": 88
+        },
+        {
+          "caller": "renderConsentHtml",
+          "callee": "escapeHtml",
+          "lineNumber": 88
+        },
+        {
+          "caller": "renderConsentHtml",
+          "callee": "t.heading",
+          "lineNumber": 94
+        },
+        {
+          "caller": "renderConsentHtml",
+          "callee": "escapeHtml",
+          "lineNumber": 94
+        },
+        {
+          "caller": "renderConsentHtml",
+          "callee": "escapeHtml",
+          "lineNumber": 95
+        },
+        {
+          "caller": "renderConsentHtml",
+          "callee": "escapeHtml",
+          "lineNumber": 98
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/oauth/mountOAuth.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 164,
+      "nonEmptyLines": 153,
+      "functions": [
+        {
+          "name": "mountAuthorize",
+          "startLine": 29,
+          "endLine": 131,
+          "params": [
+            "app",
+            "options"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "mountAuthorize",
+          "line": 29,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "consentHandler",
+          "callee": "detectConsentLocale",
+          "lineNumber": 33
+        },
+        {
+          "caller": "consentHandler",
+          "callee": "c.req.header",
+          "lineNumber": 33
+        },
+        {
+          "caller": "consentHandler",
+          "callee": "auth.getSession",
+          "lineNumber": 42
+        },
+        {
+          "caller": "consentHandler",
+          "callee": "encodeURIComponent",
+          "lineNumber": 48
+        },
+        {
+          "caller": "consentHandler",
+          "callee": "c.req.raw.formData",
+          "lineNumber": 56
+        },
+        {
+          "caller": "consentHandler",
+          "callee": "form.get",
+          "lineNumber": 57
+        },
+        {
+          "caller": "consentHandler",
+          "callee": "form.get",
+          "lineNumber": 61
+        },
+        {
+          "caller": "consentHandler",
+          "callee": "JSON.parse",
+          "lineNumber": 66
+        },
+        {
+          "caller": "consentHandler",
+          "callee": "helpers.lookupClient",
+          "lineNumber": 76
+        },
+        {
+          "caller": "consentHandler",
+          "callee": "Array.isArray",
+          "lineNumber": 81
+        },
+        {
+          "caller": "consentHandler",
+          "callee": "registered.redirectUris.includes",
+          "lineNumber": 83
+        },
+        {
+          "caller": "consentHandler",
+          "callee": "auth.getUserRole",
+          "lineNumber": 88
+        },
+        {
+          "caller": "consentHandler",
+          "callee": "helpers.completeAuthorization",
+          "lineNumber": 94
+        },
+        {
+          "caller": "consentHandler",
+          "callee": "helpers.parseAuthRequest",
+          "lineNumber": 112
+        },
+        {
+          "caller": "consentHandler",
+          "callee": "helpers.lookupClient",
+          "lineNumber": 113
+        },
+        {
+          "caller": "consentHandler",
+          "callee": "JSON.stringify",
+          "lineNumber": 118
+        },
+        {
+          "caller": "consentHandler",
+          "callee": "renderConsentHtml",
+          "lineNumber": 124
+        },
+        {
+          "caller": "mountAuthorize",
+          "callee": "app.get",
+          "lineNumber": 129
+        },
+        {
+          "caller": "mountAuthorize",
+          "callee": "app.post",
+          "lineNumber": 130
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/createAuth.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 895,
+      "nonEmptyLines": 823,
+      "functions": [
+        {
+          "name": "asProviderMap",
+          "startLine": 45,
+          "endLine": 49,
+          "params": [
+            "out"
+          ]
+        },
+        {
+          "name": "fakeDb",
+          "startLine": 51,
+          "endLine": 66,
+          "params": []
+        },
+        {
+          "name": "baseConfig",
+          "startLine": 68,
+          "endLine": 78,
+          "params": [
+            "overrides"
+          ]
+        },
+        {
+          "name": "fakeDbWith",
+          "startLine": 616,
+          "endLine": 641,
+          "params": [
+            "behaviour"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "baseConfig",
+          "callee": "fakeDb",
+          "lineNumber": 72
+        },
+        {
+          "caller": "baseConfig",
+          "callee": "\"x\".repeat",
+          "lineNumber": 74
+        },
+        {
+          "caller": "fakeDbWith",
+          "callee": "behaviour.onBind",
+          "lineNumber": 619
+        },
+        {
+          "caller": "fakeDbWith",
+          "callee": "behaviour.onPrepare",
+          "lineNumber": 635
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/fakes/runtime-bindings.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 47,
+      "nonEmptyLines": 44,
+      "classes": [
+        {
+          "name": "InMemoryKv",
+          "startLine": 9,
+          "endLine": 26,
+          "methods": [
+            "get",
+            "put",
+            "delete",
+            "list"
+          ],
+          "properties": [
+            "store"
+          ]
+        },
+        {
+          "name": "StubAssetServer",
+          "startLine": 28,
+          "endLine": 32,
+          "methods": [
+            "fetch"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "InMemoryKv",
+          "line": 9,
+          "isDefault": false
+        },
+        {
+          "name": "StubAssetServer",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "stubAuth",
+          "line": 36,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "get",
+          "callee": "this.store.get",
+          "lineNumber": 12
+        },
+        {
+          "caller": "put",
+          "callee": "this.store.set",
+          "lineNumber": 15
+        },
+        {
+          "caller": "delete",
+          "callee": "this.store.delete",
+          "lineNumber": 18
+        },
+        {
+          "caller": "list",
+          "callee": "[...this.store.keys()].filter",
+          "lineNumber": 22
+        },
+        {
+          "caller": "list",
+          "callee": "this.store.keys",
+          "lineNumber": 22
+        },
+        {
+          "caller": "list",
+          "callee": "k.startsWith",
+          "lineNumber": 22
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 3,
+        "functionCount": 0,
+        "classCount": 2
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/mcp-metadata.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 45,
+      "nonEmptyLines": 41,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/mount-auth.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 93,
+      "nonEmptyLines": 86,
+      "functions": [
+        {
+          "name": "harness",
+          "startLine": 14,
+          "endLine": 29,
+          "params": [
+            "authOverride"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "harness",
+          "callee": "createCmsRef",
+          "lineNumber": 16
+        },
+        {
+          "caller": "harness",
+          "callee": "mountServerEndpoints",
+          "lineNumber": 27
+        }
+      ],
+      "metrics": {
+        "importCount": 6,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/mount-http-trigger-auth.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 242,
+      "nonEmptyLines": 229,
+      "functions": [
+        {
+          "name": "staffGatedManifests",
+          "startLine": 26,
+          "endLine": 49,
+          "params": []
+        },
+        {
+          "name": "authFake",
+          "startLine": 56,
+          "endLine": 78,
+          "params": [
+            "opts"
+          ]
+        },
+        {
+          "name": "buildApp",
+          "startLine": 80,
+          "endLine": 100,
+          "params": [
+            "auth"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "authFake",
+          "callee": "Date.now",
+          "lineNumber": 65
+        },
+        {
+          "caller": "buildApp",
+          "callee": "createCmsRef",
+          "lineNumber": 82
+        },
+        {
+          "caller": "buildApp",
+          "callee": "staffGatedManifests",
+          "lineNumber": 83
+        },
+        {
+          "caller": "buildApp",
+          "callee": "opCalls.push",
+          "lineNumber": 86
+        },
+        {
+          "caller": "buildApp",
+          "callee": "mountServerEndpoints",
+          "lineNumber": 98
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/mount-staff-admin.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 218,
+      "nonEmptyLines": 200,
+      "functions": [
+        {
+          "name": "sessionAs",
+          "startLine": 19,
+          "endLine": 30,
+          "params": [
+            "role",
+            "userId"
+          ]
+        },
+        {
+          "name": "harness",
+          "startLine": 32,
+          "endLine": 47,
+          "params": [
+            "authOverride"
+          ]
+        },
+        {
+          "name": "jsonInit",
+          "startLine": 59,
+          "endLine": 65,
+          "params": [
+            "method",
+            "body"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "sessionAs",
+          "callee": "Date.now",
+          "lineNumber": 21
+        },
+        {
+          "caller": "harness",
+          "callee": "createCmsRef",
+          "lineNumber": 34
+        },
+        {
+          "caller": "harness",
+          "callee": "mountServerEndpoints",
+          "lineNumber": 45
+        },
+        {
+          "caller": "jsonInit",
+          "callee": "JSON.stringify",
+          "lineNumber": 63
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/public-routes-cache.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 296,
+      "nonEmptyLines": 262,
+      "functions": [
+        {
+          "name": "staffAuth",
+          "startLine": 15,
+          "endLine": 25,
+          "params": [
+            "role"
+          ]
+        },
+        {
+          "name": "manifests",
+          "startLine": 27,
+          "endLine": 50,
+          "params": []
+        },
+        {
+          "name": "harness",
+          "startLine": 52,
+          "endLine": 80,
+          "params": [
+            "locales",
+            "opts"
+          ]
+        },
+        {
+          "name": "seedPublishedPost",
+          "startLine": 82,
+          "endLine": 99,
+          "params": [
+            "db",
+            "locale"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "staffAuth",
+          "callee": "Date.now",
+          "lineNumber": 19
+        },
+        {
+          "caller": "harness",
+          "callee": "templates.registerEntryTemplate",
+          "lineNumber": 56
+        },
+        {
+          "caller": "harness",
+          "callee": "templates.registerListTemplate",
+          "lineNumber": 57
+        },
+        {
+          "caller": "harness",
+          "callee": "entries.map((e) => e.data[\"title\"]).join",
+          "lineNumber": 57
+        },
+        {
+          "caller": "harness",
+          "callee": "entries.map",
+          "lineNumber": 57
+        },
+        {
+          "caller": "harness",
+          "callee": "createCmsRef",
+          "lineNumber": 58
+        },
+        {
+          "caller": "harness",
+          "callee": "manifests",
+          "lineNumber": 59
+        },
+        {
+          "caller": "harness",
+          "callee": "mountPublicRoutes",
+          "lineNumber": 75
+        },
+        {
+          "caller": "seedPublishedPost",
+          "callee": "db.entries.set",
+          "lineNumber": 84
+        },
+        {
+          "caller": "seedPublishedPost",
+          "callee": "JSON.stringify",
+          "lineNumber": 89
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 0,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/smoke-form.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 233,
+      "nonEmptyLines": 226,
+      "functions": [
+        {
+          "name": "manifests",
+          "startLine": 20,
+          "endLine": 122,
+          "params": []
+        },
+        {
+          "name": "harness",
+          "startLine": 131,
+          "endLine": 158,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "harness",
+          "callee": "createCmsRef",
+          "lineNumber": 135
+        },
+        {
+          "caller": "harness",
+          "callee": "manifests",
+          "lineNumber": 136
+        },
+        {
+          "caller": "harness",
+          "callee": "captchaCalls.push",
+          "lineNumber": 139
+        },
+        {
+          "caller": "harness",
+          "callee": "slackCalls.push",
+          "lineNumber": 144
+        },
+        {
+          "caller": "harness",
+          "callee": "mountServerEndpoints",
+          "lineNumber": 156
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/smoke-media.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 413,
+      "nonEmptyLines": 385,
+      "functions": [
+        {
+          "name": "manifests",
+          "startLine": 85,
+          "endLine": 105,
+          "params": []
+        },
+        {
+          "name": "staffAuth",
+          "startLine": 115,
+          "endLine": 125,
+          "params": []
+        },
+        {
+          "name": "postCoverPolicy",
+          "startLine": 132,
+          "endLine": 142,
+          "params": []
+        },
+        {
+          "name": "harness",
+          "startLine": 144,
+          "endLine": 170,
+          "params": [
+            "opts"
+          ]
+        },
+        {
+          "name": "jsonRpcReq",
+          "startLine": 407,
+          "endLine": 413,
+          "params": [
+            "method",
+            "params"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "FakeMediaStorage",
+          "startLine": 35,
+          "endLine": 83,
+          "methods": [
+            "createUpload",
+            "commitUpload",
+            "getPublicUrl",
+            "deleteObject"
+          ],
+          "properties": [
+            "createCalls",
+            "commitCalls"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "createUpload",
+          "callee": "this.createCalls.push",
+          "lineNumber": 40
+        },
+        {
+          "caller": "createUpload",
+          "callee": "args.variants.map",
+          "lineNumber": 41
+        },
+        {
+          "caller": "commitUpload",
+          "callee": "this.commitCalls.push",
+          "lineNumber": 58
+        },
+        {
+          "caller": "commitUpload",
+          "callee": "args.variants.map",
+          "lineNumber": 59
+        },
+        {
+          "caller": "staffAuth",
+          "callee": "Date.now",
+          "lineNumber": 119
+        },
+        {
+          "caller": "harness",
+          "callee": "createCmsRef",
+          "lineNumber": 154
+        },
+        {
+          "caller": "harness",
+          "callee": "manifests",
+          "lineNumber": 155
+        },
+        {
+          "caller": "harness",
+          "callee": "postCoverPolicy",
+          "lineNumber": 157
+        },
+        {
+          "caller": "harness",
+          "callee": "mountServerEndpoints",
+          "lineNumber": 168
+        },
+        {
+          "caller": "jsonRpcReq",
+          "callee": "JSON.stringify",
+          "lineNumber": 411
+        }
+      ],
+      "metrics": {
+        "importCount": 6,
+        "exportCount": 0,
+        "functionCount": 5,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/view-rest.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 384,
+      "nonEmptyLines": 370,
+      "functions": [
+        {
+          "name": "manifests",
+          "startLine": 20,
+          "endLine": 71,
+          "params": []
+        },
+        {
+          "name": "harness",
+          "startLine": 73,
+          "endLine": 89,
+          "params": [
+            "seed"
+          ]
+        },
+        {
+          "name": "row",
+          "startLine": 91,
+          "endLine": 102,
+          "params": [
+            "id",
+            "data",
+            "status"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "harness",
+          "callee": "seed",
+          "lineNumber": 75
+        },
+        {
+          "caller": "harness",
+          "callee": "createCmsRef",
+          "lineNumber": 76
+        },
+        {
+          "caller": "harness",
+          "callee": "manifests",
+          "lineNumber": 77
+        },
+        {
+          "caller": "harness",
+          "callee": "mountServerEndpoints",
+          "lineNumber": 87
+        },
+        {
+          "caller": "row",
+          "callee": "JSON.stringify",
+          "lineNumber": 97
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/test/fakes/database.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 675,
+      "nonEmptyLines": 624,
+      "functions": [
+        {
+          "name": "normalize",
+          "startLine": 409,
+          "endLine": 411,
+          "params": [
+            "sql"
+          ]
+        },
+        {
+          "name": "fieldFromJsonPath",
+          "startLine": 413,
+          "endLine": 419,
+          "params": [
+            "path"
+          ]
+        },
+        {
+          "name": "runCompiledViewQuery",
+          "startLine": 427,
+          "endLine": 524,
+          "params": [
+            "db",
+            "sql",
+            "params"
+          ]
+        },
+        {
+          "name": "compareValues",
+          "startLine": 526,
+          "endLine": 541,
+          "params": [
+            "left",
+            "op",
+            "right"
+          ]
+        },
+        {
+          "name": "readValue",
+          "startLine": 543,
+          "endLine": 559,
+          "params": [
+            "row",
+            "ref"
+          ]
+        },
+        {
+          "name": "parseJsonExtractKey",
+          "startLine": 561,
+          "endLine": 566,
+          "params": [
+            "ref"
+          ]
+        },
+        {
+          "name": "projectRow",
+          "startLine": 568,
+          "endLine": 594,
+          "params": [
+            "row",
+            "projection"
+          ]
+        },
+        {
+          "name": "collectAtomParams",
+          "startLine": 596,
+          "endLine": 607,
+          "params": [
+            "expr",
+            "params",
+            "startAt"
+          ]
+        },
+        {
+          "name": "matchClose",
+          "startLine": 609,
+          "endLine": 619,
+          "params": [
+            "s",
+            "openIdx"
+          ]
+        },
+        {
+          "name": "splitTopLevel",
+          "startLine": 625,
+          "endLine": 635,
+          "params": [
+            "expr"
+          ]
+        },
+        {
+          "name": "tokenizeBoolean",
+          "startLine": 637,
+          "endLine": 675,
+          "params": [
+            "expr"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "InMemoryDatabase",
+          "startLine": 43,
+          "endLine": 87,
+          "methods": [
+            "prepare",
+            "batch",
+            "_seedUser",
+            "_seedStaff"
+          ],
+          "properties": [
+            "entries",
+            "revisions",
+            "approvals",
+            "staff",
+            "users",
+            "siteConfig",
+            "mediaAssets",
+            "appliedMigrations",
+            "migrations"
+          ]
+        },
+        {
+          "name": "InMemoryStatement",
+          "startLine": 89,
+          "endLine": 407,
+          "methods": [
+            "constructor",
+            "bind",
+            "first",
+            "all",
+            "run",
+            "execute"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "InMemoryDatabase",
+          "line": 43,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "prepare",
+          "callee": "normalize",
+          "lineNumber": 62
+        },
+        {
+          "caller": "batch",
+          "callee": "s.run",
+          "lineNumber": 68
+        },
+        {
+          "caller": "batch",
+          "callee": "out.push",
+          "lineNumber": 69
+        },
+        {
+          "caller": "_seedUser",
+          "callee": "this.users.set",
+          "lineNumber": 82
+        },
+        {
+          "caller": "_seedStaff",
+          "callee": "this.staff.set",
+          "lineNumber": 85
+        },
+        {
+          "caller": "first",
+          "callee": "this.execute",
+          "lineNumber": 101
+        },
+        {
+          "caller": "all",
+          "callee": "this.execute",
+          "lineNumber": 106
+        },
+        {
+          "caller": "run",
+          "callee": "this.execute",
+          "lineNumber": 110
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 119
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.entries.set",
+          "lineNumber": 123
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 138
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 139
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.entries.get",
+          "lineNumber": 141
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 146
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.entries.get",
+          "lineNumber": 147
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 152
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.entries.get",
+          "lineNumber": 153
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 159
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.entries.get",
+          "lineNumber": 160
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 168
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.entries.get",
+          "lineNumber": 170
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 179
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.entries.get",
+          "lineNumber": 181
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 190
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.includes",
+          "lineNumber": 191
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.entries.get",
+          "lineNumber": 194
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.entries.get",
+          "lineNumber": 202
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 212
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.includes",
+          "lineNumber": 213
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.includes",
+          "lineNumber": 215
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.includes",
+          "lineNumber": 216
+        },
+        {
+          "caller": "execute",
+          "callee": "fieldValues.push",
+          "lineNumber": 224
+        },
+        {
+          "caller": "execute",
+          "callee": "fieldFromJsonPath",
+          "lineNumber": 224
+        },
+        {
+          "caller": "execute",
+          "callee": "[...this.db.entries.values()]\n        .filter((r) => r.collection === collection)\n        .filter((r) => (status ? r.status === status : true))\n        .filter((r) => (excludeId ? r.id !== excludeId : true))\n        .filter((r) => {\n          const data = JSON.parse(r.data) as Record<string, unknown>;\n          return fieldValues.every(({ field, value }) => data[field] === value);\n        })\n        .sort((a, b) => b.updated_at - a.updated_at)\n        .slice",
+          "lineNumber": 227
+        },
+        {
+          "caller": "execute",
+          "callee": "[...this.db.entries.values()]\n        .filter((r) => r.collection === collection)\n        .filter((r) => (status ? r.status === status : true))\n        .filter((r) => (excludeId ? r.id !== excludeId : true))\n        .filter((r) => {\n          const data = JSON.parse(r.data) as Record<string, unknown>;\n          return fieldValues.every(({ field, value }) => data[field] === value);\n        })\n        .sort",
+          "lineNumber": 227
+        },
+        {
+          "caller": "execute",
+          "callee": "[...this.db.entries.values()]\n        .filter((r) => r.collection === collection)\n        .filter((r) => (status ? r.status === status : true))\n        .filter((r) => (excludeId ? r.id !== excludeId : true))\n        .filter",
+          "lineNumber": 227
+        },
+        {
+          "caller": "execute",
+          "callee": "[...this.db.entries.values()]\n        .filter((r) => r.collection === collection)\n        .filter((r) => (status ? r.status === status : true))\n        .filter",
+          "lineNumber": 227
+        },
+        {
+          "caller": "execute",
+          "callee": "[...this.db.entries.values()]\n        .filter((r) => r.collection === collection)\n        .filter",
+          "lineNumber": 227
+        },
+        {
+          "caller": "execute",
+          "callee": "[...this.db.entries.values()]\n        .filter",
+          "lineNumber": 227
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.entries.values",
+          "lineNumber": 227
+        },
+        {
+          "caller": "execute",
+          "callee": "JSON.parse",
+          "lineNumber": 232
+        },
+        {
+          "caller": "execute",
+          "callee": "fieldValues.every",
+          "lineNumber": 233
+        },
+        {
+          "caller": "execute",
+          "callee": "filtered.map",
+          "lineNumber": 237
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 241
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.includes",
+          "lineNumber": 242
+        },
+        {
+          "caller": "execute",
+          "callee": "[...this.db.entries.values()]\n        .filter((r) => r.collection === collection)\n        .filter((r) => (status ? r.status === status : true))\n        .sort((a, b) => b.updated_at - a.updated_at)\n        .slice",
+          "lineNumber": 246
+        },
+        {
+          "caller": "execute",
+          "callee": "[...this.db.entries.values()]\n        .filter((r) => r.collection === collection)\n        .filter((r) => (status ? r.status === status : true))\n        .sort",
+          "lineNumber": 246
+        },
+        {
+          "caller": "execute",
+          "callee": "[...this.db.entries.values()]\n        .filter((r) => r.collection === collection)\n        .filter",
+          "lineNumber": 246
+        },
+        {
+          "caller": "execute",
+          "callee": "[...this.db.entries.values()]\n        .filter",
+          "lineNumber": 246
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.entries.values",
+          "lineNumber": 246
+        },
+        {
+          "caller": "execute",
+          "callee": "filtered.map",
+          "lineNumber": 251
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 255
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.entries.delete",
+          "lineNumber": 256
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 260
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.revisions.delete",
+          "lineNumber": 265
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 272
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.approvals.delete",
+          "lineNumber": 277
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 285
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.siteConfig.has",
+          "lineNumber": 287
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.siteConfig.set",
+          "lineNumber": 288
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 294
+        },
+        {
+          "caller": "execute",
+          "callee": "[...this.db.siteConfig.entries()].map",
+          "lineNumber": 296
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.siteConfig.entries",
+          "lineNumber": 296
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 301
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.siteConfig.get",
+          "lineNumber": 303
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 308
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.mediaAssets.set",
+          "lineNumber": 312
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 317
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.mediaAssets.get",
+          "lineNumber": 318
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 323
+        },
+        {
+          "caller": "execute",
+          "callee": "[...this.db.mediaAssets.values()].filter",
+          "lineNumber": 325
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.mediaAssets.values",
+          "lineNumber": 325
+        },
+        {
+          "caller": "execute",
+          "callee": "ids.has",
+          "lineNumber": 325
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 330
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.mediaAssets.has",
+          "lineNumber": 332
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.mediaAssets.delete",
+          "lineNumber": 333
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 338
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.staff.get",
+          "lineNumber": 339
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 343
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.staff.get",
+          "lineNumber": 345
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.users.get",
+          "lineNumber": 346
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 355
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.slice",
+          "lineNumber": 356
+        },
+        {
+          "caller": "execute",
+          "callee": "tail.match",
+          "lineNumber": 357
+        },
+        {
+          "caller": "execute",
+          "callee": "Number",
+          "lineNumber": 358
+        },
+        {
+          "caller": "execute",
+          "callee": "tail.slice",
+          "lineNumber": 359
+        },
+        {
+          "caller": "execute",
+          "callee": "stripped.replace",
+          "lineNumber": 360
+        },
+        {
+          "caller": "execute",
+          "callee": "rest.split",
+          "lineNumber": 361
+        },
+        {
+          "caller": "execute",
+          "callee": "[...this.db.entries.values()].filter",
+          "lineNumber": 362
+        },
+        {
+          "caller": "execute",
+          "callee": "this.db.entries.values",
+          "lineNumber": 362
+        },
+        {
+          "caller": "execute",
+          "callee": "JSON.parse",
+          "lineNumber": 370
+        },
+        {
+          "caller": "execute",
+          "callee": "JSON.parse",
+          "lineNumber": 374
+        },
+        {
+          "caller": "execute",
+          "callee": "JSON.parse",
+          "lineNumber": 378
+        },
+        {
+          "caller": "execute",
+          "callee": "/^json_extract\\(data, '\\$\\.[A-Za-z_][A-Za-z0-9_]*'\\) IN \\(\\?(?:, \\?)*\\)$/.test",
+          "lineNumber": 382
+        },
+        {
+          "caller": "execute",
+          "callee": "cond.match",
+          "lineNumber": 383
+        },
+        {
+          "caller": "execute",
+          "callee": "cond.match",
+          "lineNumber": 384
+        },
+        {
+          "caller": "execute",
+          "callee": "p.slice",
+          "lineNumber": 385
+        },
+        {
+          "caller": "execute",
+          "callee": "JSON.parse",
+          "lineNumber": 387
+        },
+        {
+          "caller": "execute",
+          "callee": "wantSet.has",
+          "lineNumber": 388
+        },
+        {
+          "caller": "execute",
+          "callee": "matchedRows.sort",
+          "lineNumber": 395
+        },
+        {
+          "caller": "execute",
+          "callee": "matchedRows.slice",
+          "lineNumber": 396
+        },
+        {
+          "caller": "execute",
+          "callee": "capped.map",
+          "lineNumber": 397
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.startsWith",
+          "lineNumber": 401
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.includes",
+          "lineNumber": 401
+        },
+        {
+          "caller": "execute",
+          "callee": "sql.includes",
+          "lineNumber": 401
+        },
+        {
+          "caller": "execute",
+          "callee": "runCompiledViewQuery",
+          "lineNumber": 402
+        },
+        {
+          "caller": "normalize",
+          "callee": "sql.replace(/\\s+/g, \" \").trim",
+          "lineNumber": 410
+        },
+        {
+          "caller": "normalize",
+          "callee": "sql.replace",
+          "lineNumber": 410
+        },
+        {
+          "caller": "fieldFromJsonPath",
+          "callee": "path.match",
+          "lineNumber": 414
+        },
+        {
+          "caller": "fieldFromJsonPath",
+          "callee": "quoted[1].replace(/\\\\\"/g, '\"').replace",
+          "lineNumber": 415
+        },
+        {
+          "caller": "fieldFromJsonPath",
+          "callee": "quoted[1].replace",
+          "lineNumber": 415
+        },
+        {
+          "caller": "fieldFromJsonPath",
+          "callee": "path.match",
+          "lineNumber": 416
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "sql.indexOf",
+          "lineNumber": 432
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "sql.slice(\"SELECT\".length, fromIdx).trim",
+          "lineNumber": 433
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "sql.slice",
+          "lineNumber": 433
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "sql.slice(fromIdx + \" FROM entries\".length).trim",
+          "lineNumber": 434
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "sql.slice",
+          "lineNumber": 434
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "afterFrom.indexOf",
+          "lineNumber": 436
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "afterFrom.lastIndexOf",
+          "lineNumber": 437
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "afterFrom.lastIndexOf",
+          "lineNumber": 438
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "afterFrom.indexOf",
+          "lineNumber": 439
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "afterFrom.slice",
+          "lineNumber": 440
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "afterFrom.slice",
+          "lineNumber": 445
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "parseInt",
+          "lineNumber": 448
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "afterFrom.slice(limitIdx + \" LIMIT \".length, limitEnd).trim",
+          "lineNumber": 448
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "afterFrom.slice",
+          "lineNumber": 448
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "parseInt",
+          "lineNumber": 451
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "afterFrom.slice(offsetIdx + \" OFFSET \".length).trim",
+          "lineNumber": 451
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "afterFrom.slice",
+          "lineNumber": 451
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "whereTail.match",
+          "lineNumber": 455
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "whereTail.slice(\"collection = ?\".length).trim",
+          "lineNumber": 458
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "whereTail.slice",
+          "lineNumber": 458
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "remaining.startsWith",
+          "lineNumber": 459
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "remaining.slice(\"AND \".length).trim",
+          "lineNumber": 460
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "remaining.slice",
+          "lineNumber": 460
+        },
+        {
+          "caller": "matchFilter",
+          "callee": "evalExpr",
+          "lineNumber": 469
+        },
+        {
+          "caller": "matchFilter",
+          "callee": "expr.replace",
+          "lineNumber": 469
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "collectAtomParams",
+          "lineNumber": 472
+        },
+        {
+          "caller": "evalExpr",
+          "callee": "expr.trim",
+          "lineNumber": 479
+        },
+        {
+          "caller": "evalExpr",
+          "callee": "cleaned.startsWith",
+          "lineNumber": 480
+        },
+        {
+          "caller": "evalExpr",
+          "callee": "matchClose",
+          "lineNumber": 480
+        },
+        {
+          "caller": "evalExpr",
+          "callee": "cleaned.slice(1, -1).trim",
+          "lineNumber": 481
+        },
+        {
+          "caller": "evalExpr",
+          "callee": "cleaned.slice",
+          "lineNumber": 481
+        },
+        {
+          "caller": "evalExpr",
+          "callee": "splitTopLevel",
+          "lineNumber": 483
+        },
+        {
+          "caller": "evalExpr",
+          "callee": "top.parts.every",
+          "lineNumber": 484
+        },
+        {
+          "caller": "evalExpr",
+          "callee": "evalExpr",
+          "lineNumber": 484
+        },
+        {
+          "caller": "evalExpr",
+          "callee": "top.parts.some",
+          "lineNumber": 485
+        },
+        {
+          "caller": "evalExpr",
+          "callee": "evalExpr",
+          "lineNumber": 485
+        },
+        {
+          "caller": "evalExpr",
+          "callee": "evalAtom",
+          "lineNumber": 486
+        },
+        {
+          "caller": "evalAtom",
+          "callee": "atom.match",
+          "lineNumber": 494
+        },
+        {
+          "caller": "evalAtom",
+          "callee": "comparisonMatch[1]!.trim",
+          "lineNumber": 496
+        },
+        {
+          "caller": "evalAtom",
+          "callee": "compareValues",
+          "lineNumber": 499
+        },
+        {
+          "caller": "evalAtom",
+          "callee": "readValue",
+          "lineNumber": 499
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "[...db.entries.values()]\n    .filter((r) => r.collection === collection)\n    .filter",
+          "lineNumber": 502
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "[...db.entries.values()]\n    .filter",
+          "lineNumber": 502
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "db.entries.values",
+          "lineNumber": 502
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "matchFilter",
+          "lineNumber": 504
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "orderClause.split(\",\").map",
+          "lineNumber": 507
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "orderClause.split",
+          "lineNumber": 507
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "s.trim",
+          "lineNumber": 507
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "filtered.sort",
+          "lineNumber": 508
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "part.match",
+          "lineNumber": 510
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "String(m[1]).trim",
+          "lineNumber": 511
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "String",
+          "lineNumber": 511
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "String(m[2] ?? \"ASC\").toUpperCase",
+          "lineNumber": 512
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "String",
+          "lineNumber": 512
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "readValue",
+          "lineNumber": 513
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "readValue",
+          "lineNumber": 514
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "filtered.slice(offset, offset + limit).map",
+          "lineNumber": 523
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "filtered.slice",
+          "lineNumber": 523
+        },
+        {
+          "caller": "runCompiledViewQuery",
+          "callee": "projectRow",
+          "lineNumber": 523
+        },
+        {
+          "caller": "readValue",
+          "callee": "parseJsonExtractKey",
+          "lineNumber": 553
+        },
+        {
+          "caller": "readValue",
+          "callee": "JSON.parse",
+          "lineNumber": 555
+        },
+        {
+          "caller": "parseJsonExtractKey",
+          "callee": "ref.match",
+          "lineNumber": 562
+        },
+        {
+          "caller": "parseJsonExtractKey",
+          "callee": "quoted[1]!.replace",
+          "lineNumber": 563
+        },
+        {
+          "caller": "parseJsonExtractKey",
+          "callee": "ref.match",
+          "lineNumber": 564
+        },
+        {
+          "caller": "projectRow",
+          "callee": "projection.split(\",\").map",
+          "lineNumber": 569
+        },
+        {
+          "caller": "projectRow",
+          "callee": "projection.split",
+          "lineNumber": 569
+        },
+        {
+          "caller": "projectRow",
+          "callee": "s.trim",
+          "lineNumber": 569
+        },
+        {
+          "caller": "projectRow",
+          "callee": "part.match",
+          "lineNumber": 582
+        },
+        {
+          "caller": "projectRow",
+          "callee": "parseJsonExtractKey",
+          "lineNumber": 584
+        },
+        {
+          "caller": "projectRow",
+          "callee": "JSON.parse",
+          "lineNumber": 586
+        },
+        {
+          "caller": "collectAtomParams",
+          "callee": "params.slice",
+          "lineNumber": 606
+        },
+        {
+          "caller": "splitTopLevel",
+          "callee": "tokenizeBoolean",
+          "lineNumber": 626
+        },
+        {
+          "caller": "tokenizeBoolean",
+          "callee": "expr.startsWith",
+          "lineNumber": 654
+        },
+        {
+          "caller": "tokenizeBoolean",
+          "callee": "parts.push",
+          "lineNumber": 655
+        },
+        {
+          "caller": "tokenizeBoolean",
+          "callee": "expr.startsWith",
+          "lineNumber": 662
+        },
+        {
+          "caller": "tokenizeBoolean",
+          "callee": "parts.push",
+          "lineNumber": 663
+        },
+        {
+          "caller": "tokenizeBoolean",
+          "callee": "parts.push",
+          "lineNumber": 673
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 11,
+        "classCount": 2
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/test/joined-entry-reader.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 261,
+      "nonEmptyLines": 237,
+      "functions": [
+        {
+          "name": "translationsSchema",
+          "startLine": 10,
+          "endLine": 32,
+          "params": []
+        },
+        {
+          "name": "seedEntry",
+          "startLine": 34,
+          "endLine": 54,
+          "params": [
+            "db",
+            "args"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "seedEntry",
+          "callee": "db.entries.set",
+          "lineNumber": 44
+        },
+        {
+          "caller": "seedEntry",
+          "callee": "JSON.stringify",
+          "lineNumber": 49
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    }
+  ]
+}

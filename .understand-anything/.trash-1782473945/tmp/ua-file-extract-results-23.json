@@ -1,0 +1,1601 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 25,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": ".agent/skills/mantle-release/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 124,
+      "nonEmptyLines": 83,
+      "sections": [
+        {
+          "heading": "Mantle Release Skill",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Required Reading",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "First Principle",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Release Mode",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "Pre-Tag Gate",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "Fanout Watch",
+          "level": 2,
+          "line": 78
+        },
+        {
+          "heading": "Failure Handling",
+          "level": 2,
+          "line": 108
+        },
+        {
+          "heading": "Red Flags",
+          "level": 2,
+          "line": 115
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": ".claude/skills/mantle-release/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 124,
+      "nonEmptyLines": 83,
+      "sections": [
+        {
+          "heading": "Mantle Release Skill",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Required Reading",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "First Principle",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Release Mode",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "Pre-Tag Gate",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "Fanout Watch",
+          "level": 2,
+          "line": 78
+        },
+        {
+          "heading": "Failure Handling",
+          "level": 2,
+          "line": 108
+        },
+        {
+          "heading": "Red Flags",
+          "level": 2,
+          "line": 115
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": ".github/CODEOWNERS",
+      "language": "unknown",
+      "fileCategory": "code",
+      "totalLines": 25,
+      "nonEmptyLines": 20,
+      "metrics": {}
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "language": "yaml",
+      "fileCategory": "config",
+      "totalLines": 81,
+      "nonEmptyLines": 80,
+      "sections": [
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "updates",
+          "level": 1,
+          "line": 2
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 2
+      }
+    },
+    {
+      "path": ".github/pull_request_template.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 38,
+      "nonEmptyLines": 23,
+      "sections": [
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 1
+        },
+        {
+          "heading": "Why",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Scope",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "Non-goals",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Test plan",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Follow-ups",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "Related",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "Contributor checklist",
+          "level": 2,
+          "line": 33
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": ".npmrc",
+      "language": "unknown",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": ".nvmrc",
+      "language": "unknown",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": ".understand-anything/.understandignore",
+      "language": "unknown",
+      "fileCategory": "code",
+      "totalLines": 51,
+      "nonEmptyLines": 45,
+      "metrics": {}
+    },
+    {
+      "path": ".understand-anything/config.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "sections": [
+        {
+          "heading": "outputLanguage",
+          "level": 1,
+          "line": 1
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "path": "docs/design-references/editorial-blog-2026-05-05.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 218,
+      "nonEmptyLines": 161,
+      "sections": [
+        {
+          "heading": "Editorial Blog Design Reference (2026-05-05)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Design Thesis",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Visual Tokens",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Typography",
+          "level": 2,
+          "line": 45
+        },
+        {
+          "heading": "Page Chrome",
+          "level": 2,
+          "line": 65
+        },
+        {
+          "heading": "Templates",
+          "level": 2,
+          "line": 95
+        },
+        {
+          "heading": "Interaction Model",
+          "level": 2,
+          "line": 140
+        },
+        {
+          "heading": "I18n Surface",
+          "level": 2,
+          "line": 156
+        },
+        {
+          "heading": "Icons",
+          "level": 2,
+          "line": 178
+        },
+        {
+          "heading": "Reuse With The Current Theme Stack",
+          "level": 2,
+          "line": 191
+        },
+        {
+          "heading": "If Reviving This Direction",
+          "level": 2,
+          "line": 207
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/auth/appleClientSecret.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 158,
+      "nonEmptyLines": 149,
+      "functions": [
+        {
+          "name": "appleClientSecret",
+          "startLine": 75,
+          "endLine": 113,
+          "params": [
+            "args"
+          ]
+        },
+        {
+          "name": "importApplePrivateKey",
+          "startLine": 119,
+          "endLine": 128,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "decodePrivateKeyToDer",
+          "startLine": 130,
+          "endLine": 145,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "base64UrlEncode",
+          "startLine": 147,
+          "endLine": 151,
+          "params": [
+            "bytes"
+          ]
+        },
+        {
+          "name": "base64ToBytes",
+          "startLine": 153,
+          "endLine": 158,
+          "params": [
+            "b64"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "appleClientSecret",
+          "line": 75,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "appleClientSecret",
+          "callee": "Number.isFinite",
+          "lineNumber": 79
+        },
+        {
+          "caller": "appleClientSecret",
+          "callee": "Math.floor",
+          "lineNumber": 92
+        },
+        {
+          "caller": "appleClientSecret",
+          "callee": "Date.now",
+          "lineNumber": 92
+        },
+        {
+          "caller": "appleClientSecret",
+          "callee": "base64UrlEncode",
+          "lineNumber": 101
+        },
+        {
+          "caller": "appleClientSecret",
+          "callee": "textEncoder.encode",
+          "lineNumber": 101
+        },
+        {
+          "caller": "appleClientSecret",
+          "callee": "JSON.stringify",
+          "lineNumber": 101
+        },
+        {
+          "caller": "appleClientSecret",
+          "callee": "base64UrlEncode",
+          "lineNumber": 102
+        },
+        {
+          "caller": "appleClientSecret",
+          "callee": "textEncoder.encode",
+          "lineNumber": 103
+        },
+        {
+          "caller": "appleClientSecret",
+          "callee": "JSON.stringify",
+          "lineNumber": 103
+        },
+        {
+          "caller": "appleClientSecret",
+          "callee": "importApplePrivateKey",
+          "lineNumber": 106
+        },
+        {
+          "caller": "appleClientSecret",
+          "callee": "crypto.subtle.sign",
+          "lineNumber": 107
+        },
+        {
+          "caller": "appleClientSecret",
+          "callee": "textEncoder.encode",
+          "lineNumber": 110
+        },
+        {
+          "caller": "appleClientSecret",
+          "callee": "base64UrlEncode",
+          "lineNumber": 112
+        },
+        {
+          "caller": "importApplePrivateKey",
+          "callee": "decodePrivateKeyToDer",
+          "lineNumber": 120
+        },
+        {
+          "caller": "importApplePrivateKey",
+          "callee": "crypto.subtle.importKey",
+          "lineNumber": 121
+        },
+        {
+          "caller": "decodePrivateKeyToDer",
+          "callee": "input.replace(PEM_MARKERS_RE, \"\").replace",
+          "lineNumber": 132
+        },
+        {
+          "caller": "decodePrivateKeyToDer",
+          "callee": "input.replace",
+          "lineNumber": 132
+        },
+        {
+          "caller": "decodePrivateKeyToDer",
+          "callee": "base64ToBytes",
+          "lineNumber": 139
+        },
+        {
+          "caller": "base64UrlEncode",
+          "callee": "String.fromCharCode",
+          "lineNumber": 149
+        },
+        {
+          "caller": "base64UrlEncode",
+          "callee": "btoa(bin).replace(/\\+/g, \"-\").replace(/\\//g, \"_\").replace",
+          "lineNumber": 150
+        },
+        {
+          "caller": "base64UrlEncode",
+          "callee": "btoa(bin).replace(/\\+/g, \"-\").replace",
+          "lineNumber": 150
+        },
+        {
+          "caller": "base64UrlEncode",
+          "callee": "btoa(bin).replace",
+          "lineNumber": 150
+        },
+        {
+          "caller": "base64UrlEncode",
+          "callee": "btoa",
+          "lineNumber": 150
+        },
+        {
+          "caller": "base64ToBytes",
+          "callee": "atob",
+          "lineNumber": 154
+        },
+        {
+          "caller": "base64ToBytes",
+          "callee": "bin.charCodeAt",
+          "lineNumber": 156
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/auth/ConsoleEmailSender.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 22,
+      "nonEmptyLines": 21,
+      "classes": [
+        {
+          "name": "ConsoleEmailSender",
+          "startLine": 13,
+          "endLine": 22,
+          "methods": [
+            "send"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "ConsoleEmailSender",
+          "line": 13,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "send",
+          "callee": "console.log",
+          "lineNumber": 16
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/bindings/AssetsAssetServer.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 18,
+      "nonEmptyLines": 16,
+      "classes": [
+        {
+          "name": "AssetsAssetServer",
+          "startLine": 10,
+          "endLine": 18,
+          "methods": [
+            "constructor",
+            "fetch"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "AssetsAssetServer",
+          "line": 10,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "fetch",
+          "callee": "this.assets.fetch",
+          "lineNumber": 14
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 145,
+      "nonEmptyLines": 135,
+      "functions": [
+        {
+          "name": "wrap",
+          "startLine": 46,
+          "endLine": 64,
+          "params": [
+            "native"
+          ]
+        },
+        {
+          "name": "unwrap",
+          "startLine": 66,
+          "endLine": 75,
+          "params": [
+            "stmt"
+          ]
+        },
+        {
+          "name": "splitSql",
+          "startLine": 140,
+          "endLine": 145,
+          "params": [
+            "sql"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "D1DatabaseDriver",
+          "startLine": 22,
+          "endLine": 42,
+          "methods": [
+            "constructor",
+            "prepare",
+            "batch"
+          ],
+          "properties": [
+            "migrations"
+          ]
+        },
+        {
+          "name": "D1Migrations",
+          "startLine": 86,
+          "endLine": 131,
+          "methods": [
+            "constructor",
+            "runAll"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "D1DatabaseDriver",
+          "line": 22,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "prepare",
+          "callee": "wrap",
+          "lineNumber": 30
+        },
+        {
+          "caller": "prepare",
+          "callee": "this.db.prepare",
+          "lineNumber": 30
+        },
+        {
+          "caller": "batch",
+          "callee": "stmts.map",
+          "lineNumber": 34
+        },
+        {
+          "caller": "batch",
+          "callee": "unwrap",
+          "lineNumber": 34
+        },
+        {
+          "caller": "batch",
+          "callee": "this.db.batch",
+          "lineNumber": 35
+        },
+        {
+          "caller": "batch",
+          "callee": "results.map",
+          "lineNumber": 36
+        },
+        {
+          "caller": "wrap",
+          "callee": "wrap",
+          "lineNumber": 48
+        },
+        {
+          "caller": "wrap",
+          "callee": "native.bind",
+          "lineNumber": 48
+        },
+        {
+          "caller": "wrap",
+          "callee": "native.first<T>().then",
+          "lineNumber": 49
+        },
+        {
+          "caller": "wrap",
+          "callee": "native.first",
+          "lineNumber": 49
+        },
+        {
+          "caller": "wrap",
+          "callee": "await native.all",
+          "lineNumber": 51
+        },
+        {
+          "caller": "wrap",
+          "callee": "native.run",
+          "lineNumber": 55
+        },
+        {
+          "caller": "wrap",
+          "callee": "NATIVE.set",
+          "lineNumber": 62
+        },
+        {
+          "caller": "unwrap",
+          "callee": "NATIVE.get",
+          "lineNumber": 67
+        },
+        {
+          "caller": "runAll",
+          "callee": "this.db\n      .prepare(\n        `CREATE TABLE IF NOT EXISTS _migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)`,\n      )\n      .run",
+          "lineNumber": 90
+        },
+        {
+          "caller": "runAll",
+          "callee": "this.db\n      .prepare",
+          "lineNumber": 90
+        },
+        {
+          "caller": "runAll",
+          "callee": "await this.db\n      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='_mantle_migrations'`)\n      .first",
+          "lineNumber": 105
+        },
+        {
+          "caller": "runAll",
+          "callee": "this.db\n      .prepare",
+          "lineNumber": 105
+        },
+        {
+          "caller": "runAll",
+          "callee": "this.db\n        .prepare(\n          `INSERT OR IGNORE INTO _migrations (id, applied_at) SELECT id, applied_at FROM _mantle_migrations`,\n        )\n        .run",
+          "lineNumber": 109
+        },
+        {
+          "caller": "runAll",
+          "callee": "this.db\n        .prepare",
+          "lineNumber": 109
+        },
+        {
+          "caller": "runAll",
+          "callee": "await this.db\n      .prepare(`SELECT id FROM _migrations`)\n      .all",
+          "lineNumber": 115
+        },
+        {
+          "caller": "runAll",
+          "callee": "this.db\n      .prepare",
+          "lineNumber": 115
+        },
+        {
+          "caller": "runAll",
+          "callee": "(applied.results ?? []).map",
+          "lineNumber": 118
+        },
+        {
+          "caller": "runAll",
+          "callee": "seen.has",
+          "lineNumber": 120
+        },
+        {
+          "caller": "runAll",
+          "callee": "splitSql",
+          "lineNumber": 121
+        },
+        {
+          "caller": "runAll",
+          "callee": "statements.map",
+          "lineNumber": 122
+        },
+        {
+          "caller": "runAll",
+          "callee": "this.db.prepare",
+          "lineNumber": 122
+        },
+        {
+          "caller": "runAll",
+          "callee": "ops.push",
+          "lineNumber": 123
+        },
+        {
+          "caller": "runAll",
+          "callee": "this.db\n          .prepare(`INSERT INTO _migrations (id, applied_at) VALUES (?, ?)`)\n          .bind",
+          "lineNumber": 124
+        },
+        {
+          "caller": "runAll",
+          "callee": "this.db\n          .prepare",
+          "lineNumber": 124
+        },
+        {
+          "caller": "runAll",
+          "callee": "Date.now",
+          "lineNumber": 126
+        },
+        {
+          "caller": "runAll",
+          "callee": "this.db.batch",
+          "lineNumber": 128
+        },
+        {
+          "caller": "splitSql",
+          "callee": "sql\n    .split(\";\")\n    .map((s) => s.trim())\n    .filter",
+          "lineNumber": 141
+        },
+        {
+          "caller": "splitSql",
+          "callee": "sql\n    .split(\";\")\n    .map",
+          "lineNumber": 141
+        },
+        {
+          "caller": "splitSql",
+          "callee": "sql\n    .split",
+          "lineNumber": 141
+        },
+        {
+          "caller": "splitSql",
+          "callee": "s.trim",
+          "lineNumber": 143
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 2
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/bindings/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 8,
+      "nonEmptyLines": 8,
+      "exports": [
+        {
+          "name": "D1DatabaseDriver",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "KvCacheBinding",
+          "line": 2,
+          "isDefault": false
+        },
+        {
+          "name": "AssetsAssetServer",
+          "line": 3,
+          "isDefault": false
+        },
+        {
+          "name": "R2MediaStorage",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "WorkersQueueHookDispatcher",
+          "line": 5,
+          "isDefault": false
+        },
+        {
+          "name": "createQueueHandler",
+          "line": 5,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 6,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/bindings/KvCacheBinding.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 29,
+      "nonEmptyLines": 24,
+      "classes": [
+        {
+          "name": "KvCacheBinding",
+          "startLine": 7,
+          "endLine": 29,
+          "methods": [
+            "constructor",
+            "get",
+            "put",
+            "delete",
+            "list"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "KvCacheBinding",
+          "line": 7,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "get",
+          "callee": "this.kv.get",
+          "lineNumber": 11
+        },
+        {
+          "caller": "put",
+          "callee": "this.kv.put",
+          "lineNumber": 15
+        },
+        {
+          "caller": "delete",
+          "callee": "this.kv.delete",
+          "lineNumber": 19
+        },
+        {
+          "caller": "list",
+          "callee": "this.kv.list",
+          "lineNumber": 23
+        },
+        {
+          "caller": "list",
+          "callee": "r.keys.map",
+          "lineNumber": 25
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 295,
+      "nonEmptyLines": 279,
+      "functions": [
+        {
+          "name": "mediaDiagnostic",
+          "startLine": 279,
+          "endLine": 295,
+          "params": [
+            "code",
+            "fields"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "R2MediaStorage",
+          "startLine": 69,
+          "endLine": 277,
+          "methods": [
+            "constructor",
+            "createUpload",
+            "commitUpload",
+            "getPublicUrl",
+            "deleteObject",
+            "verifyAndCommitVariant",
+            "buildVariantStorageKey"
+          ],
+          "properties": [
+            "publicBase"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "R2MediaStorage",
+          "line": 69,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "makeDiagnostic",
+          "lineNumber": 92
+        },
+        {
+          "caller": "constructor",
+          "callee": "publicBase.replace",
+          "lineNumber": 101
+        },
+        {
+          "caller": "createUpload",
+          "callee": "Math.max",
+          "lineNumber": 107
+        },
+        {
+          "caller": "createUpload",
+          "callee": "Math.floor",
+          "lineNumber": 107
+        },
+        {
+          "caller": "createUpload",
+          "callee": "this.buildVariantStorageKey",
+          "lineNumber": 110
+        },
+        {
+          "caller": "createUpload",
+          "callee": "this.s3Endpoint.replace",
+          "lineNumber": 123
+        },
+        {
+          "caller": "createUpload",
+          "callee": "target.searchParams.set",
+          "lineNumber": 124
+        },
+        {
+          "caller": "createUpload",
+          "callee": "String",
+          "lineNumber": 124
+        },
+        {
+          "caller": "createUpload",
+          "callee": "this.s3.sign",
+          "lineNumber": 125
+        },
+        {
+          "caller": "createUpload",
+          "callee": "target.toString",
+          "lineNumber": 125
+        },
+        {
+          "caller": "createUpload",
+          "callee": "capabilities.push",
+          "lineNumber": 129
+        },
+        {
+          "caller": "commitUpload",
+          "callee": "variants.push",
+          "lineNumber": 149
+        },
+        {
+          "caller": "commitUpload",
+          "callee": "this.verifyAndCommitVariant",
+          "lineNumber": 149
+        },
+        {
+          "caller": "commitUpload",
+          "callee": "variants.filter",
+          "lineNumber": 157
+        },
+        {
+          "caller": "commitUpload",
+          "callee": "makeDiagnostic",
+          "lineNumber": 160
+        },
+        {
+          "caller": "commitUpload",
+          "callee": "variants.map((v) => v.role).join",
+          "lineNumber": 166
+        },
+        {
+          "caller": "commitUpload",
+          "callee": "variants.map",
+          "lineNumber": 166
+        },
+        {
+          "caller": "commitUpload",
+          "callee": "seenKey.has",
+          "lineNumber": 173
+        },
+        {
+          "caller": "commitUpload",
+          "callee": "makeDiagnostic",
+          "lineNumber": 175
+        },
+        {
+          "caller": "commitUpload",
+          "callee": "seenKey.add",
+          "lineNumber": 185
+        },
+        {
+          "caller": "deleteObject",
+          "callee": "this.bucket.delete",
+          "lineNumber": 203
+        },
+        {
+          "caller": "verifyAndCommitVariant",
+          "callee": "this.bucket.get",
+          "lineNumber": 215
+        },
+        {
+          "caller": "verifyAndCommitVariant",
+          "callee": "mediaDiagnostic",
+          "lineNumber": 216
+        },
+        {
+          "caller": "verifyAndCommitVariant",
+          "callee": "mediaDiagnostic",
+          "lineNumber": 220
+        },
+        {
+          "caller": "verifyAndCommitVariant",
+          "callee": "mediaDiagnostic",
+          "lineNumber": 226
+        },
+        {
+          "caller": "verifyAndCommitVariant",
+          "callee": "String",
+          "lineNumber": 234
+        },
+        {
+          "caller": "verifyAndCommitVariant",
+          "callee": "this.bucket.put",
+          "lineNumber": 242
+        },
+        {
+          "caller": "buildVariantStorageKey",
+          "callee": "/^[a-z0-9-]+$/.test",
+          "lineNumber": 270
+        },
+        {
+          "caller": "buildVariantStorageKey",
+          "callee": "/^[A-Za-z0-9_-]+$/.test",
+          "lineNumber": 271
+        },
+        {
+          "caller": "buildVariantStorageKey",
+          "callee": "this.idgen.next",
+          "lineNumber": 273
+        },
+        {
+          "caller": "buildVariantStorageKey",
+          "callee": "extensionForMime",
+          "lineNumber": 274
+        },
+        {
+          "caller": "mediaDiagnostic",
+          "callee": "makeDiagnostic",
+          "lineNumber": 287
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 77,
+      "nonEmptyLines": 74,
+      "functions": [
+        {
+          "name": "createQueueHandler",
+          "startLine": 43,
+          "endLine": 77,
+          "params": [
+            "cmsRef"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "WorkersQueueHookDispatcher",
+          "startLine": 18,
+          "endLine": 24,
+          "methods": [
+            "constructor",
+            "enqueue"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "WorkersQueueHookDispatcher",
+          "line": 18,
+          "isDefault": false
+        },
+        {
+          "name": "createQueueHandler",
+          "line": 43,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "enqueue",
+          "callee": "this.queue.send",
+          "lineNumber": 22
+        },
+        {
+          "caller": "createQueueHandler",
+          "callee": "cmsRef.get",
+          "lineNumber": 49
+        },
+        {
+          "caller": "createQueueHandler",
+          "callee": "console.error",
+          "lineNumber": 55
+        },
+        {
+          "caller": "createQueueHandler",
+          "callee": "batch.retryAll",
+          "lineNumber": 56
+        },
+        {
+          "caller": "createQueueHandler",
+          "callee": "Promise.allSettled",
+          "lineNumber": 62
+        },
+        {
+          "caller": "createQueueHandler",
+          "callee": "batch.messages.map",
+          "lineNumber": 63
+        },
+        {
+          "caller": "createQueueHandler",
+          "callee": "cms.runDeferredHook.execute",
+          "lineNumber": 65
+        },
+        {
+          "caller": "createQueueHandler",
+          "callee": "message.ack",
+          "lineNumber": 66
+        },
+        {
+          "caller": "createQueueHandler",
+          "callee": "console.error",
+          "lineNumber": 68
+        },
+        {
+          "caller": "createQueueHandler",
+          "callee": "message.retry",
+          "lineNumber": 72
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/handlers/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 4,
+      "nonEmptyLines": 4,
+      "exports": [
+        {
+          "name": "cloudflareTurnstileCheck",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "CloudflareTurnstileCheckOptions",
+          "line": 1,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/handlers/turnstile.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 98,
+      "nonEmptyLines": 92,
+      "functions": [
+        {
+          "name": "cloudflareTurnstileCheck",
+          "startLine": 53,
+          "endLine": 75,
+          "params": [
+            "options"
+          ]
+        },
+        {
+          "name": "verifyWithTurnstile",
+          "startLine": 77,
+          "endLine": 86,
+          "params": [
+            "secret",
+            "token"
+          ]
+        },
+        {
+          "name": "reject",
+          "startLine": 88,
+          "endLine": 98,
+          "params": [
+            "detail"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "cloudflareTurnstileCheck",
+          "line": 53,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "cloudflareTurnstileCheck",
+          "callee": "reject",
+          "lineNumber": 62
+        },
+        {
+          "caller": "cloudflareTurnstileCheck",
+          "callee": "reject",
+          "lineNumber": 64
+        },
+        {
+          "caller": "cloudflareTurnstileCheck",
+          "callee": "verifyWithTurnstile",
+          "lineNumber": 67
+        },
+        {
+          "caller": "cloudflareTurnstileCheck",
+          "callee": "reject",
+          "lineNumber": 69
+        },
+        {
+          "caller": "cloudflareTurnstileCheck",
+          "callee": "(verified[\"error-codes\"] ?? [\"unknown\"]).join",
+          "lineNumber": 70
+        },
+        {
+          "caller": "verifyWithTurnstile",
+          "callee": "fetch",
+          "lineNumber": 79
+        },
+        {
+          "caller": "verifyWithTurnstile",
+          "callee": "reject",
+          "lineNumber": 84
+        },
+        {
+          "caller": "verifyWithTurnstile",
+          "callee": "res.json",
+          "lineNumber": 85
+        },
+        {
+          "caller": "reject",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 90
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 15,
+      "nonEmptyLines": 15,
+      "exports": [
+        {
+          "name": "ConsoleEmailSender",
+          "line": 11,
+          "isDefault": false
+        },
+        {
+          "name": "appleClientSecret",
+          "line": 12,
+          "isDefault": false
+        },
+        {
+          "name": "AppleClientSecretArgs",
+          "line": 12,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/mount/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 15,
+      "nonEmptyLines": 15,
+      "exports": [
+        {
+          "name": "mountServerEndpoints",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "CmsRuntimeRef",
+          "line": 2,
+          "isDefault": false
+        },
+        {
+          "name": "createCmsRef",
+          "line": 2,
+          "isDefault": false
+        },
+        {
+          "name": "createMcpApiHandler",
+          "line": 3,
+          "isDefault": false
+        },
+        {
+          "name": "protectedResourceMetadataPath",
+          "line": 3,
+          "isDefault": false
+        },
+        {
+          "name": "CreateMcpApiHandlerOptions",
+          "line": 3,
+          "isDefault": false
+        },
+        {
+          "name": "mountPublicRoutes",
+          "line": 8,
+          "isDefault": false
+        },
+        {
+          "name": "CollectionRouteConfig",
+          "line": 8,
+          "isDefault": false
+        },
+        {
+          "name": "MountPublicRoutesOptions",
+          "line": 8,
+          "isDefault": false
+        },
+        {
+          "name": "PublicRouteContext",
+          "line": 8,
+          "isDefault": false
+        },
+        {
+          "name": "SlugOverride",
+          "line": 8,
+          "isDefault": false
+        },
+        {
+          "name": "CmsConfig",
+          "line": 15,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 12,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/oauth/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 14,
+      "nonEmptyLines": 14,
+      "exports": [
+        {
+          "name": "OAUTH_AUTHORIZE_PATH",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "OAUTH_TOKEN_PATH",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "OAUTH_REGISTER_PATH",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "createOAuthProvider",
+          "line": 6,
+          "isDefault": false
+        },
+        {
+          "name": "CreateOAuthProviderArgs",
+          "line": 6,
+          "isDefault": false
+        },
+        {
+          "name": "mountAuthorize",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "MountAuthorizeOptions",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "OAuthApiProps",
+          "line": 10,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 8,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/oauth/oauthConstants.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 15,
+      "nonEmptyLines": 14,
+      "exports": [
+        {
+          "name": "OAUTH_AUTHORIZE_PATH",
+          "line": 13,
+          "isDefault": false
+        },
+        {
+          "name": "OAUTH_TOKEN_PATH",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "OAUTH_REGISTER_PATH",
+          "line": 15,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/oauth/oauthSingleton.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 49,
+      "nonEmptyLines": 47,
+      "functions": [
+        {
+          "name": "createOAuthProvider",
+          "startLine": 40,
+          "endLine": 49,
+          "params": [
+            "args"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "createOAuthProvider",
+          "line": 40,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    }
+  ]
+}

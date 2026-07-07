@@ -1,0 +1,45 @@
+{
+  "nodes": [
+    {
+      "id": "pipeline:.github/workflows/ci.yml",
+      "type": "pipeline",
+      "name": "ci.yml",
+      "filePath": ".github/workflows/ci.yml",
+      "summary": "在 push 與 pull_request（main / develop）時觸發的 CI workflow，於單一 lint job 中對整個 pnpm monorepo 執行 build、套件邊界檢查、typecheck 與 vitest 測試。內含 concurrency 群組以取消同一 ref 上被取代的舊執行。",
+      "tags": ["ci-cd", "infrastructure", "build-system", "test"],
+      "complexity": "moderate",
+      "languageNotes": "刻意先 build dist/ 再跑測試（cloudflare 的 vitest 透過 dist/ 匯入 runtime 與 admin UI），並在 build 後重跑 idempotent 的 pnpm install 以補建 spec CLI 的 bin symlink。"
+    },
+    {
+      "id": "pipeline:.github/workflows/dependabot-automerge.yml",
+      "type": "pipeline",
+      "name": "dependabot-automerge.yml",
+      "filePath": ".github/workflows/dependabot-automerge.yml",
+      "summary": "在 dependabot 對 main / develop 開啟 PR 時觸發的自動合併 workflow；僅對 patch / minor / digest 更新類型先 auto-approve 再以 rebase 方式 auto-merge，major 升級維持手動處理。",
+      "tags": ["ci-cd", "infrastructure", "dependabot", "automation"],
+      "complexity": "moderate",
+      "languageNotes": "develop 分支保護要求一筆 approving review，但 dependabot 無法自我核准，因此 job 先用 gh pr review --approve 補上；合併採 --rebase 以保持 develop 線性並保留 dependabot 的 commit subject。"
+    },
+    {
+      "id": "pipeline:.github/workflows/mirror-github-packages.yml",
+      "type": "pipeline",
+      "name": "mirror-github-packages.yml",
+      "filePath": ".github/workflows/mirror-github-packages.yml",
+      "summary": "手動觸發（workflow_dispatch）的 workflow，依輸入的版本與 dist-tag 將五個公開 SDK 套件的 tarball 鏡像發佈到 GitHub Packages registry，並先驗證各 package.json 版本與輸入一致。",
+      "tags": ["ci-cd", "deployment", "npm", "registry"],
+      "complexity": "complex",
+      "languageNotes": "對每個套件先以 npm view 檢查是否已存在以達成 idempotent 發佈；發佈前解開 tarball 注入 publishConfig.registry 指向 GitHub Packages 後重新 pack。pre-v0.1（0.0.*）版本強制以 latest dist-tag 發佈。"
+    },
+    {
+      "id": "pipeline:.github/workflows/release.yml",
+      "type": "pipeline",
+      "name": "release.yml",
+      "filePath": ".github/workflows/release.yml",
+      "summary": "由推送 v* tag 觸發的 release fanout workflow：build/test 作為 gate，驗證 tag 版本與所有套件一致，pack 後發佈到 npmjs，驗證 metadata，鏡像到 GitHub Packages，建立 GitHub release，並 dispatch aotter/mantle-starters 觸發下游 bump PR。",
+      "tags": ["ci-cd", "deployment", "release", "npm"],
+      "complexity": "complex",
+      "languageNotes": "依 prerelease 後綴推斷 npm dist-tag（alpha / beta / rc / latest），避免 prerelease 落到 latest 而影響 adopters；發佈 gate 先過 build 與 test，缺少 NPM_TOKEN 會 fail-fast 以免產生部分發佈。跨 repo dispatch 需 RELEASE_FANOUT_TOKEN，因為 GITHUB_TOKEN 無法跨 repo 派發。"
+    }
+  ],
+  "edges": []
+}

@@ -1,0 +1,11 @@
+{
+  "projectRoot": "/Users/aotter/projects/aotter-clam-mantle-workroot/mantle",
+  "batchFiles": [
+    {"path": "packages/mantle-spec/src/domain/model/ContentState.ts", "language": "typescript", "sizeLines": 17, "fileCategory": "code"},
+    {"path": "packages/mantle-spec/src/domain/model/Entry.ts", "language": "typescript", "sizeLines": 51, "fileCategory": "code"},
+    {"path": "packages/mantle-spec/src/domain/model/index.ts", "language": "typescript", "sizeLines": 11, "fileCategory": "code"},
+    {"path": "packages/mantle-spec/src/domain/service/LifecycleStateMachine.ts", "language": "typescript", "sizeLines": 108, "fileCategory": "code"},
+    {"path": "packages/mantle-spec/test/entry-state-machine.test.ts", "language": "typescript", "sizeLines": 142, "fileCategory": "code"}
+  ],
+  "batchImportData": {"packages/mantle-spec/src/domain/model/ContentState.ts":[],"packages/mantle-spec/src/domain/model/Entry.ts":["packages/mantle-spec/src/domain/model/ContentState.ts"],"packages/mantle-spec/src/domain/model/index.ts":[],"packages/mantle-spec/src/domain/service/LifecycleStateMachine.ts":["packages/mantle-spec/src/domain/model/ContentState.ts","packages/mantle-spec/src/domain/model/ManifestGrammar.ts"],"packages/mantle-spec/test/entry-state-machine.test.ts":["packages/mantle-spec/src/domain/model/index.ts","packages/mantle-spec/src/domain/service/LifecycleStateMachine.ts"]}
+}

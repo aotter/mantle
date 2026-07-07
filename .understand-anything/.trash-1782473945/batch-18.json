@@ -1,0 +1,72 @@
+{
+  "nodes": [
+    {
+      "id": "document:packages/adapters/cloudflare/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "packages/adapters/cloudflare/README.md",
+      "summary": "@aotter/mantle-cloudflare 套件的說明文件，描述此 Cloudflare Workers adapter 如何將 runtime 掛載到 Hono 上、以 D1/KV/Workers assets 實作 runtime ports，並負責 Better Auth 的 GitHub OAuth 與 MCP OAuth/DCR 接線。標註 0.0.7-alpha 為早期預發布，API surface 在 v0.1.0 前仍會變動。",
+      "tags": ["documentation", "entry-point", "adapter", "cloudflare"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/adapters/cloudflare/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/adapters/cloudflare/package.json",
+      "summary": "@aotter/mantle-cloudflare 的套件資訊清單，定義 ESM 入口 (dist/index.js)、sideEffects:false、alpha 發布通道，並宣告對 mantle-runtime/mantle-spec/mantle-admin-ui 的 workspace 相依，以及 hono、better-auth、@cloudflare/workers-oauth-provider 等 peer dependencies。",
+      "tags": ["configuration", "package-manifest", "adapter", "cloudflare", "build-system"],
+      "complexity": "simple",
+      "languageNotes": "使用 pnpm catalog 解析 peer/dev 相依版本，workspace:* 連結 monorepo 內部套件。"
+    },
+    {
+      "id": "config:packages/adapters/cloudflare/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "packages/adapters/cloudflare/tsconfig.json",
+      "summary": "編輯器與 typecheck 用的 TypeScript 設定，繼承 tsconfig.base.json，設定 noEmit 並納入 @cloudflare/workers-types 與 node 型別，涵蓋 src 與 test 目錄。",
+      "tags": ["configuration", "typescript", "tooling", "cloudflare"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/adapters/cloudflare/tsconfig.lib.json",
+      "type": "config",
+      "name": "tsconfig.lib.json",
+      "filePath": "packages/adapters/cloudflare/tsconfig.lib.json",
+      "summary": "套件實際建置用的 TypeScript 編譯設定，繼承 tsconfig.base.json，從 src 輸出至 dist、啟用 stripInternal，僅納入 @cloudflare/workers-types，排除測試與 dist。",
+      "tags": ["configuration", "typescript", "build-system", "cloudflare"],
+      "complexity": "simple",
+      "languageNotes": "package.json 的 build script 以 tsc -b tsconfig.lib.json 為進入點，與 tsconfig.json (noEmit) 分工。"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:packages/adapters/cloudflare/README.md",
+      "target": "file:packages/adapters/cloudflare/src/index.ts",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:packages/adapters/cloudflare/package.json",
+      "target": "file:packages/adapters/cloudflare/src/index.ts",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:packages/adapters/cloudflare/tsconfig.lib.json",
+      "target": "file:packages/adapters/cloudflare/src/index.ts",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:packages/adapters/cloudflare/tsconfig.json",
+      "target": "file:packages/adapters/cloudflare/src/index.ts",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

@@ -1,5 +1,29 @@
 import { api } from "./api";
-import type { StaffOperation } from "./types";
+import type { StaffOperation, ViewManifestInfo } from "./types";
+
+/**
+ * Shared react-query options for `GET /admin/api/views-manifest`
+ * (#426, extended #443 with `title`). `authenticated-layout.tsx` and
+ * `view-page.tsx` share the `["views-manifest"]` cache entry, so they
+ * MUST agree on the cached shape — they previously declared different
+ * queryFns under the same key (layout cached the unwrapped array,
+ * view-page expected the `{ views }` envelope), and whichever mounted
+ * first poisoned the other: SPA-navigating into a report page crashed
+ * the whole tree on `undefined.find`, while a direct page load hid the
+ * sidebar report group. One helper, one shape (the unwrapped array).
+ */
+export function viewsManifestQueryOptions(): {
+  queryKey: readonly ["views-manifest"];
+  queryFn: () => Promise<ViewManifestInfo[]>;
+} {
+  return {
+    queryKey: ["views-manifest"] as const,
+    queryFn: async () => {
+      const res = await api.get<{ views: ViewManifestInfo[] }>("/views-manifest");
+      return res.views;
+    },
+  };
+}
 
 /**
  * Shared react-query options for `GET /admin/api/operations` (#426,

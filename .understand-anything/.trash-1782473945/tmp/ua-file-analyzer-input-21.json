@@ -1,0 +1,15 @@
+{
+  "projectRoot": "/Users/aotter/projects/aotter-clam-mantle-workroot/mantle",
+  "batchFiles": [
+    {"path": "packages/mantle-spec/README.md", "language": "markdown", "sizeLines": 9, "fileCategory": "docs"},
+    {"path": "packages/mantle-spec/package.json", "language": "json", "sizeLines": 52, "fileCategory": "config"},
+    {"path": "packages/mantle-spec/tsconfig.json", "language": "json", "sizeLines": 8, "fileCategory": "config"},
+    {"path": "packages/mantle-spec/tsconfig.lib.json", "language": "json", "sizeLines": 12, "fileCategory": "config"}
+  ],
+  "batchImportData": {
+    "packages/mantle-spec/README.md": [],
+    "packages/mantle-spec/package.json": [],
+    "packages/mantle-spec/tsconfig.json": [],
+    "packages/mantle-spec/tsconfig.lib.json": []
+  }
+}

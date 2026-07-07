@@ -1,0 +1,201 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 4,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/mantle-spec/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 9,
+      "nonEmptyLines": 6,
+      "sections": [
+        {
+          "heading": "@aotter/mantle-spec",
+          "level": 1,
+          "line": 1
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-spec/package.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 52,
+      "nonEmptyLines": 52,
+      "sections": [
+        {
+          "heading": "name",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "description",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "license",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "homepage",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "repository",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "type",
+          "level": 1,
+          "line": 8
+        },
+        {
+          "heading": "sideEffects",
+          "level": 1,
+          "line": 13
+        },
+        {
+          "heading": "publishConfig",
+          "level": 1,
+          "line": 14
+        },
+        {
+          "heading": "main",
+          "level": 1,
+          "line": 19
+        },
+        {
+          "heading": "types",
+          "level": 1,
+          "line": 20
+        },
+        {
+          "heading": "bin",
+          "level": 1,
+          "line": 21
+        },
+        {
+          "heading": "exports",
+          "level": 1,
+          "line": 24
+        },
+        {
+          "heading": "files",
+          "level": 1,
+          "line": 30
+        },
+        {
+          "heading": "scripts",
+          "level": 1,
+          "line": 34
+        },
+        {
+          "heading": "dependencies",
+          "level": 1,
+          "line": 40
+        },
+        {
+          "heading": "peerDependencies",
+          "level": 1,
+          "line": 43
+        },
+        {
+          "heading": "devDependencies",
+          "level": 1,
+          "line": 46
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 18
+      }
+    },
+    {
+      "path": "packages/mantle-spec/tsconfig.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 8,
+      "nonEmptyLines": 8,
+      "sections": [
+        {
+          "heading": "extends",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "compilerOptions",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "include",
+          "level": 1,
+          "line": 7
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    },
+    {
+      "path": "packages/mantle-spec/tsconfig.lib.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 12,
+      "nonEmptyLines": 12,
+      "sections": [
+        {
+          "heading": "extends",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "compilerOptions",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "include",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "exclude",
+          "level": 1,
+          "line": 11
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    }
+  ]
+}

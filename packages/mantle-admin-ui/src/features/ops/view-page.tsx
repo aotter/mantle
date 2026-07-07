@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
+import { viewsManifestQueryOptions } from "../../lib/queries";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { Collection, JsonSchema, SiteInfo, ViewManifestInfo } from "../../lib/types";
@@ -74,10 +75,7 @@ async function fetchView(
  *  `/admin/api/collections`. */
 export function ViewPage({ name }: { name: string }): React.ReactElement {
   const { language } = usePreferences();
-  const viewsQuery = useQuery<{ views: ViewManifestInfo[] }>({
-    queryKey: ["views-manifest"],
-    queryFn: () => api.get<{ views: ViewManifestInfo[] }>("/views-manifest"),
-  });
+  const viewsQuery = useQuery<ViewManifestInfo[]>(viewsManifestQueryOptions());
   const collectionsQuery = useQuery<Collection[]>({
     queryKey: ["collections"],
     queryFn: async () => {
@@ -91,7 +89,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   });
   const canonical = site.data?.canonicalLocale ?? null;
 
-  const view = viewsQuery.data?.views.find((v) => v.name === name);
+  const view = viewsQuery.data?.find((v) => v.name === name);
   const sourceSchema = collectionsQuery.data?.find((c) => c.name === view?.from)?.schema;
 
   const [params, setParams] = React.useState<Record<string, unknown>>({});

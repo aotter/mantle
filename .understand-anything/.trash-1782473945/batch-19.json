@@ -1,0 +1,73 @@
+{
+  "nodes": [
+    {
+      "id": "document:packages/mantle-admin-ui/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "packages/mantle-admin-ui/README.md",
+      "summary": "說明 @aotter/mantle-admin-ui 套件的用途：建構一個自包含的 React/Tailwind admin SPA HTML 產出物，供 platform adapters 消費，目前處於 0.0.x alpha 早期預發布階段。",
+      "tags": ["documentation", "entry-point", "admin-ui", "spa"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/index.html",
+      "type": "file",
+      "name": "index.html",
+      "filePath": "packages/mantle-admin-ui/index.html",
+      "summary": "Vite SPA 的 HTML 進入點，掛載 React 應用至 #root 並載入 /src/main.tsx，內含一段在首次繪製前套用主題（dark class）與語系/書寫方向的內聯防 FOUC 腳本。",
+      "tags": ["entry-point", "spa", "vite", "markup", "theming"],
+      "complexity": "moderate",
+      "languageNotes": "內聯阻塞式腳本在 first paint 前讀取 localStorage 偏好，將語系正規化（如 zh-Hant→zh-TW）並對 ar/fa/he 設定 RTL 方向，避免主題閃爍（FOUC）。"
+    },
+    {
+      "id": "config:packages/mantle-admin-ui/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/mantle-admin-ui/package.json",
+      "summary": "@aotter/mantle-admin-ui 套件清單：React 19 + Vite + Tailwind v4 + shadcn admin SPA，平台無關，產出單一自包含 HTML 字串供 mantle-cloudflare / mantle-netlify mount 層消費；以 vite build 產生 dist 並設定 sideEffects:false 以利 tree-shaking。",
+      "tags": ["configuration", "package-manifest", "build-system", "spa", "vite"],
+      "complexity": "moderate",
+      "languageNotes": "sideEffects:false 與 type:module 確保下游 admin SPA 打包時可 tree-shake；exports 同時匯出 index-html.js（HTML 字串）與 ./index.html 靜態檔。"
+    },
+    {
+      "id": "config:packages/mantle-admin-ui/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "packages/mantle-admin-ui/tsconfig.json",
+      "summary": "admin-ui 套件的 TypeScript 編譯設定，啟用 strict 模式、react-jsx、Bundler moduleResolution 與 noEmit，鎖定瀏覽器 DOM lib，涵蓋 src 與 vite.config.ts。",
+      "tags": ["configuration", "typescript", "build-system", "spa"],
+      "complexity": "simple",
+      "languageNotes": "moduleResolution:Bundler 搭配 allowImportingTsExtensions 與 noEmit，符合 Vite 打包流程（型別檢查與打包分離）。"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:packages/mantle-admin-ui/README.md",
+      "target": "config:packages/mantle-admin-ui/package.json",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:packages/mantle-admin-ui/README.md",
+      "target": "file:packages/mantle-admin-ui/index.html",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:packages/mantle-admin-ui/tsconfig.json",
+      "target": "file:packages/mantle-admin-ui/index.html",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:packages/mantle-admin-ui/package.json",
+      "target": "file:packages/mantle-admin-ui/index.html",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "projectRoot": "/Users/aotter/projects/aotter-clam-mantle-workroot/mantle",
+  "batchFiles": [
+    {"path": ".github/ISSUE_TEMPLATE/bug.yml", "language": "yaml", "sizeLines": 82, "fileCategory": "config"},
+    {"path": ".github/ISSUE_TEMPLATE/config.yml", "language": "yaml", "sizeLines": 14, "fileCategory": "config"},
+    {"path": ".github/ISSUE_TEMPLATE/convergence.yml", "language": "yaml", "sizeLines": 53, "fileCategory": "config"},
+    {"path": ".github/ISSUE_TEMPLATE/feature.yml", "language": "yaml", "sizeLines": 55, "fileCategory": "config"},
+    {"path": ".github/ISSUE_TEMPLATE/proposal.yml", "language": "yaml", "sizeLines": 64, "fileCategory": "config"}
+  ],
+  "batchImportData": {
+    ".github/ISSUE_TEMPLATE/bug.yml": [],
+    ".github/ISSUE_TEMPLATE/config.yml": [],
+    ".github/ISSUE_TEMPLATE/convergence.yml": [],
+    ".github/ISSUE_TEMPLATE/feature.yml": [],
+    ".github/ISSUE_TEMPLATE/proposal.yml": []
+  }
+}

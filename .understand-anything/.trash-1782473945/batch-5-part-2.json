@@ -1,0 +1,695 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/mantle-admin-ui/src/lib/types.ts",
+      "type": "file",
+      "name": "types.ts",
+      "filePath": "packages/mantle-admin-ui/src/lib/types.ts",
+      "summary": "admin SPA 共用的領域型別定義，涵蓋 collections、entries、使用者與內容狀態，並匯出編輯/簡易狀態列舉常數。",
+      "tags": [
+        "type-definition",
+        "data-model",
+        "domain"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/lib/utils.ts",
+      "type": "file",
+      "name": "utils.ts",
+      "filePath": "packages/mantle-admin-ui/src/lib/utils.ts",
+      "summary": "提供 cn 工具函式，以 clsx 與 tailwind-merge 合併並去重 Tailwind class 名稱。",
+      "tags": [
+        "utility",
+        "styling"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/main.tsx",
+      "type": "file",
+      "name": "main.tsx",
+      "filePath": "packages/mantle-admin-ui/src/main.tsx",
+      "summary": "admin SPA 的進入點，掛載 React root 並組合 PreferencesProvider、QueryClient 與 router。",
+      "tags": [
+        "entry-point",
+        "bootstrap",
+        "spa"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/ui/admin-table.tsx",
+      "type": "file",
+      "name": "admin-table.tsx",
+      "filePath": "packages/mantle-admin-ui/src/ui/admin-table.tsx",
+      "summary": "表格基礎元件集合，提供 TableShell、TableHeadCell 與 TableCell 等版型外殼。",
+      "tags": [
+        "component",
+        "ui",
+        "table"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/ui/button.tsx",
+      "type": "file",
+      "name": "button.tsx",
+      "filePath": "packages/mantle-admin-ui/src/ui/button.tsx",
+      "summary": "可重用按鈕元件，以 class-variance-authority 定義多種變體與尺寸的 buttonVariants。",
+      "tags": [
+        "component",
+        "ui",
+        "button"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/ui/collapsible.tsx",
+      "type": "file",
+      "name": "collapsible.tsx",
+      "filePath": "packages/mantle-admin-ui/src/ui/collapsible.tsx",
+      "summary": "重新匯出 Radix Collapsible 基礎元件的薄封裝 barrel。",
+      "tags": [
+        "component",
+        "ui",
+        "barrel"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/ui/dropdown-menu.tsx",
+      "type": "file",
+      "name": "dropdown-menu.tsx",
+      "filePath": "packages/mantle-admin-ui/src/ui/dropdown-menu.tsx",
+      "summary": "下拉選單元件集合，封裝 Radix DropdownMenu 並套用統一樣式，匯出 trigger、content、item 等子元件。",
+      "tags": [
+        "component",
+        "ui",
+        "dropdown"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/ui/page.tsx",
+      "type": "file",
+      "name": "page.tsx",
+      "filePath": "packages/mantle-admin-ui/src/ui/page.tsx",
+      "summary": "頁面層級的共用 UI 元件集合，含 PageHeader、SectionCard、EmptyState、ErrorBox 與可複製欄位 CopyField。",
+      "tags": [
+        "component",
+        "ui",
+        "page"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-admin-ui/src/ui/page.tsx:PageHeader",
+      "type": "function",
+      "name": "PageHeader",
+      "filePath": "packages/mantle-admin-ui/src/ui/page.tsx",
+      "lineRange": [
+        9,
+        34
+      ],
+      "summary": "頁面標題區元件，渲染 eyebrow、標題、描述與動作按鈕區。",
+      "tags": [
+        "component",
+        "ui",
+        "page"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-admin-ui/src/ui/page.tsx:EmptyState",
+      "type": "function",
+      "name": "EmptyState",
+      "filePath": "packages/mantle-admin-ui/src/ui/page.tsx",
+      "lineRange": [
+        46,
+        71
+      ],
+      "summary": "空狀態提示元件，顯示圖示、標題、描述與可選操作。",
+      "tags": [
+        "component",
+        "ui",
+        "empty-state"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-admin-ui/src/ui/page.tsx:ErrorBox",
+      "type": "function",
+      "name": "ErrorBox",
+      "filePath": "packages/mantle-admin-ui/src/ui/page.tsx",
+      "lineRange": [
+        73,
+        88
+      ],
+      "summary": "錯誤顯示元件，呈現錯誤訊息並提供回報連結。",
+      "tags": [
+        "component",
+        "ui",
+        "error"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-admin-ui/src/ui/page.tsx:CopyField",
+      "type": "function",
+      "name": "CopyField",
+      "filePath": "packages/mantle-admin-ui/src/ui/page.tsx",
+      "lineRange": [
+        90,
+        148
+      ],
+      "summary": "可複製值的欄位元件，支援點擊複製到剪貼簿並顯示複製成功的暫態回饋。",
+      "tags": [
+        "component",
+        "ui",
+        "clipboard"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/ui/separator.tsx",
+      "type": "file",
+      "name": "separator.tsx",
+      "filePath": "packages/mantle-admin-ui/src/ui/separator.tsx",
+      "summary": "封裝 Radix Separator 的分隔線元件，套用統一樣式。",
+      "tags": [
+        "component",
+        "ui",
+        "separator"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/ui/sheet.tsx",
+      "type": "file",
+      "name": "sheet.tsx",
+      "filePath": "packages/mantle-admin-ui/src/ui/sheet.tsx",
+      "summary": "封裝 Radix Dialog 的側拉式 sheet 元件集合，提供 overlay、content、header、title 等子元件，供行動裝置側邊欄使用。",
+      "tags": [
+        "component",
+        "ui",
+        "sheet",
+        "overlay"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-admin-ui/src/ui/sheet.tsx:SheetContent",
+      "type": "function",
+      "name": "SheetContent",
+      "filePath": "packages/mantle-admin-ui/src/ui/sheet.tsx",
+      "lineRange": [
+        33,
+        72
+      ],
+      "summary": "sheet 主內容容器，依 side 設定滑出方向並渲染遮罩、內容與可選關閉按鈕。",
+      "tags": [
+        "component",
+        "ui",
+        "sheet"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "type": "file",
+      "name": "sidebar.tsx",
+      "filePath": "packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "summary": "完整的側邊欄基礎元件系統，提供 SidebarProvider context、行動裝置偵測、展開/收合狀態管理與一整套組合元件（header、content、menu、sub-menu 等）。",
+      "tags": [
+        "component",
+        "ui",
+        "sidebar",
+        "provider"
+      ],
+      "complexity": "complex",
+      "languageNotes": "以 React Context 提供 sidebar 狀態，整合 useIsMobile 媒體查詢與 cookie 持久化，並用 class-variance-authority 管理 menu button 變體。"
+    },
+    {
+      "id": "function:packages/mantle-admin-ui/src/ui/sidebar.tsx:useIsMobile",
+      "type": "function",
+      "name": "useIsMobile",
+      "filePath": "packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "lineRange": [
+        34,
+        44
+      ],
+      "summary": "以 matchMedia 偵測是否為行動裝置斷點的自訂 hook。",
+      "tags": [
+        "hook",
+        "responsive"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-admin-ui/src/ui/sidebar.tsx:SidebarProvider",
+      "type": "function",
+      "name": "SidebarProvider",
+      "filePath": "packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "lineRange": [
+        46,
+        119
+      ],
+      "summary": "提供側邊欄狀態的 context provider，管理展開/收合與行動裝置開關狀態、cookie 持久化與鍵盤快捷鍵。",
+      "tags": [
+        "component",
+        "provider",
+        "state-management"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-admin-ui/src/ui/sidebar.tsx:useSidebar",
+      "type": "function",
+      "name": "useSidebar",
+      "filePath": "packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "lineRange": [
+        121,
+        127
+      ],
+      "summary": "取用 sidebar context 的 hook，於 provider 外使用時拋錯。",
+      "tags": [
+        "hook",
+        "context"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-admin-ui/src/ui/sidebar.tsx:Sidebar",
+      "type": "function",
+      "name": "Sidebar",
+      "filePath": "packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "lineRange": [
+        129,
+        199
+      ],
+      "summary": "側邊欄主容器元件，依行動/桌機狀態切換以 sheet 或固定欄位呈現。",
+      "tags": [
+        "component",
+        "sidebar",
+        "responsive"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-admin-ui/src/ui/sidebar.tsx:SidebarMenuButton",
+      "type": "function",
+      "name": "SidebarMenuButton",
+      "filePath": "packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "lineRange": [
+        358,
+        380
+      ],
+      "summary": "側邊欄選單按鈕元件，套用 active 與尺寸變體，支援 asChild 組合。",
+      "tags": [
+        "component",
+        "sidebar",
+        "button"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-admin-ui/src/ui/sidebar.tsx:SidebarMenuSubButton",
+      "type": "function",
+      "name": "SidebarMenuSubButton",
+      "filePath": "packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "lineRange": [
+        410,
+        439
+      ],
+      "summary": "側邊欄子選單按鈕元件，套用 active 與尺寸變體並支援 asChild 組合。",
+      "tags": [
+        "component",
+        "sidebar",
+        "button"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/ui/status-badge.tsx",
+      "type": "file",
+      "name": "status-badge.tsx",
+      "filePath": "packages/mantle-admin-ui/src/ui/status-badge.tsx",
+      "summary": "內容狀態徽章元件，依內容狀態值渲染對應顏色與標籤。",
+      "tags": [
+        "component",
+        "ui",
+        "status"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-admin-ui/src/ui/status-badge.tsx:StatusBadge",
+      "type": "function",
+      "name": "StatusBadge",
+      "filePath": "packages/mantle-admin-ui/src/ui/status-badge.tsx",
+      "lineRange": [
+        13,
+        32
+      ],
+      "summary": "渲染內容狀態徽章，依狀態套用顏色樣式並顯示本地化標籤。",
+      "tags": [
+        "component",
+        "ui",
+        "status"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/mantle-admin-ui/src/lib/utils.ts",
+      "target": "function:packages/mantle-admin-ui/src/lib/utils.ts:cn",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/lib/utils.ts",
+      "target": "function:packages/mantle-admin-ui/src/lib/utils.ts:cn",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/main.tsx",
+      "target": "file:packages/mantle-admin-ui/src/app/admin-app.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/main.tsx",
+      "target": "file:packages/mantle-admin-ui/src/app/preferences.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/main.tsx",
+      "target": "file:packages/mantle-admin-ui/src/app/query-client.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/main.tsx",
+      "target": "file:packages/mantle-admin-ui/src/app/router.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/main.tsx",
+      "target": "file:packages/mantle-admin-ui/src/styles/index.css",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/admin-table.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/admin-table.tsx:TableShell",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/admin-table.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/admin-table.tsx:TableShell",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/admin-table.tsx",
+      "target": "file:packages/mantle-admin-ui/src/lib/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/button.tsx",
+      "target": "file:packages/mantle-admin-ui/src/lib/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/dropdown-menu.tsx",
+      "target": "file:packages/mantle-admin-ui/src/lib/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/page.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/page.tsx:PageHeader",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/page.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/page.tsx:EmptyState",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/page.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/page.tsx:ErrorBox",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/page.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/page.tsx:CopyField",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/page.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/page.tsx:PageHeader",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/page.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/page.tsx:EmptyState",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/page.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/page.tsx:ErrorBox",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/page.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/page.tsx:CopyField",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/page.tsx",
+      "target": "file:packages/mantle-admin-ui/src/app/i18n.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/page.tsx",
+      "target": "file:packages/mantle-admin-ui/src/app/preferences.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/page.tsx",
+      "target": "file:packages/mantle-admin-ui/src/lib/api.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/page.tsx",
+      "target": "file:packages/mantle-admin-ui/src/lib/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/page.tsx",
+      "target": "file:packages/mantle-admin-ui/src/ui/button.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/separator.tsx",
+      "target": "file:packages/mantle-admin-ui/src/lib/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/sheet.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/sheet.tsx:SheetContent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/sheet.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/sheet.tsx:SheetContent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/sheet.tsx",
+      "target": "file:packages/mantle-admin-ui/src/lib/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/sidebar.tsx:useIsMobile",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/sidebar.tsx:SidebarProvider",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/sidebar.tsx:useSidebar",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/sidebar.tsx:Sidebar",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/sidebar.tsx:SidebarMenuButton",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/sidebar.tsx:SidebarMenuSubButton",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/sidebar.tsx:SidebarProvider",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/sidebar.tsx:useSidebar",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/sidebar.tsx:Sidebar",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "target": "file:packages/mantle-admin-ui/src/context/layout-provider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "target": "file:packages/mantle-admin-ui/src/lib/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "target": "file:packages/mantle-admin-ui/src/ui/button.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "target": "file:packages/mantle-admin-ui/src/ui/sheet.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:packages/mantle-admin-ui/src/ui/sidebar.tsx:SidebarProvider",
+      "target": "file:packages/mantle-admin-ui/src/context/layout-provider.tsx",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/status-badge.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/status-badge.tsx:StatusBadge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/status-badge.tsx",
+      "target": "function:packages/mantle-admin-ui/src/ui/status-badge.tsx:StatusBadge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/status-badge.tsx",
+      "target": "file:packages/mantle-admin-ui/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/ui/status-badge.tsx",
+      "target": "file:packages/mantle-admin-ui/src/lib/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    }
+  ]
+}

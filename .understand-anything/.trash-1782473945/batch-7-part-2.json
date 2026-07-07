@@ -1,0 +1,660 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/adapters/cloudflare/test/mcp-metadata.test.ts",
+      "type": "file",
+      "name": "mcp-metadata.test.ts",
+      "filePath": "packages/adapters/cloudflare/test/mcp-metadata.test.ts",
+      "summary": "驗證 MCP protected resource metadata 路徑推導與 mountMcp 暴露的 metadata 端點的測試。",
+      "tags": [
+        "test",
+        "mcp",
+        "unit-test",
+        "metadata"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/test/mount-auth.test.ts",
+      "type": "file",
+      "name": "mount-auth.test.ts",
+      "filePath": "packages/adapters/cloudflare/test/mount-auth.test.ts",
+      "summary": "以 harness 組裝 server endpoints 與 OAuth，驗證認證掛載與 Better Auth handler 路由的整合測試。",
+      "tags": [
+        "test",
+        "auth",
+        "integration-test",
+        "mount"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/test/mount-http-trigger-auth.test.ts",
+      "type": "file",
+      "name": "mount-http-trigger-auth.test.ts",
+      "filePath": "packages/adapters/cloudflare/test/mount-http-trigger-auth.test.ts",
+      "summary": "驗證 HTTP trigger 端點的 staff 權限閘門：以 staff-gated manifests 與 fake auth 確認未授權與授權請求的正確行為。",
+      "tags": [
+        "test",
+        "http-trigger",
+        "auth",
+        "integration-test"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/test/mount-staff-admin.test.ts",
+      "type": "file",
+      "name": "mount-staff-admin.test.ts",
+      "filePath": "packages/adapters/cloudflare/test/mount-staff-admin.test.ts",
+      "summary": "驗證 admin 端點的 staff/owner 角色閘門，依不同 session 角色測試使用者管理與權限拒絕行為。",
+      "tags": [
+        "test",
+        "admin",
+        "staff-role",
+        "integration-test"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/test/public-routes-cache.test.ts",
+      "type": "file",
+      "name": "public-routes-cache.test.ts",
+      "filePath": "packages/adapters/cloudflare/test/public-routes-cache.test.ts",
+      "summary": "驗證公開路由的 KV read-through 快取行為，包含已發佈內容種子、快取命中與回退渲染，並涵蓋 locale 處理。",
+      "tags": [
+        "test",
+        "public-routes",
+        "kv-cache",
+        "integration-test"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/test/smoke-form.test.ts",
+      "type": "file",
+      "name": "smoke-form.test.ts",
+      "filePath": "packages/adapters/cloudflare/test/smoke-form.test.ts",
+      "summary": "表單提交流程的 smoke test，驗證 HTTP trigger 處理表單、captcha 驗證與 Slack 通知等副作用整合。",
+      "tags": [
+        "test",
+        "smoke-test",
+        "form",
+        "http-trigger"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/test/smoke-media.test.ts",
+      "type": "file",
+      "name": "smoke-media.test.ts",
+      "filePath": "packages/adapters/cloudflare/test/smoke-media.test.ts",
+      "summary": "媒體上傳流程的 smoke test，以 FakeMediaStorage 模擬 R2，驗證 createUpload/commitUpload 與 MCP 媒體欄位的端到端行為。",
+      "tags": [
+        "test",
+        "smoke-test",
+        "media",
+        "r2",
+        "mcp"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/test/view-rest.test.ts",
+      "type": "file",
+      "name": "view-rest.test.ts",
+      "filePath": "packages/adapters/cloudflare/test/view-rest.test.ts",
+      "summary": "View REST 端點測試，以種子 entry 資料驗證 view 查詢、分頁與權限授權的 HTTP 回應。",
+      "tags": [
+        "test",
+        "view",
+        "rest",
+        "integration-test"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "type": "file",
+      "name": "database.ts",
+      "filePath": "packages/mantle-runtime/test/fakes/database.ts",
+      "summary": "實作 DatabaseDriver port 的 in-memory 假資料庫，內含一個能解析參數化 SQL 與 compiled view query 的迷你 SQL 解譯器，供 runtime 與 adapter 測試共用。",
+      "tags": [
+        "test",
+        "fake",
+        "database",
+        "test-fixture",
+        "sql-parser"
+      ],
+      "complexity": "complex",
+      "languageNotes": "以手寫 SQL 字串比對與布林運算式 tokenizer 模擬 D1 行為（json_extract、WHERE、ORDER BY、LIMIT/OFFSET），刻意避開真實 SQLite 依賴。"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/joined-entry-reader.test.ts",
+      "type": "file",
+      "name": "joined-entry-reader.test.ts",
+      "filePath": "packages/mantle-runtime/test/joined-entry-reader.test.ts",
+      "summary": "JoinedEntryReader 的單元測試，驗證 translation 與 parent entry 的 join 行為，使用 in-memory database 與 manifest fixtures 種子資料。",
+      "tags": [
+        "test",
+        "unit-test",
+        "entry-reader",
+        "join"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/adapters/cloudflare/test/smoke-media.test.ts:FakeMediaStorage",
+      "type": "class",
+      "name": "FakeMediaStorage",
+      "filePath": "packages/adapters/cloudflare/test/smoke-media.test.ts",
+      "lineRange": [
+        35,
+        83
+      ],
+      "summary": "MediaStorage port 的假實作，記錄 createUpload/commitUpload 呼叫並回傳 stub 結果，供媒體 smoke test 模擬 R2 行為。",
+      "tags": [
+        "test",
+        "fake",
+        "media",
+        "r2"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/mantle-runtime/test/fakes/database.ts:InMemoryDatabase",
+      "type": "class",
+      "name": "InMemoryDatabase",
+      "filePath": "packages/mantle-runtime/test/fakes/database.ts",
+      "lineRange": [
+        43,
+        87
+      ],
+      "summary": "DatabaseDriver port 的 in-memory 實作，以 Map 儲存 entries/revisions/approvals/users 等並透過 prepare/batch 提供 D1 相容介面，支援種子 user 與 staff。",
+      "tags": [
+        "test",
+        "fake",
+        "database",
+        "test-fixture"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/mantle-runtime/test/fakes/database.ts:InMemoryStatement",
+      "type": "class",
+      "name": "InMemoryStatement",
+      "filePath": "packages/mantle-runtime/test/fakes/database.ts",
+      "lineRange": [
+        89,
+        407
+      ],
+      "summary": "模擬 D1 prepared statement 的假實作，依 SQL 字串比對分派 first/all/run，內含大量手寫的 INSERT/SELECT/DELETE 與 view query 解析邏輯。",
+      "tags": [
+        "test",
+        "fake",
+        "database",
+        "sql-parser"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/fakes/database.ts:runCompiledViewQuery",
+      "type": "function",
+      "name": "runCompiledViewQuery",
+      "filePath": "packages/mantle-runtime/test/fakes/database.ts",
+      "lineRange": [
+        427,
+        524
+      ],
+      "summary": "解析並執行 compiled view 的 SQL：抽取 SELECT/FROM/WHERE/ORDER BY/LIMIT 子句，對 in-memory entries 套用過濾、排序與投影。",
+      "tags": [
+        "test",
+        "sql-parser",
+        "view-query"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/fakes/database.ts:tokenizeBoolean",
+      "type": "function",
+      "name": "tokenizeBoolean",
+      "filePath": "packages/mantle-runtime/test/fakes/database.ts",
+      "lineRange": [
+        637,
+        675
+      ],
+      "summary": "將 WHERE 布林運算式切分為頂層 token，處理括號巢狀與 AND/OR 連接子，供過濾運算式遞迴評估使用。",
+      "tags": [
+        "test",
+        "sql-parser",
+        "tokenizer"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-runtime/test/fakes/database.ts:projectRow",
+      "type": "function",
+      "name": "projectRow",
+      "filePath": "packages/mantle-runtime/test/fakes/database.ts",
+      "lineRange": [
+        568,
+        594
+      ],
+      "summary": "依 SELECT 投影清單從資料列取出對應欄位（含 json_extract 解析），組裝為查詢結果列。",
+      "tags": [
+        "test",
+        "sql-parser",
+        "projection"
+      ],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/io/JoinedEntryReader.ts",
+      "target": "file:packages/mantle-runtime/test/joined-entry-reader.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mcp-metadata.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/mount/mountMcp.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-auth.test.ts",
+      "target": "function:packages/adapters/cloudflare/test/mount-auth.test.ts:harness",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-auth.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/auth/createAuth.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-auth.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/mount/bootRuntimeOnce.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-auth.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/mount/mountServerEndpoints.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-auth.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/oauth/mountOAuth.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-auth.test.ts",
+      "target": "file:packages/adapters/cloudflare/test/fakes/runtime-bindings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-auth.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-http-trigger-auth.test.ts",
+      "target": "function:packages/adapters/cloudflare/test/mount-http-trigger-auth.test.ts:buildApp",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-http-trigger-auth.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/auth/createAuth.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-http-trigger-auth.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/mount/bootRuntimeOnce.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-http-trigger-auth.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/mount/mountServerEndpoints.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-http-trigger-auth.test.ts",
+      "target": "file:packages/adapters/cloudflare/test/fakes/runtime-bindings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-http-trigger-auth.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-staff-admin.test.ts",
+      "target": "function:packages/adapters/cloudflare/test/mount-staff-admin.test.ts:harness",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-staff-admin.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/auth/createAuth.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-staff-admin.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/mount/bootRuntimeOnce.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-staff-admin.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/mount/mountServerEndpoints.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-staff-admin.test.ts",
+      "target": "file:packages/adapters/cloudflare/test/fakes/runtime-bindings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mount-staff-admin.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/public-routes-cache.test.ts",
+      "target": "function:packages/adapters/cloudflare/test/public-routes-cache.test.ts:harness",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/public-routes-cache.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/auth/createAuth.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/public-routes-cache.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/mount/bootRuntimeOnce.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/public-routes-cache.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/mount/mountPublicRoutes.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/public-routes-cache.test.ts",
+      "target": "file:packages/adapters/cloudflare/test/fakes/runtime-bindings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/public-routes-cache.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/smoke-form.test.ts",
+      "target": "function:packages/adapters/cloudflare/test/smoke-form.test.ts:harness",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/smoke-form.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/mount/bootRuntimeOnce.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/smoke-form.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/mount/mountServerEndpoints.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/smoke-form.test.ts",
+      "target": "file:packages/adapters/cloudflare/test/fakes/runtime-bindings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/smoke-form.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/smoke-media.test.ts",
+      "target": "class:packages/adapters/cloudflare/test/smoke-media.test.ts:FakeMediaStorage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/smoke-media.test.ts",
+      "target": "function:packages/adapters/cloudflare/test/smoke-media.test.ts:harness",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/smoke-media.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/auth/createAuth.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/smoke-media.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/mount/bootRuntimeOnce.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/smoke-media.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/mount/mountMcp.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/smoke-media.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/mount/mountServerEndpoints.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/smoke-media.test.ts",
+      "target": "file:packages/adapters/cloudflare/test/fakes/runtime-bindings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/smoke-media.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/view-rest.test.ts",
+      "target": "function:packages/adapters/cloudflare/test/view-rest.test.ts:harness",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/view-rest.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/auth/createAuth.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/view-rest.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/mount/bootRuntimeOnce.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/view-rest.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/mount/mountServerEndpoints.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/view-rest.test.ts",
+      "target": "file:packages/adapters/cloudflare/test/fakes/runtime-bindings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/view-rest.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "target": "class:packages/mantle-runtime/test/fakes/database.ts:InMemoryDatabase",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "target": "class:packages/mantle-runtime/test/fakes/database.ts:InMemoryDatabase",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "target": "class:packages/mantle-runtime/test/fakes/database.ts:InMemoryStatement",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/database.ts:runCompiledViewQuery",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/database.ts:tokenizeBoolean",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "target": "function:packages/mantle-runtime/test/fakes/database.ts:projectRow",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "function:packages/mantle-runtime/test/fakes/database.ts:runCompiledViewQuery",
+      "target": "function:packages/mantle-runtime/test/fakes/database.ts:projectRow",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/DatabaseDriver.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/joined-entry-reader.test.ts",
+      "target": "function:packages/mantle-runtime/test/joined-entry-reader.test.ts:seedEntry",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/joined-entry-reader.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/service/io/JoinedEntryReader.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/joined-entry-reader.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/joined-entry-reader.test.ts",
+      "target": "file:packages/mantle-runtime/test/fakes/manifests.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    }
+  ]
+}

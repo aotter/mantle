@@ -1,0 +1,2278 @@
+{
+  "scriptCompleted": true,
+  "files": [
+    {
+      "path": ".agent/skills/mantle-release/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 124,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/mantle-release/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 124,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".github/CODEOWNERS",
+      "language": "unknown",
+      "sizeLines": 25,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "language": "yaml",
+      "sizeLines": 81,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/bug.yml",
+      "language": "yaml",
+      "sizeLines": 82,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/config.yml",
+      "language": "yaml",
+      "sizeLines": 14,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/convergence.yml",
+      "language": "yaml",
+      "sizeLines": 53,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/feature.yml",
+      "language": "yaml",
+      "sizeLines": 55,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/proposal.yml",
+      "language": "yaml",
+      "sizeLines": 64,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".github/pull_request_template.md",
+      "language": "markdown",
+      "sizeLines": 38,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "language": "yaml",
+      "sizeLines": 57,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".github/workflows/dependabot-automerge.yml",
+      "language": "yaml",
+      "sizeLines": 61,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".github/workflows/mirror-github-packages.yml",
+      "language": "yaml",
+      "sizeLines": 160,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "language": "yaml",
+      "sizeLines": 340,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".npmrc",
+      "language": "unknown",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".nvmrc",
+      "language": "unknown",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".understand-anything/.understandignore",
+      "language": "unknown",
+      "sizeLines": 51,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".understand-anything/config.json",
+      "language": "json",
+      "sizeLines": 1,
+      "fileCategory": "config"
+    },
+    {
+      "path": "AGENTS.md",
+      "language": "markdown",
+      "sizeLines": 16,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "language": "markdown",
+      "sizeLines": 601,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "CLAUDE.md",
+      "language": "markdown",
+      "sizeLines": 151,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "CODE_OF_CONDUCT.md",
+      "language": "markdown",
+      "sizeLines": 79,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "language": "markdown",
+      "sizeLines": 128,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/adapter-guide.md",
+      "language": "markdown",
+      "sizeLines": 108,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/adr/0001-four-atom-manifest-model.md",
+      "language": "markdown",
+      "sizeLines": 694,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/adr/0002-closed-enums-for-bindings.md",
+      "language": "markdown",
+      "sizeLines": 226,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/adr/0007-ai-as-primary-author.md",
+      "language": "markdown",
+      "sizeLines": 509,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/adr/0008-structured-diagnostic-shape.md",
+      "language": "markdown",
+      "sizeLines": 353,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/adr/0009-consumer-supplied-manifests.md",
+      "language": "markdown",
+      "sizeLines": 270,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/adr/0010-locale-and-translates.md",
+      "language": "markdown",
+      "sizeLines": 450,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/adr/0011-adapter-port-spec.md",
+      "language": "markdown",
+      "sizeLines": 272,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/adr/0012-views-as-public-rest.md",
+      "language": "markdown",
+      "sizeLines": 137,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/adr/0013-agent-provisioned-consumer-projects.md",
+      "language": "markdown",
+      "sizeLines": 147,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md",
+      "language": "markdown",
+      "sizeLines": 421,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/adr/0016-site-semantic-layer.md",
+      "language": "markdown",
+      "sizeLines": 65,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/adr/0017-media-multi-variant-agent-side-optimization.md",
+      "language": "markdown",
+      "sizeLines": 181,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/adr/README.md",
+      "language": "markdown",
+      "sizeLines": 57,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/design-atoms.md",
+      "language": "markdown",
+      "sizeLines": 962,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/design-references/editorial-blog-2026-05-05.md",
+      "language": "markdown",
+      "sizeLines": 218,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/labels.md",
+      "language": "markdown",
+      "sizeLines": 67,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/release-process.md",
+      "language": "markdown",
+      "sizeLines": 555,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "package.json",
+      "language": "json",
+      "sizeLines": 25,
+      "fileCategory": "config"
+    },
+    {
+      "path": "packages/adapters/cloudflare/package.json",
+      "language": "json",
+      "sizeLines": 61,
+      "fileCategory": "config"
+    },
+    {
+      "path": "packages/adapters/cloudflare/README.md",
+      "language": "markdown",
+      "sizeLines": 10,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/assets/aotterFavicon.ts",
+      "language": "typescript",
+      "sizeLines": 4,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/auth/appleClientSecret.ts",
+      "language": "typescript",
+      "sizeLines": 158,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/auth/ConsoleEmailSender.ts",
+      "language": "typescript",
+      "sizeLines": 22,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/auth/createAuth.ts",
+      "language": "typescript",
+      "sizeLines": 1039,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/bindings/AssetsAssetServer.ts",
+      "language": "typescript",
+      "sizeLines": 18,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts",
+      "language": "typescript",
+      "sizeLines": 145,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/bindings/index.ts",
+      "language": "typescript",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/bindings/KvCacheBinding.ts",
+      "language": "typescript",
+      "sizeLines": 29,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts",
+      "language": "typescript",
+      "sizeLines": 295,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts",
+      "language": "typescript",
+      "sizeLines": 77,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/handlers/index.ts",
+      "language": "typescript",
+      "sizeLines": 4,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/handlers/turnstile.ts",
+      "language": "typescript",
+      "sizeLines": 98,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/index.ts",
+      "language": "typescript",
+      "sizeLines": 15,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/mount/bootRuntimeOnce.ts",
+      "language": "typescript",
+      "sizeLines": 52,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/mount/cmsConfig.ts",
+      "language": "typescript",
+      "sizeLines": 36,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/mount/index.ts",
+      "language": "typescript",
+      "sizeLines": 15,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/mount/mountMcp.ts",
+      "language": "typescript",
+      "sizeLines": 159,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/mount/mountPublicRoutes.ts",
+      "language": "typescript",
+      "sizeLines": 484,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/mount/mountServerEndpoints.ts",
+      "language": "typescript",
+      "sizeLines": 1392,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/oauth/consentHtml.ts",
+      "language": "typescript",
+      "sizeLines": 104,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/oauth/index.ts",
+      "language": "typescript",
+      "sizeLines": 14,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/oauth/mountOAuth.ts",
+      "language": "typescript",
+      "sizeLines": 164,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/oauth/oauthConstants.ts",
+      "language": "typescript",
+      "sizeLines": 15,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/src/oauth/oauthSingleton.ts",
+      "language": "typescript",
+      "sizeLines": 49,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/appleClientSecret.test.ts",
+      "language": "typescript",
+      "sizeLines": 213,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/createAuth.test.ts",
+      "language": "typescript",
+      "sizeLines": 895,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/fakes/runtime-bindings.ts",
+      "language": "typescript",
+      "sizeLines": 47,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/mantle-internal-queue.test.ts",
+      "language": "typescript",
+      "sizeLines": 190,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/mcp-metadata.test.ts",
+      "language": "typescript",
+      "sizeLines": 45,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/mount-auth.test.ts",
+      "language": "typescript",
+      "sizeLines": 93,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/mount-http-trigger-auth.test.ts",
+      "language": "typescript",
+      "sizeLines": 242,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/mount-staff-admin.test.ts",
+      "language": "typescript",
+      "sizeLines": 218,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/public-routes-cache.test.ts",
+      "language": "typescript",
+      "sizeLines": 296,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/R2MediaStorage.test.ts",
+      "language": "typescript",
+      "sizeLines": 309,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/smoke-form.test.ts",
+      "language": "typescript",
+      "sizeLines": 233,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/smoke-media.test.ts",
+      "language": "typescript",
+      "sizeLines": 413,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/test/view-rest.test.ts",
+      "language": "typescript",
+      "sizeLines": 384,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/cloudflare/tsconfig.json",
+      "language": "json",
+      "sizeLines": 8,
+      "fileCategory": "config"
+    },
+    {
+      "path": "packages/adapters/cloudflare/tsconfig.lib.json",
+      "language": "json",
+      "sizeLines": 13,
+      "fileCategory": "config"
+    },
+    {
+      "path": "packages/adapters/cloudflare/vitest.config.ts",
+      "language": "typescript",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/adapters/netlify/package.json",
+      "language": "json",
+      "sizeLines": 19,
+      "fileCategory": "config"
+    },
+    {
+      "path": "packages/adapters/netlify/README.md",
+      "language": "markdown",
+      "sizeLines": 40,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "packages/mantle-admin-ui/index.html",
+      "language": "html",
+      "sizeLines": 92,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "packages/mantle-admin-ui/package.json",
+      "language": "json",
+      "sizeLines": 62,
+      "fileCategory": "config"
+    },
+    {
+      "path": "packages/mantle-admin-ui/README.md",
+      "language": "markdown",
+      "sizeLines": 10,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/app/admin-app.tsx",
+      "language": "typescript",
+      "sizeLines": 137,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/app/i18n.ts",
+      "language": "typescript",
+      "sizeLines": 1644,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/app/preferences.tsx",
+      "language": "typescript",
+      "sizeLines": 199,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/app/query-client.ts",
+      "language": "typescript",
+      "sizeLines": 17,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/app/router.tsx",
+      "language": "typescript",
+      "sizeLines": 107,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/brand/aotter-mantle.tsx",
+      "language": "typescript",
+      "sizeLines": 116,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/context/layout-provider.tsx",
+      "language": "typescript",
+      "sizeLines": 91,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/env.d.ts",
+      "language": "typescript",
+      "sizeLines": 7,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/auth/auth-views.tsx",
+      "language": "typescript",
+      "sizeLines": 506,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/console/guide-overlay.tsx",
+      "language": "typescript",
+      "sizeLines": 193,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/console/home-view.tsx",
+      "language": "typescript",
+      "sizeLines": 168,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/content/collection-labels.ts",
+      "language": "typescript",
+      "sizeLines": 80,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/content/collection-view.tsx",
+      "language": "typescript",
+      "sizeLines": 521,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/content/entry-edit-view.tsx",
+      "language": "typescript",
+      "sizeLines": 952,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/content/status.ts",
+      "language": "typescript",
+      "sizeLines": 19,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/editor/editor-view.tsx",
+      "language": "typescript",
+      "sizeLines": 69,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/editor/rich-text-editor.tsx",
+      "language": "typescript",
+      "sizeLines": 585,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/media/media-assets.ts",
+      "language": "typescript",
+      "sizeLines": 53,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/media/media-library-view.tsx",
+      "language": "typescript",
+      "sizeLines": 169,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/media/media-upload.ts",
+      "language": "typescript",
+      "sizeLines": 216,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/system/approvals-view.tsx",
+      "language": "typescript",
+      "sizeLines": 174,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/system/not-found-view.tsx",
+      "language": "typescript",
+      "sizeLines": 43,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/system/preferences-view.tsx",
+      "language": "typescript",
+      "sizeLines": 269,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/system/settings-view.tsx",
+      "language": "typescript",
+      "sizeLines": 178,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/features/system/staff-view.tsx",
+      "language": "typescript",
+      "sizeLines": 227,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/app-sidebar.tsx",
+      "language": "typescript",
+      "sizeLines": 62,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/app-title.tsx",
+      "language": "typescript",
+      "sizeLines": 41,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/authenticated-layout.tsx",
+      "language": "typescript",
+      "sizeLines": 188,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/header.tsx",
+      "language": "typescript",
+      "sizeLines": 112,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/main.tsx",
+      "language": "typescript",
+      "sizeLines": 34,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/nav-group.tsx",
+      "language": "typescript",
+      "sizeLines": 319,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/nav-user.tsx",
+      "language": "typescript",
+      "sizeLines": 146,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/preference-controls.tsx",
+      "language": "typescript",
+      "sizeLines": 128,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/profile-dropdown.tsx",
+      "language": "typescript",
+      "sizeLines": 137,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/skip-to-main.tsx",
+      "language": "typescript",
+      "sizeLines": 26,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/types.ts",
+      "language": "typescript",
+      "sizeLines": 40,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/lib/api.ts",
+      "language": "typescript",
+      "sizeLines": 50,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/lib/types.ts",
+      "language": "typescript",
+      "sizeLines": 172,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/lib/utils.ts",
+      "language": "typescript",
+      "sizeLines": 6,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/main.tsx",
+      "language": "typescript",
+      "sizeLines": 25,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/styles/global.css",
+      "language": "css",
+      "sizeLines": 1381,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/styles/index.css",
+      "language": "css",
+      "sizeLines": 1,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/admin-table.tsx",
+      "language": "typescript",
+      "sizeLines": 38,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/button.tsx",
+      "language": "typescript",
+      "sizeLines": 58,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/collapsible.tsx",
+      "language": "typescript",
+      "sizeLines": 7,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/dropdown-menu.tsx",
+      "language": "typescript",
+      "sizeLines": 81,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/page.tsx",
+      "language": "typescript",
+      "sizeLines": 148,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/separator.tsx",
+      "language": "typescript",
+      "sizeLines": 28,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/sheet.tsx",
+      "language": "typescript",
+      "sizeLines": 116,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "language": "typescript",
+      "sizeLines": 459,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/status-badge.tsx",
+      "language": "typescript",
+      "sizeLines": 36,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-admin-ui/tsconfig.json",
+      "language": "json",
+      "sizeLines": 20,
+      "fileCategory": "config"
+    },
+    {
+      "path": "packages/mantle-admin-ui/vite.config.ts",
+      "language": "typescript",
+      "sizeLines": 81,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/package.json",
+      "language": "json",
+      "sizeLines": 49,
+      "fileCategory": "config"
+    },
+    {
+      "path": "packages/mantle-runtime/README.md",
+      "language": "markdown",
+      "sizeLines": 14,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/index.ts",
+      "language": "typescript",
+      "sizeLines": 3,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/model/EntryRow.ts",
+      "language": "typescript",
+      "sizeLines": 75,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/model/HandlerContext.ts",
+      "language": "typescript",
+      "sizeLines": 67,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/model/index.ts",
+      "language": "typescript",
+      "sizeLines": 12,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/model/SeoMeta.ts",
+      "language": "typescript",
+      "sizeLines": 45,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/model/TemplateRegistry.ts",
+      "language": "typescript",
+      "sizeLines": 65,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/AssetServer.ts",
+      "language": "typescript",
+      "sizeLines": 20,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/Clock.ts",
+      "language": "typescript",
+      "sizeLines": 13,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/DatabaseDriver.ts",
+      "language": "typescript",
+      "sizeLines": 95,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/DeferredHookDispatcher.ts",
+      "language": "typescript",
+      "sizeLines": 65,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/EmailSender.ts",
+      "language": "typescript",
+      "sizeLines": 31,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/EntryRepository.ts",
+      "language": "typescript",
+      "sizeLines": 140,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/HandlerRegistry.ts",
+      "language": "typescript",
+      "sizeLines": 63,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/IdGenerator.ts",
+      "language": "typescript",
+      "sizeLines": 28,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/index.ts",
+      "language": "typescript",
+      "sizeLines": 80,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/KvCache.ts",
+      "language": "typescript",
+      "sizeLines": 35,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/LifecycleHookRunner.ts",
+      "language": "typescript",
+      "sizeLines": 42,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/MediaAssetRepository.ts",
+      "language": "typescript",
+      "sizeLines": 34,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/MediaStorage.ts",
+      "language": "typescript",
+      "sizeLines": 200,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/PublishOrchestrator.ts",
+      "language": "typescript",
+      "sizeLines": 26,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/SiteConfigRepository.ts",
+      "language": "typescript",
+      "sizeLines": 27,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/AbsoluteUrl.ts",
+      "language": "typescript",
+      "sizeLines": 30,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/AuthPredicateEvaluator.ts",
+      "language": "typescript",
+      "sizeLines": 75,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/BuiltinProjector.ts",
+      "language": "typescript",
+      "sizeLines": 111,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/EntrySeoSupport.ts",
+      "language": "typescript",
+      "sizeLines": 37,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/HtmlRenderer.ts",
+      "language": "typescript",
+      "sizeLines": 121,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/index.ts",
+      "language": "typescript",
+      "sizeLines": 27,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/io/EntryWriteGuard.ts",
+      "language": "typescript",
+      "sizeLines": 134,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/io/index.ts",
+      "language": "typescript",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/io/JoinedEntryReader.ts",
+      "language": "typescript",
+      "sizeLines": 109,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/io/MediaAssetReferences.ts",
+      "language": "typescript",
+      "sizeLines": 52,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/io/PublishedEntries.ts",
+      "language": "typescript",
+      "sizeLines": 215,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts",
+      "language": "typescript",
+      "sizeLines": 67,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/MarkdownSerializer.ts",
+      "language": "typescript",
+      "sizeLines": 110,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/McpToolNaming.ts",
+      "language": "typescript",
+      "sizeLines": 47,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/Pagination.ts",
+      "language": "typescript",
+      "sizeLines": 29,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/PathMatcher.ts",
+      "language": "typescript",
+      "sizeLines": 54,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/PreviewBanner.ts",
+      "language": "typescript",
+      "sizeLines": 39,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/PublicPathResolver.ts",
+      "language": "typescript",
+      "sizeLines": 66,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/PublishKeys.ts",
+      "language": "typescript",
+      "sizeLines": 83,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/SeoMetaComposer.ts",
+      "language": "typescript",
+      "sizeLines": 247,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/SitemapSerializer.ts",
+      "language": "typescript",
+      "sizeLines": 47,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/TriggerIndex.ts",
+      "language": "typescript",
+      "sizeLines": 55,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts",
+      "language": "typescript",
+      "sizeLines": 102,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/ViewSqlCompiler.ts",
+      "language": "typescript",
+      "sizeLines": 230,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/index.ts",
+      "language": "typescript",
+      "sizeLines": 135,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/boot/canonicalMigrations.ts",
+      "language": "typescript",
+      "sizeLines": 182,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/boot/index.ts",
+      "language": "typescript",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/http/DiagnosticResponse.ts",
+      "language": "typescript",
+      "sizeLines": 18,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/http/index.ts",
+      "language": "typescript",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/index.ts",
+      "language": "typescript",
+      "sizeLines": 11,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/mcp/index.ts",
+      "language": "typescript",
+      "sizeLines": 21,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/mcp/McpJsonRpcDispatcher.ts",
+      "language": "typescript",
+      "sizeLines": 417,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/mcp/McpResponses.ts",
+      "language": "typescript",
+      "sizeLines": 59,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/mcp/McpToolCatalog.ts",
+      "language": "typescript",
+      "sizeLines": 418,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/persistence/DatabaseEntryRepository.ts",
+      "language": "typescript",
+      "sizeLines": 304,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/persistence/DatabaseMediaAssetRepository.ts",
+      "language": "typescript",
+      "sizeLines": 110,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/persistence/DatabaseSiteConfigRepository.ts",
+      "language": "typescript",
+      "sizeLines": 139,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/persistence/index.ts",
+      "language": "typescript",
+      "sizeLines": 4,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/persistence/LifecycleHookingEntryRepository.ts",
+      "language": "typescript",
+      "sizeLines": 241,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/render/HtmlPublishOrchestrator.ts",
+      "language": "typescript",
+      "sizeLines": 184,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/render/index.ts",
+      "language": "typescript",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/runtime.ts",
+      "language": "typescript",
+      "sizeLines": 378,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/boot/index.ts",
+      "language": "typescript",
+      "sizeLines": 6,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/boot/ValidateBootUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 313,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/content/ArchiveUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 63,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/content/ContentPublishEffects.ts",
+      "language": "typescript",
+      "sizeLines": 35,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/content/CreateDraftUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 74,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/content/DeleteEntryUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 37,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/content/diagnostics.ts",
+      "language": "typescript",
+      "sizeLines": 132,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/content/GetEntryUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 29,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/content/index.ts",
+      "language": "typescript",
+      "sizeLines": 19,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/content/ListEntriesUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 71,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/content/RequestPublishUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 147,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/content/UnpublishUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 62,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/content/UpdateDraftUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 102,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/content/index.ts",
+      "language": "typescript",
+      "sizeLines": 83,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/index.ts",
+      "language": "typescript",
+      "sizeLines": 12,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/lifecycle/index.ts",
+      "language": "typescript",
+      "sizeLines": 15,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/media/index.ts",
+      "language": "typescript",
+      "sizeLines": 53,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/procedure/index.ts",
+      "language": "typescript",
+      "sizeLines": 39,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/render/ComposeEntrySeoMetaRequest.ts",
+      "language": "typescript",
+      "sizeLines": 14,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/render/ComposeLlmsTxtRequest.ts",
+      "language": "typescript",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/render/ComposeSitemapRequest.ts",
+      "language": "typescript",
+      "sizeLines": 11,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/render/index.ts",
+      "language": "typescript",
+      "sizeLines": 6,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/render/PreviewEntryRequest.ts",
+      "language": "typescript",
+      "sizeLines": 27,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/render/RenderEntryLiveRequest.ts",
+      "language": "typescript",
+      "sizeLines": 17,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/render/RenderListLiveRequest.ts",
+      "language": "typescript",
+      "sizeLines": 11,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/view/ExecuteViewRequest.ts",
+      "language": "typescript",
+      "sizeLines": 16,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/view/index.ts",
+      "language": "typescript",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/index.ts",
+      "language": "typescript",
+      "sizeLines": 15,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/lifecycle/index.ts",
+      "language": "typescript",
+      "sizeLines": 5,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/lifecycle/RunDeferredHookUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 46,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/lifecycle/RunLifecycleHooksUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 118,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 68,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 306,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "language": "typescript",
+      "sizeLines": 187,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/media/index.ts",
+      "language": "typescript",
+      "sizeLines": 13,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/media/mediaAllowlist.ts",
+      "language": "typescript",
+      "sizeLines": 63,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/media/PendingUploadRecord.ts",
+      "language": "typescript",
+      "sizeLines": 37,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/procedure/index.ts",
+      "language": "typescript",
+      "sizeLines": 2,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/procedure/InvokeBuiltinUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 258,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 212,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 67,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 40,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 30,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/render/index.ts",
+      "language": "typescript",
+      "sizeLines": 14,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/render/PreviewEntryUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 79,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/render/RenderEntryLiveUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 67,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/render/RenderListLiveUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 48,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/view/ExecuteViewUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 105,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/view/index.ts",
+      "language": "typescript",
+      "sizeLines": 5,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/builtin-op.test.ts",
+      "language": "typescript",
+      "sizeLines": 397,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/builtin-projector.test.ts",
+      "language": "typescript",
+      "sizeLines": 79,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/compose-render.test.ts",
+      "language": "typescript",
+      "sizeLines": 172,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/content-ops.test.ts",
+      "language": "typescript",
+      "sizeLines": 897,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/dispatcher-boot.test.ts",
+      "language": "typescript",
+      "sizeLines": 278,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/dispatcher-invoke.test.ts",
+      "language": "typescript",
+      "sizeLines": 165,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/dispatcher-match.test.ts",
+      "language": "typescript",
+      "sizeLines": 43,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/entry-writer.test.ts",
+      "language": "typescript",
+      "sizeLines": 236,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/fakes/database.ts",
+      "language": "typescript",
+      "sizeLines": 675,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/fakes/in-memory-store.ts",
+      "language": "typescript",
+      "sizeLines": 163,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/fakes/kv.ts",
+      "language": "typescript",
+      "sizeLines": 35,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/fakes/manifests.ts",
+      "language": "typescript",
+      "sizeLines": 163,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/fakes/site-config.ts",
+      "language": "typescript",
+      "sizeLines": 66,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/joined-entry-reader.test.ts",
+      "language": "typescript",
+      "sizeLines": 261,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "language": "typescript",
+      "sizeLines": 626,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/locale-negotiator.test.ts",
+      "language": "typescript",
+      "sizeLines": 54,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/mcp.test.ts",
+      "language": "typescript",
+      "sizeLines": 642,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/media-asset-references.test.ts",
+      "language": "typescript",
+      "sizeLines": 95,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/media.test.ts",
+      "language": "typescript",
+      "sizeLines": 667,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/preview-banner.test.ts",
+      "language": "typescript",
+      "sizeLines": 44,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/public-path-resolver.test.ts",
+      "language": "typescript",
+      "sizeLines": 77,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/render-markdown.test.ts",
+      "language": "typescript",
+      "sizeLines": 82,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/render-publish.test.ts",
+      "language": "typescript",
+      "sizeLines": 229,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/runtime.test.ts",
+      "language": "typescript",
+      "sizeLines": 142,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/seo-meta.test.ts",
+      "language": "typescript",
+      "sizeLines": 195,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/trigger-index.test.ts",
+      "language": "typescript",
+      "sizeLines": 83,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/view-param-coercer.test.ts",
+      "language": "typescript",
+      "sizeLines": 134,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/test/view.test.ts",
+      "language": "typescript",
+      "sizeLines": 424,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-runtime/tsconfig.json",
+      "language": "json",
+      "sizeLines": 8,
+      "fileCategory": "config"
+    },
+    {
+      "path": "packages/mantle-runtime/tsconfig.lib.json",
+      "language": "json",
+      "sizeLines": 12,
+      "fileCategory": "config"
+    },
+    {
+      "path": "packages/mantle-runtime/vitest.config.ts",
+      "language": "typescript",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/package.json",
+      "language": "json",
+      "sizeLines": 52,
+      "fileCategory": "config"
+    },
+    {
+      "path": "packages/mantle-spec/README.md",
+      "language": "markdown",
+      "sizeLines": 9,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/index.ts",
+      "language": "typescript",
+      "sizeLines": 2,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/model/ContentState.ts",
+      "language": "typescript",
+      "sizeLines": 17,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/model/Entry.ts",
+      "language": "typescript",
+      "sizeLines": 51,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/model/index.ts",
+      "language": "typescript",
+      "sizeLines": 11,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/model/Locale.ts",
+      "language": "typescript",
+      "sizeLines": 47,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/model/ManifestGrammar.ts",
+      "language": "typescript",
+      "sizeLines": 440,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/model/MediaMimeAccept.ts",
+      "language": "typescript",
+      "sizeLines": 109,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/model/SiteConfig.ts",
+      "language": "typescript",
+      "sizeLines": 182,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/CrossSchemaChecker.ts",
+      "language": "typescript",
+      "sizeLines": 175,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/EntryDataValidator.ts",
+      "language": "typescript",
+      "sizeLines": 86,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/index.ts",
+      "language": "typescript",
+      "sizeLines": 15,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/JsonSchemaToZod.ts",
+      "language": "typescript",
+      "sizeLines": 197,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/LifecycleStateMachine.ts",
+      "language": "typescript",
+      "sizeLines": 108,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "language": "typescript",
+      "sizeLines": 109,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/ManifestParser.ts",
+      "language": "typescript",
+      "sizeLines": 879,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/ManifestPathDiagnoser.ts",
+      "language": "typescript",
+      "sizeLines": 72,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/SchemaDdlEmitter.ts",
+      "language": "typescript",
+      "sizeLines": 90,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/SchemaLoader.ts",
+      "language": "typescript",
+      "sizeLines": 32,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "language": "typescript",
+      "sizeLines": 194,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/StaffRoleHierarchy.ts",
+      "language": "typescript",
+      "sizeLines": 21,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/index.ts",
+      "language": "typescript",
+      "sizeLines": 30,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/infrastructure/cli/EmitOpenapiCommand.ts",
+      "language": "typescript",
+      "sizeLines": 99,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts",
+      "language": "typescript",
+      "sizeLines": 80,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/infrastructure/cli/index.ts",
+      "language": "typescript",
+      "sizeLines": 9,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts",
+      "language": "typescript",
+      "sizeLines": 56,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/infrastructure/cli/loadManifests.ts",
+      "language": "typescript",
+      "sizeLines": 123,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/infrastructure/cli/MantleCli.ts",
+      "language": "typescript",
+      "sizeLines": 53,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "language": "typescript",
+      "sizeLines": 280,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/infrastructure/index.ts",
+      "language": "typescript",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/kernel/diagnostic.ts",
+      "language": "typescript",
+      "sizeLines": 305,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/kernel/index.ts",
+      "language": "typescript",
+      "sizeLines": 7,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/dto/EmitOpenapiRequest.ts",
+      "language": "typescript",
+      "sizeLines": 15,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/dto/EmitOpenapiResponse.ts",
+      "language": "typescript",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/dto/EmitTypesRequest.ts",
+      "language": "typescript",
+      "sizeLines": 6,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/dto/EmitTypesResponse.ts",
+      "language": "typescript",
+      "sizeLines": 3,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/dto/index.ts",
+      "language": "typescript",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/dto/IntrospectManifestsRequest.ts",
+      "language": "typescript",
+      "sizeLines": 7,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/dto/IntrospectManifestsResponse.ts",
+      "language": "typescript",
+      "sizeLines": 51,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/dto/ValidateManifestsRequest.ts",
+      "language": "typescript",
+      "sizeLines": 26,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/dto/ValidateManifestsResponse.ts",
+      "language": "typescript",
+      "sizeLines": 12,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 203,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 150,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/index.ts",
+      "language": "typescript",
+      "sizeLines": 11,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 61,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "language": "typescript",
+      "sizeLines": 562,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/test/cli-emit.test.ts",
+      "language": "typescript",
+      "sizeLines": 141,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/test/cli-usecase.test.ts",
+      "language": "typescript",
+      "sizeLines": 216,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/test/cross-schema.test.ts",
+      "language": "typescript",
+      "sizeLines": 165,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/test/diagnose.test.ts",
+      "language": "typescript",
+      "sizeLines": 86,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/test/diagnostic.test.ts",
+      "language": "typescript",
+      "sizeLines": 248,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/test/entry-state-machine.test.ts",
+      "language": "typescript",
+      "sizeLines": 142,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/test/json-schema-zod.test.ts",
+      "language": "typescript",
+      "sizeLines": 277,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/test/locale.test.ts",
+      "language": "typescript",
+      "sizeLines": 186,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/test/media-mime-accept.test.ts",
+      "language": "typescript",
+      "sizeLines": 188,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/test/schema-ddl-emitter.test.ts",
+      "language": "typescript",
+      "sizeLines": 52,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/test/schema-validator.test.ts",
+      "language": "typescript",
+      "sizeLines": 159,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/test/site-validate.test.ts",
+      "language": "typescript",
+      "sizeLines": 175,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/test/staff-role.test.ts",
+      "language": "typescript",
+      "sizeLines": 41,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/test/validate-cli.test.ts",
+      "language": "typescript",
+      "sizeLines": 48,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/test/validate.test.ts",
+      "language": "typescript",
+      "sizeLines": 852,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/test/windows-path.test.ts",
+      "language": "typescript",
+      "sizeLines": 39,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle-spec/tsconfig.json",
+      "language": "json",
+      "sizeLines": 8,
+      "fileCategory": "config"
+    },
+    {
+      "path": "packages/mantle-spec/tsconfig.lib.json",
+      "language": "json",
+      "sizeLines": 12,
+      "fileCategory": "config"
+    },
+    {
+      "path": "packages/mantle-spec/vitest.config.ts",
+      "language": "typescript",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle/package.json",
+      "language": "json",
+      "sizeLines": 81,
+      "fileCategory": "config"
+    },
+    {
+      "path": "packages/mantle/README.md",
+      "language": "markdown",
+      "sizeLines": 67,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "packages/mantle/src/admin-ui.ts",
+      "language": "typescript",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle/src/cloudflare.ts",
+      "language": "typescript",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle/src/runtime.ts",
+      "language": "typescript",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle/src/spec.ts",
+      "language": "typescript",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "packages/mantle/tsconfig.lib.json",
+      "language": "json",
+      "sizeLines": 13,
+      "fileCategory": "config"
+    },
+    {
+      "path": "pnpm-workspace.yaml",
+      "language": "yaml",
+      "sizeLines": 42,
+      "fileCategory": "config"
+    },
+    {
+      "path": "README.md",
+      "language": "markdown",
+      "sizeLines": 111,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "scripts/check-boundaries.mjs",
+      "language": "javascript",
+      "sizeLines": 108,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/sync-package-docs.mjs",
+      "language": "javascript",
+      "sizeLines": 19,
+      "fileCategory": "code"
+    },
+    {
+      "path": "SECURITY.md",
+      "language": "markdown",
+      "sizeLines": 57,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "skills/.keep",
+      "language": "unknown",
+      "sizeLines": 0,
+      "fileCategory": "code"
+    },
+    {
+      "path": "skills/customize-design/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 214,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "skills/extend/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 214,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "skills/install/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 127,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "skills/provision/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 164,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "skills/README.md",
+      "language": "markdown",
+      "sizeLines": 33,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "starters/.keep",
+      "language": "unknown",
+      "sizeLines": 0,
+      "fileCategory": "code"
+    },
+    {
+      "path": "starters/blank/README.md",
+      "language": "markdown",
+      "sizeLines": 30,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "SUPPORT.md",
+      "language": "markdown",
+      "sizeLines": 24,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "tsconfig.base.json",
+      "language": "json",
+      "sizeLines": 20,
+      "fileCategory": "config"
+    }
+  ],
+  "totalFiles": 375,
+  "filteredByIgnore": 0,
+  "estimatedComplexity": "large",
+  "stats": {
+    "filesScanned": 375,
+    "byCategory": {
+      "docs": 41,
+      "code": 303,
+      "config": 24,
+      "infra": 4,
+      "markup": 3
+    },
+    "byLanguage": {
+      "markdown": 41,
+      "unknown": 6,
+      "yaml": 11,
+      "json": 17,
+      "typescript": 295,
+      "html": 1,
+      "css": 2,
+      "javascript": 2
+    }
+  }
+}
