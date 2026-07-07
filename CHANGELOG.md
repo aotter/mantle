@@ -6,6 +6,26 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.44] - 2026-07-07
+
+### Added
+
+- **@aotter/mantle-spec / @aotter/mantle-admin-ui**: localized `View.spec.title` and JSON Schema property `title` (string or LocalizedText) — sidebar report names, report page titles, list column headers, and form labels now come from the manifest instead of humanized property names (#443).
+- **@aotter/mantle-admin-ui**: row-bound operations now also surface on the entry editor page header and on child-entry rows inside the parent editor — e.g. a restock procedure is reachable by navigation instead of only from the bound collection's list page (#442).
+- **@aotter/mantle-admin-ui**: success toasts after operation execution, and a styled confirm dialog replaces `window.confirm` for destructive actions (#444).
+
+### Changed
+
+- **@aotter/mantle-admin-ui**: media upload probes the browser's canvas encoder per mime before selecting a variant format, fails fast with an operator-readable localized error when a purpose demands a format the browser cannot encode (e.g. AVIF), and no longer burns 24 encode attempts before surfacing it (#440).
+- **@aotter/mantle-runtime**: `site_config` keys with no admin-UI edit path (`mediaPurposes`, `locales`) are now synced from `mantleConfig.ts` on every boot instead of seeded write-once — config edits reach already-deployed sites (#441). UI-editable keys (brand, title, …) keep DB-wins semantics.
+- **@aotter/mantle-admin-ui**: operation failures show a generic localized message with the raw handler detail collapsed behind a disclosure instead of dumping it inline; collection page descriptions are lifecycle-aware; ID cells truncate from the tail; media-asset fields render a thumbnail chip; the `money-minor` hint badge is localized (#444).
+- **@aotter/mantle-runtime**: `lifecycle: none` authoring validation fixed for create/update drafts.
+
+### Fixed
+
+- **@aotter/mantle-admin-ui**: SPA navigation into a report page no longer white-screens the whole console — `authenticated-layout` and `view-page` cached different shapes under the same react-query key (#450).
+- **@aotter/mantle-runtime / @aotter/mantle-admin-ui**: 8 findings from the alpha.43 code review — media delete now settles all R2 deletions before removing the DB row, batch upload no longer aborts on first failure, media "load more" pagination survives edit refetches, cursor decoding is size-capped, view path labels de-hardcoded, test fakes aligned with the widened `MediaAssetRepository` (#439, headline fix shipped as #438: `mountMcp` filters Views by surface so staff Views are not listed or callable on the public `/mcp`).
+
 ## [0.0.11-alpha.43] - 2026-07-06
 
 ### Added
