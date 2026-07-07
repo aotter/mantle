@@ -1,0 +1,49 @@
+{
+  "nodes": [
+    {
+      "id": "document:packages/mantle/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "packages/mantle/README.md",
+      "summary": "@aotter/mantle 傘形 SDK 套件的說明文件，介紹 manifest 驅動的 Cloudflare Workers CMS、四個子路徑（/spec、/runtime、/cloudflare、/admin-ui）的 re-export 對照表，以及從 Mantle landing 頁開始的入門與 adapter 支援狀態。",
+      "tags": ["documentation", "entry-point", "sdk", "overview", "monorepo"],
+      "complexity": "moderate",
+      "languageNotes": "以子路徑 re-export 表格說明單一傘形套件如何聚合 spec/runtime/cloudflare/admin-ui 四個 workspace 子套件。"
+    },
+    {
+      "id": "config:packages/mantle/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/mantle/package.json",
+      "summary": "@aotter/mantle 傘形套件的 manifest，定義 4 個子路徑 exports（spec/runtime/cloudflare/admin-ui）、4 個 workspace 內部 dependencies、peer/dev dependencies（hono、zod、better-auth 等），並設定 sideEffects: false 以利 tree-shaking。",
+      "tags": ["configuration", "package-manifest", "sdk", "build-system", "monorepo"],
+      "complexity": "moderate",
+      "languageNotes": "使用 pnpm workspace:* 協定聚合四個子套件，搭配 exports map 對外提供各子路徑；publishConfig 標記為 alpha dist-tag 發佈。"
+    },
+    {
+      "id": "config:packages/mantle/tsconfig.lib.json",
+      "type": "config",
+      "name": "tsconfig.lib.json",
+      "filePath": "packages/mantle/tsconfig.lib.json",
+      "summary": "@aotter/mantle 套件的 TypeScript build 設定，供 package.json 的 build/typecheck 腳本（tsc -b）使用，控制 library 編譯的 include/exclude 與 compilerOptions。",
+      "tags": ["configuration", "typescript", "build-system", "tsconfig"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "config:packages/mantle/tsconfig.lib.json",
+      "target": "config:packages/mantle/package.json",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "document:packages/mantle/README.md",
+      "target": "config:packages/mantle/package.json",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

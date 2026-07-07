@@ -1,0 +1,2635 @@
+{
+  "scriptCompleted": true,
+  "entryPointCandidates": [
+    {
+      "id": "document:README.md",
+      "score": 5,
+      "name": "README.md",
+      "summary": "專案總覽文件，介紹 mantle 作為 Cloudflare Workers 上的 agent-native headless CMS、冷啟動安裝路徑、Mantle 家族定位，並列出各 package 與 starter 的角色。"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/bindings/index.ts",
+      "score": 4,
+      "name": "index.ts",
+      "summary": "bindings 資料夾的 barrel，re-export D1DatabaseDriver、KvCacheBinding、AssetsAssetServer、R2MediaStorage 與 queue dispatcher。"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/handlers/index.ts",
+      "score": 4,
+      "name": "index.ts",
+      "summary": "handlers 資料夾的 barrel，re-export cloudflareTurnstileCheck 與其選項型別。"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/mount/index.ts",
+      "score": 4,
+      "name": "index.ts",
+      "summary": "mount 資料夾的 barrel，re-export server endpoint 掛載、MCP API handler、public routes 與 CmsConfig 等掛載相關 API。"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/oauth/index.ts",
+      "score": 4,
+      "name": "index.ts",
+      "summary": "oauth 資料夾的 barrel，re-export OAuth 路徑常數、createOAuthProvider 與 authorize 掛載相關 API 與型別。"
+    }
+  ],
+  "fanInRanking": [
+    {
+      "id": "file:packages/mantle-admin-ui/src/app/preferences.tsx",
+      "fanIn": 26,
+      "name": "preferences.tsx"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/domain/model/ManifestGrammar.ts",
+      "fanIn": 22,
+      "name": "ManifestGrammar.ts"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/app/i18n.ts",
+      "fanIn": 21,
+      "name": "i18n.ts"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/lib/utils.ts",
+      "fanIn": 19,
+      "name": "utils.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/model/EntryRow.ts",
+      "fanIn": 17,
+      "name": "EntryRow.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/model/HandlerContext.ts",
+      "fanIn": 17,
+      "name": "HandlerContext.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/port/DatabaseDriver.ts",
+      "fanIn": 16,
+      "name": "DatabaseDriver.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/port/EntryRepository.ts",
+      "fanIn": 15,
+      "name": "EntryRepository.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/port/MediaStorage.ts",
+      "fanIn": 14,
+      "name": "MediaStorage.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/fakes/database.ts",
+      "fanIn": 14,
+      "name": "database.ts"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/auth/createAuth.ts",
+      "fanIn": 14,
+      "name": "createAuth.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/port/Clock.ts",
+      "fanIn": 13,
+      "name": "Clock.ts"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/ui/button.tsx",
+      "fanIn": 13,
+      "name": "button.tsx"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/lib/api.ts",
+      "fanIn": 12,
+      "name": "api.ts"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/lib/types.ts",
+      "fanIn": 12,
+      "name": "types.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/port/SiteConfigRepository.ts",
+      "fanIn": 11,
+      "name": "SiteConfigRepository.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/model/TemplateRegistry.ts",
+      "fanIn": 10,
+      "name": "TemplateRegistry.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/port/MediaAssetRepository.ts",
+      "fanIn": 10,
+      "name": "MediaAssetRepository.ts"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/src/mount/bootRuntimeOnce.ts",
+      "fanIn": 10,
+      "name": "bootRuntimeOnce.ts"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/kernel/diagnostic.ts",
+      "fanIn": 10,
+      "name": "diagnostic.ts"
+    }
+  ],
+  "fanOutRanking": [
+    {
+      "id": "file:packages/mantle-runtime/src/runtime.ts",
+      "fanOut": 28,
+      "name": "runtime.ts"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/layout/authenticated-layout.tsx",
+      "fanOut": 16,
+      "name": "authenticated-layout.tsx"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/app/admin-app.tsx",
+      "fanOut": 15,
+      "name": "admin-app.tsx"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/infrastructure/render/HtmlPublishOrchestrator.ts",
+      "fanOut": 13,
+      "name": "HtmlPublishOrchestrator.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/lifecycle-hooks.test.ts",
+      "fanOut": 11,
+      "name": "lifecycle-hooks.test.ts"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/features/content/collection-view.tsx",
+      "fanOut": 11,
+      "name": "collection-view.tsx"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/render/PreviewEntryUseCase.ts",
+      "fanOut": 11,
+      "name": "PreviewEntryUseCase.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/render/RenderEntryLiveUseCase.ts",
+      "fanOut": 11,
+      "name": "RenderEntryLiveUseCase.ts"
+    },
+    {
+      "id": "document:docs/adr/README.md",
+      "fanOut": 11,
+      "name": "README.md"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/content/CreateDraftUseCase.ts",
+      "fanOut": 10,
+      "name": "CreateDraftUseCase.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/builtin-op.test.ts",
+      "fanOut": 10,
+      "name": "builtin-op.test.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/procedure/InvokeBuiltinUseCase.ts",
+      "fanOut": 10,
+      "name": "InvokeBuiltinUseCase.ts"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/features/content/entry-edit-view.tsx",
+      "fanOut": 10,
+      "name": "entry-edit-view.tsx"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "fanOut": 10,
+      "name": "CreateMediaUploadUseCase.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/render-publish.test.ts",
+      "fanOut": 10,
+      "name": "render-publish.test.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/content-ops.test.ts",
+      "fanOut": 9,
+      "name": "content-ops.test.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/mcp.test.ts",
+      "fanOut": 9,
+      "name": "mcp.test.ts"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/content/UpdateDraftUseCase.ts",
+      "fanOut": 9,
+      "name": "UpdateDraftUseCase.ts"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/features/system/approvals-view.tsx",
+      "fanOut": 9,
+      "name": "approvals-view.tsx"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "fanOut": 9,
+      "name": "CommitMediaUploadUseCase.ts"
+    }
+  ],
+  "bfsTraversal": {
+    "startNode": "file:packages/mantle-runtime/src/index.ts",
+    "order": [
+      "file:packages/mantle-runtime/src/index.ts"
+    ],
+    "depthMap": {
+      "file:packages/mantle-runtime/src/index.ts": 0
+    },
+    "byDepth": {
+      "0": [
+        "file:packages/mantle-runtime/src/index.ts"
+      ]
+    }
+  },
+  "nonCodeFiles": {
+    "documentation": [
+      {
+        "id": "document:AGENTS.md",
+        "name": "AGENTS.md",
+        "type": "document",
+        "summary": "貢獻型 AI agent 的最小入口指引，提供導向 CLAUDE.md 與 CONTRIBUTING.md 等核心文件的快速連結。"
+      },
+      {
+        "id": "document:CHANGELOG.md",
+        "name": "CHANGELOG.md",
+        "type": "document",
+        "summary": "依語意化版本記錄的變更日誌，涵蓋 0.0.6-alpha 至 0.0.11-alpha.35 的 Added / Changed / Fixed / Breaking / Removed 條目，記錄 v0.1.0 開發期的增量演進。"
+      },
+      {
+        "id": "document:CLAUDE.md",
+        "name": "CLAUDE.md",
+        "type": "document",
+        "summary": "AI 貢獻者的核心導向文件，闡述 Mantle「agent 寫 config、runtime 扛複雜度」的論述、檔案配置地圖、跨切面硬性不變量與 clean-architecture 分層規則。"
+      },
+      {
+        "id": "document:CODE_OF_CONDUCT.md",
+        "name": "CODE_OF_CONDUCT.md",
+        "type": "document",
+        "summary": "基於 Contributor Covenant 的行為準則，定義社群承諾、行為標準、執行責任與分級的執行指南。"
+      },
+      {
+        "id": "document:CONTRIBUTING.md",
+        "name": "CONTRIBUTING.md",
+        "type": "document",
+        "summary": "AI 與人類貢獻者的工作流程契約，涵蓋本機設定、分支前綴、commit 形態、issue/PR 流程、架構與 grammar 把關，以及 changelog 與 release 流程的銜接。"
+      },
+      {
+        "id": "document:README.md",
+        "name": "README.md",
+        "type": "document",
+        "summary": "專案總覽文件，介紹 mantle 作為 Cloudflare Workers 上的 agent-native headless CMS、冷啟動安裝路徑、Mantle 家族定位，並列出各 package 與 starter 的角色。"
+      },
+      {
+        "id": "document:SECURITY.md",
+        "name": "SECURITY.md",
+        "type": "document",
+        "summary": "安全政策文件，說明漏洞回報管道、回應時程預期、受支援版本範圍與公開揭露的處理方式。"
+      },
+      {
+        "id": "document:SUPPORT.md",
+        "name": "SUPPORT.md",
+        "type": "document",
+        "summary": "支援指引文件，說明如何取得協助、starter monorepo 的協助管道、不提供的服務範圍，以及給 AI agent 的使用提示。"
+      },
+      {
+        "id": "document:docs/adapter-guide.md",
+        "name": "adapter-guide.md",
+        "type": "document",
+        "summary": "Adapter 實作指南，說明 adapter 必須綁定的 required runtime ports、optional capabilities、runtime boot 流程、HTTP 與 MCP 介面以及靜態資產處理，並附上實作 checklist 與目前的非目標。"
+      },
+      {
+        "id": "document:docs/design-atoms.md",
+        "name": "design-atoms.md",
+        "type": "document",
+        "summary": "4-atom manifest 模型的核心參考文件，逐一說明 Schema / View / Procedure / Trigger 四個 atom 的 v0.1 grammar、x-mantle-bind 等擴充欄位、OpenAPI emission、JSON Schema 至 zod 的驗證流程、RBAC、D1/Postgres 儲存策略與 DRAFT roadmap。"
+      },
+      {
+        "id": "document:docs/labels.md",
+        "name": "labels.md",
+        "type": "document",
+        "summary": "GitHub label 規範文件，定義 kind/status、area、release 與 review gate 等標籤分類，並提供建立缺漏 label 的指令。"
+      },
+      {
+        "id": "document:docs/release-process.md",
+        "name": "release-process.md",
+        "type": "document",
+        "summary": "Release 與發佈紀律的權威文件，涵蓋 develop→main 分支模型、alpha/beta/RC/stable channel 規則、版本控管、release fanout、npm publish 流程、跨 repo rename playbook 與 hotfix 程序。"
+      },
+      {
+        "id": "document:docs/adr/0001-four-atom-manifest-model.md",
+        "name": "0001-four-atom-manifest-model.md",
+        "type": "document",
+        "summary": "奠基性 ADR，確立 mantle 的核心：以 Schema / View / Procedure / Trigger 四個 atom 構成 `cms.mantle.aotter.net/v1` 的 multi-doc YAML manifest 模型。並併入原 POC ADR-0005（grammar 鎖定與 DRAFT key 紀律）與 ADR-0006（multi-doc YAML 撰寫形式、淘汰 Procedure `expose:` 捷徑）。"
+      },
+      {
+        "id": "document:docs/adr/0002-closed-enums-for-bindings.md",
+        "name": "0002-closed-enums-for-bindings.md",
+        "type": "document",
+        "summary": "決定 `x-mantle-bind` 與 `requires.auth.all` predicate 採封閉式 enum（closed enum），新增成員必須走顯式的 grammar-revise 流程，而非 ad-hoc 擴充，以保護 agent 撰寫面的確定性。"
+      },
+      {
+        "id": "document:docs/adr/0007-ai-as-primary-author.md",
+        "name": "0007-ai-as-primary-author.md",
+        "type": "document",
+        "summary": "確立 AI agent 為 consumer 專案的主要作者，定義三層回饋迴路（`mantle validate` 靜態驗證、boot-time fail-fast、runtime errors）與兩種角色面（coder surface：Skills/CLI/SDK TS API；operator surface：MCP）。"
+      },
+      {
+        "id": "document:docs/adr/0008-structured-diagnostic-shape.md",
+        "name": "0008-structured-diagnostic-shape.md",
+        "type": "document",
+        "summary": "定義 AI 可解析的結構化 Diagnostic 形狀（code 命名慣例、`path` 格式、`candidates`/`suggestion` 填寫時機），並決定驗證器以 zod（非 Ajv）翻譯產生診斷，貫穿 CLI、test harness 與 runtime 三個診斷面。"
+      },
+      {
+        "id": "document:docs/adr/0009-consumer-supplied-manifests.md",
+        "name": "0009-consumer-supplied-manifests.md",
+        "type": "document",
+        "summary": "決定 consumer 專案在 SDK boot 時自行提供（注入）manifest，界定 v0.1.0 的 adapter 範圍與 single-slice 出貨策略，並附帶 worked example 說明注入流程。"
+      },
+      {
+        "id": "document:docs/adr/0010-locale-and-translates.md",
+        "name": "0010-locale-and-translates.md",
+        "type": "document",
+        "summary": "確立 locale 三層模型（manifest 宣告 `Schema.spec.localized`、per-site D1 列 `site_config.locales`、per-entry `data.locale`）與 parent/child translates 模式，並定義 locale 正規化（接受 language + 可選 region，拒絕 script subtag 如 `zh-Hant`）。"
+      },
+      {
+        "id": "document:docs/adr/0011-adapter-port-spec.md",
+        "name": "0011-adapter-port-spec.md",
+        "type": "document",
+        "summary": "規範 runtime 對 adapter 暴露的 port 介面：必備 port（`DatabaseDriver`、`KvCache`、`AssetServer`）、public/private media 雙 bucket 雙 port，以及 adapter 如何 wire 這些 port，確保 runtime 不耦合任何 Cloudflare 專屬型別。"
+      },
+      {
+        "id": "document:docs/adr/0012-views-as-public-rest.md",
+        "name": "0012-views-as-public-rest.md",
+        "type": "document",
+        "summary": "決定公開讀取一律經由 View 而非 Schema 暴露，URL 形狀為 `/api/views/<view-name>`，View 自動暴露、分頁採保留查詢字串名稱、filter 接受 `{ $param: <name> }` sentinel，回應信封為 `{ rows, page, show, hasMore }`。"
+      },
+      {
+        "id": "document:docs/adr/0013-agent-provisioned-consumer-projects.md",
+        "name": "0013-agent-provisioned-consumer-projects.md",
+        "type": "document",
+        "summary": "確立 consumer 專案由 agent 自動 provision（透過 scaffolder 與 launch state）的決策，定義 agent 驅動的初始化流程與相對於人工 provision 的取捨。"
+      },
+      {
+        "id": "document:docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md",
+        "name": "0014-auth-better-auth-and-multi-tenant-mcp.md",
+        "type": "document",
+        "summary": "決定以 Better Auth 同時擔任 auth 與 MCP 授權伺服器，`staff` 表透過 admin plugin 映射為 `user.role`、由 manifest predicate 衍生兩條 MCP 路由、scope-aware DCR；含 2026-05-15 修正案將 MCP 端切換為 `@cloudflare/workers-oauth-provider`。"
+      },
+      {
+        "id": "document:docs/adr/0016-site-semantic-layer.md",
+        "name": "0016-site-semantic-layer.md",
+        "type": "document",
+        "summary": "定義 site 語意層（`AGENTS.md` + launch state），含 placeholder macros、更新規則與跨工具相容性。為 Epic #116 清理後刻意精簡的 ADR。"
+      },
+      {
+        "id": "document:docs/adr/0017-media-multi-variant-agent-side-optimization.md",
+        "name": "0017-media-multi-variant-agent-side-optimization.md",
+        "type": "document",
+        "summary": "決定 `MediaAsset.variants[]` 為必填、影像最佳化在 agent 端而非 Worker 上執行、`siteDefaults.media.purposes` 為政策物件、entry 以 asset-id 參照並由 `media_assets` 表解析，adapter 維持 storage-key 形狀。"
+      },
+      {
+        "id": "document:docs/adr/README.md",
+        "name": "README.md",
+        "type": "document",
+        "summary": "ADR 目錄的索引與導讀：列出 v0.1.0 的所有 ADR、建議閱讀順序、說明哪些主題刻意「不」放進 ADR（避免 ADR proliferation），以及新增 ADR 的貢獻指引。"
+      },
+      {
+        "id": "document:packages/adapters/cloudflare/README.md",
+        "name": "README.md",
+        "type": "document",
+        "summary": "@aotter/mantle-cloudflare 套件的說明文件，描述此 Cloudflare Workers adapter 如何將 runtime 掛載到 Hono 上、以 D1/KV/Workers assets 實作 runtime ports，並負責 Better Auth 的 GitHub OAuth 與 MCP OAuth/DCR 接線。標註 0.0.7-alpha 為早期預發布，API surface 在 v0.1.0 前仍會變動。"
+      },
+      {
+        "id": "document:packages/mantle-admin-ui/README.md",
+        "name": "README.md",
+        "type": "document",
+        "summary": "說明 @aotter/mantle-admin-ui 套件的用途：建構一個自包含的 React/Tailwind admin SPA HTML 產出物，供 platform adapters 消費，目前處於 0.0.x alpha 早期預發布階段。"
+      },
+      {
+        "id": "document:packages/mantle-runtime/README.md",
+        "name": "README.md",
+        "type": "document",
+        "summary": "@aotter/mantle-runtime 套件的說明文件，描述其作為 adapter-agnostic CMS 核心的職責：dispatcher、content operations、render pipeline、auth/session 抽象、MCP JSON-RPC dispatch，以及由平台 adapter 實作的 runtime ports。並指向 adapter 開發指南與 ADR-0011 port 規格。"
+      },
+      {
+        "id": "document:packages/mantle-spec/README.md",
+        "name": "README.md",
+        "type": "document",
+        "summary": "@aotter/mantle-spec 套件的說明文件，闡述 spec 引擎負責 manifest 文法、YAML 解析、驗證 diagnostics、locale 輔助、JSON-Schema 轉 zod 以及 mantle CLI；並標註 v0.1.0 前 API 仍在變動中。"
+      },
+      {
+        "id": "document:packages/mantle/README.md",
+        "name": "README.md",
+        "type": "document",
+        "summary": "@aotter/mantle 傘形 SDK 套件的說明文件，介紹 manifest 驅動的 Cloudflare Workers CMS、四個子路徑（/spec、/runtime、/cloudflare、/admin-ui）的 re-export 對照表，以及從 Mantle landing 頁開始的入門與 adapter 支援狀態。"
+      },
+      {
+        "id": "document:.agent/skills/mantle-release/SKILL.md",
+        "name": "SKILL.md",
+        "type": "document",
+        "summary": "mantle-release agent skill 指令檔（.agent 版本），規範版本升版、tag、npm publish、starter fanout 與 landing 部署前必讀的 release 流程、Pre-Tag Gate 與失敗處理。"
+      },
+      {
+        "id": "document:.claude/skills/mantle-release/SKILL.md",
+        "name": "SKILL.md",
+        "type": "document",
+        "summary": "mantle-release agent skill 指令檔（.claude 版本，與 .agent 版本內容對應），供 Claude Code 在 release 前讀取的版本升版與 fanout 監看流程契約。"
+      },
+      {
+        "id": "document:.github/pull_request_template.md",
+        "name": "pull_request_template.md",
+        "type": "document",
+        "summary": "GitHub Pull Request 範本，提供 Summary、Why、Scope、Test plan 與 Contributor checklist 等結構化區段。"
+      },
+      {
+        "id": "document:docs/design-references/editorial-blog-2026-05-05.md",
+        "name": "editorial-blog-2026-05-05.md",
+        "type": "document",
+        "summary": "已退役 editorial blog starter 的視覺系統設計參考，記錄設計主張、visual tokens、字體、版面、模板與 i18n surface，僅作設計參考非可執行模板。"
+      },
+      {
+        "id": "document:packages/adapters/netlify/README.md",
+        "name": "README.md",
+        "type": "document",
+        "summary": "Netlify adapter 的 STUB 說明文件，解釋此無程式碼套件存在的工程上理由，以及 v0.2 計畫交付的內容。"
+      },
+      {
+        "id": "document:skills/customize-design/SKILL.md",
+        "name": "SKILL.md",
+        "type": "document",
+        "summary": "AI agent 可讀的設計客製化指南,以 L1 tokens / L2 extraCss·icons·i18n / L3 Header·Footer·PageShell / L4 整頁模板 的分層配方說明如何安全調整 mantle publication 站台外觀。"
+      },
+      {
+        "id": "document:skills/extend/SKILL.md",
+        "name": "SKILL.md",
+        "type": "document",
+        "summary": "AI agent 可讀的擴充指南,提供從撰寫 manifest YAML、即時驗證、串接 handler、註冊模板到本地試跑與整合 smoke 測試的標準擴充迴圈。"
+      },
+      {
+        "id": "document:skills/install/SKILL.md",
+        "name": "install/SKILL.md",
+        "type": "document",
+        "summary": "提供給 AI agent 的 install skill brief，引導 agent 接手 Mantle landing（mantle.tools）已 provision 好的 repo，完成所選類型、首批頁面與內容，而非從本地 scaffold 全新專案。明確標示 create-mantle CLI 已退役，並說明四原子（Schema/View/Procedure/Trigger）的 ground truth 與本地預覽流程。"
+      },
+      {
+        "id": "document:skills/provision/SKILL.md",
+        "name": "provision/SKILL.md",
+        "type": "document",
+        "summary": "提供給 AI agent 的 provision skill brief，承接 landing 完成首次 deploy 後的工作：驗證 Cloudflare Worker 部署、配置每站台 staff auth（GitHub OAuth App ＋ Worker secrets）、smoke test，並交付 operator setup URL。內含 Diagnostics 對照表與必須避免的反模式（Don't）。"
+      },
+      {
+        "id": "document:skills/README.md",
+        "name": "skills/README.md",
+        "type": "document",
+        "summary": "skills/ 目錄的索引文件，列出 mantle 消費端可用的 agent-readable skill briefs（install / customize-design / extend / provision）與各自的 when-to-invoke，並說明這些 brief 是寫給「代表消費者行動的 AI agent」而非 SDK 維護者。"
+      },
+      {
+        "id": "document:starters/blank/README.md",
+        "name": "starters/blank/README.md",
+        "type": "document",
+        "summary": "stub README，說明 blank starter 已遷出本 SDK monorepo、改由獨立的 aotter/mantle-starters 提供（透過 create-mantle scaffolder 取得 tagged tarball）。以對外指向的 stub 作為工程上的 forcing function，讓 reviewer 在 coupling 走樣前就能察覺。"
+      }
+    ],
+    "infrastructure": [
+      {
+        "id": "pipeline:.github/workflows/ci.yml",
+        "name": "ci.yml",
+        "type": "pipeline",
+        "summary": "在 push 與 pull_request（main / develop）時觸發的 CI workflow，於單一 lint job 中對整個 pnpm monorepo 執行 build、套件邊界檢查、typecheck 與 vitest 測試。內含 concurrency 群組以取消同一 ref 上被取代的舊執行。"
+      },
+      {
+        "id": "pipeline:.github/workflows/dependabot-automerge.yml",
+        "name": "dependabot-automerge.yml",
+        "type": "pipeline",
+        "summary": "在 dependabot 對 main / develop 開啟 PR 時觸發的自動合併 workflow；僅對 patch / minor / digest 更新類型先 auto-approve 再以 rebase 方式 auto-merge，major 升級維持手動處理。"
+      },
+      {
+        "id": "pipeline:.github/workflows/mirror-github-packages.yml",
+        "name": "mirror-github-packages.yml",
+        "type": "pipeline",
+        "summary": "手動觸發（workflow_dispatch）的 workflow，依輸入的版本與 dist-tag 將五個公開 SDK 套件的 tarball 鏡像發佈到 GitHub Packages registry，並先驗證各 package.json 版本與輸入一致。"
+      },
+      {
+        "id": "pipeline:.github/workflows/release.yml",
+        "name": "release.yml",
+        "type": "pipeline",
+        "summary": "由推送 v* tag 觸發的 release fanout workflow：build/test 作為 gate，驗證 tag 版本與所有套件一致，pack 後發佈到 npmjs，驗證 metadata，鏡像到 GitHub Packages，建立 GitHub release，並 dispatch aotter/mantle-starters 觸發下游 bump PR。"
+      }
+    ],
+    "data": [],
+    "config": [
+      {
+        "id": "config:.github/ISSUE_TEMPLATE/bug.yml",
+        "name": "bug.yml",
+        "type": "config",
+        "summary": "GitHub issue form 範本，用於回報 bug，透過結構化欄位收集重現步驟、預期行為與環境資訊，並自動套用 bug label。"
+      },
+      {
+        "id": "config:.github/ISSUE_TEMPLATE/config.yml",
+        "name": "config.yml",
+        "type": "config",
+        "summary": "GitHub issue template 的總設定檔，停用空白 issue 並提供導向 Discussions、CLAUDE.md 貢獻契約、ADR 索引與安全漏洞回報的 contact links。"
+      },
+      {
+        "id": "config:.github/ISSUE_TEMPLATE/convergence.yml",
+        "name": "convergence.yml",
+        "type": "config",
+        "summary": "GitHub issue form 範本，用於在實作前對決策進行收斂，收集 context、reference points、candidate cuts 與 closing criteria，並自動套用 question 與 needs-discussion label。"
+      },
+      {
+        "id": "config:.github/ISSUE_TEMPLATE/feature.yml",
+        "name": "feature.yml",
+        "type": "config",
+        "summary": "GitHub issue form 範本，用於提出新功能需求，透過結構化欄位收集問題描述、提議解法與替代方案。"
+      },
+      {
+        "id": "config:.github/ISSUE_TEMPLATE/proposal.yml",
+        "name": "proposal.yml",
+        "type": "config",
+        "summary": "GitHub issue form 範本，用於提出較大型的架構或設計提案，收集動機、提議內容與對既有 ADR 及 grammar 限制的影響。"
+      },
+      {
+        "id": "config:package.json",
+        "name": "package.json",
+        "type": "config",
+        "summary": "monorepo 根層 package 設定，標記為 private、宣告 ESM type、node 引擎需求、pnpm packageManager，以及轉發至各 package 的 build/typecheck/test 等 workspace scripts。"
+      },
+      {
+        "id": "config:pnpm-workspace.yaml",
+        "name": "pnpm-workspace.yaml",
+        "type": "config",
+        "summary": "pnpm workspace 設定，定義 packages glob 範圍與 catalog/catalogs 集中式依賴版本管理，統一各 package 的相依版本。"
+      },
+      {
+        "id": "config:tsconfig.base.json",
+        "name": "tsconfig.base.json",
+        "type": "config",
+        "summary": "共用的 TypeScript 基礎 compiler 設定，供 monorepo 內各 package 的 tsconfig 繼承，集中 compilerOptions 以維持型別檢查一致性。"
+      },
+      {
+        "id": "config:packages/adapters/cloudflare/package.json",
+        "name": "package.json",
+        "type": "config",
+        "summary": "@aotter/mantle-cloudflare 的套件資訊清單，定義 ESM 入口 (dist/index.js)、sideEffects:false、alpha 發布通道，並宣告對 mantle-runtime/mantle-spec/mantle-admin-ui 的 workspace 相依，以及 hono、better-auth、@cloudflare/workers-oauth-provider 等 peer dependencies。"
+      },
+      {
+        "id": "config:packages/adapters/cloudflare/tsconfig.json",
+        "name": "tsconfig.json",
+        "type": "config",
+        "summary": "編輯器與 typecheck 用的 TypeScript 設定，繼承 tsconfig.base.json，設定 noEmit 並納入 @cloudflare/workers-types 與 node 型別，涵蓋 src 與 test 目錄。"
+      },
+      {
+        "id": "config:packages/adapters/cloudflare/tsconfig.lib.json",
+        "name": "tsconfig.lib.json",
+        "type": "config",
+        "summary": "套件實際建置用的 TypeScript 編譯設定，繼承 tsconfig.base.json，從 src 輸出至 dist、啟用 stripInternal，僅納入 @cloudflare/workers-types，排除測試與 dist。"
+      },
+      {
+        "id": "config:packages/mantle-admin-ui/package.json",
+        "name": "package.json",
+        "type": "config",
+        "summary": "@aotter/mantle-admin-ui 套件清單：React 19 + Vite + Tailwind v4 + shadcn admin SPA，平台無關，產出單一自包含 HTML 字串供 mantle-cloudflare / mantle-netlify mount 層消費；以 vite build 產生 dist 並設定 sideEffects:false 以利 tree-shaking。"
+      },
+      {
+        "id": "config:packages/mantle-admin-ui/tsconfig.json",
+        "name": "tsconfig.json",
+        "type": "config",
+        "summary": "admin-ui 套件的 TypeScript 編譯設定，啟用 strict 模式、react-jsx、Bundler moduleResolution 與 noEmit，鎖定瀏覽器 DOM lib，涵蓋 src 與 vite.config.ts。"
+      },
+      {
+        "id": "config:packages/mantle-runtime/package.json",
+        "name": "package.json",
+        "type": "config",
+        "summary": "@aotter/mantle-runtime 的 package manifest，宣告 ESM 套件、sideEffects: false、唯一的 workspace 相依 @aotter/mantle-spec、zod 作為 peerDependency，並定義 build（tsc -b tsconfig.lib.json）、typecheck 與 vitest test scripts。"
+      },
+      {
+        "id": "config:packages/mantle-runtime/tsconfig.json",
+        "name": "tsconfig.json",
+        "type": "config",
+        "summary": "mantle-runtime 套件的基礎 TypeScript 設定，extends 共用的 root tsconfig 並指定 compilerOptions 與 include，供 IDE 與一般 typecheck 使用。"
+      },
+      {
+        "id": "config:packages/mantle-runtime/tsconfig.lib.json",
+        "name": "tsconfig.lib.json",
+        "type": "config",
+        "summary": "mantle-runtime 的函式庫建置設定，由 build script（tsc -b tsconfig.lib.json）使用，設定 compilerOptions、include 與 exclude 以產出 dist 的 declaration 與 JS 輸出。"
+      },
+      {
+        "id": "config:packages/mantle-spec/package.json",
+        "name": "package.json",
+        "type": "config",
+        "summary": "@aotter/mantle-spec 套件的 npm 資訊清單：ESM 模組、sideEffects: false 以利 admin SPA tree-shaking，宣告 mantle CLI bin、yaml 執行期相依、zod peer dependency，以及 build/typecheck/test 腳本。"
+      },
+      {
+        "id": "config:packages/mantle-spec/tsconfig.json",
+        "name": "tsconfig.json",
+        "type": "config",
+        "summary": "套件的 IDE / typecheck 用 TypeScript 設定，繼承根目錄 tsconfig.base.json，採 noEmit 並同時納入 src 與 test 進行型別檢查。"
+      },
+      {
+        "id": "config:packages/mantle-spec/tsconfig.lib.json",
+        "name": "tsconfig.lib.json",
+        "type": "config",
+        "summary": "套件的函式庫建置用 TypeScript 設定，繼承 tsconfig.base.json，設定 rootDir=src、outDir=dist 並開啟 emit，排除 test 目錄以產出發布用的編譯產物。"
+      },
+      {
+        "id": "config:packages/mantle/package.json",
+        "name": "package.json",
+        "type": "config",
+        "summary": "@aotter/mantle 傘形套件的 manifest，定義 4 個子路徑 exports（spec/runtime/cloudflare/admin-ui）、4 個 workspace 內部 dependencies、peer/dev dependencies（hono、zod、better-auth 等），並設定 sideEffects: false 以利 tree-shaking。"
+      },
+      {
+        "id": "config:packages/mantle/tsconfig.lib.json",
+        "name": "tsconfig.lib.json",
+        "type": "config",
+        "summary": "@aotter/mantle 套件的 TypeScript build 設定，供 package.json 的 build/typecheck 腳本（tsc -b）使用，控制 library 編譯的 include/exclude 與 compilerOptions。"
+      },
+      {
+        "id": "file:.github/CODEOWNERS",
+        "name": "CODEOWNERS",
+        "type": "config",
+        "summary": "GitHub CODEOWNERS 設定，依路徑指派各 package 與治理檔案的預設審查者。"
+      },
+      {
+        "id": "config:.github/dependabot.yml",
+        "name": "dependabot.yml",
+        "type": "config",
+        "summary": "Dependabot 設定，定義 npm 與 GitHub Actions 各 package 目錄的相依套件自動更新排程與分組策略。"
+      },
+      {
+        "id": "file:.npmrc",
+        "name": ".npmrc",
+        "type": "config",
+        "summary": "npm/pnpm registry 與安裝行為設定檔。"
+      },
+      {
+        "id": "file:.nvmrc",
+        "name": ".nvmrc",
+        "type": "config",
+        "summary": "指定本專案使用的 Node.js 版本，供 nvm 等版本管理工具讀取。"
+      },
+      {
+        "id": "file:.understand-anything/.understandignore",
+        "name": ".understandignore",
+        "type": "config",
+        "summary": "Understand-Anything 分析工具的忽略規則檔，列出不納入知識圖譜掃描的路徑。"
+      },
+      {
+        "id": "config:.understand-anything/config.json",
+        "name": "config.json",
+        "type": "config",
+        "summary": "Understand-Anything 工具設定檔，指定輸出語言等分析參數。"
+      },
+      {
+        "id": "config:packages/adapters/netlify/package.json",
+        "name": "package.json",
+        "type": "config",
+        "summary": "@aotter/mantle-netlify 套件的 package 設定；目前為 v0.2 預留的 private stub，僅含中繼資料與基本 scripts。"
+      }
+    ]
+  },
+  "clusters": [],
+  "layers": {
+    "count": 10,
+    "list": [
+      {
+        "id": "layer:domain-core",
+        "name": "領域模型與 Ports",
+        "description": "跨 mantle-runtime 與 mantle-spec 的 hexagonal 核心：domain model 實體（EntryRow、HandlerContext、ManifestGrammar 等）與 domain port 介面（DatabaseDriver、EntryRepository、MediaStorage、Clock），定義被內外層共同依賴的純領域型別與抽象邊界。"
+      },
+      {
+        "id": "layer:domain-service",
+        "name": "領域服務",
+        "description": "domain/service 內的純領域邏輯（如 McpToolNaming、manifest 驗證與命名規則），實作不依賴外部 I/O 的業務規則，供 use case 編排呼叫。"
+      },
+      {
+        "id": "layer:usecase",
+        "name": "Use Case 應用層",
+        "description": "mantle-runtime 與 mantle-spec 的 usecase 應用服務：編排 domain port 與 service 完成建立／更新草稿、查詢 view、呼叫 procedure、媒體上傳與 codegen 等具體使用情境。"
+      },
+      {
+        "id": "layer:infrastructure",
+        "name": "Infrastructure 基礎設施",
+        "description": "runtime／spec 的 infrastructure 實作：MCP JSON-RPC dispatcher 與工具目錄、persistence repository、boot 遷移定義等對 domain port 的具體技術實作。"
+      },
+      {
+        "id": "layer:adapters",
+        "name": "平台 Adapters",
+        "description": "Cloudflare Workers（auth、D1、R2、KV、queues、mount/boot、OAuth）與 Netlify 平台 adapter，將 runtime 掛載至特定執行環境的進入點與綁定。"
+      },
+      {
+        "id": "layer:admin-ui",
+        "name": "Admin UI 管理介面",
+        "description": "mantle-admin-ui：React 19 + Vite + Tailwind v4 管理後台 SPA，含 app 啟動、layout、ui 元件、features、i18n 與 lib 工具。"
+      },
+      {
+        "id": "layer:sdk",
+        "name": "SDK 門面與 Spec CLI",
+        "description": "mantle umbrella 套件門面、runtime.ts／index.ts barrel 進入點，以及 mantle-spec 的 kernel 與 CLI，對外組裝並暴露整體公開 API。"
+      },
+      {
+        "id": "layer:test",
+        "name": "測試",
+        "description": "跨所有套件的 Vitest 測試與 test fakes（database 等），驗證 domain、usecase、infrastructure 與 adapter 行為。"
+      },
+      {
+        "id": "layer:documentation",
+        "name": "文件",
+        "description": "使用指南、docs/adr 架構決策紀錄、根目錄 README／CONTRIBUTING 等治理文件、agent skills 與 starters 範本，描述專案架構與使用方式。"
+      },
+      {
+        "id": "layer:config",
+        "name": "建置設定與 CI/CD",
+        "description": "pnpm monorepo 與各套件的 package.json／tsconfig、.npmrc／.nvmrc 等設定，scripts 邊界檢查工具，以及 .github 的 GitHub Actions CI／release／dependabot pipeline 與 issue 模板。"
+      }
+    ]
+  },
+  "nodeSummaryIndex": {
+    "file:packages/mantle-runtime/src/infrastructure/boot/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "infrastructure/boot 的 barrel，re-export CANONICAL_MIGRATIONS（標準資料庫遷移定義），供 runtime 啟動時執行。"
+    },
+    "file:packages/mantle-runtime/src/infrastructure/mcp/McpJsonRpcDispatcher.ts": {
+      "name": "McpJsonRpcDispatcher.ts",
+      "type": "file",
+      "summary": "MCP 傳輸層 dispatcher，將 JSON-RPC 請求解析後依工具名稱路由到對應 use case（建立草稿、更新、查詢 view、呼叫 procedure、媒體上傳等），僅做信封處理與委派、不含業務邏輯。"
+    },
+    "file:packages/mantle-runtime/src/infrastructure/mcp/McpResponses.ts": {
+      "name": "McpResponses.ts",
+      "type": "file",
+      "summary": "MCP 回應輔助工具，提供 jsonRpcOk／jsonRpcError／mcpJsonRpcError／mcpUnauthenticated 等建構 JSON-RPC 與 MCP 錯誤信封的純函式，並對外進行欄位遮罩（redactForWire）。"
+    },
+    "file:packages/mantle-runtime/src/infrastructure/mcp/McpToolCatalog.ts": {
+      "name": "McpToolCatalog.ts",
+      "type": "file",
+      "summary": "建構 MCP 工具目錄：依 schema／procedure／view 與媒體策略動態產生建立、更新、查詢、媒體上傳等工具定義，並過濾 x-mantle-bind 等非作者欄位，讓 agent 只看到可填寫的表面。"
+    },
+    "file:packages/mantle-runtime/src/infrastructure/persistence/DatabaseEntryRepository.ts": {
+      "name": "DatabaseEntryRepository.ts",
+      "type": "file",
+      "summary": "EntryRepository 的資料庫實作，透過 DatabaseDriver 對 entries 表執行 CRUD、狀態轉移、游標分頁與 JSON 欄位查詢，並以樂觀鎖版本守門與 versionConflict 處理並發衝突。"
+    },
+    "file:packages/mantle-runtime/src/infrastructure/persistence/DatabaseSiteConfigRepository.ts": {
+      "name": "DatabaseSiteConfigRepository.ts",
+      "type": "file",
+      "summary": "SiteConfigRepository 的資料庫實作，將站台預設（locales、media purposes 等）seed 進 site_config 表並提供 load／readLocales／readMediaPurposes 讀取，含 CSV 與 JSON 解析輔助。"
+    },
+    "file:packages/mantle-runtime/src/infrastructure/persistence/LifecycleHookingEntryRepository.ts": {
+      "name": "LifecycleHookingEntryRepository.ts",
+      "type": "file",
+      "summary": "EntryRepository 的 decorator，包覆 inner repository，在 create／update／delete／archive／transitionStatus 前後依 TriggerIndex 觸發 lifecycle hook，並支援延後（deferred）派發。"
+    },
+    "file:packages/mantle-runtime/src/infrastructure/render/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "infrastructure/render 的 barrel，re-export HtmlPublishOrchestrator（HTML 發布協調器實作）。"
+    },
+    "file:packages/mantle-runtime/src/runtime.ts": {
+      "name": "runtime.ts",
+      "type": "file",
+      "summary": "runtime 組裝根（assembly root），createCmsRuntime 將 manifest 切分、組裝各 repository／use case／dispatcher，並把具體 adapter 經 port 接線，是唯一允許具體實作與 use case 接線之處。"
+    },
+    "file:packages/mantle-runtime/src/usecase/boot/ValidateBootUseCase.ts": {
+      "name": "ValidateBootUseCase.ts",
+      "type": "file",
+      "summary": "啟動驗證 use case，檢查 manifest 一致性：handler 是否註冊、schema／procedure 參照是否存在、HTTP route 衝突與前綴、MCP 工具名稱衝突、locale 與 translates 規則，失敗時彙整 Diagnostic 並以 BootValidationError 拋出。"
+    },
+    "file:packages/mantle-runtime/src/usecase/boot/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "usecase/boot 的 barrel，re-export ValidateBootUseCase、BootValidationError 與其 request／response DTO。"
+    },
+    "file:packages/mantle-runtime/src/usecase/content/ArchiveUseCase.ts": {
+      "name": "ArchiveUseCase.ts",
+      "type": "file",
+      "summary": "封存 entry 的 use case，取出 entry、檢查狀態機是否可轉移到 archived、以樂觀鎖封存並在發布內容時清除快取（unpublishCache）。"
+    },
+    "file:packages/mantle-runtime/src/usecase/content/ContentPublishEffects.ts": {
+      "name": "ContentPublishEffects.ts",
+      "type": "file",
+      "summary": "內容發布副作用輔助，publishCache／unpublishCache 載入站台設定後透過 PublishOrchestrator 執行發布／取消發布，集中發布相關快取效應。"
+    },
+    "file:packages/mantle-runtime/src/usecase/content/CreateDraftUseCase.ts": {
+      "name": "CreateDraftUseCase.ts",
+      "type": "file",
+      "summary": "建立草稿 entry 的 use case，驗證 schema 存在、產生 ID 與時間戳、投影並蓋上 x-mantle-bind 值、經 EntryWriteGuard 守門後建立 entry。"
+    },
+    "file:packages/mantle-runtime/src/usecase/content/DeleteEntryUseCase.ts": {
+      "name": "DeleteEntryUseCase.ts",
+      "type": "file",
+      "summary": "刪除 entry 的 use case，先確認 entry 存在（否則回 notFound Diagnostic）再委派 repository 刪除。"
+    },
+    "file:packages/mantle-runtime/src/usecase/content/GetEntryUseCase.ts": {
+      "name": "GetEntryUseCase.ts",
+      "type": "file",
+      "summary": "讀取單一 entry 的 use case，依 ID 取出 entry，找不到時回傳 notFound Diagnostic。"
+    },
+    "file:packages/mantle-runtime/src/domain/model/EntryRow.ts": {
+      "name": "EntryRow.ts",
+      "type": "file",
+      "summary": "定義 runtime 專屬的 EntryRow 列模型與樂觀鎖衝突錯誤類別（EntryVersionConflict / EntryStatusConflict），並提供 locale 提升的輔助函式。屬於 dispatcher 填寫的 runtime 事實型別。"
+    },
+    "file:packages/mantle-runtime/src/domain/model/HandlerContext.ts": {
+      "name": "HandlerContext.ts",
+      "type": "file",
+      "summary": "定義 handler 執行期的上下文型別（HandlerContext / HandlerFn 等），承載 dispatcher 在每次請求填入的 runtime 事實，供 use case 與 lifecycle hook 共用。"
+    },
+    "file:packages/mantle-runtime/src/domain/port/AssetServer.ts": {
+      "name": "AssetServer.ts",
+      "type": "file",
+      "summary": "定義 AssetServer port 介面，描述靜態資產傳輸形狀的傳輸層 port，由具體 adapter（如 Cloudflare ASSETS）綁定。"
+    },
+    "file:packages/mantle-runtime/src/domain/port/Clock.ts": {
+      "name": "Clock.ts",
+      "type": "file",
+      "summary": "定義 Clock port 介面與 SystemClock 預設實作，提供可注入的時間來源讓 use case 取得 now（利於測試與決定性行為）。"
+    },
+    "file:packages/mantle-runtime/src/domain/port/DeferredHookDispatcher.ts": {
+      "name": "DeferredHookDispatcher.ts",
+      "type": "file",
+      "summary": "定義 DeferredHookDispatcher 選用 port 及 DeferredHookEnvelope / CtxSnapshot 型別，並提供 ctxSnapshotFrom 將 HandlerContext 快照成可序列化包裹，支援延後執行的 lifecycle hook 排隊。"
+    },
+    "file:packages/mantle-runtime/src/domain/port/EntryRepository.ts": {
+      "name": "EntryRepository.ts",
+      "type": "file",
+      "summary": "定義 EntryRepository port 介面與其完整 CRUD／查詢參數型別（CreateEntryArgs、UpdateEntryArgs、ListEntriesArgs、FindEntryByDataFields 等），是 entry 資料存取的唯一 port 契約。"
+    },
+    "file:packages/mantle-runtime/src/domain/port/HandlerRegistry.ts": {
+      "name": "HandlerRegistry.ts",
+      "type": "file",
+      "summary": "定義 HandlerRegistry port、InMemoryHandlerRegistry 實作與 buildHandlerRegistry 工廠，集中註冊與查詢 procedure handler。"
+    },
+    "file:packages/mantle-runtime/src/domain/port/IdGenerator.ts": {
+      "name": "IdGenerator.ts",
+      "type": "file",
+      "summary": "定義 IdGenerator port 介面與 RandomUuidGenerator 預設實作，提供可注入的 ID 產生器以利測試與決定性。"
+    },
+    "file:packages/mantle-runtime/src/domain/port/LifecycleHookRunner.ts": {
+      "name": "LifecycleHookRunner.ts",
+      "type": "file",
+      "summary": "定義 LifecycleHookRunner port 與 RunLifecycleHookRequest 型別，描述在 entry 變更前後執行 lifecycle trigger hook 的契約。"
+    },
+    "file:packages/mantle-runtime/src/domain/port/SiteConfigRepository.ts": {
+      "name": "SiteConfigRepository.ts",
+      "type": "file",
+      "summary": "定義 SiteConfigRepository port 介面，描述讀取站台設定（locales、media purposes 等）的資料存取契約。"
+    },
+    "file:packages/mantle-runtime/src/domain/port/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "domain/port 的 barrel，集中 re-export 全部 runtime port 介面與其輔助型別（DatabaseDriver、KvCache、EntryRepository、MediaStorage、DeferredHookDispatcher 等），讓 port 表面可由單一檔案完整探索。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/BuiltinProjector.ts": {
+      "name": "BuiltinProjector.ts",
+      "type": "file",
+      "summary": "domain service，提供 projectAndStamp／projectUpdateAndStamp 將輸入投影為 entry data 並計算 x-mantle-bind 綁定值（如 createdAt、authorId），是 builtin 寫入的投影核心。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/McpToolNaming.ts": {
+      "name": "McpToolNaming.ts",
+      "type": "file",
+      "summary": "domain service，提供 mcpToolNameSegment 名稱正規化與保留的 MCP 工具名稱／前綴常數，確保 MCP 工具命名一致且不與通用工具衝突。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/Pagination.ts": {
+      "name": "Pagination.ts",
+      "type": "file",
+      "summary": "domain service，提供 clampLimit／clampShow／clampPage 等分頁邊界鉗制工具與預設常數，集中分頁參數的安全處理。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/TriggerIndex.ts": {
+      "name": "TriggerIndex.ts",
+      "type": "file",
+      "summary": "domain service，TriggerIndex 類別將 trigger 依 schema 與 hook 建立索引，供 lifecycle 執行時快速查詢 forHook 並以 hasAny 判斷是否需觸發。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/io/EntryWriteGuard.ts": {
+      "name": "EntryWriteGuard.ts",
+      "type": "file",
+      "summary": "domain service，entry 寫入的守門檢查點（assertEntryWritable），整合 schema 驗證、locale 正規化檢查與唯一索引檢查，將寫入不變量集中於 runtime 並以結構化 Diagnostic 回報。"
+    },
+    "file:packages/mantle-runtime/src/usecase/render/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "render usecase 的 barrel，匯出 llms.txt/sitemap 組譯、即時渲染與 SEO meta 組譯等 usecase。"
+    },
+    "file:packages/mantle-runtime/src/usecase/view/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "view usecase 的 barrel，匯出 ExecuteViewUseCase 及其回應型別。"
+    },
+    "file:packages/mantle-runtime/test/builtin-op.test.ts": {
+      "name": "builtin-op.test.ts",
+      "type": "file",
+      "summary": "內建 CRUD 操作的整合測試，透過 harness 組裝 InvokeBuiltin/InvokeProcedure 並驗證各 op 行為。"
+    },
+    "file:packages/mantle-runtime/test/builtin-projector.test.ts": {
+      "name": "builtin-projector.test.ts",
+      "type": "file",
+      "summary": "BuiltinProjector 投影與蓋章邏輯的單元測試。"
+    },
+    "file:packages/mantle-runtime/test/content-ops.test.ts": {
+      "name": "content-ops.test.ts",
+      "type": "file",
+      "summary": "內容操作 usecase（草稿/發佈/下架/列表/i18n）的大型整合測試套件。"
+    },
+    "file:packages/mantle-runtime/test/dispatcher-boot.test.ts": {
+      "name": "dispatcher-boot.test.ts",
+      "type": "file",
+      "summary": "boot 驗證流程的整合測試，覆蓋 manifest 校驗與 ValidateBootUseCase 行為。"
+    },
+    "file:packages/mantle-runtime/test/dispatcher-invoke.test.ts": {
+      "name": "dispatcher-invoke.test.ts",
+      "type": "file",
+      "summary": "procedure 派發呼叫的整合測試，驗證 InvokeProcedureUseCase 與 handler registry 互動。"
+    },
+    "file:packages/mantle-runtime/test/entry-writer.test.ts": {
+      "name": "entry-writer.test.ts",
+      "type": "file",
+      "summary": "DatabaseEntryRepository 寫入路徑的整合測試，使用記憶體資料庫驗證持久化行為。"
+    },
+    "file:packages/mantle-runtime/test/fakes/in-memory-store.ts": {
+      "name": "in-memory-store.ts",
+      "type": "file",
+      "summary": "測試用記憶體版 EntryRepository，以 Map 實作 CRUD、分頁與依資料欄位查詢。"
+    },
+    "file:packages/mantle-runtime/test/fakes/manifests.ts": {
+      "name": "manifests.ts",
+      "type": "file",
+      "summary": "測試用 manifest 工廠集合，建構 schema/view/procedure/trigger 等假 manifest atom。"
+    },
+    "file:packages/mantle-runtime/test/fakes/site-config.ts": {
+      "name": "site-config.ts",
+      "type": "file",
+      "summary": "測試用記憶體版 SiteConfigRepository，提供語系與媒體用途設定。"
+    },
+    "file:packages/mantle-runtime/test/lifecycle-hooks.test.ts": {
+      "name": "lifecycle-hooks.test.ts",
+      "type": "file",
+      "summary": "lifecycle hook 觸發與 deferred hook 派發的大型整合測試套件。"
+    },
+    "file:packages/mantle-runtime/test/mcp.test.ts": {
+      "name": "mcp.test.ts",
+      "type": "file",
+      "summary": "MCP JSON-RPC dispatcher 的整合測試，覆蓋工具列舉與 procedure 呼叫等 MCP 協定行為。"
+    },
+    "file:packages/mantle-runtime/test/runtime.test.ts": {
+      "name": "runtime.test.ts",
+      "type": "file",
+      "summary": "createCmsRuntime 組裝根的整合測試，驗證 port 綁定與 boot 流程的端到端行為。"
+    },
+    "file:packages/mantle-runtime/test/trigger-index.test.ts": {
+      "name": "trigger-index.test.ts",
+      "type": "file",
+      "summary": "TriggerIndex 依 hook/HTTP/MCP 來源建索引與查詢的單元測試。"
+    },
+    "file:packages/mantle-runtime/src/usecase/content/ListEntriesUseCase.ts": {
+      "name": "ListEntriesUseCase.ts",
+      "type": "file",
+      "summary": "分頁列出某 collection entry 的 usecase，校驗 schema 存在後委派 EntryRepository.list 並 clamp 分頁參數。"
+    },
+    "file:packages/mantle-runtime/src/usecase/content/RequestPublishUseCase.ts": {
+      "name": "RequestPublishUseCase.ts",
+      "type": "file",
+      "summary": "請求發佈 entry 的 usecase；檢查狀態轉移合法性、translates 父層已發佈不變式，並透過 publishCache 進行 KV 快取失效。"
+    },
+    "file:packages/mantle-runtime/src/usecase/content/UnpublishUseCase.ts": {
+      "name": "UnpublishUseCase.ts",
+      "type": "file",
+      "summary": "下架已發佈 entry 的 usecase；校驗狀態轉移合法性後轉回 draft，並透過 unpublishCache 失效 KV 快取。"
+    },
+    "file:packages/mantle-runtime/src/usecase/content/UpdateDraftUseCase.ts": {
+      "name": "UpdateDraftUseCase.ts",
+      "type": "file",
+      "summary": "更新草稿 entry 的 usecase；透過 BuiltinProjector 投影並蓋章資料、經 EntryWriteGuard 把關後以樂觀鎖更新。"
+    },
+    "file:packages/mantle-runtime/src/usecase/content/diagnostics.ts": {
+      "name": "diagnostics.ts",
+      "type": "file",
+      "summary": "content usecase 共用的 diagnostic 工廠集合（衝突、找不到、非法轉移、未知 schema）與保留欄位處理工具。"
+    },
+    "file:packages/mantle-runtime/src/usecase/content/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "content usecase 的 barrel，匯出各內容操作 usecase 與共用 diagnostic 工廠。"
+    },
+    "file:packages/mantle-runtime/src/usecase/dto/content/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "content usecase 的請求/回應 DTO 與 ContentState enum 定義，承載各內容操作的型別契約。"
+    },
+    "file:packages/mantle-runtime/src/usecase/dto/lifecycle/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "lifecycle usecase 的 DTO 定義，描述 deferred hook 執行請求的型別。"
+    },
+    "file:packages/mantle-runtime/src/usecase/dto/procedure/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "procedure usecase 的請求/回應 DTO 定義，承載 procedure 呼叫的型別契約。"
+    },
+    "file:packages/mantle-runtime/src/usecase/lifecycle/RunDeferredHookUseCase.ts": {
+      "name": "RunDeferredHookUseCase.ts",
+      "type": "file",
+      "summary": "執行 deferred lifecycle hook 的 usecase，將 hook envelope 委派給 LifecycleHookRunner。"
+    },
+    "file:packages/mantle-runtime/src/usecase/lifecycle/RunLifecycleHooksUseCase.ts": {
+      "name": "RunLifecycleHooksUseCase.ts",
+      "type": "file",
+      "summary": "依 TriggerIndex 查出對應某 lifecycle hook 的 procedure 並逐一觸發呼叫的 usecase。"
+    },
+    "file:packages/mantle-runtime/src/usecase/lifecycle/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "lifecycle usecase 的 barrel，匯出 RunLifecycleHooksUseCase 與 RunDeferredHookUseCase。"
+    },
+    "file:packages/mantle-runtime/src/usecase/media/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "media usecase 的 barrel，匯出建立/提交上傳 usecase 及 MIME 白名單與上傳常數。"
+    },
+    "file:packages/mantle-runtime/src/usecase/procedure/InvokeBuiltinUseCase.ts": {
+      "name": "InvokeBuiltinUseCase.ts",
+      "type": "file",
+      "summary": "執行內建 CRUD 操作（create/update/upsert/delete/archive）的 usecase，將 builtin procedure 投影並寫入 EntryRepository。"
+    },
+    "file:packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts": {
+      "name": "InvokeProcedureUseCase.ts",
+      "type": "file",
+      "summary": "procedure 呼叫的核心 usecase：評估 auth 述詞、以 zod 驗證輸入/輸出（含快取）、委派 handler 或內建操作。"
+    },
+    "file:packages/mantle-runtime/src/usecase/procedure/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "procedure usecase 的 barrel，匯出 InvokeProcedureUseCase、InvokeFailure 與 InvokeBuiltinUseCase。"
+    },
+    "file:packages/mantle-runtime/src/domain/model/SeoMeta.ts": {
+      "name": "SeoMeta.ts",
+      "type": "file",
+      "summary": "定義 SEO meta 的領域模型型別（標題、描述、canonical、hreflang、JSON-LD 等欄位），供 SEO 組裝與 HTML 渲染服務共用。"
+    },
+    "file:packages/mantle-runtime/src/domain/model/TemplateRegistry.ts": {
+      "name": "TemplateRegistry.ts",
+      "type": "file",
+      "summary": "提供 entry 與 list 模板的註冊與查詢容器，集中保管 HTML 渲染所需的模板函式。"
+    },
+    "file:packages/mantle-runtime/src/domain/port/DatabaseDriver.ts": {
+      "name": "DatabaseDriver.ts",
+      "type": "file",
+      "summary": "定義 runtime 必備的資料庫驅動 port 介面（prepare/bind/first/all 等），由 Cloudflare D1 等具體 adapter 綁定，runtime 不得依賴任何 CF 專屬型別。"
+    },
+    "file:packages/mantle-runtime/src/domain/port/KvCache.ts": {
+      "name": "KvCache.ts",
+      "type": "file",
+      "summary": "定義讀多型 KV 快取的 port 介面（get/put/delete），供發佈產物與快取失效機制使用，由 adapter 綁定具體 KV namespace。"
+    },
+    "file:packages/mantle-runtime/src/domain/port/MediaAssetRepository.ts": {
+      "name": "MediaAssetRepository.ts",
+      "type": "file",
+      "summary": "定義媒體資產資料存取的 port 介面（findById、findManyByIds、save、delete），由持久層具體 repository 實作。"
+    },
+    "file:packages/mantle-runtime/src/domain/port/MediaStorage.ts": {
+      "name": "MediaStorage.ts",
+      "type": "file",
+      "summary": "定義選用的 R2 媒體儲存 port 介面與媒體資產領域型別，並提供挑選主要變體的輔助函式；屬 v0.1.0 介面已定義但實作 stub 的選用功能。"
+    },
+    "file:packages/mantle-runtime/src/domain/port/PublishOrchestrator.ts": {
+      "name": "PublishOrchestrator.ts",
+      "type": "file",
+      "summary": "定義發佈協調器的 port 介面（publish/unpublish），抽象出將 entry 渲染並寫入快取的發佈流程契約。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/AbsoluteUrl.ts": {
+      "name": "AbsoluteUrl.ts",
+      "type": "file",
+      "summary": "提供將相對路徑組合為絕對 URL，以及為路徑附加 .md 副檔名的純函式工具，供 SEO、sitemap 與 markdown 序列化共用。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/EntrySeoSupport.ts": {
+      "name": "EntrySeoSupport.ts",
+      "type": "file",
+      "summary": "當 entry 具有公開路徑時，協調呼叫 SEO 組裝器產生該 entry 的 SEO meta，作為渲染流程的輔助服務。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/HtmlRenderer.ts": {
+      "name": "HtmlRenderer.ts",
+      "type": "file",
+      "summary": "以註冊的模板渲染 entry 與 list 的 HTML，並注入 GA4 / Facebook Pixel 等追蹤標籤，包含追蹤 ID 正規化邏輯。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/MarkdownSerializer.ts": {
+      "name": "MarkdownSerializer.ts",
+      "type": "file",
+      "summary": "將 entry 序列化為帶 YAML front-matter 的 Markdown，並組裝 llms.txt 內容，供 agent 友善的內容輸出使用。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/PreviewBanner.ts": {
+      "name": "PreviewBanner.ts",
+      "type": "file",
+      "summary": "為預覽頁面注入狀態橫幅 HTML，提供預設橫幅樣式與 HTML 跳脫，避免預覽內容造成 XSS。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/PublicPathResolver.ts": {
+      "name": "PublicPathResolver.ts",
+      "type": "file",
+      "summary": "建立公開路徑解析器，依站台設定為 entry 計算對外公開的 URL 路徑，封裝 slug 與 locale 的路徑組合規則。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/PublishKeys.ts": {
+      "name": "PublishKeys.ts",
+      "type": "file",
+      "summary": "集中產生發佈產物的 KV 鍵與公開路徑（entry HTML/Markdown、list HTML、llms.txt），確保發佈與失效兩端使用一致的鍵命名規則。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/SeoMetaComposer.ts": {
+      "name": "SeoMetaComposer.ts",
+      "type": "file",
+      "summary": "依 entry 與站台設定組裝完整 SEO meta（canonical、hreflang、JSON-LD），並將其渲染為 HTML meta 標籤，包含屬性與 JSON-LD 跳脫。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/SitemapSerializer.ts": {
+      "name": "SitemapSerializer.ts",
+      "type": "file",
+      "summary": "將 entry 清單序列化為 XML sitemap，含 URL 與 lastmod 並對內容做 XML 跳脫。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/io/JoinedEntryReader.ts": {
+      "name": "JoinedEntryReader.ts",
+      "type": "file",
+      "summary": "在讀取翻譯型 entry 時，依資料欄位 join 出其母 entry，支援單筆與批次清單的母項補齊，供多語系渲染使用。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/io/MediaAssetReferences.ts": {
+      "name": "MediaAssetReferences.ts",
+      "type": "file",
+      "summary": "遞迴掃描 entry 資料蒐集所引用的媒體資產 ID，並透過 repository 批次解析出對應的媒體資產。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/io/PublishedEntries.ts": {
+      "name": "PublishedEntries.ts",
+      "type": "file",
+      "summary": "提供已發佈 entry 的查詢 IO 服務（依條件、ID、slug、資料欄位查詢），含安全欄位驗證以防 SQL 注入並將資料列轉為 entry。"
+    },
+    "file:packages/mantle-runtime/src/infrastructure/boot/canonicalMigrations.ts": {
+      "name": "canonicalMigrations.ts",
+      "type": "file",
+      "summary": "宣告 runtime 啟動時套用的正規化資料庫 migration（建立 entries、media_assets 等資料表）的常數清單。"
+    },
+    "file:packages/mantle-runtime/src/infrastructure/persistence/DatabaseMediaAssetRepository.ts": {
+      "name": "DatabaseMediaAssetRepository.ts",
+      "type": "file",
+      "summary": "以 DatabaseDriver 實作 MediaAssetRepository port，提供媒體資產的查詢、批次查詢、upsert 與刪除，並處理變體與 metadata 的 JSON 序列化。"
+    },
+    "file:packages/mantle-runtime/src/infrastructure/render/HtmlPublishOrchestrator.ts": {
+      "name": "HtmlPublishOrchestrator.ts",
+      "type": "file",
+      "summary": "實作 PublishOrchestrator port，協調發佈/取消發佈時的 entry 渲染、SEO 組裝、媒體解析與 list/llms.txt 重建，並寫入或清除 KV 快取。"
+    },
+    "file:packages/mantle-runtime/src/usecase/dto/media/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "媒體相關 use-case 的請求/回應 DTO 定義與 barrel 匯出（建立與提交媒體上傳的型別）。"
+    },
+    "file:packages/mantle-runtime/src/usecase/dto/render/ComposeEntrySeoMetaRequest.ts": {
+      "name": "ComposeEntrySeoMetaRequest.ts",
+      "type": "file",
+      "summary": "定義組裝 entry SEO meta use-case 的請求 DTO 型別。"
+    },
+    "file:packages/mantle-runtime/src/usecase/dto/render/ComposeLlmsTxtRequest.ts": {
+      "name": "ComposeLlmsTxtRequest.ts",
+      "type": "file",
+      "summary": "定義組裝 llms.txt use-case 的請求 DTO 型別。"
+    },
+    "file:packages/mantle-admin-ui/src/features/content/entry-edit-view.tsx": {
+      "name": "entry-edit-view.tsx",
+      "type": "file",
+      "summary": "Entry 編輯主 view，依 schema 動態渲染欄位（含陣列、媒體、JSON、商品 SKU 等），處理讀寫與儲存。"
+    },
+    "file:packages/mantle-admin-ui/src/features/content/status.ts": {
+      "name": "status.ts",
+      "type": "file",
+      "summary": "將編輯狀態（status）對應為當前語系顯示 label 的輔助函式。"
+    },
+    "file:packages/mantle-admin-ui/src/features/editor/editor-view.tsx": {
+      "name": "editor-view.tsx",
+      "type": "file",
+      "summary": "獨立的富文字編輯器 view，包裝 RichTextEditor 供路由掛載。"
+    },
+    "file:packages/mantle-admin-ui/src/features/editor/rich-text-editor.tsx": {
+      "name": "rich-text-editor.tsx",
+      "type": "file",
+      "summary": "富文字編輯器組件，含工具列、媒體/影片插入對話框、Markdown 預覽渲染與 HTML 跳脫。"
+    },
+    "file:packages/mantle-admin-ui/src/features/media/media-assets.ts": {
+      "name": "media-assets.ts",
+      "type": "file",
+      "summary": "媒體資產的靜態種子資料（MEDIA_ASSETS）供開發/示範使用。"
+    },
+    "file:packages/mantle-admin-ui/src/features/media/media-library-view.tsx": {
+      "name": "media-library-view.tsx",
+      "type": "file",
+      "summary": "媒體庫 view，以網格顯示媒體資產並提供類型篩選。"
+    },
+    "file:packages/mantle-admin-ui/src/features/media/media-upload.ts": {
+      "name": "media-upload.ts",
+      "type": "file",
+      "summary": "媒體上傳輔助函式集合，含上傳、用途判定、影像變體產生與 MIME 處理。"
+    },
+    "file:packages/mantle-admin-ui/src/features/system/approvals-view.tsx": {
+      "name": "approvals-view.tsx",
+      "type": "file",
+      "summary": "審核（approvals）佇列 view，列出待審核的 entry 變更群組並提供審核操作。"
+    },
+    "file:packages/mantle-admin-ui/src/features/system/not-found-view.tsx": {
+      "name": "not-found-view.tsx",
+      "type": "file",
+      "summary": "404 找不到頁面的 view 組件。"
+    },
+    "file:packages/mantle-admin-ui/src/features/system/preferences-view.tsx": {
+      "name": "preferences-view.tsx",
+      "type": "file",
+      "summary": "偏好設定 view，提供語言搜尋選擇與主題切換等使用者偏好控制。"
+    },
+    "file:packages/mantle-admin-ui/src/features/system/settings-view.tsx": {
+      "name": "settings-view.tsx",
+      "type": "file",
+      "summary": "站台設定 view，以分頁形式呈現並編輯站台層級設定。"
+    },
+    "file:packages/mantle-admin-ui/src/features/system/staff-view.tsx": {
+      "name": "staff-view.tsx",
+      "type": "file",
+      "summary": "staff 管理 view，列出管理人員、角色並提供邀請功能。"
+    },
+    "file:packages/mantle-admin-ui/src/app/admin-app.tsx": {
+      "name": "admin-app.tsx",
+      "type": "file",
+      "summary": "管理後台 SPA 的根組件，依認證 Gate 狀態切換登入畫面與已認證 layout，並掛載各功能 view。"
+    },
+    "file:packages/mantle-admin-ui/src/app/i18n.ts": {
+      "name": "i18n.ts",
+      "type": "file",
+      "summary": "管理後台多語系字典與 t() 翻譯查詢函式，依當前語系回傳對應 UI 文字。"
+    },
+    "file:packages/mantle-admin-ui/src/app/preferences.tsx": {
+      "name": "preferences.tsx",
+      "type": "file",
+      "summary": "使用者偏好（語言、文字方向、主題）的 React Context Provider，含 localStorage 持久化與語系正規化。"
+    },
+    "file:packages/mantle-admin-ui/src/app/query-client.ts": {
+      "name": "query-client.ts",
+      "type": "file",
+      "summary": "建立共用的 TanStack Query QueryClient 實例，供整個管理後台資料抓取使用。"
+    },
+    "file:packages/mantle-admin-ui/src/app/router.tsx": {
+      "name": "router.tsx",
+      "type": "file",
+      "summary": "輕量級客戶端路由 Provider，攔截 SPA 內部連結並提供 useAdminRouter / useAdminLocation hook。"
+    },
+    "file:packages/mantle-admin-ui/src/brand/aotter-mantle.tsx": {
+      "name": "aotter-mantle.tsx",
+      "type": "file",
+      "summary": "Aotter Mantle 品牌識別組件與常數（logo mark、wordmark、套件版本與連結）。"
+    },
+    "file:packages/mantle-admin-ui/src/context/layout-provider.tsx": {
+      "name": "layout-provider.tsx",
+      "type": "file",
+      "summary": "layout 狀態（側邊欄變體、開合）的 Context Provider，以 cookie 持久化使用者偏好。"
+    },
+    "file:packages/mantle-admin-ui/src/features/auth/auth-views.tsx": {
+      "name": "auth-views.tsx",
+      "type": "file",
+      "summary": "認證相關 view 集合：登入、社群登入、Email OTP、Magic Link、存取拒絕與登入狀態畫面。"
+    },
+    "file:packages/mantle-admin-ui/src/features/console/guide-overlay.tsx": {
+      "name": "guide-overlay.tsx",
+      "type": "file",
+      "summary": "新手導覽 overlay 組件，依目標元素位置高亮並逐步引導使用者熟悉管理後台。"
+    },
+    "file:packages/mantle-admin-ui/src/features/console/home-view.tsx": {
+      "name": "home-view.tsx",
+      "type": "file",
+      "summary": "管理後台首頁（console），顯示集合概覽與快捷操作入口。"
+    },
+    "file:packages/mantle-admin-ui/src/features/content/collection-labels.ts": {
+      "name": "collection-labels.ts",
+      "type": "file",
+      "summary": "集合標題與描述的多語系 label 解析輔助函式。"
+    },
+    "file:packages/mantle-admin-ui/src/features/content/collection-view.tsx": {
+      "name": "collection-view.tsx",
+      "type": "file",
+      "summary": "集合內容列表 view，含搜尋、狀態篩選、entry 列表渲染與時間格式化。"
+    },
+    "file:packages/mantle-admin-ui/src/layout/app-sidebar.tsx": {
+      "name": "app-sidebar.tsx",
+      "type": "file",
+      "summary": "組裝 admin console 左側導覽列的元件，整合品牌標題、導覽群組與使用者區塊，並連動 layout 與偏好設定狀態。"
+    },
+    "file:packages/mantle-admin-ui/src/layout/app-title.tsx": {
+      "name": "app-title.tsx",
+      "type": "file",
+      "summary": "側邊欄頂部的品牌標題元件，顯示 Aotter Mantle 標誌並於行動裝置點擊時收合側邊欄。"
+    },
+    "file:packages/mantle-admin-ui/src/layout/authenticated-layout.tsx": {
+      "name": "authenticated-layout.tsx",
+      "type": "file",
+      "summary": "已登入使用者的主版面外殼，透過 react-query 抓取 site、collections 與使用者資料，建構導覽群組並組裝 sidebar、header 與主內容區。"
+    },
+    "file:packages/mantle-admin-ui/src/layout/header.tsx": {
+      "name": "header.tsx",
+      "type": "file",
+      "summary": "頂部 header 元件，含 sidebar 觸發鈕、捲動陰影效果、站台公開連結與使用者 profile dropdown。"
+    },
+    "file:packages/mantle-admin-ui/src/layout/main.tsx": {
+      "name": "main.tsx",
+      "type": "file",
+      "summary": "版面主內容容器元件，依 fixed/fluid 屬性套用對應的版面寬度與捲動樣式。"
+    },
+    "file:packages/mantle-admin-ui/src/layout/nav-group.tsx": {
+      "name": "nav-group.tsx",
+      "type": "file",
+      "summary": "側邊欄導覽群組的完整渲染邏輯，涵蓋連結項、可摺疊子選單、收合態下拉選單，以及 active 狀態判斷工具。"
+    },
+    "file:packages/mantle-admin-ui/src/layout/nav-user.tsx": {
+      "name": "nav-user.tsx",
+      "type": "file",
+      "summary": "側邊欄底部的使用者資訊區塊，顯示頭像、登入名稱與角色，並提供下拉式登出操作。"
+    },
+    "file:packages/mantle-admin-ui/src/layout/preference-controls.tsx": {
+      "name": "preference-controls.tsx",
+      "type": "file",
+      "summary": "提供語系與主題切換的下拉控制元件，連動 usePreferences 偏好狀態。"
+    },
+    "file:packages/mantle-admin-ui/src/layout/profile-dropdown.tsx": {
+      "name": "profile-dropdown.tsx",
+      "type": "file",
+      "summary": "header 中的使用者 profile 下拉選單，顯示頭像與角色並提供登出操作。"
+    },
+    "file:packages/mantle-admin-ui/src/layout/skip-to-main.tsx": {
+      "name": "skip-to-main.tsx",
+      "type": "file",
+      "summary": "無障礙跳至主內容連結元件，並匯出主內容區的 MAIN_CONTENT_ID 常數。"
+    },
+    "file:packages/mantle-admin-ui/src/layout/types.ts": {
+      "name": "types.ts",
+      "type": "file",
+      "summary": "版面導覽相關的型別定義，描述導覽群組、連結與可摺疊項目，並提供 isCollapsible 判別工具。"
+    },
+    "file:packages/mantle-admin-ui/src/lib/api.ts": {
+      "name": "api.ts",
+      "type": "file",
+      "summary": "admin SPA 的 HTTP 客戶端封裝，提供 fetch 包裝、JSON 解析、錯誤處理與 ApiError 例外類別。"
+    },
+    "file:packages/mantle-admin-ui/src/lib/types.ts": {
+      "name": "types.ts",
+      "type": "file",
+      "summary": "admin SPA 共用的領域型別定義，涵蓋 collections、entries、使用者與內容狀態，並匯出編輯/簡易狀態列舉常數。"
+    },
+    "file:packages/mantle-admin-ui/src/lib/utils.ts": {
+      "name": "utils.ts",
+      "type": "file",
+      "summary": "提供 cn 工具函式，以 clsx 與 tailwind-merge 合併並去重 Tailwind class 名稱。"
+    },
+    "file:packages/mantle-admin-ui/src/main.tsx": {
+      "name": "main.tsx",
+      "type": "file",
+      "summary": "admin SPA 的進入點，掛載 React root 並組合 PreferencesProvider、QueryClient 與 router。"
+    },
+    "file:packages/mantle-admin-ui/src/ui/admin-table.tsx": {
+      "name": "admin-table.tsx",
+      "type": "file",
+      "summary": "表格基礎元件集合，提供 TableShell、TableHeadCell 與 TableCell 等版型外殼。"
+    },
+    "file:packages/mantle-admin-ui/src/ui/button.tsx": {
+      "name": "button.tsx",
+      "type": "file",
+      "summary": "可重用按鈕元件，以 class-variance-authority 定義多種變體與尺寸的 buttonVariants。"
+    },
+    "file:packages/mantle-admin-ui/src/ui/collapsible.tsx": {
+      "name": "collapsible.tsx",
+      "type": "file",
+      "summary": "重新匯出 Radix Collapsible 基礎元件的薄封裝 barrel。"
+    },
+    "file:packages/mantle-admin-ui/src/ui/dropdown-menu.tsx": {
+      "name": "dropdown-menu.tsx",
+      "type": "file",
+      "summary": "下拉選單元件集合，封裝 Radix DropdownMenu 並套用統一樣式，匯出 trigger、content、item 等子元件。"
+    },
+    "file:packages/mantle-admin-ui/src/ui/page.tsx": {
+      "name": "page.tsx",
+      "type": "file",
+      "summary": "頁面層級的共用 UI 元件集合，含 PageHeader、SectionCard、EmptyState、ErrorBox 與可複製欄位 CopyField。"
+    },
+    "file:packages/mantle-admin-ui/src/ui/separator.tsx": {
+      "name": "separator.tsx",
+      "type": "file",
+      "summary": "封裝 Radix Separator 的分隔線元件，套用統一樣式。"
+    },
+    "file:packages/mantle-admin-ui/src/ui/sheet.tsx": {
+      "name": "sheet.tsx",
+      "type": "file",
+      "summary": "封裝 Radix Dialog 的側拉式 sheet 元件集合，提供 overlay、content、header、title 等子元件，供行動裝置側邊欄使用。"
+    },
+    "file:packages/mantle-admin-ui/src/ui/sidebar.tsx": {
+      "name": "sidebar.tsx",
+      "type": "file",
+      "summary": "完整的側邊欄基礎元件系統，提供 SidebarProvider context、行動裝置偵測、展開/收合狀態管理與一整套組合元件（header、content、menu、sub-menu 等）。"
+    },
+    "file:packages/mantle-admin-ui/src/ui/status-badge.tsx": {
+      "name": "status-badge.tsx",
+      "type": "file",
+      "summary": "內容狀態徽章元件，依內容狀態值渲染對應顏色與標籤。"
+    },
+    "file:packages/mantle-runtime/src/usecase/dto/render/ComposeSitemapRequest.ts": {
+      "name": "ComposeSitemapRequest.ts",
+      "type": "file",
+      "summary": "定義 ComposeSitemapUseCase 的請求 DTO 介面，描述產生 sitemap 所需的網站設定與分頁參數。"
+    },
+    "file:packages/mantle-runtime/src/usecase/dto/render/PreviewEntryRequest.ts": {
+      "name": "PreviewEntryRequest.ts",
+      "type": "file",
+      "summary": "PreviewEntryUseCase 的請求 DTO，攜帶 collection／slug／locale、狀態回退順序（statusOrder）與可選的預覽橫幅 HTML。"
+    },
+    "file:packages/mantle-runtime/src/usecase/dto/render/RenderEntryLiveRequest.ts": {
+      "name": "RenderEntryLiveRequest.ts",
+      "type": "file",
+      "summary": "RenderEntryLiveUseCase 的請求 DTO，描述即時渲染單篇已發佈 entry 所需的 collection／slug／locale 與網站設定。"
+    },
+    "file:packages/mantle-runtime/src/usecase/dto/render/RenderListLiveRequest.ts": {
+      "name": "RenderListLiveRequest.ts",
+      "type": "file",
+      "summary": "RenderListLiveUseCase 的請求 DTO，描述即時渲染列表頁所需的 collection 與網站設定參數。"
+    },
+    "file:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts": {
+      "name": "CommitMediaUploadUseCase.ts",
+      "type": "file",
+      "summary": "媒體上傳的提交 use case，從 KV 取出待處理上傳紀錄、驗證未過期後將物件落地至 storage 並寫入 MediaAssetRepository。"
+    },
+    "file:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts": {
+      "name": "CreateMediaUploadUseCase.ts",
+      "type": "file",
+      "summary": "媒體上傳的建立 use case，依站台媒體用途政策驗證 variant 覆蓋度、MIME 白名單與檔案大小上限，產生上傳 URL 並將待處理紀錄寫入 KV。"
+    },
+    "file:packages/mantle-runtime/src/usecase/media/PendingUploadRecord.ts": {
+      "name": "PendingUploadRecord.ts",
+      "type": "file",
+      "summary": "定義暫存於 KV 的待處理上傳紀錄結構，承載 commit 階段所需的 variant、過期時間與 storage 物件鍵等資訊。"
+    },
+    "file:packages/mantle-runtime/src/usecase/media/diagnostics.ts": {
+      "name": "diagnostics.ts",
+      "type": "file",
+      "summary": "媒體用例的結構化 Diagnostic 工廠集合，涵蓋未設定、MIME／SVG 拒絕、檔案過大、上傳過期、variant 不完整或可疑尺寸等錯誤情境。"
+    },
+    "file:packages/mantle-runtime/src/usecase/media/mediaAllowlist.ts": {
+      "name": "mediaAllowlist.ts",
+      "type": "file",
+      "summary": "媒體上傳的政策常數與輔助函式集合，定義 MIME 白名單、預設大小上限、KV TTL 與前綴，並提供 MIME 檢核與副檔名對應。"
+    },
+    "file:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts": {
+      "name": "ComposeEntrySeoMetaUseCase.ts",
+      "type": "file",
+      "summary": "組裝單篇 entry 的 SEO meta 用例，解析公開路徑、跨 locale 讀取同篇兄弟 entry 以產生 hreflang，並交由 SeoMetaComposer 產出 meta。"
+    },
+    "file:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts": {
+      "name": "ComposeLlmsTxtUseCase.ts",
+      "type": "file",
+      "summary": "組裝 llms.txt 的用例，讀取所有已發佈 entry、依 collection 分組後委派 MarkdownSerializer 序列化成 LLM 友善的純文字索引。"
+    },
+    "file:packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts": {
+      "name": "ComposeSitemapUseCase.ts",
+      "type": "file",
+      "summary": "組裝 sitemap 的用例，讀取已發佈 entry、透過 PublishKeys 計算公開路徑後委派 SitemapSerializer 產出 sitemap XML。"
+    },
+    "file:packages/mantle-runtime/src/usecase/render/PreviewEntryUseCase.ts": {
+      "name": "PreviewEntryUseCase.ts",
+      "type": "file",
+      "summary": "預覽單篇 entry 的用例，依狀態回退順序查找 entry、組合 SEO 與媒體資產、渲染 HTML 並注入預覽橫幅。"
+    },
+    "file:packages/mantle-runtime/src/usecase/render/RenderEntryLiveUseCase.ts": {
+      "name": "RenderEntryLiveUseCase.ts",
+      "type": "file",
+      "summary": "即時渲染單篇已發佈 entry 的用例，查找 entry、join 翻譯母篇、組合 SEO 與媒體資產後渲染成 HTML。"
+    },
+    "file:packages/mantle-runtime/src/usecase/render/RenderListLiveUseCase.ts": {
+      "name": "RenderListLiveUseCase.ts",
+      "type": "file",
+      "summary": "即時渲染列表頁的用例，讀取已發佈 entry、join 母篇、解析媒體資產後委派 HtmlRenderer 產出列表 HTML。"
+    },
+    "file:packages/mantle-runtime/test/compose-render.test.ts": {
+      "name": "compose-render.test.ts",
+      "type": "file",
+      "summary": "ComposeLlmsTxtUseCase 與 ComposeSitemapUseCase 的單元測試，使用 InMemoryDatabase seed 已發佈 entry 並驗證輸出。"
+    },
+    "file:packages/mantle-runtime/test/fakes/kv.ts": {
+      "name": "kv.ts",
+      "type": "file",
+      "summary": "測試用的 InMemoryKv，以 Map 實作 KvCache port，支援 get／put／delete／list 與 TTL 快照，供媒體與渲染測試使用。"
+    },
+    "file:packages/mantle-runtime/test/media-asset-references.test.ts": {
+      "name": "media-asset-references.test.ts",
+      "type": "file",
+      "summary": "MediaAssetReferences 服務的單元測試，驗證從 entry 收集媒體資產 ID 並批次解析的行為與查詢次數。"
+    },
+    "file:packages/mantle-runtime/test/media.test.ts": {
+      "name": "media.test.ts",
+      "type": "file",
+      "summary": "媒體上傳建立與提交用例的完整測試套件，涵蓋 MIME 白名單、大小上限、variant 政策覆蓋、過期與 KV 互動等情境。"
+    },
+    "file:packages/mantle-runtime/test/preview-banner.test.ts": {
+      "name": "preview-banner.test.ts",
+      "type": "file",
+      "summary": "PreviewBanner 服務的單元測試，驗證預設橫幅 HTML 跳脫與注入至 body 的行為。"
+    },
+    "file:packages/mantle-runtime/test/public-path-resolver.test.ts": {
+      "name": "public-path-resolver.test.ts",
+      "type": "file",
+      "summary": "PublicPathResolver 服務的單元測試，驗證依站台設定與 entry 計算公開路徑的各種情境。"
+    },
+    "file:packages/mantle-runtime/test/render-markdown.test.ts": {
+      "name": "render-markdown.test.ts",
+      "type": "file",
+      "summary": "MarkdownSerializer 服務的單元測試，驗證 entry 序列化為 markdown body 與 llms.txt 的輸出。"
+    },
+    "file:packages/mantle-runtime/test/render-publish.test.ts": {
+      "name": "render-publish.test.ts",
+      "type": "file",
+      "summary": "渲染與發佈流程的整合測試，透過 HtmlPublishOrchestrator 串連 SEO、llms.txt 與即時渲染用例並驗證 KV 寫入。"
+    },
+    "file:packages/mantle-runtime/test/seo-meta.test.ts": {
+      "name": "seo-meta.test.ts",
+      "type": "file",
+      "summary": "SeoMetaComposer 與 ComposeEntrySeoMetaUseCase 的單元測試，驗證 SEO meta 組裝、hreflang 兄弟篇與 meta 標籤輸出。"
+    },
+    "file:packages/adapters/cloudflare/test/mcp-metadata.test.ts": {
+      "name": "mcp-metadata.test.ts",
+      "type": "file",
+      "summary": "驗證 MCP protected resource metadata 路徑推導與 mountMcp 暴露的 metadata 端點的測試。"
+    },
+    "file:packages/adapters/cloudflare/test/mount-auth.test.ts": {
+      "name": "mount-auth.test.ts",
+      "type": "file",
+      "summary": "以 harness 組裝 server endpoints 與 OAuth，驗證認證掛載與 Better Auth handler 路由的整合測試。"
+    },
+    "file:packages/adapters/cloudflare/test/mount-http-trigger-auth.test.ts": {
+      "name": "mount-http-trigger-auth.test.ts",
+      "type": "file",
+      "summary": "驗證 HTTP trigger 端點的 staff 權限閘門：以 staff-gated manifests 與 fake auth 確認未授權與授權請求的正確行為。"
+    },
+    "file:packages/adapters/cloudflare/test/mount-staff-admin.test.ts": {
+      "name": "mount-staff-admin.test.ts",
+      "type": "file",
+      "summary": "驗證 admin 端點的 staff/owner 角色閘門，依不同 session 角色測試使用者管理與權限拒絕行為。"
+    },
+    "file:packages/adapters/cloudflare/test/public-routes-cache.test.ts": {
+      "name": "public-routes-cache.test.ts",
+      "type": "file",
+      "summary": "驗證公開路由的 KV read-through 快取行為，包含已發佈內容種子、快取命中與回退渲染，並涵蓋 locale 處理。"
+    },
+    "file:packages/adapters/cloudflare/test/smoke-form.test.ts": {
+      "name": "smoke-form.test.ts",
+      "type": "file",
+      "summary": "表單提交流程的 smoke test，驗證 HTTP trigger 處理表單、captcha 驗證與 Slack 通知等副作用整合。"
+    },
+    "file:packages/adapters/cloudflare/test/smoke-media.test.ts": {
+      "name": "smoke-media.test.ts",
+      "type": "file",
+      "summary": "媒體上傳流程的 smoke test，以 FakeMediaStorage 模擬 R2，驗證 createUpload/commitUpload 與 MCP 媒體欄位的端到端行為。"
+    },
+    "file:packages/adapters/cloudflare/test/view-rest.test.ts": {
+      "name": "view-rest.test.ts",
+      "type": "file",
+      "summary": "View REST 端點測試，以種子 entry 資料驗證 view 查詢、分頁與權限授權的 HTTP 回應。"
+    },
+    "file:packages/mantle-runtime/test/fakes/database.ts": {
+      "name": "database.ts",
+      "type": "file",
+      "summary": "實作 DatabaseDriver port 的 in-memory 假資料庫，內含一個能解析參數化 SQL 與 compiled view query 的迷你 SQL 解譯器，供 runtime 與 adapter 測試共用。"
+    },
+    "file:packages/mantle-runtime/test/joined-entry-reader.test.ts": {
+      "name": "joined-entry-reader.test.ts",
+      "type": "file",
+      "summary": "JoinedEntryReader 的單元測試，驗證 translation 與 parent entry 的 join 行為，使用 in-memory database 與 manifest fixtures 種子資料。"
+    },
+    "file:packages/adapters/cloudflare/src/assets/aotterFavicon.ts": {
+      "name": "aotterFavicon.ts",
+      "type": "file",
+      "summary": "匯出 Aotter 品牌 favicon 的 inline SVG 字串常數，供 server endpoints 在沒有自訂 favicon 時作為預設圖示回傳。"
+    },
+    "file:packages/adapters/cloudflare/src/auth/createAuth.ts": {
+      "name": "createAuth.ts",
+      "type": "file",
+      "summary": "Cloudflare adapter 的認證核心，以 Better Auth 為基礎組裝 social providers、magic link、email OTP 等登入方式，並直接對 D1 操作 user/account 資料，提供 staff 角色查詢、bootstrap owner 提升與帳號管理。"
+    },
+    "file:packages/adapters/cloudflare/src/mount/bootRuntimeOnce.ts": {
+      "name": "bootRuntimeOnce.ts",
+      "type": "file",
+      "summary": "建立 CmsRuntime 參考並以 lazy、單次 bootInit 的方式初始化 runtime，確保每個 Worker isolate 只啟動一次 CMS runtime。"
+    },
+    "file:packages/adapters/cloudflare/src/mount/cmsConfig.ts": {
+      "name": "cmsConfig.ts",
+      "type": "file",
+      "summary": "定義 CMS runtime 與 Cloudflare bindings（D1、KV、ASSETS、R2 等）的設定型別，作為 mount 流程的設定契約。"
+    },
+    "file:packages/adapters/cloudflare/src/mount/mountMcp.ts": {
+      "name": "mountMcp.ts",
+      "type": "file",
+      "summary": "掛載 MCP（Model Context Protocol）端點，建立帶 staff 角色驗證的 MCP API handler，並從 triggers 收集可暴露的 procedures、快取 dispatcher 以服務 MCP 請求。"
+    },
+    "file:packages/adapters/cloudflare/src/mount/mountPublicRoutes.ts": {
+      "name": "mountPublicRoutes.ts",
+      "type": "file",
+      "summary": "在 Hono app 上掛載公開內容路由（首頁、集合列表、單篇 entry、sitemap、llms.txt），整合 KV read-through 快取與 live 回退渲染，並處理 locale 正規化與 staff preview。"
+    },
+    "file:packages/adapters/cloudflare/src/mount/mountServerEndpoints.ts": {
+      "name": "mountServerEndpoints.ts",
+      "type": "file",
+      "summary": "Cloudflare adapter 的主要 server 掛載點，連接 Better Auth admin 路由、HTTP trigger、view REST 端點、媒體上傳與 staff/owner 權限閘門，將 runtime use cases 包裝為 Hono HTTP handler。"
+    },
+    "file:packages/adapters/cloudflare/src/oauth/consentHtml.ts": {
+      "name": "consentHtml.ts",
+      "type": "file",
+      "summary": "產生 OAuth 授權同意頁的 HTML，支援依 Accept-Language 偵測語系，並對使用者輸入做 HTML escape 以防止注入。"
+    },
+    "file:packages/adapters/cloudflare/src/oauth/mountOAuth.ts": {
+      "name": "mountOAuth.ts",
+      "type": "file",
+      "summary": "掛載 OAuth authorize 端點，處理同意流程的 GET 顯示與 POST 提交，驗證 client、redirect URI 與 staff 角色後完成授權，符合 DCR 規範。"
+    },
+    "file:packages/adapters/cloudflare/test/createAuth.test.ts": {
+      "name": "createAuth.test.ts",
+      "type": "file",
+      "summary": "createAuth 的單元測試，以 fake D1 database 驗證 social provider 組裝、bootstrap owner 提升、staff 角色查詢與帳號管理等認證行為。"
+    },
+    "file:packages/adapters/cloudflare/test/fakes/runtime-bindings.ts": {
+      "name": "runtime-bindings.ts",
+      "type": "file",
+      "summary": "測試用的 Cloudflare bindings 假實作，提供 in-memory KV、stub asset server 與 stub auth，供 mount 層測試在不依賴真實 Cloudflare 基礎設施下執行。"
+    },
+    "file:packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts": {
+      "name": "EmitTypesCommand.ts",
+      "type": "file",
+      "summary": "mantle CLI 的 emit-types 子命令：解析參數、載入 manifest，委派 EmitTypesUseCase 產出 TypeScript 型別定義並寫檔。"
+    },
+    "file:packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts": {
+      "name": "IntrospectCommand.ts",
+      "type": "file",
+      "summary": "mantle CLI 的 introspect 子命令：載入 manifest 並委派 IntrospectManifestsUseCase 輸出結構化的 manifest 摘要 JSON。"
+    },
+    "file:packages/mantle-spec/src/infrastructure/cli/MantleCli.ts": {
+      "name": "MantleCli.ts",
+      "type": "file",
+      "summary": "mantle CLI 的主進入點，依子命令（validate/introspect/emit-openapi/emit-types）分派到對應的 command 模組。"
+    },
+    "file:packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts": {
+      "name": "ValidateCommand.ts",
+      "type": "file",
+      "summary": "mantle CLI 的 validate 子命令：載入 manifest 與 handler 原始碼，呼叫 ValidateManifestsUseCase 並依 phase 過濾後以文字或 JSON 格式輸出 Diagnostic。"
+    },
+    "file:packages/mantle-spec/src/infrastructure/cli/loadManifests.ts": {
+      "name": "loadManifests.ts",
+      "type": "file",
+      "summary": "CLI 共用的 manifest 載入器：自指定根目錄遞迴收集 YAML 檔、讀取並交由 ManifestParser 解析，回傳 manifest、檔案路徑映射與解析錯誤。"
+    },
+    "file:packages/mantle-spec/src/kernel/diagnostic.ts": {
+      "name": "diagnostic.ts",
+      "type": "file",
+      "summary": "kernel 層的 Diagnostic 核心：定義封閉的 DIAGNOSTIC_CODES、HTTP 狀態映射、Diagnostic 工廠（validate/test/boot/runtime 各 phase）、DiagnosticError 與 wire 序列化/反序列化，是整個套件結構化錯誤回報的基礎。"
+    },
+    "file:packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts": {
+      "name": "EmitOpenapiUseCase.ts",
+      "type": "file",
+      "summary": "use case：將 manifest（Procedure/View/Trigger）轉為 OpenAPI 3 規格物件，組裝 HTTP 與 View 操作的 paths 及 Diagnostic schema。"
+    },
+    "file:packages/mantle-spec/src/usecase/EmitTypesUseCase.ts": {
+      "name": "EmitTypesUseCase.ts",
+      "type": "file",
+      "summary": "use case：將 Schema manifest 轉為 TypeScript 型別定義字串，遞迴渲染 object/array/enum/primitive 並產出 entry row 與保留欄位型別。"
+    },
+    "file:packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts": {
+      "name": "IntrospectManifestsUseCase.ts",
+      "type": "file",
+      "summary": "use case：將 manifest 分割並彙整為結構化的 introspection 摘要（schemas/views/procedures/triggers 概要），供 CLI introspect 命令輸出。"
+    },
+    "file:packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts": {
+      "name": "ValidateManifestsUseCase.ts",
+      "type": "file",
+      "summary": "use case：manifest 的全套語意驗證協調器，串接重複檢查、Schema 內部一致性、locale/translates、View 引用、Procedure 授權與 builtin handler、Trigger 引用及原始碼 handler ref 檢查，彙總為 Diagnostic。"
+    },
+    "file:packages/mantle-spec/src/domain/model/ManifestGrammar.ts": {
+      "name": "ManifestGrammar.ts",
+      "type": "file",
+      "summary": "鎖定於 v0.1 的 manifest grammar 核心模型，集中定義 4-atom（Schema/View/Procedure/Trigger）的型別、封閉列舉（STAFF_ROLES、MANTLE_BIND_VALUES、BUILTIN_OPS、LIFECYCLE_HOOKS 等）與保留字。是整個 mantle-spec 套件的型別與語法權威來源。"
+    },
+    "file:packages/mantle-spec/src/domain/service/CrossSchemaChecker.ts": {
+      "name": "CrossSchemaChecker.ts",
+      "type": "file",
+      "summary": "跨 Schema 一致性檢查服務，驗證 locale 規範化（拒絕含 script subtag 的 locale）與 translates 父子 Schema 的屬性對應關係，產出結構化 Diagnostic。"
+    },
+    "file:packages/mantle-spec/src/domain/service/EntryDataValidator.ts": {
+      "name": "EntryDataValidator.ts",
+      "type": "file",
+      "summary": "entry 資料驗證器，將 Schema 的 JSON Schema 透過 JsonSchemaToZod 編譯為 Zod validator 並快取，對 entry data 執行 safeParse 後轉為結構化 Diagnostic。"
+    },
+    "file:packages/mantle-spec/src/domain/service/JsonSchemaToZod.ts": {
+      "name": "JsonSchemaToZod.ts",
+      "type": "file",
+      "summary": "將 manifest 的 JSON Schema 子集轉譯為 Zod schema 的轉換器，支援 object/array/string/number/enum 等型別與格式約束，確保執行期驗證在 Cloudflare Workers CSP 下安全（不依賴 ajv）。"
+    },
+    "file:packages/mantle-spec/src/domain/service/ManifestParser.ts": {
+      "name": "ManifestParser.ts",
+      "type": "file",
+      "summary": "manifest 解析與語法驗證的核心服務：解析 YAML 多文件流、驗證 4-atom envelope、逐 atom 檢查語法（Schema/View/Procedure/Trigger）與封閉列舉、filter AST、param ref、handler binding 等，產出 manifest 物件與 Diagnostic。"
+    },
+    "file:packages/mantle-spec/src/domain/service/ManifestPathDiagnoser.ts": {
+      "name": "ManifestPathDiagnoser.ts",
+      "type": "file",
+      "summary": "Diagnostic 路徑定位輔助服務，將 atom 種類/名稱/JSON Pointer 映射回原始檔案路徑，並提供以編輯距離計算最佳建議（did-you-mean）的工具。"
+    },
+    "file:packages/mantle-spec/src/domain/service/SchemaDdlEmitter.ts": {
+      "name": "SchemaDdlEmitter.ts",
+      "type": "file",
+      "summary": "由 Schema manifest 產生 SQLite/D1 的 DDL（generated column 與索引），以安全識別字命名並從 JSON 欄位投影出實體欄。"
+    },
+    "file:packages/mantle-spec/src/domain/service/SchemaLoader.ts": {
+      "name": "SchemaLoader.ts",
+      "type": "file",
+      "summary": "Schema manifest 的小型查詢輔助服務，提供依名稱尋找與列出所有 Schema 的函式。"
+    },
+    "file:packages/mantle-spec/src/domain/service/StaffRoleHierarchy.ts": {
+      "name": "StaffRoleHierarchy.ts",
+      "type": "file",
+      "summary": "員工角色階層判定的小型服務，提供 meetsRole 比較實際角色是否達到最低門檻。"
+    },
+    "file:packages/mantle-spec/src/infrastructure/cli/EmitOpenapiCommand.ts": {
+      "name": "EmitOpenapiCommand.ts",
+      "type": "file",
+      "summary": "mantle CLI 的 emit-openapi 子命令：解析參數、載入 manifest，委派 EmitOpenapiUseCase 產出 OpenAPI 規格並寫檔。"
+    },
+    "file:packages/mantle-spec/src/usecase/dto/EmitOpenapiRequest.ts": {
+      "name": "EmitOpenapiRequest.ts",
+      "type": "file",
+      "summary": "EmitOpenapiUseCase 的 request DTO，依 clean-architecture 規範封裝 OpenAPI 產生所需的輸入（manifest 與選項），避免使用零散的原始參數。"
+    },
+    "file:packages/mantle-spec/src/usecase/dto/EmitOpenapiResponse.ts": {
+      "name": "EmitOpenapiResponse.ts",
+      "type": "file",
+      "summary": "EmitOpenapiUseCase 的 response DTO，描述 OpenAPI codegen 的輸出結構（產生的文件內容）。"
+    },
+    "file:packages/mantle-spec/src/usecase/dto/EmitTypesRequest.ts": {
+      "name": "EmitTypesRequest.ts",
+      "type": "file",
+      "summary": "EmitTypesUseCase 的 request DTO，封裝由 manifest 產生 TypeScript 型別所需的輸入。"
+    },
+    "file:packages/mantle-spec/src/usecase/dto/EmitTypesResponse.ts": {
+      "name": "EmitTypesResponse.ts",
+      "type": "file",
+      "summary": "EmitTypesUseCase 的 response DTO，描述型別 codegen 輸出（產生的 .ts 內容）。"
+    },
+    "file:packages/mantle-spec/src/usecase/dto/IntrospectManifestsRequest.ts": {
+      "name": "IntrospectManifestsRequest.ts",
+      "type": "file",
+      "summary": "IntrospectManifestsUseCase 的 request DTO，封裝待內省（introspect）的 manifest 集合作為輸入契約。"
+    },
+    "file:packages/mantle-spec/src/usecase/dto/IntrospectManifestsResponse.ts": {
+      "name": "IntrospectManifestsResponse.ts",
+      "type": "file",
+      "summary": "IntrospectManifestsUseCase 的 response DTO，定義 manifest 內省結果的扁平化結構（IntrospectedSchema / View / Procedure / Trigger 四種 atom 與 parseErrors）。"
+    },
+    "file:packages/mantle-spec/src/usecase/dto/ValidateManifestsRequest.ts": {
+      "name": "ValidateManifestsRequest.ts",
+      "type": "file",
+      "summary": "ValidateManifestsUseCase 的 request DTO（SDK 授權契約 Loop 1），具名封裝待驗證 manifest、選用的 handler 原始碼、檔案路徑索引與站台 locale。"
+    },
+    "file:packages/mantle-spec/src/usecase/dto/ValidateManifestsResponse.ts": {
+      "name": "ValidateManifestsResponse.ts",
+      "type": "file",
+      "summary": "ValidateManifestsUseCase 的 response DTO，回傳驗證後產生的結構化 Diagnostic 集合。"
+    },
+    "file:packages/mantle-spec/test/cli-emit.test.ts": {
+      "name": "cli-emit.test.ts",
+      "type": "file",
+      "summary": "CLI emit 指令（EmitOpenapiCommand / EmitTypesCommand）的整合測試，以暫存 fixture 目錄載入 manifest 並驗證 codegen 輸出。"
+    },
+    "file:packages/mantle-spec/test/cli-usecase.test.ts": {
+      "name": "cli-usecase.test.ts",
+      "type": "file",
+      "summary": "emit / introspect 系列 use case 的單元測試，直接驗證 EmitOpenapiUseCase、EmitTypesUseCase 與 IntrospectManifestsUseCase 的行為。"
+    },
+    "file:packages/mantle-spec/test/cross-schema.test.ts": {
+      "name": "cross-schema.test.ts",
+      "type": "file",
+      "summary": "CrossSchemaChecker 的測試，驗證跨 Schema 的 locale 與 translates 一致性檢查（ADR-0010）。"
+    },
+    "file:packages/mantle-spec/test/diagnose.test.ts": {
+      "name": "diagnose.test.ts",
+      "type": "file",
+      "summary": "ManifestPathDiagnoser 的測試，驗證將 manifest 邏輯路徑對應回消費者實際檔案位置與最佳比對的能力。"
+    },
+    "file:packages/mantle-spec/test/diagnostic.test.ts": {
+      "name": "diagnostic.test.ts",
+      "type": "file",
+      "summary": "kernel diagnostic 模組的測試，涵蓋診斷碼、HTTP 狀態對應、Diagnostic 建構、線路序列化與 JSON Pointer 讀取。"
+    },
+    "file:packages/mantle-spec/test/json-schema-zod.test.ts": {
+      "name": "json-schema-zod.test.ts",
+      "type": "file",
+      "summary": "JsonSchemaToZod 轉換器的測試，驗證 JSON Schema → zod 的翻譯（Workers-CSP-safe）與 zod 錯誤路徑轉 JSON Pointer 的行為。"
+    },
+    "file:packages/mantle-spec/test/schema-ddl-emitter.test.ts": {
+      "name": "schema-ddl-emitter.test.ts",
+      "type": "file",
+      "summary": "SchemaDdlEmitter 的測試，驗證由 Schema atom 產生資料庫 DDL（buildDdl）的輸出。"
+    },
+    "file:packages/mantle-spec/test/schema-validator.test.ts": {
+      "name": "schema-validator.test.ts",
+      "type": "file",
+      "summary": "EntryDataValidator / SchemaValidator 的測試，驗證 entry 資料對 Schema 定義的驗證行為。"
+    },
+    "file:packages/mantle-spec/test/staff-role.test.ts": {
+      "name": "staff-role.test.ts",
+      "type": "file",
+      "summary": "StaffRoleHierarchy 的測試，驗證 StaffRole 角色階層的 meetsRole 權限滿足判斷。"
+    },
+    "file:packages/mantle-spec/test/validate-cli.test.ts": {
+      "name": "validate-cli.test.ts",
+      "type": "file",
+      "summary": "ValidateCommand CLI 指令的測試，驗證參數解析與驗證流程的端到端執行。"
+    },
+    "file:packages/mantle-spec/test/validate.test.ts": {
+      "name": "validate.test.ts",
+      "type": "file",
+      "summary": "ValidateManifestsUseCase 的大型測試套件，以 manifest fixture builder（schema / view / procedure / trigger）涵蓋 4-atom 文法的廣泛驗證情境與診斷產出。"
+    },
+    "file:packages/mantle-spec/test/windows-path.test.ts": {
+      "name": "windows-path.test.ts",
+      "type": "file",
+      "summary": "ValidateCommand 在 Windows 路徑分隔符下的測試，確保 CLI 路徑處理跨平台正確。"
+    },
+    "file:packages/mantle-spec/src/domain/model/Locale.ts": {
+      "name": "Locale.ts",
+      "type": "file",
+      "summary": "定義 locale 領域型別與 URL locale 區段的正規表示式常數，並提供 InvalidLocaleError 例外，作為 locale 正規化流程的核心模型。"
+    },
+    "file:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts": {
+      "name": "MediaMimeAccept.ts",
+      "type": "file",
+      "summary": "定義媒體 MIME accept 規則的領域模型，並提供解析 accept 字串、展開 policy required 槽位與彙整所有 policy MIME 的純函式。"
+    },
+    "file:packages/mantle-spec/src/domain/model/SiteConfig.ts": {
+      "name": "SiteConfig.ts",
+      "type": "file",
+      "summary": "定義站台組態（SiteConfig）相關的領域型別，涵蓋預設值、媒體用途（media purpose）與槽位設定，並匯出媒體用途 slug 的正規表示式。"
+    },
+    "file:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts": {
+      "name": "LocaleCanonicalizer.ts",
+      "type": "file",
+      "summary": "提供 locale 正規化領域服務：將輸入字串轉為標準 locale（語言＋可選地區）、URL 區段互轉、批次正規化與 script subtag 偵測，遵循 Mantle v0.1 拒絕 script subtag 的規則。"
+    },
+    "file:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts": {
+      "name": "SiteDefaultsValidator.ts",
+      "type": "file",
+      "summary": "驗證站台預設值與媒體用途設定的領域服務：檢查 locale 正規性、媒體用途 slug、required 槽位、MIME 重疊與 maxBytes 一致性，違規時拋出結構化例外。"
+    },
+    "file:packages/mantle-spec/test/locale.test.ts": {
+      "name": "locale.test.ts",
+      "type": "file",
+      "summary": "針對 Locale 模型與 LocaleCanonicalizer 服務的單元測試，涵蓋正規化、URL 互轉、批次處理與 script subtag 拒絕等情境。"
+    },
+    "file:packages/mantle-spec/test/media-mime-accept.test.ts": {
+      "name": "media-mime-accept.test.ts",
+      "type": "file",
+      "summary": "針對 MediaMimeAccept 模型與 SiteDefaultsValidator 媒體用途驗證的單元測試，涵蓋 MIME 解析、policy 展開與各類違規情境。"
+    },
+    "file:packages/mantle-spec/test/site-validate.test.ts": {
+      "name": "site-validate.test.ts",
+      "type": "file",
+      "summary": "針對 SiteDefaultsValidator 站台預設值驗證的單元測試，驗證 locale 與媒體用途違規時拋出正確的結構化例外。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/AuthPredicateEvaluator.ts": {
+      "name": "AuthPredicateEvaluator.ts",
+      "type": "file",
+      "summary": "Domain service 評估 View 的 requires.auth.all 授權述詞 (predicate)，逐一檢查 ctx.user / ctx.staff 等條件，任一不符即回傳對應的 UNAUTHENTICATED / FORBIDDEN diagnostic。採 fail-closed 設計。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/ViewSqlCompiler.ts": {
+      "name": "ViewSqlCompiler.ts",
+      "type": "file",
+      "summary": "將 ViewManifest 編譯為參數化 SQL 查詢 (SELECT / WHERE / ORDER BY / LIMIT)，包含 filter tree 遞迴編譯、JSON path 取值與欄位名稱安全檢查，以參數綁定避免 SQL injection。"
+    },
+    "file:packages/mantle-runtime/src/usecase/dto/view/ExecuteViewRequest.ts": {
+      "name": "ExecuteViewRequest.ts",
+      "type": "file",
+      "summary": "ExecuteViewUseCase 的請求 DTO，封裝 ViewManifest、pathPrefix、編譯選項與呼叫者身分 ctx (供 requires.auth.all 評估，缺少時 use case 回傳 UNAUTHENTICATED)。"
+    },
+    "file:packages/mantle-runtime/src/usecase/view/ExecuteViewUseCase.ts": {
+      "name": "ExecuteViewUseCase.ts",
+      "type": "file",
+      "summary": "Application use case：評估 View 授權述詞、編譯 SQL、透過注入的 DatabaseDriver port 執行查詢並回傳結果或 diagnostic，串接 AuthPredicateEvaluator 與 ViewSqlCompiler。"
+    },
+    "file:packages/mantle-runtime/test/view.test.ts": {
+      "name": "view.test.ts",
+      "type": "file",
+      "summary": "ViewSqlCompiler 與 ExecuteViewUseCase 的整合與單元測試，使用 InMemoryDatabase fake 驗證 SQL 編譯、filter tree、分頁、授權述詞與 SQL injection 防護。"
+    },
+    "file:packages/mantle-spec/src/domain/model/ContentState.ts": {
+      "name": "ContentState.ts",
+      "type": "file",
+      "summary": "定義編輯內容生命週期狀態的封閉列舉 ContentState（draft、review、approved、scheduled、published、archived），作為 spec 內 entry 狀態與狀態機轉移的單一真實來源。"
+    },
+    "file:packages/mantle-spec/src/domain/model/Entry.ts": {
+      "name": "Entry.ts",
+      "type": "file",
+      "summary": "宣告 spec 的核心編輯領域型別 Entry、Revision、Approval（皆為唯讀介面），並定義 IllegalTransitionError 例外型別供 runtime 在違反狀態轉移表時拋出。"
+    },
+    "file:packages/mantle-spec/src/domain/model/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "domain/model 資料夾的 barrel，重新導出 ManifestGrammar、Entry、ContentState、SiteConfig、MediaMimeAccept、Locale 等純型別模組，提供 model 層的單一進入點。"
+    },
+    "file:packages/mantle-spec/src/domain/service/LifecycleStateMachine.ts": {
+      "name": "LifecycleStateMachine.ts",
+      "type": "file",
+      "summary": "每個 Schema 的生命週期狀態機純函式集合，將 spec.lifecycle（simple / editorial）翻譯為允許的狀態轉移表，並判斷 requestPublish 是否需經審核佇列。"
+    },
+    "file:packages/mantle-spec/test/entry-state-machine.test.ts": {
+      "name": "entry-state-machine.test.ts",
+      "type": "file",
+      "summary": "針對 LifecycleStateMachine 的單元測試，驗證 simple 與 editorial 生命週期下的狀態轉移合法性、審核需求與可導覽狀態子集。"
+    },
+    "pipeline:.github/workflows/ci.yml": {
+      "name": "ci.yml",
+      "type": "pipeline",
+      "summary": "在 push 與 pull_request（main / develop）時觸發的 CI workflow，於單一 lint job 中對整個 pnpm monorepo 執行 build、套件邊界檢查、typecheck 與 vitest 測試。內含 concurrency 群組以取消同一 ref 上被取代的舊執行。"
+    },
+    "pipeline:.github/workflows/dependabot-automerge.yml": {
+      "name": "dependabot-automerge.yml",
+      "type": "pipeline",
+      "summary": "在 dependabot 對 main / develop 開啟 PR 時觸發的自動合併 workflow；僅對 patch / minor / digest 更新類型先 auto-approve 再以 rebase 方式 auto-merge，major 升級維持手動處理。"
+    },
+    "pipeline:.github/workflows/mirror-github-packages.yml": {
+      "name": "mirror-github-packages.yml",
+      "type": "pipeline",
+      "summary": "手動觸發（workflow_dispatch）的 workflow，依輸入的版本與 dist-tag 將五個公開 SDK 套件的 tarball 鏡像發佈到 GitHub Packages registry，並先驗證各 package.json 版本與輸入一致。"
+    },
+    "pipeline:.github/workflows/release.yml": {
+      "name": "release.yml",
+      "type": "pipeline",
+      "summary": "由推送 v* tag 觸發的 release fanout workflow：build/test 作為 gate，驗證 tag 版本與所有套件一致，pack 後發佈到 npmjs，驗證 metadata，鏡像到 GitHub Packages，建立 GitHub release，並 dispatch aotter/mantle-starters 觸發下游 bump PR。"
+    },
+    "config:.github/ISSUE_TEMPLATE/bug.yml": {
+      "name": "bug.yml",
+      "type": "config",
+      "summary": "GitHub issue form 範本，用於回報 bug，透過結構化欄位收集重現步驟、預期行為與環境資訊，並自動套用 bug label。"
+    },
+    "config:.github/ISSUE_TEMPLATE/config.yml": {
+      "name": "config.yml",
+      "type": "config",
+      "summary": "GitHub issue template 的總設定檔，停用空白 issue 並提供導向 Discussions、CLAUDE.md 貢獻契約、ADR 索引與安全漏洞回報的 contact links。"
+    },
+    "config:.github/ISSUE_TEMPLATE/convergence.yml": {
+      "name": "convergence.yml",
+      "type": "config",
+      "summary": "GitHub issue form 範本，用於在實作前對決策進行收斂，收集 context、reference points、candidate cuts 與 closing criteria，並自動套用 question 與 needs-discussion label。"
+    },
+    "config:.github/ISSUE_TEMPLATE/feature.yml": {
+      "name": "feature.yml",
+      "type": "config",
+      "summary": "GitHub issue form 範本，用於提出新功能需求，透過結構化欄位收集問題描述、提議解法與替代方案。"
+    },
+    "config:.github/ISSUE_TEMPLATE/proposal.yml": {
+      "name": "proposal.yml",
+      "type": "config",
+      "summary": "GitHub issue form 範本，用於提出較大型的架構或設計提案，收集動機、提議內容與對既有 ADR 及 grammar 限制的影響。"
+    },
+    "document:AGENTS.md": {
+      "name": "AGENTS.md",
+      "type": "document",
+      "summary": "貢獻型 AI agent 的最小入口指引，提供導向 CLAUDE.md 與 CONTRIBUTING.md 等核心文件的快速連結。"
+    },
+    "document:CHANGELOG.md": {
+      "name": "CHANGELOG.md",
+      "type": "document",
+      "summary": "依語意化版本記錄的變更日誌，涵蓋 0.0.6-alpha 至 0.0.11-alpha.35 的 Added / Changed / Fixed / Breaking / Removed 條目，記錄 v0.1.0 開發期的增量演進。"
+    },
+    "document:CLAUDE.md": {
+      "name": "CLAUDE.md",
+      "type": "document",
+      "summary": "AI 貢獻者的核心導向文件，闡述 Mantle「agent 寫 config、runtime 扛複雜度」的論述、檔案配置地圖、跨切面硬性不變量與 clean-architecture 分層規則。"
+    },
+    "document:CODE_OF_CONDUCT.md": {
+      "name": "CODE_OF_CONDUCT.md",
+      "type": "document",
+      "summary": "基於 Contributor Covenant 的行為準則，定義社群承諾、行為標準、執行責任與分級的執行指南。"
+    },
+    "document:CONTRIBUTING.md": {
+      "name": "CONTRIBUTING.md",
+      "type": "document",
+      "summary": "AI 與人類貢獻者的工作流程契約，涵蓋本機設定、分支前綴、commit 形態、issue/PR 流程、架構與 grammar 把關，以及 changelog 與 release 流程的銜接。"
+    },
+    "document:README.md": {
+      "name": "README.md",
+      "type": "document",
+      "summary": "專案總覽文件，介紹 mantle 作為 Cloudflare Workers 上的 agent-native headless CMS、冷啟動安裝路徑、Mantle 家族定位，並列出各 package 與 starter 的角色。"
+    },
+    "document:SECURITY.md": {
+      "name": "SECURITY.md",
+      "type": "document",
+      "summary": "安全政策文件，說明漏洞回報管道、回應時程預期、受支援版本範圍與公開揭露的處理方式。"
+    },
+    "document:SUPPORT.md": {
+      "name": "SUPPORT.md",
+      "type": "document",
+      "summary": "支援指引文件，說明如何取得協助、starter monorepo 的協助管道、不提供的服務範圍，以及給 AI agent 的使用提示。"
+    },
+    "config:package.json": {
+      "name": "package.json",
+      "type": "config",
+      "summary": "monorepo 根層 package 設定，標記為 private、宣告 ESM type、node 引擎需求、pnpm packageManager，以及轉發至各 package 的 build/typecheck/test 等 workspace scripts。"
+    },
+    "config:pnpm-workspace.yaml": {
+      "name": "pnpm-workspace.yaml",
+      "type": "config",
+      "summary": "pnpm workspace 設定，定義 packages glob 範圍與 catalog/catalogs 集中式依賴版本管理，統一各 package 的相依版本。"
+    },
+    "config:tsconfig.base.json": {
+      "name": "tsconfig.base.json",
+      "type": "config",
+      "summary": "共用的 TypeScript 基礎 compiler 設定，供 monorepo 內各 package 的 tsconfig 繼承，集中 compilerOptions 以維持型別檢查一致性。"
+    },
+    "document:docs/adapter-guide.md": {
+      "name": "adapter-guide.md",
+      "type": "document",
+      "summary": "Adapter 實作指南，說明 adapter 必須綁定的 required runtime ports、optional capabilities、runtime boot 流程、HTTP 與 MCP 介面以及靜態資產處理，並附上實作 checklist 與目前的非目標。"
+    },
+    "document:docs/design-atoms.md": {
+      "name": "design-atoms.md",
+      "type": "document",
+      "summary": "4-atom manifest 模型的核心參考文件，逐一說明 Schema / View / Procedure / Trigger 四個 atom 的 v0.1 grammar、x-mantle-bind 等擴充欄位、OpenAPI emission、JSON Schema 至 zod 的驗證流程、RBAC、D1/Postgres 儲存策略與 DRAFT roadmap。"
+    },
+    "document:docs/labels.md": {
+      "name": "labels.md",
+      "type": "document",
+      "summary": "GitHub label 規範文件，定義 kind/status、area、release 與 review gate 等標籤分類，並提供建立缺漏 label 的指令。"
+    },
+    "document:docs/release-process.md": {
+      "name": "release-process.md",
+      "type": "document",
+      "summary": "Release 與發佈紀律的權威文件，涵蓋 develop→main 分支模型、alpha/beta/RC/stable channel 規則、版本控管、release fanout、npm publish 流程、跨 repo rename playbook 與 hotfix 程序。"
+    },
+    "document:docs/adr/0001-four-atom-manifest-model.md": {
+      "name": "0001-four-atom-manifest-model.md",
+      "type": "document",
+      "summary": "奠基性 ADR，確立 mantle 的核心：以 Schema / View / Procedure / Trigger 四個 atom 構成 `cms.mantle.aotter.net/v1` 的 multi-doc YAML manifest 模型。並併入原 POC ADR-0005（grammar 鎖定與 DRAFT key 紀律）與 ADR-0006（multi-doc YAML 撰寫形式、淘汰 Procedure `expose:` 捷徑）。"
+    },
+    "document:docs/adr/0002-closed-enums-for-bindings.md": {
+      "name": "0002-closed-enums-for-bindings.md",
+      "type": "document",
+      "summary": "決定 `x-mantle-bind` 與 `requires.auth.all` predicate 採封閉式 enum（closed enum），新增成員必須走顯式的 grammar-revise 流程，而非 ad-hoc 擴充，以保護 agent 撰寫面的確定性。"
+    },
+    "document:docs/adr/0007-ai-as-primary-author.md": {
+      "name": "0007-ai-as-primary-author.md",
+      "type": "document",
+      "summary": "確立 AI agent 為 consumer 專案的主要作者，定義三層回饋迴路（`mantle validate` 靜態驗證、boot-time fail-fast、runtime errors）與兩種角色面（coder surface：Skills/CLI/SDK TS API；operator surface：MCP）。"
+    },
+    "document:docs/adr/0008-structured-diagnostic-shape.md": {
+      "name": "0008-structured-diagnostic-shape.md",
+      "type": "document",
+      "summary": "定義 AI 可解析的結構化 Diagnostic 形狀（code 命名慣例、`path` 格式、`candidates`/`suggestion` 填寫時機），並決定驗證器以 zod（非 Ajv）翻譯產生診斷，貫穿 CLI、test harness 與 runtime 三個診斷面。"
+    },
+    "document:docs/adr/0009-consumer-supplied-manifests.md": {
+      "name": "0009-consumer-supplied-manifests.md",
+      "type": "document",
+      "summary": "決定 consumer 專案在 SDK boot 時自行提供（注入）manifest，界定 v0.1.0 的 adapter 範圍與 single-slice 出貨策略，並附帶 worked example 說明注入流程。"
+    },
+    "document:docs/adr/0010-locale-and-translates.md": {
+      "name": "0010-locale-and-translates.md",
+      "type": "document",
+      "summary": "確立 locale 三層模型（manifest 宣告 `Schema.spec.localized`、per-site D1 列 `site_config.locales`、per-entry `data.locale`）與 parent/child translates 模式，並定義 locale 正規化（接受 language + 可選 region，拒絕 script subtag 如 `zh-Hant`）。"
+    },
+    "document:docs/adr/0011-adapter-port-spec.md": {
+      "name": "0011-adapter-port-spec.md",
+      "type": "document",
+      "summary": "規範 runtime 對 adapter 暴露的 port 介面：必備 port（`DatabaseDriver`、`KvCache`、`AssetServer`）、public/private media 雙 bucket 雙 port，以及 adapter 如何 wire 這些 port，確保 runtime 不耦合任何 Cloudflare 專屬型別。"
+    },
+    "document:docs/adr/0012-views-as-public-rest.md": {
+      "name": "0012-views-as-public-rest.md",
+      "type": "document",
+      "summary": "決定公開讀取一律經由 View 而非 Schema 暴露，URL 形狀為 `/api/views/<view-name>`，View 自動暴露、分頁採保留查詢字串名稱、filter 接受 `{ $param: <name> }` sentinel，回應信封為 `{ rows, page, show, hasMore }`。"
+    },
+    "document:docs/adr/0013-agent-provisioned-consumer-projects.md": {
+      "name": "0013-agent-provisioned-consumer-projects.md",
+      "type": "document",
+      "summary": "確立 consumer 專案由 agent 自動 provision（透過 scaffolder 與 launch state）的決策，定義 agent 驅動的初始化流程與相對於人工 provision 的取捨。"
+    },
+    "document:docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md": {
+      "name": "0014-auth-better-auth-and-multi-tenant-mcp.md",
+      "type": "document",
+      "summary": "決定以 Better Auth 同時擔任 auth 與 MCP 授權伺服器，`staff` 表透過 admin plugin 映射為 `user.role`、由 manifest predicate 衍生兩條 MCP 路由、scope-aware DCR；含 2026-05-15 修正案將 MCP 端切換為 `@cloudflare/workers-oauth-provider`。"
+    },
+    "document:docs/adr/0016-site-semantic-layer.md": {
+      "name": "0016-site-semantic-layer.md",
+      "type": "document",
+      "summary": "定義 site 語意層（`AGENTS.md` + launch state），含 placeholder macros、更新規則與跨工具相容性。為 Epic #116 清理後刻意精簡的 ADR。"
+    },
+    "document:docs/adr/0017-media-multi-variant-agent-side-optimization.md": {
+      "name": "0017-media-multi-variant-agent-side-optimization.md",
+      "type": "document",
+      "summary": "決定 `MediaAsset.variants[]` 為必填、影像最佳化在 agent 端而非 Worker 上執行、`siteDefaults.media.purposes` 為政策物件、entry 以 asset-id 參照並由 `media_assets` 表解析，adapter 維持 storage-key 形狀。"
+    },
+    "document:docs/adr/README.md": {
+      "name": "README.md",
+      "type": "document",
+      "summary": "ADR 目錄的索引與導讀：列出 v0.1.0 的所有 ADR、建議閱讀順序、說明哪些主題刻意「不」放進 ADR（避免 ADR proliferation），以及新增 ADR 的貢獻指引。"
+    },
+    "document:packages/adapters/cloudflare/README.md": {
+      "name": "README.md",
+      "type": "document",
+      "summary": "@aotter/mantle-cloudflare 套件的說明文件，描述此 Cloudflare Workers adapter 如何將 runtime 掛載到 Hono 上、以 D1/KV/Workers assets 實作 runtime ports，並負責 Better Auth 的 GitHub OAuth 與 MCP OAuth/DCR 接線。標註 0.0.7-alpha 為早期預發布，API surface 在 v0.1.0 前仍會變動。"
+    },
+    "config:packages/adapters/cloudflare/package.json": {
+      "name": "package.json",
+      "type": "config",
+      "summary": "@aotter/mantle-cloudflare 的套件資訊清單，定義 ESM 入口 (dist/index.js)、sideEffects:false、alpha 發布通道，並宣告對 mantle-runtime/mantle-spec/mantle-admin-ui 的 workspace 相依，以及 hono、better-auth、@cloudflare/workers-oauth-provider 等 peer dependencies。"
+    },
+    "config:packages/adapters/cloudflare/tsconfig.json": {
+      "name": "tsconfig.json",
+      "type": "config",
+      "summary": "編輯器與 typecheck 用的 TypeScript 設定，繼承 tsconfig.base.json，設定 noEmit 並納入 @cloudflare/workers-types 與 node 型別，涵蓋 src 與 test 目錄。"
+    },
+    "config:packages/adapters/cloudflare/tsconfig.lib.json": {
+      "name": "tsconfig.lib.json",
+      "type": "config",
+      "summary": "套件實際建置用的 TypeScript 編譯設定，繼承 tsconfig.base.json，從 src 輸出至 dist、啟用 stripInternal，僅納入 @cloudflare/workers-types，排除測試與 dist。"
+    },
+    "document:packages/mantle-admin-ui/README.md": {
+      "name": "README.md",
+      "type": "document",
+      "summary": "說明 @aotter/mantle-admin-ui 套件的用途：建構一個自包含的 React/Tailwind admin SPA HTML 產出物，供 platform adapters 消費，目前處於 0.0.x alpha 早期預發布階段。"
+    },
+    "file:packages/mantle-admin-ui/index.html": {
+      "name": "index.html",
+      "type": "file",
+      "summary": "Vite SPA 的 HTML 進入點，掛載 React 應用至 #root 並載入 /src/main.tsx，內含一段在首次繪製前套用主題（dark class）與語系/書寫方向的內聯防 FOUC 腳本。"
+    },
+    "config:packages/mantle-admin-ui/package.json": {
+      "name": "package.json",
+      "type": "config",
+      "summary": "@aotter/mantle-admin-ui 套件清單：React 19 + Vite + Tailwind v4 + shadcn admin SPA，平台無關，產出單一自包含 HTML 字串供 mantle-cloudflare / mantle-netlify mount 層消費；以 vite build 產生 dist 並設定 sideEffects:false 以利 tree-shaking。"
+    },
+    "config:packages/mantle-admin-ui/tsconfig.json": {
+      "name": "tsconfig.json",
+      "type": "config",
+      "summary": "admin-ui 套件的 TypeScript 編譯設定，啟用 strict 模式、react-jsx、Bundler moduleResolution 與 noEmit，鎖定瀏覽器 DOM lib，涵蓋 src 與 vite.config.ts。"
+    },
+    "document:packages/mantle-runtime/README.md": {
+      "name": "README.md",
+      "type": "document",
+      "summary": "@aotter/mantle-runtime 套件的說明文件，描述其作為 adapter-agnostic CMS 核心的職責：dispatcher、content operations、render pipeline、auth/session 抽象、MCP JSON-RPC dispatch，以及由平台 adapter 實作的 runtime ports。並指向 adapter 開發指南與 ADR-0011 port 規格。"
+    },
+    "config:packages/mantle-runtime/package.json": {
+      "name": "package.json",
+      "type": "config",
+      "summary": "@aotter/mantle-runtime 的 package manifest，宣告 ESM 套件、sideEffects: false、唯一的 workspace 相依 @aotter/mantle-spec、zod 作為 peerDependency，並定義 build（tsc -b tsconfig.lib.json）、typecheck 與 vitest test scripts。"
+    },
+    "config:packages/mantle-runtime/tsconfig.json": {
+      "name": "tsconfig.json",
+      "type": "config",
+      "summary": "mantle-runtime 套件的基礎 TypeScript 設定，extends 共用的 root tsconfig 並指定 compilerOptions 與 include，供 IDE 與一般 typecheck 使用。"
+    },
+    "config:packages/mantle-runtime/tsconfig.lib.json": {
+      "name": "tsconfig.lib.json",
+      "type": "config",
+      "summary": "mantle-runtime 的函式庫建置設定，由 build script（tsc -b tsconfig.lib.json）使用，設定 compilerOptions、include 與 exclude 以產出 dist 的 declaration 與 JS 輸出。"
+    },
+    "document:packages/mantle-spec/README.md": {
+      "name": "README.md",
+      "type": "document",
+      "summary": "@aotter/mantle-spec 套件的說明文件，闡述 spec 引擎負責 manifest 文法、YAML 解析、驗證 diagnostics、locale 輔助、JSON-Schema 轉 zod 以及 mantle CLI；並標註 v0.1.0 前 API 仍在變動中。"
+    },
+    "config:packages/mantle-spec/package.json": {
+      "name": "package.json",
+      "type": "config",
+      "summary": "@aotter/mantle-spec 套件的 npm 資訊清單：ESM 模組、sideEffects: false 以利 admin SPA tree-shaking，宣告 mantle CLI bin、yaml 執行期相依、zod peer dependency，以及 build/typecheck/test 腳本。"
+    },
+    "config:packages/mantle-spec/tsconfig.json": {
+      "name": "tsconfig.json",
+      "type": "config",
+      "summary": "套件的 IDE / typecheck 用 TypeScript 設定，繼承根目錄 tsconfig.base.json，採 noEmit 並同時納入 src 與 test 進行型別檢查。"
+    },
+    "config:packages/mantle-spec/tsconfig.lib.json": {
+      "name": "tsconfig.lib.json",
+      "type": "config",
+      "summary": "套件的函式庫建置用 TypeScript 設定，繼承 tsconfig.base.json，設定 rootDir=src、outDir=dist 並開啟 emit，排除 test 目錄以產出發布用的編譯產物。"
+    },
+    "document:packages/mantle/README.md": {
+      "name": "README.md",
+      "type": "document",
+      "summary": "@aotter/mantle 傘形 SDK 套件的說明文件，介紹 manifest 驅動的 Cloudflare Workers CMS、四個子路徑（/spec、/runtime、/cloudflare、/admin-ui）的 re-export 對照表，以及從 Mantle landing 頁開始的入門與 adapter 支援狀態。"
+    },
+    "config:packages/mantle/package.json": {
+      "name": "package.json",
+      "type": "config",
+      "summary": "@aotter/mantle 傘形套件的 manifest，定義 4 個子路徑 exports（spec/runtime/cloudflare/admin-ui）、4 個 workspace 內部 dependencies、peer/dev dependencies（hono、zod、better-auth 等），並設定 sideEffects: false 以利 tree-shaking。"
+    },
+    "config:packages/mantle/tsconfig.lib.json": {
+      "name": "tsconfig.lib.json",
+      "type": "config",
+      "summary": "@aotter/mantle 套件的 TypeScript build 設定，供 package.json 的 build/typecheck 腳本（tsc -b）使用，控制 library 編譯的 include/exclude 與 compilerOptions。"
+    },
+    "document:.agent/skills/mantle-release/SKILL.md": {
+      "name": "SKILL.md",
+      "type": "document",
+      "summary": "mantle-release agent skill 指令檔（.agent 版本），規範版本升版、tag、npm publish、starter fanout 與 landing 部署前必讀的 release 流程、Pre-Tag Gate 與失敗處理。"
+    },
+    "document:.claude/skills/mantle-release/SKILL.md": {
+      "name": "SKILL.md",
+      "type": "document",
+      "summary": "mantle-release agent skill 指令檔（.claude 版本，與 .agent 版本內容對應），供 Claude Code 在 release 前讀取的版本升版與 fanout 監看流程契約。"
+    },
+    "file:.github/CODEOWNERS": {
+      "name": "CODEOWNERS",
+      "type": "config",
+      "summary": "GitHub CODEOWNERS 設定，依路徑指派各 package 與治理檔案的預設審查者。"
+    },
+    "config:.github/dependabot.yml": {
+      "name": "dependabot.yml",
+      "type": "config",
+      "summary": "Dependabot 設定，定義 npm 與 GitHub Actions 各 package 目錄的相依套件自動更新排程與分組策略。"
+    },
+    "document:.github/pull_request_template.md": {
+      "name": "pull_request_template.md",
+      "type": "document",
+      "summary": "GitHub Pull Request 範本，提供 Summary、Why、Scope、Test plan 與 Contributor checklist 等結構化區段。"
+    },
+    "file:.npmrc": {
+      "name": ".npmrc",
+      "type": "config",
+      "summary": "npm/pnpm registry 與安裝行為設定檔。"
+    },
+    "file:.nvmrc": {
+      "name": ".nvmrc",
+      "type": "config",
+      "summary": "指定本專案使用的 Node.js 版本，供 nvm 等版本管理工具讀取。"
+    },
+    "file:.understand-anything/.understandignore": {
+      "name": ".understandignore",
+      "type": "config",
+      "summary": "Understand-Anything 分析工具的忽略規則檔，列出不納入知識圖譜掃描的路徑。"
+    },
+    "config:.understand-anything/config.json": {
+      "name": "config.json",
+      "type": "config",
+      "summary": "Understand-Anything 工具設定檔，指定輸出語言等分析參數。"
+    },
+    "document:docs/design-references/editorial-blog-2026-05-05.md": {
+      "name": "editorial-blog-2026-05-05.md",
+      "type": "document",
+      "summary": "已退役 editorial blog starter 的視覺系統設計參考，記錄設計主張、visual tokens、字體、版面、模板與 i18n surface，僅作設計參考非可執行模板。"
+    },
+    "file:packages/adapters/cloudflare/src/auth/appleClientSecret.ts": {
+      "name": "appleClientSecret.ts",
+      "type": "file",
+      "summary": "在 Workers Web Crypto 上以 ES256 簽發 Sign in with Apple 的 client secret JWT，包含私鑰匯入與 base64url 編解碼輔助函式。"
+    },
+    "file:packages/adapters/cloudflare/src/auth/ConsoleEmailSender.ts": {
+      "name": "ConsoleEmailSender.ts",
+      "type": "file",
+      "summary": "EmailSender port 的開發用實作，將驗證信內容輸出到 console 而非實際寄送。"
+    },
+    "file:packages/adapters/cloudflare/src/bindings/AssetsAssetServer.ts": {
+      "name": "AssetsAssetServer.ts",
+      "type": "file",
+      "summary": "以 Cloudflare Workers ASSETS binding 實作 runtime 的 AssetServer port，將請求轉送至靜態資產 fetcher。"
+    },
+    "file:packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts": {
+      "name": "D1DatabaseDriver.ts",
+      "type": "file",
+      "summary": "以 Cloudflare D1 實作 runtime 的 DatabaseDriver port，包裝 prepared statement、batch，並提供向後相容的 _mantle_migrations → _migrations 遷移執行器。"
+    },
+    "file:packages/adapters/cloudflare/src/bindings/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "bindings 資料夾的 barrel，re-export D1DatabaseDriver、KvCacheBinding、AssetsAssetServer、R2MediaStorage 與 queue dispatcher。"
+    },
+    "file:packages/adapters/cloudflare/src/bindings/KvCacheBinding.ts": {
+      "name": "KvCacheBinding.ts",
+      "type": "file",
+      "summary": "以 Cloudflare KV 實作 runtime 的 KvCache port，提供 get/put/delete/list 等讀多寫少快取操作。"
+    },
+    "file:packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts": {
+      "name": "R2MediaStorage.ts",
+      "type": "file",
+      "summary": "以 Cloudflare R2 實作選用的 MediaStorage port，處理預簽名上傳、變體驗證與 commit、公開 URL 產製與物件刪除，並以結構化 Diagnostic 回報錯誤。"
+    },
+    "file:packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts": {
+      "name": "WorkersQueueHookDispatcher.ts",
+      "type": "file",
+      "summary": "以 Cloudflare Workers Queue 實作 DeferredHookDispatcher port，enqueue 延遲 hook 並提供 queue consumer handler 執行 runDeferredHook。"
+    },
+    "file:packages/adapters/cloudflare/src/handlers/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "handlers 資料夾的 barrel，re-export cloudflareTurnstileCheck 與其選項型別。"
+    },
+    "file:packages/adapters/cloudflare/src/handlers/turnstile.ts": {
+      "name": "turnstile.ts",
+      "type": "file",
+      "summary": "提供 Cloudflare Turnstile 驗證的 Hono middleware，從請求取出 token 向 siteverify API 驗證，失敗時以結構化 Diagnostic 拒絕。"
+    },
+    "file:packages/adapters/cloudflare/src/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "Cloudflare adapter 套件的公開入口 barrel，re-export ConsoleEmailSender、appleClientSecret 等對外 API。"
+    },
+    "file:packages/adapters/cloudflare/src/mount/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "mount 資料夾的 barrel，re-export server endpoint 掛載、MCP API handler、public routes 與 CmsConfig 等掛載相關 API。"
+    },
+    "file:packages/adapters/cloudflare/src/oauth/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "oauth 資料夾的 barrel，re-export OAuth 路徑常數、createOAuthProvider 與 authorize 掛載相關 API 與型別。"
+    },
+    "file:packages/adapters/cloudflare/src/oauth/oauthConstants.ts": {
+      "name": "oauthConstants.ts",
+      "type": "file",
+      "summary": "定義 OAuth authorize / token / register 端點路徑常數，供 provider 與路由掛載共用。"
+    },
+    "file:packages/adapters/cloudflare/src/oauth/oauthSingleton.ts": {
+      "name": "oauthSingleton.ts",
+      "type": "file",
+      "summary": "建立並以單例方式快取 DCR 相容的 OAuth provider 實例，供 Cloudflare adapter 的 OAuth 端點共用。"
+    },
+    "file:packages/adapters/cloudflare/test/appleClientSecret.test.ts": {
+      "name": "appleClientSecret.test.ts",
+      "type": "file",
+      "summary": "Cloudflare adapter 的 Sign in with Apple client secret 測試，產生 ES256 臨時金鑰對、簽發並驗證 client secret JWT 的標頭、claims 與簽章正確性。"
+    },
+    "file:packages/adapters/cloudflare/test/mantle-internal-queue.test.ts": {
+      "name": "mantle-internal-queue.test.ts",
+      "type": "file",
+      "summary": "WorkersQueueHookDispatcher 與 queue handler 的測試，使用 fake Queue / fake MessageBatch 驗證 deferred hook envelope 的入列與消費流程。"
+    },
+    "file:packages/adapters/cloudflare/test/R2MediaStorage.test.ts": {
+      "name": "R2MediaStorage.test.ts",
+      "type": "file",
+      "summary": "R2MediaStorage 的測試，使用 fake R2 bucket 與計數型 id generator 驗證上傳建立、commit、公開 URL 產生與物件刪除等媒體儲存行為。"
+    },
+    "file:packages/adapters/cloudflare/vitest.config.ts": {
+      "name": "vitest.config.ts",
+      "type": "file",
+      "summary": "Cloudflare adapter 套件的 Vitest 設定，定義測試執行環境與檔案範圍。"
+    },
+    "config:packages/adapters/netlify/package.json": {
+      "name": "package.json",
+      "type": "config",
+      "summary": "@aotter/mantle-netlify 套件的 package 設定；目前為 v0.2 預留的 private stub，僅含中繼資料與基本 scripts。"
+    },
+    "document:packages/adapters/netlify/README.md": {
+      "name": "README.md",
+      "type": "document",
+      "summary": "Netlify adapter 的 STUB 說明文件，解釋此無程式碼套件存在的工程上理由，以及 v0.2 計畫交付的內容。"
+    },
+    "file:packages/mantle-admin-ui/src/env.d.ts": {
+      "name": "env.d.ts",
+      "type": "file",
+      "summary": "admin UI 的 Vite 環境型別宣告檔，提供 import.meta.env 與資產模組的 TypeScript 型別。"
+    },
+    "file:packages/mantle-admin-ui/src/styles/global.css": {
+      "name": "global.css",
+      "type": "file",
+      "summary": "admin SPA 的全域樣式表，定義設計 token、版面、元件與排版等基礎 UI 樣式（約 1.4k 行）。"
+    },
+    "file:packages/mantle-admin-ui/src/styles/index.css": {
+      "name": "index.css",
+      "type": "file",
+      "summary": "樣式進入點，重新匯入 global.css 供 SPA 的 main 入口載入。"
+    },
+    "file:packages/mantle-admin-ui/vite.config.ts": {
+      "name": "vite.config.ts",
+      "type": "file",
+      "summary": "admin UI 的 Vite 建置設定，含自製 plugin 將打包後的 index.html 內嵌處理，產出可被 adapter 透過 workspace dep 消費的 dist。"
+    },
+    "file:packages/mantle-runtime/src/domain/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "domain 層的 barrel，重新匯出 model / port / service 子模組的公開介面。"
+    },
+    "file:packages/mantle-runtime/src/domain/model/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "domain model 的 barrel，匯出 SeoMeta、TemplateRegistry、EntryContext 等模板與情境型別。"
+    },
+    "file:packages/mantle-runtime/src/domain/port/EmailSender.ts": {
+      "name": "EmailSender.ts",
+      "type": "file",
+      "summary": "定義 EmailSender 選用 feature port 介面與其送信參數型別，由具體 adapter 實作；runtime 不綁定任何寄信實作。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "domain service 的 barrel，匯出 LocaleNegotiator、PathMatcher、ViewParamCoercer 等純函式型服務。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/io/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "domain service io 子模組的 barrel，匯出輸入/輸出相關的服務型別。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts": {
+      "name": "LocaleNegotiator.ts",
+      "type": "file",
+      "summary": "locale 協商純函式服務：從 URL path 推斷 locale、判斷是否為已知 locale，並依站台預設組態正規化 URL locale。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/PathMatcher.ts": {
+      "name": "PathMatcher.ts",
+      "type": "file",
+      "summary": "路徑比對純函式服務：將 trigger path 樣式（含參數段）與 request path 逐段比對，支援安全解碼與尾斜線正規化。"
+    },
+    "file:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts": {
+      "name": "ViewParamCoercer.ts",
+      "type": "file",
+      "summary": "依 View 參數 schema 將查詢字串強制轉型為 string/number/boolean/enum，缺漏必填或型別不符時拋出 ViewParamCoercionError。"
+    },
+    "file:packages/mantle-runtime/src/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "mantle-runtime 套件的公開 API barrel，匯出 createCmsRuntime 組裝點、所有 adapter port 介面、domain service 與 MCP/persistence 等公開符號。"
+    },
+    "file:packages/mantle-runtime/src/infrastructure/http/DiagnosticResponse.ts": {
+      "name": "DiagnosticResponse.ts",
+      "type": "file",
+      "summary": "將 Diagnostic 轉為 HTTP Response 的薄包裝，依診斷碼決定狀態碼並在送出前做 wire 端遮蔽。"
+    },
+    "file:packages/mantle-runtime/src/infrastructure/http/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "infrastructure http 子模組的 barrel，匯出 diagnosticResponse 輔助函式。"
+    },
+    "file:packages/mantle-runtime/src/infrastructure/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "infrastructure 層 barrel，重新匯出 http / mcp / persistence 子模組的公開介面。"
+    },
+    "file:packages/mantle-runtime/src/infrastructure/mcp/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "infrastructure mcp 子模組 barrel，匯出 MCP 工具目錄、JSON-RPC 回應輔助與 McpJsonRpcDispatcher 等公開符號。"
+    },
+    "file:packages/mantle-runtime/src/infrastructure/persistence/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "infrastructure persistence 子模組 barrel，匯出以 DatabaseDriver 為底的 Entry / MediaAsset / SiteConfig repository 與 lifecycle hook 裝飾器。"
+    },
+    "file:packages/mantle-runtime/src/usecase/dto/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "usecase dto 子模組 barrel，匯出 use case 的 Request/Response DTO 型別。"
+    },
+    "file:packages/mantle-runtime/src/usecase/dto/render/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "mantle-runtime render 相關 usecase DTO 的 barrel 檔，集中 re-export render 請求/回應的型別定義。"
+    },
+    "file:packages/mantle-runtime/src/usecase/dto/view/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "mantle-runtime view usecase DTO 的單行 barrel 檔，re-export view 相關的請求/回應 DTO。"
+    },
+    "file:packages/mantle-runtime/src/usecase/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "mantle-runtime usecase 層的 barrel 檔，彙整並 re-export 各 use case 類別與其 DTO 子 barrel。"
+    },
+    "file:packages/mantle-runtime/test/dispatcher-match.test.ts": {
+      "name": "dispatcher-match.test.ts",
+      "type": "file",
+      "summary": "PathMatcher 的 vitest 單元測試，驗證 dispatcher 路徑比對 (matchPath) 在各種路由樣式下的命中與參數擷取行為。"
+    },
+    "file:packages/mantle-runtime/test/locale-negotiator.test.ts": {
+      "name": "locale-negotiator.test.ts",
+      "type": "file",
+      "summary": "LocaleNegotiator 的 vitest 單元測試，覆蓋從路徑推斷 locale、已知 locale 判定、URL locale 轉換與 site 預設組態等邏輯。"
+    },
+    "file:packages/mantle-runtime/test/view-param-coercer.test.ts": {
+      "name": "view-param-coercer.test.ts",
+      "type": "file",
+      "summary": "ViewParamCoercer 的 vitest 單元測試，驗證 view 參數型別強制轉換 (coerceViewParams) 與轉換失敗時拋出 ViewParamCoercionError 的行為。"
+    },
+    "file:packages/mantle-runtime/vitest.config.ts": {
+      "name": "vitest.config.ts",
+      "type": "file",
+      "summary": "mantle-runtime 套件的 vitest 測試組態，設定測試執行環境與 include 範圍。"
+    },
+    "file:packages/mantle-spec/src/domain/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "mantle-spec domain 層的 barrel 檔，re-export domain model 與 domain service 兩個子 barrel。"
+    },
+    "file:packages/mantle-spec/src/domain/service/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "mantle-spec domain service 的 barrel 檔，彙整 re-export LocaleCanonicalizer、ManifestParser、JsonSchemaToZod 等純無狀態演算法服務。"
+    },
+    "file:packages/mantle-spec/src/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "@aotter/mantle-spec 的公開進入點 barrel，彙整 re-export kernel、domain、usecase 三層的對外型別與函式;sideEffects: false 以利 admin SPA 的 tree-shaking。"
+    },
+    "file:packages/mantle-spec/src/infrastructure/cli/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "mantle-spec CLI 基礎設施的 barrel 檔,re-export manifest 載入器與 validate / introspect / emit-openapi / emit-types 等 CLI 命令進入點。"
+    },
+    "file:packages/mantle-spec/src/infrastructure/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "mantle-spec infrastructure 層的單行 barrel 檔,re-export CLI 子 barrel。"
+    },
+    "file:packages/mantle-spec/src/kernel/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "mantle-spec kernel 層的 barrel 檔,re-export Diagnostic 形狀、診斷碼、HTTP 狀態對應與 DiagnosticError 等跨切面輔助。"
+    },
+    "file:packages/mantle-spec/src/usecase/dto/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "mantle-spec usecase DTO 的 barrel 檔,re-export ValidateManifests 等 use case 的請求/回應 DTO。"
+    },
+    "file:packages/mantle-spec/src/usecase/index.ts": {
+      "name": "index.ts",
+      "type": "file",
+      "summary": "mantle-spec usecase 層的 barrel 檔,re-export ValidateManifestsUseCase 與其 DTO 子 barrel。"
+    },
+    "file:packages/mantle-spec/vitest.config.ts": {
+      "name": "vitest.config.ts",
+      "type": "file",
+      "summary": "mantle-spec 套件的 vitest 測試組態,設定測試執行環境與 include 範圍。"
+    },
+    "file:packages/mantle/src/admin-ui.ts": {
+      "name": "admin-ui.ts",
+      "type": "file",
+      "summary": "@aotter/mantle 聚合套件的 admin-ui 進入點,單行 re-export @aotter/mantle-admin-ui 的公開介面。"
+    },
+    "file:packages/mantle/src/cloudflare.ts": {
+      "name": "cloudflare.ts",
+      "type": "file",
+      "summary": "@aotter/mantle 聚合套件的 cloudflare 進入點,單行 re-export Cloudflare Workers adapter 的公開介面。"
+    },
+    "file:packages/mantle/src/runtime.ts": {
+      "name": "runtime.ts",
+      "type": "file",
+      "summary": "@aotter/mantle 聚合套件的 runtime 進入點,單行 re-export @aotter/mantle-runtime 的公開介面。"
+    },
+    "file:packages/mantle/src/spec.ts": {
+      "name": "spec.ts",
+      "type": "file",
+      "summary": "@aotter/mantle 聚合套件的 spec 進入點,單行 re-export @aotter/mantle-spec 的公開介面。"
+    },
+    "file:scripts/check-boundaries.mjs": {
+      "name": "check-boundaries.mjs",
+      "type": "file",
+      "summary": "Clean-architecture 邊界檢查腳本,掃描原始碼以強制 mantle-runtime 不得引用 Cloudflare 專屬型別,並驗證套件間相依方向正確。"
+    },
+    "file:scripts/sync-package-docs.mjs": {
+      "name": "sync-package-docs.mjs",
+      "type": "file",
+      "summary": "文件同步腳本,將 repo 根目錄的 docs/ 與 skills/ 複製到目標套件 (預設 packages/mantle) 之下,支援 --clean 模式清除複本。"
+    },
+    "file:skills/.keep": {
+      "name": ".keep",
+      "type": "file",
+      "summary": "空的 placeholder 檔,用於在版本控制中保留 skills/ 目錄結構。"
+    },
+    "document:skills/customize-design/SKILL.md": {
+      "name": "SKILL.md",
+      "type": "document",
+      "summary": "AI agent 可讀的設計客製化指南,以 L1 tokens / L2 extraCss·icons·i18n / L3 Header·Footer·PageShell / L4 整頁模板 的分層配方說明如何安全調整 mantle publication 站台外觀。"
+    },
+    "document:skills/extend/SKILL.md": {
+      "name": "SKILL.md",
+      "type": "document",
+      "summary": "AI agent 可讀的擴充指南,提供從撰寫 manifest YAML、即時驗證、串接 handler、註冊模板到本地試跑與整合 smoke 測試的標準擴充迴圈。"
+    },
+    "document:skills/install/SKILL.md": {
+      "name": "install/SKILL.md",
+      "type": "document",
+      "summary": "提供給 AI agent 的 install skill brief，引導 agent 接手 Mantle landing（mantle.tools）已 provision 好的 repo，完成所選類型、首批頁面與內容，而非從本地 scaffold 全新專案。明確標示 create-mantle CLI 已退役，並說明四原子（Schema/View/Procedure/Trigger）的 ground truth 與本地預覽流程。"
+    },
+    "document:skills/provision/SKILL.md": {
+      "name": "provision/SKILL.md",
+      "type": "document",
+      "summary": "提供給 AI agent 的 provision skill brief，承接 landing 完成首次 deploy 後的工作：驗證 Cloudflare Worker 部署、配置每站台 staff auth（GitHub OAuth App ＋ Worker secrets）、smoke test，並交付 operator setup URL。內含 Diagnostics 對照表與必須避免的反模式（Don't）。"
+    },
+    "document:skills/README.md": {
+      "name": "skills/README.md",
+      "type": "document",
+      "summary": "skills/ 目錄的索引文件，列出 mantle 消費端可用的 agent-readable skill briefs（install / customize-design / extend / provision）與各自的 when-to-invoke，並說明這些 brief 是寫給「代表消費者行動的 AI agent」而非 SDK 維護者。"
+    },
+    "file:starters/.keep": {
+      "name": ".keep",
+      "type": "file",
+      "summary": "空的佔位檔，用以在 git 中保留 starters/ 目錄結構（starter 內容已遷至獨立的 mantle-starters monorepo）。"
+    },
+    "document:starters/blank/README.md": {
+      "name": "starters/blank/README.md",
+      "type": "document",
+      "summary": "stub README，說明 blank starter 已遷出本 SDK monorepo、改由獨立的 aotter/mantle-starters 提供（透過 create-mantle scaffolder 取得 tagged tarball）。以對外指向的 stub 作為工程上的 forcing function，讓 reviewer 在 coupling 走樣前就能察覺。"
+    }
+  },
+  "totalNodes": 375,
+  "totalEdges": 1479
+}

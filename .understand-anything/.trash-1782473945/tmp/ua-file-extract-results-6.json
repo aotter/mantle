@@ -1,0 +1,1658 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 24,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/render/ComposeSitemapRequest.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 11,
+      "nonEmptyLines": 10,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/render/PreviewEntryRequest.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 27,
+      "nonEmptyLines": 26,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/render/RenderEntryLiveRequest.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 17,
+      "nonEmptyLines": 16,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/render/RenderListLiveRequest.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 11,
+      "nonEmptyLines": 10,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 68,
+      "nonEmptyLines": 61,
+      "classes": [
+        {
+          "name": "CommitMediaUploadUseCase",
+          "startLine": 26,
+          "endLine": 68,
+          "methods": [
+            "constructor",
+            "execute"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "CommitMediaUploadUseCase",
+          "line": 26,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "execute",
+          "callee": "this.kv.get",
+          "lineNumber": 37
+        },
+        {
+          "caller": "execute",
+          "callee": "mediaUploadExpiredDiagnostic",
+          "lineNumber": 40
+        },
+        {
+          "caller": "execute",
+          "callee": "JSON.parse",
+          "lineNumber": 43
+        },
+        {
+          "caller": "execute",
+          "callee": "record.variants.map",
+          "lineNumber": 45
+        },
+        {
+          "caller": "execute",
+          "callee": "Math.min",
+          "lineNumber": 49
+        },
+        {
+          "caller": "execute",
+          "callee": "this.storage.commitUpload",
+          "lineNumber": 52
+        },
+        {
+          "caller": "execute",
+          "callee": "this.clock.now",
+          "lineNumber": 58
+        },
+        {
+          "caller": "execute",
+          "callee": "this.assets.save",
+          "lineNumber": 61
+        },
+        {
+          "caller": "execute",
+          "callee": "this.kv.delete(kvKey).catch",
+          "lineNumber": 64
+        },
+        {
+          "caller": "execute",
+          "callee": "this.kv.delete",
+          "lineNumber": 64
+        }
+      ],
+      "metrics": {
+        "importCount": 8,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 306,
+      "nonEmptyLines": 286,
+      "functions": [
+        {
+          "name": "pickFallbackForSizing",
+          "startLine": 298,
+          "endLine": 306,
+          "params": [
+            "variants"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "CreateMediaUploadUseCase",
+          "startLine": 56,
+          "endLine": 286,
+          "methods": [
+            "constructor",
+            "execute",
+            "assertVariantsCoverPolicy",
+            "assertVariantSizesUnderCap",
+            "assertEachVariantAccepted",
+            "assertNoSuspiciousSizing"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "CreateMediaUploadUseCase",
+          "line": 56,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "execute",
+          "callee": "this.siteConfig.readMediaPurposes",
+          "lineNumber": 69
+        },
+        {
+          "caller": "execute",
+          "callee": "declared.map",
+          "lineNumber": 70
+        },
+        {
+          "caller": "execute",
+          "callee": "declared.find",
+          "lineNumber": 71
+        },
+        {
+          "caller": "execute",
+          "callee": "mediaPurposeRejectedDiagnostic",
+          "lineNumber": 74
+        },
+        {
+          "caller": "execute",
+          "callee": "this.assertVariantsCoverPolicy",
+          "lineNumber": 78
+        },
+        {
+          "caller": "execute",
+          "callee": "this.assertEachVariantAccepted",
+          "lineNumber": 79
+        },
+        {
+          "caller": "execute",
+          "callee": "this.assertVariantSizesUnderCap",
+          "lineNumber": 80
+        },
+        {
+          "caller": "execute",
+          "callee": "this.assertNoSuspiciousSizing",
+          "lineNumber": 81
+        },
+        {
+          "caller": "execute",
+          "callee": "this.clock.now",
+          "lineNumber": 83
+        },
+        {
+          "caller": "execute",
+          "callee": "this.idgen.next",
+          "lineNumber": 85
+        },
+        {
+          "caller": "execute",
+          "callee": "request.variants.map",
+          "lineNumber": 87
+        },
+        {
+          "caller": "execute",
+          "callee": "this.storage.createUpload",
+          "lineNumber": 94
+        },
+        {
+          "caller": "execute",
+          "callee": "result.capabilities.map",
+          "lineNumber": 103
+        },
+        {
+          "caller": "execute",
+          "callee": "this.kv.put",
+          "lineNumber": 121
+        },
+        {
+          "caller": "execute",
+          "callee": "JSON.stringify",
+          "lineNumber": 123
+        },
+        {
+          "caller": "execute",
+          "callee": "result.capabilities.map",
+          "lineNumber": 129
+        },
+        {
+          "caller": "assertVariantsCoverPolicy",
+          "callee": "expandPolicyRequired",
+          "lineNumber": 152
+        },
+        {
+          "caller": "assertVariantsCoverPolicy",
+          "callee": "slots.forEach",
+          "lineNumber": 155
+        },
+        {
+          "caller": "assertVariantsCoverPolicy",
+          "callee": "expandedSet.add",
+          "lineNumber": 157
+        },
+        {
+          "caller": "assertVariantsCoverPolicy",
+          "callee": "mimeToSlot.set",
+          "lineNumber": 158
+        },
+        {
+          "caller": "assertVariantsCoverPolicy",
+          "callee": "request.variants.map",
+          "lineNumber": 161
+        },
+        {
+          "caller": "assertVariantsCoverPolicy",
+          "callee": "request.variants.filter",
+          "lineNumber": 165
+        },
+        {
+          "caller": "assertVariantsCoverPolicy",
+          "callee": "expandedSet.has",
+          "lineNumber": 165
+        },
+        {
+          "caller": "assertVariantsCoverPolicy",
+          "callee": "mediaVariantsIncompleteDiagnostic",
+          "lineNumber": 168
+        },
+        {
+          "caller": "assertVariantsCoverPolicy",
+          "callee": "mimeToSlot.get",
+          "lineNumber": 181
+        },
+        {
+          "caller": "assertVariantsCoverPolicy",
+          "callee": "filledSlots.has",
+          "lineNumber": 182
+        },
+        {
+          "caller": "assertVariantsCoverPolicy",
+          "callee": "mediaVariantsIncompleteDiagnostic",
+          "lineNumber": 184
+        },
+        {
+          "caller": "assertVariantsCoverPolicy",
+          "callee": "filledSlots.add",
+          "lineNumber": 189
+        },
+        {
+          "caller": "assertVariantsCoverPolicy",
+          "callee": "mediaVariantsIncompleteDiagnostic",
+          "lineNumber": 193
+        },
+        {
+          "caller": "assertVariantsCoverPolicy",
+          "callee": "request.variants.filter",
+          "lineNumber": 205
+        },
+        {
+          "caller": "assertVariantsCoverPolicy",
+          "callee": "mediaVariantsIncompleteDiagnostic",
+          "lineNumber": 208
+        },
+        {
+          "caller": "assertVariantSizesUnderCap",
+          "callee": "Number.isSafeInteger",
+          "lineNumber": 231
+        },
+        {
+          "caller": "assertVariantSizesUnderCap",
+          "callee": "mediaVariantSizeExceededDiagnostic",
+          "lineNumber": 233
+        },
+        {
+          "caller": "assertVariantSizesUnderCap",
+          "callee": "mediaVariantSizeExceededDiagnostic",
+          "lineNumber": 242
+        },
+        {
+          "caller": "assertVariantSizesUnderCap",
+          "callee": "mediaVariantSizeExceededDiagnostic",
+          "lineNumber": 247
+        },
+        {
+          "caller": "assertEachVariantAccepted",
+          "callee": "mediaSvgRejectedDiagnostic",
+          "lineNumber": 259
+        },
+        {
+          "caller": "assertEachVariantAccepted",
+          "callee": "isAllowedMime",
+          "lineNumber": 261
+        },
+        {
+          "caller": "assertEachVariantAccepted",
+          "callee": "mediaMimeRejectedDiagnostic",
+          "lineNumber": 262
+        },
+        {
+          "caller": "assertNoSuspiciousSizing",
+          "callee": "pickFallbackForSizing",
+          "lineNumber": 271
+        },
+        {
+          "caller": "assertNoSuspiciousSizing",
+          "callee": "MODERN_FORMATS.has",
+          "lineNumber": 275
+        },
+        {
+          "caller": "assertNoSuspiciousSizing",
+          "callee": "mediaVariantsSuspiciousSizeDiagnostic",
+          "lineNumber": 278
+        },
+        {
+          "caller": "pickFallbackForSizing",
+          "callee": "variants.find",
+          "lineNumber": 302
+        }
+      ],
+      "metrics": {
+        "importCount": 9,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/media/PendingUploadRecord.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 37,
+      "nonEmptyLines": 35,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 187,
+      "nonEmptyLines": 175,
+      "functions": [
+        {
+          "name": "mediaNotConfiguredDiagnostic",
+          "startLine": 5,
+          "endLine": 15,
+          "params": [
+            "opPath"
+          ]
+        },
+        {
+          "name": "mediaMimeRejectedDiagnostic",
+          "startLine": 17,
+          "endLine": 26,
+          "params": [
+            "opPath",
+            "mime"
+          ]
+        },
+        {
+          "name": "mediaSvgRejectedDiagnostic",
+          "startLine": 28,
+          "endLine": 38,
+          "params": [
+            "opPath"
+          ]
+        },
+        {
+          "name": "mediaSizeExceededDiagnostic",
+          "startLine": 40,
+          "endLine": 53,
+          "params": [
+            "opPath",
+            "byteSize",
+            "maxBytes"
+          ]
+        },
+        {
+          "name": "mediaUploadExpiredDiagnostic",
+          "startLine": 55,
+          "endLine": 65,
+          "params": [
+            "opPath",
+            "uploadGroupId"
+          ]
+        },
+        {
+          "name": "mediaObjectNotFoundDiagnostic",
+          "startLine": 67,
+          "endLine": 77,
+          "params": [
+            "opPath",
+            "uploadGroupId"
+          ]
+        },
+        {
+          "name": "mediaPurposeRejectedDiagnostic",
+          "startLine": 85,
+          "endLine": 106,
+          "params": [
+            "opPath",
+            "purpose",
+            "declared"
+          ]
+        },
+        {
+          "name": "mediaVariantsIncompleteDiagnostic",
+          "startLine": 112,
+          "endLine": 130,
+          "params": [
+            "opPath",
+            "purpose",
+            "required",
+            "supplied"
+          ]
+        },
+        {
+          "name": "mediaVariantSizeExceededDiagnostic",
+          "startLine": 132,
+          "endLine": 148,
+          "params": [
+            "opPath",
+            "mime",
+            "byteSize",
+            "maxBytes"
+          ]
+        },
+        {
+          "name": "mediaVariantsSuspiciousSizeDiagnostic",
+          "startLine": 159,
+          "endLine": 174,
+          "params": [
+            "opPath",
+            "detail"
+          ]
+        },
+        {
+          "name": "mediaAssetNotFoundDiagnostic",
+          "startLine": 176,
+          "endLine": 187,
+          "params": [
+            "opPath",
+            "id"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "mediaNotConfiguredDiagnostic",
+          "line": 5,
+          "isDefault": false
+        },
+        {
+          "name": "mediaMimeRejectedDiagnostic",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "mediaSvgRejectedDiagnostic",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "mediaSizeExceededDiagnostic",
+          "line": 40,
+          "isDefault": false
+        },
+        {
+          "name": "mediaUploadExpiredDiagnostic",
+          "line": 55,
+          "isDefault": false
+        },
+        {
+          "name": "mediaObjectNotFoundDiagnostic",
+          "line": 67,
+          "isDefault": false
+        },
+        {
+          "name": "mediaPurposeRejectedDiagnostic",
+          "line": 85,
+          "isDefault": false
+        },
+        {
+          "name": "mediaVariantsIncompleteDiagnostic",
+          "line": 112,
+          "isDefault": false
+        },
+        {
+          "name": "mediaVariantSizeExceededDiagnostic",
+          "line": 132,
+          "isDefault": false
+        },
+        {
+          "name": "mediaVariantsSuspiciousSizeDiagnostic",
+          "line": 159,
+          "isDefault": false
+        },
+        {
+          "name": "mediaAssetNotFoundDiagnostic",
+          "line": 176,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "mediaNotConfiguredDiagnostic",
+          "callee": "makeDiagnostic",
+          "lineNumber": 6
+        },
+        {
+          "caller": "mediaMimeRejectedDiagnostic",
+          "callee": "makeDiagnostic",
+          "lineNumber": 18
+        },
+        {
+          "caller": "mediaSvgRejectedDiagnostic",
+          "callee": "makeDiagnostic",
+          "lineNumber": 29
+        },
+        {
+          "caller": "mediaSizeExceededDiagnostic",
+          "callee": "makeDiagnostic",
+          "lineNumber": 45
+        },
+        {
+          "caller": "mediaUploadExpiredDiagnostic",
+          "callee": "makeDiagnostic",
+          "lineNumber": 56
+        },
+        {
+          "caller": "mediaObjectNotFoundDiagnostic",
+          "callee": "makeDiagnostic",
+          "lineNumber": 68
+        },
+        {
+          "caller": "mediaPurposeRejectedDiagnostic",
+          "callee": "declared.map((p) => `'${p}'`).join",
+          "lineNumber": 92
+        },
+        {
+          "caller": "mediaPurposeRejectedDiagnostic",
+          "callee": "declared.map",
+          "lineNumber": 92
+        },
+        {
+          "caller": "mediaPurposeRejectedDiagnostic",
+          "callee": "makeDiagnostic",
+          "lineNumber": 94
+        },
+        {
+          "caller": "mediaVariantsIncompleteDiagnostic",
+          "callee": "required.filter",
+          "lineNumber": 118
+        },
+        {
+          "caller": "mediaVariantsIncompleteDiagnostic",
+          "callee": "supplied.includes",
+          "lineNumber": 118
+        },
+        {
+          "caller": "mediaVariantsIncompleteDiagnostic",
+          "callee": "makeDiagnostic",
+          "lineNumber": 119
+        },
+        {
+          "caller": "mediaVariantsIncompleteDiagnostic",
+          "callee": "required.join",
+          "lineNumber": 127
+        },
+        {
+          "caller": "mediaVariantsIncompleteDiagnostic",
+          "callee": "missing.join",
+          "lineNumber": 128
+        },
+        {
+          "caller": "mediaVariantSizeExceededDiagnostic",
+          "callee": "makeDiagnostic",
+          "lineNumber": 138
+        },
+        {
+          "caller": "mediaVariantsSuspiciousSizeDiagnostic",
+          "callee": "makeDiagnostic",
+          "lineNumber": 163
+        },
+        {
+          "caller": "mediaAssetNotFoundDiagnostic",
+          "callee": "makeDiagnostic",
+          "lineNumber": 177
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 11,
+        "functionCount": 11,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/media/mediaAllowlist.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 63,
+      "nonEmptyLines": 55,
+      "functions": [
+        {
+          "name": "isAllowedMime",
+          "startLine": 22,
+          "endLine": 25,
+          "params": [
+            "mime",
+            "allowSvg"
+          ]
+        },
+        {
+          "name": "extensionForMime",
+          "startLine": 46,
+          "endLine": 63,
+          "params": [
+            "mime"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "MEDIA_MIME_ALLOWLIST",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "MEDIA_SVG_MIME",
+          "line": 18,
+          "isDefault": false
+        },
+        {
+          "name": "isAllowedMime",
+          "line": 22,
+          "isDefault": false
+        },
+        {
+          "name": "DEFAULT_MAX_BYTES",
+          "line": 31,
+          "isDefault": false
+        },
+        {
+          "name": "UPLOAD_URL_TTL_SECONDS",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "PENDING_UPLOAD_KV_TTL_SECONDS",
+          "line": 39,
+          "isDefault": false
+        },
+        {
+          "name": "PENDING_UPLOAD_KV_PREFIX",
+          "line": 41,
+          "isDefault": false
+        },
+        {
+          "name": "extensionForMime",
+          "line": 46,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "isAllowedMime",
+          "callee": "(MEDIA_MIME_ALLOWLIST as readonly string[]).includes",
+          "lineNumber": 24
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 8,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 67,
+      "nonEmptyLines": 64,
+      "functions": [
+        {
+          "name": "readSiblings",
+          "startLine": 39,
+          "endLine": 67,
+          "params": [
+            "db",
+            "current",
+            "site",
+            "paths"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "ComposeEntrySeoMetaUseCase",
+          "startLine": 28,
+          "endLine": 37,
+          "methods": [
+            "constructor",
+            "execute"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "ComposeEntrySeoMetaUseCase",
+          "line": 28,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "execute",
+          "callee": "paths.forEntry",
+          "lineNumber": 33
+        },
+        {
+          "caller": "execute",
+          "callee": "readSiblings",
+          "lineNumber": 34
+        },
+        {
+          "caller": "execute",
+          "callee": "composeEntrySeoMeta",
+          "lineNumber": 35
+        },
+        {
+          "caller": "readSiblings",
+          "callee": "current.locale?.toLowerCase",
+          "lineNumber": 48
+        },
+        {
+          "caller": "readSiblings",
+          "callee": "site.locales.filter",
+          "lineNumber": 49
+        },
+        {
+          "caller": "readSiblings",
+          "callee": "l.toLowerCase",
+          "lineNumber": 49
+        },
+        {
+          "caller": "readSiblings",
+          "callee": "Promise.all",
+          "lineNumber": 50
+        },
+        {
+          "caller": "readSiblings",
+          "callee": "targetLocales.map",
+          "lineNumber": 51
+        },
+        {
+          "caller": "readSiblings",
+          "callee": "readEntryBySlug(db, {\n        collection: current.collection,\n        slug,\n        locale,\n        status: \"published\",\n      }).then",
+          "lineNumber": 52
+        },
+        {
+          "caller": "readSiblings",
+          "callee": "readEntryBySlug",
+          "lineNumber": 52
+        },
+        {
+          "caller": "readSiblings",
+          "callee": "paths.forEntry",
+          "lineNumber": 63
+        },
+        {
+          "caller": "readSiblings",
+          "callee": "out.push",
+          "lineNumber": 64
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 40,
+      "nonEmptyLines": 37,
+      "functions": [
+        {
+          "name": "groupByCollection",
+          "startLine": 32,
+          "endLine": 40,
+          "params": [
+            "entries"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "ComposeLlmsTxtUseCase",
+          "startLine": 18,
+          "endLine": 30,
+          "methods": [
+            "constructor",
+            "execute"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "ComposeLlmsTxtUseCase",
+          "line": 18,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "execute",
+          "callee": "readPublishedEntries",
+          "lineNumber": 22
+        },
+        {
+          "caller": "execute",
+          "callee": "groupByCollection",
+          "lineNumber": 23
+        },
+        {
+          "caller": "execute",
+          "callee": "serializeLlmsTxt",
+          "lineNumber": 24
+        },
+        {
+          "caller": "groupByCollection",
+          "callee": "out.get",
+          "lineNumber": 35
+        },
+        {
+          "caller": "groupByCollection",
+          "callee": "arr.push",
+          "lineNumber": 36
+        },
+        {
+          "caller": "groupByCollection",
+          "callee": "out.set",
+          "lineNumber": 37
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 30,
+      "nonEmptyLines": 27,
+      "classes": [
+        {
+          "name": "ComposeSitemapUseCase",
+          "startLine": 16,
+          "endLine": 30,
+          "methods": [
+            "constructor",
+            "execute"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "SITEMAP_MAX_URLS_DEFAULT",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "ComposeSitemapUseCase",
+          "line": 16,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "execute",
+          "callee": "readPublishedEntries",
+          "lineNumber": 21
+        },
+        {
+          "caller": "execute",
+          "callee": "mapper",
+          "lineNumber": 25
+        },
+        {
+          "caller": "execute",
+          "callee": "entries.push",
+          "lineNumber": 26
+        },
+        {
+          "caller": "execute",
+          "callee": "serializeSitemap",
+          "lineNumber": 28
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 2,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/render/PreviewEntryUseCase.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 79,
+      "nonEmptyLines": 76,
+      "classes": [
+        {
+          "name": "PreviewEntryUseCase",
+          "startLine": 38,
+          "endLine": 79,
+          "methods": [
+            "constructor",
+            "execute"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "PreviewEntryUseCase",
+          "line": 38,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "execute",
+          "callee": "readEntryBySlug",
+          "lineNumber": 52
+        },
+        {
+          "caller": "execute",
+          "callee": "joinParentIfTranslation",
+          "lineNumber": 65
+        },
+        {
+          "caller": "execute",
+          "callee": "composeSeoIfPathed",
+          "lineNumber": 66
+        },
+        {
+          "caller": "execute",
+          "callee": "resolveMediaAssetsForEntries",
+          "lineNumber": 67
+        },
+        {
+          "caller": "execute",
+          "callee": "renderEntryHtml",
+          "lineNumber": 68
+        },
+        {
+          "caller": "execute",
+          "callee": "defaultPreviewBanner",
+          "lineNumber": 76
+        },
+        {
+          "caller": "execute",
+          "callee": "injectPreviewBanner",
+          "lineNumber": 77
+        }
+      ],
+      "metrics": {
+        "importCount": 11,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/render/RenderEntryLiveUseCase.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 67,
+      "nonEmptyLines": 65,
+      "classes": [
+        {
+          "name": "RenderEntryLiveUseCase",
+          "startLine": 35,
+          "endLine": 67,
+          "methods": [
+            "constructor",
+            "execute"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "RenderEntryLiveUseCase",
+          "line": 35,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "execute",
+          "callee": "readEntryBySlug",
+          "lineNumber": 47
+        },
+        {
+          "caller": "execute",
+          "callee": "joinParentIfTranslation",
+          "lineNumber": 54
+        },
+        {
+          "caller": "execute",
+          "callee": "composeSeoIfPathed",
+          "lineNumber": 57
+        },
+        {
+          "caller": "execute",
+          "callee": "resolveMediaAssetsForEntries",
+          "lineNumber": 58
+        },
+        {
+          "caller": "execute",
+          "callee": "renderEntryHtml",
+          "lineNumber": 59
+        }
+      ],
+      "metrics": {
+        "importCount": 10,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/render/RenderListLiveUseCase.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 48,
+      "nonEmptyLines": 46,
+      "classes": [
+        {
+          "name": "RenderListLiveUseCase",
+          "startLine": 22,
+          "endLine": 48,
+          "methods": [
+            "constructor",
+            "execute"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "RenderListLiveUseCase",
+          "line": 22,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "execute",
+          "callee": "readPublishedEntries",
+          "lineNumber": 31
+        },
+        {
+          "caller": "execute",
+          "callee": "joinParentForList",
+          "lineNumber": 35
+        },
+        {
+          "caller": "execute",
+          "callee": "resolveMediaAssetsForEntries",
+          "lineNumber": 38
+        },
+        {
+          "caller": "execute",
+          "callee": "renderListHtml",
+          "lineNumber": 39
+        }
+      ],
+      "metrics": {
+        "importCount": 8,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/test/compose-render.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 172,
+      "nonEmptyLines": 163,
+      "functions": [
+        {
+          "name": "seedPublished",
+          "startLine": 16,
+          "endLine": 36,
+          "params": [
+            "db",
+            "args"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "seedPublished",
+          "callee": "db.entries.set",
+          "lineNumber": 26
+        },
+        {
+          "caller": "seedPublished",
+          "callee": "JSON.stringify",
+          "lineNumber": 31
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/test/fakes/kv.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 35,
+      "nonEmptyLines": 29,
+      "classes": [
+        {
+          "name": "InMemoryKv",
+          "startLine": 8,
+          "endLine": 35,
+          "methods": [
+            "get",
+            "put",
+            "delete",
+            "list",
+            "_snapshot"
+          ],
+          "properties": [
+            "store",
+            "ttl"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "InMemoryKv",
+          "line": 8,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "get",
+          "callee": "this.store.get",
+          "lineNumber": 13
+        },
+        {
+          "caller": "put",
+          "callee": "this.store.set",
+          "lineNumber": 17
+        },
+        {
+          "caller": "put",
+          "callee": "this.ttl.set",
+          "lineNumber": 18
+        },
+        {
+          "caller": "delete",
+          "callee": "this.store.delete",
+          "lineNumber": 22
+        },
+        {
+          "caller": "delete",
+          "callee": "this.ttl.delete",
+          "lineNumber": 23
+        },
+        {
+          "caller": "list",
+          "callee": "[...this.store.keys()].filter",
+          "lineNumber": 27
+        },
+        {
+          "caller": "list",
+          "callee": "this.store.keys",
+          "lineNumber": 27
+        },
+        {
+          "caller": "list",
+          "callee": "k.startsWith",
+          "lineNumber": 27
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/test/media-asset-references.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 95,
+      "nonEmptyLines": 84,
+      "functions": [
+        {
+          "name": "entry",
+          "startLine": 44,
+          "endLine": 54,
+          "params": [
+            "data"
+          ]
+        },
+        {
+          "name": "asset",
+          "startLine": 56,
+          "endLine": 70,
+          "params": [
+            "id"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "MemoryMediaAssets",
+          "startLine": 72,
+          "endLine": 95,
+          "methods": [
+            "constructor",
+            "findById",
+            "findManyByIds",
+            "save"
+          ],
+          "properties": [
+            "lookups",
+            "assets"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "assets.map",
+          "lineNumber": 77
+        },
+        {
+          "caller": "findById",
+          "callee": "this.assets.get",
+          "lineNumber": 81
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "this.lookups.push",
+          "lineNumber": 85
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "this.assets.get",
+          "lineNumber": 88
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "out.set",
+          "lineNumber": 89
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/test/media.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 667,
+      "nonEmptyLines": 626,
+      "functions": [
+        {
+          "name": "makeCreateUseCase",
+          "startLine": 106,
+          "endLine": 121,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "FakeMediaStorage",
+          "startLine": 13,
+          "endLine": 60,
+          "methods": [
+            "createUpload",
+            "commitUpload",
+            "getPublicUrl",
+            "deleteObject"
+          ],
+          "properties": [
+            "createCalls",
+            "commitCalls"
+          ]
+        },
+        {
+          "name": "InMemoryMediaAssetRepository",
+          "startLine": 62,
+          "endLine": 87,
+          "methods": [
+            "findById",
+            "findManyByIds",
+            "save",
+            "delete"
+          ],
+          "properties": [
+            "saved",
+            "store"
+          ]
+        },
+        {
+          "name": "CountingIdGenerator",
+          "startLine": 92,
+          "endLine": 98,
+          "methods": [
+            "next"
+          ],
+          "properties": [
+            "n"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "createUpload",
+          "callee": "this.createCalls.push",
+          "lineNumber": 18
+        },
+        {
+          "caller": "createUpload",
+          "callee": "args.variants.map",
+          "lineNumber": 21
+        },
+        {
+          "caller": "commitUpload",
+          "callee": "this.commitCalls.push",
+          "lineNumber": 35
+        },
+        {
+          "caller": "commitUpload",
+          "callee": "args.variants.map",
+          "lineNumber": 36
+        },
+        {
+          "caller": "findById",
+          "callee": "this.store.get",
+          "lineNumber": 67
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "this.store.get",
+          "lineNumber": 73
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "out.set",
+          "lineNumber": 74
+        },
+        {
+          "caller": "save",
+          "callee": "this.saved.push",
+          "lineNumber": 80
+        },
+        {
+          "caller": "save",
+          "callee": "this.store.set",
+          "lineNumber": 81
+        },
+        {
+          "caller": "delete",
+          "callee": "this.store.delete",
+          "lineNumber": 85
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 3
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/test/preview-banner.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 44,
+      "nonEmptyLines": 40,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/test/public-path-resolver.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 77,
+      "nonEmptyLines": 69,
+      "functions": [
+        {
+          "name": "entry",
+          "startLine": 5,
+          "endLine": 16,
+          "params": [
+            "overrides"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/test/render-markdown.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 82,
+      "nonEmptyLines": 75,
+      "functions": [
+        {
+          "name": "entry",
+          "startLine": 17,
+          "endLine": 28,
+          "params": [
+            "data",
+            "locale"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/test/render-publish.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 229,
+      "nonEmptyLines": 206,
+      "functions": [
+        {
+          "name": "seedEntry",
+          "startLine": 29,
+          "endLine": 43,
+          "params": [
+            "db",
+            "args"
+          ]
+        },
+        {
+          "name": "asset",
+          "startLine": 188,
+          "endLine": 202,
+          "params": [
+            "id"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "MemoryMediaAssets",
+          "startLine": 204,
+          "endLine": 229,
+          "methods": [
+            "constructor",
+            "findById",
+            "findManyByIds",
+            "save",
+            "delete"
+          ],
+          "properties": [
+            "lookups",
+            "assets"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "seedEntry",
+          "callee": "db.entries.set",
+          "lineNumber": 33
+        },
+        {
+          "caller": "seedEntry",
+          "callee": "JSON.stringify",
+          "lineNumber": 38
+        },
+        {
+          "caller": "constructor",
+          "callee": "assets.map",
+          "lineNumber": 209
+        },
+        {
+          "caller": "findById",
+          "callee": "this.assets.get",
+          "lineNumber": 213
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "this.lookups.push",
+          "lineNumber": 217
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "this.assets.get",
+          "lineNumber": 220
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "out.set",
+          "lineNumber": 221
+        }
+      ],
+      "metrics": {
+        "importCount": 10,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/test/seo-meta.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 195,
+      "nonEmptyLines": 183,
+      "functions": [
+        {
+          "name": "makeEntry",
+          "startLine": 20,
+          "endLine": 32,
+          "params": [
+            "overrides"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    }
+  ]
+}

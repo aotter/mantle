@@ -1,0 +1,669 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 8,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/mantle-spec/src/domain/model/Locale.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 47,
+      "nonEmptyLines": 43,
+      "classes": [
+        {
+          "name": "InvalidLocaleError",
+          "startLine": 42,
+          "endLine": 47,
+          "methods": [
+            "constructor"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "URL_LOCALE",
+          "line": 27,
+          "isDefault": false
+        },
+        {
+          "name": "LOCALE_SHAPED_SEGMENT",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "URL_SEGMENT",
+          "line": 40,
+          "isDefault": false
+        },
+        {
+          "name": "InvalidLocaleError",
+          "line": 42,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "super",
+          "lineNumber": 44
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 4,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/model/MediaMimeAccept.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 109,
+      "nonEmptyLines": 104,
+      "functions": [
+        {
+          "name": "parseMimeAccept",
+          "startLine": 68,
+          "endLine": 81,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "expandPolicyRequired",
+          "startLine": 89,
+          "endLine": 93,
+          "params": [
+            "required"
+          ]
+        },
+        {
+          "name": "allPolicyMimes",
+          "startLine": 100,
+          "endLine": 108,
+          "params": [
+            "required"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "parseMimeAccept",
+          "line": 68,
+          "isDefault": false
+        },
+        {
+          "name": "expandPolicyRequired",
+          "line": 89,
+          "isDefault": false
+        },
+        {
+          "name": "allPolicyMimes",
+          "line": 100,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parseMimeAccept",
+          "callee": "entry.split",
+          "lineNumber": 71
+        },
+        {
+          "caller": "parseMimeAccept",
+          "callee": "raw.trim().toLowerCase",
+          "lineNumber": 72
+        },
+        {
+          "caller": "parseMimeAccept",
+          "callee": "raw.trim",
+          "lineNumber": 72
+        },
+        {
+          "caller": "parseMimeAccept",
+          "callee": "seen.has",
+          "lineNumber": 75
+        },
+        {
+          "caller": "parseMimeAccept",
+          "callee": "seen.add",
+          "lineNumber": 76
+        },
+        {
+          "caller": "parseMimeAccept",
+          "callee": "out.push",
+          "lineNumber": 77
+        },
+        {
+          "caller": "expandPolicyRequired",
+          "callee": "required.map",
+          "lineNumber": 92
+        },
+        {
+          "caller": "allPolicyMimes",
+          "callee": "parseMimeAccept",
+          "lineNumber": 105
+        },
+        {
+          "caller": "allPolicyMimes",
+          "callee": "seen.add",
+          "lineNumber": 105
+        },
+        {
+          "caller": "allPolicyMimes",
+          "callee": "Array.from",
+          "lineNumber": 107
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/model/SiteConfig.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 182,
+      "nonEmptyLines": 177,
+      "exports": [
+        {
+          "name": "MEDIA_PURPOSE_SLUG_PATTERN",
+          "line": 182,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 109,
+      "nonEmptyLines": 101,
+      "functions": [
+        {
+          "name": "toCanonicalLocale",
+          "startLine": 29,
+          "endLine": 47,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "toUrlLocale",
+          "startLine": 50,
+          "endLine": 52,
+          "params": [
+            "canonical"
+          ]
+        },
+        {
+          "name": "fromUrlLocale",
+          "startLine": 59,
+          "endLine": 61,
+          "params": [
+            "urlSegment"
+          ]
+        },
+        {
+          "name": "safeCanonicalLocale",
+          "startLine": 69,
+          "endLine": 75,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "canonicalizeLocaleList",
+          "startLine": 85,
+          "endLine": 103,
+          "params": [
+            "inputs"
+          ]
+        },
+        {
+          "name": "containsScriptSubtagLocale",
+          "startLine": 105,
+          "endLine": 109,
+          "params": [
+            "inputs"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "toCanonicalLocale",
+          "line": 29,
+          "isDefault": false
+        },
+        {
+          "name": "toUrlLocale",
+          "line": 50,
+          "isDefault": false
+        },
+        {
+          "name": "fromUrlLocale",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "safeCanonicalLocale",
+          "line": 69,
+          "isDefault": false
+        },
+        {
+          "name": "canonicalizeLocaleList",
+          "line": 85,
+          "isDefault": false
+        },
+        {
+          "name": "containsScriptSubtagLocale",
+          "line": 105,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "toCanonicalLocale",
+          "callee": "String",
+          "lineNumber": 31
+        },
+        {
+          "caller": "toCanonicalLocale",
+          "callee": "input.replace(/_/g, \"-\").split",
+          "lineNumber": 35
+        },
+        {
+          "caller": "toCanonicalLocale",
+          "callee": "input.replace",
+          "lineNumber": 35
+        },
+        {
+          "caller": "toCanonicalLocale",
+          "callee": "head.slice",
+          "lineNumber": 39
+        },
+        {
+          "caller": "toCanonicalLocale",
+          "callee": "head.slice",
+          "lineNumber": 39
+        },
+        {
+          "caller": "toCanonicalLocale",
+          "callee": "parts[0]!.toLowerCase",
+          "lineNumber": 41
+        },
+        {
+          "caller": "toCanonicalLocale",
+          "callee": "LANG.test",
+          "lineNumber": 42
+        },
+        {
+          "caller": "toCanonicalLocale",
+          "callee": "parts[1]!.toLowerCase",
+          "lineNumber": 44
+        },
+        {
+          "caller": "toCanonicalLocale",
+          "callee": "REGION.test",
+          "lineNumber": 45
+        },
+        {
+          "caller": "toCanonicalLocale",
+          "callee": "region.toUpperCase",
+          "lineNumber": 46
+        },
+        {
+          "caller": "toUrlLocale",
+          "callee": "canonical.toLowerCase",
+          "lineNumber": 51
+        },
+        {
+          "caller": "fromUrlLocale",
+          "callee": "toCanonicalLocale",
+          "lineNumber": 60
+        },
+        {
+          "caller": "safeCanonicalLocale",
+          "callee": "toCanonicalLocale",
+          "lineNumber": 71
+        },
+        {
+          "caller": "canonicalizeLocaleList",
+          "callee": "toCanonicalLocale",
+          "lineNumber": 93
+        },
+        {
+          "caller": "canonicalizeLocaleList",
+          "callee": "seen.has",
+          "lineNumber": 94
+        },
+        {
+          "caller": "canonicalizeLocaleList",
+          "callee": "seen.add",
+          "lineNumber": 95
+        },
+        {
+          "caller": "canonicalizeLocaleList",
+          "callee": "valid.push",
+          "lineNumber": 96
+        },
+        {
+          "caller": "canonicalizeLocaleList",
+          "callee": "invalid.push",
+          "lineNumber": 99
+        },
+        {
+          "caller": "containsScriptSubtagLocale",
+          "callee": "inputs.some",
+          "lineNumber": 108
+        },
+        {
+          "caller": "containsScriptSubtagLocale",
+          "callee": "SCRIPT_SUBTAG_SHAPE.test",
+          "lineNumber": 108
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 6,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 194,
+      "nonEmptyLines": 188,
+      "functions": [
+        {
+          "name": "assertSiteDefaultsCanonical",
+          "startLine": 95,
+          "endLine": 107,
+          "params": [
+            "defaults"
+          ]
+        },
+        {
+          "name": "collectMediaPurposeIssues",
+          "startLine": 109,
+          "endLine": 189,
+          "params": [
+            "purposes"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "InvalidSiteDefaultsError",
+          "startLine": 31,
+          "endLine": 47,
+          "methods": [
+            "constructor"
+          ],
+          "properties": []
+        },
+        {
+          "name": "InvalidMediaPurposesError",
+          "startLine": 61,
+          "endLine": 93,
+          "methods": [
+            "constructor"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "InvalidSiteDefaultsError",
+          "line": 31,
+          "isDefault": false
+        },
+        {
+          "name": "InvalidMediaPurposesError",
+          "line": 61,
+          "isDefault": false
+        },
+        {
+          "name": "assertSiteDefaultsCanonical",
+          "line": 95,
+          "isDefault": false
+        },
+        {
+          "name": "parseMimeAccept",
+          "line": 194,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "containsScriptSubtagLocale",
+          "lineNumber": 33
+        },
+        {
+          "caller": "constructor",
+          "callee": "super",
+          "lineNumber": 34
+        },
+        {
+          "caller": "constructor",
+          "callee": "invalidLocales.map((s) => `'${s}'`).join",
+          "lineNumber": 36
+        },
+        {
+          "caller": "constructor",
+          "callee": "invalidLocales.map",
+          "lineNumber": 36
+        },
+        {
+          "caller": "constructor",
+          "callee": "super",
+          "lineNumber": 63
+        },
+        {
+          "caller": "constructor",
+          "callee": "issues\n          .map((i) => {\n            const tag = `'${i.name || \"(unnamed)\"}'`;\n            switch (i.reason) {\n              case \"invalid-slug\":\n                return `${tag} fails slug pattern ${MEDIA_PURPOSE_SLUG_PATTERN.source}`;\n              case \"empty-required\":\n                return `${tag} declares no required slots (need at least one)`;\n              case \"empty-required-slot\":\n                return `${tag} has a required slot that parses to zero mimes: ${i.detail}`;\n              case \"overlapping-slot-mimes\":\n                return `${tag} has slots with overlapping mime sets (variant→slot mapping is ambiguous): ${i.detail}`;\n              case \"maxBytes-missing-mime\":\n                return `${tag} maxBytes is missing entries: ${i.detail}`;\n              case \"maxBytes-non-positive\":\n                return `${tag} maxBytes has non-positive entries: ${i.detail}`;\n            }\n          })\n          .join",
+          "lineNumber": 65
+        },
+        {
+          "caller": "constructor",
+          "callee": "issues\n          .map",
+          "lineNumber": 65
+        },
+        {
+          "caller": "assertSiteDefaultsCanonical",
+          "callee": "canonicalizeLocaleList",
+          "lineNumber": 99
+        },
+        {
+          "caller": "assertSiteDefaultsCanonical",
+          "callee": "collectMediaPurposeIssues",
+          "lineNumber": 104
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "MEDIA_PURPOSE_SLUG_PATTERN.test",
+          "lineNumber": 114
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "out.push",
+          "lineNumber": 115
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "out.push",
+          "lineNumber": 119
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "expandPolicyRequired",
+          "lineNumber": 125
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "slots\n      .map((mimes, i) => ({ mimes, raw: p.required[i] }))\n      .filter",
+          "lineNumber": 126
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "slots\n      .map",
+          "lineNumber": 126
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "out.push",
+          "lineNumber": 130
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "emptySlots.map((s) => `'${s.raw}'`).join",
+          "lineNumber": 133
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "emptySlots.map",
+          "lineNumber": 133
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "slots.forEach",
+          "lineNumber": 146
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "seen.has",
+          "lineNumber": 148
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "overlaps.push",
+          "lineNumber": 149
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "seen.get",
+          "lineNumber": 150
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "seen.set",
+          "lineNumber": 153
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "out.push",
+          "lineNumber": 158
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "overlaps.join",
+          "lineNumber": 161
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "Array.from",
+          "lineNumber": 167
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "seen.keys",
+          "lineNumber": 167
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "expandedMimes.filter",
+          "lineNumber": 168
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "out.push",
+          "lineNumber": 170
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "missing.join",
+          "lineNumber": 173
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "expandedMimes.filter",
+          "lineNumber": 177
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "out.push",
+          "lineNumber": 181
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "nonPositive.map((m) => `${m}=${p.maxBytes[m]}`).join",
+          "lineNumber": 184
+        },
+        {
+          "caller": "collectMediaPurposeIssues",
+          "callee": "nonPositive.map",
+          "lineNumber": 184
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 4,
+        "functionCount": 2,
+        "classCount": 2
+      }
+    },
+    {
+      "path": "packages/mantle-spec/test/locale.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 186,
+      "nonEmptyLines": 160,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/test/media-mime-accept.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 188,
+      "nonEmptyLines": 170,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/test/site-validate.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 175,
+      "nonEmptyLines": 160,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "nodes": [
+    {
+      "id": "config:.github/ISSUE_TEMPLATE/bug.yml",
+      "type": "config",
+      "name": "bug.yml",
+      "filePath": ".github/ISSUE_TEMPLATE/bug.yml",
+      "summary": "GitHub issue form 範本，用於回報 bug，透過結構化欄位收集重現步驟、預期行為與環境資訊，並自動套用 bug label。",
+      "tags": ["configuration", "github", "issue-template", "bug-report"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "config:.github/ISSUE_TEMPLATE/config.yml",
+      "type": "config",
+      "name": "config.yml",
+      "filePath": ".github/ISSUE_TEMPLATE/config.yml",
+      "summary": "GitHub issue template 的總設定檔，停用空白 issue 並提供導向 Discussions、CLAUDE.md 貢獻契約、ADR 索引與安全漏洞回報的 contact links。",
+      "tags": ["configuration", "github", "issue-template", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:.github/ISSUE_TEMPLATE/convergence.yml",
+      "type": "config",
+      "name": "convergence.yml",
+      "filePath": ".github/ISSUE_TEMPLATE/convergence.yml",
+      "summary": "GitHub issue form 範本，用於在實作前對決策進行收斂，收集 context、reference points、candidate cuts 與 closing criteria，並自動套用 question 與 needs-discussion label。",
+      "tags": ["configuration", "github", "issue-template", "decision-record"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "config:.github/ISSUE_TEMPLATE/feature.yml",
+      "type": "config",
+      "name": "feature.yml",
+      "filePath": ".github/ISSUE_TEMPLATE/feature.yml",
+      "summary": "GitHub issue form 範本，用於提出新功能需求，透過結構化欄位收集問題描述、提議解法與替代方案。",
+      "tags": ["configuration", "github", "issue-template", "feature-request"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "config:.github/ISSUE_TEMPLATE/proposal.yml",
+      "type": "config",
+      "name": "proposal.yml",
+      "filePath": ".github/ISSUE_TEMPLATE/proposal.yml",
+      "summary": "GitHub issue form 範本，用於提出較大型的架構或設計提案，收集動機、提議內容與對既有 ADR 及 grammar 限制的影響。",
+      "tags": ["configuration", "github", "issue-template", "proposal"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": []
+}

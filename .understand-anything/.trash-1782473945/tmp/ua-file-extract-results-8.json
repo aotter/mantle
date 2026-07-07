@@ -1,0 +1,4596 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 20,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/mantle-spec/src/domain/model/ManifestGrammar.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 440,
+      "nonEmptyLines": 393,
+      "functions": [
+        {
+          "name": "isMediaMcpHint",
+          "startLine": 50,
+          "endLine": 52,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "isParamRef",
+          "startLine": 235,
+          "endLine": 242,
+          "params": [
+            "v"
+          ]
+        },
+        {
+          "name": "isStaffRole",
+          "startLine": 338,
+          "endLine": 340,
+          "params": [
+            "s"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "API_VERSION",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "MCP_HINTS",
+          "line": 31,
+          "isDefault": false
+        },
+        {
+          "name": "MEDIA_MCP_HINTS",
+          "line": 42,
+          "isDefault": false
+        },
+        {
+          "name": "isMediaMcpHint",
+          "line": 50,
+          "isDefault": false
+        },
+        {
+          "name": "MANTLE_REF_KEYWORD",
+          "line": 86,
+          "isDefault": false
+        },
+        {
+          "name": "MCP_HINT_KEYWORD",
+          "line": 87,
+          "isDefault": false
+        },
+        {
+          "name": "MANTLE_BIND_KEYWORD",
+          "line": 88,
+          "isDefault": false
+        },
+        {
+          "name": "FILTER_COMPARISON_OPS",
+          "line": 197,
+          "isDefault": false
+        },
+        {
+          "name": "isParamRef",
+          "line": 235,
+          "isDefault": false
+        },
+        {
+          "name": "VIEW_PARAMS_RESERVED",
+          "line": 248,
+          "isDefault": false
+        },
+        {
+          "name": "BUILTIN_OPS",
+          "line": 290,
+          "isDefault": false
+        },
+        {
+          "name": "STAFF_ROLES",
+          "line": 331,
+          "isDefault": false
+        },
+        {
+          "name": "isStaffRole",
+          "line": 338,
+          "isDefault": false
+        },
+        {
+          "name": "LIFECYCLE_HOOKS",
+          "line": 374,
+          "isDefault": false
+        },
+        {
+          "name": "MCP_TRIGGER_SURFACES",
+          "line": 403,
+          "isDefault": false
+        },
+        {
+          "name": "MANTLE_BIND_VALUES",
+          "line": 424,
+          "isDefault": false
+        },
+        {
+          "name": "RESERVED_ENTRY_COLUMNS",
+          "line": 432,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "isMediaMcpHint",
+          "callee": "(MEDIA_MCP_HINTS as readonly string[]).includes",
+          "lineNumber": 51
+        },
+        {
+          "caller": "isParamRef",
+          "callee": "Array.isArray",
+          "lineNumber": 239
+        },
+        {
+          "caller": "isStaffRole",
+          "callee": "(STAFF_ROLES as readonly string[]).includes",
+          "lineNumber": 339
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 17,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/CrossSchemaChecker.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 175,
+      "nonEmptyLines": 165,
+      "functions": [
+        {
+          "name": "checkLocaleAndTranslates",
+          "startLine": 40,
+          "endLine": 163,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "emit",
+          "startLine": 165,
+          "endLine": 170,
+          "params": [
+            "phase",
+            "payload"
+          ]
+        },
+        {
+          "name": "propertyKeys",
+          "startLine": 172,
+          "endLine": 175,
+          "params": [
+            "s"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "checkLocaleAndTranslates",
+          "line": 40,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "schemasByName.set",
+          "lineNumber": 44
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "canonicalizeLocaleList",
+          "lineNumber": 52
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "out.push",
+          "lineNumber": 55
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "emit",
+          "lineNumber": 56
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "invalid.map((s) => `'${s}'`).join",
+          "lineNumber": 62
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "invalid.map",
+          "lineNumber": 62
+        },
+        {
+          "caller": "path",
+          "callee": "manifestPath",
+          "lineNumber": 73
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "out.push",
+          "lineNumber": 76
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "emit",
+          "lineNumber": 77
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "path",
+          "lineNumber": 80
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "out.push",
+          "lineNumber": 90
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "emit",
+          "lineNumber": 91
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "path",
+          "lineNumber": 94
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "schemasByName.get",
+          "lineNumber": 101
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "out.push",
+          "lineNumber": 103
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "emit",
+          "lineNumber": 104
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "path",
+          "lineNumber": 107
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "schemasByName.keys",
+          "lineNumber": 110
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "bestMatch",
+          "lineNumber": 111
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "schemasByName.keys",
+          "lineNumber": 111
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "out.push",
+          "lineNumber": 118
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "emit",
+          "lineNumber": 119
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "path",
+          "lineNumber": 122
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "propertyKeys",
+          "lineNumber": 129
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "parentProps.has",
+          "lineNumber": 130
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "out.push",
+          "lineNumber": 131
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "emit",
+          "lineNumber": 132
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "path",
+          "lineNumber": 135
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "[...parentProps].sort",
+          "lineNumber": 138
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "bestMatch",
+          "lineNumber": 139
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "propertyKeys",
+          "lineNumber": 144
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "childProps.has",
+          "lineNumber": 145
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "out.push",
+          "lineNumber": 146
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "emit",
+          "lineNumber": 147
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "path",
+          "lineNumber": 150
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "[...childProps].sort",
+          "lineNumber": 153
+        },
+        {
+          "caller": "checkLocaleAndTranslates",
+          "callee": "bestMatch",
+          "lineNumber": 154
+        },
+        {
+          "caller": "emit",
+          "callee": "validateDiagnostic",
+          "lineNumber": 169
+        },
+        {
+          "caller": "emit",
+          "callee": "bootDiagnostic",
+          "lineNumber": 169
+        },
+        {
+          "caller": "propertyKeys",
+          "callee": "Object.keys",
+          "lineNumber": 174
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/EntryDataValidator.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 86,
+      "nonEmptyLines": 81,
+      "classes": [
+        {
+          "name": "EntryDataValidator",
+          "startLine": 36,
+          "endLine": 79,
+          "methods": [
+            "validate",
+            "hasCompiled",
+            "compileFor"
+          ],
+          "properties": [
+            "compiled"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "EntryDataValidator",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "SchemaValidator",
+          "line": 86,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "validate",
+          "callee": "this.compileFor",
+          "lineNumber": 46
+        },
+        {
+          "caller": "validate",
+          "callee": "compiled.safeParse",
+          "lineNumber": 47
+        },
+        {
+          "caller": "validate",
+          "callee": "result.error.issues.map",
+          "lineNumber": 49
+        },
+        {
+          "caller": "validate",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 50
+        },
+        {
+          "caller": "validate",
+          "callee": "zodPathToJsonPointer",
+          "lineNumber": 53
+        },
+        {
+          "caller": "hasCompiled",
+          "callee": "this.compiled.has",
+          "lineNumber": 67
+        },
+        {
+          "caller": "compileFor",
+          "callee": "this.compiled.get",
+          "lineNumber": 72
+        },
+        {
+          "caller": "compileFor",
+          "callee": "jsonSchemaToZod",
+          "lineNumber": 74
+        },
+        {
+          "caller": "compileFor",
+          "callee": "this.compiled.set",
+          "lineNumber": 75
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 2,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/JsonSchemaToZod.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 197,
+      "nonEmptyLines": 185,
+      "functions": [
+        {
+          "name": "jsonSchemaToZod",
+          "startLine": 32,
+          "endLine": 38,
+          "params": [
+            "schema"
+          ]
+        },
+        {
+          "name": "buildBase",
+          "startLine": 40,
+          "endLine": 82,
+          "params": [
+            "schema"
+          ]
+        },
+        {
+          "name": "objectShape",
+          "startLine": 84,
+          "endLine": 102,
+          "params": [
+            "schema"
+          ]
+        },
+        {
+          "name": "arrayShape",
+          "startLine": 104,
+          "endLine": 110,
+          "params": [
+            "schema"
+          ]
+        },
+        {
+          "name": "stringShape",
+          "startLine": 112,
+          "endLine": 143,
+          "params": [
+            "schema"
+          ]
+        },
+        {
+          "name": "numberShape",
+          "startLine": 145,
+          "endLine": 151,
+          "params": [
+            "schema",
+            "integer"
+          ]
+        },
+        {
+          "name": "enumLiteralUnion",
+          "startLine": 153,
+          "endLine": 169,
+          "params": [
+            "values"
+          ]
+        },
+        {
+          "name": "zodPathToJsonPointer",
+          "startLine": 177,
+          "endLine": 185,
+          "params": [
+            "path"
+          ]
+        },
+        {
+          "name": "firstZodIssueAsJsonPointer",
+          "startLine": 191,
+          "endLine": 197,
+          "params": [
+            "err"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "jsonSchemaToZod",
+          "line": 32,
+          "isDefault": false
+        },
+        {
+          "name": "zodPathToJsonPointer",
+          "line": 177,
+          "isDefault": false
+        },
+        {
+          "name": "firstZodIssueAsJsonPointer",
+          "line": 191,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "jsonSchemaToZod",
+          "callee": "buildBase",
+          "lineNumber": 33
+        },
+        {
+          "caller": "jsonSchemaToZod",
+          "callee": "base.nullable",
+          "lineNumber": 37
+        },
+        {
+          "caller": "buildBase",
+          "callee": "Array.isArray",
+          "lineNumber": 44
+        },
+        {
+          "caller": "buildBase",
+          "callee": "t.map",
+          "lineNumber": 45
+        },
+        {
+          "caller": "buildBase",
+          "callee": "jsonSchemaToZod",
+          "lineNumber": 46
+        },
+        {
+          "caller": "buildBase",
+          "callee": "z.union",
+          "lineNumber": 48
+        },
+        {
+          "caller": "buildBase",
+          "callee": "Array.isArray",
+          "lineNumber": 53
+        },
+        {
+          "caller": "buildBase",
+          "callee": "enumLiteralUnion",
+          "lineNumber": 54
+        },
+        {
+          "caller": "buildBase",
+          "callee": "objectShape",
+          "lineNumber": 59
+        },
+        {
+          "caller": "buildBase",
+          "callee": "arrayShape",
+          "lineNumber": 61
+        },
+        {
+          "caller": "buildBase",
+          "callee": "stringShape",
+          "lineNumber": 63
+        },
+        {
+          "caller": "buildBase",
+          "callee": "numberShape",
+          "lineNumber": 65
+        },
+        {
+          "caller": "buildBase",
+          "callee": "numberShape",
+          "lineNumber": 67
+        },
+        {
+          "caller": "buildBase",
+          "callee": "z.boolean",
+          "lineNumber": 69
+        },
+        {
+          "caller": "buildBase",
+          "callee": "z.null",
+          "lineNumber": 71
+        },
+        {
+          "caller": "buildBase",
+          "callee": "z.unknown",
+          "lineNumber": 80
+        },
+        {
+          "caller": "objectShape",
+          "callee": "Object.entries",
+          "lineNumber": 88
+        },
+        {
+          "caller": "objectShape",
+          "callee": "jsonSchemaToZod",
+          "lineNumber": 89
+        },
+        {
+          "caller": "objectShape",
+          "callee": "requiredSet.has",
+          "lineNumber": 90
+        },
+        {
+          "caller": "objectShape",
+          "callee": "child.optional",
+          "lineNumber": 90
+        },
+        {
+          "caller": "objectShape",
+          "callee": "z.object",
+          "lineNumber": 92
+        },
+        {
+          "caller": "objectShape",
+          "callee": "obj.strict",
+          "lineNumber": 99
+        },
+        {
+          "caller": "arrayShape",
+          "callee": "jsonSchemaToZod",
+          "lineNumber": 105
+        },
+        {
+          "caller": "arrayShape",
+          "callee": "z.unknown",
+          "lineNumber": 105
+        },
+        {
+          "caller": "arrayShape",
+          "callee": "z.array",
+          "lineNumber": 106
+        },
+        {
+          "caller": "arrayShape",
+          "callee": "arr.min",
+          "lineNumber": 107
+        },
+        {
+          "caller": "arrayShape",
+          "callee": "arr.max",
+          "lineNumber": 108
+        },
+        {
+          "caller": "stringShape",
+          "callee": "z.string",
+          "lineNumber": 113
+        },
+        {
+          "caller": "stringShape",
+          "callee": "s.min",
+          "lineNumber": 114
+        },
+        {
+          "caller": "stringShape",
+          "callee": "s.max",
+          "lineNumber": 115
+        },
+        {
+          "caller": "stringShape",
+          "callee": "s.regex",
+          "lineNumber": 116
+        },
+        {
+          "caller": "stringShape",
+          "callee": "s.email",
+          "lineNumber": 120
+        },
+        {
+          "caller": "stringShape",
+          "callee": "s.url",
+          "lineNumber": 124
+        },
+        {
+          "caller": "stringShape",
+          "callee": "s.uuid",
+          "lineNumber": 127
+        },
+        {
+          "caller": "stringShape",
+          "callee": "s.datetime",
+          "lineNumber": 130
+        },
+        {
+          "caller": "stringShape",
+          "callee": "s.regex",
+          "lineNumber": 134
+        },
+        {
+          "caller": "numberShape",
+          "callee": "z.number",
+          "lineNumber": 146
+        },
+        {
+          "caller": "numberShape",
+          "callee": "n.int",
+          "lineNumber": 147
+        },
+        {
+          "caller": "numberShape",
+          "callee": "n.gte",
+          "lineNumber": 148
+        },
+        {
+          "caller": "numberShape",
+          "callee": "n.lte",
+          "lineNumber": 149
+        },
+        {
+          "caller": "enumLiteralUnion",
+          "callee": "values.every",
+          "lineNumber": 157
+        },
+        {
+          "caller": "enumLiteralUnion",
+          "callee": "z.enum",
+          "lineNumber": 158
+        },
+        {
+          "caller": "enumLiteralUnion",
+          "callee": "z.literal",
+          "lineNumber": 161
+        },
+        {
+          "caller": "enumLiteralUnion",
+          "callee": "values.map",
+          "lineNumber": 163
+        },
+        {
+          "caller": "enumLiteralUnion",
+          "callee": "z.literal",
+          "lineNumber": 163
+        },
+        {
+          "caller": "enumLiteralUnion",
+          "callee": "z.union",
+          "lineNumber": 168
+        },
+        {
+          "caller": "zodPathToJsonPointer",
+          "callee": "path\n      .map((seg) => String(seg).replace(/~/g, \"~0\").replace(/\\//g, \"~1\"))\n      .join",
+          "lineNumber": 181
+        },
+        {
+          "caller": "zodPathToJsonPointer",
+          "callee": "path\n      .map",
+          "lineNumber": 181
+        },
+        {
+          "caller": "zodPathToJsonPointer",
+          "callee": "String(seg).replace(/~/g, \"~0\").replace",
+          "lineNumber": 182
+        },
+        {
+          "caller": "zodPathToJsonPointer",
+          "callee": "String(seg).replace",
+          "lineNumber": 182
+        },
+        {
+          "caller": "zodPathToJsonPointer",
+          "callee": "String",
+          "lineNumber": 182
+        },
+        {
+          "caller": "firstZodIssueAsJsonPointer",
+          "callee": "zodPathToJsonPointer",
+          "lineNumber": 196
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 3,
+        "functionCount": 9,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/ManifestParser.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 879,
+      "nonEmptyLines": 849,
+      "functions": [
+        {
+          "name": "parseManifests",
+          "startLine": 113,
+          "endLine": 123,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "parseManifestsOrThrow",
+          "startLine": 143,
+          "endLine": 156,
+          "params": [
+            "input",
+            "options"
+          ]
+        },
+        {
+          "name": "parseOneStream",
+          "startLine": 158,
+          "endLine": 227,
+          "params": [
+            "yamlText",
+            "baseDocIndex",
+            "manifests",
+            "diagnostics"
+          ]
+        },
+        {
+          "name": "pointerFor",
+          "startLine": 229,
+          "endLine": 232,
+          "params": [
+            "docIndex",
+            "jsonPointer"
+          ]
+        },
+        {
+          "name": "validateEnvelope",
+          "startLine": 234,
+          "endLine": 280,
+          "params": [
+            "raw",
+            "docIndex"
+          ]
+        },
+        {
+          "name": "validateSchemaSpec",
+          "startLine": 282,
+          "endLine": 352,
+          "params": [
+            "m",
+            "idx"
+          ]
+        },
+        {
+          "name": "validateViewSpec",
+          "startLine": 354,
+          "endLine": 380,
+          "params": [
+            "m",
+            "idx"
+          ]
+        },
+        {
+          "name": "validateViewParams",
+          "startLine": 382,
+          "endLine": 421,
+          "params": [
+            "raw",
+            "idx"
+          ]
+        },
+        {
+          "name": "validateFilterAst",
+          "startLine": 423,
+          "endLine": 491,
+          "params": [
+            "node",
+            "idx",
+            "path",
+            "jsonPointer",
+            "paramSchema"
+          ]
+        },
+        {
+          "name": "validateParamRef",
+          "startLine": 493,
+          "endLine": 532,
+          "params": [
+            "name",
+            "idx",
+            "pointer",
+            "paramSchema"
+          ]
+        },
+        {
+          "name": "validateProcedureSpec",
+          "startLine": 534,
+          "endLine": 561,
+          "params": [
+            "m",
+            "idx"
+          ]
+        },
+        {
+          "name": "validateHandlerBinding",
+          "startLine": 563,
+          "endLine": 611,
+          "params": [
+            "h",
+            "idx"
+          ]
+        },
+        {
+          "name": "validateRequires",
+          "startLine": 613,
+          "endLine": 660,
+          "params": [
+            "req",
+            "idx",
+            "atom"
+          ]
+        },
+        {
+          "name": "validateAuthPredicate",
+          "startLine": 662,
+          "endLine": 702,
+          "params": [
+            "p",
+            "idx",
+            "path"
+          ]
+        },
+        {
+          "name": "validateHttpSource",
+          "startLine": 704,
+          "endLine": 721,
+          "params": [
+            "source",
+            "idx"
+          ]
+        },
+        {
+          "name": "validateLifecycleSource",
+          "startLine": 723,
+          "endLine": 773,
+          "params": [
+            "source",
+            "idx"
+          ]
+        },
+        {
+          "name": "validateMcpSource",
+          "startLine": 775,
+          "endLine": 798,
+          "params": [
+            "source",
+            "idx"
+          ]
+        },
+        {
+          "name": "validateTriggerSpec",
+          "startLine": 800,
+          "endLine": 853,
+          "params": [
+            "m",
+            "idx"
+          ]
+        },
+        {
+          "name": "partitionManifests",
+          "startLine": 860,
+          "endLine": 877,
+          "params": [
+            "manifests"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "ManifestParseError",
+          "startLine": 56,
+          "endLine": 67,
+          "methods": [
+            "constructor"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "ManifestParseError",
+          "line": 56,
+          "isDefault": false
+        },
+        {
+          "name": "parseManifests",
+          "line": 113,
+          "isDefault": false
+        },
+        {
+          "name": "parseManifestsOrThrow",
+          "line": 143,
+          "isDefault": false
+        },
+        {
+          "name": "partitionManifests",
+          "line": 860,
+          "isDefault": false
+        },
+        {
+          "name": "FilterAst",
+          "line": 879,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "super",
+          "lineNumber": 64
+        },
+        {
+          "caller": "parseManifests",
+          "callee": "parseOneStream",
+          "lineNumber": 119
+        },
+        {
+          "caller": "parseManifestsOrThrow",
+          "callee": "parseManifests",
+          "lineNumber": 147
+        },
+        {
+          "caller": "parseManifestsOrThrow",
+          "callee": "result.diagnostics\n      .map((d) => `  - [${d.code}] ${d.path}: ${d.message}`)\n      .join",
+          "lineNumber": 149
+        },
+        {
+          "caller": "parseManifestsOrThrow",
+          "callee": "result.diagnostics\n      .map",
+          "lineNumber": 149
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "parseAllDocuments",
+          "lineNumber": 164
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "diagnostics.push",
+          "lineNumber": 169
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "validateDiagnostic",
+          "lineNumber": 170
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "pointerFor",
+          "lineNumber": 173
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "doc.errors.map((e) => e.message).join",
+          "lineNumber": 174
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "doc.errors.map",
+          "lineNumber": 174
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "doc.toJS",
+          "lineNumber": 186
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "diagnostics.push",
+          "lineNumber": 188
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "validateDiagnostic",
+          "lineNumber": 189
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "pointerFor",
+          "lineNumber": 192
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "String",
+          "lineNumber": 193
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "manifests.push",
+          "lineNumber": 200
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "validateEnvelope",
+          "lineNumber": 200
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "diagnostics.push",
+          "lineNumber": 203
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "validateDiagnostic",
+          "lineNumber": 204
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "pointerFor",
+          "lineNumber": 207
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "diagnostics.push",
+          "lineNumber": 212
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "validateDiagnostic",
+          "lineNumber": 213
+        },
+        {
+          "caller": "parseOneStream",
+          "callee": "pointerFor",
+          "lineNumber": 216
+        },
+        {
+          "caller": "pointerFor",
+          "callee": "jsonPointer.startsWith",
+          "lineNumber": 230
+        },
+        {
+          "caller": "validateEnvelope",
+          "callee": "Array.isArray",
+          "lineNumber": 235
+        },
+        {
+          "caller": "validateEnvelope",
+          "callee": "JSON.stringify",
+          "lineNumber": 242
+        },
+        {
+          "caller": "validateEnvelope",
+          "callee": "KNOWN_KINDS.has",
+          "lineNumber": 248
+        },
+        {
+          "caller": "validateEnvelope",
+          "callee": "[...KNOWN_KINDS].join",
+          "lineNumber": 250
+        },
+        {
+          "caller": "validateEnvelope",
+          "callee": "JSON.stringify",
+          "lineNumber": 250
+        },
+        {
+          "caller": "validateEnvelope",
+          "callee": "validateSchemaSpec",
+          "lineNumber": 270
+        },
+        {
+          "caller": "validateEnvelope",
+          "callee": "validateViewSpec",
+          "lineNumber": 272
+        },
+        {
+          "caller": "validateEnvelope",
+          "callee": "validateProcedureSpec",
+          "lineNumber": 274
+        },
+        {
+          "caller": "validateEnvelope",
+          "callee": "validateTriggerSpec",
+          "lineNumber": 276
+        },
+        {
+          "caller": "validateSchemaSpec",
+          "callee": "JSON.stringify",
+          "lineNumber": 296
+        },
+        {
+          "caller": "validateSchemaSpec",
+          "callee": "V01_LIFECYCLE_MODES.has",
+          "lineNumber": 303
+        },
+        {
+          "caller": "validateSchemaSpec",
+          "callee": "[...V01_LIFECYCLE_MODES].join",
+          "lineNumber": 305
+        },
+        {
+          "caller": "validateSchemaSpec",
+          "callee": "JSON.stringify",
+          "lineNumber": 305
+        },
+        {
+          "caller": "validateSchemaSpec",
+          "callee": "Array.isArray",
+          "lineNumber": 313
+        },
+        {
+          "caller": "validateViewSpec",
+          "callee": "validateRequires",
+          "lineNumber": 360
+        },
+        {
+          "caller": "validateViewSpec",
+          "callee": "validateViewParams",
+          "lineNumber": 364
+        },
+        {
+          "caller": "validateViewSpec",
+          "callee": "validateFilterAst",
+          "lineNumber": 367
+        },
+        {
+          "caller": "validateViewParams",
+          "callee": "Array.isArray",
+          "lineNumber": 383
+        },
+        {
+          "caller": "validateViewParams",
+          "callee": "JSON.stringify",
+          "lineNumber": 394
+        },
+        {
+          "caller": "validateViewParams",
+          "callee": "Array.isArray",
+          "lineNumber": 401
+        },
+        {
+          "caller": "validateViewParams",
+          "callee": "Object.keys",
+          "lineNumber": 409
+        },
+        {
+          "caller": "validateViewParams",
+          "callee": "propNames.includes",
+          "lineNumber": 411
+        },
+        {
+          "caller": "validateViewParams",
+          "callee": "VIEW_PARAMS_RESERVED.join",
+          "lineNumber": 413
+        },
+        {
+          "caller": "validateFilterAst",
+          "callee": "Array.isArray",
+          "lineNumber": 430
+        },
+        {
+          "caller": "validateFilterAst",
+          "callee": "FILTER_COMPARISON_OPS.join",
+          "lineNumber": 432
+        },
+        {
+          "caller": "validateFilterAst",
+          "callee": "Object.keys",
+          "lineNumber": 438
+        },
+        {
+          "caller": "validateFilterAst",
+          "callee": "FILTER_COMPARISON_OPS.join",
+          "lineNumber": 441
+        },
+        {
+          "caller": "validateFilterAst",
+          "callee": "JSON.stringify",
+          "lineNumber": 441
+        },
+        {
+          "caller": "validateFilterAst",
+          "callee": "FILTER_COMPARISON_OP_SET.has",
+          "lineNumber": 447
+        },
+        {
+          "caller": "validateFilterAst",
+          "callee": "Array.isArray",
+          "lineNumber": 449
+        },
+        {
+          "caller": "validateFilterAst",
+          "callee": "isParamRef",
+          "lineNumber": 463
+        },
+        {
+          "caller": "validateFilterAst",
+          "callee": "validateParamRef",
+          "lineNumber": 464
+        },
+        {
+          "caller": "validateFilterAst",
+          "callee": "Array.isArray",
+          "lineNumber": 470
+        },
+        {
+          "caller": "validateFilterAst",
+          "callee": "validateFilterAst",
+          "lineNumber": 474
+        },
+        {
+          "caller": "validateFilterAst",
+          "callee": "DRAFT_FILTER_OPS.has",
+          "lineNumber": 478
+        },
+        {
+          "caller": "validateFilterAst",
+          "callee": "FILTER_COMPARISON_OPS.join",
+          "lineNumber": 487
+        },
+        {
+          "caller": "validateParamRef",
+          "callee": "Object.prototype.hasOwnProperty.call",
+          "lineNumber": 515
+        },
+        {
+          "caller": "validateParamRef",
+          "callee": "required.includes",
+          "lineNumber": 524
+        },
+        {
+          "caller": "validateProcedureSpec",
+          "callee": "validateHandlerBinding",
+          "lineNumber": 546
+        },
+        {
+          "caller": "validateProcedureSpec",
+          "callee": "validateRequires",
+          "lineNumber": 548
+        },
+        {
+          "caller": "validateHandlerBinding",
+          "callee": "[...V01_HANDLER_KINDS].join",
+          "lineNumber": 567
+        },
+        {
+          "caller": "validateHandlerBinding",
+          "callee": "V01_HANDLER_KINDS.has",
+          "lineNumber": 572
+        },
+        {
+          "caller": "validateHandlerBinding",
+          "callee": "[...V01_HANDLER_KINDS].join",
+          "lineNumber": 574
+        },
+        {
+          "caller": "validateHandlerBinding",
+          "callee": "V01_BUILTIN_OPS.has",
+          "lineNumber": 590
+        },
+        {
+          "caller": "validateHandlerBinding",
+          "callee": "[...V01_BUILTIN_OPS].join",
+          "lineNumber": 592
+        },
+        {
+          "caller": "validateHandlerBinding",
+          "callee": "JSON.stringify",
+          "lineNumber": 592
+        },
+        {
+          "caller": "validateRequires",
+          "callee": "Array.isArray",
+          "lineNumber": 651
+        },
+        {
+          "caller": "validateRequires",
+          "callee": "validateAuthPredicate",
+          "lineNumber": 658
+        },
+        {
+          "caller": "validateAuthPredicate",
+          "callee": "Array.isArray",
+          "lineNumber": 664
+        },
+        {
+          "caller": "validateAuthPredicate",
+          "callee": "Array.isArray",
+          "lineNumber": 668
+        },
+        {
+          "caller": "validateAuthPredicate",
+          "callee": "roles.some",
+          "lineNumber": 668
+        },
+        {
+          "caller": "validateAuthPredicate",
+          "callee": "(roles as readonly string[]).find",
+          "lineNumber": 674
+        },
+        {
+          "caller": "validateAuthPredicate",
+          "callee": "isStaffRole",
+          "lineNumber": 674
+        },
+        {
+          "caller": "validateAuthPredicate",
+          "callee": "[...STAFF_ROLES].join",
+          "lineNumber": 677
+        },
+        {
+          "caller": "validateAuthPredicate",
+          "callee": "draftKeys.find",
+          "lineNumber": 688
+        },
+        {
+          "caller": "validateAuthPredicate",
+          "callee": "JSON.stringify",
+          "lineNumber": 699
+        },
+        {
+          "caller": "validateHttpSource",
+          "callee": "V01_HTTP_METHODS.has",
+          "lineNumber": 706
+        },
+        {
+          "caller": "validateHttpSource",
+          "callee": "[...V01_HTTP_METHODS].join",
+          "lineNumber": 708
+        },
+        {
+          "caller": "validateHttpSource",
+          "callee": "JSON.stringify",
+          "lineNumber": 708
+        },
+        {
+          "caller": "validateHttpSource",
+          "callee": "path.startsWith",
+          "lineNumber": 714
+        },
+        {
+          "caller": "validateLifecycleSource",
+          "callee": "Array.isArray",
+          "lineNumber": 732
+        },
+        {
+          "caller": "validateLifecycleSource",
+          "callee": "[...V01_LIFECYCLE_HOOKS].join",
+          "lineNumber": 734
+        },
+        {
+          "caller": "validateLifecycleSource",
+          "callee": "V01_LIFECYCLE_HOOKS.has",
+          "lineNumber": 741
+        },
+        {
+          "caller": "validateLifecycleSource",
+          "callee": "[...V01_LIFECYCLE_HOOKS].join",
+          "lineNumber": 743
+        },
+        {
+          "caller": "validateLifecycleSource",
+          "callee": "JSON.stringify",
+          "lineNumber": 743
+        },
+        {
+          "caller": "validateLifecycleSource",
+          "callee": "V01_HOOK_ERROR_POLICIES.has",
+          "lineNumber": 751
+        },
+        {
+          "caller": "validateLifecycleSource",
+          "callee": "JSON.stringify",
+          "lineNumber": 753
+        },
+        {
+          "caller": "validateLifecycleSource",
+          "callee": "(on as ReadonlyArray<string>).some",
+          "lineNumber": 758
+        },
+        {
+          "caller": "validateLifecycleSource",
+          "callee": "h.startsWith",
+          "lineNumber": 758
+        },
+        {
+          "caller": "validateMcpSource",
+          "callee": "V01_MCP_TRIGGER_SURFACES.has",
+          "lineNumber": 777
+        },
+        {
+          "caller": "validateMcpSource",
+          "callee": "[...V01_MCP_TRIGGER_SURFACES].join",
+          "lineNumber": 779
+        },
+        {
+          "caller": "validateMcpSource",
+          "callee": "JSON.stringify",
+          "lineNumber": 779
+        },
+        {
+          "caller": "validateTriggerSpec",
+          "callee": "[...V01_TRIGGER_SOURCE_KINDS].join",
+          "lineNumber": 809
+        },
+        {
+          "caller": "validateTriggerSpec",
+          "callee": "DRAFT_TRIGGER_SOURCE_KINDS.has",
+          "lineNumber": 814
+        },
+        {
+          "caller": "validateTriggerSpec",
+          "callee": "V01_TRIGGER_SOURCE_KINDS.has",
+          "lineNumber": 822
+        },
+        {
+          "caller": "validateTriggerSpec",
+          "callee": "[...V01_TRIGGER_SOURCE_KINDS].join",
+          "lineNumber": 824
+        },
+        {
+          "caller": "validateTriggerSpec",
+          "callee": "validateHttpSource",
+          "lineNumber": 829
+        },
+        {
+          "caller": "validateTriggerSpec",
+          "callee": "validateLifecycleSource",
+          "lineNumber": 830
+        },
+        {
+          "caller": "validateTriggerSpec",
+          "callee": "validateMcpSource",
+          "lineNumber": 831
+        },
+        {
+          "caller": "partitionManifests",
+          "callee": "schemas.push",
+          "lineNumber": 871
+        },
+        {
+          "caller": "partitionManifests",
+          "callee": "views.push",
+          "lineNumber": 872
+        },
+        {
+          "caller": "partitionManifests",
+          "callee": "procedures.push",
+          "lineNumber": 873
+        },
+        {
+          "caller": "partitionManifests",
+          "callee": "triggers.push",
+          "lineNumber": 874
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 5,
+        "functionCount": 19,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/ManifestPathDiagnoser.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 72,
+      "nonEmptyLines": 68,
+      "functions": [
+        {
+          "name": "manifestPath",
+          "startLine": 30,
+          "endLine": 43,
+          "params": [
+            "kind",
+            "name",
+            "jsonPointer",
+            "filePaths",
+            "occurrence"
+          ]
+        },
+        {
+          "name": "bestMatch",
+          "startLine": 45,
+          "endLine": 56,
+          "params": [
+            "target",
+            "candidates"
+          ]
+        },
+        {
+          "name": "editDistance",
+          "startLine": 58,
+          "endLine": 72,
+          "params": [
+            "a",
+            "b"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "manifestPath",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "bestMatch",
+          "line": 45,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "manifestPath",
+          "callee": "filePaths?.get",
+          "lineNumber": 39
+        },
+        {
+          "caller": "manifestPath",
+          "callee": "Math.max",
+          "lineNumber": 40
+        },
+        {
+          "caller": "bestMatch",
+          "callee": "editDistance",
+          "lineNumber": 49
+        },
+        {
+          "caller": "editDistance",
+          "callee": "Array.from",
+          "lineNumber": 62
+        },
+        {
+          "caller": "editDistance",
+          "callee": "Array(b.length + 1).fill",
+          "lineNumber": 62
+        },
+        {
+          "caller": "editDistance",
+          "callee": "Array",
+          "lineNumber": 62
+        },
+        {
+          "caller": "editDistance",
+          "callee": "Math.min",
+          "lineNumber": 68
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/SchemaDdlEmitter.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 90,
+      "nonEmptyLines": 82,
+      "functions": [
+        {
+          "name": "safeIdent",
+          "startLine": 26,
+          "endLine": 31,
+          "params": [
+            "name",
+            "kind"
+          ]
+        },
+        {
+          "name": "colName",
+          "startLine": 33,
+          "endLine": 36,
+          "params": [
+            "collection",
+            "fieldPath"
+          ]
+        },
+        {
+          "name": "jsonPath",
+          "startLine": 38,
+          "endLine": 42,
+          "params": [
+            "fieldPath"
+          ]
+        },
+        {
+          "name": "buildDdl",
+          "startLine": 52,
+          "endLine": 90,
+          "params": [
+            "manifest"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "buildDdl",
+          "line": 52,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "safeIdent",
+          "callee": "SAFE_NAME.test",
+          "lineNumber": 27
+        },
+        {
+          "caller": "colName",
+          "callee": "fieldPath.replace",
+          "lineNumber": 34
+        },
+        {
+          "caller": "colName",
+          "callee": "safeIdent",
+          "lineNumber": 35
+        },
+        {
+          "caller": "colName",
+          "callee": "safeIdent",
+          "lineNumber": 35
+        },
+        {
+          "caller": "buildDdl",
+          "callee": "safeIdent",
+          "lineNumber": 53
+        },
+        {
+          "caller": "buildDdl",
+          "callee": "fields.map",
+          "lineNumber": 63
+        },
+        {
+          "caller": "buildDdl",
+          "callee": "colName",
+          "lineNumber": 64
+        },
+        {
+          "caller": "buildDdl",
+          "callee": "seen.has",
+          "lineNumber": 65
+        },
+        {
+          "caller": "buildDdl",
+          "callee": "seen.add",
+          "lineNumber": 66
+        },
+        {
+          "caller": "buildDdl",
+          "callee": "addColumns.push",
+          "lineNumber": 67
+        },
+        {
+          "caller": "buildDdl",
+          "callee": "jsonPath",
+          "lineNumber": 69
+        },
+        {
+          "caller": "buildDdl",
+          "callee": "columnNames.push",
+          "lineNumber": 72
+        },
+        {
+          "caller": "buildDdl",
+          "callee": "fields.map((f) => f.replace(/\\./g, \"_\")).join",
+          "lineNumber": 76
+        },
+        {
+          "caller": "buildDdl",
+          "callee": "fields.map",
+          "lineNumber": 76
+        },
+        {
+          "caller": "buildDdl",
+          "callee": "f.replace",
+          "lineNumber": 76
+        },
+        {
+          "caller": "buildDdl",
+          "callee": "cols.map((c) => `${c} IS NOT NULL`).join",
+          "lineNumber": 81
+        },
+        {
+          "caller": "buildDdl",
+          "callee": "cols.map",
+          "lineNumber": 81
+        },
+        {
+          "caller": "buildDdl",
+          "callee": "createIndexes.push",
+          "lineNumber": 82
+        },
+        {
+          "caller": "buildDdl",
+          "callee": "cols.join",
+          "lineNumber": 83
+        },
+        {
+          "caller": "buildDdl",
+          "callee": "indexNames.push",
+          "lineNumber": 86
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/SchemaLoader.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 32,
+      "nonEmptyLines": 30,
+      "functions": [
+        {
+          "name": "findSchemaByName",
+          "startLine": 7,
+          "endLine": 17,
+          "params": [
+            "manifests",
+            "name"
+          ]
+        },
+        {
+          "name": "listSchemas",
+          "startLine": 24,
+          "endLine": 32,
+          "params": [
+            "manifests"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "findSchemaByName",
+          "line": 7,
+          "isDefault": false
+        },
+        {
+          "name": "listSchemas",
+          "line": 24,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "listSchemas",
+          "callee": "out.push",
+          "lineNumber": 29
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/domain/service/StaffRoleHierarchy.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 21,
+      "nonEmptyLines": 19,
+      "functions": [
+        {
+          "name": "meetsRole",
+          "startLine": 19,
+          "endLine": 21,
+          "params": [
+            "actual",
+            "min"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "meetsRole",
+          "line": 19,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/infrastructure/cli/EmitOpenapiCommand.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 99,
+      "nonEmptyLines": 90,
+      "functions": [
+        {
+          "name": "parseArgs",
+          "startLine": 16,
+          "endLine": 39,
+          "params": [
+            "rawArgs"
+          ]
+        },
+        {
+          "name": "printHelp",
+          "startLine": 41,
+          "endLine": 66,
+          "params": []
+        },
+        {
+          "name": "run",
+          "startLine": 68,
+          "endLine": 99,
+          "params": [
+            "rawArgs"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "parseArgs",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "run",
+          "line": 68,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "printHelp",
+          "callee": "stdout.write",
+          "lineNumber": 42
+        },
+        {
+          "caller": "run",
+          "callee": "parseArgs",
+          "lineNumber": 71
+        },
+        {
+          "caller": "run",
+          "callee": "stderr.write",
+          "lineNumber": 73
+        },
+        {
+          "caller": "run",
+          "callee": "String",
+          "lineNumber": 73
+        },
+        {
+          "caller": "run",
+          "callee": "printHelp",
+          "lineNumber": 77
+        },
+        {
+          "caller": "run",
+          "callee": "loadManifestsFromRoot",
+          "lineNumber": 81
+        },
+        {
+          "caller": "run",
+          "callee": "parseErrors.some",
+          "lineNumber": 82
+        },
+        {
+          "caller": "run",
+          "callee": "stderr.write",
+          "lineNumber": 83
+        },
+        {
+          "caller": "run",
+          "callee": "EmitOpenapiUseCase.run",
+          "lineNumber": 86
+        },
+        {
+          "caller": "run",
+          "callee": "JSON.stringify",
+          "lineNumber": 92
+        },
+        {
+          "caller": "run",
+          "callee": "writeFile",
+          "lineNumber": 94
+        },
+        {
+          "caller": "run",
+          "callee": "stdout.write",
+          "lineNumber": 96
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 2,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/infrastructure/cli/EmitTypesCommand.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 80,
+      "nonEmptyLines": 72,
+      "functions": [
+        {
+          "name": "parseArgs",
+          "startLine": 14,
+          "endLine": 33,
+          "params": [
+            "rawArgs"
+          ]
+        },
+        {
+          "name": "printHelp",
+          "startLine": 35,
+          "endLine": 53,
+          "params": []
+        },
+        {
+          "name": "run",
+          "startLine": 55,
+          "endLine": 80,
+          "params": [
+            "rawArgs"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "parseArgs",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "run",
+          "line": 55,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "printHelp",
+          "callee": "stdout.write",
+          "lineNumber": 36
+        },
+        {
+          "caller": "run",
+          "callee": "parseArgs",
+          "lineNumber": 58
+        },
+        {
+          "caller": "run",
+          "callee": "stderr.write",
+          "lineNumber": 60
+        },
+        {
+          "caller": "run",
+          "callee": "String",
+          "lineNumber": 60
+        },
+        {
+          "caller": "run",
+          "callee": "printHelp",
+          "lineNumber": 64
+        },
+        {
+          "caller": "run",
+          "callee": "loadManifestsFromRoot",
+          "lineNumber": 68
+        },
+        {
+          "caller": "run",
+          "callee": "parseErrors.some",
+          "lineNumber": 69
+        },
+        {
+          "caller": "run",
+          "callee": "stderr.write",
+          "lineNumber": 70
+        },
+        {
+          "caller": "run",
+          "callee": "EmitTypesUseCase.run",
+          "lineNumber": 73
+        },
+        {
+          "caller": "run",
+          "callee": "writeFile",
+          "lineNumber": 75
+        },
+        {
+          "caller": "run",
+          "callee": "stdout.write",
+          "lineNumber": 77
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 2,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/infrastructure/cli/IntrospectCommand.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 56,
+      "nonEmptyLines": 48,
+      "functions": [
+        {
+          "name": "parseArgs",
+          "startLine": 11,
+          "endLine": 22,
+          "params": [
+            "rawArgs"
+          ]
+        },
+        {
+          "name": "printHelp",
+          "startLine": 24,
+          "endLine": 38,
+          "params": []
+        },
+        {
+          "name": "run",
+          "startLine": 40,
+          "endLine": 56,
+          "params": [
+            "rawArgs"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "parseArgs",
+          "line": 11,
+          "isDefault": false
+        },
+        {
+          "name": "run",
+          "line": 40,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "printHelp",
+          "callee": "stdout.write",
+          "lineNumber": 25
+        },
+        {
+          "caller": "run",
+          "callee": "parseArgs",
+          "lineNumber": 43
+        },
+        {
+          "caller": "run",
+          "callee": "stderr.write",
+          "lineNumber": 45
+        },
+        {
+          "caller": "run",
+          "callee": "String",
+          "lineNumber": 45
+        },
+        {
+          "caller": "run",
+          "callee": "printHelp",
+          "lineNumber": 49
+        },
+        {
+          "caller": "run",
+          "callee": "loadManifestsFromRoot",
+          "lineNumber": 52
+        },
+        {
+          "caller": "run",
+          "callee": "IntrospectManifestsUseCase.run",
+          "lineNumber": 53
+        },
+        {
+          "caller": "run",
+          "callee": "stdout.write",
+          "lineNumber": 54
+        },
+        {
+          "caller": "run",
+          "callee": "JSON.stringify",
+          "lineNumber": 54
+        },
+        {
+          "caller": "run",
+          "callee": "parseErrors.some",
+          "lineNumber": 55
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 2,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/infrastructure/cli/MantleCli.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 53,
+      "nonEmptyLines": 46,
+      "functions": [
+        {
+          "name": "main",
+          "startLine": 12,
+          "endLine": 45,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "main",
+          "callee": "stdout.write",
+          "lineNumber": 15
+        },
+        {
+          "caller": "main",
+          "callee": "argv.slice",
+          "lineNumber": 30
+        },
+        {
+          "caller": "main",
+          "callee": "runValidate",
+          "lineNumber": 34
+        },
+        {
+          "caller": "main",
+          "callee": "runIntrospect",
+          "lineNumber": 36
+        },
+        {
+          "caller": "main",
+          "callee": "runEmitOpenapi",
+          "lineNumber": 38
+        },
+        {
+          "caller": "main",
+          "callee": "runEmitTypes",
+          "lineNumber": 40
+        },
+        {
+          "caller": "main",
+          "callee": "stderr.write",
+          "lineNumber": 42
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 280,
+      "nonEmptyLines": 254,
+      "functions": [
+        {
+          "name": "parseArgs",
+          "startLine": 44,
+          "endLine": 82,
+          "params": [
+            "rawArgs"
+          ]
+        },
+        {
+          "name": "printHelp",
+          "startLine": 84,
+          "endLine": 109,
+          "params": []
+        },
+        {
+          "name": "isVisibleInPhase",
+          "startLine": 122,
+          "endLine": 126,
+          "params": [
+            "code",
+            "phase"
+          ]
+        },
+        {
+          "name": "run",
+          "startLine": 128,
+          "endLine": 208,
+          "params": [
+            "rawArgs"
+          ]
+        },
+        {
+          "name": "loadHandlerSource",
+          "startLine": 210,
+          "endLine": 236,
+          "params": [
+            "root"
+          ]
+        },
+        {
+          "name": "emitText",
+          "startLine": 238,
+          "endLine": 271,
+          "params": [
+            "diagnostics",
+            "errorCount",
+            "warningCount",
+            "root",
+            "phase",
+            "suppressedCount"
+          ]
+        },
+        {
+          "name": "formatValue",
+          "startLine": 273,
+          "endLine": 280,
+          "params": [
+            "v"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "parseArgs",
+          "line": 44,
+          "isDefault": false
+        },
+        {
+          "name": "run",
+          "line": 128,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parseArgs",
+          "callee": "JSON.stringify",
+          "lineNumber": 58
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "JSON.stringify",
+          "lineNumber": 66
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "printHelp",
+          "lineNumber": 70
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "exit",
+          "lineNumber": 71
+        },
+        {
+          "caller": "printHelp",
+          "callee": "stdout.write",
+          "lineNumber": 85
+        },
+        {
+          "caller": "run",
+          "callee": "parseArgs",
+          "lineNumber": 131
+        },
+        {
+          "caller": "run",
+          "callee": "stderr.write",
+          "lineNumber": 133
+        },
+        {
+          "caller": "run",
+          "callee": "String",
+          "lineNumber": 133
+        },
+        {
+          "caller": "run",
+          "callee": "resolve",
+          "lineNumber": 137
+        },
+        {
+          "caller": "run",
+          "callee": "cwd",
+          "lineNumber": 137
+        },
+        {
+          "caller": "run",
+          "callee": "loadManifestsFromRoot",
+          "lineNumber": 142
+        },
+        {
+          "caller": "run",
+          "callee": "loadHandlerSource",
+          "lineNumber": 148
+        },
+        {
+          "caller": "run",
+          "callee": "stderr.write",
+          "lineNumber": 150
+        },
+        {
+          "caller": "run",
+          "callee": "String",
+          "lineNumber": 150
+        },
+        {
+          "caller": "run",
+          "callee": "ValidateManifestsUseCase.run",
+          "lineNumber": 156
+        },
+        {
+          "caller": "run",
+          "callee": "manifests.some",
+          "lineNumber": 163
+        },
+        {
+          "caller": "run",
+          "callee": "cliWarnings.push",
+          "lineNumber": 167
+        },
+        {
+          "caller": "run",
+          "callee": "validateDiagnostic",
+          "lineNumber": 168
+        },
+        {
+          "caller": "run",
+          "callee": "rawDiagnostics.filter",
+          "lineNumber": 184
+        },
+        {
+          "caller": "run",
+          "callee": "isVisibleInPhase",
+          "lineNumber": 184
+        },
+        {
+          "caller": "run",
+          "callee": "stdout.write",
+          "lineNumber": 196
+        },
+        {
+          "caller": "run",
+          "callee": "JSON.stringify",
+          "lineNumber": 197
+        },
+        {
+          "caller": "run",
+          "callee": "emitText",
+          "lineNumber": 204
+        },
+        {
+          "caller": "walk",
+          "callee": "readdir",
+          "lineNumber": 216
+        },
+        {
+          "caller": "walk",
+          "callee": "join",
+          "lineNumber": 221
+        },
+        {
+          "caller": "walk",
+          "callee": "it.isDirectory",
+          "lineNumber": 222
+        },
+        {
+          "caller": "walk",
+          "callee": "walk",
+          "lineNumber": 224
+        },
+        {
+          "caller": "walk",
+          "callee": "it.isFile",
+          "lineNumber": 225
+        },
+        {
+          "caller": "walk",
+          "callee": "exts.some",
+          "lineNumber": 225
+        },
+        {
+          "caller": "walk",
+          "callee": "it.name.endsWith",
+          "lineNumber": 225
+        },
+        {
+          "caller": "walk",
+          "callee": "chunks.push",
+          "lineNumber": 227
+        },
+        {
+          "caller": "walk",
+          "callee": "readFile",
+          "lineNumber": 227
+        },
+        {
+          "caller": "loadHandlerSource",
+          "callee": "walk",
+          "lineNumber": 234
+        },
+        {
+          "caller": "loadHandlerSource",
+          "callee": "chunks.join",
+          "lineNumber": 235
+        },
+        {
+          "caller": "emitText",
+          "callee": "stdout.write",
+          "lineNumber": 247
+        },
+        {
+          "caller": "emitText",
+          "callee": "relative",
+          "lineNumber": 247
+        },
+        {
+          "caller": "emitText",
+          "callee": "cwd",
+          "lineNumber": 247
+        },
+        {
+          "caller": "emitText",
+          "callee": "stdout.write",
+          "lineNumber": 249
+        },
+        {
+          "caller": "emitText",
+          "callee": "stdout.write",
+          "lineNumber": 257
+        },
+        {
+          "caller": "emitText",
+          "callee": "stdout.write",
+          "lineNumber": 258
+        },
+        {
+          "caller": "emitText",
+          "callee": "stdout.write",
+          "lineNumber": 259
+        },
+        {
+          "caller": "emitText",
+          "callee": "stdout.write",
+          "lineNumber": 260
+        },
+        {
+          "caller": "emitText",
+          "callee": "formatValue",
+          "lineNumber": 260
+        },
+        {
+          "caller": "emitText",
+          "callee": "stdout.write",
+          "lineNumber": 261
+        },
+        {
+          "caller": "emitText",
+          "callee": "stdout.write",
+          "lineNumber": 262
+        },
+        {
+          "caller": "emitText",
+          "callee": "stdout.write",
+          "lineNumber": 263
+        },
+        {
+          "caller": "emitText",
+          "callee": "stdout.write",
+          "lineNumber": 265
+        },
+        {
+          "caller": "emitText",
+          "callee": "stdout.write",
+          "lineNumber": 267
+        },
+        {
+          "caller": "formatValue",
+          "callee": "JSON.stringify",
+          "lineNumber": 274
+        },
+        {
+          "caller": "formatValue",
+          "callee": "JSON.stringify",
+          "lineNumber": 276
+        },
+        {
+          "caller": "formatValue",
+          "callee": "String",
+          "lineNumber": 278
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 2,
+        "functionCount": 7,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/infrastructure/cli/loadManifests.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 123,
+      "nonEmptyLines": 117,
+      "functions": [
+        {
+          "name": "loadManifestsFromRoot",
+          "startLine": 34,
+          "endLine": 102,
+          "params": [
+            "rootArg"
+          ]
+        },
+        {
+          "name": "collectYamlFiles",
+          "startLine": 104,
+          "endLine": 123,
+          "params": [
+            "root"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "loadManifestsFromRoot",
+          "line": 34,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "resolve",
+          "lineNumber": 35
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "cwd",
+          "lineNumber": 35
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "collectYamlFiles",
+          "lineNumber": 42
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "parseErrors.push",
+          "lineNumber": 44
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "validateDiagnostic",
+          "lineNumber": 45
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "String",
+          "lineNumber": 50
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "readFile",
+          "lineNumber": 59
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "parseErrors.push",
+          "lineNumber": 61
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "validateDiagnostic",
+          "lineNumber": 62
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "String",
+          "lineNumber": 66
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "parseManifests",
+          "lineNumber": 72
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "parseErrors.push",
+          "lineNumber": 73
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "parsed.manifests.forEach",
+          "lineNumber": 74
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "manifests.push",
+          "lineNumber": 75
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "filePaths.get",
+          "lineNumber": 77
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "list.push",
+          "lineNumber": 78
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "filePaths.set",
+          "lineNumber": 79
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "parseErrors.push",
+          "lineNumber": 90
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "validateDiagnostic",
+          "lineNumber": 91
+        },
+        {
+          "caller": "loadManifestsFromRoot",
+          "callee": "String",
+          "lineNumber": 95
+        },
+        {
+          "caller": "walk",
+          "callee": "readdir",
+          "lineNumber": 107
+        },
+        {
+          "caller": "walk",
+          "callee": "join",
+          "lineNumber": 109
+        },
+        {
+          "caller": "walk",
+          "callee": "it.isDirectory",
+          "lineNumber": 110
+        },
+        {
+          "caller": "walk",
+          "callee": "walk",
+          "lineNumber": 110
+        },
+        {
+          "caller": "walk",
+          "callee": "it.isFile",
+          "lineNumber": 111
+        },
+        {
+          "caller": "walk",
+          "callee": "it.name.endsWith",
+          "lineNumber": 111
+        },
+        {
+          "caller": "walk",
+          "callee": "it.name.endsWith",
+          "lineNumber": 111
+        },
+        {
+          "caller": "walk",
+          "callee": "out.push",
+          "lineNumber": 112
+        },
+        {
+          "caller": "collectYamlFiles",
+          "callee": "stat",
+          "lineNumber": 116
+        },
+        {
+          "caller": "collectYamlFiles",
+          "callee": "s.isDirectory",
+          "lineNumber": 117
+        },
+        {
+          "caller": "collectYamlFiles",
+          "callee": "walk",
+          "lineNumber": 120
+        },
+        {
+          "caller": "collectYamlFiles",
+          "callee": "out.sort",
+          "lineNumber": 121
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/kernel/diagnostic.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 305,
+      "nonEmptyLines": 288,
+      "functions": [
+        {
+          "name": "isDiagnosticCode",
+          "startLine": 102,
+          "endLine": 104,
+          "params": [
+            "s"
+          ]
+        },
+        {
+          "name": "httpStatusFor",
+          "startLine": 164,
+          "endLine": 166,
+          "params": [
+            "d"
+          ]
+        },
+        {
+          "name": "makeDiagnostic",
+          "startLine": 173,
+          "endLine": 186,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "validateDiagnostic",
+          "startLine": 196,
+          "endLine": 196,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "testDiagnostic",
+          "startLine": 197,
+          "endLine": 197,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "bootDiagnostic",
+          "startLine": 198,
+          "endLine": 198,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "runtimeDiagnostic",
+          "startLine": 199,
+          "endLine": 199,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "formatValue",
+          "startLine": 203,
+          "endLine": 214,
+          "params": [
+            "v"
+          ]
+        },
+        {
+          "name": "redactForWire",
+          "startLine": 248,
+          "endLine": 252,
+          "params": [
+            "d"
+          ]
+        },
+        {
+          "name": "parseWireDiagnostic",
+          "startLine": 261,
+          "endLine": 282,
+          "params": [
+            "text"
+          ]
+        },
+        {
+          "name": "readJsonPointer",
+          "startLine": 289,
+          "endLine": 301,
+          "params": [
+            "root",
+            "jsonPointer"
+          ]
+        },
+        {
+          "name": "unescapePointer",
+          "startLine": 303,
+          "endLine": 305,
+          "params": [
+            "s"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "DiagnosticError",
+          "startLine": 224,
+          "endLine": 240,
+          "methods": [
+            "constructor",
+            "diagnostic"
+          ],
+          "properties": [
+            "diagnostics"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "DIAGNOSTIC_CODES",
+          "line": 29,
+          "isDefault": false
+        },
+        {
+          "name": "isDiagnosticCode",
+          "line": 102,
+          "isDefault": false
+        },
+        {
+          "name": "HTTP_STATUS_BY_CODE",
+          "line": 129,
+          "isDefault": false
+        },
+        {
+          "name": "httpStatusFor",
+          "line": 164,
+          "isDefault": false
+        },
+        {
+          "name": "makeDiagnostic",
+          "line": 173,
+          "isDefault": false
+        },
+        {
+          "name": "validateDiagnostic",
+          "line": 196,
+          "isDefault": false
+        },
+        {
+          "name": "testDiagnostic",
+          "line": 197,
+          "isDefault": false
+        },
+        {
+          "name": "bootDiagnostic",
+          "line": 198,
+          "isDefault": false
+        },
+        {
+          "name": "runtimeDiagnostic",
+          "line": 199,
+          "isDefault": false
+        },
+        {
+          "name": "DiagnosticError",
+          "line": 224,
+          "isDefault": false
+        },
+        {
+          "name": "redactForWire",
+          "line": 248,
+          "isDefault": false
+        },
+        {
+          "name": "parseWireDiagnostic",
+          "line": 261,
+          "isDefault": false
+        },
+        {
+          "name": "readJsonPointer",
+          "line": 289,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "isDiagnosticCode",
+          "callee": "(DIAGNOSTIC_CODES as readonly string[]).includes",
+          "lineNumber": 103
+        },
+        {
+          "caller": "makeDiagnostic",
+          "callee": "parts.push",
+          "lineNumber": 180
+        },
+        {
+          "caller": "makeDiagnostic",
+          "callee": "parts.push",
+          "lineNumber": 181
+        },
+        {
+          "caller": "makeDiagnostic",
+          "callee": "formatValue",
+          "lineNumber": 181
+        },
+        {
+          "caller": "makeDiagnostic",
+          "callee": "parts.push",
+          "lineNumber": 182
+        },
+        {
+          "caller": "makeDiagnostic",
+          "callee": "parts.join",
+          "lineNumber": 183
+        },
+        {
+          "caller": "validateDiagnostic",
+          "callee": "makeDiagnostic",
+          "lineNumber": 196
+        },
+        {
+          "caller": "testDiagnostic",
+          "callee": "makeDiagnostic",
+          "lineNumber": 197
+        },
+        {
+          "caller": "bootDiagnostic",
+          "callee": "makeDiagnostic",
+          "lineNumber": 198
+        },
+        {
+          "caller": "runtimeDiagnostic",
+          "callee": "makeDiagnostic",
+          "lineNumber": 199
+        },
+        {
+          "caller": "formatValue",
+          "callee": "JSON.stringify",
+          "lineNumber": 206
+        },
+        {
+          "caller": "formatValue",
+          "callee": "String",
+          "lineNumber": 207
+        },
+        {
+          "caller": "formatValue",
+          "callee": "JSON.stringify",
+          "lineNumber": 209
+        },
+        {
+          "caller": "formatValue",
+          "callee": "s.slice",
+          "lineNumber": 210
+        },
+        {
+          "caller": "constructor",
+          "callee": "Array.isArray",
+          "lineNumber": 227
+        },
+        {
+          "caller": "constructor",
+          "callee": "super",
+          "lineNumber": 229
+        },
+        {
+          "caller": "parseWireDiagnostic",
+          "callee": "JSON.parse",
+          "lineNumber": 265
+        },
+        {
+          "caller": "parseWireDiagnostic",
+          "callee": "Array.isArray",
+          "lineNumber": 269
+        },
+        {
+          "caller": "parseWireDiagnostic",
+          "callee": "isDiagnosticCode",
+          "lineNumber": 272
+        },
+        {
+          "caller": "readJsonPointer",
+          "callee": "jsonPointer.split(\"/\").slice(1).map",
+          "lineNumber": 291
+        },
+        {
+          "caller": "readJsonPointer",
+          "callee": "jsonPointer.split(\"/\").slice",
+          "lineNumber": 291
+        },
+        {
+          "caller": "readJsonPointer",
+          "callee": "jsonPointer.split",
+          "lineNumber": 291
+        },
+        {
+          "caller": "unescapePointer",
+          "callee": "s.replace(/~1/g, \"/\").replace",
+          "lineNumber": 304
+        },
+        {
+          "caller": "unescapePointer",
+          "callee": "s.replace",
+          "lineNumber": 304
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 13,
+        "functionCount": 12,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/EmitOpenapiUseCase.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 203,
+      "nonEmptyLines": 194,
+      "functions": [
+        {
+          "name": "httpOperation",
+          "startLine": 85,
+          "endLine": 117,
+          "params": [
+            "t",
+            "p"
+          ]
+        },
+        {
+          "name": "viewOperation",
+          "startLine": 119,
+          "endLine": 186,
+          "params": [
+            "v"
+          ]
+        },
+        {
+          "name": "diagnosticSchema",
+          "startLine": 188,
+          "endLine": 203,
+          "params": []
+        }
+      ],
+      "classes": [
+        {
+          "name": "EmitOpenapiUseCase",
+          "startLine": 19,
+          "endLine": 83,
+          "methods": [
+            "execute",
+            "run"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "EmitOpenapiUseCase",
+          "line": 19,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "execute",
+          "callee": "partitionManifests",
+          "lineNumber": 21
+        },
+        {
+          "caller": "execute",
+          "callee": "procedures.map",
+          "lineNumber": 22
+        },
+        {
+          "caller": "execute",
+          "callee": "procByName.get",
+          "lineNumber": 28
+        },
+        {
+          "caller": "execute",
+          "callee": "src.method.toLowerCase",
+          "lineNumber": 32
+        },
+        {
+          "caller": "execute",
+          "callee": "httpOperation",
+          "lineNumber": 32
+        },
+        {
+          "caller": "execute",
+          "callee": "viewOperation",
+          "lineNumber": 38
+        },
+        {
+          "caller": "execute",
+          "callee": "diagnosticSchema",
+          "lineNumber": 48
+        },
+        {
+          "caller": "run",
+          "callee": "new EmitOpenapiUseCase().execute",
+          "lineNumber": 81
+        },
+        {
+          "caller": "httpOperation",
+          "callee": "method.toLowerCase",
+          "lineNumber": 88
+        },
+        {
+          "caller": "httpOperation",
+          "callee": "p.metadata.name.replace",
+          "lineNumber": 88
+        },
+        {
+          "caller": "viewOperation",
+          "callee": "Object.entries",
+          "lineNumber": 126
+        },
+        {
+          "caller": "viewOperation",
+          "callee": "params.push",
+          "lineNumber": 127
+        },
+        {
+          "caller": "viewOperation",
+          "callee": "required.has",
+          "lineNumber": 127
+        },
+        {
+          "caller": "viewOperation",
+          "callee": "v.metadata.name.replace",
+          "lineNumber": 164
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/EmitTypesUseCase.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 150,
+      "nonEmptyLines": 137,
+      "functions": [
+        {
+          "name": "tsId",
+          "startLine": 93,
+          "endLine": 95,
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "renderType",
+          "startLine": 97,
+          "endLine": 110,
+          "params": [
+            "schema",
+            "indent"
+          ]
+        },
+        {
+          "name": "renderTypeInline",
+          "startLine": 112,
+          "endLine": 130,
+          "params": [
+            "schema"
+          ]
+        },
+        {
+          "name": "primitiveType",
+          "startLine": 132,
+          "endLine": 146,
+          "params": [
+            "t",
+            "schema"
+          ]
+        },
+        {
+          "name": "tsKey",
+          "startLine": 148,
+          "endLine": 150,
+          "params": [
+            "name"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "EmitTypesUseCase",
+          "startLine": 32,
+          "endLine": 91,
+          "methods": [
+            "execute",
+            "run"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "EmitTypesUseCase",
+          "line": 32,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "execute",
+          "callee": "partitionManifests",
+          "lineNumber": 34
+        },
+        {
+          "caller": "execute",
+          "callee": "schemas.map",
+          "lineNumber": 35
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 38
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 39
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 40
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 41
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 44
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 45
+        },
+        {
+          "caller": "execute",
+          "callee": "tsId",
+          "lineNumber": 45
+        },
+        {
+          "caller": "execute",
+          "callee": "renderType",
+          "lineNumber": 45
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 46
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 50
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 51
+        },
+        {
+          "caller": "execute",
+          "callee": "tsId",
+          "lineNumber": 51
+        },
+        {
+          "caller": "execute",
+          "callee": "renderType",
+          "lineNumber": 51
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 52
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 53
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 54
+        },
+        {
+          "caller": "execute",
+          "callee": "tsId",
+          "lineNumber": 54
+        },
+        {
+          "caller": "execute",
+          "callee": "renderType",
+          "lineNumber": 54
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 55
+        },
+        {
+          "caller": "execute",
+          "callee": "schemaByName.get",
+          "lineNumber": 59
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 60
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 62
+        },
+        {
+          "caller": "execute",
+          "callee": "tsId",
+          "lineNumber": 62
+        },
+        {
+          "caller": "execute",
+          "callee": "Object.keys",
+          "lineNumber": 65
+        },
+        {
+          "caller": "execute",
+          "callee": "reservedSet.has",
+          "lineNumber": 69
+        },
+        {
+          "caller": "execute",
+          "callee": "rendered.push",
+          "lineNumber": 70
+        },
+        {
+          "caller": "execute",
+          "callee": "rendered.push",
+          "lineNumber": 72
+        },
+        {
+          "caller": "execute",
+          "callee": "renderTypeInline",
+          "lineNumber": 72
+        },
+        {
+          "caller": "execute",
+          "callee": "rendered.push",
+          "lineNumber": 74
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 77
+        },
+        {
+          "caller": "execute",
+          "callee": "tsId",
+          "lineNumber": 77
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 78
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 79
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 81
+        },
+        {
+          "caller": "execute",
+          "callee": "out.push",
+          "lineNumber": 84
+        },
+        {
+          "caller": "execute",
+          "callee": "out.join",
+          "lineNumber": 85
+        },
+        {
+          "caller": "run",
+          "callee": "new EmitTypesUseCase().execute",
+          "lineNumber": 89
+        },
+        {
+          "caller": "tsId",
+          "callee": "name.replace",
+          "lineNumber": 94
+        },
+        {
+          "caller": "renderType",
+          "callee": "Object.entries",
+          "lineNumber": 102
+        },
+        {
+          "caller": "renderType",
+          "callee": "required.has",
+          "lineNumber": 103
+        },
+        {
+          "caller": "renderType",
+          "callee": "lines.push",
+          "lineNumber": 104
+        },
+        {
+          "caller": "renderType",
+          "callee": "tsKey",
+          "lineNumber": 104
+        },
+        {
+          "caller": "renderType",
+          "callee": "renderTypeInline",
+          "lineNumber": 104
+        },
+        {
+          "caller": "renderType",
+          "callee": "lines.push",
+          "lineNumber": 106
+        },
+        {
+          "caller": "renderType",
+          "callee": "lines.join",
+          "lineNumber": 107
+        },
+        {
+          "caller": "renderType",
+          "callee": "renderTypeInline",
+          "lineNumber": 109
+        },
+        {
+          "caller": "renderTypeInline",
+          "callee": "Array.isArray",
+          "lineNumber": 114
+        },
+        {
+          "caller": "renderTypeInline",
+          "callee": "schema.enum\n      .map((v) => (typeof v === \"string\" ? JSON.stringify(v) : String(v)))\n      .join",
+          "lineNumber": 115
+        },
+        {
+          "caller": "renderTypeInline",
+          "callee": "schema.enum\n      .map",
+          "lineNumber": 115
+        },
+        {
+          "caller": "renderTypeInline",
+          "callee": "JSON.stringify",
+          "lineNumber": 116
+        },
+        {
+          "caller": "renderTypeInline",
+          "callee": "String",
+          "lineNumber": 116
+        },
+        {
+          "caller": "renderTypeInline",
+          "callee": "Array.isArray",
+          "lineNumber": 119
+        },
+        {
+          "caller": "renderTypeInline",
+          "callee": "t.map((kind) => primitiveType(kind, schema)).join",
+          "lineNumber": 120
+        },
+        {
+          "caller": "renderTypeInline",
+          "callee": "t.map",
+          "lineNumber": 120
+        },
+        {
+          "caller": "renderTypeInline",
+          "callee": "primitiveType",
+          "lineNumber": 120
+        },
+        {
+          "caller": "renderTypeInline",
+          "callee": "renderType",
+          "lineNumber": 123
+        },
+        {
+          "caller": "renderTypeInline",
+          "callee": "renderTypeInline",
+          "lineNumber": 126
+        },
+        {
+          "caller": "renderTypeInline",
+          "callee": "primitiveType",
+          "lineNumber": 129
+        },
+        {
+          "caller": "tsKey",
+          "callee": "/^[A-Za-z_$][A-Za-z0-9_$]*$/.test",
+          "lineNumber": 149
+        },
+        {
+          "caller": "tsKey",
+          "callee": "JSON.stringify",
+          "lineNumber": 149
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 1,
+        "functionCount": 5,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/IntrospectManifestsUseCase.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 61,
+      "nonEmptyLines": 59,
+      "classes": [
+        {
+          "name": "IntrospectManifestsUseCase",
+          "startLine": 18,
+          "endLine": 61,
+          "methods": [
+            "execute",
+            "run"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "IntrospectManifestsUseCase",
+          "line": 18,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "execute",
+          "callee": "partitionManifests",
+          "lineNumber": 20
+        },
+        {
+          "caller": "execute",
+          "callee": "partitioned.schemas.map",
+          "lineNumber": 21
+        },
+        {
+          "caller": "execute",
+          "callee": "Object.keys",
+          "lineNumber": 30
+        },
+        {
+          "caller": "execute",
+          "callee": "partitioned.views.map",
+          "lineNumber": 33
+        },
+        {
+          "caller": "execute",
+          "callee": "partitioned.procedures.map",
+          "lineNumber": 43
+        },
+        {
+          "caller": "execute",
+          "callee": "partitioned.triggers.map",
+          "lineNumber": 50
+        },
+        {
+          "caller": "run",
+          "callee": "new IntrospectManifestsUseCase().execute",
+          "lineNumber": 59
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-spec/src/usecase/ValidateManifestsUseCase.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 562,
+      "nonEmptyLines": 530,
+      "functions": [
+        {
+          "name": "byName",
+          "startLine": 94,
+          "endLine": 98,
+          "params": [
+            "arr"
+          ]
+        },
+        {
+          "name": "checkDuplicates",
+          "startLine": 100,
+          "endLine": 133,
+          "params": [
+            "kind",
+            "arr",
+            "filePaths"
+          ]
+        },
+        {
+          "name": "checkSchemaInternals",
+          "startLine": 135,
+          "endLine": 194,
+          "params": [
+            "s",
+            "filePaths"
+          ]
+        },
+        {
+          "name": "checkViewRefs",
+          "startLine": 196,
+          "endLine": 281,
+          "params": [
+            "v",
+            "schemasByName",
+            "filePaths"
+          ]
+        },
+        {
+          "name": "checkFilterFields",
+          "startLine": 283,
+          "endLine": 325,
+          "params": [
+            "node",
+            "validFields",
+            "viewName",
+            "schemaName",
+            "jsonPointer",
+            "filePaths"
+          ]
+        },
+        {
+          "name": "getFilterComparison",
+          "startLine": 327,
+          "endLine": 336,
+          "params": [
+            "node"
+          ]
+        },
+        {
+          "name": "checkBuiltinHandler",
+          "startLine": 338,
+          "endLine": 379,
+          "params": [
+            "p",
+            "schemasByName",
+            "filePaths"
+          ]
+        },
+        {
+          "name": "checkProcedureAuth",
+          "startLine": 381,
+          "endLine": 408,
+          "params": [
+            "p",
+            "filePaths"
+          ]
+        },
+        {
+          "name": "isValidPredicate",
+          "startLine": 410,
+          "endLine": 424,
+          "params": [
+            "p"
+          ]
+        },
+        {
+          "name": "checkTriggerRefs",
+          "startLine": 426,
+          "endLine": 509,
+          "params": [
+            "triggers",
+            "proceduresByName",
+            "filePaths",
+            "schemasByName"
+          ]
+        },
+        {
+          "name": "checkHandlerRefsInSource",
+          "startLine": 511,
+          "endLine": 553,
+          "params": [
+            "procedures",
+            "source",
+            "filePaths"
+          ]
+        },
+        {
+          "name": "check",
+          "startLine": 560,
+          "endLine": 562,
+          "params": [
+            "request"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "ValidateManifestsUseCase",
+          "startLine": 39,
+          "endLine": 92,
+          "methods": [
+            "execute",
+            "run"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "ValidateManifestsUseCase",
+          "line": 39,
+          "isDefault": false
+        },
+        {
+          "name": "check",
+          "line": 560,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "execute",
+          "callee": "partitionManifests",
+          "lineNumber": 42
+        },
+        {
+          "caller": "execute",
+          "callee": "byName",
+          "lineNumber": 43
+        },
+        {
+          "caller": "execute",
+          "callee": "byName",
+          "lineNumber": 44
+        },
+        {
+          "caller": "execute",
+          "callee": "diags.push",
+          "lineNumber": 46
+        },
+        {
+          "caller": "execute",
+          "callee": "checkDuplicates",
+          "lineNumber": 46
+        },
+        {
+          "caller": "execute",
+          "callee": "diags.push",
+          "lineNumber": 47
+        },
+        {
+          "caller": "execute",
+          "callee": "checkDuplicates",
+          "lineNumber": 47
+        },
+        {
+          "caller": "execute",
+          "callee": "diags.push",
+          "lineNumber": 48
+        },
+        {
+          "caller": "execute",
+          "callee": "checkDuplicates",
+          "lineNumber": 48
+        },
+        {
+          "caller": "execute",
+          "callee": "diags.push",
+          "lineNumber": 49
+        },
+        {
+          "caller": "execute",
+          "callee": "checkDuplicates",
+          "lineNumber": 49
+        },
+        {
+          "caller": "execute",
+          "callee": "diags.push",
+          "lineNumber": 52
+        },
+        {
+          "caller": "execute",
+          "callee": "checkSchemaInternals",
+          "lineNumber": 52
+        },
+        {
+          "caller": "execute",
+          "callee": "diags.push",
+          "lineNumber": 55
+        },
+        {
+          "caller": "execute",
+          "callee": "checkLocaleAndTranslates",
+          "lineNumber": 56
+        },
+        {
+          "caller": "execute",
+          "callee": "diags.push",
+          "lineNumber": 65
+        },
+        {
+          "caller": "execute",
+          "callee": "checkViewRefs",
+          "lineNumber": 65
+        },
+        {
+          "caller": "execute",
+          "callee": "diags.push",
+          "lineNumber": 69
+        },
+        {
+          "caller": "execute",
+          "callee": "checkProcedureAuth",
+          "lineNumber": 69
+        },
+        {
+          "caller": "execute",
+          "callee": "diags.push",
+          "lineNumber": 70
+        },
+        {
+          "caller": "execute",
+          "callee": "checkBuiltinHandler",
+          "lineNumber": 70
+        },
+        {
+          "caller": "execute",
+          "callee": "diags.push",
+          "lineNumber": 73
+        },
+        {
+          "caller": "execute",
+          "callee": "checkTriggerRefs",
+          "lineNumber": 73
+        },
+        {
+          "caller": "execute",
+          "callee": "diags.push",
+          "lineNumber": 76
+        },
+        {
+          "caller": "execute",
+          "callee": "checkHandlerRefsInSource",
+          "lineNumber": 76
+        },
+        {
+          "caller": "run",
+          "callee": "new ValidateManifestsUseCase().execute",
+          "lineNumber": 90
+        },
+        {
+          "caller": "byName",
+          "callee": "m.set",
+          "lineNumber": 96
+        },
+        {
+          "caller": "checkDuplicates",
+          "callee": "counts.set",
+          "lineNumber": 112
+        },
+        {
+          "caller": "checkDuplicates",
+          "callee": "counts.get",
+          "lineNumber": 112
+        },
+        {
+          "caller": "checkDuplicates",
+          "callee": "counts.get",
+          "lineNumber": 117
+        },
+        {
+          "caller": "checkDuplicates",
+          "callee": "seenIndex.get",
+          "lineNumber": 119
+        },
+        {
+          "caller": "checkDuplicates",
+          "callee": "seenIndex.set",
+          "lineNumber": 120
+        },
+        {
+          "caller": "checkDuplicates",
+          "callee": "out.push",
+          "lineNumber": 121
+        },
+        {
+          "caller": "checkDuplicates",
+          "callee": "validateDiagnostic",
+          "lineNumber": 122
+        },
+        {
+          "caller": "checkDuplicates",
+          "callee": "manifestPath",
+          "lineNumber": 125
+        },
+        {
+          "caller": "checkSchemaInternals",
+          "callee": "ui.forEach",
+          "lineNumber": 144
+        },
+        {
+          "caller": "checkSchemaInternals",
+          "callee": "composite.forEach",
+          "lineNumber": 145
+        },
+        {
+          "caller": "checkSchemaInternals",
+          "callee": "out.push",
+          "lineNumber": 147
+        },
+        {
+          "caller": "checkSchemaInternals",
+          "callee": "validateDiagnostic",
+          "lineNumber": 148
+        },
+        {
+          "caller": "checkSchemaInternals",
+          "callee": "manifestPath",
+          "lineNumber": 151
+        },
+        {
+          "caller": "checkSchemaInternals",
+          "callee": "Object.keys",
+          "lineNumber": 159
+        },
+        {
+          "caller": "checkSchemaInternals",
+          "callee": "bestMatch",
+          "lineNumber": 160
+        },
+        {
+          "caller": "checkSchemaInternals",
+          "callee": "Object.keys",
+          "lineNumber": 160
+        },
+        {
+          "caller": "checkSchemaInternals",
+          "callee": "Object.entries",
+          "lineNumber": 168
+        },
+        {
+          "caller": "checkSchemaInternals",
+          "callee": "(MANTLE_BIND_VALUES as readonly string[]).includes",
+          "lineNumber": 173
+        },
+        {
+          "caller": "checkSchemaInternals",
+          "callee": "out.push",
+          "lineNumber": 174
+        },
+        {
+          "caller": "checkSchemaInternals",
+          "callee": "validateDiagnostic",
+          "lineNumber": 175
+        },
+        {
+          "caller": "checkSchemaInternals",
+          "callee": "manifestPath",
+          "lineNumber": 178
+        },
+        {
+          "caller": "checkSchemaInternals",
+          "callee": "MANTLE_BIND_VALUES.join",
+          "lineNumber": 185
+        },
+        {
+          "caller": "checkSchemaInternals",
+          "callee": "bestMatch",
+          "lineNumber": 187
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "schemasByName.get",
+          "lineNumber": 203
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "out.push",
+          "lineNumber": 205
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "validateDiagnostic",
+          "lineNumber": 206
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "manifestPath",
+          "lineNumber": 209
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "schemasByName.keys",
+          "lineNumber": 212
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "bestMatch",
+          "lineNumber": 213
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "schemasByName.keys",
+          "lineNumber": 213
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "Object.keys",
+          "lineNumber": 222
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "v.spec.fields.forEach",
+          "lineNumber": 225
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "validFieldNames.has",
+          "lineNumber": 226
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "out.push",
+          "lineNumber": 227
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "validateDiagnostic",
+          "lineNumber": 228
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "manifestPath",
+          "lineNumber": 231
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "[...validFieldNames].sort",
+          "lineNumber": 234
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "bestMatch",
+          "lineNumber": 235
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "out.push",
+          "lineNumber": 244
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "checkFilterFields",
+          "lineNumber": 245
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "v.spec.orderBy.forEach",
+          "lineNumber": 257
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "validFieldNames.has",
+          "lineNumber": 258
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "out.push",
+          "lineNumber": 259
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "validateDiagnostic",
+          "lineNumber": 260
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "manifestPath",
+          "lineNumber": 263
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "[...validFieldNames].sort",
+          "lineNumber": 271
+        },
+        {
+          "caller": "checkViewRefs",
+          "callee": "bestMatch",
+          "lineNumber": 272
+        },
+        {
+          "caller": "checkFilterFields",
+          "callee": "getFilterComparison",
+          "lineNumber": 291
+        },
+        {
+          "caller": "checkFilterFields",
+          "callee": "validFields.has",
+          "lineNumber": 293
+        },
+        {
+          "caller": "checkFilterFields",
+          "callee": "validateDiagnostic",
+          "lineNumber": 295
+        },
+        {
+          "caller": "checkFilterFields",
+          "callee": "manifestPath",
+          "lineNumber": 298
+        },
+        {
+          "caller": "checkFilterFields",
+          "callee": "[...validFields].sort",
+          "lineNumber": 306
+        },
+        {
+          "caller": "checkFilterFields",
+          "callee": "bestMatch",
+          "lineNumber": 307
+        },
+        {
+          "caller": "checkFilterFields",
+          "callee": "node.and.flatMap",
+          "lineNumber": 315
+        },
+        {
+          "caller": "checkFilterFields",
+          "callee": "checkFilterFields",
+          "lineNumber": 316
+        },
+        {
+          "caller": "checkFilterFields",
+          "callee": "node.or.flatMap",
+          "lineNumber": 320
+        },
+        {
+          "caller": "checkFilterFields",
+          "callee": "checkFilterFields",
+          "lineNumber": 321
+        },
+        {
+          "caller": "checkBuiltinHandler",
+          "callee": "schemasByName.get",
+          "lineNumber": 346
+        },
+        {
+          "caller": "checkBuiltinHandler",
+          "callee": "out.push",
+          "lineNumber": 348
+        },
+        {
+          "caller": "checkBuiltinHandler",
+          "callee": "validateDiagnostic",
+          "lineNumber": 349
+        },
+        {
+          "caller": "checkBuiltinHandler",
+          "callee": "manifestPath",
+          "lineNumber": 352
+        },
+        {
+          "caller": "checkBuiltinHandler",
+          "callee": "schemasByName.keys",
+          "lineNumber": 355
+        },
+        {
+          "caller": "checkBuiltinHandler",
+          "callee": "bestMatch",
+          "lineNumber": 356
+        },
+        {
+          "caller": "checkBuiltinHandler",
+          "callee": "schemasByName.keys",
+          "lineNumber": 356
+        },
+        {
+          "caller": "checkBuiltinHandler",
+          "callee": "out.push",
+          "lineNumber": 367
+        },
+        {
+          "caller": "checkBuiltinHandler",
+          "callee": "validateDiagnostic",
+          "lineNumber": 368
+        },
+        {
+          "caller": "checkBuiltinHandler",
+          "callee": "manifestPath",
+          "lineNumber": 371
+        },
+        {
+          "caller": "checkProcedureAuth",
+          "callee": "all.forEach",
+          "lineNumber": 388
+        },
+        {
+          "caller": "checkProcedureAuth",
+          "callee": "isValidPredicate",
+          "lineNumber": 389
+        },
+        {
+          "caller": "checkProcedureAuth",
+          "callee": "out.push",
+          "lineNumber": 390
+        },
+        {
+          "caller": "checkProcedureAuth",
+          "callee": "validateDiagnostic",
+          "lineNumber": 391
+        },
+        {
+          "caller": "checkProcedureAuth",
+          "callee": "manifestPath",
+          "lineNumber": 394
+        },
+        {
+          "caller": "isValidPredicate",
+          "callee": "Array.isArray",
+          "lineNumber": 415
+        },
+        {
+          "caller": "isValidPredicate",
+          "callee": "Array.isArray",
+          "lineNumber": 419
+        },
+        {
+          "caller": "isValidPredicate",
+          "callee": "roles.every",
+          "lineNumber": 419
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "proceduresByName.has",
+          "lineNumber": 437
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "out.push",
+          "lineNumber": 438
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "validateDiagnostic",
+          "lineNumber": 439
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "manifestPath",
+          "lineNumber": 442
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "proceduresByName.keys",
+          "lineNumber": 445
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "bestMatch",
+          "lineNumber": 446
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "proceduresByName.keys",
+          "lineNumber": 446
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "httpPath.startsWith",
+          "lineNumber": 454
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "out.push",
+          "lineNumber": 456
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "validateDiagnostic",
+          "lineNumber": 457
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "manifestPath",
+          "lineNumber": 460
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "httpRoutes.get",
+          "lineNumber": 475
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "out.push",
+          "lineNumber": 477
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "validateDiagnostic",
+          "lineNumber": 478
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "manifestPath",
+          "lineNumber": 481
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "httpRoutes.set",
+          "lineNumber": 488
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "schemasByName.has",
+          "lineNumber": 492
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "out.push",
+          "lineNumber": 494
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "validateDiagnostic",
+          "lineNumber": 495
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "manifestPath",
+          "lineNumber": 498
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "schemasByName.keys",
+          "lineNumber": 501
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "bestMatch",
+          "lineNumber": 502
+        },
+        {
+          "caller": "checkTriggerRefs",
+          "callee": "schemasByName.keys",
+          "lineNumber": 502
+        },
+        {
+          "caller": "checkHandlerRefsInSource",
+          "callee": "ref.replace",
+          "lineNumber": 520
+        },
+        {
+          "caller": "checkHandlerRefsInSource",
+          "callee": "quoted.test",
+          "lineNumber": 534
+        },
+        {
+          "caller": "checkHandlerRefsInSource",
+          "callee": "propertyKey.test",
+          "lineNumber": 534
+        },
+        {
+          "caller": "checkHandlerRefsInSource",
+          "callee": "out.push",
+          "lineNumber": 535
+        },
+        {
+          "caller": "checkHandlerRefsInSource",
+          "callee": "validateDiagnostic",
+          "lineNumber": 536
+        },
+        {
+          "caller": "checkHandlerRefsInSource",
+          "callee": "manifestPath",
+          "lineNumber": 539
+        },
+        {
+          "caller": "check",
+          "callee": "ValidateManifestsUseCase.run",
+          "lineNumber": 561
+        }
+      ],
+      "metrics": {
+        "importCount": 7,
+        "exportCount": 2,
+        "functionCount": 12,
+        "classCount": 1
+      }
+    }
+  ]
+}

@@ -1,0 +1,2285 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 24,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/mantle-admin-ui/src/layout/app-sidebar.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 62,
+      "nonEmptyLines": 60,
+      "functions": [
+        {
+          "name": "AppSidebar",
+          "startLine": 25,
+          "endLine": 62,
+          "params": [
+            "{\n  brand,\n  groups,\n  pathname,\n  search,\n  user,\n}"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "AppSidebar",
+          "line": 25,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "AppSidebar",
+          "callee": "useLayout",
+          "lineNumber": 32
+        },
+        {
+          "caller": "AppSidebar",
+          "callee": "usePreferences",
+          "lineNumber": 33
+        },
+        {
+          "caller": "AppSidebar",
+          "callee": "groups.map",
+          "lineNumber": 47
+        }
+      ],
+      "metrics": {
+        "importCount": 7,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/app-title.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 41,
+      "nonEmptyLines": 39,
+      "functions": [
+        {
+          "name": "AppTitle",
+          "startLine": 17,
+          "endLine": 41,
+          "params": [
+            "{ brand }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "AppTitle",
+          "line": 17,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "AppTitle",
+          "callee": "useSidebar",
+          "lineNumber": 18
+        },
+        {
+          "caller": "AppTitle",
+          "callee": "usePreferences",
+          "lineNumber": 19
+        },
+        {
+          "caller": "AppTitle",
+          "callee": "setOpenMobile",
+          "lineNumber": 29
+        },
+        {
+          "caller": "AppTitle",
+          "callee": "t",
+          "lineNumber": 34
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/authenticated-layout.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 188,
+      "nonEmptyLines": 175,
+      "functions": [
+        {
+          "name": "AuthenticatedLayout",
+          "startLine": 51,
+          "endLine": 128,
+          "params": [
+            "{\n  brand = DEFAULT_BRAND,\n  fixed = false,\n  fluid = false,\n  children,\n}"
+          ]
+        },
+        {
+          "name": "buildNavGroups",
+          "startLine": 130,
+          "endLine": 184,
+          "params": [
+            "collections",
+            "language",
+            "role"
+          ]
+        },
+        {
+          "name": "statusesFor",
+          "startLine": 186,
+          "endLine": 188,
+          "params": [
+            "c"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "AuthenticatedLayout",
+          "line": 51,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "AuthenticatedLayout",
+          "callee": "useAdminLocation",
+          "lineNumber": 57
+        },
+        {
+          "caller": "AuthenticatedLayout",
+          "callee": "usePreferences",
+          "lineNumber": 58
+        },
+        {
+          "caller": "AuthenticatedLayout",
+          "callee": "useGuideOverlay",
+          "lineNumber": 59
+        },
+        {
+          "caller": "AuthenticatedLayout",
+          "callee": "useQuery",
+          "lineNumber": 61
+        },
+        {
+          "caller": "AuthenticatedLayout",
+          "callee": "api.get",
+          "lineNumber": 63
+        },
+        {
+          "caller": "AuthenticatedLayout",
+          "callee": "useQuery",
+          "lineNumber": 66
+        },
+        {
+          "caller": "AuthenticatedLayout",
+          "callee": "await api.get",
+          "lineNumber": 69
+        },
+        {
+          "caller": "AuthenticatedLayout",
+          "callee": "useQuery",
+          "lineNumber": 73
+        },
+        {
+          "caller": "AuthenticatedLayout",
+          "callee": "api.get",
+          "lineNumber": 75
+        },
+        {
+          "caller": "AuthenticatedLayout",
+          "callee": "React.useMemo",
+          "lineNumber": 78
+        },
+        {
+          "caller": "AuthenticatedLayout",
+          "callee": "React.useMemo",
+          "lineNumber": 87
+        },
+        {
+          "caller": "AuthenticatedLayout",
+          "callee": "buildNavGroups",
+          "lineNumber": 88
+        },
+        {
+          "caller": "AuthenticatedLayout",
+          "callee": "readSidebarOpenCookie",
+          "lineNumber": 94
+        },
+        {
+          "caller": "buildNavGroups",
+          "callee": "collections.filter",
+          "lineNumber": 135
+        },
+        {
+          "caller": "buildNavGroups",
+          "callee": "t",
+          "lineNumber": 139
+        },
+        {
+          "caller": "buildNavGroups",
+          "callee": "t",
+          "lineNumber": 147
+        },
+        {
+          "caller": "buildNavGroups",
+          "callee": "primaryCollections.map",
+          "lineNumber": 148
+        },
+        {
+          "caller": "buildNavGroups",
+          "callee": "collectionTitle",
+          "lineNumber": 149
+        },
+        {
+          "caller": "buildNavGroups",
+          "callee": "t",
+          "lineNumber": 158
+        },
+        {
+          "caller": "buildNavGroups",
+          "callee": "statusesFor(c).map",
+          "lineNumber": 161
+        },
+        {
+          "caller": "buildNavGroups",
+          "callee": "statusesFor",
+          "lineNumber": 161
+        },
+        {
+          "caller": "buildNavGroups",
+          "callee": "statusLabel",
+          "lineNumber": 162
+        },
+        {
+          "caller": "buildNavGroups",
+          "callee": "t",
+          "lineNumber": 170
+        },
+        {
+          "caller": "buildNavGroups",
+          "callee": "t",
+          "lineNumber": 172
+        },
+        {
+          "caller": "buildNavGroups",
+          "callee": "t",
+          "lineNumber": 173
+        },
+        {
+          "caller": "buildNavGroups",
+          "callee": "t",
+          "lineNumber": 174
+        },
+        {
+          "caller": "buildNavGroups",
+          "callee": "t",
+          "lineNumber": 178
+        }
+      ],
+      "metrics": {
+        "importCount": 17,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/header.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 112,
+      "nonEmptyLines": 109,
+      "functions": [
+        {
+          "name": "Header",
+          "startLine": 33,
+          "endLine": 112,
+          "params": [
+            "{\n  fixed = false,\n  className,\n  children,\n  user,\n  site,\n  publicUrl,\n  onOpenGuide,\n}"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Header",
+          "line": 33,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "Header",
+          "callee": "usePreferences",
+          "lineNumber": 42
+        },
+        {
+          "caller": "Header",
+          "callee": "React.useState",
+          "lineNumber": 43
+        },
+        {
+          "caller": "Header",
+          "callee": "React.useEffect",
+          "lineNumber": 44
+        },
+        {
+          "caller": "onScroll",
+          "callee": "setScrolled",
+          "lineNumber": 46
+        },
+        {
+          "caller": "Header",
+          "callee": "onScroll",
+          "lineNumber": 47
+        },
+        {
+          "caller": "Header",
+          "callee": "window.addEventListener",
+          "lineNumber": 48
+        },
+        {
+          "caller": "Header",
+          "callee": "window.removeEventListener",
+          "lineNumber": 49
+        },
+        {
+          "caller": "Header",
+          "callee": "cn",
+          "lineNumber": 56
+        },
+        {
+          "caller": "Header",
+          "callee": "t",
+          "lineNumber": 73
+        },
+        {
+          "caller": "Header",
+          "callee": "t",
+          "lineNumber": 75
+        },
+        {
+          "caller": "Header",
+          "callee": "cn",
+          "lineNumber": 86
+        },
+        {
+          "caller": "Header",
+          "callee": "t",
+          "lineNumber": 98
+        },
+        {
+          "caller": "Header",
+          "callee": "t",
+          "lineNumber": 99
+        },
+        {
+          "caller": "Header",
+          "callee": "t",
+          "lineNumber": 102
+        }
+      ],
+      "metrics": {
+        "importCount": 7,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/main.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 34,
+      "nonEmptyLines": 32,
+      "functions": [
+        {
+          "name": "Main",
+          "startLine": 12,
+          "endLine": 34,
+          "params": [
+            "{\n  fixed = false,\n  fluid = false,\n  className,\n  children,\n}"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Main",
+          "line": 12,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "Main",
+          "callee": "cn",
+          "lineNumber": 22
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/nav-group.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 319,
+      "nonEmptyLines": 307,
+      "functions": [
+        {
+          "name": "NavGroup",
+          "startLine": 43,
+          "endLine": 63,
+          "params": [
+            "{\n  group,\n  pathname,\n  search,\n}"
+          ]
+        },
+        {
+          "name": "navKey",
+          "startLine": 65,
+          "endLine": 67,
+          "params": [
+            "item"
+          ]
+        },
+        {
+          "name": "NavGroupItem",
+          "startLine": 69,
+          "endLine": 98,
+          "params": [
+            "{\n  item,\n  pathname,\n  search,\n}"
+          ]
+        },
+        {
+          "name": "NavLinkItem",
+          "startLine": 100,
+          "endLine": 137,
+          "params": [
+            "{\n  item,\n  pathname,\n  search,\n}"
+          ]
+        },
+        {
+          "name": "NavCollapsibleExpanded",
+          "startLine": 139,
+          "endLine": 190,
+          "params": [
+            "{\n  item,\n  pathname,\n  search,\n}"
+          ]
+        },
+        {
+          "name": "NavSubLink",
+          "startLine": 192,
+          "endLine": 214,
+          "params": [
+            "{\n  link,\n  pathname,\n  search,\n}"
+          ]
+        },
+        {
+          "name": "tourIdForUrl",
+          "startLine": 216,
+          "endLine": 223,
+          "params": [
+            "url"
+          ]
+        },
+        {
+          "name": "NavCollapsibleDropdown",
+          "startLine": 225,
+          "endLine": 269,
+          "params": [
+            "{\n  item,\n  pathname,\n  search,\n}"
+          ]
+        },
+        {
+          "name": "NavBadge",
+          "startLine": 271,
+          "endLine": 286,
+          "params": [
+            "{\n  children,\n  sidebarLabel = false,\n}"
+          ]
+        },
+        {
+          "name": "isLinkActive",
+          "startLine": 288,
+          "endLine": 303,
+          "params": [
+            "link",
+            "pathname",
+            "search"
+          ]
+        },
+        {
+          "name": "isGroupActive",
+          "startLine": 309,
+          "endLine": 319,
+          "params": [
+            "item",
+            "pathname",
+            "search"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "NavGroup",
+          "line": 43,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "NavGroup",
+          "callee": "group.items.map",
+          "lineNumber": 52
+        },
+        {
+          "caller": "NavGroup",
+          "callee": "navKey",
+          "lineNumber": 54
+        },
+        {
+          "caller": "navKey",
+          "callee": "isCollapsible",
+          "lineNumber": 66
+        },
+        {
+          "caller": "NavGroupItem",
+          "callee": "useSidebar",
+          "lineNumber": 78
+        },
+        {
+          "caller": "NavGroupItem",
+          "callee": "isCollapsible",
+          "lineNumber": 79
+        },
+        {
+          "caller": "NavLinkItem",
+          "callee": "useSidebar",
+          "lineNumber": 109
+        },
+        {
+          "caller": "NavLinkItem",
+          "callee": "isLinkActive",
+          "lineNumber": 110
+        },
+        {
+          "caller": "NavLinkItem",
+          "callee": "tourIdForUrl",
+          "lineNumber": 117
+        },
+        {
+          "caller": "NavLinkItem",
+          "callee": "setOpenMobile",
+          "lineNumber": 118
+        },
+        {
+          "caller": "NavCollapsibleExpanded",
+          "callee": "isGroupActive",
+          "lineNumber": 148
+        },
+        {
+          "caller": "NavCollapsibleExpanded",
+          "callee": "tourIdForUrl",
+          "lineNumber": 157
+        },
+        {
+          "caller": "NavCollapsibleExpanded",
+          "callee": "item.items.map",
+          "lineNumber": 177
+        },
+        {
+          "caller": "NavSubLink",
+          "callee": "useSidebar",
+          "lineNumber": 201
+        },
+        {
+          "caller": "NavSubLink",
+          "callee": "isLinkActive",
+          "lineNumber": 202
+        },
+        {
+          "caller": "NavSubLink",
+          "callee": "tourIdForUrl",
+          "lineNumber": 206
+        },
+        {
+          "caller": "NavSubLink",
+          "callee": "setOpenMobile",
+          "lineNumber": 206
+        },
+        {
+          "caller": "tourIdForUrl",
+          "callee": "url.startsWith",
+          "lineNumber": 219
+        },
+        {
+          "caller": "NavCollapsibleDropdown",
+          "callee": "isGroupActive",
+          "lineNumber": 234
+        },
+        {
+          "caller": "NavCollapsibleDropdown",
+          "callee": "usePreferences",
+          "lineNumber": 235
+        },
+        {
+          "caller": "NavCollapsibleDropdown",
+          "callee": "item.items.map",
+          "lineNumber": 253
+        },
+        {
+          "caller": "NavCollapsibleDropdown",
+          "callee": "cn",
+          "lineNumber": 257
+        },
+        {
+          "caller": "NavCollapsibleDropdown",
+          "callee": "isLinkActive",
+          "lineNumber": 258
+        },
+        {
+          "caller": "isLinkActive",
+          "callee": "want.entries",
+          "lineNumber": 299
+        },
+        {
+          "caller": "isLinkActive",
+          "callee": "have.get",
+          "lineNumber": 300
+        },
+        {
+          "caller": "isGroupActive",
+          "callee": "item.items.some",
+          "lineNumber": 314
+        },
+        {
+          "caller": "isGroupActive",
+          "callee": "isLinkActive",
+          "lineNumber": 314
+        },
+        {
+          "caller": "isGroupActive",
+          "callee": "item.items.some",
+          "lineNumber": 315
+        }
+      ],
+      "metrics": {
+        "importCount": 6,
+        "exportCount": 1,
+        "functionCount": 11,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/nav-user.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 146,
+      "nonEmptyLines": 137,
+      "functions": [
+        {
+          "name": "NavUser",
+          "startLine": 26,
+          "endLine": 104,
+          "params": [
+            "{ login, role }"
+          ]
+        },
+        {
+          "name": "Avatar",
+          "startLine": 106,
+          "endLine": 138,
+          "params": [
+            "{\n  avatarUrl,\n  initial,\n  large = false,\n}"
+          ]
+        },
+        {
+          "name": "signOut",
+          "startLine": 140,
+          "endLine": 146,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "NavUser",
+          "line": 26,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "NavUser",
+          "callee": "useSidebar",
+          "lineNumber": 27
+        },
+        {
+          "caller": "NavUser",
+          "callee": "usePreferences",
+          "lineNumber": 28
+        },
+        {
+          "caller": "NavUser",
+          "callee": "(login ?? \"?\").charAt(0).toUpperCase",
+          "lineNumber": 29
+        },
+        {
+          "caller": "NavUser",
+          "callee": "(login ?? \"?\").charAt",
+          "lineNumber": 29
+        },
+        {
+          "caller": "NavUser",
+          "callee": "encodeURIComponent",
+          "lineNumber": 31
+        },
+        {
+          "caller": "NavUser",
+          "callee": "t",
+          "lineNumber": 47
+        },
+        {
+          "caller": "NavUser",
+          "callee": "t",
+          "lineNumber": 70
+        },
+        {
+          "caller": "NavUser",
+          "callee": "t",
+          "lineNumber": 80
+        },
+        {
+          "caller": "NavUser",
+          "callee": "t",
+          "lineNumber": 96
+        },
+        {
+          "caller": "Avatar",
+          "callee": "cn",
+          "lineNumber": 119
+        },
+        {
+          "caller": "Avatar",
+          "callee": "cn",
+          "lineNumber": 134
+        },
+        {
+          "caller": "signOut",
+          "callee": "document.createElement",
+          "lineNumber": 141
+        },
+        {
+          "caller": "signOut",
+          "callee": "document.body.appendChild",
+          "lineNumber": 144
+        },
+        {
+          "caller": "signOut",
+          "callee": "form.submit",
+          "lineNumber": 145
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/preference-controls.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 128,
+      "nonEmptyLines": 123,
+      "functions": [
+        {
+          "name": "LanguagePreferenceDropdown",
+          "startLine": 20,
+          "endLine": 64,
+          "params": []
+        },
+        {
+          "name": "ThemePreferenceDropdown",
+          "startLine": 66,
+          "endLine": 116,
+          "params": []
+        },
+        {
+          "name": "themeOptions",
+          "startLine": 118,
+          "endLine": 128,
+          "params": [
+            "language"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "LanguagePreferenceDropdown",
+          "line": 20,
+          "isDefault": false
+        },
+        {
+          "name": "ThemePreferenceDropdown",
+          "line": 66,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "LanguagePreferenceDropdown",
+          "callee": "usePreferences",
+          "lineNumber": 21
+        },
+        {
+          "caller": "LanguagePreferenceDropdown",
+          "callee": "ADMIN_LANGUAGES.find",
+          "lineNumber": 23
+        },
+        {
+          "caller": "LanguagePreferenceDropdown",
+          "callee": "t",
+          "lineNumber": 33
+        },
+        {
+          "caller": "LanguagePreferenceDropdown",
+          "callee": "t",
+          "lineNumber": 43
+        },
+        {
+          "caller": "LanguagePreferenceDropdown",
+          "callee": "ADMIN_LANGUAGES.map",
+          "lineNumber": 45
+        },
+        {
+          "caller": "LanguagePreferenceDropdown",
+          "callee": "setLanguage",
+          "lineNumber": 48
+        },
+        {
+          "caller": "LanguagePreferenceDropdown",
+          "callee": "cn",
+          "lineNumber": 54
+        },
+        {
+          "caller": "ThemePreferenceDropdown",
+          "callee": "usePreferences",
+          "lineNumber": 67
+        },
+        {
+          "caller": "ThemePreferenceDropdown",
+          "callee": "themeOptions(language).find",
+          "lineNumber": 68
+        },
+        {
+          "caller": "ThemePreferenceDropdown",
+          "callee": "themeOptions",
+          "lineNumber": 68
+        },
+        {
+          "caller": "ThemePreferenceDropdown",
+          "callee": "t",
+          "lineNumber": 79
+        },
+        {
+          "caller": "ThemePreferenceDropdown",
+          "callee": "t",
+          "lineNumber": 83
+        },
+        {
+          "caller": "ThemePreferenceDropdown",
+          "callee": "t",
+          "lineNumber": 89
+        },
+        {
+          "caller": "ThemePreferenceDropdown",
+          "callee": "themeOptions(language).map",
+          "lineNumber": 91
+        },
+        {
+          "caller": "ThemePreferenceDropdown",
+          "callee": "themeOptions",
+          "lineNumber": 91
+        },
+        {
+          "caller": "ThemePreferenceDropdown",
+          "callee": "setTheme",
+          "lineNumber": 96
+        },
+        {
+          "caller": "ThemePreferenceDropdown",
+          "callee": "cn",
+          "lineNumber": 105
+        },
+        {
+          "caller": "themeOptions",
+          "callee": "t",
+          "lineNumber": 124
+        },
+        {
+          "caller": "themeOptions",
+          "callee": "t",
+          "lineNumber": 125
+        },
+        {
+          "caller": "themeOptions",
+          "callee": "t",
+          "lineNumber": 126
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 2,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/profile-dropdown.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 137,
+      "nonEmptyLines": 127,
+      "functions": [
+        {
+          "name": "ProfileDropdown",
+          "startLine": 31,
+          "endLine": 95,
+          "params": [
+            "{\n  login,\n  role,\n}"
+          ]
+        },
+        {
+          "name": "Avatar",
+          "startLine": 97,
+          "endLine": 129,
+          "params": [
+            "{\n  avatarUrl,\n  initial,\n  large = false,\n}"
+          ]
+        },
+        {
+          "name": "signOut",
+          "startLine": 131,
+          "endLine": 137,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "ProfileDropdown",
+          "line": 31,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "ProfileDropdown",
+          "callee": "usePreferences",
+          "lineNumber": 35
+        },
+        {
+          "caller": "ProfileDropdown",
+          "callee": "(login ?? \"?\").charAt(0).toUpperCase",
+          "lineNumber": 36
+        },
+        {
+          "caller": "ProfileDropdown",
+          "callee": "(login ?? \"?\").charAt",
+          "lineNumber": 36
+        },
+        {
+          "caller": "ProfileDropdown",
+          "callee": "encodeURIComponent",
+          "lineNumber": 38
+        },
+        {
+          "caller": "ProfileDropdown",
+          "callee": "cn",
+          "lineNumber": 45
+        },
+        {
+          "caller": "ProfileDropdown",
+          "callee": "t",
+          "lineNumber": 63
+        },
+        {
+          "caller": "ProfileDropdown",
+          "callee": "t",
+          "lineNumber": 73
+        },
+        {
+          "caller": "ProfileDropdown",
+          "callee": "t",
+          "lineNumber": 89
+        },
+        {
+          "caller": "Avatar",
+          "callee": "cn",
+          "lineNumber": 110
+        },
+        {
+          "caller": "Avatar",
+          "callee": "cn",
+          "lineNumber": 125
+        },
+        {
+          "caller": "signOut",
+          "callee": "document.createElement",
+          "lineNumber": 132
+        },
+        {
+          "caller": "signOut",
+          "callee": "document.body.appendChild",
+          "lineNumber": 135
+        },
+        {
+          "caller": "signOut",
+          "callee": "form.submit",
+          "lineNumber": 136
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/skip-to-main.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 26,
+      "nonEmptyLines": 24,
+      "functions": [
+        {
+          "name": "SkipToMain",
+          "startLine": 6,
+          "endLine": 26,
+          "params": [
+            "{\n  className,\n}"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "MAIN_CONTENT_ID",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "SkipToMain",
+          "line": 6,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "SkipToMain",
+          "callee": "cn",
+          "lineNumber": 14
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/layout/types.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 40,
+      "nonEmptyLines": 34,
+      "functions": [
+        {
+          "name": "isCollapsible",
+          "startLine": 27,
+          "endLine": 29,
+          "params": [
+            "item"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "isCollapsible",
+          "line": 27,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "isCollapsible",
+          "callee": "Array.isArray",
+          "lineNumber": 28
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/lib/api.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 50,
+      "nonEmptyLines": 46,
+      "functions": [
+        {
+          "name": "request",
+          "startLine": 14,
+          "endLine": 33,
+          "params": [
+            "path",
+            "init"
+          ]
+        },
+        {
+          "name": "jsonInit",
+          "startLine": 44,
+          "endLine": 50,
+          "params": [
+            "method",
+            "body"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "ApiError",
+          "startLine": 3,
+          "endLine": 12,
+          "methods": [
+            "constructor"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "ApiError",
+          "line": 3,
+          "isDefault": false
+        },
+        {
+          "name": "api",
+          "line": 35,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "super",
+          "lineNumber": 9
+        },
+        {
+          "caller": "request",
+          "callee": "fetch",
+          "lineNumber": 15
+        },
+        {
+          "caller": "request",
+          "callee": "res.text",
+          "lineNumber": 20
+        },
+        {
+          "caller": "request",
+          "callee": "JSON.parse",
+          "lineNumber": 24
+        },
+        {
+          "caller": "jsonInit",
+          "callee": "JSON.stringify",
+          "lineNumber": 48
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/lib/types.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 172,
+      "nonEmptyLines": 154,
+      "exports": [
+        {
+          "name": "EDITORIAL_STATUSES",
+          "line": 166,
+          "isDefault": false
+        },
+        {
+          "name": "SIMPLE_STATUSES",
+          "line": 172,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/lib/utils.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 6,
+      "nonEmptyLines": 5,
+      "functions": [
+        {
+          "name": "cn",
+          "startLine": 4,
+          "endLine": 6,
+          "params": [
+            "...inputs"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "cn",
+          "line": 4,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "cn",
+          "callee": "twMerge",
+          "lineNumber": 5
+        },
+        {
+          "caller": "cn",
+          "callee": "clsx",
+          "lineNumber": 5
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/main.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 25,
+      "nonEmptyLines": 23,
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/admin-table.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 38,
+      "nonEmptyLines": 35,
+      "functions": [
+        {
+          "name": "TableShell",
+          "startLine": 4,
+          "endLine": 18,
+          "params": [
+            "{\n  children,\n  className,\n}"
+          ]
+        },
+        {
+          "name": "TableHeadCell",
+          "startLine": 20,
+          "endLine": 28,
+          "params": [
+            "{\n  children,\n  className,\n}"
+          ]
+        },
+        {
+          "name": "TableCell",
+          "startLine": 30,
+          "endLine": 38,
+          "params": [
+            "{\n  children,\n  className,\n}"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "TableShell",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "TableHeadCell",
+          "line": 20,
+          "isDefault": false
+        },
+        {
+          "name": "TableCell",
+          "line": 30,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "TableShell",
+          "callee": "cn",
+          "lineNumber": 12
+        },
+        {
+          "caller": "TableHeadCell",
+          "callee": "cn",
+          "lineNumber": 27
+        },
+        {
+          "caller": "TableCell",
+          "callee": "cn",
+          "lineNumber": 37
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/button.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 58,
+      "nonEmptyLines": 54,
+      "exports": [
+        {
+          "name": "Button",
+          "line": 58,
+          "isDefault": false
+        },
+        {
+          "name": "buttonVariants",
+          "line": 58,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/collapsible.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 7,
+      "nonEmptyLines": 5,
+      "exports": [
+        {
+          "name": "Collapsible",
+          "line": 7,
+          "isDefault": false
+        },
+        {
+          "name": "CollapsibleTrigger",
+          "line": 7,
+          "isDefault": false
+        },
+        {
+          "name": "CollapsibleContent",
+          "line": 7,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/dropdown-menu.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 81,
+      "nonEmptyLines": 75,
+      "exports": [
+        {
+          "name": "DropdownMenu",
+          "line": 74,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuTrigger",
+          "line": 74,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuContent",
+          "line": 74,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuItem",
+          "line": 74,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuLabel",
+          "line": 74,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuSeparator",
+          "line": 74,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 6,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/page.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 148,
+      "nonEmptyLines": 141,
+      "functions": [
+        {
+          "name": "PageHeader",
+          "startLine": 9,
+          "endLine": 34,
+          "params": [
+            "{\n  eyebrow,\n  title,\n  description,\n  actions,\n}"
+          ]
+        },
+        {
+          "name": "SectionCard",
+          "startLine": 36,
+          "endLine": 44,
+          "params": [
+            "{\n  className,\n  children,\n}"
+          ]
+        },
+        {
+          "name": "EmptyState",
+          "startLine": 46,
+          "endLine": 71,
+          "params": [
+            "{\n  icon: Icon = AlertCircle,\n  title,\n  description,\n  action,\n}"
+          ]
+        },
+        {
+          "name": "ErrorBox",
+          "startLine": 73,
+          "endLine": 88,
+          "params": [
+            "{ error }"
+          ]
+        },
+        {
+          "name": "CopyField",
+          "startLine": 90,
+          "endLine": 148,
+          "params": [
+            "{\n  label,\n  value,\n  href,\n}"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "PageHeader",
+          "line": 9,
+          "isDefault": false
+        },
+        {
+          "name": "SectionCard",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "EmptyState",
+          "line": 46,
+          "isDefault": false
+        },
+        {
+          "name": "ErrorBox",
+          "line": 73,
+          "isDefault": false
+        },
+        {
+          "name": "CopyField",
+          "line": 90,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "SectionCard",
+          "callee": "cn",
+          "lineNumber": 43
+        },
+        {
+          "caller": "ErrorBox",
+          "callee": "usePreferences",
+          "lineNumber": 74
+        },
+        {
+          "caller": "ErrorBox",
+          "callee": "React.useEffect",
+          "lineNumber": 76
+        },
+        {
+          "caller": "ErrorBox",
+          "callee": "encodeURIComponent",
+          "lineNumber": 79
+        },
+        {
+          "caller": "ErrorBox",
+          "callee": "t",
+          "lineNumber": 85
+        },
+        {
+          "caller": "CopyField",
+          "callee": "usePreferences",
+          "lineNumber": 99
+        },
+        {
+          "caller": "CopyField",
+          "callee": "React.useState",
+          "lineNumber": 100
+        },
+        {
+          "caller": "copy",
+          "callee": "navigator.clipboard.writeText",
+          "lineNumber": 104
+        },
+        {
+          "caller": "copy",
+          "callee": "setCopied",
+          "lineNumber": 105
+        },
+        {
+          "caller": "copy",
+          "callee": "window.setTimeout",
+          "lineNumber": 106
+        },
+        {
+          "caller": "copy",
+          "callee": "setCopied",
+          "lineNumber": 106
+        },
+        {
+          "caller": "copy",
+          "callee": "setCopied",
+          "lineNumber": 108
+        },
+        {
+          "caller": "CopyField",
+          "callee": "t",
+          "lineNumber": 123
+        },
+        {
+          "caller": "CopyField",
+          "callee": "t",
+          "lineNumber": 135
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 5,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/separator.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 28,
+      "nonEmptyLines": 26,
+      "exports": [
+        {
+          "name": "Separator",
+          "line": 28,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/sheet.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 116,
+      "nonEmptyLines": 107,
+      "functions": [
+        {
+          "name": "Sheet",
+          "startLine": 7,
+          "endLine": 9,
+          "params": [
+            "{ ...props }"
+          ]
+        },
+        {
+          "name": "SheetPortal",
+          "startLine": 11,
+          "endLine": 15,
+          "params": [
+            "{\n  ...props\n}"
+          ]
+        },
+        {
+          "name": "SheetOverlay",
+          "startLine": 17,
+          "endLine": 31,
+          "params": [
+            "{\n  className,\n  ...props\n}"
+          ]
+        },
+        {
+          "name": "SheetContent",
+          "startLine": 33,
+          "endLine": 72,
+          "params": [
+            "{\n  className,\n  children,\n  side = \"right\",\n  showCloseButton = true,\n  ...props\n}"
+          ]
+        },
+        {
+          "name": "SheetHeader",
+          "startLine": 74,
+          "endLine": 82,
+          "params": [
+            "{ className, ...props }"
+          ]
+        },
+        {
+          "name": "SheetTitle",
+          "startLine": 84,
+          "endLine": 95,
+          "params": [
+            "{\n  className,\n  ...props\n}"
+          ]
+        },
+        {
+          "name": "SheetDescription",
+          "startLine": 97,
+          "endLine": 108,
+          "params": [
+            "{\n  className,\n  ...props\n}"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Sheet",
+          "line": 110,
+          "isDefault": false
+        },
+        {
+          "name": "SheetContent",
+          "line": 110,
+          "isDefault": false
+        },
+        {
+          "name": "SheetHeader",
+          "line": 110,
+          "isDefault": false
+        },
+        {
+          "name": "SheetTitle",
+          "line": 110,
+          "isDefault": false
+        },
+        {
+          "name": "SheetDescription",
+          "line": 110,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "SheetOverlay",
+          "callee": "cn",
+          "lineNumber": 24
+        },
+        {
+          "caller": "SheetContent",
+          "callee": "cn",
+          "lineNumber": 48
+        },
+        {
+          "caller": "SheetHeader",
+          "callee": "cn",
+          "lineNumber": 78
+        },
+        {
+          "caller": "SheetTitle",
+          "callee": "cn",
+          "lineNumber": 91
+        },
+        {
+          "caller": "SheetDescription",
+          "callee": "cn",
+          "lineNumber": 104
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 5,
+        "functionCount": 7,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/sidebar.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 459,
+      "nonEmptyLines": 426,
+      "functions": [
+        {
+          "name": "useIsMobile",
+          "startLine": 34,
+          "endLine": 44,
+          "params": []
+        },
+        {
+          "name": "SidebarProvider",
+          "startLine": 46,
+          "endLine": 119,
+          "params": [
+            "{\n  defaultOpen = true,\n  className,\n  style,\n  children,\n  ...props\n}"
+          ]
+        },
+        {
+          "name": "useSidebar",
+          "startLine": 121,
+          "endLine": 127,
+          "params": []
+        },
+        {
+          "name": "Sidebar",
+          "startLine": 129,
+          "endLine": 199,
+          "params": [
+            "{\n  side = \"left\",\n  variant = \"sidebar\",\n  className,\n  children,\n  ...props\n}"
+          ]
+        },
+        {
+          "name": "SidebarTrigger",
+          "startLine": 201,
+          "endLine": 224,
+          "params": [
+            "{\n  className,\n  onClick,\n  ...props\n}"
+          ]
+        },
+        {
+          "name": "SidebarInset",
+          "startLine": 226,
+          "endLine": 238,
+          "params": [
+            "{ className, ...props }"
+          ]
+        },
+        {
+          "name": "SidebarHeader",
+          "startLine": 240,
+          "endLine": 249,
+          "params": [
+            "{ className, ...props }"
+          ]
+        },
+        {
+          "name": "SidebarContent",
+          "startLine": 251,
+          "endLine": 263,
+          "params": [
+            "{ className, ...props }"
+          ]
+        },
+        {
+          "name": "SidebarFooter",
+          "startLine": 265,
+          "endLine": 274,
+          "params": [
+            "{ className, ...props }"
+          ]
+        },
+        {
+          "name": "SidebarSeparator",
+          "startLine": 276,
+          "endLine": 290,
+          "params": [
+            "{ className, ...props }"
+          ]
+        },
+        {
+          "name": "SidebarGroup",
+          "startLine": 292,
+          "endLine": 301,
+          "params": [
+            "{ className, ...props }"
+          ]
+        },
+        {
+          "name": "SidebarGroupLabel",
+          "startLine": 303,
+          "endLine": 318,
+          "params": [
+            "{\n  className,\n  ...props\n}"
+          ]
+        },
+        {
+          "name": "SidebarMenu",
+          "startLine": 320,
+          "endLine": 329,
+          "params": [
+            "{ className, ...props }"
+          ]
+        },
+        {
+          "name": "SidebarMenuItem",
+          "startLine": 331,
+          "endLine": 340,
+          "params": [
+            "{ className, ...props }"
+          ]
+        },
+        {
+          "name": "SidebarMenuButton",
+          "startLine": 358,
+          "endLine": 380,
+          "params": [
+            "{\n  asChild = false,\n  isActive = false,\n  size = \"default\",\n  className,\n  ...props\n}"
+          ]
+        },
+        {
+          "name": "SidebarMenuSub",
+          "startLine": 382,
+          "endLine": 394,
+          "params": [
+            "{ className, ...props }"
+          ]
+        },
+        {
+          "name": "SidebarMenuSubItem",
+          "startLine": 396,
+          "endLine": 408,
+          "params": [
+            "{\n  className,\n  ...props\n}"
+          ]
+        },
+        {
+          "name": "SidebarMenuSubButton",
+          "startLine": 410,
+          "endLine": 439,
+          "params": [
+            "{\n  asChild = false,\n  size = \"md\",\n  isActive = false,\n  className,\n  ...props\n}"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Sidebar",
+          "line": 441,
+          "isDefault": false
+        },
+        {
+          "name": "SidebarContent",
+          "line": 441,
+          "isDefault": false
+        },
+        {
+          "name": "SidebarFooter",
+          "line": 441,
+          "isDefault": false
+        },
+        {
+          "name": "SidebarGroup",
+          "line": 441,
+          "isDefault": false
+        },
+        {
+          "name": "SidebarGroupLabel",
+          "line": 441,
+          "isDefault": false
+        },
+        {
+          "name": "SidebarHeader",
+          "line": 441,
+          "isDefault": false
+        },
+        {
+          "name": "SidebarInset",
+          "line": 441,
+          "isDefault": false
+        },
+        {
+          "name": "SidebarMenu",
+          "line": 441,
+          "isDefault": false
+        },
+        {
+          "name": "SidebarMenuButton",
+          "line": 441,
+          "isDefault": false
+        },
+        {
+          "name": "SidebarMenuItem",
+          "line": 441,
+          "isDefault": false
+        },
+        {
+          "name": "SidebarMenuSub",
+          "line": 441,
+          "isDefault": false
+        },
+        {
+          "name": "SidebarMenuSubButton",
+          "line": 441,
+          "isDefault": false
+        },
+        {
+          "name": "SidebarMenuSubItem",
+          "line": 441,
+          "isDefault": false
+        },
+        {
+          "name": "SidebarProvider",
+          "line": 441,
+          "isDefault": false
+        },
+        {
+          "name": "SidebarSeparator",
+          "line": 441,
+          "isDefault": false
+        },
+        {
+          "name": "SidebarTrigger",
+          "line": 441,
+          "isDefault": false
+        },
+        {
+          "name": "useSidebar",
+          "line": 441,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "useIsMobile",
+          "callee": "React.useState",
+          "lineNumber": 35
+        },
+        {
+          "caller": "useIsMobile",
+          "callee": "React.useEffect",
+          "lineNumber": 36
+        },
+        {
+          "caller": "useIsMobile",
+          "callee": "window.matchMedia",
+          "lineNumber": 37
+        },
+        {
+          "caller": "onChange",
+          "callee": "setIsMobile",
+          "lineNumber": 38
+        },
+        {
+          "caller": "useIsMobile",
+          "callee": "mql.addEventListener",
+          "lineNumber": 39
+        },
+        {
+          "caller": "useIsMobile",
+          "callee": "setIsMobile",
+          "lineNumber": 40
+        },
+        {
+          "caller": "useIsMobile",
+          "callee": "mql.removeEventListener",
+          "lineNumber": 41
+        },
+        {
+          "caller": "SidebarProvider",
+          "callee": "useIsMobile",
+          "lineNumber": 55
+        },
+        {
+          "caller": "SidebarProvider",
+          "callee": "React.useState",
+          "lineNumber": 56
+        },
+        {
+          "caller": "SidebarProvider",
+          "callee": "React.useState",
+          "lineNumber": 57
+        },
+        {
+          "caller": "SidebarProvider",
+          "callee": "React.useCallback",
+          "lineNumber": 58
+        },
+        {
+          "caller": "SidebarProvider",
+          "callee": "writeSidebarOpenCookie",
+          "lineNumber": 59
+        },
+        {
+          "caller": "SidebarProvider",
+          "callee": "setOpen",
+          "lineNumber": 60
+        },
+        {
+          "caller": "SidebarProvider",
+          "callee": "React.useCallback",
+          "lineNumber": 63
+        },
+        {
+          "caller": "SidebarProvider",
+          "callee": "setOpenMobile",
+          "lineNumber": 65
+        },
+        {
+          "caller": "SidebarProvider",
+          "callee": "setOpenPersisted",
+          "lineNumber": 66
+        },
+        {
+          "caller": "SidebarProvider",
+          "callee": "React.useEffect",
+          "lineNumber": 69
+        },
+        {
+          "caller": "handleKeyDown",
+          "callee": "event.preventDefault",
+          "lineNumber": 75
+        },
+        {
+          "caller": "handleKeyDown",
+          "callee": "toggleSidebar",
+          "lineNumber": 76
+        },
+        {
+          "caller": "SidebarProvider",
+          "callee": "window.addEventListener",
+          "lineNumber": 79
+        },
+        {
+          "caller": "SidebarProvider",
+          "callee": "window.removeEventListener",
+          "lineNumber": 80
+        },
+        {
+          "caller": "SidebarProvider",
+          "callee": "React.useMemo",
+          "lineNumber": 85
+        },
+        {
+          "caller": "SidebarProvider",
+          "callee": "cn",
+          "lineNumber": 109
+        },
+        {
+          "caller": "useSidebar",
+          "callee": "React.useContext",
+          "lineNumber": 122
+        },
+        {
+          "caller": "Sidebar",
+          "callee": "useSidebar",
+          "lineNumber": 139
+        },
+        {
+          "caller": "Sidebar",
+          "callee": "cn",
+          "lineNumber": 181
+        },
+        {
+          "caller": "SidebarTrigger",
+          "callee": "useSidebar",
+          "lineNumber": 206
+        },
+        {
+          "caller": "SidebarTrigger",
+          "callee": "cn",
+          "lineNumber": 213
+        },
+        {
+          "caller": "SidebarTrigger",
+          "callee": "onClick",
+          "lineNumber": 215
+        },
+        {
+          "caller": "SidebarTrigger",
+          "callee": "toggleSidebar",
+          "lineNumber": 216
+        },
+        {
+          "caller": "SidebarInset",
+          "callee": "cn",
+          "lineNumber": 230
+        },
+        {
+          "caller": "SidebarHeader",
+          "callee": "cn",
+          "lineNumber": 245
+        },
+        {
+          "caller": "SidebarContent",
+          "callee": "cn",
+          "lineNumber": 256
+        },
+        {
+          "caller": "SidebarFooter",
+          "callee": "cn",
+          "lineNumber": 270
+        },
+        {
+          "caller": "SidebarSeparator",
+          "callee": "cn",
+          "lineNumber": 281
+        },
+        {
+          "caller": "SidebarGroup",
+          "callee": "cn",
+          "lineNumber": 297
+        },
+        {
+          "caller": "SidebarGroupLabel",
+          "callee": "cn",
+          "lineNumber": 311
+        },
+        {
+          "caller": "SidebarMenu",
+          "callee": "cn",
+          "lineNumber": 325
+        },
+        {
+          "caller": "SidebarMenuItem",
+          "callee": "cn",
+          "lineNumber": 336
+        },
+        {
+          "caller": "SidebarMenuButton",
+          "callee": "cn",
+          "lineNumber": 376
+        },
+        {
+          "caller": "SidebarMenuButton",
+          "callee": "sidebarMenuButtonVariants",
+          "lineNumber": 376
+        },
+        {
+          "caller": "SidebarMenuSub",
+          "callee": "cn",
+          "lineNumber": 387
+        },
+        {
+          "caller": "SidebarMenuSubItem",
+          "callee": "cn",
+          "lineNumber": 404
+        },
+        {
+          "caller": "SidebarMenuSubButton",
+          "callee": "cn",
+          "lineNumber": 429
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 17,
+        "functionCount": 18,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-admin-ui/src/ui/status-badge.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 36,
+      "nonEmptyLines": 33,
+      "functions": [
+        {
+          "name": "StatusBadge",
+          "startLine": 13,
+          "endLine": 32,
+          "params": [
+            "{\n  status,\n  className,\n}"
+          ]
+        },
+        {
+          "name": "isContentStatus",
+          "startLine": 34,
+          "endLine": 36,
+          "params": [
+            "status"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "StatusBadge",
+          "line": 13,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "StatusBadge",
+          "callee": "isContentStatus",
+          "lineNumber": 20
+        },
+        {
+          "caller": "StatusBadge",
+          "callee": "cn",
+          "lineNumber": 23
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    }
+  ]
+}

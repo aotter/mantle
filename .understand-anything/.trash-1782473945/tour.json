@@ -1,0 +1,85 @@
+[
+  {
+    "order": 1,
+    "title": "專案總覽：為什麼有 mantle",
+    "description": "從 README 開始理解 mantle 的定位：一套執行於 Cloudflare Workers、把 AI agent 視為一等作者的 agent-native headless CMS，主打「用提示而非設定」來建立內容模型。它也補上根目錄治理文件與「AI 作為主要作者」的奠基性 ADR，說明三層回饋迴路（validate 靜態驗證、boot-time fail-fast、runtime errors）與 coder／operator 兩種角色面。先讀懂這個「為什麼」，後續的程式結構才有脈絡。",
+    "nodeIds": ["document:README.md", "document:CONTRIBUTING.md", "document:docs/adr/0007-ai-as-primary-author.md"]
+  },
+  {
+    "order": 2,
+    "title": "四 Atom 內容模型",
+    "description": "mantle 的核心是以 Schema / View / Procedure / Trigger 四個 atom 構成的 multi-doc YAML manifest，這是 consumer 專案用來「宣告」內容模型的語言。design-atoms 逐一說明四個 atom 的 v0.1 grammar、x-mantle-bind 擴充欄位、OpenAPI emission 與 JSON Schema → zod 驗證流程；對應的 ADR 則記錄了 grammar 鎖定與 DRAFT 紀律的決策由來。理解這四個 atom，等於拿到讀懂整個 runtime 的字典。",
+    "nodeIds": ["document:docs/design-atoms.md", "document:docs/adr/0001-four-atom-manifest-model.md"]
+  },
+  {
+    "order": 3,
+    "title": "Manifest Grammar 權威來源",
+    "description": "承接第 2 步的概念模型，ManifestGrammar.ts 是把四 atom 落實為 TypeScript 型別的程式碼權威來源：它鎖定 v0.1 grammar，集中定義 Schema/View/Procedure/Trigger 型別、封閉列舉（STAFF_ROLES、MANTLE_BIND_VALUES、BUILTIN_OPS、LIFECYCLE_HOOKS）與保留字。它是整個 mantle-spec 套件被最廣泛依賴的型別基礎（fan-in 排名第二），任何對 grammar 的改動都從這裡開始。",
+    "nodeIds": ["file:packages/mantle-spec/src/domain/model/ManifestGrammar.ts"],
+    "languageLesson": "TypeScript 以 `as const` 搭配封閉列舉（closed enum）把字串字面量提升為精確的 union 型別，讓 grammar 在編譯期就鎖死合法值；這正是「locked-grammar」在型別層的實作手段。"
+  },
+  {
+    "order": 4,
+    "title": "結構化 Diagnostic 契約",
+    "description": "agent 之所以能自我修正，靠的是機器可解析的錯誤回報。kernel 的 diagnostic.ts 定義了封閉的 DIAGNOSTIC_CODES、HTTP 狀態映射、依 phase（validate/test/boot/runtime）建構 Diagnostic 的工廠，以及 wire 序列化，是整個套件結構化錯誤的基礎；對應 ADR 則規範了 code 命名、path 格式與 candidates/suggestion 的填寫時機。這個契約貫穿 CLI、測試與 runtime 三個診斷面。",
+    "nodeIds": ["file:packages/mantle-spec/src/kernel/diagnostic.ts", "document:docs/adr/0008-structured-diagnostic-shape.md"]
+  },
+  {
+    "order": 5,
+    "title": "Runtime 領域模型與 Ports",
+    "description": "進入 mantle-runtime 的 hexagonal 核心。EntryRow 與 HandlerContext 是 dispatcher 在每次請求填入的 runtime 事實型別；DatabaseDriver、EntryRepository、MediaStorage、Clock 則是一組 port 介面，定義 runtime 對外部世界的抽象邊界，runtime 不得依賴任何 Cloudflare 專屬型別。這些檔案是全 repo fan-in 最高的一群，是所有 use case 與 adapter 共同依賴的契約地基。",
+    "nodeIds": ["file:packages/mantle-runtime/src/domain/model/EntryRow.ts", "file:packages/mantle-runtime/src/domain/model/HandlerContext.ts", "file:packages/mantle-runtime/src/domain/port/EntryRepository.ts", "file:packages/mantle-runtime/src/domain/port/DatabaseDriver.ts", "file:packages/mantle-runtime/src/domain/port/Clock.ts"],
+    "languageLesson": "Hexagonal（ports & adapters）架構：domain 只定義 port 介面（如 DatabaseDriver），具體技術（D1、R2）由外層 adapter 實作並在組裝根注入，讓核心邏輯完全不知道自己跑在哪個平台上。"
+  },
+  {
+    "order": 6,
+    "title": "Use Case 應用層",
+    "description": "建立在第 5 步的 port 與型別之上，usecase 層編排出具體使用情境。CreateDraftUseCase 驗證 schema、產生 ID 與時間戳、蓋上 x-mantle-bind 值並經 EntryWriteGuard 守門；ExecuteViewUseCase 評估授權述詞、編譯 SQL 並透過注入的 DatabaseDriver 查詢；InvokeProcedureUseCase 評估 auth、以 zod 驗證輸入輸出後委派 handler 或內建操作。這三者對應內容、View 與 Procedure 三類 atom 的執行語意。",
+    "nodeIds": ["file:packages/mantle-runtime/src/usecase/content/CreateDraftUseCase.ts", "file:packages/mantle-runtime/src/usecase/view/ExecuteViewUseCase.ts", "file:packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts"]
+  },
+  {
+    "order": 7,
+    "title": "靜態 .md 鏡像：agent 可爬的內容",
+    "description": "呼應 README 強調的「agent 不需登入就能爬的靜態 .md 鏡像」，render 層的 ComposeLlmsTxtUseCase 讀取所有已發佈 entry、依 collection 分組後序列化成 LLM 友善的純文字索引（llms.txt）。這展示了 mantle 如何把內部結構化內容轉成 agent 取用最友善的表面，是「agent-native」承諾在輸出端的具體實作。",
+    "nodeIds": ["file:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts"]
+  },
+  {
+    "order": 8,
+    "title": "MCP Dispatcher 與工具目錄",
+    "description": "這是 mantle「MCP-native」的心臟。McpToolCatalog 依 schema/procedure/view 與媒體策略動態產生建立、更新、查詢、媒體上傳等工具定義，並過濾掉 x-mantle-bind 等非作者欄位，讓 agent 只看到「可填寫的表面」；McpJsonRpcDispatcher 則把 JSON-RPC 請求依工具名稱路由到第 6 步的對應 use case，僅做信封處理與委派、不含業務邏輯。兩者把第 2 步的 manifest 直接變成 agent 可呼叫的 MCP 工具集。",
+    "nodeIds": ["file:packages/mantle-runtime/src/infrastructure/mcp/McpToolCatalog.ts", "file:packages/mantle-runtime/src/infrastructure/mcp/McpJsonRpcDispatcher.ts", "file:packages/mantle-runtime/src/domain/service/McpToolNaming.ts"]
+  },
+  {
+    "order": 9,
+    "title": "Persistence 與啟動遷移",
+    "description": "DatabaseEntryRepository 是第 5 步 EntryRepository port 的資料庫實作：透過 DatabaseDriver 對 entries 表執行 CRUD、狀態轉移、游標分頁與 JSON 欄位查詢，並以樂觀鎖版本守門處理並發衝突。boot 模組則 re-export CANONICAL_MIGRATIONS，供 runtime 啟動時建立／升級資料庫結構。這一步展示了抽象 port 如何落到真實的資料表操作。",
+    "nodeIds": ["file:packages/mantle-runtime/src/infrastructure/persistence/DatabaseEntryRepository.ts", "file:packages/mantle-runtime/src/infrastructure/boot/index.ts"],
+    "languageLesson": "樂觀鎖（optimistic locking）：每筆 entry 帶 version 欄位，更新時比對版本而非加鎖，衝突時擲出 EntryVersionConflict，適合 Workers 這類無狀態、高並發的執行環境。"
+  },
+  {
+    "order": 10,
+    "title": "Cloudflare Adapter：ports 接上平台",
+    "description": "adapter 是 port 與真實平台的接合點。bindings 提供 D1DatabaseDriver、R2MediaStorage、KvCacheBinding 等對第 5 步 port 的具體綁定；createAuth 以 Better Auth 組裝 social/magic-link/OTP 登入並直接對 D1 操作 user/account，含 staff 角色查詢與 bootstrap owner 提升；mount 與 oauth 則把 server endpoint、MCP API handler 與 OAuth 路徑掛載到 Workers。這正是 README 所說「runtime 免費附帶 dispatcher + auth + render + MCP」如何在 Cloudflare 落地。",
+    "nodeIds": ["file:packages/adapters/cloudflare/src/bindings/index.ts", "file:packages/adapters/cloudflare/src/auth/createAuth.ts", "file:packages/adapters/cloudflare/src/mount/index.ts", "file:packages/adapters/cloudflare/src/oauth/index.ts"]
+  },
+  {
+    "order": 11,
+    "title": "Admin UI 管理後台 SPA",
+    "description": "mantle-admin-ui 是 React 19 + Vite + Tailwind v4 的管理後台。admin-app.tsx 是 SPA 根組件，依認證 Gate 切換登入畫面與已認證 layout；preferences.tsx 以 React Context 管理語言/方向/主題並持久化到 localStorage（全 repo fan-in 最高）；i18n.ts 提供多語系字典與 t() 查詢；lib/api.ts 則是與第 10 步 adapter endpoint 對話的 HTTP 客戶端。這層提供給人類 operator 的操作面，與 agent 走的 MCP 面互補。",
+    "nodeIds": ["file:packages/mantle-admin-ui/src/app/admin-app.tsx", "file:packages/mantle-admin-ui/src/app/preferences.tsx", "file:packages/mantle-admin-ui/src/app/i18n.ts", "file:packages/mantle-admin-ui/src/lib/api.ts"],
+    "languageLesson": "React Context + localStorage 是 SPA 管理跨元件偏好設定的標準模式：Provider 把狀態下放給整棵元件樹，避免逐層 props 傳遞（prop drilling）。"
+  },
+  {
+    "order": 12,
+    "title": "組裝根與 SDK 門面",
+    "description": "所有線在這裡收束。runtime.ts 的 createCmsRuntime 是唯一允許接線具體實作的組裝根（assembly root）：它切分 manifest、組裝各 repository／use case／dispatcher，並把第 10 步的 adapter 經 port 注入。@aotter/mantle 聚合套件則以單行 re-export 把 runtime、cloudflare、admin-ui、spec 四個進入點集中對外暴露，成為 consumer 與 create-mantle 腳手架實際 import 的公開 API 門面。",
+    "nodeIds": ["file:packages/mantle-runtime/src/runtime.ts", "file:packages/mantle/src/runtime.ts", "file:packages/mantle/src/cloudflare.ts", "file:packages/mantle/src/admin-ui.ts"]
+  },
+  {
+    "order": 13,
+    "title": "Spec CLI、Monorepo 與 CI",
+    "description": "收尾於開發者工具鏈。MantleCli 是 coder surface 的進入點，依子命令分派 validate/introspect/emit-openapi/emit-types，把第 4 步的結構化 diagnostic 直接交到作者手上。pnpm-workspace.yaml 定義 monorepo 範圍與 catalog 集中式版本管理；CI workflow 則在 push 與 PR 時於單一 job 對整個 monorepo 跑 build、套件邊界檢查、typecheck 與 vitest，守住前面每一層的契約不被破壞。",
+    "nodeIds": ["file:packages/mantle-spec/src/infrastructure/cli/MantleCli.ts", "config:pnpm-workspace.yaml", "pipeline:.github/workflows/ci.yml"],
+    "languageLesson": "pnpm workspace 的 catalog 讓 monorepo 各 package 共用一份集中管理的依賴版本，避免版本漂移；CI 的 concurrency 群組則會取消同一 ref 上被取代的舊執行，節省 runner 資源。"
+  }
+]

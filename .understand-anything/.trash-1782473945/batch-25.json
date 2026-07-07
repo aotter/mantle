@@ -1,0 +1,348 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/dto/render/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/dto/render/index.ts",
+      "summary": "mantle-runtime render 相關 usecase DTO 的 barrel 檔，集中 re-export render 請求/回應的型別定義。",
+      "tags": ["barrel", "re-export", "dto", "usecase", "runtime"],
+      "complexity": "simple",
+      "languageNotes": "純 re-export barrel，遵循每資料夾一個 index.ts 的結構慣例。"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/dto/view/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/dto/view/index.ts",
+      "summary": "mantle-runtime view usecase DTO 的單行 barrel 檔，re-export view 相關的請求/回應 DTO。",
+      "tags": ["barrel", "re-export", "dto", "usecase", "runtime"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/index.ts",
+      "summary": "mantle-runtime usecase 層的 barrel 檔，彙整並 re-export 各 use case 類別與其 DTO 子 barrel。",
+      "tags": ["barrel", "re-export", "usecase", "runtime", "entry-point"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/dispatcher-match.test.ts",
+      "type": "file",
+      "name": "dispatcher-match.test.ts",
+      "filePath": "packages/mantle-runtime/test/dispatcher-match.test.ts",
+      "summary": "PathMatcher 的 vitest 單元測試，驗證 dispatcher 路徑比對 (matchPath) 在各種路由樣式下的命中與參數擷取行為。",
+      "tags": ["test", "unit-test", "runtime", "dispatcher", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/locale-negotiator.test.ts",
+      "type": "file",
+      "name": "locale-negotiator.test.ts",
+      "filePath": "packages/mantle-runtime/test/locale-negotiator.test.ts",
+      "summary": "LocaleNegotiator 的 vitest 單元測試，覆蓋從路徑推斷 locale、已知 locale 判定、URL locale 轉換與 site 預設組態等邏輯。",
+      "tags": ["test", "unit-test", "runtime", "locale", "i18n"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/test/view-param-coercer.test.ts",
+      "type": "file",
+      "name": "view-param-coercer.test.ts",
+      "filePath": "packages/mantle-runtime/test/view-param-coercer.test.ts",
+      "summary": "ViewParamCoercer 的 vitest 單元測試，驗證 view 參數型別強制轉換 (coerceViewParams) 與轉換失敗時拋出 ViewParamCoercionError 的行為。",
+      "tags": ["test", "unit-test", "runtime", "validation", "view"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-runtime/vitest.config.ts",
+      "type": "file",
+      "name": "vitest.config.ts",
+      "filePath": "packages/mantle-runtime/vitest.config.ts",
+      "summary": "mantle-runtime 套件的 vitest 測試組態，設定測試執行環境與 include 範圍。",
+      "tags": ["configuration", "test", "build-system", "runtime"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/domain/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-spec/src/domain/index.ts",
+      "summary": "mantle-spec domain 層的 barrel 檔，re-export domain model 與 domain service 兩個子 barrel。",
+      "tags": ["barrel", "re-export", "domain", "spec", "entry-point"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/domain/service/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-spec/src/domain/service/index.ts",
+      "summary": "mantle-spec domain service 的 barrel 檔，彙整 re-export LocaleCanonicalizer、ManifestParser、JsonSchemaToZod 等純無狀態演算法服務。",
+      "tags": ["barrel", "re-export", "domain", "service", "spec"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-spec/src/index.ts",
+      "summary": "@aotter/mantle-spec 的公開進入點 barrel，彙整 re-export kernel、domain、usecase 三層的對外型別與函式;sideEffects: false 以利 admin SPA 的 tree-shaking。",
+      "tags": ["barrel", "re-export", "entry-point", "spec", "public-api"],
+      "complexity": "simple",
+      "languageNotes": "套件公開 API 的彙整 barrel,維持 sideEffects: false 以避免將 yaml 等相依拖入 admin bundle。"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/infrastructure/cli/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-spec/src/infrastructure/cli/index.ts",
+      "summary": "mantle-spec CLI 基礎設施的 barrel 檔,re-export manifest 載入器與 validate / introspect / emit-openapi / emit-types 等 CLI 命令進入點。",
+      "tags": ["barrel", "re-export", "cli", "infrastructure", "spec"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/infrastructure/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-spec/src/infrastructure/index.ts",
+      "summary": "mantle-spec infrastructure 層的單行 barrel 檔,re-export CLI 子 barrel。",
+      "tags": ["barrel", "re-export", "infrastructure", "spec"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/kernel/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-spec/src/kernel/index.ts",
+      "summary": "mantle-spec kernel 層的 barrel 檔,re-export Diagnostic 形狀、診斷碼、HTTP 狀態對應與 DiagnosticError 等跨切面輔助。",
+      "tags": ["barrel", "re-export", "kernel", "spec", "diagnostics"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/usecase/dto/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-spec/src/usecase/dto/index.ts",
+      "summary": "mantle-spec usecase DTO 的 barrel 檔,re-export ValidateManifests 等 use case 的請求/回應 DTO。",
+      "tags": ["barrel", "re-export", "dto", "usecase", "spec"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/usecase/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-spec/src/usecase/index.ts",
+      "summary": "mantle-spec usecase 層的 barrel 檔,re-export ValidateManifestsUseCase 與其 DTO 子 barrel。",
+      "tags": ["barrel", "re-export", "usecase", "spec", "entry-point"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-spec/vitest.config.ts",
+      "type": "file",
+      "name": "vitest.config.ts",
+      "filePath": "packages/mantle-spec/vitest.config.ts",
+      "summary": "mantle-spec 套件的 vitest 測試組態,設定測試執行環境與 include 範圍。",
+      "tags": ["configuration", "test", "build-system", "spec"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle/src/admin-ui.ts",
+      "type": "file",
+      "name": "admin-ui.ts",
+      "filePath": "packages/mantle/src/admin-ui.ts",
+      "summary": "@aotter/mantle 聚合套件的 admin-ui 進入點,單行 re-export @aotter/mantle-admin-ui 的公開介面。",
+      "tags": ["barrel", "re-export", "entry-point", "admin-ui", "facade"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle/src/cloudflare.ts",
+      "type": "file",
+      "name": "cloudflare.ts",
+      "filePath": "packages/mantle/src/cloudflare.ts",
+      "summary": "@aotter/mantle 聚合套件的 cloudflare 進入點,單行 re-export Cloudflare Workers adapter 的公開介面。",
+      "tags": ["barrel", "re-export", "entry-point", "adapter", "facade"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle/src/runtime.ts",
+      "type": "file",
+      "name": "runtime.ts",
+      "filePath": "packages/mantle/src/runtime.ts",
+      "summary": "@aotter/mantle 聚合套件的 runtime 進入點,單行 re-export @aotter/mantle-runtime 的公開介面。",
+      "tags": ["barrel", "re-export", "entry-point", "runtime", "facade"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle/src/spec.ts",
+      "type": "file",
+      "name": "spec.ts",
+      "filePath": "packages/mantle/src/spec.ts",
+      "summary": "@aotter/mantle 聚合套件的 spec 進入點,單行 re-export @aotter/mantle-spec 的公開介面。",
+      "tags": ["barrel", "re-export", "entry-point", "spec", "facade"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:scripts/check-boundaries.mjs",
+      "type": "file",
+      "name": "check-boundaries.mjs",
+      "filePath": "scripts/check-boundaries.mjs",
+      "summary": "Clean-architecture 邊界檢查腳本,掃描原始碼以強制 mantle-runtime 不得引用 Cloudflare 專屬型別,並驗證套件間相依方向正確。",
+      "tags": ["script", "validation", "architecture", "build-system", "ci-cd"],
+      "complexity": "moderate",
+      "languageNotes": "以遞迴檔案掃描 + 註解剝除 + 正則樣式比對的方式,在 CI 階段把架構不變式 (runtime 無 CF 相依) 變成可執行檢查。"
+    },
+    {
+      "id": "file:scripts/sync-package-docs.mjs",
+      "type": "file",
+      "name": "sync-package-docs.mjs",
+      "filePath": "scripts/sync-package-docs.mjs",
+      "summary": "文件同步腳本,將 repo 根目錄的 docs/ 與 skills/ 複製到目標套件 (預設 packages/mantle) 之下,支援 --clean 模式清除複本。",
+      "tags": ["script", "build-system", "documentation", "tooling"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:skills/.keep",
+      "type": "file",
+      "name": ".keep",
+      "filePath": "skills/.keep",
+      "summary": "空的 placeholder 檔,用於在版本控制中保留 skills/ 目錄結構。",
+      "tags": ["placeholder", "scaffolding", "vcs"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:skills/customize-design/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": "skills/customize-design/SKILL.md",
+      "summary": "AI agent 可讀的設計客製化指南,以 L1 tokens / L2 extraCss·icons·i18n / L3 Header·Footer·PageShell / L4 整頁模板 的分層配方說明如何安全調整 mantle publication 站台外觀。",
+      "tags": ["documentation", "skill", "design", "guide", "ai-author"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:skills/extend/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": "skills/extend/SKILL.md",
+      "summary": "AI agent 可讀的擴充指南,提供從撰寫 manifest YAML、即時驗證、串接 handler、註冊模板到本地試跑與整合 smoke 測試的標準擴充迴圈。",
+      "tags": ["documentation", "skill", "guide", "manifest", "ai-author"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:scripts/check-boundaries.mjs:checkRuntimeCloudflareFree",
+      "type": "function",
+      "name": "checkRuntimeCloudflareFree",
+      "filePath": "scripts/check-boundaries.mjs",
+      "lineRange": [37, 64],
+      "summary": "掃描 mantle-runtime 原始碼,偵測並回報任何對 D1Database / KVNamespace 等 Cloudflare 專屬型別的引用,強制 runtime 維持 adapter-agnostic。",
+      "tags": ["validation", "architecture", "boundary-check", "runtime"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:scripts/check-boundaries.mjs:checkPackageDirection",
+      "type": "function",
+      "name": "checkPackageDirection",
+      "filePath": "scripts/check-boundaries.mjs",
+      "lineRange": [66, 97],
+      "summary": "掃描各套件原始碼,驗證套件間 import 相依方向符合 clean-architecture 約定,發現逆向相依時記錄為 failure。",
+      "tags": ["validation", "architecture", "boundary-check", "dependency"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:scripts/check-boundaries.mjs:listFiles",
+      "type": "function",
+      "name": "listFiles",
+      "filePath": "scripts/check-boundaries.mjs",
+      "lineRange": [9, 21],
+      "summary": "遞迴列舉目錄下符合 predicate 的所有檔案路徑,供邊界檢查掃描原始碼使用。",
+      "tags": ["utility", "filesystem", "recursion"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/mantle-runtime/test/dispatcher-match.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/service/PathMatcher.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/locale-negotiator.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/view-param-coercer.test.ts",
+      "target": "file:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/PathMatcher.ts",
+      "target": "file:packages/mantle-runtime/test/dispatcher-match.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts",
+      "target": "file:packages/mantle-runtime/test/locale-negotiator.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts",
+      "target": "file:packages/mantle-runtime/test/view-param-coercer.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/dispatcher-match.test.ts",
+      "target": "function:packages/mantle-runtime/src/domain/service/PathMatcher.ts:matchPath",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/locale-negotiator.test.ts",
+      "target": "function:packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts:inferLocaleFromPath",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/test/view-param-coercer.test.ts",
+      "target": "function:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts:coerceViewParams",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:scripts/check-boundaries.mjs",
+      "target": "function:scripts/check-boundaries.mjs:checkRuntimeCloudflareFree",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:scripts/check-boundaries.mjs",
+      "target": "function:scripts/check-boundaries.mjs:checkPackageDirection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:scripts/check-boundaries.mjs",
+      "target": "function:scripts/check-boundaries.mjs:listFiles",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    }
+  ]
+}

@@ -1,0 +1,1003 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 11,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "AGENTS.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 16,
+      "nonEmptyLines": 12,
+      "sections": [
+        {
+          "heading": "AGENTS.md",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Quick links for contributing agents",
+          "level": 2,
+          "line": 10
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 2
+      }
+    },
+    {
+      "path": "CHANGELOG.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 601,
+      "nonEmptyLines": 446,
+      "sections": [
+        {
+          "heading": "Changelog",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "[0.0.11-alpha.35] - 2026-06-26",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 11
+        },
+        {
+          "heading": "[0.0.11-alpha.34] - 2026-06-25",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 17
+        },
+        {
+          "heading": "[0.0.11-alpha.33] - 2026-06-25",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Removed",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 28
+        },
+        {
+          "heading": "[0.0.11-alpha.31] - 2026-06-20",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 35
+        },
+        {
+          "heading": "[0.0.11-alpha.30] - 2026-06-19",
+          "level": 2,
+          "line": 46
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 48
+        },
+        {
+          "heading": "[0.0.11-alpha.29] - 2026-06-19",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "Removed",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 64
+        },
+        {
+          "heading": "[0.0.11-alpha.28] - 2026-06-19",
+          "level": 2,
+          "line": 70
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 72
+        },
+        {
+          "heading": "[0.0.11-alpha.27] - 2026-06-19",
+          "level": 2,
+          "line": 88
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 90
+        },
+        {
+          "heading": "[0.0.11-alpha.26] - 2026-06-19",
+          "level": 2,
+          "line": 96
+        },
+        {
+          "heading": "Removed",
+          "level": 3,
+          "line": 98
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 105
+        },
+        {
+          "heading": "[0.0.11-alpha.25] - 2026-06-19",
+          "level": 2,
+          "line": 117
+        },
+        {
+          "heading": "Removed",
+          "level": 3,
+          "line": 119
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 125
+        },
+        {
+          "heading": "[0.0.11-alpha.24] - 2026-06-15",
+          "level": 2,
+          "line": 137
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 139
+        },
+        {
+          "heading": "[0.0.11-alpha.23] - 2026-06-15",
+          "level": 2,
+          "line": 156
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 158
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 165
+        },
+        {
+          "heading": "[0.0.11-alpha.22] - 2026-06-15",
+          "level": 2,
+          "line": 177
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 179
+        },
+        {
+          "heading": "[0.0.11-alpha.21] - 2026-06-14",
+          "level": 2,
+          "line": 187
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 189
+        },
+        {
+          "heading": "[0.0.11-alpha.20] - 2026-06-14",
+          "level": 2,
+          "line": 200
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 202
+        },
+        {
+          "heading": "[0.0.11-alpha.19] - 2026-06-14",
+          "level": 2,
+          "line": 218
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 220
+        },
+        {
+          "heading": "[0.0.11-alpha.18] - 2026-06-14",
+          "level": 2,
+          "line": 228
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 230
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 244
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 256
+        },
+        {
+          "heading": "[0.0.11-alpha.16] - 2026-05-25",
+          "level": 2,
+          "line": 263
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 265
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 284
+        },
+        {
+          "heading": "[0.0.11-alpha.15] - 2026-05-24",
+          "level": 2,
+          "line": 294
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 296
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 313
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 324
+        },
+        {
+          "heading": "[0.0.11-alpha.14] - 2026-05-20",
+          "level": 2,
+          "line": 333
+        },
+        {
+          "heading": "Breaking",
+          "level": 3,
+          "line": 335
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 391
+        },
+        {
+          "heading": "Why",
+          "level": 3,
+          "line": 404
+        },
+        {
+          "heading": "[0.0.11-alpha.13] - 2026-05-20",
+          "level": 2,
+          "line": 417
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 419
+        },
+        {
+          "heading": "[0.0.11-alpha.12] - 2026-05-20",
+          "level": 2,
+          "line": 423
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 425
+        },
+        {
+          "heading": "[0.0.11-alpha.11] - 2026-05-19",
+          "level": 2,
+          "line": 430
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 432
+        },
+        {
+          "heading": "[0.0.11-alpha.10] - 2026-05-19",
+          "level": 2,
+          "line": 438
+        },
+        {
+          "heading": "Why",
+          "level": 3,
+          "line": 442
+        },
+        {
+          "heading": "[0.0.11-alpha.9] - 2026-05-19",
+          "level": 2,
+          "line": 448
+        },
+        {
+          "heading": "Breaking",
+          "level": 3,
+          "line": 450
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 457
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 463
+        },
+        {
+          "heading": "[0.0.9-alpha] - 2026-05-15",
+          "level": 2,
+          "line": 468
+        },
+        {
+          "heading": "Breaking",
+          "level": 3,
+          "line": 470
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 479
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 485
+        },
+        {
+          "heading": "[0.0.8-beta.5] - 2026-05-14",
+          "level": 2,
+          "line": 489
+        },
+        {
+          "heading": "Breaking",
+          "level": 3,
+          "line": 491
+        },
+        {
+          "heading": "[0.0.8-beta.4] - 2026-05-14",
+          "level": 2,
+          "line": 495
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 497
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 502
+        },
+        {
+          "heading": "Breaking",
+          "level": 3,
+          "line": 506
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 513
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 526
+        },
+        {
+          "heading": "Breaking",
+          "level": 3,
+          "line": 530
+        },
+        {
+          "heading": "[0.0.8-beta.1] - 2026-05-13",
+          "level": 2,
+          "line": 534
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 538
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 545
+        },
+        {
+          "heading": "Removed",
+          "level": 3,
+          "line": 553
+        },
+        {
+          "heading": "[0.0.8-alpha] - 2026-05-12",
+          "level": 2,
+          "line": 557
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 559
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 565
+        },
+        {
+          "heading": "Removed",
+          "level": 3,
+          "line": 572
+        },
+        {
+          "heading": "[0.0.7-alpha] - 2026-05-10",
+          "level": 2,
+          "line": 577
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 579
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 587
+        },
+        {
+          "heading": "[0.0.6-alpha] - 2026-05-08",
+          "level": 2,
+          "line": 593
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 595
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 91
+      }
+    },
+    {
+      "path": "CLAUDE.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 151,
+      "nonEmptyLines": 109,
+      "sections": [
+        {
+          "heading": "CLAUDE.md — orientation for AI contributors",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Mantle thesis (read first)",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "You're the primary author",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Where things live",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "Hard invariants (cross-cutting; never violate)",
+          "level": 2,
+          "line": 47
+        },
+        {
+          "heading": "Clean-architecture layout (mirrors `aotter-mantle/mantle/core`)",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "Spec/runtime type boundary (separate from layer rules)",
+          "level": 3,
+          "line": 92
+        },
+        {
+          "heading": "PR conventions",
+          "level": 3,
+          "line": 102
+        },
+        {
+          "heading": "Build / test / typecheck",
+          "level": 2,
+          "line": 107
+        },
+        {
+          "heading": "Stub policy",
+          "level": 2,
+          "line": 118
+        },
+        {
+          "heading": "Grammar promoted, runtime wired",
+          "level": 3,
+          "line": 130
+        },
+        {
+          "heading": "Failure modes to avoid (encoded in the ADRs)",
+          "level": 2,
+          "line": 137
+        },
+        {
+          "heading": "Migration shape",
+          "level": 2,
+          "line": 144
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "CODE_OF_CONDUCT.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 79,
+      "nonEmptyLines": 45,
+      "sections": [
+        {
+          "heading": "Contributor Covenant Code of Conduct",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Our pledge",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Our standards",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Enforcement responsibilities",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "Scope",
+          "level": 2,
+          "line": 37
+        },
+        {
+          "heading": "Enforcement",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "Enforcement guidelines",
+          "level": 2,
+          "line": 47
+        },
+        {
+          "heading": "Correction",
+          "level": 3,
+          "line": 51
+        },
+        {
+          "heading": "Warning",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "Temporary ban",
+          "level": 3,
+          "line": 63
+        },
+        {
+          "heading": "Permanent ban",
+          "level": 3,
+          "line": 69
+        },
+        {
+          "heading": "Attribution",
+          "level": 2,
+          "line": 75
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 128,
+      "nonEmptyLines": 85,
+      "sections": [
+        {
+          "heading": "Contributing to mantle",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Project shape",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "Local setup",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "Branches",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "Commits",
+          "level": 2,
+          "line": 57
+        },
+        {
+          "heading": "Issues",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "Pull requests",
+          "level": 2,
+          "line": 92
+        },
+        {
+          "heading": "Architecture and grammar gates",
+          "level": 2,
+          "line": 106
+        },
+        {
+          "heading": "Changelog",
+          "level": 2,
+          "line": 116
+        },
+        {
+          "heading": "Release process",
+          "level": 2,
+          "line": 122
+        },
+        {
+          "heading": "Security",
+          "level": 2,
+          "line": 126
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 111,
+      "nonEmptyLines": 79,
+      "sections": [
+        {
+          "heading": "mantle",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Try it cold",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Part of Mantle",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "For AI agents",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "For humans",
+          "level": 2,
+          "line": 61
+        },
+        {
+          "heading": "Packages",
+          "level": 2,
+          "line": 75
+        },
+        {
+          "heading": "Starters",
+          "level": 2,
+          "line": 85
+        },
+        {
+          "heading": "Repo conventions",
+          "level": 2,
+          "line": 102
+        },
+        {
+          "heading": "License",
+          "level": 2,
+          "line": 109
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "SECURITY.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 57,
+      "nonEmptyLines": 37,
+      "sections": [
+        {
+          "heading": "Security policy",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Reporting a vulnerability",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Response expectations",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Supported versions",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "Scope",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "Public handling",
+          "level": 2,
+          "line": 50
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "SUPPORT.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 24,
+      "nonEmptyLines": 16,
+      "sections": [
+        {
+          "heading": "Support",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "How to get help",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Help wanted on the starters monorepo?",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "What we don't offer",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "AI-agent tip",
+          "level": 2,
+          "line": 21
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "package.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 25,
+      "nonEmptyLines": 25,
+      "sections": [
+        {
+          "heading": "name",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "private",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "description",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "license",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "homepage",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "repository",
+          "level": 1,
+          "line": 8
+        },
+        {
+          "heading": "type",
+          "level": 1,
+          "line": 9
+        },
+        {
+          "heading": "engines",
+          "level": 1,
+          "line": 13
+        },
+        {
+          "heading": "scripts",
+          "level": 1,
+          "line": 17
+        },
+        {
+          "heading": "packageManager",
+          "level": 1,
+          "line": 24
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "pnpm-workspace.yaml",
+      "language": "yaml",
+      "fileCategory": "config",
+      "totalLines": 42,
+      "nonEmptyLines": 40,
+      "sections": [
+        {
+          "heading": "packages",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "catalogs",
+          "level": 1,
+          "line": 24
+        },
+        {
+          "heading": "catalog",
+          "level": 1,
+          "line": 32
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    },
+    {
+      "path": "tsconfig.base.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 20,
+      "nonEmptyLines": 20,
+      "sections": [
+        {
+          "heading": "compilerOptions",
+          "level": 1,
+          "line": 2
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    }
+  ]
+}

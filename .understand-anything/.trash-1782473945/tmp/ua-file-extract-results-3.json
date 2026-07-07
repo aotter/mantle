@@ -1,0 +1,2504 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 25,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/mantle-runtime/src/domain/model/SeoMeta.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 45,
+      "nonEmptyLines": 45,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/model/TemplateRegistry.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 65,
+      "nonEmptyLines": 57,
+      "classes": [
+        {
+          "name": "TemplateRegistry",
+          "startLine": 46,
+          "endLine": 65,
+          "methods": [
+            "registerEntryTemplate",
+            "registerListTemplate",
+            "getEntryTemplate",
+            "getListTemplate"
+          ],
+          "properties": [
+            "entries",
+            "lists"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "TemplateRegistry",
+          "line": 46,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "registerEntryTemplate",
+          "callee": "this.entries.set",
+          "lineNumber": 51
+        },
+        {
+          "caller": "registerListTemplate",
+          "callee": "this.lists.set",
+          "lineNumber": 55
+        },
+        {
+          "caller": "getEntryTemplate",
+          "callee": "this.entries.get",
+          "lineNumber": 59
+        },
+        {
+          "caller": "getListTemplate",
+          "callee": "this.lists.get",
+          "lineNumber": 63
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/DatabaseDriver.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 95,
+      "nonEmptyLines": 90,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/KvCache.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 35,
+      "nonEmptyLines": 33,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/MediaAssetRepository.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 34,
+      "nonEmptyLines": 33,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/MediaStorage.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 200,
+      "nonEmptyLines": 183,
+      "functions": [
+        {
+          "name": "pickPrimaryVariant",
+          "startLine": 192,
+          "endLine": 200,
+          "params": [
+            "asset"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "pickPrimaryVariant",
+          "line": 192,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "pickPrimaryVariant",
+          "callee": "asset.variants.find",
+          "lineNumber": 193
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/port/PublishOrchestrator.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 26,
+      "nonEmptyLines": 24,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/AbsoluteUrl.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 30,
+      "nonEmptyLines": 28,
+      "functions": [
+        {
+          "name": "absoluteUrl",
+          "startLine": 15,
+          "endLine": 21,
+          "params": [
+            "origin",
+            "path"
+          ]
+        },
+        {
+          "name": "appendMarkdownExt",
+          "startLine": 26,
+          "endLine": 30,
+          "params": [
+            "absoluteOrPath"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "absoluteUrl",
+          "line": 15,
+          "isDefault": false
+        },
+        {
+          "name": "appendMarkdownExt",
+          "line": 26,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "absoluteUrl",
+          "callee": "path.startsWith",
+          "lineNumber": 17
+        },
+        {
+          "caller": "absoluteUrl",
+          "callee": "path.startsWith",
+          "lineNumber": 17
+        },
+        {
+          "caller": "absoluteUrl",
+          "callee": "origin.replace",
+          "lineNumber": 18
+        },
+        {
+          "caller": "absoluteUrl",
+          "callee": "path.startsWith",
+          "lineNumber": 20
+        },
+        {
+          "caller": "appendMarkdownExt",
+          "callee": "/^([^?#]*)(.*)$/.exec",
+          "lineNumber": 27
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/EntrySeoSupport.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 37,
+      "nonEmptyLines": 35,
+      "functions": [
+        {
+          "name": "composeSeoIfPathed",
+          "startLine": 28,
+          "endLine": 37,
+          "params": [
+            "composer",
+            "paths",
+            "entry",
+            "site"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "composeSeoIfPathed",
+          "line": 28,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "composeSeoIfPathed",
+          "callee": "paths.forEntry",
+          "lineNumber": 35
+        },
+        {
+          "caller": "composeSeoIfPathed",
+          "callee": "composer.execute",
+          "lineNumber": 36
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/HtmlRenderer.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 121,
+      "nonEmptyLines": 112,
+      "functions": [
+        {
+          "name": "renderEntryHtml",
+          "startLine": 41,
+          "endLine": 56,
+          "params": [
+            "args"
+          ]
+        },
+        {
+          "name": "renderListHtml",
+          "startLine": 71,
+          "endLine": 86,
+          "params": [
+            "args"
+          ]
+        },
+        {
+          "name": "renderTrackingTagsHtml",
+          "startLine": 88,
+          "endLine": 101,
+          "params": [
+            "site"
+          ]
+        },
+        {
+          "name": "injectTrackingTags",
+          "startLine": 103,
+          "endLine": 111,
+          "params": [
+            "html",
+            "site"
+          ]
+        },
+        {
+          "name": "normalizeGa4MeasurementId",
+          "startLine": 113,
+          "endLine": 116,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "normalizeFacebookPixelId",
+          "startLine": 118,
+          "endLine": 121,
+          "params": [
+            "value"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "renderEntryHtml",
+          "line": 41,
+          "isDefault": false
+        },
+        {
+          "name": "renderListHtml",
+          "line": 71,
+          "isDefault": false
+        },
+        {
+          "name": "renderTrackingTagsHtml",
+          "line": 88,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "renderEntryHtml",
+          "callee": "args.templates.getEntryTemplate",
+          "lineNumber": 42
+        },
+        {
+          "caller": "renderEntryHtml",
+          "callee": "injectTrackingTags",
+          "lineNumber": 46
+        },
+        {
+          "caller": "renderEntryHtml",
+          "callee": "tpl",
+          "lineNumber": 48
+        },
+        {
+          "caller": "renderListHtml",
+          "callee": "args.templates.getListTemplate",
+          "lineNumber": 72
+        },
+        {
+          "caller": "renderListHtml",
+          "callee": "injectTrackingTags",
+          "lineNumber": 74
+        },
+        {
+          "caller": "renderListHtml",
+          "callee": "tpl",
+          "lineNumber": 76
+        },
+        {
+          "caller": "renderTrackingTagsHtml",
+          "callee": "normalizeGa4MeasurementId",
+          "lineNumber": 89
+        },
+        {
+          "caller": "renderTrackingTagsHtml",
+          "callee": "normalizeFacebookPixelId",
+          "lineNumber": 90
+        },
+        {
+          "caller": "renderTrackingTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 93
+        },
+        {
+          "caller": "renderTrackingTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 94
+        },
+        {
+          "caller": "renderTrackingTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 97
+        },
+        {
+          "caller": "renderTrackingTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 98
+        },
+        {
+          "caller": "renderTrackingTagsHtml",
+          "callee": "parts.join",
+          "lineNumber": 100
+        },
+        {
+          "caller": "injectTrackingTags",
+          "callee": "renderTrackingTagsHtml",
+          "lineNumber": 104
+        },
+        {
+          "caller": "injectTrackingTags",
+          "callee": "headClose.test",
+          "lineNumber": 107
+        },
+        {
+          "caller": "injectTrackingTags",
+          "callee": "html.replace",
+          "lineNumber": 107
+        },
+        {
+          "caller": "injectTrackingTags",
+          "callee": "bodyOpen.test",
+          "lineNumber": 109
+        },
+        {
+          "caller": "injectTrackingTags",
+          "callee": "html.replace",
+          "lineNumber": 109
+        },
+        {
+          "caller": "normalizeGa4MeasurementId",
+          "callee": "value?.trim().toUpperCase",
+          "lineNumber": 114
+        },
+        {
+          "caller": "normalizeGa4MeasurementId",
+          "callee": "value?.trim",
+          "lineNumber": 114
+        },
+        {
+          "caller": "normalizeGa4MeasurementId",
+          "callee": "/^G-[A-Z0-9]{4,32}$/.test",
+          "lineNumber": 115
+        },
+        {
+          "caller": "normalizeFacebookPixelId",
+          "callee": "value?.trim",
+          "lineNumber": 119
+        },
+        {
+          "caller": "normalizeFacebookPixelId",
+          "callee": "/^[0-9]{5,32}$/.test",
+          "lineNumber": 120
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 3,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/MarkdownSerializer.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 110,
+      "nonEmptyLines": 102,
+      "functions": [
+        {
+          "name": "getMarkdownBody",
+          "startLine": 37,
+          "endLine": 42,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "hasMarkdownBody",
+          "startLine": 44,
+          "endLine": 46,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "serializeEntryAsMarkdown",
+          "startLine": 48,
+          "endLine": 70,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "serializeLlmsTxt",
+          "startLine": 77,
+          "endLine": 103,
+          "params": [
+            "args"
+          ]
+        },
+        {
+          "name": "yamlScalar",
+          "startLine": 105,
+          "endLine": 110,
+          "params": [
+            "s"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "getMarkdownBody",
+          "line": 37,
+          "isDefault": false
+        },
+        {
+          "name": "hasMarkdownBody",
+          "line": 44,
+          "isDefault": false
+        },
+        {
+          "name": "serializeEntryAsMarkdown",
+          "line": 48,
+          "isDefault": false
+        },
+        {
+          "name": "serializeLlmsTxt",
+          "line": 77,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "hasMarkdownBody",
+          "callee": "getMarkdownBody",
+          "lineNumber": 45
+        },
+        {
+          "caller": "serializeEntryAsMarkdown",
+          "callee": "getMarkdownBody",
+          "lineNumber": 50
+        },
+        {
+          "caller": "serializeEntryAsMarkdown",
+          "callee": "fm.push",
+          "lineNumber": 56
+        },
+        {
+          "caller": "serializeEntryAsMarkdown",
+          "callee": "yamlScalar",
+          "lineNumber": 63
+        },
+        {
+          "caller": "serializeEntryAsMarkdown",
+          "callee": "content.endsWith",
+          "lineNumber": 68
+        },
+        {
+          "caller": "serializeLlmsTxt",
+          "callee": "locale.toLowerCase",
+          "lineNumber": 83
+        },
+        {
+          "caller": "serializeLlmsTxt",
+          "callee": "hasMarkdownBody",
+          "lineNumber": 91
+        },
+        {
+          "caller": "serializeLlmsTxt",
+          "callee": "appendMarkdownExt",
+          "lineNumber": 97
+        },
+        {
+          "caller": "serializeLlmsTxt",
+          "callee": "absoluteUrl",
+          "lineNumber": 97
+        },
+        {
+          "caller": "yamlScalar",
+          "callee": "/^[A-Za-z0-9._/-][\\w. /:-]*$/.test",
+          "lineNumber": 106
+        },
+        {
+          "caller": "yamlScalar",
+          "callee": "/^(true|false|null|yes|no|on|off)$/i.test",
+          "lineNumber": 106
+        },
+        {
+          "caller": "yamlScalar",
+          "callee": "JSON.stringify",
+          "lineNumber": 109
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 4,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/PreviewBanner.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 39,
+      "nonEmptyLines": 36,
+      "functions": [
+        {
+          "name": "injectPreviewBanner",
+          "startLine": 17,
+          "endLine": 19,
+          "params": [
+            "html",
+            "banner"
+          ]
+        },
+        {
+          "name": "defaultPreviewBanner",
+          "startLine": 28,
+          "endLine": 30,
+          "params": [
+            "status",
+            "slug"
+          ]
+        },
+        {
+          "name": "escapeHtml",
+          "startLine": 32,
+          "endLine": 39,
+          "params": [
+            "s"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "injectPreviewBanner",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "defaultPreviewBanner",
+          "line": 28,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "injectPreviewBanner",
+          "callee": "html.replace",
+          "lineNumber": 18
+        },
+        {
+          "caller": "defaultPreviewBanner",
+          "callee": "escapeHtml",
+          "lineNumber": 29
+        },
+        {
+          "caller": "defaultPreviewBanner",
+          "callee": "escapeHtml",
+          "lineNumber": 29
+        },
+        {
+          "caller": "escapeHtml",
+          "callee": "s\n    .replace(/&/g, \"&amp;\")\n    .replace(/</g, \"&lt;\")\n    .replace(/>/g, \"&gt;\")\n    .replace(/\"/g, \"&quot;\")\n    .replace",
+          "lineNumber": 33
+        },
+        {
+          "caller": "escapeHtml",
+          "callee": "s\n    .replace(/&/g, \"&amp;\")\n    .replace(/</g, \"&lt;\")\n    .replace(/>/g, \"&gt;\")\n    .replace",
+          "lineNumber": 33
+        },
+        {
+          "caller": "escapeHtml",
+          "callee": "s\n    .replace(/&/g, \"&amp;\")\n    .replace(/</g, \"&lt;\")\n    .replace",
+          "lineNumber": 33
+        },
+        {
+          "caller": "escapeHtml",
+          "callee": "s\n    .replace(/&/g, \"&amp;\")\n    .replace",
+          "lineNumber": 33
+        },
+        {
+          "caller": "escapeHtml",
+          "callee": "s\n    .replace",
+          "lineNumber": 33
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/PublicPathResolver.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 66,
+      "nonEmptyLines": 62,
+      "functions": [
+        {
+          "name": "createPublicPathResolver",
+          "startLine": 45,
+          "endLine": 66,
+          "params": [
+            "config"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "createPublicPathResolver",
+          "line": 45,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "forEntry",
+          "callee": "entrySlug",
+          "lineNumber": 53
+        },
+        {
+          "caller": "forEntry",
+          "callee": "toUrlLocale",
+          "lineNumber": 54
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/PublishKeys.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 83,
+      "nonEmptyLines": 75,
+      "functions": [
+        {
+          "name": "entrySlug",
+          "startLine": 22,
+          "endLine": 28,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "entryHtmlKey",
+          "startLine": 30,
+          "endLine": 34,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "entryMarkdownKey",
+          "startLine": 36,
+          "endLine": 40,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "listHtmlKey",
+          "startLine": 42,
+          "endLine": 45,
+          "params": [
+            "collection",
+            "locale"
+          ]
+        },
+        {
+          "name": "llmsTxtKey",
+          "startLine": 47,
+          "endLine": 49,
+          "params": [
+            "locale"
+          ]
+        },
+        {
+          "name": "entryPublicPath",
+          "startLine": 51,
+          "endLine": 55,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "entryHtmlKeyFromParts",
+          "startLine": 67,
+          "endLine": 74,
+          "params": [
+            "collection",
+            "locale",
+            "slug"
+          ]
+        },
+        {
+          "name": "entryMarkdownKeyFromParts",
+          "startLine": 76,
+          "endLine": 83,
+          "params": [
+            "collection",
+            "locale",
+            "slug"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "entrySlug",
+          "line": 22,
+          "isDefault": false
+        },
+        {
+          "name": "entryHtmlKey",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "entryMarkdownKey",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "listHtmlKey",
+          "line": 42,
+          "isDefault": false
+        },
+        {
+          "name": "llmsTxtKey",
+          "line": 47,
+          "isDefault": false
+        },
+        {
+          "name": "entryPublicPath",
+          "line": 51,
+          "isDefault": false
+        },
+        {
+          "name": "entryHtmlKeyFromParts",
+          "line": 67,
+          "isDefault": false
+        },
+        {
+          "name": "entryMarkdownKeyFromParts",
+          "line": 76,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "entrySlug",
+          "callee": "/^[a-z0-9][a-z0-9-]*$/.test",
+          "lineNumber": 24
+        },
+        {
+          "caller": "entryHtmlKey",
+          "callee": "entrySlug",
+          "lineNumber": 31
+        },
+        {
+          "caller": "entryHtmlKey",
+          "callee": "toUrlLocale",
+          "lineNumber": 32
+        },
+        {
+          "caller": "entryMarkdownKey",
+          "callee": "entrySlug",
+          "lineNumber": 37
+        },
+        {
+          "caller": "entryMarkdownKey",
+          "callee": "toUrlLocale",
+          "lineNumber": 38
+        },
+        {
+          "caller": "listHtmlKey",
+          "callee": "locale.toLowerCase",
+          "lineNumber": 43
+        },
+        {
+          "caller": "llmsTxtKey",
+          "callee": "locale.toLowerCase",
+          "lineNumber": 48
+        },
+        {
+          "caller": "entryPublicPath",
+          "callee": "entrySlug",
+          "lineNumber": 52
+        },
+        {
+          "caller": "entryPublicPath",
+          "callee": "toUrlLocale",
+          "lineNumber": 53
+        },
+        {
+          "caller": "entryHtmlKeyFromParts",
+          "callee": "locale.toLowerCase",
+          "lineNumber": 72
+        },
+        {
+          "caller": "entryMarkdownKeyFromParts",
+          "callee": "locale.toLowerCase",
+          "lineNumber": 81
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 8,
+        "functionCount": 8,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/SeoMetaComposer.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 247,
+      "nonEmptyLines": 232,
+      "functions": [
+        {
+          "name": "composeEntrySeoMeta",
+          "startLine": 43,
+          "endLine": 93,
+          "params": [
+            "args"
+          ]
+        },
+        {
+          "name": "buildHreflangs",
+          "startLine": 95,
+          "endLine": 124,
+          "params": [
+            "args"
+          ]
+        },
+        {
+          "name": "buildJsonLd",
+          "startLine": 126,
+          "endLine": 160,
+          "params": [
+            "args"
+          ]
+        },
+        {
+          "name": "stringField",
+          "startLine": 162,
+          "endLine": 165,
+          "params": [
+            "data",
+            "key"
+          ]
+        },
+        {
+          "name": "numericField",
+          "startLine": 167,
+          "endLine": 170,
+          "params": [
+            "data",
+            "key"
+          ]
+        },
+        {
+          "name": "hasArticleSignal",
+          "startLine": 172,
+          "endLine": 174,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "renderSeoTagsHtml",
+          "startLine": 184,
+          "endLine": 233,
+          "params": [
+            "meta"
+          ]
+        },
+        {
+          "name": "escapeAttr",
+          "startLine": 235,
+          "endLine": 241,
+          "params": [
+            "s"
+          ]
+        },
+        {
+          "name": "escapeJsonLd",
+          "startLine": 243,
+          "endLine": 247,
+          "params": [
+            "obj"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "SeoMeta",
+          "line": 22,
+          "isDefault": false
+        },
+        {
+          "name": "composeEntrySeoMeta",
+          "line": 43,
+          "isDefault": false
+        },
+        {
+          "name": "renderSeoTagsHtml",
+          "line": 184,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "composeEntrySeoMeta",
+          "callee": "absoluteUrl",
+          "lineNumber": 46
+        },
+        {
+          "caller": "composeEntrySeoMeta",
+          "callee": "appendMarkdownExt",
+          "lineNumber": 47
+        },
+        {
+          "caller": "composeEntrySeoMeta",
+          "callee": "stringField",
+          "lineNumber": 49
+        },
+        {
+          "caller": "composeEntrySeoMeta",
+          "callee": "stringField",
+          "lineNumber": 50
+        },
+        {
+          "caller": "composeEntrySeoMeta",
+          "callee": "stringField",
+          "lineNumber": 51
+        },
+        {
+          "caller": "composeEntrySeoMeta",
+          "callee": "stringField",
+          "lineNumber": 51
+        },
+        {
+          "caller": "composeEntrySeoMeta",
+          "callee": "hasArticleSignal",
+          "lineNumber": 52
+        },
+        {
+          "caller": "composeEntrySeoMeta",
+          "callee": "buildHreflangs",
+          "lineNumber": 55
+        },
+        {
+          "caller": "composeEntrySeoMeta",
+          "callee": "buildJsonLd",
+          "lineNumber": 83
+        },
+        {
+          "caller": "push",
+          "callee": "locale.toLowerCase",
+          "lineNumber": 106
+        },
+        {
+          "caller": "push",
+          "callee": "seen.has",
+          "lineNumber": 107
+        },
+        {
+          "caller": "push",
+          "callee": "seen.add",
+          "lineNumber": 108
+        },
+        {
+          "caller": "push",
+          "callee": "out.push",
+          "lineNumber": 109
+        },
+        {
+          "caller": "push",
+          "callee": "absoluteUrl",
+          "lineNumber": 109
+        },
+        {
+          "caller": "buildHreflangs",
+          "callee": "push",
+          "lineNumber": 111
+        },
+        {
+          "caller": "buildHreflangs",
+          "callee": "push",
+          "lineNumber": 112
+        },
+        {
+          "caller": "buildHreflangs",
+          "callee": "siblings.find",
+          "lineNumber": 116
+        },
+        {
+          "caller": "buildHreflangs",
+          "callee": "s.locale.toLowerCase",
+          "lineNumber": 117
+        },
+        {
+          "caller": "buildHreflangs",
+          "callee": "site.canonicalLocale.toLowerCase",
+          "lineNumber": 117
+        },
+        {
+          "caller": "buildHreflangs",
+          "callee": "out.push",
+          "lineNumber": 119
+        },
+        {
+          "caller": "buildHreflangs",
+          "callee": "absoluteUrl",
+          "lineNumber": 121
+        },
+        {
+          "caller": "buildJsonLd",
+          "callee": "numericField",
+          "lineNumber": 136
+        },
+        {
+          "caller": "buildJsonLd",
+          "callee": "numericField",
+          "lineNumber": 137
+        },
+        {
+          "caller": "buildJsonLd",
+          "callee": "new Date(publishedAtMs).toISOString",
+          "lineNumber": 153
+        },
+        {
+          "caller": "buildJsonLd",
+          "callee": "new Date(updatedAtMs).toISOString",
+          "lineNumber": 154
+        },
+        {
+          "caller": "buildJsonLd",
+          "callee": "Object.fromEntries",
+          "lineNumber": 157
+        },
+        {
+          "caller": "buildJsonLd",
+          "callee": "Object.entries(base).filter",
+          "lineNumber": 158
+        },
+        {
+          "caller": "buildJsonLd",
+          "callee": "Object.entries",
+          "lineNumber": 158
+        },
+        {
+          "caller": "numericField",
+          "callee": "Number.isFinite",
+          "lineNumber": 169
+        },
+        {
+          "caller": "hasArticleSignal",
+          "callee": "hasMarkdownBody",
+          "lineNumber": 173
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 186
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 186
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 187
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 188
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 191
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 192
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 192
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 196
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 196
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 199
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 199
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 201
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 202
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 202
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 203
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 203
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 204
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 204
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 206
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 206
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 209
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 210
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 214
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 214
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 216
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 216
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "toUrlLocale",
+          "lineNumber": 216
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 217
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 217
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 218
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 218
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 220
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 221
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 225
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeAttr",
+          "lineNumber": 225
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.push",
+          "lineNumber": 228
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "escapeJsonLd",
+          "lineNumber": 229
+        },
+        {
+          "caller": "renderSeoTagsHtml",
+          "callee": "parts.join",
+          "lineNumber": 232
+        },
+        {
+          "caller": "escapeAttr",
+          "callee": "s\n    .replace(/&/g, \"&amp;\")\n    .replace(/\"/g, \"&quot;\")\n    .replace(/</g, \"&lt;\")\n    .replace",
+          "lineNumber": 236
+        },
+        {
+          "caller": "escapeAttr",
+          "callee": "s\n    .replace(/&/g, \"&amp;\")\n    .replace(/\"/g, \"&quot;\")\n    .replace",
+          "lineNumber": 236
+        },
+        {
+          "caller": "escapeAttr",
+          "callee": "s\n    .replace(/&/g, \"&amp;\")\n    .replace",
+          "lineNumber": 236
+        },
+        {
+          "caller": "escapeAttr",
+          "callee": "s\n    .replace",
+          "lineNumber": 236
+        },
+        {
+          "caller": "escapeJsonLd",
+          "callee": "JSON.stringify(obj).replace",
+          "lineNumber": 246
+        },
+        {
+          "caller": "escapeJsonLd",
+          "callee": "JSON.stringify",
+          "lineNumber": 246
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 3,
+        "functionCount": 9,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/SitemapSerializer.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 47,
+      "nonEmptyLines": 43,
+      "functions": [
+        {
+          "name": "serializeSitemap",
+          "startLine": 22,
+          "endLine": 38,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "escapeXml",
+          "startLine": 40,
+          "endLine": 47,
+          "params": [
+            "s"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "serializeSitemap",
+          "line": 22,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "serializeSitemap",
+          "callee": "out.push",
+          "lineNumber": 25
+        },
+        {
+          "caller": "serializeSitemap",
+          "callee": "out.push",
+          "lineNumber": 26
+        },
+        {
+          "caller": "serializeSitemap",
+          "callee": "absoluteUrl",
+          "lineNumber": 28
+        },
+        {
+          "caller": "serializeSitemap",
+          "callee": "out.push",
+          "lineNumber": 29
+        },
+        {
+          "caller": "serializeSitemap",
+          "callee": "out.push",
+          "lineNumber": 30
+        },
+        {
+          "caller": "serializeSitemap",
+          "callee": "escapeXml",
+          "lineNumber": 30
+        },
+        {
+          "caller": "serializeSitemap",
+          "callee": "out.push",
+          "lineNumber": 32
+        },
+        {
+          "caller": "serializeSitemap",
+          "callee": "new Date(entry.updatedAt).toISOString",
+          "lineNumber": 32
+        },
+        {
+          "caller": "serializeSitemap",
+          "callee": "out.push",
+          "lineNumber": 34
+        },
+        {
+          "caller": "serializeSitemap",
+          "callee": "out.push",
+          "lineNumber": 36
+        },
+        {
+          "caller": "serializeSitemap",
+          "callee": "out.join",
+          "lineNumber": 37
+        },
+        {
+          "caller": "escapeXml",
+          "callee": "s\n    .replace(/&/g, \"&amp;\")\n    .replace(/</g, \"&lt;\")\n    .replace(/>/g, \"&gt;\")\n    .replace(/\"/g, \"&quot;\")\n    .replace",
+          "lineNumber": 41
+        },
+        {
+          "caller": "escapeXml",
+          "callee": "s\n    .replace(/&/g, \"&amp;\")\n    .replace(/</g, \"&lt;\")\n    .replace(/>/g, \"&gt;\")\n    .replace",
+          "lineNumber": 41
+        },
+        {
+          "caller": "escapeXml",
+          "callee": "s\n    .replace(/&/g, \"&amp;\")\n    .replace(/</g, \"&lt;\")\n    .replace",
+          "lineNumber": 41
+        },
+        {
+          "caller": "escapeXml",
+          "callee": "s\n    .replace(/&/g, \"&amp;\")\n    .replace",
+          "lineNumber": 41
+        },
+        {
+          "caller": "escapeXml",
+          "callee": "s\n    .replace",
+          "lineNumber": 41
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/io/JoinedEntryReader.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 109,
+      "nonEmptyLines": 100,
+      "functions": [
+        {
+          "name": "joinParentIfTranslation",
+          "startLine": 23,
+          "endLine": 51,
+          "params": [
+            "db",
+            "schemas",
+            "entry",
+            "options"
+          ]
+        },
+        {
+          "name": "joinParentForList",
+          "startLine": 62,
+          "endLine": 109,
+          "params": [
+            "db",
+            "schemas",
+            "entries",
+            "options"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "joinParentIfTranslation",
+          "line": 23,
+          "isDefault": false
+        },
+        {
+          "name": "joinParentForList",
+          "line": 62,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "joinParentIfTranslation",
+          "callee": "schemas.get",
+          "lineNumber": 29
+        },
+        {
+          "caller": "joinParentIfTranslation",
+          "callee": "readEntryByDataField",
+          "lineNumber": 36
+        },
+        {
+          "caller": "joinParentForList",
+          "callee": "schemas.get",
+          "lineNumber": 70
+        },
+        {
+          "caller": "joinParentForList",
+          "callee": "joinValues.add",
+          "lineNumber": 77
+        },
+        {
+          "caller": "joinParentForList",
+          "callee": "readEntriesByDataFieldIn",
+          "lineNumber": 81
+        },
+        {
+          "caller": "joinParentForList",
+          "callee": "parentByValue.has",
+          "lineNumber": 94
+        },
+        {
+          "caller": "joinParentForList",
+          "callee": "parentByValue.set",
+          "lineNumber": 95
+        },
+        {
+          "caller": "joinParentForList",
+          "callee": "entries.map",
+          "lineNumber": 99
+        },
+        {
+          "caller": "joinParentForList",
+          "callee": "parentByValue.get",
+          "lineNumber": 102
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/io/MediaAssetReferences.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 52,
+      "nonEmptyLines": 49,
+      "functions": [
+        {
+          "name": "collectMediaAssetIds",
+          "startLine": 12,
+          "endLine": 16,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "resolveMediaAssetsForEntries",
+          "startLine": 18,
+          "endLine": 26,
+          "params": [
+            "repo",
+            "entries"
+          ]
+        },
+        {
+          "name": "collect",
+          "startLine": 28,
+          "endLine": 52,
+          "params": [
+            "value",
+            "out"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "collectMediaAssetIds",
+          "line": 12,
+          "isDefault": false
+        },
+        {
+          "name": "resolveMediaAssetsForEntries",
+          "line": 18,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "collectMediaAssetIds",
+          "callee": "collect",
+          "lineNumber": 14
+        },
+        {
+          "caller": "resolveMediaAssetsForEntries",
+          "callee": "collectMediaAssetIds",
+          "lineNumber": 23
+        },
+        {
+          "caller": "resolveMediaAssetsForEntries",
+          "callee": "entries.map",
+          "lineNumber": 23
+        },
+        {
+          "caller": "resolveMediaAssetsForEntries",
+          "callee": "repo.findManyByIds",
+          "lineNumber": 25
+        },
+        {
+          "caller": "collect",
+          "callee": "Array.isArray",
+          "lineNumber": 30
+        },
+        {
+          "caller": "collect",
+          "callee": "collect",
+          "lineNumber": 31
+        },
+        {
+          "caller": "collect",
+          "callee": "Object.entries",
+          "lineNumber": 35
+        },
+        {
+          "caller": "collect",
+          "callee": "key.endsWith",
+          "lineNumber": 38
+        },
+        {
+          "caller": "collect",
+          "callee": "out.push",
+          "lineNumber": 41
+        },
+        {
+          "caller": "collect",
+          "callee": "Array.isArray",
+          "lineNumber": 44
+        },
+        {
+          "caller": "collect",
+          "callee": "key.endsWith",
+          "lineNumber": 44
+        },
+        {
+          "caller": "collect",
+          "callee": "out.push",
+          "lineNumber": 46
+        },
+        {
+          "caller": "collect",
+          "callee": "collect",
+          "lineNumber": 50
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 2,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/domain/service/io/PublishedEntries.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 215,
+      "nonEmptyLines": 202,
+      "functions": [
+        {
+          "name": "readPublishedEntries",
+          "startLine": 36,
+          "endLine": 60,
+          "params": [
+            "db",
+            "filter"
+          ]
+        },
+        {
+          "name": "readEntryById",
+          "startLine": 65,
+          "endLine": 77,
+          "params": [
+            "db",
+            "id"
+          ]
+        },
+        {
+          "name": "readEntryBySlug",
+          "startLine": 93,
+          "endLine": 104,
+          "params": [
+            "db",
+            "args"
+          ]
+        },
+        {
+          "name": "assertSafeField",
+          "startLine": 124,
+          "endLine": 130,
+          "params": [
+            "field"
+          ]
+        },
+        {
+          "name": "readEntryByDataField",
+          "startLine": 132,
+          "endLine": 157,
+          "params": [
+            "db",
+            "args"
+          ]
+        },
+        {
+          "name": "readEntriesByDataFieldIn",
+          "startLine": 173,
+          "endLine": 200,
+          "params": [
+            "db",
+            "args"
+          ]
+        },
+        {
+          "name": "rowToEntry",
+          "startLine": 202,
+          "endLine": 215,
+          "params": [
+            "row"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "readPublishedEntries",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "readEntryById",
+          "line": 65,
+          "isDefault": false
+        },
+        {
+          "name": "readEntryBySlug",
+          "line": 93,
+          "isDefault": false
+        },
+        {
+          "name": "readEntryByDataField",
+          "line": 132,
+          "isDefault": false
+        },
+        {
+          "name": "readEntriesByDataFieldIn",
+          "line": 173,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "readPublishedEntries",
+          "callee": "conditions.push",
+          "lineNumber": 43
+        },
+        {
+          "caller": "readPublishedEntries",
+          "callee": "conditions.push",
+          "lineNumber": 45
+        },
+        {
+          "caller": "readPublishedEntries",
+          "callee": "binds.push",
+          "lineNumber": 46
+        },
+        {
+          "caller": "readPublishedEntries",
+          "callee": "conditions.push",
+          "lineNumber": 49
+        },
+        {
+          "caller": "readPublishedEntries",
+          "callee": "binds.push",
+          "lineNumber": 50
+        },
+        {
+          "caller": "readPublishedEntries",
+          "callee": "conditions.join",
+          "lineNumber": 54
+        },
+        {
+          "caller": "readPublishedEntries",
+          "callee": "Number.isFinite",
+          "lineNumber": 55
+        },
+        {
+          "caller": "readPublishedEntries",
+          "callee": "Math.floor",
+          "lineNumber": 56
+        },
+        {
+          "caller": "readPublishedEntries",
+          "callee": "await db.prepare(sql).bind(...binds).all",
+          "lineNumber": 58
+        },
+        {
+          "caller": "readPublishedEntries",
+          "callee": "db.prepare(sql).bind",
+          "lineNumber": 58
+        },
+        {
+          "caller": "readPublishedEntries",
+          "callee": "db.prepare",
+          "lineNumber": 58
+        },
+        {
+          "caller": "readPublishedEntries",
+          "callee": "rows.map",
+          "lineNumber": 59
+        },
+        {
+          "caller": "readEntryById",
+          "callee": "await db\n    .prepare(\n      `SELECT id, collection, status, version, data, created_at, updated_at` +\n        ` FROM entries WHERE id = ?`,\n    )\n    .bind(id)\n    .first",
+          "lineNumber": 69
+        },
+        {
+          "caller": "readEntryById",
+          "callee": "db\n    .prepare(\n      `SELECT id, collection, status, version, data, created_at, updated_at` +\n        ` FROM entries WHERE id = ?`,\n    )\n    .bind",
+          "lineNumber": 69
+        },
+        {
+          "caller": "readEntryById",
+          "callee": "db\n    .prepare",
+          "lineNumber": 69
+        },
+        {
+          "caller": "readEntryById",
+          "callee": "rowToEntry",
+          "lineNumber": 76
+        },
+        {
+          "caller": "readEntryBySlug",
+          "callee": "readEntryByDataField",
+          "lineNumber": 97
+        },
+        {
+          "caller": "assertSafeField",
+          "callee": "SAFE_FIELD_RE.test",
+          "lineNumber": 125
+        },
+        {
+          "caller": "assertSafeField",
+          "callee": "JSON.stringify",
+          "lineNumber": 127
+        },
+        {
+          "caller": "readEntryByDataField",
+          "callee": "assertSafeField",
+          "lineNumber": 136
+        },
+        {
+          "caller": "readEntryByDataField",
+          "callee": "conditions.push",
+          "lineNumber": 143
+        },
+        {
+          "caller": "readEntryByDataField",
+          "callee": "conditions.push",
+          "lineNumber": 145
+        },
+        {
+          "caller": "readEntryByDataField",
+          "callee": "binds.push",
+          "lineNumber": 146
+        },
+        {
+          "caller": "readEntryByDataField",
+          "callee": "conditions.push",
+          "lineNumber": 149
+        },
+        {
+          "caller": "readEntryByDataField",
+          "callee": "binds.push",
+          "lineNumber": 150
+        },
+        {
+          "caller": "readEntryByDataField",
+          "callee": "conditions.join",
+          "lineNumber": 154
+        },
+        {
+          "caller": "readEntryByDataField",
+          "callee": "await db.prepare(sql).bind(...binds).first",
+          "lineNumber": 155
+        },
+        {
+          "caller": "readEntryByDataField",
+          "callee": "db.prepare(sql).bind",
+          "lineNumber": 155
+        },
+        {
+          "caller": "readEntryByDataField",
+          "callee": "db.prepare",
+          "lineNumber": 155
+        },
+        {
+          "caller": "readEntryByDataField",
+          "callee": "rowToEntry",
+          "lineNumber": 156
+        },
+        {
+          "caller": "readEntriesByDataFieldIn",
+          "callee": "assertSafeField",
+          "lineNumber": 178
+        },
+        {
+          "caller": "readEntriesByDataFieldIn",
+          "callee": "args.values.map(() => \"?\").join",
+          "lineNumber": 179
+        },
+        {
+          "caller": "readEntriesByDataFieldIn",
+          "callee": "args.values.map",
+          "lineNumber": 179
+        },
+        {
+          "caller": "readEntriesByDataFieldIn",
+          "callee": "conditions.push",
+          "lineNumber": 186
+        },
+        {
+          "caller": "readEntriesByDataFieldIn",
+          "callee": "conditions.push",
+          "lineNumber": 188
+        },
+        {
+          "caller": "readEntriesByDataFieldIn",
+          "callee": "binds.push",
+          "lineNumber": 189
+        },
+        {
+          "caller": "readEntriesByDataFieldIn",
+          "callee": "conditions.push",
+          "lineNumber": 192
+        },
+        {
+          "caller": "readEntriesByDataFieldIn",
+          "callee": "binds.push",
+          "lineNumber": 193
+        },
+        {
+          "caller": "readEntriesByDataFieldIn",
+          "callee": "conditions.join",
+          "lineNumber": 197
+        },
+        {
+          "caller": "readEntriesByDataFieldIn",
+          "callee": "await db.prepare(sql).bind(...binds).all",
+          "lineNumber": 198
+        },
+        {
+          "caller": "readEntriesByDataFieldIn",
+          "callee": "db.prepare(sql).bind",
+          "lineNumber": 198
+        },
+        {
+          "caller": "readEntriesByDataFieldIn",
+          "callee": "db.prepare",
+          "lineNumber": 198
+        },
+        {
+          "caller": "readEntriesByDataFieldIn",
+          "callee": "rows.map",
+          "lineNumber": 199
+        },
+        {
+          "caller": "rowToEntry",
+          "callee": "JSON.parse",
+          "lineNumber": 203
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 5,
+        "functionCount": 7,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/boot/canonicalMigrations.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 182,
+      "nonEmptyLines": 171,
+      "exports": [
+        {
+          "name": "CANONICAL_MIGRATIONS",
+          "line": 9,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/persistence/DatabaseMediaAssetRepository.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 110,
+      "nonEmptyLines": 102,
+      "functions": [
+        {
+          "name": "rowToAsset",
+          "startLine": 97,
+          "endLine": 110,
+          "params": [
+            "row"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "DatabaseMediaAssetRepository",
+          "startLine": 23,
+          "endLine": 83,
+          "methods": [
+            "constructor",
+            "findById",
+            "findManyByIds",
+            "save",
+            "delete"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "DatabaseMediaAssetRepository",
+          "line": 23,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "findById",
+          "callee": "await this.db\n      .prepare(\n        `SELECT id, created_at, owner_id, alt, caption, variants, metadata\n         FROM media_assets WHERE id = ?`,\n      )\n      .bind(id)\n      .first",
+          "lineNumber": 27
+        },
+        {
+          "caller": "findById",
+          "callee": "this.db\n      .prepare(\n        `SELECT id, created_at, owner_id, alt, caption, variants, metadata\n         FROM media_assets WHERE id = ?`,\n      )\n      .bind",
+          "lineNumber": 27
+        },
+        {
+          "caller": "findById",
+          "callee": "this.db\n      .prepare",
+          "lineNumber": 27
+        },
+        {
+          "caller": "findById",
+          "callee": "rowToAsset",
+          "lineNumber": 35
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "Array.from",
+          "lineNumber": 41
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "deduped.slice",
+          "lineNumber": 43
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "chunk.map(() => \"?\").join",
+          "lineNumber": 44
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "chunk.map",
+          "lineNumber": 44
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "await this.db\n        .prepare(\n          `SELECT id, created_at, owner_id, alt, caption, variants, metadata\n           FROM media_assets WHERE id IN (${placeholders})`,\n        )\n        .bind(...chunk)\n        .all",
+          "lineNumber": 45
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "this.db\n        .prepare(\n          `SELECT id, created_at, owner_id, alt, caption, variants, metadata\n           FROM media_assets WHERE id IN (${placeholders})`,\n        )\n        .bind",
+          "lineNumber": 45
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "this.db\n        .prepare",
+          "lineNumber": 45
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "out.set",
+          "lineNumber": 52
+        },
+        {
+          "caller": "findManyByIds",
+          "callee": "rowToAsset",
+          "lineNumber": 52
+        },
+        {
+          "caller": "save",
+          "callee": "this.db\n      .prepare(\n        `INSERT INTO media_assets (id, created_at, owner_id, alt, caption, variants, metadata)\n         VALUES (?, ?, ?, ?, ?, ?, ?)\n         ON CONFLICT(id) DO UPDATE SET\n           alt      = excluded.alt,\n           caption  = excluded.caption,\n           variants = excluded.variants,\n           metadata = excluded.metadata`,\n      )\n      .bind(\n        asset.id,\n        asset.createdAt,\n        null,\n        asset.alt ?? null,\n        asset.caption ?? null,\n        JSON.stringify(asset.variants),\n        asset.metadata ? JSON.stringify(asset.metadata) : null,\n      )\n      .run",
+          "lineNumber": 58
+        },
+        {
+          "caller": "save",
+          "callee": "this.db\n      .prepare(\n        `INSERT INTO media_assets (id, created_at, owner_id, alt, caption, variants, metadata)\n         VALUES (?, ?, ?, ?, ?, ?, ?)\n         ON CONFLICT(id) DO UPDATE SET\n           alt      = excluded.alt,\n           caption  = excluded.caption,\n           variants = excluded.variants,\n           metadata = excluded.metadata`,\n      )\n      .bind",
+          "lineNumber": 58
+        },
+        {
+          "caller": "save",
+          "callee": "this.db\n      .prepare",
+          "lineNumber": 58
+        },
+        {
+          "caller": "save",
+          "callee": "JSON.stringify",
+          "lineNumber": 74
+        },
+        {
+          "caller": "save",
+          "callee": "JSON.stringify",
+          "lineNumber": 75
+        },
+        {
+          "caller": "delete",
+          "callee": "this.db.prepare(`DELETE FROM media_assets WHERE id = ?`).bind(id).run",
+          "lineNumber": 81
+        },
+        {
+          "caller": "delete",
+          "callee": "this.db.prepare(`DELETE FROM media_assets WHERE id = ?`).bind",
+          "lineNumber": 81
+        },
+        {
+          "caller": "delete",
+          "callee": "this.db.prepare",
+          "lineNumber": 81
+        },
+        {
+          "caller": "rowToAsset",
+          "callee": "JSON.parse",
+          "lineNumber": 98
+        },
+        {
+          "caller": "rowToAsset",
+          "callee": "JSON.parse",
+          "lineNumber": 100
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/infrastructure/render/HtmlPublishOrchestrator.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 184,
+      "nonEmptyLines": 174,
+      "classes": [
+        {
+          "name": "HtmlPublishOrchestrator",
+          "startLine": 70,
+          "endLine": 184,
+          "methods": [
+            "constructor",
+            "publish",
+            "unpublish",
+            "renderEntry",
+            "renderList",
+            "renderLlmsTxt"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "HtmlPublishOrchestrator",
+          "line": 70,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "publish",
+          "callee": "readEntryById",
+          "lineNumber": 82
+        },
+        {
+          "caller": "publish",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 85
+        },
+        {
+          "caller": "publish",
+          "callee": "joinParentIfTranslation",
+          "lineNumber": 98
+        },
+        {
+          "caller": "publish",
+          "callee": "Promise.all",
+          "lineNumber": 104
+        },
+        {
+          "caller": "publish",
+          "callee": "this.renderEntry",
+          "lineNumber": 105
+        },
+        {
+          "caller": "publish",
+          "callee": "this.renderList",
+          "lineNumber": 106
+        },
+        {
+          "caller": "publish",
+          "callee": "this.renderLlmsTxt",
+          "lineNumber": 107
+        },
+        {
+          "caller": "unpublish",
+          "callee": "readEntryById",
+          "lineNumber": 112
+        },
+        {
+          "caller": "unpublish",
+          "callee": "runtimeDiagnostic",
+          "lineNumber": 115
+        },
+        {
+          "caller": "unpublish",
+          "callee": "Promise.all",
+          "lineNumber": 128
+        },
+        {
+          "caller": "unpublish",
+          "callee": "this.kv.delete",
+          "lineNumber": 129
+        },
+        {
+          "caller": "unpublish",
+          "callee": "entryHtmlKey",
+          "lineNumber": 129
+        },
+        {
+          "caller": "unpublish",
+          "callee": "this.kv.delete",
+          "lineNumber": 130
+        },
+        {
+          "caller": "unpublish",
+          "callee": "entryMarkdownKey",
+          "lineNumber": 130
+        },
+        {
+          "caller": "unpublish",
+          "callee": "this.renderList",
+          "lineNumber": 131
+        },
+        {
+          "caller": "unpublish",
+          "callee": "this.renderLlmsTxt",
+          "lineNumber": 132
+        },
+        {
+          "caller": "renderEntry",
+          "callee": "composeSeoIfPathed",
+          "lineNumber": 142
+        },
+        {
+          "caller": "renderEntry",
+          "callee": "resolveMediaAssetsForEntries",
+          "lineNumber": 143
+        },
+        {
+          "caller": "renderEntry",
+          "callee": "renderEntryHtml",
+          "lineNumber": 144
+        },
+        {
+          "caller": "renderEntry",
+          "callee": "this.kv.put",
+          "lineNumber": 146
+        },
+        {
+          "caller": "renderEntry",
+          "callee": "entryHtmlKey",
+          "lineNumber": 146
+        },
+        {
+          "caller": "renderEntry",
+          "callee": "serializeEntryAsMarkdown",
+          "lineNumber": 148
+        },
+        {
+          "caller": "renderEntry",
+          "callee": "this.kv.put",
+          "lineNumber": 150
+        },
+        {
+          "caller": "renderEntry",
+          "callee": "entryMarkdownKey",
+          "lineNumber": 150
+        },
+        {
+          "caller": "renderList",
+          "callee": "readPublishedEntries",
+          "lineNumber": 161
+        },
+        {
+          "caller": "renderList",
+          "callee": "joinParentForList",
+          "lineNumber": 162
+        },
+        {
+          "caller": "renderList",
+          "callee": "resolveMediaAssetsForEntries",
+          "lineNumber": 165
+        },
+        {
+          "caller": "renderList",
+          "callee": "renderListHtml",
+          "lineNumber": 166
+        },
+        {
+          "caller": "renderList",
+          "callee": "this.kv.put",
+          "lineNumber": 176
+        },
+        {
+          "caller": "renderList",
+          "callee": "listHtmlKey",
+          "lineNumber": 176
+        },
+        {
+          "caller": "renderLlmsTxt",
+          "callee": "this.composeLlmsTxt.execute",
+          "lineNumber": 181
+        },
+        {
+          "caller": "renderLlmsTxt",
+          "callee": "this.kv.put",
+          "lineNumber": 182
+        },
+        {
+          "caller": "renderLlmsTxt",
+          "callee": "llmsTxtKey",
+          "lineNumber": 182
+        }
+      ],
+      "metrics": {
+        "importCount": 13,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/media/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 53,
+      "nonEmptyLines": 47,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/render/ComposeEntrySeoMetaRequest.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 14,
+      "nonEmptyLines": 13,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/mantle-runtime/src/usecase/dto/render/ComposeLlmsTxtRequest.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 8,
+      "nonEmptyLines": 7,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

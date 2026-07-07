@@ -1,0 +1,479 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/mantle-spec/src/domain/model/Locale.ts",
+      "type": "file",
+      "name": "Locale.ts",
+      "filePath": "packages/mantle-spec/src/domain/model/Locale.ts",
+      "summary": "定義 locale 領域型別與 URL locale 區段的正規表示式常數，並提供 InvalidLocaleError 例外，作為 locale 正規化流程的核心模型。",
+      "tags": ["data-model", "type-definition", "locale", "validation"],
+      "complexity": "simple",
+      "languageNotes": "以 const 正則常數搭配自訂 Error 子類別，是 spec 領域模型的典型寫法。"
+    },
+    {
+      "id": "class:packages/mantle-spec/src/domain/model/Locale.ts:InvalidLocaleError",
+      "type": "class",
+      "name": "InvalidLocaleError",
+      "filePath": "packages/mantle-spec/src/domain/model/Locale.ts",
+      "lineRange": [42, 47],
+      "summary": "當輸入字串無法正規化為合法 locale 時拋出的自訂例外類別。",
+      "tags": ["error", "validation", "locale"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts",
+      "type": "file",
+      "name": "MediaMimeAccept.ts",
+      "filePath": "packages/mantle-spec/src/domain/model/MediaMimeAccept.ts",
+      "summary": "定義媒體 MIME accept 規則的領域模型，並提供解析 accept 字串、展開 policy required 槽位與彙整所有 policy MIME 的純函式。",
+      "tags": ["data-model", "media", "mime", "parsing", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts:parseMimeAccept",
+      "type": "function",
+      "name": "parseMimeAccept",
+      "filePath": "packages/mantle-spec/src/domain/model/MediaMimeAccept.ts",
+      "lineRange": [68, 81],
+      "summary": "將逗號分隔的 MIME accept 字串解析為正規化、去重後的小寫 MIME 清單。",
+      "tags": ["parsing", "mime", "normalization", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts:expandPolicyRequired",
+      "type": "function",
+      "name": "expandPolicyRequired",
+      "filePath": "packages/mantle-spec/src/domain/model/MediaMimeAccept.ts",
+      "lineRange": [89, 93],
+      "summary": "將 policy 的 required 槽位陣列展開為各槽位對應的 MIME 集合。",
+      "tags": ["media", "mime", "policy", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts:allPolicyMimes",
+      "type": "function",
+      "name": "allPolicyMimes",
+      "filePath": "packages/mantle-spec/src/domain/model/MediaMimeAccept.ts",
+      "lineRange": [100, 108],
+      "summary": "彙整一個 policy 中所有 required 槽位的去重 MIME 清單。",
+      "tags": ["media", "mime", "policy", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/domain/model/SiteConfig.ts",
+      "type": "file",
+      "name": "SiteConfig.ts",
+      "filePath": "packages/mantle-spec/src/domain/model/SiteConfig.ts",
+      "summary": "定義站台組態（SiteConfig）相關的領域型別，涵蓋預設值、媒體用途（media purpose）與槽位設定，並匯出媒體用途 slug 的正規表示式。",
+      "tags": ["data-model", "type-definition", "site-config", "manifest"],
+      "complexity": "moderate",
+      "languageNotes": "以大量 TypeScript interface/type 描述 manifest 的站台組態結構，幾乎不含執行邏輯。"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "type": "file",
+      "name": "LocaleCanonicalizer.ts",
+      "filePath": "packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "summary": "提供 locale 正規化領域服務：將輸入字串轉為標準 locale（語言＋可選地區）、URL 區段互轉、批次正規化與 script subtag 偵測，遵循 Mantle v0.1 拒絕 script subtag 的規則。",
+      "tags": ["service", "locale", "normalization", "validation", "utility"],
+      "complexity": "moderate",
+      "languageNotes": "純函式服務，以正則辨識語言與地區子標籤；批次正規化區分 valid/invalid 並去重。"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts:toCanonicalLocale",
+      "type": "function",
+      "name": "toCanonicalLocale",
+      "filePath": "packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "lineRange": [29, 47],
+      "summary": "將任意輸入字串正規化為標準 locale（小寫語言加可選大寫地區），無法解析時拋出 InvalidLocaleError。",
+      "tags": ["locale", "normalization", "validation", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts:safeCanonicalLocale",
+      "type": "function",
+      "name": "safeCanonicalLocale",
+      "filePath": "packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "lineRange": [69, 75],
+      "summary": "toCanonicalLocale 的安全包裝，解析失敗時回傳 null 而非拋出例外。",
+      "tags": ["locale", "normalization", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts:canonicalizeLocaleList",
+      "type": "function",
+      "name": "canonicalizeLocaleList",
+      "filePath": "packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "lineRange": [85, 103],
+      "summary": "批次正規化 locale 清單，去重並將結果分為 valid 與 invalid 兩組回傳。",
+      "tags": ["locale", "normalization", "validation", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "type": "file",
+      "name": "SiteDefaultsValidator.ts",
+      "filePath": "packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "summary": "驗證站台預設值與媒體用途設定的領域服務：檢查 locale 正規性、媒體用途 slug、required 槽位、MIME 重疊與 maxBytes 一致性，違規時拋出結構化例外。",
+      "tags": ["service", "validation", "site-config", "media", "diagnostics"],
+      "complexity": "complex",
+      "languageNotes": "把 manifest 的隱性不變量集中於 runtime 驗證並以結構化錯誤回報，符合 Mantle『runtime 承擔複雜度』的設計原則。"
+    },
+    {
+      "id": "class:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts:InvalidSiteDefaultsError",
+      "type": "class",
+      "name": "InvalidSiteDefaultsError",
+      "filePath": "packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "lineRange": [31, 47],
+      "summary": "站台預設 locale 含非法值（如 script subtag）時拋出的結構化例外，附帶具體指引訊息。",
+      "tags": ["error", "validation", "locale", "diagnostics"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts:InvalidMediaPurposesError",
+      "type": "class",
+      "name": "InvalidMediaPurposesError",
+      "filePath": "packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "lineRange": [61, 93],
+      "summary": "媒體用途設定違規時拋出的結構化例外，將各類問題（slug、required、重疊、maxBytes）彙整為可讀訊息。",
+      "tags": ["error", "validation", "media", "diagnostics"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts:assertSiteDefaultsCanonical",
+      "type": "function",
+      "name": "assertSiteDefaultsCanonical",
+      "filePath": "packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "lineRange": [95, 107],
+      "summary": "斷言站台預設值符合正規化規則，locale 或媒體用途違規時拋出對應的結構化例外。",
+      "tags": ["validation", "site-config", "assertion", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts:collectMediaPurposeIssues",
+      "type": "function",
+      "name": "collectMediaPurposeIssues",
+      "filePath": "packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "lineRange": [109, 189],
+      "summary": "逐一檢查媒體用途設定並彙整所有問題（slug 非法、空 required、空槽位、MIME 重疊、maxBytes 缺漏或非正值），回傳結構化問題清單。",
+      "tags": ["validation", "media", "mime", "diagnostics"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/mantle-spec/test/locale.test.ts",
+      "type": "file",
+      "name": "locale.test.ts",
+      "filePath": "packages/mantle-spec/test/locale.test.ts",
+      "summary": "針對 Locale 模型與 LocaleCanonicalizer 服務的單元測試，涵蓋正規化、URL 互轉、批次處理與 script subtag 拒絕等情境。",
+      "tags": ["test", "locale", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-spec/test/media-mime-accept.test.ts",
+      "type": "file",
+      "name": "media-mime-accept.test.ts",
+      "filePath": "packages/mantle-spec/test/media-mime-accept.test.ts",
+      "summary": "針對 MediaMimeAccept 模型與 SiteDefaultsValidator 媒體用途驗證的單元測試，涵蓋 MIME 解析、policy 展開與各類違規情境。",
+      "tags": ["test", "media", "mime", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-spec/test/site-validate.test.ts",
+      "type": "file",
+      "name": "site-validate.test.ts",
+      "filePath": "packages/mantle-spec/test/site-validate.test.ts",
+      "summary": "針對 SiteDefaultsValidator 站台預設值驗證的單元測試，驗證 locale 與媒體用途違規時拋出正確的結構化例外。",
+      "tags": ["test", "site-config", "validation"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/mantle-spec/src/domain/model/Locale.ts",
+      "target": "class:packages/mantle-spec/src/domain/model/Locale.ts:InvalidLocaleError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/model/Locale.ts",
+      "target": "class:packages/mantle-spec/src/domain/model/Locale.ts:InvalidLocaleError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts",
+      "target": "function:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts:parseMimeAccept",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts",
+      "target": "function:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts:parseMimeAccept",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts",
+      "target": "function:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts:expandPolicyRequired",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts",
+      "target": "function:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts:expandPolicyRequired",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts",
+      "target": "function:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts:allPolicyMimes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts",
+      "target": "function:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts:allPolicyMimes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts:allPolicyMimes",
+      "target": "function:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts:parseMimeAccept",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "target": "function:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts:toCanonicalLocale",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "target": "function:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts:toCanonicalLocale",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "target": "function:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts:safeCanonicalLocale",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "target": "function:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts:safeCanonicalLocale",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "target": "function:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts:canonicalizeLocaleList",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "target": "function:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts:canonicalizeLocaleList",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "target": "file:packages/mantle-spec/src/domain/model/Locale.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts:safeCanonicalLocale",
+      "target": "function:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts:toCanonicalLocale",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts:canonicalizeLocaleList",
+      "target": "function:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts:toCanonicalLocale",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "target": "class:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts:InvalidSiteDefaultsError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "target": "class:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts:InvalidSiteDefaultsError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "target": "class:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts:InvalidMediaPurposesError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "target": "class:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts:InvalidMediaPurposesError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "target": "function:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts:assertSiteDefaultsCanonical",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "target": "function:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts:assertSiteDefaultsCanonical",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "target": "function:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts:collectMediaPurposeIssues",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "target": "file:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "target": "file:packages/mantle-spec/src/domain/model/SiteConfig.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "target": "file:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts:assertSiteDefaultsCanonical",
+      "target": "function:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts:canonicalizeLocaleList",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts:assertSiteDefaultsCanonical",
+      "target": "function:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts:collectMediaPurposeIssues",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts:collectMediaPurposeIssues",
+      "target": "function:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts:expandPolicyRequired",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-spec/test/locale.test.ts",
+      "target": "file:packages/mantle-spec/src/domain/model/Locale.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/test/locale.test.ts",
+      "target": "file:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/model/Locale.ts",
+      "target": "file:packages/mantle-spec/test/locale.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts",
+      "target": "file:packages/mantle-spec/test/locale.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/mantle-spec/test/media-mime-accept.test.ts",
+      "target": "file:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/test/media-mime-accept.test.ts",
+      "target": "file:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/model/MediaMimeAccept.ts",
+      "target": "file:packages/mantle-spec/test/media-mime-accept.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "target": "file:packages/mantle-spec/test/media-mime-accept.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/mantle-spec/test/site-validate.test.ts",
+      "target": "file:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts",
+      "target": "file:packages/mantle-spec/test/site-validate.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

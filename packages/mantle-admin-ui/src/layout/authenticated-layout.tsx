@@ -16,7 +16,7 @@ import { LayoutProvider } from "../context/layout-provider";
 import { SidebarInset, SidebarProvider } from "../ui/sidebar";
 import { api } from "../lib/api";
 import { fieldLabel } from "../lib/field-label";
-import { operationsQueryOptions } from "../lib/queries";
+import { operationsQueryOptions, viewsManifestQueryOptions } from "../lib/queries";
 import { resolveLocalizedText } from "../lib/localized-text";
 import {
   EDITORIAL_STATUSES,
@@ -83,13 +83,7 @@ export function AuthenticatedLayout({
   // One extra query each (#426), cached under their own query keys so
   // they don't refetch alongside unrelated collection/site changes.
   const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
-  const viewsQuery = useQuery<ViewManifestInfo[]>({
-    queryKey: ["views-manifest"],
-    queryFn: async () => {
-      const res = await api.get<{ views: ViewManifestInfo[] }>("/views-manifest");
-      return res.views;
-    },
-  });
+  const viewsQuery = useQuery<ViewManifestInfo[]>(viewsManifestQueryOptions());
 
   const resolvedBrand = React.useMemo<AdminBrand>(
     () => ({

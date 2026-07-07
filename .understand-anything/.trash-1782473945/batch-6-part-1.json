@@ -1,0 +1,954 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/dto/render/ComposeSitemapRequest.ts",
+      "type": "file",
+      "name": "ComposeSitemapRequest.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/dto/render/ComposeSitemapRequest.ts",
+      "summary": "定義 ComposeSitemapUseCase 的請求 DTO 介面，描述產生 sitemap 所需的網站設定與分頁參數。",
+      "tags": [
+        "dto",
+        "type-definition",
+        "render",
+        "sitemap"
+      ],
+      "complexity": "simple",
+      "languageNotes": "純 TypeScript interface DTO，無實作邏輯。"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/dto/render/PreviewEntryRequest.ts",
+      "type": "file",
+      "name": "PreviewEntryRequest.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/dto/render/PreviewEntryRequest.ts",
+      "summary": "PreviewEntryUseCase 的請求 DTO，攜帶 collection／slug／locale、狀態回退順序（statusOrder）與可選的預覽橫幅 HTML。",
+      "tags": [
+        "dto",
+        "type-definition",
+        "render",
+        "preview"
+      ],
+      "complexity": "simple",
+      "languageNotes": "DTO 透過 ContentState enum 表達狀態回退順序，符合 clean architecture 的 DTO 慣例。"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/dto/render/RenderEntryLiveRequest.ts",
+      "type": "file",
+      "name": "RenderEntryLiveRequest.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/dto/render/RenderEntryLiveRequest.ts",
+      "summary": "RenderEntryLiveUseCase 的請求 DTO，描述即時渲染單篇已發佈 entry 所需的 collection／slug／locale 與網站設定。",
+      "tags": [
+        "dto",
+        "type-definition",
+        "render",
+        "live"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/dto/render/RenderListLiveRequest.ts",
+      "type": "file",
+      "name": "RenderListLiveRequest.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/dto/render/RenderListLiveRequest.ts",
+      "summary": "RenderListLiveUseCase 的請求 DTO，描述即時渲染列表頁所需的 collection 與網站設定參數。",
+      "tags": [
+        "dto",
+        "type-definition",
+        "render",
+        "list"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "type": "file",
+      "name": "CommitMediaUploadUseCase.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "summary": "媒體上傳的提交 use case，從 KV 取出待處理上傳紀錄、驗證未過期後將物件落地至 storage 並寫入 MediaAssetRepository。",
+      "tags": [
+        "usecase",
+        "media",
+        "upload",
+        "service"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts:CommitMediaUploadUseCase",
+      "type": "class",
+      "name": "CommitMediaUploadUseCase",
+      "filePath": "packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "lineRange": [
+        26,
+        68
+      ],
+      "summary": "以注入的 KvCache、MediaStorage、MediaAssetRepository 與 Clock 提交一筆待處理媒體上傳，過期則回傳結構化 Diagnostic。",
+      "tags": [
+        "usecase",
+        "media",
+        "upload",
+        "dependency-injection"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "type": "file",
+      "name": "CreateMediaUploadUseCase.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "summary": "媒體上傳的建立 use case，依站台媒體用途政策驗證 variant 覆蓋度、MIME 白名單與檔案大小上限，產生上傳 URL 並將待處理紀錄寫入 KV。",
+      "tags": [
+        "usecase",
+        "media",
+        "validation",
+        "upload"
+      ],
+      "complexity": "complex",
+      "languageNotes": "大量 private assert* 方法把驗證不變式收斂在 runtime，misuse 以結構化 Diagnostic 浮現，呼應「runtime 承擔複雜度」原則。"
+    },
+    {
+      "id": "class:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts:CreateMediaUploadUseCase",
+      "type": "class",
+      "name": "CreateMediaUploadUseCase",
+      "filePath": "packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "lineRange": [
+        56,
+        286
+      ],
+      "summary": "建立媒體上傳的應用服務，串連用途政策檢查、variant 覆蓋／大小／MIME 驗證、storage 簽發上傳 URL，並把 PendingUploadRecord 存入 KV。",
+      "tags": [
+        "usecase",
+        "media",
+        "validation",
+        "policy"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts:pickFallbackForSizing",
+      "type": "function",
+      "name": "pickFallbackForSizing",
+      "filePath": "packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "lineRange": [
+        298,
+        306
+      ],
+      "summary": "從 variant 清單中挑選用於可疑尺寸比對的回退（fallback）格式 variant。",
+      "tags": [
+        "utility",
+        "media",
+        "validation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/media/PendingUploadRecord.ts",
+      "type": "file",
+      "name": "PendingUploadRecord.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/media/PendingUploadRecord.ts",
+      "summary": "定義暫存於 KV 的待處理上傳紀錄結構，承載 commit 階段所需的 variant、過期時間與 storage 物件鍵等資訊。",
+      "tags": [
+        "type-definition",
+        "media",
+        "upload",
+        "data-model"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "type": "file",
+      "name": "diagnostics.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "summary": "媒體用例的結構化 Diagnostic 工廠集合，涵蓋未設定、MIME／SVG 拒絕、檔案過大、上傳過期、variant 不完整或可疑尺寸等錯誤情境。",
+      "tags": [
+        "media",
+        "validation",
+        "factory",
+        "diagnostics"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "每個函式僅組裝一個 Diagnostic 物件，將 misuse 以可讀訊息回饋給 AI 作者，是 runtime 承擔複雜度的具體實踐。"
+    },
+    {
+      "id": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaSizeExceededDiagnostic",
+      "type": "function",
+      "name": "mediaSizeExceededDiagnostic",
+      "filePath": "packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "lineRange": [
+        40,
+        53
+      ],
+      "summary": "產生「檔案大小超過上限」的結構化 Diagnostic，附上實際位元組數與允許上限。",
+      "tags": [
+        "factory",
+        "diagnostics",
+        "validation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaPurposeRejectedDiagnostic",
+      "type": "function",
+      "name": "mediaPurposeRejectedDiagnostic",
+      "filePath": "packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "lineRange": [
+        85,
+        106
+      ],
+      "summary": "產生「媒體用途未被站台宣告」的 Diagnostic，列出所有已宣告的合法用途供作者修正。",
+      "tags": [
+        "factory",
+        "diagnostics",
+        "policy"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaVariantsIncompleteDiagnostic",
+      "type": "function",
+      "name": "mediaVariantsIncompleteDiagnostic",
+      "filePath": "packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "lineRange": [
+        112,
+        130
+      ],
+      "summary": "產生「variant 未覆蓋政策所需 slot」的 Diagnostic，標示要求的與遺漏的 variant 清單。",
+      "tags": [
+        "factory",
+        "diagnostics",
+        "validation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaVariantSizeExceededDiagnostic",
+      "type": "function",
+      "name": "mediaVariantSizeExceededDiagnostic",
+      "filePath": "packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "lineRange": [
+        132,
+        148
+      ],
+      "summary": "產生「單一 variant 檔案大小超過上限」的 Diagnostic，附上 MIME、位元組數與上限。",
+      "tags": [
+        "factory",
+        "diagnostics",
+        "validation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaVariantsSuspiciousSizeDiagnostic",
+      "type": "function",
+      "name": "mediaVariantsSuspiciousSizeDiagnostic",
+      "filePath": "packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "lineRange": [
+        159,
+        174
+      ],
+      "summary": "產生「variant 尺寸關係可疑（如現代格式反而比回退格式更大）」的警示 Diagnostic。",
+      "tags": [
+        "factory",
+        "diagnostics",
+        "validation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/media/mediaAllowlist.ts",
+      "type": "file",
+      "name": "mediaAllowlist.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/media/mediaAllowlist.ts",
+      "summary": "媒體上傳的政策常數與輔助函式集合，定義 MIME 白名單、預設大小上限、KV TTL 與前綴，並提供 MIME 檢核與副檔名對應。",
+      "tags": [
+        "media",
+        "config",
+        "validation",
+        "constants"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-runtime/src/usecase/media/mediaAllowlist.ts:extensionForMime",
+      "type": "function",
+      "name": "extensionForMime",
+      "filePath": "packages/mantle-runtime/src/usecase/media/mediaAllowlist.ts",
+      "lineRange": [
+        46,
+        63
+      ],
+      "summary": "將 MIME 類型對應到對應的檔案副檔名，用於產生 storage 物件鍵。",
+      "tags": [
+        "utility",
+        "media",
+        "serialization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts",
+      "type": "file",
+      "name": "ComposeEntrySeoMetaUseCase.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts",
+      "summary": "組裝單篇 entry 的 SEO meta 用例，解析公開路徑、跨 locale 讀取同篇兄弟 entry 以產生 hreflang，並交由 SeoMetaComposer 產出 meta。",
+      "tags": [
+        "usecase",
+        "render",
+        "seo",
+        "service"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts:ComposeEntrySeoMetaUseCase",
+      "type": "class",
+      "name": "ComposeEntrySeoMetaUseCase",
+      "filePath": "packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts",
+      "lineRange": [
+        28,
+        37
+      ],
+      "summary": "以注入的 DatabaseDriver 與 PublicPathResolver 解析 entry 路徑與兄弟篇，委派 composeEntrySeoMeta 產出 SEO meta。",
+      "tags": [
+        "usecase",
+        "render",
+        "seo",
+        "dependency-injection"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts:readSiblings",
+      "type": "function",
+      "name": "readSiblings",
+      "filePath": "packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts",
+      "lineRange": [
+        39,
+        67
+      ],
+      "summary": "跨站台其他 locale 平行讀取同 slug 的已發佈兄弟 entry，回傳其公開路徑用於 hreflang alternate 連結。",
+      "tags": [
+        "render",
+        "seo",
+        "i18n",
+        "data-access"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts",
+      "type": "file",
+      "name": "ComposeLlmsTxtUseCase.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts",
+      "summary": "組裝 llms.txt 的用例，讀取所有已發佈 entry、依 collection 分組後委派 MarkdownSerializer 序列化成 LLM 友善的純文字索引。",
+      "tags": [
+        "usecase",
+        "render",
+        "llms-txt",
+        "serialization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts:ComposeLlmsTxtUseCase",
+      "type": "class",
+      "name": "ComposeLlmsTxtUseCase",
+      "filePath": "packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts",
+      "lineRange": [
+        18,
+        30
+      ],
+      "summary": "讀取已發佈 entry 並按 collection 分組，呼叫 serializeLlmsTxt 產生 llms.txt 內容的應用服務。",
+      "tags": [
+        "usecase",
+        "render",
+        "llms-txt",
+        "dependency-injection"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts:groupByCollection",
+      "type": "function",
+      "name": "groupByCollection",
+      "filePath": "packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts",
+      "lineRange": [
+        32,
+        40
+      ],
+      "summary": "將 entry 陣列依其 collection 鍵分組成 Map，供 llms.txt 序列化逐區段輸出。",
+      "tags": [
+        "utility",
+        "render",
+        "llms-txt"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts",
+      "type": "file",
+      "name": "ComposeSitemapUseCase.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts",
+      "summary": "組裝 sitemap 的用例，讀取已發佈 entry、透過 PublishKeys 計算公開路徑後委派 SitemapSerializer 產出 sitemap XML。",
+      "tags": [
+        "usecase",
+        "render",
+        "sitemap",
+        "serialization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts:ComposeSitemapUseCase",
+      "type": "class",
+      "name": "ComposeSitemapUseCase",
+      "filePath": "packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts",
+      "lineRange": [
+        16,
+        30
+      ],
+      "summary": "讀取已發佈 entry 並映射為公開 URL，委派 serializeSitemap 產生 sitemap 的應用服務。",
+      "tags": [
+        "usecase",
+        "render",
+        "sitemap",
+        "dependency-injection"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "target": "class:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts:CommitMediaUploadUseCase",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "target": "class:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts:CommitMediaUploadUseCase",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/Clock.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/KvCache.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/MediaAssetRepository.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/MediaStorage.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/dto/media/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/media/mediaAllowlist.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/media/PendingUploadRecord.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "class:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts:CommitMediaUploadUseCase",
+      "target": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaSizeExceededDiagnostic",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "target": "class:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts:CreateMediaUploadUseCase",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "target": "class:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts:CreateMediaUploadUseCase",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "target": "function:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts:pickFallbackForSizing",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/Clock.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/IdGenerator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/KvCache.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/MediaStorage.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/SiteConfigRepository.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/dto/media/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/media/mediaAllowlist.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/media/PendingUploadRecord.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "class:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts:CreateMediaUploadUseCase",
+      "target": "function:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts:pickFallbackForSizing",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts:CreateMediaUploadUseCase",
+      "target": "function:packages/mantle-runtime/src/usecase/media/mediaAllowlist.ts:isAllowedMime",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts:CreateMediaUploadUseCase",
+      "target": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaPurposeRejectedDiagnostic",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts:CreateMediaUploadUseCase",
+      "target": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaVariantsIncompleteDiagnostic",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts:CreateMediaUploadUseCase",
+      "target": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaVariantSizeExceededDiagnostic",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts:CreateMediaUploadUseCase",
+      "target": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaVariantsSuspiciousSizeDiagnostic",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/PendingUploadRecord.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/MediaStorage.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "target": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaSizeExceededDiagnostic",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "target": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaSizeExceededDiagnostic",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "target": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaPurposeRejectedDiagnostic",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "target": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaPurposeRejectedDiagnostic",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "target": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaVariantsIncompleteDiagnostic",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "target": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaVariantsIncompleteDiagnostic",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "target": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaVariantSizeExceededDiagnostic",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "target": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaVariantSizeExceededDiagnostic",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "target": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaVariantsSuspiciousSizeDiagnostic",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/diagnostics.ts",
+      "target": "function:packages/mantle-runtime/src/usecase/media/diagnostics.ts:mediaVariantsSuspiciousSizeDiagnostic",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/mediaAllowlist.ts",
+      "target": "function:packages/mantle-runtime/src/usecase/media/mediaAllowlist.ts:extensionForMime",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/mediaAllowlist.ts",
+      "target": "function:packages/mantle-runtime/src/usecase/media/mediaAllowlist.ts:extensionForMime",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts",
+      "target": "class:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts:ComposeEntrySeoMetaUseCase",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts",
+      "target": "class:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts:ComposeEntrySeoMetaUseCase",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts",
+      "target": "function:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts:readSiblings",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/DatabaseDriver.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/service/io/PublishedEntries.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/service/PublicPathResolver.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/service/SeoMetaComposer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/dto/render/ComposeEntrySeoMetaRequest.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "class:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts:ComposeEntrySeoMetaUseCase",
+      "target": "function:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts:readSiblings",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts",
+      "target": "class:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts:ComposeLlmsTxtUseCase",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts",
+      "target": "class:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts:ComposeLlmsTxtUseCase",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts",
+      "target": "function:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts:groupByCollection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/DatabaseDriver.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/service/io/PublishedEntries.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/service/MarkdownSerializer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/dto/render/ComposeLlmsTxtRequest.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "class:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts:ComposeLlmsTxtUseCase",
+      "target": "function:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts:groupByCollection",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts:ComposeLlmsTxtUseCase",
+      "target": "function:packages/mantle-runtime/src/domain/service/io/PublishedEntries.ts:readPublishedEntries",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts:ComposeLlmsTxtUseCase",
+      "target": "function:packages/mantle-runtime/src/domain/service/MarkdownSerializer.ts:serializeLlmsTxt",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts",
+      "target": "class:packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts:ComposeSitemapUseCase",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts",
+      "target": "class:packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts:ComposeSitemapUseCase",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/port/DatabaseDriver.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/service/io/PublishedEntries.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/service/PublishKeys.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/domain/service/SitemapSerializer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts",
+      "target": "file:packages/mantle-runtime/src/usecase/dto/render/ComposeSitemapRequest.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "class:packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts:ComposeSitemapUseCase",
+      "target": "function:packages/mantle-runtime/src/domain/service/io/PublishedEntries.ts:readPublishedEntries",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts:ComposeSitemapUseCase",
+      "target": "function:packages/mantle-runtime/src/domain/service/SitemapSerializer.ts:serializeSitemap",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeLlmsTxtUseCase.ts",
+      "target": "file:packages/mantle-runtime/test/compose-render.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeSitemapUseCase.ts",
+      "target": "file:packages/mantle-runtime/test/compose-render.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/test/media.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/media/CommitMediaUploadUseCase.ts",
+      "target": "file:packages/mantle-runtime/test/media.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts",
+      "target": "file:packages/mantle-runtime/test/render-publish.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/usecase/render/ComposeEntrySeoMetaUseCase.ts",
+      "target": "file:packages/mantle-runtime/test/seo-meta.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

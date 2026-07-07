@@ -1,0 +1,307 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/adr/0001-four-atom-manifest-model.md",
+      "type": "document",
+      "name": "0001-four-atom-manifest-model.md",
+      "filePath": "docs/adr/0001-four-atom-manifest-model.md",
+      "summary": "奠基性 ADR，確立 mantle 的核心：以 Schema / View / Procedure / Trigger 四個 atom 構成 `cms.mantle.aotter.net/v1` 的 multi-doc YAML manifest 模型。並併入原 POC ADR-0005（grammar 鎖定與 DRAFT key 紀律）與 ADR-0006（multi-doc YAML 撰寫形式、淘汰 Procedure `expose:` 捷徑）。",
+      "tags": ["adr", "manifest", "four-atom", "grammar-lock", "documentation"],
+      "complexity": "complex",
+      "languageNotes": "整份文件採 Context / Decision / Consequences / Alternatives / How to apply 的標準 ADR 結構，並含三段併入的子 ADR（grammar discipline、multi-doc YAML），是全批 ADR 中規模最大者。"
+    },
+    {
+      "id": "document:docs/adr/0002-closed-enums-for-bindings.md",
+      "type": "document",
+      "name": "0002-closed-enums-for-bindings.md",
+      "filePath": "docs/adr/0002-closed-enums-for-bindings.md",
+      "summary": "決定 `x-mantle-bind` 與 `requires.auth.all` predicate 採封閉式 enum（closed enum），新增成員必須走顯式的 grammar-revise 流程，而非 ad-hoc 擴充，以保護 agent 撰寫面的確定性。",
+      "tags": ["adr", "closed-enum", "binding", "grammar-revise", "documentation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/adr/0007-ai-as-primary-author.md",
+      "type": "document",
+      "name": "0007-ai-as-primary-author.md",
+      "filePath": "docs/adr/0007-ai-as-primary-author.md",
+      "summary": "確立 AI agent 為 consumer 專案的主要作者，定義三層回饋迴路（`mantle validate` 靜態驗證、boot-time fail-fast、runtime errors）與兩種角色面（coder surface：Skills/CLI/SDK TS API；operator surface：MCP）。",
+      "tags": ["adr", "ai-author", "feedback-loop", "developer-experience", "documentation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/adr/0008-structured-diagnostic-shape.md",
+      "type": "document",
+      "name": "0008-structured-diagnostic-shape.md",
+      "filePath": "docs/adr/0008-structured-diagnostic-shape.md",
+      "summary": "定義 AI 可解析的結構化 Diagnostic 形狀（code 命名慣例、`path` 格式、`candidates`/`suggestion` 填寫時機），並決定驗證器以 zod（非 Ajv）翻譯產生診斷，貫穿 CLI、test harness 與 runtime 三個診斷面。",
+      "tags": ["adr", "diagnostic", "error-handling", "zod", "documentation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/adr/0009-consumer-supplied-manifests.md",
+      "type": "document",
+      "name": "0009-consumer-supplied-manifests.md",
+      "filePath": "docs/adr/0009-consumer-supplied-manifests.md",
+      "summary": "決定 consumer 專案在 SDK boot 時自行提供（注入）manifest，界定 v0.1.0 的 adapter 範圍與 single-slice 出貨策略，並附帶 worked example 說明注入流程。",
+      "tags": ["adr", "manifest", "sdk-boot", "consumer-project", "documentation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/adr/0010-locale-and-translates.md",
+      "type": "document",
+      "name": "0010-locale-and-translates.md",
+      "filePath": "docs/adr/0010-locale-and-translates.md",
+      "summary": "確立 locale 三層模型（manifest 宣告 `Schema.spec.localized`、per-site D1 列 `site_config.locales`、per-entry `data.locale`）與 parent/child translates 模式，並定義 locale 正規化（接受 language + 可選 region，拒絕 script subtag 如 `zh-Hant`）。",
+      "tags": ["adr", "locale", "i18n", "canonicalization", "documentation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/adr/0011-adapter-port-spec.md",
+      "type": "document",
+      "name": "0011-adapter-port-spec.md",
+      "filePath": "docs/adr/0011-adapter-port-spec.md",
+      "summary": "規範 runtime 對 adapter 暴露的 port 介面：必備 port（`DatabaseDriver`、`KvCache`、`AssetServer`）、public/private media 雙 bucket 雙 port，以及 adapter 如何 wire 這些 port，確保 runtime 不耦合任何 Cloudflare 專屬型別。",
+      "tags": ["adr", "adapter-port", "clean-architecture", "runtime-boundary", "documentation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/adr/0012-views-as-public-rest.md",
+      "type": "document",
+      "name": "0012-views-as-public-rest.md",
+      "filePath": "docs/adr/0012-views-as-public-rest.md",
+      "summary": "決定公開讀取一律經由 View 而非 Schema 暴露，URL 形狀為 `/api/views/<view-name>`，View 自動暴露、分頁採保留查詢字串名稱、filter 接受 `{ $param: <name> }` sentinel，回應信封為 `{ rows, page, show, hasMore }`。",
+      "tags": ["adr", "view", "public-rest", "api-surface", "documentation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/adr/0013-agent-provisioned-consumer-projects.md",
+      "type": "document",
+      "name": "0013-agent-provisioned-consumer-projects.md",
+      "filePath": "docs/adr/0013-agent-provisioned-consumer-projects.md",
+      "summary": "確立 consumer 專案由 agent 自動 provision（透過 scaffolder 與 launch state）的決策，定義 agent 驅動的初始化流程與相對於人工 provision 的取捨。",
+      "tags": ["adr", "provisioning", "agent-driven", "scaffolding", "documentation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md",
+      "type": "document",
+      "name": "0014-auth-better-auth-and-multi-tenant-mcp.md",
+      "filePath": "docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md",
+      "summary": "決定以 Better Auth 同時擔任 auth 與 MCP 授權伺服器，`staff` 表透過 admin plugin 映射為 `user.role`、由 manifest predicate 衍生兩條 MCP 路由、scope-aware DCR；含 2026-05-15 修正案將 MCP 端切換為 `@cloudflare/workers-oauth-provider`。",
+      "tags": ["adr", "auth", "better-auth", "mcp", "multi-tenant"],
+      "complexity": "complex",
+      "languageNotes": "本 ADR 含一份事後修正案（Amendment），記錄 MCP 授權層 carve-out 的架構變更，是少數帶 amendment 的 ADR。"
+    },
+    {
+      "id": "document:docs/adr/0016-site-semantic-layer.md",
+      "type": "document",
+      "name": "0016-site-semantic-layer.md",
+      "filePath": "docs/adr/0016-site-semantic-layer.md",
+      "summary": "定義 site 語意層（`AGENTS.md` + launch state），含 placeholder macros、更新規則與跨工具相容性。為 Epic #116 清理後刻意精簡的 ADR。",
+      "tags": ["adr", "semantic-layer", "agents-md", "launch-state", "documentation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/adr/0017-media-multi-variant-agent-side-optimization.md",
+      "type": "document",
+      "name": "0017-media-multi-variant-agent-side-optimization.md",
+      "filePath": "docs/adr/0017-media-multi-variant-agent-side-optimization.md",
+      "summary": "決定 `MediaAsset.variants[]` 為必填、影像最佳化在 agent 端而非 Worker 上執行、`siteDefaults.media.purposes` 為政策物件、entry 以 asset-id 參照並由 `media_assets` 表解析，adapter 維持 storage-key 形狀。",
+      "tags": ["adr", "media", "image-variants", "agent-side", "documentation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/adr/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "docs/adr/README.md",
+      "summary": "ADR 目錄的索引與導讀：列出 v0.1.0 的所有 ADR、建議閱讀順序、說明哪些主題刻意「不」放進 ADR（避免 ADR proliferation），以及新增 ADR 的貢獻指引。",
+      "tags": ["documentation", "entry-point", "adr-index", "overview"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:docs/adr/0001-four-atom-manifest-model.md",
+      "target": "document:docs/adr/0002-closed-enums-for-bindings.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/0001-four-atom-manifest-model.md",
+      "target": "document:docs/adr/0012-views-as-public-rest.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/0002-closed-enums-for-bindings.md",
+      "target": "document:docs/adr/0001-four-atom-manifest-model.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/0007-ai-as-primary-author.md",
+      "target": "document:docs/adr/0001-four-atom-manifest-model.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/0007-ai-as-primary-author.md",
+      "target": "document:docs/adr/0008-structured-diagnostic-shape.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/0007-ai-as-primary-author.md",
+      "target": "document:docs/adr/0013-agent-provisioned-consumer-projects.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/0008-structured-diagnostic-shape.md",
+      "target": "document:docs/adr/0007-ai-as-primary-author.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/0009-consumer-supplied-manifests.md",
+      "target": "document:docs/adr/0001-four-atom-manifest-model.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/0009-consumer-supplied-manifests.md",
+      "target": "document:docs/adr/0007-ai-as-primary-author.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/0010-locale-and-translates.md",
+      "target": "document:docs/adr/0001-four-atom-manifest-model.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/0011-adapter-port-spec.md",
+      "target": "document:docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/0011-adapter-port-spec.md",
+      "target": "document:docs/adr/0007-ai-as-primary-author.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/0011-adapter-port-spec.md",
+      "target": "document:docs/adr/0009-consumer-supplied-manifests.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/0012-views-as-public-rest.md",
+      "target": "document:docs/adr/0001-four-atom-manifest-model.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md",
+      "target": "document:docs/adr/0011-adapter-port-spec.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/README.md",
+      "target": "document:docs/adr/0001-four-atom-manifest-model.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/README.md",
+      "target": "document:docs/adr/0002-closed-enums-for-bindings.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/README.md",
+      "target": "document:docs/adr/0007-ai-as-primary-author.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/README.md",
+      "target": "document:docs/adr/0008-structured-diagnostic-shape.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/README.md",
+      "target": "document:docs/adr/0009-consumer-supplied-manifests.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/README.md",
+      "target": "document:docs/adr/0010-locale-and-translates.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/README.md",
+      "target": "document:docs/adr/0011-adapter-port-spec.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/README.md",
+      "target": "document:docs/adr/0012-views-as-public-rest.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/README.md",
+      "target": "document:docs/adr/0013-agent-provisioned-consumer-projects.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/README.md",
+      "target": "document:docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/adr/README.md",
+      "target": "document:docs/adr/0016-site-semantic-layer.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

@@ -1,0 +1,1300 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 13,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/adr/0001-four-atom-manifest-model.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 694,
+      "nonEmptyLines": 568,
+      "sections": [
+        {
+          "heading": "ADR-0001: 4-atom YAML manifest model under `cms.mantle.aotter.net/v1`",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 71
+        },
+        {
+          "heading": "Path A: Trigger does all binding",
+          "level": 3,
+          "line": 83
+        },
+        {
+          "heading": "PG-1:1 mapping is the primary onboarding pitch",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "Composition rule",
+          "level": 3,
+          "line": 102
+        },
+        {
+          "heading": "Consequences",
+          "level": 2,
+          "line": 111
+        },
+        {
+          "heading": "Pros",
+          "level": 3,
+          "line": 113
+        },
+        {
+          "heading": "Costs",
+          "level": 3,
+          "line": 131
+        },
+        {
+          "heading": "Risks",
+          "level": 3,
+          "line": 145
+        },
+        {
+          "heading": "Alternatives considered",
+          "level": 2,
+          "line": 164
+        },
+        {
+          "heading": "How to apply",
+          "level": 2,
+          "line": 193
+        },
+        {
+          "heading": "Implementation status",
+          "level": 2,
+          "line": 210
+        },
+        {
+          "heading": "Future grammar discipline (was POC ADR-0005)",
+          "level": 2,
+          "line": 221
+        },
+        {
+          "heading": "Context",
+          "level": 3,
+          "line": 227
+        },
+        {
+          "heading": "Decision",
+          "level": 3,
+          "line": 276
+        },
+        {
+          "heading": "v0.1 grammar lock per atom",
+          "level": 4,
+          "line": 283
+        },
+        {
+          "heading": "v0.1 closed enums",
+          "level": 4,
+          "line": 316
+        },
+        {
+          "heading": "What's DRAFT (do not implement, do not type)",
+          "level": 4,
+          "line": 328
+        },
+        {
+          "heading": "Discipline",
+          "level": 4,
+          "line": 344
+        },
+        {
+          "heading": "Consequences",
+          "level": 3,
+          "line": 363
+        },
+        {
+          "heading": "Pros",
+          "level": 4,
+          "line": 365
+        },
+        {
+          "heading": "Costs",
+          "level": 4,
+          "line": 384
+        },
+        {
+          "heading": "Risks",
+          "level": 4,
+          "line": 398
+        },
+        {
+          "heading": "Alternatives considered",
+          "level": 3,
+          "line": 419
+        },
+        {
+          "heading": "How to apply",
+          "level": 3,
+          "line": 446
+        },
+        {
+          "heading": "Authoring shape: multi-doc YAML (was POC ADR-0006)",
+          "level": 2,
+          "line": 464
+        },
+        {
+          "heading": "Context",
+          "level": 3,
+          "line": 471
+        },
+        {
+          "heading": "Path A — Multi-doc YAML",
+          "level": 4,
+          "line": 492
+        },
+        {
+          "heading": "Path B — Inline shortcut on Procedure (`expose:`)",
+          "level": 4,
+          "line": 527
+        },
+        {
+          "heading": "Decision",
+          "level": 3,
+          "line": 547
+        },
+        {
+          "heading": "Why Path B was retired",
+          "level": 4,
+          "line": 553
+        },
+        {
+          "heading": "What multi-doc YAML accomplishes",
+          "level": 4,
+          "line": 579
+        },
+        {
+          "heading": "File organization conventions (suggested, not enforced)",
+          "level": 4,
+          "line": 591
+        },
+        {
+          "heading": "Consequences",
+          "level": 3,
+          "line": 607
+        },
+        {
+          "heading": "Pros",
+          "level": 4,
+          "line": 609
+        },
+        {
+          "heading": "Costs",
+          "level": 4,
+          "line": 621
+        },
+        {
+          "heading": "Risks",
+          "level": 4,
+          "line": 637
+        },
+        {
+          "heading": "Alternatives considered",
+          "level": 3,
+          "line": 659
+        },
+        {
+          "heading": "How to apply",
+          "level": 3,
+          "line": 682
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 40
+      }
+    },
+    {
+      "path": "docs/adr/0002-closed-enums-for-bindings.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 226,
+      "nonEmptyLines": 182,
+      "sections": [
+        {
+          "heading": "ADR-0002: Closed enums for identity/time bindings",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 67
+        },
+        {
+          "heading": "`x-mantle-bind` — closed enum (v0.1)",
+          "level": 3,
+          "line": 72
+        },
+        {
+          "heading": "`requires.auth.all` predicate — closed vocabulary (v0.1)",
+          "level": 3,
+          "line": 84
+        },
+        {
+          "heading": "Adding a new entry is an explicit grammar-revise round",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "Consequences",
+          "level": 2,
+          "line": 123
+        },
+        {
+          "heading": "Pros",
+          "level": 3,
+          "line": 125
+        },
+        {
+          "heading": "Costs",
+          "level": 3,
+          "line": 140
+        },
+        {
+          "heading": "Risks",
+          "level": 3,
+          "line": 157
+        },
+        {
+          "heading": "Alternatives considered",
+          "level": 2,
+          "line": 177
+        },
+        {
+          "heading": "How to apply",
+          "level": 2,
+          "line": 205
+        },
+        {
+          "heading": "Implementation status",
+          "level": 2,
+          "line": 220
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "docs/adr/0007-ai-as-primary-author.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 509,
+      "nonEmptyLines": 421,
+      "sections": [
+        {
+          "heading": "ADR-0007: AI-as-primary-author — three feedback loops, two role surfaces",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 75
+        },
+        {
+          "heading": "Part A — Three feedback loops for the coder agent",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "Loop 1 — Static validation (`mantle validate`)",
+          "level": 4,
+          "line": 83
+        },
+        {
+          "heading": "Test harness (planned public package surface)",
+          "level": 4,
+          "line": 112
+        },
+        {
+          "heading": "Loop 2 — Boot-time fail-fast",
+          "level": 4,
+          "line": 158
+        },
+        {
+          "heading": "Loop 3 — Runtime errors",
+          "level": 4,
+          "line": 182
+        },
+        {
+          "heading": "Phase ordering rationale",
+          "level": 4,
+          "line": 191
+        },
+        {
+          "heading": "Part B — Role-split surfaces",
+          "level": 3,
+          "line": 214
+        },
+        {
+          "heading": "What goes on Skills + CLI + SDK TS API (coder surface)",
+          "level": 4,
+          "line": 262
+        },
+        {
+          "heading": "What goes on MCP (operator surface)",
+          "level": 4,
+          "line": 289
+        },
+        {
+          "heading": "What goes on neither (the SDK TS API only)",
+          "level": 4,
+          "line": 302
+        },
+        {
+          "heading": "What does NOT go on either surface",
+          "level": 4,
+          "line": 310
+        },
+        {
+          "heading": "Consequences",
+          "level": 2,
+          "line": 324
+        },
+        {
+          "heading": "Pros",
+          "level": 3,
+          "line": 326
+        },
+        {
+          "heading": "Costs",
+          "level": 3,
+          "line": 354
+        },
+        {
+          "heading": "Risks",
+          "level": 3,
+          "line": 379
+        },
+        {
+          "heading": "Alternatives considered",
+          "level": 2,
+          "line": 420
+        },
+        {
+          "heading": "How to apply",
+          "level": 2,
+          "line": 468
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 20
+      }
+    },
+    {
+      "path": "docs/adr/0008-structured-diagnostic-shape.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 353,
+      "nonEmptyLines": 291,
+      "sections": [
+        {
+          "heading": "ADR-0008: Structured diagnostic shape for AI-parseable errors",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "Code naming convention",
+          "level": 3,
+          "line": 78
+        },
+        {
+          "heading": "Why no prefixes",
+          "level": 3,
+          "line": 101
+        },
+        {
+          "heading": "`path` format",
+          "level": 3,
+          "line": 123
+        },
+        {
+          "heading": "`candidates` — when to populate",
+          "level": 3,
+          "line": 139
+        },
+        {
+          "heading": "`suggestion` — when to populate",
+          "level": 3,
+          "line": 152
+        },
+        {
+          "heading": "CLI output mode",
+          "level": 3,
+          "line": 159
+        },
+        {
+          "heading": "Test harness diagnostic surface",
+          "level": 3,
+          "line": 174
+        },
+        {
+          "heading": "Runtime diagnostic surface",
+          "level": 3,
+          "line": 188
+        },
+        {
+          "heading": "Validator translation (zod, not Ajv)",
+          "level": 3,
+          "line": 212
+        },
+        {
+          "heading": "Consequences",
+          "level": 2,
+          "line": 245
+        },
+        {
+          "heading": "Pros",
+          "level": 3,
+          "line": 247
+        },
+        {
+          "heading": "Costs",
+          "level": 3,
+          "line": 266
+        },
+        {
+          "heading": "Risks",
+          "level": 3,
+          "line": 279
+        },
+        {
+          "heading": "Alternatives considered",
+          "level": 2,
+          "line": 297
+        },
+        {
+          "heading": "How to apply",
+          "level": 2,
+          "line": 322
+        },
+        {
+          "heading": "Implementation status",
+          "level": 2,
+          "line": 340
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 19
+      }
+    },
+    {
+      "path": "docs/adr/0009-consumer-supplied-manifests.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 270,
+      "nonEmptyLines": 223,
+      "sections": [
+        {
+          "heading": "ADR-0009: Consumer-supplied manifests at SDK boot",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "Adapter scope for v0.1.0",
+          "level": 3,
+          "line": 88
+        },
+        {
+          "heading": "Single-slice ship",
+          "level": 3,
+          "line": 97
+        },
+        {
+          "heading": "Worked example",
+          "level": 2,
+          "line": 113
+        },
+        {
+          "heading": "Consequences",
+          "level": 2,
+          "line": 123
+        },
+        {
+          "heading": "Pros",
+          "level": 3,
+          "line": 125
+        },
+        {
+          "heading": "Costs",
+          "level": 3,
+          "line": 147
+        },
+        {
+          "heading": "Risks",
+          "level": 3,
+          "line": 164
+        },
+        {
+          "heading": "Alternatives considered",
+          "level": 2,
+          "line": 193
+        },
+        {
+          "heading": "How to apply",
+          "level": 2,
+          "line": 232
+        },
+        {
+          "heading": "Implementation status",
+          "level": 2,
+          "line": 253
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "docs/adr/0010-locale-and-translates.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 450,
+      "nonEmptyLines": 383,
+      "sections": [
+        {
+          "heading": "ADR-0010: Locale three-layer model and parent/child translates pattern",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 50
+        },
+        {
+          "heading": "Layer 1 — Manifest declaration (`Schema.spec.localized`)",
+          "level": 3,
+          "line": 55
+        },
+        {
+          "heading": "Layer 2 — Per-site D1 row (`site_config.locales`)",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "Seeding via `CmsConfig.siteDefaults` (v0.1.0)",
+          "level": 4,
+          "line": 95
+        },
+        {
+          "heading": "Layer 3 — Per-entry data (`data.locale`)",
+          "level": 3,
+          "line": 125
+        },
+        {
+          "heading": "Canonicalization",
+          "level": 3,
+          "line": 165
+        },
+        {
+          "heading": "Parent/child translates pattern",
+          "level": 3,
+          "line": 197
+        },
+        {
+          "heading": "Consequences",
+          "level": 2,
+          "line": 266
+        },
+        {
+          "heading": "Pros",
+          "level": 3,
+          "line": 268
+        },
+        {
+          "heading": "Costs",
+          "level": 3,
+          "line": 297
+        },
+        {
+          "heading": "Risks",
+          "level": 3,
+          "line": 317
+        },
+        {
+          "heading": "Alternatives considered",
+          "level": 2,
+          "line": 336
+        },
+        {
+          "heading": "How to apply",
+          "level": 2,
+          "line": 388
+        },
+        {
+          "heading": "Implementation status",
+          "level": 2,
+          "line": 431
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 16
+      }
+    },
+    {
+      "path": "docs/adr/0011-adapter-port-spec.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 272,
+      "nonEmptyLines": 213,
+      "sections": [
+        {
+          "heading": "ADR-0011: Adapter port spec",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Public vs private media — two buckets, two ports",
+          "level": 3,
+          "line": 51
+        },
+        {
+          "heading": "`DatabaseDriver`",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "`KvCache`",
+          "level": 3,
+          "line": 114
+        },
+        {
+          "heading": "`AssetServer`",
+          "level": 3,
+          "line": 128
+        },
+        {
+          "heading": "How adapters wire ports",
+          "level": 2,
+          "line": 143
+        },
+        {
+          "heading": "Consequences",
+          "level": 2,
+          "line": 209
+        },
+        {
+          "heading": "Alternatives considered",
+          "level": 2,
+          "line": 226
+        },
+        {
+          "heading": "How to apply",
+          "level": 2,
+          "line": 238
+        },
+        {
+          "heading": "Implementation status",
+          "level": 2,
+          "line": 261
+        },
+        {
+          "heading": "See also",
+          "level": 2,
+          "line": 269
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "docs/adr/0012-views-as-public-rest.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 137,
+      "nonEmptyLines": 93,
+      "sections": [
+        {
+          "heading": "ADR-0012: Views as the public REST surface",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "1. Public reads route through Views, never Schemas",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "2. URL shape: `/api/views/<view-name>`",
+          "level": 3,
+          "line": 31
+        },
+        {
+          "heading": "3. Views auto-expose; opt-out is \"don't write a View\"",
+          "level": 3,
+          "line": 37
+        },
+        {
+          "heading": "4. Pagination knobs are reserved query-string names",
+          "level": 3,
+          "line": 41
+        },
+        {
+          "heading": "5. Filter comparison `value` accepts a `{ $param: <name> }` sentinel",
+          "level": 3,
+          "line": 51
+        },
+        {
+          "heading": "6. Response envelope is `{ rows, page, show, hasMore }`",
+          "level": 3,
+          "line": 78
+        },
+        {
+          "heading": "7. Param coercion happens at the adapter boundary",
+          "level": 3,
+          "line": 96
+        },
+        {
+          "heading": "Out of scope (deferred)",
+          "level": 2,
+          "line": 110
+        },
+        {
+          "heading": "Consequences",
+          "level": 2,
+          "line": 119
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "docs/adr/0013-agent-provisioned-consumer-projects.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 147,
+      "nonEmptyLines": 122,
+      "sections": [
+        {
+          "heading": "ADR-0013: Agent-provisioned consumer projects",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Status",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Date",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 36
+        },
+        {
+          "heading": "Consequences",
+          "level": 2,
+          "line": 88
+        },
+        {
+          "heading": "Alternatives",
+          "level": 2,
+          "line": 106
+        },
+        {
+          "heading": "How to apply",
+          "level": 2,
+          "line": 122
+        },
+        {
+          "heading": "Implementation status",
+          "level": 2,
+          "line": 138
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 421,
+      "nonEmptyLines": 285,
+      "sections": [
+        {
+          "heading": "ADR-0014: Better Auth as the auth + MCP authorization server, scope-derived multi-tenant MCP",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Status",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Date",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "1. Better Auth replaces both layers",
+          "level": 3,
+          "line": 45
+        },
+        {
+          "heading": "2. `staff` table → `user.role` via Better Auth admin plugin",
+          "level": 3,
+          "line": 63
+        },
+        {
+          "heading": "3. Two MCP routes, surface-derived from manifest predicate",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "4. Scope-aware DCR via Better Auth `oauthProvider`",
+          "level": 3,
+          "line": 96
+        },
+        {
+          "heading": "5. Role checked dynamically, not embedded in token",
+          "level": 3,
+          "line": 131
+        },
+        {
+          "heading": "6. Single auth surface, no port indirection",
+          "level": 3,
+          "line": 135
+        },
+        {
+          "heading": "7. Auth as contract, Better Auth as default",
+          "level": 3,
+          "line": 143
+        },
+        {
+          "heading": "8. Path to `@aotter/mantle-better-auth` separate package (deferred)",
+          "level": 3,
+          "line": 183
+        },
+        {
+          "heading": "Consequences",
+          "level": 2,
+          "line": 203
+        },
+        {
+          "heading": "What gets deleted",
+          "level": 3,
+          "line": 205
+        },
+        {
+          "heading": "What stays",
+          "level": 3,
+          "line": 223
+        },
+        {
+          "heading": "What gets added",
+          "level": 3,
+          "line": 230
+        },
+        {
+          "heading": "Backward compatibility",
+          "level": 3,
+          "line": 241
+        },
+        {
+          "heading": "Skills + launch handoff",
+          "level": 3,
+          "line": 245
+        },
+        {
+          "heading": "Future-proof for v0.2",
+          "level": 3,
+          "line": 260
+        },
+        {
+          "heading": "Platform agnosticism",
+          "level": 3,
+          "line": 271
+        },
+        {
+          "heading": "Alternatives considered",
+          "level": 2,
+          "line": 275
+        },
+        {
+          "heading": "Alt-A: Hand-rolled multi-IDP without a library",
+          "level": 3,
+          "line": 277
+        },
+        {
+          "heading": "Alt-B: arctic library for upstream IDPs, keep `workers-oauth-provider` for DCR",
+          "level": 3,
+          "line": 283
+        },
+        {
+          "heading": "Alt-C: Better Auth for upstream IDPs, keep `workers-oauth-provider` for DCR",
+          "level": 3,
+          "line": 289
+        },
+        {
+          "heading": "Alt-D: Single `/mcp` with role + scope flags",
+          "level": 3,
+          "line": 295
+        },
+        {
+          "heading": "Alt-E: Two separate Better Auth `oauthProvider` instances",
+          "level": 3,
+          "line": 301
+        },
+        {
+          "heading": "Alt-F: `staff` table preserved alongside Better Auth user table",
+          "level": 3,
+          "line": 307
+        },
+        {
+          "heading": "Implementation status",
+          "level": 2,
+          "line": 313
+        },
+        {
+          "heading": "How to apply",
+          "level": 2,
+          "line": 350
+        },
+        {
+          "heading": "Sources",
+          "level": 2,
+          "line": 362
+        },
+        {
+          "heading": "Amendment — 2026-05-15: MCP carve-out to `@cloudflare/workers-oauth-provider`",
+          "level": 2,
+          "line": 371
+        },
+        {
+          "heading": "Architectural change",
+          "level": 3,
+          "line": 381
+        },
+        {
+          "heading": "Why Better Auth still wins the auth-side concerns",
+          "level": 3,
+          "line": 394
+        },
+        {
+          "heading": "Auth-as-contract is preserved without the escape hatch",
+          "level": 3,
+          "line": 403
+        },
+        {
+          "heading": "What didn't change",
+          "level": 3,
+          "line": 409
+        },
+        {
+          "heading": "Future work",
+          "level": 3,
+          "line": 417
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 37
+      }
+    },
+    {
+      "path": "docs/adr/0016-site-semantic-layer.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 65,
+      "nonEmptyLines": 48,
+      "sections": [
+        {
+          "heading": "ADR-0016: Site semantic layer — `AGENTS.md` + launch state",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Status",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "Placeholder macros",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "Update rules",
+          "level": 2,
+          "line": 46
+        },
+        {
+          "heading": "Cross-tool compatibility",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "Implementation",
+          "level": 2,
+          "line": 59
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/adr/0017-media-multi-variant-agent-side-optimization.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 181,
+      "nonEmptyLines": 146,
+      "sections": [
+        {
+          "heading": "ADR-0017: Multi-variant media assets, agent-side optimization",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "1. `MediaAsset.variants[]` is required",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "2. Optimization runs **agent-side**, not on the Worker",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "3. `siteDefaults.media.purposes` is a policy object",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "4. Asset-id refs in entries, `media_assets` table for resolution",
+          "level": 3,
+          "line": 85
+        },
+        {
+          "heading": "5. Adapter stays storage-key-shaped",
+          "level": 3,
+          "line": 120
+        },
+        {
+          "heading": "Consequences",
+          "level": 2,
+          "line": 134
+        },
+        {
+          "heading": "Positive",
+          "level": 3,
+          "line": 136
+        },
+        {
+          "heading": "Negative / accepted",
+          "level": 3,
+          "line": 149
+        },
+        {
+          "heading": "Why not the alternatives",
+          "level": 2,
+          "line": 161
+        },
+        {
+          "heading": "References",
+          "level": 2,
+          "line": 174
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "docs/adr/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 57,
+      "nonEmptyLines": 45,
+      "sections": [
+        {
+          "heading": "Architecture Decision Records",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "v0.1.0 ADRs",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Reading order",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "What's NOT here (and why)",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "Contributing a new ADR",
+          "level": 2,
+          "line": 51
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    }
+  ]
+}

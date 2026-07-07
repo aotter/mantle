@@ -1,0 +1,567 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/adapters/cloudflare/test/appleClientSecret.test.ts",
+      "type": "file",
+      "name": "appleClientSecret.test.ts",
+      "filePath": "packages/adapters/cloudflare/test/appleClientSecret.test.ts",
+      "summary": "Cloudflare adapter 的 Sign in with Apple client secret 測試，產生 ES256 臨時金鑰對、簽發並驗證 client secret JWT 的標頭、claims 與簽章正確性。",
+      "tags": ["test", "auth", "jwt", "cloudflare"],
+      "complexity": "moderate",
+      "languageNotes": "使用 Web Crypto API（crypto.subtle）在測試端自製 ES256 簽章驗證，避免引入額外 JWT 函式庫。"
+    },
+    {
+      "id": "function:packages/adapters/cloudflare/test/appleClientSecret.test.ts:generateEphemeralKeyPair",
+      "type": "function",
+      "name": "generateEphemeralKeyPair",
+      "filePath": "packages/adapters/cloudflare/test/appleClientSecret.test.ts",
+      "lineRange": [14, 34],
+      "summary": "以 Web Crypto 產生 ES256（P-256）臨時金鑰對，並把私鑰匯出為 PKCS#8 PEM 字串供 appleClientSecret 測試使用。",
+      "tags": ["test-helper", "crypto", "key-generation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/adapters/cloudflare/test/appleClientSecret.test.ts:verifyJwt",
+      "type": "function",
+      "name": "verifyJwt",
+      "filePath": "packages/adapters/cloudflare/test/appleClientSecret.test.ts",
+      "lineRange": [45, 68],
+      "summary": "解析三段式 JWT、斷言標頭與 claims，並以對應公鑰透過 crypto.subtle.verify 驗證 ES256 簽章。",
+      "tags": ["test-helper", "jwt", "validation", "crypto"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/test/mantle-internal-queue.test.ts",
+      "type": "file",
+      "name": "mantle-internal-queue.test.ts",
+      "filePath": "packages/adapters/cloudflare/test/mantle-internal-queue.test.ts",
+      "summary": "WorkersQueueHookDispatcher 與 queue handler 的測試，使用 fake Queue / fake MessageBatch 驗證 deferred hook envelope 的入列與消費流程。",
+      "tags": ["test", "queue", "cloudflare", "worker"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/adapters/cloudflare/test/mantle-internal-queue.test.ts:fakeBatch",
+      "type": "function",
+      "name": "fakeBatch",
+      "filePath": "packages/adapters/cloudflare/test/mantle-internal-queue.test.ts",
+      "lineRange": [36, 67],
+      "summary": "建構一個模擬的 Cloudflare MessageBatch，將 hook envelope 包裝成具 ack/retry 介面的訊息陣列供 queue handler 測試消費。",
+      "tags": ["test-helper", "queue", "mock"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/test/R2MediaStorage.test.ts",
+      "type": "file",
+      "name": "R2MediaStorage.test.ts",
+      "filePath": "packages/adapters/cloudflare/test/R2MediaStorage.test.ts",
+      "summary": "R2MediaStorage 的測試，使用 fake R2 bucket 與計數型 id generator 驗證上傳建立、commit、公開 URL 產生與物件刪除等媒體儲存行為。",
+      "tags": ["test", "media-storage", "r2", "cloudflare"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/adapters/cloudflare/test/R2MediaStorage.test.ts:fakeBucket",
+      "type": "function",
+      "name": "fakeBucket",
+      "filePath": "packages/adapters/cloudflare/test/R2MediaStorage.test.ts",
+      "lineRange": [35, 74],
+      "summary": "建立模擬的 R2 bucket，提供 get/put/delete 並記錄所有寫入與刪除操作，作為 R2MediaStorage 測試的可觀察替身。",
+      "tags": ["test-helper", "mock", "r2"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/adapters/cloudflare/test/R2MediaStorage.test.ts:makeStorage",
+      "type": "function",
+      "name": "makeStorage",
+      "filePath": "packages/adapters/cloudflare/test/R2MediaStorage.test.ts",
+      "lineRange": [81, 102],
+      "summary": "組裝待測的 R2MediaStorage 實例，注入 fake bucket、計數型 id generator 與測試組態，回傳實例與其可觀察狀態。",
+      "tags": ["test-helper", "factory", "r2"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/adapters/cloudflare/test/R2MediaStorage.test.ts:seedObject",
+      "type": "function",
+      "name": "seedObject",
+      "filePath": "packages/adapters/cloudflare/test/R2MediaStorage.test.ts",
+      "lineRange": [112, 129],
+      "summary": "在 fake bucket 狀態中預先植入指定 key 的物件，供刪除與讀取等情境的前置條件設定。",
+      "tags": ["test-helper", "fixture", "r2"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/adapters/cloudflare/vitest.config.ts",
+      "type": "file",
+      "name": "vitest.config.ts",
+      "filePath": "packages/adapters/cloudflare/vitest.config.ts",
+      "summary": "Cloudflare adapter 套件的 Vitest 設定，定義測試執行環境與檔案範圍。",
+      "tags": ["config", "test", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/adapters/netlify/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/adapters/netlify/package.json",
+      "summary": "@aotter/mantle-netlify 套件的 package 設定；目前為 v0.2 預留的 private stub，僅含中繼資料與基本 scripts。",
+      "tags": ["configuration", "package-manifest", "stub"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/adapters/netlify/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "packages/adapters/netlify/README.md",
+      "summary": "Netlify adapter 的 STUB 說明文件，解釋此無程式碼套件存在的工程上理由，以及 v0.2 計畫交付的內容。",
+      "tags": ["documentation", "stub", "adapter"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/env.d.ts",
+      "type": "file",
+      "name": "env.d.ts",
+      "filePath": "packages/mantle-admin-ui/src/env.d.ts",
+      "summary": "admin UI 的 Vite 環境型別宣告檔，提供 import.meta.env 與資產模組的 TypeScript 型別。",
+      "tags": ["type-definition", "vite", "ambient-types"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/styles/global.css",
+      "type": "file",
+      "name": "global.css",
+      "filePath": "packages/mantle-admin-ui/src/styles/global.css",
+      "summary": "admin SPA 的全域樣式表，定義設計 token、版面、元件與排版等基礎 UI 樣式（約 1.4k 行）。",
+      "tags": ["stylesheet", "css", "design-system", "ui"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/src/styles/index.css",
+      "type": "file",
+      "name": "index.css",
+      "filePath": "packages/mantle-admin-ui/src/styles/index.css",
+      "summary": "樣式進入點，重新匯入 global.css 供 SPA 的 main 入口載入。",
+      "tags": ["stylesheet", "css", "entry-point"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-admin-ui/vite.config.ts",
+      "type": "file",
+      "name": "vite.config.ts",
+      "filePath": "packages/mantle-admin-ui/vite.config.ts",
+      "summary": "admin UI 的 Vite 建置設定，含自製 plugin 將打包後的 index.html 內嵌處理，產出可被 adapter 透過 workspace dep 消費的 dist。",
+      "tags": ["config", "build-system", "vite", "plugin"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-admin-ui/vite.config.ts:inlineIndexHtmlPlugin",
+      "type": "function",
+      "name": "inlineIndexHtmlPlugin",
+      "filePath": "packages/mantle-admin-ui/vite.config.ts",
+      "lineRange": [60, 81],
+      "summary": "自訂 Vite plugin，於 closeBundle 階段讀取打包後的 index.html 並寫出內嵌資產的產物供 adapter 使用。",
+      "tags": ["build-plugin", "vite", "bundling"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-runtime/src/domain/index.ts",
+      "summary": "domain 層的 barrel，重新匯出 model / port / service 子模組的公開介面。",
+      "tags": ["barrel", "entry-point", "domain"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/model/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-runtime/src/domain/model/index.ts",
+      "summary": "domain model 的 barrel，匯出 SeoMeta、TemplateRegistry、EntryContext 等模板與情境型別。",
+      "tags": ["barrel", "type-definition", "domain"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/port/EmailSender.ts",
+      "type": "file",
+      "name": "EmailSender.ts",
+      "filePath": "packages/mantle-runtime/src/domain/port/EmailSender.ts",
+      "summary": "定義 EmailSender 選用 feature port 介面與其送信參數型別，由具體 adapter 實作；runtime 不綁定任何寄信實作。",
+      "tags": ["port", "type-definition", "domain", "email"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/service/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-runtime/src/domain/service/index.ts",
+      "summary": "domain service 的 barrel，匯出 LocaleNegotiator、PathMatcher、ViewParamCoercer 等純函式型服務。",
+      "tags": ["barrel", "entry-point", "domain"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/service/io/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-runtime/src/domain/service/io/index.ts",
+      "summary": "domain service io 子模組的 barrel，匯出輸入/輸出相關的服務型別。",
+      "tags": ["barrel", "entry-point", "domain"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts",
+      "type": "file",
+      "name": "LocaleNegotiator.ts",
+      "filePath": "packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts",
+      "summary": "locale 協商純函式服務：從 URL path 推斷 locale、判斷是否為已知 locale，並依站台預設組態正規化 URL locale。",
+      "tags": ["service", "locale", "domain", "i18n"],
+      "complexity": "moderate",
+      "languageNotes": "Mantle v0.1 僅接受 language + 選用 region，拒絕 script subtag（如 zh-Hant），對應 isKnownLocale / toUrlLocale 的正規化邏輯。"
+    },
+    {
+      "id": "function:packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts:inferLocaleFromPath",
+      "type": "function",
+      "name": "inferLocaleFromPath",
+      "filePath": "packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts",
+      "lineRange": [42, 55],
+      "summary": "解析 request path 的首段，比對站台已知 locale 並回傳正規化後的 URL locale，無匹配時回傳預設值。",
+      "tags": ["service", "locale", "i18n"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts:isKnownLocale",
+      "type": "function",
+      "name": "isKnownLocale",
+      "filePath": "packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts",
+      "lineRange": [57, 62],
+      "summary": "依站台組態的 locales 清單與 URL locale 格式判斷給定字串是否為已知 locale。",
+      "tags": ["service", "locale", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/service/PathMatcher.ts",
+      "type": "file",
+      "name": "PathMatcher.ts",
+      "filePath": "packages/mantle-runtime/src/domain/service/PathMatcher.ts",
+      "summary": "路徑比對純函式服務：將 trigger path 樣式（含參數段）與 request path 逐段比對，支援安全解碼與尾斜線正規化。",
+      "tags": ["service", "routing", "domain", "path-matching"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-runtime/src/domain/service/PathMatcher.ts:matchPath",
+      "type": "function",
+      "name": "matchPath",
+      "filePath": "packages/mantle-runtime/src/domain/service/PathMatcher.ts",
+      "lineRange": [14, 41],
+      "summary": "將 trigger path 與 request path 逐段比對，擷取 :param 動態段並回傳比對結果與參數值，不符則回傳 null。",
+      "tags": ["service", "routing", "path-matching"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts",
+      "type": "file",
+      "name": "ViewParamCoercer.ts",
+      "filePath": "packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts",
+      "summary": "依 View 參數 schema 將查詢字串強制轉型為 string/number/boolean/enum，缺漏必填或型別不符時拋出 ViewParamCoercionError。",
+      "tags": ["service", "validation", "coercion", "domain"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts:ViewParamCoercionError",
+      "type": "class",
+      "name": "ViewParamCoercionError",
+      "filePath": "packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts",
+      "lineRange": [14, 19],
+      "summary": "View 參數轉型失敗時拋出的錯誤型別，攜帶失敗的參數名與原因供上層轉為結構化 Diagnostic。",
+      "tags": ["error", "validation", "domain"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts:coerceViewParams",
+      "type": "function",
+      "name": "coerceViewParams",
+      "filePath": "packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts",
+      "lineRange": [25, 47],
+      "summary": "走訪 View 宣告的所有參數，從查詢字串取值並逐一轉型，處理必填檢查並彙整為型別化的參數物件。",
+      "tags": ["service", "validation", "coercion"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts:coerceByType",
+      "type": "function",
+      "name": "coerceByType",
+      "filePath": "packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts",
+      "lineRange": [65, 102],
+      "summary": "依目標型別（integer/number/boolean/string）將原始字串值轉型，無法轉換時拋出帶參數名的轉型錯誤。",
+      "tags": ["service", "coercion", "type-conversion"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-runtime/src/index.ts",
+      "summary": "mantle-runtime 套件的公開 API barrel，匯出 createCmsRuntime 組裝點、所有 adapter port 介面、domain service 與 MCP/persistence 等公開符號。",
+      "tags": ["barrel", "entry-point", "public-api"],
+      "complexity": "moderate",
+      "languageNotes": "刻意僅匯出 port 介面與純函式服務，不洩漏任何 Cloudflare 專屬型別，維持 runtime 的可移植邊界。"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/infrastructure/http/DiagnosticResponse.ts",
+      "type": "file",
+      "name": "DiagnosticResponse.ts",
+      "filePath": "packages/mantle-runtime/src/infrastructure/http/DiagnosticResponse.ts",
+      "summary": "將 Diagnostic 轉為 HTTP Response 的薄包裝，依診斷碼決定狀態碼並在送出前做 wire 端遮蔽。",
+      "tags": ["infrastructure", "http", "diagnostic"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/infrastructure/http/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-runtime/src/infrastructure/http/index.ts",
+      "summary": "infrastructure http 子模組的 barrel，匯出 diagnosticResponse 輔助函式。",
+      "tags": ["barrel", "entry-point", "infrastructure"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/infrastructure/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-runtime/src/infrastructure/index.ts",
+      "summary": "infrastructure 層 barrel，重新匯出 http / mcp / persistence 子模組的公開介面。",
+      "tags": ["barrel", "entry-point", "infrastructure"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/infrastructure/mcp/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-runtime/src/infrastructure/mcp/index.ts",
+      "summary": "infrastructure mcp 子模組 barrel，匯出 MCP 工具目錄、JSON-RPC 回應輔助與 McpJsonRpcDispatcher 等公開符號。",
+      "tags": ["barrel", "mcp", "infrastructure"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/infrastructure/persistence/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-runtime/src/infrastructure/persistence/index.ts",
+      "summary": "infrastructure persistence 子模組 barrel，匯出以 DatabaseDriver 為底的 Entry / MediaAsset / SiteConfig repository 與 lifecycle hook 裝飾器。",
+      "tags": ["barrel", "persistence", "infrastructure", "repository"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/mantle-runtime/src/usecase/dto/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/mantle-runtime/src/usecase/dto/index.ts",
+      "summary": "usecase dto 子模組 barrel，匯出 use case 的 Request/Response DTO 型別。",
+      "tags": ["barrel", "type-definition", "usecase"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/adapters/cloudflare/test/appleClientSecret.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/auth/appleClientSecret.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mantle-internal-queue.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/R2MediaStorage.test.ts",
+      "target": "file:packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/appleClientSecret.test.ts",
+      "target": "function:packages/adapters/cloudflare/test/appleClientSecret.test.ts:generateEphemeralKeyPair",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/appleClientSecret.test.ts",
+      "target": "function:packages/adapters/cloudflare/test/appleClientSecret.test.ts:verifyJwt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/mantle-internal-queue.test.ts",
+      "target": "function:packages/adapters/cloudflare/test/mantle-internal-queue.test.ts:fakeBatch",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/R2MediaStorage.test.ts",
+      "target": "function:packages/adapters/cloudflare/test/R2MediaStorage.test.ts:fakeBucket",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/R2MediaStorage.test.ts",
+      "target": "function:packages/adapters/cloudflare/test/R2MediaStorage.test.ts:makeStorage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/test/R2MediaStorage.test.ts",
+      "target": "function:packages/adapters/cloudflare/test/R2MediaStorage.test.ts:seedObject",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/vite.config.ts",
+      "target": "function:packages/mantle-admin-ui/vite.config.ts:inlineIndexHtmlPlugin",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts",
+      "target": "function:packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts:inferLocaleFromPath",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts",
+      "target": "function:packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts:isKnownLocale",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts",
+      "target": "function:packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts:inferLocaleFromPath",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts",
+      "target": "function:packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts:isKnownLocale",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/PathMatcher.ts",
+      "target": "function:packages/mantle-runtime/src/domain/service/PathMatcher.ts:matchPath",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/PathMatcher.ts",
+      "target": "function:packages/mantle-runtime/src/domain/service/PathMatcher.ts:matchPath",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts",
+      "target": "class:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts:ViewParamCoercionError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts",
+      "target": "function:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts:coerceViewParams",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts",
+      "target": "function:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts:coerceByType",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts",
+      "target": "class:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts:ViewParamCoercionError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts",
+      "target": "function:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts:coerceViewParams",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/infrastructure/http/DiagnosticResponse.ts",
+      "target": "function:packages/mantle-runtime/src/infrastructure/http/DiagnosticResponse.ts:diagnosticResponse",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/auth/appleClientSecret.ts",
+      "target": "file:packages/adapters/cloudflare/test/appleClientSecret.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts",
+      "target": "file:packages/adapters/cloudflare/test/mantle-internal-queue.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/adapters/cloudflare/src/bindings/R2MediaStorage.ts",
+      "target": "file:packages/adapters/cloudflare/test/R2MediaStorage.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/LocaleNegotiator.ts",
+      "target": "file:packages/mantle-runtime/test/locale-negotiator.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/PathMatcher.ts",
+      "target": "file:packages/mantle-runtime/test/dispatcher-match.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/mantle-runtime/src/domain/service/ViewParamCoercer.ts",
+      "target": "file:packages/mantle-runtime/test/view-param-coercer.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/mantle-admin-ui/src/styles/index.css",
+      "target": "file:packages/mantle-admin-ui/src/styles/global.css",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    }
+  ]
+}
