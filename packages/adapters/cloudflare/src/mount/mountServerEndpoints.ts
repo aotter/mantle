@@ -173,6 +173,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     .filter((m): m is ViewManifest => m.kind === "View" && m.spec.surface === "staff");
   const viewsManifest = staffViews.map((v) => ({
     name: v.metadata.name,
+    title: v.spec.title ?? null,
     from: v.spec.from,
     params: v.spec.params ?? null,
     fields: v.spec.fields ?? null,
@@ -990,12 +991,23 @@ function titleFieldKey(data: Record<string, unknown>, schema?: JsonSchema): stri
   return null;
 }
 
+/** Schema property names that collide in MEANING with a system column
+ *  the admin list already renders unconditionally (the "updated"
+ *  column reads the reserved `updatedAt` storage column, formatted as
+ *  `row.updated_at`). A schema-declared `required` property with one
+ *  of these exact names would otherwise show up a SECOND time as a
+ *  raw data-preview column — same value, no title-cased header — right
+ *  next to the system column (#443). NAME-based only, on purpose: no
+ *  fuzzy/semantic matching, just these two well-known reserved names. */
+const DATA_PREVIEW_SYSTEM_COLUMN_NAMES = new Set(["updatedAt", "createdAt"]);
+
 /** Operational (`lifecycle: none`) collections have no title/status
  *  workflow worth a dedicated column — instead the admin list shows up
  *  to 3 raw data columns. Mirrors the client-side column-picking rule
  *  in `collection-view.tsx`: first 3 `required` properties, skipping
- *  the schema-stable title field. Kept small on the wire on purpose —
- *  this is a preview, not the full entry. */
+ *  the schema-stable title field and the system-column-name collisions
+ *  above (#443). Kept small on the wire on purpose — this is a
+ *  preview, not the full entry. */
 function adminDataPreview(
   data: Record<string, unknown>,
   manifest?: SchemaManifest,
@@ -1006,7 +1018,9 @@ function adminDataPreview(
   // must still produce the same columns as every other row, or the
   // client's fixed headers drift out of sync with the values.
   const titleKey = schemaTitleKey(schema);
-  const fields = (schema.required ?? []).filter((key) => key !== titleKey).slice(0, 3);
+  const fields = (schema.required ?? [])
+    .filter((key) => key !== titleKey && !DATA_PREVIEW_SYSTEM_COLUMN_NAMES.has(key))
+    .slice(0, 3);
   if (fields.length === 0) return undefined;
   const preview: Record<string, unknown> = {};
   for (const key of fields) preview[key] = data[key];

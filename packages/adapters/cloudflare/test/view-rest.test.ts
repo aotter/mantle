@@ -99,7 +99,8 @@ const staffAuth: Auth = {
   methods: [],
 };
 
-/** Base fixture + one `surface: staff` View (`ordersRecent`), so the
+/** Base fixture + two `surface: staff` Views — `ordersRecent` (titled)
+ *  and `ordersArchive` (untitled, #443 null-fallback coverage) — so the
  *  same harness exercises both the public surface (`postsPublished`
  *  stays public) and the staff surface (#433). `auth` defaults to a
  *  staff session; override to `stubAuth` to test the unauthenticated
@@ -116,6 +117,19 @@ function staffHarness(
       apiVersion: "cms.mantle.aotter.net/v1",
       kind: "View",
       metadata: { name: "ordersRecent" },
+      spec: {
+        title: { en: "Recent Orders", "zh-TW": "最新訂單" },
+        from: "posts",
+        surface: "staff",
+      },
+    },
+    // #443 — untitled staff View, alongside the titled one above, so
+    // the views-manifest test can assert the untitled case falls back
+    // to `null` (not to omitting the key) without a second harness.
+    {
+      apiVersion: "cms.mantle.aotter.net/v1",
+      kind: "View",
+      metadata: { name: "ordersArchive" },
       spec: {
         from: "posts",
         surface: "staff",
@@ -481,7 +495,24 @@ describe("GET /admin/api/views-manifest — staff-only filter (#433)", () => {
     const body = (await res.json()) as { views: Array<{ name: string }> };
     const names = body.views.map((v) => v.name).sort();
     // Base fixture declares public Views `postsPublished` + `postsByLocale`
-    // (default surface); only the staff View `ordersRecent` must appear.
-    expect(names).toEqual(["ordersRecent"]);
+    // (default surface); only the staff Views `ordersRecent` +
+    // `ordersArchive` must appear.
+    expect(names).toEqual(["ordersArchive", "ordersRecent"]);
+  });
+
+  it("surfaces View.spec.title (#443) as raw LocalizedText, unresolved", async () => {
+    const h = staffHarness();
+    const res = await h.app.request("/admin/api/views-manifest");
+    const body = (await res.json()) as { views: Array<{ name: string; title: unknown }> };
+    const ordersRecent = body.views.find((v) => v.name === "ordersRecent");
+    expect(ordersRecent?.title).toEqual({ en: "Recent Orders", "zh-TW": "最新訂單" });
+  });
+
+  it("falls back to null when a View has no title (#443)", async () => {
+    const h = staffHarness();
+    const res = await h.app.request("/admin/api/views-manifest");
+    const body = (await res.json()) as { views: Array<{ name: string; title: unknown }> };
+    const ordersArchive = body.views.find((v) => v.name === "ordersArchive");
+    expect(ordersArchive?.title).toBeNull();
   });
 });

@@ -215,13 +215,14 @@ function buildNavGroups(
         }
       : null;
 
-  // 「報表」— one item per read-only View (#426).
+  // 「報表」— one item per read-only View (#426). `title` (#443) falls
+  // back to the humanized name, exactly as before this field existed.
   const reportsGroup: NavGroupData | null =
     views.length > 0
       ? {
           title: t(language, "nav.reports"),
           items: views.map((v) => ({
-            title: fieldLabel(v.name),
+            title: resolveLocalizedText(v.title, language, canonical) ?? fieldLabel(v.name),
             icon: BarChart3,
             url: `/admin/views/${encodeURIComponent(v.name)}`,
           })),

@@ -114,6 +114,7 @@ function OperationCard({
         path={[]}
         onChange={setInput}
         language={language}
+        canonical={canonical}
         collectionName={operation.name}
         mediaPurposes={[]}
       />

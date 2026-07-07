@@ -4,6 +4,7 @@ import { parseManifests } from "../src/domain/service/ManifestParser.js";
 import type {
   ProcedureManifest,
   SchemaManifest,
+  ViewManifest,
 } from "../src/domain/model/ManifestGrammar.js";
 
 /**
@@ -11,6 +12,11 @@ import type {
  * `Procedure.spec.title`/`.description`): the resolver in
  * `ManifestGrammar.ts` and the shape validation the parser applies to
  * both atoms.
+ *
+ * #443 — extends the same grammar to `View.spec.title` (optional, same
+ * as Procedure), and to the standard JSON Schema `title` keyword on
+ * Schema properties (accepts a plain string or the same LocalizedText
+ * locale-map shape; not rejected by manifest parsing).
  */
 
 const apiVersion = "cms.mantle.aotter.net/v1" as const;
@@ -52,6 +58,10 @@ function schemaDoc(spec: Record<string, unknown>): string {
 
 function procedureDoc(spec: Record<string, unknown>): string {
   return `apiVersion: ${apiVersion}\nkind: Procedure\nmetadata:\n  name: doThing\nspec:\n${indent(spec)}`;
+}
+
+function viewDoc(spec: Record<string, unknown>): string {
+  return `apiVersion: ${apiVersion}\nkind: View\nmetadata:\n  name: postsRecent\nspec:\n${indent(spec)}`;
 }
 
 // Minimal YAML emitter for the flat shapes these tests need — avoids
@@ -243,5 +253,91 @@ describe("ManifestParser — Procedure.spec.title / .description (LocalizedText,
     expect(diagnostics.length).toBeGreaterThan(0);
     expect(diagnostics[0]?.path).toContain("/spec/description");
     expect(diagnostics[0]?.message).toContain("Procedure.spec.description");
+  });
+});
+
+describe("ManifestParser — View.spec.title (LocalizedText, optional — #443)", () => {
+  it("accepts a View with no title", () => {
+    const yaml = viewDoc({ from: "posts" });
+    const { manifests, diagnostics } = parseManifests(yaml);
+    expect(diagnostics).toEqual([]);
+    const view = manifests[0] as ViewManifest;
+    expect(view.spec.title).toBeUndefined();
+  });
+
+  it("accepts a plain string title", () => {
+    const yaml = viewDoc({ from: "posts", title: "Recent Posts" });
+    const { manifests, diagnostics } = parseManifests(yaml);
+    expect(diagnostics).toEqual([]);
+    const view = manifests[0] as ViewManifest;
+    expect(view.spec.title).toBe("Recent Posts");
+  });
+
+  it("accepts a locale-map title", () => {
+    const yaml = viewDoc({
+      from: "posts",
+      title: { en: "Recent Posts", "zh-TW": "最新文章" },
+    });
+    const { manifests, diagnostics } = parseManifests(yaml);
+    expect(diagnostics).toEqual([]);
+    const view = manifests[0] as ViewManifest;
+    expect(view.spec.title).toEqual({ en: "Recent Posts", "zh-TW": "最新文章" });
+  });
+
+  it("rejects an empty string title when present", () => {
+    const yaml = viewDoc({ from: "posts", title: "" });
+    const { diagnostics } = parseManifests(yaml);
+    expect(diagnostics.length).toBeGreaterThan(0);
+    expect(diagnostics[0]?.path).toContain("/spec/title");
+  });
+
+  it("rejects an empty object title when present", () => {
+    const yaml = viewDoc({ from: "posts", title: {} });
+    const { diagnostics } = parseManifests(yaml);
+    expect(diagnostics.length).toBeGreaterThan(0);
+    expect(diagnostics[0]?.path).toContain("/spec/title");
+  });
+
+  it("rejects a non-string, non-object title", () => {
+    const yaml = viewDoc({ from: "posts", title: 42 });
+    const { diagnostics } = parseManifests(yaml);
+    expect(diagnostics.length).toBeGreaterThan(0);
+    expect(diagnostics[0]?.path).toContain("/spec/title");
+    expect(diagnostics[0]?.message).toContain("View.spec.title");
+  });
+});
+
+describe("JSON Schema property `title` keyword (#443)", () => {
+  it("a Schema property with a plain string title parses without diagnostics", () => {
+    const yaml = schemaDoc({
+      title: "Posts",
+      schema: {
+        type: "object",
+        properties: { slug: { type: "string", title: "Slug" } },
+      },
+    });
+    const { manifests, diagnostics } = parseManifests(yaml);
+    expect(diagnostics).toEqual([]);
+    const schema = manifests[0] as SchemaManifest;
+    expect(schema.spec.schema.properties?.["slug"]?.["title"]).toBe("Slug");
+  });
+
+  it("a Schema property with a locale-map title parses without diagnostics", () => {
+    const yaml = schemaDoc({
+      title: "Posts",
+      schema: {
+        type: "object",
+        properties: {
+          slug: { type: "string", title: { en: "Slug", "zh-TW": "網址代稱" } },
+        },
+      },
+    });
+    const { manifests, diagnostics } = parseManifests(yaml);
+    expect(diagnostics).toEqual([]);
+    const schema = manifests[0] as SchemaManifest;
+    expect(schema.spec.schema.properties?.["slug"]?.["title"]).toEqual({
+      en: "Slug",
+      "zh-TW": "網址代稱",
+    });
   });
 });

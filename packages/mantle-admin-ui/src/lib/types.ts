@@ -63,6 +63,10 @@ export interface JsonSchema {
   default?: unknown;
   additionalProperties?: boolean | JsonSchema;
   description?: string;
+  /** Standard JSON Schema keyword (#443) — plain string or the same
+   *  `LocalizedText` shape as `Collection.title`. Optional; absent
+   *  means the consumer humanizes the property name instead. */
+  title?: LocalizedText;
   "x-mantle-ref"?: string;
   "x-mcp-hint"?: string;
   [key: string]: unknown;
@@ -211,11 +215,14 @@ export interface StaffOperation {
   rowBindings: Array<{ collection: string; inputField: string; rowField: string }>;
 }
 
-/** `GET /admin/api/views-manifest` entry (#426) — a read-only View
- *  projection over a Schema. `params` is the View's declared
- *  parameter JSON Schema, or `null` when the View takes none. */
+/** `GET /admin/api/views-manifest` entry (#426, extended #443 with
+ *  `title`) — a read-only View projection over a Schema. `params` is
+ *  the View's declared parameter JSON Schema, or `null` when the View
+ *  takes none. `title` is `null` when the View manifest declares none
+ *  — callers fall back to a Title-Cased rendering of `name`. */
 export interface ViewManifestInfo {
   name: string;
+  title: LocalizedText | null;
   from: string;
   params: JsonSchema | null;
   fields: string[] | null;

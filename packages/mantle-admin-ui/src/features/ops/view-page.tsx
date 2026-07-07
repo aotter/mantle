@@ -4,7 +4,9 @@ import { Search } from "lucide-react";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
-import type { Collection, JsonSchema, ViewManifestInfo } from "../../lib/types";
+import { fieldLabel, propertyLabel } from "../../lib/field-label";
+import { resolveLocalizedText } from "../../lib/localized-text";
+import type { Collection, JsonSchema, SiteInfo, ViewManifestInfo } from "../../lib/types";
 import { TableCell, TableHeadCell, TableShell } from "../../ui/admin-table";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { Button } from "../../ui/button";
@@ -83,6 +85,11 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
       return res.collections;
     },
   });
+  const site = useQuery<SiteInfo>({
+    queryKey: ["site"],
+    queryFn: () => api.get<SiteInfo>("/site"),
+  });
+  const canonical = site.data?.canonicalLocale ?? null;
 
   const view = viewsQuery.data?.views.find((v) => v.name === name);
   const sourceSchema = collectionsQuery.data?.find((c) => c.name === view?.from)?.schema;
@@ -116,12 +123,13 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
 
   const rows = query.data?.data.rows ?? [];
   const columns = viewColumns(view, rows);
+  const viewTitle = resolveLocalizedText(view.title, language, canonical) ?? fieldLabel(view.name);
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="AotterMantle"
-        title={view.name}
+        title={viewTitle}
         description={t(language, "views.page.body", { schema: view.from })}
       />
 
@@ -134,6 +142,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
             path={[]}
             onChange={setParams}
             language={language}
+            canonical={canonical}
             collectionName={view.name}
             mediaPurposes={[]}
           />
@@ -164,7 +173,9 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
           <thead>
             <tr className="border-b border-[var(--glass-border)]">
               {columns.map((col) => (
-                <TableHeadCell key={col}>{fieldLabel(col)}</TableHeadCell>
+                <TableHeadCell key={col}>
+                  {propertyLabel(col, sourceSchema?.properties?.[col], language, canonical)}
+                </TableHeadCell>
               ))}
             </tr>
           </thead>
@@ -254,11 +265,4 @@ function renderViewValue(sourceSchema: JsonSchema | undefined, column: string, v
     return String(value);
   }
   return <span className="font-mono text-xs">{JSON.stringify(value)}</span>;
-}
-
-function fieldLabel(name: string): string {
-  return name
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
