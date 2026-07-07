@@ -188,8 +188,13 @@ export function RowActionDialog({
     return { ...operation.input, properties, required };
   }, [operation.input, inputField]);
 
+  // Label precedence (#443): the property's `title` keyword first, then
+  // the pre-#443 `description`-as-label reuse (kept for manifests
+  // written before `title` existed), then the humanized field name.
+  const inputFieldSchema = inputField ? operation.input.properties?.[inputField] : undefined;
   const boundFieldLabel = inputField
-    ? resolveLocalizedText(operation.input.properties?.[inputField]?.description, language, canonical) ??
+    ? resolveLocalizedText(inputFieldSchema?.title, language, canonical) ??
+      resolveLocalizedText(inputFieldSchema?.description, language, canonical) ??
       fieldLabel(inputField)
     : null;
 
@@ -227,6 +232,7 @@ export function RowActionDialog({
               path={[]}
               onChange={setFormValue}
               language={language}
+              canonical={canonical}
               collectionName={operation.name}
               mediaPurposes={[]}
             />

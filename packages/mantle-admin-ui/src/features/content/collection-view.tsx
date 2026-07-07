@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useAdminLocation } from "../../app/router";
 import { api } from "../../lib/api";
-import { fieldLabel } from "../../lib/field-label";
+import { propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { operationsQueryOptions } from "../../lib/queries";
 import type {
@@ -296,7 +296,11 @@ export function CollectionView({
                 <TableHeadCell>{t(language, "collection.table.id")}</TableHeadCell>
                 <TableHeadCell>{t(language, "collection.table.title")}</TableHeadCell>
                 {isOperationalCollection ? (
-                  dataColumns.map((name) => <TableHeadCell key={name}>{fieldLabel(name)}</TableHeadCell>)
+                  dataColumns.map((name) => (
+                    <TableHeadCell key={name}>
+                      {propertyLabel(name, collection?.schema?.properties?.[name], language, canonical)}
+                    </TableHeadCell>
+                  ))
                 ) : (
                   <>
                     <TableHeadCell>{t(language, "collection.table.status")}</TableHeadCell>
@@ -844,11 +848,20 @@ function formatTimestamp(ms: number): string {
   }
 }
 
+/** Schema property names that collide in MEANING with a system column
+ *  the admin list already renders unconditionally (the "updated"
+ *  column reads the reserved `updatedAt` storage column, formatted via
+ *  `row.updated_at`). MUST mirror `DATA_PREVIEW_SYSTEM_COLUMN_NAMES`
+ *  server-side in `mountServerEndpoints.ts` (#443) — NAME-based only,
+ *  these two well-known reserved names, no fuzzy matching. */
+const DATA_PREVIEW_SYSTEM_COLUMN_NAMES = new Set(["updatedAt", "createdAt"]);
+
 /** For `lifecycle: "none"` collections: up to 3 data columns from the
  *  schema's `required` properties, skipping the schema-stable title
- *  field. MUST mirror `schemaTitleKey` / `adminDataPreview` server-side
- *  in `mountServerEndpoints.ts` — both sides derive from the schema
- *  alone so headers and cell values can never disagree. */
+ *  field and the system-column-name collisions above (#443). MUST
+ *  mirror `schemaTitleKey` / `adminDataPreview` server-side in
+ *  `mountServerEndpoints.ts` — both sides derive from the schema alone
+ *  so headers and cell values can never disagree. */
 function dataPreviewColumns(collection: Collection | undefined): string[] {
   if (!collection || collection.lifecycle !== "none") return [];
   const schema = collection.schema;
@@ -862,7 +875,9 @@ function dataPreviewColumns(collection: Collection | undefined): string[] {
       return types.includes("string");
     }) ??
     null;
-  return required.filter((key) => key !== titleKey).slice(0, 3);
+  return required
+    .filter((key) => key !== titleKey && !DATA_PREVIEW_SYSTEM_COLUMN_NAMES.has(key))
+    .slice(0, 3);
 }
 
 /** Renders one operational data-preview cell, applying money/timestamp

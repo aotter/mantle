@@ -30,7 +30,8 @@ import {
 
 /**
  * Shared shape validator for `LocalizedText` fields (`Schema.spec.title`
- * / `.description`, `Procedure.spec.title` / `.description` — #430).
+ * / `.description`, `Procedure.spec.title` / `.description` — #430;
+ * `View.spec.title` — #443).
  * Accepts:
  *   - a non-empty string, or
  *   - a plain object (not an array) with at least one own-enumerable
@@ -434,6 +435,13 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
 
 function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   const s = m.spec as unknown as Record<string, unknown>;
+  validateLocalizedText(
+    s["title"],
+    idx,
+    "/spec/title",
+    "View.spec.title",
+    false,
+  );
   if (typeof s["from"] !== "string" || (s["from"] as string).length === 0) {
     throw new ManifestParseError("View.spec.from is required (non-empty string)", idx, "/spec/from");
   }

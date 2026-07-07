@@ -78,6 +78,15 @@ export type JsonSchema = {
   readonly default?: unknown;
   readonly additionalProperties?: boolean | JsonSchema;
   readonly description?: string;
+  /** Standard JSON Schema keyword (#443): a human-facing label for this
+   *  property, for admin-UI form labels / list column headers /
+   *  operation form labels. Accepts a plain string OR the same
+   *  `LocalizedText` locale-map shape used by `Schema.spec.title` —
+   *  admin-ui resolves it client-side with `resolveLocalizedText`, same
+   *  as any other `LocalizedText` field. Optional; absent means the
+   *  consumer humanizes the property name instead (unchanged v0.1
+   *  behavior). */
+  readonly title?: LocalizedText;
   /** Custom: cross-collection reference target. */
   readonly "x-mantle-ref"?: string;
   /** Custom: hint for MCP tool / agent prompt context. */
@@ -93,11 +102,10 @@ export const MANTLE_BIND_KEYWORD = "x-mantle-bind" as const;
  * A human-facing label/blurb that is either a plain string (single
  * language, the v0.1 shape) or a map of locale code → string (e.g.
  * `{ en: "Products", "zh-TW": "商品" }`) so one manifest can serve a
- * multi-language admin UI. `Schema.spec.title`/`.description` and
- * `Procedure.spec.title`/`.description` use this shape; consumers
- * resolve it to a single displayable string with `resolveLocalizedText`.
- * View manifests are NOT included — LocalizedText is Schema + Procedure
- * only per the #430 design.
+ * multi-language admin UI. `Schema.spec.title`/`.description`,
+ * `Procedure.spec.title`/`.description`, and `View.spec.title` (#443)
+ * use this shape; consumers resolve it to a single displayable string
+ * with `resolveLocalizedText`.
  */
 export type LocalizedText = string | Readonly<Record<string, string>>;
 
@@ -216,6 +224,13 @@ export type LifecycleMode = "simple" | "editorial" | "none";
 export type ViewManifest = ManifestEnvelope<"View", ViewManifestSpec>;
 
 export interface ViewManifestSpec {
+  /** Human-readable label for the admin UI's report sidebar / report
+   *  page (#443). Same string-or-locale-map `LocalizedText` shape as
+   *  `Schema.spec.title`. Optional — Views didn't carry a title before
+   *  v0.1.x; when absent the admin UI falls back to a Title-Cased
+   *  rendering of `metadata.name`, exactly as before this field
+   *  existed. */
+  readonly title?: LocalizedText;
   /** Source Schema name (bare; no namespace). */
   readonly from: string;
   /** REST-surface visibility. Reuses the `"public" | "staff"`

@@ -4,6 +4,7 @@ import { ArrowLeft, ExternalLink, Images, ImagePlus, MoreHorizontal, Plus, Rotat
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
+import { propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { operationsQueryOptions } from "../../lib/queries";
 import type {
@@ -218,6 +219,7 @@ export function EntryEditView({
               path={[]}
               onChange={setData}
               language={language}
+              canonical={canonical}
               collectionName={payload.collection.name}
               mediaPurposes={mediaPurposes}
             />
@@ -299,6 +301,7 @@ export function SchemaFields({
   path,
   onChange,
   language,
+  canonical = null,
   collectionName,
   mediaPurposes,
 }: {
@@ -307,6 +310,11 @@ export function SchemaFields({
   path: string[];
   onChange: (data: Record<string, unknown>) => void;
   language: AdminLanguage;
+  /** Site canonical locale, for resolving property `title` LocalizedText
+   *  (#443). Optional — absent falls straight through to `fieldLabel`,
+   *  matching pre-#443 behavior for any caller that hasn't threaded it
+   *  through yet. */
+  canonical?: string | null;
   collectionName: string;
   mediaPurposes: readonly MediaPurposePolicy[];
 }): React.ReactElement {
@@ -325,6 +333,7 @@ export function SchemaFields({
           rootValue={value}
           onChange={onChange}
           language={language}
+          canonical={canonical}
           collectionName={collectionName}
           mediaPurposes={mediaPurposes}
         />
@@ -342,6 +351,7 @@ function SchemaField({
   rootValue,
   onChange,
   language,
+  canonical = null,
   collectionName,
   mediaPurposes,
 }: {
@@ -353,11 +363,12 @@ function SchemaField({
   rootValue: Record<string, unknown>;
   onChange: (data: Record<string, unknown>) => void;
   language: AdminLanguage;
+  canonical?: string | null;
   collectionName: string;
   mediaPurposes: readonly MediaPurposePolicy[];
 }): React.ReactElement {
   const type = schemaType(schema);
-  const label = fieldLabel(name);
+  const label = propertyLabel(name, schema, language, canonical);
   const description = typeof schema.description === "string" ? schema.description : undefined;
   const setValue = (next: unknown): void => onChange(writePath(rootValue, path, next));
   // Server-stamped field (#428): the runtime writes `x-mantle-bind`
@@ -430,6 +441,7 @@ function SchemaField({
               path={path}
               onChange={onChange}
               language={language}
+              canonical={canonical}
               collectionName={collectionName}
               mediaPurposes={mediaPurposes}
             />
@@ -454,6 +466,7 @@ function SchemaField({
           rootValue={rootValue}
           onChange={onChange}
           language={language}
+          canonical={canonical}
           collectionName={collectionName}
           mediaPurposes={mediaPurposes}
         />
@@ -506,6 +519,7 @@ function ArrayField({
   rootValue,
   onChange,
   language,
+  canonical = null,
   collectionName,
   mediaPurposes,
 }: {
@@ -515,6 +529,7 @@ function ArrayField({
   rootValue: Record<string, unknown>;
   onChange: (data: Record<string, unknown>) => void;
   language: AdminLanguage;
+  canonical?: string | null;
   collectionName: string;
   mediaPurposes: readonly MediaPurposePolicy[];
 }): React.ReactElement {
@@ -542,6 +557,7 @@ function ArrayField({
               path={[...path, String(index)]}
               onChange={onChange}
               language={language}
+              canonical={canonical}
               collectionName={collectionName}
               mediaPurposes={mediaPurposes}
             />
@@ -862,13 +878,6 @@ function isMediaAssetRef(schema: JsonSchema): boolean {
  *  renders read-only here rather than as a live, editable control. */
 function isMantleBoundField(schema: JsonSchema): boolean {
   return typeof schema["x-mantle-bind"] === "string";
-}
-
-function fieldLabel(name: string): string {
-  return name
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function stringForInput(value: unknown): string {
