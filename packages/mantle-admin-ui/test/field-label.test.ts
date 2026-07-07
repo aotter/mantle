@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fieldLabel, propertyLabel } from "../src/lib/field-label";
+import { fieldLabel, propertyDescription, propertyLabel } from "../src/lib/field-label";
 import type { JsonSchema } from "../src/lib/types";
 
 /**
@@ -9,6 +9,11 @@ import type { JsonSchema } from "../src/lib/types";
  * canonical locale as fallback) and falls back to `fieldLabel`'s
  * humanized property name — the exact pre-#443 behavior — when no
  * title is declared.
+ *
+ * #453 — extends the same resolution to the `description` keyword via
+ * `propertyDescription`, so entry-editor field help text can be
+ * localized the same way (previously only a plain string rendered;
+ * a LocalizedText `description` was silently dropped).
  */
 
 describe("fieldLabel", () => {
@@ -61,5 +66,41 @@ describe("propertyLabel", () => {
 
   it("falls back to the humanized name when the schema itself is undefined", () => {
     expect(propertyLabel("skuCode", undefined, "en", null)).toBe("Sku Code");
+  });
+});
+
+describe("propertyDescription", () => {
+  it("uses a plain string description as-is", () => {
+    const schema: JsonSchema = {
+      type: "string",
+      description: "Optional join key into `categories.slug`.",
+    };
+    expect(propertyDescription(schema, "en", null)).toBe("Optional join key into `categories.slug`.");
+  });
+
+  it("resolves a LocalizedText description for the viewer's language", () => {
+    const schema: JsonSchema = {
+      type: "string",
+      description: { en: "Join key into categories.slug.", "zh-TW": "對應分類 slug 的關聯鍵。" },
+    };
+    expect(propertyDescription(schema, "zh-TW", "en")).toBe("對應分類 slug 的關聯鍵。");
+    expect(propertyDescription(schema, "en", "zh-TW")).toBe("Join key into categories.slug.");
+  });
+
+  it("falls back to the canonical locale when the viewer's language is absent", () => {
+    const schema: JsonSchema = {
+      type: "string",
+      description: { "zh-TW": "對應分類 slug 的關聯鍵。" },
+    };
+    expect(propertyDescription(schema, "en", "zh-TW")).toBe("對應分類 slug 的關聯鍵。");
+  });
+
+  it("returns undefined when description is absent (no humanized-name fallback, unlike propertyLabel)", () => {
+    const schema: JsonSchema = { type: "string" };
+    expect(propertyDescription(schema, "en", null)).toBeUndefined();
+  });
+
+  it("returns undefined when the schema itself is undefined", () => {
+    expect(propertyDescription(undefined, "en", null)).toBeUndefined();
   });
 });

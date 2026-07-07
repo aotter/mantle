@@ -4,7 +4,7 @@ import { ArrowLeft, ExternalLink, Images, ImagePlus, MoreHorizontal, Plus, Rotat
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
-import { propertyLabel } from "../../lib/field-label";
+import { propertyDescription, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { operationsQueryOptions } from "../../lib/queries";
 import type {
@@ -371,7 +371,11 @@ function SchemaField({
 }): React.ReactElement {
   const type = schemaType(schema);
   const label = propertyLabel(name, schema, language, canonical);
-  const description = typeof schema.description === "string" ? schema.description : undefined;
+  // #453: `description` is the same string-or-LocalizedText shape as
+  // `title` (#443) — resolve it the same way instead of only rendering
+  // the plain-string case, matching the row-operation dialog
+  // (`row-operations.tsx`).
+  const description = propertyDescription(schema, language, canonical);
   const setValue = (next: unknown): void => onChange(writePath(rootValue, path, next));
   // Server-stamped field (#428): the runtime writes `x-mantle-bind`
   // properties itself (ctx.user / ctx.staff / now) — caller writes are

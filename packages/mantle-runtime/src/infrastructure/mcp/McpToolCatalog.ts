@@ -1,6 +1,7 @@
 import {
   MANTLE_BIND_KEYWORD,
   expandPolicyRequired,
+  resolveLocalizedText,
   type JsonSchema,
   type MediaPurposePolicy,
   type ProcedureManifest,
@@ -343,8 +344,14 @@ function buildUpdateTool(schema: SchemaManifest): McpToolDefinition {
  */
 function buildProcedureTool(procedure: ProcedureManifest): McpToolDefinition {
   const input: JsonSchema = procedure.spec.input;
+  // `input.description` is the standard JSON Schema keyword and, like
+  // property `description` (#453, same LocalizedText shape as property
+  // `title` — #443), may be a locale map for the admin UI's benefit.
+  // MCP tool descriptions are plain strings read by the agent, not the
+  // localized admin-UI surface, so collapse to `en` (or the map's first
+  // entry) here rather than passing a locale map through.
   const description =
-    input.description ??
+    resolveLocalizedText(input.description, "en") ??
     `Invoke Procedure '${procedure.metadata.name}'. Input shape declared by the manifest.`;
   return {
     name: mcpToolNameSegment(procedure.metadata.name),

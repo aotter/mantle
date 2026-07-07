@@ -341,3 +341,45 @@ describe("JSON Schema property `title` keyword (#443)", () => {
     });
   });
 });
+
+describe("JSON Schema property `description` keyword (#453, mirrors #443's `title`)", () => {
+  it("a Schema property with a plain string description parses without diagnostics", () => {
+    const yaml = schemaDoc({
+      title: "Posts",
+      schema: {
+        type: "object",
+        properties: {
+          slug: { type: "string", description: "Optional join key into `categories.slug`." },
+        },
+      },
+    });
+    const { manifests, diagnostics } = parseManifests(yaml);
+    expect(diagnostics).toEqual([]);
+    const schema = manifests[0] as SchemaManifest;
+    expect(schema.spec.schema.properties?.["slug"]?.["description"]).toBe(
+      "Optional join key into `categories.slug`.",
+    );
+  });
+
+  it("a Schema property with a locale-map description parses without diagnostics", () => {
+    const yaml = schemaDoc({
+      title: "Posts",
+      schema: {
+        type: "object",
+        properties: {
+          slug: {
+            type: "string",
+            description: { en: "Join key into categories.slug.", "zh-TW": "對應分類 slug 的關聯鍵。" },
+          },
+        },
+      },
+    });
+    const { manifests, diagnostics } = parseManifests(yaml);
+    expect(diagnostics).toEqual([]);
+    const schema = manifests[0] as SchemaManifest;
+    expect(schema.spec.schema.properties?.["slug"]?.["description"]).toEqual({
+      en: "Join key into categories.slug.",
+      "zh-TW": "對應分類 slug 的關聯鍵。",
+    });
+  });
+});

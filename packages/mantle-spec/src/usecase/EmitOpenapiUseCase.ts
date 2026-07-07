@@ -1,5 +1,7 @@
 import { partitionManifests } from "../domain/service/ManifestParser.js";
+import { resolveLocalizedText } from "../domain/model/ManifestGrammar.js";
 import type {
+  JsonSchema,
   ProcedureManifest,
   TriggerManifest,
   ViewManifest,
@@ -89,7 +91,7 @@ function httpOperation(t: TriggerManifest, p: ProcedureManifest): Record<string,
     summary: `Trigger ${t.metadata.name}`,
     requestBody: {
       required: true,
-      content: { "application/json": { schema: p.spec.input } },
+      content: { "application/json": { schema: collapseSchemaDescriptions(p.spec.input) } },
     },
     responses: {
       "200": {
@@ -99,7 +101,7 @@ function httpOperation(t: TriggerManifest, p: ProcedureManifest): Record<string,
             schema: {
               type: "object",
               required: ["ok", "data"],
-              properties: { ok: { const: true }, data: p.spec.output },
+              properties: { ok: { const: true }, data: collapseSchemaDescriptions(p.spec.output) },
             },
           },
         },
@@ -124,7 +126,7 @@ function viewOperation(v: ViewManifest): Record<string, unknown> {
   if (v.spec.params?.properties) {
     const required = new Set(v.spec.params.required ?? []);
     for (const [name, schema] of Object.entries(v.spec.params.properties)) {
-      params.push({ name, in: "query", required: required.has(name), schema });
+      params.push({ name, in: "query", required: required.has(name), schema: collapseSchemaDescriptions(schema) });
     }
   }
   const responses: Record<string, unknown> = {
@@ -183,6 +185,35 @@ function viewOperation(v: ViewManifest): Record<string, unknown> {
     };
   }
   return op;
+}
+
+/**
+ * JSON Schema `description` (#453, same shape as property `title` —
+ * #443) may be a plain string or a `LocalizedText` locale-map for the
+ * admin-UI's benefit. Emitted OpenAPI is plain JSON Schema, so a
+ * locale-map `description` has to collapse to one string before it
+ * goes on the wire — otherwise the emitted doc isn't valid JSON
+ * Schema. Prefers `"en"` (the dev/OpenAPI-doc language per the #453
+ * design note), then whichever locale `resolveLocalizedText` finds
+ * first. Recurses into `properties`/`items` so nested and array field
+ * descriptions collapse too; returns a fresh object rather than
+ * mutating the manifest's schema.
+ */
+function collapseSchemaDescriptions(schema: JsonSchema): JsonSchema {
+  const { description, properties, items, ...rest } = schema;
+  const resolvedDescription = description === undefined ? null : resolveLocalizedText(description, "en");
+  return {
+    ...rest,
+    ...(resolvedDescription !== null ? { description: resolvedDescription } : {}),
+    ...(properties
+      ? {
+          properties: Object.fromEntries(
+            Object.entries(properties).map(([name, propSchema]) => [name, collapseSchemaDescriptions(propSchema)]),
+          ),
+        }
+      : {}),
+    ...(items ? { items: collapseSchemaDescriptions(items) } : {}),
+  };
 }
 
 function diagnosticSchema(): Record<string, unknown> {

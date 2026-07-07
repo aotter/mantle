@@ -77,7 +77,17 @@ export type JsonSchema = {
   readonly nullable?: boolean;
   readonly default?: unknown;
   readonly additionalProperties?: boolean | JsonSchema;
-  readonly description?: string;
+  /** Standard JSON Schema keyword: help text for this property, shown
+   *  under the admin-UI form field (`entry-edit-view.tsx`) and the
+   *  row-operation dialog's bound-field label fallback
+   *  (`row-operations.tsx`). Accepts a plain string OR the same
+   *  `LocalizedText` locale-map shape used by `Schema.spec.description`
+   *  (#453, mirroring the property `title` keyword's #443 shape) —
+   *  admin-ui resolves it client-side with `resolveLocalizedText`. `en`
+   *  can stay the dev/OpenAPI-doc string while `zh-TW` etc. carry
+   *  operator-readable copy. Optional; absent renders no help text
+   *  (unchanged v0.1 behavior). */
+  readonly description?: LocalizedText;
   /** Standard JSON Schema keyword (#443): a human-facing label for this
    *  property, for admin-UI form labels / list column headers /
    *  operation form labels. Accepts a plain string OR the same

@@ -198,6 +198,77 @@ spec:
     expect(responses["401"]).toBeUndefined();
     expect(responses["403"]).toBeUndefined();
   });
+
+  it("collapses a LocalizedText property `description` on Procedure input to a plain string (#453)", () => {
+    const localized = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: submitContact }
+spec:
+  input:
+    type: object
+    required: [name]
+    properties:
+      name: { type: string, description: { en: "Contact name.", "zh-TW": "聯絡人姓名。" } }
+  output: { type: object }
+  handler: { kind: ref, ref: submitContact }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: submitContactHttp }
+spec:
+  source: { kind: http, method: POST, path: /api/contact }
+  target: { procedure: submitContact }
+`);
+    expect(localized.diagnostics).toEqual([]);
+    const { document } = EmitOpenapiUseCase.run({
+      manifests: localized.manifests,
+      title: "Test",
+      version: "0.1.0",
+    });
+    const paths = document["paths"] as Record<string, Record<string, Record<string, unknown>>>;
+    const requestSchema = (
+      (paths["/api/contact"]!.post!["requestBody"] as Record<string, unknown>)["content"] as Record<
+        string,
+        Record<string, unknown>
+      >
+    )["application/json"]!["schema"] as { properties: { name: { description: unknown } } };
+    expect(requestSchema.properties.name.description).toBe("Contact name.");
+  });
+
+  it("collapses a LocalizedText property `description` on View params to a plain string (#453)", () => {
+    const localized = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: posts }
+spec:
+  title: Posts
+  schema: { type: object, properties: { slug: { type: string } } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: posts-by-locale }
+spec:
+  from: posts
+  params:
+    type: object
+    properties:
+      locale: { type: string, description: { en: "Locale filter.", "zh-TW": "語系篩選。" } }
+    required: [locale]
+  filter:
+    eq: { field: locale, value: { $param: locale } }
+`);
+    expect(localized.diagnostics).toEqual([]);
+    const { document } = EmitOpenapiUseCase.run({
+      manifests: localized.manifests,
+      title: "Test",
+      version: "0.1.0",
+    });
+    const paths = document["paths"] as Record<string, Record<string, Record<string, unknown>>>;
+    const params = paths["/api/views/posts-by-locale"]!.get!["parameters"] as Array<{
+      name: string;
+      schema: { description?: unknown };
+    }>;
+    expect(params.find((p) => p.name === "locale")?.schema.description).toBe("Locale filter.");
+  });
 });
 
 describe("EmitTypesUseCase", () => {
