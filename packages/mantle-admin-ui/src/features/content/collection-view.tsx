@@ -27,12 +27,13 @@ import type {
 import { cn } from "../../lib/utils";
 import { Button } from "../../ui/button";
 import { TableCell, TableHeadCell, TableShell } from "../../ui/admin-table";
+import { useConfirm } from "../../ui/confirm-dialog";
 import { CollapsibleDescription, EmptyState, ErrorBox, PageHeader } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
 import { statusLabel } from "./status";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
-import { t } from "../../app/i18n";
-import { formatMoneyMinor, formatTimestampMs, moneyMinorHint, timestampHint } from "./field-render";
+import { t, type I18nKey } from "../../app/i18n";
+import { formatMoneyMinor, formatTimestampMs, idTail, moneyMinorHint, timestampHint } from "./field-render";
 import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
 
 const TIMESTAMP_FMT = new Intl.DateTimeFormat(undefined, {
@@ -382,6 +383,7 @@ function BulkActionBar({
   const [pending, setPending] = React.useState<"publish" | "unpublish" | "delete" | null>(null);
   const [failures, setFailures] = React.useState<unknown[]>([]);
   const canPublish = collection && collection.lifecycle !== "none";
+  const confirm = useConfirm();
 
   async function runBulk(
     action: "publish" | "unpublish" | "delete",
@@ -402,13 +404,11 @@ function BulkActionBar({
     onDone();
   }
 
-  function bulkDelete(): void {
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm(t(language, "collection.bulk.deleteConfirm", { count: String(selectedIds.length) }))
-    ) {
-      return;
-    }
+  async function bulkDelete(): Promise<void> {
+    const ok = await confirm({
+      description: t(language, "collection.bulk.deleteConfirm", { count: String(selectedIds.length) }),
+    });
+    if (!ok) return;
     void runBulk("delete", (id) => api.delete(`/entries/${encodeURIComponent(id)}`));
   }
 
@@ -449,7 +449,7 @@ function BulkActionBar({
           variant="destructive"
           size="sm"
           disabled={pending !== null}
-          onClick={bulkDelete}
+          onClick={() => void bulkDelete()}
         >
           {t(language, "collection.bulk.delete")}
         </Button>
@@ -515,17 +515,34 @@ function renderCollectionDescription(
 ): React.ReactNode {
   const resolvedTitle = collection ? resolveLocalizedText(collection.title, language, canonical) ?? collection.name : "";
   const raw = resolveLocalizedText(collection?.description, language, canonical)?.trim();
-  if (!raw) return t(language, "collection.defaultDescription");
+  const summaryKey = collectionSummaryKey(collection);
+  if (!raw) return t(language, summaryKey, { name: resolvedTitle });
 
   return (
     <CollapsibleDescription
       description={raw}
       summaryLabel={t(language, "collection.schemaDetails")}
-      collapsedIntro={t(language, "collection.schemaSummary", {
+      collapsedIntro={t(language, summaryKey, {
         name: resolvedTitle,
       })}
     />
   );
+}
+
+/** #444: the subtitle used to say "items, publishing state, and
+ *  localized content" for every collection, including `lifecycle:
+ *  "none"` ones that have neither a publish workflow nor translations.
+ *  Picks from four i18n variants using capabilities the UI already has
+ *  on hand (`collection.lifecycle`, `collection.hasTranslations`) —
+ *  same fields `CollectionView` already reads for
+ *  `isOperationalCollection` / the `i18n` badge, no new server data. */
+export function collectionSummaryKey(collection: Collection | undefined): I18nKey {
+  const hasLifecycle = collection ? collection.lifecycle !== "none" : true;
+  const hasTranslations = collection?.hasTranslations ?? false;
+  if (hasLifecycle && hasTranslations) return "collection.schemaSummary.lifecycleAndI18n";
+  if (hasLifecycle) return "collection.schemaSummary.lifecycleOnly";
+  if (hasTranslations) return "collection.schemaSummary.i18nOnly";
+  return "collection.schemaSummary.plain";
 }
 
 function StatusFilter({
@@ -621,7 +638,11 @@ function EntriesSkeleton(): React.ReactElement {
 
 /** Truncated ID cell that copies the full id on click, mirroring the
  *  `CopyField` pattern in `ui/page.tsx` (brief check-mark state via a
- *  timeout, no shared state beyond this row). */
+ *  timeout, no shared state beyond this row). #444: shows the TAIL of
+ *  the id (`idTail`) rather than the head — ids share a `<prefix>_
+ *  <collection>_` head across every row in a collection, so the head
+ *  read as a meaningless constant. The full id is still one click
+ *  away (copy) or a hover (title tooltip) away. */
 function CopyIdButton({ id, language }: { id: string; language: AdminLanguage }): React.ReactElement {
   const [copied, setCopied] = React.useState(false);
 
@@ -639,10 +660,10 @@ function CopyIdButton({ id, language }: { id: string; language: AdminLanguage })
     <button
       type="button"
       className="group inline-flex items-center gap-1 hover:text-foreground"
-      title={t(language, "collection.copyId")}
+      title={`${id} — ${t(language, "collection.copyId")}`}
       onClick={() => void copy()}
     >
-      {id.slice(0, 8)}
+      {idTail(id)}
       {copied ? (
         <Check className="size-3 text-[color:var(--success)]" aria-hidden />
       ) : (
@@ -687,6 +708,7 @@ function EntryRowDisplay({
   const [editing, setEditing] = React.useState(false);
   const [draftTitle, setDraftTitle] = React.useState(itemName);
   const [error, setError] = React.useState<string | null>(null);
+  const confirm = useConfirm();
 
   React.useEffect(() => {
     if (!editing) setDraftTitle(itemName);
@@ -709,7 +731,7 @@ function EntryRowDisplay({
   }
 
   async function remove(): Promise<void> {
-    if (typeof window !== "undefined" && !window.confirm(t(language, "crud.deleteConfirm", { name: itemName }))) {
+    if (!(await confirm({ description: t(language, "crud.deleteConfirm", { name: itemName }) }))) {
       return;
     }
     setError(null);

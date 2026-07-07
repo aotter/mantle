@@ -10,7 +10,8 @@ import { resolveLocalizedText } from "../../lib/localized-text";
 import { operationsQueryOptions } from "../../lib/queries";
 import type { SiteInfo, StaffOperation } from "../../lib/types";
 import { Button } from "../../ui/button";
-import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { EmptyState, ErrorBox, OperationErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { useToast } from "../../ui/toast";
 import { SchemaFields } from "../content/entry-edit-view";
 
 /** #426 — staff operations surface. Lists every staff-operable
@@ -76,13 +77,15 @@ function OperationCard({
     }
   }, [operation.name]);
 
+  const title = resolveLocalizedText(operation.title, language, canonical) ?? fieldLabel(operation.name);
+  const description = resolveLocalizedText(operation.description, language, canonical);
+
+  const { showToast } = useToast();
   const invoke = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api.post<{ ok: true; output: unknown }>(`/operations/${encodeURIComponent(operation.name)}`, body),
+    onSuccess: () => showToast(t(language, "ops.success", { name: title })),
   });
-
-  const title = resolveLocalizedText(operation.title, language, canonical) ?? fieldLabel(operation.name);
-  const description = resolveLocalizedText(operation.description, language, canonical);
 
   return (
     <SectionCard className="space-y-4 scroll-mt-20" id={operation.name}>
@@ -123,14 +126,7 @@ function OperationCard({
         </Button>
       </div>
 
-      {invoke.isError ? (
-        <div>
-          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-destructive">
-            {t(language, "ops.error.title")}
-          </h3>
-          <ErrorBox error={asRenderable(invoke.error)} />
-        </div>
-      ) : null}
+      {invoke.isError ? <OperationErrorBox error={asRenderable(invoke.error)} /> : null}
 
       {invoke.isSuccess ? (
         <div>

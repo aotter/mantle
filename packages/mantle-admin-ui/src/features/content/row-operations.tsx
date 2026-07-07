@@ -7,7 +7,8 @@ import { asRenderable } from "../../lib/errors";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { EntryEditorPayload, StaffOperation } from "../../lib/types";
 import { Button } from "../../ui/button";
-import { ErrorBox } from "../../ui/page";
+import { ErrorBox, OperationErrorBox } from "../../ui/page";
+import { useToast } from "../../ui/toast";
 import {
   Dialog,
   DialogContent,
@@ -198,10 +199,17 @@ export function RowActionDialog({
       fieldLabel(inputField)
     : null;
 
+  const { showToast } = useToast();
   const invoke = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api.post<{ ok: true; output: unknown }>(`/operations/${encodeURIComponent(operation.name)}`, body),
-    onSuccess,
+    onSuccess: () => {
+      // #444: the dialog closes right after this and the list refreshes
+      // silently — without a toast the operator has no confirmation the
+      // operation actually ran, only that the modal is gone.
+      showToast(t(language, "ops.success", { name: title }));
+      onSuccess();
+    },
   });
 
   const canSubmit = !inputField || prefillValue !== undefined;
@@ -240,14 +248,7 @@ export function RowActionDialog({
         )}
 
         {entryQuery.isError ? <ErrorBox error={entryQuery.error} /> : null}
-        {invoke.isError ? (
-          <div>
-            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-destructive">
-              {t(language, "ops.error.title")}
-            </h3>
-            <ErrorBox error={asRenderable(invoke.error)} />
-          </div>
-        ) : null}
+        {invoke.isError ? <OperationErrorBox error={asRenderable(invoke.error)} /> : null}
 
         <DialogFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={invoke.isPending}>
