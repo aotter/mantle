@@ -117,6 +117,14 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
       );
       CREATE INDEX IF NOT EXISTS verification_identifier_idx ON verification (identifier);
 
+      CREATE TABLE IF NOT EXISTS jwks (
+        id         TEXT PRIMARY KEY NOT NULL,
+        publicKey  TEXT NOT NULL,
+        privateKey TEXT NOT NULL,
+        createdAt  TEXT NOT NULL,
+        expiresAt  TEXT
+      );
+
       CREATE TABLE IF NOT EXISTS oauthClient (
         id                      TEXT PRIMARY KEY NOT NULL,
         clientId                TEXT NOT NULL UNIQUE,

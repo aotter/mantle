@@ -24,6 +24,7 @@ describe("CANONICAL_MIGRATIONS", () => {
     );
 
     for (const table of [
+      "jwks",
       "oauthClient",
       "oauthRefreshToken",
       "oauthAccessToken",
@@ -32,10 +33,14 @@ describe("CANONICAL_MIGRATIONS", () => {
       expect(init).toContain(`CREATE TABLE IF NOT EXISTS ${table}`);
     }
 
+    const jwks = tableSql(init, "jwks");
     const accessToken = tableSql(init, "oauthAccessToken");
     const refreshToken = tableSql(init, "oauthRefreshToken");
     const consent = tableSql(init, "oauthConsent");
 
+    expect(jwks).toMatch(
+      /CREATE TABLE IF NOT EXISTS jwks\s*\([\s\S]*\bprivateKey\s+TEXT NOT NULL/,
+    );
     expect(accessToken).toMatch(
       /CREATE TABLE IF NOT EXISTS oauthAccessToken\s*\([\s\S]*\btoken\s+TEXT NOT NULL UNIQUE/,
     );
