@@ -443,7 +443,10 @@ describe("createAuth — boot invariants", () => {
     );
     expect(await auth.revokeInvite("user_1")).toBe(false);
     await expect(
-      auth.registerOAuthClient({ redirectUris: ["https://site.test/api/auth/callback"] }),
+      auth.registerOAuthClient({
+        requestHeaders: new Headers(),
+        redirectUris: ["https://site.test/api/auth/callback"],
+      }),
     ).rejects.toThrow(/setup pending/);
   });
 
