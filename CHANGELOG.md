@@ -6,6 +6,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.46] - 2026-07-12
+
+### Fixed
+
+- **@aotter/mantle-cloudflare**: server-side OAuth client registration now requires and forwards the current owner/admin request headers, allowing Better Auth to enforce client privileges with the authenticated session instead of rejecting every registration as unauthorized (#462).
+
 ## [0.0.11-alpha.45] - 2026-07-07
 
 ### Added
