@@ -294,6 +294,9 @@ export interface OAuthProviderConfig {
 }
 
 export interface RegisterOAuthClientInput {
+  /** Current owner/admin request headers. Better Auth enforces its
+   *  clientPrivileges hook against this session before persistence. */
+  readonly requestHeaders: HeadersInit;
   readonly redirectUris: ReadonlyArray<string>;
   readonly scope?: ReadonlyArray<string>;
   readonly clientName?: string;
@@ -1148,8 +1151,8 @@ export interface Auth {
   readonly revokeInvite: (userId: string) => Promise<boolean>;
   /** Register an OAuth/OIDC client when `oauthProvider` is configured.
    *  Uses Better Auth's own provider plugin endpoint and returns the
-   *  client secret only on creation, exactly like OAuth dynamic client
-   *  registration. */
+   *  client secret only on creation. The caller must pass the current
+   *  owner/admin request headers so Better Auth can enforce privileges. */
   readonly registerOAuthClient: (
     input: RegisterOAuthClientInput,
   ) => Promise<RegisteredOAuthClient>;
@@ -1290,7 +1293,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
         throw new Error("registerOAuthClient: oauthProvider is not configured.");
       }
       const created = await api.adminCreateOAuthClient({
-        headers: new Headers(),
+        headers: new Headers(input.requestHeaders),
         body: {
           redirect_uris: [...input.redirectUris],
           ...(input.scope ? { scope: input.scope.join(" ") } : {}),
