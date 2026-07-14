@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle-cloudflare",
-  "version": "0.0.11-alpha.46",
+  "version": "0.0.11-alpha.47",
   "description": "Cloudflare Workers adapter for mantle. Hono-based mountServerEndpoints / createMcpApiHandler / mountAuthorize / mountPublicRoutes. Better Auth for staff sign-in; @cloudflare/workers-oauth-provider for the MCP OAuth AS surface.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
