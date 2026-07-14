@@ -14,8 +14,6 @@ import { t } from "../app/i18n";
 
 interface ConfirmOptions {
   description: string;
-  confirmLabel?: string;
-  variant?: "default" | "destructive";
 }
 
 interface PendingConfirm extends ConfirmOptions {
@@ -60,10 +58,10 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }): Re
             </Button>
             <Button
               type="button"
-              variant={pending?.variant ?? "destructive"}
+              variant="destructive"
               onClick={() => settle(true)}
             >
-              {pending?.confirmLabel ?? t(language, "confirm.confirm")}
+              {t(language, "confirm.confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -23,8 +23,7 @@ export type Phase = "validate" | "test" | "boot" | "runtime";
  * (ADR-0001 § Future grammar discipline).
  *
  * Single source of truth: the const array drives `DiagnosticCode`
- * (type) and `isDiagnosticCode` (guard), so adding a code is one
- * edit and `parseWireDiagnostic` stays in sync automatically.
+ * (type), so adding a code is one edit.
  */
 export const DIAGNOSTIC_CODES = [
   // Validate-only.
@@ -98,10 +97,6 @@ export const DIAGNOSTIC_CODES = [
 ] as const;
 
 export type DiagnosticCode = (typeof DIAGNOSTIC_CODES)[number];
-
-export function isDiagnosticCode(s: string): s is DiagnosticCode {
-  return (DIAGNOSTIC_CODES as readonly string[]).includes(s);
-}
 
 export interface Diagnostic {
   readonly code: DiagnosticCode;
@@ -186,15 +181,10 @@ export function makeDiagnostic(
 }
 
 /** Phase-stamping helpers — equivalent to `makeDiagnostic({...input, phase})`
- *  but read cleaner at call sites.
- *
- *  `testDiagnostic` ships with no spec-side caller today — the test
- *  harness referenced in ADR-0007 is the planned consumer; `phase: "test"`
- *  is part of the public Diagnostic contract per ADR-0008 regardless of
- *  whether spec emits it directly. Don't drop the helper or the phase
- *  value before the harness lands. */
+ *  but read cleaner at call sites. `phase: "test"` has no helper — the
+ *  test harness (ADR-0007) will add one when it lands; the phase value
+ *  itself stays part of the public Diagnostic contract per ADR-0008. */
 export const validateDiagnostic = (input: PhaselessInput): Diagnostic => makeDiagnostic({ ...input, phase: "validate" });
-export const testDiagnostic = (input: PhaselessInput): Diagnostic => makeDiagnostic({ ...input, phase: "test" });
 export const bootDiagnostic = (input: PhaselessInput): Diagnostic => makeDiagnostic({ ...input, phase: "boot" });
 export const runtimeDiagnostic = (input: PhaselessInput): Diagnostic => makeDiagnostic({ ...input, phase: "runtime" });
 
@@ -249,36 +239,6 @@ export function redactForWire(d: Diagnostic): Diagnostic {
   if (d.candidates === undefined) return d;
   const { candidates: _omit, ...rest } = d;
   return rest;
-}
-
-/**
- * Inverse of `redactForWire`: tolerantly parse a JSON string into a
- * Diagnostic, returning `null` on anything that isn't a Diagnostic
- * (non-JSON, missing required fields, etc.). Intended for consumers
- * receiving HTTP error bodies — runtime egress, MCP `error.data`,
- * any future SDK adapter.
- */
-export function parseWireDiagnostic(text: string): Diagnostic | null {
-  if (!text) return null;
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch {
-    return null;
-  }
-  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const parsed = raw as Record<string, unknown>;
-  const code = parsed["code"];
-  if (typeof code !== "string" || !isDiagnosticCode(code)) return null;
-  if (typeof parsed["message"] !== "string") return null;
-  if (typeof parsed["path"] !== "string") return null;
-  const phase = parsed["phase"];
-  if (phase !== "validate" && phase !== "test" && phase !== "boot" && phase !== "runtime") {
-    return null;
-  }
-  const severity = parsed["severity"];
-  if (severity !== "error" && severity !== "warning") return null;
-  return parsed as unknown as Diagnostic;
 }
 
 /**

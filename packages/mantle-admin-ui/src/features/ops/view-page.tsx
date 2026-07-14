@@ -7,12 +7,12 @@ import { api } from "../../lib/api";
 import { viewsManifestQueryOptions } from "../../lib/queries";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
-import type { Collection, JsonSchema, SiteInfo, ViewManifestInfo } from "../../lib/types";
+import type { Collection, SiteInfo, ViewManifestInfo } from "../../lib/types";
 import { TableCell, TableHeadCell, TableShell } from "../../ui/admin-table";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { Button } from "../../ui/button";
 import { SchemaFields } from "../content/entry-edit-view";
-import { formatMoneyMinor, formatTimestampMs, moneyMinorHint, timestampHint } from "../content/field-render";
+import { renderDataValue } from "../../lib/render-data-value";
 
 /** Mirrors `VIEW_PARAMS_RESERVED` in `@aotter/mantle-spec`'s manifest
  *  grammar (`page`, `show`, plus `cursor` which the admin UI doesn't
@@ -131,8 +131,9 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
         description={t(language, "views.page.body", { schema: view.from })}
       />
 
-      {view.params ? (
-        <SectionCard className="space-y-4">
+      <SectionCard className="space-y-4">
+        {view.params ? (
+          <>
           <h2 className="text-sm font-semibold">{t(language, "views.params.title")}</h2>
           <SchemaFields
             schema={view.params}
@@ -144,21 +145,14 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
             collectionName={view.name}
             mediaPurposes={[]}
           />
-          <ReservedParamInputs page={page} show={show} onPage={setPage} onShow={setShow} />
-          <Button type="button" onClick={() => void query.refetch()} disabled={query.isFetching}>
-            <Search className="size-4" aria-hidden />
-            {query.isFetching ? t(language, "views.running") : t(language, "views.run")}
-          </Button>
-        </SectionCard>
-      ) : (
-        <SectionCard className="space-y-4">
-          <ReservedParamInputs page={page} show={show} onPage={setPage} onShow={setShow} />
-          <Button type="button" onClick={() => void query.refetch()} disabled={query.isFetching}>
-            <Search className="size-4" aria-hidden />
-            {query.isFetching ? t(language, "views.running") : t(language, "views.run")}
-          </Button>
-        </SectionCard>
-      )}
+          </>
+        ) : null}
+        <ReservedParamInputs page={page} show={show} onPage={setPage} onShow={setShow} />
+        <Button type="button" onClick={() => void query.refetch()} disabled={query.isFetching}>
+          <Search className="size-4" aria-hidden />
+          {query.isFetching ? t(language, "views.running") : t(language, "views.run")}
+        </Button>
+      </SectionCard>
 
       {query.isError ? <ErrorBox error={query.error} /> : null}
 
@@ -182,7 +176,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
               <tr key={index} className="border-t border-[var(--glass-border)]">
                 {columns.map((col) => (
                   <TableCell key={col} className="text-muted-foreground">
-                    {renderViewValue(sourceSchema, col, row[col])}
+                    {renderDataValue(sourceSchema?.properties?.[col], row[col])}
                   </TableCell>
                 ))}
               </tr>
@@ -243,24 +237,4 @@ function viewColumns(view: ViewManifestInfo, rows: ReadonlyArray<Record<string, 
     for (const key of Object.keys(row)) seen.add(key);
   }
   return [...seen];
-}
-
-/** Reuses the money-minor / timestamp-ms formatting convention from
- *  `field-render.ts` against the source Schema's property, when that
- *  Schema was resolved. Falls back to raw values otherwise. */
-function renderViewValue(sourceSchema: JsonSchema | undefined, column: string, value: unknown): React.ReactNode {
-  const fieldSchema = sourceSchema?.properties?.[column];
-  if (moneyMinorHint(fieldSchema)) {
-    const formatted = formatMoneyMinor(value, undefined);
-    if (formatted) return formatted;
-  }
-  if (timestampHint(fieldSchema)) {
-    const formatted = formatTimestampMs(value);
-    if (formatted) return formatted;
-  }
-  if (value == null || value === "") return <span className="text-muted-foreground">-</span>;
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return <span className="font-mono text-xs">{JSON.stringify(value)}</span>;
 }

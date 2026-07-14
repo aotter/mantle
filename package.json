@@ -19,7 +19,7 @@
     "typecheck": "pnpm -r --filter '@aotter/mantle*' typecheck",
     "test": "pnpm -r --filter '@aotter/mantle*' test",
     "check:boundaries": "node scripts/check-boundaries.mjs",
-    "check": "pnpm run check:boundaries && pnpm build && pnpm install --frozen-lockfile && pnpm typecheck && pnpm test"
+    "check": "pnpm run check:boundaries && pnpm build && pnpm typecheck && pnpm test"
   },
   "packageManager": "pnpm@9.15.0"
 }

@@ -218,7 +218,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
   const idgen = args.idgen ?? RandomUuidGenerator;
 
   // Repositories: DB-backed inner + lifecycle-hook decorator. Every
-  // mutation through `entries` (create / update / delete / archive /
+  // mutation through `entries` (create / update / delete /
   // transitionStatus) fires the matching Triggers via
   // `RunLifecycleHooksUseCase`. Symmetric chokepoint per POC ADR-0014:
   // MCP, admin, and builtin paths all hit the same wrapped repository.
@@ -236,7 +236,6 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     get: (id) => entries.get(id),
     update: (a) => entries.update(a),
     delete: (a) => entries.delete(a),
-    archive: (a) => entries.archive(a),
     transitionStatus: (a) => entries.transitionStatus(a),
     list: (a) => entries.list(a),
     findByDataField: (a) => entries.findByDataField(a),

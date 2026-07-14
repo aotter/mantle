@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { check } from "../src/usecase/ValidateManifestsUseCase.js";
+import { ValidateManifestsUseCase } from "../src/usecase/ValidateManifestsUseCase.js";
 import {
   parseManifests,
   parseManifestsOrThrow,
@@ -80,7 +80,7 @@ function trigger(name: string, procedureName: string): TriggerManifest {
   };
 }
 
-describe("check()", () => {
+describe("ValidateManifestsUseCase.run()", () => {
   it("returns no error diagnostics for a valid manifest set", () => {
     const manifests: Manifest[] = [
       schema("posts"),
@@ -88,13 +88,13 @@ describe("check()", () => {
       procedure("createPost"),
       trigger("createPostHttp", "createPost"),
     ];
-    const result = check({ manifests });
+    const result = ValidateManifestsUseCase.run({ manifests });
     expect(result.errorCount).toBe(0);
     expect(result.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
   });
 
   it("validates comparison filter field references against the source Schema", () => {
-    const result = check({
+    const result = ValidateManifestsUseCase.run({
       manifests: [
         schema("products", {
           schema: {
@@ -132,7 +132,7 @@ describe("check()", () => {
       procedure("restockProduct"),
       t,
     ];
-    const result = check({ manifests });
+    const result = ValidateManifestsUseCase.run({ manifests });
     const codes = result.diagnostics.map((d) => d.code);
     expect(codes).toContain("TRIGGER_PATH_INVALID");
     expect(result.errorCount).toBeGreaterThan(0);
@@ -163,7 +163,7 @@ describe("check()", () => {
       tA,
       tB,
     ];
-    const result = check({ manifests });
+    const result = ValidateManifestsUseCase.run({ manifests });
     const codes = result.diagnostics.map((d) => d.code);
     // Both triggers should report TRIGGER_PATH_INVALID — collision is
     // secondary to the bad prefix and would misdescribe the root cause.
@@ -177,7 +177,7 @@ describe("check()", () => {
       // Note: no Procedure "createPost" declared.
       trigger("createPostHttp", "createPost"),
     ];
-    const result = check({ manifests });
+    const result = ValidateManifestsUseCase.run({ manifests });
     const codes = result.diagnostics.map((d) => d.code);
     expect(codes).toContain("TRIGGER_TARGET_PROCEDURE_UNKNOWN");
     expect(result.errorCount).toBeGreaterThan(0);
@@ -188,7 +188,7 @@ describe("check()", () => {
       // No Schema "posts".
       view("postList", "posts"),
     ];
-    const result = check({ manifests });
+    const result = ValidateManifestsUseCase.run({ manifests });
     const codes = result.diagnostics.map((d) => d.code);
     expect(codes).toContain("VIEW_FROM_UNKNOWN_SCHEMA");
     expect(result.errorCount).toBeGreaterThan(0);
@@ -211,7 +211,7 @@ describe("check()", () => {
         translates: { parent: "ghost", on: "slug" },
       },
     };
-    const result = check({ manifests: [child] });
+    const result = ValidateManifestsUseCase.run({ manifests: [child] });
     const codes = result.diagnostics.map((d) => d.code);
     expect(codes).toContain("TRANSLATES_PARENT_UNKNOWN");
   });
@@ -230,7 +230,7 @@ describe("check()", () => {
       schema("posts"),
       procedure("createPost"),
     ];
-    const result = check({ manifests });
+    const result = ValidateManifestsUseCase.run({ manifests });
     const dups = result.diagnostics.filter((d) => d.code === "DUPLICATE_NAME");
     expect(dups).toHaveLength(4); // every copy including the original
     // First-occurrence diagnostic mentions ordinal 1, last mentions 4/4.
@@ -856,7 +856,7 @@ describe("checkHandlerRefsInSource — HANDLER_NOT_REGISTERED", () => {
       import { register } from "./registry";
       register('captchaCheck', () => true);
     `;
-    const result = check({ manifests: [captchaProcedure], handlerSource: source });
+    const result = ValidateManifestsUseCase.run({ manifests: [captchaProcedure], handlerSource: source });
     expect(result.diagnostics.filter((d) => d.code === "HANDLER_NOT_REGISTERED")).toEqual([]);
   });
 
@@ -869,7 +869,7 @@ describe("checkHandlerRefsInSource — HANDLER_NOT_REGISTERED", () => {
         };
       }
     `;
-    const result = check({
+    const result = ValidateManifestsUseCase.run({
       manifests: [captchaProcedure, procedure("slackNotify")],
       handlerSource: source,
     });
@@ -878,7 +878,7 @@ describe("checkHandlerRefsInSource — HANDLER_NOT_REGISTERED", () => {
 
   it("emits HANDLER_NOT_REGISTERED when the ref is absent from source entirely", () => {
     const source = `export function buildHandlers() { return {}; }`;
-    const result = check({ manifests: [captchaProcedure], handlerSource: source });
+    const result = ValidateManifestsUseCase.run({ manifests: [captchaProcedure], handlerSource: source });
     const diag = result.diagnostics.find((d) => d.code === "HANDLER_NOT_REGISTERED");
     expect(diag?.severity).toBe("warning");
     expect(diag?.value).toBe("captchaCheck");
@@ -886,7 +886,7 @@ describe("checkHandlerRefsInSource — HANDLER_NOT_REGISTERED", () => {
 
   it("does not false-positive on a substring match — `captchaCheckHelper` is not `captchaCheck`", () => {
     const source = `const captchaCheckHelper = () => true;`;
-    const result = check({ manifests: [captchaProcedure], handlerSource: source });
+    const result = ValidateManifestsUseCase.run({ manifests: [captchaProcedure], handlerSource: source });
     // Substring match would falsely accept this; the property-key regex
     // requires the identifier followed by `:` (an object key) so the
     // bare assignment above does NOT count as registration evidence.
@@ -900,7 +900,7 @@ describe("checkHandlerRefsInSource — HANDLER_NOT_REGISTERED", () => {
       // captchaCheck lives in handlers.ts — see buildHandlers().
       export function buildHandlers() { return {}; }
     `;
-    const result = check({ manifests: [captchaProcedure], handlerSource: source });
+    const result = ValidateManifestsUseCase.run({ manifests: [captchaProcedure], handlerSource: source });
     // Comment is not a property key (no \`:\` follows the word) and not
     // a quoted string. Expect the warning to fire.
     const diag = result.diagnostics.find((d) => d.code === "HANDLER_NOT_REGISTERED");

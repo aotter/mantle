@@ -24,12 +24,6 @@ export function isAllowedMime(mime: string, allowSvg: boolean): boolean {
   return (MEDIA_MIME_ALLOWLIST as readonly string[]).includes(mime);
 }
 
-/** Default upload byte ceiling: 25 MB. Large enough for most cover
- *  images and short-form social posts; small enough to keep R2 free
- *  tier viable. Adapters may pass a different value via the use-case
- *  ctor when they have stricter / looser policies. */
-export const DEFAULT_MAX_BYTES = 25 * 1024 * 1024;
-
 /** Upload-capability TTL: 15 minutes. Bearer URL is short-lived. */
 export const UPLOAD_URL_TTL_SECONDS = 15 * 60;
 

@@ -5,6 +5,7 @@ import {
 import {
   MANTLE_BIND_VALUES,
   FILTER_COMPARISON_OPS,
+  RESERVED_ENTRY_COLUMNS,
   type AuthPredicate,
   type FilterAst,
   type ProcedureManifest,
@@ -218,8 +219,7 @@ function checkViewRefs(
   }
 
   const props = (schema.spec.schema as { properties?: Record<string, unknown> }).properties ?? {};
-  const reserved = ["id", "status", "version", "createdAt", "updatedAt", "authorId"];
-  const validFieldNames = new Set([...Object.keys(props), ...reserved]);
+  const validFieldNames = new Set([...Object.keys(props), ...RESERVED_ENTRY_COLUMNS]);
 
   if (v.spec.fields) {
     v.spec.fields.forEach((f, i) => {
@@ -550,13 +550,4 @@ function checkHandlerRefsInSource(
     }
   }
   return out;
-}
-
-/**
- * @deprecated Use {@link ValidateManifestsUseCase.run} instead.
- *  Backwards-compat alias for the v0.1.0 import name; will be removed
- *  in v0.2.
- */
-export function check(request: ValidateManifestsRequest): ValidateManifestsResponse {
-  return ValidateManifestsUseCase.run(request);
 }

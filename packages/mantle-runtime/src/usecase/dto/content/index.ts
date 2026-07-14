@@ -47,16 +47,10 @@ export interface ListEntriesRequest {
   readonly collection: string;
   readonly status?: ContentState;
   readonly limit?: number;
-  /** Opaque cursor from a prior `ListEntriesResponse.nextCursor`. */
+  /** Opaque cursor from a prior `ListEntriesResult.nextCursor`. */
   readonly cursor?: string;
   /** Free-text filter matched against `id` and the raw data blob. */
   readonly search?: string;
-}
-
-export interface ListEntriesResponse<R> {
-  readonly rows: readonly R[];
-  /** Present when there may be more rows; pass back as `cursor`. */
-  readonly nextCursor?: string;
 }
 
 export interface RequestPublishRequest extends ContentMutationFields {
@@ -69,11 +63,6 @@ export interface UnpublishRequest extends ContentMutationFields {
 
 export interface ArchiveRequest extends ContentMutationFields {
   readonly id: string;
-  /** @deprecated Ignored. `ArchiveUseCase` pins OCC to the version it
-   *  reads internally so the transition guard and the chokepoint
-   *  check see the same snapshot. Field kept optional for backwards
-   *  compat; remove in v0.2. */
-  readonly expectedVersion?: number;
 }
 
 export interface DeleteEntryRequest extends ContentMutationFields {

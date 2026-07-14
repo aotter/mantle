@@ -1,6 +1,7 @@
 import { toUrlLocale, type Entry, type SiteConfig } from "@aotter/mantle-spec";
 import type { SeoMeta } from "../model/SeoMeta.js";
 import { absoluteUrl, appendMarkdownExt } from "./AbsoluteUrl.js";
+import { escapeHtml as escapeAttr } from "./HtmlEscaping.js";
 import { hasMarkdownBody } from "./MarkdownSerializer.js";
 
 /**
@@ -64,7 +65,6 @@ export function composeEntrySeoMeta(args: ComposeEntrySeoMetaArgs): SeoMeta {
     alternateMarkdown,
     hreflangs,
     description: description ?? null,
-    robots: null,
     og: {
       type: ogType,
       url: canonical,
@@ -195,9 +195,6 @@ export function renderSeoTagsHtml(meta: SeoMeta): string {
   if (meta.description) {
     parts.push(`<meta name="description" content="${escapeAttr(meta.description)}">`);
   }
-  if (meta.robots) {
-    parts.push(`<meta name="robots" content="${escapeAttr(meta.robots)}">`);
-  }
   parts.push(`<meta name="generator" content="mantle">`);
   parts.push(`<meta property="og:type" content="${escapeAttr(meta.og.type)}">`);
   parts.push(`<meta property="og:url" content="${escapeAttr(meta.og.url)}">`);
@@ -230,14 +227,6 @@ export function renderSeoTagsHtml(meta: SeoMeta): string {
     );
   }
   return parts.join("\n");
-}
-
-function escapeAttr(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
 }
 
 function escapeJsonLd(obj: object): string {

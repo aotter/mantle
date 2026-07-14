@@ -92,18 +92,3 @@ export function expandPolicyRequired(
   return required.map(parseMimeAccept);
 }
 
-/**
- * Flat deduped list of every mime referenced across all slots of a
- * policy. Used by `maxBytes` coverage checks and the renderer's
- * `tools/list` policy summary.
- */
-export function allPolicyMimes(
-  required: readonly string[],
-): readonly string[] {
-  const seen = new Set<string>();
-  for (const entry of required) {
-    for (const mime of parseMimeAccept(entry)) seen.add(mime);
-  }
-  return Array.from(seen);
-}
-

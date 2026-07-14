@@ -11,10 +11,12 @@ import {
   UpdateDraftUseCase,
 } from "../src/usecase/content/index.js";
 import type { Clock } from "../src/domain/port/Clock.js";
-import type { EntryRepository } from "../src/domain/port/EntryRepository.js";
+import type {
+  EntryRepository,
+  ListEntriesResult,
+} from "../src/domain/port/EntryRepository.js";
 import type { IdGenerator } from "../src/domain/port/IdGenerator.js";
 import type { SiteConfigRepository } from "../src/domain/port/SiteConfigRepository.js";
-import type { ListEntriesResponse } from "../src/usecase/dto/content/index.js";
 import { EntryVersionConflict, type EntryRow } from "../src/domain/model/EntryRow.js";
 import { InMemoryEntryRepository } from "./fakes/in-memory-store.js";
 import { postsSchema } from "./fakes/manifests.js";
@@ -617,7 +619,6 @@ describe("RequestPublishUseCase (simple lifecycle)", () => {
       create: inner.create.bind(inner),
       update: inner.update.bind(inner),
       delete: inner.delete.bind(inner),
-      archive: inner.archive.bind(inner),
       list: inner.list.bind(inner),
       findByDataField: inner.findByDataField.bind(inner),
       findByDataFields: inner.findByDataFields.bind(inner),
@@ -793,7 +794,7 @@ describe("UnpublishUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    const archived = await h.archive.execute({ id: created.id, expectedVersion: 1 });
+    const archived = await h.archive.execute({ id: created.id });
     const reverted = await h.unpublish.execute({ id: created.id });
     expect(archived.status).toBe("archived");
     expect(reverted.status).toBe("draft");
@@ -808,7 +809,7 @@ describe("ArchiveUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    const archived = await h.archive.execute({ id: created.id, expectedVersion: 1 });
+    const archived = await h.archive.execute({ id: created.id });
     expect(archived.status).toBe("archived");
   });
 
@@ -819,19 +820,12 @@ describe("ArchiveUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    const published = await h.requestPublish.execute({ id: created.id });
-    const archived = await h.archive.execute({
-      id: created.id,
-      expectedVersion: published.version,
-    });
+    await h.requestPublish.execute({ id: created.id });
+    const archived = await h.archive.execute({ id: created.id });
     expect(archived.status).toBe("archived");
   });
 
-  it("ignores caller-supplied stale expectedVersion (OCC pinned to internal read; #210 PR12 H3)", async () => {
-    // PR12: ArchiveUseCase now pins OCC to existing.version (the row
-    // it just read), not request.expectedVersion. A caller supplying
-    // a stale version still succeeds as long as no concurrent write
-    // raced — because the guard and chokepoint check the same snapshot.
+  it("pins OCC to its internal read after an earlier update", async () => {
     const h = harness();
     const created = await h.createDraft.execute({
       collection: "posts",
@@ -839,15 +833,12 @@ describe("ArchiveUseCase", () => {
       authorId: null,
     });
     expect(created.version).toBe(1);
-    // Bump the version via update so caller's view of version=1 is stale.
     await h.updateDraft.execute({
       id: created.id,
       expectedVersion: 1,
       data: { title: "y" },
     });
-    // request.expectedVersion is now ignored — archive picks up the
-    // real version internally and succeeds.
-    const archived = await h.archive.execute({ id: created.id, expectedVersion: 1 });
+    const archived = await h.archive.execute({ id: created.id });
     expect(archived.status).toBe("archived");
   });
 });
@@ -890,7 +881,7 @@ describe("GetEntryUseCase / ListEntriesUseCase / DeleteEntryUseCase", () => {
     expectTypeOf(h.listEntries.executePage)
       .returns
       .resolves
-      .toEqualTypeOf<ListEntriesResponse<EntryRow>>();
+      .toEqualTypeOf<ListEntriesResult>();
   });
 
   it("ListEntriesUseCase.execute() returns a flat readonly array (app-code shape)", async () => {

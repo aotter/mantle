@@ -1,5 +1,5 @@
 import type { Context, Hono } from "hono";
-import type { ContentState, SiteConfig } from "@aotter/mantle-spec";
+import type { SiteConfig } from "@aotter/mantle-spec";
 import {
   entryHtmlKeyFromParts,
   entryMarkdownKeyFromParts,
@@ -346,18 +346,6 @@ async function assertStaffSession(
   return null;
 }
 
-async function readKvText(
-  kv: KvCache,
-  key: string,
-  headers: Record<string, string>,
-): Promise<Response> {
-  const body = await kv.get(key);
-  if (body === null) {
-    return new Response("not found", { status: 404, headers: TEXT_PUBLIC });
-  }
-  return new Response(body, { status: 200, headers });
-}
-
 /** Hono throws on `c.executionCtx` access when there is no
  *  ExecutionContext (test harnesses, in-process `app.request`).
  *  Wrap the read so callers can opt out of background write-back
@@ -480,5 +468,3 @@ function buildOverrideIndex(
 function overrideKey(collection: string, slug: string): string {
   return `${collection}\u0000${slug}`;
 }
-
-export type { ContentState };

@@ -42,15 +42,13 @@ export class ArchiveUseCase {
         illegalTransitionDiagnostic(opPath, existing.status, "archived"),
       );
     }
-    // Pin OCC to the version we just fetched so the guard above
-    // (canTransition against existing.status) and the chokepoint
-    // assertion see the same snapshot. Caller-supplied
-    // request.expectedVersion is deprecated — kept on the DTO for
-    // backwards compat but no longer load-bearing.
+    // Pin OCC to the version we just fetched so the guard above and
+    // the chokepoint assertion see the same snapshot.
     const archived = await withConflictDiagnostic(opPath, () =>
-      this.entries.archive({
+      this.entries.transitionStatus({
         id: request.id,
         collection: existing.collection,
+        to: "archived",
         expectedVersion: existing.version,
         now: this.clock.now(),
         hookContext: request.ctx,

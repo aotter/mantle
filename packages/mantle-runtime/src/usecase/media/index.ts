@@ -5,7 +5,6 @@ export { GetMediaAssetUseCase } from "./GetMediaAssetUseCase.js";
 export { UpdateMediaAssetUseCase } from "./UpdateMediaAssetUseCase.js";
 export { DeleteMediaAssetUseCase } from "./DeleteMediaAssetUseCase.js";
 export {
-  DEFAULT_MAX_BYTES,
   MEDIA_MIME_ALLOWLIST,
   MEDIA_SVG_MIME,
   PENDING_UPLOAD_KV_PREFIX,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SchemaValidator } from "../src/domain/service/EntryDataValidator.js";
+import { EntryDataValidator } from "../src/domain/service/EntryDataValidator.js";
 import type { SchemaManifest } from "../src/domain/model/ManifestGrammar.js";
 
 /**
@@ -16,9 +16,9 @@ function makeManifest(name: string, schema: SchemaManifest["spec"]["schema"]): S
   };
 }
 
-describe("SchemaValidator — happy path", () => {
+describe("EntryDataValidator — happy path", () => {
   it("returns no diagnostics for valid data", () => {
-    const v = new SchemaValidator();
+    const v = new EntryDataValidator();
     const m = makeManifest("posts", {
       type: "object",
       properties: {
@@ -32,9 +32,9 @@ describe("SchemaValidator — happy path", () => {
   });
 });
 
-describe("SchemaValidator — failure shapes", () => {
+describe("EntryDataValidator — failure shapes", () => {
   it("missing required field → INPUT_VALIDATION_FAILED at the field path", () => {
-    const v = new SchemaValidator();
+    const v = new EntryDataValidator();
     const m = makeManifest("posts", {
       type: "object",
       properties: { title: { type: "string" }, slug: { type: "string" } },
@@ -50,7 +50,7 @@ describe("SchemaValidator — failure shapes", () => {
   });
 
   it("wrong type → INPUT_VALIDATION_FAILED", () => {
-    const v = new SchemaValidator();
+    const v = new EntryDataValidator();
     const m = makeManifest("posts", {
       type: "object",
       properties: { title: { type: "string" } },
@@ -63,7 +63,7 @@ describe("SchemaValidator — failure shapes", () => {
   });
 
   it("pattern violation → INPUT_VALIDATION_FAILED at the field path", () => {
-    const v = new SchemaValidator();
+    const v = new EntryDataValidator();
     const m = makeManifest("posts", {
       type: "object",
       properties: { slug: { type: "string", pattern: "^[a-z0-9-]+$" } },
@@ -76,7 +76,7 @@ describe("SchemaValidator — failure shapes", () => {
   });
 
   it("minLength violation → INPUT_VALIDATION_FAILED", () => {
-    const v = new SchemaValidator();
+    const v = new EntryDataValidator();
     const m = makeManifest("posts", {
       type: "object",
       properties: { title: { type: "string", minLength: 5 } },
@@ -89,7 +89,7 @@ describe("SchemaValidator — failure shapes", () => {
   });
 
   it("nested-array element error path includes the index", () => {
-    const v = new SchemaValidator();
+    const v = new EntryDataValidator();
     const m = makeManifest("posts", {
       type: "object",
       properties: {
@@ -103,7 +103,7 @@ describe("SchemaValidator — failure shapes", () => {
   });
 
   it("root-level type error has empty path", () => {
-    const v = new SchemaValidator();
+    const v = new EntryDataValidator();
     const m = makeManifest("scalar", { type: "string" });
     const diags = v.validate(m, 42);
     expect(diags).toHaveLength(1);
@@ -111,9 +111,9 @@ describe("SchemaValidator — failure shapes", () => {
   });
 });
 
-describe("SchemaValidator — caching", () => {
+describe("EntryDataValidator — caching", () => {
   it("compiles a schema once per metadata.name across repeated validate calls", () => {
-    const v = new SchemaValidator();
+    const v = new EntryDataValidator();
     const m = makeManifest("posts", {
       type: "object",
       properties: { title: { type: "string" } },
@@ -138,7 +138,7 @@ describe("SchemaValidator — caching", () => {
     // same name reuses the first compile. Manifest names are unique
     // within a deployment, so this is correct in production; the
     // test asserts the contract.
-    const v = new SchemaValidator();
+    const v = new EntryDataValidator();
     const a = makeManifest("posts", {
       type: "object",
       properties: { title: { type: "string" } },

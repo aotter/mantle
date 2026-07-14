@@ -33,18 +33,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build dist (typecheck + emit) for spec / runtime / admin-ui / cloudflare
+      - name: Build dist
         # Vitest tests for cloudflare import runtime/admin UI via dist/,
-        # so build before test. Spec + runtime tests use src/ directly.
-        run: pnpm -r --filter '@aotter/mantle-spec' --filter '@aotter/mantle-runtime' --filter '@aotter/mantle-admin-ui' --filter '@aotter/mantle-cloudflare' build
-
-      - name: Re-link bins now that dist/ exists
-        # First `pnpm install` runs before SDK build, so spec's
-        # `bin: ./dist/.../MantleCli.js` target doesn't exist and pnpm
-        # silently skips bin linking (logs WARN: "Failed to create bin
-        # ... ENOENT"). Re-running install (idempotent) after build
-        # creates the symlink before starter validation.
-        run: pnpm install --frozen-lockfile
+        # so build before test.
+        run: pnpm build
 
       - name: Check package boundaries
         run: pnpm run check:boundaries

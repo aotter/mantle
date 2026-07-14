@@ -124,7 +124,6 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     "/admin/sign-in",
     "/admin/c/:collection",
     "/admin/c/:collection/:id",
-    "/admin/editor",
     "/admin/media",
     "/admin/approvals",
     "/admin/preferences",
@@ -208,11 +207,11 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   };
 
   guarded("get", "/admin/api/me", (_c, gate) =>
-    jsonResponse(200, { login: gate.login, role: gate.role, userId: gate.userId }),
+    Response.json({ login: gate.login, role: gate.role, userId: gate.userId }),
   );
 
   ownerGuarded("get", "/admin/api/staff", async () =>
-    jsonResponse(200, { users: await auth.listUsers() }),
+    Response.json({ users: await auth.listUsers() }),
   );
 
   ownerGuarded("patch", "/admin/api/staff/:id/role", async (c, gate) => {
@@ -220,7 +219,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
     const role = body.role === null ? null : typeof body.role === "string" ? body.role : undefined;
     if (role === undefined || (role !== null && !STAFF_ROLE_SET.has(role))) {
-      return jsonResponse(400, {
+      return Response.json({
         ok: false,
         diagnostic: runtimeDiagnostic({
           code: "INPUT_VALIDATION_FAILED",
@@ -229,13 +228,13 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
           expected: `body.role in [${[...STAFF_ROLE_SET].join(", ")}] or null`,
           message: "`role` must be a staff role string or null (revoke).",
         }),
-      });
+      }, { status: 400 });
     }
     // An owner cannot change their own role. Demoting the only owner
     // would lock everyone out of staff management with no SDK-side
     // recovery path (the fix would be a manual D1 UPDATE).
     if (userId === gate.userId) {
-      return jsonResponse(403, {
+      return Response.json({
         ok: false,
         diagnostic: runtimeDiagnostic({
           code: "AUTH_DENIED",
@@ -244,11 +243,11 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
           expected: "target user is not the caller",
           message: "You cannot change your own role.",
         }),
-      });
+      }, { status: 403 });
     }
     const changed = await auth.setUserRole(userId, role as StaffRole | null);
     if (!changed) {
-      return jsonResponse(404, {
+      return Response.json({
         ok: false,
         diagnostic: runtimeDiagnostic({
           code: "NOT_FOUND",
@@ -257,9 +256,9 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
           expected: "an existing user id",
           message: "No user matched that id.",
         }),
-      });
+      }, { status: 404 });
     }
-    return jsonResponse(200, { ok: true });
+    return Response.json({ ok: true });
   });
 
   ownerGuarded("post", "/admin/api/staff/invitations", async (c) => {
@@ -267,7 +266,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const role = typeof body.role === "string" ? body.role : "";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !STAFF_ROLE_SET.has(role)) {
-      return jsonResponse(400, {
+      return Response.json({
         ok: false,
         diagnostic: runtimeDiagnostic({
           code: "INPUT_VALIDATION_FAILED",
@@ -276,11 +275,11 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
           expected: `body.email is an address and body.role in [${[...STAFF_ROLE_SET].join(", ")}]`,
           message: "Invitation needs a valid `email` and a staff `role`.",
         }),
-      });
+      }, { status: 400 });
     }
     const result = await auth.inviteUser(email, role as StaffRole);
     if (result.kind === "exists") {
-      return jsonResponse(409, {
+      return Response.json({
         ok: false,
         userId: result.id,
         diagnostic: runtimeDiagnostic({
@@ -291,15 +290,15 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
           message:
             "That email already has an account — adjust its role in the staff list instead.",
         }),
-      });
+      }, { status: 409 });
     }
-    return jsonResponse(200, { ok: true, userId: result.id });
+    return Response.json({ ok: true, userId: result.id });
   });
 
   ownerGuarded("delete", "/admin/api/staff/invitations/:id", async (c) => {
     const revoked = await auth.revokeInvite(c.req.param("id") ?? "");
     if (!revoked) {
-      return jsonResponse(409, {
+      return Response.json({
         ok: false,
         diagnostic: runtimeDiagnostic({
           code: "CONFLICT",
@@ -309,14 +308,14 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
           message:
             "Only never-signed-in invitations can be revoked. For an active user, clear the role instead.",
         }),
-      });
+      }, { status: 409 });
     }
-    return jsonResponse(200, { ok: true });
+    return Response.json({ ok: true });
   });
 
-  guarded("get", "/admin/api/collections", () => jsonResponse(200, { collections }));
+  guarded("get", "/admin/api/collections", () => Response.json({ collections }));
 
-  guarded("get", "/admin/api/views-manifest", () => jsonResponse(200, { views: viewsManifest }));
+  guarded("get", "/admin/api/views-manifest", () => Response.json({ views: viewsManifest }));
 
   // Staff Views (#433): mounted behind the staff gate at
   // `/admin/api/views/<name>` — NOT on the public `/api/views/<name>`
@@ -333,7 +332,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   }
 
   guarded("get", "/admin/api/operations", () =>
-    jsonResponse(200, {
+    Response.json({
       operations: operations.map((op) => ({
         name: op.name,
         title: op.title,
@@ -349,7 +348,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     const name = c.req.param("name") ?? "";
     const op = operationsByName.get(name);
     if (!op) {
-      return jsonResponse(404, {
+      return Response.json({
         ok: false,
         diagnostic: runtimeDiagnostic({
           code: "NOT_FOUND",
@@ -358,7 +357,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
           expected: "a staff-operable Procedure name from GET /admin/api/operations",
           message: `No staff-operable operation named '${name}'.`,
         }),
-      });
+      }, { status: 404 });
     }
     return runUseCase(`POST /admin/api/operations/${name}`, async () => {
       const runtime = await ref.get();
@@ -386,12 +385,10 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     const runtime = await ref.get();
     const site = await runtime.siteConfig.load();
     const url = new URL(c.req.url);
-    return jsonResponse(200, {
+    return Response.json({
       ...site,
       publicUrl: site.origin || url.origin,
       mcpUrl: `${url.origin}/mcp/staff`,
-      staffMcpUrl: `${url.origin}/mcp/staff`,
-      userMcpUrl: `${url.origin}/mcp`,
     });
   });
 
@@ -425,7 +422,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   guarded("get", "/admin/api/entries", async (c) => {
     const collection = c.req.query("collection");
     if (!collection) {
-      return jsonResponse(400, {
+      return Response.json({
         ok: false,
         diagnostic: runtimeDiagnostic({
           code: "INPUT_VALIDATION_FAILED",
@@ -434,7 +431,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
           expected: "?collection=<name> query parameter",
           message: "Missing `collection` query parameter.",
         }),
-      });
+      }, { status: 400 });
     }
     const runtime = await ref.get();
     const rawLimit = c.req.query("limit");
@@ -451,14 +448,14 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       search: c.req.query("search") || undefined,
     });
     const items = result.rows.map((row) => adminListItem(row, schemasByName));
-    return jsonResponse(200, { items, next_cursor: result.nextCursor ?? null });
+    return Response.json({ items, next_cursor: result.nextCursor ?? null });
   });
 
   guarded("get", "/admin/api/entries/export", async (c) => {
     const collection = c.req.query("collection");
     const schema = collection ? schemasByName.get(collection) : undefined;
     if (!collection || !schema) {
-      return jsonResponse(404, {
+      return Response.json({
         ok: false,
         diagnostic: runtimeDiagnostic({
           code: "NOT_FOUND",
@@ -469,7 +466,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
             ? `Schema '${collection}' was not found.`
             : "Missing `collection` query parameter.",
         }),
-      });
+      }, { status: 404 });
     }
     const runtime = await ref.get();
     const propertyNames = Object.keys(schema.spec.schema.properties ?? {});
@@ -502,7 +499,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
       const row = await runtime.getEntry.execute({ id });
-      return entryEditorPayload(runtime, adminRowFromRuntime(row), schemas);
+      return entryEditorPayload(runtime, row, schemas);
     }),
   );
 
@@ -531,7 +528,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
         ctx: adminHandlerContext(c, gate),
         originalInput: body,
       });
-      return entryEditorPayload(runtime, adminRowFromRuntime(row), schemas);
+      return entryEditorPayload(runtime, row, schemas);
     }),
   );
 
@@ -550,7 +547,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
         ctx: adminHandlerContext(c, gate),
         originalInput: body,
       });
-      return entryEditorPayload(runtime, adminRowFromRuntime(updated), schemas);
+      return entryEditorPayload(runtime, updated, schemas);
     }),
   );
 
@@ -564,7 +561,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
         ctx: adminHandlerContext(c, gate),
         originalInput: body,
       });
-      return entryEditorPayload(runtime, adminRowFromRuntime(row), schemas);
+      return entryEditorPayload(runtime, row, schemas);
     }),
   );
 
@@ -578,7 +575,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
         ctx: adminHandlerContext(c, gate),
         originalInput: body,
       });
-      return entryEditorPayload(runtime, adminRowFromRuntime(row), schemas);
+      return entryEditorPayload(runtime, row, schemas);
     }),
   );
 
@@ -617,7 +614,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       typeof body.purpose !== "string" ||
       !Array.isArray(body.variants)
     ) {
-      return jsonResponse(400, {
+      return Response.json({
         ok: false,
         diagnostic: runtimeDiagnostic({
           code: "INPUT_VALIDATION_FAILED",
@@ -626,12 +623,12 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
           expected:
             "{ filename: string, purpose: string, variants: [{ mimeType, byteSize, role }, ...] }",
         }),
-      });
+      }, { status: 400 });
     }
     const variants: Array<{ mimeType: string; byteSize: number; role: "primary" | "alternate" | "fallback" }> = [];
     for (const raw of body.variants) {
       if (raw === null || typeof raw !== "object") {
-        return jsonResponse(400, {
+        return Response.json({
           ok: false,
           diagnostic: runtimeDiagnostic({
             code: "INPUT_VALIDATION_FAILED",
@@ -639,7 +636,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
             path: `POST ${MEDIA_UPLOADS_PATH}`,
             expected: "variants[] entries are objects with { mimeType, byteSize, role }",
           }),
-        });
+        }, { status: 400 });
       }
       const v = raw as Record<string, unknown>;
       const mimeType = v["mimeType"];
@@ -652,7 +649,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
         byteSize <= 0 ||
         (role !== "primary" && role !== "alternate" && role !== "fallback")
       ) {
-        return jsonResponse(400, {
+        return Response.json({
           ok: false,
           diagnostic: runtimeDiagnostic({
             code: "INPUT_VALIDATION_FAILED",
@@ -661,7 +658,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
             expected:
               "each variant: { mimeType: string, byteSize: positive integer, role: 'primary'|'alternate'|'fallback' }",
           }),
-        });
+        }, { status: 400 });
       }
       variants.push({ mimeType, byteSize, role });
     }
@@ -745,7 +742,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
       (body.alt !== undefined && typeof body.alt !== "string") ||
       (body.caption !== undefined && typeof body.caption !== "string")
     ) {
-      return jsonResponse(400, {
+      return Response.json({
         ok: false,
         diagnostic: runtimeDiagnostic({
           code: "INPUT_VALIDATION_FAILED",
@@ -754,7 +751,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
           expected: "{ alt?: string, caption?: string }",
           message: "`alt` and `caption` must be strings when present.",
         }),
-      });
+      }, { status: 400 });
     }
     return runUseCase(`PATCH ${MEDIA_ASSET_PATH}`, async () =>
       adminMediaItem(
@@ -1502,20 +1499,6 @@ function adminRowFromDb(row: AdminEntryDbRow): AdminEntryRow {
   };
 }
 
-function adminRowFromRuntime(row: AdminEntryRow): AdminEntryRow {
-  return {
-    id: row.id,
-    collection: row.collection,
-    status: row.status,
-    version: row.version,
-    data: row.data,
-    locale: row.locale,
-    authorId: row.authorId,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
-}
-
 function expectedVersionField(value: unknown, path: string): number {
   if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return value;
   throw new DiagnosticError(
@@ -1611,7 +1594,7 @@ async function handleHttpTrigger(
   // both into AUTH_DENIED if we pass `{ user: null, staff: null }`
   // as ctx, so we pre-check here.
   if (procedure.spec.requires?.auth && !ctx) {
-    return jsonResponse(401, {
+    return Response.json({
       ok: false,
       diagnostic: runtimeDiagnostic({
         code: "UNAUTHENTICATED",
@@ -1620,7 +1603,7 @@ async function handleHttpTrigger(
         expected: "authenticated session",
         message: `Procedure '${procName}' requires authentication.`,
       }),
-    });
+    }, { status: 401 });
   }
 
   const wu = waitUntil ? { waitUntil } : {};
@@ -1634,10 +1617,10 @@ async function handleHttpTrigger(
   });
 
   if (result.ok) {
-    return jsonResponse(200, { ok: true, data: result.data });
+    return Response.json({ ok: true, data: result.data });
   }
   const status = HTTP_STATUS_BY_CODE[result.diagnostic.code] ?? 500;
-  return jsonResponse(status, { ok: false, diagnostic: result.diagnostic });
+  return Response.json({ ok: false, diagnostic: result.diagnostic }, { status });
 }
 
 async function handleViewRequest(
@@ -1671,7 +1654,7 @@ async function handleViewRequest(
   const ctx = await buildCallerContext(req, auth, waitUntil);
   if (view.spec.requires?.auth) {
     if (!ctx) {
-      return jsonResponse(401, {
+      return Response.json({
         ok: false,
         diagnostic: runtimeDiagnostic({
           code: "UNAUTHENTICATED",
@@ -1680,14 +1663,14 @@ async function handleViewRequest(
           expected: "authenticated session",
           message: `View '${viewName}' requires authentication.`,
         }),
-      });
+      }, { status: 401 });
     }
     const denial = evaluateAuthAll(view.spec.requires, ctx, viewPath, "runtime");
     if (denial) {
-      return jsonResponse(HTTP_STATUS_BY_CODE[denial.code] ?? 403, {
+      return Response.json({
         ok: false,
         diagnostic: denial,
-      });
+      }, { status: HTTP_STATUS_BY_CODE[denial.code] ?? 403 });
     }
   }
 
@@ -1700,7 +1683,7 @@ async function handleViewRequest(
     params = coerceViewParams(view, url.searchParams);
   } catch (err) {
     if (err instanceof ViewParamCoercionError) {
-      return jsonResponse(400, {
+      return Response.json({
         ok: false,
         diagnostic: runtimeDiagnostic({
           code: "INPUT_VALIDATION_FAILED",
@@ -1709,7 +1692,7 @@ async function handleViewRequest(
           expected: "query string conforms to View.spec.params",
           message: err.message,
         }),
-      });
+      }, { status: 400 });
     }
     throw err;
   }
@@ -1722,10 +1705,10 @@ async function handleViewRequest(
   });
 
   if (result.ok) {
-    return jsonResponse(200, { ok: true, data: result.result });
+    return Response.json({ ok: true, data: result.result });
   }
   const status = HTTP_STATUS_BY_CODE[result.diagnostic.code] ?? 500;
-  return jsonResponse(status, { ok: false, diagnostic: result.diagnostic });
+  return Response.json({ ok: false, diagnostic: result.diagnostic }, { status });
 }
 
 /**
@@ -1800,13 +1783,6 @@ function readWaitUntil(c: Context): ((p: Promise<unknown>) => void) | undefined 
   }
 }
 
-function jsonResponse(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
-
 function mediaFieldsForCollection(
   schema: SchemaManifest,
   schemas: readonly SchemaManifest[],
@@ -1836,7 +1812,7 @@ function mediaFieldsForSchema(schema: SchemaManifest): Array<{ name: string; hin
 }
 
 function adminUnauthenticated(c: Context, path: string): Response {
-  return jsonResponse(401, {
+  return Response.json({
     ok: false,
     diagnostic: runtimeDiagnostic({
       code: "UNAUTHENTICATED",
@@ -1845,7 +1821,7 @@ function adminUnauthenticated(c: Context, path: string): Response {
       expected: "active session cookie",
       message: "Not signed in. Sign in via /admin/sign-in first.",
     }),
-  });
+  }, { status: 401 });
 }
 
 // Distinct from UNAUTHENTICATED so the SPA can render an "access
@@ -1854,7 +1830,7 @@ function adminUnauthenticated(c: Context, path: string): Response {
 // re-auth then silently fast-forwards through, producing a visible
 // 5-step redirect chain that looks like an infinite loop).
 function adminNotOwner(c: Context, path: string): Response {
-  return jsonResponse(403, {
+  return Response.json({
     ok: false,
     diagnostic: runtimeDiagnostic({
       code: "AUTH_DENIED",
@@ -1863,10 +1839,10 @@ function adminNotOwner(c: Context, path: string): Response {
       expected: "owner role for the signed-in user",
       message: "Staff management is owner-only.",
     }),
-  });
+  }, { status: 403 });
 }
 function adminNotStaff(c: Context, path: string, login: string | null): Response {
-  return jsonResponse(403, {
+  return Response.json({
     ok: false,
     login,
     diagnostic: runtimeDiagnostic({
@@ -1877,7 +1853,7 @@ function adminNotStaff(c: Context, path: string, login: string | null): Response
       message:
         "Signed in, but this account isn't on the admin staff list. Contact a site owner to be added.",
     }),
-  });
+  }, { status: 403 });
 }
 
 function jsonError(args: { status: number; code: string; message: string }): Response {
@@ -1888,22 +1864,22 @@ function jsonError(args: { status: number; code: string; message: string }): Res
     path: "mount/http",
     message: args.message,
   };
-  return jsonResponse(args.status, { ok: false, diagnostic });
+  return Response.json({ ok: false, diagnostic }, { status: args.status });
 }
 
 async function runUseCase<T>(opPath: string, fn: () => Promise<T>): Promise<Response> {
   try {
     const result = await fn();
-    return jsonResponse(200, result);
+    return Response.json(result);
   } catch (e) {
     if (e instanceof DiagnosticError) {
       const status = HTTP_STATUS_BY_CODE[e.diagnostic.code] ?? 500;
-      return jsonResponse(status, { ok: false, diagnostic: redactForWire(e.diagnostic) });
+      return Response.json({ ok: false, diagnostic: redactForWire(e.diagnostic) }, { status });
     }
     // Don't leak raw exception strings on the wire — R2 / D1 / aws4fetch
     // errors can carry bucket names, account IDs, or query fragments.
     console.error(`[runUseCase ${opPath}] unhandled error`, e);
-    return jsonResponse(500, {
+    return Response.json({
       ok: false,
       diagnostic: runtimeDiagnostic({
         code: "INTERNAL_ERROR",
@@ -1911,12 +1887,12 @@ async function runUseCase<T>(opPath: string, fn: () => Promise<T>): Promise<Resp
         path: opPath,
         message: "An internal error occurred.",
       }),
-    });
+    }, { status: 500 });
   }
 }
 
 function mediaNotConfiguredResponse(path: string): Response {
-  return jsonResponse(501, {
+  return Response.json({
     ok: false,
     diagnostic: runtimeDiagnostic({
       code: "MEDIA_NOT_CONFIGURED",
@@ -1925,7 +1901,7 @@ function mediaNotConfiguredResponse(path: string): Response {
       message:
         "Media uploads are not enabled on this deployment. Bind a `mediaStorage` adapter in `createCmsRuntime` to enable.",
     }),
-  });
+  }, { status: 501 });
 }
 
 export type { CmsRuntimeRef };

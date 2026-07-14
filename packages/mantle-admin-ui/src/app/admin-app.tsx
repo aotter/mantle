@@ -9,7 +9,6 @@ import { AccessDeniedView, GateError, GateLoading, SignInView } from "../feature
 import { HomeView } from "../features/console/home-view";
 import { CollectionView } from "../features/content/collection-view";
 import { EntryEditView } from "../features/content/entry-edit-view";
-import { EditorView } from "../features/editor/editor-view";
 import { MediaLibraryView } from "../features/media/media-library-view";
 import { OperationsView } from "../features/ops/operations-view";
 import { ViewPage } from "../features/ops/view-page";
@@ -79,14 +78,6 @@ function Gate({ path }: { path: string }): React.ReactElement {
     return (
       <AuthenticatedLayout>
         <HomeView />
-      </AuthenticatedLayout>
-    );
-  }
-
-  if (path === "/admin/editor") {
-    return (
-      <AuthenticatedLayout>
-        <EditorView />
       </AuthenticatedLayout>
     );
   }

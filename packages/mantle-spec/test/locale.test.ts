@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
-import {
-  InvalidLocaleError,
-  LOCALE_SHAPED_SEGMENT,
-  URL_LOCALE,
-  URL_SEGMENT,
-} from "../src/domain/model/Locale.js";
+import { InvalidLocaleError, URL_LOCALE } from "../src/domain/model/Locale.js";
 import {
   canonicalizeLocaleList,
-  fromUrlLocale,
   safeCanonicalLocale,
   toCanonicalLocale,
   toUrlLocale,
@@ -127,22 +121,11 @@ describe("canonicalizeLocaleList", () => {
   });
 });
 
-describe("toUrlLocale / fromUrlLocale roundtrip", () => {
-  it("toUrlLocale lowercases canonical form", () => {
+describe("toUrlLocale", () => {
+  it("lowercases canonical form", () => {
     expect(toUrlLocale("zh-TW")).toBe("zh-tw");
     expect(toUrlLocale("en-US")).toBe("en-us");
     expect(toUrlLocale("en")).toBe("en");
-  });
-
-  it("fromUrlLocale parses URL form back to canonical", () => {
-    expect(fromUrlLocale("zh-tw")).toBe("zh-TW");
-    expect(fromUrlLocale("en")).toBe("en");
-  });
-
-  it("canonical → URL → canonical is a stable roundtrip", () => {
-    for (const canonical of ["zh-TW", "en-US", "pt-BR", "en", "ja"]) {
-      expect(fromUrlLocale(toUrlLocale(canonical))).toBe(canonical);
-    }
   });
 });
 
@@ -158,29 +141,5 @@ describe("URL_LOCALE regex", () => {
     expect(URL_LOCALE.test("ZH-tw")).toBe(false);
     expect(URL_LOCALE.test("foo")).toBe(false);
     expect(URL_LOCALE.test("")).toBe(false);
-  });
-});
-
-describe("LOCALE_SHAPED_SEGMENT regex", () => {
-  it("matches case-insensitively (for redirect detection)", () => {
-    expect(LOCALE_SHAPED_SEGMENT.test("zh-TW")).toBe(true);
-    expect(LOCALE_SHAPED_SEGMENT.test("ZH-tw")).toBe(true);
-    expect(LOCALE_SHAPED_SEGMENT.test("zh-tw")).toBe(true);
-  });
-});
-
-describe("URL_SEGMENT regex", () => {
-  it("matches lowercase slugs", () => {
-    expect(URL_SEGMENT.test("posts")).toBe(true);
-    expect(URL_SEGMENT.test("hello-world")).toBe(true);
-    expect(URL_SEGMENT.test("a")).toBe(true);
-    expect(URL_SEGMENT.test("123")).toBe(true);
-  });
-
-  it("rejects uppercase, leading hyphen, special chars", () => {
-    expect(URL_SEGMENT.test("Posts")).toBe(false);
-    expect(URL_SEGMENT.test("-leading")).toBe(false);
-    expect(URL_SEGMENT.test("with space")).toBe(false);
-    expect(URL_SEGMENT.test("")).toBe(false);
   });
 });

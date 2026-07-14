@@ -33,13 +33,11 @@ import { StatusBadge } from "../../ui/status-badge";
 import { statusLabel } from "./status";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t, type I18nKey } from "../../app/i18n";
-import { formatMoneyMinor, formatTimestampMs, idTail, moneyMinorHint, timestampHint } from "./field-render";
+import { formatTimestampMs, idTail } from "./field-render";
 import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
-
-const TIMESTAMP_FMT = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "short",
-  timeStyle: "short",
-});
+import { useCursorPagination } from "../../lib/use-cursor-pagination";
+import { renderDataValue } from "../../lib/render-data-value";
+import { renderTitleText } from "../../lib/entry-title";
 
 export function CollectionView({
   collectionName,
@@ -90,25 +88,27 @@ export function CollectionView({
   React.useEffect(() => {
     if (entries.data) setVisibleEntries(entries.data);
   }, [entries.data]);
-  // Appended "load more" pages live in their own state, separate from
-  // the page-1 query. Reset whenever page 1 itself changes — a new
-  // collection/status/search/language combo, or a refetch of the
-  // current combo after a mutation — since stale appended pages would
-  // otherwise duplicate or drift out of sync with a fresh page 1.
-  const [extraItems, setExtraItems] = React.useState<EntryRow[]>([]);
-  const [nextCursor, setNextCursor] = React.useState<string | null>(null);
-  const [loadMoreError, setLoadMoreError] = React.useState<unknown>(null);
-  const [isLoadingMore, setIsLoadingMore] = React.useState(false);
-  React.useEffect(() => {
-    setExtraItems([]);
-    setNextCursor(entries.data?.next_cursor ?? null);
-    setLoadMoreError(null);
-  }, [collectionName, status, searchTerm, language, entries.data]);
+  const loadEntriesPage = React.useCallback(async (cursor: string) => {
+    const qs = new URLSearchParams({
+      collection: collectionName,
+      limit: "99",
+      locale: language,
+      cursor,
+    });
+    if (status) qs.set("status", status);
+    if (searchTerm) qs.set("search", searchTerm);
+    return api.get<ListEntriesResult>(`/entries?${qs.toString()}`);
+  }, [collectionName, language, searchTerm, status]);
+  const baseEntries = entries.data ?? visibleEntries;
+  const pagination = useCursorPagination<EntryRow>(baseEntries, {
+    resetKey: `${collectionName}:${status ?? "all"}:${language}:${searchTerm}`,
+    resetOnPageChange: true,
+    loadPage: loadEntriesPage,
+  });
   const displayedEntries = React.useMemo(() => {
-    const base = entries.data ?? visibleEntries;
-    if (!base) return base;
-    return { ...base, items: [...base.items, ...extraItems] };
-  }, [entries.data, visibleEntries, extraItems]);
+    if (!baseEntries) return baseEntries;
+    return { ...baseEntries, items: pagination.items };
+  }, [baseEntries, pagination.items]);
   const isFirstLoad = entries.isLoading && !displayedEntries;
 
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
@@ -124,29 +124,6 @@ export function CollectionView({
     clearSelection();
     void queryClient.invalidateQueries({ queryKey: ["entries", collectionName] });
   }, [collectionName, queryClient, clearSelection]);
-
-  async function loadMore(): Promise<void> {
-    if (!nextCursor) return;
-    setIsLoadingMore(true);
-    setLoadMoreError(null);
-    try {
-      const qs = new URLSearchParams({
-        collection: collectionName,
-        limit: "99",
-        locale: language,
-        cursor: nextCursor,
-      });
-      if (status) qs.set("status", status);
-      if (searchTerm) qs.set("search", searchTerm);
-      const page = await api.get<ListEntriesResult>(`/entries?${qs.toString()}`);
-      setExtraItems((prev) => [...prev, ...page.items]);
-      setNextCursor(page.next_cursor);
-    } catch (err) {
-      setLoadMoreError(err);
-    } finally {
-      setIsLoadingMore(false);
-    }
-  }
 
   const titleMutation = useMutation({
     mutationFn: ({ id, title, version }: { id: string; title: string; version: number }) =>
@@ -348,16 +325,16 @@ export function CollectionView({
               {t(language, "collection.refreshing")}
             </p>
           ) : null}
-          {loadMoreError ? <ErrorBox error={loadMoreError} /> : null}
-          {nextCursor ? (
+          {pagination.loadMoreError ? <ErrorBox error={pagination.loadMoreError} /> : null}
+          {pagination.nextCursor ? (
             <div className="mt-3">
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => void loadMore()}
-                disabled={isLoadingMore}
+                onClick={() => void pagination.loadMore()}
+                disabled={pagination.isLoadingMore}
               >
-                {isLoadingMore ? t(language, "crud.saving") : t(language, "collection.loadMore")}
+                {pagination.isLoadingMore ? t(language, "crud.saving") : t(language, "collection.loadMore")}
               </Button>
             </div>
           ) : null}
@@ -380,16 +357,13 @@ function BulkActionBar({
   onDone: () => void;
   onClear: () => void;
 }): React.ReactElement {
-  const [pending, setPending] = React.useState<"publish" | "unpublish" | "delete" | null>(null);
+  const [pending, setPending] = React.useState(false);
   const [failures, setFailures] = React.useState<unknown[]>([]);
   const canPublish = collection && collection.lifecycle !== "none";
   const confirm = useConfirm();
 
-  async function runBulk(
-    action: "publish" | "unpublish" | "delete",
-    call: (id: string) => Promise<unknown>,
-  ): Promise<void> {
-    setPending(action);
+  async function runBulk(call: (id: string) => Promise<unknown>): Promise<void> {
+    setPending(true);
     setFailures([]);
     const errors: unknown[] = [];
     for (const id of selectedIds) {
@@ -399,7 +373,7 @@ function BulkActionBar({
         errors.push(err);
       }
     }
-    setPending(null);
+    setPending(false);
     setFailures(errors);
     onDone();
   }
@@ -409,7 +383,7 @@ function BulkActionBar({
       description: t(language, "collection.bulk.deleteConfirm", { count: String(selectedIds.length) }),
     });
     if (!ok) return;
-    void runBulk("delete", (id) => api.delete(`/entries/${encodeURIComponent(id)}`));
+    void runBulk((id) => api.delete(`/entries/${encodeURIComponent(id)}`));
   }
 
   return (
@@ -424,9 +398,9 @@ function BulkActionBar({
               type="button"
               variant="secondary"
               size="sm"
-              disabled={pending !== null}
+              disabled={pending}
               onClick={() =>
-                void runBulk("publish", (id) => api.post(`/entries/${encodeURIComponent(id)}/publish`, {}))
+                void runBulk((id) => api.post(`/entries/${encodeURIComponent(id)}/publish`, {}))
               }
             >
               {t(language, "collection.bulk.publish")}
@@ -435,9 +409,9 @@ function BulkActionBar({
               type="button"
               variant="secondary"
               size="sm"
-              disabled={pending !== null}
+              disabled={pending}
               onClick={() =>
-                void runBulk("unpublish", (id) => api.post(`/entries/${encodeURIComponent(id)}/unpublish`, {}))
+                void runBulk((id) => api.post(`/entries/${encodeURIComponent(id)}/unpublish`, {}))
               }
             >
               {t(language, "collection.bulk.unpublish")}
@@ -448,7 +422,7 @@ function BulkActionBar({
           type="button"
           variant="destructive"
           size="sm"
-          disabled={pending !== null}
+          disabled={pending}
           onClick={() => void bulkDelete()}
         >
           {t(language, "collection.bulk.delete")}
@@ -799,7 +773,7 @@ function EntryRowDisplay({
       {dataColumns ? (
         dataColumns.map((name) => (
           <TableCell key={name} className="text-muted-foreground">
-            {renderDataPreviewValue(collection, name, row.data_preview?.[name])}
+            {renderDataValue(collection?.schema?.properties?.[name], row.data_preview?.[name])}
           </TableCell>
         ))
       ) : (
@@ -814,7 +788,7 @@ function EntryRowDisplay({
         </>
       )}
       <TableCell className="text-muted-foreground">
-        {formatTimestamp(row.updated_at)}
+        {formatTimestampMs(row.updated_at) ?? "-"}
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-1" data-tour="entry-actions">
@@ -855,21 +829,6 @@ function renderTitle(
   return <span className="font-mono text-xs">{JSON.stringify(title)}</span>;
 }
 
-function renderTitleText(title: unknown, language: AdminLanguage): string {
-  if (typeof title === "string" && title) return title;
-  if (title == null || title === "") return t(language, "collection.untitled");
-  return JSON.stringify(title);
-}
-
-function formatTimestamp(ms: number): string {
-  if (!Number.isFinite(ms)) return "-";
-  try {
-    return TIMESTAMP_FMT.format(new Date(ms));
-  } catch {
-    return "-";
-  }
-}
-
 /** Schema property names that collide in MEANING with a system column
  *  the admin list already renders unconditionally (the "updated"
  *  column reads the reserved `updatedAt` storage column, formatted via
@@ -900,27 +859,4 @@ function dataPreviewColumns(collection: Collection | undefined): string[] {
   return required
     .filter((key) => key !== titleKey && !DATA_PREVIEW_SYSTEM_COLUMN_NAMES.has(key))
     .slice(0, 3);
-}
-
-/** Renders one operational data-preview cell, applying money/timestamp
- *  formatting when the schema property carries the matching hint. */
-function renderDataPreviewValue(
-  collection: Collection | undefined,
-  fieldName: string,
-  value: unknown,
-): React.ReactNode {
-  const fieldSchema = collection?.schema?.properties?.[fieldName];
-  if (moneyMinorHint(fieldSchema)) {
-    const formatted = formatMoneyMinor(value, undefined);
-    if (formatted) return formatted;
-  }
-  if (timestampHint(fieldSchema)) {
-    const formatted = formatTimestampMs(value);
-    if (formatted) return formatted;
-  }
-  if (value == null || value === "") return <span className="text-muted-foreground">-</span>;
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return <span className="font-mono text-xs">{JSON.stringify(value)}</span>;
 }

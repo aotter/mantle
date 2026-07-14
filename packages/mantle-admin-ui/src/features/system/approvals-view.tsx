@@ -10,11 +10,8 @@ import { Button } from "../../ui/button";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
 import { statusLabel } from "../content/status";
-
-const TIMESTAMP_FMT = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "short",
-  timeStyle: "short",
-});
+import { formatTimestampMs } from "../content/field-render";
+import { renderTitleText } from "../../lib/entry-title";
 
 export function ApprovalsView(): React.ReactElement {
   const { language } = usePreferences();
@@ -119,7 +116,7 @@ function ApprovalRow({
   entry: EntryRow;
   language: AdminLanguage;
 }): React.ReactElement {
-  const title = entryTitle(entry, language);
+  const title = renderTitleText(entry.title, language);
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 p-3">
       <div className="min-w-0">
@@ -131,7 +128,7 @@ function ApprovalRow({
           {title}
         </a>
         <p className="mt-1 text-xs text-muted-foreground">
-          {entry.collection} / v{entry.version} / {formatTimestamp(entry.updated_at)}
+          {entry.collection} / v{entry.version} / {formatTimestampMs(entry.updated_at) ?? "-"}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
@@ -161,19 +158,4 @@ function ApprovalsSkeleton(): React.ReactElement {
       ))}
     </div>
   );
-}
-
-function entryTitle(entry: EntryRow, language: AdminLanguage): string {
-  if (typeof entry.title === "string" && entry.title.trim()) return entry.title;
-  if (entry.title == null || entry.title === "") return t(language, "collection.untitled");
-  return JSON.stringify(entry.title);
-}
-
-function formatTimestamp(ms: number): string {
-  if (!Number.isFinite(ms)) return "-";
-  try {
-    return TIMESTAMP_FMT.format(new Date(ms));
-  } catch {
-    return "-";
-  }
 }

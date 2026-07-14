@@ -3,7 +3,6 @@ import {
   resolveLifecycle,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
-import type { HandlerContext } from "../../domain/model/HandlerContext.js";
 import type { EntryRow } from "../../domain/model/EntryRow.js";
 import type { Clock } from "../../domain/port/Clock.js";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
@@ -16,6 +15,7 @@ import {
   withConflictDiagnostic,
 } from "./diagnostics.js";
 import { assertEntryWritable } from "../../domain/service/io/EntryWriteGuard.js";
+import { authoringContext } from "./AuthoringContext.js";
 
 /**
  * `CreateDraftUseCase` — create a draft for content lifecycles, or a
@@ -67,13 +67,4 @@ export class CreateDraftUseCase {
       }),
     );
   }
-}
-
-function authoringContext(ctx: HandlerContext | undefined, authorId: string | null): HandlerContext {
-  if (ctx) return ctx;
-  return {
-    user: authorId ? { id: authorId } : null,
-    staff: null,
-    env: {},
-  };
 }

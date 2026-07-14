@@ -9,8 +9,8 @@ import { renderEntryHtml } from "../../domain/service/HtmlRenderer.js";
 import type { RenderEntryLiveRequest } from "../dto/render/RenderEntryLiveRequest.js";
 import {
   composeSeoIfPathed,
-  type SeoComposer,
-} from "../../domain/service/EntrySeoSupport.js";
+  type ComposeEntrySeoMetaUseCase,
+} from "./ComposeEntrySeoMetaUseCase.js";
 import { resolveMediaAssetsForEntries } from "../../domain/service/io/MediaAssetReferences.js";
 
 /**
@@ -37,13 +37,13 @@ export class RenderEntryLiveUseCase {
     private readonly db: DatabaseDriver,
     private readonly templates: TemplateRegistry,
     private readonly paths: PublicPathResolver | null,
-    private readonly composeSeo: SeoComposer,
+    private readonly composeSeo: Pick<ComposeEntrySeoMetaUseCase, "execute">,
     private readonly schemas: ReadonlyMap<string, SchemaManifest>,
     private readonly mediaAssets: MediaAssetRepository | null = null,
   ) {}
 
   async execute(request: RenderEntryLiveRequest): Promise<string | null> {
-    const status = request.status ?? "published";
+    const status = "published";
     const raw = await readEntryBySlug(this.db, {
       collection: request.collection,
       slug: request.slug,

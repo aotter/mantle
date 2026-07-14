@@ -1,12 +1,14 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join, resolve, relative } from "node:path";
 import { exit, stdout, stderr, cwd } from "node:process";
+import { parseArgs as parseNodeArgs } from "node:util";
 import {
   validateDiagnostic,
   type Diagnostic,
 } from "../../kernel/diagnostic.js";
 import { ValidateManifestsUseCase } from "../../usecase/ValidateManifestsUseCase.js";
 import { loadManifestsFromRoot } from "./loadManifests.js";
+import { translateParseArgsError } from "./parseArgsError.js";
 
 /**
  * `mantle validate` — Loop 1 of the SDK authoring contract
@@ -24,7 +26,7 @@ import { loadManifestsFromRoot } from "./loadManifests.js";
  *   --format json   → JSON array on stdout (default when piped)
  *   --format text   → pretty-print on stdout (default when TTY)
  *
- * Phase (which gates are active — see Phase doc below):
+ * Phase:
  *   --phase preview  → grammar checks only; deploy-only gates skipped (default)
  *   --phase deploy   → production/deploy checks
  *
@@ -42,43 +44,55 @@ export interface CliArgs {
 }
 
 export function parseArgs(rawArgs: ReadonlyArray<string>): CliArgs {
-  let manifests = "./manifests";
-  let source: string | null = "./src";
-  let format: "json" | "text" | null = null;
-  let phase: Phase = "preview";
-
-  for (let i = 0; i < rawArgs.length; i++) {
-    const a = rawArgs[i];
-    if (a === "--manifests") manifests = rawArgs[++i] ?? manifests;
-    else if (a === "--source") source = rawArgs[++i] ?? source;
-    else if (a === "--no-source") source = null;
-    else if (a === "--format") {
-      const v = rawArgs[++i];
-      if (v !== "json" && v !== "text") {
-        throw new Error(`--format must be 'json' or 'text'; got ${JSON.stringify(v)}`);
-      }
-      format = v;
-    } else if (a === "--json") {
-      format = "json";
-    } else if (a === "--phase") {
-      const v = rawArgs[++i];
-      if (v !== "preview" && v !== "deploy") {
-        throw new Error(`--phase must be 'preview' or 'deploy'; got ${JSON.stringify(v)}`);
-      }
-      phase = v;
-    } else if (a === "--help" || a === "-h") {
-      printHelp();
-      exit(0);
-    } else if (a !== undefined) {
-      throw new Error(`Unknown argument: ${a}`);
-    }
+  let values;
+  try {
+    ({ values } = parseNodeArgs({
+      args: [...rawArgs],
+      options: {
+        manifests: { type: "string" },
+        source: { type: "string" },
+        "no-source": { type: "boolean" },
+        format: { type: "string" },
+        json: { type: "boolean" },
+        phase: { type: "string" },
+        help: { type: "boolean", short: "h" },
+      },
+    }));
+  } catch (err) {
+    throw translateParseArgsError(err, {
+      "--phase": "--phase must be 'preview' or 'deploy'; got undefined",
+      "--format": "--format must be 'json' or 'text'; got undefined",
+    });
   }
 
-  if (format === null) {
+  if (values.help) {
+    printHelp();
+    exit(0);
+  }
+
+  const phase = values.phase ?? "preview";
+  if (phase !== "preview" && phase !== "deploy") {
+    throw new Error(`--phase must be 'preview' or 'deploy'; got ${JSON.stringify(phase)}`);
+  }
+
+  let format: "json" | "text";
+  if (values.format !== undefined) {
+    if (values.format !== "json" && values.format !== "text") {
+      throw new Error(`--format must be 'json' or 'text'; got ${JSON.stringify(values.format)}`);
+    }
+    format = values.format;
+  } else if (values.json) {
+    format = "json";
+  } else {
     format = stdout.isTTY ? "text" : "json";
   }
 
-  return { manifests, source, format, phase };
+  return {
+    manifests: values.manifests ?? "./manifests",
+    source: values["no-source"] ? null : values.source ?? "./src",
+    format,
+    phase,
+  };
 }
 
 function printHelp(): void {
@@ -106,23 +120,6 @@ Exit codes:
   1  one or more errors
   2  CLI invocation problem
 `);
-}
-
-/**
- * Which diagnostic codes are gated to which phase. Codes not listed
- * here fire in every phase. The list is small on purpose — most
- * grammar checks belong in every phase; only lifecycle-stage gates
- * (for example future production secret checks) live here.
- *
- * "deploy" entries mean: the diagnostic is emitted only when phase
- * === "deploy".
- */
-const PHASE_GATED_CODES: Readonly<Record<string, Phase>> = {};
-
-function isVisibleInPhase(code: string, phase: Phase): boolean {
-  const gate = PHASE_GATED_CODES[code];
-  if (gate === undefined) return true;
-  return gate === phase;
 }
 
 export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
@@ -177,12 +174,10 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
     );
   }
 
-  const rawDiagnostics = [...parseErrors, ...result.diagnostics, ...cliWarnings];
-
-  // Apply phase gating — diagnostics for codes only valid in another
-  // phase are dropped before counting.
-  const diagnostics = rawDiagnostics.filter((d) => isVisibleInPhase(d.code, args.phase));
-  const suppressedCount = rawDiagnostics.length - diagnostics.length;
+  // ponytail: no diagnostic code is phase-gated yet, so --phase only
+  // labels the output. Reintroduce filtering here when the first
+  // deploy-only gate lands.
+  const diagnostics = [...parseErrors, ...result.diagnostics, ...cliWarnings];
 
   let errorCount = 0;
   let warningCount = 0;
@@ -195,13 +190,13 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
   if (args.format === "json") {
     stdout.write(
       JSON.stringify(
-        { phase: args.phase, diagnostics, errorCount, warningCount, suppressedCount },
+        { phase: args.phase, diagnostics, errorCount, warningCount },
         null,
         2,
       ) + "\n",
     );
   } else {
-    emitText(diagnostics, errorCount, warningCount, manifestsRoot, args.phase, suppressedCount);
+    emitText(diagnostics, errorCount, warningCount, manifestsRoot, args.phase);
   }
 
   return errorCount > 0 ? 1 : 0;
@@ -241,15 +236,9 @@ function emitText(
   warningCount: number,
   root: string,
   phase: Phase,
-  suppressedCount: number,
 ): void {
   if (diagnostics.length === 0) {
     stdout.write(`OK  no issues (root: ${relative(cwd(), root) || root}, phase: ${phase})\n`);
-    if (phase === "preview" && suppressedCount > 0) {
-      stdout.write(
-        `ℹ ${suppressedCount} deploy-only gate(s) skipped — re-run with \`--phase deploy\` before shipping.\n`,
-      );
-    }
     return;
   }
   for (const d of diagnostics) {
@@ -263,11 +252,6 @@ function emitText(
     stdout.write("\n");
   }
   stdout.write(`${errorCount} error(s), ${warningCount} warning(s) (phase: ${phase}).\n`);
-  if (phase === "preview" && suppressedCount > 0) {
-    stdout.write(
-      `ℹ ${suppressedCount} deploy-only gate(s) skipped — re-run with \`--phase deploy\` before shipping.\n`,
-    );
-  }
 }
 
 function formatValue(v: unknown): string {

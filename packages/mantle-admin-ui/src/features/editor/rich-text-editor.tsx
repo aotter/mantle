@@ -36,24 +36,14 @@ import type { SiteInfo } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { primaryPublicUrl, uploadMediaAsset } from "../media/media-upload";
 
-export type EditorMode = "markdown" | "html" | "rich";
-
 export function RichTextEditor({
   value,
   onChange,
-  label,
-  mode,
-  onModeChange,
   compact = false,
-  showPreview = false,
 }: {
   value: string;
   onChange: (value: string) => void;
-  label?: string;
-  mode?: EditorMode;
-  onModeChange?: (mode: EditorMode) => void;
   compact?: boolean;
-  showPreview?: boolean;
 }): React.ReactElement {
   const { language } = usePreferences();
   const textRef = React.useRef<HTMLTextAreaElement | null>(null);
@@ -62,7 +52,6 @@ export function RichTextEditor({
   const [videoOpen, setVideoOpen] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const activeMode = mode ?? "rich";
   const site = useQuery<SiteInfo>({
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
@@ -142,24 +131,6 @@ export function RichTextEditor({
 
   return (
     <div className="rich-editor">
-      <div className="rich-editor-topline">
-        {label ? <span className="text-sm font-semibold">{label}</span> : null}
-        {onModeChange ? (
-          <div className="segmented-control rich-editor-modes">
-            {(["rich", "markdown", "html"] as const).map((nextMode) => (
-              <button
-                key={nextMode}
-                type="button"
-                data-active={activeMode === nextMode}
-                onClick={() => onModeChange(nextMode)}
-              >
-                {editorModeLabel(language, nextMode)}
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
       <div className="rich-editor-toolbar" aria-label={t(language, "editor.toolbar")}>
         <ToolbarButton title={t(language, "editor.undo")} onClick={() => runTextCommand("undo", textRef.current)}>
           <Undo2 className="size-4" aria-hidden />
@@ -278,10 +249,6 @@ export function RichTextEditor({
       />
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
       {uploading ? <p className="text-xs text-muted-foreground">{t(language, "editor.uploading")}</p> : null}
-      {showPreview ? (
-        <div className="editor-preview" dangerouslySetInnerHTML={{ __html: renderRichTextPreview(value, activeMode) }} />
-      ) : null}
-
       {mediaOpen ? (
         <MediaInsertDialog
           language={language}
@@ -319,12 +286,6 @@ function ToolbarButton({
       {children}
     </button>
   );
-}
-
-function editorModeLabel(language: AdminLanguage, mode: EditorMode): string {
-  if (mode === "html") return t(language, "editor.mode.html");
-  if (mode === "markdown") return t(language, "editor.mode.markdown");
-  return t(language, "editor.mode.rich");
 }
 
 function ToolbarDivider(): React.ReactElement {
@@ -449,94 +410,6 @@ function dailymotionId(url: URL): string | null {
   const parts = url.pathname.split("/").filter(Boolean);
   const videoIndex = parts.indexOf("video");
   return videoIndex >= 0 ? (parts[videoIndex + 1] ?? null) : null;
-}
-
-export function renderRichTextPreview(body: string, mode: EditorMode): string {
-  if (mode === "html") return body;
-
-  const output: string[] = [];
-  let inList = false;
-  let inOrderedList = false;
-
-  for (const rawLine of body.split("\n")) {
-    const trimmed = rawLine.trim();
-    if (!trimmed) {
-      if (inList) output.push("</ul>");
-      if (inOrderedList) output.push("</ol>");
-      inList = false;
-      inOrderedList = false;
-      continue;
-    }
-    if (trimmed.startsWith("<")) {
-      if (inList) output.push("</ul>");
-      if (inOrderedList) output.push("</ol>");
-      inList = false;
-      inOrderedList = false;
-      output.push(trimmed);
-      continue;
-    }
-    const image = trimmed.match(/^!\[(.*)]\((.*)\)$/);
-    if (image) {
-      output.push(`<figure><img src="${escapeAttribute(image[2] ?? "")}" alt="${escapeAttribute(image[1] ?? "")}" /></figure>`);
-      continue;
-    }
-    const line = renderInlineMarkdown(trimmed);
-
-    if (trimmed.startsWith("## ")) {
-      if (inList) output.push("</ul>");
-      if (inOrderedList) output.push("</ol>");
-      inList = false;
-      inOrderedList = false;
-      output.push(`<h2>${renderInlineMarkdown(trimmed.slice(3))}</h2>`);
-      continue;
-    }
-
-    if (trimmed.startsWith("- [ ] ")) {
-      if (!inList) {
-        output.push("<ul>");
-        inList = true;
-      }
-      output.push(`<li><input type="checkbox" disabled /> ${renderInlineMarkdown(trimmed.slice(6))}</li>`);
-      continue;
-    }
-
-    if (trimmed.startsWith("- ")) {
-      if (!inList) {
-        output.push("<ul>");
-        inList = true;
-      }
-      output.push(`<li>${renderInlineMarkdown(trimmed.slice(2))}</li>`);
-      continue;
-    }
-
-    if (/^\d+\.\s/.test(trimmed)) {
-      if (!inOrderedList) {
-        output.push("<ol>");
-        inOrderedList = true;
-      }
-      output.push(`<li>${renderInlineMarkdown(trimmed.replace(/^\d+\.\s/, ""))}</li>`);
-      continue;
-    }
-
-    if (inList) output.push("</ul>");
-    if (inOrderedList) output.push("</ol>");
-    inList = false;
-    inOrderedList = false;
-    output.push(`<p>${line}</p>`);
-  }
-
-  if (inList) output.push("</ul>");
-  if (inOrderedList) output.push("</ol>");
-  return output.join("");
-}
-
-function renderInlineMarkdown(value: string): string {
-  return escapeHtml(value)
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/_(.+?)_/g, "<em>$1</em>")
-    .replace(/~~(.+?)~~/g, "<s>$1</s>")
-    .replace(/`(.+?)`/g, "<code>$1</code>")
-    .replace(/\[(.+?)]\((https?:\/\/[^)]+)\)/g, '<a href="$2">$1</a>');
 }
 
 function escapeHtml(value: string): string {

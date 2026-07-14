@@ -9,8 +9,7 @@ import type { LifecycleMode } from "../model/ManifestGrammar.js";
  * queue or publish directly.
  *
  * Pure functions — no env, no DB. Feeds the dispatcher's
- * requestPublish branching, the admin SPA sub-nav rendering (via
- * `getLifecycleStatuses`), and runtime state-transition validation.
+ * requestPublish branching and runtime state-transition validation.
  */
 
 /**
@@ -101,24 +100,4 @@ function transitionsFor(mode: LifecycleMode): Readonly<Record<ContentState, Read
   if (mode === "editorial") return EDITORIAL_TRANSITIONS;
   if (mode === "none") return NONE_TRANSITIONS;
   return SIMPLE_TRANSITIONS;
-}
-
-/**
- * The **navigable** subset of statuses an admin user filters by in
- * the per-Schema sub-nav (Drafts / Review / Published / Archived for
- * editorial; same minus Review for simple). This is intentionally a
- * subset of the full state set: `approved` and `scheduled` are
- * intermediate editorial states — entries pass through them but
- * authors don't navigate to them as buckets.
- *
- * Lives in spec for now because the consumer's admin SPA bundles
- * this. v0.1.x may move to `mantle-admin-ui` once the SPA is
- * extracted from the spec dependency graph.
- */
-export function getLifecycleStatuses(mode: LifecycleMode): readonly ContentState[] {
-  if (mode === "editorial") return ["draft", "review", "published", "archived"] as const;
-  // Operational records have no status buckets to browse — the admin
-  // renders a flat list with no draft/published filter chrome.
-  if (mode === "none") return [] as const;
-  return ["draft", "published", "archived"] as const;
 }

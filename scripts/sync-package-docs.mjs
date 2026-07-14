@@ -5,10 +5,9 @@ import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
-const args = process.argv.slice(2);
-const clean = args.includes("--clean");
-const targetArg = args.find((arg) => arg !== "--clean") ?? "packages/mantle";
-const packageRoot = resolve(process.cwd(), targetArg);
+const clean = process.argv.includes("--clean");
+// Invoked by packages/mantle pre/postpack with cwd = the package dir.
+const packageRoot = process.cwd();
 
 for (const dir of ["docs", "skills"]) {
   const target = resolve(packageRoot, dir);

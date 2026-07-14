@@ -205,14 +205,11 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
   {
     name: "archive_entry",
-    description: "Archive an entry. Requires expected_version (OCC).",
+    description: "Archive an entry.",
     inputSchema: {
       type: "object",
-      properties: {
-        id: { type: "string" },
-        expected_version: { type: "number" },
-      },
-      required: ["id", "expected_version"],
+      properties: { id: { type: "string" } },
+      required: ["id"],
     },
   },
   {
@@ -282,8 +279,6 @@ export function buildMcpToolCatalog(
 /** Re-export the naming util from `domain/service/` so existing
  *  consumers of `McpToolCatalog` (the dispatcher) keep their import
  *  surface stable. */
-export { mcpToolNameSegment as toolNameSegment };
-
 /** Inverse routing: given a tool name and its prefix, recover the
  *  segment. Returns `null` if the name doesn't carry the prefix. */
 export function extractCollectionSegment(

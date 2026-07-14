@@ -33,11 +33,11 @@ import {
   renderListHtml,
 } from "../../domain/service/HtmlRenderer.js";
 import type { PublicPathResolver } from "../../domain/service/PublicPathResolver.js";
+import { resolveMediaAssetsForEntries } from "../../domain/service/io/MediaAssetReferences.js";
 import {
   composeSeoIfPathed,
-  type SeoComposer,
-} from "../../domain/service/EntrySeoSupport.js";
-import { resolveMediaAssetsForEntries } from "../../domain/service/io/MediaAssetReferences.js";
+  type ComposeEntrySeoMetaUseCase,
+} from "../../usecase/render/ComposeEntrySeoMetaUseCase.js";
 
 /**
  * Structural contract of the llms.txt composer the orchestrator
@@ -72,26 +72,14 @@ export class HtmlPublishOrchestrator implements PublishOrchestrator {
     private readonly db: DatabaseDriver,
     private readonly kv: KvCache,
     private readonly paths: PublicPathResolver | null,
-    private readonly composeSeo: SeoComposer,
+    private readonly composeSeo: Pick<ComposeEntrySeoMetaUseCase, "execute">,
     private readonly composeLlmsTxt: LlmsTxtComposer,
     private readonly schemas: ReadonlyMap<string, SchemaManifest>,
     private readonly mediaAssets: MediaAssetRepository | null = null,
   ) {}
 
   async publish(request: PublishEntryRequest): Promise<void> {
-    const raw = await readEntryById(this.db, request.entryId);
-    if (!raw) {
-      throw new DiagnosticError(
-        runtimeDiagnostic({
-          code: "NOT_FOUND",
-          severity: "error",
-          path: `usecase/PublishEntry/${request.entryId}`,
-          value: request.entryId,
-          expected: "id of an existing entry",
-          message: `Entry not found: ${request.entryId}.`,
-        }),
-      );
-    }
+    const raw = await requireEntry(this.db, request.entryId, "usecase/PublishEntry");
     // Materialize parent fields into the translation's data before
     // rendering (ADR-0010). RequestPublishUseCase has already asserted
     // the parent is published, so a status filter is safe here.
@@ -99,36 +87,24 @@ export class HtmlPublishOrchestrator implements PublishOrchestrator {
       parentStatus: "published",
     });
     const indexLocale = entry.locale ?? null;
-    const doctype = request.htmlDoctype ?? DEFAULT_DOCTYPE;
-
     await Promise.all([
-      this.renderEntry(entry, request.site, request.templates, doctype),
-      this.renderList(entry.collection, indexLocale, request.site, request.templates, doctype),
+      this.renderEntry(entry, request.site, request.templates, DEFAULT_DOCTYPE),
+      this.renderList(entry.collection, indexLocale, request.site, request.templates, DEFAULT_DOCTYPE),
       this.renderLlmsTxt(indexLocale, request.site),
     ]);
   }
 
   async unpublish(request: PublishEntryRequest): Promise<void> {
-    const entry = await readEntryById(this.db, request.entryId);
-    if (!entry) {
-      throw new DiagnosticError(
-        runtimeDiagnostic({
-          code: "NOT_FOUND",
-          severity: "error",
-          path: `usecase/UnpublishEntryCache/${request.entryId}`,
-          value: request.entryId,
-          expected: "id of an existing entry",
-          message: `Entry not found: ${request.entryId}.`,
-        }),
-      );
-    }
+    const entry = await requireEntry(
+      this.db,
+      request.entryId,
+      "usecase/UnpublishEntryCache",
+    );
     const indexLocale = entry.locale ?? null;
-    const doctype = request.htmlDoctype ?? DEFAULT_DOCTYPE;
-
     await Promise.all([
       this.kv.delete(entryHtmlKey(entry)),
       this.kv.delete(entryMarkdownKey(entry)),
-      this.renderList(entry.collection, indexLocale, request.site, request.templates, doctype),
+      this.renderList(entry.collection, indexLocale, request.site, request.templates, DEFAULT_DOCTYPE),
       this.renderLlmsTxt(indexLocale, request.site),
     ]);
   }
@@ -181,4 +157,23 @@ export class HtmlPublishOrchestrator implements PublishOrchestrator {
     const body = await this.composeLlmsTxt.execute({ site, locale });
     await this.kv.put(llmsTxtKey(locale ?? ""), body);
   }
+}
+
+async function requireEntry(
+  db: DatabaseDriver,
+  entryId: string,
+  pathPrefix: string,
+): Promise<Entry> {
+  const entry = await readEntryById(db, entryId);
+  if (entry) return entry;
+  throw new DiagnosticError(
+    runtimeDiagnostic({
+      code: "NOT_FOUND",
+      severity: "error",
+      path: `${pathPrefix}/${entryId}`,
+      value: entryId,
+      expected: "id of an existing entry",
+      message: `Entry not found: ${entryId}.`,
+    }),
+  );
 }

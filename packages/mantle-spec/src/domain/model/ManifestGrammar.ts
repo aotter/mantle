@@ -28,29 +28,17 @@
 export const API_VERSION = "cms.mantle.aotter.net/v1" as const;
 export type ApiVersion = typeof API_VERSION;
 
-export const MCP_HINTS = [
-  "markdown",
-  "richtext",
-  "code",
-  "media",
-  "media-image",
-  "media-video",
-  "media-file",
-  "money-minor",
-  "timestamp-ms",
-] as const;
-export type McpHint = (typeof MCP_HINTS)[number];
-
-export const MEDIA_MCP_HINTS = [
-  "media",
-  "media-image",
-  "media-video",
-  "media-file",
-] as const;
-export type MediaMcpHint = (typeof MEDIA_MCP_HINTS)[number];
+/** Media-shaped `x-mcp-hint` values — the subset marking a field as
+ *  holding a media asset URL. */
+export type MediaMcpHint = "media" | "media-image" | "media-video" | "media-file";
 
 export function isMediaMcpHint(value: unknown): value is MediaMcpHint {
-  return typeof value === "string" && (MEDIA_MCP_HINTS as readonly string[]).includes(value);
+  return (
+    value === "media" ||
+    value === "media-image" ||
+    value === "media-video" ||
+    value === "media-file"
+  );
 }
 
 /** Loose JSON Schema shape — we don't constrain it at the type level.
@@ -58,8 +46,10 @@ export function isMediaMcpHint(value: unknown): value is MediaMcpHint {
  *  to zod (Workers-CSP-safe). Cross-collection refs use the custom
  *  keyword `x-mantle-ref: <collectionName>` on string-typed fields holding
  *  foreign-key IDs; `x-mcp-hint` is a widget-intent hint. The grammar
- *  accepts strings, but `MCP_HINTS` lists the v0.1 conventional values
- *  agents and admin widgets should understand. */
+ *  accepts strings; the v0.1 conventional values agents and admin
+ *  widgets should understand are `markdown`, `richtext`, `code`,
+ *  `media`, `media-image`, `media-video`, `media-file`, `money-minor`,
+ *  and `timestamp-ms`. */
 export type JsonSchema = {
   readonly type?: string | readonly string[];
   readonly properties?: Readonly<Record<string, JsonSchema>>;

@@ -7,7 +7,6 @@ import {
   SidebarSeparator,
   SidebarTrigger,
 } from "../ui/sidebar";
-import { useLayout } from "../context/layout-provider";
 import { usePreferences } from "../app/preferences";
 import { AppTitle } from "./app-title";
 import { NavGroup } from "./nav-group";
@@ -29,13 +28,9 @@ export function AppSidebar({
   search,
   user,
 }: AppSidebarProps): React.ReactElement {
-  const { variant } = useLayout();
   const { direction } = usePreferences();
   return (
-    <Sidebar
-      side={direction === "rtl" ? "right" : "left"}
-      variant={variant === "floating" ? "sidebar" : variant}
-    >
+    <Sidebar side={direction === "rtl" ? "right" : "left"}>
       <SidebarHeader>
         <div className="sidebar-chrome-row">
           <AppTitle brand={brand} />

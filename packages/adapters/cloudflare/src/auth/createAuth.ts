@@ -1,4 +1,5 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
+import type { SocialProvider } from "better-auth/social-providers";
 import { admin, emailOTP, jwt, magicLink } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
@@ -16,48 +17,12 @@ export { STAFF_ROLES, type StaffRole };
 export const STAFF_ROLE_SET: ReadonlySet<string> = new Set(STAFF_ROLES);
 
 /**
- * Provider id for the `kind: "social"` method. Mirrors Better Auth's
- * own `socialProviders` block keys for 1.6.9. Adding a provider that
- * Better Auth supports = adding its id here; no other wiring needed
- * (the config flows through to Better Auth as-is, plus the per-
- * provider i18n label).
+ * Provider id for the `kind: "social"` method — Better Auth's own
+ * `socialProviders` block keys. The config flows through to Better
+ * Auth as-is; no per-provider wiring in this adapter (beyond the
+ * github `mapProfileToUser` shim).
  */
-export type SocialProviderId =
-  | "github"
-  | "google"
-  | "apple"
-  | "microsoft-entra-id"
-  | "facebook"
-  | "discord"
-  | "twitter"
-  | "linkedin"
-  | "spotify"
-  | "twitch"
-  | "gitlab"
-  | "tiktok"
-  | "reddit"
-  | "kick"
-  | "vk"
-  | "naver"
-  | "kakao"
-  | "line"
-  | "slack"
-  | "atlassian"
-  | "zoom"
-  | "notion"
-  | "figma"
-  | "linear"
-  | "vercel"
-  | "paypal"
-  | "huggingface"
-  | "cognito"
-  | "salesforce"
-  | "polar"
-  | "railway"
-  | "roblox"
-  | "paybin"
-  | "wechat"
-  | "dropbox";
+export type SocialProviderId = SocialProvider;
 
 /**
  * Auth method config (discriminated union). Each `kind` is one auth
@@ -190,76 +155,6 @@ export type BootstrapOwnerRule =
   | { readonly match: "github-login"; readonly value: string }
   | { readonly match: "email"; readonly value: string };
 
-/**
- * Account-linking policy forwarded verbatim to Better Auth's
- * `account.accountLinking`. All fields optional — omitted keys fall
- * back to Better Auth's defaults (`enabled: true`,
- * `allowDifferentEmails: false`, `trustedProviders: []`,
- * `updateUserInfoOnLink: false`).
- *
- * Trusted providers bypass email-verification before linking — only
- * use when the upstream IDP guarantees a verified email (Google /
- * Apple / GitHub). `allowDifferentEmails: true` weakens the default
- * email-match guard and meaningfully widens the takeover surface;
- * default to false unless you have a specific use case (e.g. a
- * provider that doesn't return email at all).
- *
- * Better Auth does NOT merge two pre-existing user rows; this config
- * controls behavior at sign-in / link time, not after-the-fact
- * reconciliation. See Better Auth issues #6126 / #2062 for the
- * upstream stance.
- */
-export interface AccountLinkingConfig {
-  readonly enabled?: boolean;
-  readonly trustedProviders?: ReadonlyArray<SocialProviderId>;
-  readonly allowDifferentEmails?: boolean;
-  readonly updateUserInfoOnLink?: boolean;
-}
-
-/**
- * Session policy forwarded to Better Auth's `session` config. All
- * fields optional. `expiresIn` controls absolute session lifetime
- * (Better Auth default 7 days). `updateAge` is the sliding-renewal
- * window — sessions whose age exceeds `updateAge` get their expiry
- * extended on the next request (Better Auth default 1 day). All
- * values in seconds.
- *
- * `cookieCache.enabled: true` lets Better Auth attach a short-TTL
- * signed cookie carrying the session row so `getSession` can skip
- * the D1 read on every request; `maxAge` caps that cache (Better
- * Auth default 5 minutes). Use with care — invalidating a session
- * via `signOut` doesn't clear cached copies in flight.
- */
-export interface SessionConfig {
-  readonly expiresIn?: number;
-  readonly updateAge?: number;
-  readonly cookieCache?: {
-    readonly enabled: boolean;
-    readonly maxAge?: number;
-  };
-}
-
-/**
- * Email-verification policy forwarded to Better Auth's
- * `emailVerification`. Decoupled from `email-otp` / `magic-link`
- * methods — this controls the verification-token flow that fires
- * separately when Better Auth has a `sendVerificationEmail` callback
- * configured. All optional; omitted keys use Better Auth's defaults.
- *
- * **`sendOnSignUp` only delivers mail when a `sendVerificationEmail`
- * callback is wired into Better Auth.** This config does NOT expose
- * that callback — adopters who flip `sendOnSignUp: true` without
- * providing a sender will see the flag set in Better Auth but no
- * email leaves the worker. Wiring the callback is a follow-up SDK
- * surface; for now the flag is useful for the
- * `autoSignInAfterVerification` knob and forward-compat.
- */
-export interface EmailVerificationConfig {
-  readonly sendOnSignUp?: boolean;
-  readonly autoSignInAfterVerification?: boolean;
-  readonly expiresIn?: number;
-}
-
 export interface CrossSubDomainCookiesConfig {
   readonly enabled: boolean;
   readonly domain?: string;
@@ -275,12 +170,8 @@ export interface OAuthProviderConfig {
   readonly consentPage: string;
   readonly allowDynamicClientRegistration?: boolean;
   readonly allowUnauthenticatedClientRegistration?: boolean;
-  readonly allowPublicClientPrelogin?: boolean;
   readonly clientRegistrationDefaultScopes?: ReadonlyArray<Scope>;
   readonly clientRegistrationAllowedScopes?: ReadonlyArray<Scope>;
-  readonly accessTokenExpiresIn?: number;
-  readonly idTokenExpiresIn?: number;
-  readonly refreshTokenExpiresIn?: number;
   readonly cachedTrustedClients?: ReadonlySet<string>;
   readonly clientPrivileges?: (context: {
     readonly headers: Headers;
@@ -350,15 +241,6 @@ export interface CreateAuthConfig {
   /** Better Auth's built-in rate limit. Defaults off; production
    *  deployments should set it. */
   readonly rateLimit?: { readonly window: number; readonly max: number };
-  /** Forwarded to Better Auth's `account.accountLinking`. Omit for
-   *  Better Auth's defaults (linking enabled, same-email required). */
-  readonly accountLinking?: AccountLinkingConfig;
-  /** Forwarded to Better Auth's `session`. Omit for Better Auth's
-   *  defaults (7 day expiry, 1 day update age, no cookie cache). */
-  readonly session?: SessionConfig;
-  /** Forwarded to Better Auth's `emailVerification`. Omit for Better
-   *  Auth's defaults. */
-  readonly emailVerification?: EmailVerificationConfig;
   /** Additional Better Auth trusted origins. SDK still injects
    *  provider-required origins such as Apple automatically. */
   readonly trustedOrigins?: ReadonlyArray<string>;
@@ -800,12 +682,6 @@ function buildAuth(config: CreateAuthConfig) {
                     config.oauthProvider.allowUnauthenticatedClientRegistration,
                 }
               : {}),
-            ...(config.oauthProvider.allowPublicClientPrelogin !== undefined
-              ? {
-                  allowPublicClientPrelogin:
-                    config.oauthProvider.allowPublicClientPrelogin,
-                }
-              : {}),
             ...(config.oauthProvider.clientRegistrationDefaultScopes
               ? {
                   clientRegistrationDefaultScopes: [
@@ -819,15 +695,6 @@ function buildAuth(config: CreateAuthConfig) {
                     ...config.oauthProvider.clientRegistrationAllowedScopes,
                   ],
                 }
-              : {}),
-            ...(config.oauthProvider.accessTokenExpiresIn !== undefined
-              ? { accessTokenExpiresIn: config.oauthProvider.accessTokenExpiresIn }
-              : {}),
-            ...(config.oauthProvider.idTokenExpiresIn !== undefined
-              ? { idTokenExpiresIn: config.oauthProvider.idTokenExpiresIn }
-              : {}),
-            ...(config.oauthProvider.refreshTokenExpiresIn !== undefined
-              ? { refreshTokenExpiresIn: config.oauthProvider.refreshTokenExpiresIn }
               : {}),
             ...(config.oauthProvider.cachedTrustedClients
               ? {
@@ -922,71 +789,6 @@ function buildAuth(config: CreateAuthConfig) {
     },
   };
 
-  // Forward adopter-supplied optional Better Auth config. We do NOT
-  // first-class every BA option — only the ones adopters routinely
-  // need (account-linking policy, session lifetime, email-verification
-  // behavior). Omitted keys flow through to Better Auth defaults.
-  const accountConfig = config.accountLinking
-    ? {
-        account: {
-          accountLinking: {
-            ...(config.accountLinking.enabled !== undefined
-              ? { enabled: config.accountLinking.enabled }
-              : {}),
-            ...(config.accountLinking.trustedProviders
-              ? { trustedProviders: [...config.accountLinking.trustedProviders] }
-              : {}),
-            ...(config.accountLinking.allowDifferentEmails !== undefined
-              ? { allowDifferentEmails: config.accountLinking.allowDifferentEmails }
-              : {}),
-            ...(config.accountLinking.updateUserInfoOnLink !== undefined
-              ? { updateUserInfoOnLink: config.accountLinking.updateUserInfoOnLink }
-              : {}),
-          },
-        },
-      }
-    : {};
-  const sessionConfig = config.session
-    ? {
-        session: {
-          ...(config.session.expiresIn !== undefined
-            ? { expiresIn: config.session.expiresIn }
-            : {}),
-          ...(config.session.updateAge !== undefined
-            ? { updateAge: config.session.updateAge }
-            : {}),
-          ...(config.session.cookieCache
-            ? {
-                cookieCache: {
-                  enabled: config.session.cookieCache.enabled,
-                  ...(config.session.cookieCache.maxAge !== undefined
-                    ? { maxAge: config.session.cookieCache.maxAge }
-                    : {}),
-                },
-              }
-            : {}),
-        },
-      }
-    : {};
-  const emailVerificationConfig = config.emailVerification
-    ? {
-        emailVerification: {
-          ...(config.emailVerification.sendOnSignUp !== undefined
-            ? { sendOnSignUp: config.emailVerification.sendOnSignUp }
-            : {}),
-          ...(config.emailVerification.autoSignInAfterVerification !== undefined
-            ? {
-                autoSignInAfterVerification:
-                  config.emailVerification.autoSignInAfterVerification,
-              }
-            : {}),
-          ...(config.emailVerification.expiresIn !== undefined
-            ? { expiresIn: config.emailVerification.expiresIn }
-            : {}),
-        },
-      }
-    : {};
-
   return betterAuth({
     database: config.database,
     secret: config.secret,
@@ -995,22 +797,12 @@ function buildAuth(config: CreateAuthConfig) {
     socialProviders,
     user: userConfig,
     ...(rateLimit ? { rateLimit } : {}),
-    ...accountConfig,
-    ...sessionConfig,
-    ...emailVerificationConfig,
     trustedOrigins,
     advanced: advancedConfig,
     plugins: sdkPlugins,
     databaseHooks,
   });
 }
-
-/**
- * Method kind exposed to clients. Mirrors `AuthMethodConfig["kind"]`
- * but without the adapter-internal config (secrets, sender refs). The
- * admin SPA reads this to decide which sign-in sections to render.
- */
-export type AuthMethodKind = AuthMethodConfig["kind"];
 
 /**
  * Public-facing method descriptor exposed via `Auth.methods` and the

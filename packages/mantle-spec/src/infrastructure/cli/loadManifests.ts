@@ -1,10 +1,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { cwd } from "node:process";
-import {
-  parseManifests,
-  ManifestParseError,
-} from "../../domain/service/ManifestParser.js";
+import { parseManifests } from "../../domain/service/ManifestParser.js";
 import type { Manifest } from "../../domain/model/ManifestGrammar.js";
 import {
   validateDiagnostic,
@@ -79,19 +76,14 @@ export async function loadManifestsFromRoot(rootArg: string): Promise<LoadManife
         else filePaths.set(key, [{ file, docIndex: i }]);
       });
     } catch (err) {
-      const idx = err instanceof ManifestParseError ? err.docIndex : undefined;
-      const pointer = err instanceof ManifestParseError ? err.pointer : undefined;
-      const path =
-        idx != null
-          ? pointer
-            ? `${file}#/${idx}${pointer}`
-            : `${file}#/${idx}`
-          : file;
+      // parseManifests converts every ManifestParseError into a
+      // diagnostic internally; anything that escapes is unexpected
+      // (e.g. a YAML-library throw), so surface it generically.
       parseErrors.push(
         validateDiagnostic({
           code: "INVALID_MANIFEST_ENVELOPE",
           severity: "error",
-          path,
+          path: file,
           message: err instanceof Error ? err.message : String(err),
         }),
       );

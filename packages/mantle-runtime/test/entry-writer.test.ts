@@ -141,9 +141,10 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
       authorId: null,
       now: 1,
     });
-    const archived = await repo.archive({
+    const archived = await repo.transitionStatus({
       id: "p1",
       collection: "posts",
+      to: "archived",
       expectedVersion: 1,
       now: 2,
     });

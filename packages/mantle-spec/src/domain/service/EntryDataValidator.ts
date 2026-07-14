@@ -99,10 +99,3 @@ function withoutTopLevelRequired(schema: SchemaManifest["spec"]["schema"]): Sche
   const { required: _dropped, ...rest } = schema as Record<string, unknown>;
   return rest as SchemaManifest["spec"]["schema"];
 }
-
-/**
- * @deprecated Use {@link EntryDataValidator} directly. Kept as an
- *  alias for v0.1.0 import-name backwards-compat; will be removed in
- *  v0.2.
- */
-export { EntryDataValidator as SchemaValidator };

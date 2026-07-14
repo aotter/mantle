@@ -28,12 +28,4 @@ export function injectPreviewBanner(html: string, banner: string): string {
 export function defaultPreviewBanner(status: string, slug: string): string {
   return `<div class="preview-banner">Preview · ${escapeHtml(status)} · ${escapeHtml(slug)}</div>`;
 }
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+import { escapeHtml } from "./HtmlEscaping.js";

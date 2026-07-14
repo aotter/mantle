@@ -1,7 +1,9 @@
 import { writeFile } from "node:fs/promises";
 import { stdout, stderr } from "node:process";
+import { parseArgs as parseNodeArgs } from "node:util";
 import { EmitOpenapiUseCase } from "../../usecase/EmitOpenapiUseCase.js";
 import { loadManifestsFromRoot } from "./loadManifests.js";
+import { translateParseArgsError } from "./parseArgsError.js";
 
 export interface EmitOpenapiArgs {
   readonly manifests: string;
@@ -14,28 +16,33 @@ export interface EmitOpenapiArgs {
 export type ParseResult = { kind: "args"; args: EmitOpenapiArgs } | { kind: "help" };
 
 export function parseArgs(rawArgs: ReadonlyArray<string>): ParseResult {
-  let manifests = "./manifests";
-  let title = "mantle";
-  let version = "0.1.0";
-  let sessionCookieName: string | undefined;
-  let output: string | undefined;
-  for (let i = 0; i < rawArgs.length; i++) {
-    const a = rawArgs[i];
-    if (a === "--manifests") manifests = rawArgs[++i] ?? manifests;
-    else if (a === "--title") title = rawArgs[++i] ?? title;
-    else if (a === "--version") version = rawArgs[++i] ?? version;
-    else if (a === "--session-cookie-name") sessionCookieName = rawArgs[++i];
-    else if (a === "--output" || a === "-o") {
-      const v = rawArgs[++i];
-      if (!v) throw new Error("--output requires a file path");
-      output = v;
-    }
-    else if (a === "--help" || a === "-h") return { kind: "help" };
-    else if (a !== undefined) {
-      throw new Error(`Unknown argument: ${a}`);
-    }
+  let values;
+  try {
+    ({ values } = parseNodeArgs({
+      args: [...rawArgs],
+      options: {
+        manifests: { type: "string" },
+        title: { type: "string" },
+        version: { type: "string" },
+        "session-cookie-name": { type: "string" },
+        output: { type: "string", short: "o" },
+        help: { type: "boolean", short: "h" },
+      },
+    }));
+  } catch (err) {
+    throw translateParseArgsError(err, { "--output": "--output requires a file path" });
   }
-  return { kind: "args", args: { manifests, title, version, sessionCookieName, output } };
+  if (values.help) return { kind: "help" };
+  return {
+    kind: "args",
+    args: {
+      manifests: values.manifests ?? "./manifests",
+      title: values.title ?? "mantle",
+      version: values.version ?? "0.1.0",
+      sessionCookieName: values["session-cookie-name"],
+      output: values.output,
+    },
+  };
 }
 
 function printHelp(): void {

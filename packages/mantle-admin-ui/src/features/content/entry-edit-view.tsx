@@ -312,11 +312,7 @@ export function SchemaFields({
   path: string[];
   onChange: (data: Record<string, unknown>) => void;
   language: AdminLanguage;
-  /** Site canonical locale, for resolving property `title` LocalizedText
-   *  (#443). Optional — absent falls straight through to `fieldLabel`,
-   *  matching pre-#443 behavior for any caller that hasn't threaded it
-   *  through yet. */
-  canonical?: string | null;
+  canonical: string | null;
   collectionName: string;
   mediaPurposes: readonly MediaPurposePolicy[];
 }): React.ReactElement {
@@ -365,7 +361,7 @@ function SchemaField({
   rootValue: Record<string, unknown>;
   onChange: (data: Record<string, unknown>) => void;
   language: AdminLanguage;
-  canonical?: string | null;
+  canonical: string | null;
   collectionName: string;
   mediaPurposes: readonly MediaPurposePolicy[];
 }): React.ReactElement {
@@ -538,7 +534,7 @@ function ArrayField({
   rootValue: Record<string, unknown>;
   onChange: (data: Record<string, unknown>) => void;
   language: AdminLanguage;
-  canonical?: string | null;
+  canonical: string | null;
   collectionName: string;
   mediaPurposes: readonly MediaPurposePolicy[];
 }): React.ReactElement {
@@ -975,7 +971,7 @@ function writePath(
   value: unknown,
 ): Record<string, unknown> {
   if (path.length === 0) return objectValue(value);
-  const clone = structuredCloneSafe(root);
+  const clone = structuredClone(root);
   let current: unknown = clone;
   for (let index = 0; index < path.length - 1; index += 1) {
     const segment = path[index]!;
@@ -996,11 +992,6 @@ function writePath(
     (current as Record<string, unknown>)[last] = value;
   }
   return clone;
-}
-
-function structuredCloneSafe(value: Record<string, unknown>): Record<string, unknown> {
-  if (typeof structuredClone === "function") return structuredClone(value);
-  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
 }
 
 function objectValue(value: unknown): Record<string, unknown> {
