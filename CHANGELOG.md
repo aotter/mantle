@@ -6,6 +6,18 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.47] - 2026-07-14
+
+### Changed
+
+- **@aotter/mantle-admin-ui**: simplify the live auth, collection, entry, media, report, approval, staff, and navigation paths around shared pagination, entry-title, and value-rendering helpers; remove unreachable editor, layout-context, duplicate i18n, and UI wrapper code (#464).
+- **@aotter/mantle-runtime / @aotter/mantle-spec / @aotter/mantle-cloudflare**: collapse duplicate diagnostics, pagination, lifecycle, rendering, MCP response, CLI parsing, and server-mount logic into the active implementation paths while preserving the shipped 4-atom and adapter behavior (#464).
+- **repository**: simplify CI, Dependabot auto-merge, release publishing, boundary checks, and package-doc synchronization; the complete audit removes 2,523 lines and adds 739 focused replacement lines (#464).
+
+### Removed
+
+- **@aotter/mantle-admin-ui / @aotter/mantle-runtime / @aotter/mantle-spec / @aotter/mantle-cloudflare**: remove unused pre-v1 exports, dead adapter branches, unreachable rich-editor surfaces, duplicate framework helpers, and tests that covered retired APIs (#464).
+
 ## [0.0.11-alpha.46] - 2026-07-12
 
 ### Fixed
