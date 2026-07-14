@@ -4,12 +4,11 @@ export interface NavLink {
   readonly title: string;
   readonly url: string;
   readonly icon?: ElementType;
-  /** Small trailing icon between the title and any badge/chevron —
+  /** Small trailing icon after the title —
    *  used to mark a row with a secondary attribute (e.g. globe icon
    *  on collections that have translation children) without
    *  displacing the leading `icon` slot. */
   readonly marker?: ElementType;
-  readonly badge?: string;
   readonly external?: boolean;
 }
 
@@ -18,7 +17,6 @@ export interface NavCollapsible {
   readonly icon?: ElementType;
   /** See `NavLink.marker`. */
   readonly marker?: ElementType;
-  readonly badge?: string;
   readonly items: ReadonlyArray<NavLink>;
 }
 

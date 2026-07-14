@@ -13,8 +13,8 @@ import {
 import type { PreviewEntryRequest } from "../dto/render/PreviewEntryRequest.js";
 import {
   composeSeoIfPathed,
-  type SeoComposer,
-} from "../../domain/service/EntrySeoSupport.js";
+  type ComposeEntrySeoMetaUseCase,
+} from "./ComposeEntrySeoMetaUseCase.js";
 import { resolveMediaAssetsForEntries } from "../../domain/service/io/MediaAssetReferences.js";
 
 /** Default fallback: prefer drafts, fall back to published, then
@@ -26,7 +26,7 @@ const DEFAULT_PREVIEW_STATUS_ORDER: ReadonlyArray<ContentState> = [
 ];
 
 /**
- * Render an entry with a preview banner. Walks `statusOrder` until a
+ * Render an entry with a preview banner. Walks the default status order until a
  * matching row is found, renders via the registered template, then
  * injects the banner just inside `<body>`. Returns `null` when no
  * matching row exists or no template is registered.
@@ -40,15 +40,14 @@ export class PreviewEntryUseCase {
     private readonly db: DatabaseDriver,
     private readonly templates: TemplateRegistry,
     private readonly paths: PublicPathResolver | null,
-    private readonly composeSeo: SeoComposer,
+    private readonly composeSeo: Pick<ComposeEntrySeoMetaUseCase, "execute">,
     private readonly schemas: ReadonlyMap<string, SchemaManifest>,
     private readonly mediaAssets: MediaAssetRepository | null = null,
   ) {}
 
   async execute(request: PreviewEntryRequest): Promise<string | null> {
-    const order = request.statusOrder ?? DEFAULT_PREVIEW_STATUS_ORDER;
     let raw: Entry | null = null;
-    for (const status of order) {
+    for (const status of DEFAULT_PREVIEW_STATUS_ORDER) {
       raw = await readEntryBySlug(this.db, {
         collection: request.collection,
         slug: request.slug,
@@ -73,7 +72,7 @@ export class PreviewEntryUseCase {
       seo,
     });
     if (html === null) return null;
-    const banner = request.banner ?? defaultPreviewBanner(entry.status, request.slug);
+    const banner = defaultPreviewBanner(entry.status, request.slug);
     return injectPreviewBanner(html, banner);
   }
 }

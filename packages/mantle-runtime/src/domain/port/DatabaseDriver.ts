@@ -57,7 +57,6 @@ export interface RunResult {
   readonly success: boolean;
   readonly meta: {
     readonly changes: number;
-    readonly lastRowId?: number | string;
   };
 }
 

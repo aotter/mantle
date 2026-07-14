@@ -20,8 +20,6 @@ export interface SeoMeta {
   readonly hreflangs: ReadonlyArray<{ readonly locale: string; readonly href: string }>;
   /** `<meta name="description">`. `null` to skip. */
   readonly description: string | null;
-  /** `<meta name="robots">`. `null` to skip. */
-  readonly robots: string | null;
   /** Open Graph block. */
   readonly og: {
     readonly type: "article" | "website";

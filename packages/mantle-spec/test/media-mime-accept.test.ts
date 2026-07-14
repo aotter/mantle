@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  allPolicyMimes,
   expandPolicyRequired,
   parseMimeAccept,
 } from "../src/domain/model/MediaMimeAccept.js";
@@ -86,15 +85,6 @@ describe("expandPolicyRequired", () => {
     ).toEqual([["image/jpeg"], ["image/webp"], ["image/avif"]]);
   });
 });
-
-describe("allPolicyMimes", () => {
-  it("flattens + dedupes across slots", () => {
-    expect(
-      allPolicyMimes(["image/jpg,image/png", "webp", "avif,webp"]),
-    ).toEqual(["image/jpeg", "image/png", "image/webp", "image/avif"]);
-  });
-});
-
 
 describe("SiteDefaultsValidator + new mime grammar", () => {
   it("accepts the new grammar end-to-end (comma-lists + shorthand)", () => {

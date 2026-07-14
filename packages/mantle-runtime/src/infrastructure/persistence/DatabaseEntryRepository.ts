@@ -1,6 +1,5 @@
 import type { ContentState } from "@aotter/mantle-spec";
 import type {
-  ArchiveEntryArgs,
   CreateEntryArgs,
   DeleteEntryArgs,
   EntryRepository,
@@ -19,6 +18,7 @@ import {
   liftLocale,
   type EntryRow,
 } from "../../domain/model/EntryRow.js";
+import { decodeCursor, encodeCursor, escapeLikeTerm } from "./Pagination.js";
 
 /**
  * `EntryRepository` impl backed by `DatabaseDriver`. Adapters that
@@ -106,20 +106,6 @@ export class DatabaseEntryRepository implements EntryRepository {
     ]);
     const last = result[result.length - 1];
     return { removed: (last?.meta.changes ?? 0) > 0 };
-  }
-
-  async archive(args: ArchiveEntryArgs): Promise<EntryRow> {
-    const newVersion = args.expectedVersion + 1;
-    const row = await this.db
-      .prepare(
-        `UPDATE entries SET status = 'archived', version = ?, updated_at = ?
-         WHERE id = ? AND version = ?
-         RETURNING id, collection, status, version, data, author_id, created_at, updated_at`,
-      )
-      .bind(newVersion, args.now, args.id, args.expectedVersion)
-      .first<EntryDbRow>();
-    if (!row) throw await this.versionConflict(args.id, args.expectedVersion);
-    return rowFromDb(row);
   }
 
   async transitionStatus(args: TransitionStatusArgs): Promise<EntryRow> {
@@ -294,30 +280,4 @@ function rowFromDb(row: EntryDbRow): EntryRow {
 
 function jsonPathForTopLevelField(field: string): string {
   return `$."${field.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-
-/** Escape LIKE metacharacters (`%`, `_`, and the escape char itself)
- *  so a search term is matched literally as a substring. Paired with
- *  `ESCAPE '\'` in the LIKE clause. */
-function escapeLikeTerm(term: string): string {
-  return term.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
-}
-
-/**
- * `list()` cursor: offset-based, prefixed so a future row-value cursor
- * (`(updatedAt,id)` tuple) can coexist by switching on the prefix.
- * Callers treat it as opaque.
- */
-const CURSOR_PREFIX = "o:";
-function encodeCursor(offset: number): string {
-  return `${CURSOR_PREFIX}${offset}`;
-}
-/** Upper bound on a decoded offset. `Number("1e10")` passes
- *  `Number.isInteger`, so an attacker-supplied cursor could otherwise
- *  drive `OFFSET 10_000_000_000`. Reject anything past a sane cap. */
-const MAX_CURSOR_OFFSET = 1_000_000;
-function decodeCursor(cursor: string | undefined): number {
-  if (!cursor || !cursor.startsWith(CURSOR_PREFIX)) return 0;
-  const n = Number(cursor.slice(CURSOR_PREFIX.length));
-  return Number.isInteger(n) && n >= 0 && n <= MAX_CURSOR_OFFSET ? n : 0;
 }

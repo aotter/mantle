@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, LogOut } from "lucide-react";
 import { Button } from "../../ui/button";
 import { usePreferences } from "../../app/preferences";
@@ -101,28 +102,16 @@ export function SignInView(): React.ReactElement {
   const params = new URLSearchParams(window.location.search);
   const ret = params.get("return") ?? "/admin";
 
-  const [methods, setMethods] = React.useState<AuthMethodInfo[] | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    async function load(): Promise<void> {
-      try {
-        const res = await fetch("/api/auth/methods", { credentials: "include" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as { methods?: AuthMethodInfo[] };
-        if (cancelled) return;
-        setMethods(data.methods ?? []);
-      } catch (err: unknown) {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    }
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const methods = useQuery<AuthMethodInfo[]>({
+    queryKey: ["auth-methods"],
+    queryFn: async () => {
+      const res = await fetch("/api/auth/methods", { credentials: "include" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { methods?: AuthMethodInfo[] };
+      return data.methods ?? [];
+    },
+    retry: false,
+  });
 
   return (
     <div className="flex min-h-svh items-center justify-center p-6">
@@ -130,26 +119,26 @@ export function SignInView(): React.ReactElement {
         <p className="label-eyebrow mb-2">{t(language, "auth.signIn.eyebrow")}</p>
         <h1 className="mb-2 text-xl">{t(language, "auth.signIn.title")}</h1>
 
-        {error ? (
+        {methods.isError ? (
           <p className="mb-4 text-sm text-destructive">
             {t(language, "auth.signIn.methodsLoadFailed")}
           </p>
         ) : null}
-        {methods === null && !error ? (
+        {methods.isLoading ? (
           <div className="space-y-2">
             <div className="h-9 w-full animate-pulse rounded bg-muted" />
           </div>
         ) : null}
-        {methods && methods.length === 0 ? (
+        {methods.data?.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {t(language, "auth.signIn.noMethods")}
           </p>
         ) : null}
-        {methods && methods.length > 0 ? (
+        {methods.data && methods.data.length > 0 ? (
           // Wrap so each section's `first:` selectors target the first
           // method in the list, not the first child of the card.
           <div>
-            {methods.map((m) => (
+            {methods.data.map((m) => (
               <MethodSection
                 key={
                   m.kind === "social"

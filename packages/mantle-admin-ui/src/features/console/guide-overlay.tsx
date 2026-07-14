@@ -12,7 +12,7 @@ interface TourStep {
   readonly href?: string;
 }
 
-function tourSteps(firstCollection: { name: string; title: string } | null): readonly TourStep[] {
+function tourSteps(firstCollection: { name: string } | null): readonly TourStep[] {
   const reopen: TourStep = { key: "reopen", selector: '[data-tour="guide-button"]' };
   if (!firstCollection) return [reopen];
   const href = `/admin/c/${encodeURIComponent(firstCollection.name)}`;
@@ -44,7 +44,7 @@ export function GuideOverlay({
   onClose,
 }: {
   language: AdminLanguage;
-  firstCollection: { name: string; title: string } | null;
+  firstCollection: { name: string } | null;
   onClose: () => void;
 }): React.ReactElement {
   const [index, setIndex] = React.useState(0);

@@ -16,11 +16,8 @@ import { Button } from "../../ui/button";
 import { useConfirm } from "../../ui/confirm-dialog";
 import { EmptyState, ErrorBox, PageHeader } from "../../ui/page";
 import { uploadMediaAsset } from "./media-upload";
-
-const TIMESTAMP_FMT = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
+import { useCursorPagination } from "../../lib/use-cursor-pagination";
+import { formatTimestampMs } from "../content/field-render";
 
 /** Full-page media library (#434): thumbnail grid of committed assets,
  *  drag-drop + button upload, search, inline alt/caption edit, delete. */
@@ -82,34 +79,17 @@ export function MediaBrowser({
     },
   });
 
-  // Appended "load more" pages live in their own state, separate from
-  // the page-1 query. Reset ONLY when page 1's identity (the search
-  // term) changes — NOT on every refetch. An in-place mutation (alt /
-  // caption save, delete) refetches page 1 under the same key; resetting
-  // on `page1.data` there would silently drop every already-loaded extra
-  // page (#F3). `cursorAtSearch` is the cursor page 1 handed us for the
-  // current search; `loadedCursor` is set once the user loads more, and
-  // from then on it owns pagination independent of page-1 refetches.
-  const [extraItems, setExtraItems] = React.useState<MediaLibraryItem[]>([]);
-  const [loadedCursor, setLoadedCursor] = React.useState<string | null | undefined>(undefined);
-  const [isLoadingMore, setIsLoadingMore] = React.useState(false);
-  const [loadMoreError, setLoadMoreError] = React.useState<unknown>(null);
-  React.useEffect(() => {
-    setExtraItems([]);
-    setLoadedCursor(undefined);
-    setLoadMoreError(null);
+  const loadMediaPage = React.useCallback(async (cursor: string) => {
+    const qs = new URLSearchParams({ limit: "60", cursor });
+    if (searchTerm) qs.set("search", searchTerm);
+    return api.get<MediaLibraryListResult>(`/media?${qs.toString()}`);
   }, [searchTerm]);
-
-  // Effective next cursor: once the user has loaded extra pages,
-  // `loadedCursor` owns it (so a page-1 refetch doesn't rewind it);
-  // otherwise fall back to page 1's cursor.
-  const nextCursor =
-    loadedCursor !== undefined ? loadedCursor : page1.data?.next_cursor ?? null;
-
-  const items = React.useMemo(
-    () => [...(page1.data?.items ?? []), ...extraItems],
-    [page1.data, extraItems],
-  );
+  const pagination = useCursorPagination<MediaLibraryItem>(page1.data, {
+    resetKey: searchTerm,
+    resetOnPageChange: false,
+    loadPage: loadMediaPage,
+  });
+  const items = pagination.items;
 
   const [uploading, setUploading] = React.useState(false);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
@@ -153,23 +133,6 @@ export function MediaBrowser({
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
-    }
-  }
-
-  async function loadMore(): Promise<void> {
-    if (!nextCursor) return;
-    setIsLoadingMore(true);
-    setLoadMoreError(null);
-    try {
-      const qs = new URLSearchParams({ limit: "60", cursor: nextCursor });
-      if (searchTerm) qs.set("search", searchTerm);
-      const page = await api.get<MediaLibraryListResult>(`/media?${qs.toString()}`);
-      setExtraItems((prev) => [...prev, ...page.items]);
-      setLoadedCursor(page.next_cursor);
-    } catch (err) {
-      setLoadMoreError(err);
-    } finally {
-      setIsLoadingMore(false);
     }
   }
 
@@ -245,16 +208,16 @@ export function MediaBrowser({
         </div>
       )}
 
-      {loadMoreError ? <ErrorBox error={loadMoreError} /> : null}
-      {nextCursor ? (
+      {pagination.loadMoreError ? <ErrorBox error={pagination.loadMoreError} /> : null}
+      {pagination.nextCursor ? (
         <div className="mt-4">
           <Button
             type="button"
             variant="secondary"
-            onClick={() => void loadMore()}
-            disabled={isLoadingMore}
+            onClick={() => void pagination.loadMore()}
+            disabled={pagination.isLoadingMore}
           >
-            {isLoadingMore ? t(language, "media.saving") : t(language, "media.loadMore")}
+            {pagination.isLoadingMore ? t(language, "media.saving") : t(language, "media.loadMore")}
           </Button>
         </div>
       ) : null}
@@ -413,7 +376,7 @@ function MediaTile({
           </>
         )}
         <p className="text-[11px] text-muted-foreground">
-          {t(language, "media.uploaded", { date: formatTimestamp(item.createdAt) })}
+          {t(language, "media.uploaded", { date: formatTimestampMs(item.createdAt) ?? "-" })}
         </p>
       </div>
     </div>
@@ -472,15 +435,6 @@ function MediaSkeleton(): React.ReactElement {
       ))}
     </div>
   );
-}
-
-function formatTimestamp(ms: number): string {
-  if (!Number.isFinite(ms)) return "-";
-  try {
-    return TIMESTAMP_FMT.format(new Date(ms));
-  } catch {
-    return "-";
-  }
 }
 
 function formatByteSize(bytes: number | null): string {

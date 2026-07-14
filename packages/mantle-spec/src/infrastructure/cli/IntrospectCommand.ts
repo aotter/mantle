@@ -1,6 +1,8 @@
 import { stdout, stderr } from "node:process";
+import { parseArgs as parseNodeArgs } from "node:util";
 import { IntrospectManifestsUseCase } from "../../usecase/IntrospectManifestsUseCase.js";
 import { loadManifestsFromRoot } from "./loadManifests.js";
+import { translateParseArgsError } from "./parseArgsError.js";
 
 export interface IntrospectArgs {
   readonly manifests: string;
@@ -9,16 +11,20 @@ export interface IntrospectArgs {
 export type ParseResult = { kind: "args"; args: IntrospectArgs } | { kind: "help" };
 
 export function parseArgs(rawArgs: ReadonlyArray<string>): ParseResult {
-  let manifests = "./manifests";
-  for (let i = 0; i < rawArgs.length; i++) {
-    const a = rawArgs[i];
-    if (a === "--manifests") manifests = rawArgs[++i] ?? manifests;
-    else if (a === "--help" || a === "-h") return { kind: "help" };
-    else if (a !== undefined) {
-      throw new Error(`Unknown argument: ${a}`);
-    }
+  let values;
+  try {
+    ({ values } = parseNodeArgs({
+      args: [...rawArgs],
+      options: {
+        manifests: { type: "string" },
+        help: { type: "boolean", short: "h" },
+      },
+    }));
+  } catch (err) {
+    throw translateParseArgsError(err);
   }
-  return { kind: "args", args: { manifests } };
+  if (values.help) return { kind: "help" };
+  return { kind: "args", args: { manifests: values.manifests ?? "./manifests" } };
 }
 
 function printHelp(): void {

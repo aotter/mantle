@@ -69,7 +69,7 @@ export class InvokeProcedureUseCase {
 
   async execute<O = unknown>(request: InvokeProcedureRequest): Promise<InvokeProcedureResponse<O>> {
     const { procedure, input, ctx } = request;
-    const phase: Phase = request.phase ?? "runtime";
+    const phase: Phase = "runtime";
     const procPath = request.pathPrefix ?? `manifest:Procedure/${procedure.metadata.name}`;
 
     // 1. Auth.
@@ -181,13 +181,6 @@ export class InvokeProcedureUseCase {
     }
 
     return { ok: true, data: result as O };
-  }
-
-  /** Test seam — clear validator caches between tests when manifests
-   *  change between runs. Production paths never call this. */
-  _clearValidatorCaches(): void {
-    this.inputCache.clear();
-    this.outputCache.clear();
   }
 
   private compileInput(p: ProcedureManifest): ZodType {

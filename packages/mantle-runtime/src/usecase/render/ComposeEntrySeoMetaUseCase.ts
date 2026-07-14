@@ -36,6 +36,16 @@ export class ComposeEntrySeoMetaUseCase {
   }
 }
 
+export async function composeSeoIfPathed(
+  composer: Pick<ComposeEntrySeoMetaUseCase, "execute">,
+  paths: PublicPathResolver | null,
+  entry: Entry,
+  site: SiteConfig,
+): Promise<SeoMeta | undefined> {
+  if (!paths?.forEntry(entry)) return undefined;
+  return composer.execute({ entry, site, paths });
+}
+
 async function readSiblings(
   db: DatabaseDriver,
   current: Entry,

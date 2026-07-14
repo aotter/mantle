@@ -9,21 +9,6 @@ import { STAFF_ROLE_SET } from "../auth/createAuth.js";
 import type { OAuthApiProps } from "../oauth/mountOAuth.js";
 import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
 
-/**
- * RFC 9728 §3.1: the OAuth Protected Resource Metadata document for a
- * resource at `<origin><path>` is served at
- * `<origin>/.well-known/oauth-protected-resource<path>`. The OAuth
- * provider lib handles this automatically when it sits at top level
- * (`export default new OAuthProvider(...)`); kept exported for
- * consumers who want to inspect the path shape.
- */
-export function protectedResourceMetadataPath(resourcePath: string): string {
-  const trimmed = resourcePath.replace(/\/+$/, "");
-  if (!trimmed || trimmed === "/") return "/.well-known/oauth-protected-resource";
-  const normalized = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-  return `/.well-known/oauth-protected-resource${normalized}`;
-}
-
 export interface CreateMcpApiHandlerOptions {
   readonly ref: CmsRuntimeRef;
   readonly surface: "staff" | "public";

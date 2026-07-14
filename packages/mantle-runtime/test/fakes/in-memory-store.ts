@@ -6,7 +6,6 @@ import {
   type EntryRow,
 } from "../../src/domain/model/EntryRow.js";
 import type {
-  ArchiveEntryArgs,
   CreateEntryArgs,
   DeleteEntryArgs,
   EntryRepository,
@@ -78,22 +77,6 @@ export class InMemoryEntryRepository implements EntryRepository {
   async delete(args: DeleteEntryArgs): Promise<{ readonly removed: boolean }> {
     const removed = this.rows.delete(args.id);
     return { removed };
-  }
-
-  async archive(args: ArchiveEntryArgs): Promise<EntryRow> {
-    const row = this.rows.get(args.id);
-    if (!row) throw new EntryVersionConflict(args.id, args.expectedVersion, -1);
-    if (row.version !== args.expectedVersion) {
-      throw new EntryVersionConflict(args.id, args.expectedVersion, row.version);
-    }
-    const next: EntryRow = {
-      ...row,
-      status: "archived" as ContentState,
-      version: row.version + 1,
-      updatedAt: args.now,
-    };
-    this.rows.set(args.id, next);
-    return next;
   }
 
   async transitionStatus(args: TransitionStatusArgs): Promise<EntryRow> {

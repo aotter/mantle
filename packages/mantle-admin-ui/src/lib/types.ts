@@ -39,10 +39,7 @@ export interface Collection {
   /** Schema properties carrying `x-mcp-hint: media-*`. Upload hosting
    *  is optional; this only marks which fields are media-shaped. */
   mediaFields?: Array<{ name: string; hint: string }>;
-  localized?: boolean;
-  translates?: { parent: string; on: string } | null;
   schema?: JsonSchema;
-  uiSchema?: Record<string, unknown> | null;
 }
 
 export interface JsonSchema {

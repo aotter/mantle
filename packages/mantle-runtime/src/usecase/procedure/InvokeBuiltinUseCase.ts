@@ -224,9 +224,10 @@ export class InvokeBuiltinUseCase {
         }),
       );
     }
-    return this.entries.archive({
+    return this.entries.transitionStatus({
       id,
       collection: schema.metadata.name,
+      to: "archived",
       expectedVersion: existing.version,
       now,
       hookContext: ctx,

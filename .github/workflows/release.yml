@@ -70,10 +70,24 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # Single source of truth for the five public packages. PKG_DIRS is in
+    # dependency order for pack; tarball names derive from PKG_NAMES by
+    # stripping `@` and mapping `/` to `-`, matching pnpm pack's naming.
+    env:
+      PKG_DIRS: >-
+        packages/mantle-spec
+        packages/mantle-admin-ui
+        packages/mantle-runtime
+        packages/adapters/cloudflare
+        packages/mantle
+      PKG_NAMES: >-
+        @aotter/mantle-spec
+        @aotter/mantle-admin-ui
+        @aotter/mantle-runtime
+        @aotter/mantle-cloudflare
+        @aotter/mantle
     steps:
       - uses: actions/checkout@v6.0.3
-        with:
-          fetch-depth: 0
 
       - uses: pnpm/action-setup@v6.0.8
 
@@ -114,15 +128,9 @@ jobs:
           node --input-type=module -e "
             import { readFileSync } from 'node:fs';
             const expected = '${{ steps.ver.outputs.version }}';
-            const paths = [
-              'packages/mantle-spec/package.json',
-              'packages/mantle-admin-ui/package.json',
-              'packages/mantle-runtime/package.json',
-              'packages/adapters/cloudflare/package.json',
-              'packages/mantle/package.json',
-            ];
             let failed = false;
-            for (const path of paths) {
+            for (const dir of process.env.PKG_DIRS.split(/\s+/)) {
+              const path = dir + '/package.json';
               const pkg = JSON.parse(readFileSync(path, 'utf8'));
               if (pkg.version !== expected) {
                 console.error(path + ' version ' + pkg.version + ' does not match tag version ' + expected);
@@ -137,24 +145,15 @@ jobs:
           set -euo pipefail
           VERSION="${{ steps.ver.outputs.version }}"
           mkdir -p .release-tarballs
-          for dir in \
-            packages/mantle-spec \
-            packages/mantle-admin-ui \
-            packages/mantle-runtime \
-            packages/adapters/cloudflare \
-            packages/mantle
-          do
+          for dir in $PKG_DIRS; do
             pnpm -C "$dir" pack --pack-destination "$PWD/.release-tarballs"
           done
 
-          for tgz in \
-            ".release-tarballs/aotter-mantle-spec-$VERSION.tgz" \
-            ".release-tarballs/aotter-mantle-admin-ui-$VERSION.tgz" \
-            ".release-tarballs/aotter-mantle-runtime-$VERSION.tgz" \
-            ".release-tarballs/aotter-mantle-cloudflare-$VERSION.tgz" \
-            ".release-tarballs/aotter-mantle-$VERSION.tgz"
-          do
-            test -f "$tgz"
+          # Version lockstep: pnpm pack names tarballs <name>-<version>.tgz,
+          # so a package whose version drifted from the tag fails here.
+          for pkg in $PKG_NAMES; do
+            base="${pkg#@}"
+            test -f ".release-tarballs/${base//\//-}-$VERSION.tgz"
           done
 
       - name: Publish to npmjs
@@ -182,17 +181,9 @@ jobs:
             PUBLISH_TAG=latest
           fi
 
-          declare -a PACKAGES=(
-            "@aotter/mantle-spec:.release-tarballs/aotter-mantle-spec-$VERSION.tgz"
-            "@aotter/mantle-admin-ui:.release-tarballs/aotter-mantle-admin-ui-$VERSION.tgz"
-            "@aotter/mantle-runtime:.release-tarballs/aotter-mantle-runtime-$VERSION.tgz"
-            "@aotter/mantle-cloudflare:.release-tarballs/aotter-mantle-cloudflare-$VERSION.tgz"
-            "@aotter/mantle:.release-tarballs/aotter-mantle-$VERSION.tgz"
-          )
-
-          for item in "${PACKAGES[@]}"; do
-            pkg="${item%%:*}"
-            tgz="${item#*:}"
+          for pkg in $PKG_NAMES; do
+            base="${pkg#@}"
+            tgz=".release-tarballs/${base//\//-}-$VERSION.tgz"
             if npm view "$pkg@$VERSION" version \
               --userconfig "$NPMJS_NPMRC" \
               --registry https://registry.npmjs.org >/dev/null 2>&1; then
@@ -207,13 +198,7 @@ jobs:
           done
 
           if [[ "$PUBLISH_TAG" != "${{ steps.ver.outputs.npm_tag }}" ]]; then
-            for p in \
-              @aotter/mantle-spec \
-              @aotter/mantle-admin-ui \
-              @aotter/mantle-runtime \
-              @aotter/mantle-cloudflare \
-              @aotter/mantle
-            do
+            for p in $PKG_NAMES; do
               npm dist-tag add "$p@$VERSION" "${{ steps.ver.outputs.npm_tag }}" \
                 --userconfig "$NPMJS_NPMRC" \
                 --registry https://registry.npmjs.org
@@ -224,10 +209,9 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ steps.ver.outputs.version }}"
-          PACKAGES='@aotter/mantle-spec @aotter/mantle-admin-ui @aotter/mantle-runtime @aotter/mantle-cloudflare @aotter/mantle'
           for attempt in 1 2 3 4 5 6 7 8; do
             READY=1
-            for p in $PACKAGES; do
+            for p in $PKG_NAMES; do
               npm view "$p@$VERSION" version readmeFilename --json --registry https://registry.npmjs.org || READY=0
             done
             README_LEN=$((npm view "@aotter/mantle@$VERSION" readme --json --registry https://registry.npmjs.org 2>/dev/null || true) | node -e "let s=''; process.stdin.on('data',d=>s+=d); process.stdin.on('end',()=>{const v=s.trim()?JSON.parse(s):''; console.log((v || '').length);})")
@@ -258,17 +242,9 @@ jobs:
           fi
           mkdir -p .github-package-tarballs
 
-          declare -a PACKAGES=(
-            "@aotter/mantle-spec:.release-tarballs/aotter-mantle-spec-$VERSION.tgz"
-            "@aotter/mantle-admin-ui:.release-tarballs/aotter-mantle-admin-ui-$VERSION.tgz"
-            "@aotter/mantle-runtime:.release-tarballs/aotter-mantle-runtime-$VERSION.tgz"
-            "@aotter/mantle-cloudflare:.release-tarballs/aotter-mantle-cloudflare-$VERSION.tgz"
-            "@aotter/mantle:.release-tarballs/aotter-mantle-$VERSION.tgz"
-          )
-
-          for item in "${PACKAGES[@]}"; do
-            pkg="${item%%:*}"
-            tgz="${item#*:}"
+          for pkg in $PKG_NAMES; do
+            base="${pkg#@}"
+            tgz=".release-tarballs/${base//\//-}-$VERSION.tgz"
             if npm view "$pkg@$VERSION" version \
               --userconfig "$GPR_NPMRC" \
               --registry https://npm.pkg.github.com >/dev/null 2>&1; then
@@ -292,13 +268,7 @@ jobs:
           done
 
           if [[ "$PUBLISH_TAG" != "${{ steps.ver.outputs.npm_tag }}" ]]; then
-            for p in \
-              @aotter/mantle-spec \
-              @aotter/mantle-admin-ui \
-              @aotter/mantle-runtime \
-              @aotter/mantle-cloudflare \
-              @aotter/mantle
-            do
+            for p in $PKG_NAMES; do
               npm dist-tag add "$p@$VERSION" "${{ steps.ver.outputs.npm_tag }}" \
                 --userconfig "$GPR_NPMRC" \
                 --registry https://npm.pkg.github.com

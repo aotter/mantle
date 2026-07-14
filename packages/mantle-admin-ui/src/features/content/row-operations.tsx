@@ -34,7 +34,7 @@ import { SchemaFields } from "./entry-edit-view";
  *  which is what lets `RowOperationsMenu`/`RowActionDialog` serve the
  *  list's "⋯" menu (#430), the entry editor's page-header actions, and
  *  the parent editor's child-entry rows (#442) off one implementation. */
-export type OperableRow = {
+type OperableRow = {
   id: string;
   collection: string;
 };
@@ -143,7 +143,7 @@ export function RowOperationsMenu({
  *  which itself wins over the reserved `id` column. This component
  *  only consumes the already-resolved `rowField` — it does not
  *  re-derive or duplicate that rule. */
-export function RowActionDialog({
+function RowActionDialog({
   operation,
   binding,
   row,

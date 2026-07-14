@@ -1,14 +1,12 @@
 import {
   DiagnosticError,
   runtimeDiagnostic,
+  type LifecycleHook,
   type ProcedureManifest,
   type TriggerManifest,
 } from "@aotter/mantle-spec";
+import type { EntryRow } from "../../domain/model/EntryRow.js";
 import type { HandlerContext, HandlerLifecycleEvent } from "../../domain/model/HandlerContext.js";
-import type {
-  LifecycleHookRunner,
-  RunLifecycleHookRequest,
-} from "../../domain/port/LifecycleHookRunner.js";
 import type { TriggerIndex } from "../../domain/service/TriggerIndex.js";
 import type {
   InvokeProcedureRequest,
@@ -16,8 +14,7 @@ import type {
 } from "../dto/procedure/index.js";
 
 /**
- * `RunLifecycleHooksUseCase` — implements the `LifecycleHookRunner`
- * port. Resolves matching Triggers via `TriggerIndex`, dispatches each
+ * Resolves matching Triggers via `TriggerIndex`, dispatches each
  * to its target Procedure through the injected invoker (so input
  * validation, auth, output validation all reuse the shared pipeline),
  * and applies per-Trigger `errorPolicy`.
@@ -43,7 +40,18 @@ export type InvokeProcedureFn = (
   request: InvokeProcedureRequest,
 ) => Promise<InvokeProcedureResponse>;
 
-export class RunLifecycleHooksUseCase implements LifecycleHookRunner {
+export interface RunLifecycleHookRequest {
+  readonly hook: LifecycleHook;
+  readonly schema: string;
+  /** Pre-mutation row for `before_*` hooks; persisted post-mutation
+   * row for `after_*`. `null` only on `before_create`. */
+  readonly entry: EntryRow | null;
+  readonly ctx: HandlerContext;
+  /** Pre-projection input, including side-channel fields when present. */
+  readonly originalInput?: unknown;
+}
+
+export class RunLifecycleHooksUseCase {
   constructor(
     private readonly triggers: TriggerIndex,
     private readonly proceduresByName: ReadonlyMap<string, ProcedureManifest>,

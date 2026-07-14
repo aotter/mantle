@@ -2,7 +2,6 @@ export { mountServerEndpoints } from "./mountServerEndpoints.js";
 export { type CmsRuntimeRef, createCmsRef } from "./bootRuntimeOnce.js";
 export {
   createMcpApiHandler,
-  protectedResourceMetadataPath,
   type CreateMcpApiHandlerOptions,
 } from "./mountMcp.js";
 export {

@@ -4,6 +4,7 @@ import type {
   MediaAssetListResult,
   MediaAssetRepository,
 } from "../../domain/port/MediaAssetRepository.js";
+import { decodeCursor, encodeCursor, escapeLikeTerm } from "./Pagination.js";
 import type {
   MediaAsset,
   MediaVariant,
@@ -124,29 +125,6 @@ export class DatabaseMediaAssetRepository implements MediaAssetRepository {
 }
 
 const CHUNK = 100;
-
-/** Offset-based cursor, prefixed so a future row-value cursor can
- *  coexist by switching on the prefix. Callers treat it as opaque.
- *  Matches `DatabaseEntryRepository`'s scheme. */
-const CURSOR_PREFIX = "o:";
-function encodeCursor(offset: number): string {
-  return `${CURSOR_PREFIX}${offset}`;
-}
-/** Upper bound on a decoded offset. `Number("1e10")` passes
- *  `Number.isInteger`, so an attacker-supplied cursor could otherwise
- *  drive `OFFSET 10_000_000_000`. Reject anything past a sane cap. */
-const MAX_CURSOR_OFFSET = 1_000_000;
-function decodeCursor(cursor: string | undefined): number {
-  if (!cursor || !cursor.startsWith(CURSOR_PREFIX)) return 0;
-  const n = Number(cursor.slice(CURSOR_PREFIX.length));
-  return Number.isInteger(n) && n >= 0 && n <= MAX_CURSOR_OFFSET ? n : 0;
-}
-
-/** Escape LIKE metacharacters in a user-supplied search term so `%`,
- *  `_`, and `\` are matched literally (ESCAPE '\'). */
-function escapeLikeTerm(term: string): string {
-  return term.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-}
 
 interface MediaAssetRow {
   readonly id: string;

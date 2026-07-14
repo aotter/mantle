@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { UserPlus } from "lucide-react";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
-import { api, ApiError } from "../../lib/api";
+import { api } from "../../lib/api";
+import { asRenderable } from "../../lib/errors";
 import type { AdminUser, StaffRole, StaffUser } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
@@ -213,15 +214,4 @@ function InviteCard({ onInvited }: { onInvited: () => void }): React.ReactElemen
 
 function isStaffRole(value: string | null): value is StaffRole {
   return value === "owner" || value === "editor" || value === "contributor";
-}
-
-/** The server returns structured diagnostics; surface their `message`
- *  instead of the generic "409 Conflict" statusText. */
-function asRenderable(error: unknown): unknown {
-  if (error instanceof ApiError) {
-    const body = error.body as { diagnostic?: { message?: string } } | null;
-    const message = body?.diagnostic?.message;
-    if (message) return new Error(message);
-  }
-  return error;
 }

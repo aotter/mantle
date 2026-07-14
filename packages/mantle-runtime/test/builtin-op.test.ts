@@ -90,7 +90,6 @@ function harness(opts: {
       get: (id) => entries.get(id),
       update: (a) => entries.update(a),
       delete: (a) => entries.delete(a),
-      archive: (a) => entries.archive(a),
       transitionStatus: (a) => entries.transitionStatus(a),
       list: (a) => entries.list(a),
     },

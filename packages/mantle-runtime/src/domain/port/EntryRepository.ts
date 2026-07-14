@@ -23,8 +23,6 @@ export interface EntryRepository {
   update(args: UpdateEntryArgs): Promise<EntryRow>;
   /** Cascades to revisions + approvals child rows for the entry id. */
   delete(args: DeleteEntryArgs): Promise<{ readonly removed: boolean }>;
-  /** Throws `EntryVersionConflict` on OCC mismatch. */
-  archive(args: ArchiveEntryArgs): Promise<EntryRow>;
   /** Status flip without data update. `expectedStatus`, when set,
    *  atomically asserts pre-flip status to prevent races (e.g. a
    *  concurrent publish while we try to archive). Bumps version.
@@ -86,13 +84,6 @@ export interface UpdateEntryArgs extends MutationHookFields {
 export interface DeleteEntryArgs extends MutationHookFields {
   readonly id: string;
   readonly collection: string;
-}
-
-export interface ArchiveEntryArgs extends MutationHookFields {
-  readonly id: string;
-  readonly collection: string;
-  readonly expectedVersion: number;
-  readonly now: number;
 }
 
 export interface TransitionStatusArgs extends MutationHookFields {

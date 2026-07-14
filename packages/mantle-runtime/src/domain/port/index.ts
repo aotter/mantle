@@ -28,7 +28,6 @@ export type {
   CreateEntryArgs,
   UpdateEntryArgs,
   DeleteEntryArgs,
-  ArchiveEntryArgs,
   TransitionStatusArgs,
   ListEntriesArgs,
   ListEntriesResult,
@@ -61,10 +60,6 @@ export type {
   EmailSender,
   EmailSendArgs,
 } from "./EmailSender.js";
-export type {
-  LifecycleHookRunner,
-  RunLifecycleHookRequest,
-} from "./LifecycleHookRunner.js";
 export type {
   DeferredHookDispatcher,
   DeferredHookEnvelope,

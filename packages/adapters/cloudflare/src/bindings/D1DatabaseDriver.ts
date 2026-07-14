@@ -55,7 +55,7 @@ function wrap(native: D1PreparedStatement): PreparedStatement {
       const r = await native.run();
       return {
         success: r.success,
-        meta: { changes: r.meta.changes ?? 0, lastRowId: r.meta.last_row_id },
+        meta: { changes: r.meta.changes ?? 0 },
       };
     },
   };

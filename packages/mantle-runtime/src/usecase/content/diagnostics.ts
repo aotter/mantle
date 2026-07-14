@@ -96,37 +96,3 @@ export function schemaUnknownDiagnostic(
     message: `No Schema with name '${collection}'.`,
   });
 }
-
-/**
- * Field names that are persisted as native columns on the entry row
- * and must not be carried in the `data` JSON blob — otherwise the
- * blob would round-trip back out of `entries.get()` claiming an
- * identity / version / lifecycle that disagrees with the columns.
- *
- * SQL bindings are taken from explicit `CreateEntryArgs` /
- * `UpdateEntryArgs` fields, so a reserved key in `data` cannot
- * overwrite a column — but it can lie. Strip at the entry-writer
- * chokepoint so `data` reflects only author-defined fields.
- */
-export const RESERVED_DATA_KEYS: readonly string[] = [
-  "id",
-  "status",
-  "version",
-  "expectedVersion",
-  "createdAt",
-  "updatedAt",
-  "authorId",
-];
-
-export function stripReservedDataKeys(
-  data: Record<string, unknown>,
-): Record<string, unknown> {
-  let out: Record<string, unknown> | null = null;
-  for (const key of RESERVED_DATA_KEYS) {
-    if (key in data) {
-      if (!out) out = { ...data };
-      delete out[key];
-    }
-  }
-  return out ?? data;
-}

@@ -272,8 +272,10 @@ coverUrl:
 ```
 
 **Implementation status**: declared in
-`@aotter/mantle-spec` as the `MCP_HINT_KEYWORD` constant; the
-conventional values are exported as `MCP_HINTS` / `MEDIA_MCP_HINTS`.
+`@aotter/mantle-spec` as the `MCP_HINT_KEYWORD` constant. The
+conventional values are `markdown`, `richtext`, `code`, `media`,
+`media-image`, `media-video`, `media-file`, `money-minor`, and
+`timestamp-ms` (the `media*` subset marks media-shaped fields).
 MCP tool schemas preserve the hint for agents. Admin surfaces expose
 media-shaped fields but first-party upload hosting is optional and not
 part of first-run provisioning.

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { ContentState, IllegalTransitionError } from "../src/domain/model/index.js";
 import {
   canTransition,
-  getLifecycleStatuses,
   type LifecycleSchemaLike,
   publishRequiresApproval,
   resolveLifecycle,
@@ -45,29 +44,6 @@ describe("publishRequiresApproval", () => {
     expect(publishRequiresApproval(simpleSchema)).toBe(false);
     expect(publishRequiresApproval(explicitSimpleSchema)).toBe(false);
     expect(publishRequiresApproval(undefined)).toBe(false);
-  });
-});
-
-describe("getLifecycleStatuses", () => {
-  it("editorial: drafts / review / published / archived", () => {
-    expect(getLifecycleStatuses("editorial")).toEqual([
-      "draft",
-      "review",
-      "published",
-      "archived",
-    ]);
-  });
-
-  it("simple: drafts / published / archived (no review)", () => {
-    expect(getLifecycleStatuses("simple")).toEqual([
-      "draft",
-      "published",
-      "archived",
-    ]);
-  });
-
-  it("none: no status buckets — operational records render flat", () => {
-    expect(getLifecycleStatuses("none")).toEqual([]);
   });
 });
 

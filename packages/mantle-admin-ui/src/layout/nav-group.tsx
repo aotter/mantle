@@ -129,7 +129,6 @@ function NavLinkItem({
               className="size-3.5 text-muted-foreground"
             />
           )}
-          {item.badge && <NavBadge sidebarLabel>{item.badge}</NavBadge>}
         </a>
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -164,7 +163,6 @@ function NavCollapsibleExpanded({
                 className="size-3.5 text-muted-foreground"
               />
             )}
-            {item.badge && <NavBadge sidebarLabel>{item.badge}</NavBadge>}
             <ChevronRight
               aria-hidden
               data-sidebar-label
@@ -206,7 +204,6 @@ function NavSubLink({
         <a href={link.url} title={link.title} data-tour={tourIdForUrl(link.url)} onClick={() => setOpenMobile(false)}>
           {link.icon && <link.icon aria-hidden />}
           <span>{link.title}</span>
-          {link.badge && <NavBadge>{link.badge}</NavBadge>}
         </a>
       </SidebarMenuSubButton>
     </SidebarMenuSubItem>
@@ -268,23 +265,6 @@ function NavCollapsibleDropdown({
         </DropdownMenuContent>
       </DropdownMenu>
     </SidebarMenuItem>
-  );
-}
-
-function NavBadge({
-  children,
-  sidebarLabel = false,
-}: {
-  children: React.ReactNode;
-  sidebarLabel?: boolean;
-}): React.ReactElement {
-  return (
-    <span
-      data-sidebar-label={sidebarLabel || undefined}
-      className="ms-auto rounded-full bg-accent px-2 py-0.5 text-xs text-accent-foreground"
-    >
-      {children}
-    </span>
   );
 }
 

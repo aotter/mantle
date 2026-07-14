@@ -12,8 +12,7 @@ import {
   Wrench,
 } from "lucide-react";
 
-import { LayoutProvider } from "../context/layout-provider";
-import { SidebarInset, SidebarProvider } from "../ui/sidebar";
+import { readSidebarOpenCookie, SidebarInset, SidebarProvider } from "../ui/sidebar";
 import { api } from "../lib/api";
 import { fieldLabel } from "../lib/field-label";
 import { operationsQueryOptions, viewsManifestQueryOptions } from "../lib/queries";
@@ -35,16 +34,12 @@ import { Header } from "./header";
 import { Main } from "./main";
 import { SkipToMain } from "./skip-to-main";
 import { statusLabel } from "../features/content/status";
-import { readSidebarOpenCookie } from "../context/layout-provider";
 import { t } from "../app/i18n";
 import { AdminAttribution } from "../brand/aotter-mantle";
 import type { AdminBrand, NavGroupData, NavItem, NavLink } from "./types";
 import { GuideOverlay, useGuideOverlay } from "../features/console/guide-overlay";
 
 interface AuthenticatedLayoutProps {
-  brand?: AdminBrand;
-  fixed?: boolean;
-  fluid?: boolean;
   children: React.ReactNode;
 }
 
@@ -54,12 +49,7 @@ const DEFAULT_BRAND: AdminBrand = {
   href: "/admin",
 };
 
-export function AuthenticatedLayout({
-  brand = DEFAULT_BRAND,
-  fixed = false,
-  fluid = false,
-  children,
-}: AuthenticatedLayoutProps): React.ReactElement {
+export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): React.ReactElement {
   const { pathname, search } = useAdminLocation();
   const { language } = usePreferences();
   const guide = useGuideOverlay();
@@ -87,11 +77,11 @@ export function AuthenticatedLayout({
 
   const resolvedBrand = React.useMemo<AdminBrand>(
     () => ({
-      ...brand,
-      title: site.data?.brand ?? brand.title,
-      subtitle: site.data?.canonicalLocale ?? brand.subtitle,
+      ...DEFAULT_BRAND,
+      title: site.data?.brand ?? DEFAULT_BRAND.title,
+      subtitle: site.data?.canonicalLocale ?? DEFAULT_BRAND.subtitle,
     }),
-    [brand, site.data],
+    [site.data],
   );
 
   const canonical = site.data?.canonicalLocale ?? null;
@@ -107,16 +97,13 @@ export function AuthenticatedLayout({
       ),
     [collectionsQuery.data, operationsQuery.data, viewsQuery.data, language, canonical, me.data?.role],
   );
-  const firstCollection = React.useMemo<{ name: string; title: string } | null>(() => {
+  const firstCollection = React.useMemo<{ name: string } | null>(() => {
     const first = (collectionsQuery.data ?? []).find((collection) => !collection.parent);
-    if (!first) return null;
-    const title = resolveLocalizedText(first.title, language, canonical) ?? fieldLabel(first.name);
-    return { name: first.name, title };
-  }, [collectionsQuery.data, language, canonical]);
+    return first ? { name: first.name } : null;
+  }, [collectionsQuery.data]);
 
   return (
-    <LayoutProvider>
-      <SidebarProvider defaultOpen={readSidebarOpenCookie() ?? true}>
+    <SidebarProvider defaultOpen={readSidebarOpenCookie() ?? true}>
         <SkipToMain />
         <AppSidebar
           brand={resolvedBrand}
@@ -139,7 +126,7 @@ export function AuthenticatedLayout({
               role: me.data?.role ?? null,
             }}
           />
-          <Main fixed={fixed} fluid={fluid}>
+          <Main>
             {children}
           </Main>
         </SidebarInset>
@@ -151,8 +138,7 @@ export function AuthenticatedLayout({
               onClose={guide.closeGuide}
             />
           ) : null}
-        </SidebarProvider>
-      </LayoutProvider>
+    </SidebarProvider>
   );
 }
 

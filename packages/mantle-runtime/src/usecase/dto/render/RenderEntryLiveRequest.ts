@@ -1,4 +1,4 @@
-import type { ContentState, SiteConfig } from "@aotter/mantle-spec";
+import type { SiteConfig } from "@aotter/mantle-spec";
 
 /**
  * Request DTO for `RenderEntryLiveUseCase` — renders a single entry
@@ -11,7 +11,4 @@ export interface RenderEntryLiveRequest {
   readonly slug: string;
   readonly locale: string;
   readonly site: SiteConfig;
-  /** Defaults to `"published"`. Pass other states for preview /
-   *  archived rendering. */
-  readonly status?: ContentState;
 }

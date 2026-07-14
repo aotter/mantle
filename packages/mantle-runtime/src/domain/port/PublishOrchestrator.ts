@@ -22,5 +22,4 @@ export interface PublishEntryRequest {
   readonly entryId: string;
   readonly site: SiteConfig;
   readonly templates: TemplateRegistry;
-  readonly htmlDoctype?: string;
 }

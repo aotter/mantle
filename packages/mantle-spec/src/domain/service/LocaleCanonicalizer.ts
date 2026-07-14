@@ -52,15 +52,6 @@ export function toUrlLocale(canonical: string): string {
 }
 
 /**
- * Parse a URL locale segment back to canonical. Stricter than
- * `toCanonicalLocale`: only accepts `xx` or `xx-yy` (lowercase only),
- * which is what the public router regex matches.
- */
-export function fromUrlLocale(urlSegment: string): string {
-  return toCanonicalLocale(urlSegment);
-}
-
-/**
  * Best-effort canonicalization. Unlike `toCanonicalLocale`, never
  * throws — returns the original input unchanged when it's malformed.
  * Used for query-side comparisons where a malformed filter value

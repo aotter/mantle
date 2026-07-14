@@ -36,7 +36,12 @@ jobs:
       # without this the auto-merge queue stays BLOCKED forever. Repo
       # Settings → Actions → "Allow GitHub Actions to create and approve
       # PRs" must be on (flipped 2026-05-17 at org level).
-      - name: Auto-approve patch + minor + digest
+      #
+      # Rebase merge: keeps `develop` linear and preserves dependabot's
+      # `chore(deps): bump X` subject as the head commit. Squash is
+      # disabled on this repo; merge-commit is allowed but generates
+      # noisy 'Merge pull request #N from ...' subjects we don't want.
+      - name: Auto-approve + auto-merge patch + minor + digest
         if: |
           steps.meta.outputs.update-type == 'version-update:semver-patch' ||
           steps.meta.outputs.update-type == 'version-update:semver-minor' ||
@@ -44,18 +49,6 @@ jobs:
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr review --approve "$PR_URL"
-
-      - name: Auto-merge patch + minor + digest
-        if: |
-          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
-          steps.meta.outputs.update-type == 'version-update:semver-minor' ||
-          steps.meta.outputs.update-type == 'version-update:semver-digest'
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # Rebase merge: keeps `develop` linear and preserves dependabot's
-        # `chore(deps): bump X` subject as the head commit. Squash is
-        # disabled on this repo; merge-commit is allowed but generates
-        # noisy 'Merge pull request #N from ...' subjects we don't want.
-        run: gh pr merge --auto --rebase "$PR_URL"
+        run: |
+          gh pr review --approve "$PR_URL"
+          gh pr merge --auto --rebase "$PR_URL"

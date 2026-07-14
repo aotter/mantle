@@ -1,7 +1,9 @@
 import { writeFile } from "node:fs/promises";
 import { stdout, stderr } from "node:process";
+import { parseArgs as parseNodeArgs } from "node:util";
 import { EmitTypesUseCase } from "../../usecase/EmitTypesUseCase.js";
 import { loadManifestsFromRoot } from "./loadManifests.js";
+import { translateParseArgsError } from "./parseArgsError.js";
 
 export interface EmitTypesArgs {
   readonly manifests: string;
@@ -12,24 +14,29 @@ export interface EmitTypesArgs {
 export type ParseResult = { kind: "args"; args: EmitTypesArgs } | { kind: "help" };
 
 export function parseArgs(rawArgs: ReadonlyArray<string>): ParseResult {
-  let manifests = "./manifests";
-  let namespace = "Mantle";
-  let output: string | undefined;
-  for (let i = 0; i < rawArgs.length; i++) {
-    const a = rawArgs[i];
-    if (a === "--manifests") manifests = rawArgs[++i] ?? manifests;
-    else if (a === "--namespace") namespace = rawArgs[++i] ?? namespace;
-    else if (a === "--output" || a === "-o") {
-      const v = rawArgs[++i];
-      if (!v) throw new Error("--output requires a file path");
-      output = v;
-    }
-    else if (a === "--help" || a === "-h") return { kind: "help" };
-    else if (a !== undefined) {
-      throw new Error(`Unknown argument: ${a}`);
-    }
+  let values;
+  try {
+    ({ values } = parseNodeArgs({
+      args: [...rawArgs],
+      options: {
+        manifests: { type: "string" },
+        namespace: { type: "string" },
+        output: { type: "string", short: "o" },
+        help: { type: "boolean", short: "h" },
+      },
+    }));
+  } catch (err) {
+    throw translateParseArgsError(err, { "--output": "--output requires a file path" });
   }
-  return { kind: "args", args: { manifests, namespace, output } };
+  if (values.help) return { kind: "help" };
+  return {
+    kind: "args",
+    args: {
+      manifests: values.manifests ?? "./manifests",
+      namespace: values.namespace ?? "Mantle",
+      output: values.output,
+    },
+  };
 }
 
 function printHelp(): void {

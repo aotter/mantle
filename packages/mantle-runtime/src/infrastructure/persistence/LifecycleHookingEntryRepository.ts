@@ -7,7 +7,6 @@ import {
   type DeferredHookEnvelope,
 } from "../../domain/port/DeferredHookDispatcher.js";
 import type {
-  ArchiveEntryArgs,
   CreateEntryArgs,
   DeleteEntryArgs,
   EntryRepository,
@@ -19,8 +18,8 @@ import type {
   TransitionStatusArgs,
   UpdateEntryArgs,
 } from "../../domain/port/EntryRepository.js";
-import type { LifecycleHookRunner } from "../../domain/port/LifecycleHookRunner.js";
 import type { TriggerIndex } from "../../domain/service/TriggerIndex.js";
+import type { RunLifecycleHooksUseCase } from "../../usecase/lifecycle/RunLifecycleHooksUseCase.js";
 
 const ANON_CTX: HandlerContext = { user: null, staff: null, env: {} };
 
@@ -36,8 +35,6 @@ const ANON_CTX: HandlerContext = { user: null, staff: null, env: {} };
  *   - `create` → `before_create` / `after_create`
  *   - `update` → `before_update` / `after_update`
  *   - `delete` → `before_delete` / `after_delete`
- *   - `archive` → `before_update` / `after_update` (status flip is
- *      a kind of update; explicit archive hooks are v0.2 if needed)
  *   - `transitionStatus({ to: 'published' })` → `before_publish` /
  *      `after_publish`; other targets fire `before_update` /
  *      `after_update`
@@ -54,7 +51,7 @@ export class LifecycleHookingEntryRepository implements EntryRepository {
   constructor(
     private readonly inner: EntryRepository,
     private readonly triggers: TriggerIndex,
-    private readonly hooks: LifecycleHookRunner,
+    private readonly hooks: Pick<RunLifecycleHooksUseCase, "run">,
     private readonly deferred?: DeferredHookDispatcher,
   ) {}
 
@@ -117,25 +114,6 @@ export class LifecycleHookingEntryRepository implements EntryRepository {
       await this.fireAfter("after_delete", existing, ctx, args);
     }
     return result;
-  }
-
-  async archive(args: ArchiveEntryArgs): Promise<EntryRow> {
-    if (!this.triggers.hasAny(args.collection)) {
-      return this.inner.archive(args);
-    }
-    const existing = await this.inner.get(args.id);
-    if (!existing) return this.inner.archive(args);
-    const ctx = ctxOf(args);
-    await this.hooks.run({
-      hook: "before_update",
-      schema: args.collection,
-      entry: existing,
-      ctx,
-      originalInput: args.originalInput,
-    });
-    const row = await this.inner.archive(args);
-    await this.fireAfter("after_update", row, ctx, args);
-    return row;
   }
 
   async transitionStatus(args: TransitionStatusArgs): Promise<EntryRow> {

@@ -1,23 +1,22 @@
 #!/usr/bin/env node
 import { readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 
 const ROOT = process.cwd();
 
 const failures = [];
 
 function listFiles(dir, predicate) {
-  const out = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === "node_modules" || entry.name === "dist") continue;
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      out.push(...listFiles(path, predicate));
-    } else if (predicate(path)) {
-      out.push(path);
-    }
-  }
-  return out;
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name))
+    .filter(
+      (path) =>
+        !relative(dir, path)
+          .split(sep)
+          .some((seg) => seg === "node_modules" || seg === "dist") &&
+        predicate(path),
+    );
 }
 
 function stripComments(source) {

@@ -1,6 +1,6 @@
 import type { HandlerContext } from "../../domain/model/HandlerContext.js";
-import type { LifecycleHookRunner } from "../../domain/port/LifecycleHookRunner.js";
 import type { RunDeferredHookRequest } from "../dto/lifecycle/index.js";
+import type { RunLifecycleHooksUseCase } from "./RunLifecycleHooksUseCase.js";
 
 /**
  * Consume side of the deferred after-hook path. Adapter queue
@@ -21,7 +21,7 @@ import type { RunDeferredHookRequest } from "../dto/lifecycle/index.js";
  * so the hook eventually succeeds or hits the dead-letter queue.
  */
 export class RunDeferredHookUseCase {
-  constructor(private readonly hooks: LifecycleHookRunner) {}
+  constructor(private readonly hooks: Pick<RunLifecycleHooksUseCase, "run">) {}
 
   async execute(request: RunDeferredHookRequest): Promise<void> {
     const { envelope, env } = request;

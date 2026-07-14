@@ -9,6 +9,7 @@ import {
   type ViewManifest,
 } from "@aotter/mantle-spec";
 import type { MediaVariantRole } from "../../domain/port/MediaStorage.js";
+import type { HandlerContext } from "../../domain/model/HandlerContext.js";
 import {
   ArchiveUseCase,
   CreateDraftUseCase,
@@ -206,17 +207,10 @@ export class McpJsonRpcDispatcher {
     const procedure = this.procedureByToolName.get(name);
     if (procedure) {
       if (!this.useCases.invokeProcedure) return UNKNOWN_TOOL;
-      const procCtx = {
-        user: { id: auth.userId },
-        staff: auth.staff
-          ? { id: auth.staff.userId, role: auth.staff.role }
-          : null,
-        env: {},
-      };
       return this.useCases.invokeProcedure.execute({
         procedure,
         input: args,
-        ctx: procCtx,
+        ctx: ctxFromAuth(auth),
         pathPrefix: `MCP ${name}`,
       });
     }
@@ -238,13 +232,7 @@ export class McpJsonRpcDispatcher {
           show: typeof args["show"] === "number" ? args["show"] : undefined,
         },
         pathPrefix: `MCP ${name}`,
-        ctx: {
-          user: { id: auth.userId },
-          staff: auth.staff
-            ? { id: auth.staff.userId, role: auth.staff.role }
-            : null,
-          env: {},
-        },
+        ctx: ctxFromAuth(auth),
       });
       return result;
     }
@@ -280,9 +268,8 @@ export class McpJsonRpcDispatcher {
       }
       case "archive_entry": {
         const id = args["id"];
-        const expected = args["expected_version"];
-        if (typeof id !== "string" || typeof expected !== "number") return MISSING_ARG;
-        return this.useCases.archive.execute({ id, expectedVersion: expected });
+        if (typeof id !== "string") return MISSING_ARG;
+        return this.useCases.archive.execute({ id });
       }
       case "delete_entry": {
         const id = args["id"];
@@ -348,11 +335,7 @@ export class McpJsonRpcDispatcher {
         // `hookCtx` plumbs the authenticated MCP user into lifecycle
         // hook context so consumers can branch on `ctx.user` (e.g.
         // bypass captcha checks for authenticated agents).
-        const hookCtx = {
-          user: { id: auth.userId },
-          staff: auth.staff ? { id: auth.staff.userId, role: auth.staff.role } : null,
-          env: {},
-        };
+        const hookCtx = ctxFromAuth(auth);
         const createSegment = extractCollectionSegment(name, CREATE_DRAFT_PREFIX);
         if (createSegment) {
           const collection = this.schemaBySegment.get(createSegment);
@@ -389,6 +372,14 @@ export class McpJsonRpcDispatcher {
 
 const UNKNOWN_TOOL = Symbol("unknown-tool");
 const MISSING_ARG = Symbol("missing-arg");
+
+function ctxFromAuth(auth: McpAuthContext): HandlerContext {
+  return {
+    user: { id: auth.userId },
+    staff: auth.staff ? { id: auth.staff.userId, role: auth.staff.role } : null,
+    env: {},
+  };
+}
 
 /**
  * Strip the `id` + `expected_version` envelope keys before passing
