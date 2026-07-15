@@ -6,6 +6,17 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.48] - 2026-07-15
+
+### Added
+
+- **@aotter/mantle-spec / @aotter/mantle-runtime / @aotter/mantle-cloudflare**: add one adapter-neutral authorization contract for REST and MCP Procedures/Views: verified caller metadata, role/scope predicates, consumer-supplied API-key and personal-token resolution, mutable guard Procedures (including payment/entitlement checks), consistent 401/402/403 diagnostics, and OpenAPI/MCP reflection (#468, #467).
+- **docs**: ship a versioned consumer guide with complete anonymous, API-key, paid API-key guard, and personal-token examples while keeping credential storage, transaction state, and entitlement policy in the Mantle Site rather than Core (#468, #467).
+
+### Fixed
+
+- **@aotter/mantle-runtime / @aotter/mantle-cloudflare**: staff Views are discoverable and callable only on staff MCP, authorization failures return structured JSON-RPC errors, OAuth bearer identity is normalized into the shared caller context, and every staff MCP call reads the caller's current D1 role so demotion or revocation takes effect immediately (#468, #332, #388).
+
 ## [0.0.11-alpha.47] - 2026-07-14
 
 ### Changed
