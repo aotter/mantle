@@ -64,12 +64,21 @@ export class ValidateManifestsUseCase {
 
     for (const v of partitioned.views) {
       diags.push(...checkViewRefs(v, schemasByName, request.filePaths));
+      diags.push(...checkTargetAuth(v, request.filePaths));
     }
 
     for (const p of partitioned.procedures) {
-      diags.push(...checkProcedureAuth(p, request.filePaths));
+      diags.push(...checkTargetAuth(p, request.filePaths));
       diags.push(...checkBuiltinHandler(p, schemasByName, request.filePaths));
     }
+
+    diags.push(
+      ...checkGuards(
+        [...partitioned.procedures, ...partitioned.views],
+        proceduresByName,
+        request.filePaths,
+      ),
+    );
 
     diags.push(...checkTriggerRefs(partitioned.triggers, proceduresByName, request.filePaths, schemasByName));
 
@@ -378,8 +387,8 @@ function checkBuiltinHandler(
   return out;
 }
 
-function checkProcedureAuth(
-  p: ProcedureManifest,
+function checkTargetAuth(
+  p: ProcedureManifest | ViewManifest,
   filePaths?: ManifestFilePaths,
 ): Diagnostic[] {
   const out: Diagnostic[] = [];
@@ -398,8 +407,8 @@ function checkProcedureAuth(
             filePaths,
           ),
           value: pred,
-          expected: "'ctx.user' or { 'ctx.staff': [<role>, ...] }",
-          message: `Procedure '${p.metadata.name}' has an illegal auth predicate.`,
+          expected: "'ctx.user', 'ctx.auth', { 'ctx.auth.scope': <scope> }, or { 'ctx.staff': [<role>, ...] }",
+          message: `${p.kind} '${p.metadata.name}' has an illegal auth predicate.`,
         }),
       );
     }
@@ -408,7 +417,16 @@ function checkProcedureAuth(
 }
 
 function isValidPredicate(p: unknown): p is AuthPredicate {
-  if (p === "ctx.user") return true;
+  if (p === "ctx.user" || p === "ctx.auth") return true;
+  if (
+    typeof p === "object" &&
+    p !== null &&
+    !Array.isArray(p) &&
+    "ctx.auth.scope" in (p as object)
+  ) {
+    const scope = (p as Record<string, unknown>)["ctx.auth.scope"];
+    return typeof scope === "string" && scope.length > 0;
+  }
   if (
     typeof p === "object" &&
     p !== null &&
@@ -421,6 +439,78 @@ function isValidPredicate(p: unknown): p is AuthPredicate {
     }
   }
   return false;
+}
+
+function checkGuards(
+  targets: ReadonlyArray<ProcedureManifest | ViewManifest>,
+  proceduresByName: ReadonlyMap<string, ProcedureManifest>,
+  filePaths?: ManifestFilePaths,
+): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  for (const target of targets) {
+    const guardName = target.spec.requires?.guard?.procedure;
+    if (!guardName) continue;
+    const path = manifestPath(
+      target.kind,
+      target.metadata.name,
+      "/spec/requires/guard/procedure",
+      filePaths,
+    );
+    const guard = proceduresByName.get(guardName);
+    if (!guard) {
+      out.push(
+        validateDiagnostic({
+          code: "GUARD_PROCEDURE_UNKNOWN",
+          severity: "error",
+          path,
+          value: guardName,
+          expected: "name of a declared Procedure",
+          candidates: [...proceduresByName.keys()],
+          suggestion: bestMatch(guardName, [...proceduresByName.keys()]),
+          message: `${target.kind} '${target.metadata.name}' references unknown guard Procedure '${guardName}'.`,
+        }),
+      );
+      continue;
+    }
+    if (target.kind === "Procedure" && target.metadata.name === guardName) {
+      out.push(
+        validateDiagnostic({
+          code: "GUARD_SELF_REFERENCE",
+          severity: "error",
+          path,
+          value: guardName,
+          expected: "a different, unguarded Procedure",
+          message: `Procedure '${target.metadata.name}' cannot guard itself.`,
+        }),
+      );
+      continue;
+    }
+    if (guard.spec.handler.kind !== "ref") {
+      out.push(
+        validateDiagnostic({
+          code: "GUARD_PROCEDURE_BUILTIN",
+          severity: "error",
+          path,
+          value: guardName,
+          expected: "a Procedure with handler.kind: ref",
+          message: `${target.kind} '${target.metadata.name}' uses '${guardName}' as a guard, but guard Procedures cannot use builtin handlers.`,
+        }),
+      );
+    }
+    if (guard.spec.requires?.guard) {
+      out.push(
+        validateDiagnostic({
+          code: "GUARD_CHAIN_NOT_ALLOWED",
+          severity: "error",
+          path,
+          value: guardName,
+          expected: "an unguarded Procedure",
+          message: `${target.kind} '${target.metadata.name}' uses '${guardName}' as a guard, but guard chains are not allowed.`,
+        }),
+      );
+    }
+  }
+  return out;
 }
 
 function checkTriggerRefs(

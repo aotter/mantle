@@ -29,12 +29,15 @@ export interface IntrospectedView {
   readonly fields: ReadonlyArray<string> | null;
   readonly limit: number | null;
   readonly restPath: string;
+  readonly auth: { readonly all: ReadonlyArray<AuthPredicate> } | null;
+  readonly guard: { readonly procedure: string } | null;
 }
 
 export interface IntrospectedProcedure {
   readonly name: string;
   readonly handler: HandlerBinding;
   readonly auth: { readonly all: ReadonlyArray<AuthPredicate> } | null;
+  readonly guard: { readonly procedure: string } | null;
   readonly input: JsonSchema;
   readonly output: JsonSchema;
 }

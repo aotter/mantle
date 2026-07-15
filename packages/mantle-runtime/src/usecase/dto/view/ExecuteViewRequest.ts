@@ -6,11 +6,9 @@ export interface ExecuteViewRequest {
   readonly view: ViewManifest;
   readonly pathPrefix?: string;
   readonly options?: CompileViewOptions;
-  /** Caller identity for `requires.auth.all` evaluation. Required when
-   *  `view.spec.requires` is present; the use case returns
-   *  `UNAUTHENTICATED` if missing. Adapters constructing public
-   *  (unauthenticated) Views may pass a guest context
-   *  (`{ user: null, staff: null, ... }`) — predicate evaluation will
-   *  fail closed on any `ctx.user` / `ctx.staff` requirement. */
+  /** Normalized caller context for static auth and an optional guard.
+   *  Required for guarded Views; the use case returns `UNAUTHENTICATED`
+   *  if absent. Adapters may pass a guest context for anonymous Views;
+   *  protected predicates then fail closed with 401. */
   readonly ctx?: HandlerContext;
 }

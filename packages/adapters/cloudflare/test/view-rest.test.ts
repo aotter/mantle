@@ -90,13 +90,12 @@ function harness(seed?: (db: InMemoryDatabase) => void) {
 
 /** A staff session (owner) for exercising the `/admin/api/*` gate. */
 const staffAuth: Auth = {
-  handler: async () => new Response(null, { status: 404 }),
+  ...stubAuth,
   getSession: async () => ({
     session: { id: "s", userId: "u", expiresAt: new Date(Date.now() + 60_000) },
     user: { id: "u", email: "x@y.z", name: "Staff", role: "owner", githubLogin: null },
   }),
   getUserRole: async () => "owner",
-  methods: [],
 };
 
 /** Base fixture + two `surface: staff` Views — `ordersRecent` (titled)
@@ -250,13 +249,12 @@ describe("GET /api/views/<name>", () => {
     // We validate the plumbing here by registering an auth-gated View
     // and a staff session; the view should resolve.
     const ownerAuth: Auth = {
-      handler: async () => new Response(null, { status: 404 }),
+      ...stubAuth,
       getSession: async () => ({
         session: { id: "s", userId: "u", expiresAt: new Date(Date.now() + 60_000) },
         user: { id: "u", email: "x@y.z", name: "Staff", role: "owner", githubLogin: null },
       }),
       getUserRole: async () => "owner",
-      methods: [],
     };
     const gatedManifests: Manifest[] = [
       ...manifests(),
@@ -315,13 +313,12 @@ describe("GET /api/views/<name>", () => {
 
   it("auth-gated View returns 403 AUTH_DENIED when session exists but role insufficient (#210 PR13)", async () => {
     const customerAuth: Auth = {
-      handler: async () => new Response(null, { status: 404 }),
+      ...stubAuth,
       getSession: async () => ({
         session: { id: "s", userId: "u", expiresAt: new Date(Date.now() + 60_000) },
         user: { id: "u", email: "x@y.z", name: "Customer", role: null, githubLogin: null },
       }),
       getUserRole: async () => null,
-      methods: [],
     };
     const gatedManifests: Manifest[] = [
       ...manifests(),
@@ -348,6 +345,56 @@ describe("GET /api/views/<name>", () => {
     expect(res.status).toBe(403);
     const body = await res.json() as { diagnostic?: { code: string } };
     expect(body.diagnostic?.code).toBe("AUTH_DENIED");
+  });
+
+  it("authenticates configured OAuth bearer tokens on Views and enforces scope predicates", async () => {
+    let scopes: readonly string[] = ["reports:read"];
+    const bearerAuth: Auth = {
+      ...stubAuth,
+      verifyOAuthAccessToken: async () => ({
+        ok: true,
+        userId: "user-1",
+        clientId: "client-1",
+        credentialId: "jti-1",
+        scopes,
+      }),
+    };
+    const gatedManifests: Manifest[] = [
+      ...manifests(),
+      {
+        apiVersion: "cms.mantle.aotter.net/v1",
+        kind: "View",
+        metadata: { name: "scopedReport" },
+        spec: {
+          from: "posts",
+          requires: {
+            auth: {
+              all: ["ctx.auth", { "ctx.auth.scope": "reports:read" }],
+            },
+          },
+        },
+      },
+    ];
+    const ref = createCmsRef({
+      manifests: gatedManifests,
+      siteDefaults: { locales: ["en"] },
+      bindings: {
+        db: new InMemoryDatabase(),
+        kv: new InMemoryKv(),
+        assets: new StubAssetServer(),
+      },
+      auth: bearerAuth,
+      oauthBearer: { audience: "https://api.example.test" },
+    });
+    const app = new Hono();
+    mountServerEndpoints(app, ref);
+    const request = () =>
+      app.request("/api/views/scopedReport", {
+        headers: { authorization: "Bearer header.payload.signature" },
+      });
+    expect((await request()).status).toBe(200);
+    scopes = [];
+    expect((await request()).status).toBe(403);
   });
 
   it("auth gate runs BEFORE param coercion — anonymous probe doesn't leak the param contract (#210 PR13 CX2)", async () => {

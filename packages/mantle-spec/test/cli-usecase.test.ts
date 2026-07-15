@@ -94,14 +94,14 @@ describe("EmitOpenapiUseCase", () => {
     expect(paths["/api/views/posts-by-locale"]?.get?.operationId).toBe("view_posts_by_locale");
   });
 
-  it("attaches `security: [{bearer:[]}]` when Procedure requires auth", () => {
+  it("attaches the default session-cookie scheme when Procedure requires auth", () => {
     const { document } = EmitOpenapiUseCase.run({
       manifests: fixture(),
       title: "Test",
       version: "0.1.0",
     });
     const paths = document["paths"] as Record<string, Record<string, Record<string, unknown>>>;
-    expect(paths["/api/contact"]!.post!["security"]).toEqual([{ bearer: [] }]);
+    expect(paths["/api/contact"]!.post!["security"]).toEqual([{ sessionCookie: [] }]);
   });
 
   it("View operation includes reserved page/show + declared params as query parameters", () => {
@@ -117,7 +117,7 @@ describe("EmitOpenapiUseCase", () => {
     expect(params.find((p) => p.name === "locale")?.required).toBe(true);
   });
 
-  it("auth-gated View emits security[bearer] + 401/403 responses (#210 PR16 / codex CX4)", () => {
+  it("auth-gated View emits session-cookie security + 401/403 responses", () => {
     const gated = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
 kind: Schema
 metadata: { name: posts }
@@ -144,21 +144,21 @@ spec:
     const op = paths["/api/views/privatePosts"]!.get!;
     // Views use cookie auth (Better Auth session), not bearer —
     // bearer is for Procedure MCP/HTTP-Trigger surface.
-    expect(op["security"]).toEqual([{ cookieAuth: [] }]);
+    expect(op["security"]).toEqual([{ sessionCookie: [] }]);
     const responses = op["responses"] as Record<string, unknown>;
     expect(responses["401"]).toBeDefined();
     expect(responses["403"]).toBeDefined();
-    // Verify the cookieAuth scheme is registered in components with
+    // Verify the sessionCookie scheme is registered in components with
     // the secure production cookie name by default.
     const schemes = (document["components"] as { securitySchemes: Record<string, unknown> }).securitySchemes;
-    expect(schemes["cookieAuth"]).toEqual({
+    expect(schemes["sessionCookie"]).toEqual({
       type: "apiKey",
       in: "cookie",
       name: "__Secure-better-auth.session_token",
     });
   });
 
-  it("cookieAuth name can be overridden via sessionCookieName (local/non-secure deploys)", () => {
+  it("sessionCookie name can be overridden via sessionCookieName (local/non-secure deploys)", () => {
     const gated = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
 kind: Schema
 metadata: { name: posts }
@@ -180,9 +180,77 @@ spec:
       sessionCookieName: "better-auth.session_token",
     });
     const schemes = (document["components"] as { securitySchemes: Record<string, unknown> }).securitySchemes;
-    expect((schemes["cookieAuth"] as Record<string, unknown>)["name"]).toBe(
+    expect((schemes["sessionCookie"] as Record<string, unknown>)["name"]).toBe(
       "better-auth.session_token",
     );
+  });
+
+  it("reflects configured API key, OAuth, PAT scopes, and dynamic guard accurately", () => {
+    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: requirePaid }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: requirePaid }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: readOrders }
+spec:
+  input: { type: object }
+  output: { type: object }
+  requires:
+    auth:
+      all:
+        - ctx.auth
+        - { "ctx.auth.scope": "orders:read" }
+        - { "ctx.auth.scope": "tenant:read" }
+    guard: { procedure: requirePaid }
+  handler: { kind: ref, ref: readOrders }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: readOrdersHttp }
+spec:
+  source: { kind: http, method: POST, path: /api/orders/read }
+  target: { procedure: readOrders }
+`);
+    expect(parsed.diagnostics).toEqual([]);
+    const { document } = EmitOpenapiUseCase.run({
+      manifests: parsed.manifests,
+      title: "Test",
+      version: "0.1.0",
+      security: {
+        sessionCookie: false,
+        oauthBearer: {
+          openIdConnectUrl: "https://auth.example.test/.well-known/openid-configuration",
+        },
+        apiKey: { in: "header", name: "X-API-Key" },
+        personalToken: { bearerFormat: "PAT" },
+      },
+    });
+    const paths = document["paths"] as Record<string, Record<string, Record<string, unknown>>>;
+    const op = paths["/api/orders/read"]!.post!;
+    expect(op["security"]).toEqual([
+      { oauthBearer: ["orders:read", "tenant:read"] },
+      { apiKey: [] },
+      { personalToken: [] },
+    ]);
+    expect(op["x-mantle-required-scopes"]).toEqual(["orders:read", "tenant:read"]);
+    expect(op["x-mantle-guard-procedure"]).toBe("requirePaid");
+    expect((op["responses"] as Record<string, unknown>)["402"]).toBeDefined();
+    const schemes = (document["components"] as {
+      securitySchemes: Record<string, unknown>;
+    }).securitySchemes;
+    expect(schemes).toMatchObject({
+      oauthBearer: {
+        type: "openIdConnect",
+        openIdConnectUrl: "https://auth.example.test/.well-known/openid-configuration",
+      },
+      apiKey: { type: "apiKey", in: "header", name: "X-API-Key" },
+      personalToken: { type: "http", scheme: "bearer", bearerFormat: "PAT" },
+    });
   });
 
   it("public View emits no security + no 401/403 (no auth declared)", () => {

@@ -121,13 +121,12 @@ const STAFF_USER = {
 
 function staffAuth(): Auth {
   return {
-    handler: stubAuth.handler,
+    ...stubAuth,
     getSession: async () => ({
       session: { id: "sess-1", userId: STAFF_USER.id, expiresAt: new Date(Date.now() + 60_000) },
       user: STAFF_USER,
     }),
     getUserRole: async () => "owner",
-    methods: [],
   };
 }
 
@@ -673,7 +672,7 @@ describe("MCP View surface gating (#438)", () => {
     ] as Manifest[];
   }
 
-  function viewRef() {
+  function viewRef(auth: Auth = staffAuth()) {
     return createCmsRef({
       manifests: viewManifests(),
       siteDefaults: { media: { purposes: [postCoverPolicy()] } },
@@ -682,11 +681,17 @@ describe("MCP View surface gating (#438)", () => {
         kv: new InMemoryKv(),
         assets: new StubAssetServer(),
       },
-      auth: staffAuth(),
+      auth,
     });
   }
 
-  const props = { props: { userId: STAFF_USER.id, role: "owner" } };
+  const props = {
+    props: {
+      userId: STAFF_USER.id,
+      clientId: "mcp-client",
+      scopes: ["mcp"],
+    },
+  };
 
   async function toolNames(surface: "public" | "staff"): Promise<string[]> {
     const handler = createMcpApiHandler({ ref: viewRef(), surface });
@@ -705,6 +710,24 @@ describe("MCP View surface gating (#438)", () => {
     const names = await toolNames("public");
     expect(names).toContain("query_view_public_posts");
     expect(names).not.toContain("query_view_staff_report");
+  });
+
+  it("returns a standards-compatible 403 challenge when the MCP scope is missing", async () => {
+    const handler = createMcpApiHandler({ ref: viewRef(), surface: "public" });
+    const res = await handler.fetch!(
+      jsonRpcReq("tools/list"),
+      {},
+      {
+        props: {
+          userId: STAFF_USER.id,
+          clientId: "mcp-client",
+          scopes: ["accounts:read"],
+        },
+      } as unknown as ExecutionContext,
+    );
+    expect(res.status).toBe(403);
+    expect(res.headers.get("www-authenticate")).toContain("insufficient_scope");
+    expect(res.headers.get("www-authenticate")).toContain('scope="mcp"');
   });
 
   it("public surface tools/call for a staff View returns unknown-tool", async () => {
@@ -726,14 +749,51 @@ describe("MCP View surface gating (#438)", () => {
     expect(serialized.toLowerCase()).toContain("unknown");
   });
 
-  it("staff surface (authoring) does NOT surface the staff View as a query tool either, but the filter routes it to the staff dispatcher", async () => {
-    // v0.1 staff MCP surface exposes authoring tools, not query_view_*
-    // tools, so neither View name appears here. The security-relevant
-    // assertion is that the staff View is absent from the PUBLIC surface
-    // (covered above); this pins that the staff surface stays authoring-only.
+  it("staff surface lists and calls the staff View but not the public View (#332)", async () => {
     const names = await toolNames("staff");
     expect(names).not.toContain("query_view_public_posts");
-    expect(names).not.toContain("query_view_staff_report");
+    expect(names).toContain("query_view_staff_report");
     expect(names).toContain("create_draft_posts");
+
+    const handler = createMcpApiHandler({ ref: viewRef(), surface: "staff" });
+    const res = await handler.fetch!(
+      jsonRpcReq("tools/call", { name: "query_view_staff_report", arguments: {} }),
+      {},
+      props as unknown as ExecutionContext,
+    );
+    const body = (await res.json()) as {
+      result?: { content?: Array<{ text?: string }> };
+      error?: unknown;
+    };
+    expect(body.error).toBeUndefined();
+    expect(JSON.parse(body.result?.content?.[0]?.text ?? "{}")).toMatchObject({
+      rows: [],
+    });
+  });
+
+  it("re-reads staff role on every MCP call so demotion takes effect immediately (#388)", async () => {
+    let role: string | null = "owner";
+    const liveAuth: Auth = {
+      ...staffAuth(),
+      getUserRole: async () => role,
+    };
+    const handler = createMcpApiHandler({ ref: viewRef(liveAuth), surface: "staff" });
+    const first = await handler.fetch!(
+      jsonRpcReq("tools/list"),
+      {},
+      props as unknown as ExecutionContext,
+    );
+    expect(first.status).toBe(200);
+
+    role = null;
+    const afterDemotion = await handler.fetch!(
+      jsonRpcReq("tools/list"),
+      {},
+      props as unknown as ExecutionContext,
+    );
+    expect(afterDemotion.status).toBe(403);
+    expect(afterDemotion.headers.get("www-authenticate")).toContain(
+      "insufficient_scope",
+    );
   });
 });

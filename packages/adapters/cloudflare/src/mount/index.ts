@@ -1,4 +1,11 @@
 export { mountServerEndpoints } from "./mountServerEndpoints.js";
+export {
+  resolveCaller,
+  type CallerResolution,
+  type ConsumerCredentialResolution,
+  type ConsumerCredentialResolver,
+  type ResolveCallerOptions,
+} from "./resolveCaller.js";
 export { type CmsRuntimeRef, createCmsRef } from "./bootRuntimeOnce.js";
 export {
   createMcpApiHandler,

@@ -1,5 +1,6 @@
 import {
   partitionManifests,
+  runtimeDiagnostic,
   type Manifest,
   type ProcedureManifest,
   type SchemaManifest,
@@ -248,7 +249,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     idgen,
     siteConfig,
   );
-  const invokeProcedure = new InvokeProcedureUseCase(registry, invokeBuiltin);
+  const invokeProcedure = new InvokeProcedureUseCase(registry, invokeBuiltin, proceduresByName);
   const lifecycleHooks = new RunLifecycleHooksUseCase(
     triggerIndex,
     proceduresByName,
@@ -292,7 +293,27 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
   const unpublish = new UnpublishUseCase(entries, schemasByName, clock, contentPublishEffects);
   const archive = new ArchiveUseCase(entries, schemasByName, clock, contentPublishEffects);
   const deleteEntry = new DeleteEntryUseCase(entries);
-  const executeView = new ExecuteViewUseCase(args.db);
+  const executeView = new ExecuteViewUseCase(args.db, async (request) => {
+    const procedure = proceduresByName.get(request.procedure);
+    if (!procedure) {
+      return {
+        ok: false as const,
+        diagnostic: runtimeDiagnostic({
+          code: "GUARD_PROCEDURE_UNKNOWN",
+          severity: "error",
+          path: request.pathPrefix,
+          value: request.procedure,
+          expected: "name of a declared Procedure",
+        }),
+      };
+    }
+    return invokeProcedure.execute({
+      procedure,
+      input: request.input,
+      ctx: request.ctx,
+      pathPrefix: request.pathPrefix,
+    });
+  });
   const composeSitemap = new ComposeSitemapUseCase(args.db);
   const renderEntryLive = new RenderEntryLiveUseCase(
     args.db,

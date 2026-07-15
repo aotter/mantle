@@ -19,6 +19,10 @@ import type { LifecycleHook, StaffRole } from "@aotter/mantle-spec";
 export interface HandlerContext {
   readonly user: { readonly id: string } | null;
   readonly staff: { readonly id: string; readonly role: StaffRole } | null;
+  /** Verified credential metadata normalized by the adapter. Raw
+   *  credentials never enter runtime context. Optional preserves
+   *  source compatibility for legacy/internal invocations. */
+  readonly auth?: HandlerAuthContext;
   /** Adapter-specific bindings (D1 + KV + optional feature bindings on Cloudflare).
    *  Untyped here so the runtime stays portable — consumer handlers
    *  cast to their adapter's bindings type. The test harness passes
@@ -34,6 +38,16 @@ export interface HandlerContext {
    *  target. Undefined on standard Procedure invocations (HTTP Trigger,
    *  MCP, admin endpoints). */
   readonly event?: HandlerLifecycleEvent;
+}
+
+export type CredentialKind = "session" | "oauth" | "api-key" | "personal-token";
+
+export interface HandlerAuthContext {
+  readonly credential: CredentialKind;
+  /** Opaque site record id or token JTI, never the raw token/key. */
+  readonly credentialId: string | null;
+  readonly clientId: string | null;
+  readonly scopes: readonly string[];
 }
 
 export interface HandlerLifecycleEvent {

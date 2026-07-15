@@ -59,6 +59,7 @@ export interface ProcedureOpts {
   readonly authPredicates?: ProcedureManifest["spec"]["requires"]["auth"]["all"] extends infer A
     ? A
     : never;
+  readonly guard?: string;
 }
 
 export function makeProcedure(opts: ProcedureOpts = {}): ProcedureManifest {
@@ -80,10 +81,16 @@ export function makeProcedure(opts: ProcedureOpts = {}): ProcedureManifest {
       handler: opts.handler ?? { kind: "ref", ref: opts.handlerRef ?? "echoHandler" },
     },
   };
-  if (opts.authPredicates) {
+  if (opts.authPredicates || opts.guard) {
     return {
       ...proc,
-      spec: { ...proc.spec, requires: { auth: { all: opts.authPredicates } } },
+      spec: {
+        ...proc.spec,
+        requires: {
+          ...(opts.authPredicates ? { auth: { all: opts.authPredicates } } : {}),
+          ...(opts.guard ? { guard: { procedure: opts.guard } } : {}),
+        },
+      },
     };
   }
   return proc;

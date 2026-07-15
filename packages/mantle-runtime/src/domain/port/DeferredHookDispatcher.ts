@@ -1,6 +1,6 @@
 import type { LifecycleHook, StaffRole } from "@aotter/mantle-spec";
 import type { EntryRow } from "../model/EntryRow.js";
-import type { HandlerContext } from "../model/HandlerContext.js";
+import type { HandlerAuthContext, HandlerContext } from "../model/HandlerContext.js";
 
 /**
  * Optional adapter port for delivering `after_*` lifecycle hooks
@@ -47,6 +47,9 @@ export interface CtxSnapshot {
   readonly userId: string | null;
   readonly staffId: string | null;
   readonly staffRole: StaffRole | null;
+  /** Optional for backward compatibility with envelopes queued before
+   *  credential context was introduced. */
+  readonly auth?: HandlerAuthContext | null;
 }
 
 /**
@@ -56,10 +59,11 @@ export interface CtxSnapshot {
  * (decorator) and consumer (use case) share one source of truth.
  */
 export function ctxSnapshotFrom(ctx: HandlerContext): CtxSnapshot | null {
-  if (!ctx.user && !ctx.staff) return null;
+  if (!ctx.user && !ctx.staff && !ctx.auth) return null;
   return {
     userId: ctx.user?.id ?? null,
     staffId: ctx.staff?.id ?? null,
     staffRole: ctx.staff?.role ?? null,
+    ...(ctx.auth ? { auth: ctx.auth } : {}),
   };
 }

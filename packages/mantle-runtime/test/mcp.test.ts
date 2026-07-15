@@ -472,23 +472,16 @@ describe("McpJsonRpcDispatcher", () => {
       [],
       { surface: "staff", procedures: [procedure] },
     );
-    // Bearer authenticated but no staff role: invokeProcedure returns
-    // AUTH_DENIED, which the dispatcher wraps in the JSON-RPC result
-    // (not as a -32000 error — the use case's `{ok: false}` IS the
-    // payload, same shape as builtin op denials).
+    // Bearer authenticated but no staff role: the structured runtime
+    // diagnostic is surfaced as JSON-RPC error data.
     const res = await dispatcher.dispatch(
       jsonRpcReq("tools/call", { name: "restock_sku", arguments: { msg: "x" } }),
       { userId: "u1", staff: null },
     );
     const body = (await res.json()) as {
-      result?: { content: { text: string }[] };
+      error?: { data?: { code?: string } };
     };
-    const inner = JSON.parse(body.result!.content[0]!.text) as {
-      ok: boolean;
-      diagnostic?: { code: string };
-    };
-    expect(inner.ok).toBe(false);
-    expect(inner.diagnostic?.code).toBe("AUTH_DENIED");
+    expect(body.error?.data?.code).toBe("AUTH_DENIED");
   });
 
   it("Procedure-MCP trigger does not shadow public-surface View routing when names don't match (#281)", async () => {
@@ -532,10 +525,9 @@ describe("McpJsonRpcDispatcher", () => {
     expect(executeViewCalls).toHaveLength(1);
     expect(executeViewCalls[0]?.pathPrefix).toMatch(/^MCP query_view_recent_posts$/);
     const inner = JSON.parse(body.result!.content[0]!.text) as {
-      ok: boolean;
-      result?: { rows: unknown[] };
+      rows: unknown[];
     };
-    expect(inner.ok).toBe(true);
+    expect(inner.rows).toEqual([]);
   });
 
   it("Procedure-MCP trigger on public surface still enforces requires.auth.all: ctx.staff (#281)", async () => {
@@ -565,12 +557,10 @@ describe("McpJsonRpcDispatcher", () => {
       jsonRpcReq("tools/call", { name: "lookup_price", arguments: { msg: "x" } }),
       { userId: "u1", staff: null },
     );
-    const denied = (await deniedRes.json()) as { result: { content: { text: string }[] } };
-    const deniedInner = JSON.parse(denied.result.content[0]!.text) as {
-      ok: boolean;
-      diagnostic?: { code: string };
+    const denied = (await deniedRes.json()) as {
+      error?: { data?: { code?: string } };
     };
-    expect(deniedInner.diagnostic?.code).toBe("AUTH_DENIED");
+    expect(denied.error?.data?.code).toBe("AUTH_DENIED");
     expect(calls).toBe(0);
 
     // Bearer with staff: allowed (handler runs).
@@ -579,10 +569,7 @@ describe("McpJsonRpcDispatcher", () => {
       { userId: "u1", staff: { userId: "u1", role: "owner" } },
     );
     const allowed = (await allowedRes.json()) as { result: { content: { text: string }[] } };
-    const allowedInner = JSON.parse(allowed.result.content[0]!.text) as {
-      ok: boolean;
-      data?: unknown;
-    };
+    const allowedInner = JSON.parse(allowed.result.content[0]!.text) as { ok: boolean };
     expect(allowedInner.ok).toBe(true);
     expect(calls).toBe(1);
   });

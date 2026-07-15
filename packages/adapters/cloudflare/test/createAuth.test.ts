@@ -1,14 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { EmailSender } from "@aotter/mantle-runtime";
 import {
   buildGenericOAuthProviders,
+  buildOAuthResourceLifecyclePlugin,
+  buildOAuthProviderOptions,
   buildSocialProviders,
   buildTrustedOriginsFor,
   createAuth,
   createSetupIncompleteAuth,
+  getProviderAccessTokenForRequest,
+  mapRegisteredOAuthClient,
   pickLocale,
   shouldPromoteToOwner,
   validateBootstrap,
+  verifyOAuthJwt,
   type AuthMethodConfig,
   type BootstrapOwnerRule,
   type CreateAuthConfig,
@@ -397,6 +402,123 @@ describe("buildGenericOAuthProviders", () => {
     ).toThrow(/discoveryUrl.*authorizationUrl.*tokenUrl/i);
   });
 
+  it("accepts a public PKCE OAuth client without a client secret", () => {
+    const out = buildGenericOAuthProviders([
+      {
+        kind: "oauth",
+        providerId: "public-client",
+        clientId: "client",
+        discoveryUrl: "https://platform.test/.well-known/openid-configuration",
+        pkce: true,
+      },
+    ]);
+    expect(out[0]).not.toHaveProperty("clientSecret");
+    expect(out[0]).toMatchObject({ clientId: "client", pkce: true });
+  });
+
+  it("maps an RFC 8707 resource to authorization and token params", () => {
+    const out = buildGenericOAuthProviders([
+      {
+        kind: "oauth",
+        providerId: "platform",
+        clientId: "client",
+        authorizationUrl: "https://platform.test/authorize",
+        tokenUrl: "https://platform.test/token",
+        resource: "https://api.platform.test",
+      },
+    ]);
+    expect(out[0]).toMatchObject({
+      resource: "https://api.platform.test",
+      authorizationUrlParams: { resource: "https://api.platform.test" },
+      tokenUrlParams: { resource: "https://api.platform.test" },
+    });
+  });
+
+  it("carries resource through authorization, code exchange, and refresh exchange", async () => {
+    const bodies: URLSearchParams[] = [];
+    vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+      let resource = "";
+      if (init?.body instanceof URLSearchParams) {
+        const body = new URLSearchParams(init.body);
+        bodies.push(body);
+        resource = body.get("resource") ?? "";
+      }
+      const payload = Buffer.from(JSON.stringify({ aud: resource })).toString(
+        "base64url",
+      );
+      return Response.json({
+        access_token: `header.${payload}.signature`,
+        refresh_token: "refresh-2",
+        token_type: "Bearer",
+        expires_in: 3600,
+      });
+    });
+    try {
+      const plugin = buildOAuthResourceLifecyclePlugin([
+        {
+          kind: "oauth",
+          providerId: "platform",
+          clientId: "client",
+          authorizationUrl: "https://platform.test/authorize",
+          tokenUrl: "https://platform.test/token",
+          resource: "https://api.platform.test",
+        },
+      ]);
+      expect(plugin).not.toBeNull();
+      const initialized = await plugin!.init!({
+        socialProviders: [
+          {
+            id: "platform",
+            name: "platform",
+            createAuthorizationURL: async () =>
+              new URL("https://platform.test/authorize?client_id=client"),
+            validateAuthorizationCode: async () => null,
+            refreshAccessToken: async () => ({}),
+            getUserInfo: async () => null,
+          },
+        ],
+      } as never);
+      const providers = (initialized as {
+        context?: { socialProviders?: Array<Record<string, unknown>> };
+      }).context?.socialProviders;
+      const provider = providers?.[0] as {
+        createAuthorizationURL(data: Record<string, unknown>): Promise<URL>;
+        validateAuthorizationCode(data: {
+          code: string;
+          redirectURI: string;
+          codeVerifier?: string;
+        }): Promise<{ accessToken?: string } | null>;
+        refreshAccessToken(token: string): Promise<{ accessToken?: string }>;
+      };
+
+      const authorization = await provider.createAuthorizationURL({});
+      expect(authorization.searchParams.get("resource")).toBe(
+        "https://api.platform.test",
+      );
+      const exchanged = await provider.validateAuthorizationCode({
+        code: "code-1",
+        redirectURI: "https://site.test/callback",
+      });
+      const refreshed = await provider.refreshAccessToken("refresh-1");
+      expect(exchanged?.accessToken).toBeTruthy();
+      expect(refreshed.accessToken).toBeTruthy();
+      expect(bodies).toHaveLength(2);
+      expect(bodies[0]?.get("grant_type")).toBe("authorization_code");
+      expect(bodies[0]?.get("resource")).toBe("https://api.platform.test");
+      expect(bodies[1]?.get("grant_type")).toBe("refresh_token");
+      expect(bodies[1]?.get("resource")).toBe("https://api.platform.test");
+      for (const token of [exchanged?.accessToken, refreshed.accessToken]) {
+        expect(token?.split(".")).toHaveLength(3);
+        const claims = JSON.parse(
+          Buffer.from(token!.split(".")[1]!, "base64url").toString("utf8"),
+        ) as { aud?: string };
+        expect(claims.aud).toBe("https://api.platform.test");
+      }
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("throws when the same oauth providerId is registered twice", () => {
     expect(() =>
       buildGenericOAuthProviders([
@@ -414,6 +536,156 @@ describe("buildGenericOAuthProviders", () => {
         },
       ]),
     ).toThrow(/mantle-platform.*registered more than once/i);
+  });
+
+  it("rejects an oauth providerId that collides with a social provider", () => {
+    expect(() =>
+      buildGenericOAuthProviders([
+        {
+          kind: "social",
+          provider: "github",
+          clientId: "social-client",
+          clientSecret: "social-secret",
+        },
+        {
+          kind: "oauth",
+          providerId: "github",
+          clientId: "oauth-client",
+          discoveryUrl: "https://issuer.test/.well-known/openid-configuration",
+          resource: "https://api.test",
+        },
+      ]),
+    ).toThrow(/conflicts with a registered social provider id/i);
+  });
+});
+
+describe("verifyOAuthJwt facade", () => {
+  it("rejects opaque tokens before invoking the JWKS verifier", async () => {
+    const verify = vi.fn(async () => ({ sub: "user-1" }));
+    await expect(
+      verifyOAuthJwt("opaque-token", { audience: "https://api.test" }, verify),
+    ).resolves.toEqual({ ok: false, status: 401, reason: "invalid-token" });
+    expect(verify).not.toHaveBeenCalled();
+  });
+
+  it("returns only normalized caller claims after successful verification", async () => {
+    const result = await verifyOAuthJwt(
+      "header.payload.signature",
+      { audience: "https://api.test", scopes: ["orders:read"] },
+      async (_token, audience) => {
+        expect(audience).toBe("https://api.test");
+        return {
+          sub: "user-1",
+          azp: "client-1",
+          jti: "token-1",
+          scope: "openid orders:read",
+          unrelated_secret_claim: "must-not-escape",
+        };
+      },
+    );
+    expect(result).toEqual({
+      ok: true,
+      userId: "user-1",
+      clientId: "client-1",
+      credentialId: "token-1",
+      scopes: ["openid", "orders:read"],
+    });
+  });
+
+  it("returns 403 only after a verified JWT lacks a required scope", async () => {
+    const result = await verifyOAuthJwt(
+      "header.payload.signature",
+      { audience: "https://api.test", scopes: ["orders:write"] },
+      async () => ({ sub: "user-1", scope: "orders:read" }),
+    );
+    expect(result).toEqual({
+      ok: false,
+      status: 403,
+      reason: "insufficient-scope",
+      missingScopes: ["orders:write"],
+    });
+  });
+
+  it.each(["issuer", "audience", "signature", "expiry", "not-before"])(
+    "fails closed with 401 when the underlying verifier rejects %s",
+    async () => {
+      const result = await verifyOAuthJwt(
+        "header.payload.signature",
+        { audience: "https://api.test" },
+        async () => {
+          throw new Error("verification failed");
+        },
+      );
+      expect(result).toEqual({ ok: false, status: 401, reason: "invalid-token" });
+    },
+  );
+
+  it("rejects a verified JWT without a subject", async () => {
+    const result = await verifyOAuthJwt(
+      "header.payload.signature",
+      { audience: "https://api.test" },
+      async () => ({ scope: "mcp" }),
+    );
+    expect(result).toEqual({ ok: false, status: 401, reason: "invalid-token" });
+  });
+});
+
+describe("getProviderAccessTokenForRequest", () => {
+  it("binds lookup/refresh to the current session request and omits refresh-token data", async () => {
+    const request = new Request("https://site.test/server/action", {
+      headers: { cookie: "session=current-user" },
+    });
+    const getAccessToken = vi.fn(async () => ({
+      accessToken: "access-1",
+      accessTokenExpiresAt: new Date("2030-01-01T00:00:00.000Z"),
+      scopes: ["orders:read"],
+      refreshToken: "must-not-escape",
+      account: { id: "must-not-escape" },
+    }));
+    const value = await getProviderAccessTokenForRequest(
+      { getAccessToken },
+      request,
+      "platform",
+    );
+    expect(getAccessToken).toHaveBeenCalledWith({
+      headers: request.headers,
+      body: { providerId: "platform" },
+    });
+    expect(value).toEqual({
+      accessToken: "access-1",
+      accessTokenExpiresAt: new Date("2030-01-01T00:00:00.000Z"),
+      scopes: ["orders:read"],
+    });
+    expect(value).not.toHaveProperty("refreshToken");
+  });
+});
+
+describe("buildOAuthProviderOptions", () => {
+  it("maps and defensively copies explicit valid JWT audiences", () => {
+    const validAudiences = ["https://api.example.test"];
+    const options = buildOAuthProviderOptions({
+      loginPage: "/sign-in",
+      consentPage: "/consent",
+      scopes: ["openid", "orders:read"],
+      validAudiences,
+    });
+    validAudiences.push("https://mutated.example.test");
+    expect(options.validAudiences).toEqual(["https://api.example.test"]);
+    expect(options.scopes).toEqual(["openid", "orders:read"]);
+  });
+});
+
+describe("registered OAuth client mapping", () => {
+  it("never returns a public client's secret even if the provider includes one", () => {
+    const client = mapRegisteredOAuthClient({
+      client_id: "public-client",
+      client_secret: "must-not-escape",
+      redirect_uris: ["https://site.test/callback"],
+      token_endpoint_auth_method: "none",
+      public: true,
+    });
+    expect(client).not.toHaveProperty("clientSecret");
+    expect(client).toMatchObject({ clientId: "public-client", public: true });
   });
 });
 

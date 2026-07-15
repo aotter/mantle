@@ -85,7 +85,6 @@ export function mountAuthorize(app: Hono, options: MountAuthorizeOptions): void 
         return new Response("redirect_uri mismatch", { status: 400 });
       }
 
-      const role = await auth.getUserRole(session.user.id);
       // If claude.ai forgets to request a scope, default to ["mcp"]
       // so the token grant is non-empty (claude.ai post-token
       // verification rejects empty-scope tokens in some flows).
@@ -96,12 +95,12 @@ export function mountAuthorize(app: Hono, options: MountAuthorizeOptions): void 
         userId: session.user.id,
         metadata: {},
         scope: grantedScope,
-        // Stash role on props so apiHandler can enforce staff gating
-        // via D1 lookup. ctx.props is what the lib hands to
-        // apiHandler.fetch after token verification.
+        // Store immutable grant identity only. Staff role is mutable
+        // authorization state and is re-read from D1 on every MCP call.
         props: {
           userId: session.user.id,
-          role: role ?? null,
+          clientId: reqInfo.clientId,
+          scopes: grantedScope,
         },
       });
       return new Response(null, { status: 302, headers: { location: redirectTo } });
@@ -160,5 +159,6 @@ interface OauthHelpers {
  *  that `createMcpApiHandler` reads from `ctx.props`. */
 export interface OAuthApiProps {
   readonly userId: string;
-  readonly role: string | null;
+  readonly clientId: string;
+  readonly scopes: readonly string[];
 }

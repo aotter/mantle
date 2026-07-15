@@ -33,6 +33,7 @@ export class RunDeferredHookUseCase {
         envelope.ctxSnapshot?.staffId && envelope.ctxSnapshot.staffRole
           ? { id: envelope.ctxSnapshot.staffId, role: envelope.ctxSnapshot.staffRole }
           : null,
+      auth: envelope.ctxSnapshot?.auth ?? undefined,
       env,
     };
     await this.hooks.run({

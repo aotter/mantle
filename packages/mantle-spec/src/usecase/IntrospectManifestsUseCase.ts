@@ -39,11 +39,14 @@ export class IntrospectManifestsUseCase {
       fields: v.spec.fields ?? null,
       limit: v.spec.limit ?? null,
       restPath: `/api/views/${v.metadata.name}`,
+      auth: v.spec.requires?.auth ?? null,
+      guard: v.spec.requires?.guard ?? null,
     }));
     const procedures: IntrospectedProcedure[] = partitioned.procedures.map((p) => ({
       name: p.metadata.name,
       handler: p.spec.handler,
       auth: p.spec.requires?.auth ?? null,
+      guard: p.spec.requires?.guard ?? null,
       input: p.spec.input,
       output: p.spec.output,
     }));

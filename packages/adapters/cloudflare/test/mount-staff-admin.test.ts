@@ -30,7 +30,18 @@ function sessionAs(role: string | null, userId = "user-1") {
 }
 
 function harness(authOverride?: Partial<Auth>) {
-  const auth: Auth = { ...stubAuth, ...authOverride };
+  const getSession = authOverride?.getSession ?? stubAuth.getSession;
+  const auth: Auth = {
+    ...stubAuth,
+    ...authOverride,
+    getSession,
+    getUserRole:
+      authOverride?.getUserRole ??
+      (async () => {
+        const session = await getSession(new Request("https://example.test/"));
+        return session?.user.role ?? null;
+      }),
+  };
   const ref = createCmsRef({
     manifests: [],
     handlers: {},

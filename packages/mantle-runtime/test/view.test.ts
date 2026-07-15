@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { compileView } from "../src/domain/service/ViewSqlCompiler.js";
 import { ExecuteViewUseCase } from "../src/usecase/view/ExecuteViewUseCase.js";
 import { InMemoryDatabase } from "./fakes/database.js";
-import type { ViewManifest } from "@aotter/mantle-spec";
+import { runtimeDiagnostic, type ViewManifest } from "@aotter/mantle-spec";
 
 function view(opts: Partial<ViewManifest["spec"]> & { from: string }): ViewManifest {
   return {
@@ -395,6 +395,73 @@ describe("ExecuteViewUseCase", () => {
       },
     });
     expect(result.ok).toBe(true);
+  });
+
+  it("authenticates, validates params, then invokes the dynamic guard before querying", async () => {
+    const db = new InMemoryDatabase();
+    const calls: string[] = [];
+    const useCase = new ExecuteViewUseCase(db, async (request) => {
+      calls.push(`guard:${String(request.input["accountId"])}`);
+      return {
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "ENTITLEMENT_REQUIRED",
+          severity: "error",
+          path: "site:entitlement",
+          message: "payment required",
+        }),
+      };
+    });
+    const guardedView = view({
+      from: "posts",
+      params: {
+        type: "object",
+        properties: { accountId: { type: "string" } },
+        required: ["accountId"],
+      },
+      requires: {
+        auth: { all: ["ctx.auth"] },
+        guard: { procedure: "requirePaid" },
+      },
+    });
+
+    const anonymous = await useCase.execute({
+      view: guardedView,
+      options: { params: {} },
+      ctx: { user: null, staff: null, env: {} },
+    });
+    expect(anonymous.ok).toBe(false);
+    if (!anonymous.ok) expect(anonymous.diagnostic.code).toBe("UNAUTHENTICATED");
+    expect(calls).toEqual([]);
+
+    const ctx = {
+      user: null,
+      staff: null,
+      auth: {
+        credential: "api-key" as const,
+        credentialId: "key-1",
+        clientId: null,
+        scopes: [] as readonly string[],
+      },
+      env: {},
+    };
+    const invalid = await useCase.execute({
+      view: guardedView,
+      options: { params: {} },
+      ctx,
+    });
+    expect(invalid.ok).toBe(false);
+    if (!invalid.ok) expect(invalid.diagnostic.code).toBe("INPUT_VALIDATION_FAILED");
+    expect(calls).toEqual([]);
+
+    const denied = await useCase.execute({
+      view: guardedView,
+      options: { params: { accountId: "acct-1" } },
+      ctx,
+    });
+    expect(denied.ok).toBe(false);
+    if (!denied.ok) expect(denied.diagnostic.code).toBe("ENTITLEMENT_REQUIRED");
+    expect(calls).toEqual(["guard:acct-1"]);
   });
 
   it("hasMore=true when result fills the requested page exactly", async () => {

@@ -1,0 +1,215 @@
+import { Hono } from "hono";
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import {
+  DiagnosticError,
+  runtimeDiagnostic,
+  type Manifest,
+} from "@aotter/mantle-spec";
+import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
+import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
+import { createMcpApiHandler } from "../src/mount/mountMcp.js";
+import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
+import {
+  InMemoryKv,
+  StubAssetServer,
+  stubAuth,
+} from "./fakes/runtime-bindings.js";
+
+const apiVersion = "cms.mantle.aotter.net/v1" as const;
+const guide = readFileSync(
+  new URL("../../../../docs/api-mcp-authorization.md", import.meta.url),
+  "utf8",
+);
+
+function manifests(): Manifest[] {
+  return [
+    {
+      apiVersion,
+      kind: "Procedure",
+      metadata: { name: "require-active-membership" },
+      spec: {
+        input: {
+          type: "object",
+          properties: { accountId: { type: "string" } },
+          required: ["accountId"],
+        },
+        output: { type: "object" },
+        handler: { kind: "ref", ref: "requireActiveMembership" },
+      },
+    },
+    {
+      apiVersion,
+      kind: "Procedure",
+      metadata: { name: "read-account" },
+      spec: {
+        input: {
+          type: "object",
+          properties: { accountId: { type: "string" } },
+          required: ["accountId"],
+        },
+        output: {
+          type: "object",
+          properties: { accountId: { type: "string" } },
+          required: ["accountId"],
+        },
+        requires: {
+          auth: {
+            all: ["ctx.user", "ctx.auth", { "ctx.auth.scope": "accounts:read" }],
+          },
+          guard: { procedure: "require-active-membership" },
+        },
+        handler: { kind: "ref", ref: "readAccount" },
+      },
+    },
+    {
+      apiVersion,
+      kind: "Trigger",
+      metadata: { name: "read-account-http" },
+      spec: {
+        source: { kind: "http", method: "POST", path: "/api/accounts/read" },
+        target: { procedure: "read-account" },
+      },
+    },
+    {
+      apiVersion,
+      kind: "Trigger",
+      metadata: { name: "read-account-mcp" },
+      spec: {
+        source: { kind: "mcp", surface: "public" },
+        target: { procedure: "read-account" },
+      },
+    },
+  ];
+}
+
+function mcpCall(): Request {
+  return new Request("https://example.test/mcp", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: "read_account",
+        arguments: { accountId: "acct-1" },
+      },
+    }),
+  });
+}
+
+describe("authorization integration: one target across REST and MCP", () => {
+  it("keeps the shipped four-scenario guide aligned with the public seams", () => {
+    for (const text of [
+      "## 1. Anonymous public API",
+      "## 2. Public API requiring an API key",
+      "## 3. API key plus a mutable paid/transaction guard",
+      "## 4. Personal token with user scope, shared by REST and MCP semantics",
+      "ConsumerCredentialResolver",
+      "credentialResolver: siteCredentialResolver(env.DB)",
+      "createMcpApiHandler({ ref: runtimeRef, surface: \"public\" })",
+      "getProviderAccessToken(request, \"mantle-platform\")",
+      "verifyOAuthAccessToken(request",
+      "x-mantle-guard-procedure",
+      "ENTITLEMENT_REQUIRED",
+    ]) {
+      expect(guide, `missing guide contract: ${text}`).toContain(text);
+    }
+  });
+
+  it("re-runs the same mutable site guard after PAT/OAuth caller normalization", async () => {
+    let entitled = true;
+    let targetCalls = 0;
+    let guardCalls = 0;
+    const ref = createCmsRef({
+      manifests: manifests(),
+      handlers: {
+        requireActiveMembership: (_input, ctx) => {
+          guardCalls++;
+          expect(ctx.user?.id).toBe("user-1");
+          if (!entitled) {
+            throw new DiagnosticError(
+              runtimeDiagnostic({
+                code: "ENTITLEMENT_REQUIRED",
+                severity: "error",
+                path: "site:memberships/user-1",
+                message: "Active membership required.",
+              }),
+            );
+          }
+          return {};
+        },
+        readAccount: (input) => {
+          targetCalls++;
+          return input;
+        },
+      },
+      bindings: {
+        db: new InMemoryDatabase(),
+        kv: new InMemoryKv(),
+        assets: new StubAssetServer(),
+      },
+      auth: stubAuth,
+      credentialResolver: (request) => {
+        const header = request.headers.get("authorization");
+        if (header === null) return { kind: "not-handled" };
+        if (header !== "Bearer site_pat_1") return { kind: "invalid" };
+        return {
+          kind: "verified",
+          credential: {
+            credential: "personal-token",
+            credentialId: "pat-row-1",
+            userId: "user-1",
+            scopes: ["accounts:read"],
+          },
+        };
+      },
+    });
+    const app = new Hono();
+    mountServerEndpoints(app, ref);
+    const mcp = createMcpApiHandler({ ref, surface: "public" });
+    const mcpContext = {
+      props: {
+        userId: "user-1",
+        clientId: "personal-client",
+        scopes: ["mcp", "accounts:read"],
+      },
+    } as unknown as ExecutionContext;
+
+    const restGranted = await app.request("/api/accounts/read", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer site_pat_1",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ accountId: "acct-1" }),
+    });
+    expect(restGranted.status).toBe(200);
+    const mcpGranted = await mcp.fetch!(mcpCall(), {}, mcpContext);
+    const mcpGrantedBody = (await mcpGranted.json()) as {
+      result?: { content?: Array<{ text?: string }> };
+    };
+    expect(JSON.parse(mcpGrantedBody.result?.content?.[0]?.text ?? "{}")).toEqual({
+      accountId: "acct-1",
+    });
+    expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 2, targetCalls: 2 });
+
+    entitled = false;
+    const restDenied = await app.request("/api/accounts/read", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer site_pat_1",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ accountId: "acct-1" }),
+    });
+    expect(restDenied.status).toBe(402);
+    const mcpDenied = await mcp.fetch!(mcpCall(), {}, mcpContext);
+    const mcpDeniedBody = (await mcpDenied.json()) as {
+      error?: { data?: { code?: string } };
+    };
+    expect(mcpDeniedBody.error?.data?.code).toBe("ENTITLEMENT_REQUIRED");
+    expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 4, targetCalls: 2 });
+  });
+});
