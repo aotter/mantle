@@ -294,9 +294,11 @@ forces it.
 - `spec.orderBy:`
 - `spec.limit:`
 - `spec.params:` (required query params referenced by filter values)
+- `spec.requires.{auth, guard}:` (same authorization contract as Procedure)
 
 **Procedure (v0.1)**:
 - `spec.requires.auth.all:` (closed predicate vocabulary)
+- `spec.requires.guard.procedure:` (one consumer-owned dynamic guard)
 - `spec.input:` (JSON Schema 2020-12)
 - `spec.output:` (JSON Schema 2020-12)
 - `spec.handler.{kind: ref, ref: <opaque-key>}` — author-supplied
@@ -311,14 +313,16 @@ forces it.
 - `spec.source.kind: lifecycle` — entry-writer hook (promoted to
   v0.1.0; runtime implemented by `LifecycleHookingEntryRepository`)
 - `spec.source.{schema, on, errorPolicy}` (when `kind: lifecycle`)
+- `spec.source.kind: mcp` plus `surface: public | staff` — MCP tool
+  exposure for a declared Procedure
 - `spec.target.procedure:`
 
 #### v0.1 closed enums
 
 - `x-mantle-bind: {ctx.user, ctx.staff, now}`
-- `ctx.*` predicate identity: `{user, staff}` (no `system` until a
-  use case forces it)
-- `Trigger.source.kind: {http, lifecycle}`
+- `ctx.*` predicate vocabulary: `{user, staff, auth, auth.scope}` (no
+  `system` until a use case forces it)
+- `Trigger.source.kind: {http, lifecycle, mcp}`
 - `Procedure.handler.kind: {ref, builtin}`
 - `BuiltinOp: {create, update, upsert, delete}`
 - `LifecycleHook: {before_create, after_create, before_update,

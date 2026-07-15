@@ -26,6 +26,7 @@ Closed enums (`x-mantle-bind` values, `ctx.*` predicates, `Trigger.source.kind`,
 | "I want CAPTCHA / Slack notify on submit"  | + Procedure (handler.kind: ref) + Trigger (lifecycle before_/after_create) |
 | "I want a /search page filtered by tag"    | View with params: { tag } |
 | "I want a public prompt-generator / calculator / configurator page" | A consumer-side `app.get(...)` route in `src/index.ts` — see § Custom public routes |
+| "I want an API key / personal token / paid API / scoped MCP tool" | Procedure/View `requires.auth` plus optional `guard.procedure`; site-owned resolver/handler — see § API and MCP authorization |
 | "I want a /docs/<slug>/edit-history page"  | Defer — v0.1 ships `simple` lifecycle only; `editorial` is v0.1.x |
 | "I want comments"                          | v0.1: anonymous-with-email pattern (Schema + write Procedure). End-user member system is v0.2. |
 
@@ -146,6 +147,43 @@ pnpm mcp-smoke         # 12 cases against /mcp
 
 If you added a new MCP-relevant Schema, the per-collection authoring tools (`create_draft_<segment>`, `update_draft_<segment>`) auto-emit; verify with `tools/list`.
 
+## API and MCP authorization
+
+Read the shipped canonical guide before adding an authenticated public API:
+
+<https://raw.githubusercontent.com/aotter/mantle/develop/docs/api-mcp-authorization.md>
+
+Use only the closed grammar:
+
+```yaml
+requires:
+  auth:
+    all:
+      - ctx.auth
+      - { "ctx.auth.scope": "orders:read" }
+  guard:
+    procedure: require-active-access
+```
+
+- `ctx.auth` means any adapter-verified credential; it is not API-key-only.
+- Repeat `ctx.auth.scope` to require multiple site-owned scopes.
+- Use `ctx.user` as well when a user subject is required.
+- Put current payment, transaction, membership, ownership, or other business
+  state in one site-owned `handler.kind: ref` guard Procedure. It receives the
+  validated target input/params and the same `HandlerContext`.
+- Put API-key/PAT recognition, hashing, revocation, and normalization in the
+  Cloudflare `credentialResolver`. Do not add Core tables, repositories, or a
+  generic entitlement layer.
+- Bind the same Procedure to HTTP and MCP Triggers when both transports should
+  expose it. Standard remote MCP uses OAuth; it does not promise to send a raw
+  REST API key/PAT. Runtime predicates and the guard are shared after caller
+  normalization.
+
+Expected diagnostics are `UNAUTHENTICATED`/401 for no valid credential,
+`AUTH_DENIED`/403 for a verified caller missing role/scope, and
+`ENTITLEMENT_REQUIRED`/402 when a site guard denies current access. Re-run the
+guide's focused integration command after changing manifests or auth wiring.
+
 ## Custom public routes (consumer-app freedom)
 
 The starter owns its `Hono` app instance. If the user wants a public surface that doesn't fit the 4-atom model — a prompt generator, calculator, configurator, starter directory browser, small interactive widget — add a route directly in `src/index.ts`:
@@ -202,7 +240,9 @@ Production fix: iterate every published entry and call `runtime.requestPublish.e
 - Don't add a Schema-level public-read flag (`Schema.spec.expose.rest` etc) — public reads always go through Views.
 - Don't add a non-`$param` filter sentinel (`{ $env: ... }`, `{ $cookie: ... }`, `{ $now }`) — none are in v0.1.
 - Don't bypass the chokepoint by writing to D1 directly — every mutation MUST go through `runtime.entries` (lifecycle hooks fire there).
-- Don't use `Trigger.source.kind: cron / mcp / queue` — DRAFT, parser rejects.
+- Don't use `Trigger.source.kind: cron / queue` — DRAFT, parser rejects. MCP is
+  shipped; declare `source: { kind: mcp, surface: public | staff }` and bind it
+  to a declared Procedure.
 - Don't use `Procedure.spec.requires.window` / `.quota` — DRAFT.
 - Don't write a Procedure with `handler.kind: builtin` and `op: archive` on a `lifecycle: simple` Schema — boot rejects (archive is editorial-only).
 - Don't paste secrets into a manifest (`requires.auth.all` carries predicates only). Secrets go in `wrangler secret put`.

@@ -66,6 +66,15 @@ The runtime is a library, not an HTTP server. A new adapter must mount equivalen
 
 Auth is not a runtime port. Per [ADR-0014](adr/0014-auth-better-auth-and-multi-tenant-mcp.md), the adapter owns Better Auth wiring and passes authenticated user/staff context into runtime dispatchers. Procedure handlers receive that data through `HandlerContext` in `packages/mantle-runtime/src/domain/model/HandlerContext.ts`.
 
+The adapter must also normalize verified credential metadata into
+`HandlerContext.auth` (`credential`, opaque `credentialId`, optional
+`clientId`, scopes). Platform-native session/OAuth verification stays in the
+adapter. A narrow adapter extension seam may let consumer code verify its own
+API-key or personal-token formats, but credential storage/issuance must not
+become a runtime port. The Cloudflare reference is
+`mount/resolveCaller.ts`; consumer usage is documented in
+[API and MCP authorization](api-mcp-authorization.md).
+
 Minimum HTTP behavior for a full adapter:
 
 - Route manifest HTTP Triggers to `runtime.invokeProcedure`.
@@ -74,6 +83,8 @@ Minimum HTTP behavior for a full adapter:
 - Serve admin SPA assets through `AssetServer`, with an SPA catchall for admin client-side routes.
 - Mount public render routes and markdown mirrors when the starter exposes public pages.
 - Translate runtime diagnostics and validation failures into stable HTTP JSON responses instead of throwing raw errors.
+- Evaluate target auth and dynamic guards through the runtime use cases; do
+  not duplicate guard logic in HTTP handlers.
 
 Minimum auth/MCP behavior:
 
@@ -82,7 +93,12 @@ Minimum auth/MCP behavior:
 - Validate `/mcp` requests with any authenticated session (D1 role check is surface-driven, not OAuth-scope-driven — claude.ai rejects colon-shaped scopes).
 - Advertise a single non-colon scope (default `["mcp"]`) in `scopes_supported`. Per-surface enforcement happens server-side in the apiHandler.
 - Build `McpAuthContext` from the validated session and pass it to `McpJsonRpcDispatcher`.
-- Build procedure `HandlerContext` with `user`, `staff`, adapter `env`, and optional `waitUntil`.
+- Build Procedure/View `HandlerContext` with `user`, live `staff`, normalized
+  `auth`, adapter `env`, and optional `waitUntil`.
+- Re-read mutable staff role for each protected REST/MCP invocation. Token or
+  consent-time role snapshots are not an authorization boundary.
+- Keep `tools/list` filtering as UX only; route every `tools/call` through the
+  same auth evaluator and guard runner used by REST.
 
 ## Static assets
 
@@ -98,11 +114,18 @@ Minimum auth/MCP behavior:
 - [ ] Mount HTTP Trigger and View REST surfaces.
 - [ ] Mount admin/public render routes and admin SPA assets.
 - [ ] Provide adapter-owned Better Auth wiring and session helpers.
+- [ ] Normalize session/OAuth and any consumer credential seam into
+      `HandlerContext.auth`; never put raw credentials in runtime context.
 - [ ] Mount `/mcp/staff` and `/mcp` via the platform's OAuth provider lib (Cloudflare adapter uses `@cloudflare/workers-oauth-provider` at top level). Enforce staff D1 role inside the apiHandler.
+- [ ] Prove one guarded target has identical REST/MCP outcomes, including
+      mutable revocation on the next call.
 - [ ] Add optional `MediaStorage` or `DeferredHookDispatcher` only when the adapter supports those features.
 - [ ] Verify the runtime package still has no platform-specific imports.
 
 ## Current non-goals
 
 - Do not add `SessionRepository`, `OAuthVerifier`, `UserRepository`, or `StaffRepository` runtime ports. Those were pre-ADR-0014 concepts and are not part of the current adapter contract.
+- Do not add API-key, personal-token, transaction, billing, or entitlement
+  repositories to Core. They are consumer state behind the adapter resolver
+  and guard Procedure.
 - Do not add a second canonical migration chain for a new adapter. The runtime owns canonical migrations; adapters execute them through `DatabaseDriver.migrations`.

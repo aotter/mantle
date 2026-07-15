@@ -118,9 +118,24 @@ GitHub OAuth token is still Landing-owned unless a separate token
 handoff design is introduced.
 
 The generated site's hosted-auth client code belongs in the starter or
-a starter overlay. Core owns only the auth contract, manifest/runtime
-identity vocabulary (`ctx.user`, `ctx.staff`), and curated Better Auth
-server primitives.
+a starter overlay. Core owns only the auth contract, normalized
+manifest/runtime credential vocabulary (`ctx.user`, `ctx.staff`, `ctx.auth`),
+guard orchestration, and curated Better Auth server primitives.
+
+## API and MCP Authorization
+
+Login hosting and business API authorization are related but separate. Core
+provides a normalized verified-credential context (`ctx.auth`), closed scope
+predicates, one Cloudflare consumer credential resolver seam, and a
+Procedure-backed guard that REST and MCP both execute. A generated site owns
+API keys, personal tokens, grants, transactions, subscriptions, and the guard
+handler that checks current business state.
+
+Mantle Platform may be the identity or OAuth token authority for a hosted
+flow. That does not make token claims the generated site's live membership or
+entitlement authority. The target site's guard reads its authoritative state
+on every call. See [API and MCP authorization](api-mcp-authorization.md) for
+the exact public API and four consumer examples.
 
 ## SDK Surface Rule
 
@@ -135,5 +150,14 @@ The current first-party SSO use case justifies these optional fields on
 - `crossSubDomainCookies`
 - `cookiePrefix`
 
-All three are additive. Existing generated sites that do not pass them
-keep their previous cookie and session behavior.
+The cross-site API use case additionally justifies these curated fields and
+facades:
+
+- generic OAuth method `resource`
+- OAuth provider `validAudiences`
+- `Auth.getProviderAccessToken(request, providerId)`
+- `Auth.verifyOAuthAccessToken(tokenOrRequest, { audience, scopes })`
+
+All are additive. Existing generated sites that do not pass them keep their
+previous cookie, session, and REST behavior. These are not a raw Better Auth
+options passthrough.

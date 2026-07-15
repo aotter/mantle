@@ -1,6 +1,7 @@
 # ADR-0002: Closed enums for identity/time bindings
 
-**Status:** Carried over from POC v0.0.x; refreshed for v0.1.0.
+**Status:** Carried over from POC v0.0.x; refreshed for v0.1.0;
+amended 2026-07-15 for verified credentials and delegated scopes.
 
 **Date**: 2026-04-30 (POC); refreshed 2026-05-03
 
@@ -224,3 +225,38 @@ parser rejects unknown values with the structured diagnostic
 shape. Verify in code review that new manifest grammar
 additions do not quietly widen these enums; widening is a
 grammar-revise, not a code-cleanup.
+
+## Amendment — 2026-07-15: verified credentials and delegated scopes
+
+Epic #467 supplied the required grammar-revise evidence: the existing
+`ctx.user` and `ctx.staff` predicates cannot represent service API keys or
+delegated OAuth/personal-token scopes without coupling Core to a credential
+store. The closed predicate vocabulary is therefore extended by exactly two
+entries:
+
+```yaml
+requires:
+  auth:
+    all:
+      - ctx.auth
+      - { "ctx.auth.scope": "orders:read" }
+```
+
+- `ctx.auth` requires any credential that an adapter has already verified and
+  normalized into `HandlerContext.auth`.
+- `{ "ctx.auth.scope": "<opaque site-owned scope>" }` requires that one exact
+  scope. Multiple scopes are expressed by repeating the predicate under the
+  existing `all` group.
+
+The full v0.1 vocabulary is now `ctx.user`, `ctx.staff`, `ctx.auth`, and
+`ctx.auth.scope`. The latter two do not add a credential-kind expression,
+`any` group, policy array, scope catalog, or entitlement lookup. API keys may
+have no `ctx.user`; OAuth and personal tokens may supply one. Missing identity
+or credential yields `UNAUTHENTICATED` (`401`), while a verified credential
+missing a required role/scope yields `AUTH_DENIED` (`403`).
+
+Current membership, payment, ownership, or transaction state is intentionally
+not a static predicate. A target may name one ordinary Procedure through
+`requires.guard.procedure`; that Procedure performs the site-owned dynamic
+check after target input validation and before target execution. This keeps
+the predicate set closed and preserves the four-atom model.
