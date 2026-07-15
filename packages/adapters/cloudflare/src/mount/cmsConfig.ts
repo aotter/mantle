@@ -6,6 +6,7 @@ import type {
 } from "@aotter/mantle-runtime";
 import type { Manifest, SiteDefaults } from "@aotter/mantle-spec";
 import type { Auth } from "../auth/createAuth.js";
+import type { ConsumerCredentialResolver } from "./resolveCaller.js";
 
 /**
  * Consumer-supplied config for the Cloudflare adapter mounts. `auth`
@@ -33,4 +34,13 @@ export interface CmsConfig {
   /** Pass-through to runtime: SVG opt-in flag (default false). */
   readonly mediaAllowSvg?: boolean;
   readonly auth: Auth;
+  /** Site-owned API key / personal-token verifier. Core supplies only
+   *  normalization and orchestration; storage and issuance stay in
+   *  consumer code. */
+  readonly credentialResolver?: ConsumerCredentialResolver;
+  /** Enable OAuth JWT bearer authentication on manifest REST routes. */
+  readonly oauthBearer?: {
+    readonly audience: string;
+    readonly scopes?: readonly string[];
+  };
 }

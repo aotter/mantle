@@ -38,6 +38,20 @@ Use `crossSubDomainCookies` only when the same party controls every
 participating subdomain. For a customer-owned domain such as
 `customer.com`, use an OAuth/OIDC broker flow instead of shared cookies.
 
+## API and MCP Authorization
+
+`createCmsRef()` accepts an optional `credentialResolver` for site-owned API
+keys and personal tokens, plus optional `oauthBearer` JWT verification for
+manifest REST routes. The adapter normalizes those callers, cookie sessions,
+and MCP OAuth callers into the same runtime auth context. Manifest
+`ctx.auth`/scope predicates and `guard.procedure` then enforce the target on
+every REST or MCP call.
+
+Core does not create credential or payment tables. See the shipped
+[API and MCP authorization guide](../../../docs/api-mcp-authorization.md) for
+the exact resolver contract, OAuth resource helpers, manifest examples,
+status behavior, OpenAPI reflection, and runnable integration fixture.
+
 ## Optional R2 Media Uploads
 
 R2-backed staff media uploads are adapter-specific post-launch work, not part

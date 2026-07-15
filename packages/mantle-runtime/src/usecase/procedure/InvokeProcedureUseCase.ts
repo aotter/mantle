@@ -25,17 +25,19 @@ import type { InvokeBuiltinUseCase } from "./InvokeBuiltinUseCase.js";
  *
  * Order of operations:
  *   1. Evaluate `requires.auth.all` predicates against `ctx`. Deny ⇒
- *      `AUTH_DENIED`.
+ *      `UNAUTHENTICATED` or `AUTH_DENIED`.
  *   2. Validate `input` against the Procedure's `input` JSON Schema.
  *      Fail ⇒ `INPUT_VALIDATION_FAILED` (first zod issue).
- *   3. Dispatch by `handler.kind`:
+ *   3. Invoke an optional guard Procedure with validated input and the
+ *      same caller context. Any failure denies the target.
+ *   4. Dispatch by `handler.kind`:
  *      - `ref`: resolve in registry, call (`InvokeFailure` → unwrap;
  *        other throws → `INTERNAL_ERROR`).
  *      - `builtin`: delegate to `InvokeBuiltinUseCase` (project +
  *        stamp + chokepoint write per POC ADR-0014). When no builtin
  *        collaborator was injected (test paths, ref-only runtimes) the
  *        use case returns `HANDLER_BUILTIN_NOT_IN_V010`.
- *   4. Validate the result against the `output` schema. Fail ⇒
+ *   5. Validate the result against the `output` schema. Fail ⇒
  *      `OUTPUT_VALIDATION_FAILED` (handler / builtin bug).
  */
 /**
@@ -65,9 +67,17 @@ export class InvokeProcedureUseCase {
   constructor(
     private readonly registry: HandlerRegistry,
     private readonly builtin?: InvokeBuiltinUseCase,
+    private readonly proceduresByName: ReadonlyMap<string, ProcedureManifest> = new Map(),
   ) {}
 
   async execute<O = unknown>(request: InvokeProcedureRequest): Promise<InvokeProcedureResponse<O>> {
+    return this.executeInternal(request, true);
+  }
+
+  private async executeInternal<O = unknown>(
+    request: InvokeProcedureRequest,
+    allowGuard: boolean,
+  ): Promise<InvokeProcedureResponse<O>> {
     const { procedure, input, ctx } = request;
     const phase: Phase = "runtime";
     const procPath = request.pathPrefix ?? `manifest:Procedure/${procedure.metadata.name}`;
@@ -94,7 +104,78 @@ export class InvokeProcedureUseCase {
       };
     }
 
-    // 3. Dispatch by handler kind.
+    // 3. Dynamic guard. It receives only target input that passed the
+    // target schema, shares the same caller context, and runs through
+    // this exact auth/input/handler/output pipeline. Boot rejects guard
+    // chains; allowGuard is defense-in-depth for boot-bypass paths.
+    const guardName = procedure.spec.requires?.guard?.procedure;
+    if (guardName) {
+      if (!allowGuard) {
+        return {
+          ok: false,
+          diagnostic: makeDiagnostic({
+            code: "GUARD_CHAIN_NOT_ALLOWED",
+            phase,
+            severity: "error",
+            path: `${procPath}#/requires/guard/procedure`,
+            value: guardName,
+            expected: "an unguarded Procedure",
+          }),
+        };
+      }
+      const guard = this.proceduresByName.get(guardName);
+      if (!guard) {
+        return {
+          ok: false,
+          diagnostic: makeDiagnostic({
+            code: "GUARD_PROCEDURE_UNKNOWN",
+            phase,
+            severity: "error",
+            path: `${procPath}#/requires/guard/procedure`,
+            value: guardName,
+            expected: "name of a declared Procedure",
+          }),
+        };
+      }
+      if (guard.metadata.name === procedure.metadata.name) {
+        return {
+          ok: false,
+          diagnostic: makeDiagnostic({
+            code: "GUARD_SELF_REFERENCE",
+            phase,
+            severity: "error",
+            path: `${procPath}#/requires/guard/procedure`,
+            value: guardName,
+            expected: "a different, unguarded Procedure",
+          }),
+        };
+      }
+      if (guard.spec.handler.kind !== "ref") {
+        return {
+          ok: false,
+          diagnostic: makeDiagnostic({
+            code: "GUARD_PROCEDURE_BUILTIN",
+            phase,
+            severity: "error",
+            path: `${procPath}#/requires/guard/procedure`,
+            value: guardName,
+            expected: "a Procedure with handler.kind: ref",
+          }),
+        };
+      }
+      const guardResult = await this.executeInternal(
+        {
+          procedure: guard,
+          input: inputResult.data,
+          ctx,
+          pathPrefix: `${procPath}#/requires/guard/${guardName}`,
+        },
+        false,
+      );
+      if (!guardResult.ok) return guardResult;
+    }
+
+    // 4. Dispatch by handler kind.
     const handlerBinding = procedure.spec.handler;
     const handlerLabel =
       handlerBinding.kind === "builtin"
@@ -161,7 +242,7 @@ export class InvokeProcedureUseCase {
       };
     }
 
-    // 4. Output validation.
+    // 5. Output validation.
     const outputValidator = this.compileOutput(procedure);
     const outputResult = outputValidator.safeParse(result);
     if (!outputResult.success) {

@@ -23,6 +23,31 @@ describe("ValidateBootUseCase", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("rejects missing, self-referencing, builtin, and chained guard Procedures", () => {
+    const reg = new InMemoryHandlerRegistry();
+    reg.register("echoHandler", () => ({ ok: true }));
+    const result = new ValidateBootUseCase().execute({
+      manifests: [
+        postsSchema(),
+        makeProcedure({ name: "missing", guard: "ghost" }),
+        makeProcedure({ name: "self", guard: "self" }),
+        makeBuiltinProcedure({ name: "builtinGuard", schema: "posts" }),
+        makeProcedure({ name: "usesBuiltin", guard: "builtinGuard" }),
+        makeProcedure({ name: "leaf" }),
+        makeProcedure({ name: "chainedGuard", guard: "leaf" }),
+        makeProcedure({ name: "usesChain", guard: "chainedGuard" }),
+      ],
+      registry: reg,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const codes = result.diagnostics.map((d) => d.code);
+    expect(codes).toContain("GUARD_PROCEDURE_UNKNOWN");
+    expect(codes).toContain("GUARD_SELF_REFERENCE");
+    expect(codes).toContain("GUARD_PROCEDURE_BUILTIN");
+    expect(codes).toContain("GUARD_CHAIN_NOT_ALLOWED");
+  });
+
   it("fails with HANDLER_NOT_REGISTERED when ref is missing", () => {
     const reg = new InMemoryHandlerRegistry();
     const result = new ValidateBootUseCase().execute({

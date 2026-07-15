@@ -99,6 +99,67 @@ export class ValidateBootUseCase {
       }
     }
 
+    // Guard Procedures are ordinary ref handlers, but the guard graph
+    // is intentionally one level deep. Validate it again at boot so
+    // programmatically-built manifests cannot bypass the spec CLI.
+    for (const target of [...partitioned.procedures, ...partitioned.views]) {
+      const guardName = target.spec.requires?.guard?.procedure;
+      if (!guardName) continue;
+      const path = `manifest:${target.kind}/${target.metadata.name}#/spec/requires/guard/procedure`;
+      const guard = proceduresByName.get(guardName);
+      if (!guard) {
+        diagnostics.push(
+          bootDiagnostic({
+            code: "GUARD_PROCEDURE_UNKNOWN",
+            severity: "error",
+            path,
+            value: guardName,
+            expected: "name of a declared Procedure",
+            candidates: procedureCandidates,
+            message: `${target.kind} '${target.metadata.name}' references unknown guard Procedure '${guardName}'.`,
+          }),
+        );
+        continue;
+      }
+      if (target.kind === "Procedure" && target.metadata.name === guardName) {
+        diagnostics.push(
+          bootDiagnostic({
+            code: "GUARD_SELF_REFERENCE",
+            severity: "error",
+            path,
+            value: guardName,
+            expected: "a different, unguarded Procedure",
+            message: `Procedure '${target.metadata.name}' cannot guard itself.`,
+          }),
+        );
+        continue;
+      }
+      if (guard.spec.handler.kind !== "ref") {
+        diagnostics.push(
+          bootDiagnostic({
+            code: "GUARD_PROCEDURE_BUILTIN",
+            severity: "error",
+            path,
+            value: guardName,
+            expected: "a Procedure with handler.kind: ref",
+            message: `${target.kind} '${target.metadata.name}' uses '${guardName}' as a guard, but guard Procedures cannot use builtin handlers.`,
+          }),
+        );
+      }
+      if (guard.spec.requires?.guard) {
+        diagnostics.push(
+          bootDiagnostic({
+            code: "GUARD_CHAIN_NOT_ALLOWED",
+            severity: "error",
+            path,
+            value: guardName,
+            expected: "an unguarded Procedure",
+            message: `${target.kind} '${target.metadata.name}' uses '${guardName}' as a guard, but guard chains are not allowed.`,
+          }),
+        );
+      }
+    }
+
     // 2. Trigger.target.procedure resolves.
     for (const t of partitioned.triggers) {
       if (!proceduresByName.has(t.spec.target.procedure)) {

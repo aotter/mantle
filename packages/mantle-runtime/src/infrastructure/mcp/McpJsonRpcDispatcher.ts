@@ -49,6 +49,12 @@ export interface McpAuthContext {
   readonly userId: string;
   /** Caller's staff role; null for non-staff bearers. */
   readonly staff: { readonly userId: string; readonly role: StaffRole } | null;
+  /** OAuth client/token metadata. Optional keeps callers compiled
+   *  against older adapters working; the compatibility scope remains
+   *  `mcp` when no explicit scope list is supplied. */
+  readonly clientId?: string | null;
+  readonly credentialId?: string | null;
+  readonly scopes?: readonly string[];
 }
 
 /**
@@ -207,17 +213,21 @@ export class McpJsonRpcDispatcher {
     const procedure = this.procedureByToolName.get(name);
     if (procedure) {
       if (!this.useCases.invokeProcedure) return UNKNOWN_TOOL;
-      return this.useCases.invokeProcedure.execute({
+      const result = await this.useCases.invokeProcedure.execute({
         procedure,
         input: args,
         ctx: ctxFromAuth(auth),
         pathPrefix: `MCP ${name}`,
       });
+      if (!result.ok) throw new DiagnosticError(result.diagnostic);
+      return result.data;
     }
 
-    if ((this.options.surface ?? "staff") === "public") {
-      const viewSegment = extractCollectionSegment(name, QUERY_VIEW_PREFIX);
-      if (!viewSegment) return UNKNOWN_TOOL;
+    // Views exist on both public and staff MCP surfaces. The adapter
+    // passes a pre-filtered slice, so a guessed public call cannot
+    // resolve a staff View while staff MCP can list and invoke it.
+    const viewSegment = extractCollectionSegment(name, QUERY_VIEW_PREFIX);
+    if (viewSegment) {
       const view = this.viewBySegment.get(viewSegment);
       if (!view || !this.useCases.executeView) return UNKNOWN_TOOL;
       // Build ctx from the bearer-derived McpAuthContext so the
@@ -234,7 +244,12 @@ export class McpJsonRpcDispatcher {
         pathPrefix: `MCP ${name}`,
         ctx: ctxFromAuth(auth),
       });
-      return result;
+      if (!result.ok) throw new DiagnosticError(result.diagnostic);
+      return result.result;
+    }
+
+    if ((this.options.surface ?? "staff") === "public") {
+      return UNKNOWN_TOOL;
     }
 
     switch (name) {
@@ -377,6 +392,12 @@ function ctxFromAuth(auth: McpAuthContext): HandlerContext {
   return {
     user: { id: auth.userId },
     staff: auth.staff ? { id: auth.staff.userId, role: auth.staff.role } : null,
+    auth: {
+      credential: "oauth",
+      credentialId: auth.credentialId ?? null,
+      clientId: auth.clientId ?? null,
+      scopes: auth.scopes ?? ["mcp"],
+    },
     env: {},
   };
 }

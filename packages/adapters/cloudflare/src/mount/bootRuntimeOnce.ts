@@ -5,6 +5,7 @@ import {
 import type { Manifest } from "@aotter/mantle-spec";
 import type { Auth } from "../auth/createAuth.js";
 import type { CmsConfig } from "./cmsConfig.js";
+import type { ConsumerCredentialResolver } from "./resolveCaller.js";
 
 /**
  * Per-isolate runtime singleton. The cached promise MUST reset on
@@ -16,6 +17,8 @@ export interface CmsRuntimeRef {
   get(): Promise<CmsRuntime>;
   readonly manifests: readonly Manifest[];
   readonly auth: Auth;
+  readonly credentialResolver?: ConsumerCredentialResolver;
+  readonly oauthBearer?: CmsConfig["oauthBearer"];
 }
 
 export function createCmsRef(config: CmsConfig): CmsRuntimeRef {
@@ -37,6 +40,8 @@ export function createCmsRef(config: CmsConfig): CmsRuntimeRef {
   return {
     manifests: config.manifests,
     auth: config.auth,
+    credentialResolver: config.credentialResolver,
+    oauthBearer: config.oauthBearer,
     get(): Promise<CmsRuntime> {
       if (booted) return booted;
       booted = runtime

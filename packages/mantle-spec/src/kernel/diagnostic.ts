@@ -38,6 +38,10 @@ export const DIAGNOSTIC_CODES = [
   "VIEW_FILTER_PARAM_REF_NOT_REQUIRED",
   "BIND_VALUE_NOT_IN_ENUM",
   "AUTH_PREDICATE_NOT_IN_ENUM",
+  "GUARD_PROCEDURE_UNKNOWN",
+  "GUARD_SELF_REFERENCE",
+  "GUARD_PROCEDURE_BUILTIN",
+  "GUARD_CHAIN_NOT_ALLOWED",
   "UNIQUE_INDEX_FIELD_UNKNOWN",
   "DRAFT_KEY_USED",
   // v0.1.x-committed keys present in v0.1.0 manifests are rejected
@@ -74,6 +78,7 @@ export const DIAGNOSTIC_CODES = [
   "INPUT_VALIDATION_FAILED",
   "UNAUTHENTICATED",
   "AUTH_DENIED",
+  "ENTITLEMENT_REQUIRED",
   "CONFLICT",
   "DISPATCHER_NOT_BUILT",
   "INTERNAL_ERROR",
@@ -119,13 +124,14 @@ export interface Diagnostic {
  * Narrowed to a status-literal union so adding a code with a status
  * outside the v0.1 set fails compile.
  */
-export type RuntimeHttpStatus = 400 | 401 | 403 | 404 | 405 | 409 | 410 | 500 | 501;
+export type RuntimeHttpStatus = 400 | 401 | 402 | 403 | 404 | 405 | 409 | 410 | 500 | 501;
 
 export const HTTP_STATUS_BY_CODE: Readonly<Partial<Record<DiagnosticCode, RuntimeHttpStatus>>> = {
   INPUT_VALIDATION_FAILED: 400,
   INVALID_LOCALE: 400,
   UNAUTHENTICATED: 401,
   AUTH_DENIED: 403,
+  ENTITLEMENT_REQUIRED: 402,
   NOT_FOUND: 404,
   METHOD_NOT_ALLOWED: 405,
   CONFLICT: 409,

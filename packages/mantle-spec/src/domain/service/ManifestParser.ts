@@ -744,6 +744,26 @@ function validateRequires(req: unknown, idx: number, atom: "Procedure" | "View")
       );
     }
   }
+  if ("guard" in r) {
+    const guard = r["guard"];
+    if (typeof guard !== "object" || guard === null || Array.isArray(guard)) {
+      throw new ManifestParseError(`${atom}.spec.requires.guard must be an object`, idx);
+    }
+    const g = guard as Record<string, unknown>;
+    if (typeof g["procedure"] !== "string" || g["procedure"].length === 0) {
+      throw new ManifestParseError(
+        `${atom}.spec.requires.guard.procedure must be a non-empty Procedure name`,
+        idx,
+      );
+    }
+    const extra = Object.keys(g).find((key) => key !== "procedure");
+    if (extra !== undefined) {
+      throw new ManifestParseError(
+        `${atom}.spec.requires.guard.${extra} is not supported; guard accepts only \`procedure\``,
+        idx,
+      );
+    }
+  }
   if (!("auth" in r) || r["auth"] == null) return;
   const auth = r["auth"];
   if (typeof auth !== "object" || auth === null) {
@@ -777,9 +797,19 @@ function validateRequires(req: unknown, idx: number, atom: "Procedure" | "View")
 }
 
 function validateAuthPredicate(p: unknown, idx: number, path: string): asserts p is AuthPredicate {
-  if (p === "ctx.user") return;
+  if (p === "ctx.user" || p === "ctx.auth") return;
   if (typeof p === "object" && p !== null && !Array.isArray(p)) {
     const o = p as Record<string, unknown>;
+    if ("ctx.auth.scope" in o) {
+      const scope = o["ctx.auth.scope"];
+      if (typeof scope !== "string" || scope.length === 0) {
+        throw new ManifestParseError(
+          `${path}: 'ctx.auth.scope' value must be a non-empty string`,
+          idx,
+        );
+      }
+      return;
+    }
     if ("ctx.staff" in o) {
       const roles = o["ctx.staff"];
       if (!Array.isArray(roles) || roles.length === 0 || roles.some((r) => typeof r !== "string")) {
@@ -813,7 +843,7 @@ function validateAuthPredicate(p: unknown, idx: number, path: string): asserts p
     }
   }
   throw new ManifestParseError(
-    `${path} must be 'ctx.user' or { 'ctx.staff': [<role>, ...] }; got ${JSON.stringify(p)}`,
+    `${path} must be 'ctx.user', 'ctx.auth', { 'ctx.auth.scope': <scope> }, or { 'ctx.staff': [<role>, ...] }; got ${JSON.stringify(p)}`,
     idx,
   );
 }

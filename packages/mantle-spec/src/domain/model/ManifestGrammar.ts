@@ -235,9 +235,9 @@ export interface ViewManifestSpec {
   readonly from: string;
   /** REST-surface visibility. Reuses the `"public" | "staff"`
    *  vocabulary of `McpTriggerSurface` (see `MCP_TRIGGER_SURFACES`).
-   *  When absent or `"public"` the View auto-mounts at the public,
-   *  unauthenticated `GET /api/views/<name>` (v0.1 default; every
-   *  existing View keeps this behavior). When `"staff"` the View is
+   *  When absent or `"public"` the View auto-mounts at the public
+   *  `GET /api/views/<name>` (v0.1 default; `requires` may still gate
+   *  the call). When `"staff"` the View is
    *  NOT mounted on the public path — it mounts at
    *  `GET /admin/api/views/<name>` behind the staff gate and becomes
    *  the report-sidebar source. Guards data behind a staff session; use
@@ -247,10 +247,9 @@ export interface ViewManifestSpec {
    *  When absent the View is public — `ExecuteViewUseCase` skips the
    *  predicate check. When present, ALL predicates must hold; the
    *  runtime enforces with `evaluateAuthAll`. Closed predicate
-   *  vocabulary: `ctx.user`, `{ ctx.staff: [<role>, ...] }`. */
-  readonly requires?: {
-    readonly auth?: { readonly all: readonly AuthPredicate[] };
-  };
+   *  vocabulary: `ctx.user`, `ctx.staff`, `ctx.auth`, and
+   *  `ctx.auth.scope`; an optional guard names one consumer Procedure. */
+  readonly requires?: AuthorizationRequirements;
   /** Filter AST. v0.1 grammar: comparison ops plus and/or. Comparison
    *  values may be literals or `{ $param: <name> }` sentinels referencing
    *  `spec.params`. */
@@ -347,13 +346,12 @@ export interface ProcedureManifestSpec {
    *  field (replaces the pre-#430 hack of reading
    *  `spec.input.description`). */
   readonly description?: LocalizedText;
-  /** Auth gate. v0.1: `requires.auth.all` only; predicate vocabulary
-   *  closed to `ctx.user` and `{ ctx.staff: [<role>, ...] }`. DRAFT:
+  /** Authorization. v0.1: `requires.auth.all` plus one optional
+   *  `requires.guard.procedure`; static predicates are closed to
+   *  `ctx.user`, `ctx.staff`, `ctx.auth`, and `ctx.auth.scope`. DRAFT:
    *  `requires.auth.any`, `owns:`, `withinMinutes:`, `contains:`,
    *  `requires.window`, `requires.quota`. See ADR-0002. */
-  readonly requires?: {
-    readonly auth?: { readonly all: readonly AuthPredicate[] };
-  };
+  readonly requires?: AuthorizationRequirements;
   /** JSON Schema for the request body. */
   readonly input: JsonSchema;
   /** JSON Schema for the response body. */
@@ -387,17 +385,37 @@ export interface HandlerBuiltinBinding {
   readonly schema: string;
 }
 
-/** v0.1 closed predicate vocabulary. `ctx.user` is a bare string;
- *  `ctx.staff` carries a role list as an object with the literal key.
+/** v0.1 closed predicate vocabulary. `ctx.user` and `ctx.auth` are bare
+ *  strings; `ctx.staff` and `ctx.auth.scope` carry scalar data under
+ *  literal object keys.
  *
  *  v0.1.x roadmap (annotation only — DO NOT IMPLEMENT until ADR-promoted):
  *  extend with `ctx.user.{tier, verified, owns, in-group}` when platform
  *  mode lands and user-level auth is needed. Closed enums for `tier` /
  *  group identity will live next to STAFF_ROLES below. */
-export type AuthPredicate = CtxUserPredicate | CtxStaffPredicate;
+export interface AuthorizationRequirements {
+  readonly auth?: { readonly all: readonly AuthPredicate[] };
+  /** Dynamic, consumer-owned authorization check. The named Procedure
+   *  receives the target's validated input/params and the same
+   *  HandlerContext before the target executes. */
+  readonly guard?: { readonly procedure: string };
+}
+
+export type AuthPredicate =
+  | CtxUserPredicate
+  | CtxStaffPredicate
+  | CtxAuthPredicate
+  | CtxAuthScopePredicate;
 export type CtxUserPredicate = "ctx.user";
+/** Requires any verified credential normalized into HandlerContext.auth. */
+export type CtxAuthPredicate = "ctx.auth";
 export interface CtxStaffPredicate {
   readonly "ctx.staff": readonly StaffRole[];
+}
+/** Requires one opaque, consumer-owned scope. Repeat under `all` for
+ *  multiple required scopes. */
+export interface CtxAuthScopePredicate {
+  readonly "ctx.auth.scope": string;
 }
 
 /**

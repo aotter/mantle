@@ -12,6 +12,10 @@ import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
 export interface CreateMcpApiHandlerOptions {
   readonly ref: CmsRuntimeRef;
   readonly surface: "staff" | "public";
+  /** OAuth scopes required to enter this MCP resource. Defaults to
+   *  the existing compatibility scope `mcp`. Target-specific scopes
+   *  remain manifest predicates enforced on tools/call. */
+  readonly requiredScopes?: readonly string[];
 }
 
 /**
@@ -21,8 +25,8 @@ export interface CreateMcpApiHandlerOptions {
  *
  * The OAuthProvider lib verifies the bearer token, decrypts grant
  * props, and sets `ctx.props` BEFORE calling this handler. We read
- * `ctx.props.{userId, role}` (stashed at consent time by
- * `mountAuthorize`) and gate staff surfaces on the D1 staff role.
+ * immutable grant props and re-read the caller's mutable staff role
+ * from D1 on every invocation.
  *
  * Note: OAuth scope distinction (`mcp:read` vs `mcp:staff`) used to
  * differentiate surfaces here. Removed because claude.ai's MCP client
@@ -34,6 +38,7 @@ export function createMcpApiHandler(
   options: CreateMcpApiHandlerOptions,
 ): ExportedHandler<Record<string, unknown>> {
   const { ref, surface } = options;
+  const requiredScopes = options.requiredScopes ?? ["mcp"];
   // Key the cached dispatcher to the runtime identity. Without this,
   // if `ref.get()` rejects + resets and the next call returns a new
   // runtime instance, the cached dispatcher would silently keep
@@ -47,10 +52,14 @@ export function createMcpApiHandler(
   return {
     async fetch(request, _env, ctx) {
       const props = (ctx as unknown as { props?: OAuthApiProps }).props;
-      if (!props?.userId) return forbidden();
-      const role = props.role;
+      if (!props?.userId) return forbidden(requiredScopes);
+      const grantedScopes = props.scopes?.length ? props.scopes : ["mcp"];
+      if (requiredScopes.some((scope) => !grantedScopes.includes(scope))) {
+        return forbidden(requiredScopes);
+      }
+      const role = await ref.auth.getUserRole(props.userId);
       if (surface === "staff" && (!role || !STAFF_ROLE_SET.has(role))) {
-        return forbidden();
+        return forbidden(requiredScopes);
       }
       const runtime = await ref.get();
       // Media tools require BOTH a storage adapter AND a declared
@@ -112,16 +121,20 @@ export function createMcpApiHandler(
         staff: role && STAFF_ROLE_SET.has(role)
           ? { userId: props.userId, role: role as StaffRole }
           : null,
+        clientId: props.clientId ?? null,
+        credentialId: null,
+        scopes: grantedScopes,
       });
     },
   };
 }
 
-function forbidden(): Response {
+function forbidden(requiredScopes: readonly string[]): Response {
+  const scope = requiredScopes.join(" ");
   return new Response("forbidden", {
     status: 403,
     headers: {
-      "www-authenticate": `Bearer realm="mcp", error="insufficient_scope"`,
+      "www-authenticate": `Bearer realm="mcp", error="insufficient_scope", scope="${scope}"`,
       "access-control-expose-headers": "WWW-Authenticate",
     },
   });

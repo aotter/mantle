@@ -458,3 +458,56 @@ The boundary is deliberately narrower than "hosted auth everywhere":
   hosted auth for `customer.com` must use an OAuth/OIDC broker flow:
   Platform authenticates and returns identity; the customer site creates
   its own local session and maps identity into local grants.
+
+## Amendment — 2026-07-15: one adapter-owned authorization pipeline
+
+Epic #467 extends the auth contract without moving auth into
+`mantle-runtime`. The original adapter-ownership rule remains authoritative:
+Better Auth is the curated Cloudflare default for identity/session/OIDC, and
+`@cloudflare/workers-oauth-provider` remains the compatibility transport for
+remote MCP. Both adapters now normalize verified callers into the same
+runtime context before invoking a target.
+
+`HandlerContext` gains an additive optional `auth` member carrying only:
+
+```ts
+{
+  credential: "session" | "oauth" | "api-key" | "personal-token";
+  credentialId: string | null;
+  clientId: string | null;
+  scopes: readonly string[];
+}
+```
+
+Raw keys/tokens and refresh tokens are forbidden in this context. `ctx.user`
+remains the authenticated subject when one exists; `ctx.staff` is a mutable
+privilege overlay and is re-read from D1 for each protected REST/MCP call.
+
+The Cloudflare adapter exposes one `ConsumerCredentialResolver` seam for a
+site to recognize and verify its own API-key or personal-token formats. It
+distinguishes `not-handled`, `invalid`, and `verified`; a recognized invalid
+credential never falls back to a cookie. Core adds no credential repository,
+table, issuance API, or runtime auth port.
+
+The curated Better Auth facade also adds the OAuth resource primitives needed
+by a generated site acting as a client or provider:
+
+- generic OAuth client `resource` is retained across authorization, code
+  exchange, and refresh;
+- OAuth provider `validAudiences` constrains minted JWT audiences;
+- `getProviderAccessToken(request, providerId)` uses the current local session
+  and returns no refresh token/account row;
+- `verifyOAuthAccessToken()` verifies issuer/JWKS, audience, time claims, and
+  scopes, rejects opaque tokens, and preserves the `401`/`403` distinction.
+
+REST and MCP transport verification remain adapter-specific. After
+normalization, both call the same runtime auth evaluator and optional guard
+Procedure. Standard remote MCP continues to use its OAuth bearer and the
+single compatibility `mcp` resource scope; manifest scopes are re-evaluated on
+every `tools/call`. MCP does not promise to accept a raw REST API key/PAT.
+
+Dynamic membership, billing, and entitlement state remains consumer-owned.
+`requires.guard.procedure` orchestrates a site handler on every invocation but
+does not introduce a Policy atom or an entitlement service. See
+[`API and MCP authorization`](../api-mcp-authorization.md) for the public API
+and end-to-end examples.

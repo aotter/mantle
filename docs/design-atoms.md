@@ -338,6 +338,12 @@ names — `page` / `show` / `cursor` — must NOT appear in
 `spec.params.properties` (the parser rejects with
 `VIEW_PARAMS_RESERVED_NAME`).
 
+Views may declare the same `requires.auth.all` predicates and optional
+`requires.guard.procedure` as Procedures. Static auth runs before parameter
+validation; the guard receives validated params and authorizes the whole
+query. It does not rewrite SQL or filter individual rows. REST and MCP View
+calls share this path.
+
 Response envelope:
 
 ```json
@@ -405,9 +411,32 @@ sdk.registerHandler("send-contact-message", sendContactMessage);
 **v0.1 `requires.auth`**: `{ all: [<predicate>] }` only. Predicates:
 - `ctx.user` — caller is any signed-in end-user
 - `ctx.staff: [<role>, ...]` — caller is staff in one of these roles
+- `ctx.auth` — caller supplied any adapter-verified credential
+- `ctx.auth.scope: <scope>` — verified credential carries the exact opaque,
+  consumer-owned scope; repeat to require multiple scopes
 
 Anything beyond this (`any:`, `owns:`, `withinMinutes:`, `contains:`,
 `requires.window`, `requires.quota`, `errors`, `retry`) is DRAFT.
+
+Both Procedures and Views may add one dynamic guard beside `auth`:
+
+```yaml
+requires:
+  auth:
+    all:
+      - ctx.auth
+      - { "ctx.auth.scope": "orders:read" }
+  guard:
+    procedure: require-active-access
+```
+
+The guard is an ordinary declared `handler.kind: ref` Procedure. It receives
+the validated target input/View params and the same `HandlerContext`; success
+permits the target. Any guard diagnostic, invalid output, missing handler, or
+throw fails closed. Guards cannot be builtin, self-referential, or guarded
+themselves. Current payments, membership, and entitlement state belongs in
+the consumer guard handler, not in a new atom or Core repository. See
+[API and MCP authorization](api-mcp-authorization.md).
 
 **v0.1.0 `handler.kind`**: `ref` (author-supplied function) or
 `builtin` (SDK-supplied CRUD shortcut). For `builtin`, declare
@@ -450,14 +479,14 @@ The same Procedure can have multiple Triggers — that's how it becomes
 handler logic. Each transport is one Trigger; the Procedure body is
 shared.
 
-**v0.1.0 `Trigger.source.kind`**: `http` (public endpoint) or
-`lifecycle` (entry-writer hook). For `lifecycle`, declare `schema`,
+**v0.1 `Trigger.source.kind`**: `http` (public endpoint), `mcp` (named
+tool on `surface: public | staff`), or `lifecycle` (entry-writer hook). For `lifecycle`, declare `schema`,
 `on: [<hook>, ...]` from `LifecycleHook`, and optional `errorPolicy`
 (`abort` rejects only on `before_*` hooks; `continue` is the default).
 Lifecycle hooks are wired through `LifecycleHookingEntryRepository`, so
 MCP, admin, and builtin write paths share the same hook behavior.
 
-- `mcp` / `cron` / `queue` are **DRAFT (v0.2+)** — speculative, gated by
+- `cron` / `queue` are **DRAFT (v0.2+)** — speculative, gated by
   concrete consumer demand. Same appendix § "DRAFT (v0.2+)."
 
 The state-machine "lifecycle" from the Schema atom
@@ -494,13 +523,20 @@ Mapping:
   OpenAPI Operation Object at `path` + `method`
 - The target Procedure's `input` → OpenAPI request body schema
 - The target Procedure's `output` → OpenAPI 200 response schema
-- `requires.auth.all: [{ ctx.staff: [<roles>] }]` → OpenAPI `security`
-  with role names as scopes
+- configured cookie, OAuth bearer, API-key, and personal-token schemes →
+  accurate OpenAPI `security` alternatives for auth-gated targets
+- repeated `ctx.auth.scope` predicates → OAuth scopes plus
+  `x-mantle-required-scopes`
+- `requires.guard.procedure` → `x-mantle-guard-procedure` plus a `402`
+  response
 - Error code → HTTP status mapping (below) → OpenAPI 4xx/5xx response
   shapes
 
-MCP tool definition emission is deferred to v0.2+ when
-`Trigger.source.kind: mcp` lands.
+MCP Procedure tools emit from `Trigger.source.kind: mcp`; Views emit on their
+declared surface. Catalog filtering is discovery UX only. Every `tools/call`
+re-runs static auth and the dynamic guard. Required scopes/guard behavior stay
+in the standard Tool description rather than a non-standard required-scopes
+field.
 
 ## Manifest validation — JSON Schema in, zod at runtime
 
@@ -537,6 +573,7 @@ different constraints.
 | `INPUT_VALIDATION_FAILED` | `400` | Procedure input fails zod-converted schema |
 | `UNAUTHENTICATED` | `401` | no active session (admin API: missing/expired session cookie) |
 | `AUTH_DENIED` | `403` | `requires.auth` predicate evaluated false (or admin: caller lacks required staff role) |
+| `ENTITLEMENT_REQUIRED` | `402` | consumer guard denies current payment/membership/transaction entitlement |
 | `NOT_FOUND` | `404` | resource not found — admin: approval id; runtime: View name at `/api/views/<name>` |
 | `HANDLER_NOT_REGISTERED` | `500` | `handler.ref` key not registered at boot |
 | `DISPATCHER_NOT_BUILT` | `501` | runtime feature not implemented in this SDK build |
@@ -553,10 +590,11 @@ Additional runtime codes activate as future grammar surfaces (e.g.
 
 ## RBAC — what v0.1 ships, what's DRAFT
 
-v0.1 covers the staff-RBAC half: `requires.auth.all` with `ctx.user` /
-`ctx.staff: [<roles>]` predicates as the auth gate on Procedures.
-That's enough for "staff-only", "logged-in-only", and role-gated
-Procedures.
+v0.1 auth gates use `requires.auth.all` with `ctx.user`,
+`ctx.staff: [<roles>]`, `ctx.auth`, and `ctx.auth.scope` predicates on
+Procedures and Views. This covers staff-only, logged-in-only,
+credential-protected, and delegated-scope targets. One Procedure-backed guard
+handles mutable consumer business state without widening the static grammar.
 
 **Not yet shipped** (DRAFT):
 - Row-level read visibility (private posts, friend-only audiences)
@@ -579,8 +617,10 @@ sub-specs in the DRAFT spec. See "Future grammar" appendix.
 4. **What invokes them?** → `Trigger` per source. Multiple Triggers
    can target the same Procedure (HTTP + MCP + cron, all on one
    handler).
-5. **Who's allowed?** → `Procedure.spec.requires.auth` for now.
-   Row-level and field-level rules arrive with future grammar.
+5. **Who's allowed?** → `Procedure/View.spec.requires.auth` for static
+   identity/scope; optional `requires.guard.procedure` for one live,
+   consumer-owned business check. Row-level and field-level rules remain
+   future grammar.
 
 If you find yourself wanting a 5th kind, **stop**. Sketch the same
 thing as a composition of the four; almost always it works.
@@ -751,6 +791,13 @@ Grammar lives in v0.1.0. Runtime is the
 stamping and `input ∩ Schema.properties` projection. Full shape lives
 further down.
 
+#### `Trigger.source.kind: mcp` and shared authorization
+
+An MCP Trigger binds a declared Procedure to either the public or staff MCP
+surface. Procedures/Views share `ctx.auth`/scope predicates and optional guard
+orchestration across REST and MCP. Staff role is loaded live for each protected
+call; staff Views remain absent and un-callable on public MCP.
+
 ### v0.1.x committed
 
 > The `handler.kind: builtin` and `Trigger.source.kind: lifecycle`
@@ -904,7 +951,7 @@ validator rejects with `DRAFT_KEY_USED`.
 - Filter AST extension: `contains` (array containment), `not`, `in`, `like`.
 
 #### Procedure future
-- **`requires.auth.{any | all}`** with disjunction; predicate
+- **`requires.auth.any`** with disjunction; the shipped `all` predicate
   vocabulary extends to `owns: { schema, idFrom }`, `contains: {
   schema, idFrom, field, valueFrom }`.
 - **`requires.window.{withinMinutes, column?}`** — temporal
@@ -920,8 +967,6 @@ validator rejects with `DRAFT_KEY_USED`.
   error otherwise).
 
 #### Trigger future
-- **`source.kind: mcp`** — MCP tool exposure. Same Procedure becomes
-  an LLM-callable tool by adding a Trigger.
 - **`source.kind: cron`** with `expr:` — scheduled invocation.
 - **`source.kind: queue`** — async fan-out / message-driven invocation.
 - **`source.kind: lifecycle.foo`** — DRAFT extensions to the v0.1.x
@@ -942,7 +987,8 @@ to a committed roadmap.)
   declaration when projection Triggers ship.
 
 #### Cross-cutting future
-- **Closed `ctx.*` predicate identity**: v0.1 `{ user, staff }`
+- **Closed `ctx.*` predicate identity**: v0.1 `{ user, staff, auth,
+  auth.scope }`
   extends to `{ ..., system }` when SDK-internal Trigger executor
   paths land. Multi-tenant deployments would add `{ tenant }` via
   grammar-revise round if/when that product shape is pursued. New

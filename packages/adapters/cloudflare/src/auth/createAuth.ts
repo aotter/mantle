@@ -1,10 +1,16 @@
-import { betterAuth, type BetterAuthOptions } from "better-auth";
+import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
+import {
+  applyDefaultAccessTokenExpiry,
+  refreshAccessToken,
+  validateAuthorizationCode,
+} from "better-auth/oauth2";
 import type { SocialProvider } from "better-auth/social-providers";
 import { admin, emailOTP, jwt, magicLink } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import { oauthProvider, type Scope } from "@better-auth/oauth-provider";
+import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client";
 import type { EmailSender } from "@aotter/mantle-runtime";
 import { STAFF_ROLES, type StaffRole } from "@aotter/mantle-spec";
 
@@ -97,6 +103,9 @@ export type AuthMethodConfig =
         | "select_account"
         | "select_account consent"
         | "login consent";
+      /** RFC 8707 resource indicator. Mantle carries it through the
+       * authorization request, code exchange, and refresh exchange. */
+      readonly resource?: string;
     }
   | {
       readonly kind: "email-otp";
@@ -173,6 +182,8 @@ export interface OAuthProviderConfig {
   readonly clientRegistrationDefaultScopes?: ReadonlyArray<Scope>;
   readonly clientRegistrationAllowedScopes?: ReadonlyArray<Scope>;
   readonly cachedTrustedClients?: ReadonlySet<string>;
+  /** Explicit JWT audiences this authorization server may mint. */
+  readonly validAudiences?: ReadonlyArray<string>;
   readonly clientPrivileges?: (context: {
     readonly headers: Headers;
     readonly action: "create" | "read" | "update" | "delete" | "list" | "rotate";
@@ -385,11 +396,24 @@ export function buildGenericOAuthProviders(
   pkce?: boolean;
   authentication?: "basic" | "post";
   prompt?: Extract<AuthMethodConfig, { kind: "oauth" }>["prompt"];
+  resource?: string;
+  authorizationUrlParams?: Record<string, string>;
+  tokenUrlParams?: Record<string, string>;
 }> {
   const seenProviderIds = new Set<string>();
+  const socialProviderIds: ReadonlySet<string> = new Set(
+    methods.flatMap((method) =>
+      method.kind === "social" ? [method.provider] : [],
+    ),
+  );
   const out: ReturnType<typeof buildGenericOAuthProviders> = [];
   for (const method of methods) {
     if (method.kind !== "oauth") continue;
+    if (socialProviderIds.has(method.providerId)) {
+      throw new Error(
+        `createAuth: OAuth providerId '${method.providerId}' conflicts with a registered social provider id. Provider ids must be unique across methods[].`,
+      );
+    }
     if (seenProviderIds.has(method.providerId)) {
       throw new Error(
         `createAuth: OAuth provider '${method.providerId}' is registered more than once; ` +
@@ -420,6 +444,13 @@ export function buildGenericOAuthProviders(
       ...(method.pkce !== undefined ? { pkce: method.pkce } : {}),
       ...(method.authentication ? { authentication: method.authentication } : {}),
       ...(method.prompt ? { prompt: method.prompt } : {}),
+      ...(method.resource
+        ? {
+            resource: method.resource,
+            authorizationUrlParams: { resource: method.resource },
+            tokenUrlParams: { resource: method.resource },
+          }
+        : {}),
     });
   }
   return out;
@@ -604,6 +635,156 @@ function methodsRequireSameSiteNone(
   return methods.some((m) => m.kind === "social" && m.provider === "apple");
 }
 
+/**
+ * Better Auth 1.6.x declares generic-OAuth URL parameter options but
+ * its provider implementation does not replay them across every token
+ * lifecycle step. Patch only resource-configured generic providers at
+ * the provider boundary, using Better Auth's public OAuth helpers.
+ */
+/** @internal exported for lifecycle regression tests. */
+export function buildOAuthResourceLifecyclePlugin(
+  methods: ReadonlyArray<AuthMethodConfig>,
+): BetterAuthPlugin | null {
+  const configured = new Map(
+    methods
+      .filter(
+        (method): method is Extract<AuthMethodConfig, { kind: "oauth" }> =>
+          method.kind === "oauth" && typeof method.resource === "string",
+      )
+      .map((method) => [method.providerId, method] as const),
+  );
+  if (configured.size === 0) return null;
+
+  return {
+    id: "mantle-oauth-resource-lifecycle",
+    init(ctx) {
+      const tokenEndpoints = new Map<string, Promise<string>>();
+      const resolveTokenEndpoint = (
+        method: Extract<AuthMethodConfig, { kind: "oauth" }>,
+      ): Promise<string> => {
+        if (method.tokenUrl) return Promise.resolve(method.tokenUrl);
+        const existing = tokenEndpoints.get(method.providerId);
+        if (existing) return existing;
+        const pending = (async () => {
+          if (!method.discoveryUrl) {
+            throw new Error(
+              `OAuth provider '${method.providerId}' has no token endpoint.`,
+            );
+          }
+          const response = await fetch(method.discoveryUrl, {
+            headers: { accept: "application/json" },
+            redirect: "error",
+          });
+          if (!response.ok) {
+            throw new Error(
+              `OAuth discovery for '${method.providerId}' returned ${response.status}.`,
+            );
+          }
+          const discovery = (await response.json()) as { token_endpoint?: unknown };
+          if (typeof discovery.token_endpoint !== "string") {
+            throw new Error(
+              `OAuth discovery for '${method.providerId}' omitted token_endpoint.`,
+            );
+          }
+          return discovery.token_endpoint;
+        })();
+        tokenEndpoints.set(method.providerId, pending);
+        return pending;
+      };
+
+      return {
+        context: {
+          socialProviders: ctx.socialProviders.map((provider) => {
+            const method = configured.get(provider.id);
+            if (!method?.resource) return provider;
+            const createAuthorizationURL = provider.createAuthorizationURL.bind(provider);
+            return {
+              ...provider,
+              async createAuthorizationURL(data) {
+                const url = await createAuthorizationURL(data);
+                url.searchParams.set("resource", method.resource!);
+                return url;
+              },
+              async validateAuthorizationCode(data) {
+                const tokens = await validateAuthorizationCode({
+                  code: data.code,
+                  codeVerifier: data.codeVerifier,
+                  redirectURI: data.redirectURI,
+                  options: {
+                    clientId: method.clientId,
+                    clientSecret: method.clientSecret,
+                    redirectURI: method.redirectURI,
+                  },
+                  tokenEndpoint: await resolveTokenEndpoint(method),
+                  authentication: method.authentication,
+                  resource: method.resource,
+                });
+                return applyDefaultAccessTokenExpiry(tokens, undefined);
+              },
+              async refreshAccessToken(refreshTokenValue: string) {
+                const tokens = await refreshAccessToken({
+                  refreshToken: refreshTokenValue,
+                  options: {
+                    clientId: method.clientId,
+                    clientSecret: method.clientSecret,
+                  },
+                  tokenEndpoint: await resolveTokenEndpoint(method),
+                  authentication: method.authentication,
+                  extraParams: { resource: method.resource! },
+                });
+                return applyDefaultAccessTokenExpiry(tokens, undefined);
+              },
+            };
+          }),
+        },
+      };
+    },
+  };
+}
+
+/** @internal exported for provider-option mapping tests. */
+export function buildOAuthProviderOptions(
+  config: OAuthProviderConfig,
+): Parameters<typeof oauthProvider>[0] {
+  return {
+    loginPage: config.loginPage,
+    consentPage: config.consentPage,
+    ...(config.scopes ? { scopes: [...config.scopes] } : {}),
+    ...(config.validAudiences
+      ? { validAudiences: [...config.validAudiences] }
+      : {}),
+    ...(config.allowDynamicClientRegistration !== undefined
+      ? { allowDynamicClientRegistration: config.allowDynamicClientRegistration }
+      : {}),
+    ...(config.allowUnauthenticatedClientRegistration !== undefined
+      ? {
+          allowUnauthenticatedClientRegistration:
+            config.allowUnauthenticatedClientRegistration,
+        }
+      : {}),
+    ...(config.clientRegistrationDefaultScopes
+      ? {
+          clientRegistrationDefaultScopes: [
+            ...config.clientRegistrationDefaultScopes,
+          ],
+        }
+      : {}),
+    ...(config.clientRegistrationAllowedScopes
+      ? {
+          clientRegistrationAllowedScopes: [
+            ...config.clientRegistrationAllowedScopes,
+          ],
+        }
+      : {}),
+    ...(config.cachedTrustedClients
+      ? { cachedTrustedClients: new Set(config.cachedTrustedClients) }
+      : {}),
+    ...(config.clientPrivileges
+      ? { clientPrivileges: config.clientPrivileges }
+      : {}),
+  };
+}
+
 function buildAuth(config: CreateAuthConfig) {
   if (config.methods.length === 0) {
     throw new Error(
@@ -618,6 +799,7 @@ function buildAuth(config: CreateAuthConfig) {
   const bootstrap = config.bootstrapOwner;
   const emailOtpMethod = pickSingleton(config.methods, "email-otp");
   const magicLinkMethod = pickSingleton(config.methods, "magic-link");
+  const resourceLifecyclePlugin = buildOAuthResourceLifecyclePlugin(config.methods);
 
   // Rate limit: Better Auth's per-route limits gate on
   // `process.env.NODE_ENV === "production"`, which is unset on
@@ -659,54 +841,13 @@ function buildAuth(config: CreateAuthConfig) {
           }),
         ]
       : []),
+    ...(resourceLifecyclePlugin ? [resourceLifecyclePlugin] : []),
     ...(emailOtpMethod ? [buildEmailOTPPlugin(emailOtpMethod)] : []),
     ...(magicLinkMethod ? [buildMagicLinkPlugin(magicLinkMethod)] : []),
     ...(config.oauthProvider
       ? [
           jwt(),
-          oauthProvider({
-            loginPage: config.oauthProvider.loginPage,
-            consentPage: config.oauthProvider.consentPage,
-            ...(config.oauthProvider.scopes
-              ? { scopes: [...config.oauthProvider.scopes] }
-              : {}),
-            ...(config.oauthProvider.allowDynamicClientRegistration !== undefined
-              ? {
-                  allowDynamicClientRegistration:
-                    config.oauthProvider.allowDynamicClientRegistration,
-                }
-              : {}),
-            ...(config.oauthProvider.allowUnauthenticatedClientRegistration !== undefined
-              ? {
-                  allowUnauthenticatedClientRegistration:
-                    config.oauthProvider.allowUnauthenticatedClientRegistration,
-                }
-              : {}),
-            ...(config.oauthProvider.clientRegistrationDefaultScopes
-              ? {
-                  clientRegistrationDefaultScopes: [
-                    ...config.oauthProvider.clientRegistrationDefaultScopes,
-                  ],
-                }
-              : {}),
-            ...(config.oauthProvider.clientRegistrationAllowedScopes
-              ? {
-                  clientRegistrationAllowedScopes: [
-                    ...config.oauthProvider.clientRegistrationAllowedScopes,
-                  ],
-                }
-              : {}),
-            ...(config.oauthProvider.cachedTrustedClients
-              ? {
-                  cachedTrustedClients: new Set(
-                    config.oauthProvider.cachedTrustedClients,
-                  ),
-                }
-              : {}),
-            ...(config.oauthProvider.clientPrivileges
-              ? { clientPrivileges: config.oauthProvider.clientPrivileges }
-              : {}),
-          }),
+          oauthProvider(buildOAuthProviderOptions(config.oauthProvider)),
         ]
       : []),
   ];
@@ -861,6 +1002,27 @@ export type InviteUserResult =
   | { readonly kind: "created"; readonly id: string }
   | { readonly kind: "exists"; readonly id: string };
 
+export interface ProviderAccessToken {
+  readonly accessToken: string;
+  readonly accessTokenExpiresAt?: Date;
+  readonly scopes: readonly string[];
+}
+
+export type OAuthAccessTokenVerification =
+  | {
+      readonly ok: true;
+      readonly userId: string;
+      readonly clientId: string | null;
+      readonly credentialId: string | null;
+      readonly scopes: readonly string[];
+    }
+  | {
+      readonly ok: false;
+      readonly status: 401 | 403;
+      readonly reason: "invalid-token" | "insufficient-scope";
+      readonly missingScopes?: readonly string[];
+    };
+
 // Better Auth's full inferred type pulls plugin internals
 // (`AdminOptions`) that aren't re-exported, so emitting a .d.ts that
 // names that type fails (TS4058). The structural facade keeps the
@@ -883,6 +1045,23 @@ export interface Auth {
    *  (MCP, HTTP Triggers) need this because OAuth access tokens carry
    *  userId + scopes but not the user's role. */
   readonly getUserRole: (userId: string) => Promise<string | null>;
+  /** Retrieve (and, when expired, refresh) a linked provider token for
+   *  the user identified by the current local session request. Refresh
+   *  tokens and account rows are never returned. */
+  readonly getProviderAccessToken: (
+    request: Request,
+    providerId: string,
+  ) => Promise<ProviderAccessToken>;
+  /** Verify a JWT access token against this Auth instance's issuer and
+   *  JWKS. Opaque tokens and remote introspection are intentionally not
+   *  supported. */
+  readonly verifyOAuthAccessToken: (
+    tokenOrRequest: string | Request,
+    options: {
+      readonly audience: string;
+      readonly scopes?: readonly string[];
+    },
+  ) => Promise<OAuthAccessTokenVerification>;
   /** Methods the consumer registered, in declaration order. The admin
    *  SPA renders sign-in sections per this list. Secrets, senders, and
    *  per-provider extras are intentionally excluded — UI doesn't need
@@ -955,6 +1134,9 @@ export function createAuth(config: CreateAuthConfig): Auth {
   const basePath = normalizeAuthBasePath(config.basePath);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const api = auth.api as any;
+  const verifyAccessToken = config.oauthProvider
+    ? oauthProviderResourceClient(auth).getActions().verifyAccessToken
+    : null;
   return {
     basePath,
     handler: (request) => auth.handler(request),
@@ -966,6 +1148,18 @@ export function createAuth(config: CreateAuthConfig): Auth {
         .bind(userId)
         .first<{ role: string | null }>();
       return row?.role ?? null;
+    },
+    getProviderAccessToken: (request, providerId) =>
+      getProviderAccessTokenForRequest(api, request, providerId),
+    verifyOAuthAccessToken: async (tokenOrRequest, options) => {
+      return verifyOAuthJwt(
+        tokenOrRequest,
+        options,
+        verifyAccessToken
+          ? (token, audience) =>
+              verifyAccessToken(token, { verifyOptions: { audience } })
+          : null,
+      );
     },
     methods: config.methods.map<AuthMethodInfo>((m) => {
       switch (m.kind) {
@@ -1147,6 +1341,14 @@ export function createSetupIncompleteAuth(
     handler: async () => response(),
     getSession: async () => null,
     getUserRole: async () => null,
+    getProviderAccessToken: async () => {
+      throw new Error(message);
+    },
+    verifyOAuthAccessToken: async () => ({
+      ok: false,
+      status: 401,
+      reason: "invalid-token",
+    }),
     methods: [],
     listLinkedAccounts: async () => [],
     unlinkAccount: async () => false,
@@ -1162,7 +1364,110 @@ export function createSetupIncompleteAuth(
   };
 }
 
-function mapRegisteredOAuthClient(value: unknown): RegisteredOAuthClient {
+function bearerTokenFrom(tokenOrRequest: string | Request): string | null {
+  if (typeof tokenOrRequest === "string") return tokenOrRequest.trim() || null;
+  const header = tokenOrRequest.headers.get("authorization");
+  if (!header) return null;
+  const match = /^Bearer ([^\s]+)$/i.exec(header);
+  return match?.[1] ?? null;
+}
+
+/** @internal exported to pin the session-bound Better Auth request and
+ *  secret-minimizing response mapping. */
+export async function getProviderAccessTokenForRequest(
+  api: {
+    getAccessToken(input: {
+      headers: Headers;
+      body: { providerId: string };
+    }): Promise<unknown>;
+  },
+  request: Request,
+  providerId: string,
+): Promise<ProviderAccessToken> {
+  const value = (await api.getAccessToken({
+    headers: request.headers,
+    body: { providerId },
+  })) as {
+    accessToken?: unknown;
+    accessTokenExpiresAt?: unknown;
+    scopes?: unknown;
+  };
+  if (typeof value?.accessToken !== "string") {
+    throw new Error(
+      `getProviderAccessToken: provider '${providerId}' returned no access token.`,
+    );
+  }
+  return {
+    accessToken: value.accessToken,
+    ...(value.accessTokenExpiresAt instanceof Date
+      ? { accessTokenExpiresAt: value.accessTokenExpiresAt }
+      : {}),
+    scopes: Array.isArray(value.scopes)
+      ? value.scopes.filter((scope): scope is string => typeof scope === "string")
+      : [],
+  };
+}
+
+function scopesFromClaim(value: unknown): string[] {
+  if (typeof value === "string") return value.split(/\s+/).filter(Boolean);
+  if (Array.isArray(value)) {
+    return value.filter((scope): scope is string => typeof scope === "string");
+  }
+  return [];
+}
+
+/** @internal exported to pin the stable facade's normalization and
+ *  401/403 contract independently of Better Auth network/JWKS I/O. */
+export async function verifyOAuthJwt(
+  tokenOrRequest: string | Request,
+  options: {
+    readonly audience: string;
+    readonly scopes?: readonly string[];
+  },
+  verify: ((token: string, audience: string) => Promise<Record<string, unknown>>) | null,
+): Promise<OAuthAccessTokenVerification> {
+  const token = bearerTokenFrom(tokenOrRequest);
+  // JWT compact serialization has exactly three non-empty parts.
+  // Reject opaque tokens before any network/JWKS work.
+  if (
+    !verify ||
+    !token ||
+    token.split(".").length !== 3 ||
+    token.split(".").some((part) => part.length === 0)
+  ) {
+    return { ok: false, status: 401, reason: "invalid-token" };
+  }
+  try {
+    const claims = await verify(token, options.audience);
+    if (typeof claims["sub"] !== "string" || claims["sub"].length === 0) {
+      return { ok: false, status: 401, reason: "invalid-token" };
+    }
+    const scopes = scopesFromClaim(claims["scope"]);
+    const missingScopes = (options.scopes ?? []).filter(
+      (scope) => !scopes.includes(scope),
+    );
+    if (missingScopes.length > 0) {
+      return {
+        ok: false,
+        status: 403,
+        reason: "insufficient-scope",
+        missingScopes,
+      };
+    }
+    return {
+      ok: true,
+      userId: claims["sub"],
+      clientId: typeof claims["azp"] === "string" ? claims["azp"] : null,
+      credentialId: typeof claims["jti"] === "string" ? claims["jti"] : null,
+      scopes,
+    };
+  } catch {
+    return { ok: false, status: 401, reason: "invalid-token" };
+  }
+}
+
+/** @internal exported to pin secret-minimizing DCR response mapping. */
+export function mapRegisteredOAuthClient(value: unknown): RegisteredOAuthClient {
   const row = value as {
     client_id?: string;
     client_secret?: string;
@@ -1179,7 +1484,9 @@ function mapRegisteredOAuthClient(value: unknown): RegisteredOAuthClient {
   }
   return {
     clientId: row.client_id,
-    ...(row.client_secret ? { clientSecret: row.client_secret } : {}),
+    ...(row.client_secret && row.public !== true && row.token_endpoint_auth_method !== "none"
+      ? { clientSecret: row.client_secret }
+      : {}),
     redirectUris: row.redirect_uris,
     ...(row.scope ? { scope: row.scope.split(" ").filter(Boolean) } : {}),
     ...(row.client_name ? { clientName: row.client_name } : {}),

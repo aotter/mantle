@@ -272,6 +272,7 @@ export function buildMcpToolCatalog(
     out.push(buildCreateTool(s));
     out.push(buildUpdateTool(s));
   }
+  out.push(...(opts.views ?? []).map(buildQueryViewTool));
   out.push(...procedureTools);
   return out;
 }
@@ -350,7 +351,7 @@ function buildProcedureTool(procedure: ProcedureManifest): McpToolDefinition {
     `Invoke Procedure '${procedure.metadata.name}'. Input shape declared by the manifest.`;
   return {
     name: mcpToolNameSegment(procedure.metadata.name),
-    description,
+    description: `${description}${authorizationSummary(procedure.spec.requires)}`,
     inputSchema: input as Record<string, unknown>,
   };
 }
@@ -371,9 +372,32 @@ function buildQueryViewTool(view: ViewManifest): McpToolDefinition {
   if (params?.required?.length) inputSchema["required"] = params.required;
   return {
     name: `${QUERY_VIEW_PREFIX}${mcpToolNameSegment(view.metadata.name)}`,
-    description: `Query public View '${view.metadata.name}'.`,
+    description: `Query ${(view.spec.surface ?? "public")} View '${view.metadata.name}'.${authorizationSummary(view.spec.requires)}`,
     inputSchema,
   };
+}
+
+function authorizationSummary(
+  requires: ProcedureManifest["spec"]["requires"] | ViewManifest["spec"]["requires"],
+): string {
+  if (!requires) return "";
+  const scopes = (requires.auth?.all ?? []).flatMap((predicate) =>
+    typeof predicate === "object" && "ctx.auth.scope" in predicate
+      ? [predicate["ctx.auth.scope"]]
+      : [],
+  );
+  const parts: string[] = [];
+  if (requires.auth?.all?.length) {
+    parts.push(
+      scopes.length
+        ? `authorization is enforced at call time; required scopes: ${scopes.join(", ")}`
+        : "authorization is enforced at call time",
+    );
+  }
+  if (requires.guard) {
+    parts.push(`dynamic guard '${requires.guard.procedure}' runs on every call`);
+  }
+  return parts.length ? ` Authorization: ${parts.join("; ")}.` : "";
 }
 
 function describeCreateTool(schema: SchemaManifest): string {

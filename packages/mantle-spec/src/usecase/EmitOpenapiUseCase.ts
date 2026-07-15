@@ -1,6 +1,7 @@
 import { partitionManifests } from "../domain/service/ManifestParser.js";
 import { resolveLocalizedText } from "../domain/model/ManifestGrammar.js";
 import type {
+  AuthorizationRequirements,
   JsonSchema,
   ProcedureManifest,
   TriggerManifest,
@@ -31,13 +32,13 @@ export class EmitOpenapiUseCase {
       if (!proc) continue;
       const path = src.path;
       paths[path] ??= {};
-      paths[path]![src.method.toLowerCase()] = httpOperation(t, proc);
+      paths[path]![src.method.toLowerCase()] = httpOperation(t, proc, request);
     }
 
     for (const v of views) {
       const path = `/api/views/${v.metadata.name}`;
       paths[path] ??= {};
-      paths[path]!["get"] = viewOperation(v);
+      paths[path]!["get"] = viewOperation(v, request);
     }
 
     return {
@@ -57,23 +58,7 @@ export class EmitOpenapiUseCase {
               },
             },
           },
-          securitySchemes: {
-            // Bearer for Procedure invocation paths (HTTP Triggers
-            // sit on the MCP-adjacent surface that the OAuth provider
-            // validates bearer tokens for).
-            bearer: { type: "http", scheme: "bearer" },
-            // Cookie for View REST paths — the Cloudflare adapter's
-            // `/api/views/*` resolves identity via `auth.getSession`
-            // (Better Auth cookie). Default to the secure production
-            // cookie name (Better Auth adds `__Secure-` prefix when
-            // baseURL is HTTPS); callers on a non-secure deployment
-            // pass `sessionCookieName: "better-auth.session_token"`.
-            cookieAuth: {
-              type: "apiKey",
-              in: "cookie",
-              name: request.sessionCookieName ?? DEFAULT_SESSION_COOKIE_NAME,
-            },
-          },
+          securitySchemes: securitySchemes(request),
         },
       },
     };
@@ -84,7 +69,11 @@ export class EmitOpenapiUseCase {
   }
 }
 
-function httpOperation(t: TriggerManifest, p: ProcedureManifest): Record<string, unknown> {
+function httpOperation(
+  t: TriggerManifest,
+  p: ProcedureManifest,
+  request: EmitOpenapiRequest,
+): Record<string, unknown> {
   const method = t.spec.source.kind === "http" ? t.spec.source.method : "POST";
   const op: Record<string, unknown> = {
     operationId: `${method.toLowerCase()}_${p.metadata.name.replace(/[^a-z0-9]+/gi, "_")}`,
@@ -112,13 +101,11 @@ function httpOperation(t: TriggerManifest, p: ProcedureManifest): Record<string,
       },
     },
   };
-  if (p.spec.requires?.auth?.all && p.spec.requires.auth.all.length > 0) {
-    op["security"] = [{ bearer: [] }];
-  }
+  reflectAuthorization(op, op["responses"] as Record<string, unknown>, p.spec.requires, request, `Procedure '${p.metadata.name}'`);
   return op;
 }
 
-function viewOperation(v: ViewManifest): Record<string, unknown> {
+function viewOperation(v: ViewManifest, request: EmitOpenapiRequest): Record<string, unknown> {
   const params: Array<Record<string, unknown>> = [
     { name: "page", in: "query", schema: { type: "integer", minimum: 1 }, required: false },
     { name: "show", in: "query", schema: { type: "integer", minimum: 1 }, required: false },
@@ -168,23 +155,95 @@ function viewOperation(v: ViewManifest): Record<string, unknown> {
     parameters: params,
     responses,
   };
-  // When `requires.auth.all` is set, emit cookie-session security +
-  // 401/403 responses. Views ride the `/api/views/*` REST surface
-  // which the Cloudflare adapter gates via Better Auth session cookie
-  // (NOT bearer — bearer is for Procedure HTTP Triggers which sit on
-  // the OAuth-validated MCP surface).
-  if (v.spec.requires?.auth?.all && v.spec.requires.auth.all.length > 0) {
-    op["security"] = [{ cookieAuth: [] }];
-    responses["401"] = {
-      description: "Authentication required",
-      content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } },
-    };
-    responses["403"] = {
-      description: "Auth predicate not satisfied",
-      content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } },
+  reflectAuthorization(op, responses, v.spec.requires, request, `View '${v.metadata.name}'`);
+  return op;
+}
+
+function securitySchemes(request: EmitOpenapiRequest): Record<string, unknown> {
+  const configured = request.security;
+  const out: Record<string, unknown> = {};
+  if (configured?.sessionCookie !== false) {
+    out["sessionCookie"] = {
+      type: "apiKey",
+      in: "cookie",
+      name:
+        configured?.sessionCookie?.name ??
+        request.sessionCookieName ??
+        DEFAULT_SESSION_COOKIE_NAME,
     };
   }
-  return op;
+  if (configured?.oauthBearer) {
+    out["oauthBearer"] = {
+      type: "openIdConnect",
+      openIdConnectUrl: configured.oauthBearer.openIdConnectUrl,
+    };
+  }
+  if (configured?.apiKey) {
+    out["apiKey"] = {
+      type: "apiKey",
+      in: configured.apiKey.in,
+      name: configured.apiKey.name,
+    };
+  }
+  if (configured?.personalToken) {
+    out["personalToken"] = {
+      type: "http",
+      scheme: "bearer",
+      ...(configured.personalToken.bearerFormat
+        ? { bearerFormat: configured.personalToken.bearerFormat }
+        : {}),
+    };
+  }
+  return out;
+}
+
+function reflectAuthorization(
+  operation: Record<string, unknown>,
+  responses: Record<string, unknown>,
+  requires: AuthorizationRequirements | undefined,
+  request: EmitOpenapiRequest,
+  targetLabel: string,
+): void {
+  const predicates = requires?.auth?.all ?? [];
+  const scopes = predicates.flatMap((predicate) =>
+    typeof predicate === "object" && "ctx.auth.scope" in predicate
+      ? [predicate["ctx.auth.scope"]]
+      : [],
+  );
+  if (predicates.length > 0) {
+    const schemes = securitySchemes(request);
+    const security: Array<Record<string, readonly string[]>> = [];
+    if ("sessionCookie" in schemes) security.push({ sessionCookie: [] });
+    if ("oauthBearer" in schemes) security.push({ oauthBearer: scopes });
+    if ("apiKey" in schemes) security.push({ apiKey: [] });
+    if ("personalToken" in schemes) security.push({ personalToken: [] });
+    if (security.length === 0) {
+      throw new Error(
+        `EmitOpenapiUseCase: ${targetLabel} is protected but no security scheme is configured.`,
+      );
+    }
+    operation["security"] = security;
+    operation["x-mantle-auth-predicates"] = predicates;
+    if (scopes.length > 0) operation["x-mantle-required-scopes"] = scopes;
+    responses["401"] = errorResponse("Authentication required");
+    responses["403"] = errorResponse("Verified caller lacks a required role or scope");
+  }
+  const guard = requires?.guard?.procedure;
+  if (guard) {
+    operation["x-mantle-guard-procedure"] = guard;
+    responses["402"] = errorResponse("Dynamic entitlement guard denied the request");
+  }
+}
+
+function errorResponse(description: string): Record<string, unknown> {
+  return {
+    description,
+    content: {
+      "application/json": {
+        schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+      },
+    },
+  };
 }
 
 /**

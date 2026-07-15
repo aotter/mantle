@@ -55,7 +55,10 @@ function view(
   };
 }
 
-function procedure(name: string): ProcedureManifest {
+function procedure(
+  name: string,
+  overrides: Partial<ProcedureManifest["spec"]> = {},
+): ProcedureManifest {
   return {
     apiVersion,
     kind: "Procedure",
@@ -64,6 +67,7 @@ function procedure(name: string): ProcedureManifest {
       input: { type: "object" },
       output: { type: "object" },
       handler: { kind: "ref", ref: name },
+      ...overrides,
     },
   };
 }
@@ -466,6 +470,41 @@ spec:
     expect(result.diagnostics).toEqual([]);
   });
 
+  it("accepts ctx.auth and scalar ctx.auth.scope predicates", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: scopedPosts }
+spec:
+  from: posts
+  requires:
+    auth:
+      all:
+        - ctx.auth
+        - { "ctx.auth.scope": "posts:read" }
+`;
+    const result = parseManifests(yaml);
+    expect(result.diagnostics).toEqual([]);
+    const parsed = result.manifests[0] as ViewManifest;
+    expect(parsed.spec.requires?.auth?.all).toEqual([
+      "ctx.auth",
+      { "ctx.auth.scope": "posts:read" },
+    ]);
+  });
+
+  it("rejects an empty ctx.auth.scope", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: scopedPosts }
+spec:
+  from: posts
+  requires:
+    auth:
+      all: [{ "ctx.auth.scope": "" }]
+`;
+    const result = parseManifests(yaml);
+    expect(result.diagnostics[0]?.message).toContain("non-empty string");
+  });
+
   it("rejects View.requires.auth.all with a role outside STAFF_ROLES", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v1
 kind: View
@@ -506,6 +545,81 @@ spec:
 `;
     const result = parseManifests(yaml);
     expect(result.diagnostics.map((d) => d.code)).toContain("AUTH_PREDICATE_NOT_IN_ENUM");
+  });
+});
+
+describe("requires.guard", () => {
+  it("parses the single Procedure guard sub-spec on Procedure and View", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: guardedWrite }
+spec:
+  input: { type: object }
+  output: { type: object }
+  requires: { guard: { procedure: requirePaid } }
+  handler: { kind: ref, ref: guardedWrite }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: guardedRead }
+spec:
+  from: posts
+  requires: { guard: { procedure: requirePaid } }
+`;
+    const result = parseManifests(yaml);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it("rejects guard keys beyond procedure", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: guardedRead }
+spec:
+  from: posts
+  requires: { guard: { procedure: requirePaid, cache: true } }
+`;
+    const result = parseManifests(yaml);
+    expect(result.diagnostics[0]?.message).toContain("accepts only `procedure`");
+  });
+
+  it("validates missing, self, builtin, and chained guard targets", () => {
+    const missing = procedure("missingTarget", {
+      requires: { guard: { procedure: "notThere" } },
+    });
+    const self = procedure("selfGuard", {
+      requires: { guard: { procedure: "selfGuard" } },
+    });
+    const builtin = procedure("builtinGuard", {
+      handler: { kind: "builtin", op: "create", schema: "posts" },
+    });
+    const chained = procedure("chainedGuard", {
+      requires: { guard: { procedure: "leafGuard" } },
+    });
+    const leaf = procedure("leafGuard");
+    const targetBuiltin = view("targetBuiltin", "posts", {
+      requires: { guard: { procedure: "builtinGuard" } },
+    });
+    const targetChain = view("targetChain", "posts", {
+      requires: { guard: { procedure: "chainedGuard" } },
+    });
+
+    const result = ValidateManifestsUseCase.run({
+      manifests: [
+        schema("posts"),
+        missing,
+        self,
+        builtin,
+        chained,
+        leaf,
+        targetBuiltin,
+        targetChain,
+      ],
+    });
+    const codes = result.diagnostics.map((d) => d.code);
+    expect(codes).toContain("GUARD_PROCEDURE_UNKNOWN");
+    expect(codes).toContain("GUARD_SELF_REFERENCE");
+    expect(codes).toContain("GUARD_PROCEDURE_BUILTIN");
+    expect(codes).toContain("GUARD_CHAIN_NOT_ALLOWED");
   });
 });
 

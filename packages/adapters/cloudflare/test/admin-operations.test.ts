@@ -116,9 +116,24 @@ function sessionAsStaff(role = "editor") {
   });
 }
 
+function testAuth(authOverride?: Partial<Auth>): Auth {
+  const getSession = authOverride?.getSession ?? sessionAsStaff();
+  return {
+    ...stubAuth,
+    ...authOverride,
+    getSession,
+    getUserRole:
+      authOverride?.getUserRole ??
+      (async (userId) => {
+        const session = await getSession(new Request("https://example.test/"));
+        return session?.user.id === userId ? (session.user.role ?? null) : null;
+      }),
+  };
+}
+
 function harness(authOverride?: Partial<Auth>) {
   const calls: Array<{ input: unknown }> = [];
-  const auth: Auth = { ...stubAuth, getSession: sessionAsStaff(), ...authOverride };
+  const auth = testAuth(authOverride);
   const ref = createCmsRef({
     manifests: manifests(),
     handlers: {
@@ -379,7 +394,7 @@ function rowBindingManifests(): Manifest[] {
 }
 
 function rowBindingHarness() {
-  const auth: Auth = { ...stubAuth, getSession: sessionAsStaff() };
+  const auth = testAuth();
   const ref = createCmsRef({
     manifests: rowBindingManifests(),
     handlers: {

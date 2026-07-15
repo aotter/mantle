@@ -1,6 +1,10 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import type { Manifest } from "@aotter/mantle-spec";
+import {
+  DiagnosticError,
+  runtimeDiagnostic,
+  type Manifest,
+} from "@aotter/mantle-spec";
 import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
 import type { Auth } from "../src/auth/createAuth.js";
@@ -57,7 +61,7 @@ function authFake(opts: AuthFakeOpts | null): Auth {
   if (opts === null) return stubAuth;
   const userId = opts.userId ?? "u-1";
   return {
-    handler: async () => new Response(null, { status: 404 }),
+    ...stubAuth,
     getSession: async () => ({
       session: {
         id: "s-1",
@@ -73,7 +77,6 @@ function authFake(opts: AuthFakeOpts | null): Auth {
       },
     }),
     getUserRole: async () => opts.role,
-    methods: [],
   };
 }
 
@@ -183,12 +186,7 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
     expect(res.status).toBe(200);
   });
 
-  it("bearer-token-only caller (no cookie) hits the 401 branch — bearer auth is the MCP surface, not HTTP Trigger", async () => {
-    // `buildCallerContext` resolves cookie sessions only. A request
-    // with `Authorization: Bearer …` and no cookie should NOT silently
-    // be treated as authenticated by the HTTP Trigger handler. The
-    // stub auth's `getSession` returns null for any request without a
-    // valid cookie, which is what we exercise here.
+  it("rejects a bearer token when OAuth bearer verification is not configured", async () => {
     const app = buildApp(authFake(null));
     const res = await app.request("/api/staff-only", {
       method: "POST",
@@ -197,6 +195,187 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
     expect(res.status).toBe(401);
     const body = (await res.json()) as { diagnostic?: { code: string } };
     expect(body.diagnostic?.code).toBe("UNAUTHENTICATED");
+  });
+
+  it("authenticates a configured OAuth bearer and enforces manifest scopes", async () => {
+    const scoped: Manifest[] = [
+      {
+        apiVersion,
+        kind: "Procedure",
+        metadata: { name: "scoped-op" },
+        spec: {
+          input: { type: "object" },
+          output: { type: "object" },
+          requires: {
+            auth: { all: ["ctx.auth", { "ctx.auth.scope": "orders:read" }] },
+          },
+          handler: { kind: "ref", ref: "scopedOp" },
+        },
+      },
+      {
+        apiVersion,
+        kind: "Trigger",
+        metadata: { name: "scoped-http" },
+        spec: {
+          source: { kind: "http", method: "POST", path: "/api/scoped" },
+          target: { procedure: "scoped-op" },
+        },
+      },
+    ];
+    let scopes: readonly string[] = ["orders:read"];
+    const auth: Auth = {
+      ...stubAuth,
+      verifyOAuthAccessToken: async () => ({
+        ok: true,
+        userId: "user-1",
+        clientId: "client-1",
+        credentialId: "jti-1",
+        scopes,
+      }),
+    };
+    const ref = createCmsRef({
+      manifests: scoped,
+      handlers: { scopedOp: () => ({ ok: true }) },
+      bindings: {
+        db: new InMemoryDatabase(),
+        kv: new InMemoryKv(),
+        assets: new StubAssetServer(),
+      },
+      auth,
+      oauthBearer: { audience: "https://api.example.test" },
+    });
+    const app = new Hono();
+    mountServerEndpoints(app, ref);
+    const request = () =>
+      app.request("/api/scoped", {
+        method: "POST",
+        headers: { authorization: "Bearer header.payload.signature" },
+      });
+
+    expect((await request()).status).toBe(200);
+    scopes = [];
+    const denied = await request();
+    expect(denied.status).toBe(403);
+    expect((await denied.json()) as object).toMatchObject({
+      diagnostic: { code: "AUTH_DENIED" },
+    });
+  });
+
+  it("runs a mutable site-owned paid guard for a verified API key on every call", async () => {
+    let entitled = true;
+    let targetCalls = 0;
+    const manifests: Manifest[] = [
+      {
+        apiVersion,
+        kind: "Procedure",
+        metadata: { name: "require-active-access" },
+        spec: {
+          input: {
+            type: "object",
+            properties: { orderId: { type: "string" } },
+            required: ["orderId"],
+          },
+          output: { type: "object" },
+          handler: { kind: "ref", ref: "requireActiveAccess" },
+        },
+      },
+      {
+        apiVersion,
+        kind: "Procedure",
+        metadata: { name: "read-order" },
+        spec: {
+          input: {
+            type: "object",
+            properties: { orderId: { type: "string" } },
+            required: ["orderId"],
+          },
+          output: {
+            type: "object",
+            properties: { ok: { type: "boolean" } },
+            required: ["ok"],
+          },
+          requires: {
+            auth: {
+              all: ["ctx.auth", { "ctx.auth.scope": "orders:read" }],
+            },
+            guard: { procedure: "require-active-access" },
+          },
+          handler: { kind: "ref", ref: "readOrder" },
+        },
+      },
+      {
+        apiVersion,
+        kind: "Trigger",
+        metadata: { name: "read-order-http" },
+        spec: {
+          source: { kind: "http", method: "POST", path: "/api/orders/read" },
+          target: { procedure: "read-order" },
+        },
+      },
+    ];
+    const ref = createCmsRef({
+      manifests,
+      handlers: {
+        requireActiveAccess: (_input, ctx) => {
+          expect(ctx.auth?.credentialId).toBe("api-key-row-1");
+          if (!entitled) {
+            throw new DiagnosticError(
+              runtimeDiagnostic({
+                code: "ENTITLEMENT_REQUIRED",
+                severity: "error",
+                path: "site:transactions/api-key-row-1",
+                message: "An active paid transaction is required.",
+              }),
+            );
+          }
+          return {};
+        },
+        readOrder: () => {
+          targetCalls++;
+          return { ok: true };
+        },
+      },
+      bindings: {
+        db: new InMemoryDatabase(),
+        kv: new InMemoryKv(),
+        assets: new StubAssetServer(),
+      },
+      auth: authFake(null),
+      credentialResolver: (request) => {
+        const key = request.headers.get("x-api-key");
+        if (key === null) return { kind: "not-handled" };
+        if (key !== "site-secret") return { kind: "invalid" };
+        return {
+          kind: "verified",
+          credential: {
+            credential: "api-key",
+            credentialId: "api-key-row-1",
+            userId: null,
+            scopes: ["orders:read"],
+          },
+        };
+      },
+    });
+    const app = new Hono();
+    mountServerEndpoints(app, ref);
+
+    const request = () =>
+      app.request("/api/orders/read", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": "site-secret" },
+        body: JSON.stringify({ orderId: "order-1" }),
+      });
+    const granted = await request();
+    expect(granted.status).toBe(200);
+    expect(targetCalls).toBe(1);
+
+    entitled = false;
+    const revoked = await request();
+    expect(revoked.status).toBe(402);
+    expect((await revoked.json()) as object).toMatchObject({
+      diagnostic: { code: "ENTITLEMENT_REQUIRED" },
+    });
+    expect(targetCalls).toBe(1);
   });
 
   it("falls back to a guest ctx (no 401) when Procedure has no requires.auth", async () => {

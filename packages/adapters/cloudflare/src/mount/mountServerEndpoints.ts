@@ -28,6 +28,7 @@ import {
 } from "@aotter/mantle-runtime";
 import { indexHtml } from "@aotter/mantle-admin-ui";
 import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
+import { resolveCaller } from "./resolveCaller.js";
 import { STAFF_ROLE_SET, type StaffRole, type Auth } from "../auth/createAuth.js";
 import { AOTTER_FAVICON_SVG } from "../assets/aotterFavicon.js";
 
@@ -52,7 +53,7 @@ export function mountServerEndpoints(
     app.on(method, honoPath, async (c) => {
       const runtime = await ref.get();
       const waitUntil = readWaitUntil(c);
-      return handleHttpTrigger(c.req.raw, runtime, ref.auth, triggerName, path, waitUntil);
+      return handleHttpTrigger(c.req.raw, runtime, ref, triggerName, path, waitUntil);
     });
   }
   for (const v of ref.manifests) {
@@ -66,7 +67,7 @@ export function mountServerEndpoints(
     app.get(`/api/views/${viewName}`, async (c) => {
       const runtime = await ref.get();
       const waitUntil = readWaitUntil(c);
-      return handleViewRequest(c.req.raw, runtime, viewName, ref.auth, waitUntil, "/api/views");
+      return handleViewRequest(c.req.raw, runtime, viewName, ref, waitUntil, "/api/views");
     });
   }
   mountAdminBetterAuth(app, ref, ref.auth);
@@ -327,7 +328,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     guarded("get", `/admin/api/views/${viewName}`, async (c) => {
       const runtime = await ref.get();
       const waitUntil = readWaitUntil(c);
-      return handleViewRequest(c.req.raw, runtime, viewName, ref.auth, waitUntil, "/admin/api/views");
+      return handleViewRequest(c.req.raw, runtime, viewName, ref, waitUntil, "/admin/api/views");
     });
   }
 
@@ -1530,6 +1531,7 @@ type StaffGate =
       userId: string;
       login: string | null;
       role: StaffRole;
+      sessionId: string;
     };
 
 function adminHandlerContext(c: Context, gate: Extract<StaffGate, { kind: "ok" }>): HandlerContext {
@@ -1537,6 +1539,12 @@ function adminHandlerContext(c: Context, gate: Extract<StaffGate, { kind: "ok" }
   return {
     user: { id: gate.userId },
     staff: { id: gate.userId, role: gate.role },
+    auth: {
+      credential: "session",
+      credentialId: gate.sessionId,
+      clientId: null,
+      scopes: [],
+    },
     env: {},
     ...(waitUntil ? { waitUntil } : {}),
   };
@@ -1545,7 +1553,7 @@ function adminHandlerContext(c: Context, gate: Extract<StaffGate, { kind: "ok" }
 async function readStaffGate(c: Context, auth: Auth): Promise<StaffGate> {
   const session = await auth.getSession(c.req.raw);
   if (!session) return { kind: "unauth" };
-  const role = session.user.role ?? null;
+  const role = await auth.getUserRole(session.user.id);
   const login = session.user.githubLogin ?? null;
   if (!role || !STAFF_ROLE_SET.has(role)) {
     return { kind: "forbidden", login };
@@ -1555,13 +1563,14 @@ async function readStaffGate(c: Context, auth: Auth): Promise<StaffGate> {
     userId: session.user.id,
     login,
     role: role as StaffRole,
+    sessionId: session.session.id,
   };
 }
 
 async function handleHttpTrigger(
   req: Request,
   runtime: CmsRuntime,
-  auth: Auth,
+  ref: CmsRuntimeRef,
   triggerName: string,
   triggerPath: string,
   waitUntil: ((p: Promise<unknown>) => void) | undefined,
@@ -1576,6 +1585,20 @@ async function handleHttpTrigger(
     return jsonError({ status: 500, code: "INTERNAL_ERROR", message: `Procedure '${procName}' missing post-boot.` });
   }
 
+  const triggerPathPrefix = `${req.method} ${triggerPath}`;
+  const caller = await resolveCaller(req, {
+    auth: ref.auth,
+    credentialResolver: ref.credentialResolver,
+    oauthBearer: ref.oauthBearer,
+    waitUntil,
+  });
+  if (caller.kind === "invalid") {
+    return Response.json(
+      { ok: false, diagnostic: caller.diagnostic },
+      { status: caller.status },
+    );
+  }
+
   const url = new URL(req.url);
   const params = matchPath(triggerPath, url.pathname) ?? {};
   const body = await readBody(req);
@@ -1584,35 +1607,10 @@ async function handleHttpTrigger(
   // `id`). Body fields fill in non-path inputs only.
   const input = { ...body, ...params };
 
-  const triggerPathPrefix = `${req.method} ${triggerPath}`;
-  const ctx = await buildCallerContext(req, auth, waitUntil);
-
-  // Mirror the View handler's 401-vs-403 discipline (see
-  // `handleViewRequest`). An auth-gated Procedure called with no
-  // session is UNAUTHENTICATED (401); a session whose role fails the
-  // predicate is AUTH_DENIED (403). InvokeProcedureUseCase collapses
-  // both into AUTH_DENIED if we pass `{ user: null, staff: null }`
-  // as ctx, so we pre-check here.
-  if (procedure.spec.requires?.auth && !ctx) {
-    return Response.json({
-      ok: false,
-      diagnostic: runtimeDiagnostic({
-        code: "UNAUTHENTICATED",
-        severity: "error",
-        path: triggerPathPrefix,
-        expected: "authenticated session",
-        message: `Procedure '${procName}' requires authentication.`,
-      }),
-    }, { status: 401 });
-  }
-
-  const wu = waitUntil ? { waitUntil } : {};
-  const invokeCtx: HandlerContext = ctx ?? { user: null, staff: null, env: {}, ...wu };
-
   const result = await runtime.invokeProcedure.execute({
     procedure,
     input,
-    ctx: invokeCtx,
+    ctx: caller.context,
     pathPrefix: triggerPathPrefix,
   });
 
@@ -1627,7 +1625,7 @@ async function handleViewRequest(
   req: Request,
   runtime: CmsRuntime,
   viewName: string,
-  auth: Auth,
+  ref: CmsRuntimeRef,
   waitUntil: ((p: Promise<unknown>) => void) | undefined,
   // Mount prefix for this View's route. Passed by the caller because
   // the same handler serves BOTH the public mount (`/api/views`) and
@@ -1642,29 +1640,25 @@ async function handleViewRequest(
 
   const viewPath = `GET ${mountPath}/${viewName}`;
 
-  // Resolve caller identity FIRST and evaluate `requires.auth.all`
-  // BEFORE param coercion. Two reasons:
-  //   (1) a param-coercion 400 against an auth-gated View would leak
-  //       the View's parameter contract to an unauthorized caller —
-  //       this matters for both anonymous probes AND authenticated
-  //       users without the required role.
-  //   (2) the UNAUTHENTICATED branch in ExecuteViewUseCase only fires
-  //       when ctx is undefined, so passing a guest ctx for no-session
-  //       would collapse 401 and 403 into the same AUTH_DENIED.
-  const ctx = await buildCallerContext(req, auth, waitUntil);
+  // Resolve caller and evaluate static auth BEFORE query coercion so a
+  // protected View does not leak its parameter contract. The runtime
+  // evaluates the same predicates again before guard/query execution;
+  // this adapter preflight exists only to preserve the no-leak order at
+  // the HTTP parsing boundary.
+  const caller = await resolveCaller(req, {
+    auth: ref.auth,
+    credentialResolver: ref.credentialResolver,
+    oauthBearer: ref.oauthBearer,
+    waitUntil,
+  });
+  if (caller.kind === "invalid") {
+    return Response.json(
+      { ok: false, diagnostic: caller.diagnostic },
+      { status: caller.status },
+    );
+  }
+  const ctx = caller.context;
   if (view.spec.requires?.auth) {
-    if (!ctx) {
-      return Response.json({
-        ok: false,
-        diagnostic: runtimeDiagnostic({
-          code: "UNAUTHENTICATED",
-          severity: "error",
-          path: viewPath,
-          expected: "authenticated session",
-          message: `View '${viewName}' requires authentication.`,
-        }),
-      }, { status: 401 });
-    }
     const denial = evaluateAuthAll(view.spec.requires, ctx, viewPath, "runtime");
     if (denial) {
       return Response.json({
@@ -1709,39 +1703,6 @@ async function handleViewRequest(
   }
   const status = HTTP_STATUS_BY_CODE[result.diagnostic.code] ?? 500;
   return Response.json({ ok: false, diagnostic: result.diagnostic }, { status });
-}
-
-/**
- * Resolve caller identity for a View or HTTP-Trigger request from the
- * Better Auth cookie session. Returns `undefined` when there is no
- * session so callers can distinguish 401 (no session) from 403
- * (session but wrong role) — `ExecuteViewUseCase` and the
- * `handleHttpTrigger` pre-check both rely on this signal.
- *
- * Used by both `handleViewRequest` and `handleHttpTrigger` so the
- * two HTTP surfaces resolve identity identically.
- *
- * Note: this resolves cookie sessions only. OAuth bearer tokens
- * (issued by `createOAuthProvider` for MCP callers) are NOT verified
- * here — bearer-authenticated identity belongs on the MCP surface,
- * not the HTTP Trigger surface, so a bearer-only caller hitting an
- * auth-gated Trigger will land at the 401 branch in
- * `handleHttpTrigger`. Procedures that need to be agent-callable
- * should be reached via `/mcp` or `/mcp/staff` (see #281).
- */
-async function buildCallerContext(
-  req: Request,
-  auth: Auth,
-  waitUntil: ((p: Promise<unknown>) => void) | undefined,
-): Promise<HandlerContext | undefined> {
-  const session = await auth.getSession(req);
-  if (!session) return undefined;
-  const wu = waitUntil ? { waitUntil } : {};
-  const role = await auth.getUserRole(session.user.id);
-  const staff = role && STAFF_ROLE_SET.has(role)
-    ? { id: session.user.id, role: role as StaffRole }
-    : null;
-  return { user: { id: session.user.id }, staff, env: {}, ...wu };
 }
 
 function parsePositiveInt(raw: string | null): number | undefined {
