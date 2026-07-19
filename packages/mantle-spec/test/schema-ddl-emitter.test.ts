@@ -29,6 +29,12 @@ describe("buildDdl", () => {
     );
   });
 
+  it("quotes legal kebab-case identifiers", () => {
+    const ddl = buildDdl(baseManifest("contact-messages"));
+    expect(ddl.addColumns[0]).toContain('"contact-messages__slug"');
+    expect(ddl.createIndexes[0]).toContain('"uq_contact-messages__slug"');
+  });
+
   it("composite unique index guards every column as NOT NULL (not just the first)", () => {
     // Regression: prior `WHERE cols[0] IS NOT NULL` let rows with
     // mixed-NULL composites silently collide as (col0, NULL).
@@ -46,7 +52,7 @@ describe("buildDdl", () => {
     };
     const ddl = buildDdl(manifest);
     expect(ddl.createIndexes[0]).toMatch(
-      /WHERE translations__locale IS NOT NULL AND translations__slug IS NOT NULL/,
+      /WHERE "translations__locale" IS NOT NULL AND "translations__slug" IS NOT NULL/,
     );
   });
 });
