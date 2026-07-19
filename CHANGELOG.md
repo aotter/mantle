@@ -6,6 +6,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.49] - 2026-07-19
+
+### Fixed
+
+- **@aotter/mantle-spec / @aotter/mantle-runtime**: materialize Schema `uniqueIndexes` as generated D1 columns and native unique indexes during boot, so concurrent writes cannot bypass manifest uniqueness; quote valid kebab-case schema identifiers in emitted DDL (#478).
+
 ## [0.0.11-alpha.48] - 2026-07-15
 
 ### Added
