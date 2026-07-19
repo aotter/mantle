@@ -21,13 +21,17 @@ export interface DdlStatements {
   readonly columnNames: readonly string[];
 }
 
-const SAFE_NAME = /^[a-z][a-z0-9_]*$/i;
+const SAFE_NAME = /^[a-z][a-z0-9_.-]*$/i;
 
 function safeIdent(name: string, kind: string): string {
   if (!SAFE_NAME.test(name)) {
     throw new Error(`unsafe ${kind} identifier: ${name}`);
   }
   return name;
+}
+
+function quoteIdent(name: string): string {
+  return `"${name}"`;
 }
 
 function colName(collection: string, fieldPath: string): string {
@@ -65,7 +69,7 @@ export function buildDdl(manifest: SchemaManifest): DdlStatements {
       if (!seen.has(cn)) {
         seen.add(cn);
         addColumns.push(
-          `ALTER TABLE entries ADD COLUMN ${cn} TEXT GENERATED ALWAYS AS (` +
+          `ALTER TABLE entries ADD COLUMN ${quoteIdent(cn)} TEXT GENERATED ALWAYS AS (` +
             `CASE WHEN collection = '${collection}' THEN json_extract(data, '${jsonPath(f)}') END` +
             `) VIRTUAL`,
         );
@@ -78,9 +82,10 @@ export function buildDdl(manifest: SchemaManifest): DdlStatements {
     // only cols[0] meant rows with mixed-NULL composites silently
     // collided as duplicates of (col0, NULL) — uniqueness weaker than
     // declared.
-    const notNullClause = cols.map((c) => `${c} IS NOT NULL`).join(" AND ");
+    const notNullClause = cols.map((c) => `${quoteIdent(c)} IS NOT NULL`).join(" AND ");
     createIndexes.push(
-      `CREATE UNIQUE INDEX IF NOT EXISTS ${ixName} ON entries(${cols.join(", ")})` +
+      `CREATE UNIQUE INDEX IF NOT EXISTS ${quoteIdent(ixName)} ` +
+        `ON entries(${cols.map(quoteIdent).join(", ")})` +
         ` WHERE ${notNullClause}`,
     );
     indexNames.push(ixName);

@@ -74,7 +74,10 @@ import { DatabaseMediaAssetRepository } from "./infrastructure/persistence/Datab
 import { DatabaseSiteConfigRepository } from "./infrastructure/persistence/DatabaseSiteConfigRepository.js";
 import { LifecycleHookingEntryRepository } from "./infrastructure/persistence/LifecycleHookingEntryRepository.js";
 import { HtmlPublishOrchestrator } from "./infrastructure/render/index.js";
-import { CANONICAL_MIGRATIONS } from "./infrastructure/boot/index.js";
+import {
+  CANONICAL_MIGRATIONS,
+  schemaIndexMigrations,
+} from "./infrastructure/boot/index.js";
 
 /**
  * `createCmsRuntime` — assembly root. Per the clean-architecture
@@ -399,7 +402,10 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     idgen,
 
     async bootInit(): Promise<void> {
-      await args.db.migrations.runAll(CANONICAL_MIGRATIONS);
+      await args.db.migrations.runAll([
+        ...CANONICAL_MIGRATIONS,
+        ...schemaIndexMigrations(schemasByName.values()),
+      ]);
       await siteConfig.seed(args.siteDefaults);
       const siteLocales = await siteConfig.readLocales();
       validateBoot.assert({

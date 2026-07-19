@@ -4,7 +4,7 @@ import { BootValidationError } from "../src/usecase/boot/index.js";
 import { DatabaseSiteConfigRepository } from "../src/infrastructure/persistence/DatabaseSiteConfigRepository.js";
 import { InMemoryDatabase } from "./fakes/database.js";
 import { InMemoryKv } from "./fakes/kv.js";
-import { makeProcedure } from "./fakes/manifests.js";
+import { makeProcedure, postsSchema } from "./fakes/manifests.js";
 import type { AssetServer } from "../src/domain/port/index.js";
 
 const noopAssets: AssetServer = {
@@ -48,6 +48,25 @@ describe("createCmsRuntime + bootInit", () => {
     expect(site.title).toBe("Blog Site");
     expect(site.description).toBe("A nice place.");
     expect(site.origin).toBe("https://example.com");
+  });
+
+  it("bootInit installs manifest unique indexes", async () => {
+    const db = new InMemoryDatabase();
+    const schema = postsSchema();
+    const runtime = createCmsRuntime({
+      manifests: [{
+        ...schema,
+        spec: { ...schema.spec, uniqueIndexes: [["slug"]] },
+      }],
+      db,
+      kv: new InMemoryKv(),
+      assets: noopAssets,
+    });
+
+    await runtime.bootInit();
+
+    expect(db.appliedMigrations).toContain("schema-index-column:posts__slug");
+    expect(db.appliedMigrations).toContain("schema-unique-index:uq_posts__slug");
   });
 
   it("bootInit throws BootValidationError when handler ref is missing", async () => {

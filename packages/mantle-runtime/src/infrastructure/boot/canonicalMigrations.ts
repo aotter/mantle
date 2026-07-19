@@ -1,3 +1,4 @@
+import { buildDdl, type SchemaManifest } from "@aotter/mantle-spec";
 import type { Migration } from "../../domain/port/DatabaseDriver.js";
 
 /**
@@ -225,3 +226,31 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
     `,
   },
 ];
+
+export function schemaIndexMigrations(
+  schemas: Iterable<SchemaManifest>,
+): readonly Migration[] {
+  const migrations: Migration[] = [];
+  const ordered = [...schemas].sort((a, b) =>
+    a.metadata.name.localeCompare(b.metadata.name));
+  for (const schema of ordered) {
+    const ddl = buildDdl(schema);
+    for (let i = 0; i < ddl.addColumns.length; i += 1) {
+      const columnName = ddl.columnNames[i]!;
+      migrations.push({
+        id: `schema-index-column:${columnName}`,
+        description: `Generated unique-index column ${columnName}`,
+        sql: ddl.addColumns[i]!,
+      });
+    }
+    for (let i = 0; i < ddl.createIndexes.length; i += 1) {
+      const indexName = ddl.indexNames[i]!;
+      migrations.push({
+        id: `schema-unique-index:${indexName}`,
+        description: `Manifest unique index ${indexName}`,
+        sql: ddl.createIndexes[i]!,
+      });
+    }
+  }
+  return migrations;
+}

@@ -1,1 +1,4 @@
-export { CANONICAL_MIGRATIONS } from "./canonicalMigrations.js";
+export {
+  CANONICAL_MIGRATIONS,
+  schemaIndexMigrations,
+} from "./canonicalMigrations.js";
