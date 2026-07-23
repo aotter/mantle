@@ -35,6 +35,22 @@ only for unreleased work. `blank/` shows the base application shape and
 pages, and feature wiring. Copy the smallest matching pattern. Do not edit or
 copy generated `provision-bundles/*.json` by hand.
 
+## Authoring CLI
+
+Use the project's scripts first; generated starters expose the shipping
+`mantle` authoring CLI from `@aotter/mantle-spec`:
+
+```bash
+pnpm exec mantle --help
+pnpm validate
+pnpm introspect
+pnpm emit-openapi
+pnpm emit-types
+```
+
+This CLI validates and derives artifacts from an existing project. It is not
+the retired `create-mantle` scaffolder.
+
 ## Core Model
 
 Mantle exposes exactly four declarative atoms:

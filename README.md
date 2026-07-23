@@ -22,14 +22,28 @@ Agent-native headless CMS where AI agents are first-class authors — locked-gra
 
 ## Try it cold
 
-Recommended path: open the Mantle landing page, answer the launch
-questions, sign in with GitHub and Cloudflare, then let landing create
-the private GitHub repo from a generated provision bundle. The repo
-carries `.mantle/launch-state.json`, `.mantle/handoff.md`, and
-repo-local vendored Core skills so Claude Code / Cursor / Codex can
-continue from the real repo instead of scaffolding locally.
+If a user hands you this repo and says "let's try Mantle" or "what can we
+build?", do not stop at describing the SDK and do not clone this repo as the
+application. Start with the two user-facing surfaces:
 
-Starter bundle source lives in [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters); this repo carries the SDK, runtime, adapter packages, and the authoritative `mantle:*` agent skills.
+1. **Starter templates and examples:** inspect
+   [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters).
+   Offer the available shapes — `blank`, `presence`, `intake`, `publication`,
+   `transaction`, `reservation`, and `community` — and reuse the closest
+   `blank/` or `overlays/<type>/` implementation.
+2. **Authoring CLI:** generated projects ship the `mantle` CLI through
+   `@aotter/mantle-spec`. Run `pnpm exec mantle --help`; its commands are
+   `validate`, `introspect`, `emit-openapi`, and `emit-types`.
+
+Then open [Mantle landing](https://mantle.tools), answer the launch questions,
+sign in with GitHub and Cloudflare, and let landing create the private GitHub
+repo and first Cloudflare deploy. Continue from that generated repo using its
+`.mantle/launch-state.json`, `.mantle/handoff.md`, repo-local skills, starter
+implementation, and CLI.
+
+The retired `create-mantle` scaffolder and the shipping `mantle` authoring CLI
+are different tools. Do not look for the former; do use the latter inside a
+Mantle project.
 
 > **Prerelease.** This repo is a clean rebuild of the v0.0.x POC. Until v0.1.0 tags, the API surface is in flux — alpha and beta releases may introduce breaking changes. Current published versions and channel policy are documented in [`docs/release-process.md`](docs/release-process.md). Track the rebuild plan at [#1](https://github.com/aotter/mantle/issues/1).
 
@@ -54,9 +68,8 @@ Before working:
 
 - Match the installed Mantle version and use its embedded docs under
   `node_modules/@aotter/mantle/docs/`; do not guess from the latest branch.
-- Reuse the closest pattern from
-  [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters)
-  before designing a new one.
+- For "let's try it" requests, name the available starter templates and
+  shipping CLI commands before proposing custom code.
 - Cloudflare deployment is the primary production path.
 - Free self-hosted auth requires the site owner to configure the GitHub OAuth
   App, provider secrets, and related operations.

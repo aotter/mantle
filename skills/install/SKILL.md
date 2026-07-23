@@ -22,6 +22,20 @@ send them to `https://mantle.tools` to launch, then resume here once the
 repo exists. Do not rebuild the old manual interview / prompt-composition
 harness.
 
+The retired scaffolder is not the Mantle authoring CLI. Generated projects
+still ship `mantle` through `@aotter/mantle-spec`:
+
+```bash
+pnpm exec mantle --help
+pnpm validate
+pnpm introspect
+pnpm emit-openapi
+pnpm emit-types
+```
+
+Use the project scripts when present; they pin the correct manifests and
+output paths.
+
 ## Source of Truth
 
 Before changing a Mantle project:
@@ -72,9 +86,13 @@ The repo was already created and deployed by landing. Continue it:
    tool. Use GitHub CLI only if it is already authenticated.
 2. Clone or open the repo, then read `.mantle/launch-state.json`,
    `.mantle/features.json`, and `.mantle/handoff.md`.
-3. Inspect the four-atoms manifest, the type overlay notes, pages, and
+3. Inspect the matching template in
+   [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters):
+   `blank/` for the base and `overlays/<type>/` for presence, intake,
+   publication, transaction, reservation, or community examples.
+4. Inspect the four-atoms manifest, the type overlay notes, pages, and
    seed data before changing code.
-4. Validate locally before editing:
+5. Validate locally before editing:
 
 ```bash
 pnpm install --frozen-lockfile
