@@ -86,9 +86,8 @@ Read these before editing:
 Use remote docs only when embedded docs are unavailable, and use a tag matching
 the installed version. Never use `develop` docs for a versioned project.
 
-`launch_source` records provenance, not readiness: `mantle-landing-v2` came
-through landing and `mantle-local-v2` came from local materialization. Verify
-the current git remote, live URL, and auth response instead of assuming them.
+Do not branch on how the project was created. Verify the current git remote,
+live URL, and auth response, then skip work that is already complete.
 
 Then run:
 

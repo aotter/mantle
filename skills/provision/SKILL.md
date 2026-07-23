@@ -32,13 +32,8 @@ git status --short
 
 ## Resume From Observed State
 
-`launch_source` only explains how the project began:
-
-- `mantle-landing-v2`: landing intended to create the repo and first
-  Cloudflare build.
-- `mantle-local-v2`: the project was materialized locally.
-
-Both paths finish the same way. Verify these facts and skip completed work:
+Do not branch on how the project was created. Verify these facts and skip
+completed work:
 
 1. `git remote get-url origin` confirms the GitHub repo.
 2. An HTTPS `PUBLIC_ORIGIN` that responds confirms the Cloudflare deploy.
