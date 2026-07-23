@@ -14,7 +14,8 @@ mantle is in `0.0.x-alpha` until the v0.1.0 release gate closes. The process bel
 - Use semver after v0.1.0.
 - Tag format is `vMAJOR.MINOR.PATCH`, for example `v0.1.0`.
 - Alpha tags may use prerelease suffixes, for example `v0.0.6-alpha`.
-- Package versions must stay aligned unless a future ADR explicitly changes package release policy.
+- Package versions and agent plugin manifest versions must stay aligned unless
+  a future ADR explicitly changes release policy.
 
 ## Release channels
 
@@ -278,13 +279,13 @@ source.
 
 Do **not** publish `@aotter/mantle-netlify` while it is a stub.
 
-The retired `create-mantle` scaffolder is not shipped by this SDK repo.
-Releases on this SDK repo must not attach a create-mantle tarball and
-must not publish `@aotter/create-mantle`.
+Releases on this SDK repo must not attach or publish a separate starter
+scaffolder package. Local cold start is owned by the versioned provision
+bundles and materializer in `aotter/mantle-starters`.
 
-`skills/install/SKILL.md` consumes the repo and handoff created by the
-landing page. Human-facing starter bundle details belong in the
-`mantle-starters` README, not this SDK repo.
+`skills/install/SKILL.md` creates or continues a local / landing-generated
+project. Human-facing starter bundle details belong in the `mantle-starters`
+README, not this SDK repo.
 
 ### Pre-publish checks
 

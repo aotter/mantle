@@ -48,8 +48,8 @@ pnpm emit-openapi
 pnpm emit-types
 ```
 
-This CLI validates and derives artifacts from an existing project. It is not
-the retired `create-mantle` scaffolder.
+This CLI validates and derives artifacts from an existing materialized
+project; starter creation is owned by the provision-bundle flow.
 
 ## Core Model
 

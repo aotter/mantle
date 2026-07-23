@@ -1,8 +1,8 @@
 {
   "name": "mantle",
   "displayName": "Mantle",
-  "description": "Core Mantle SDK skills for generated sites, marketplace capabilities, theming, updates, and production handoff.",
-  "version": "0.0.11-alpha.35",
+  "description": "Create and develop Mantle sites from deterministic starters, then ship them to Cloudflare.",
+  "version": "0.0.11-alpha.49",
   "author": {
     "name": "Aotter"
   },

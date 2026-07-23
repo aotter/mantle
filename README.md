@@ -23,27 +23,21 @@ Agent-native headless CMS where AI agents are first-class authors — locked-gra
 ## Try it cold
 
 If a user hands you this repo and says "let's try Mantle" or "what can we
-build?", do not stop at describing the SDK and do not clone this repo as the
-application. Start with the two user-facing surfaces:
+build?", read [`skills/install/SKILL.md`](skills/install/SKILL.md). Pick the
+closest `blank`, `presence`, `intake`, `publication`, `transaction`,
+`reservation`, or `community` bundle from
+[`aotter/mantle-starters`](https://github.com/aotter/mantle-starters),
+materialize it into a new local project, then install, validate, typecheck, and
+start the preview. Do not use this SDK checkout as the application.
 
-1. **Starter templates and examples:** inspect
-   [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters).
-   Offer the available shapes — `blank`, `presence`, `intake`, `publication`,
-   `transaction`, `reservation`, and `community` — and reuse the closest
-   `blank/` or `overlays/<type>/` implementation.
-2. **Authoring CLI:** generated projects ship the `mantle` CLI through
-   `@aotter/mantle-spec`. Run `pnpm exec mantle --help`; its commands are
-   `validate`, `introspect`, `emit-openapi`, and `emit-types`.
+[Mantle landing](https://mantle.tools) runs the same starter-bundle flow and
+continues through private GitHub repo creation, Cloudflare deployment, and
+optional paid hosted auth. Local cold start stops before those provider
+operations.
 
-Then open [Mantle landing](https://mantle.tools), answer the launch questions,
-sign in with GitHub and Cloudflare, and let landing create the private GitHub
-repo and first Cloudflare deploy. Continue from that generated repo using its
-`.mantle/launch-state.json`, `.mantle/handoff.md`, repo-local skills, starter
-implementation, and CLI.
-
-The retired `create-mantle` scaffolder and the shipping `mantle` authoring CLI
-are different tools. Do not look for the former; do use the latter inside a
-Mantle project.
+Generated projects include the `mantle` authoring CLI from
+`@aotter/mantle-spec`: `validate`, `introspect`, `emit-openapi`, and
+`emit-types`.
 
 > **Prerelease.** This repo is a clean rebuild of the v0.0.x POC. Until v0.1.0 tags, the API surface is in flux — alpha and beta releases may introduce breaking changes. Current published versions and channel policy are documented in [`docs/release-process.md`](docs/release-process.md). Track the rebuild plan at [#1](https://github.com/aotter/mantle/issues/1).
 
@@ -68,8 +62,8 @@ Before working:
 
 - Match the installed Mantle version and use its embedded docs under
   `node_modules/@aotter/mantle/docs/`; do not guess from the latest branch.
-- For "let's try it" requests, name the available starter templates and
-  shipping CLI commands before proposing custom code.
+- For "let's try it" requests, materialize the closest starter bundle before
+  proposing custom code.
 - Cloudflare deployment is the primary production path.
 - Free self-hosted auth requires the site owner to configure the GitHub OAuth
   App, provider secrets, and related operations.
@@ -91,15 +85,15 @@ contract.
 
 ### Install Mantle Core skills
 
-Install the Core skill bundle into your agent first. Generated starter repos
-also vendor the same skills locally, so cloning a starter does not create a
-second skill contract.
+Install the Mantle agent plugin to create or continue sites. Generated starter
+repos also vendor the same Core skills locally, so materializing a starter does
+not create a second skill contract.
 
 **Claude Code**
 
 ```bash
 /plugin marketplace add aotter/mantle
-/plugin install mantle
+/plugin install mantle@mantle
 ```
 
 **Codex**
@@ -122,7 +116,7 @@ the repo is cloned or opened.
 
 | Agent | Status | Install method |
 |---|---|---|
-| Claude Code | supported | `/plugin marketplace add aotter/mantle` then `/plugin install mantle` |
+| Claude Code | supported | `/plugin marketplace add aotter/mantle` then `/plugin install mantle@mantle` |
 | Codex | supported | `codex plugin marketplace add aotter/mantle --ref develop` then `codex plugin add mantle@mantle` |
 | Cursor | supported | Auto-discovery via `.cursor-plugin/plugin.json` |
 | VS Code + GitHub Copilot | supported | Auto-discovery via `.copilot-plugin/plugin.json` |

@@ -3,12 +3,12 @@
   "owner": {
     "name": "Aotter"
   },
-  "description": "Mantle Core SDK agent skills and marketplace capability workflow.",
+  "description": "Create and ship Mantle sites with deterministic starters and Core agent skills.",
   "plugins": [
     {
       "name": "mantle",
       "source": "./",
-      "description": "Core Mantle SDK skills for generated sites, marketplace capabilities, theming, updates, and production handoff."
+      "description": "Create and develop Mantle sites from deterministic starters, then ship them to Cloudflare."
     }
   ]
 }
