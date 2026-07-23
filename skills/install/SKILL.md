@@ -1,8 +1,9 @@
 ---
-name: mantle install
+name: mantle:install
 description: Orient and continue a Mantle site that Mantle landing has provisioned. Mantle sites launch on Mantle landing (mantle.tools), which creates the GitHub repo and the first Cloudflare deploy; the agent takes over the provisioned repo to complete the selected type, first pages, and content. Use when the user pasted a Mantle launch / after-launch context, opened a landing-provisioned repo, or wants to start a new Mantle site.
 when_to_invoke: |
   The user wants a new Mantle site, pasted a Mantle landing launch / after-launch context, or opened a repo that Mantle landing provisioned and wants help continuing it.
+applies_to: mantle@v0.1.0
 ---
 
 # mantle install
@@ -20,6 +21,18 @@ send them to `https://mantle.tools` to launch, then resume here once the
 repo exists. Do not rebuild the old manual interview / prompt-composition
 harness.
 
+## Source of Truth
+
+Before changing a Mantle project:
+
+1. Read the installed `@aotter/mantle*` versions from `package.json`.
+2. Use the repo-local vendored `mantle:*` skill when present.
+3. Read the matching embedded docs from
+   `node_modules/@aotter/mantle/docs/`.
+4. Use remote docs only when embedded docs are unavailable, and use a tag
+   matching the installed version. Never use `develop` branch docs for a
+   versioned consumer project.
+
 ## Ground Truth
 
 `@aotter/mantle-*` exposes exactly four declarative atoms scoped to
@@ -33,9 +46,8 @@ harness.
 | Trigger | `CREATE TRIGGER` + cron + REST route + LISTEN/NOTIFY | binding atom |
 
 Anything domain-shaped (Form, Membership, Workflow) is composed in the
-consumer project from these four atoms plus user TypeScript. Full grammar
-reference:
-<https://raw.githubusercontent.com/aotter/mantle/develop/docs/design-atoms.md>.
+consumer project from these four atoms plus user TypeScript. The matching
+grammar reference is `node_modules/@aotter/mantle/docs/design-atoms.md`.
 
 A landing-provisioned repo carries its launch context and ground truth in:
 
@@ -98,7 +110,7 @@ not block the first deploy or first useful page on storage setup.
 
 When the current repo uses the Cloudflare adapter and really needs
 staff-managed images or files, follow the Cloudflare R2 recipe:
-<https://raw.githubusercontent.com/aotter/mantle/develop/docs/media-uploads.md>.
+`node_modules/@aotter/mantle/docs/media-uploads.md`.
 
 For media maintenance, prefer Claude Code, Codex, Cursor, or another
 local/non-sandboxed coding agent that can read files and make outbound PUT
@@ -126,9 +138,8 @@ routes are alive.
 
 Landing already created the GitHub repo and the first Cloudflare deploy.
 To finish production — verify the deploy, wire per-site staff auth, smoke
-test, and hand off the operator setup URL — continue with the provision
-skill:
-<https://raw.githubusercontent.com/aotter/mantle/develop/skills/provision/SKILL.md>.
+test, and hand off the operator setup URL — continue with the repo-local
+`mantle:provision` skill.
 
 ## Don't
 

@@ -50,6 +50,20 @@ This repo is the OLTP side of that thesis applied to web content.
 
 You're an agent helping a (likely non-technical) user install or extend a mantle project.
 
+Before working:
+
+- Match the installed Mantle version and use its embedded docs under
+  `node_modules/@aotter/mantle/docs/`; do not guess from the latest branch.
+- Reuse the closest pattern from
+  [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters)
+  before designing a new one.
+- Cloudflare deployment is the primary production path.
+- Free self-hosted auth requires the site owner to configure the GitHub OAuth
+  App, provider secrets, and related operations.
+- [Mantle landing](https://mantle.tools) also offers paid hosted auth for
+  owners who do not want to operate provider configuration and auth
+  infrastructure.
+
 → **Install a fresh publication/site** — start at [`skills/install/SKILL.md`](skills/install/SKILL.md).
 → **Work inside an existing project** — start at [`skills/develop/SKILL.md`](skills/develop/SKILL.md).
 → **Install a repeatable marketplace capability** — start at [`skills/plugin/SKILL.md`](skills/plugin/SKILL.md).
@@ -167,10 +181,12 @@ Generated repos carry vendored copies of Core-owned `mantle:*` skills from
 | Starter | Family | Status | What |
 |---|---|---|---|
 | [`mantle-starters/blank`](https://github.com/aotter/mantle-starters/tree/develop/blank) | blank | available | Headless API + MCP only. Drop-in backend for consumers bringing their own frontend. |
-| `provision-bundles/publication.json` | publication | available | Owner-published content intent: pages, posts, docs-lite, project updates, and contact flow atoms. |
-| `provision-bundles/transaction.json` | transaction | available | Small catalog/order workflow intent on Mantle atoms, with payment/provider details left to post-launch work. |
-| `provision-bundles/reservation.json` | reservation | available | Booking/request intent with schedule/resource atoms and provider-specific fulfillment left to post-launch work. |
-| `provision-bundles/community.json` | community | available | Member/community intent with moderation and participation atoms; auth depth is post-launch work. |
+| [`overlays/presence`](https://github.com/aotter/mantle-starters/tree/develop/overlays/presence) | presence | available | Small public presence and contact intent. |
+| [`overlays/intake`](https://github.com/aotter/mantle-starters/tree/develop/overlays/intake) | intake | available | Structured submission and intake workflow intent. |
+| [`overlays/publication`](https://github.com/aotter/mantle-starters/tree/develop/overlays/publication) | publication | available | Pages, posts, docs-lite, project updates, and contact flow atoms. |
+| [`overlays/transaction`](https://github.com/aotter/mantle-starters/tree/develop/overlays/transaction) | transaction | available | Small catalog/order workflow intent; payment/provider details remain post-launch work. |
+| [`overlays/reservation`](https://github.com/aotter/mantle-starters/tree/develop/overlays/reservation) | reservation | available | Booking/request intent; provider-specific fulfillment remains post-launch work. |
+| [`overlays/community`](https://github.com/aotter/mantle-starters/tree/develop/overlays/community) | community | available | Member/community intent with moderation and participation atoms. |
 
 ## Repo conventions
 

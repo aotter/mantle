@@ -23,7 +23,18 @@ owns the workflow vocabulary.
 4. Installed Core docs in `node_modules/@aotter/mantle/docs/`.
 
 If `node_modules/` is missing, run `pnpm install --frozen-lockfile` before
-falling back to remote docs.
+falling back to remote docs. Remote docs must use a tag matching the installed
+version; never use `develop` branch docs for a versioned consumer project.
+
+## Existing Examples
+
+Before inventing a Mantle pattern, inspect
+[`aotter/mantle-starters`](https://github.com/aotter/mantle-starters).
+Use `blank/` for the base application shape and `overlays/<type>/` for working
+examples of manifests, handlers, routes, pages, and feature wiring. Copy the
+smallest matching pattern, then adapt it to the current project's installed
+Mantle version. Do not edit or copy generated `provision-bundles/*.json` by
+hand.
 
 ## Core Model
 
