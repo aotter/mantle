@@ -481,7 +481,7 @@ re-attach to the new (empty) worker, etc.
 
 ```bash
 sleep 60   # Let the deploy + DNS propagate
-for path in / /zh-TW /skill/install /admin; do
+for path in / /zh-TW /skill/after-launch /admin; do
   code=$(curl -sIo /dev/null -w "%{http_code}" "https://<your-site>$path")
   echo "  $path → $code"
 done
