@@ -6,6 +6,18 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.50] - 2026-07-23
+
+### Added
+
+- **@aotter/mantle / agent plugins**: add the deterministic local cold-start path backed by the same versioned provision bundles as Mantle Landing, with repository-URL and installed-plugin routing that stops at a validated local project until the user explicitly asks to ship (#486, aotter/mantle-starters#414).
+
+### Changed
+
+- **skills**: converge local and Landing-generated handoffs on observed repository, deploy, and auth state; explicitly guide visual direction and core business-workflow customization without treating auth or seed data as the finished product (#486, aotter/mantle-starters#414, aotter/mantle-landing#299).
+- **release fanout**: ship marker-free local/Landing starter bundles and the paired transactional Landing provisioning state machine; launch provenance is no longer a product version or authorization boundary (aotter/mantle-starters#414, aotter/mantle-landing#298, aotter/mantle-landing#299, aotter/mantle-platform#25).
+- **@aotter/mantle-admin-ui**: refresh Radix UI, Lucide, and Vite dependencies within their existing compatible release lines.
+
 ## [0.0.11-alpha.49] - 2026-07-19
 
 ### Fixed
