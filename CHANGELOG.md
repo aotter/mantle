@@ -6,6 +6,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.52] - 2026-07-24
+
+### Fixed
+
+- **agent toolchain**: keep shipped skills on the installed Mantle version by reading the bundled 4-atom and API/MCP authorization guides instead of floating `develop` docs, enforce that boundary in the release gate, and smoke the canonical `/skill/after-launch` handoff route (aotter/mantle#489, aotter/mantle#490, aotter/mantle-platform#25).
+
 ## [0.0.11-alpha.51] - 2026-07-23
 
 ### Fixed
