@@ -1,11 +1,10 @@
 ---
-name: mantle:develop
+name: develop
 description: Work on any Mantle project using the Core SDK contract. Use for manifest, runtime, content model, handler, adapter, validation, and MCP work after a project already exists.
-source: "@aotter/mantle"
-sourcePath: skills/develop/SKILL.md
-when_to_invoke: |
-  Working dir contains a Mantle project: package.json depends on @aotter/mantle or @aotter/mantle-*, and manifests/ or src/mantle/config.ts exists. Legacy projects may still use src/mantleConfig.ts.
-applies_to: mantle@v0.1.0
+metadata:
+  source: "@aotter/mantle"
+  sourcePath: skills/develop/SKILL.md
+  applies_to: mantle@v0.1.0
 ---
 
 # Mantle Develop

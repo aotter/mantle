@@ -13,7 +13,9 @@ Agent-readable skill briefs for consumers of `@aotter/mantle-*`. Discoverable by
 | [`extend`](extend/SKILL.md) | Legacy atom-authoring guide. Prefer `mantle:develop` or `mantle:plugin` depending on whether the work is one-off or installable. |
 | [`provision`](provision/SKILL.md) | User wants production fully usable after a landing launch. Verify the current landing deploy, wire per-site staff auth, smoke test, and hand off the operator setup URL. |
 
-The skills target `mantle@v0.1.0`. Each one names its assumed grammar version in the front-matter `applies_to:` field; future versions add a sibling SKILL.md or update the existing one.
+The skills target `mantle@v0.1.0`. Each one names its assumed grammar version
+in front-matter `metadata.applies_to`; future versions add a sibling SKILL.md
+or update the existing one.
 
 ## Skill authority
 
@@ -43,7 +45,9 @@ The skills target ADR-0007's "AI as primary author" thesis: agents reach these f
 
 Each SKILL.md ships:
 
-- **Front-matter** with `name`, `description`, `when_to_invoke`, `applies_to`.
+- **Front-matter** with a folder-matching `name`, trigger-complete
+  `description`, and optional source/version `metadata`. Plugin hosts add the
+  external `mantle:` namespace.
 - **Preflight** section — environment + user-confirmation gates.
 - **Step-by-step** — concrete commands (`pnpm validate`, `mantle emit-openapi`, etc.).
 - **Diagnostic recipes** — `Symptom → Cause → Fix` table for the common failure modes.

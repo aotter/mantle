@@ -1,11 +1,10 @@
 ---
-name: mantle:theme
+name: theme
 description: Apply brand and visual direction in a Mantle project without depending on starter-owned skill semantics.
-source: "@aotter/mantle"
-sourcePath: skills/theme/SKILL.md
-when_to_invoke: |
-  User wants visual, brand, layout, copy, or UI polish in an existing Mantle project.
-applies_to: mantle@v0.1.0
+metadata:
+  source: "@aotter/mantle"
+  sourcePath: skills/theme/SKILL.md
+  applies_to: mantle@v0.1.0
 ---
 
 # Mantle Theme

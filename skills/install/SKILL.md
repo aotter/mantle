@@ -1,9 +1,10 @@
 ---
-name: mantle:install
+name: install
 description: Orient and continue a Mantle site that Mantle landing has provisioned. Mantle sites launch on Mantle landing (mantle.tools), which creates the GitHub repo and the first Cloudflare deploy; the agent takes over the provisioned repo to complete the selected type, first pages, and content. Use when the user pasted a Mantle launch / after-launch context, opened a landing-provisioned repo, or wants to start a new Mantle site.
-when_to_invoke: |
-  The user wants a new Mantle site, pasted a Mantle landing launch / after-launch context, or opened a repo that Mantle landing provisioned and wants help continuing it.
-applies_to: mantle@v0.1.0
+metadata:
+  source: "@aotter/mantle"
+  sourcePath: skills/install/SKILL.md
+  applies_to: mantle@v0.1.0
 ---
 
 # mantle install

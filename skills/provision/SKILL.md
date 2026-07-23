@@ -1,9 +1,10 @@
 ---
-name: mantle:provision
+name: provision
 description: Finish production for a Mantle site after Mantle landing has provisioned it. Landing already created the private GitHub repo and the first Cloudflare Worker deploy; this skill covers verifying that deploy, completing self-hosted or paid hosted auth, smoke testing, and handing off the operator setup URL.
-when_to_invoke: |
-  Mantle landing has created the repo and the first Cloudflare deploy, the user wants production fully usable, and staff sign-in / MCP still needs verification or wiring.
-applies_to: mantle@v0.1.0
+metadata:
+  source: "@aotter/mantle"
+  sourcePath: skills/provision/SKILL.md
+  applies_to: mantle@v0.1.0
 ---
 
 # Provision a Mantle Project
@@ -27,8 +28,10 @@ with v2.
 
 - Cloudflare has deployed the Worker from the repo (landing's first build,
   plus your redeploy after config).
-- `wrangler.toml` carries `PUBLIC_ORIGIN`, the correct Worker name, and the
-  selected auth path's non-secret configuration.
+- `wrangler.toml` carries `PUBLIC_ORIGIN` and the correct Worker name.
+- Self-hosted auth also carries `GITHUB_CLIENT_ID` and
+  `ADMIN_GITHUB_LOGIN` there; hosted auth remains landing-managed in
+  Cloudflare Worker bindings.
 - The selected self-hosted or hosted auth configuration is complete; required
   secrets are set without being committed.
 - `AGENTS.md` `Public site:` points at the deployed Worker URL.

@@ -1,9 +1,10 @@
 ---
-name: mantle extend
+name: extend
 description: Add new functionality to an existing mantle project — a new Schema, View, Procedure, or Trigger; or wire a feature like a contact form, newsletter signup, comment thread, or filtered list page. Use when the user already has a mantle project and wants to grow it.
-when_to_invoke: |
-  Working dir contains `manifests/`, `package.json` includes `@aotter/*`. The user describes a new content type, a public REST query, a write endpoint, or a side-effect on entry mutation.
-applies_to: mantle@v0.1.0
+metadata:
+  source: "@aotter/mantle"
+  sourcePath: skills/extend/SKILL.md
+  applies_to: mantle@v0.1.0
 ---
 
 # Extend a mantle project
