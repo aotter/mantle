@@ -8,12 +8,14 @@ Agent-readable skill briefs for consumers of `@aotter/mantle-*`. Discoverable by
 | [`plugin`](plugin/SKILL.md) | `mantle:plugin`: Core-owned marketplace workflow for plan-first capability installs across starters and adapters. |
 | [`theme`](theme/SKILL.md) | `mantle:theme`: Core-owned visual workflow. Reads project context but does not depend on starter-owned skill semantics. |
 | [`update`](update/SKILL.md) | `mantle:update`: Core-owned drift check workflow for SDK, starter snapshots, and plugin lockfiles. |
-| [`install`](install/SKILL.md) | User wants to start or continue a Mantle site. Sites launch on [Mantle landing](https://mantle.tools), which provisions the GitHub repo and first Cloudflare deploy; this brief orients the agent to take over and continue the provisioned repo. |
+| [`install`](install/SKILL.md) | User wants to create a local Mantle site from a deterministic starter bundle or continue an existing local / landing-generated project. |
 | [`customize-design`](customize-design/SKILL.md) | Legacy publication-specific design guide. Prefer `mantle:theme` for generated repos. |
 | [`extend`](extend/SKILL.md) | Legacy atom-authoring guide. Prefer `mantle:develop` or `mantle:plugin` depending on whether the work is one-off or installable. |
-| [`provision`](provision/SKILL.md) | User wants production fully usable after a landing launch. Verify the current landing deploy, wire per-site staff auth, smoke test, and hand off the operator setup URL. |
+| [`provision`](provision/SKILL.md) | User wants a local or landing-generated project shipped to Cloudflare with production auth and operator handoff. |
 
-The skills target `mantle@v0.1.0`. Each one names its assumed grammar version in the front-matter `applies_to:` field; future versions add a sibling SKILL.md or update the existing one.
+The skills target `mantle@v0.1.0`. Each one names its assumed grammar version
+in front-matter `metadata.applies_to`; future versions add a sibling SKILL.md
+or update the existing one.
 
 ## Skill authority
 
@@ -43,7 +45,9 @@ The skills target ADR-0007's "AI as primary author" thesis: agents reach these f
 
 Each SKILL.md ships:
 
-- **Front-matter** with `name`, `description`, `when_to_invoke`, `applies_to`.
+- **Front-matter** with a folder-matching `name`, trigger-complete
+  `description`, and optional source/version `metadata`. Plugin hosts add the
+  external `mantle:` namespace.
 - **Preflight** section — environment + user-confirmation gates.
 - **Step-by-step** — concrete commands (`pnpm validate`, `mantle emit-openapi`, etc.).
 - **Diagnostic recipes** — `Symptom → Cause → Fix` table for the common failure modes.

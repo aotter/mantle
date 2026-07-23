@@ -1,11 +1,10 @@
 ---
-name: mantle:plugin
+name: plugin
 description: Discover, plan, apply, and verify Mantle marketplace plugins through the Core SDK contract. Use when the user wants to add an installable capability without hand-planning provisioning steps.
-source: "@aotter/mantle"
-sourcePath: skills/plugin/SKILL.md
-when_to_invoke: |
-  The user asks for a marketplace/plugin/capability install, or wants a domain feature that should be repeatable across starters and adapters.
-applies_to: mantle@v0.1.0
+metadata:
+  source: "@aotter/mantle"
+  sourcePath: skills/plugin/SKILL.md
+  applies_to: mantle@v0.1.0
 ---
 
 # Mantle Plugin

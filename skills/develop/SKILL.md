@@ -1,11 +1,10 @@
 ---
-name: mantle:develop
+name: develop
 description: Work on any Mantle project using the Core SDK contract. Use for manifest, runtime, content model, handler, adapter, validation, and MCP work after a project already exists.
-source: "@aotter/mantle"
-sourcePath: skills/develop/SKILL.md
-when_to_invoke: |
-  Working dir contains a Mantle project: package.json depends on @aotter/mantle or @aotter/mantle-*, and manifests/ or src/mantle/config.ts exists. Legacy projects may still use src/mantleConfig.ts.
-applies_to: mantle@v0.1.0
+metadata:
+  source: "@aotter/mantle"
+  sourcePath: skills/develop/SKILL.md
+  applies_to: mantle@v0.1.0
 ---
 
 # Mantle Develop
@@ -23,7 +22,34 @@ owns the workflow vocabulary.
 4. Installed Core docs in `node_modules/@aotter/mantle/docs/`.
 
 If `node_modules/` is missing, run `pnpm install --frozen-lockfile` before
-falling back to remote docs.
+falling back to remote docs. Remote docs must use a tag matching the installed
+version; never use `develop` branch docs for a versioned consumer project.
+
+## Existing Examples
+
+Before inventing a Mantle pattern, inspect
+[`aotter/mantle-starters`](https://github.com/aotter/mantle-starters).
+Use a tag matching the installed Mantle version when available; use `develop`
+only for unreleased work. `blank/` shows the base application shape and
+`overlays/<type>/` contains working examples of manifests, handlers, routes,
+pages, and feature wiring. Copy the smallest matching pattern. Do not edit or
+copy generated `provision-bundles/*.json` by hand.
+
+## Authoring CLI
+
+Use the project's scripts first; generated starters expose the shipping
+`mantle` authoring CLI from `@aotter/mantle-spec`:
+
+```bash
+pnpm exec mantle --help
+pnpm validate
+pnpm introspect
+pnpm emit-openapi
+pnpm emit-types
+```
+
+This CLI validates and derives artifacts from an existing materialized
+project; starter creation is owned by the provision-bundle flow.
 
 ## Core Model
 

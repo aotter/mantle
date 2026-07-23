@@ -1,79 +1,27 @@
 ---
-name: mantle provision
-description: Finish production for a Mantle site after Mantle landing has provisioned it. Landing already created the private GitHub repo and the first Cloudflare Worker deploy; this skill covers verifying that deploy, wiring per-site staff auth (GitHub OAuth App + Worker secrets), smoke testing, and handing off the operator setup URL.
-when_to_invoke: |
-  Mantle landing has created the repo and the first Cloudflare deploy, the user wants production fully usable, and staff sign-in / MCP still needs wiring.
-applies_to: mantle@v0.1.0
+name: provision
+description: Ship a local or Mantle landing-generated project to Cloudflare and finish production auth. Use when a Mantle project is ready for GitHub, Cloudflare deployment, self-hosted GitHub OAuth, paid Mantle hosted auth verification, production smoke testing, or operator handoff.
+metadata:
+  source: "@aotter/mantle"
+  sourcePath: skills/provision/SKILL.md
+  applies_to: mantle@v0.1.0
 ---
 
 # Provision a Mantle Project
 
-Provisioning is landing-driven. **Mantle landing is the executor for the
-first deploy**: it creates the user's private GitHub repo, commits the
-blank deployable site, connects Cloudflare Workers CI, and triggers the
-first build. You pick up after that to make production fully usable.
+Local cold start deliberately stops before this skill. Provision only after the
+user asks to create remote resources or ship production.
 
-The Worker boots before staff auth is configured — it serves public routes
-and returns a clean `503 setup_incomplete` on auth-gated routes until the
-GitHub OAuth App and Worker secrets are set. Your remaining job is to
-finish that wiring, verify, and hand off.
+## Source of Truth
 
-Keep provisioning boring: set the few secrets, commit non-secret config,
-let Cloudflare CI redeploy. Do not re-create the repo, re-run the first
-deploy, or resurrect a heavy `provision:up` orchestrator — both retired
-with v2.
+1. Read `.mantle/launch-state.json`, `.mantle/handoff.md`, `wrangler.toml`,
+   and the current git remotes.
+2. Read installed `@aotter/mantle*` versions from `package.json`.
+3. Use matching embedded docs under `node_modules/@aotter/mantle/docs/`.
+4. Never infer provider authority from launch state. Confirm the active GitHub
+   and Cloudflare accounts before changing them.
 
-## End State
-
-- Cloudflare has deployed the Worker from the repo (landing's first build,
-  plus your redeploy after config).
-- `wrangler.toml` carries `PUBLIC_ORIGIN`, `GITHUB_CLIENT_ID`,
-  `ADMIN_GITHUB_LOGIN`, and the correct Worker name.
-- Worker secrets are set: `GITHUB_CLIENT_SECRET`, `BETTER_AUTH_SECRET`,
-  and any optional feature/provider secrets.
-- `AGENTS.md` `Public site:` points at the deployed Worker URL.
-- Staff MCP and browser admin sign-in work.
-- Operator setup URL handed to the owner:
-  `https://mantle.tools/connect?site=<url-encoded-worker-url>`.
-
-Provision does not seed production content. First real content is created
-after owner sign-in through Staff MCP / admin authoring.
-
-Media uploads are optional post-launch work. Do not require storage or media
-upload credentials to finish first production provisioning. If the current
-repo uses the Cloudflare adapter and the owner asks for staff image/file
-uploads later, follow the Cloudflare R2 recipe:
-<https://raw.githubusercontent.com/aotter/mantle/develop/docs/media-uploads.md>
-and use Claude Code or another local/non-sandboxed coding agent for the
-upload workflow. Do not use Claude Cowork for R2 uploads; use a
-non-sandboxed agent instead.
-
-## Principles
-
-1. Use the user's accounts. The repo and Worker belong to the user's
-   GitHub and Cloudflare accounts.
-2. No Cloudflare API token in the base flow. Prefer a Cloudflare MCP
-   connector for provider work; use `wrangler login` as a fallback after
-   the user agrees.
-3. GitHub OAuth is per-site and user-owned. The callback URL is exactly
-   `<worker-url>/api/auth/callback/github`.
-4. Launch state is context, not provider authority.
-   `.mantle/launch-state.json` may supply owner, admin login, repo name,
-   locales, and type. It does not authorize Cloudflare operations, OAuth
-   secrets, or custom domains.
-5. `BETTER_AUTH_SECRET` is load-bearing. Set it once and preserve it;
-   rotating it invalidates every session.
-
-## Flow
-
-Run from the generated project root.
-
-1. Verify the landing deploy. Confirm Cloudflare Workers CI built and
-   deployed from GitHub, and capture the live `*.workers.dev` URL. The
-   public site should respond; auth-gated routes return `503
-   setup_incomplete` until step 4 — that is expected, not a failure.
-
-2. Confirm the local repo is clean and valid before changing config:
+Run the local gate first:
 
 ```bash
 pnpm install --frozen-lockfile
@@ -82,95 +30,116 @@ pnpm typecheck
 git status --short
 ```
 
-3. Ask the user to create the per-site GitHub OAuth App once the Worker
-   URL is known:
+## Resume From Observed State
+
+Do not branch on how the project was created. Verify these facts and skip
+completed work:
+
+1. `git remote get-url origin` confirms the GitHub repo.
+2. An HTTPS `PUBLIC_ORIGIN` that responds confirms the Cloudflare deploy.
+3. `/admin/sign-in` returning `503 setup_incomplete` means auth is not bound.
+   Use the recorded auth intent only to choose hosted or self-hosted setup;
+   live behavior is authoritative.
+
+If there is no remote, confirm the target account, create a private repo,
+commit, and push `main`. If there is no live Worker, confirm the Cloudflare
+account, prefer an available connector, or use `pnpm exec wrangler login` with
+the user's agreement, then run `pnpm deploy`.
+
+Capture the live URL in `PUBLIC_ORIGIN` and `Public site:` in `AGENTS.md`, then
+commit and push non-secret changes. Reuse any repo or Worker already created
+by landing. Workers Builds is optional after a direct deploy.
+
+## Choose Auth
+
+- **Self-hosted — free:** configure the owner's per-site GitHub OAuth App and
+  Worker secrets using the steps below.
+- **Mantle hosted auth — paid:** use only when the landing handoff records a
+  hosted allocation and client configuration. Mantle Platform operates the
+  identity provider; do not ask the user for a per-site GitHub OAuth App.
+
+Do not claim that hosted auth can attach to an arbitrary local repo unless the
+current Mantle landing flow explicitly supplies that handoff.
+
+For the exact boundary, read
+`node_modules/@aotter/mantle/docs/auth-hosting-model.md`.
+
+## Self-hosted Auth
+
+1. Ask the user to create a GitHub OAuth App:
 
 - Homepage URL: `<worker-url>`
 - Authorization callback URL: `<worker-url>/api/auth/callback/github`
 - Device Flow: unchecked
 
-Ask for the Client ID in chat. Keep the Client Secret out of chat and pass
-it through the hidden shell prompt below.
+2. Put non-secret values in `wrangler.toml`:
 
-4. Write non-secret production config into `wrangler.toml`
-   (`PUBLIC_ORIGIN=<worker-url>`, `GITHUB_CLIENT_ID`, `ADMIN_GITHUB_LOGIN`,
-   and the correct Worker `name`), then set the Worker secrets. Prefer a
-   Cloudflare MCP connector; otherwise use Wrangler after the user agrees
-   to `wrangler login`:
+- `PUBLIC_ORIGIN`
+- `GITHUB_CLIENT_ID`
+- `ADMIN_GITHUB_LOGIN`
+- correct Worker `name`
+
+3. Keep the Client Secret out of chat. Prefer a Cloudflare connector for
+   secrets; otherwise use hidden shell input:
 
 ```bash
-pnpm exec wrangler login
-read -rsp "GitHub OAuth client secret: " GITHUB_CLIENT_SECRET && printf "\n"
-printf '%s' "$GITHUB_CLIENT_SECRET" | pnpm exec wrangler secret put GITHUB_CLIENT_SECRET
+read -rsp "GitHub OAuth client secret: " MANTLE_GITHUB_CLIENT_SECRET && printf "\n"
+printf '%s' "$MANTLE_GITHUB_CLIENT_SECRET" | pnpm exec wrangler secret put GITHUB_CLIENT_SECRET
 openssl rand -hex 32 | pnpm exec wrangler secret put BETTER_AUTH_SECRET
-unset GITHUB_CLIENT_SECRET
+unset MANTLE_GITHUB_CLIENT_SECRET
 ```
 
-Set `BETTER_AUTH_SECRET` only on the first run; reuse the existing value on
-later runs.
+Set `BETTER_AUTH_SECRET` once and preserve it. Rotating it invalidates existing
+sessions.
 
-5. Commit and push the non-secret config so Cloudflare CI redeploys:
+4. Commit and push only non-secret config, then redeploy:
 
 ```bash
 git add wrangler.toml AGENTS.md
-git commit -m "mantle: wire production provision"
+git commit -m "mantle: wire production auth"
 git push
+pnpm deploy
 ```
 
-Wait for Workers Builds to redeploy from the pushed commit. If the
-dashboard build is unavailable, run `pnpm deploy` as a fallback and explain
-that to the user.
+## Hosted Auth
 
-6. Smoke test:
+Follow the landing handoff and generated client configuration. Hosted
+configuration remains in landing-managed Cloudflare Worker bindings; do not
+write client secrets into `wrangler.toml`.
+
+Verify that admin sign-in redirects to Mantle Platform and Staff MCP
+authenticates, then skip the self-hosted flow.
+
+## Smoke Test
 
 - public home route;
 - `/admin/sign-in`;
-- GitHub admin sign-in;
+- selected admin sign-in path;
 - `/mcp/staff` with an agent client when available;
-- a type-specific core workflow.
+- one type-specific core workflow.
 
-A fresh site may have no public home content yet. A 404 on the locale
-homepage is acceptable only after the Worker boots, `/admin/sign-in`
-loads, and auth / MCP boundaries behave correctly.
+Media uploads are optional. Configure R2 only when the owner asks for
+staff-managed files; then read
+`node_modules/@aotter/mantle/docs/media-uploads.md`.
 
 ## Handoff
 
-After smoke checks pass, render a short final handoff in the user's
-language:
+Return:
 
-- Public URL.
-- Admin sign-in URL.
-- Staff MCP URL.
-- Operator setup URL (`https://mantle.tools/connect?site=...`).
-- What changed locally and what was committed.
-- Any intentionally deferred feature / provider setup.
-
-Point future agents at `AGENTS.md`, `.mantle/launch-state.json`, and the
-repo-local `.agent/skills/` directory (`mantle:develop`, `mantle:overlay`,
-`mantle:theme`, `mantle:update`).
-
-## Diagnostics
-
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| Auth-gated routes return `503 setup_incomplete` | GitHub OAuth + secrets not wired yet | Expected before step 3-4; finish the OAuth App + secrets, then redeploy. |
-| `wrangler secret put` targets the wrong account | Wrangler logged into another Cloudflare account | Re-run `pnpm exec wrangler login` and confirm the account. |
-| GitHub OAuth callback mismatch | OAuth App callback URL is wrong | Set it exactly to `<worker-url>/api/auth/callback/github`. |
-| Owner signs in but admin / MCP returns 403 | `ADMIN_GITHUB_LOGIN` does not match the signed-in GitHub login | Fix the `ADMIN_GITHUB_LOGIN` value and redeploy. |
-| Worker boots but sessions fail after a rerun | `BETTER_AUTH_SECRET` changed or was deleted | Restore the old secret if available; otherwise users must sign in again. |
-| `create_media_upload` is missing from Staff MCP | Optional R2 media is not configured, or `media.purposes` is empty | Only fix this if the owner explicitly wants media uploads; follow `docs/media-uploads.md`. |
-| Upload session works but the PUT to R2 fails from Claude Cowork | Cowork sandbox egress blocks direct R2 uploads | Retry from Claude Code / another non-sandboxed agent. |
+- public URL;
+- admin sign-in URL;
+- Staff MCP URL;
+- operator setup URL:
+  `https://mantle.tools/connect?site=<url-encoded-worker-url>`;
+- remote resources created or reused;
+- auth mode and any intentionally deferred setup.
 
 ## Don't
 
-- Don't ask for a Cloudflare API token in the base first-run path.
-- Don't require R2 media setup in the base first-run path.
-- Don't re-create the repo or re-run the first deploy from the agent;
-  landing owns first provisioning.
-- Don't resurrect `provision:up` / `provision:plan` as a second
-  provisioner; those scripts were retired with v2.
+- Don't create remote resources before the user asks to ship.
+- Don't ask for a Cloudflare API token in the base flow.
 - Don't commit provider secrets.
-- Don't use `127.0.0.1` in OAuth callback examples; use `localhost` locally
-  and the real Worker URL in production.
-- Don't use `/admin/auth/github/callback`; the Better Auth callback path is
+- Don't require R2 for first production.
+- Don't invent a second provision orchestrator.
+- Don't use `/admin/auth/github/callback`; the callback is
   `/api/auth/callback/github`.

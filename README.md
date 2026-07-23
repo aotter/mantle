@@ -22,14 +22,22 @@ Agent-native headless CMS where AI agents are first-class authors — locked-gra
 
 ## Try it cold
 
-Recommended path: open the Mantle landing page, answer the launch
-questions, sign in with GitHub and Cloudflare, then let landing create
-the private GitHub repo from a generated provision bundle. The repo
-carries `.mantle/launch-state.json`, `.mantle/handoff.md`, and
-repo-local vendored Core skills so Claude Code / Cursor / Codex can
-continue from the real repo instead of scaffolding locally.
+If a user hands you this repo and says "let's try Mantle" or "what can we
+build?", read [`skills/install/SKILL.md`](skills/install/SKILL.md). Pick the
+closest `blank`, `presence`, `intake`, `publication`, `transaction`,
+`reservation`, or `community` bundle from
+[`aotter/mantle-starters`](https://github.com/aotter/mantle-starters),
+materialize it into a new local project, then install, validate, typecheck, and
+start the preview. Do not use this SDK checkout as the application.
 
-Starter bundle source lives in [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters); this repo carries the SDK, runtime, adapter packages, and the authoritative `mantle:*` agent skills.
+[Mantle landing](https://mantle.tools) runs the same starter-bundle flow and
+continues through private GitHub repo creation, Cloudflare deployment, and
+optional paid hosted auth. Local cold start stops before those provider
+operations.
+
+Generated projects include the `mantle` authoring CLI from
+`@aotter/mantle-spec`: `validate`, `introspect`, `emit-openapi`, and
+`emit-types`.
 
 > **Prerelease.** This repo is a clean rebuild of the v0.0.x POC. Until v0.1.0 tags, the API surface is in flux — alpha and beta releases may introduce breaking changes. Current published versions and channel policy are documented in [`docs/release-process.md`](docs/release-process.md). Track the rebuild plan at [#1](https://github.com/aotter/mantle/issues/1).
 
@@ -50,6 +58,19 @@ This repo is the OLTP side of that thesis applied to web content.
 
 You're an agent helping a (likely non-technical) user install or extend a mantle project.
 
+Before working:
+
+- Match the installed Mantle version and use its embedded docs under
+  `node_modules/@aotter/mantle/docs/`; do not guess from the latest branch.
+- For "let's try it" requests, materialize the closest starter bundle before
+  proposing custom code.
+- Cloudflare deployment is the primary production path.
+- Free self-hosted auth requires the site owner to configure the GitHub OAuth
+  App, provider secrets, and related operations.
+- [Mantle landing](https://mantle.tools) also offers paid hosted auth for
+  owners who do not want to operate provider configuration and auth
+  infrastructure.
+
 → **Install a fresh publication/site** — start at [`skills/install/SKILL.md`](skills/install/SKILL.md).
 → **Work inside an existing project** — start at [`skills/develop/SKILL.md`](skills/develop/SKILL.md).
 → **Install a repeatable marketplace capability** — start at [`skills/plugin/SKILL.md`](skills/plugin/SKILL.md).
@@ -64,15 +85,15 @@ contract.
 
 ### Install Mantle Core skills
 
-Install the Core skill bundle into your agent first. Generated starter repos
-also vendor the same skills locally, so cloning a starter does not create a
-second skill contract.
+Install the Mantle agent plugin to create or continue sites. Generated starter
+repos also vendor the same Core skills locally, so materializing a starter does
+not create a second skill contract.
 
 **Claude Code**
 
 ```bash
 /plugin marketplace add aotter/mantle
-/plugin install mantle
+/plugin install mantle@mantle
 ```
 
 **Codex**
@@ -95,7 +116,7 @@ the repo is cloned or opened.
 
 | Agent | Status | Install method |
 |---|---|---|
-| Claude Code | supported | `/plugin marketplace add aotter/mantle` then `/plugin install mantle` |
+| Claude Code | supported | `/plugin marketplace add aotter/mantle` then `/plugin install mantle@mantle` |
 | Codex | supported | `codex plugin marketplace add aotter/mantle --ref develop` then `codex plugin add mantle@mantle` |
 | Cursor | supported | Auto-discovery via `.cursor-plugin/plugin.json` |
 | VS Code + GitHub Copilot | supported | Auto-discovery via `.copilot-plugin/plugin.json` |
@@ -167,10 +188,12 @@ Generated repos carry vendored copies of Core-owned `mantle:*` skills from
 | Starter | Family | Status | What |
 |---|---|---|---|
 | [`mantle-starters/blank`](https://github.com/aotter/mantle-starters/tree/develop/blank) | blank | available | Headless API + MCP only. Drop-in backend for consumers bringing their own frontend. |
-| `provision-bundles/publication.json` | publication | available | Owner-published content intent: pages, posts, docs-lite, project updates, and contact flow atoms. |
-| `provision-bundles/transaction.json` | transaction | available | Small catalog/order workflow intent on Mantle atoms, with payment/provider details left to post-launch work. |
-| `provision-bundles/reservation.json` | reservation | available | Booking/request intent with schedule/resource atoms and provider-specific fulfillment left to post-launch work. |
-| `provision-bundles/community.json` | community | available | Member/community intent with moderation and participation atoms; auth depth is post-launch work. |
+| [`overlays/presence`](https://github.com/aotter/mantle-starters/tree/develop/overlays/presence) | presence | available | Small public presence and contact intent. |
+| [`overlays/intake`](https://github.com/aotter/mantle-starters/tree/develop/overlays/intake) | intake | available | Structured submission and intake workflow intent. |
+| [`overlays/publication`](https://github.com/aotter/mantle-starters/tree/develop/overlays/publication) | publication | available | Pages, posts, docs-lite, project updates, and contact flow atoms. |
+| [`overlays/transaction`](https://github.com/aotter/mantle-starters/tree/develop/overlays/transaction) | transaction | available | Small catalog/order workflow intent; payment/provider details remain post-launch work. |
+| [`overlays/reservation`](https://github.com/aotter/mantle-starters/tree/develop/overlays/reservation) | reservation | available | Booking/request intent; provider-specific fulfillment remains post-launch work. |
+| [`overlays/community`](https://github.com/aotter/mantle-starters/tree/develop/overlays/community) | community | available | Member/community intent with moderation and participation atoms. |
 
 ## Repo conventions
 

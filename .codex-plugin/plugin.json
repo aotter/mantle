@@ -1,7 +1,7 @@
 {
   "name": "mantle",
-  "version": "0.0.11-alpha.35",
-  "description": "Core Mantle SDK skills for generated sites, marketplace capabilities, theming, updates, and production handoff.",
+  "version": "0.0.11-alpha.49",
+  "description": "Create and develop Mantle sites from deterministic starters, then ship them to Cloudflare.",
   "author": {
     "name": "Aotter",
     "url": "https://mantle.tools/"
@@ -19,8 +19,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Mantle",
-    "shortDescription": "Core SDK skills for Mantle sites",
-    "longDescription": "Work on Mantle generated sites with Core-owned agent skills for project development, marketplace capability installs, visual theming, update checks, and production handoff. Starter repos may vendor these same skills, but @aotter/mantle owns their meaning.",
+    "shortDescription": "Create and ship Mantle sites",
+    "longDescription": "Create a local Mantle site from deterministic starter bundles, develop it with version-matched Core skills, and optionally ship it to Cloudflare. Mantle landing offers hosted GitHub, Cloudflare, and paid auth setup.",
     "developerName": "Aotter",
     "category": "Developer Tools",
     "capabilities": [
@@ -29,9 +29,9 @@
     ],
     "websiteURL": "https://mantle.tools/",
     "defaultPrompt": [
-      "Use Mantle skills to continue this generated site",
-      "Install a Mantle marketplace capability",
-      "Check this Mantle repo for starter or plugin drift"
+      "Create a new Mantle site locally from a starter",
+      "Continue this generated Mantle site",
+      "Ship this Mantle site to Cloudflare"
     ],
     "brandColor": "#0F766E",
     "screenshots": []

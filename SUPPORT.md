@@ -9,9 +9,9 @@
 
 ## Help wanted on the starters monorepo?
 
-Starter scaffolds + the `create-mantle` scaffolder live in
-[`aotter/mantle-starters`](https://github.com/aotter/mantle-starters). File issues there for
-archetype bugs, scaffolder fixes, and theme work.
+Starter source, provision bundles, and the local materializer live in
+[`aotter/mantle-starters`](https://github.com/aotter/mantle-starters). File
+issues there for bundle, materialization, overlay, and Kiwa source bugs.
 
 ## What we don't offer
 

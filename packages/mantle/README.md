@@ -31,14 +31,16 @@ import { mountServerEndpoints } from "@aotter/mantle/cloudflare";
 
 ## Getting started
 
-Recommended path: open the Mantle landing page, answer the launch
-questions, and sign in with GitHub and Cloudflare. Landing provisions the
-site server-side — it creates the private GitHub repo, commits a blank
-deployable Mantle site, and connects the first Cloudflare deploy. Then
-point your coding agent (Claude Code / Cursor / Codex) at the provisioned
-repo to continue.
+Give the [Mantle repo](https://github.com/aotter/mantle) to a coding agent or
+install its agent plugin, then ask it to create a site. The install skill picks
+a deterministic bundle from
+[`aotter/mantle-starters`](https://github.com/aotter/mantle-starters),
+materializes a local project, and verifies it before any provider work.
 
-Starter source and provision bundles live in [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters); launch starts from the blank base and the agent applies the selected type as a post-launch overlay. Generated repos vendor Core-owned `mantle:*` skills from this package for repo-local use. See `skills/install` in the [Mantle repo](https://github.com/aotter/mantle/tree/develop/skills/install) for how the agent continues a provisioned repo.
+[Mantle landing](https://mantle.tools) uses the same bundles and continues
+through private GitHub repo creation, Cloudflare deployment, and optional paid
+hosted auth. Generated repos vendor Core-owned `mantle:*` skills from this
+package for repo-local use.
 
 ## Agent marketplace install
 
@@ -47,7 +49,7 @@ Install the Mantle Core skill bundle before working on generated repos:
 ```bash
 # Claude Code
 /plugin marketplace add aotter/mantle
-/plugin install mantle
+/plugin install mantle@mantle
 
 # Codex
 codex plugin marketplace add aotter/mantle --ref develop

@@ -1,11 +1,10 @@
 ---
-name: mantle:update
+name: update
 description: Check a Mantle project for drift against its Core SDK, starter source, or installed plugin lockfiles.
-source: "@aotter/mantle"
-sourcePath: skills/update/SKILL.md
-when_to_invoke: |
-  User asks to update Mantle, compare generated files, refresh starter/vendor output, or inspect marketplace plugin drift.
-applies_to: mantle@v0.1.0
+metadata:
+  source: "@aotter/mantle"
+  sourcePath: skills/update/SKILL.md
+  applies_to: mantle@v0.1.0
 ---
 
 # Mantle Update

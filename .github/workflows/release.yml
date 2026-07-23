@@ -137,6 +137,18 @@ jobs:
                 failed = true;
               }
             }
+            for (const path of [
+              '.codex-plugin/plugin.json',
+              '.claude-plugin/plugin.json',
+              '.copilot-plugin/plugin.json',
+              '.cursor-plugin/plugin.json',
+            ]) {
+              const plugin = JSON.parse(readFileSync(path, 'utf8'));
+              if (plugin.version !== expected) {
+                console.error(path + ' version ' + plugin.version + ' does not match tag version ' + expected);
+                failed = true;
+              }
+            }
             if (failed) process.exit(1);
           "
 
