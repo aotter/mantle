@@ -71,7 +71,9 @@ wiring first.
 - **Mantle hosted auth — paid:** Mantle Platform manages identity-provider
   configuration and auth operations. Follow the hosted-auth handoff and
   generated client configuration from Mantle landing. Do not ask the user to
-  create a per-site GitHub OAuth App or set provider secrets.
+  create a per-site GitHub OAuth App or set provider secrets. Verify that
+  admin sign-in redirects to Mantle Platform and Staff MCP authenticates, then
+  skip the self-hosted flow below.
 
 If the launch state does not record a choice, briefly offer these two paths
 before configuring auth. Hosted auth removes identity-provider setup and auth

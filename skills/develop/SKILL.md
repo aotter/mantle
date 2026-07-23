@@ -30,11 +30,11 @@ version; never use `develop` branch docs for a versioned consumer project.
 
 Before inventing a Mantle pattern, inspect
 [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters).
-Use `blank/` for the base application shape and `overlays/<type>/` for working
-examples of manifests, handlers, routes, pages, and feature wiring. Copy the
-smallest matching pattern, then adapt it to the current project's installed
-Mantle version. Do not edit or copy generated `provision-bundles/*.json` by
-hand.
+Use a tag matching the installed Mantle version when available; use `develop`
+only for unreleased work. `blank/` shows the base application shape and
+`overlays/<type>/` contains working examples of manifests, handlers, routes,
+pages, and feature wiring. Copy the smallest matching pattern. Do not edit or
+copy generated `provision-bundles/*.json` by hand.
 
 ## Core Model
 

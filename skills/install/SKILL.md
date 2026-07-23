@@ -138,8 +138,9 @@ routes are alive.
 
 Landing already created the GitHub repo and the first Cloudflare deploy.
 To finish production — verify the deploy, wire per-site staff auth, smoke
-test, and hand off the operator setup URL — continue with the repo-local
-`mantle:provision` skill.
+test, and hand off the operator setup URL — use `mantle:provision` from the
+installed Core plugin, or read its matching package copy at
+`node_modules/@aotter/mantle/skills/provision/SKILL.md`.
 
 ## Don't
 
