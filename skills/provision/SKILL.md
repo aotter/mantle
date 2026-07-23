@@ -30,42 +30,30 @@ pnpm typecheck
 git status --short
 ```
 
-## Get a Live Worker URL
+## Resume From Observed State
 
-Choose the path from observed state.
+`launch_source` only explains how the project began:
 
-### Local project
+- `mantle-landing-v2`: landing intended to create the repo and first
+  Cloudflare build.
+- `mantle-local-v2`: the project was materialized locally.
 
-Before creating anything, confirm the user wants the project pushed and
-deployed.
+Both paths finish the same way. Verify these facts and skip completed work:
 
-1. Create a private repository in the user's chosen GitHub account or
-   organization with an available GitHub connector. Use `gh` only when it is
-   already authenticated.
-2. Commit the generated project, add the confirmed remote, and push `main`.
-3. Confirm the Cloudflare account, then prefer an available Cloudflare
-   connector. Otherwise run `pnpm exec wrangler login` with the user's
-   agreement and deploy with:
+1. `git remote get-url origin` confirms the GitHub repo.
+2. An HTTPS `PUBLIC_ORIGIN` that responds confirms the Cloudflare deploy.
+3. `/admin/sign-in` returning `503 setup_incomplete` means auth is not bound.
+   Use the recorded auth intent only to choose hosted or self-hosted setup;
+   live behavior is authoritative.
 
-```bash
-pnpm deploy
-```
+If there is no remote, confirm the target account, create a private repo,
+commit, and push `main`. If there is no live Worker, confirm the Cloudflare
+account, prefer an available connector, or use `pnpm exec wrangler login` with
+the user's agreement, then run `pnpm deploy`.
 
-4. Capture the resulting `https://<worker>.<account>.workers.dev` URL. Write it
-   to `PUBLIC_ORIGIN` in `wrangler.toml` and `Public site:` in `AGENTS.md`,
-   then commit and push the non-secret changes.
-
-Connecting Cloudflare Workers Builds to GitHub is optional after the direct
-deploy; do not block the first live Worker on CI setup.
-
-### Mantle landing project
-
-Landing already created the private GitHub repo and started the first
-Cloudflare build. Verify that build and capture the live Worker URL. Do not
-create another repo or Worker.
-
-The public site should respond before staff auth is configured. Auth-gated
-routes may return `503 setup_incomplete`.
+Capture the live URL in `PUBLIC_ORIGIN` and `Public site:` in `AGENTS.md`, then
+commit and push non-secret changes. Reuse any repo or Worker already created
+by landing. Workers Builds is optional after a direct deploy.
 
 ## Choose Auth
 

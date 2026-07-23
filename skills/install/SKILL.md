@@ -86,6 +86,10 @@ Read these before editing:
 Use remote docs only when embedded docs are unavailable, and use a tag matching
 the installed version. Never use `develop` docs for a versioned project.
 
+`launch_source` records provenance, not readiness: `mantle-landing-v2` came
+through landing and `mantle-local-v2` came from local materialization. Verify
+the current git remote, live URL, and auth response instead of assuming them.
+
 Then run:
 
 ```bash
@@ -124,7 +128,10 @@ Return:
 - selected type and why;
 - local URL;
 - validation and typecheck results;
-- GitHub, Cloudflare, and auth work intentionally deferred.
+- observed GitHub, deploy, and auth state;
+- three tailored next options: shape the visual experience, build the first
+  real business workflow, or finish deploy/auth if incomplete. Never leave
+  auth or seed data as the only next step.
 
 ## Don't
 
