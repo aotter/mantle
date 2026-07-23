@@ -95,8 +95,25 @@ function checkPackageDirection() {
   }
 }
 
+function checkSkillDocsVersioned() {
+  const files = listFiles(join(ROOT, "skills"), (path) =>
+    path.endsWith("SKILL.md"),
+  );
+  const floatingCoreDoc =
+    /(?:raw\.githubusercontent\.com\/aotter\/mantle\/develop|github\.com\/aotter\/mantle\/(?:blob|raw)\/develop)\//;
+  for (const file of files) {
+    if (floatingCoreDoc.test(readFileSync(file, "utf8"))) {
+      fail(
+        file,
+        "consumer skills must use the installed Mantle docs, not floating develop docs",
+      );
+    }
+  }
+}
+
 checkRuntimeCloudflareFree();
 checkPackageDirection();
+checkSkillDocsVersioned();
 
 if (failures.length > 0) {
   console.error("Boundary check failed:");
