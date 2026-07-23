@@ -6,6 +6,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.51] - 2026-07-23
+
+### Fixed
+
+- **release fanout**: No SDK code changes. alpha.51 re-spins the release fanout to ship reproducible generated Starter styles that should have been part of alpha.50; a fresh materialized project now resolves the same Tailwind compiler as its checked-in CSS and the smoke gate enforces that invariant (aotter/mantle-starters#416, aotter/mantle-platform#25).
+
 ## [0.0.11-alpha.50] - 2026-07-23
 
 ### Added
