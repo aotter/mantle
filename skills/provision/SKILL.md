@@ -66,8 +66,8 @@ Inspect `.mantle/launch-state.json`, `.mantle/handoff.md`, and the current auth
 wiring first.
 
 - **Self-hosted auth — free:** the owner creates and maintains the per-site
-  GitHub OAuth App, provider secrets, email delivery, and related operations.
-  Continue with the self-hosted steps below.
+  GitHub OAuth App and its provider secrets, plus any additional login or email
+  providers they enable. Continue with the self-hosted steps below.
 - **Mantle hosted auth — paid:** Mantle Platform manages identity-provider
   configuration and auth operations. Follow the hosted-auth handoff and
   generated client configuration from Mantle landing. Do not ask the user to
