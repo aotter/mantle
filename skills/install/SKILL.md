@@ -35,9 +35,9 @@ hosted provider flow.
 | Booking or request intent | `reservation` |
 | Member or participation intent | `community` |
 
-2. Choose a target directory outside the Mantle SDK checkout. Derive a short
-   project slug, brand, one-sentence description, and locales from the user's
-   prompt.
+2. Choose absolute paths for a temporary starters checkout and a target
+   directory outside both Mantle repositories. Derive a short project slug,
+   brand, one-sentence description, and locales from the user's prompt.
 
 3. Clone [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters)
    into a temporary directory and run its materializer. Use a starters ref
