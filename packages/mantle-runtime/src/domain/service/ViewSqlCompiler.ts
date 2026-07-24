@@ -86,7 +86,12 @@ export function compileView(view: ViewManifest, options: CompileViewOptions = {}
   const orderBy = buildOrderBy(view.spec.orderBy);
   const effectiveShow = clampShow(options.show, view.spec.limit);
   const effectivePage = clampPage(options.page);
-  const offset = (effectivePage - 1) * effectiveShow;
+  // Cap the offset so a huge `?page=` can't render in exponential
+  // notation (`5e+21`) or exceed SQLite's INT64 range — either makes
+  // D1 reject the literal and surfaces as a 500 instead of an empty
+  // page. MAX_SAFE_INTEGER (~9e15) stringifies as plain digits and is
+  // well under INT64 max; any page past the data just returns no rows.
+  const offset = Math.min((effectivePage - 1) * effectiveShow, Number.MAX_SAFE_INTEGER);
   const sql = `SELECT ${selectExpr} FROM entries ${where}${orderBy} LIMIT ${effectiveShow} OFFSET ${offset}`;
   return { sql, params: sqlParams, effectivePage, effectiveShow };
 }
@@ -174,7 +179,11 @@ function buildOrderBy(
 ): string {
   if (!orderBy || orderBy.length === 0) return "";
   const parts = orderBy.map((o) => {
-    const dir = (o.direction ?? "asc").toUpperCase();
+    // Closed-set map, never interpolate the raw value: `direction` is
+    // only a compile-time "asc"|"desc" type, but manifests are parsed
+    // from YAML, so an out-of-enum string (e.g. `DESC LIMIT 0 --`)
+    // could otherwise reach the SQL string verbatim.
+    const dir = o.direction === "desc" ? "DESC" : "ASC";
     return `${fieldRefExpr(o.field)} ${dir}`;
   });
   return ` ORDER BY ${parts.join(", ")}`;

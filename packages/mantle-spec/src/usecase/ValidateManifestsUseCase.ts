@@ -70,6 +70,10 @@ export class ValidateManifestsUseCase {
     for (const p of partitioned.procedures) {
       diags.push(...checkTargetAuth(p, request.filePaths));
       diags.push(...checkBuiltinHandler(p, schemasByName, request.filePaths));
+      diags.push(
+        ...collectInvalidPatterns(p.spec.input, "Procedure", p.metadata.name, "/spec/input", request.filePaths),
+        ...collectInvalidPatterns(p.spec.output, "Procedure", p.metadata.name, "/spec/output", request.filePaths),
+      );
     }
 
     diags.push(
@@ -147,8 +151,39 @@ function checkSchemaInternals(
   filePaths?: ManifestFilePaths,
 ): Diagnostic[] {
   const out: Diagnostic[] = [];
-  const schema = s.spec.schema as { properties?: Record<string, unknown> };
+  const schema = s.spec.schema as {
+    properties?: Record<string, unknown>;
+    required?: unknown;
+  };
   const properties = schema.properties ?? {};
+
+  // `required` entries that aren't declared in `properties` are never
+  // added to the generated zod shape — so a typo'd required field is
+  // silently unenforced. Surface it at pre-deploy. (#399)
+  if (Array.isArray(schema.required)) {
+    schema.required.forEach((field, ri) => {
+      if (typeof field === "string" && !(field in properties)) {
+        out.push(
+          validateDiagnostic({
+            code: "REQUIRED_FIELD_UNKNOWN",
+            severity: "error",
+            path: manifestPath("Schema", s.metadata.name, `/spec/schema/required/${ri}`, filePaths),
+            value: field,
+            expected: `name of a property declared in spec.schema.properties`,
+            candidates: Object.keys(properties),
+            suggestion: bestMatch(field, Object.keys(properties)),
+            message: `Schema '${s.metadata.name}' lists '${field}' in required but never declares it under properties — the constraint is silently unenforced.`,
+          }),
+        );
+      }
+    });
+  }
+
+  // Any string `pattern` must compile; an uncompilable one would
+  // otherwise throw a raw SyntaxError at first entry write. (#395)
+  out.push(
+    ...collectInvalidPatterns(s.spec.schema, "Schema", s.metadata.name, "/spec/schema", filePaths),
+  );
 
   const ui = s.spec.uniqueIndexes ?? [];
   ui.forEach((composite, ci) => {
@@ -200,6 +235,56 @@ function checkSchemaInternals(
       );
     }
   }
+  return out;
+}
+
+/**
+ * Walk a JSON Schema (properties + array items, recursively) and emit
+ * an INVALID_PATTERN diagnostic for any `pattern` string that
+ * `new RegExp` can't compile. The runtime converter skips such a
+ * pattern rather than crash, but the author should hear about it at
+ * pre-deploy. (#395)
+ */
+function collectInvalidPatterns(
+  root: unknown,
+  kind: "Schema" | "Procedure",
+  name: string,
+  basePointer: string,
+  filePaths?: ManifestFilePaths,
+): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  const visit = (node: unknown, pointer: string): void => {
+    if (!node || typeof node !== "object") return;
+    const n = node as Record<string, unknown>;
+    if (typeof n["pattern"] === "string") {
+      try {
+        new RegExp(n["pattern"] as string);
+      } catch (e) {
+        out.push(
+          validateDiagnostic({
+            code: "INVALID_PATTERN",
+            severity: "error",
+            path: manifestPath(kind, name, `${pointer}/pattern`, filePaths),
+            value: n["pattern"],
+            expected: "a valid JavaScript regular expression",
+            message: `${kind} '${name}' has an uncompilable regex pattern at ${pointer}: ${
+              e instanceof Error ? e.message : String(e)
+            }`,
+          }),
+        );
+      }
+    }
+    const props = n["properties"];
+    if (props && typeof props === "object") {
+      for (const [k, v] of Object.entries(props as Record<string, unknown>)) {
+        visit(v, `${pointer}/properties/${k}`);
+      }
+    }
+    if (n["items"] && typeof n["items"] === "object") {
+      visit(n["items"], `${pointer}/items`);
+    }
+  };
+  visit(root, basePointer);
   return out;
 }
 

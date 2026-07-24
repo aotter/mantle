@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { stdout, stderr } from "node:process";
 import { parseArgs as parseNodeArgs } from "node:util";
 import { EmitOpenapiUseCase } from "../../usecase/EmitOpenapiUseCase.js";
+import { ValidateManifestsUseCase } from "../../usecase/ValidateManifestsUseCase.js";
 import { loadManifestsFromRoot } from "./loadManifests.js";
 import { translateParseArgsError } from "./parseArgsError.js";
 
@@ -88,6 +89,17 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
   const { manifests, parseErrors } = await loadManifestsFromRoot(args.manifests);
   if (parseErrors.some((d) => d.severity === "error")) {
     stderr.write(`Manifest parse errors — run \`mantle validate\` to inspect.\n`);
+    return 1;
+  }
+  // Semantic validation gate. Without it, a method+path collision
+  // between two HTTP Triggers (only caught by ValidateManifests, not
+  // the parser) would silently overwrite one operation and emit a
+  // document missing a real route. (#398)
+  const { errorCount } = ValidateManifestsUseCase.run({ manifests });
+  if (errorCount > 0) {
+    stderr.write(
+      `Manifest validation errors (e.g. duplicate route) — run \`mantle validate\` to inspect.\n`,
+    );
     return 1;
   }
   const { document } = EmitOpenapiUseCase.run({

@@ -275,3 +275,23 @@ describe("firstZodIssueAsJsonPointer", () => {
     expect(ajv).toEqual({ instancePath: "", message: "validation failed" });
   });
 });
+
+describe("jsonSchemaToZod — malformed pattern (#395)", () => {
+  it("does not throw at build time when `pattern` is uncompilable", () => {
+    // Pre-#395 this threw a raw SyntaxError out of the converter,
+    // crashing the request handler. Now the constraint is skipped
+    // (validate already flags it as INVALID_PATTERN).
+    expect(() =>
+      jsonSchemaToZod({
+        type: "object",
+        properties: { slug: { type: "string", pattern: "(unterminated" } },
+      }),
+    ).not.toThrow();
+    const zs = jsonSchemaToZod({
+      type: "object",
+      properties: { slug: { type: "string", pattern: "[a-" } },
+    });
+    // Constraint dropped → any string still parses.
+    expect(zs.safeParse({ slug: "anything" }).success).toBe(true);
+  });
+});
