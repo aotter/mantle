@@ -88,6 +88,32 @@ pnpm check
 
 Use `pnpm dev` for local preview when the project provides it.
 
+## Connect a Local MCP Client
+
+Start the project with `pnpm dev`, then use the exact local origin it prints.
+Generated Cloudflare projects normally expose:
+
+- `http://localhost:8787/mcp` for public tools;
+- `http://localhost:8787/mcp/staff` for authenticated authoring tools.
+
+Prefer the client's native remote HTTP + OAuth support. Use a standard
+HTTP-to-stdio bridge such as `npx -y mcp-remote <url>` only when the client
+accepts stdio MCP servers but cannot connect to remote HTTP directly. Mantle
+does not own a separate local proxy or an auth-bypass mode.
+
+Before changing client config, confirm the Worker is reachable:
+
+```bash
+curl -i http://localhost:8787/mcp
+```
+
+An OAuth-protected endpoint should respond with `401` and a
+`WWW-Authenticate` resource-metadata challenge before sign-in. After
+connecting, inspect `tools/list`; make one read-only `query_view_*` call when
+available before invoking any mutation. Use project-scoped client config when
+the client offers it, and never commit OAuth tokens or the bridge's token
+cache.
+
 ## Rules
 
 - Prefer manifest YAML for content model changes.
