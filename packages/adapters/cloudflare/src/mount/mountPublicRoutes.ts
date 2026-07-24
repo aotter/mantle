@@ -350,7 +350,11 @@ async function assertStaffSession(
  *  ExecutionContext (test harnesses, in-process `app.request`).
  *  Wrap the read so callers can opt out of background write-back
  *  silently — the read-through helper falls back to an inline `await`. */
-function safeExecutionCtx(c: Context): ExecutionContext | undefined {
+interface WaitUntilContext {
+  waitUntil(promise: Promise<unknown>): void;
+}
+
+function safeExecutionCtx(c: Context): WaitUntilContext | undefined {
   try {
     return c.executionCtx;
   } catch {
@@ -380,7 +384,7 @@ async function readKvWithLiveFallback(
   key: string,
   headers: Record<string, string>,
   compose: () => Promise<string>,
-  executionCtx?: ExecutionContext,
+  executionCtx?: WaitUntilContext,
 ): Promise<Response> {
   const cached = await kv.get(key);
   if (cached !== null) {
