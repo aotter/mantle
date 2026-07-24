@@ -1053,7 +1053,7 @@ spec:
 
 describe("required field absent from properties (#399)", () => {
   it("flags a required entry not declared in properties", () => {
-    const result = check({
+    const result = ValidateManifestsUseCase.run({
       manifests: [
         schema("posts", {
           schema: {
@@ -1072,7 +1072,7 @@ describe("required field absent from properties (#399)", () => {
 
 describe("uncompilable regex pattern (#395)", () => {
   it("flags a malformed `pattern` at validate time instead of crashing at runtime", () => {
-    const result = check({
+    const result = ValidateManifestsUseCase.run({
       manifests: [
         schema("posts", {
           schema: {
