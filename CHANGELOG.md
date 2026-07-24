@@ -6,6 +6,26 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.53] - 2026-07-24
+
+### Added
+
+- **agent toolchain**: document the minimal local MCP connection flow in the versioned `mantle:develop` skill: public versus staff endpoints, OAuth preflight, native remote HTTP first, a standard stdio bridge fallback, and read-only verification before mutations (#494, #495).
+
+### Changed
+
+- **release fanout / starters**: use the SDK-owned setup-incomplete Auth facade instead of a starter-local copy, preserving first-deploy public boot while keeping the Auth contract centralized (aotter/mantle-starters#287, aotter/mantle-starters#419).
+- **toolchain**: refresh TypeScript, Cloudflare Workers types/Wrangler, and GitHub Actions dependencies; the adapter now depends only on the `waitUntil()` shape it consumes instead of the expanding Workers `ExecutionContext` interface (#465, #480, #492).
+
+### Fixed
+
+- **@aotter/mantle-runtime**: builtin update/upsert now patch an existing row without deleting omitted fields or re-stamping bound author/time values; View SQL closes sort-direction interpolation and caps oversized page offsets (#390, #392, #397, #493).
+- **@aotter/mantle-spec**: pre-deploy validation rejects invalid regex patterns, unknown required fields, invalid View sort directions, and colliding OpenAPI routes; type emission supports non-object top-level schemas and `validate --source` reports an unreadable root directly (#392–#395, #398, #399, #493).
+
+### Security
+
+- **@aotter/mantle-cloudflare / @aotter/mantle-admin-ui**: block cross-origin OAuth consent posts, normalize email-OTP return paths to the current origin, and redact internal diagnostic candidates from HTTP Trigger and View responses (#387, #389, #396, #493).
+
 ## [0.0.11-alpha.52] - 2026-07-24
 
 ### Fixed
