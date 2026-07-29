@@ -1,6 +1,6 @@
 ---
 name: theme
-description: Apply brand and visual direction in a Mantle project without depending on starter-owned skill semantics.
+description: Apply brand and visual direction in a generated Mantle project using its repo-owned theme and UI contracts.
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/theme/SKILL.md
@@ -53,5 +53,5 @@ pnpm dev
 
 If utility classes changed, rebuild `styles/generated.css` with the project's
 `build:styles`, `check`, or `dev` script. Remove routes/imports for replaced
-Mantle SVGs or styles, then visually verify light/dark contrast and responsive
+assets or styles, then visually verify light/dark contrast and responsive
 behavior before calling the work done.

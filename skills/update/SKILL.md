@@ -29,9 +29,9 @@ Use this for drift checks. Do not blindly overwrite user-owned code.
    If it exits before writing a report (for example, an older
    `mantle:update` rejects a new bundle placeholder), fetch the provision
    bundle from that `aotter/mantle-starters` commit, extract
-   its `scripts/update.mjs` to a temporary file, and run that file from the
-   project root with the same commit SHA. Do not replace the project's updater
-   before reviewing the report.
+   `scripts/update.mjs` and `scripts/materialize.mjs` together into a temporary
+   directory, and run the updater from the project root with the same commit
+   SHA. Do not replace the project's updater before reviewing the report.
 3. Read the generated report before editing.
 4. Triage each path; do not treat the report as a patch or merge plan.
 5. Port confirmed upstream changes one hunk at a time.
@@ -44,22 +44,22 @@ pnpm typecheck
 
 ## Report Triage
 
-The report is a SHA-256 inventory. It cannot distinguish a local edit from an
-upstream change, and the number of differences is not a confidence score.
+Current reports compare three states: the original starter ref, the target
+ref, and the local project.
 
-- Compare the current file, its original starter ref, and the target ref.
+- Review `upstream` to find starter changes worth porting. Use `local` only to
+  understand project-owned drift from the original starter.
 - Never copy generated comparison versions of `wrangler.toml`,
   `.dev.vars.example`, `.mantle/launch-state.json`, or
   `.mantle/features.json`. Preserve Worker/D1 names, bindings, origins,
   provider values, and launch state. Port a reviewed upstream line manually
   only when it does not replace project identity or state.
-- Current updaters omit the two `.mantle/*.json` state files and reproduce
-  instance substitutions. If a report includes those files or proposes
-  `mantle-<type>` names for a real project, stop: the comparator is stale or
-  incompatible. Use the target updater recovery in step 2, then regenerate
-  the report.
-- A high local-to-upstream difference ratio is normal after customization.
-  Inspect diffs; do not infer importance from counts.
+- The updater omits the two `.mantle/*.json` state files and reproduces project
+  identity. If `upstream` proposes `mantle-<type>` names for a real project,
+  stop: the comparator is stale or incompatible. Use the target updater
+  recovery in step 2, then regenerate the report.
+- A large `local` section is normal after customization. Counts are not a
+  confidence score.
 
 ## Boundary
 
