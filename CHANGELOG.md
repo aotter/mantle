@@ -6,6 +6,18 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.54] - 2026-07-29
+
+### Changed
+
+- **agent toolchain**: make local cold starts use the same deterministic starter layering as Mantle Landing, with explicit archetype seeds, auth-free first content, visible typed launches, version-matched embedded docs, and clear GitHub OAuth versus hosted-auth handoff (#497, aotter/mantle-starters#422).
+- **agent toolchain**: document the project-owned theme token and section boundaries, locale/content-model invariants, and the safe order for changing fields without silently dropping submitted data (#497, aotter/mantle-starters#422).
+
+### Fixed
+
+- **release fanout / starters**: replace updater-only materialization guesses with the shared materializer and a three-way source/target/local drift report, preserving Worker, D1, origin, and local project identity while surfacing only actionable upstream changes (#497, aotter/mantle-starters#422).
+- **release fanout / starters**: remove obsolete Mantle-brand starter assets, isolate intake-only client/render code to its overlay, keep overlay Tailwind classes in generated CSS, and validate materialized projects and repo-local skills before release (aotter/mantle-starters#422).
+
 ## [0.0.11-alpha.53] - 2026-07-24
 
 ### Added
