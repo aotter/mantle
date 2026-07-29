@@ -78,16 +78,18 @@ Before working:
 → **Check SDK / starter / plugin drift** — start at [`skills/update/SKILL.md`](skills/update/SKILL.md).
 → **Finish production deploy** (GitHub repo, Cloudflare dashboard first deploy, OAuth App, Wrangler secrets, smoke) — start at [`skills/provision/SKILL.md`](skills/provision/SKILL.md).
 
-The `mantle:*` namespace is owned by `@aotter/mantle`. Starter templates
-vendor exact copies for offline/repo-local use; `.mantle/*` launch files
-and plugin recipes are context read by Core skills, not a second skill
+The `mantle:*` namespace is owned by `@aotter/mantle`. Generated starters
+vendor Core workflow skills pinned to their starter ref for offline use.
+Those skills may include updater compatibility guidance, but the installed
+package version and its embedded docs remain the runtime/API contract.
+`.mantle/*` launch files and plugin recipes are project context, not another
 contract.
 
 ### Install Mantle Core skills
 
 Install the Mantle agent plugin to create or continue sites. Generated starter
-repos also vendor the same Core skills locally, so materializing a starter does
-not create a second skill contract.
+repos also vendor the Core workflow skills locally; use those for project
+workflow and the installed package docs for SDK behavior.
 
 **Claude Code**
 

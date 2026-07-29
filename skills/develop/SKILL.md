@@ -9,17 +9,19 @@ metadata:
 
 # Mantle Develop
 
-This is the Core SDK skill for working inside an existing Mantle project.
-Starter files, launch handoffs, and plugin recipes are context; this skill
-owns the workflow vocabulary.
+This is the Core workflow skill for an existing Mantle project. A repo-local
+copy may carry compatibility guidance pinned to the starter ref; the installed
+package version and embedded docs govern runtime/API behavior.
 
 ## First Read
 
 1. `package.json` for the installed `@aotter/mantle*` versions.
 2. `manifests/` and `src/mantle/config.ts` for the active atoms and adapter wiring. If the project is older, check `src/mantleConfig.ts`.
-3. Optional local context: `.mantle/launch-state.json`, `.mantle/handoff.md`,
+3. The active `.mantle/overlays/<type>/seed.json`, when present; generated
+   homepages commonly import visible copy and form structure from it.
+4. Optional local context: `.mantle/launch-state.json`, `.mantle/handoff.md`,
    `.mantle/plugins.json`, `.mantle/plugins.lock.json`, and `.mantle/recipes/`.
-4. Installed Core docs in `node_modules/@aotter/mantle/docs/`.
+5. Installed Core docs in `node_modules/@aotter/mantle/docs/`.
 
 If `node_modules/` is missing, run `pnpm install --frozen-lockfile` before
 falling back to remote docs. Remote docs must use a tag matching the installed
@@ -70,6 +72,30 @@ Mantle exposes exactly four declarative atoms:
 Do not invent manifest kinds such as `Form`, `Feature`, `Workflow`, or
 `Membership`. Compose those from the four atoms plus TypeScript only where
 the atoms cannot express the behavior.
+
+## Content Edits
+
+- A generated homepage reads its repo seed before auth. Change that seed for
+  local/static page copy; after auth, use Admin or Staff MCP for runtime-backed
+  content.
+- For a new submitted field, update the stored `Schema` and the public
+  `Procedure.spec.input` before the seed/form. Keep public mutation inputs
+  `additionalProperties: false`; otherwise JSON Schema's default may strip an
+  undeclared field while returning success.
+- Update notification handlers when they need the new field. Test the stored
+  entry, not only the HTTP `{ "ok": true }` response.
+
+## Locales
+
+- `data.locale` is reserved for `localized: true` Schemas. A non-localized
+  Schema must use a domain field such as `replyLocale`.
+- Parallel locale blocks must keep field names, option values, step IDs, and
+  result keys identical; translate display strings only.
+- `siteDefaults.locales` is code-owned and boot-synced. Brand, title,
+  description, and origin are seeded once, then changed through site settings.
+- When changing an existing collection from `[slug]` to `[slug, locale]`,
+  boot with a Mantle version that reconciles obsolete unique indexes and test
+  the same slug in two locales. Do not patch D1 manually.
 
 ## Adapter Boundary
 
