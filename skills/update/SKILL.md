@@ -25,6 +25,12 @@ Use this for drift checks. Do not blindly overwrite user-owned code.
 
 1. Start from a clean git worktree.
 2. Run the project's existing update or compare script if one exists.
+   If it exits before writing a report (for example, an older
+   `mantle:update` rejects a new bundle placeholder), fetch the provision
+   bundle from the user-selected `aotter/mantle-starters` target ref, extract
+   its `scripts/update.mjs` to a temporary file, and run that file from the
+   project root with the same ref. Do not replace the project's updater
+   before reviewing the report.
 3. Read the generated report before editing.
 4. Apply useful differences manually.
 5. Re-run:
