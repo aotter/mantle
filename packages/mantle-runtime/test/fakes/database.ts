@@ -115,6 +115,24 @@ class InMemoryStatement implements PreparedStatement {
     const sql = this.sql;
     const p = this.params;
 
+    if (sql === "SELECT id FROM _migrations WHERE id LIKE 'schema-unique-index:%'") {
+      return {
+        rows: [...this.db.appliedMigrations]
+          .filter((id) => id.startsWith("schema-unique-index:"))
+          .map((id) => ({ id })),
+        changes: 0,
+      };
+    }
+    if (sql.startsWith('DROP INDEX IF EXISTS "uq_')) {
+      return { rows: [], changes: 0 };
+    }
+    if (sql === "DELETE FROM _migrations WHERE id = ?") {
+      return {
+        rows: [],
+        changes: this.db.appliedMigrations.delete(p[0] as string) ? 1 : 0,
+      };
+    }
+
     // INSERT INTO entries
     if (sql.startsWith("INSERT INTO entries")) {
       const [id, collection, status, data, author_id, created_at, updated_at] = p as [

@@ -32,8 +32,13 @@ Before inventing a Mantle pattern, inspect
 Use a tag matching the installed Mantle version when available; use `develop`
 only for unreleased work. `blank/` shows the base application shape and
 `overlays/<type>/` contains working examples of manifests, handlers, routes,
-pages, and feature wiring. Copy the smallest matching pattern. Do not edit or
-copy generated `provision-bundles/*.json` by hand.
+page seeds, and feature wiring. Copy the smallest matching pattern. Do not edit
+or copy generated `provision-bundles/*.json` by hand.
+
+Public rendering is opt-in consumer wiring: `mountPublicRoutes`, a
+`TemplateRegistry`, and a matching `publicPathResolver` must agree on the
+exposed collections. Do not auto-publish every Schema. Generated projects list
+their mounted URL surface in their own README.
 
 ## Authoring CLI
 
@@ -117,6 +122,8 @@ cache.
 ## Rules
 
 - Prefer manifest YAML for content model changes.
+- Use a generated overlay `seed.json` for the auth-free local first page when
+  it is already imported by `src/web/content/*`.
 - Add TypeScript only for handlers, rendering, adapter wiring, or real behavior.
 - Do not write directly to D1, KV, Postgres, or object storage for content
   authoring. Use runtime use cases, admin APIs, or Staff MCP.

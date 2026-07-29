@@ -86,6 +86,13 @@ Minimum HTTP behavior for a full adapter:
 - Evaluate target auth and dynamic guards through the runtime use cases; do
   not duplicate guard logic in HTTP handlers.
 
+For the Cloudflare adapter, public rendering requires three matching consumer
+inputs: `mountPublicRoutes(...)` route declarations, a `TemplateRegistry`
+passed through `CmsConfig.templates`, and a `publicPathResolver` passed through
+`CmsConfig.publicPathResolver`. Omitting public routes is valid for a headless
+consumer; mounting every Schema automatically is not, because some collections
+are private even when they contain a slug.
+
 Minimum auth/MCP behavior:
 
 - Provide Better Auth-compatible sign-in/session routes for the platform.

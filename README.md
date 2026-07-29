@@ -148,15 +148,19 @@ Core-owned `mantle:plugin` skill plus deterministic plugin recipes.
 
 ## For humans
 
-End state: a Cloudflare Worker at `https://<your-site>.<your-account>.workers.dev` with:
+Core surfaces on a Cloudflare Worker at
+`https://<your-site>.<your-account>.workers.dev`:
 
 - `/admin` — React admin SPA, role-gated after sign-in (GitHub / Google / Apple / 30+ social providers, email-OTP, magic-link — adopter picks the methods)
 - `/mcp/staff` — staff MCP endpoint, owner/editor agents connect here to edit content
 - `/mcp` — end-user/read MCP endpoint for public View tools and future member flows
-- `/<locale>/<collection>/<slug>` — per-entry HTML
-- `/<locale>/<collection>/<slug>.md` — agent-friendly markdown mirror
-- `/<locale>/llms.txt` — per-locale llms.txt index
 - public surface in your taste (the v0.1.0 starter ships Hono + hono/jsx + Tailwind)
+
+Public render routes are opt-in consumer wiring. When a project registers
+`mountPublicRoutes`, matching templates, and a `publicPathResolver`, the SDK
+can expose `/<locale>/<collection>/<slug>`, its `.md` mirror,
+`/<locale>/llms.txt`, and `/sitemap.xml`. Generated projects document the
+routes they actually mount; Mantle does not publish every Schema by default.
 
 For a guided install, follow the steps in [`skills/install/SKILL.md`](skills/install/SKILL.md).
 

@@ -38,11 +38,15 @@ hosted provider flow.
 2. Choose absolute paths for a temporary starters checkout and a target
    directory outside both Mantle repositories. Derive a short project slug,
    brand, one-sentence description, and locales from the user's prompt.
+   Require Node 22+ and pnpm 9+; check `node --version` and `pnpm --version`
+   before materializing.
 
 3. Clone [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters)
    into a temporary directory and run its materializer. Use a starters ref
    supplied by the user for branch testing. Otherwise use a tag matching the
-   requested Mantle version; use `develop` only for unreleased work.
+   requested Mantle version; use `develop` only for unreleased work. When the
+   user supplies a Mantle branch URL for a cold test, use the same branch name
+   in `mantle-starters` when that branch exists.
 
 ```bash
 git clone --depth 1 --branch <starters-ref> \
@@ -59,7 +63,13 @@ The materializer writes the same precomposed `provision-bundles/<type>.json`
 used by Mantle landing. Do not manually copy `blank/`, merge overlays, or edit
 the generated bundle JSON.
 
-4. Initialize and verify the local project:
+4. For a typed launch, read `.mantle/handoff.md`, the selected overlay's
+   `layout.md`, `seed-prompt.md`, and `seed.json`. Shape the first local page by
+   editing that checked-in seed; generated content modules import it directly.
+   This is application source, not direct D1 authoring. Do not use Staff MCP
+   until an auth provider is configured.
+
+5. Initialize and verify the local project:
 
 ```bash
 cd <target-dir>
@@ -71,7 +81,10 @@ pnpm dev
 ```
 
 Open `http://localhost:8787`. Public preview works before auth is configured;
-auth-gated routes may return `503 setup_incomplete`.
+auth-gated routes may return `503 setup_incomplete`. `blank` is intentionally
+empty; typed launches must show the selected seed. Do not infer SDK public
+render routes from the Core README—generated projects mount only the URL
+surface documented in their own README.
 
 ## Continue an Existing Project
 
