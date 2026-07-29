@@ -69,6 +69,31 @@ describe("createCmsRuntime + bootInit", () => {
     expect(db.appliedMigrations).toContain("schema-unique-index:uq_posts__slug");
   });
 
+  it("bootInit replaces stale manifest unique indexes", async () => {
+    const db = new InMemoryDatabase();
+    const schema = postsSchema();
+    const runtime = (uniqueIndexes: readonly (readonly string[])[]) =>
+      createCmsRuntime({
+        manifests: [{
+          ...schema,
+          spec: { ...schema.spec, uniqueIndexes },
+        }],
+        db,
+        kv: new InMemoryKv(),
+        assets: noopAssets,
+      });
+
+    await runtime([["slug"]]).bootInit();
+    await runtime([["slug", "locale"]]).bootInit();
+
+    expect(db.appliedMigrations).not.toContain("schema-unique-index:uq_posts__slug");
+    expect(db.appliedMigrations).toContain("schema-unique-index:uq_posts__slug__locale");
+
+    await runtime([["slug"]]).bootInit();
+    expect(db.appliedMigrations).toContain("schema-unique-index:uq_posts__slug");
+    expect(db.appliedMigrations).not.toContain("schema-unique-index:uq_posts__slug__locale");
+  });
+
   it("bootInit throws BootValidationError when handler ref is missing", async () => {
     const runtime = createCmsRuntime({
       manifests: [makeProcedure({ handlerRef: "missing" })],

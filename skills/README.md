@@ -19,10 +19,12 @@ or update the existing one.
 
 ## Skill authority
 
-The `mantle:*` namespace is owned by `@aotter/mantle`. Starter template
-repos may vendor exact copies for offline/repo-local use, but they must not
-fork the meaning of a `mantle:*` skill. Starter launch files and plugin recipes
-are context that Core skills read, not competing skill contracts.
+The `mantle:*` namespace is owned by `@aotter/mantle`. Generated starters may
+vendor Core workflow skills pinned to their starter ref for offline use. Use
+those skills for workflow and compatibility recovery; use the installed
+package version plus `node_modules/@aotter/mantle/docs/` for runtime/API
+behavior. Starter launch files and plugin recipes are project context, not
+competing contracts.
 
 ## Marketplace install
 

@@ -78,16 +78,18 @@ Before working:
 → **Check SDK / starter / plugin drift** — start at [`skills/update/SKILL.md`](skills/update/SKILL.md).
 → **Finish production deploy** (GitHub repo, Cloudflare dashboard first deploy, OAuth App, Wrangler secrets, smoke) — start at [`skills/provision/SKILL.md`](skills/provision/SKILL.md).
 
-The `mantle:*` namespace is owned by `@aotter/mantle`. Starter templates
-vendor exact copies for offline/repo-local use; `.mantle/*` launch files
-and plugin recipes are context read by Core skills, not a second skill
+The `mantle:*` namespace is owned by `@aotter/mantle`. Generated starters
+vendor Core workflow skills pinned to their starter ref for offline use.
+Those skills may include updater compatibility guidance, but the installed
+package version and its embedded docs remain the runtime/API contract.
+`.mantle/*` launch files and plugin recipes are project context, not another
 contract.
 
 ### Install Mantle Core skills
 
 Install the Mantle agent plugin to create or continue sites. Generated starter
-repos also vendor the same Core skills locally, so materializing a starter does
-not create a second skill contract.
+repos also vendor the Core workflow skills locally; use those for project
+workflow and the installed package docs for SDK behavior.
 
 **Claude Code**
 
@@ -148,15 +150,19 @@ Core-owned `mantle:plugin` skill plus deterministic plugin recipes.
 
 ## For humans
 
-End state: a Cloudflare Worker at `https://<your-site>.<your-account>.workers.dev` with:
+Core surfaces on a Cloudflare Worker at
+`https://<your-site>.<your-account>.workers.dev`:
 
 - `/admin` — React admin SPA, role-gated after sign-in (GitHub / Google / Apple / 30+ social providers, email-OTP, magic-link — adopter picks the methods)
 - `/mcp/staff` — staff MCP endpoint, owner/editor agents connect here to edit content
 - `/mcp` — end-user/read MCP endpoint for public View tools and future member flows
-- `/<locale>/<collection>/<slug>` — per-entry HTML
-- `/<locale>/<collection>/<slug>.md` — agent-friendly markdown mirror
-- `/<locale>/llms.txt` — per-locale llms.txt index
 - public surface in your taste (the v0.1.0 starter ships Hono + hono/jsx + Tailwind)
+
+Public render routes are opt-in consumer wiring. When a project registers
+`mountPublicRoutes`, matching templates, and a `publicPathResolver`, the SDK
+can expose `/<locale>/<collection>/<slug>`, its `.md` mirror,
+`/<locale>/llms.txt`, and `/sitemap.xml`. Generated projects document the
+routes they actually mount; Mantle does not publish every Schema by default.
 
 For a guided install, follow the steps in [`skills/install/SKILL.md`](skills/install/SKILL.md).
 

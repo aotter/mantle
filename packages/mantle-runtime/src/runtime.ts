@@ -76,6 +76,7 @@ import { LifecycleHookingEntryRepository } from "./infrastructure/persistence/Li
 import { HtmlPublishOrchestrator } from "./infrastructure/render/index.js";
 import {
   CANONICAL_MIGRATIONS,
+  reconcileSchemaUniqueIndexes,
   schemaIndexMigrations,
 } from "./infrastructure/boot/index.js";
 
@@ -402,10 +403,12 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     idgen,
 
     async bootInit(): Promise<void> {
+      const indexMigrations = schemaIndexMigrations(schemasByName.values());
       await args.db.migrations.runAll([
         ...CANONICAL_MIGRATIONS,
-        ...schemaIndexMigrations(schemasByName.values()),
+        ...indexMigrations,
       ]);
+      await reconcileSchemaUniqueIndexes(args.db, indexMigrations);
       await siteConfig.seed(args.siteDefaults);
       const siteLocales = await siteConfig.readLocales();
       validateBoot.assert({

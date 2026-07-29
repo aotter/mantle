@@ -1,5 +1,8 @@
 import { buildDdl, type SchemaManifest } from "@aotter/mantle-spec";
-import type { Migration } from "../../domain/port/DatabaseDriver.js";
+import type {
+  DatabaseDriver,
+  Migration,
+} from "../../domain/port/DatabaseDriver.js";
 
 /**
  * Canonical migration list — the runtime owns the schema; adapters
@@ -253,4 +256,38 @@ export function schemaIndexMigrations(
     }
   }
   return migrations;
+}
+
+const SCHEMA_UNIQUE_INDEX_PREFIX = "schema-unique-index:";
+const SAFE_SCHEMA_UNIQUE_INDEX = /^uq_[a-z0-9_.-]+(?:__[a-z0-9_.-]+)+$/i;
+
+/**
+ * Drop generated indexes no longer declared by the current manifests.
+ * Keep generated columns: SQLite cannot remove them safely across the
+ * D1 versions Mantle supports, and unused virtual columns are harmless.
+ */
+export async function reconcileSchemaUniqueIndexes(
+  db: DatabaseDriver,
+  current: readonly Migration[],
+): Promise<void> {
+  const desired = new Set(
+    current
+      .map((migration) => migration.id)
+      .filter((id) => id.startsWith(SCHEMA_UNIQUE_INDEX_PREFIX)),
+  );
+  const applied = await db
+    .prepare(`SELECT id FROM _migrations WHERE id LIKE 'schema-unique-index:%'`)
+    .all<{ id: string }>();
+
+  for (const { id } of applied) {
+    if (desired.has(id)) continue;
+    const indexName = id.slice(SCHEMA_UNIQUE_INDEX_PREFIX.length);
+    if (!SAFE_SCHEMA_UNIQUE_INDEX.test(indexName)) {
+      throw new Error(`unsafe generated unique-index identifier: ${indexName}`);
+    }
+    await db.batch([
+      db.prepare(`DROP INDEX IF EXISTS "${indexName}"`),
+      db.prepare(`DELETE FROM _migrations WHERE id = ?`).bind(id),
+    ]);
+  }
 }
