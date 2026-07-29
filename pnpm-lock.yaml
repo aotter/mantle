@@ -22,8 +22,8 @@ catalogs:
       specifier: ^1.6.23
       version: 1.6.23
     hono:
-      specifier: ^4.12.27
-      version: 4.12.28
+      specifier: ^4.12.30
+      version: 4.12.32
     typescript:
       specifier: ^6.0.3
       version: 6.0.3
@@ -70,7 +70,7 @@ importers:
         version: 1.6.23(@cloudflare/workers-types@4.20260702.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vitest@4.1.10(@types/node@26.1.1)(vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0)))
       hono:
         specifier: 'catalog:'
-        version: 4.12.28
+        version: 4.12.32
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -115,7 +115,7 @@ importers:
         version: 1.6.23(@cloudflare/workers-types@4.20260702.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vitest@4.1.10(@types/node@26.1.1)(vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0)))
       hono:
         specifier: 'catalog:'
-        version: 4.12.28
+        version: 4.12.32
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -1756,8 +1756,8 @@ packages:
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
 
-  hono@4.12.28:
-    resolution: {integrity: sha512-YwUvVpSF7m1yOblFPrU3Hbo8XhPheBoiyfGuII6z19LnOr6JpDnyyp7LFNrfV56wS8tpvtBFGRISHN02pDdLOA==}
+  hono@4.12.32:
+    resolution: {integrity: sha512-XcuyW9qE2kJn07PkecMOBd5Vq/hMy7mmGw+idz1yblbg9N17ijJODrvPkn7/dwL3Kulj8LcRJ69DLOWf91dRUg==}
     engines: {node: '>=16.9.0'}
 
   is-number@7.0.0:
@@ -3432,7 +3432,7 @@ snapshots:
 
   graceful-fs@4.2.11: {}
 
-  hono@4.12.28: {}
+  hono@4.12.32: {}
 
   is-number@7.0.0: {}
 
