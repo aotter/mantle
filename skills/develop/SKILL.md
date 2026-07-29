@@ -82,6 +82,9 @@ the atoms cannot express the behavior.
   `Procedure.spec.input` before the seed/form. Keep public mutation inputs
   `additionalProperties: false`; otherwise JSON Schema's default may strip an
   undeclared field while returning success.
+- For a new section display property, update the content type and the `page`
+  Schema's `sections[].properties`; an undeclared property has no
+  runtime-backed Admin or Staff MCP path.
 - Update notification handlers when they need the new field. Test the stored
   entry, not only the HTTP `{ "ok": true }` response.
 
