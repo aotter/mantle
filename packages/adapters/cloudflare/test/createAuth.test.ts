@@ -15,6 +15,7 @@ import {
   shouldPromoteToOwner,
   validateBootstrap,
   verifyOAuthJwt,
+  verifyOAuthJwtWithLocalJwks,
   type AuthMethodConfig,
   type BootstrapOwnerRule,
   type CreateAuthConfig,
@@ -62,6 +63,51 @@ it("keeps every Better Auth Set-Cookie header on redirects", () => {
   expect(
     (response.headers as Headers & { getSetCookie(): string[] }).getSetCookie(),
   ).toHaveLength(2);
+});
+
+it("verifies provider JWTs with the same auth instance's JWKS", async () => {
+  const issuer = "https://platform.example.test/api/auth";
+  const audience = "https://platform.example.test/api";
+  const keyPair = await crypto.subtle.generateKey(
+    "Ed25519",
+    true,
+    ["sign", "verify"],
+  ) as CryptoKeyPair;
+  const publicJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+  const encode = (value: string | Uint8Array) =>
+    Buffer.from(value).toString("base64url");
+  const header = encode(JSON.stringify({ alg: "EdDSA", kid: "local-key" }));
+  const payload = encode(JSON.stringify({
+    iss: issuer,
+    aud: audience,
+    sub: "owner-1",
+    scope: "platform:sites:read",
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 60,
+  }));
+  const input = `${header}.${payload}`;
+  const signature = new Uint8Array(
+    await crypto.subtle.sign(
+      "Ed25519",
+      keyPair.privateKey,
+      new TextEncoder().encode(input),
+    ),
+  );
+
+  const claims = await verifyOAuthJwtWithLocalJwks(
+    `${input}.${encode(signature)}`,
+    audience,
+    issuer,
+    async () => ({
+      keys: [{
+        ...publicJwk,
+        alg: "EdDSA",
+        kid: "local-key",
+      }],
+    }),
+  );
+
+  expect(claims["sub"]).toBe("owner-1");
 });
 
 /**

@@ -3,6 +3,7 @@ import {
   applyDefaultAccessTokenExpiry,
   refreshAccessToken,
   validateAuthorizationCode,
+  verifyJwsAccessToken,
 } from "better-auth/oauth2";
 import type { SocialProvider } from "better-auth/social-providers";
 import { admin, emailOTP, jwt, magicLink } from "better-auth/plugins";
@@ -11,7 +12,6 @@ import { defaultStatements } from "better-auth/plugins/admin/access";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import { splitSetCookieHeader } from "better-auth/cookies";
 import { oauthProvider, type Scope } from "@better-auth/oauth-provider";
-import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client";
 import type { EmailSender } from "@aotter/mantle-runtime";
 import { STAFF_ROLES, type StaffRole } from "@aotter/mantle-spec";
 
@@ -1155,8 +1155,18 @@ export function createAuth(config: CreateAuthConfig): Auth {
   const basePath = normalizeAuthBasePath(config.basePath);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const api = auth.api as any;
+  const localJwksCacheKey = {};
   const verifyAccessToken = config.oauthProvider
-    ? oauthProviderResourceClient(auth).getActions().verifyAccessToken
+    ? async (token: string, audience: string) => {
+        const context = await auth.$context;
+        return verifyOAuthJwtWithLocalJwks(
+          token,
+          audience,
+          context.baseURL,
+          async () => api.getJwks(),
+          localJwksCacheKey,
+        );
+      }
     : null;
   return {
     basePath,
@@ -1177,10 +1187,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
       return verifyOAuthJwt(
         tokenOrRequest,
         options,
-        verifyAccessToken
-          ? (token, audience) =>
-              verifyAccessToken(token, { verifyOptions: { audience } })
-          : null,
+        verifyAccessToken,
       );
     },
     methods: config.methods.map<AuthMethodInfo>((m) => {
@@ -1436,6 +1443,26 @@ function scopesFromClaim(value: unknown): string[] {
     return value.filter((scope): scope is string => typeof scope === "string");
   }
   return [];
+}
+
+type LocalJwksFetcher = Exclude<
+  Parameters<typeof verifyJwsAccessToken>[1]["jwksFetch"],
+  string
+>;
+
+/** @internal exported to keep same-Worker OAuth verification off the network. */
+export function verifyOAuthJwtWithLocalJwks(
+  token: string,
+  audience: string,
+  issuer: string,
+  jwksFetch: LocalJwksFetcher,
+  jwksCacheKey?: object,
+): Promise<Record<string, unknown>> {
+  return verifyJwsAccessToken(token, {
+    jwksFetch,
+    ...(jwksCacheKey ? { jwksCacheKey } : {}),
+    verifyOptions: { audience, issuer },
+  });
 }
 
 /** @internal exported to pin the stable facade's normalization and
