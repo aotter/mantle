@@ -1,7 +1,9 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Bot,
   Database,
+  ExternalLink,
   FileText,
   Globe,
   PencilLine,
@@ -11,11 +13,14 @@ import { api } from "../../lib/api";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { Collection, SiteInfo } from "../../lib/types";
 import { Button } from "../../ui/button";
-import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { CopyField, EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 
 const QUICK_ACTION_ICONS: readonly LucideIcon[] = [PencilLine, FileText, Database];
+const CLAUDE_CUSTOMIZE_URL =
+  "https://claude.ai/customize/connectors?modal=add-custom-connector";
+const CLAUDE_NEW_CHAT_URL = "https://claude.ai/new";
 
 export function HomeView(): React.ReactElement {
   const { language } = usePreferences();
@@ -56,6 +61,86 @@ export function HomeView(): React.ReactElement {
           ) : null
         }
       />
+
+      {site.isLoading ? (
+        <div className="glass-card h-72 animate-pulse" />
+      ) : site.isError ? (
+        <ErrorBox error={site.error} />
+      ) : siteInfo ? (
+        <SectionCard className="overflow-hidden p-0">
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border/70 p-5">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl bg-primary/15 p-2 text-primary">
+                <Bot className="size-5" aria-hidden />
+              </div>
+              <div>
+                <h2 className="text-lg">{t(language, "console.connector.title")}</h2>
+                <p className="text-sm text-muted-foreground">
+                  {t(language, "console.connector.body")}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <span className="badge-status bg-foreground text-background">Claude</span>
+              <span className="badge-status bg-accent text-accent-foreground">MCP</span>
+            </div>
+          </div>
+
+          <div className="grid divide-y divide-border/70 md:grid-cols-3 md:divide-x md:divide-y-0">
+            <div className="flex min-w-0 flex-col gap-4 p-5">
+              <ConnectorStepNumber>1</ConnectorStepNumber>
+              <div>
+                <h3>{t(language, "console.connector.step1.title")}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t(language, "console.connector.step1.body")}
+                </p>
+              </div>
+              <div className="mt-auto">
+                <CopyField
+                  label={t(language, "console.connector.step1.label")}
+                  value={siteInfo.mcpUrl}
+                />
+              </div>
+            </div>
+
+            <div className="flex min-w-0 flex-col gap-4 p-5">
+              <ConnectorStepNumber>2</ConnectorStepNumber>
+              <div>
+                <h3>{t(language, "console.connector.step2.title")}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t(language, "console.connector.step2.body")}
+                </p>
+              </div>
+              <div className="mt-auto">
+                <Button asChild variant="outline">
+                  <a href={CLAUDE_CUSTOMIZE_URL} target="_blank" rel="noreferrer">
+                    <ExternalLink className="size-4" aria-hidden />
+                    {t(language, "console.connector.step2.action")}
+                  </a>
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex min-w-0 flex-col gap-4 p-5">
+              <ConnectorStepNumber>3</ConnectorStepNumber>
+              <div>
+                <h3>{t(language, "console.connector.step3.title")}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t(language, "console.connector.step3.body")}
+                </p>
+              </div>
+              <div className="mt-auto">
+                <Button asChild>
+                  <a href={CLAUDE_NEW_CHAT_URL} target="_blank" rel="noreferrer">
+                    {t(language, "console.connector.step3.action")}
+                    <ExternalLink className="size-4" aria-hidden />
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4">
         <SectionCard className="admin-dashboard-panel">
@@ -153,6 +238,14 @@ export function HomeView(): React.ReactElement {
         )}
       </section>
     </div>
+  );
+}
+
+function ConnectorStepNumber({ children }: { children: React.ReactNode }): React.ReactElement {
+  return (
+    <span className="inline-flex size-6 items-center justify-center rounded-full bg-foreground/10 text-xs font-semibold text-foreground">
+      {children}
+    </span>
   );
 }
 

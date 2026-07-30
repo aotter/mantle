@@ -75,6 +75,17 @@ function jsonInit(method: string, body: unknown): RequestInit {
   };
 }
 
+describe("GET /admin/api/site", () => {
+  it("returns the Staff MCP endpoint for connector setup", async () => {
+    const { app } = harness({ getSession: sessionAs("owner") });
+    const res = await app.request("https://example.test/admin/api/site");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      mcpUrl: "https://example.test/mcp/staff",
+    });
+  });
+});
+
 describe("GET /admin/api/staff", () => {
   it("401s with no session", async () => {
     const { app } = harness();
