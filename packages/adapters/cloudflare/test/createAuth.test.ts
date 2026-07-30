@@ -10,6 +10,7 @@ import {
   createSetupIncompleteAuth,
   getProviderAccessTokenForRequest,
   mapRegisteredOAuthClient,
+  normalizeAuthResponseCookies,
   pickLocale,
   shouldPromoteToOwner,
   validateBootstrap,
@@ -43,6 +44,25 @@ const GITHUB_METHOD_FIXTURE = {
   clientId: "g",
   clientSecret: "g",
 } as const satisfies AuthMethodConfig;
+
+it("keeps every Better Auth Set-Cookie header on redirects", () => {
+  const response = normalizeAuthResponseCookies(
+    new Response(null, {
+      status: 302,
+      headers: {
+        location: "https://example.test/return",
+        "set-cookie":
+          "__Secure-mantle.oauth_state=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/, __Secure-mantle.session_token=session.sig; Path=/; HttpOnly; Secure",
+      },
+    }),
+  );
+
+  expect(response.status).toBe(302);
+  expect(response.headers.get("location")).toBe("https://example.test/return");
+  expect(
+    (response.headers as Headers & { getSetCookie(): string[] }).getSetCookie(),
+  ).toHaveLength(2);
+});
 
 /**
  * `buildSocialProviders` returns `BetterAuthOptions["socialProviders"]`

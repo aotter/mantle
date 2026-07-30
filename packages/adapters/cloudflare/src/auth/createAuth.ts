@@ -9,6 +9,7 @@ import { admin, emailOTP, jwt, magicLink } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
+import { splitSetCookieHeader } from "better-auth/cookies";
 import { oauthProvider, type Scope } from "@better-auth/oauth-provider";
 import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client";
 import type { EmailSender } from "@aotter/mantle-runtime";
@@ -281,6 +282,26 @@ function normalizeAuthBasePath(basePath: string | undefined): string {
     return trimmed.replace(/\/+$/, "");
   }
   return trimmed;
+}
+
+/** @internal Exported for regression tests. */
+export function normalizeAuthResponseCookies(response: Response): Response {
+  const setCookie = response.headers.get("set-cookie");
+  if (!setCookie) return response;
+  const values =
+    (response.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.() ??
+    [setCookie];
+  const cookies = values.flatMap(splitSetCookieHeader);
+  if (cookies.length < 2) return response;
+
+  const headers = new Headers(response.headers);
+  headers.delete("set-cookie");
+  for (const cookie of cookies) headers.append("set-cookie", cookie);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 const ac = createAccessControl(defaultStatements);
@@ -1139,7 +1160,8 @@ export function createAuth(config: CreateAuthConfig): Auth {
     : null;
   return {
     basePath,
-    handler: (request) => auth.handler(request),
+    handler: async (request) =>
+      normalizeAuthResponseCookies(await auth.handler(request)),
     getSession: (request) =>
       api.getSession({ headers: request.headers }).then((r: unknown) => r ?? null),
     getUserRole: async (userId) => {
