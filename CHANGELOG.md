@@ -6,6 +6,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.55] - 2026-07-30
+
+### Fixed
+
+- **@aotter/mantle-admin-ui**: resume Better Auth OAuth Provider authorization after social sign-in instead of dropping signed authorize parameters and returning to `/admin` (#504, #505).
+
 ## [0.0.11-alpha.54] - 2026-07-29
 
 ### Changed
