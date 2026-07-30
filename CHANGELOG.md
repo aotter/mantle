@@ -6,6 +6,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.56] - 2026-07-31
+
+### Fixed
+
+- **@aotter/mantle-cloudflare**: verify access tokens issued by the same Better Auth OAuth provider against its local JWKS instead of making a Cloudflare Worker subrequest back to its own endpoint (#504, #512).
+
 ## [0.0.11-alpha.55] - 2026-07-31
 
 ### Added
