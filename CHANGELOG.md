@@ -6,6 +6,16 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.55] - 2026-07-31
+
+### Added
+
+- **@aotter/mantle-admin-ui**: guide staff through connecting Claude to the site's Staff MCP endpoint from the admin home page, with English, Traditional Chinese, and Simplified Chinese copy (#508, #509).
+
+### Fixed
+
+- **@aotter/mantle-cloudflare**: preserve every Better Auth OAuth response cookie on Cloudflare so callbacks clear one-time state and establish the new browser session together (#504, #510).
+
 ## [0.0.11-alpha.54] - 2026-07-29
 
 ### Changed
