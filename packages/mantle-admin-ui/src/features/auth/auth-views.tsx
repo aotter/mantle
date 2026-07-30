@@ -99,6 +99,16 @@ export function safeReturnPath(raw: string | null | undefined): string {
   return "/admin";
 }
 
+export function resolveSignInReturnPath(search: string): string {
+  const params = new URLSearchParams(search);
+  const explicit = params.get("return");
+  if (explicit) return safeReturnPath(explicit);
+  if (params.has("client_id") && params.has("sig")) {
+    return `/api/auth/oauth2/authorize${search.startsWith("?") ? search : `?${search}`}`;
+  }
+  return "/admin";
+}
+
 /**
  * Data-driven sign-in. Fetches `/api/auth/methods` on mount; renders
  * one section per registered method. When `email-otp` is present, a
@@ -111,13 +121,7 @@ export function safeReturnPath(raw: string | null | undefined): string {
  */
 export function SignInView(): React.ReactElement {
   const { language } = usePreferences();
-  const params = new URLSearchParams(window.location.search);
-  // Only accept a same-origin path. The OTP success path navigates
-  // client-side via `window.location.assign(returnTo)`, so an absolute
-  // (`https://evil`) or protocol-relative (`//evil`) value would be a
-  // post-login open redirect. The gate that produces this param only
-  // ever emits `pathname+search`. (#387)
-  const ret = safeReturnPath(params.get("return"));
+  const ret = resolveSignInReturnPath(window.location.search);
 
   const methods = useQuery<AuthMethodInfo[]>({
     queryKey: ["auth-methods"],
