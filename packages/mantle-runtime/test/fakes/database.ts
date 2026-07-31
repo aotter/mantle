@@ -181,6 +181,15 @@ class InMemoryStatement implements PreparedStatement {
         changes: 0,
       };
     }
+    if (sql.startsWith("SELECT collection, status, version FROM entries WHERE id = ?")) {
+      const r = this.db.entries.get(p[0] as string);
+      return {
+        rows: r
+          ? [{ collection: r.collection, status: r.status, version: r.version }]
+          : [],
+        changes: 0,
+      };
+    }
 
     // UPDATE entries SET data = ?, version = ?, updated_at = ? WHERE id = ? AND version = ? RETURNING …
     if (sql.startsWith("UPDATE entries SET data = ?, version = ?, updated_at = ? WHERE id = ? AND version = ? RETURNING")) {
@@ -281,7 +290,22 @@ class InMemoryStatement implements PreparedStatement {
       return { rows: filtered.map((r) => ({ ...r })), changes: 0 };
     }
 
-    // DELETE FROM entries WHERE id = ?
+    // Snapshot-guarded parent delete.
+    if (sql.startsWith("DELETE FROM entries WHERE id = ? AND collection = ?")) {
+      const [id, collection, status, version] = p as [string, string, string, number];
+      const row = this.db.entries.get(id);
+      if (
+        !row ||
+        row.collection !== collection ||
+        row.status !== status ||
+        row.version !== version
+      ) {
+        return { rows: [], changes: 0 };
+      }
+      this.db.entries.delete(id);
+      return { rows: [], changes: 1 };
+    }
+    // Legacy unguarded parent delete used by direct fake fixtures.
     if (sql.startsWith("DELETE FROM entries WHERE id = ?")) {
       const removed = this.db.entries.delete(p[0] as string);
       return { rows: [], changes: removed ? 1 : 0 };
@@ -289,6 +313,9 @@ class InMemoryStatement implements PreparedStatement {
     // DELETE FROM revisions WHERE entry_id = ?
     if (sql.startsWith("DELETE FROM revisions WHERE entry_id = ?")) {
       const eid = p[0] as string;
+      if (sql.includes("AND EXISTS") && !snapshotMatches(this.db, p.slice(1))) {
+        return { rows: [], changes: 0 };
+      }
       let n = 0;
       for (const [k, v] of this.db.revisions) {
         if (v.entry_id === eid) {
@@ -301,6 +328,9 @@ class InMemoryStatement implements PreparedStatement {
     // DELETE FROM approvals WHERE entry_id = ?
     if (sql.startsWith("DELETE FROM approvals WHERE entry_id = ?")) {
       const eid = p[0] as string;
+      if (sql.includes("AND EXISTS") && !snapshotMatches(this.db, p.slice(1))) {
+        return { rows: [], changes: 0 };
+      }
       let n = 0;
       for (const [k, v] of this.db.approvals) {
         if (v.entry_id === eid) {
@@ -473,6 +503,12 @@ class InMemoryStatement implements PreparedStatement {
 
 function normalize(sql: string): string {
   return sql.replace(/\s+/g, " ").trim();
+}
+
+function snapshotMatches(db: InMemoryDatabase, values: readonly unknown[]): boolean {
+  const [id, collection, status, version] = values as [string, string, string, number];
+  const row = db.entries.get(id);
+  return row?.collection === collection && row.status === status && row.version === version;
 }
 
 /** Mirrors `(id LIKE '%'||?||'%' ESCAPE '\' OR data LIKE '%'||?||'%' ESCAPE '\')`

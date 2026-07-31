@@ -10,7 +10,7 @@ import type { ComposeLlmsTxtRequest } from "../dto/render/ComposeLlmsTxtRequest.
  *   - locale: string  → entries with `data.locale === locale`
  *   - locale: null    → non-localized entries only (publish-pipeline
  *                       semantic; matches what HtmlPublishOrchestrator
- *                       writes to `llms:root` on a non-localized
+ *                       writes to the versioned root key on a non-localized
  *                       publish). Consumers that want a cross-locale
  *                       aggregate at the root URL should iterate
  *                       site.locales themselves and concat.

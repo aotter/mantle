@@ -84,6 +84,10 @@ export interface UpdateEntryArgs extends MutationHookFields {
 export interface DeleteEntryArgs extends MutationHookFields {
   readonly id: string;
   readonly collection: string;
+  /** Atomic snapshot guards. Delete cascades must remove children only
+   *  when the parent still matches this exact state. */
+  readonly expectedStatus: ContentState;
+  readonly expectedVersion: number;
 }
 
 export interface TransitionStatusArgs extends MutationHookFields {

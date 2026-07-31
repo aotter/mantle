@@ -163,9 +163,49 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
       authorId: null,
       now: 1,
     });
-    const result = await repo.delete({ id: "p1", collection: "posts" });
+    const result = await repo.delete({
+      id: "p1",
+      collection: "posts",
+      expectedStatus: "draft",
+      expectedVersion: 1,
+    });
     expect(result.removed).toBe(true);
     expect(await repo.get("p1")).toBeNull();
+  });
+
+  it("delete keeps parent and children when the loaded snapshot is stale", async () => {
+    const db = new InMemoryDatabase();
+    const repo = new DatabaseEntryRepository(db);
+    await repo.create({
+      id: "p1",
+      collection: "posts",
+      status: "draft",
+      data: {},
+      authorId: null,
+      now: 1,
+    });
+    db.revisions.set("r1", { entry_id: "p1" });
+    db.approvals.set("a1", { entry_id: "p1" });
+    await repo.transitionStatus({
+      id: "p1",
+      collection: "posts",
+      to: "published",
+      expectedStatus: "draft",
+      expectedVersion: 1,
+      now: 2,
+    });
+
+    await expect(
+      repo.delete({
+        id: "p1",
+        collection: "posts",
+        expectedStatus: "draft",
+        expectedVersion: 1,
+      }),
+    ).rejects.toBeInstanceOf(EntryVersionConflict);
+    expect(await repo.get("p1")).not.toBeNull();
+    expect(db.revisions.has("r1")).toBe(true);
+    expect(db.approvals.has("a1")).toBe(true);
   });
 
   it("list orders by updated_at DESC and respects status filter", async () => {

@@ -74,7 +74,7 @@ function harness(opts: {
     requestPublish: new RequestPublishUseCase(store, schemas, clock, undefined, opts.siteConfig),
     unpublish: new UnpublishUseCase(store, schemas, clock),
     archive: new ArchiveUseCase(store, schemas, clock),
-    deleteEntry: new DeleteEntryUseCase(store),
+    deleteEntry: new DeleteEntryUseCase(store, schemas),
   };
 }
 
@@ -191,6 +191,17 @@ describe("CreateDraftUseCase", () => {
       await expect(h.unpublish.execute({ id: row.id })).rejects.toMatchObject({
         diagnostic: { code: "CONFLICT" },
       });
+    });
+
+    it("deletes published operational records without an impossible unpublish step", async () => {
+      const h = noneHarness();
+      const row = await h.createDraft.execute({
+        collection: "posts",
+        data: { title: "op-record" },
+        authorId: null,
+      });
+      await expect(h.deleteEntry.execute({ id: row.id })).resolves.toEqual({ removed: true });
+      expect(await h.store.get(row.id)).toBeNull();
     });
   });
 
@@ -972,6 +983,24 @@ describe("GetEntryUseCase / ListEntriesUseCase / DeleteEntryUseCase", () => {
     const result = await h.deleteEntry.execute({ id: created.id });
     expect(result.removed).toBe(true);
     expect(await h.store.get(created.id)).toBeNull();
+  });
+
+  it("DeleteEntryUseCase requires published content to be unpublished first", async () => {
+    const h = harness();
+    const created = await h.createDraft.execute({
+      collection: "posts",
+      data: { title: "x" },
+      authorId: null,
+    });
+    await h.requestPublish.execute({ id: created.id });
+
+    await expect(h.deleteEntry.execute({ id: created.id })).rejects.toMatchObject({
+      diagnostic: {
+        code: "CONFLICT",
+        message: expect.stringContaining("Unpublish it first"),
+      },
+    });
+    expect(await h.store.get(created.id)).not.toBeNull();
   });
 
   it("DeleteEntryUseCase surfaces NOT_FOUND on missing ids", async () => {

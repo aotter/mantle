@@ -75,6 +75,14 @@ export class InMemoryEntryRepository implements EntryRepository {
   }
 
   async delete(args: DeleteEntryArgs): Promise<{ readonly removed: boolean }> {
+    const row = this.rows.get(args.id);
+    if (!row || row.collection !== args.collection) return { removed: false };
+    if (row.version !== args.expectedVersion) {
+      throw new EntryVersionConflict(args.id, args.expectedVersion, row.version);
+    }
+    if (row.status !== args.expectedStatus) {
+      throw new EntryStatusConflict(args.id, args.expectedStatus, row.status);
+    }
     const removed = this.rows.delete(args.id);
     return { removed };
   }

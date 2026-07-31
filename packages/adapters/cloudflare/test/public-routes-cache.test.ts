@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { Manifest } from "@aotter/mantle-spec";
-import { TemplateRegistry } from "@aotter/mantle-runtime";
+import { llmsTxtKey, TemplateRegistry } from "@aotter/mantle-runtime";
 import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountPublicRoutes } from "../src/mount/mountPublicRoutes.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
@@ -105,6 +105,7 @@ describe("mountPublicRoutes read-through cache", () => {
 
     const res = await h.app.request("/en/posts");
     expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
     await expect(res.text()).resolves.toContain("<section data-brand=\"Blog\">Hello</section>");
     await expect(h.kv.get("list:html:en/posts")).resolves.toContain("<section data-brand=\"Blog\">Hello</section>");
   });
@@ -115,6 +116,7 @@ describe("mountPublicRoutes read-through cache", () => {
 
     const res = await h.app.request("/en/posts/hello");
     expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
     await expect(res.text()).resolves.toContain("<h1>Hello</h1>");
     await expect(h.kv.get("entry:html:en/posts/hello")).resolves.toContain("<h1>Hello</h1>");
   });
@@ -154,6 +156,7 @@ describe("mountPublicRoutes read-through cache", () => {
 
     const res = await h.app.request("/en/posts/hello.md");
     expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
     const body = await res.text();
     expect(body).toContain("# Hello");
     expect(body).toContain("World");
@@ -227,6 +230,7 @@ describe("mountPublicRoutes llms.txt live-fallback", () => {
 
     const res = await h.app.request("/en/llms.txt");
     expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
     expect(res.headers.get("content-type")).toContain("text/plain");
     const body = await res.text();
     expect(body).toContain("# Cached from KV");
@@ -260,10 +264,14 @@ describe("mountPublicRoutes llms.txt live-fallback", () => {
     seedPublishedPost(h.db, "en");
     seedPublishedPost(h.db, "zh-TW");
 
-    expect(await h.kv.get("llms:root")).toBeNull();
+    await h.kv.put("llms:root", "# Stale alpha.58 value");
+    const rootKey = llmsTxtKey("");
+    expect(rootKey).toBe("llms:root:v2");
+    expect(await h.kv.get(rootKey)).toBeNull();
 
     const res = await h.app.request("/llms.txt");
     expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
     const body = await res.text();
     // Both locale sections present in the aggregate.
     expect(body).toContain("Locale: en");
@@ -272,8 +280,10 @@ describe("mountPublicRoutes llms.txt live-fallback", () => {
     expect(body).toMatch(/https:\/\/example\.com\/en\/posts\/hello\.md/);
     expect(body).toMatch(/https:\/\/example\.com\/zh-tw\/posts\/hello\.md/);
     // Cache write-back lands at the root key.
-    const cached = await h.kv.get("llms:root");
+    expect(body).not.toContain("Stale alpha.58");
+    const cached = await h.kv.get(rootKey);
     expect(cached).toBe(body);
+    expect(h.kv._ttl(rootKey)).toBe(300);
   });
 
   it("never returns 404 from /llms.txt — always composes at minimum the site header", async () => {
@@ -292,5 +302,6 @@ describe("mountPublicRoutes llms.txt live-fallback", () => {
     const h = harness(["en"]);
     const res = await h.app.request("/fr/llms.txt");
     expect(res.status).toBe(404);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
   });
 });

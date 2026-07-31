@@ -4,13 +4,14 @@ import {
   OAUTH_REGISTER_PATH,
   OAUTH_TOKEN_PATH,
 } from "./oauthConstants.js";
+import { applyCachePolicy } from "./cachePolicy.js";
 
-export interface CreateOAuthProviderArgs {
+export interface CreateOAuthProviderArgs<Env = Record<string, unknown>> {
   /** Worker module shape for non-OAuth requests. Typically the
    *  consumer's Hono app: `{ fetch: app.fetch }`. The lib injects
    *  `OAUTH_PROVIDER` onto env BEFORE calling this, so the consumer's
    *  `/authorize` route can pull helpers via `c.env.OAUTH_PROVIDER`. */
-  readonly defaultHandler: ExportedHandler<Record<string, unknown>>;
+  readonly defaultHandler: ExportedHandler<Env>;
   /** Map of MCP resource path → worker handler. Lib verifies the
    *  bearer token, then dispatches to the matching handler with
    *  `ctx.props` set to whatever was passed to
@@ -37,8 +38,10 @@ export interface CreateOAuthProviderArgs {
  * Endpoint paths default to `/oauth/{authorize,token,register}` —
  * see `oauthConstants.ts`.
  */
-export function createOAuthProvider(args: CreateOAuthProviderArgs): OAuthProvider {
-  return new OAuthProvider({
+export function createOAuthProvider<Env = Record<string, unknown>>(
+  args: CreateOAuthProviderArgs<Env>,
+): OAuthProvider<Env> {
+  return new CacheSafeOAuthProvider<Env>({
     apiHandlers: args.apiHandlers as never,
     defaultHandler: args.defaultHandler as never,
     authorizeEndpoint: OAUTH_AUTHORIZE_PATH,
@@ -46,4 +49,19 @@ export function createOAuthProvider(args: CreateOAuthProviderArgs): OAuthProvide
     clientRegistrationEndpoint: OAUTH_REGISTER_PATH,
     scopesSupported: [...(args.scopesSupported ?? ["mcp"])],
   });
+}
+
+/**
+ * One response boundary covers the OAuth library and every handler behind it.
+ * Only an anonymous 200 GET/HEAD that explicitly opted into shared caching
+ * remains public; all other responses are private, including redirects/errors.
+ */
+class CacheSafeOAuthProvider<Env> extends OAuthProvider<Env> {
+  override async fetch(
+    request: Request,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
+    return applyCachePolicy(request, await super.fetch(request, env, ctx));
+  }
 }

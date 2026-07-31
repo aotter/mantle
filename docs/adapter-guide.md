@@ -93,6 +93,26 @@ passed through `CmsConfig.templates`, and a `publicPathResolver` passed through
 consumer; mounting every Schema automatically is not, because some collections
 are private even when they contain a slug.
 
+### HTTP cache contract
+
+The Cloudflare adapter is private by default. Consumers must export
+`createOAuthProvider(...)` as the Worker's top-level handler so its final
+response policy covers admin, auth, API, OAuth, MCP, redirects, and errors.
+Those responses receive `Cache-Control: private, no-store`; Cloudflare-specific
+CDN cache overrides are removed.
+
+`mountPublicRoutes(...)` opts only successful pre-rendered HTML, markdown,
+`llms.txt`, and sitemap responses into the shared cache with
+`Cache-Control: public, max-age=0, s-maxage=300`. The top-level policy preserves
+that opt-in only for anonymous `GET`/`HEAD` responses with status 200, explicit
+shared freshness, no request `Cookie` or `Authorization`, and no response
+`Set-Cookie`. It also varies public responses by `Cookie` and `Authorization`.
+
+A starter-level Workers Cache may therefore store only responses that still
+meet that exact public contract. It must bypass credentialed/cookie requests
+and must never infer cacheability from a URL prefix. Cache entries remain
+version-local; cross-version caching is outside this contract.
+
 Minimum auth/MCP behavior:
 
 - Provide Better Auth-compatible sign-in/session routes for the platform.
@@ -124,6 +144,7 @@ Minimum auth/MCP behavior:
 - [ ] Normalize session/OAuth and any consumer credential seam into
       `HandlerContext.auth`; never put raw credentials in runtime context.
 - [ ] Mount `/mcp/staff` and `/mcp` via the platform's OAuth provider lib (Cloudflare adapter uses `@cloudflare/workers-oauth-provider` at top level). Enforce staff D1 role inside the apiHandler.
+- [ ] Preserve the HTTP cache contract: private by default; explicit anonymous 200 `GET`/`HEAD` public opt-in only.
 - [ ] Prove one guarded target has identical REST/MCP outcomes, including
       mutable revocation on the next call.
 - [ ] Add optional `MediaStorage` or `DeferredHookDispatcher` only when the adapter supports those features.

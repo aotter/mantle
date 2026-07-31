@@ -8,20 +8,26 @@ import type { Auth } from "../../src/auth/createAuth.js";
 
 export class InMemoryKv implements KvCache {
   private store = new Map<string, string>();
+  private ttl = new Map<string, number | undefined>();
   async get(key: string): Promise<string | null> {
     return this.store.get(key) ?? null;
   }
-  async put(key: string, value: string, _opts?: KvPutOptions): Promise<void> {
+  async put(key: string, value: string, opts?: KvPutOptions): Promise<void> {
     this.store.set(key, value);
+    this.ttl.set(key, opts?.expirationTtl);
   }
   async delete(key: string): Promise<void> {
     this.store.delete(key);
+    this.ttl.delete(key);
   }
   async list(prefix: string): Promise<KvListResult> {
     return {
       keys: [...this.store.keys()].filter((k) => k.startsWith(prefix)),
       cursor: null,
     };
+  }
+  _ttl(key: string): number | undefined {
+    return this.ttl.get(key);
   }
 }
 

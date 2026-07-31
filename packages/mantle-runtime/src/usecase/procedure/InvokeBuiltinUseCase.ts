@@ -15,6 +15,11 @@ import {
   projectAndStamp,
   projectUpdateAndStamp,
 } from "../../domain/service/BuiltinProjector.js";
+import { assertEntryDeletable } from "../../domain/service/io/EntryDeleteGuard.js";
+import {
+  notFoundDiagnostic,
+  withConflictDiagnostic,
+} from "../../domain/service/EntryMutationDiagnostics.js";
 import { assertEntryWritable } from "../../domain/service/io/EntryWriteGuard.js";
 import type { InvokeBuiltinRequest } from "../dto/procedure/index.js";
 
@@ -31,7 +36,7 @@ import type { InvokeBuiltinRequest } from "../dto/procedure/index.js";
  *   - `update` → `entries.update`. Caller supplies `id` +
  *     `expectedVersion` in the input; OCC enforced at the chokepoint.
  *   - `upsert` → `update` if `input.id` resolves, else `create`.
- *   - `delete` → `entries.delete({ id })`.
+ *   - `delete` → guarded `entries.delete(...)` over the loaded row snapshot.
  *
  * Pre-projection original input is forwarded to the chokepoint via
  * `originalInput`, so lifecycle hook handlers can read side-channel
@@ -212,12 +217,27 @@ export class InvokeBuiltinUseCase {
     ctx: HandlerContext,
   ): Promise<{ readonly removed: boolean }> {
     const id = requireField(input, "id", "string");
-    return this.entries.delete({
-      id,
-      collection: schema.metadata.name,
-      hookContext: ctx,
-      originalInput: input,
+    const opPath = `usecase/InvokeBuiltin/${schema.metadata.name}/delete/${id}`;
+    const existing = await this.entries.get(id);
+    if (!existing) {
+      throw new DiagnosticError(notFoundDiagnostic(opPath, schema.metadata.name, id));
+    }
+    assertEntryDeletable({
+      entry: existing,
+      schema,
+      expectedCollection: schema.metadata.name,
+      opPath,
     });
+    return withConflictDiagnostic(opPath, () =>
+      this.entries.delete({
+        id,
+        collection: existing.collection,
+        expectedStatus: existing.status,
+        expectedVersion: existing.version,
+        hookContext: ctx,
+        originalInput: input,
+      }),
+    );
   }
 
   private async opArchive(

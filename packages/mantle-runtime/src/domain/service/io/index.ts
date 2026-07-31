@@ -6,3 +6,4 @@
 export * from "./PublishedEntries.js";
 export * from "./JoinedEntryReader.js";
 export * from "./EntryWriteGuard.js";
+export * from "./EntryDeleteGuard.js";
