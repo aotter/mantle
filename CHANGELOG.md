@@ -6,6 +6,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.61] - 2026-07-31
+
+### Fixed
+
+- **release fanout / starters**: No SDK code changes. alpha.61 re-spins the release fanout to ship archetype-specific generated CSS and asset hashes that should have been part of alpha.60; fresh materialized projects now pass the strict style check, and provisioned copy that resembles a Tailwind utility cannot perturb the generated artifacts (aotter/mantle-starters#443).
+
 ## [0.0.11-alpha.60] - 2026-07-31
 
 ### Added
