@@ -3,14 +3,21 @@ import type {
   DeferredHookDispatcher,
   DeferredHookEnvelope,
 } from "@aotter/mantle-runtime";
+import { z } from "zod";
+
+// Cloudflare's 128 KB limit is decimal and includes roughly 100 bytes
+// of platform metadata. Reserve a full 1 KB so accepted envelopes stay
+// below the provider limit rather than failing only at queue.send.
+const MAX_ENVELOPE_BYTES = 127_000;
+const MAX_CONCURRENCY = 5;
+const jsonValue = z.json();
 
 /**
  * `DeferredHookDispatcher` impl backed by a Cloudflare Workers Queue
  * binding. Producer side: serialises each `DeferredHookEnvelope` and
- * sends it via `queue.send`. The runtime decorator handles fallback
- * on rejection (its three-rung ladder downgrades to `ctx.waitUntil`
- * → inline-await), so this dispatcher does not retry — it lets the
- * caller decide.
+ * sends it explicitly as JSON. The runtime decorator handles a
+ * rejection with its best-effort fallback. Queue acceptance is not
+ * atomic with the preceding D1 mutation.
  *
  * Per ADR-0011 only this adapter package may import the CF binding
  * type. The runtime sees only the `DeferredHookDispatcher` port.
@@ -19,13 +26,43 @@ export class WorkersQueueHookDispatcher implements DeferredHookDispatcher {
   constructor(private readonly queue: Queue<DeferredHookEnvelope>) {}
 
   async enqueue(envelope: DeferredHookEnvelope): Promise<void> {
-    await this.queue.send(envelope);
+    // `EntryRow.locale?` may be present with value `undefined` in a
+    // repository object. JSON transport omits that optional field;
+    // normalize only this declared optional before the strict
+    // JSON-safe check so undefined values inside entry.data still
+    // fail instead of disappearing silently.
+    const { locale, ...entryWithoutLocale } = envelope.entry;
+    const wireEnvelope = locale === undefined
+      ? { ...envelope, entry: entryWithoutLocale }
+      : envelope;
+    let json: ReturnType<typeof jsonValue.safeParse>;
+    try {
+      json = jsonValue.safeParse(wireEnvelope);
+    } catch (cause) {
+      throw new Error(
+        `Deferred lifecycle envelope '${envelope.eventId}' is not JSON-safe.`,
+        { cause },
+      );
+    }
+    if (!json.success) {
+      const issue = json.error.issues[0];
+      throw new Error(
+        `Deferred lifecycle envelope '${envelope.eventId}' is not JSON-safe at '${issue?.path.join("/") ?? "unknown"}'.`,
+      );
+    }
+    const bytes = new TextEncoder().encode(JSON.stringify(json.data)).byteLength;
+    if (bytes >= MAX_ENVELOPE_BYTES) {
+      throw new Error(
+        `Deferred lifecycle envelope '${envelope.eventId}' is ${bytes} bytes; this adapter requires less than ${MAX_ENVELOPE_BYTES} to leave room under Cloudflare's 128 KB message limit.`,
+      );
+    }
+    await this.queue.send(wireEnvelope, { contentType: "json" });
   }
 }
 
 /**
  * Build the `queue(batch, env, ctx)` Workers handler that consumes
- * `mantle_internal` messages and re-fires each `after_*` hook through
+ * `mantle-internal` messages and re-fires each `after_*` hook through
  * the runtime. Consumers wire this alongside `fetch` in their default
  * Worker export:
  *
@@ -36,13 +73,13 @@ export class WorkersQueueHookDispatcher implements DeferredHookDispatcher {
  * } satisfies ExportedHandler<Env>;
  * ```
  *
- * Per-message ack / retry: a thrown handler error retries the
- * message; success acks. CF Queues then handles backoff and the
- * dead-letter queue per the binding's wrangler config.
+ * Per-message ack / retry: any validation or handler failure retries
+ * the message; success acks. CF Queues then applies the consumer's
+ * retry delay, max_retries, and DLQ configuration.
  */
 export function createQueueHandler<Env>(
   cmsRef: { get(): Promise<CmsRuntime> },
-): (batch: MessageBatch<DeferredHookEnvelope>, env: Env) => Promise<void> {
+): (batch: MessageBatch<unknown>, env: Env) => Promise<void> {
   return async (batch, env) => {
     let cms: CmsRuntime;
     try {
@@ -52,26 +89,28 @@ export function createQueueHandler<Env>(
       // batch.retryAll so each message's per-message attempt counter
       // increments — letting wrangler's max_retries / DLQ rules
       // engage instead of looping forever at the batch level.
-      console.error("[mantle-internal] runtime boot failed; retrying batch", err);
       batch.retryAll();
+      console.error("[mantle-internal] runtime boot failed; retrying batch", err);
       return;
     }
-    // Drain in parallel — after-hooks are independent and CF Queues
-    // ack/retry is per-message, so serial processing only burns the
-    // 30s consumer wall clock on larger batches.
-    await Promise.allSettled(
-      batch.messages.map(async (message) => {
-        try {
-          await cms.runDeferredHook.execute({ envelope: message.body, env });
-          message.ack();
-        } catch (err) {
-          console.error(
-            `[mantle-internal] consume failed for ${message.body.hook} on ${message.body.schema}/${message.body.entry.id}`,
-            err,
-          );
-          message.retry();
-        }
-      }),
-    );
+    // Bound fan-out even when a consumer raises max_batch_size.
+    for (let offset = 0; offset < batch.messages.length; offset += MAX_CONCURRENCY) {
+      const chunk = batch.messages.slice(offset, offset + MAX_CONCURRENCY);
+      await Promise.all(
+        chunk.map(async (message) => {
+          try {
+            await cms.runDeferredHook.execute({ envelope: message.body, env });
+            message.ack();
+          } catch (err) {
+            message.retry();
+            console.error("[mantle-internal] deferred lifecycle consume failed; retrying", {
+              messageId: message.id,
+              attempts: message.attempts,
+              error: err,
+            });
+          }
+        }),
+      );
+    }
   };
 }

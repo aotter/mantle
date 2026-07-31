@@ -259,6 +259,7 @@ export class McpJsonRpcDispatcher {
       return UNKNOWN_TOOL;
     }
 
+    const hookCtx = ctxFromAuth(auth);
     switch (name) {
       case "list_entries": {
         const collection = args["collection"];
@@ -281,22 +282,38 @@ export class McpJsonRpcDispatcher {
       case "request_publish": {
         const id = args["id"];
         if (typeof id !== "string") return MISSING_ARG;
-        return this.useCases.requestPublish.execute({ id });
+        return this.useCases.requestPublish.execute({
+          id,
+          ctx: hookCtx,
+          originalInput: args,
+        });
       }
       case "unpublish_entry": {
         const id = args["id"];
         if (typeof id !== "string") return MISSING_ARG;
-        return this.useCases.unpublish.execute({ id });
+        return this.useCases.unpublish.execute({
+          id,
+          ctx: hookCtx,
+          originalInput: args,
+        });
       }
       case "archive_entry": {
         const id = args["id"];
         if (typeof id !== "string") return MISSING_ARG;
-        return this.useCases.archive.execute({ id });
+        return this.useCases.archive.execute({
+          id,
+          ctx: hookCtx,
+          originalInput: args,
+        });
       }
       case "delete_entry": {
         const id = args["id"];
         if (typeof id !== "string") return MISSING_ARG;
-        return this.useCases.deleteEntry.execute({ id });
+        return this.useCases.deleteEntry.execute({
+          id,
+          ctx: hookCtx,
+          originalInput: args,
+        });
       }
       case "create_media_upload": {
         if (!this.useCases.media) return UNKNOWN_TOOL;
@@ -354,21 +371,19 @@ export class McpJsonRpcDispatcher {
         // Per-collection content-draft or operational-record tools.
         // The agent sends Schema fields at the top level; we rebuild
         // `data` for the chokepoint.
-        // `hookCtx` plumbs the authenticated MCP user into lifecycle
-        // hook context so consumers can branch on `ctx.user` (e.g.
-        // bypass captcha checks for authenticated agents).
-        const hookCtx = ctxFromAuth(auth);
         const createSegment =
           extractCollectionSegment(name, CREATE_DRAFT_PREFIX) ??
           extractCollectionSegment(name, CREATE_RECORD_PREFIX);
         if (createSegment) {
           const collection = this.schemaBySegment.get(createSegment);
           if (!collection) return UNKNOWN_TOOL;
+          const data = stripReservedArgs(args);
           return this.useCases.createDraft.execute({
             collection,
-            data: stripReservedArgs(args),
+            data,
             authorId: auth.userId,
             ctx: hookCtx,
+            originalInput: data,
           });
         }
         const updateSegment =
@@ -383,11 +398,13 @@ export class McpJsonRpcDispatcher {
           // Caller may also call get_entry separately; we don't need
           // the collection on the chokepoint args because UpdateDraft
           // looks it up from the existing row.
+          const data = stripReservedArgs(args);
           return this.useCases.updateDraft.execute({
             id,
             expectedVersion: expected,
-            data: stripReservedArgs(args),
+            data,
             ctx: hookCtx,
+            originalInput: data,
           });
         }
         return UNKNOWN_TOOL;

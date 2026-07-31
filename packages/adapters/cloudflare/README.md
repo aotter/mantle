@@ -72,3 +72,18 @@ of the Core SDK skill contract or Day 1 landing path. Use the Cloudflare recipe
 only when a site actually needs staff-managed images or files:
 
 <https://raw.githubusercontent.com/aotter/mantle/develop/docs/media-uploads.md>
+
+## Optional deferred lifecycle hooks
+
+`WorkersQueueHookDispatcher` and `createQueueHandler` opt `after_*` lifecycle
+Triggers into Cloudflare Queues. Delivery is at-least-once, not exactly-once;
+the D1 write and Queue send are not atomic, and fallback through `waitUntil` is
+best-effort. Handlers receive a stable `ctx.event.id` plus
+`ctx.event.trigger` for idempotency. The adapter validates strict v1 JSON
+envelopes, reserves metadata headroom under Cloudflare's 128 KB message limit,
+and maps failures to per-message retry/DLQ behavior.
+
+Producer/consumer bindings, Worker export, idempotent D1/upstream examples,
+site-queue multiplexing, verification, and the legacy-envelope drain step are
+in the shipped
+[deferred lifecycle Queue guide](../../../docs/deferred-lifecycle-queues.md).

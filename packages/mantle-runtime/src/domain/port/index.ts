@@ -63,9 +63,13 @@ export type {
 export type {
   DeferredHookDispatcher,
   DeferredHookEnvelope,
+  DeferredLifecycleHook,
   CtxSnapshot,
 } from "./DeferredHookDispatcher.js";
-export { ctxSnapshotFrom } from "./DeferredHookDispatcher.js";
+export {
+  DEFERRED_HOOK_ENVELOPE_VERSION,
+  ctxSnapshotFrom,
+} from "./DeferredHookDispatcher.js";
 export { type Clock, SystemClock } from "./Clock.js";
 export { type IdGenerator, RandomUuidGenerator } from "./IdGenerator.js";
 export {

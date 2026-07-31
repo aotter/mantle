@@ -93,6 +93,8 @@ The `mantle-runtime` package never imports Cloudflare-specific types — adapter
   - `node_modules/@aotter/mantle/docs/api-mcp-authorization.md` (anonymous,
     API-key, paid guard, personal-token, OAuth, REST, and MCP examples)
   - `node_modules/@aotter/mantle/docs/media-uploads.md` (Cloudflare R2 adapter recipe)
+  - `node_modules/@aotter/mantle/docs/deferred-lifecycle-queues.md` (versioned
+    Queue wiring, retry/DLQ, idempotency, and delivery guarantees)
   - `node_modules/@aotter/mantle/docs/adr/`
   - `node_modules/@aotter/mantle/skills/develop/SKILL.md`
   - `node_modules/@aotter/mantle/skills/plugin/SKILL.md`
@@ -103,6 +105,7 @@ The `mantle-runtime` package never imports Cloudflare-specific types — adapter
 - [Repo](https://github.com/aotter/mantle)
 - [4-atom manifest model (ADR-0001)](https://github.com/aotter/mantle/blob/develop/docs/adr/0001-four-atom-manifest-model.md)
 - [API and MCP authorization](https://github.com/aotter/mantle/blob/develop/docs/api-mcp-authorization.md)
+- [Deferred lifecycle Queues](https://github.com/aotter/mantle/blob/develop/docs/deferred-lifecycle-queues.md)
 - [Release process](https://github.com/aotter/mantle/blob/develop/docs/release-process.md)
 - [Issues](https://github.com/aotter/mantle/issues)
 

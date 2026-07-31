@@ -101,7 +101,7 @@ function harness(opts: {
   const hookRunner = new RunLifecycleHooksUseCase(triggerIndex, proceduresByName, (req) =>
     invoke.execute(req),
   );
-  entries = new LifecycleHookingEntryRepository(store, triggerIndex, hookRunner);
+  entries = new LifecycleHookingEntryRepository(store, triggerIndex, hookRunner, idgen);
 
   return { store, invoke, schemas };
 }
@@ -479,7 +479,7 @@ describe("InvokeBuiltinUseCase — update / delete / upsert", () => {
 });
 
 describe("InvokeBuiltinUseCase — lifecycle hook integration", () => {
-  it("before_create hook sees ctx.event.originalInput including side-channel fields", async () => {
+  it("before_create hook input includes side-channel fields", async () => {
     let captured: unknown = null;
     const h = harness({
       procedures: [

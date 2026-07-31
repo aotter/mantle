@@ -16,8 +16,8 @@ import type { HandlerContext } from "../model/HandlerContext.js";
  *      Schema's `spec.schema.properties`. Side-channel fields (CAPTCHA
  *      tokens, hCaptcha challenges, etc.) declared in the Procedure's
  *      input but not in the Schema's properties are silently dropped
- *      from the row. They remain available to lifecycle hooks via
- *      `ctx.event.originalInput`.
+ *      from the row. They remain available as the input to matching
+ *      synchronous `before_*` lifecycle hooks only.
  *
  *   2. **Stamping**: any Schema property carrying `x-mantle-bind: <value>`
  *      gets its value computed at write time:

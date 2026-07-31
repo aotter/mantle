@@ -45,11 +45,4 @@ export class TriggerIndex {
   forHook(schema: string, hook: LifecycleHook): readonly TriggerManifest[] {
     return this.bySchemaAndHook.get(schema)?.get(hook) ?? [];
   }
-
-  /** True when at least one lifecycle Trigger bound to this Schema
-   *  exists (any hook). Used by the entry-writer decorator to short-
-   *  circuit when no hooks could fire. */
-  hasAny(schema: string): boolean {
-    return this.bySchemaAndHook.has(schema);
-  }
 }

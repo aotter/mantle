@@ -121,11 +121,10 @@ export interface CreateCmsRuntimeArgs {
   /** Whether the SVG mime is allowed in `CreateMediaUpload`. Default
    *  false; object stores don't sanitize SVG payloads. */
   readonly mediaAllowSvg?: boolean;
-  /** Optional deferred-delivery dispatcher for `after_*` lifecycle
-   *  hooks. When set, after-hooks are enqueued through it instead of
-   *  riding `ctx.waitUntil` / inline-await. Cloudflare adapter wires
-   *  a Workers-Queues-backed impl by default. Absent → existing
-   *  waitUntil → inline ladder applies. */
+  /** Optional at-least-once dispatcher for `after_*` lifecycle hooks.
+   *  Queue acceptance is not atomic with the entry write. A rejection
+   *  falls back, with the same event id, to best-effort `waitUntil`
+   *  then inline execution. */
   readonly deferredHookDispatcher?: DeferredHookDispatcher;
   /** Optional clock — test seam. Defaults to `SystemClock`. */
   readonly clock?: Clock;
@@ -184,10 +183,8 @@ export interface CmsRuntime {
     resolve(id: string): Promise<MediaAsset | null>;
     resolveMany(ids: readonly string[]): Promise<ReadonlyMap<string, MediaAsset>>;
   } | null;
-  /** Drive a deferred after-hook from an enqueued envelope. Adapter
-   *  queue consumers call `runDeferredHook.execute({ envelope, env })`
-   *  with the consume-side binding bag (different invocation than
-   *  the one that produced the envelope). */
+  /** Validate and drive a deferred after-hook from an untrusted Queue
+   *  body. Failures escape so the adapter can retry/DLQ the event. */
   readonly runDeferredHook: RunDeferredHookUseCase;
 
   /** Adapter-helper bag. */
@@ -263,6 +260,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     innerEntries,
     triggerIndex,
     lifecycleHooks,
+    idgen,
     args.deferredHookDispatcher,
   );
   const runDeferredHook = new RunDeferredHookUseCase(lifecycleHooks);

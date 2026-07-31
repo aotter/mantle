@@ -63,8 +63,10 @@ export { extensionForMime } from "./usecase/media/mediaAllowlist.js";
 export type {
   DeferredHookDispatcher,
   DeferredHookEnvelope,
+  DeferredLifecycleHook,
   CtxSnapshot,
 } from "./domain/port/DeferredHookDispatcher.js";
+export { DEFERRED_HOOK_ENVELOPE_VERSION } from "./domain/port/DeferredHookDispatcher.js";
 
 // ID source — adapters wire this into binding-side helpers that need
 // random IDs. Default `RandomUuidGenerator` (`crypto.randomUUID()`)
@@ -75,6 +77,8 @@ export { type IdGenerator, RandomUuidGenerator } from "./domain/port/IdGenerator
 export type {
   AnyHandler,
   HandlerContext,
+  HandlerAuthContext,
+  HandlerLifecycleEvent,
 } from "./domain/model/HandlerContext.js";
 export type { SeoMeta } from "./domain/model/SeoMeta.js";
 export {

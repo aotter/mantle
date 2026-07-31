@@ -880,26 +880,44 @@ spec:
 **Atomicity defaults by phase**:
 - `before_*`: `errorPolicy: abort`. Handler throw cancels the
   surrounding mutation; caller receives the diagnostic.
-- `after_*`: `errorPolicy: continue`. Handler throw is logged and
-  discarded; the mutation succeeds. Runs via `ctx.waitUntil` when
-  available so the caller doesn't block on a remote call.
+- `after_*`: `errorPolicy: continue`. The committed mutation remains
+  successful. On the inline / `ctx.waitUntil` path, a failure is logged
+  and swallowed. With an optional `DeferredHookDispatcher`, failures
+  surface to the delivery adapter so its at-least-once retry/DLQ policy
+  can run; they still never roll back the entry mutation.
 
 Authors override either default by declaring `errorPolicy: abort |
 continue` explicitly.
 
-**Hook handlers** receive the *original* (pre-projection) Procedure
-input — so a `before_create` hook on `contact-messages` can read the
-caller's `recaptchaToken` field even though the row never stores it.
-They also receive `ctx.event = { hook, schema, entry }`. `entry` is
-null only on `before_create` (no row exists yet); the pre-mutation
-row on `before_update` / `before_delete` / `before_publish`; the
-persisted post-mutation row on every `after_*`.
+**Hook handler input** is phase-specific. Synchronous `before_*` hooks
+receive the original pre-projection Procedure input, so a
+`before_create` hook on `contact-messages` can read the caller's
+`recaptchaToken` even though the row never stores it. Every `after_*`
+hook receives only persisted `entry.data`; deferred envelopes never
+retain arbitrary request input.
+
+Handlers also receive
+`ctx.event = { id, trigger, hook, schema, entry }`. `id` is stable
+across enqueue fallback and deferred retries; `trigger` is the current
+`Trigger.metadata.name`. Deferred handlers use `${id}:${trigger}` as
+their idempotency key. `entry` is null only on `before_create`; it is
+the pre-mutation row for the other `before_*` hooks and the persisted
+post-mutation row for every `after_*`.
 
 **Hook ordering**: when multiple lifecycle Triggers bind the same
 `(schema, hook)`, the runtime fires them **alphabetically by
 `Trigger.metadata.name`**. A `priority: number` key is reserved for
 v0.2; today, choose names that sort correctly (`010-bot-check`,
 `020-rate-limit`).
+
+For deferred delivery, that ordered Trigger-name list is captured in
+one strict versioned event. Every captured Trigger runs before a
+failure is returned to the Queue, so retry may replay Triggers that
+already succeeded. Queue acceptance is not transactional with D1,
+`waitUntil` fallback is best-effort, and exactly-once is not promised.
+Cloudflare wiring, the 128 KB platform limit, retry/DLQ configuration,
+idempotency, and legacy-envelope draining are specified in
+[Deferred lifecycle hooks on Cloudflare Queues](deferred-lifecycle-queues.md).
 
 **Editorial-lifecycle hooks** (`before_publish`, `after_publish`)
 depend on the `lifecycle: editorial` runtime, which ships in the

@@ -1,47 +1,133 @@
+import {
+  ContentState,
+  DiagnosticError,
+  STAFF_ROLES,
+  firstZodIssueAsJsonPointer,
+  runtimeDiagnostic,
+} from "@aotter/mantle-spec";
+import { z } from "zod";
 import type { HandlerContext } from "../../domain/model/HandlerContext.js";
+import {
+  DEFERRED_HOOK_ENVELOPE_VERSION,
+  type DeferredHookEnvelope,
+} from "../../domain/port/DeferredHookDispatcher.js";
 import type { RunDeferredHookRequest } from "../dto/lifecycle/index.js";
 import type { RunLifecycleHooksUseCase } from "./RunLifecycleHooksUseCase.js";
 
+const nonEmpty = z.string().min(1);
+const authSchema = z.object({
+  credential: z.enum(["session", "oauth", "api-key", "personal-token"]),
+  credentialId: nonEmpty.nullable(),
+  clientId: nonEmpty.nullable(),
+  scopes: z.array(nonEmpty),
+}).strict();
+
+const ctxSnapshotSchema = z.object({
+  userId: nonEmpty.nullable(),
+  staffId: nonEmpty.nullable(),
+  staffRole: z.enum(STAFF_ROLES).nullable(),
+  auth: authSchema.nullable(),
+}).strict().superRefine((snapshot, ctx) => {
+  if ((snapshot.staffId === null) !== (snapshot.staffRole === null)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["staffId"],
+      message: "staffId and staffRole must both be null or both be set",
+    });
+  }
+  if (snapshot.staffId !== null && snapshot.staffId !== snapshot.userId) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["staffId"],
+      message: "staffId must match userId",
+    });
+  }
+});
+
+const entrySchema = z.object({
+  id: nonEmpty,
+  collection: nonEmpty,
+  locale: nonEmpty.optional(),
+  status: z.enum(ContentState),
+  version: z.number().int().positive(),
+  data: z.record(z.string(), z.json()),
+  authorId: nonEmpty.nullable(),
+  createdAt: z.number().finite(),
+  updatedAt: z.number().finite(),
+}).strict();
+
+const envelopeSchema = z.object({
+  version: z.literal(DEFERRED_HOOK_ENVELOPE_VERSION),
+  eventId: nonEmpty,
+  triggerNames: z.array(nonEmpty).min(1),
+  hook: z.enum(["after_create", "after_update", "after_delete", "after_publish"]),
+  schema: nonEmpty,
+  entry: entrySchema,
+  ctxSnapshot: ctxSnapshotSchema.nullable(),
+}).strict().superRefine((envelope, ctx) => {
+  if (new Set(envelope.triggerNames).size !== envelope.triggerNames.length) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["triggerNames"],
+      message: "triggerNames must be unique",
+    });
+  }
+  if (envelope.entry.collection !== envelope.schema) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["entry", "collection"],
+      message: "entry.collection must match schema",
+    });
+  }
+});
+
 /**
- * Consume side of the deferred after-hook path. Adapter queue
- * consumers (CF Workers `queue(batch, env)` for Workers Queues, etc.)
- * deserialize each `DeferredHookEnvelope` and call this use case with
- * a fresh per-invocation `env` binding bag.
+ * Consume side of deferred lifecycle delivery. Queue bodies are
+ * untrusted: the versioned envelope is validated before any field is
+ * read, then the original identity snapshot is rebuilt with the
+ * consume invocation's fresh adapter bindings.
  *
- * Reconstructs a `HandlerContext` mirroring the original firing
- * context's identity (user / staff snapshot from the envelope), with
- * `env` filled by the consume invocation. `waitUntil` is intentionally
- * absent — the consume invocation owns its own request lifetime, and
- * chaining another fire-and-forget here would just reintroduce the
- * durability gap the deferred path closes.
- *
- * Errors from the underlying hook surface per the Trigger's
- * `errorPolicy`. The adapter is expected to translate a throw into
- * the platform's retry signal (e.g. `message.retry()` on CF Queues)
- * so the hook eventually succeeds or hits the dead-letter queue.
+ * Deferred failures intentionally escape. The Queue adapter converts
+ * a throw into retry/DLQ behavior; the already-committed entry
+ * mutation is unaffected.
  */
 export class RunDeferredHookUseCase {
   constructor(private readonly hooks: Pick<RunLifecycleHooksUseCase, "run">) {}
 
   async execute(request: RunDeferredHookRequest): Promise<void> {
-    const { envelope, env } = request;
+    const envelope = parseEnvelope(request.envelope);
+    const snapshot = envelope.ctxSnapshot;
     const ctx: HandlerContext = {
-      user: envelope.ctxSnapshot?.userId
-        ? { id: envelope.ctxSnapshot.userId }
+      user: snapshot?.userId ? { id: snapshot.userId } : null,
+      staff: snapshot?.staffId && snapshot.staffRole
+        ? { id: snapshot.staffId, role: snapshot.staffRole }
         : null,
-      staff:
-        envelope.ctxSnapshot?.staffId && envelope.ctxSnapshot.staffRole
-          ? { id: envelope.ctxSnapshot.staffId, role: envelope.ctxSnapshot.staffRole }
-          : null,
-      auth: envelope.ctxSnapshot?.auth ?? undefined,
-      env,
+      ...(snapshot?.auth ? { auth: snapshot.auth } : {}),
+      env: request.env,
     };
     await this.hooks.run({
+      eventId: envelope.eventId,
+      triggerNames: envelope.triggerNames,
+      delivery: "deferred",
       hook: envelope.hook,
       schema: envelope.schema,
       entry: envelope.entry,
       ctx,
-      originalInput: envelope.originalInput,
     });
   }
+}
+
+function parseEnvelope(value: unknown): DeferredHookEnvelope {
+  const result = envelopeSchema.safeParse(value);
+  if (result.success) return result.data;
+  const { instancePath, message } = firstZodIssueAsJsonPointer(result.error);
+  throw new DiagnosticError(
+    runtimeDiagnostic({
+      code: "INPUT_VALIDATION_FAILED",
+      severity: "error",
+      path: `usecase/RunDeferredHook/envelope${instancePath}`,
+      expected: message,
+      message: `Deferred lifecycle envelope rejected at '${instancePath || "/"}': ${message}.`,
+    }),
+  );
 }
