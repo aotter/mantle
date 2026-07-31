@@ -6,6 +6,21 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.59] - 2026-07-31
+
+### Changed
+
+- **@aotter/mantle-runtime**: require published content to be unpublished before deletion while keeping `lifecycle: none` operational records directly deletable; repository deletes now guard the collection, status, and version snapshot atomically (#521, #524).
+- **release fanout / starters**: enable version-local Cloudflare Workers Caching and observability, content-fingerprint immutable CSS/JS, remove the render-blocking remote Inter font, and give shipped hero images stable LCP dimensions and priority (aotter/mantle-starters#439, aotter/mantle-starters#440).
+
+### Fixed
+
+- **@aotter/mantle-runtime**: invalidate cross-locale `/llms.txt` aggregates on localized publish/unpublish, retire stale alpha.58 root keys, and bound live root fallback writes with a five-minute TTL (#521, #524).
+
+### Security
+
+- **@aotter/mantle-cloudflare**: make the top-level Worker response boundary private by default; only anonymous successful `GET`/`HEAD` responses with explicit shared freshness remain cacheable, while redirects, errors, auth/Admin/API/OAuth/MCP responses, cookies, authorization, and Cloudflare CDN overrides fail closed (#521, #524).
+
 ## [0.0.11-alpha.58] - 2026-07-31
 
 ### Changed
