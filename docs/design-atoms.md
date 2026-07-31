@@ -101,7 +101,7 @@ stays honest.
 ### 1. `Schema` — the entity (internal)
 
 A relation. Defines what data exists. You declare the JSON Schema for
-each row, the unique indexes, the binding directives. Schema is **not
+each row, its indexes, and the binding directives. Schema is **not
 directly externally exposed** — clients don't write to a Schema URL; they
 hit a Procedure that the SDK translates into Schema mutations.
 
@@ -128,6 +128,7 @@ spec:
       authorId: { type: string, format: uuid, x-mantle-bind: ctx.user }
       createdAt: { type: string, format: date-time, x-mantle-bind: now }
   uniqueIndexes: [[slug, locale]]
+  indexes: [[locale, title]]        # ordered, non-unique hot path
 ```
 
 **`spec.title`** — admin UI label. Required. AI authors must populate
@@ -675,11 +676,13 @@ indexing it surfaces as a JSON-extracted virtual generated column
 (`json_extract(data, '$.locale')`) with a partial unique index, not as
 a top-level column.
 
-`uniqueIndexes` declarations compile into virtual generated columns +
-partial unique indexes via the spec engine's DDL emitter
-(`@aotter/mantle-spec`); different collections coexist on the
-same table without colliding because the generated-column expression
-is gated by `WHEN collection = '<name>'`.
+`uniqueIndexes` and ordered, non-unique `indexes` declarations compile
+into affinity-correct virtual generated columns plus partial B-tree
+indexes via the spec engine's DDL emitter (`@aotter/mantle-spec`).
+Different collections coexist on the same table without colliding
+because each generated-column expression is gated by `WHEN collection
+= '<name>'`. See [Schema indexes on D1](schema-indexes.md) for the
+grammar, leftmost-prefix rules, SQL helper, and query-plan examples.
 
 ### What works well on D1
 
@@ -688,8 +691,9 @@ is gated by `WHEN collection = '<name>'`.
   plus `->` / `->>` operators.
 - Reserved-column queries (`status = 'published'`, `ORDER BY
   updated_at`) use native indexes — fast.
-- `uniqueIndexes`-declared paths use virtual columns + partial unique
-  indexes — fast equality.
+- `uniqueIndexes`- and `indexes`-declared paths use virtual columns +
+  partial indexes. Core-compiled Views and repository lookups reference
+  those columns instead of repeating `json_extract`.
 
 ### Where D1's JSON support has limits (vs Postgres)
 
@@ -708,11 +712,9 @@ is gated by `WHEN collection = '<name>'`.
 
 - **Blog-scale (< 10k entries / collection)**: today's design is
   comfortable. Public render hits KV cache, not D1.
-- **Mid-scale (10k – 100k entries)**: list/filter Views on
-  JSON-internal fields start to need `indexedFields` (future
-  grammar). Cross-collection JSON-path joins start to need
-  `x-mantle-ref` auto-lift. Both are reserved in the future-grammar
-  appendix.
+- **Mid-scale (10k – 100k entries)**: declare measured list/filter
+  access paths with ordered `indexes`. Cross-collection JSON-path joins
+  may eventually gain `x-mantle-ref` auto-lift; that remains DRAFT.
 - **Hard D1 limits**: 1 MB max row size; 5,000 rows per query result;
   single-writer per database (concurrent writes serialize).
 - **Cross-region read**: D1 is region-pinned; first hit from a
@@ -739,7 +741,7 @@ When this path is taken (post-v0.1; not implemented yet), the
 | What changes (SDK runtime) | Author impact |
 |---|---|
 | `data TEXT` → `data JSONB` | none |
-| Virtual generated columns → optional (PG can use GIN) | author may stop declaring `indexedFields` if defaults suffice; same YAML still valid |
+| Virtual generated columns → optional (PG can use GIN) | author may stop declaring `indexes` if defaults suffice; the same YAML remains valid |
 | `json_each` → array operators (`@>`, `&&`) | none — predicates stay declarative |
 | SDK-stamped `now` → `DEFAULT now()` (optional) | none |
 | SDK-side policy rewriting → native RLS (optional) | none |
@@ -930,18 +932,11 @@ forces it, not on speculation. Today, do not implement; the boot
 validator rejects with `DRAFT_KEY_USED`.
 
 #### Schema future
-- **`spec.indexedFields: [<field-path>, ...]`** — non-unique
-  performance indexes on JSON-internal fields. Compiles to one virtual
-  generated column + one non-unique index per declared field, mirroring
-  the existing `uniqueIndexes` mechanism but without the UNIQUE
-  constraint. Lands when first list/filter Views on JSON-internal
-  fields start to slow (typical threshold: 5–10k rows on a collection
-  whose hot filter or sort key isn't a reserved native column).
 - **`x-mantle-ref` auto-lift to virtual column** — when a property
   carrying `x-mantle-ref: <other-schema>` is referenced in any registered
   View's `filter:` or future `join:`, the SDK auto-creates the virtual
-  column + non-unique index without requiring explicit
-  `indexedFields` entry. Solves cross-collection JSON-path join
+  column + non-unique index without requiring an explicit `indexes`
+  declaration. Solves cross-collection JSON-path join
   performance without making authors think about it. Pure SDK
   behavior; no new YAML grammar.
 - **`spec.policies.visible`** — row-level read predicate auto-AND'd

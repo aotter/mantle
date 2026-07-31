@@ -1,5 +1,5 @@
 export {
   CANONICAL_MIGRATIONS,
-  reconcileSchemaUniqueIndexes,
+  reconcileSchemaIndexes,
   schemaIndexMigrations,
 } from "./canonicalMigrations.js";

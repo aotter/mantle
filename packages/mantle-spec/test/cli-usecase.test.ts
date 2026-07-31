@@ -16,6 +16,8 @@ spec:
       slug: { type: string }
       title: { type: string }
       body: { type: string }
+  indexes: [[title, slug]]
+  uniqueIndexes: [[slug]]
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: View
@@ -67,6 +69,8 @@ describe("IntrospectManifestsUseCase", () => {
       name: "posts",
       localized: false,
       lifecycle: "simple",
+      indexes: [["title", "slug"]],
+      uniqueIndexes: [["slug"]],
     });
     expect(out.schemas[0]!.properties).toEqual(["slug", "title", "body"]);
     expect(out.views).toHaveLength(1);

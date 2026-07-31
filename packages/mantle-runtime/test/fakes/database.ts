@@ -57,6 +57,7 @@ export class InMemoryDatabase implements DatabaseDriver {
     metadata: string | null;
   }>();
   appliedMigrations = new Set<string>();
+  legacyIndexColumns = new Map<string, readonly string[]>();
 
   prepare(sql: string): PreparedStatement {
     return new InMemoryStatement(this, normalize(sql), []);
@@ -115,15 +116,31 @@ class InMemoryStatement implements PreparedStatement {
     const sql = this.sql;
     const p = this.params;
 
-    if (sql === "SELECT id FROM _migrations WHERE id LIKE 'schema-unique-index:%'") {
+    if (
+      sql === "SELECT id FROM _migrations WHERE id LIKE 'schema-unique-index:%'" ||
+      sql === "SELECT id FROM _migrations WHERE id LIKE 'schema-index-v2:index:%'"
+    ) {
+      const prefix = sql.includes("schema-index-v2")
+        ? "schema-index-v2:index:"
+        : "schema-unique-index:";
       return {
         rows: [...this.db.appliedMigrations]
-          .filter((id) => id.startsWith("schema-unique-index:"))
+          .filter((id) => id.startsWith(prefix))
           .map((id) => ({ id })),
         changes: 0,
       };
     }
-    if (sql.startsWith('DROP INDEX IF EXISTS "uq_')) {
+    const legacyInfo = /^PRAGMA index_info\("([^"]+)"\)$/.exec(sql);
+    if (legacyInfo) {
+      return {
+        rows: (this.db.legacyIndexColumns.get(legacyInfo[1]!) ?? [])
+          .map((name, seqno) => ({ name, seqno })),
+        changes: 0,
+      };
+    }
+    if (/^DROP INDEX IF EXISTS "(?:m2[ui]_|uq_)/.test(sql)) {
+      const indexName = /^DROP INDEX IF EXISTS "([^"]+)"$/.exec(sql)?.[1];
+      if (indexName) this.db.legacyIndexColumns.delete(indexName);
       return { rows: [], changes: 0 };
     }
     if (sql === "DELETE FROM _migrations WHERE id = ?") {

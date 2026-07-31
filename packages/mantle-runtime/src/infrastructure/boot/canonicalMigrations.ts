@@ -238,52 +238,144 @@ export function schemaIndexMigrations(
     a.metadata.name.localeCompare(b.metadata.name));
   for (const schema of ordered) {
     const ddl = buildDdl(schema);
-    for (let i = 0; i < ddl.addColumns.length; i += 1) {
-      const columnName = ddl.columnNames[i]!;
+    for (const column of ddl.columns) {
       migrations.push({
-        id: `schema-index-column:${columnName}`,
-        description: `Generated unique-index column ${columnName}`,
-        sql: ddl.addColumns[i]!,
+        id: `schema-index-v2:column:${column.name}`,
+        description: `Generated Schema-index column ${column.name}`,
+        sql: column.sql,
       });
     }
-    for (let i = 0; i < ddl.createIndexes.length; i += 1) {
-      const indexName = ddl.indexNames[i]!;
+    for (const index of ddl.indexes) {
       migrations.push({
-        id: `schema-unique-index:${indexName}`,
-        description: `Manifest unique index ${indexName}`,
-        sql: ddl.createIndexes[i]!,
+        id: `schema-index-v2:index:${index.name}`,
+        description: `Manifest Schema index ${index.name}`,
+        sql: index.sql,
       });
     }
   }
   return migrations;
 }
 
-const SCHEMA_UNIQUE_INDEX_PREFIX = "schema-unique-index:";
-const SAFE_SCHEMA_UNIQUE_INDEX = /^uq_[a-z0-9_.-]+(?:__[a-z0-9_.-]+)+$/i;
+const SCHEMA_INDEX_V2_PREFIX = "schema-index-v2:index:";
+const LEGACY_UNIQUE_INDEX_PREFIX = "schema-unique-index:";
+const SAFE_SCHEMA_INDEX_V2 = /^m2[ui]_[0-9a-f]+_[0-9a-f]+_[0-9a-f]+(?:__[0-9a-f]+_[0-9a-f]+)*$/;
+const SAFE_LEGACY_UNIQUE_INDEX = /^uq_[a-z0-9_.-]+(?:__[a-z0-9_.-]+)+$/i;
 
 /**
  * Drop generated indexes no longer declared by the current manifests.
  * Keep generated columns: SQLite cannot remove them safely across the
  * D1 versions Mantle supports, and unused virtual columns are harmless.
  */
-export async function reconcileSchemaUniqueIndexes(
+export async function reconcileSchemaIndexes(
   db: DatabaseDriver,
   current: readonly Migration[],
+  schemas: Iterable<SchemaManifest>,
 ): Promise<void> {
-  const desired = new Set(
+  const desiredV2 = new Set(
     current
       .map((migration) => migration.id)
-      .filter((id) => id.startsWith(SCHEMA_UNIQUE_INDEX_PREFIX)),
+      .filter((id) => id.startsWith(SCHEMA_INDEX_V2_PREFIX)),
   );
-  const applied = await db
+  const legacyExpectations = legacyUniqueIndexExpectations(schemas);
+  const appliedV2 = await db
+    .prepare(`SELECT id FROM _migrations WHERE id LIKE 'schema-index-v2:index:%'`)
+    .all<{ id: string }>();
+  const appliedLegacy = await db
     .prepare(`SELECT id FROM _migrations WHERE id LIKE 'schema-unique-index:%'`)
     .all<{ id: string }>();
+  const desiredLegacy = await matchingLegacyUniqueIndexes(
+    db,
+    appliedLegacy,
+    legacyExpectations,
+  );
 
+  await dropStaleIndexes(
+    db,
+    appliedV2,
+    desiredV2,
+    SCHEMA_INDEX_V2_PREFIX,
+    SAFE_SCHEMA_INDEX_V2,
+  );
+  await dropStaleIndexes(
+    db,
+    appliedLegacy,
+    desiredLegacy,
+    LEGACY_UNIQUE_INDEX_PREFIX,
+    SAFE_LEGACY_UNIQUE_INDEX,
+  );
+}
+
+function legacyUniqueIndexExpectations(
+  schemas: Iterable<SchemaManifest>,
+): ReadonlyMap<string, readonly string[] | null> {
+  const expectations = new Map<string, readonly string[] | null>();
+  for (const schema of schemas) {
+    for (const fields of schema.spec.uniqueIndexes ?? []) {
+      if (fields.length === 0) continue;
+      const flattened = fields.map((field) => field.replace(/\./g, "_"));
+      const id =
+        `${LEGACY_UNIQUE_INDEX_PREFIX}uq_${schema.metadata.name}__${flattened.join("__")}`;
+      const columns = flattened.map((field) => `${schema.metadata.name}__${field}`);
+      const ambiguous = schema.metadata.name.includes("__") ||
+        fields.some((field) => /[._]/.test(field));
+      const previous = expectations.get(id);
+      if (
+        ambiguous ||
+        previous === null ||
+        (previous !== undefined && !sameStrings(previous, columns))
+      ) {
+        expectations.set(id, null);
+      } else {
+        expectations.set(id, columns);
+      }
+    }
+  }
+  return expectations;
+}
+
+/**
+ * Alpha.59 flattened dots and joined tuples with `__`, so migration ids alone
+ * cannot prove that a legacy physical index still represents today's tuple.
+ * Retain only unambiguous declarations whose ordered physical columns match.
+ */
+async function matchingLegacyUniqueIndexes(
+  db: DatabaseDriver,
+  applied: readonly { readonly id: string }[],
+  expectedById: ReadonlyMap<string, readonly string[] | null>,
+): Promise<ReadonlySet<string>> {
+  const matching = new Set<string>();
+  for (const { id } of applied) {
+    const expected = expectedById.get(id);
+    if (!expected) continue;
+    const indexName = id.slice(LEGACY_UNIQUE_INDEX_PREFIX.length);
+    if (!SAFE_LEGACY_UNIQUE_INDEX.test(indexName)) continue;
+    const actual = await db
+      .prepare(`PRAGMA index_info("${indexName}")`)
+      .all<{ seqno: number; name: string }>();
+    const columns = [...actual]
+      .sort((a, b) => a.seqno - b.seqno)
+      .map(({ name }) => name);
+    if (sameStrings(columns, expected)) matching.add(id);
+  }
+  return matching;
+}
+
+function sameStrings(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+async function dropStaleIndexes(
+  db: DatabaseDriver,
+  applied: readonly { readonly id: string }[],
+  desired: ReadonlySet<string>,
+  prefix: string,
+  safeName: RegExp,
+): Promise<void> {
   for (const { id } of applied) {
     if (desired.has(id)) continue;
-    const indexName = id.slice(SCHEMA_UNIQUE_INDEX_PREFIX.length);
-    if (!SAFE_SCHEMA_UNIQUE_INDEX.test(indexName)) {
-      throw new Error(`unsafe generated unique-index identifier: ${indexName}`);
+    const indexName = id.slice(prefix.length);
+    if (!safeName.test(indexName)) {
+      throw new Error(`unsafe generated Schema-index identifier: ${indexName}`);
     }
     await db.batch([
       db.prepare(`DROP INDEX IF EXISTS "${indexName}"`),

@@ -45,6 +45,8 @@ export const DIAGNOSTIC_CODES = [
   "GUARD_SELF_REFERENCE",
   "GUARD_PROCEDURE_BUILTIN",
   "GUARD_CHAIN_NOT_ALLOWED",
+  "SCHEMA_INDEX_INVALID",
+  "SCHEMA_INDEX_FIELD_UNKNOWN",
   "UNIQUE_INDEX_FIELD_UNKNOWN",
   "DRAFT_KEY_USED",
   // v0.1.x-committed keys present in v0.1.0 manifests are rejected

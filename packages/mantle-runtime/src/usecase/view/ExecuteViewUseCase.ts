@@ -5,6 +5,7 @@ import {
   readJsonPointer,
   runtimeDiagnostic,
   type Diagnostic,
+  type SchemaManifest,
 } from "@aotter/mantle-spec";
 import type { ZodType } from "zod";
 import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
@@ -48,6 +49,7 @@ export class ExecuteViewUseCase {
   constructor(
     private readonly db: DatabaseDriver,
     private readonly invokeGuard?: InvokeViewGuard,
+    private readonly schemasByName: ReadonlyMap<string, SchemaManifest> = new Map(),
   ) {}
 
   async execute<R = Record<string, unknown>>(
@@ -142,10 +144,14 @@ export class ExecuteViewUseCase {
 
     let compiled;
     try {
-      compiled = compileView(request.view, {
-        ...request.options,
-        params: validatedParams,
-      });
+      compiled = compileView(
+        request.view,
+        {
+          ...request.options,
+          params: validatedParams,
+        },
+        this.schemasByName.get(request.view.spec.from),
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return {

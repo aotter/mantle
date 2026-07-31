@@ -3,17 +3,20 @@ import {
   RESERVED_ENTRY_COLUMNS,
   isParamRef,
   runtimeDiagnostic,
+  schemaIndexedFieldSql,
   type FilterAst,
+  type SchemaManifest,
   type ViewManifest,
 } from "@aotter/mantle-spec";
 import { clampPage, clampShow } from "./Pagination.js";
 
 /**
  * View → SQL compilation. Targets SQLite + JSON1 (D1's dialect).
- * Reserved metadata fields project as native columns; everything else
- * goes through `json_extract(data, '$.<field>')`. SQL uses positional
- * `?` parameters; field-name escapes are defense-in-depth on top of
- * the Schema validator gate.
+ * Reserved metadata fields project as native columns. Declared Schema
+ * index fields use their generated columns; undeclared fields keep the
+ * `json_extract(data, '$.<field>')` fallback. SQL uses positional `?`
+ * parameters; field-name escapes are defense-in-depth on top of the
+ * Schema validator gate.
  *
  * v0.1 filter AST supports comparison operators (`eq`, `gt`, `gte`,
  * `lt`, `lte`) plus `and` / `or`; comparison values may be literals or
@@ -71,19 +74,35 @@ const SQL_COMPARISON_OP: Readonly<Record<FilterComparisonOp, string>> = {
   lte: "<=",
 };
 
-export function compileView(view: ViewManifest, options: CompileViewOptions = {}): CompiledView {
+export function compileView(
+  view: ViewManifest,
+  options: CompileViewOptions = {},
+  schema?: SchemaManifest,
+): CompiledView {
+  if (schema && schema.metadata.name !== view.spec.from) {
+    throw new DiagnosticError(
+      runtimeDiagnostic({
+        code: "INTERNAL_ERROR",
+        severity: "error",
+        path: "compileView/schema",
+        value: schema.metadata.name,
+        expected: `Schema '${view.spec.from}' referenced by View.spec.from`,
+        message: `View '${view.metadata.name}' cannot compile against Schema '${schema.metadata.name}'.`,
+      }),
+    );
+  }
   const sqlParams: unknown[] = [view.spec.from];
-  const selectExpr = buildSelect(view.spec.fields);
+  const selectExpr = buildSelect(view.spec.fields, schema);
   const whereParts: string[] = ["collection = ?"];
   if (view.spec.filter) {
-    const compiled = compileFilter(view.spec.filter, options.params ?? {});
+    const compiled = compileFilter(view.spec.filter, options.params ?? {}, schema);
     if (compiled !== null) {
       whereParts.push(`(${compiled.sql})`);
       sqlParams.push(...compiled.params);
     }
   }
   const where = `WHERE ${whereParts.join(" AND ")}`;
-  const orderBy = buildOrderBy(view.spec.orderBy);
+  const orderBy = buildOrderBy(view.spec.orderBy, schema);
   const effectiveShow = clampShow(options.show, view.spec.limit);
   const effectivePage = clampPage(options.page);
   // Cap the offset so a huge `?page=` can't render in exponential
@@ -96,22 +115,26 @@ export function compileView(view: ViewManifest, options: CompileViewOptions = {}
   return { sql, params: sqlParams, effectivePage, effectiveShow };
 }
 
-function buildSelect(fields?: readonly string[]): string {
+function buildSelect(
+  fields?: readonly string[],
+  schema?: SchemaManifest,
+): string {
   if (!fields || fields.length === 0) return DEFAULT_PROJECTION;
-  return fields.map(fieldExpr).join(", ");
+  return fields.map((field) => fieldExpr(field, schema)).join(", ");
 }
 
-function fieldExpr(field: string): string {
+function fieldExpr(field: string, schema?: SchemaManifest): string {
   const reserved = RESERVED_COLUMN[field];
-  if (reserved) {
-    return reserved === field ? reserved : `${reserved} AS ${field}`;
-  }
-  return `json_extract(data, ${quotedJsonPath(field)}) AS ${quoteIdent(field)}`;
+  const expression = fieldRefExpr(field, schema);
+  if (reserved === field) return expression;
+  return `${expression} AS ${reserved ? field : quoteIdent(field)}`;
 }
 
-function fieldRefExpr(field: string): string {
+function fieldRefExpr(field: string, schema?: SchemaManifest): string {
   const reserved = RESERVED_COLUMN[field];
   if (reserved) return reserved;
+  const indexed = schema ? schemaIndexedFieldSql(schema, field) : null;
+  if (indexed) return indexed;
   return `json_extract(data, ${quotedJsonPath(field)})`;
 }
 
@@ -134,6 +157,7 @@ interface CompiledFragment {
 function compileFilter(
   node: FilterAst,
   paramValues: Record<string, unknown>,
+  schema?: SchemaManifest,
 ): CompiledFragment | null {
   const comparison = getFilterComparison(node);
   if (comparison) {
@@ -147,14 +171,14 @@ function compileFilter(
       bound = value;
     }
     return {
-      sql: `${fieldRefExpr(comparison.node.field)} ${SQL_COMPARISON_OP[comparison.op]} ?`,
+      sql: `${fieldRefExpr(comparison.node.field, schema)} ${SQL_COMPARISON_OP[comparison.op]} ?`,
       params: [bound],
     };
   }
   const op = "and" in node ? "AND" : "OR";
   const children = "and" in node ? node.and : "or" in node ? node.or : [];
   const compiled = children
-    .map((c) => compileFilter(c, paramValues))
+    .map((c) => compileFilter(c, paramValues, schema))
     .filter((c): c is CompiledFragment => c !== null);
   if (compiled.length === 0) return null;
   return {
@@ -176,6 +200,7 @@ function getFilterComparison(
 
 function buildOrderBy(
   orderBy?: ReadonlyArray<{ readonly field: string; readonly direction?: "asc" | "desc" }>,
+  schema?: SchemaManifest,
 ): string {
   if (!orderBy || orderBy.length === 0) return "";
   const parts = orderBy.map((o) => {
@@ -184,7 +209,7 @@ function buildOrderBy(
     // from YAML, so an out-of-enum string (e.g. `DESC LIMIT 0 --`)
     // could otherwise reach the SQL string verbatim.
     const dir = o.direction === "desc" ? "DESC" : "ASC";
-    return `${fieldRefExpr(o.field)} ${dir}`;
+    return `${fieldRefExpr(o.field, schema)} ${dir}`;
   });
   return ` ORDER BY ${parts.join(", ")}`;
 }

@@ -125,7 +125,19 @@ class D1Migrations implements MigrationRunner {
           .prepare(`INSERT INTO _migrations (id, applied_at) VALUES (?, ?)`)
           .bind(m.id, Date.now()),
       );
-      await this.db.batch(ops);
+      try {
+        await this.db.batch(ops);
+      } catch (error) {
+        // Two cold starts can read the same stale `seen` snapshot. The
+        // losing batch rolls back atomically; accept it only when the
+        // winner has recorded this exact migration in the meantime.
+        const winner = await this.db
+          .prepare(`SELECT id FROM _migrations WHERE id = ?`)
+          .bind(m.id)
+          .first<{ id: string }>();
+        if (winner?.id !== m.id) throw error;
+      }
+      seen.add(m.id);
     }
   }
 }

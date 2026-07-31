@@ -27,6 +27,7 @@ export class IntrospectManifestsUseCase {
         lifecycle: s.spec.lifecycle ?? "simple",
         translates: s.spec.translates ?? null,
         uniqueIndexes: s.spec.uniqueIndexes ?? [],
+        indexes: s.spec.indexes ?? [],
         properties: Object.keys(properties),
       };
     });

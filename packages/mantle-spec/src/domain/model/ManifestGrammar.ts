@@ -185,6 +185,8 @@ export interface SchemaManifestSpec {
   readonly uiSchema?: Record<string, unknown>;
   /** Composite unique-index declarations, e.g. `[[slug, locale]]`. */
   readonly uniqueIndexes?: ReadonlyArray<ReadonlyArray<string>>;
+  /** Ordered composite non-unique indexes over top-level scalar fields. */
+  readonly indexes?: ReadonlyArray<ReadonlyArray<string>>;
   /** Whether entries in this collection carry a per-row locale. Default
    *  `false`. When `true`, `data.locale` MUST be present and ∈ site
    *  `locales`; when `false`, `data.locale` MUST be absent. See
