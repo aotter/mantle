@@ -6,6 +6,21 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.58] - 2026-07-31
+
+### Changed
+
+- **@aotter/mantle-runtime / agent toolchain**: expose `lifecycle: none` collections to Staff MCP as operational `create_record_*` / `update_record_*` tools instead of draft authoring tools, and document operational schemas, fixed-option enums, and standard hero images in the versioned skills (#518, #519).
+- **release fanout / starters**: model every public submission, inquiry, signup, and reservation collection as `lifecycle: none`; keep their sample rows free of draft state; and sync Core-owned skills during SDK bumps (aotter/mantle-starters#434, aotter/mantle-starters#435).
+
+### Fixed
+
+- **@aotter/mantle-runtime / @aotter/mantle-admin-ui**: create builtin operational records live, hide the invalid empty-record create action in Admin, preserve configured starter hero images through the manifest/render contract, and declare intake option enums so Admin renders fixed values as selects (#518, #519, aotter/mantle-starters#434, aotter/mantle-starters#435).
+
+### Security
+
+- **@aotter/mantle-runtime**: reject MCP `tools/call` names that are absent from the endpoint's advertised catalog, preventing a guessed Staff tool from bypassing the public-surface tool filter (#518, #519).
+
 ## [0.0.11-alpha.57] - 2026-07-31
 
 ### Fixed
