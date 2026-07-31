@@ -6,6 +6,21 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.60] - 2026-07-31
+
+### Added
+
+- **@aotter/mantle-spec / @aotter/mantle-runtime**: promote ordered composite `Schema.spec.indexes` for top-level scalar fields, emit affinity-correct collection-gated generated columns and indexes, expose one quoted field-reference helper, and make Core View/repository queries use the declared access paths (#523, #527).
+
+### Changed
+
+- **@aotter/mantle-runtime / @aotter/mantle-cloudflare**: **pre-v1 contract change** — deferred lifecycle delivery now uses a validated versioned envelope with one stable event id and Trigger identity, persists only the normalized row/actor snapshot, and documents at-least-once idempotency; deployments must drain legacy queued envelopes before upgrading consumers (#522, #526).
+- **@aotter/mantle-spec / @aotter/mantle-runtime**: Schema DDL output now returns named column/index records with collision-free v2 physical identifiers; rolling upgrades retain alpha.59 UNIQUE indexes only when their declaration and ordered physical columns match unambiguously (#523, #527).
+
+### Fixed
+
+- **@aotter/mantle-runtime / @aotter/mantle-cloudflare**: surface deferred hook failures to Queue retry/DLQ handling, make malformed-message ack/retry decisions deterministic, bound consumer concurrency, and accept a failed D1 migration batch only when the exact migration was concurrently recorded (#522, #526, #523, #527).
+
 ## [0.0.11-alpha.59] - 2026-07-31
 
 ### Changed
