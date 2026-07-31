@@ -23,6 +23,24 @@ describe("ValidateBootUseCase", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("rejects invalid Schema index declarations with boot diagnostics", () => {
+    const manifest = postsSchema();
+    const result = new ValidateBootUseCase().execute({
+      manifests: [{
+        ...manifest,
+        spec: { ...manifest.spec, indexes: [["missing"]] },
+      }],
+      registry: new InMemoryHandlerRegistry(),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics[0]).toMatchObject({
+      code: "SCHEMA_INDEX_FIELD_UNKNOWN",
+      phase: "boot",
+    });
+  });
+
   it("rejects missing, self-referencing, builtin, and chained guard Procedures", () => {
     const reg = new InMemoryHandlerRegistry();
     reg.register("echoHandler", () => ({ ok: true }));

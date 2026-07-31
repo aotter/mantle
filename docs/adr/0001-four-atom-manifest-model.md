@@ -285,6 +285,7 @@ forces it.
 **Schema (v0.1)**:
 - `spec.schema:` (JSON Schema 2020-12 body)
 - `spec.uniqueIndexes:` (composite uniques)
+- `spec.indexes:` (ordered composite, non-unique access paths)
 - Property extensions: `x-mantle-bind`, `x-mantle-ref`, `x-mcp-hint`
 
 **View (v0.1)**:
@@ -332,7 +333,7 @@ forces it.
 #### What's DRAFT (do not implement, do not type)
 
 - Schema: `policies.{visible, readable, writable, owner}`,
-  `indexedFields:`, `x-mantle-ref` auto-lift to virtual column,
+  `x-mantle-ref` auto-lift to virtual column,
   computed columns via projection Trigger
 - View: `recursive`, `gatedBy`, `join`, `policies.skip`,
   filter AST extensions (`contains`, `not`, `in`, `like`)

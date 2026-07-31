@@ -2,6 +2,7 @@ import {
   bootDiagnostic,
   partitionManifests,
   checkLocaleAndTranslates,
+  ValidateManifestsUseCase,
   type Diagnostic,
   type Manifest,
   type ProcedureManifest,
@@ -39,6 +40,7 @@ import {
  *   - Every `Trigger.source.kind: lifecycle` watches a declared Schema
  *     (`LIFECYCLE_SCHEMA_UNKNOWN`). The hook runtime is the
  *     `LifecycleHookingEntryRepository` decorator.
+ *   - Schema index declarations resolve to supported scalar fields.
  *   - Locale + translates cross-Schema invariants (ADR-0010) hold.
  */
 export type ValidateBootResponse =
@@ -67,6 +69,14 @@ export class ValidateBootUseCase {
     const procedureCandidates = [...proceduresByName.keys()];
     const schemaCandidates = [...schemasByName.keys()];
     const handlerCandidates = request.registry.list();
+
+    for (const diagnostic of ValidateManifestsUseCase.run({
+      manifests: request.manifests,
+    }).diagnostics) {
+      if (isSchemaIndexDiagnostic(diagnostic)) {
+        diagnostics.push({ ...diagnostic, phase: "boot" });
+      }
+    }
 
     // 1. Procedure handler refs + builtin schema cross-resolution.
     for (const p of partitioned.procedures) {
@@ -222,6 +232,12 @@ export class ValidateBootUseCase {
     const result = this.execute(request);
     if (!result.ok) throw new BootValidationError(result.diagnostics);
   }
+}
+
+function isSchemaIndexDiagnostic(diagnostic: Diagnostic): boolean {
+  return diagnostic.code === "SCHEMA_INDEX_INVALID" ||
+    diagnostic.code === "SCHEMA_INDEX_FIELD_UNKNOWN" ||
+    diagnostic.code === "UNIQUE_INDEX_FIELD_UNKNOWN";
 }
 
 function checkHttpRouteCollisions(triggers: readonly TriggerManifest[]): Diagnostic[] {

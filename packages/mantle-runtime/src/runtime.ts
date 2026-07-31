@@ -76,7 +76,7 @@ import { LifecycleHookingEntryRepository } from "./infrastructure/persistence/Li
 import { HtmlPublishOrchestrator } from "./infrastructure/render/index.js";
 import {
   CANONICAL_MIGRATIONS,
-  reconcileSchemaUniqueIndexes,
+  reconcileSchemaIndexes,
   schemaIndexMigrations,
 } from "./infrastructure/boot/index.js";
 
@@ -224,7 +224,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
   // transitionStatus) fires the matching Triggers via
   // `RunLifecycleHooksUseCase`. Symmetric chokepoint per POC ADR-0014:
   // MCP, admin, and builtin paths all hit the same wrapped repository.
-  const innerEntries = new DatabaseEntryRepository(args.db);
+  const innerEntries = new DatabaseEntryRepository(args.db, schemasByName);
   const triggerIndex = new TriggerIndex(partitioned.triggers);
   const siteConfig = new DatabaseSiteConfigRepository(args.db);
   // `entries` is filled below — assigned via `let` so the lifecycle
@@ -295,27 +295,31 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
   const unpublish = new UnpublishUseCase(entries, schemasByName, clock, contentPublishEffects);
   const archive = new ArchiveUseCase(entries, schemasByName, clock, contentPublishEffects);
   const deleteEntry = new DeleteEntryUseCase(entries, schemasByName);
-  const executeView = new ExecuteViewUseCase(args.db, async (request) => {
-    const procedure = proceduresByName.get(request.procedure);
-    if (!procedure) {
-      return {
-        ok: false as const,
-        diagnostic: runtimeDiagnostic({
-          code: "GUARD_PROCEDURE_UNKNOWN",
-          severity: "error",
-          path: request.pathPrefix,
-          value: request.procedure,
-          expected: "name of a declared Procedure",
-        }),
-      };
-    }
-    return invokeProcedure.execute({
-      procedure,
-      input: request.input,
-      ctx: request.ctx,
-      pathPrefix: request.pathPrefix,
-    });
-  });
+  const executeView = new ExecuteViewUseCase(
+    args.db,
+    async (request) => {
+      const procedure = proceduresByName.get(request.procedure);
+      if (!procedure) {
+        return {
+          ok: false as const,
+          diagnostic: runtimeDiagnostic({
+            code: "GUARD_PROCEDURE_UNKNOWN",
+            severity: "error",
+            path: request.pathPrefix,
+            value: request.procedure,
+            expected: "name of a declared Procedure",
+          }),
+        };
+      }
+      return invokeProcedure.execute({
+        procedure,
+        input: request.input,
+        ctx: request.ctx,
+        pathPrefix: request.pathPrefix,
+      });
+    },
+    schemasByName,
+  );
   const composeSitemap = new ComposeSitemapUseCase(args.db);
   const renderEntryLive = new RenderEntryLiveUseCase(
     args.db,
@@ -401,12 +405,8 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     idgen,
 
     async bootInit(): Promise<void> {
-      const indexMigrations = schemaIndexMigrations(schemasByName.values());
-      await args.db.migrations.runAll([
-        ...CANONICAL_MIGRATIONS,
-        ...indexMigrations,
-      ]);
-      await reconcileSchemaUniqueIndexes(args.db, indexMigrations);
+      const schemas = partitioned.schemas;
+      await args.db.migrations.runAll(CANONICAL_MIGRATIONS);
       await siteConfig.seed(args.siteDefaults);
       const siteLocales = await siteConfig.readLocales();
       validateBoot.assert({
@@ -414,6 +414,9 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
         registry,
         siteLocales,
       });
+      const indexMigrations = schemaIndexMigrations(schemas);
+      await args.db.migrations.runAll(indexMigrations);
+      await reconcileSchemaIndexes(args.db, indexMigrations, schemas);
     },
   };
 }

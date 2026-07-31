@@ -1,95 +1,120 @@
 import type { SchemaManifest } from "../model/ManifestGrammar.js";
+import {
+  checkSchemaIndexes,
+  type ResolvedSchemaIndexField,
+} from "./SchemaIndexChecker.js";
 
-/**
- * DDL fragments derived from a Schema manifest's `uniqueIndexes`. Pure
- * strings — no env / driver coupling. The runtime adapter feeds these
- * to the SQL engine.
- *
- * Stays in `mantle-spec` because it's manifest-shape → SQL-string
- * with zero runtime concerns; a build-time validator + the runtime's
- * migration emitter want the same string-builder. One source, two
- * consumers.
- */
+/** Pure Schema-manifest → SQLite DDL output; runtime owns execution. */
 export interface DdlStatements {
-  /** ALTER TABLE statements adding generated virtual columns. */
-  readonly addColumns: readonly string[];
-  /** CREATE UNIQUE INDEX statements over the generated columns. */
-  readonly createIndexes: readonly string[];
-  /** Index names (used by `dropIndexes`). */
-  readonly indexNames: readonly string[];
-  /** Generated column names (used by `dropColumns`). */
-  readonly columnNames: readonly string[];
-}
-
-const SAFE_NAME = /^[a-z][a-z0-9_.-]*$/i;
-
-function safeIdent(name: string, kind: string): string {
-  if (!SAFE_NAME.test(name)) {
-    throw new Error(`unsafe ${kind} identifier: ${name}`);
-  }
-  return name;
-}
-
-function quoteIdent(name: string): string {
-  return `"${name}"`;
-}
-
-function colName(collection: string, fieldPath: string): string {
-  const flat = fieldPath.replace(/\./g, "_");
-  return `${safeIdent(collection, "collection")}__${safeIdent(flat, "field")}`;
-}
-
-function jsonPath(fieldPath: string): string {
-  // Each segment may contain dots in the field path (e.g. `meta.slug`); JSON
-  // path syntax becomes `$.meta.slug`. We don't support array indexing here.
-  return `$.${fieldPath}`;
+  readonly columns: readonly {
+    readonly name: string;
+    readonly sql: string;
+  }[];
+  readonly indexes: readonly {
+    readonly name: string;
+    readonly sql: string;
+  }[];
 }
 
 /**
- * Build the DDL needed to enforce a `SchemaManifest`'s `uniqueIndexes`
- * on the shared `entries` table. Generates one virtual column per
- * indexed field and one unique index per declared composite key. The
- * virtual columns are only populated when `collection = ?`, so
- * different collections coexist on the same `entries` table without
- * collisions.
+ * Build generated columns and ordered composite indexes for one Schema.
+ * Both declaration kinds share the same validated fields and columns.
  */
 export function buildDdl(manifest: SchemaManifest): DdlStatements {
-  const collection = safeIdent(manifest.metadata.name, "collection");
-  const indexes = manifest.spec.uniqueIndexes ?? [];
-  const addColumns: string[] = [];
-  const createIndexes: string[] = [];
-  const indexNames: string[] = [];
-  const columnNames: string[] = [];
-  const seen = new Set<string>();
+  const checked = checkedIndexes(manifest);
+  const columns = new Map<string, DdlStatements["columns"][number]>();
+  const indexes: Array<DdlStatements["indexes"][number]> = [];
 
-  for (const fields of indexes) {
-    if (fields.length === 0) continue;
-    const cols = fields.map((f) => {
-      const cn = colName(collection, f);
-      if (!seen.has(cn)) {
-        seen.add(cn);
-        addColumns.push(
-          `ALTER TABLE entries ADD COLUMN ${quoteIdent(cn)} TEXT GENERATED ALWAYS AS (` +
-            `CASE WHEN collection = '${collection}' THEN json_extract(data, '${jsonPath(f)}') END` +
+  for (const declaration of checked.declarations) {
+    const columnNames = declaration.fields.map((field) => {
+      const name = generatedColumnName(manifest.metadata.name, field);
+      if (!columns.has(name)) {
+        columns.set(name, {
+          name,
+          sql:
+            `ALTER TABLE entries ADD COLUMN ${quoteIdent(name)} ${field.affinity} ` +
+            `GENERATED ALWAYS AS (` +
+            `CASE WHEN collection = ${quoteText(manifest.metadata.name)} ` +
+            `THEN json_extract(data, ${quoteText(jsonPath(field.name))}) END` +
             `) VIRTUAL`,
-        );
-        columnNames.push(cn);
+        });
       }
-      return cn;
+      return name;
     });
-    const ixName = `uq_${collection}__${fields.map((f) => f.replace(/\./g, "_")).join("__")}`;
-    // Partial index must require EVERY column be non-NULL; guarding
-    // only cols[0] meant rows with mixed-NULL composites silently
-    // collided as duplicates of (col0, NULL) — uniqueness weaker than
-    // declared.
-    const notNullClause = cols.map((c) => `${quoteIdent(c)} IS NOT NULL`).join(" AND ");
-    createIndexes.push(
-      `CREATE UNIQUE INDEX IF NOT EXISTS ${quoteIdent(ixName)} ` +
-        `ON entries(${cols.map(quoteIdent).join(", ")})` +
-        ` WHERE ${notNullClause}`,
+    const name = generatedIndexName(
+      manifest.metadata.name,
+      declaration.fields,
+      declaration.unique,
     );
-    indexNames.push(ixName);
+    indexes.push({
+      name,
+      sql:
+        `CREATE ${declaration.unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${quoteIdent(name)} ` +
+        `ON entries(${columnNames.map(quoteIdent).join(", ")}) ` +
+        `WHERE ${quoteIdent(columnNames[0]!)} IS NOT NULL`,
+    });
   }
 
-  return { addColumns, createIndexes, indexNames, columnNames };
+  return { columns: [...columns.values()], indexes };
+}
+
+/**
+ * Return the opaque generated-column SQL reference for a declared field.
+ * Native/reserved and undeclared fields return null. An optional table alias
+ * is identifier-quoted, so site-owned Procedure joins never interpolate it.
+ */
+export function schemaIndexedFieldSql(
+  schema: SchemaManifest,
+  field: string,
+  tableAlias?: string,
+): string | null {
+  const checked = checkedIndexes(schema);
+  const indexed = checked.declarations
+    .flatMap((declaration) => declaration.fields)
+    .find((candidate) => candidate.name === field);
+  if (!indexed) return null;
+  const column = quoteIdent(generatedColumnName(schema.metadata.name, indexed));
+  return tableAlias === undefined ? column : `${quoteIdent(tableAlias)}.${column}`;
+}
+
+function checkedIndexes(manifest: SchemaManifest): ReturnType<typeof checkSchemaIndexes> {
+  const checked = checkSchemaIndexes(manifest);
+  const first = checked.problems[0];
+  if (first) {
+    throw new Error(`invalid Schema index declaration at ${first.pointer}: ${first.message}`);
+  }
+  return checked;
+}
+
+function generatedColumnName(collection: string, field: ResolvedSchemaIndexField): string {
+  return `m2c_${utf8Hex(collection)}_${utf8Hex(field.name)}_${utf8Hex(field.affinity)}`;
+}
+
+function generatedIndexName(
+  collection: string,
+  fields: readonly ResolvedSchemaIndexField[],
+  unique: boolean,
+): string {
+  const encodedFields = fields
+    .map((field) => `${utf8Hex(field.name)}_${utf8Hex(field.affinity)}`)
+    .join("__");
+  return `m2${unique ? "u" : "i"}_${utf8Hex(collection)}_${encodedFields}`;
+}
+
+function utf8Hex(value: string): string {
+  return [...new TextEncoder().encode(value)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function jsonPath(field: string): string {
+  return `$."${field}"`;
+}
+
+function quoteText(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function quoteIdent(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
 }

@@ -4,7 +4,9 @@ import {
   parseManifests,
   parseManifestsOrThrow,
 } from "../src/domain/service/ManifestParser.js";
+import { buildDdl } from "../src/domain/service/SchemaDdlEmitter.js";
 import type {
+  JsonSchema,
   Manifest,
   ProcedureManifest,
   SchemaManifest,
@@ -258,6 +260,183 @@ spec:
     expect(result.diagnostics.map((d) => d.code)).toContain(
       "INVALID_MANIFEST_ENVELOPE",
     );
+  });
+});
+
+describe("parseManifests() — Schema indexes", () => {
+  const parseSchema = (
+    indexYaml: string,
+    properties = "slug: { type: string }",
+    name = "posts",
+  ) =>
+    parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: ${name} }
+spec:
+  title: Posts
+  schema:
+    type: object
+    properties: { ${properties} }
+${indexYaml}
+`);
+
+  it("accepts and preserves ordered composite indexes", () => {
+    const result = parseSchema(
+      "  indexes: [[slug, locale], [locale, slug], [slug]]",
+      "slug: { type: string }, locale: { type: [string, 'null'] }",
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect((result.manifests[0] as SchemaManifest).spec.indexes).toEqual([
+      ["slug", "locale"],
+      ["locale", "slug"],
+      ["slug"],
+    ]);
+  });
+
+  it.each([
+    ["outer mapping", "  indexes: { slug: true }", "/spec/indexes"],
+    ["outer null", "  indexes: null", "/spec/indexes"],
+    ["non-array composite", "  indexes: [slug]", "/spec/indexes/0"],
+    ["non-string field", "  indexes: [[slug, 1]]", "/spec/indexes/0/1"],
+  ])("rejects %s as INVALID_MANIFEST_ENVELOPE", (_label, declaration, pointer) => {
+    const result = parseSchema(declaration);
+
+    expect(result.manifests).toEqual([]);
+    expect(result.diagnostics[0]).toMatchObject({
+      code: "INVALID_MANIFEST_ENVELOPE",
+      path: expect.stringContaining(pointer),
+    });
+  });
+
+  it("keeps indexedFields rejected as a DRAFT alias", () => {
+    const result = parseSchema("  indexedFields: [slug]");
+
+    expect(result.diagnostics[0]).toMatchObject({
+      code: "DRAFT_KEY_USED",
+      path: expect.stringContaining("/spec/indexedFields"),
+    });
+  });
+
+  it("accepts a dot as part of an exact top-level field name", () => {
+    const result = parseSchema(
+      "  indexes: [['profile.slug']]",
+      "'profile.slug': { type: string }",
+    );
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it("does not interpret a dot as a nested path", () => {
+    const result = parseSchema(
+      "  indexes: [['profile.slug']]",
+      "profile: { type: object, properties: { slug: { type: string } } }",
+    );
+    expect(result.diagnostics[0]?.code).toBe("SCHEMA_INDEX_FIELD_UNKNOWN");
+  });
+
+  it.each([
+    ["empty composite", "  indexes: [[]]"],
+    ["duplicate field", "  indexes: [[slug, slug]]"],
+    ["duplicate tuple", "  indexes: [[slug], [slug]]"],
+    ["cross-kind duplicate", "  uniqueIndexes: [[slug]]\n  indexes: [[slug]]"],
+    ["reserved native alias", "  indexes: [[id]]"],
+    ["unsafe identifier", "  indexes: [['_slug']]"],
+  ])("rejects semantic error: %s", (_label, declaration) => {
+    const extra = declaration.includes("[[id]]")
+      ? "slug: { type: string }, id: { type: string }"
+      : declaration.includes("_slug")
+        ? "slug: { type: string }, _slug: { type: string }"
+        : "slug: { type: string }";
+    const result = parseSchema(declaration, extra);
+    expect(result.diagnostics[0]?.code).toBe("SCHEMA_INDEX_INVALID");
+  });
+
+  it("preserves the legacy unique unknown-field diagnostic code", () => {
+    const result = parseSchema("  uniqueIndexes: [[missing]]");
+    expect(result.diagnostics[0]?.code).toBe("UNIQUE_INDEX_FIELD_UNKNOWN");
+  });
+
+  it("rejects an unsafe name only when the Schema declares indexes", () => {
+    const checked = parseSchema(
+      "  indexes: [[slug]]",
+      "slug: { type: string }",
+      "account/members",
+    );
+
+    expect(checked.diagnostics[0]).toMatchObject({
+      code: "SCHEMA_INDEX_INVALID",
+      path: expect.stringContaining("/metadata/name"),
+    });
+    expect(parseSchema("", "slug: { type: string }", "account/members").diagnostics)
+      .toEqual([]);
+  });
+});
+
+describe("ValidateManifestsUseCase — Schema index semantics", () => {
+  it("accepts every resolved scalar affinity and nullable form", () => {
+    const manifest = schema("typed", {
+      schema: {
+        type: "object",
+        properties: {
+          text: { type: ["null", "string"] },
+          count: { type: "integer", nullable: true },
+          ratio: { type: "number" },
+          enabled: { type: "boolean" },
+        },
+      },
+      indexes: [["text", "count", "ratio", "enabled"]],
+    });
+    expect(ValidateManifestsUseCase.run({ manifests: [manifest] }).errorCount).toBe(0);
+  });
+
+  it.each([
+    ["object", { type: "object" }],
+    ["array", { type: "array" }],
+    ["enum-only", { enum: ["a", "b"] }],
+    ["mixed union", { type: ["string", "number"] }],
+    ["null-only", { type: "null" }],
+    ["invalid nullable", { type: "string", nullable: "yes" }],
+  ])("rejects non-indexable property shape: %s", (_label, property) => {
+    const manifest = schema("typed", {
+      schema: {
+        type: "object",
+        properties: { value: property as unknown as JsonSchema },
+      },
+      indexes: [["value"]],
+    });
+    const result = ValidateManifestsUseCase.run({ manifests: [manifest] });
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code))
+      .toContain("SCHEMA_INDEX_INVALID");
+  });
+
+  it("uses own top-level properties rather than the prototype chain", () => {
+    const manifest = schema("posts", { indexes: [["toString"]] });
+    const result = ValidateManifestsUseCase.run({ manifests: [manifest] });
+    expect(result.diagnostics[0]).toMatchObject({
+      code: "SCHEMA_INDEX_FIELD_UNKNOWN",
+      value: "toString",
+    });
+  });
+
+  it("catches invalid runtime matrix shapes without silently dropping them", () => {
+    const manifest = schema("posts", {
+      indexes: "slug" as unknown as SchemaManifest["spec"]["indexes"],
+    });
+    const result = ValidateManifestsUseCase.run({ manifests: [manifest] });
+    expect(result.diagnostics[0]).toMatchObject({ code: "SCHEMA_INDEX_INVALID" });
+  });
+
+  it.each([
+    ["outer", new Array(1)],
+    ["inner", [new Array(1)]],
+  ])("rejects a sparse %s index array", (_label, indexes) => {
+    const manifest = schema("posts", {
+      indexes: indexes as SchemaManifest["spec"]["indexes"],
+    });
+    const result = ValidateManifestsUseCase.run({ manifests: [manifest] });
+
+    expect(result.diagnostics[0]).toMatchObject({ code: "SCHEMA_INDEX_INVALID" });
+    expect(() => buildDdl(manifest)).toThrow(/invalid Schema index declaration/);
   });
 });
 

@@ -17,6 +17,7 @@ export interface IntrospectedSchema {
   readonly lifecycle: string;
   readonly translates: { readonly parent: string; readonly on: string } | null;
   readonly uniqueIndexes: ReadonlyArray<ReadonlyArray<string>>;
+  readonly indexes: ReadonlyArray<ReadonlyArray<string>>;
   readonly properties: ReadonlyArray<string>;
 }
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createCmsRuntime } from "../src/runtime.js";
 import { BootValidationError } from "../src/usecase/boot/index.js";
 import { DatabaseSiteConfigRepository } from "../src/infrastructure/persistence/DatabaseSiteConfigRepository.js";
+import { schemaIndexMigrations } from "../src/infrastructure/boot/index.js";
 import { InMemoryDatabase } from "./fakes/database.js";
 import { InMemoryKv } from "./fakes/kv.js";
 import { makeProcedure, postsSchema } from "./fakes/manifests.js";
@@ -50,13 +51,110 @@ describe("createCmsRuntime + bootInit", () => {
     expect(site.origin).toBe("https://example.com");
   });
 
-  it("bootInit installs manifest unique indexes", async () => {
+  it("bootInit installs manifest Schema indexes", async () => {
     const db = new InMemoryDatabase();
+    const schema = postsSchema();
+    const indexedSchema = {
+      ...schema,
+      spec: {
+        ...schema.spec,
+        indexes: [["title"]],
+        uniqueIndexes: [["slug"]],
+      },
+    } as const;
+    const runtime = createCmsRuntime({
+      manifests: [indexedSchema],
+      db,
+      kv: new InMemoryKv(),
+      assets: noopAssets,
+    });
+
+    await runtime.bootInit();
+
+    const ids = schemaIndexMigrations([indexedSchema]).map(({ id }) => id);
+    expect(ids).toHaveLength(4);
+    expect(ids.filter((id) => id.startsWith("schema-index-v2:column:"))).toHaveLength(2);
+    expect(ids.filter((id) => id.startsWith("schema-index-v2:index:"))).toHaveLength(2);
+    expect(ids.every((id) => db.appliedMigrations.has(id))).toBe(true);
+    expect([...db.appliedMigrations]).not.toContainEqual(
+      expect.stringMatching(/^schema-(?:index-column|unique-index):/),
+    );
+  });
+
+  it("bootInit replaces stale v2 indexes but keeps generated columns", async () => {
+    const db = new InMemoryDatabase();
+    const schema = postsSchema();
+    const manifest = (indexes: readonly (readonly string[])[]) => ({
+      ...schema,
+      spec: { ...schema.spec, indexes },
+    } as const);
+    const runtime = (indexes: readonly (readonly string[])[]) =>
+      createCmsRuntime({
+        manifests: [manifest(indexes)],
+        db,
+        kv: new InMemoryKv(),
+        assets: noopAssets,
+      });
+
+    await runtime([["slug"]]).bootInit();
+    const first = schemaIndexMigrations([manifest([["slug"]])]);
+    await runtime([["slug", "title"]]).bootInit();
+    const second = schemaIndexMigrations([manifest([["slug", "title"]])]);
+
+    expect(db.appliedMigrations.has(first.find(({ id }) =>
+      id.startsWith("schema-index-v2:index:"))!.id)).toBe(false);
+    expect(db.appliedMigrations.has(second.find(({ id }) =>
+      id.startsWith("schema-index-v2:index:"))!.id)).toBe(true);
+    for (const { id } of first.filter(({ id }) =>
+      id.startsWith("schema-index-v2:column:"))) {
+      expect(db.appliedMigrations.has(id)).toBe(true);
+    }
+
+    await runtime([["slug"]]).bootInit();
+    expect(db.appliedMigrations.has(first.find(({ id }) =>
+      id.startsWith("schema-index-v2:index:"))!.id)).toBe(true);
+    expect(db.appliedMigrations.has(second.find(({ id }) =>
+      id.startsWith("schema-index-v2:index:"))!.id)).toBe(false);
+  });
+
+  it("retains declared alpha.59 unique indexes and removes retired ones", async () => {
+    const db = new InMemoryDatabase();
+    const legacyId = "schema-unique-index:uq_posts__slug";
+    db.appliedMigrations.add(legacyId);
+    db.legacyIndexColumns.set("uq_posts__slug", ["posts__slug"]);
+    const schema = postsSchema();
+    const runtime = (uniqueIndexes: readonly (readonly string[])[]) =>
+      createCmsRuntime({
+        manifests: [{ ...schema, spec: { ...schema.spec, uniqueIndexes } }],
+        db,
+        kv: new InMemoryKv(),
+        assets: noopAssets,
+      });
+
+    await runtime([["slug"]]).bootInit();
+    expect(db.appliedMigrations.has(legacyId)).toBe(true);
+
+    await runtime([]).bootInit();
+    expect(db.appliedMigrations.has(legacyId)).toBe(false);
+  });
+
+  it("drops an ambiguous alpha.59 index-name collision", async () => {
+    const db = new InMemoryDatabase();
+    const legacyId = "schema-unique-index:uq_posts__a_b";
+    db.appliedMigrations.add(legacyId);
+    db.legacyIndexColumns.set("uq_posts__a_b", ["posts__a_b"]);
     const schema = postsSchema();
     const runtime = createCmsRuntime({
       manifests: [{
         ...schema,
-        spec: { ...schema.spec, uniqueIndexes: [["slug"]] },
+        spec: {
+          ...schema.spec,
+          schema: {
+            type: "object",
+            properties: { "a.b": { type: "string" } },
+          },
+          uniqueIndexes: [["a.b"]],
+        },
       }],
       db,
       kv: new InMemoryKv(),
@@ -65,39 +163,39 @@ describe("createCmsRuntime + bootInit", () => {
 
     await runtime.bootInit();
 
-    expect(db.appliedMigrations).toContain("schema-index-column:posts__slug");
-    expect(db.appliedMigrations).toContain("schema-unique-index:uq_posts__slug");
+    expect(db.appliedMigrations.has(legacyId)).toBe(false);
+    expect(db.legacyIndexColumns.has("uq_posts__a_b")).toBe(false);
   });
 
-  it("bootInit replaces stale manifest unique indexes", async () => {
+  it("rejects invalid Schema indexes before running dynamic index migrations", async () => {
     const db = new InMemoryDatabase();
     const schema = postsSchema();
-    const runtime = (uniqueIndexes: readonly (readonly string[])[]) =>
-      createCmsRuntime({
-        manifests: [{
-          ...schema,
-          spec: { ...schema.spec, uniqueIndexes },
-        }],
-        db,
-        kv: new InMemoryKv(),
-        assets: noopAssets,
-      });
+    const runtime = createCmsRuntime({
+      manifests: [{
+        ...schema,
+        spec: { ...schema.spec, indexes: [["missing"]] },
+      }],
+      db,
+      kv: new InMemoryKv(),
+      assets: noopAssets,
+    });
 
-    await runtime([["slug"]]).bootInit();
-    await runtime([["slug", "locale"]]).bootInit();
-
-    expect(db.appliedMigrations).not.toContain("schema-unique-index:uq_posts__slug");
-    expect(db.appliedMigrations).toContain("schema-unique-index:uq_posts__slug__locale");
-
-    await runtime([["slug"]]).bootInit();
-    expect(db.appliedMigrations).toContain("schema-unique-index:uq_posts__slug");
-    expect(db.appliedMigrations).not.toContain("schema-unique-index:uq_posts__slug__locale");
+    const error = await runtime.bootInit().catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(BootValidationError);
+    expect((error as BootValidationError).diagnostics[0]?.code).toBe(
+      "SCHEMA_INDEX_FIELD_UNKNOWN",
+    );
+    expect(db.appliedMigrations.has("0001-init")).toBe(true);
+    expect([...db.appliedMigrations]).not.toContainEqual(
+      expect.stringMatching(/^schema-index-v2:/),
+    );
   });
 
   it("bootInit throws BootValidationError when handler ref is missing", async () => {
+    const db = new InMemoryDatabase();
     const runtime = createCmsRuntime({
       manifests: [makeProcedure({ handlerRef: "missing" })],
-      db: new InMemoryDatabase(),
+      db,
       kv: new InMemoryKv(),
       assets: noopAssets,
     });

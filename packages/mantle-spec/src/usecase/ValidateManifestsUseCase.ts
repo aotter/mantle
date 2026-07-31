@@ -16,6 +16,10 @@ import {
 import { partitionManifests } from "../domain/service/ManifestParser.js";
 import { checkLocaleAndTranslates } from "../domain/service/CrossSchemaChecker.js";
 import {
+  checkSchemaIndexes,
+  schemaIndexDiagnosticCode,
+} from "../domain/service/SchemaIndexChecker.js";
+import {
   bestMatch,
   manifestPath,
   type ManifestFilePaths,
@@ -185,30 +189,24 @@ function checkSchemaInternals(
     ...collectInvalidPatterns(s.spec.schema, "Schema", s.metadata.name, "/spec/schema", filePaths),
   );
 
-  const ui = s.spec.uniqueIndexes ?? [];
-  ui.forEach((composite, ci) => {
-    composite.forEach((field, fi) => {
-      if (!(field in properties)) {
-        out.push(
-          validateDiagnostic({
-            code: "UNIQUE_INDEX_FIELD_UNKNOWN",
-            severity: "error",
-            path: manifestPath(
-              "Schema",
-              s.metadata.name,
-              `/spec/uniqueIndexes/${ci}/${fi}`,
-              filePaths,
-            ),
-            value: field,
-            expected: `name of a property declared in spec.schema.properties`,
-            candidates: Object.keys(properties),
-            suggestion: bestMatch(field, Object.keys(properties)),
-            message: `Schema '${s.metadata.name}' uniqueIndexes references unknown field '${field}'.`,
-          }),
-        );
-      }
-    });
-  });
+  for (const problem of checkSchemaIndexes(s).problems) {
+    const candidates = problem.candidates ?? [];
+    out.push(
+      validateDiagnostic({
+        code: schemaIndexDiagnosticCode(problem),
+        severity: "error",
+        path: manifestPath("Schema", s.metadata.name, problem.pointer, filePaths),
+        value: problem.value,
+        expected: problem.expected,
+        candidates: problem.candidates,
+        suggestion:
+          typeof problem.value === "string"
+            ? bestMatch(problem.value, candidates)
+            : undefined,
+        message: problem.message,
+      }),
+    );
+  }
 
   for (const [propName, propSpec] of Object.entries(properties)) {
     const ps = propSpec as Record<string, unknown> | null;

@@ -27,6 +27,10 @@ import {
   type TriggerManifest,
   type ViewManifest,
 } from "../model/ManifestGrammar.js";
+import {
+  checkSchemaIndexes,
+  schemaIndexDiagnosticCode,
+} from "./SchemaIndexChecker.js";
 
 /**
  * Shared shape validator for `LocalizedText` fields (`Schema.spec.title`
@@ -373,6 +377,23 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
     "Schema.spec.description",
     false,
   );
+  if ("indexedFields" in s) {
+    throw new ManifestParseError(
+      "Schema.spec.indexedFields is DRAFT and superseded by ordered composite Schema.spec.indexes; not supported in v0.1",
+      idx,
+      "/spec/indexedFields",
+      "DRAFT_KEY_USED",
+    );
+  }
+  const indexProblem = checkSchemaIndexes(m).problems[0];
+  if (indexProblem) {
+    throw new ManifestParseError(
+      indexProblem.message,
+      idx,
+      indexProblem.pointer,
+      schemaIndexDiagnosticCode(indexProblem, true),
+    );
+  }
   if ("localized" in s && typeof s["localized"] !== "boolean") {
     throw new ManifestParseError(
       `Schema.spec.localized must be a boolean; got ${JSON.stringify(s["localized"])}`,

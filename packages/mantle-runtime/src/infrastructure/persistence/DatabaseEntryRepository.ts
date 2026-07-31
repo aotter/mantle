@@ -1,4 +1,8 @@
-import type { ContentState } from "@aotter/mantle-spec";
+import {
+  schemaIndexedFieldSql,
+  type ContentState,
+  type SchemaManifest,
+} from "@aotter/mantle-spec";
 import type {
   CreateEntryArgs,
   DeleteEntryArgs,
@@ -36,7 +40,10 @@ import { decodeCursor, encodeCursor, escapeLikeTerm } from "./Pagination.js";
  * — see ADR-0010 + `domain/model/EntryRow.ts`.
  */
 export class DatabaseEntryRepository implements EntryRepository {
-  constructor(private readonly db: DatabaseDriver) {}
+  constructor(
+    private readonly db: DatabaseDriver,
+    private readonly schemasByName: ReadonlyMap<string, SchemaManifest> = new Map(),
+  ) {}
 
   async create(args: CreateEntryArgs): Promise<EntryRow> {
     await this.db
@@ -218,26 +225,11 @@ export class DatabaseEntryRepository implements EntryRepository {
   }
 
   async findByDataField(args: FindEntryByDataFieldArgs): Promise<EntryRow | null> {
-    const path = jsonPathForTopLevelField(args.field);
-    const stmt = args.status
-      ? this.db
-          .prepare(
-            `SELECT id, collection, status, version, data, author_id, created_at, updated_at
-             FROM entries
-             WHERE collection = ? AND status = ? AND json_extract(data, ?) = ?
-             ORDER BY updated_at DESC LIMIT 1`,
-          )
-          .bind(args.collection, args.status, path, args.value)
-      : this.db
-          .prepare(
-            `SELECT id, collection, status, version, data, author_id, created_at, updated_at
-             FROM entries
-             WHERE collection = ? AND json_extract(data, ?) = ?
-             ORDER BY updated_at DESC LIMIT 1`,
-          )
-          .bind(args.collection, path, args.value);
-    const row = await stmt.first<EntryDbRow>();
-    return row ? rowFromDb(row) : null;
+    return this.findByDataFields({
+      collection: args.collection,
+      status: args.status,
+      fields: { [args.field]: args.value },
+    });
   }
 
   async findByDataFields(args: FindEntryByDataFieldsArgs): Promise<EntryRow | null> {
@@ -245,13 +237,20 @@ export class DatabaseEntryRepository implements EntryRepository {
     if (entries.length === 0) return null;
     const conditions = ["collection = ?"];
     const binds: unknown[] = [args.collection];
+    const schema = this.schemasByName.get(args.collection);
     if (args.status) {
       conditions.push("status = ?");
       binds.push(args.status);
     }
     for (const [field, value] of entries) {
-      conditions.push("json_extract(data, ?) = ?");
-      binds.push(jsonPathForTopLevelField(field), value);
+      const indexed = schema ? schemaIndexedFieldSql(schema, field) : null;
+      if (indexed) {
+        conditions.push(`${indexed} = ?`);
+        binds.push(value);
+      } else {
+        conditions.push("json_extract(data, ?) = ?");
+        binds.push(jsonPathForTopLevelField(field), value);
+      }
     }
     if (args.excludeId) {
       conditions.push("id <> ?");
