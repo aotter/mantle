@@ -6,6 +6,13 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.57] - 2026-07-31
+
+### Fixed
+
+- **@aotter/mantle-admin-ui**: route every admin-console sign-out entry point through the mounted Better Auth endpoint instead of the nonexistent `/admin/logout`, preventing the sidebar and header actions from landing on a 404 (#514, #515).
+- **release fanout / starters**: render intake option groups with native fieldset/legend semantics, load Inter from the document head instead of an invalid late CSS import, and refresh every provision bundle (aotter/mantle-starters#432).
+
 ## [0.0.11-alpha.56] - 2026-07-31
 
 ### Fixed
