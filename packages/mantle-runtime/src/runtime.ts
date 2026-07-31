@@ -296,7 +296,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
   );
   const unpublish = new UnpublishUseCase(entries, schemasByName, clock, contentPublishEffects);
   const archive = new ArchiveUseCase(entries, schemasByName, clock, contentPublishEffects);
-  const deleteEntry = new DeleteEntryUseCase(entries);
+  const deleteEntry = new DeleteEntryUseCase(entries, schemasByName);
   const executeView = new ExecuteViewUseCase(args.db, async (request) => {
     const procedure = proceduresByName.get(request.procedure);
     if (!procedure) {

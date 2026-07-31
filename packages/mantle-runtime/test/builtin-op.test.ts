@@ -302,6 +302,96 @@ describe("InvokeBuiltinUseCase — update / delete / upsert", () => {
     expect(deleted.data).toEqual({ removed: true });
   });
 
+  it("delete rejects published content until it is unpublished", async () => {
+    const h = harness();
+    const created = await h.invoke.execute({
+      procedure: builtinProcedure({ name: "createPost", op: "create", schema: "posts" }),
+      input: { title: "live" },
+      ctx: { user: null, staff: null, env: {} },
+    });
+    if (!created.ok) throw new Error("create failed");
+    const row = created.data as { id: string };
+    await h.store.transitionStatus({
+      id: row.id,
+      collection: "posts",
+      to: "published",
+      expectedStatus: "draft",
+      expectedVersion: 1,
+      now: NOW + 1,
+    });
+
+    const deleted = await h.invoke.execute({
+      procedure: builtinProcedure({
+        name: "deletePost",
+        op: "delete",
+        schema: "posts",
+        inputProperties: { id: { type: "string" } },
+      }),
+      input: { id: row.id },
+      ctx: { user: null, staff: null, env: {} },
+    });
+    expect(deleted).toMatchObject({ ok: false, diagnostic: { code: "CONFLICT" } });
+    expect(await h.store.get(row.id)).not.toBeNull();
+  });
+
+  it("delete cannot cross the Procedure's bound collection", async () => {
+    const comments: SchemaManifest = {
+      ...postsSchemaWithBindings,
+      metadata: { name: "comments" },
+      spec: { ...postsSchemaWithBindings.spec, title: "Comments" },
+    };
+    const h = harness({ schemas: [postsSchemaWithBindings, comments] });
+    await h.store.create({
+      id: "shared-id",
+      collection: "comments",
+      status: "draft",
+      data: {},
+      authorId: null,
+      now: NOW,
+    });
+
+    const deleted = await h.invoke.execute({
+      procedure: builtinProcedure({
+        name: "deletePost",
+        op: "delete",
+        schema: "posts",
+        inputProperties: { id: { type: "string" } },
+      }),
+      input: { id: "shared-id" },
+      ctx: { user: null, staff: null, env: {} },
+    });
+    expect(deleted).toMatchObject({ ok: false, diagnostic: { code: "NOT_FOUND" } });
+    expect(await h.store.get("shared-id")).not.toBeNull();
+  });
+
+  it("delete removes lifecycle:none records even though they are published", async () => {
+    const schema: SchemaManifest = {
+      ...postsSchemaWithBindings,
+      spec: { ...postsSchemaWithBindings.spec, lifecycle: "none" },
+    };
+    const h = harness({ schemas: [schema] });
+    const created = await h.invoke.execute({
+      procedure: builtinProcedure({ name: "createPost", op: "create", schema: "posts" }),
+      input: { title: "submission" },
+      ctx: { user: null, staff: null, env: {} },
+    });
+    if (!created.ok) throw new Error("create failed");
+    const row = created.data as { id: string; status: string };
+    expect(row.status).toBe("published");
+
+    const deleted = await h.invoke.execute({
+      procedure: builtinProcedure({
+        name: "deletePost",
+        op: "delete",
+        schema: "posts",
+        inputProperties: { id: { type: "string" } },
+      }),
+      input: { id: row.id },
+      ctx: { user: null, staff: null, env: {} },
+    });
+    expect(deleted).toMatchObject({ ok: true, data: { removed: true } });
+  });
+
   it("archive flips status to archived and bumps version", async () => {
     const h = harness();
     const created = await h.invoke.execute({

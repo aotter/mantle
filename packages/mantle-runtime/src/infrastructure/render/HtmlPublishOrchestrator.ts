@@ -91,6 +91,7 @@ export class HtmlPublishOrchestrator implements PublishOrchestrator {
       this.renderEntry(entry, request.site, request.templates, DEFAULT_DOCTYPE),
       this.renderList(entry.collection, indexLocale, request.site, request.templates, DEFAULT_DOCTYPE),
       this.renderLlmsTxt(indexLocale, request.site),
+      ...(indexLocale === null ? [] : [this.kv.delete(llmsTxtKey(""))]),
     ]);
   }
 
@@ -106,6 +107,7 @@ export class HtmlPublishOrchestrator implements PublishOrchestrator {
       this.kv.delete(entryMarkdownKey(entry)),
       this.renderList(entry.collection, indexLocale, request.site, request.templates, DEFAULT_DOCTYPE),
       this.renderLlmsTxt(indexLocale, request.site),
+      ...(indexLocale === null ? [] : [this.kv.delete(llmsTxtKey(""))]),
     ]);
   }
 

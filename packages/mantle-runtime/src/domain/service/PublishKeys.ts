@@ -9,10 +9,10 @@ import { toUrlLocale, type Entry } from "@aotter/mantle-spec";
  *   - `entry:md:{locale}/{collection}/{slug}`   — markdown mirror
  *   - `list:html:{locale}/{collection}`         — collection index
  *   - `llms:{locale}`                            — /{locale}/llms.txt
- *   - `llms:root`                                — /llms.txt (cross-locale aggregate)
+ *   - `llms:root:v2`                             — /llms.txt (cross-locale aggregate)
  *
  * Non-localized entries use empty-string locale (`entry:html:/posts/abc`).
- * The root /llms.txt uses the explicit `:root` suffix instead of an
+ * The root /llms.txt uses an explicit versioned `:root:v2` suffix instead of an
  * empty one because `wrangler kv bulk put` silently drops keys ending
  * in `:` (caught in CI on commit 93c10ef).
  *
@@ -45,7 +45,9 @@ export function listHtmlKey(collection: string, locale: string): string {
 }
 
 export function llmsTxtKey(locale: string): string {
-  return `llms:${locale ? locale.toLowerCase() : "root"}`;
+  // v2 abandons alpha.58's TTL-less root values, which cannot be repaired
+  // until another publish happens. Locale keys already rewrite on publish.
+  return locale ? `llms:${locale.toLowerCase()}` : "llms:root:v2";
 }
 
 export function entryPublicPath(entry: Entry): string {

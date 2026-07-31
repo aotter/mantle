@@ -52,6 +52,19 @@ Core does not create credential or payment tables. See the shipped
 the exact resolver contract, OAuth resource helpers, manifest examples,
 status behavior, OpenAPI reflection, and runnable integration fixture.
 
+## HTTP Cache Boundary
+
+Export `createOAuthProvider(...)` as the Worker's top-level handler. It marks
+admin, auth, API, OAuth, MCP, redirects, and errors `private, no-store` and
+removes Cloudflare CDN cache overrides. Only anonymous 200 `GET`/`HEAD`
+responses that explicitly declare `public` plus shared freshness remain
+cacheable; they vary on `Cookie` and `Authorization`.
+
+`mountPublicRoutes(...)` applies that explicit public contract to pre-rendered
+HTML, markdown, `llms.txt`, and sitemap responses. A consumer Workers Cache may
+store only responses that still satisfy the contract. See the
+[adapter implementation guide](../../../docs/adapter-guide.md#http-cache-contract).
+
 ## Optional R2 Media Uploads
 
 R2-backed staff media uploads are adapter-specific post-launch work, not part

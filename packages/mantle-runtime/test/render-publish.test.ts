@@ -155,6 +155,46 @@ describe("HtmlPublishOrchestrator", () => {
     ).rejects.toMatchObject({ diagnostic: { code: "NOT_FOUND" } });
   });
 
+  it("invalidates the cross-locale llms cache on localized publish and unpublish", async () => {
+    const db = new InMemoryDatabase();
+    const kv = new InMemoryKv();
+    seedEntry(db, {
+      id: "p1",
+      data: { title: "Hi", slug: "hi", locale: "en" },
+    });
+    const orchestrator = new HtmlPublishOrchestrator(
+      db,
+      kv,
+      null,
+      new ComposeEntrySeoMetaUseCase(db),
+      new ComposeLlmsTxtUseCase(db),
+      new Map(),
+    );
+    const rootKey = llmsTxtKey("");
+
+    await kv.put(rootKey, "stale before publish");
+    await orchestrator.publish({
+      entryId: "p1",
+      site: { ...site, locales: ["en"] },
+      templates: new TemplateRegistry(),
+    });
+    expect(kv._snapshot().get(rootKey)).toBeUndefined();
+
+    await kv.put(rootKey, "stale before unpublish");
+    db.entries.set("p1", {
+      ...db.entries.get("p1")!,
+      status: "draft",
+      version: 2,
+      updated_at: 3,
+    });
+    await orchestrator.unpublish({
+      entryId: "p1",
+      site: { ...site, locales: ["en"] },
+      templates: new TemplateRegistry(),
+    });
+    expect(kv._snapshot().get(rootKey)).toBeUndefined();
+  });
+
   it("unpublish removes entry blobs and rewrites derived list/llms caches", async () => {
     const db = new InMemoryDatabase();
     const kv = new InMemoryKv();

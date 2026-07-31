@@ -1,10 +1,11 @@
-import { DiagnosticError } from "@aotter/mantle-spec";
+import { DiagnosticError, type SchemaManifest } from "@aotter/mantle-spec";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
+import { assertEntryDeletable } from "../../domain/service/io/EntryDeleteGuard.js";
 import type {
   DeleteEntryRequest,
   DeleteEntryResponse,
 } from "../dto/content/index.js";
-import { notFoundDiagnostic } from "./diagnostics.js";
+import { notFoundDiagnostic, withConflictDiagnostic } from "./diagnostics.js";
 
 /**
  * `DeleteEntryUseCase` — permanently delete an entry + cascade
@@ -19,19 +20,34 @@ import { notFoundDiagnostic } from "./diagnostics.js";
  * delete a ghost."
  */
 export class DeleteEntryUseCase {
-  constructor(private readonly entries: EntryRepository) {}
+  constructor(
+    private readonly entries: EntryRepository,
+    private readonly schemas: ReadonlyMap<string, SchemaManifest>,
+  ) {}
 
   async execute(request: DeleteEntryRequest): Promise<DeleteEntryResponse> {
     const opPath = `usecase/DeleteEntry/${request.id}`;
     const existing = await this.entries.get(request.id);
     if (!existing) {
-      throw new DiagnosticError(notFoundDiagnostic(opPath, "<unknown>", request.id));
+      throw new DiagnosticError(
+        notFoundDiagnostic(opPath, request.collection ?? "<unknown>", request.id),
+      );
     }
-    return this.entries.delete({
-      id: request.id,
-      collection: existing.collection,
-      hookContext: request.ctx,
-      originalInput: request.originalInput,
+    assertEntryDeletable({
+      entry: existing,
+      schema: this.schemas.get(existing.collection),
+      expectedCollection: request.collection,
+      opPath,
     });
+    return withConflictDiagnostic(opPath, () =>
+      this.entries.delete({
+        id: request.id,
+        collection: existing.collection,
+        expectedStatus: existing.status,
+        expectedVersion: existing.version,
+        hookContext: request.ctx,
+        originalInput: request.originalInput,
+      }),
+    );
   }
 }

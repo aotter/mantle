@@ -95,26 +95,38 @@ export interface MountPublicRoutesOptions {
   readonly liveDev?: boolean;
 }
 
+const PUBLIC_CACHE_CONTROL = "public, max-age=0, s-maxage=300";
+const PRIVATE_CACHE_CONTROL = "private, no-store";
+const ROOT_LLMS_FALLBACK_TTL_SECONDS = 300;
+
 const HTML_NO_STORE = {
   "content-type": "text/html; charset=utf-8",
-  "cache-control": "no-store",
+  "cache-control": PRIVATE_CACHE_CONTROL,
 } as const;
 
 const HTML_PUBLIC = {
   "content-type": "text/html; charset=utf-8",
+  "cache-control": PUBLIC_CACHE_CONTROL,
 } as const;
 
 const MD_PUBLIC = {
   "content-type": "text/markdown; charset=utf-8",
+  "cache-control": PUBLIC_CACHE_CONTROL,
 } as const;
 
 const TEXT_PUBLIC = {
   "content-type": "text/plain; charset=utf-8",
+  "cache-control": PUBLIC_CACHE_CONTROL,
+} as const;
+
+const TEXT_NO_STORE = {
+  "content-type": "text/plain; charset=utf-8",
+  "cache-control": PRIVATE_CACHE_CONTROL,
 } as const;
 
 const SITEMAP_HEADERS = {
   "content-type": "application/xml; charset=utf-8",
-  "cache-control": "public, max-age=300, s-maxage=300",
+  "cache-control": PUBLIC_CACHE_CONTROL,
 } as const;
 
 export function mountPublicRoutes(
@@ -142,6 +154,7 @@ export function mountPublicRoutes(
       TEXT_PUBLIC,
       () => composeRootLlmsTxt(runtime, site),
       safeExecutionCtx(c),
+      ROOT_LLMS_FALLBACK_TTL_SECONDS,
     );
   });
 
@@ -181,7 +194,7 @@ export function mountPublicRoutes(
     const runtime = await ref.get();
     const site = await runtime.siteConfig.load();
     const locale = canonicalLocaleParam(c.req.param("locale"), site);
-    if (locale === null) return new Response("not found", { status: 404, headers: TEXT_PUBLIC });
+    if (locale === null) return new Response("not found", { status: 404, headers: TEXT_NO_STORE });
     return readKvWithLiveFallback(
       runtime.kv,
       llmsTxtKey(locale),
@@ -252,7 +265,7 @@ function mountCollection(
       const locale = canonicalLocaleParam(c.req.param("locale"), site);
       const slugParam = c.req.param("slug") ?? "";
       const slug = slugParam.endsWith(".md") ? slugParam.slice(0, -3) : slugParam;
-      const notFound = (): Response => new Response("not found", { status: 404, headers: TEXT_PUBLIC });
+      const notFound = (): Response => new Response("not found", { status: 404, headers: TEXT_NO_STORE });
       if (locale === null) return notFound();
       const key = entryMarkdownKeyFromParts(route.collection, locale, slug);
       return readThroughCache(runtime.kv, key, MD_PUBLIC, async () => {
@@ -385,13 +398,18 @@ async function readKvWithLiveFallback(
   headers: Record<string, string>,
   compose: () => Promise<string>,
   executionCtx?: WaitUntilContext,
+  expirationTtl?: number,
 ): Promise<Response> {
   const cached = await kv.get(key);
   if (cached !== null) {
     return new Response(cached, { status: 200, headers });
   }
   const rendered = await compose();
-  const writeBack = kv.put(key, rendered);
+  const writeBack = kv.put(
+    key,
+    rendered,
+    expirationTtl === undefined ? undefined : { expirationTtl },
+  );
   if (executionCtx) {
     executionCtx.waitUntil(writeBack);
   } else {

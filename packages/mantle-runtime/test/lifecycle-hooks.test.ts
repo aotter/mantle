@@ -82,7 +82,7 @@ function harness(opts: {
     calls,
     createDraft: new CreateDraftUseCase(hookedRepo, schemas, clock, idgen),
     updateDraft: new UpdateDraftUseCase(hookedRepo, schemas, clock),
-    deleteEntry: new DeleteEntryUseCase(hookedRepo),
+    deleteEntry: new DeleteEntryUseCase(hookedRepo, schemas),
     requestPublish: new RequestPublishUseCase(hookedRepo, schemas, clock),
   };
 }
@@ -341,7 +341,12 @@ describe("LifecycleHookingEntryRepository — publish + delete", () => {
     // Direct repo call (bypassing use cases that pre-check NOT_FOUND):
     // simulates the InvokeBuiltinUseCase opDelete path which doesn't
     // pre-verify the row exists.
-    await h.hookedRepo.delete({ id: "ghost", collection: "posts" });
+    await h.hookedRepo.delete({
+      id: "ghost",
+      collection: "posts",
+      expectedStatus: "draft",
+      expectedVersion: 1,
+    });
     expect(h.calls).toEqual([]);
     // OCC will throw on a ghost update at the inner repo, but the hook
     // must not fire either way — wrap in try/catch.

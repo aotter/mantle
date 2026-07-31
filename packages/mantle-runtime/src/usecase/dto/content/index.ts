@@ -67,6 +67,8 @@ export interface ArchiveRequest extends ContentMutationFields {
 
 export interface DeleteEntryRequest extends ContentMutationFields {
   readonly id: string;
+  /** Optional collection assertion for schema-bound callers. */
+  readonly collection?: string;
 }
 
 export interface DeleteEntryResponse {

@@ -99,13 +99,42 @@ export class DatabaseEntryRepository implements EntryRepository {
   }
 
   async delete(args: DeleteEntryArgs): Promise<{ readonly removed: boolean }> {
+    const parentMatches =
+      `id = ? AND collection = ? AND status = ? AND version = ?`;
+    const parentSnapshot = [
+      args.id,
+      args.collection,
+      args.expectedStatus,
+      args.expectedVersion,
+    ] as const;
     const result = await this.db.batch([
-      this.db.prepare(`DELETE FROM revisions WHERE entry_id = ?`).bind(args.id),
-      this.db.prepare(`DELETE FROM approvals WHERE entry_id = ?`).bind(args.id),
-      this.db.prepare(`DELETE FROM entries WHERE id = ?`).bind(args.id),
+      this.db
+        .prepare(
+          `DELETE FROM revisions WHERE entry_id = ?
+           AND EXISTS (SELECT 1 FROM entries WHERE ${parentMatches})`,
+        )
+        .bind(args.id, ...parentSnapshot),
+      this.db
+        .prepare(
+          `DELETE FROM approvals WHERE entry_id = ?
+           AND EXISTS (SELECT 1 FROM entries WHERE ${parentMatches})`,
+        )
+        .bind(args.id, ...parentSnapshot),
+      this.db
+        .prepare(`DELETE FROM entries WHERE ${parentMatches}`)
+        .bind(...parentSnapshot),
     ]);
     const last = result[result.length - 1];
-    return { removed: (last?.meta.changes ?? 0) > 0 };
+    if ((last?.meta.changes ?? 0) > 0) return { removed: true };
+    const after = await this.db
+      .prepare(`SELECT collection, status, version FROM entries WHERE id = ?`)
+      .bind(args.id)
+      .first<{ collection: string; status: ContentState; version: number }>();
+    if (!after || after.collection !== args.collection) return { removed: false };
+    if (after.version !== args.expectedVersion) {
+      throw new EntryVersionConflict(args.id, args.expectedVersion, after.version);
+    }
+    throw new EntryStatusConflict(args.id, args.expectedStatus, after.status);
   }
 
   async transitionStatus(args: TransitionStatusArgs): Promise<EntryRow> {
