@@ -146,7 +146,10 @@ pnpm view-smoke        # 10 cases against /api/views/*
 pnpm mcp-smoke         # 12 cases against /mcp
 ```
 
-If you added a new MCP-relevant Schema, the per-collection authoring tools (`create_draft_<segment>`, `update_draft_<segment>`) auto-emit; verify with `tools/list`.
+If you added a new MCP-relevant Schema, per-collection authoring tools auto-emit:
+`create_draft_<segment>` / `update_draft_<segment>` for content lifecycles,
+or `create_record_<segment>` / `update_record_<segment>` for
+`lifecycle: none`. Verify the actual surface with `tools/list`.
 
 ## API and MCP authorization
 

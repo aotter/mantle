@@ -174,17 +174,18 @@ export function CollectionView({
               <Download className="size-4" aria-hidden />
               {t(language, "collection.export")}
             </Button>
-            <Button
-              type="button"
-              variant={isOperationalCollection ? "ghost" : "default"}
-              onClick={() => createMutation.mutate()}
-              disabled={createMutation.isPending}
-            >
-              <Plus className="size-4" aria-hidden />
-              {createMutation.isPending
-                ? t(language, "crud.saving")
-                : t(language, "collection.create")}
-            </Button>
+            {collection && !isOperationalCollection ? (
+              <Button
+                type="button"
+                onClick={() => createMutation.mutate()}
+                disabled={createMutation.isPending}
+              >
+                <Plus className="size-4" aria-hidden />
+                {createMutation.isPending
+                  ? t(language, "crud.saving")
+                  : t(language, "collection.create")}
+              </Button>
+            ) : null}
             {status ? <StatusBadge status={status} /> : null}
             {collection?.hasTranslations ? (
               <span className="badge-status bg-accent text-accent-foreground">i18n</span>

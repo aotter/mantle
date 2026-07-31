@@ -155,18 +155,19 @@ describe("ValidateBootUseCase", () => {
     expect(collision?.message).toMatch(/Schema 'posts'/);
   });
 
-  it("fails with MCP_TOOL_NAME_COLLISION when a Procedure starts with update_draft_ or query_view_ prefix (#281)", () => {
+  it("fails with MCP_TOOL_NAME_COLLISION for every schema-derived tool prefix (#281)", () => {
     const reg = new InMemoryHandlerRegistry();
     reg.register("echoHandler", () => ({ ok: true }));
-    const r1 = new ValidateBootUseCase().execute({
-      manifests: [makeProcedure({ name: "update-draft-x" })],
-      registry: reg,
-    });
-    const r2 = new ValidateBootUseCase().execute({
-      manifests: [makeProcedure({ name: "query-view-x" })],
-      registry: reg,
-    });
-    for (const r of [r1, r2]) {
+    for (const name of [
+      "update-draft-x",
+      "create-record-x",
+      "update-record-x",
+      "query-view-x",
+    ]) {
+      const r = new ValidateBootUseCase().execute({
+        manifests: [makeProcedure({ name })],
+        registry: reg,
+      });
       expect(r.ok).toBe(false);
       if (r.ok) continue;
       const collision = r.diagnostics.find((d) => d.code === "MCP_TOOL_NAME_COLLISION");

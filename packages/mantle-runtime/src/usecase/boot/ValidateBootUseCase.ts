@@ -308,7 +308,7 @@ function checkMcpToolNameCollisions(
   }
   // Procedure tool names (#281) share the catalog namespace. Reject
   // anything that collides with a generic tool, a reserved
-  // create_draft_/update_draft_/query_view_ prefix, a schema-mangled
+  // content/record authoring or query_view_ prefix, a schema-mangled
   // segment, or another procedure. We don't gate by whether the
   // Procedure has an `mcp` Trigger today — names must stay portable
   // so an adopter can add the Trigger later without renaming.

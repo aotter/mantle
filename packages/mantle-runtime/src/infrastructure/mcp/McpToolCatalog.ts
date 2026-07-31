@@ -1,6 +1,7 @@
 import {
   MANTLE_BIND_KEYWORD,
   expandPolicyRequired,
+  resolveLifecycle,
   resolveLocalizedText,
   type JsonSchema,
   type MediaPurposePolicy,
@@ -13,7 +14,8 @@ import { mcpToolNameSegment } from "../../domain/service/McpToolNaming.js";
 /**
  * MCP tool catalog. Mix of generic tools (read paths, status flips
  * that take only an `id`) plus per-collection emitted authoring
- * tools (`create_draft_<collection>`, `update_draft_<collection>`)
+ * tools (`create_draft_*` / `update_draft_*` for authored content,
+ * `create_record_*` / `update_record_*` for operational records)
  * with the Schema's properties inlined into the tool's `inputSchema`
  * so MCP clients (LLM agents) see typed authoring contracts without
  * a separate `get_schema` round trip.
@@ -27,8 +29,8 @@ import { mcpToolNameSegment } from "../../domain/service/McpToolNaming.js";
  *     the agent must not send them)
  *   - `required` = intersection of `Schema.spec.schema.required` with
  *     the surviving authoring fields
- *   - `update_draft_<collection>` adds `id` + `expected_version` to
- *     the schema and to `required`
+ *   - each update tool adds `id` + `expected_version` to the schema
+ *     and to `required`
  *   - the dispatcher unwraps the typed top-level fields back into the
  *     chokepoint's `data` arg — the wire surface is flatter than
  *     `{ data: {...} }`, the storage shape is unchanged.
@@ -187,7 +189,7 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
   {
     name: "request_publish",
-    description: "Publish a draft. v0.1.0 simple lifecycle: publishes immediately.",
+    description: "Publish a draft. v0.1.0 simple lifecycle: publishes immediately. Not available for lifecycle:none operational records.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" } },
@@ -196,7 +198,7 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
   {
     name: "unpublish_entry",
-    description: "Unpublish a published or archived entry back to draft before editing.",
+    description: "Unpublish a content entry back to draft before editing. Not available for lifecycle:none operational records.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" } },
@@ -205,7 +207,7 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
   {
     name: "archive_entry",
-    description: "Archive an entry.",
+    description: "Archive a content entry. Not available for lifecycle:none operational records.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" } },
@@ -214,7 +216,7 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
   {
     name: "delete_entry",
-    description: "Permanently delete an entry. Cascades to its revisions and approvals. Prefer archive_entry when reversibility matters.",
+    description: "Permanently delete an entry. Cascades to its revisions and approvals. For content lifecycles, prefer archive_entry when reversibility matters.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" } },
@@ -225,6 +227,8 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
 
 export const CREATE_DRAFT_PREFIX = "create_draft_";
 export const UPDATE_DRAFT_PREFIX = "update_draft_";
+export const CREATE_RECORD_PREFIX = "create_record_";
+export const UPDATE_RECORD_PREFIX = "update_record_";
 export const QUERY_VIEW_PREFIX = "query_view_";
 
 export type McpToolSurface = "staff" | "public";
@@ -299,7 +303,7 @@ function buildCreateTool(schema: SchemaManifest): McpToolDefinition {
   };
   if (required.length > 0) inputSchema["required"] = required;
   return {
-    name: `${CREATE_DRAFT_PREFIX}${mcpToolNameSegment(schema.metadata.name)}`,
+    name: `${resolveLifecycle(schema) === "none" ? CREATE_RECORD_PREFIX : CREATE_DRAFT_PREFIX}${mcpToolNameSegment(schema.metadata.name)}`,
     description: describeCreateTool(schema),
     inputSchema,
   };
@@ -320,7 +324,7 @@ function buildUpdateTool(schema: SchemaManifest): McpToolDefinition {
     required: ["id", "expected_version", ...required],
   };
   return {
-    name: `${UPDATE_DRAFT_PREFIX}${mcpToolNameSegment(schema.metadata.name)}`,
+    name: `${resolveLifecycle(schema) === "none" ? UPDATE_RECORD_PREFIX : UPDATE_DRAFT_PREFIX}${mcpToolNameSegment(schema.metadata.name)}`,
     description: describeUpdateTool(schema),
     inputSchema,
   };
@@ -401,12 +405,16 @@ function authorizationSummary(
 }
 
 function describeCreateTool(schema: SchemaManifest): string {
-  const base = `Create a new draft entry in '${schema.metadata.name}'.`;
+  const base = resolveLifecycle(schema) === "none"
+    ? `Create a live operational record in '${schema.metadata.name}'.`
+    : `Create a new draft entry in '${schema.metadata.name}'.`;
   return schema.spec.description ? `${base} ${schema.spec.description}`.trim() : base;
 }
 
 function describeUpdateTool(schema: SchemaManifest): string {
-  return `Update a draft entry in '${schema.metadata.name}' with optimistic-concurrency check.`;
+  return resolveLifecycle(schema) === "none"
+    ? `Update an operational record in '${schema.metadata.name}' with optimistic-concurrency check.`
+    : `Update a draft entry in '${schema.metadata.name}' with optimistic-concurrency check.`;
 }
 
 interface AuthoringFields {

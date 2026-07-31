@@ -43,5 +43,7 @@ export const RESERVED_MCP_GENERIC_TOOL_NAMES: ReadonlySet<string> = new Set([
 export const RESERVED_MCP_TOOL_PREFIXES: readonly string[] = [
   "create_draft_",
   "update_draft_",
+  "create_record_",
+  "update_record_",
   "query_view_",
 ];
