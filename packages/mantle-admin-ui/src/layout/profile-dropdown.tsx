@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { cn } from "../lib/utils";
+import { signOut } from "../lib/auth";
 import { usePreferences } from "../app/preferences";
 import { t } from "../app/i18n";
 
@@ -18,10 +19,9 @@ import { t } from "../app/i18n";
  * NavUser in the sidebar footer carries the full identity card; this
  * one is the always-visible escape hatch for account-level actions.
  *
- * The Avatar / signOut helpers are duplicated with
- * NavUser by design at v0.1 — neither file is large, and the two
- * components have different ergonomic constraints (size, alignment).
- * Dedupe into a shared `lib/profile` if a third caller appears.
+ * The Avatar helper is duplicated with NavUser by design at v0.1 —
+ * the two components have different ergonomic constraints (size,
+ * alignment).
  */
 export interface ProfileDropdownProps {
   login: string | null;
@@ -126,12 +126,4 @@ function Avatar({
       )}
     </span>
   );
-}
-
-function signOut(): void {
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = "/admin/logout";
-  document.body.appendChild(form);
-  form.submit();
 }
