@@ -29,8 +29,10 @@ import { ExecuteViewUseCase } from "../../usecase/view/index.js";
 import { InvokeProcedureUseCase } from "../../usecase/procedure/InvokeProcedureUseCase.js";
 import {
   CREATE_DRAFT_PREFIX,
+  CREATE_RECORD_PREFIX,
   QUERY_VIEW_PREFIX,
   UPDATE_DRAFT_PREFIX,
+  UPDATE_RECORD_PREFIX,
   buildMcpToolCatalog,
   extractCollectionSegment,
   type McpToolSurface,
@@ -92,6 +94,7 @@ export interface McpUseCases {
 export class McpJsonRpcDispatcher {
   private readonly catalog: readonly McpToolDefinition[];
   private readonly catalogWireJson: string;
+  private readonly catalogToolNames: ReadonlySet<string>;
   /** segment → original `Schema.metadata.name`. Built once at
    *  construction; the per-collection routing path looks up the
    *  segment from the tool name and recovers the canonical
@@ -121,6 +124,7 @@ export class McpJsonRpcDispatcher {
       procedures: options.procedures,
     });
     this.catalogWireJson = `{"tools":${JSON.stringify(this.catalog)}}`;
+    this.catalogToolNames = new Set(this.catalog.map((tool) => tool.name));
     const map = new Map<string, string>();
     for (const s of schemas) map.set(mcpToolNameSegment(s.metadata.name), s.metadata.name);
     this.schemaBySegment = map;
@@ -176,6 +180,9 @@ export class McpJsonRpcDispatcher {
       return jsonRpcError(reqId, -32602, "missing tool name");
     }
     const args = (p.arguments ?? {}) as Record<string, unknown>;
+    if (!this.catalogToolNames.has(p.name)) {
+      return jsonRpcError(reqId, -32601, `unknown tool: ${p.name}`);
+    }
 
     try {
       const result = await this.dispatchToolByName(p.name, args, auth);
@@ -344,14 +351,16 @@ export class McpJsonRpcDispatcher {
         });
       }
       default: {
-        // Per-collection authoring tools: `create_draft_<segment>` /
-        // `update_draft_<segment>`. The agent sends Schema fields at
-        // the top level; we rebuild `data` for the chokepoint.
+        // Per-collection content-draft or operational-record tools.
+        // The agent sends Schema fields at the top level; we rebuild
+        // `data` for the chokepoint.
         // `hookCtx` plumbs the authenticated MCP user into lifecycle
         // hook context so consumers can branch on `ctx.user` (e.g.
         // bypass captcha checks for authenticated agents).
         const hookCtx = ctxFromAuth(auth);
-        const createSegment = extractCollectionSegment(name, CREATE_DRAFT_PREFIX);
+        const createSegment =
+          extractCollectionSegment(name, CREATE_DRAFT_PREFIX) ??
+          extractCollectionSegment(name, CREATE_RECORD_PREFIX);
         if (createSegment) {
           const collection = this.schemaBySegment.get(createSegment);
           if (!collection) return UNKNOWN_TOOL;
@@ -362,7 +371,9 @@ export class McpJsonRpcDispatcher {
             ctx: hookCtx,
           });
         }
-        const updateSegment = extractCollectionSegment(name, UPDATE_DRAFT_PREFIX);
+        const updateSegment =
+          extractCollectionSegment(name, UPDATE_DRAFT_PREFIX) ??
+          extractCollectionSegment(name, UPDATE_RECORD_PREFIX);
         if (updateSegment) {
           const collection = this.schemaBySegment.get(updateSegment);
           if (!collection) return UNKNOWN_TOOL;

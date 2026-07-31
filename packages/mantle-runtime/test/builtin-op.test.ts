@@ -172,6 +172,22 @@ describe("InvokeBuiltinUseCase — create", () => {
     if (!result.ok) return;
     expect((result.data as { data: { authorId: unknown } }).data.authorId).toBeNull();
   });
+
+  it("creates lifecycle:none operational records live", async () => {
+    const schema = {
+      ...postsSchemaWithBindings,
+      spec: { ...postsSchemaWithBindings.spec, lifecycle: "none" as const },
+    };
+    const h = harness({ schemas: [schema] });
+    const result = await h.invoke.execute({
+      procedure: createPostFullInput,
+      input: { title: "Submission" },
+      ctx: { user: null, staff: null, env: {} },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect((result.data as { status: string }).status).toBe("published");
+  });
 });
 
 describe("InvokeBuiltinUseCase — update / delete / upsert", () => {

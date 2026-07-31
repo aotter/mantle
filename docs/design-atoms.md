@@ -171,7 +171,8 @@ entry's state machine.
   with `CONFLICT`). The admin console renders these collections flat —
   no draft/published filter buckets, no publish controls. Declare it
   on any Schema whose rows a human should *inspect and correct*, never
-  *stage and publish*.
+  *stage and publish*. Staff MCP emits `create_record_<schema>` and
+  `update_record_<schema>` for these Schemas instead of draft tools.
 
 The modes are **per-Schema and mix freely** within a site. There is no
 site-wide lifecycle setting; one Schema can be `simple` while another

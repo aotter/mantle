@@ -1,6 +1,7 @@
 import {
   canTransition,
   DiagnosticError,
+  resolveLifecycle,
   runtimeDiagnostic,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
@@ -21,8 +22,9 @@ import type { InvokeBuiltinRequest } from "../dto/procedure/index.js";
  * `InvokeBuiltinUseCase` — executes the `handler.kind: builtin` op
  * (POC ADR-0014). The four ops map 1:1 to the entry-writer chokepoint:
  *
- *   - `create` → `entries.create({ ..., status: 'draft' })` with a
- *     generated id. Input is projected through
+ *   - `create` → `entries.create` with a generated id. Content starts
+ *     as a draft; `lifecycle: none` operational records start live.
+ *     Input is projected through
  *     `domain/service/BuiltinProjector.projectAndStamp` so only
  *     Schema-declared keys land in `data` and `x-mantle-bind` fields are
  *     server-stamped from `ctx`.
@@ -126,7 +128,7 @@ export class InvokeBuiltinUseCase {
     return this.entries.create({
       id: this.idgen.next(),
       collection: schema.metadata.name,
-      status: "draft",
+      status: resolveLifecycle(schema) === "none" ? "published" : "draft",
       data,
       authorId: ctx.user?.id ?? null,
       now,

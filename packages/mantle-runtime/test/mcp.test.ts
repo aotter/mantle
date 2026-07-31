@@ -76,6 +76,11 @@ function buildHarness(schemas = [postsSchema()]): Harness {
   };
 }
 
+function operationalPostsSchema() {
+  const schema = postsSchema();
+  return { ...schema, spec: { ...schema.spec, lifecycle: "none" as const } };
+}
+
 /**
  * Build a stripped-down McpUseCases for tests that only exercise the
  * procedure-dispatch / public-surface paths (#281). The CRUD use cases
@@ -151,6 +156,37 @@ describe("McpJsonRpcDispatcher", () => {
     expect(names).toContain("update_draft_posts");
     // Old generic create_draft is gone.
     expect(names).not.toContain("create_draft");
+  });
+
+  it("uses record tools for lifecycle:none collections and creates them live", async () => {
+    const { dispatcher } = buildHarness([operationalPostsSchema()]);
+    const list = await dispatcher.dispatch(jsonRpcReq("tools/list"), { userId: "u1" });
+    const listBody = (await list.json()) as {
+      result: { tools: Array<{ name: string; description: string }> };
+    };
+    const names = listBody.result.tools.map((tool) => tool.name);
+    expect(names).toContain("create_record_posts");
+    expect(names).toContain("update_record_posts");
+    expect(names).not.toContain("create_draft_posts");
+    expect(names).not.toContain("update_draft_posts");
+    expect(
+      listBody.result.tools.find((tool) => tool.name === "create_record_posts")?.description,
+    ).toContain("live operational record");
+
+    const call = await dispatcher.dispatch(
+      jsonRpcReq("tools/call", {
+        name: "create_record_posts",
+        arguments: { title: "Submission" },
+      }),
+      { userId: "u1" },
+    );
+    const callBody = (await call.json()) as {
+      result: { content: Array<{ text: string }> };
+    };
+    expect(JSON.parse(callBody.result.content[0]!.text)).toMatchObject({
+      status: "published",
+      data: { title: "Submission" },
+    });
   });
 
   it("public surface exposes View query tools, not staff authoring tools", async () => {
@@ -458,6 +494,16 @@ describe("McpJsonRpcDispatcher", () => {
     expect(names).toContain("query_view_recent_posts");
     expect(names).not.toContain("create_draft_posts");
     expect(names).not.toContain("list_entries");
+
+    const guessedStaffCall = await dispatcher.dispatch(
+      jsonRpcReq("tools/call", {
+        name: "create_draft_posts",
+        arguments: { title: "Bypass" },
+      }),
+      { userId: "u1", staff: null },
+    );
+    const guessedBody = (await guessedStaffCall.json()) as { error: { code: number } };
+    expect(guessedBody.error.code).toBe(-32601);
   });
 
   it("Procedure-MCP trigger: requires.auth.all enforces the predicate, returning AUTH_DENIED for missing staff (#281)", async () => {

@@ -33,8 +33,9 @@ tokens, or recipes, but the skill contract is Core-owned.
 ## Work
 
 - Use existing tokens, CSS, components, and installed dependencies first.
-- When the generated section type exposes `showImage`, set it to `false` for
-  a text-only hero/content block. Put custom media in a project-owned section.
+- For a standard hero image, set the section's `image: { src, alt }`; use
+  `showImage: false` for text-only hero/content blocks. Put non-image media in
+  a project-owned section.
 - Keep accessibility basics: semantic HTML, focus states, contrast, and
   keyboard reachability. Against a non-default background, check
   `--foreground-muted` and `--primary`, not only `--foreground`; keep normal
