@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle-runtime",
-  "version": "0.0.11-alpha.59",
+  "version": "0.0.11-alpha.60",
   "description": "Runtime engine for mantle: dispatcher + entry-writer + view executor + content-ops + render pipeline + auth + MCP. Defines adapter-agnostic ports. MUST NOT import D1Database / KVNamespace types.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
