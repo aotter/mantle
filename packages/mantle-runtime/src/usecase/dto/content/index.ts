@@ -15,11 +15,9 @@ import type { HandlerContext } from "../../../domain/model/HandlerContext.js";
  */
 export interface ContentMutationFields {
   readonly ctx?: HandlerContext;
-  /** Pre-projection original input forwarded to lifecycle hooks
-   *  (`ctx.event.originalInput` on the hook's procedure call). When
-   *  unset, hooks see the row data instead. The builtin Procedure path
-   *  populates this with the full procedure input so hooks can read
-   *  side-channel fields like CAPTCHA tokens. */
+  /** Pre-projection input forwarded only to synchronous `before_*`
+   *  hooks. Deferred `after_*` delivery uses persisted row data and
+   *  never retains side-channel fields such as CAPTCHA tokens. */
   readonly originalInput?: unknown;
 }
 

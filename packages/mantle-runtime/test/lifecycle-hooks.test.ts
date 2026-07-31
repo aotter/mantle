@@ -21,6 +21,7 @@ import {
 import {
   RunDeferredHookUseCase,
   RunLifecycleHooksUseCase,
+  type RunLifecycleHookRequest,
 } from "../src/usecase/lifecycle/index.js";
 import { InvokeProcedureUseCase } from "../src/usecase/procedure/InvokeProcedureUseCase.js";
 import { InMemoryEntryRepository } from "./fakes/in-memory-store.js";
@@ -31,7 +32,11 @@ import {
 } from "./fakes/manifests.js";
 
 const clock: Clock = { now: () => 1_700_000_000_000 };
-const idgen: IdGenerator = { next: () => "post-1" };
+
+function harnessIdGenerator(): IdGenerator {
+  let call = 0;
+  return { next: () => call++ === 0 ? "post-1" : `event-${call - 1}` };
+}
 
 interface Harness {
   store: InMemoryEntryRepository;
@@ -42,6 +47,7 @@ interface Harness {
   updateDraft: UpdateDraftUseCase;
   deleteEntry: DeleteEntryUseCase;
   requestPublish: RequestPublishUseCase;
+  hookRunner: RunLifecycleHooksUseCase;
   calls: string[];
 }
 
@@ -64,6 +70,7 @@ function harness(opts: {
   }
   const triggers = opts.triggers.map(makeLifecycleTrigger);
   const triggerIndex = new TriggerIndex(triggers);
+  const idgen = harnessIdGenerator();
   const invoke = new InvokeProcedureUseCase(registry);
   const hookRunner = new RunLifecycleHooksUseCase(triggerIndex, proceduresByName, (req) =>
     invoke.execute(req),
@@ -72,6 +79,7 @@ function harness(opts: {
     store,
     triggerIndex,
     hookRunner,
+    idgen,
     opts.deferred,
   );
   return {
@@ -84,6 +92,7 @@ function harness(opts: {
     updateDraft: new UpdateDraftUseCase(hookedRepo, schemas, clock),
     deleteEntry: new DeleteEntryUseCase(hookedRepo, schemas),
     requestPublish: new RequestPublishUseCase(hookedRepo, schemas, clock),
+    hookRunner,
   };
 }
 
@@ -100,6 +109,30 @@ const slackProcedure: ProcedureManifest = makeProcedure({
   input: { type: "object" },
   output: { type: "object" },
 });
+
+function deferredEnvelope(
+  overrides: Partial<DeferredHookEnvelope> = {},
+): DeferredHookEnvelope {
+  return {
+    version: 1,
+    eventId: "event-1",
+    triggerNames: ["create-audit"],
+    hook: "after_create",
+    schema: "posts",
+    entry: {
+      id: "post-1",
+      collection: "posts",
+      status: "draft",
+      version: 1,
+      data: {},
+      authorId: null,
+      createdAt: 0,
+      updatedAt: 0,
+    },
+    ctxSnapshot: null,
+    ...overrides,
+  };
+}
 
 describe("LifecycleHookingEntryRepository — before_create", () => {
   it("fires before_create then writes when handler returns OK", async () => {
@@ -357,7 +390,7 @@ describe("LifecycleHookingEntryRepository — publish + delete", () => {
   });
 });
 
-describe("LifecycleHookingEntryRepository — durable dispatcher (after_*)", () => {
+describe("LifecycleHookingEntryRepository — deferred dispatcher (after_*)", () => {
   it("enqueues envelope through dispatcher and skips inline run", async () => {
     const enqueued: DeferredHookEnvelope[] = [];
     const dispatcher: DeferredHookDispatcher = {
@@ -366,15 +399,25 @@ describe("LifecycleHookingEntryRepository — durable dispatcher (after_*)", () 
       },
     };
     const h = harness({
-      procedures: [slackProcedure],
+      procedures: [slackProcedure, captchaProcedure],
       triggers: [
         {
+          name: "030-notify",
           procedure: "slackNotify",
           schema: "posts",
           on: ["after_create"],
         },
+        {
+          name: "010-audit",
+          procedure: "captchaCheck",
+          schema: "posts",
+          on: ["after_create"],
+        },
       ],
-      handlers: { slackNotify: () => ({ ok: true }) },
+      handlers: {
+        slackNotify: () => ({ ok: true }),
+        captchaCheck: () => ({ ok: true }),
+      },
       deferred: dispatcher,
     });
     await h.createDraft.execute({
@@ -388,6 +431,10 @@ describe("LifecycleHookingEntryRepository — durable dispatcher (after_*)", () 
     expect(enqueued[0]?.hook).toBe("after_create");
     expect(enqueued[0]?.schema).toBe("posts");
     expect(enqueued[0]?.entry.id).toBe("post-1");
+    expect(enqueued[0]?.version).toBe(1);
+    expect(enqueued[0]?.eventId).toBe("event-1");
+    expect(enqueued[0]?.triggerNames).toEqual(["010-audit", "030-notify"]);
+    expect(enqueued[0]).not.toHaveProperty("originalInput");
     // Anonymous create → no ctx snapshot.
     expect(enqueued[0]?.ctxSnapshot).toBeNull();
   });
@@ -425,6 +472,7 @@ describe("LifecycleHookingEntryRepository — durable dispatcher (after_*)", () 
       userId: "user-1",
       staffId: "user-1",
       staffRole: "owner",
+      auth: null,
     });
   });
 
@@ -464,6 +512,15 @@ describe("LifecycleHookingEntryRepository — durable dispatcher (after_*)", () 
     expect(captured).not.toBeNull();
     await captured;
     expect(h.calls).toEqual(["slackNotify"]);
+    expect(errSpy).toHaveBeenCalledWith(
+      "[lifecycle] deferred enqueue failed; using best-effort fallback",
+      expect.objectContaining({
+        eventId: "event-1",
+        hook: "after_create",
+        schema: "posts",
+        entryId: "post-1",
+      }),
+    );
     errSpy.mockRestore();
   });
 
@@ -492,6 +549,80 @@ describe("LifecycleHookingEntryRepository — durable dispatcher (after_*)", () 
       authorId: null,
     });
     expect(h.calls).toEqual(["slackNotify"]);
+    errSpy.mockRestore();
+  });
+
+  it("never forwards side-channel input to an after_* hook", async () => {
+    let received: unknown;
+    const captureProcedure = makeProcedure({
+      name: "captureAfter",
+      handlerRef: "captureAfter",
+      input: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          recaptchaToken: { type: "string" },
+        },
+      },
+      output: { type: "object" },
+    });
+    const dispatcher: DeferredHookDispatcher = {
+      enqueue: async () => {
+        throw new Error("ambiguous send failure");
+      },
+    };
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const h = harness({
+      procedures: [captureProcedure],
+      triggers: [{ procedure: "captureAfter", schema: "posts", on: ["after_create"] }],
+      handlers: {
+        captureAfter: (input) => {
+          received = input;
+          return { ok: true };
+        },
+      },
+      deferred: dispatcher,
+    });
+    await h.createDraft.execute({
+      collection: "posts",
+      data: { title: "persisted" },
+      originalInput: { title: "persisted", recaptchaToken: "secret" },
+      authorId: null,
+    });
+    expect(received).toEqual({ title: "persisted" });
+    errSpy.mockRestore();
+  });
+
+  it("reuses one event identity across an ambiguous enqueue fallback and replay", async () => {
+    let envelope: DeferredHookEnvelope | undefined;
+    const identities: string[] = [];
+    const dispatcher: DeferredHookDispatcher = {
+      enqueue: async (message) => {
+        envelope = message;
+        throw new Error("send outcome unknown");
+      },
+    };
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const h = harness({
+      procedures: [slackProcedure],
+      triggers: [{ name: "010-notify", procedure: "slackNotify", on: ["after_create"] }],
+      handlers: {
+        slackNotify: (_input, rawCtx) => {
+          const ctx = rawCtx as { event?: { id: string; trigger: string } };
+          identities.push(`${ctx.event?.id}:${ctx.event?.trigger}`);
+          return { ok: true };
+        },
+      },
+      deferred: dispatcher,
+    });
+    await h.createDraft.execute({
+      collection: "posts",
+      data: { title: "x" },
+      authorId: null,
+    });
+    expect(envelope).toBeDefined();
+    await new RunDeferredHookUseCase(h.hookRunner).execute({ envelope, env: {} });
+    expect(identities).toEqual(["event-1:010-notify", "event-1:010-notify"]);
     errSpy.mockRestore();
   });
 
@@ -527,21 +658,17 @@ describe("LifecycleHookingEntryRepository — durable dispatcher (after_*)", () 
 
 describe("RunDeferredHookUseCase", () => {
   it("rebuilds ctx from snapshot and forwards to hook runner", async () => {
-    let received: { hook: string; schema: string; entry: unknown; ctx: unknown } | null = null;
+    let received: RunLifecycleHookRequest | null = null;
     const stubRunner = {
-      run: async (req: { hook: string; schema: string; entry: unknown; ctx: unknown }) => {
-        received = {
-          hook: req.hook,
-          schema: req.schema,
-          entry: req.entry,
-          ctx: req.ctx,
-        };
+      run: async (request: RunLifecycleHookRequest) => {
+        received = request;
       },
     };
     const useCase = new RunDeferredHookUseCase(stubRunner);
-    const envelope: DeferredHookEnvelope = {
+    const envelope = deferredEnvelope({
+      eventId: "event-9",
+      triggerNames: ["publish-audit"],
       hook: "after_publish",
-      schema: "posts",
       entry: {
         id: "post-9",
         collection: "posts",
@@ -552,22 +679,36 @@ describe("RunDeferredHookUseCase", () => {
         createdAt: 1,
         updatedAt: 2,
       },
-      originalInput: { foo: "bar" },
       ctxSnapshot: {
         userId: "user-1",
         staffId: "user-1",
         staffRole: "editor",
+        auth: {
+          credential: "oauth",
+          credentialId: "grant-1",
+          clientId: "client-1",
+          scopes: ["mcp"],
+        },
       },
-    };
+    });
     const env = { MANTLE_INTERNAL_QUEUE: "fake" };
     await useCase.execute({ envelope, env });
     expect(received).toEqual({
+      eventId: "event-9",
+      triggerNames: ["publish-audit"],
+      delivery: "deferred",
       hook: "after_publish",
       schema: "posts",
       entry: envelope.entry,
       ctx: {
         user: { id: "user-1" },
         staff: { id: "user-1", role: "editor" },
+        auth: {
+          credential: "oauth",
+          credentialId: "grant-1",
+          clientId: "client-1",
+          scopes: ["mcp"],
+        },
         env,
       },
     });
@@ -581,23 +722,112 @@ describe("RunDeferredHookUseCase", () => {
       },
     };
     const useCase = new RunDeferredHookUseCase(stubRunner);
-    const envelope: DeferredHookEnvelope = {
-      hook: "after_create",
-      schema: "posts",
+    const envelope = deferredEnvelope();
+    await useCase.execute({ envelope, env: {} });
+    expect(receivedCtx).toEqual({ user: null, staff: null, env: {} });
+  });
+
+  it.each([
+    ["missing version", ({ version: _version, ...rest }) => rest],
+    ["unsupported version", (value) => ({ ...value, version: 2 })],
+    ["before hook", (value) => ({ ...value, hook: "before_create" })],
+    ["duplicate trigger", (value) => ({ ...value, triggerNames: ["audit", "audit"] })],
+    ["collection mismatch", (value) => ({
+      ...value,
+      entry: { ...value.entry, collection: "pages" },
+    })],
+    ["legacy originalInput", (value) => ({ ...value, originalInput: { token: "secret" } })],
+    ["non-JSON entry data", (value) => ({
+      ...value,
+      entry: { ...value.entry, data: { bad: undefined } },
+    })],
+    ["inconsistent staff snapshot", (value) => ({
+      ...value,
+      ctxSnapshot: {
+        userId: "user-1",
+        staffId: "staff-2",
+        staffRole: "editor",
+        auth: null,
+      },
+    })],
+  ] as const)("rejects malformed envelope: %s", async (_name, mutate) => {
+    let called = false;
+    const useCase = new RunDeferredHookUseCase({
+      run: async () => {
+        called = true;
+      },
+    });
+    const base = deferredEnvelope({ triggerNames: ["audit"] });
+    await expect(useCase.execute({ envelope: mutate(base), env: {} })).rejects.toMatchObject({
+      diagnostic: { code: "INPUT_VALIDATION_FAILED" },
+    });
+    expect(called).toBe(false);
+  });
+
+  it("runs every captured Trigger before surfacing deferred failure, then preserves replay keys", async () => {
+    let failMiddle = true;
+    const seen: string[] = [];
+    const procedures = ["first", "middle", "last"].map((name) =>
+      makeProcedure({
+        name,
+        handlerRef: name,
+        input: { type: "object" },
+        output: { type: "object" },
+      }),
+    );
+    const h = harness({
+      procedures,
+      triggers: [
+        { name: "010-first", procedure: "first", on: ["after_create"] },
+        { name: "020-middle", procedure: "middle", on: ["after_create"] },
+        { name: "030-last", procedure: "last", on: ["after_create"] },
+      ],
+      handlers: Object.fromEntries(procedures.map(({ metadata }) => [
+        metadata.name,
+        (_input: unknown, rawCtx: unknown) => {
+          const ctx = rawCtx as { event: { id: string; trigger: string } };
+          seen.push(`${ctx.event.id}:${ctx.event.trigger}`);
+          if (metadata.name === "middle" && failMiddle) throw new Error("transient");
+          return {};
+        },
+      ])),
+    });
+    const envelope = deferredEnvelope({
+      eventId: "event-stable",
+      triggerNames: ["010-first", "020-middle", "030-last"],
       entry: {
         id: "post-1",
         collection: "posts",
         status: "draft",
         version: 1,
-        data: {},
+        data: { title: "x" },
         authorId: null,
         createdAt: 0,
         updatedAt: 0,
       },
-      ctxSnapshot: null,
-    };
+    });
+    const useCase = new RunDeferredHookUseCase(h.hookRunner);
+    await expect(useCase.execute({ envelope, env: {} })).rejects.toBeInstanceOf(AggregateError);
+    expect(seen).toEqual([
+      "event-stable:010-first",
+      "event-stable:020-middle",
+      "event-stable:030-last",
+    ]);
+
+    failMiddle = false;
     await useCase.execute({ envelope, env: {} });
-    expect(receivedCtx).toEqual({ user: null, staff: null, env: {} });
+    expect(seen.slice(3)).toEqual(seen.slice(0, 3));
+  });
+
+  it("rejects a captured Trigger that no longer exists", async () => {
+    const h = harness({ procedures: [], triggers: [], handlers: {} });
+    await expect(new RunDeferredHookUseCase(h.hookRunner).execute({
+      envelope: deferredEnvelope({
+        eventId: "event-old",
+        triggerNames: ["removed-trigger"],
+      }),
+      env: {},
+    })).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
   });
 });
 

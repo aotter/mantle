@@ -27,7 +27,7 @@ describe("TriggerIndex", () => {
     const idx = new TriggerIndex([
       makeHttpTrigger({ procedure: "ping", path: "/api/ping" }),
     ]);
-    expect(idx.hasAny("posts")).toBe(false);
+    expect(idx.forHook("posts", "before_create")).toEqual([]);
   });
 
   it("orders Triggers within a (schema, hook) group alphabetically by name", () => {
@@ -53,18 +53,6 @@ describe("TriggerIndex", () => {
     ]);
     const names = idx.forHook("posts", "before_create").map((t) => t.metadata.name);
     expect(names).toEqual(["010-first", "020-second", "030-third"]);
-  });
-
-  it("hasAny is true for any schema with at least one lifecycle Trigger", () => {
-    const idx = new TriggerIndex([
-      makeLifecycleTrigger({
-        procedure: "p",
-        schema: "posts",
-        on: ["before_delete"],
-      }),
-    ]);
-    expect(idx.hasAny("posts")).toBe(true);
-    expect(idx.hasAny("ghost")).toBe(false);
   });
 
   it("supports multiple hooks declared on a single Trigger.on array", () => {

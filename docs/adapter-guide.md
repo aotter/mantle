@@ -25,9 +25,16 @@ Optional ports are enabled only when a feature needs them:
 | Contract | Source | Required when |
 |---|---|---|
 | `MediaStorage` | `packages/mantle-runtime/src/domain/port/MediaStorage.ts` | The adapter exposes admin/MCP media upload flows. |
-| `DeferredHookDispatcher` | `packages/mantle-runtime/src/domain/port/DeferredHookDispatcher.ts` | The adapter wants durable queue delivery for `after_*` lifecycle hooks. |
+| `DeferredHookDispatcher` | `packages/mantle-runtime/src/domain/port/DeferredHookDispatcher.ts` | The adapter wants at-least-once queue delivery for `after_*` lifecycle hooks. |
 
 Test seams such as `Clock` and `IdGenerator` are injectable through `createCmsRuntime`, but normal adapters do not need custom implementations.
+
+Deferred delivery is an optional, versioned wire contract. Queue acceptance is
+not atomic with the entry write; adapters must preserve the supplied event id,
+validate untrusted messages before dereferencing them, surface handler failures
+to their retry mechanism, and document poison-message/DLQ behavior. See
+[Deferred lifecycle hooks on Cloudflare Queues](deferred-lifecycle-queues.md)
+for the reference implementation and exact guarantees.
 
 ## Runtime boot
 
@@ -148,6 +155,8 @@ Minimum auth/MCP behavior:
 - [ ] Prove one guarded target has identical REST/MCP outcomes, including
       mutable revocation on the next call.
 - [ ] Add optional `MediaStorage` or `DeferredHookDispatcher` only when the adapter supports those features.
+- [ ] For deferred hooks, document at-least-once delivery, idempotency,
+      message limits, retries/DLQ, and the non-transactional write-to-enqueue gap.
 - [ ] Verify the runtime package still has no platform-specific imports.
 
 ## Current non-goals

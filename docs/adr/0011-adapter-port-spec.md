@@ -31,16 +31,26 @@ The POC accumulated multiple half-decisions about this seam (POC ADR-0015 docume
 
 Optional feature ports may also live in `domain/port/`, but they are
 not part of the first-run adapter contract until a feature is enabled.
-For v0.1.x media hosting and durable lifecycle dispatch:
+For v0.1.x media hosting and deferred lifecycle dispatch:
 
 | Optional port | Surface |
 |---|---|
 | `MediaStorage` | Object-storage-shaped media upload/commit/public URL/delete contract for **public** media. Cloudflare may implement with R2, but runtime must not import R2 types. |
-| `DeferredHookDispatcher` | Queue-shaped dispatcher for durable `after_*` lifecycle hooks. Cloudflare may implement with Workers Queues; other adapters may use a queue, job runner, or leave it unset. |
+| `DeferredHookDispatcher` | Queue-shaped dispatcher for at-least-once `after_*` lifecycle delivery. Cloudflare may implement with Workers Queues; other adapters may use a queue, job runner, or leave it unset. |
 
 These optional ports must not force first-run provisioning to create R2
 resources. Publication starters can carry external image URLs without a
 media storage implementation.
+
+`DeferredHookDispatcher.enqueue` confirms adapter acceptance only. It cannot
+make an entry write and an external queue send atomic. The versioned envelope
+contains a stable event id plus captured Trigger names; handlers combine them
+for idempotency because retries and ambiguous producer fallback can duplicate
+execution. Deferred envelopes carry persisted entry data and normalized actor
+metadata, never arbitrary original request input. Adapter-specific retry,
+delay, batch, DLQ, and message-size settings remain outside manifest grammar.
+The operational reference is
+[`docs/deferred-lifecycle-queues.md`](../deferred-lifecycle-queues.md).
 
 Identity, session, OAuth, and role enforcement are adapter-owned per
 ADR-0014. The runtime does not define `SessionRepository`,

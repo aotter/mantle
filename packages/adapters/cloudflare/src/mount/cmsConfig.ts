@@ -24,10 +24,11 @@ export interface CmsConfig {
      *  `/admin/api/media/*` endpoints are registered. Forwarded to the
      *  runtime as `mediaStorage`. */
     readonly mediaStorage?: CreateCmsRuntimeArgs["mediaStorage"];
-    /** Optional deferred-delivery dispatcher. When set, `after_*`
-     *  lifecycle hooks fire through this instead of riding
-     *  `ctx.waitUntil`. The Cloudflare adapter expects a
-     *  `WorkersQueueHookDispatcher` bound to the `mantle_internal` queue
+    /** Optional at-least-once dispatcher. When set, `after_*`
+     *  lifecycle hooks enqueue after the entry write; a rejected send
+     *  falls back to best-effort `ctx.waitUntil`/inline execution. The
+     *  Cloudflare adapter expects a
+     *  `WorkersQueueHookDispatcher` bound to the `mantle-internal` queue
      *  here. */
     readonly deferredHookDispatcher?: CreateCmsRuntimeArgs["deferredHookDispatcher"];
   };

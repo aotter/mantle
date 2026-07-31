@@ -47,7 +47,8 @@ export interface EntryRepository {
  * Hook-related fields shared by every mutating chokepoint args type.
  * The persistence-layer impl ignores these; the
  * `LifecycleHookingEntryRepository` decorator reads them to fire
- * before_/after_ Triggers with the right ctx + original input.
+ * before_/after_ Triggers with the right context. Only synchronous
+ * `before_*` handlers receive the original input.
  *
  * `hookContext` defaults to an anonymous `HandlerContext` in the
  * decorator when callers don't supply one (test paths, internal

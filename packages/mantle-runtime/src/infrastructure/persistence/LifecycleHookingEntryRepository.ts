@@ -2,9 +2,11 @@ import type { LifecycleHook } from "@aotter/mantle-spec";
 import type { EntryRow } from "../../domain/model/EntryRow.js";
 import type { HandlerContext } from "../../domain/model/HandlerContext.js";
 import {
+  DEFERRED_HOOK_ENVELOPE_VERSION,
   ctxSnapshotFrom,
   type DeferredHookDispatcher,
   type DeferredHookEnvelope,
+  type DeferredLifecycleHook,
 } from "../../domain/port/DeferredHookDispatcher.js";
 import type {
   CreateEntryArgs,
@@ -18,57 +20,33 @@ import type {
   TransitionStatusArgs,
   UpdateEntryArgs,
 } from "../../domain/port/EntryRepository.js";
+import type { IdGenerator } from "../../domain/port/IdGenerator.js";
 import type { TriggerIndex } from "../../domain/service/TriggerIndex.js";
 import type { RunLifecycleHooksUseCase } from "../../usecase/lifecycle/RunLifecycleHooksUseCase.js";
 
 const ANON_CTX: HandlerContext = { user: null, staff: null, env: {} };
 
-/**
- * Decorator that wraps any `EntryRepository` and fires lifecycle
- * Triggers around every mutation (POC ADR-0014).
- *
- * Symmetry rule: MCP, admin, and builtin write paths all hit the same
- * chokepoint, so all three pay (and gain) the same hook semantics —
- * authors don't need to remember "hooks fire on path X but not Y."
- *
- * Hook → mutation mapping:
- *   - `create` → `before_create` / `after_create`
- *   - `update` → `before_update` / `after_update`
- *   - `delete` → `before_delete` / `after_delete`
- *   - `transitionStatus({ to: 'published' })` → `before_publish` /
- *      `after_publish`; other targets fire `before_update` /
- *      `after_update`
- *
- * Short-circuits when no Trigger watches the row's collection — no
- * hook runner call, no per-mutation overhead.
- *
- * `before_*` runs synchronously: a thrown `DiagnosticError` from the
- * runner cancels the mutation. `after_*` runs after the inner write
- * succeeds — fire-and-forget via `ctx.waitUntil` if the adapter
- * populated it; otherwise inline-await.
- */
+/** Shared mutation chokepoint for lifecycle Triggers. */
 export class LifecycleHookingEntryRepository implements EntryRepository {
   constructor(
     private readonly inner: EntryRepository,
     private readonly triggers: TriggerIndex,
     private readonly hooks: Pick<RunLifecycleHooksUseCase, "run">,
+    private readonly idgen: IdGenerator,
     private readonly deferred?: DeferredHookDispatcher,
   ) {}
 
   async create(args: CreateEntryArgs): Promise<EntryRow> {
+    const before = this.triggerNames(args.collection, "before_create");
+    const after = this.triggerNames(args.collection, "after_create");
+    if (before.length === 0 && after.length === 0) return this.inner.create(args);
+
     const ctx = ctxOf(args);
-    if (!this.triggers.hasAny(args.collection)) {
-      return this.inner.create(args);
-    }
-    await this.hooks.run({
-      hook: "before_create",
-      schema: args.collection,
-      entry: null,
-      ctx,
-      originalInput: args.originalInput,
-    });
+    const beforeId = before.length > 0 ? this.idgen.next() : undefined;
+    const afterId = after.length > 0 ? this.idgen.next() : undefined;
+    await this.fireBefore("before_create", args.collection, null, ctx, args, before, beforeId);
     const row = await this.inner.create(args);
-    await this.fireAfter("after_create", row, ctx, args);
+    await this.fireAfter("after_create", row, ctx, after, afterId);
     return row;
   }
 
@@ -77,64 +55,53 @@ export class LifecycleHookingEntryRepository implements EntryRepository {
   }
 
   async update(args: UpdateEntryArgs): Promise<EntryRow> {
-    if (!this.triggers.hasAny(args.collection)) {
-      return this.inner.update(args);
-    }
+    const before = this.triggerNames(args.collection, "before_update");
+    const after = this.triggerNames(args.collection, "after_update");
+    if (before.length === 0 && after.length === 0) return this.inner.update(args);
+
     const existing = await this.inner.get(args.id);
     if (!existing) return this.inner.update(args);
     const ctx = ctxOf(args);
-    await this.hooks.run({
-      hook: "before_update",
-      schema: args.collection,
-      entry: existing,
-      ctx,
-      originalInput: args.originalInput,
-    });
+    const beforeId = before.length > 0 ? this.idgen.next() : undefined;
+    const afterId = after.length > 0 ? this.idgen.next() : undefined;
+    await this.fireBefore("before_update", args.collection, existing, ctx, args, before, beforeId);
     const row = await this.inner.update(args);
-    await this.fireAfter("after_update", row, ctx, args);
+    await this.fireAfter("after_update", row, ctx, after, afterId);
     return row;
   }
 
   async delete(args: DeleteEntryArgs): Promise<{ readonly removed: boolean }> {
-    if (!this.triggers.hasAny(args.collection)) {
-      return this.inner.delete(args);
-    }
+    const before = this.triggerNames(args.collection, "before_delete");
+    const after = this.triggerNames(args.collection, "after_delete");
+    if (before.length === 0 && after.length === 0) return this.inner.delete(args);
+
     const existing = await this.inner.get(args.id);
     if (!existing) return this.inner.delete(args);
     const ctx = ctxOf(args);
-    await this.hooks.run({
-      hook: "before_delete",
-      schema: args.collection,
-      entry: existing,
-      ctx,
-      originalInput: args.originalInput,
-    });
+    const beforeId = before.length > 0 ? this.idgen.next() : undefined;
+    const afterId = after.length > 0 ? this.idgen.next() : undefined;
+    await this.fireBefore("before_delete", args.collection, existing, ctx, args, before, beforeId);
     const result = await this.inner.delete(args);
-    if (result.removed) {
-      await this.fireAfter("after_delete", existing, ctx, args);
-    }
+    if (result.removed) await this.fireAfter("after_delete", existing, ctx, after, afterId);
     return result;
   }
 
   async transitionStatus(args: TransitionStatusArgs): Promise<EntryRow> {
-    if (!this.triggers.hasAny(args.collection)) {
-      return this.inner.transitionStatus(args);
-    }
     const isPublish = args.to === "published";
     const beforeHook: LifecycleHook = isPublish ? "before_publish" : "before_update";
-    const afterHook: LifecycleHook = isPublish ? "after_publish" : "after_update";
+    const afterHook: DeferredLifecycleHook = isPublish ? "after_publish" : "after_update";
+    const before = this.triggerNames(args.collection, beforeHook);
+    const after = this.triggerNames(args.collection, afterHook);
+    if (before.length === 0 && after.length === 0) return this.inner.transitionStatus(args);
+
     const existing = await this.inner.get(args.id);
     if (!existing) return this.inner.transitionStatus(args);
     const ctx = ctxOf(args);
-    await this.hooks.run({
-      hook: beforeHook,
-      schema: args.collection,
-      entry: existing,
-      ctx,
-      originalInput: args.originalInput,
-    });
+    const beforeId = before.length > 0 ? this.idgen.next() : undefined;
+    const afterId = after.length > 0 ? this.idgen.next() : undefined;
+    await this.fireBefore(beforeHook, args.collection, existing, ctx, args, before, beforeId);
     const row = await this.inner.transitionStatus(args);
-    await this.fireAfter(afterHook, row, ctx, args);
+    await this.fireAfter(afterHook, row, ctx, after, afterId);
     return row;
   }
 
@@ -150,61 +117,85 @@ export class LifecycleHookingEntryRepository implements EntryRepository {
     return this.inner.findByDataFields(args);
   }
 
-  /**
-   * After-hook execution. Tries delivery rungs in order:
-   *
-   *   1. `deferred.enqueue(envelope)` — adapter-backed deferred path
-   *      (CF Workers Queues, Inngest, pg-boss, …). Survives isolate
-   *      death; consume invocation rehydrates the envelope and re-fires
-   *      via `CmsRuntime.runDeferredHook`. A rejection downgrades to
-   *      the next rung rather than dropping the hook silently.
-   *   2. `ctx.waitUntil(promise)` — adapter-populated fire-and-forget
-   *      bridge (CF Workers `ExecutionContext`). Fast but non-durable:
-   *      isolate death between response and resolution loses the work.
-   *   3. inline `await promise` — non-Workers runtimes (Bun / Node /
-   *      tests) where detached promises get cancelled with the request.
-   *      Trades response latency for hook-fire reliability.
-   *
-   * Hook throws are surfaced via `RunLifecycleHooksUseCase`'s
-   * `errorPolicy` semantics; for `continue` the runner already
-   * `console.error`s and swallows. Anything that escapes the inline
-   * branch here is an abort-policy throw on a before_* (impossible —
-   * the parser rejects `errorPolicy: abort` on after_* hooks) or an
-   * unexpected internal error; we log and swallow so the mutation
-   * result still reaches the caller.
-   */
-  private async fireAfter(
+  private triggerNames(schema: string, hook: LifecycleHook): readonly string[] {
+    return this.triggers.forHook(schema, hook).map((trigger) => trigger.metadata.name);
+  }
+
+  private async fireBefore(
     hook: LifecycleHook,
-    entry: EntryRow,
+    schema: string,
+    entry: EntryRow | null,
     ctx: HandlerContext,
     args: MutationHookFields,
+    triggerNames: readonly string[],
+    eventId: string | undefined,
   ): Promise<void> {
-    if (this.deferred && this.triggers.forHook(entry.collection, hook).length > 0) {
+    if (eventId === undefined) return;
+    await this.hooks.run({
+      eventId,
+      triggerNames,
+      delivery: "inline",
+      hook,
+      schema,
+      entry,
+      ctx,
+      originalInput: args.originalInput,
+    });
+  }
+
+  /**
+   * Queue acceptance is not atomic with the completed entry write.
+   * On a definite or ambiguous enqueue rejection, reuse the same
+   * event id in the best-effort waitUntil/inline fallback.
+   */
+  private async fireAfter(
+    hook: DeferredLifecycleHook,
+    entry: EntryRow,
+    ctx: HandlerContext,
+    triggerNames: readonly string[],
+    eventId: string | undefined,
+  ): Promise<void> {
+    if (eventId === undefined) return;
+    if (this.deferred) {
       const envelope: DeferredHookEnvelope = {
+        version: DEFERRED_HOOK_ENVELOPE_VERSION,
+        eventId,
+        triggerNames,
         hook,
         schema: entry.collection,
         entry,
-        originalInput: args.originalInput,
         ctxSnapshot: ctxSnapshotFrom(ctx),
       };
       try {
         await this.deferred.enqueue(envelope);
         return;
-      } catch (err) {
-        console.error(
-          `[lifecycle] deferred enqueue for ${hook} on ${entry.collection}/${entry.id} failed; falling back`,
-          err,
-        );
+      } catch (error) {
+        console.error("[lifecycle] deferred enqueue failed; using best-effort fallback", {
+          eventId,
+          hook,
+          schema: entry.collection,
+          entryId: entry.id,
+          error,
+        });
       }
     }
+
     const promise = this.hooks.run({
+      eventId,
+      triggerNames,
+      delivery: "inline",
       hook,
       schema: entry.collection,
       entry,
       ctx,
-      originalInput: args.originalInput,
-    }).catch((err) => {
-      console.error(`[lifecycle] ${hook} on ${entry.collection}/${entry.id} failed`, err);
+    }).catch((error) => {
+      console.error("[lifecycle] after-hook fallback failed", {
+        eventId,
+        hook,
+        schema: entry.collection,
+        entryId: entry.id,
+        error,
+      });
     });
     if (ctx.waitUntil) {
       ctx.waitUntil(promise);

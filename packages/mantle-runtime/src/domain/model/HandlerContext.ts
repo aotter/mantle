@@ -1,4 +1,5 @@
 import type { LifecycleHook, StaffRole } from "@aotter/mantle-spec";
+import type { EntryRow } from "./EntryRow.js";
 
 /**
  * `HandlerContext` — auth + bindings handed to every Procedure
@@ -51,11 +52,16 @@ export interface HandlerAuthContext {
 }
 
 export interface HandlerLifecycleEvent {
+  /** Stable for one lifecycle event across deferred retries/replays. */
+  readonly id: string;
+  /** Trigger currently consuming the event. Pair with `id` for an
+   *  idempotency key when several Triggers share one event. */
+  readonly trigger: string;
   readonly hook: LifecycleHook;
   readonly schema: string;
   /** Pre-mutation row for `before_*` hooks; persisted post-mutation
    *  row for `after_*`. `null` for `before_create` (no row exists). */
-  readonly entry: object | null;
+  readonly entry: EntryRow | null;
 }
 
 /**

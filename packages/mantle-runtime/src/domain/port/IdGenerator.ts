@@ -1,6 +1,7 @@
 /**
  * `IdGenerator` — abstracted id source for new entries / revisions /
- * approvals / sessions / media bearer tokens / R2 object keys.
+ * approvals / lifecycle events / sessions / media bearer tokens / R2
+ * object keys.
  *
  * # Security invariant
  *

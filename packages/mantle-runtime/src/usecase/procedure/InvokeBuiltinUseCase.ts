@@ -39,9 +39,9 @@ import type { InvokeBuiltinRequest } from "../dto/procedure/index.js";
  *   - `delete` → guarded `entries.delete(...)` over the loaded row snapshot.
  *
  * Pre-projection original input is forwarded to the chokepoint via
- * `originalInput`, so lifecycle hook handlers can read side-channel
- * fields (CAPTCHA tokens, etc.) declared on the Procedure input but
- * not on the Schema.
+ * `originalInput`, so synchronous `before_*` hooks can read side-channel
+ * fields (CAPTCHA tokens, etc.) declared on the Procedure input but not
+ * on the Schema.
  *
  * Auth + input/output validation happen upstream in
  * `InvokeProcedureUseCase`. This use case trusts its `validatedInput`.

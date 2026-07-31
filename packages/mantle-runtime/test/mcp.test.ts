@@ -17,9 +17,21 @@ import { InvokeProcedureUseCase } from "../src/usecase/procedure/InvokeProcedure
 import { InMemoryHandlerRegistry } from "../src/domain/port/HandlerRegistry.js";
 import type { Clock } from "../src/domain/port/Clock.js";
 import type { IdGenerator } from "../src/domain/port/IdGenerator.js";
+import type {
+  DeferredHookDispatcher,
+  DeferredHookEnvelope,
+} from "../src/domain/port/DeferredHookDispatcher.js";
+import { TriggerIndex } from "../src/domain/service/TriggerIndex.js";
 import { TemplateRegistry } from "../src/domain/model/TemplateRegistry.js";
+import { LifecycleHookingEntryRepository } from "../src/infrastructure/persistence/LifecycleHookingEntryRepository.js";
+import { RunLifecycleHooksUseCase } from "../src/usecase/lifecycle/RunLifecycleHooksUseCase.js";
 import { InMemoryEntryRepository } from "./fakes/in-memory-store.js";
-import { makeProcedure, postsSchema, recentPostsView } from "./fakes/manifests.js";
+import {
+  makeLifecycleTrigger,
+  makeProcedure,
+  postsSchema,
+  recentPostsView,
+} from "./fakes/manifests.js";
 
 interface Harness {
   store: InMemoryEntryRepository;
@@ -337,6 +349,157 @@ describe("McpJsonRpcDispatcher", () => {
       data: { title: "From MCP" },
       authorId: "u1",
     });
+  });
+
+  it("preserves MCP input and actor context across every lifecycle mutation", async () => {
+    const schema = postsSchema();
+    const schemas = new Map([[schema.metadata.name, schema]]);
+    const procedure = makeProcedure({
+      name: "audit-mutation",
+      handlerRef: "auditMutation",
+      input: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          title: { type: "string" },
+        },
+      },
+      output: { type: "object" },
+    });
+    const trigger = makeLifecycleTrigger({
+      name: "mcp-mutation-audit",
+      procedure: procedure.metadata.name,
+      on: [
+        "before_create",
+        "after_create",
+        "before_update",
+        "after_update",
+        "before_publish",
+        "after_publish",
+        "before_delete",
+        "after_delete",
+      ],
+    });
+    const triggerIndex = new TriggerIndex([trigger]);
+    const registry = new InMemoryHandlerRegistry();
+    const beforeCalls: Array<{
+      input: unknown;
+      hook: string | undefined;
+      userId: string | undefined;
+      staffRole: string | undefined;
+      credentialId: string | null | undefined;
+    }> = [];
+    registry.register("auditMutation", (input, ctx) => {
+      beforeCalls.push({
+        input,
+        hook: ctx.event?.hook,
+        userId: ctx.user?.id,
+        staffRole: ctx.staff?.role,
+        credentialId: ctx.auth?.credentialId,
+      });
+      return {};
+    });
+    const invoke = new InvokeProcedureUseCase(registry);
+    const hooks = new RunLifecycleHooksUseCase(
+      triggerIndex,
+      new Map([[procedure.metadata.name, procedure]]),
+      (request) => invoke.execute(request),
+    );
+    const store = new InMemoryEntryRepository();
+    const envelopes: DeferredHookEnvelope[] = [];
+    const deferred: DeferredHookDispatcher = {
+      enqueue: async (envelope) => {
+        envelopes.push(envelope);
+      },
+    };
+    let nextId = 1;
+    const idgen: IdGenerator = { next: () => `mcp-lifecycle-${nextId++}` };
+    const entries = new LifecycleHookingEntryRepository(
+      store,
+      triggerIndex,
+      hooks,
+      idgen,
+      deferred,
+    );
+    const useCases: McpUseCases = {
+      listEntries: new ListEntriesUseCase(entries, schemas),
+      getEntry: new GetEntryUseCase(entries),
+      createDraft: new CreateDraftUseCase(entries, schemas, { now: () => 1 }, idgen),
+      updateDraft: new UpdateDraftUseCase(entries, schemas, { now: () => 2 }),
+      requestPublish: new RequestPublishUseCase(entries, schemas, { now: () => 3 }),
+      unpublish: new UnpublishUseCase(entries, schemas, { now: () => 4 }),
+      archive: new ArchiveUseCase(entries, schemas, { now: () => 5 }),
+      deleteEntry: new DeleteEntryUseCase(entries, schemas),
+    };
+    const dispatcher = new McpJsonRpcDispatcher(useCases, [schema]);
+    const auth = {
+      userId: "agent-1",
+      staff: { userId: "agent-1", role: "owner" as const },
+      credentialId: "credential-1",
+      clientId: "client-1",
+      scopes: ["content:write"],
+    };
+    const call = async (
+      name: string,
+      args: Record<string, unknown>,
+    ): Promise<Record<string, unknown>> => {
+      const response = await dispatcher.dispatch(
+        jsonRpcReq("tools/call", { name, arguments: args }),
+        auth,
+      );
+      const body = (await response.json()) as {
+        result?: { content: Array<{ text: string }> };
+        error?: unknown;
+      };
+      expect(body.error).toBeUndefined();
+      return JSON.parse(body.result!.content[0]!.text) as Record<string, unknown>;
+    };
+
+    const created = await call("create_draft_posts", { title: "Created" });
+    const id = created["id"] as string;
+    await call("update_draft_posts", {
+      id,
+      expected_version: created["version"],
+      title: "Updated",
+    });
+    await call("request_publish", { id });
+    await call("unpublish_entry", { id });
+    await call("archive_entry", { id });
+    await call("delete_entry", { id });
+
+    expect(beforeCalls.map(({ hook, input }) => ({ hook, input }))).toEqual([
+      { hook: "before_create", input: { title: "Created" } },
+      { hook: "before_update", input: { title: "Updated" } },
+      { hook: "before_publish", input: { id } },
+      { hook: "before_update", input: { id } },
+      { hook: "before_update", input: { id } },
+      { hook: "before_delete", input: { id } },
+    ]);
+    expect(
+      beforeCalls.every(
+        (call) =>
+          call.userId === "agent-1" &&
+          call.staffRole === "owner" &&
+          call.credentialId === "credential-1",
+      ),
+    ).toBe(true);
+    expect(envelopes.map((envelope) => envelope.hook)).toEqual([
+      "after_create",
+      "after_update",
+      "after_publish",
+      "after_update",
+      "after_update",
+      "after_delete",
+    ]);
+    expect(
+      envelopes.every(
+        (envelope) =>
+          envelope.ctxSnapshot?.userId === "agent-1" &&
+          envelope.ctxSnapshot.staffRole === "owner" &&
+          envelope.ctxSnapshot.auth?.credentialId === "credential-1" &&
+          !("originalInput" in envelope),
+      ),
+    ).toBe(true);
   });
 
   it("tools/call request_publish flips draft → published", async () => {
