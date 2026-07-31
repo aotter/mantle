@@ -4,6 +4,7 @@ import { AlertTriangle, LogOut } from "lucide-react";
 import { Button } from "../../ui/button";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
+import { signOut } from "../../lib/auth";
 
 export function GateLoading(): React.ReactElement {
   return (
@@ -545,13 +546,4 @@ function UnknownMethodSection({ kind }: { kind: string }): React.ReactElement {
       {t(language, "auth.signIn.unknownMethod", { kind })}
     </p>
   );
-}
-
-function signOut(): void {
-  void fetch("/api/auth/sign-out", {
-    method: "POST",
-    credentials: "include",
-  }).then(() => {
-    window.location.href = "/admin/sign-in";
-  });
 }

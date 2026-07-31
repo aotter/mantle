@@ -28,7 +28,6 @@ function isSpaHref(href: string): boolean {
   if (!url.pathname.startsWith("/admin")) return false;
   if (url.pathname.startsWith("/admin/api/")) return false;
   if (url.pathname.startsWith("/admin/auth/")) return false;
-  if (url.pathname === "/admin/logout") return false;
   return true;
 }
 

@@ -15,6 +15,7 @@ import {
   useSidebar,
 } from "../ui/sidebar";
 import { cn } from "../lib/utils";
+import { signOut } from "../lib/auth";
 import { usePreferences } from "../app/preferences";
 import { t } from "../app/i18n";
 
@@ -135,12 +136,4 @@ function Avatar({
       )}
     </span>
   );
-}
-
-function signOut(): void {
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = "/admin/logout";
-  document.body.appendChild(form);
-  form.submit();
 }
