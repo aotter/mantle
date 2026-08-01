@@ -1,9 +1,5 @@
 import type { ContentState, Entry, SchemaManifest } from "@aotter/mantle-spec";
-import type { DatabaseDriver } from "../../port/DatabaseDriver.js";
-import {
-  readEntriesByDataFieldIn,
-  readEntryByDataField,
-} from "./PublishedEntries.js";
+import type { EntryReader } from "../../port/EntryReader.js";
 
 /**
  * `joinParentIfTranslation` — when `entry.collection` declares
@@ -21,7 +17,7 @@ import {
  * its already-published parent.
  */
 export async function joinParentIfTranslation(
-  db: DatabaseDriver,
+  reader: EntryReader,
   schemas: ReadonlyMap<string, SchemaManifest>,
   entry: Entry,
   options: { readonly parentStatus?: ContentState } = {},
@@ -33,7 +29,7 @@ export async function joinParentIfTranslation(
   const joinValue = entry.data[translates.on];
   if (typeof joinValue !== "string" || joinValue === "") return entry;
 
-  const parent = await readEntryByDataField(db, {
+  const parent = await reader.readByDataField({
     collection: translates.parent,
     field: translates.on,
     value: joinValue,
@@ -60,7 +56,7 @@ export async function joinParentIfTranslation(
  * be needed.
  */
 export async function joinParentForList(
-  db: DatabaseDriver,
+  reader: EntryReader,
   schemas: ReadonlyMap<string, SchemaManifest>,
   entries: readonly Entry[],
   options: { readonly parentStatus?: ContentState } = {},
@@ -78,7 +74,7 @@ export async function joinParentForList(
   }
   if (joinValues.size === 0) return [...entries];
 
-  const parents = await readEntriesByDataFieldIn(db, {
+  const parents = await reader.readByDataFieldIn({
     collection: translates.parent,
     field: translates.on,
     values: [...joinValues],

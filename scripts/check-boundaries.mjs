@@ -95,6 +95,33 @@ function checkPackageDirection() {
   }
 }
 
+function checkEntryReadOwnership() {
+  const runtimeReadDirs = [
+    "packages/mantle-runtime/src/domain/service/io",
+    "packages/mantle-runtime/src/usecase/render",
+    "packages/mantle-runtime/src/infrastructure/render",
+  ];
+  for (const dir of runtimeReadDirs) {
+    const files = listFiles(join(ROOT, dir), (path) => path.endsWith(".ts"));
+    for (const file of files) {
+      if (/\bDatabaseDriver\b/.test(stripComments(readFileSync(file, "utf8")))) {
+        fail(file, "entry/render reads must depend on EntryReader, not DatabaseDriver");
+      }
+    }
+  }
+
+  const adapterFiles = listFiles(
+    join(ROOT, "packages/adapters/cloudflare/src"),
+    (path) => path.endsWith(".ts"),
+  );
+  const entrySql = /\b(?:FROM|INTO|UPDATE|DELETE\s+FROM)\s+entries\b/i;
+  for (const file of adapterFiles) {
+    if (entrySql.test(stripComments(readFileSync(file, "utf8")))) {
+      fail(file, "Cloudflare routes must use EntryReader instead of route-owned entries SQL");
+    }
+  }
+}
+
 function checkSkillDocsVersioned() {
   const files = listFiles(join(ROOT, "skills"), (path) =>
     path.endsWith("SKILL.md"),
@@ -113,6 +140,7 @@ function checkSkillDocsVersioned() {
 
 checkRuntimeCloudflareFree();
 checkPackageDirection();
+checkEntryReadOwnership();
 checkSkillDocsVersioned();
 
 if (failures.length > 0) {

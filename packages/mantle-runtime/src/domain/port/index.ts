@@ -35,6 +35,15 @@ export type {
   FindEntryByDataFieldsArgs,
   MutationHookFields,
 } from "./EntryRepository.js";
+export type {
+  EntryReader,
+  EntryDataScalar,
+  ReadEntryBySlugArgs,
+  ReadEntryByDataFieldArgs,
+  ReadEntriesByDataFieldInArgs,
+  ReadPublishedEntriesArgs,
+  FindManyEntriesByDataFieldArgs,
+} from "./EntryReader.js";
 export type { SiteConfigRepository } from "./SiteConfigRepository.js";
 export type {
   PublishOrchestrator,

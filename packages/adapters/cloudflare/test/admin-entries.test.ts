@@ -68,12 +68,16 @@ function testAuth(authOverride?: Partial<Auth>): Auth {
   };
 }
 
-function harness(seed?: (db: InMemoryDatabase) => void, authOverride?: Partial<Auth>) {
+function harness(
+  seed?: (db: InMemoryDatabase) => void,
+  authOverride?: Partial<Auth>,
+  manifestSet: Manifest[] = manifests(),
+) {
   const db = new InMemoryDatabase();
   if (seed) seed(db);
   const auth = testAuth(authOverride);
   const ref = createCmsRef({
-    manifests: manifests(),
+    manifests: manifestSet,
     bindings: {
       db,
       kv: new InMemoryKv(),
@@ -84,6 +88,52 @@ function harness(seed?: (db: InMemoryDatabase) => void, authOverride?: Partial<A
   const app = new Hono();
   mountServerEndpoints(app, ref);
   return { app, db };
+}
+
+function relatedManifests(): Manifest[] {
+  const apiVersion = "cms.mantle.aotter.net/v1" as const;
+  const schema = (
+    name: string,
+    properties: Record<string, { type: "string" | "number" | "boolean" }>,
+  ): Manifest => ({
+    apiVersion,
+    kind: "Schema",
+    metadata: { name },
+    spec: {
+      title: name,
+      schema: { type: "object", properties },
+      lifecycle: "simple",
+    },
+  });
+  return [
+    schema("parents", {
+      key: { type: "string" },
+      count: { type: "number" },
+      enabled: { type: "boolean" },
+    }),
+    schema("string-children", { parentKey: { type: "string" } }),
+    schema("number-children", { parentCount: { type: "number" } }),
+    schema("boolean-children", { parentEnabled: { type: "boolean" } }),
+  ];
+}
+
+function relatedRow(
+  id: string,
+  collection: string,
+  status: "draft" | "published" | "archived",
+  data: Record<string, unknown>,
+  updatedAt: number,
+) {
+  return {
+    id,
+    collection,
+    status,
+    version: 1,
+    data: JSON.stringify(data),
+    author_id: null,
+    created_at: updatedAt,
+    updated_at: updatedAt,
+  };
 }
 
 function row(id: string, data: Record<string, unknown>, updatedAt = 1) {
@@ -203,5 +253,80 @@ describe("GET /admin/api/entries/export", () => {
     const { app } = harness(undefined, { getSession: async () => null });
     const res = await app.request("/admin/api/entries/export?collection=posts");
     expect(res.status).toBe(401);
+  });
+});
+
+describe("GET /admin/api/entries/:id related entries", () => {
+  it("keeps primitive matching, all-status ordering, and the 50-row cap", async () => {
+    const { app, db } = harness((database) => {
+      database.entries.set(
+        "parent",
+        relatedRow("parent", "parents", "draft", {
+          key: "alpha",
+          count: 7,
+          enabled: true,
+        }, 1),
+      );
+      for (let index = 0; index < 55; index += 1) {
+        database.entries.set(
+          `string-${index}`,
+          relatedRow(
+            `string-${index}`,
+            "string-children",
+            index % 2 === 0 ? "published" : "archived",
+            { parentKey: "alpha" },
+            index,
+          ),
+        );
+      }
+      database.entries.set(
+        "number-a",
+        relatedRow("number-a", "number-children", "draft", { parentCount: 7 }, 100),
+      );
+      database.entries.set(
+        "number-z",
+        relatedRow("number-z", "number-children", "archived", { parentCount: 7 }, 100),
+      );
+      database.entries.set(
+        "boolean-true",
+        relatedRow("boolean-true", "boolean-children", "published", { parentEnabled: true }, 1),
+      );
+      database.entries.set(
+        "boolean-false",
+        relatedRow("boolean-false", "boolean-children", "published", { parentEnabled: false }, 2),
+      );
+    }, undefined, relatedManifests());
+
+    const res = await app.request("/admin/api/entries/parent");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      related: Array<{
+        collection: { name: string };
+        entries: Array<{ id: string; status: string }>;
+      }>;
+    };
+    const byCollection = new Map(
+      body.related.map((section) => [section.collection.name, section.entries]),
+    );
+    const strings = byCollection.get("string-children")!;
+    expect(strings).toHaveLength(50);
+    expect(strings.slice(0, 2).map(({ id }) => id)).toEqual(["string-54", "string-53"]);
+    expect(new Set(strings.map(({ status }) => status))).toEqual(
+      new Set(["published", "archived"]),
+    );
+    expect(byCollection.get("number-children")?.map(({ id }) => id)).toEqual([
+      "number-z",
+      "number-a",
+    ]);
+    expect(byCollection.get("boolean-children")?.map(({ id }) => id)).toEqual([
+      "boolean-true",
+    ]);
+    const relatedReads = db.executions.filter(({ sql }) =>
+      sql.includes("ORDER BY updated_at DESC, id DESC LIMIT 50")
+    );
+    expect(relatedReads).toHaveLength(3);
+    expect(relatedReads.every(({ sql }) =>
+      sql.includes("json_extract(data, ?) = ?")
+    )).toBe(true);
   });
 });

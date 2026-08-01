@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SiteConfig } from "@aotter/mantle-spec";
+import { DatabaseEntryRepository } from "../src/infrastructure/persistence/DatabaseEntryRepository.js";
 import { ComposeLlmsTxtUseCase } from "../src/usecase/render/ComposeLlmsTxtUseCase.js";
 import { ComposeSitemapUseCase } from "../src/usecase/render/ComposeSitemapUseCase.js";
 import { InMemoryDatabase } from "./fakes/database.js";
@@ -50,7 +51,7 @@ describe("ComposeLlmsTxtUseCase", () => {
       locale: "zh-TW",
       data: { slug: "ni-hao", title: "你好", content: "正文" },
     });
-    const out = await new ComposeLlmsTxtUseCase(db).execute({ site, locale: "en" });
+    const out = await new ComposeLlmsTxtUseCase(new DatabaseEntryRepository(db)).execute({ site, locale: "en" });
     expect(out).toContain("[Hello]");
     expect(out).not.toContain("[你好]");
   });
@@ -68,7 +69,7 @@ describe("ComposeLlmsTxtUseCase", () => {
       collection: "guides",
       data: { slug: "intro", title: "Intro", content: "Welcome" },
     });
-    const out = await new ComposeLlmsTxtUseCase(db).execute({ site, locale: null });
+    const out = await new ComposeLlmsTxtUseCase(new DatabaseEntryRepository(db)).execute({ site, locale: null });
     expect(out).toContain("[Intro]");
     expect(out).not.toContain("[Hello]");
   });
@@ -83,7 +84,7 @@ describe("ComposeSitemapUseCase", () => {
       locale: "en",
       data: { slug: "hello" },
     });
-    const out = await new ComposeSitemapUseCase(db).execute({ site });
+    const out = await new ComposeSitemapUseCase(new DatabaseEntryRepository(db)).execute({ site });
     expect(out).toMatch(/<\?xml version="1\.0"/);
     expect(out).toContain("<urlset");
     expect(out).toContain("<loc>https://example.com/en/posts/hello</loc>");
@@ -104,7 +105,7 @@ describe("ComposeSitemapUseCase", () => {
       locale: "zh-TW",
       data: { slug: "hello" },
     });
-    const out = await new ComposeSitemapUseCase(db).execute({
+    const out = await new ComposeSitemapUseCase(new DatabaseEntryRepository(db)).execute({
       site,
       pathFor: (e) => {
         const slug = (e.data as { slug?: string }).slug;
@@ -132,7 +133,7 @@ describe("ComposeSitemapUseCase", () => {
       collection: "internal",
       data: { slug: "skip" },
     });
-    const out = await new ComposeSitemapUseCase(db).execute({
+    const out = await new ComposeSitemapUseCase(new DatabaseEntryRepository(db)).execute({
       site,
       pathFor: (e) => (e.collection === "internal" ? null : `/${e.collection}/${(e.data as { slug?: string }).slug}`),
     });
@@ -150,7 +151,7 @@ describe("ComposeSitemapUseCase", () => {
         data: { slug: `s${i}` },
       });
     }
-    const out = await new ComposeSitemapUseCase(db).execute({ site, maxUrls: 3 });
+    const out = await new ComposeSitemapUseCase(new DatabaseEntryRepository(db)).execute({ site, maxUrls: 3 });
     const urlCount = (out.match(/<url>/g) ?? []).length;
     expect(urlCount).toBe(3);
   });
@@ -163,7 +164,7 @@ describe("ComposeSitemapUseCase", () => {
       locale: "en",
       data: { slug: "a-and-b" },
     });
-    const out = await new ComposeSitemapUseCase(db).execute({
+    const out = await new ComposeSitemapUseCase(new DatabaseEntryRepository(db)).execute({
       site: { ...site, origin: "https://x.com?a=1&b=2" },
     });
     expect(out).toContain("&amp;");

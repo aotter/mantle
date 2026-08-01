@@ -13,6 +13,7 @@ import type { TemplateRegistry } from "./domain/model/TemplateRegistry.js";
 import type { AssetServer } from "./domain/port/AssetServer.js";
 import type { DatabaseDriver } from "./domain/port/DatabaseDriver.js";
 import type { DeferredHookDispatcher } from "./domain/port/DeferredHookDispatcher.js";
+import type { EntryReader } from "./domain/port/EntryReader.js";
 import type { EntryRepository } from "./domain/port/EntryRepository.js";
 import type { KvCache } from "./domain/port/KvCache.js";
 import type { MediaStorage } from "./domain/port/MediaStorage.js";
@@ -133,10 +134,13 @@ export interface CreateCmsRuntimeArgs {
 }
 
 export interface CmsRuntime {
-  /** Required ADR-0011 ports — re-exposed so adapters can pass them downstream. */
+  /** Raw ADR-0011 database driver, retained for adapter compatibility.
+   *  @deprecated Use `entryReader` or a purpose-shaped use case for entry reads. */
   readonly db: DatabaseDriver;
   readonly kv: KvCache;
   readonly assets: AssetServer;
+  /** Schema-aware, lifecycle-neutral entry reads for adapter-owned routes. */
+  readonly entryReader: EntryReader;
 
   /** Use cases (pre-wired with ports + clock + idgen). */
   readonly createDraft: CreateDraftUseCase;
@@ -225,6 +229,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
   // `RunLifecycleHooksUseCase`. Symmetric chokepoint per POC ADR-0014:
   // MCP, admin, and builtin paths all hit the same wrapped repository.
   const innerEntries = new DatabaseEntryRepository(args.db, schemasByName);
+  const entryReader: EntryReader = innerEntries;
   const triggerIndex = new TriggerIndex(partitioned.triggers);
   const siteConfig = new DatabaseSiteConfigRepository(args.db);
   // `entries` is filled below — assigned via `let` so the lifecycle
@@ -265,11 +270,11 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
   );
   const runDeferredHook = new RunDeferredHookUseCase(lifecycleHooks);
   const publicPathResolver = args.publicPathResolver ?? null;
-  const composeEntrySeoMeta = new ComposeEntrySeoMetaUseCase(args.db);
-  const composeLlmsTxt = new ComposeLlmsTxtUseCase(args.db);
+  const composeEntrySeoMeta = new ComposeEntrySeoMetaUseCase(entryReader);
+  const composeLlmsTxt = new ComposeLlmsTxtUseCase(entryReader);
   const mediaAssets = new DatabaseMediaAssetRepository(args.db);
   const publishOrchestrator = new HtmlPublishOrchestrator(
-    args.db,
+    entryReader,
     args.kv,
     publicPathResolver,
     composeEntrySeoMeta,
@@ -320,18 +325,23 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     },
     schemasByName,
   );
-  const composeSitemap = new ComposeSitemapUseCase(args.db);
+  const composeSitemap = new ComposeSitemapUseCase(entryReader);
   const renderEntryLive = new RenderEntryLiveUseCase(
-    args.db,
+    entryReader,
     templates,
     publicPathResolver,
     composeEntrySeoMeta,
     schemasByName,
     mediaAssets,
   );
-  const renderListLive = new RenderListLiveUseCase(args.db, templates, schemasByName, mediaAssets);
+  const renderListLive = new RenderListLiveUseCase(
+    entryReader,
+    templates,
+    schemasByName,
+    mediaAssets,
+  );
   const previewEntry = new PreviewEntryUseCase(
-    args.db,
+    entryReader,
     templates,
     publicPathResolver,
     composeEntrySeoMeta,
@@ -370,6 +380,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     db: args.db,
     kv: args.kv,
     assets: args.assets,
+    entryReader,
 
     createDraft,
     updateDraft,

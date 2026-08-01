@@ -61,6 +61,12 @@ await runtime.bootInit();
 
 `bootInit()` runs canonical migrations, seeds `siteDefaults`, and validates the manifest set. Call it once before serving CMS traffic. The Cloudflare adapter's reference pattern is `packages/adapters/cloudflare/src/mount/bootRuntimeOnce.ts`.
 
+For adapter-owned entry lookups, use `runtime.entryReader`; it applies Schema
+index declarations, locale semantics, and the public `Entry` projection.
+`runtime.db` remains available for compatibility and adapter-owned non-entry
+tables, but direct entry SQL bypasses those guarantees and is deprecated.
+Authoring continues through the pre-wired content use cases.
+
 ## HTTP and MCP surfaces
 
 The runtime is a library, not an HTTP server. A new adapter must mount equivalent framework routes:

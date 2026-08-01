@@ -2,8 +2,7 @@
  * `domain/service/` — pure stateless algorithms operating on the
  * domain model + spec types. No env, no I/O.
  *
- * `PublishedEntries` + `JoinedEntryReader` take a `DatabaseDriver`
- * and perform real reads; they live in `./io/` and are imported
+ * Services that coordinate I/O ports live in `./io/` and are imported
  * directly by their consumers — NOT re-exported here, so the barrel's
  * purity claim above holds.
  */

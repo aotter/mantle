@@ -1,4 +1,4 @@
-import type { ContentState } from "@aotter/mantle-spec";
+import type { ContentState, Entry } from "@aotter/mantle-spec";
 
 /**
  * `EntryRow` — DB row shape for `entries`. Mirrors the canonical
@@ -43,6 +43,21 @@ export function liftLocale(
 ): string | undefined {
   const v = data["locale"];
   return typeof v === "string" ? v : undefined;
+}
+
+/** Explicit public projection. Keep this field-by-field so adding another
+ * persistence-only property to `EntryRow` cannot silently expose it. */
+export function projectPublicEntry(row: EntryRow): Entry {
+  return {
+    id: row.id,
+    collection: row.collection,
+    locale: row.locale,
+    status: row.status,
+    version: row.version,
+    data: row.data,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
 export class EntryVersionConflict extends Error {

@@ -4,6 +4,7 @@ import {
   joinParentForList,
   joinParentIfTranslation,
 } from "../src/domain/service/io/JoinedEntryReader.js";
+import { DatabaseEntryRepository } from "../src/infrastructure/persistence/DatabaseEntryRepository.js";
 import { InMemoryDatabase } from "./fakes/database.js";
 import { postsSchema } from "./fakes/manifests.js";
 
@@ -82,7 +83,7 @@ describe("joinParentIfTranslation", () => {
       updatedAt: 2,
     };
 
-    const merged = await joinParentIfTranslation(db, schemas, translation, {
+    const merged = await joinParentIfTranslation(new DatabaseEntryRepository(db, schemas), schemas, translation, {
       parentStatus: "published",
     });
 
@@ -119,7 +120,7 @@ describe("joinParentIfTranslation", () => {
       updatedAt: 2,
     };
 
-    const merged = await joinParentIfTranslation(db, schemas, translation, {
+    const merged = await joinParentIfTranslation(new DatabaseEntryRepository(db, schemas), schemas, translation, {
       parentStatus: "published",
     });
 
@@ -139,7 +140,7 @@ describe("joinParentIfTranslation", () => {
       updatedAt: 2,
     };
 
-    const result = await joinParentIfTranslation(db, schemas, standalone);
+    const result = await joinParentIfTranslation(new DatabaseEntryRepository(db, schemas), schemas, standalone);
 
     expect(result).toBe(standalone);
   });
@@ -157,7 +158,7 @@ describe("joinParentIfTranslation", () => {
       updatedAt: 2,
     };
 
-    const result = await joinParentIfTranslation(db, schemas, translation, {
+    const result = await joinParentIfTranslation(new DatabaseEntryRepository(db, schemas), schemas, translation, {
       parentStatus: "published",
     });
 
@@ -182,7 +183,7 @@ describe("joinParentIfTranslation", () => {
       updatedAt: 2,
     };
 
-    const result = await joinParentIfTranslation(db, schemas, translation);
+    const result = await joinParentIfTranslation(new DatabaseEntryRepository(db, schemas), schemas, translation);
     expect(result).toBe(translation);
   });
 });
@@ -225,7 +226,7 @@ describe("joinParentForList", () => {
       makeTranslation({ id: "t-other", slug: "other", locale: "en" }),
     ];
 
-    const merged = await joinParentForList(db, schemas, translations, {
+    const merged = await joinParentForList(new DatabaseEntryRepository(db, schemas), schemas, translations, {
       parentStatus: "published",
     });
 
@@ -238,7 +239,7 @@ describe("joinParentForList", () => {
 
   it("returns empty list for empty input", async () => {
     const db = new InMemoryDatabase();
-    const result = await joinParentForList(db, schemas, []);
+    const result = await joinParentForList(new DatabaseEntryRepository(db, schemas), schemas, []);
     expect(result).toEqual([]);
   });
 
@@ -255,7 +256,7 @@ describe("joinParentForList", () => {
         updatedAt: 2,
       },
     ];
-    const result = await joinParentForList(db, schemas, standalone);
+    const result = await joinParentForList(new DatabaseEntryRepository(db, schemas), schemas, standalone);
     expect(result).toEqual(standalone);
   });
 });

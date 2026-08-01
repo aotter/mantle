@@ -1,6 +1,5 @@
 import type { Entry } from "@aotter/mantle-spec";
-import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
-import { readPublishedEntries } from "../../domain/service/io/PublishedEntries.js";
+import type { EntryReader } from "../../domain/port/EntryReader.js";
 import { serializeLlmsTxt } from "../../domain/service/MarkdownSerializer.js";
 import type { ComposeLlmsTxtRequest } from "../dto/render/ComposeLlmsTxtRequest.js";
 
@@ -16,10 +15,10 @@ import type { ComposeLlmsTxtRequest } from "../dto/render/ComposeLlmsTxtRequest.
  *                       site.locales themselves and concat.
  */
 export class ComposeLlmsTxtUseCase {
-  constructor(private readonly db: DatabaseDriver) {}
+  constructor(private readonly reader: EntryReader) {}
 
   async execute(request: ComposeLlmsTxtRequest): Promise<string> {
-    const entries = await readPublishedEntries(this.db, { locale: request.locale });
+    const entries = await this.reader.readPublished({ locale: request.locale });
     const grouped = groupByCollection(entries);
     return serializeLlmsTxt({
       site: request.site,

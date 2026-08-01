@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DatabaseEntryRepository } from "../src/infrastructure/persistence/DatabaseEntryRepository.js";
 import type { Entry, SiteConfig } from "@aotter/mantle-spec";
 import {
   composeEntrySeoMeta,
@@ -173,7 +174,7 @@ describe("ComposeEntrySeoMetaUseCase (with sibling lookup)", () => {
     const paths = createPublicPathResolver({
       collectionRoutes: { "post-translations": { segment: "posts" } },
     });
-    const usecase = new ComposeEntrySeoMetaUseCase(db);
+    const usecase = new ComposeEntrySeoMetaUseCase(new DatabaseEntryRepository(db));
     const meta = await usecase.execute({
       entry: {
         id: "p1",

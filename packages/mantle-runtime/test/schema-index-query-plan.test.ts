@@ -23,9 +23,12 @@ import { compileView } from "../src/domain/service/ViewSqlCompiler.js";
 import {
   reconcileSchemaIndexes,
   schemaIndexMigrations,
+  CANONICAL_MIGRATIONS,
 } from "../src/infrastructure/boot/index.js";
+import { joinParentForList } from "../src/domain/service/io/JoinedEntryReader.js";
 import { DatabaseEntryRepository } from "../src/infrastructure/persistence/DatabaseEntryRepository.js";
 import { ExecuteViewUseCase } from "../src/usecase/view/ExecuteViewUseCase.js";
+import { readEntryBySlug, type CmsRuntime } from "../src/index.js";
 
 const schema = {
   apiVersion: "cms.mantle.aotter.net/v1",
@@ -130,6 +133,15 @@ function planDetails(
 ): readonly string[] {
   return (db.prepare(`EXPLAIN QUERY PLAN ${compiled.sql}`)
     .all(...sqliteParams(compiled.params)) as unknown as QueryPlanRow[])
+    .map((row) => row.detail);
+}
+
+function executionPlanDetails(
+  db: DatabaseSync,
+  execution: RecordedExecution,
+): readonly string[] {
+  return (db.prepare(`EXPLAIN QUERY PLAN ${execution.sql}`)
+    .all(...sqliteParams(execution.params)) as unknown as QueryPlanRow[])
     .map((row) => row.detail);
 }
 
@@ -412,6 +424,16 @@ describe("declared Schema indexes against real SQLite", () => {
 
     await expect(repository.findByDataField({
       collection: schema.metadata.name,
+      field: "state",
+      value: "active",
+    })).resolves.toMatchObject({ data: { state: "active" } });
+    expect(executions.at(-1)?.sql).not.toContain(
+      schemaIndexedFieldSql(schema, "state"),
+    );
+    expect(executions.at(-1)?.sql).toContain("json_extract(data, ?) = ?");
+
+    await expect(repository.findByDataField({
+      collection: schema.metadata.name,
       field: "role",
       value: "owner",
     })).resolves.toMatchObject({ data: { role: "owner" } });
@@ -519,5 +541,288 @@ describe("declared Schema indexes against real SQLite", () => {
     } finally {
       upgrade.close();
     }
+  });
+});
+
+function entryReadSchema(
+  name: string,
+  indexes: readonly (readonly string[])[] = [],
+): SchemaManifest {
+  return {
+    apiVersion: "cms.mantle.aotter.net/v1",
+    kind: "Schema",
+    metadata: { name },
+    spec: {
+      title: name,
+      localized: true,
+      lifecycle: "simple",
+      schema: {
+        type: "object",
+        properties: {
+          slug: { type: "string" },
+          locale: { type: ["string", "null"] },
+          tenantId: { type: "string" },
+          marker: { type: "string" },
+        },
+      },
+      indexes: indexes.map((fields) => [...fields]),
+    },
+  };
+}
+
+function translationSchema(name: string, parent: string): SchemaManifest {
+  const base = entryReadSchema(name);
+  return {
+    ...base,
+    spec: {
+      ...base.spec,
+      translates: { parent, on: "slug" },
+    },
+  };
+}
+
+describe("EntryReader against crowded real SQLite", () => {
+  const slugLocale = entryReadSchema("reads-slug-locale", [["slug", "locale"]]);
+  const localeSlug = entryReadSchema("reads-locale-slug", [["locale", "slug"]]);
+  const slugOnly = entryReadSchema("reads-slug-only", [["slug"]]);
+  const tenantSlug = entryReadSchema("reads-tenant-slug", [["tenantId", "slug"]]);
+  const noIndex = entryReadSchema("reads-no-index");
+  const triState = entryReadSchema("reads-tri-state");
+  const batchParent = entryReadSchema("reads-batch-parent");
+  const batchTranslation = translationSchema("reads-batch-translation", batchParent.metadata.name);
+  const schemas = [
+    slugLocale,
+    localeSlug,
+    slugOnly,
+    tenantSlug,
+    noIndex,
+    triState,
+    batchParent,
+    batchTranslation,
+  ] as const;
+  const schemasByName = new Map(schemas.map((item) => [item.metadata.name, item]));
+  const executions: RecordedExecution[] = [];
+  let db: DatabaseSync;
+  let driver: DatabaseDriver;
+  let reader: DatabaseEntryRepository;
+
+  beforeAll(() => {
+    db = new DatabaseSync(":memory:");
+    for (const migration of CANONICAL_MIGRATIONS) db.exec(migration.sql);
+    const insert = db.prepare(
+      `INSERT INTO entries
+       (id, collection, status, version, data, author_id, created_at, updated_at)
+       VALUES (?, ?, ?, 1, ?, ?, ?, ?)`,
+    );
+
+    for (const current of [slugLocale, localeSlug, slugOnly, tenantSlug, noIndex]) {
+      for (let index = 0; index < 1_200; index += 1) {
+        insert.run(
+          `${current.metadata.name}-${index}`,
+          current.metadata.name,
+          "published",
+          JSON.stringify({
+            slug: `noise-${index}`,
+            locale: index % 2 === 0 ? "en" : "zh-TW",
+            tenantId: `tenant-${index % 20}`,
+            marker: "noise",
+          }),
+          null,
+          index,
+          index,
+        );
+      }
+      insert.run(
+        `${current.metadata.name}-needle`,
+        current.metadata.name,
+        "published",
+        JSON.stringify({
+          slug: "needle",
+          locale: "en",
+          tenantId: "tenant-target",
+          marker: current.metadata.name,
+        }),
+        "private-author",
+        20_000,
+        20_000,
+      );
+    }
+
+    insert.run(
+      "tri-en",
+      triState.metadata.name,
+      "published",
+      JSON.stringify({ slug: "tri", locale: "en", marker: "en" }),
+      "private-author",
+      1,
+      10,
+    );
+    insert.run(
+      "tri-missing",
+      triState.metadata.name,
+      "published",
+      JSON.stringify({ slug: "tri", marker: "missing" }),
+      null,
+      1,
+      20,
+    );
+    insert.run(
+      "tri-null",
+      triState.metadata.name,
+      "published",
+      JSON.stringify({ slug: "tri", locale: null, marker: "null" }),
+      null,
+      1,
+      30,
+    );
+
+    for (let index = 0; index < 191; index += 1) {
+      insert.run(
+        `batch-parent-${index}`,
+        batchParent.metadata.name,
+        "published",
+        JSON.stringify({ slug: `parent-${index}`, marker: `parent-marker-${index}` }),
+        null,
+        index,
+        index,
+      );
+    }
+
+    for (const current of schemas) {
+      const ddl = buildDdl(current);
+      for (const column of ddl.columns) db.exec(column.sql);
+      for (const index of ddl.indexes) db.exec(index.sql);
+    }
+    db.exec("ANALYZE");
+    driver = createSqliteDriver(db, executions);
+    reader = new DatabaseEntryRepository(driver, schemasByName);
+  });
+
+  afterAll(() => db.close());
+
+  it("uses only planner-compatible declared prefixes for slug and locale", async () => {
+    for (const current of [slugLocale, localeSlug]) {
+      executions.length = 0;
+      const found = await reader.readBySlug({
+        collection: current.metadata.name,
+        slug: "needle",
+        locale: "en",
+        status: "published",
+      });
+      expect(found?.id).toBe(`${current.metadata.name}-needle`);
+      expect(Object.hasOwn(found ?? {}, "authorId")).toBe(false);
+
+      const execution = executions.at(-1)!;
+      const indexName = buildDdl(current).indexes[0]!.name;
+      const plan = executionPlanDetails(db, execution).join("\n");
+      expect(plan).toContain(`SEARCH entries USING INDEX ${indexName}`);
+      expect(plan).not.toContain("SCAN entries");
+    }
+
+    executions.length = 0;
+    await expect(reader.readBySlug({
+      collection: slugOnly.metadata.name,
+      slug: "needle",
+      locale: "en",
+      status: "published",
+    })).resolves.toMatchObject({ id: `${slugOnly.metadata.name}-needle` });
+    const slugOnlyExecution = executions.at(-1)!;
+    expect(slugOnlyExecution.sql).toContain(schemaIndexedFieldSql(slugOnly, "slug"));
+    expect(slugOnlyExecution.sql).toContain("json_extract(data, ?) = ?");
+    expect(executionPlanDetails(db, slugOnlyExecution).join("\n")).toContain(
+      `SEARCH entries USING INDEX ${buildDdl(slugOnly).indexes[0]!.name}`,
+    );
+
+    for (const current of [tenantSlug, noIndex]) {
+      executions.length = 0;
+      await expect(reader.readBySlug({
+        collection: current.metadata.name,
+        slug: "needle",
+        locale: "en",
+        status: "published",
+      })).resolves.toMatchObject({ id: `${current.metadata.name}-needle` });
+      const execution = executions.at(-1)!;
+      expect(execution.sql).toContain("json_extract(data, ?) = ?");
+      for (const index of buildDdl(current).indexes) {
+        expect(executionPlanDetails(db, execution).join("\n")).not.toContain(index.name);
+      }
+    }
+  });
+
+  it("preserves locale string, null, and omitted semantics and the public helper", async () => {
+    await expect(reader.readBySlug({
+      collection: triState.metadata.name,
+      slug: "tri",
+      locale: "en",
+      status: "published",
+    })).resolves.toMatchObject({ id: "tri-en", locale: "en" });
+
+    await expect(reader.readBySlug({
+      collection: triState.metadata.name,
+      slug: "tri",
+      status: "published",
+    })).resolves.toMatchObject({ id: "tri-null" });
+
+    executions.length = 0;
+    const nullLocale = await reader.readBySlug({
+      collection: triState.metadata.name,
+      slug: "tri",
+      locale: null,
+      status: "published",
+    });
+    expect(nullLocale).toMatchObject({ id: "tri-null", data: { locale: null } });
+    expect(executions.at(-1)?.sql).toContain("IS NULL");
+    expect(executions.at(-1)?.sql).not.toContain("= NULL");
+
+    const nullLocaleRows = await reader.readPublished({
+      collection: triState.metadata.name,
+      locale: null,
+    });
+    expect(nullLocaleRows.map((entry) => entry.id)).toEqual([
+      "tri-null",
+      "tri-missing",
+    ]);
+
+    executions.length = 0;
+    const publicDb: CmsRuntime["db"] = driver;
+    const compatible = await readEntryBySlug(publicDb, {
+      collection: slugLocale.metadata.name,
+      slug: "needle",
+      locale: "en",
+      status: "published",
+    });
+    expect(compatible?.id).toBe(`${slugLocale.metadata.name}-needle`);
+    expect(Object.hasOwn(compatible ?? {}, "authorId")).toBe(false);
+    expect(executions.at(-1)?.sql).toContain("json_extract(data, ?) = ?");
+  });
+
+  it("chunks translation-parent reads below D1's 100-bind limit without N+1", async () => {
+    const values = Array.from({ length: 191 }, (_, index) => `parent-${index}`);
+    const translations = values.map((slug, index) => ({
+      id: `translation-${index}`,
+      collection: batchTranslation.metadata.name,
+      locale: "en",
+      status: "published" as const,
+      version: 1,
+      data: { slug, locale: "en", marker: `translation-marker-${index}` },
+      createdAt: index,
+      updatedAt: index,
+    }));
+
+    executions.length = 0;
+    const joined = await joinParentForList(reader, schemasByName, translations, {
+      parentStatus: "published",
+    });
+    expect(joined).toHaveLength(values.length);
+    expect(joined[0]?.data).toMatchObject({
+      slug: "parent-0",
+      marker: "translation-marker-0",
+    });
+    const entryReads = executions.filter((execution) => execution.sql.includes("FROM entries"));
+    expect(entryReads).toHaveLength(3);
+    expect(entryReads.map((execution) => execution.params.length)).toEqual([99, 99, 5]);
+    expect(Math.max(...entryReads.map((execution) => execution.params.length))).toBeLessThanOrEqual(100);
+    expect(entryReads[0]?.params.slice(2, 97)).toEqual(values.slice(0, 95));
+    expect(entryReads[1]?.params.slice(2, 97)).toEqual(values.slice(95, 190));
   });
 });

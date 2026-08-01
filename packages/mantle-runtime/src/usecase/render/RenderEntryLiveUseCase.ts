@@ -1,9 +1,8 @@
 import type { SchemaManifest } from "@aotter/mantle-spec";
-import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
+import type { EntryReader } from "../../domain/port/EntryReader.js";
 import type { MediaAssetRepository } from "../../domain/port/MediaAssetRepository.js";
 import type { TemplateRegistry } from "../../domain/model/TemplateRegistry.js";
 import type { PublicPathResolver } from "../../domain/service/PublicPathResolver.js";
-import { readEntryBySlug } from "../../domain/service/io/PublishedEntries.js";
 import { joinParentIfTranslation } from "../../domain/service/io/JoinedEntryReader.js";
 import { renderEntryHtml } from "../../domain/service/HtmlRenderer.js";
 import type { RenderEntryLiveRequest } from "../dto/render/RenderEntryLiveRequest.js";
@@ -34,7 +33,7 @@ import { resolveMediaAssetsForEntries } from "../../domain/service/io/MediaAsset
  */
 export class RenderEntryLiveUseCase {
   constructor(
-    private readonly db: DatabaseDriver,
+    private readonly reader: EntryReader,
     private readonly templates: TemplateRegistry,
     private readonly paths: PublicPathResolver | null,
     private readonly composeSeo: Pick<ComposeEntrySeoMetaUseCase, "execute">,
@@ -44,14 +43,14 @@ export class RenderEntryLiveUseCase {
 
   async execute(request: RenderEntryLiveRequest): Promise<string | null> {
     const status = "published";
-    const raw = await readEntryBySlug(this.db, {
+    const raw = await this.reader.readBySlug({
       collection: request.collection,
       slug: request.slug,
       locale: request.locale,
       status,
     });
     if (!raw) return null;
-    const entry = await joinParentIfTranslation(this.db, this.schemas, raw, {
+    const entry = await joinParentIfTranslation(this.reader, this.schemas, raw, {
       parentStatus: status,
     });
     const seo = await composeSeoIfPathed(this.composeSeo, this.paths, entry, request.site);

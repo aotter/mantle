@@ -99,6 +99,19 @@ function seedPublishedPost(db: InMemoryDatabase, locale = "en"): void {
 }
 
 describe("mountPublicRoutes read-through cache", () => {
+  it("serves warm HTML and markdown without an entry lookup", async () => {
+    const h = harness();
+    await h.kv.put("entry:html:en/posts/cached", "<h1>Cached HTML</h1>");
+    await h.kv.put("entry:md:en/posts/cached", "# Cached markdown");
+
+    const html = await h.app.request("/en/posts/cached");
+    const markdown = await h.app.request("/en/posts/cached.md");
+
+    await expect(html.text()).resolves.toContain("Cached HTML");
+    await expect(markdown.text()).resolves.toContain("Cached markdown");
+    expect(h.db.executions.filter(({ sql }) => sql.includes("FROM entries"))).toEqual([]);
+  });
+
   it("renders list HTML from D1 on KV miss and populates KV", async () => {
     const h = harness();
     seedPublishedPost(h.db);
@@ -203,6 +216,27 @@ describe("mountPublicRoutes read-through cache", () => {
     expect(res.status).toBe(200);
   });
 
+  it("preview prefers a draft over published content with the same route identity", async () => {
+    const h = harness(["en"], { auth: staffAuth("editor") });
+    seedPublishedPost(h.db);
+    h.db.entries.set("p1-en-draft", {
+      ...h.db.entries.get("p1-en")!,
+      id: "p1-en-draft",
+      status: "draft",
+      data: JSON.stringify({
+        slug: "hello",
+        locale: "en",
+        title: "Draft wins",
+        body: "Unpublished",
+      }),
+      updated_at: 3,
+    });
+
+    const res = await h.app.request("/en/posts/hello?preview=1");
+    expect(res.status).toBe(200);
+    await expect(res.text()).resolves.toContain("Draft wins");
+  });
+
   it("preview returns 403 when getUserRole returns a non-staff role string", async () => {
     // Defends against future extension where getUserRole might return
     // a custom role (e.g. "viewer") not in STAFF_ROLE_SET.
@@ -235,6 +269,7 @@ describe("mountPublicRoutes llms.txt live-fallback", () => {
     const body = await res.text();
     expect(body).toContain("# Cached from KV");
     expect(body).not.toContain("Hello"); // the seeded D1 entry — composer would have included it
+    expect(h.db.executions.filter(({ sql }) => sql.includes("FROM entries"))).toEqual([]);
   });
 
   it("composes per-locale llms.txt live on KV miss and writes back", async () => {
