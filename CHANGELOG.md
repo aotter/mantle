@@ -6,6 +6,34 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.62] - 2026-08-01
+
+### Added
+
+- **`@aotter/mantle-cloudflare` / `@aotter/mantle-runtime`**: add a
+  focused warm HTTP dispatch benchmark and a reusable compiled Trigger
+  path matcher, with documented local and same-machine Wrangler
+  regression budgets (#530, #532).
+
+### Changed
+
+- **`@aotter/mantle-cloudflare`**: compile immutable Trigger path
+  metadata once at mount time and avoid a duplicate auth-predicate pass
+  on successful View requests while preserving scope, guard,
+  malformed-path, and protected-schema behavior (#530, #532).
+
+### Fixed
+
+- **`@aotter/mantle-spec`**: emit HTTP Trigger template fields as required
+  OpenAPI path parameters and project them out of the JSON request body
+  without changing Procedure validation or runtime path authority
+  (#531, #532).
+- **release fanout / starters**: enforce that every published provision
+  bundle and materialized Mantle site enables the Workers cache by
+  default, and keep Landing's bundle intake fail-closed when that
+  invariant is missing (aotter/mantle-starters#445,
+  aotter/mantle-landing#331).
+
 ## [0.0.11-alpha.61] - 2026-07-31
 
 ### Fixed
