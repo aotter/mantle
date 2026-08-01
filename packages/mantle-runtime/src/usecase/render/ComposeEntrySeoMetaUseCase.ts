@@ -1,12 +1,11 @@
 import type { Entry, SiteConfig } from "@aotter/mantle-spec";
-import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
+import type { EntryReader } from "../../domain/port/EntryReader.js";
 import {
   composeEntrySeoMeta,
   type SeoMeta,
   type SiblingTranslation,
 } from "../../domain/service/SeoMetaComposer.js";
 import type { PublicPathResolver } from "../../domain/service/PublicPathResolver.js";
-import { readEntryBySlug } from "../../domain/service/io/PublishedEntries.js";
 import type { ComposeEntrySeoMetaRequest } from "../dto/render/ComposeEntrySeoMetaRequest.js";
 
 /**
@@ -26,12 +25,12 @@ import type { ComposeEntrySeoMetaRequest } from "../dto/render/ComposeEntrySeoMe
  * `Promise.all`.
  */
 export class ComposeEntrySeoMetaUseCase {
-  constructor(private readonly db: DatabaseDriver) {}
+  constructor(private readonly reader: EntryReader) {}
 
   async execute(request: ComposeEntrySeoMetaRequest): Promise<SeoMeta> {
     const { entry, site, paths, type } = request;
     const publicPath = paths.forEntry(entry) ?? "";
-    const siblings = await readSiblings(this.db, entry, site, paths);
+    const siblings = await readSiblings(this.reader, entry, site, paths);
     return composeEntrySeoMeta({ entry, site, publicPath, siblings, type });
   }
 }
@@ -47,7 +46,7 @@ export async function composeSeoIfPathed(
 }
 
 async function readSiblings(
-  db: DatabaseDriver,
+  reader: EntryReader,
   current: Entry,
   site: SiteConfig,
   paths: PublicPathResolver,
@@ -59,7 +58,7 @@ async function readSiblings(
   const targetLocales = site.locales.filter((l) => l.toLowerCase() !== currentKey);
   const lookups = await Promise.all(
     targetLocales.map((locale) =>
-      readEntryBySlug(db, {
+      reader.readBySlug({
         collection: current.collection,
         slug,
         locale,

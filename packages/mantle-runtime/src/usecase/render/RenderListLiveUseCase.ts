@@ -1,8 +1,7 @@
 import type { SchemaManifest } from "@aotter/mantle-spec";
-import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
+import type { EntryReader } from "../../domain/port/EntryReader.js";
 import type { MediaAssetRepository } from "../../domain/port/MediaAssetRepository.js";
 import type { TemplateRegistry } from "../../domain/model/TemplateRegistry.js";
-import { readPublishedEntries } from "../../domain/service/io/PublishedEntries.js";
 import { joinParentForList } from "../../domain/service/io/JoinedEntryReader.js";
 import { renderListHtml } from "../../domain/service/HtmlRenderer.js";
 import type { RenderListLiveRequest } from "../dto/render/RenderListLiveRequest.js";
@@ -21,18 +20,18 @@ import { resolveMediaAssetsForEntries } from "../../domain/service/io/MediaAsset
  */
 export class RenderListLiveUseCase {
   constructor(
-    private readonly db: DatabaseDriver,
+    private readonly reader: EntryReader,
     private readonly templates: TemplateRegistry,
     private readonly schemas: ReadonlyMap<string, SchemaManifest>,
     private readonly mediaAssets: MediaAssetRepository | null = null,
   ) {}
 
   async execute(request: RenderListLiveRequest): Promise<string | null> {
-    const raw = await readPublishedEntries(this.db, {
+    const raw = await this.reader.readPublished({
       collection: request.collection,
       locale: request.locale,
     });
-    const entries = await joinParentForList(this.db, this.schemas, raw, {
+    const entries = await joinParentForList(this.reader, this.schemas, raw, {
       parentStatus: "published",
     });
     const mediaAssets = await resolveMediaAssetsForEntries(this.mediaAssets, entries);

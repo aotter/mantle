@@ -3,6 +3,7 @@ import { HtmlPublishOrchestrator } from "../src/infrastructure/render/HtmlPublis
 import { ComposeEntrySeoMetaUseCase } from "../src/usecase/render/ComposeEntrySeoMetaUseCase.js";
 import { ComposeLlmsTxtUseCase } from "../src/usecase/render/ComposeLlmsTxtUseCase.js";
 import { RenderEntryLiveUseCase } from "../src/usecase/render/RenderEntryLiveUseCase.js";
+import { DatabaseEntryRepository } from "../src/infrastructure/persistence/DatabaseEntryRepository.js";
 import {
   entryHtmlKey,
   entryMarkdownKey,
@@ -52,7 +53,7 @@ describe("HtmlPublishOrchestrator", () => {
       ({ entry }) => `<html><head><title>${entry.data["title"]}</title></head><body>Hi</body></html>`,
     );
     const usecase = new RenderEntryLiveUseCase(
-      db,
+      new DatabaseEntryRepository(db),
       templates,
       null,
       { execute: async () => ({ title: "", description: "" }) },
@@ -93,7 +94,7 @@ describe("HtmlPublishOrchestrator", () => {
     const repo = new MemoryMediaAssets([asset("cover")]);
 
     const usecase = new RenderEntryLiveUseCase(
-      db,
+      new DatabaseEntryRepository(db),
       templates,
       null,
       { execute: async () => ({ title: "", description: "" }) },
@@ -124,7 +125,8 @@ describe("HtmlPublishOrchestrator", () => {
     );
     templates.registerListTemplate("posts", ({ entries }) => `<ul>${entries.length}</ul>`);
 
-    const orchestrator = new HtmlPublishOrchestrator(db, kv, null, new ComposeEntrySeoMetaUseCase(db), new ComposeLlmsTxtUseCase(db), new Map());
+    const reader = new DatabaseEntryRepository(db);
+    const orchestrator = new HtmlPublishOrchestrator(reader, kv, null, new ComposeEntrySeoMetaUseCase(reader), new ComposeLlmsTxtUseCase(reader), new Map());
     await orchestrator.publish({ entryId: "p1", site, templates });
 
     const snap = kv._snapshot();
@@ -145,7 +147,8 @@ describe("HtmlPublishOrchestrator", () => {
   it("throws NOT_FOUND for unknown entry id", async () => {
     const db = new InMemoryDatabase();
     const kv = new InMemoryKv();
-    const orchestrator = new HtmlPublishOrchestrator(db, kv, null, new ComposeEntrySeoMetaUseCase(db), new ComposeLlmsTxtUseCase(db), new Map());
+    const reader = new DatabaseEntryRepository(db);
+    const orchestrator = new HtmlPublishOrchestrator(reader, kv, null, new ComposeEntrySeoMetaUseCase(reader), new ComposeLlmsTxtUseCase(reader), new Map());
     await expect(
       orchestrator.publish({
         entryId: "ghost",
@@ -162,12 +165,13 @@ describe("HtmlPublishOrchestrator", () => {
       id: "p1",
       data: { title: "Hi", slug: "hi", locale: "en" },
     });
+    const reader = new DatabaseEntryRepository(db);
     const orchestrator = new HtmlPublishOrchestrator(
-      db,
+      reader,
       kv,
       null,
-      new ComposeEntrySeoMetaUseCase(db),
-      new ComposeLlmsTxtUseCase(db),
+      new ComposeEntrySeoMetaUseCase(reader),
+      new ComposeLlmsTxtUseCase(reader),
       new Map(),
     );
     const rootKey = llmsTxtKey("");
@@ -203,7 +207,8 @@ describe("HtmlPublishOrchestrator", () => {
     templates.registerEntryTemplate("posts", ({ entry }) => `<h1>${entry.data["title"] as string}</h1>`);
     templates.registerListTemplate("posts", ({ entries }) => `<ul>${entries.length}</ul>`);
 
-    const orchestrator = new HtmlPublishOrchestrator(db, kv, null, new ComposeEntrySeoMetaUseCase(db), new ComposeLlmsTxtUseCase(db), new Map());
+    const reader = new DatabaseEntryRepository(db);
+    const orchestrator = new HtmlPublishOrchestrator(reader, kv, null, new ComposeEntrySeoMetaUseCase(reader), new ComposeLlmsTxtUseCase(reader), new Map());
     await orchestrator.publish({ entryId: "p1", site, templates });
     db.entries.set("p1", {
       ...db.entries.get("p1")!,

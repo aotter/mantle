@@ -6,7 +6,7 @@ import {
   type SiteConfig,
 } from "@aotter/mantle-spec";
 import type { TemplateRegistry } from "../../domain/model/TemplateRegistry.js";
-import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
+import type { EntryReader } from "../../domain/port/EntryReader.js";
 import type { KvCache } from "../../domain/port/KvCache.js";
 import type { MediaAssetRepository } from "../../domain/port/MediaAssetRepository.js";
 import type {
@@ -19,10 +19,6 @@ import {
   listHtmlKey,
   llmsTxtKey,
 } from "../../domain/service/PublishKeys.js";
-import {
-  readEntryById,
-  readPublishedEntries,
-} from "../../domain/service/io/PublishedEntries.js";
 import {
   joinParentForList,
   joinParentIfTranslation,
@@ -69,7 +65,7 @@ const DEFAULT_DOCTYPE = "<!DOCTYPE html>\n";
 
 export class HtmlPublishOrchestrator implements PublishOrchestrator {
   constructor(
-    private readonly db: DatabaseDriver,
+    private readonly reader: EntryReader,
     private readonly kv: KvCache,
     private readonly paths: PublicPathResolver | null,
     private readonly composeSeo: Pick<ComposeEntrySeoMetaUseCase, "execute">,
@@ -79,11 +75,11 @@ export class HtmlPublishOrchestrator implements PublishOrchestrator {
   ) {}
 
   async publish(request: PublishEntryRequest): Promise<void> {
-    const raw = await requireEntry(this.db, request.entryId, "usecase/PublishEntry");
+    const raw = await requireEntry(this.reader, request.entryId, "usecase/PublishEntry");
     // Materialize parent fields into the translation's data before
     // rendering (ADR-0010). RequestPublishUseCase has already asserted
     // the parent is published, so a status filter is safe here.
-    const entry = await joinParentIfTranslation(this.db, this.schemas, raw, {
+    const entry = await joinParentIfTranslation(this.reader, this.schemas, raw, {
       parentStatus: "published",
     });
     const indexLocale = entry.locale ?? null;
@@ -97,7 +93,7 @@ export class HtmlPublishOrchestrator implements PublishOrchestrator {
 
   async unpublish(request: PublishEntryRequest): Promise<void> {
     const entry = await requireEntry(
-      this.db,
+      this.reader,
       request.entryId,
       "usecase/UnpublishEntryCache",
     );
@@ -136,8 +132,8 @@ export class HtmlPublishOrchestrator implements PublishOrchestrator {
     templates: TemplateRegistry,
     doctype: string,
   ): Promise<void> {
-    const raw = await readPublishedEntries(this.db, { locale, collection });
-    const entries = await joinParentForList(this.db, this.schemas, raw, {
+    const raw = await this.reader.readPublished({ locale, collection });
+    const entries = await joinParentForList(this.reader, this.schemas, raw, {
       parentStatus: "published",
     });
     const mediaAssets = await resolveMediaAssetsForEntries(this.mediaAssets, entries);
@@ -162,11 +158,11 @@ export class HtmlPublishOrchestrator implements PublishOrchestrator {
 }
 
 async function requireEntry(
-  db: DatabaseDriver,
+  reader: EntryReader,
   entryId: string,
   pathPrefix: string,
 ): Promise<Entry> {
-  const entry = await readEntryById(db, entryId);
+  const entry = await reader.readById(entryId);
   if (entry) return entry;
   throw new DiagnosticError(
     runtimeDiagnostic({

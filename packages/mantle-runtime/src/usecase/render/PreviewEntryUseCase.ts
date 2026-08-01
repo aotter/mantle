@@ -1,9 +1,8 @@
 import type { ContentState, Entry, SchemaManifest } from "@aotter/mantle-spec";
-import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
+import type { EntryReader } from "../../domain/port/EntryReader.js";
 import type { MediaAssetRepository } from "../../domain/port/MediaAssetRepository.js";
 import type { TemplateRegistry } from "../../domain/model/TemplateRegistry.js";
 import type { PublicPathResolver } from "../../domain/service/PublicPathResolver.js";
-import { readEntryBySlug } from "../../domain/service/io/PublishedEntries.js";
 import { joinParentIfTranslation } from "../../domain/service/io/JoinedEntryReader.js";
 import { renderEntryHtml } from "../../domain/service/HtmlRenderer.js";
 import {
@@ -37,7 +36,7 @@ const DEFAULT_PREVIEW_STATUS_ORDER: ReadonlyArray<ContentState> = [
  */
 export class PreviewEntryUseCase {
   constructor(
-    private readonly db: DatabaseDriver,
+    private readonly reader: EntryReader,
     private readonly templates: TemplateRegistry,
     private readonly paths: PublicPathResolver | null,
     private readonly composeSeo: Pick<ComposeEntrySeoMetaUseCase, "execute">,
@@ -48,7 +47,7 @@ export class PreviewEntryUseCase {
   async execute(request: PreviewEntryRequest): Promise<string | null> {
     let raw: Entry | null = null;
     for (const status of DEFAULT_PREVIEW_STATUS_ORDER) {
-      raw = await readEntryBySlug(this.db, {
+      raw = await this.reader.readBySlug({
         collection: request.collection,
         slug: request.slug,
         locale: request.locale,
@@ -61,7 +60,7 @@ export class PreviewEntryUseCase {
     // filter so a draft translation can still preview against its
     // already-published parent. RequestPublishUseCase enforces the
     // published-parent invariant at publish time.
-    const entry = await joinParentIfTranslation(this.db, this.schemas, raw);
+    const entry = await joinParentIfTranslation(this.reader, this.schemas, raw);
     const seo = await composeSeoIfPathed(this.composeSeo, this.paths, entry, request.site);
     const mediaAssets = await resolveMediaAssetsForEntries(this.mediaAssets, [entry]);
     const html = renderEntryHtml({

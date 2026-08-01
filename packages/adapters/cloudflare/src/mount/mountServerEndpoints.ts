@@ -10,6 +10,7 @@ import {
   runtimeDiagnostic,
   type ContentState,
   type Diagnostic,
+  type Entry,
   type JsonSchema,
   type LocalizedText,
   type Manifest,
@@ -1126,17 +1127,6 @@ type AdminEntryRow = {
   readonly updatedAt: number;
 };
 
-type AdminEntryDbRow = {
-  readonly id: string;
-  readonly collection: string;
-  readonly status: string;
-  readonly version: number;
-  readonly data: string;
-  readonly author_id: string | null;
-  readonly created_at: number;
-  readonly updated_at: number;
-};
-
 async function entryEditorPayload(
   runtime: CmsRuntime,
   row: AdminEntryRow,
@@ -1227,7 +1217,7 @@ function adminEditorCollection(
   };
 }
 
-function adminEditorEntry(row: AdminEntryRow): AdminEditorEntry {
+function adminEditorEntry(row: Entry): AdminEditorEntry {
   return {
     id: row.id,
     collection: row.collection,
@@ -1423,18 +1413,13 @@ async function entriesByDataValue(
   collection: string,
   field: string,
   value: string | number | boolean,
-): Promise<AdminEntryRow[]> {
-  const rows = await runtime.db
-    .prepare(
-      `SELECT id, collection, status, version, data, author_id, created_at, updated_at
-       FROM entries
-       WHERE collection = ? AND json_extract(data, ?) = ?
-       ORDER BY updated_at DESC, id DESC
-       LIMIT 50`,
-    )
-    .bind(collection, `$.${field}`, value)
-    .all<AdminEntryDbRow>();
-  return rows.map(adminRowFromDb);
+): Promise<readonly Entry[]> {
+  return runtime.entryReader.findManyByDataField({
+    collection,
+    field,
+    value,
+    limit: 50,
+  });
 }
 
 async function readSiteSettings(runtime: CmsRuntime): Promise<{
@@ -1493,22 +1478,6 @@ async function deleteKvPrefix(runtime: CmsRuntime, prefix: string): Promise<void
     cursor = page.cursor;
   } while (cursor);
 }
-function adminRowFromDb(row: AdminEntryDbRow): AdminEntryRow {
-  const data = JSON.parse(row.data) as Record<string, unknown>;
-  const locale = typeof data.locale === "string" ? data.locale : undefined;
-  return {
-    id: row.id,
-    collection: row.collection,
-    status: row.status as ContentState,
-    version: row.version,
-    data,
-    locale,
-    authorId: row.author_id,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
-
 function expectedVersionField(value: unknown, path: string): number {
   if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return value;
   throw new DiagnosticError(

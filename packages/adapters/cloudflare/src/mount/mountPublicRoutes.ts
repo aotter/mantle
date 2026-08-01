@@ -7,7 +7,6 @@ import {
   isKnownLocale,
   listHtmlKey,
   llmsTxtKey,
-  readEntryBySlug,
   serializeEntryAsMarkdown,
   toUrlLocale,
   type CmsRuntime,
@@ -269,7 +268,7 @@ function mountCollection(
       if (locale === null) return notFound();
       const key = entryMarkdownKeyFromParts(route.collection, locale, slug);
       return readThroughCache(runtime.kv, key, MD_PUBLIC, async () => {
-        const entry = await readEntryBySlug(runtime.db, {
+        const entry = await runtime.entryReader.readBySlug({
           collection: route.collection,
           slug,
           locale,

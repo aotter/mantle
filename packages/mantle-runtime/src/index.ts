@@ -36,6 +36,15 @@ export type {
 export type { KvCache, KvPutOptions, KvListResult } from "./domain/port/KvCache.js";
 export type { AssetServer } from "./domain/port/AssetServer.js";
 export type {
+  EntryReader,
+  EntryDataScalar,
+  ReadEntryBySlugArgs,
+  ReadEntryByDataFieldArgs,
+  ReadEntriesByDataFieldInArgs,
+  ReadPublishedEntriesArgs,
+  FindManyEntriesByDataFieldArgs,
+} from "./domain/port/EntryReader.js";
+export type {
   MediaStorage,
   CreateUploadArgs,
   CreateUploadVariantSpec,
@@ -112,7 +121,7 @@ export {
   llmsTxtKey,
 } from "./domain/service/PublishKeys.js";
 export { serializeEntryAsMarkdown } from "./domain/service/MarkdownSerializer.js";
-export { readEntryBySlug } from "./domain/service/io/PublishedEntries.js";
+export { readEntryBySlug } from "./infrastructure/persistence/DatabaseEntryRepository.js";
 export {
   inferLocaleFromPath,
   isKnownLocale,

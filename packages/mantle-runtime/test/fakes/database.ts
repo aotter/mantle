@@ -41,6 +41,7 @@ interface UserRecord {
 }
 
 export class InMemoryDatabase implements DatabaseDriver {
+  readonly executions: Array<{ readonly sql: string; readonly params: readonly unknown[] }> = [];
   entries = new Map<string, EntryRecord>();
   revisions = new Map<string, { entry_id: string }>();
   approvals = new Map<string, { entry_id: string }>();
@@ -115,6 +116,7 @@ class InMemoryStatement implements PreparedStatement {
   private execute(): { rows: Record<string, unknown>[]; changes: number } {
     const sql = this.sql;
     const p = this.params;
+    this.db.executions.push({ sql, params: p });
 
     if (
       sql === "SELECT id FROM _migrations WHERE id LIKE 'schema-unique-index:%'" ||
@@ -251,34 +253,15 @@ class InMemoryStatement implements PreparedStatement {
       return { rows: [r as unknown as Record<string, unknown>], changes: 1 };
     }
 
-    // SELECT … FROM entries WHERE collection = ? [AND status = ?] AND json_extract(data, ?) = ? [...AND id <> ?] ORDER BY updated_at DESC LIMIT 1
+    // EntryReader queries. Keep one matcher for single, batch, and
+    // published reads so the fake follows the production read boundary
+    // instead of duplicating every emitted SQL shape.
     if (
       sql.startsWith("SELECT id, collection, status, version, data, author_id, created_at, updated_at FROM entries") &&
-      sql.includes("json_extract(data, ?) = ?")
+      sql.includes(" FROM entries WHERE ") &&
+      !sql.includes("LIMIT ? OFFSET ?")
     ) {
-      const hasStatus = sql.includes("AND status = ?");
-      const hasExcludeId = sql.includes("AND id <> ?");
-      const collection = p[0] as string;
-      let pi = 1;
-      const status = hasStatus ? (p[pi++] as string) : null;
-      const fieldValues: Array<{ field: string; value: unknown }> = [];
-      while (pi < p.length - (hasExcludeId ? 1 : 0)) {
-        const path = p[pi++] as string;
-        const value = p[pi++];
-        fieldValues.push({ field: fieldFromJsonPath(path), value });
-      }
-      const excludeId = hasExcludeId ? (p[p.length - 1] as string) : null;
-      const filtered = [...this.db.entries.values()]
-        .filter((r) => r.collection === collection)
-        .filter((r) => (status ? r.status === status : true))
-        .filter((r) => (excludeId ? r.id !== excludeId : true))
-        .filter((r) => {
-          const data = JSON.parse(r.data) as Record<string, unknown>;
-          return fieldValues.every(({ field, value }) => data[field] === value);
-        })
-        .sort((a, b) => b.updated_at - a.updated_at)
-        .slice(0, 1);
-      return { rows: filtered.map((r) => ({ ...r })), changes: 0 };
+      return { rows: runEntryReaderQuery(this.db, sql, p), changes: 0 };
     }
 
     // SELECT … FROM entries WHERE collection = ? [AND status = ?] [AND (id LIKE ... OR data LIKE ...)] ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?
@@ -463,52 +446,6 @@ class InMemoryStatement implements PreparedStatement {
       };
     }
 
-    // Publish read paths — SELECT id, collection, status, version, data, created_at, updated_at FROM entries WHERE …
-    if (sql.startsWith("SELECT id, collection, status, version, data, created_at, updated_at FROM entries WHERE")) {
-      const tail = sql.slice("SELECT id, collection, status, version, data, created_at, updated_at FROM entries WHERE ".length);
-      const limitMatch = tail.match(/ LIMIT (\d+)$/);
-      const limit = limitMatch ? Number(limitMatch[1]) : undefined;
-      const stripped = limit ? tail.slice(0, tail.length - limitMatch![0].length) : tail;
-      const rest = stripped.replace(/ ORDER BY updated_at DESC$/, "");
-      const conds = rest.split(" AND ");
-      const matchedRows = [...this.db.entries.values()].filter((r) => {
-        let pi = 0;
-        for (const cond of conds) {
-          if (cond === `status = 'published'`) {
-            if (r.status !== "published") return false;
-          } else if (cond === `status = ?`) {
-            if (r.status !== (p[pi++] as string)) return false;
-          } else if (cond === `json_extract(data, '$.locale') IS NULL`) {
-            const data = JSON.parse(r.data) as Record<string, unknown>;
-            if (typeof data["locale"] === "string") return false;
-          } else if (cond === `json_extract(data, '$.locale') = ?`) {
-            const want = p[pi++] as string;
-            const data = JSON.parse(r.data) as Record<string, unknown>;
-            if (data["locale"] !== want) return false;
-          } else if (cond === `json_extract(data, '$.slug') = ?`) {
-            const want = p[pi++] as string;
-            const data = JSON.parse(r.data) as Record<string, unknown>;
-            if (data["slug"] !== want) return false;
-          } else if (cond === `collection = ?`) {
-            if (r.collection !== (p[pi++] as string)) return false;
-          } else if (/^json_extract\(data, '\$\.[A-Za-z_][A-Za-z0-9_]*'\) IN \(\?(?:, \?)*\)$/.test(cond)) {
-            const field = cond.match(/^json_extract\(data, '\$\.([A-Za-z_][A-Za-z0-9_]*)'\) IN /)![1]!;
-            const placeholderCount = (cond.match(/\?/g) ?? []).length;
-            const wantSet = new Set(p.slice(pi, pi + placeholderCount));
-            pi += placeholderCount;
-            const data = JSON.parse(r.data) as Record<string, unknown>;
-            if (!wantSet.has(data[field] as string)) return false;
-          } else {
-            throw new Error(`fake DB: unsupported cond '${cond}' in publish read SELECT`);
-          }
-        }
-        return true;
-      });
-      matchedRows.sort((a, b) => b.updated_at - a.updated_at);
-      const capped = limit ? matchedRows.slice(0, limit) : matchedRows;
-      return { rows: capped.map((r) => ({ ...r })), changes: 0 };
-    }
-
     // View-compiled SELECT: starts with SELECT and FROM entries WHERE collection = ? …
     if (sql.startsWith("SELECT") && sql.includes("FROM entries") && sql.includes("WHERE collection = ?")) {
       return { rows: runCompiledViewQuery(this.db, sql, p), changes: 0 };
@@ -551,6 +488,104 @@ function fieldFromJsonPath(path: string): string {
   const dotted = path.match(/^\$\.([^.[\]]+)$/);
   if (dotted) return dotted[1];
   throw new Error(`unsupported json path in fake database: ${path}`);
+}
+
+function runEntryReaderQuery(
+  db: InMemoryDatabase,
+  sql: string,
+  params: readonly unknown[],
+): Record<string, unknown>[] {
+  const whereStart = sql.indexOf(" WHERE ") + " WHERE ".length;
+  const orderStart = sql.indexOf(" ORDER BY ", whereStart);
+  const limitStart = sql.indexOf(" LIMIT ", whereStart);
+  const whereEnd = [orderStart, limitStart, sql.length]
+    .filter((index) => index >= 0)
+    .reduce((left, right) => Math.min(left, right));
+  const conditions = sql.slice(whereStart, whereEnd).split(" AND ");
+  const predicates: Array<(row: EntryRecord) => boolean> = [];
+  let paramIndex = 0;
+
+  for (const condition of conditions) {
+    if (condition === "collection = ?") {
+      const expected = params[paramIndex++];
+      predicates.push((row) => row.collection === expected);
+      continue;
+    }
+    if (condition === "status = ?") {
+      const expected = params[paramIndex++];
+      predicates.push((row) => row.status === expected);
+      continue;
+    }
+    if (condition === "status = 'published'") {
+      predicates.push((row) => row.status === "published");
+      continue;
+    }
+    if (condition === "id <> ?") {
+      const excluded = params[paramIndex++];
+      predicates.push((row) => row.id !== excluded);
+      continue;
+    }
+
+    let field: string | null = null;
+    let operation = condition;
+    if (condition.startsWith("json_extract(data, ?)")) {
+      field = fieldFromJsonPath(String(params[paramIndex++]));
+      operation = condition.slice("json_extract(data, ?)".length);
+    } else {
+      const generated = /^"m2c_[0-9a-f]+_([0-9a-f]+)_[0-9a-f]+"/.exec(condition);
+      if (generated) {
+        field = decodeHex(generated[1]!);
+        operation = condition.slice(generated[0].length);
+      }
+    }
+    if (field === null) {
+      throw new Error(`fake DB: unsupported EntryReader condition '${condition}'`);
+    }
+    if (operation === " IS NULL") {
+      predicates.push((row) => readEntryDataField(row, field) == null);
+      continue;
+    }
+    if (operation === " = ?") {
+      const expected = params[paramIndex++];
+      predicates.push((row) => readEntryDataField(row, field) === expected);
+      continue;
+    }
+    if (/^ IN \(\?(?:, \?)*\)$/.test(operation)) {
+      const count = (operation.match(/\?/g) ?? []).length;
+      const expected = new Set(params.slice(paramIndex, paramIndex + count));
+      paramIndex += count;
+      predicates.push((row) => expected.has(readEntryDataField(row, field)));
+      continue;
+    }
+    throw new Error(`fake DB: unsupported EntryReader operation '${operation}'`);
+  }
+
+  const rows = [...db.entries.values()].filter((row) =>
+    predicates.every((predicate) => predicate(row))
+  );
+  if (orderStart >= 0) {
+    const orderEnd = limitStart >= 0 ? limitStart : sql.length;
+    const order = sql.slice(orderStart + " ORDER BY ".length, orderEnd);
+    rows.sort((left, right) =>
+      right.updated_at - left.updated_at ||
+      (order.includes("id DESC")
+        ? left.id < right.id ? 1 : left.id > right.id ? -1 : 0
+        : 0)
+    );
+  }
+  const limit = limitStart >= 0
+    ? Number(sql.slice(limitStart + " LIMIT ".length).split(" ")[0])
+    : rows.length;
+  return rows.slice(0, limit).map((row) => ({ ...row }));
+}
+
+function readEntryDataField(row: EntryRecord, field: string): unknown {
+  return (JSON.parse(row.data) as Record<string, unknown>)[field];
+}
+
+function decodeHex(value: string): string {
+  const bytes = value.match(/.{2}/g)?.map((pair) => Number.parseInt(pair, 16)) ?? [];
+  return new TextDecoder().decode(Uint8Array.from(bytes));
 }
 
 /**

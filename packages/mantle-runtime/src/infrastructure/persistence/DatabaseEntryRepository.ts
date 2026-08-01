@@ -1,6 +1,7 @@
 import {
   schemaIndexedFieldSql,
   type ContentState,
+  type Entry,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
 import type {
@@ -14,12 +15,21 @@ import type {
   TransitionStatusArgs,
   UpdateEntryArgs,
 } from "../../domain/port/EntryRepository.js";
+import type {
+  EntryReader,
+  FindManyEntriesByDataFieldArgs,
+  ReadEntriesByDataFieldInArgs,
+  ReadEntryByDataFieldArgs,
+  ReadEntryBySlugArgs,
+  ReadPublishedEntriesArgs,
+} from "../../domain/port/EntryReader.js";
 import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
 import { clampLimit } from "../../domain/service/Pagination.js";
 import {
   EntryStatusConflict,
   EntryVersionConflict,
   liftLocale,
+  projectPublicEntry,
   type EntryRow,
 } from "../../domain/model/EntryRow.js";
 import { decodeCursor, encodeCursor, escapeLikeTerm } from "./Pagination.js";
@@ -39,7 +49,7 @@ import { decodeCursor, encodeCursor, escapeLikeTerm } from "./Pagination.js";
  * Lifts `data.locale` to `EntryRow.locale` at the rowFromDb boundary
  * — see ADR-0010 + `domain/model/EntryRow.ts`.
  */
-export class DatabaseEntryRepository implements EntryRepository {
+export class DatabaseEntryRepository implements EntryRepository, EntryReader {
   constructor(
     private readonly db: DatabaseDriver,
     private readonly schemasByName: ReadonlyMap<string, SchemaManifest> = new Map(),
@@ -225,7 +235,7 @@ export class DatabaseEntryRepository implements EntryRepository {
   }
 
   async findByDataField(args: FindEntryByDataFieldArgs): Promise<EntryRow | null> {
-    return this.findByDataFields({
+    return this.findOneByDataFields({
       collection: args.collection,
       status: args.status,
       fields: { [args.field]: args.value },
@@ -233,6 +243,130 @@ export class DatabaseEntryRepository implements EntryRepository {
   }
 
   async findByDataFields(args: FindEntryByDataFieldsArgs): Promise<EntryRow | null> {
+    return this.findOneByDataFields(args);
+  }
+
+  async readById(id: string): Promise<Entry | null> {
+    const row = await this.get(id);
+    return row ? projectPublicEntry(row) : null;
+  }
+
+  async readBySlug(args: ReadEntryBySlugArgs): Promise<Entry | null> {
+    return this.readByDataField({
+      collection: args.collection,
+      field: "slug",
+      value: args.slug,
+      locale: args.locale,
+      status: args.status,
+    });
+  }
+
+  async readByDataField(args: ReadEntryByDataFieldArgs): Promise<Entry | null> {
+    const row = await this.findOneByDataFields({
+      collection: args.collection,
+      status: args.status,
+      fields: { [args.field]: args.value },
+      locale: args.locale,
+    });
+    return row ? projectPublicEntry(row) : null;
+  }
+
+  async readByDataFieldIn(
+    args: ReadEntriesByDataFieldInArgs,
+  ): Promise<readonly Entry[]> {
+    const values = [...new Set(args.values)];
+    if (values.length === 0) return [];
+
+    const entries: Entry[] = [];
+    for (let start = 0; start < values.length; start += ENTRY_READ_BATCH_SIZE) {
+      const chunk = values.slice(start, start + ENTRY_READ_BATCH_SIZE);
+      const conditions = ["collection = ?"];
+      const binds: unknown[] = [args.collection];
+      const schema = this.schemasByName.get(args.collection);
+      const compiled = compileDataPredicates(schema, [
+        { field: args.field, kind: "in", values: chunk },
+        ...localePredicates(args.locale),
+      ]);
+      conditions.push(...compiled.conditions);
+      binds.push(...compiled.binds);
+      if (args.status) {
+        conditions.push("status = ?");
+        binds.push(args.status);
+      }
+      const rows = await this.db
+        .prepare(
+          `SELECT ${ENTRY_COLUMNS} FROM entries
+           WHERE ${conditions.join(" AND ")} ORDER BY updated_at DESC`,
+        )
+        .bind(...binds)
+        .all<EntryDbRow>();
+      entries.push(...rows.map(rowFromDb).map(projectPublicEntry));
+    }
+    entries.sort((a, b) => b.updatedAt - a.updatedAt);
+    return entries;
+  }
+
+  async readPublished(
+    args: ReadPublishedEntriesArgs = {},
+  ): Promise<readonly Entry[]> {
+    const conditions = ["status = 'published'"];
+    const binds: unknown[] = [];
+    const schema = args.collection
+      ? this.schemasByName.get(args.collection)
+      : undefined;
+    const compiled = compileDataPredicates(schema, localePredicates(args.locale));
+    conditions.push(...compiled.conditions);
+    binds.push(...compiled.binds);
+    if (args.collection) {
+      conditions.push("collection = ?");
+      binds.push(args.collection);
+    }
+    let sql =
+      `SELECT ${ENTRY_COLUMNS} FROM entries ` +
+      `WHERE ${conditions.join(" AND ")} ORDER BY updated_at DESC`;
+    if (
+      typeof args.limit === "number" &&
+      Number.isFinite(args.limit) &&
+      args.limit > 0
+    ) {
+      sql += ` LIMIT ${Math.floor(args.limit)}`;
+    }
+    const rows = await this.db.prepare(sql).bind(...binds).all<EntryDbRow>();
+    return rows.map(rowFromDb).map(projectPublicEntry);
+  }
+
+  async findManyByDataField(
+    args: FindManyEntriesByDataFieldArgs,
+  ): Promise<readonly Entry[]> {
+    const conditions = ["collection = ?"];
+    const binds: unknown[] = [args.collection];
+    const compiled = compileDataPredicates(
+      this.schemasByName.get(args.collection),
+      [{ field: args.field, kind: "equal", value: args.value }],
+    );
+    conditions.push(...compiled.conditions);
+    binds.push(...compiled.binds);
+    const limit = Number.isFinite(args.limit) && args.limit > 0
+      ? Math.floor(args.limit)
+      : 1;
+    const rows = await this.db
+      .prepare(
+        `SELECT ${ENTRY_COLUMNS} FROM entries
+         WHERE ${conditions.join(" AND ")}
+         ORDER BY updated_at DESC, id DESC LIMIT ${limit}`,
+      )
+      .bind(...binds)
+      .all<EntryDbRow>();
+    return rows.map(rowFromDb).map(projectPublicEntry);
+  }
+
+  private async findOneByDataFields(args: {
+    readonly collection: string;
+    readonly status?: ContentState;
+    readonly fields: Readonly<Record<string, unknown>>;
+    readonly locale?: string | null;
+    readonly excludeId?: string;
+  }): Promise<EntryRow | null> {
     const entries = Object.entries(args.fields);
     if (entries.length === 0) return null;
     const conditions = ["collection = ?"];
@@ -242,16 +376,16 @@ export class DatabaseEntryRepository implements EntryRepository {
       conditions.push("status = ?");
       binds.push(args.status);
     }
-    for (const [field, value] of entries) {
-      const indexed = schema ? schemaIndexedFieldSql(schema, field) : null;
-      if (indexed) {
-        conditions.push(`${indexed} = ?`);
-        binds.push(value);
-      } else {
-        conditions.push("json_extract(data, ?) = ?");
-        binds.push(jsonPathForTopLevelField(field), value);
-      }
-    }
+    const compiled = compileDataPredicates(schema, [
+      ...entries.map(([field, value]) => ({
+        field,
+        kind: "equal" as const,
+        value,
+      })),
+      ...localePredicates(args.locale),
+    ]);
+    conditions.push(...compiled.conditions);
+    binds.push(...compiled.binds);
     if (args.excludeId) {
       conditions.push("id <> ?");
       binds.push(args.excludeId);
@@ -278,6 +412,83 @@ export class DatabaseEntryRepository implements EntryRepository {
       .first<{ version: number }>();
     return new EntryVersionConflict(id, expected, after?.version ?? -1);
   }
+}
+
+const ENTRY_COLUMNS =
+  "id, collection, status, version, data, author_id, created_at, updated_at";
+
+// D1 accepts at most 100 bound parameters. The worst fallback shape uses
+// five fixed binds (collection, two JSON paths, locale, status), leaving 95
+// values for the parent `IN` predicate.
+const ENTRY_READ_BATCH_SIZE = 95;
+
+type DataPredicate =
+  | { readonly field: string; readonly kind: "equal"; readonly value: unknown }
+  | { readonly field: string; readonly kind: "in"; readonly values: readonly string[] }
+  | { readonly field: string; readonly kind: "null" };
+
+function localePredicates(locale: string | null | undefined): DataPredicate[] {
+  if (locale === undefined) return [];
+  return locale === null
+    ? [{ field: "locale", kind: "null" }]
+    : [{ field: "locale", kind: "equal", value: locale }];
+}
+
+function compileDataPredicates(
+  schema: SchemaManifest | undefined,
+  predicates: readonly DataPredicate[],
+): { readonly conditions: string[]; readonly binds: unknown[] } {
+  const conditions: string[] = [];
+  const binds: unknown[] = [];
+  const indexed = usableIndexedFields(schema, predicates);
+  for (const predicate of predicates) {
+    const generated = schema && indexed.has(predicate.field)
+      ? schemaIndexedFieldSql(schema, predicate.field)
+      : null;
+    const reference = generated ?? "json_extract(data, ?)";
+    if (!generated) binds.push(jsonPathForTopLevelField(predicate.field));
+    if (predicate.kind === "null") {
+      conditions.push(`${reference} IS NULL`);
+    } else if (predicate.kind === "in") {
+      conditions.push(
+        `${reference} IN (${predicate.values.map(() => "?").join(", ")})`,
+      );
+      binds.push(...predicate.values);
+    } else {
+      conditions.push(`${reference} = ?`);
+      binds.push(predicate.value);
+    }
+  }
+  return { conditions, binds };
+}
+
+function usableIndexedFields(
+  schema: SchemaManifest | undefined,
+  predicates: readonly DataPredicate[],
+): ReadonlySet<string> {
+  if (!schema) return new Set();
+  const byField = new Map(predicates.map((predicate) => [predicate.field, predicate]));
+  const usable = new Set<string>();
+  const declarations = [
+    ...(schema.spec.uniqueIndexes ?? []),
+    ...(schema.spec.indexes ?? []),
+  ];
+  for (const declaration of declarations) {
+    for (let index = 0; index < declaration.length; index += 1) {
+      const field = declaration[index]!;
+      const predicate = byField.get(field);
+      if (!predicate) break;
+      if (
+        index === 0 &&
+        (predicate.kind === "null" ||
+          (predicate.kind === "equal" && predicate.value === null))
+      ) {
+        break;
+      }
+      usable.add(field);
+    }
+  }
+  return usable;
 }
 
 interface EntryDbRow {
@@ -308,4 +519,13 @@ function rowFromDb(row: EntryDbRow): EntryRow {
 
 function jsonPathForTopLevelField(field: string): string {
   return `$."${field.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/** Public compatibility helper. Without a Schema map it intentionally uses
+ * the safe JSON fallback; in-repo callers use `CmsRuntime.entryReader`. */
+export async function readEntryBySlug(
+  db: DatabaseDriver,
+  args: ReadEntryBySlugArgs,
+): Promise<Entry | null> {
+  return new DatabaseEntryRepository(db).readBySlug(args);
 }
