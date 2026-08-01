@@ -135,7 +135,9 @@ export interface CreateCmsRuntimeArgs {
 
 export interface CmsRuntime {
   /** Raw ADR-0011 database driver, retained for adapter compatibility.
-   *  @deprecated Use `entryReader` or a purpose-shaped use case for entry reads. */
+   *  @deprecated Use purpose-shaped surfaces such as `entryReader` and
+   *  `siteConfig`; adapters should retain their injected driver for tables
+   *  they own. */
   readonly db: DatabaseDriver;
   readonly kv: KvCache;
   readonly assets: AssetServer;

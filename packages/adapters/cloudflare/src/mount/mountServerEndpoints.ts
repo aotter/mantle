@@ -415,7 +415,11 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     runUseCase("PATCH /admin/api/site-settings", async () => {
       const runtime = await ref.get();
       const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
-      await runtime.siteConfig.updateEditable({
+      const siteConfig = runtime.siteConfig;
+      if (!siteConfig.updateEditable) {
+        throw new Error("SiteConfigRepository.updateEditable is unavailable");
+      }
+      await siteConfig.updateEditable({
         brand: stringField(body.brand),
         title: stringField(body.title),
         description: stringField(body.description),
@@ -423,7 +427,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
         facebookPixelId: stringField(body.facebookPixelId),
       });
       await invalidatePublicRenderCache(runtime);
-      return adminSiteSettings(await runtime.siteConfig.load());
+      return adminSiteSettings(await siteConfig.load());
     }),
   );
 

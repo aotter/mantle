@@ -301,15 +301,18 @@ describe("createCmsRuntime + bootInit", () => {
 
     await repo.updateEditable({
       brand: "New brand",
+      title: "New title",
       description: "",
       ga4MeasurementId: "G-TEST",
+      facebookPixelId: "PIXEL-TEST",
     });
 
     expect(db.batches).toBe(1);
     expect(db.siteConfig.get("brand")).toBe("New brand");
-    expect(db.siteConfig.get("title")).toBe("Keep title");
+    expect(db.siteConfig.get("title")).toBe("New title");
     expect(db.siteConfig.get("description")).toBe("");
     expect(db.siteConfig.get("ga4MeasurementId")).toBe("G-TEST");
+    expect(db.siteConfig.get("facebookPixelId")).toBe("PIXEL-TEST");
     expect(db.siteConfig.get("origin")).toBe("https://example.com");
 
     await repo.updateEditable({});

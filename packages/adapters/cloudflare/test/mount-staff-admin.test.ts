@@ -210,6 +210,28 @@ describe("/admin/api/site-settings", () => {
     await expect(kv.get("llms:en")).resolves.toBeNull();
   });
 
+  it("still invalidates and reloads when PATCH has no accepted fields", async () => {
+    const events: string[] = [];
+    const db = new OrderedDatabase(events);
+    const { app } = harness(
+      { getSession: sessionAs("editor") },
+      { db, kv: new OrderedKv(events) },
+    );
+
+    const res = await app.request(
+      "/admin/api/site-settings",
+      jsonInit("PATCH", { title: 42, facebookPixelId: null }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(events).toEqual([
+      "invalidate",
+      "invalidate",
+      "invalidate",
+      "read",
+    ]);
+  });
+
   it("does not cross failed write or invalidation boundaries", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     try {

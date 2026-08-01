@@ -26,8 +26,9 @@ export interface SiteConfigRepository {
   /** Persist the operator-owned subset exposed by the Admin settings UI.
    *  Omitted fields are unchanged; an empty string intentionally clears a
    *  value. Code-canonical locales and media purposes are never writable
-   *  through this path. */
-  updateEditable(args: UpdateEditableSiteConfigArgs): Promise<void>;
+   *  through this path. Optional during the `CmsRuntime.db` compatibility
+   *  window; canonical Mantle runtimes always provide it. */
+  updateEditable?(args: UpdateEditableSiteConfigArgs): Promise<void>;
   readLocales(): Promise<readonly string[]>;
   /** Declared media purpose taxonomy (`SiteConfig.media.purposes`).
    *  Empty array when the deployment didn't declare any — symmetric
