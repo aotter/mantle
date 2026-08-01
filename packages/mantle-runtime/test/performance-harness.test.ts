@@ -87,6 +87,43 @@ describe("performance harness", () => {
     });
   });
 
+  it("rejects a temporary sort for only the last ORDER BY term", async () => {
+    const orderedSchema: SchemaManifest = {
+      ...schema,
+      spec: {
+        ...schema.spec,
+        indexes: [["tenantId"]],
+      },
+    };
+    const baseView = publicView("orders-by-tenant", {
+      gte: { field: "tenantId", value: "tenantId-0" },
+    });
+    const orderedView: ViewManifest = {
+      ...baseView,
+      spec: {
+        ...baseView.spec,
+        orderBy: [
+          { field: "tenantId", direction: "desc" },
+          { field: "updatedAt", direction: "desc" },
+        ],
+      },
+    };
+
+    const report = await inspectIndexCoverage([orderedSchema, orderedView], {
+      requirePublic: true,
+      rowsPerSchema: 1_000,
+    });
+
+    expect(report.paths[0]?.plan).toContainEqual(
+      expect.stringMatching(/USE TEMP B-TREE.*ORDER BY/),
+    );
+    expect(report.paths[0]).toMatchObject({
+      temporarySort: true,
+      passed: false,
+      findings: ["temporary ORDER BY B-tree"],
+    });
+  });
+
   it("reports HTTP percentiles and optional D1 metric headers", async () => {
     let request = 0;
     const fetcher: typeof globalThis.fetch = async () => {

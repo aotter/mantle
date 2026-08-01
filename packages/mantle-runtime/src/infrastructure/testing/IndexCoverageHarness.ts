@@ -133,7 +133,7 @@ function inspectView(
   const indexedScan = entryScans.some(
     (detail) => /\bUSING (?:COVERING )?INDEX\b/.test(detail),
   );
-  const temporarySort = plan.some((detail) => /USE TEMP B-TREE FOR ORDER BY/.test(detail));
+  const temporarySort = plan.some((detail) => /USE TEMP B-TREE.*ORDER BY/.test(detail));
   const accessFields = [...dataAccessFields(view)].sort();
   const filterFields = [...dataFilterFields(view)].sort();
   const schemaIndexFields = declaredIndexFields(schema);
