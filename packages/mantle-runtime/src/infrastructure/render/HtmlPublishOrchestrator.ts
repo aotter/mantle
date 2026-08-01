@@ -107,6 +107,23 @@ export class HtmlPublishOrchestrator implements PublishOrchestrator {
     ]);
   }
 
+  async invalidateAll(): Promise<void> {
+    await Promise.all([
+      this.deletePrefix("entry:html:"),
+      this.deletePrefix("list:html:"),
+      this.deletePrefix("llms:"),
+    ]);
+  }
+
+  private async deletePrefix(prefix: string): Promise<void> {
+    let cursor: string | null = null;
+    do {
+      const page = await this.kv.list(prefix, cursor);
+      await Promise.all(page.keys.map((key) => this.kv.delete(key)));
+      cursor = page.cursor;
+    } while (cursor);
+  }
+
   private async renderEntry(
     entry: Entry,
     site: SiteConfig,

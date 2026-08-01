@@ -84,10 +84,18 @@ function parseMediaPurposes(raw: string | undefined): readonly MediaPurposePolic
 }
 
 export class DatabaseSiteConfigRepository implements SiteConfigRepository {
+  private cacheLocales = false;
+  private cachedLocales: readonly string[] | undefined;
+
   constructor(private readonly db: DatabaseDriver) {}
 
   async seed(defaults: SiteDefaults | undefined): Promise<void> {
-    if (!defaults) return;
+    this.cacheLocales = false;
+    this.cachedLocales = undefined;
+    if (!defaults) {
+      this.cacheLocales = true;
+      return;
+    }
     assertSiteDefaultsCanonical(defaults);
     const stmts = [];
     const insertOnce = (key: string, value: string) =>
@@ -138,6 +146,7 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
       if (value === undefined) continue;
       await this.upsertIfChanged(key, value);
     }
+    this.cacheLocales = true;
   }
 
   private async upsertIfChanged(key: string, value: string): Promise<void> {
@@ -189,11 +198,14 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
   }
 
   async readLocales(): Promise<readonly string[]> {
+    if (this.cacheLocales && this.cachedLocales) return this.cachedLocales;
     const row = await this.db
       .prepare(`SELECT value FROM site_config WHERE key = ?`)
       .bind(KEYS.locales)
       .first<{ value: string }>();
-    return splitCsv(row?.value);
+    const locales = splitCsv(row?.value);
+    if (this.cacheLocales) this.cachedLocales = locales;
+    return locales;
   }
 
   async readMediaPurposes(): Promise<readonly MediaPurposePolicy[]> {

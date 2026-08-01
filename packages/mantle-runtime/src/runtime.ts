@@ -65,6 +65,7 @@ import {
   UpdateMediaAssetUseCase,
   DeleteMediaAssetUseCase,
 } from "./usecase/media/index.js";
+import { UpdateSiteSettingsUseCase } from "./usecase/site/index.js";
 import type { PublicPathResolver } from "./domain/service/PublicPathResolver.js";
 
 import type { MediaAsset } from "./domain/port/MediaStorage.js";
@@ -72,6 +73,7 @@ import { TemplateRegistry as TemplateRegistryImpl } from "./domain/model/Templat
 import { TriggerIndex } from "./domain/service/TriggerIndex.js";
 import { DatabaseEntryRepository } from "./infrastructure/persistence/DatabaseEntryRepository.js";
 import { DatabaseMediaAssetRepository } from "./infrastructure/persistence/DatabaseMediaAssetRepository.js";
+import { DatabasePendingUploadRepository } from "./infrastructure/persistence/DatabasePendingUploadRepository.js";
 import { DatabaseSiteConfigRepository } from "./infrastructure/persistence/DatabaseSiteConfigRepository.js";
 import { LifecycleHookingEntryRepository } from "./infrastructure/persistence/LifecycleHookingEntryRepository.js";
 import { HtmlPublishOrchestrator } from "./infrastructure/render/index.js";
@@ -117,7 +119,7 @@ export interface CreateCmsRuntimeArgs {
    *  admin upload endpoints are not registered — uploads return 404 /
    *  `MEDIA_NOT_CONFIGURED`. When set, the runtime wires
    *  `CreateMediaUpload` + `CommitMediaUpload` use cases backed by
-   *  this adapter. The KV mapping for pending uploads reuses `args.kv`. */
+   *  this adapter. Pending create-to-commit state remains canonical in DB. */
   readonly mediaStorage?: MediaStorage;
   /** Whether the SVG mime is allowed in `CreateMediaUpload`. Default
    *  false; object stores don't sanitize SVG payloads. */
@@ -164,6 +166,7 @@ export interface CmsRuntime {
   readonly validateBoot: ValidateBootUseCase;
   readonly publishOrchestrator: PublishOrchestrator;
   readonly siteConfig: SiteConfigRepository;
+  readonly updateSiteSettings: UpdateSiteSettingsUseCase;
   /** The resolver passed at boot, or `null` when the consumer didn't
    *  supply one. Adapters use this to derive URLs (sitemap, SEO
    *  hreflangs) without rebuilding the mapping. */
@@ -275,6 +278,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
   const composeEntrySeoMeta = new ComposeEntrySeoMetaUseCase(entryReader);
   const composeLlmsTxt = new ComposeLlmsTxtUseCase(entryReader);
   const mediaAssets = new DatabaseMediaAssetRepository(args.db);
+  const pendingUploads = new DatabasePendingUploadRepository(args.db);
   const publishOrchestrator = new HtmlPublishOrchestrator(
     entryReader,
     args.kv,
@@ -283,6 +287,10 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     composeLlmsTxt,
     schemasByName,
     mediaAssets,
+  );
+  const updateSiteSettings = new UpdateSiteSettingsUseCase(
+    siteConfig,
+    publishOrchestrator,
   );
 
   // Content / view / boot use cases. They see `entries` only as the
@@ -357,7 +365,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
         storage: args.mediaStorage,
         createUpload: new CreateMediaUploadUseCase(
           args.mediaStorage,
-          args.kv,
+          pendingUploads,
           clock,
           idgen,
           siteConfig,
@@ -365,7 +373,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
         ),
         commitUpload: new CommitMediaUploadUseCase(
           args.mediaStorage,
-          args.kv,
+          pendingUploads,
           clock,
           mediaAssets,
         ),
@@ -403,6 +411,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     validateBoot,
     publishOrchestrator,
     siteConfig,
+    updateSiteSettings,
     publicPathResolver,
     media,
     runDeferredHook,

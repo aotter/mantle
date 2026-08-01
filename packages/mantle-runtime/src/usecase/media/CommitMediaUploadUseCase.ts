@@ -1,7 +1,7 @@
 import { DiagnosticError } from "@aotter/mantle-spec";
 import type { Clock } from "../../domain/port/Clock.js";
-import type { KvCache } from "../../domain/port/KvCache.js";
 import type { MediaAssetRepository } from "../../domain/port/MediaAssetRepository.js";
+import type { PendingUploadRepository } from "../../domain/port/PendingUploadRepository.js";
 import type {
   CommitUploadVariantSpec,
   MediaAsset,
@@ -9,12 +9,10 @@ import type {
 } from "../../domain/port/MediaStorage.js";
 import type { CommitMediaUploadRequest } from "../dto/media/index.js";
 import { mediaUploadExpiredDiagnostic } from "./diagnostics.js";
-import { PENDING_UPLOAD_KV_PREFIX } from "./mediaAllowlist.js";
-import type { PendingUploadRecord } from "./PendingUploadRecord.js";
 
 /**
  * Finalise the variant bundle issued by `create_media_upload`. Reads
- * the `PendingUploadRecord` from KV (each variant's expected
+ * the canonical `PendingUploadRecord` (each variant's expected
  * mime + size + storageKey), asks the adapter to verify every
  * uploaded object (HEAD + bytes), and on success persists the
  * resulting `MediaAsset` to the `media_assets` table.
@@ -26,21 +24,20 @@ import type { PendingUploadRecord } from "./PendingUploadRecord.js";
 export class CommitMediaUploadUseCase {
   constructor(
     private readonly storage: MediaStorage,
-    private readonly kv: KvCache,
+    private readonly pendingUploads: PendingUploadRepository,
     private readonly clock: Clock,
     private readonly assets: MediaAssetRepository,
   ) {}
 
   async execute(request: CommitMediaUploadRequest): Promise<MediaAsset> {
     const opPath = "usecase/CommitMediaUpload";
-    const kvKey = `${PENDING_UPLOAD_KV_PREFIX}${request.uploadGroupId}`;
-    const raw = await this.kv.get(kvKey);
-    if (!raw) {
+    const record = await this.pendingUploads.findById(request.uploadGroupId);
+    if (!record || record.expiresAt <= this.clock.now()) {
+      if (record) await this.pendingUploads.delete(request.uploadGroupId);
       throw new DiagnosticError(
         mediaUploadExpiredDiagnostic(opPath, request.uploadGroupId),
       );
     }
-    const record = JSON.parse(raw) as PendingUploadRecord;
 
     const variantSpecs: ReadonlyArray<CommitUploadVariantSpec> = record.variants.map((v) => ({
       mimeType: v.mimeType,
@@ -60,8 +57,7 @@ export class CommitMediaUploadUseCase {
 
     await this.assets.save(asset);
 
-    // Best-effort cleanup. KV TTL covers us if delete fails.
-    await this.kv.delete(kvKey).catch(() => undefined);
+    await this.pendingUploads.delete(request.uploadGroupId);
 
     return asset;
   }

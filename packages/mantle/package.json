@@ -13,6 +13,9 @@
   "sideEffects": false,
   "main": "./dist/spec.js",
   "types": "./dist/spec.d.ts",
+  "bin": {
+    "mantle-harness": "./dist/harness-cli.js"
+  },
   "publishConfig": {
     "access": "public",
     "tag": "alpha",
@@ -30,6 +33,10 @@
     "./runtime": {
       "types": "./dist/runtime.d.ts",
       "import": "./dist/runtime.js"
+    },
+    "./runtime/testing": {
+      "types": "./dist/runtime-testing.d.ts",
+      "import": "./dist/runtime-testing.js"
     },
     "./cloudflare": {
       "types": "./dist/cloudflare.d.ts",

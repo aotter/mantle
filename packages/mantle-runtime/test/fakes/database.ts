@@ -14,8 +14,8 @@ import type {
  * diverging test is easy to diagnose.
  *
  * Tables modelled: `entries`, `revisions`, `approvals`, `users`,
- * `staff`, `sessions`, `site_config`. Migrations runner records
- * applied ids in a Set; no DDL execution.
+ * `staff`, `sessions`, `site_config`, pending uploads, and media assets.
+ * Migrations runner records applied ids in a Set; no DDL execution.
  */
 interface EntryRecord {
   id: string;
@@ -48,6 +48,10 @@ export class InMemoryDatabase implements DatabaseDriver {
   staff = new Map<string, StaffRecord>();
   users = new Map<string, UserRecord>();
   siteConfig = new Map<string, string>();
+  pendingUploads = new Map<string, {
+    record: string;
+    expires_at: number;
+  }>();
   mediaAssets = new Map<string, {
     id: string;
     created_at: number;
@@ -371,6 +375,33 @@ class InMemoryStatement implements PreparedStatement {
       return { rows: v !== undefined ? [{ value: v }] : [], changes: 0 };
     }
 
+    if (sql === "DELETE FROM pending_media_uploads WHERE expires_at <= ?") {
+      const cutoff = p[0] as number;
+      let changes = 0;
+      for (const [id, upload] of this.db.pendingUploads) {
+        if (upload.expires_at <= cutoff) {
+          this.db.pendingUploads.delete(id);
+          changes += 1;
+        }
+      }
+      return { rows: [], changes };
+    }
+    if (sql.startsWith("INSERT INTO pending_media_uploads")) {
+      const [id, record, expires_at] = p as [string, string, number];
+      this.db.pendingUploads.set(id, { record, expires_at });
+      return { rows: [], changes: 1 };
+    }
+    if (sql === "SELECT record FROM pending_media_uploads WHERE id = ?") {
+      const upload = this.db.pendingUploads.get(p[0] as string);
+      return { rows: upload ? [{ record: upload.record }] : [], changes: 0 };
+    }
+    if (sql === "DELETE FROM pending_media_uploads WHERE id = ?") {
+      return {
+        rows: [],
+        changes: this.db.pendingUploads.delete(p[0] as string) ? 1 : 0,
+      };
+    }
+
     // INSERT INTO media_assets (...) ... ON CONFLICT(id) DO UPDATE SET ...
     if (sql.startsWith("INSERT INTO media_assets")) {
       const [id, created_at, owner_id, alt, caption, variants, metadata] = p as [
@@ -518,6 +549,15 @@ function runEntryReaderQuery(
     }
     if (condition === "status = 'published'") {
       predicates.push((row) => row.status === "published");
+      continue;
+    }
+    if (condition === "entry_locale IS NULL") {
+      predicates.push((row) => readEntryDataField(row, "locale") == null);
+      continue;
+    }
+    if (condition === "entry_locale = ?") {
+      const expected = params[paramIndex++];
+      predicates.push((row) => readEntryDataField(row, "locale") === expected);
       continue;
     }
     if (condition === "id <> ?") {

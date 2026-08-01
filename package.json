@@ -18,6 +18,7 @@
     "build": "pnpm -r --filter '@aotter/mantle*' build",
     "typecheck": "pnpm -r --filter '@aotter/mantle*' typecheck",
     "test": "pnpm -r --filter '@aotter/mantle*' test",
+    "bench:wrangler": "pnpm --filter @aotter/mantle-cloudflare bench:wrangler",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "check": "pnpm run check:boundaries && pnpm build && pnpm typecheck && pnpm test"
   },

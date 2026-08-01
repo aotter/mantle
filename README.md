@@ -37,7 +37,9 @@ operations.
 
 Generated projects include the `mantle` authoring CLI from
 `@aotter/mantle-spec`: `validate`, `introspect`, `emit-openapi`, and
-`emit-types`.
+`emit-types`. The umbrella package also ships `mantle-harness` for crowded
+SQLite index coverage and live Worker/API/page sampling; see
+[`docs/performance-harness.md`](docs/performance-harness.md).
 
 > **Prerelease.** This repo is a clean rebuild of the v0.0.x POC. Until v0.1.0 tags, the API surface is in flux — alpha and beta releases may introduce breaking changes. Current published versions and channel policy are documented in [`docs/release-process.md`](docs/release-process.md). Track the rebuild plan at [#1](https://github.com/aotter/mantle/issues/1).
 

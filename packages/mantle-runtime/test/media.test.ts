@@ -5,7 +5,7 @@ import {
   CommitMediaUploadUseCase,
   CreateMediaUploadUseCase,
 } from "../src/usecase/media/index.js";
-import { InMemoryKv } from "./fakes/kv.js";
+import { InMemoryPendingUploadRepository } from "./fakes/pending.js";
 import { InMemorySiteConfigRepository } from "./fakes/site-config.js";
 
 const DEFAULT_PURPOSES = ["post-cover", "product-cover"] as const;
@@ -119,14 +119,14 @@ const THREE_VARIANTS = [
 
 function makeCreateUseCase(opts: {
   storage: FakeMediaStorage;
-  kv: InMemoryKv;
+  pending: InMemoryPendingUploadRepository;
   site: InMemorySiteConfigRepository;
   idgen?: CountingIdGenerator;
   allowSvg?: boolean;
 }): CreateMediaUploadUseCase {
   return new CreateMediaUploadUseCase(
     opts.storage,
-    opts.kv,
+    opts.pending,
     fakeClock,
     opts.idgen ?? new CountingIdGenerator(),
     opts.site,
@@ -137,9 +137,9 @@ function makeCreateUseCase(opts: {
 describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
   it("rejects undeclared purpose with MEDIA_PURPOSE_REJECTED (fail-closed)", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository(DEFAULT_PURPOSES);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     await expect(
       useCase.execute({
         filename: "x.png",
@@ -151,9 +151,9 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
   it("rejects every purpose when none declared (fail-closed)", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository([]);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     await expect(
       useCase.execute({
         filename: "x.png",
@@ -165,9 +165,9 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
   it("rejects when variants don't cover the required mime set", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository(DEFAULT_PURPOSES);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     await expect(
       useCase.execute({
         filename: "x.png",
@@ -182,9 +182,9 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
   it("rejects when no primary variant is declared", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository(DEFAULT_PURPOSES);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     await expect(
       useCase.execute({
         filename: "x.png",
@@ -196,9 +196,9 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
   it("rejects when two variants share role='primary' (storage-key collision)", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository(DEFAULT_PURPOSES);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     await expect(
       useCase.execute({
         filename: "x.png",
@@ -215,9 +215,9 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
   it("rejects when two variants share the same (mimeType, role) pair", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository(DEFAULT_PURPOSES);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     await expect(
       useCase.execute({
         filename: "x.png",
@@ -242,7 +242,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
   // covers the use-case-level upload validation.
   it("accepts png-primary for a slot declared as 'image/jpg,image/png'", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository([
       {
         name: "product-cover",
@@ -255,7 +255,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
         },
       },
     ]);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     const result = await useCase.execute({
       filename: "logo.png",
       purpose: "product-cover",
@@ -271,7 +271,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
   it("accepts jpeg-primary for the same slot 0 = 'image/jpg,image/png' policy", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository([
       {
         name: "product-cover",
@@ -284,7 +284,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
         },
       },
     ]);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     const result = await useCase.execute({
       filename: "photo.jpg",
       purpose: "product-cover",
@@ -307,7 +307,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
   // primary→slot-0.
   it("accepts a primary variant whose mime is not in slot 0 (role independent of slot position)", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository([
       {
         name: "product-cover",
@@ -320,7 +320,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
         },
       },
     ]);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     const result = await useCase.execute({
       filename: "photo.jpg",
       purpose: "product-cover",
@@ -341,7 +341,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
   it("rejects a third option that isn't in slot 0's accepted set", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository([
       {
         name: "product-cover",
@@ -354,7 +354,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
         },
       },
     ]);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     await expect(
       useCase.execute({
         filename: "x.gif",
@@ -373,7 +373,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
   it("rejects extra mime types outside the purpose's required set", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository([
       {
         name: "post-cover",
@@ -385,7 +385,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
         },
       },
     ]);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     await expect(
       useCase.execute({
         filename: "x.jpg",
@@ -406,9 +406,9 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
     "rejects non-positive-integer byteSize: %s",
     async (badSize) => {
       const storage = new FakeMediaStorage();
-      const kv = new InMemoryKv();
+      const pending = new InMemoryPendingUploadRepository();
       const site = new InMemorySiteConfigRepository(DEFAULT_PURPOSES);
-      const useCase = makeCreateUseCase({ storage, kv, site });
+      const useCase = makeCreateUseCase({ storage, pending, site });
       await expect(
         useCase.execute({
           filename: "x.jpg",
@@ -426,7 +426,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
   it("rejects oversized variant at create time (before signing)", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository([
       {
         name: "post-cover",
@@ -438,7 +438,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
         },
       },
     ]);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     await expect(
       useCase.execute({
         filename: "x.jpg",
@@ -456,7 +456,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
   it("forwards per-mime maxBytes from the purpose policy to the adapter", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository([
       {
         name: "post-cover",
@@ -468,7 +468,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
         },
       },
     ]);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     await useCase.execute({
       filename: "x.png",
       purpose: "post-cover",
@@ -488,9 +488,9 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
   it("rejects suspicious sizing: avif > jpeg", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository(DEFAULT_PURPOSES);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     await expect(
       useCase.execute({
         filename: "unoptimized.jpg",
@@ -506,9 +506,9 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
   it("rejects suspicious sizing: webp > jpeg", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository(DEFAULT_PURPOSES);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     await expect(
       useCase.execute({
         filename: "unoptimized.jpg",
@@ -524,7 +524,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
   it("skips suspicious-sizing check when no classic fallback present", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository([
       {
         name: "avif-only",
@@ -532,7 +532,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
         maxBytes: { "image/avif": 1_000_000 },
       },
     ]);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     await expect(
       useCase.execute({
         filename: "avif-only.avif",
@@ -544,7 +544,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
   it("rejects mime types outside the allowlist on any variant", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository([
       {
         name: "post-cover",
@@ -552,7 +552,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
         maxBytes: { "application/octet-stream": 1_000_000 },
       },
     ]);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     await expect(
       useCase.execute({
         filename: "x.exe",
@@ -562,11 +562,11 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
     ).rejects.toMatchObject({ diagnostic: { code: "MEDIA_MIME_REJECTED" } });
   });
 
-  it("persists a KV record keyed by uploadGroupId", async () => {
+  it("persists canonical pending state keyed by uploadGroupId", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository(DEFAULT_PURPOSES);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     const result = await useCase.execute({
       filename: "cover.png",
       purpose: "post-cover",
@@ -574,20 +574,19 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
     });
     expect(result.uploadGroupId).toBe("asset-1");
     expect(result.capabilities).toHaveLength(3);
-    const raw = await kv.get(`media:pending:${result.uploadGroupId}`);
-    expect(raw).not.toBeNull();
-    const record = JSON.parse(raw!);
-    expect(record.purpose).toBe("post-cover");
-    expect(record.filename).toBe("cover.png");
-    expect(record.variants).toHaveLength(3);
-    expect(record.variants[0].storageKey).toContain("asset-1");
+    const record = await pending.findById(result.uploadGroupId);
+    expect(record).not.toBeNull();
+    expect(record?.purpose).toBe("post-cover");
+    expect(record?.filename).toBe("cover.png");
+    expect(record?.variants).toHaveLength(3);
+    expect(record?.variants[0]?.storageKey).toContain("asset-1");
   });
 
   it("forwards filename to storage.createUpload", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository(DEFAULT_PURPOSES);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     await useCase.execute({
       filename: "hero-2026.png",
       purpose: "post-cover",
@@ -599,7 +598,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
   it("rejects SVG by default", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository([
       {
         name: "post-cover",
@@ -607,7 +606,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
         maxBytes: { "image/svg+xml": 1_000_000 },
       },
     ]);
-    const useCase = makeCreateUseCase({ storage, kv, site });
+    const useCase = makeCreateUseCase({ storage, pending, site });
     await expect(
       useCase.execute({
         filename: "x.svg",
@@ -619,7 +618,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
   it("accepts SVG when allowSvg flag is on", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository([
       {
         name: "post-cover",
@@ -627,7 +626,7 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
         maxBytes: { "image/svg+xml": 1_000_000 },
       },
     ]);
-    const useCase = makeCreateUseCase({ storage, kv, site, allowSvg: true });
+    const useCase = makeCreateUseCase({ storage, pending, site, allowSvg: true });
     const r = await useCase.execute({
       filename: "x.svg",
       purpose: "post-cover",
@@ -639,28 +638,28 @@ describe("CreateMediaUploadUseCase (#272 multi-variant)", () => {
 
 
 describe("CommitMediaUploadUseCase (#272)", () => {
-  it("returns MEDIA_UPLOAD_EXPIRED when KV record is missing", async () => {
+  it("returns MEDIA_UPLOAD_EXPIRED when pending state is missing", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const assets = new InMemoryMediaAssetRepository();
-    const useCase = new CommitMediaUploadUseCase(storage, kv, fakeClock, assets);
+    const useCase = new CommitMediaUploadUseCase(storage, pending, fakeClock, assets);
     await expect(useCase.execute({ uploadGroupId: "missing" })).rejects.toMatchObject({
       diagnostic: { code: "MEDIA_UPLOAD_EXPIRED" },
     });
   });
 
-  it("persists the committed asset + clears the pending KV record", async () => {
+  it("persists the committed asset + clears canonical pending state", async () => {
     const storage = new FakeMediaStorage();
-    const kv = new InMemoryKv();
+    const pending = new InMemoryPendingUploadRepository();
     const site = new InMemorySiteConfigRepository(DEFAULT_PURPOSES);
     const assets = new InMemoryMediaAssetRepository();
-    const create = makeCreateUseCase({ storage, kv, site });
+    const create = makeCreateUseCase({ storage, pending, site });
     const created = await create.execute({
       filename: "x.png",
       purpose: "post-cover",
       variants: THREE_VARIANTS,
     });
-    const commit = new CommitMediaUploadUseCase(storage, kv, fakeClock, assets);
+    const commit = new CommitMediaUploadUseCase(storage, pending, fakeClock, assets);
     const asset = await commit.execute({
       uploadGroupId: created.uploadGroupId,
       alt: "an image",
@@ -670,12 +669,31 @@ describe("CommitMediaUploadUseCase (#272)", () => {
     expect(asset.variants).toHaveLength(3);
     expect(asset.variants.find((v) => v.role === "primary")?.mimeType).toBe("image/jpeg");
     expect(asset.alt).toBe("an image");
-    // filename round-trips from create-time KV record into the
+    // filename round-trips from create-time pending state into the
     // commit-time CommitUploadArgs so the adapter can stamp it.
     expect(storage.commitCalls).toHaveLength(1);
     expect(storage.commitCalls[0]!.filename).toBe("x.png");
     expect(assets.saved).toHaveLength(1);
     expect(assets.saved[0]!.id).toBe(created.uploadGroupId);
-    expect(await kv.get(`media:pending:${created.uploadGroupId}`)).toBeNull();
+    expect(await pending.findById(created.uploadGroupId)).toBeNull();
+  });
+
+  it("rejects and removes expired canonical pending state", async () => {
+    const storage = new FakeMediaStorage();
+    const pending = new InMemoryPendingUploadRepository();
+    const assets = new InMemoryMediaAssetRepository();
+    await pending.save("expired", {
+      purpose: "post-cover",
+      filename: "old.png",
+      variants: [],
+      createdAt: FROZEN_NOW - 2_000,
+      expiresAt: FROZEN_NOW - 1,
+    });
+
+    const commit = new CommitMediaUploadUseCase(storage, pending, fakeClock, assets);
+    await expect(commit.execute({ uploadGroupId: "expired" })).rejects.toMatchObject({
+      diagnostic: { code: "MEDIA_UPLOAD_EXPIRED" },
+    });
+    await expect(pending.findById("expired")).resolves.toBeNull();
   });
 });

@@ -56,3 +56,46 @@ describe("D1DatabaseDriver migrations", () => {
     expect(fake.batch).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("D1DatabaseDriver query observer", () => {
+  it("reports D1 metadata without changing the default driver contract", async () => {
+    const meta = {
+      duration: 2,
+      size_after: 0,
+      rows_read: 7,
+      rows_written: 0,
+      last_row_id: 0,
+      changed_db: false,
+      changes: 0,
+    };
+    const statement = (sql: string): D1PreparedStatement => ({
+      bind: () => statement(sql),
+      first: async () => {
+        throw new Error("observer mode should use all() so D1 metadata is available");
+      },
+      all: async <T>() => ({ success: true, meta, results: [{ id: "one" }] as T[] }),
+      run: async () => ({ success: true, meta }),
+    }) as D1PreparedStatement;
+    const db = {
+      prepare: vi.fn((sql: string) => statement(sql)),
+      batch: vi.fn(async (statements: readonly D1PreparedStatement[]) =>
+        statements.map(() => ({ success: true, meta, results: [] }))),
+    } as unknown as D1Database;
+    const observed: Array<{ sql: string; rowsRead: number }> = [];
+    const driver = new D1DatabaseDriver(db, ({ sql, rowsRead }) => {
+      observed.push({ sql, rowsRead });
+    });
+
+    await expect(driver.prepare("SELECT one").first<{ id: string }>()).resolves.toEqual({ id: "one" });
+    await driver.prepare("SELECT many").all();
+    await driver.prepare("UPDATE one").run();
+    await driver.batch([driver.prepare("SELECT batch")]);
+
+    expect(observed).toEqual([
+      { sql: "SELECT one", rowsRead: 7 },
+      { sql: "SELECT many", rowsRead: 7 },
+      { sql: "UPDATE one", rowsRead: 7 },
+      { sql: "SELECT batch", rowsRead: 7 },
+    ]);
+  });
+});

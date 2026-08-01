@@ -415,19 +415,14 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     runUseCase("PATCH /admin/api/site-settings", async () => {
       const runtime = await ref.get();
       const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
-      const siteConfig = runtime.siteConfig;
-      if (!siteConfig.updateEditable) {
-        throw new Error("SiteConfigRepository.updateEditable is unavailable");
-      }
-      await siteConfig.updateEditable({
+      const site = await runtime.updateSiteSettings.execute({
         brand: stringField(body.brand),
         title: stringField(body.title),
         description: stringField(body.description),
         ga4MeasurementId: stringField(body.ga4MeasurementId),
         facebookPixelId: stringField(body.facebookPixelId),
       });
-      await invalidatePublicRenderCache(runtime);
-      return adminSiteSettings(await siteConfig.load());
+      return adminSiteSettings(site);
     }),
   );
 
@@ -1431,22 +1426,6 @@ function adminSiteSettings(site: SiteConfig) {
   };
 }
 
-async function invalidatePublicRenderCache(runtime: CmsRuntime): Promise<void> {
-  await Promise.all([
-    deleteKvPrefix(runtime, "entry:html:"),
-    deleteKvPrefix(runtime, "list:html:"),
-    deleteKvPrefix(runtime, "llms:"),
-  ]);
-}
-
-async function deleteKvPrefix(runtime: CmsRuntime, prefix: string): Promise<void> {
-  let cursor: string | null = null;
-  do {
-    const page = await runtime.kv.list(prefix, cursor);
-    await Promise.all(page.keys.map((key) => runtime.kv.delete(key)));
-    cursor = page.cursor;
-  } while (cursor);
-}
 function expectedVersionField(value: unknown, path: string): number {
   if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return value;
   throw new DiagnosticError(

@@ -117,11 +117,49 @@ Do not assume Cloudflare unless the project imports `@aotter/mantle/cloudflare`
 or its adapter config is visible. A future Netlify adapter should satisfy the
 same Core workflow through its own ports and provider setup.
 
+Site code is a consumer of this abstraction. Use Manifests, runtime use cases,
+`entryReader`, and `siteConfig`; do not query Mantle-owned `entries` or
+`site_config`, reach through deprecated `runtime.db`, copy generated-column
+names, or construct SDK KV keys. Cloudflare bindings belong only at the
+composition root. If a normal feature cannot be expressed through a
+purpose-shaped surface, treat that as a Core abstraction gap instead of
+teaching the project Mantle internals.
+
+## Performance Loop
+
+After changing a Schema index, View filter/order, public API, or rendered page,
+run the project's index check when present. Otherwise run the installed
+harness directly:
+
+```bash
+pnpm exec mantle-harness indexes --require-public --format text
+```
+
+The check uses crowded real SQLite and the shipped compiler. It complements
+`pnpm validate`; it does not replace correctness validation. Declare the
+smallest ordered index justified by the measured path and respect SQLite's
+leftmost-prefix rule. Do not change user-visible filter or ordering semantics
+just to make the gate pass. Do not add every permutation or cache every read.
+
+For relevant Cloudflare serving changes, start the project and sample the
+actual routes:
+
+```bash
+pnpm exec mantle-harness http \
+  --base-url http://127.0.0.1:8787 \
+  --route page=/en/example \
+  --rounds 20 --warmup 2 --format text
+```
+
+Prefer query plan, query count, `rows_read` scaling, and cache MISS/HIT
+evidence. Do not create CI gates from absolute local milliseconds.
+
 ## Loop
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm validate
+pnpm check:indexes # when the project provides it
 pnpm typecheck
 pnpm check
 ```

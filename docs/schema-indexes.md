@@ -141,7 +141,20 @@ site still owns actor resolution, account rules, aggregation, and output.
 
 ## Verify a plan
 
-Inspect the real database when adding or changing a hot path:
+Prefer the shipped crowded-data harness for a manifest View:
+
+```bash
+pnpm exec mantle-harness indexes --require-public --format text
+```
+
+It applies Mantle's real canonical migrations and generated DDL, seeds skewed
+rows, compiles and executes the real View SQL, then records
+`EXPLAIN QUERY PLAN`. By default findings are advisory; use `--require-public`
+or repeat `--require <view-name>` only for paths whose performance is part of
+the contract. See [the performance harness](./performance-harness.md).
+
+For site-owned SQL that cannot be represented by a View, inspect the real
+database directly when adding or changing a hot path:
 
 ```sql
 PRAGMA index_list("entries");

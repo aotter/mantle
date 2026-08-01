@@ -4,7 +4,6 @@ import {
   entryHtmlKeyFromParts,
   entryMarkdownKeyFromParts,
   inferLocaleFromPath,
-  isKnownLocale,
   listHtmlKey,
   llmsTxtKey,
   serializeEntryAsMarkdown,
@@ -146,14 +145,15 @@ export function mountPublicRoutes(
   // response stays fast and subsequent requests hit the warm KV.
   app.get("/llms.txt", async (c) => {
     const runtime = await ref.get();
-    const site = await runtime.siteConfig.load();
-    return readKvWithLiveFallback(
+    return readThroughCache(
       runtime.kv,
       llmsTxtKey(""),
       TEXT_PUBLIC,
-      () => composeRootLlmsTxt(runtime, site),
-      safeExecutionCtx(c),
-      ROOT_LLMS_FALLBACK_TTL_SECONDS,
+      async () => composeRootLlmsTxt(runtime, await runtime.siteConfig.load()),
+      {
+        executionCtx: safeExecutionCtx(c),
+        expirationTtl: ROOT_LLMS_FALLBACK_TTL_SECONDS,
+      },
     );
   });
 
@@ -182,7 +182,7 @@ export function mountPublicRoutes(
     app.get("/:locale", async (c) => {
       const runtime = await ref.get();
       const site = await runtime.siteConfig.load();
-      const locale = canonicalLocaleParam(c.req.param("locale"), site);
+      const locale = canonicalLocaleParam(c.req.param("locale"), site.locales);
       const ctx = buildCtx(c, runtime, site, locale ?? inferLocaleFromPath(c.req.path, site));
       if (locale === null) return options.notFoundRenderer(ctx);
       return options.homeRenderer!(ctx);
@@ -191,15 +191,20 @@ export function mountPublicRoutes(
 
   app.get("/:locale/llms.txt", async (c) => {
     const runtime = await ref.get();
-    const site = await runtime.siteConfig.load();
-    const locale = canonicalLocaleParam(c.req.param("locale"), site);
+    const locale = canonicalLocaleParam(
+      c.req.param("locale"),
+      await runtime.siteConfig.readLocales(),
+    );
     if (locale === null) return new Response("not found", { status: 404, headers: TEXT_NO_STORE });
-    return readKvWithLiveFallback(
+    return readThroughCache(
       runtime.kv,
       llmsTxtKey(locale),
       TEXT_PUBLIC,
-      () => runtime.composeLlmsTxt.execute({ site, locale }),
-      safeExecutionCtx(c),
+      async () => runtime.composeLlmsTxt.execute({
+        site: await runtime.siteConfig.load(),
+        locale,
+      }),
+      { executionCtx: safeExecutionCtx(c) },
     );
   });
 
@@ -228,12 +233,20 @@ function mountCollection(
   if (route.listRoute) {
     app.get(`/:locale${segPath}`, async (c) => {
       const runtime = await ref.get();
-      const site = await runtime.siteConfig.load();
-      const locale = canonicalLocaleParam(c.req.param("locale"), site);
-      const ctx = buildCtx(c, runtime, site, locale ?? inferLocaleFromPath(c.req.path, site));
-      const notFound = (): Promise<Response> | Response => options.notFoundRenderer(ctx);
+      const locale = canonicalLocaleParam(
+        c.req.param("locale"),
+        await runtime.siteConfig.readLocales(),
+      );
+      const loadSite = lazySite(runtime);
+      const notFound = async (): Promise<Response> => {
+        const site = await loadSite();
+        return options.notFoundRenderer(
+          buildCtx(c, runtime, site, locale ?? inferLocaleFromPath(c.req.path, site)),
+        );
+      };
       if (locale === null) return notFound();
       if (liveDev) {
+        const site = await loadSite();
         const html = await runtime.renderListLive.execute({
           collection: route.collection,
           locale,
@@ -246,8 +259,11 @@ function mountCollection(
         runtime.renderListLive.execute({
           collection: route.collection,
           locale,
-          site,
-        }), notFound);
+          site: await loadSite(),
+        }), {
+          fallback: notFound,
+          executionCtx: safeExecutionCtx(c),
+        });
     });
   }
 
@@ -260,8 +276,10 @@ function mountCollection(
     // reads — the `:slug` group stays single-segment.
     app.get(`/:locale${segPath}/:slug{[^/]+\\.md}`, async (c) => {
       const runtime = await ref.get();
-      const site = await runtime.siteConfig.load();
-      const locale = canonicalLocaleParam(c.req.param("locale"), site);
+      const locale = canonicalLocaleParam(
+        c.req.param("locale"),
+        await runtime.siteConfig.readLocales(),
+      );
       const slugParam = c.req.param("slug") ?? "";
       const slug = slugParam.endsWith(".md") ? slugParam.slice(0, -3) : slugParam;
       const notFound = (): Response => new Response("not found", { status: 404, headers: TEXT_NO_STORE });
@@ -276,25 +294,39 @@ function mountCollection(
         });
         if (!entry) return null;
         return serializeEntryAsMarkdown(entry);
-      }, notFound);
+      }, {
+        fallback: notFound,
+        executionCtx: safeExecutionCtx(c),
+      });
     });
   }
 
   app.get(`/:locale${segPath}/:slug`, async (c) => {
     const runtime = await ref.get();
-    const site = await runtime.siteConfig.load();
-    const locale = canonicalLocaleParam(c.req.param("locale"), site);
+    const locale = canonicalLocaleParam(
+      c.req.param("locale"),
+      await runtime.siteConfig.readLocales(),
+    );
     const slug = c.req.param("slug");
-    const ctx = buildCtx(c, runtime, site, locale ?? inferLocaleFromPath(c.req.path, site));
-    const notFound = (): Promise<Response> | Response => options.notFoundRenderer(ctx);
+    const loadSite = lazySite(runtime);
+    const notFound = async (): Promise<Response> => {
+      const site = await loadSite();
+      return options.notFoundRenderer(
+        buildCtx(c, runtime, site, locale ?? inferLocaleFromPath(c.req.path, site)),
+      );
+    };
     if (locale === null) return notFound();
 
     const override = overrides.get(overrideKey(route.collection, slug));
-    if (override) return override.render(ctx);
+    if (override) {
+      const site = await loadSite();
+      return override.render(buildCtx(c, runtime, site, locale));
+    }
 
     if (c.req.query("preview") === "1") {
       const denied = await assertStaffSession(ref, c.req.raw);
       if (denied) return denied;
+      const site = await loadSite();
       const html = await runtime.previewEntry.execute({
         collection: route.collection,
         slug,
@@ -306,6 +338,7 @@ function mountCollection(
     }
 
     if (liveDev) {
+      const site = await loadSite();
       const html = await runtime.renderEntryLive.execute({
         collection: route.collection,
         slug,
@@ -322,10 +355,13 @@ function mountCollection(
         collection: route.collection,
         slug,
         locale,
-        site,
+        site: await loadSite(),
       });
       return html;
-    }, notFound);
+    }, {
+      fallback: notFound,
+      executionCtx: safeExecutionCtx(c),
+    });
   });
 
   if (route.homeSlug && options.homeRenderer == null) {
@@ -375,49 +411,6 @@ function safeExecutionCtx(c: Context): WaitUntilContext | undefined {
 }
 
 /**
- * KV-cached read with a live-compose fallback. KV hit → return cached.
- * KV miss → call `compose()` and return the body inline; the cache
- * write rides `ctx.waitUntil` so the response stays fast and warms
- * KV for subsequent requests. Used for `/llms.txt` + `/:locale/llms.txt`
- * so a freshly-deployed worker (or one whose KV has been wiped) doesn't
- * 404 at agents that visit before any entry has been published.
- *
- * `compose` is expected to never throw and never return empty — the
- * SDK's `ComposeLlmsTxtUseCase` always returns at least a title +
- * description header even when no entries are published. If callers
- * pass a composer that can return empty / null, the empty string is
- * still cached + returned; the route never 404s post-fallback.
- *
- * Without an `executionCtx` (tests, SSR fixtures), the write happens
- * inline. Workers requests always carry one via Hono's `c.executionCtx`.
- */
-async function readKvWithLiveFallback(
-  kv: KvCache,
-  key: string,
-  headers: Record<string, string>,
-  compose: () => Promise<string>,
-  executionCtx?: WaitUntilContext,
-  expirationTtl?: number,
-): Promise<Response> {
-  const cached = await kv.get(key);
-  if (cached !== null) {
-    return new Response(cached, { status: 200, headers });
-  }
-  const rendered = await compose();
-  const writeBack = kv.put(
-    key,
-    rendered,
-    expirationTtl === undefined ? undefined : { expirationTtl },
-  );
-  if (executionCtx) {
-    executionCtx.waitUntil(writeBack);
-  } else {
-    await writeBack;
-  }
-  return new Response(rendered, { status: 200, headers });
-}
-
-/**
  * Cross-locale aggregate body for `/llms.txt` (no `:locale` segment).
  *
  * `ComposeLlmsTxtUseCase.execute({ locale: null })` returns
@@ -452,16 +445,36 @@ async function readThroughCache(
   key: string,
   headers: Record<string, string>,
   populate: () => Promise<string | null>,
-  fallback: () => Promise<Response> | Response,
+  options: {
+    readonly fallback?: () => Promise<Response> | Response;
+    readonly executionCtx?: WaitUntilContext;
+    readonly expirationTtl?: number;
+  } = {},
 ): Promise<Response> {
   const cached = await kv.get(key);
   if (cached !== null) return new Response(cached, { status: 200, headers });
 
   const rendered = await populate();
-  if (rendered === null) return fallback();
+  if (rendered === null) {
+    if (options.fallback) return options.fallback();
+    return new Response("not found", { status: 404, headers: TEXT_NO_STORE });
+  }
 
-  await kv.put(key, rendered);
+  const writeBack = kv.put(
+    key,
+    rendered,
+    options.expirationTtl === undefined
+      ? undefined
+      : { expirationTtl: options.expirationTtl },
+  );
+  if (options.executionCtx) options.executionCtx.waitUntil(writeBack);
+  else await writeBack;
   return new Response(rendered, { status: 200, headers });
+}
+
+function lazySite(runtime: CmsRuntime): () => Promise<SiteConfig> {
+  let pending: Promise<SiteConfig> | undefined;
+  return () => pending ??= runtime.siteConfig.load();
 }
 
 function buildCtx(
@@ -473,9 +486,12 @@ function buildCtx(
   return { c, runtime, site, locale };
 }
 
-function canonicalLocaleParam(locale: string, site: SiteConfig): string | null {
-  if (!isKnownLocale(locale, site)) return null;
-  return inferLocaleFromPath(`/${locale}`, site);
+function canonicalLocaleParam(
+  locale: string,
+  locales: readonly string[],
+): string | null {
+  const target = locale.toLowerCase();
+  return locales.find((candidate) => toUrlLocale(candidate) === target) ?? null;
 }
 
 function buildOverrideIndex(
