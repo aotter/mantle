@@ -20,8 +20,8 @@ import {
 import {
   ViewParamCoercionError,
   coerceViewParams,
+  compilePathMatcher,
   evaluateAuthAll,
-  matchPath,
   type CmsRuntime,
   type HandlerContext,
   type MediaAsset,
@@ -49,11 +49,20 @@ export function mountServerEndpoints(
     if (source.kind !== "http") continue;
     const { method, path } = source;
     const honoPath = openApiToHono(path);
+    const matchTriggerPath = compilePathMatcher(path);
     const triggerName = t.metadata.name;
     app.on(method, honoPath, async (c) => {
       const runtime = await ref.get();
       const waitUntil = readWaitUntil(c);
-      return handleHttpTrigger(c.req.raw, runtime, ref, triggerName, path, waitUntil);
+      return handleHttpTrigger(
+        c.req.raw,
+        runtime,
+        ref,
+        triggerName,
+        path,
+        matchTriggerPath(c.req.path) ?? {},
+        waitUntil,
+      );
     });
   }
   for (const v of ref.manifests) {
@@ -1573,6 +1582,7 @@ async function handleHttpTrigger(
   ref: CmsRuntimeRef,
   triggerName: string,
   triggerPath: string,
+  pathParams: Readonly<Record<string, string>>,
   waitUntil: ((p: Promise<unknown>) => void) | undefined,
 ): Promise<Response> {
   const trigger = runtime.triggersByName.get(triggerName);
@@ -1599,13 +1609,11 @@ async function handleHttpTrigger(
     );
   }
 
-  const url = new URL(req.url);
-  const params = matchPath(triggerPath, url.pathname) ?? {};
   const body = await readBody(req);
   // Spread order matters: URL path params are authoritative for the
   // resource identifier (a `DELETE /entries/{id}` body MUST NOT spoof
   // `id`). Body fields fill in non-path inputs only.
-  const input = { ...body, ...params };
+  const input = { ...body, ...pathParams };
 
   const result = await runtime.invokeProcedure.execute({
     procedure,
@@ -1647,11 +1655,9 @@ async function handleViewRequest(
 
   const viewPath = `GET ${mountPath}/${viewName}`;
 
-  // Resolve caller and evaluate static auth BEFORE query coercion so a
-  // protected View does not leak its parameter contract. The runtime
-  // evaluates the same predicates again before guard/query execution;
-  // this adapter preflight exists only to preserve the no-leak order at
-  // the HTTP parsing boundary.
+  // Resolve the caller once. Static auth normally runs in the runtime;
+  // malformed query params take the catch path below, which performs
+  // the same check before returning a schema-revealing 400.
   const caller = await resolveCaller(req, {
     auth: ref.auth,
     credentialResolver: ref.credentialResolver,
@@ -1665,15 +1671,6 @@ async function handleViewRequest(
     );
   }
   const ctx = caller.context;
-  if (view.spec.requires?.auth) {
-    const denial = evaluateAuthAll(view.spec.requires, ctx, viewPath, "runtime");
-    if (denial) {
-      return Response.json({
-        ok: false,
-        diagnostic: denial,
-      }, { status: HTTP_STATUS_BY_CODE[denial.code] ?? 403 });
-    }
-  }
 
   const url = new URL(req.url);
   const page = parsePositiveInt(url.searchParams.get(PAGE_PARAM));
@@ -1684,6 +1681,15 @@ async function handleViewRequest(
     params = coerceViewParams(view, url.searchParams);
   } catch (err) {
     if (err instanceof ViewParamCoercionError) {
+      if (view.spec.requires?.auth) {
+        const denial = evaluateAuthAll(view.spec.requires, ctx, viewPath, "runtime");
+        if (denial) {
+          return Response.json(
+            { ok: false, diagnostic: denial },
+            { status: HTTP_STATUS_BY_CODE[denial.code] ?? 403 },
+          );
+        }
+      }
       return Response.json({
         ok: false,
         diagnostic: runtimeDiagnostic({

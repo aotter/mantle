@@ -98,6 +98,68 @@ describe("EmitOpenapiUseCase", () => {
     expect(paths["/api/views/posts-by-locale"]?.get?.operationId).toBe("view_posts_by_locale");
   });
 
+  it("projects HTTP path fields out of the body without changing the Procedure schema (#531)", () => {
+    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: reserve-site }
+spec:
+  input:
+    type: object
+    required: [siteId, operationId]
+    properties:
+      siteId: { type: string, minLength: 1, description: Site selected by the URL. }
+      operationId: { type: string, minLength: 1 }
+      note: { type: string }
+  output: { type: object }
+  handler: { kind: ref, ref: reserveSite }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: reserve-site-http }
+spec:
+  source: { kind: http, method: POST, path: "/api/sites/{siteId}/reserve" }
+  target: { procedure: reserve-site }
+`);
+    expect(parsed.diagnostics).toEqual([]);
+    const procedure = parsed.manifests.find((manifest) => manifest.kind === "Procedure");
+    expect(procedure?.kind).toBe("Procedure");
+    if (!procedure || procedure.kind !== "Procedure") throw new Error("missing Procedure fixture");
+    const originalInput = structuredClone(procedure.spec.input);
+
+    const { document } = EmitOpenapiUseCase.run({
+      manifests: parsed.manifests,
+      title: "Test",
+      version: "0.1.0",
+    });
+    const paths = document["paths"] as Record<string, Record<string, Record<string, unknown>>>;
+    const operation = paths["/api/sites/{siteId}/reserve"]!.post!;
+    expect(operation["parameters"]).toEqual([
+      {
+        name: "siteId",
+        in: "path",
+        required: true,
+        schema: {
+          type: "string",
+          minLength: 1,
+          description: "Site selected by the URL.",
+        },
+      },
+    ]);
+    const bodySchema = (
+      ((operation["requestBody"] as Record<string, unknown>)["content"] as Record<
+        string,
+        Record<string, unknown>
+      >)["application/json"]!["schema"]
+    ) as {
+      required: string[];
+      properties: Record<string, unknown>;
+    };
+    expect(bodySchema.required).toEqual(["operationId"]);
+    expect(Object.keys(bodySchema.properties)).toEqual(["operationId", "note"]);
+    expect(bodySchema.properties["siteId"]).toBeUndefined();
+    expect(procedure.spec.input).toEqual(originalInput);
+  });
+
   it("attaches the default session-cookie scheme when Procedure requires auth", () => {
     const { document } = EmitOpenapiUseCase.run({
       manifests: fixture(),

@@ -103,6 +103,99 @@ function buildApp(auth: Auth): Hono {
 }
 
 describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
+  it("binds decoded path params once, keeps them authoritative, and still validates the full Procedure input (#530, #531)", async () => {
+    let resolverCalls = 0;
+    const inputs: unknown[] = [];
+    const manifests: Manifest[] = [
+      {
+        apiVersion,
+        kind: "Procedure",
+        metadata: { name: "reserve-site" },
+        spec: {
+          input: {
+            type: "object",
+            properties: {
+              siteId: { type: "string", minLength: 1 },
+              operationId: { type: "string", minLength: 1 },
+            },
+            required: ["siteId", "operationId"],
+          },
+          output: { type: "object" },
+          handler: { kind: "ref", ref: "reserveSite" },
+          requires: { auth: { all: ["ctx.auth"] } },
+        },
+      },
+      {
+        apiVersion,
+        kind: "Trigger",
+        metadata: { name: "reserve-site-http" },
+        spec: {
+          source: { kind: "http", method: "POST", path: "/api/sites/{siteId}/reserve" },
+          target: { procedure: "reserve-site" },
+        },
+      },
+    ];
+    const ref = createCmsRef({
+      manifests,
+      handlers: {
+        reserveSite: (input) => {
+          inputs.push(input);
+          return {};
+        },
+      },
+      bindings: {
+        db: new InMemoryDatabase(),
+        kv: new InMemoryKv(),
+        assets: new StubAssetServer(),
+      },
+      auth: stubAuth,
+      credentialResolver: () => {
+        resolverCalls++;
+        return {
+          kind: "verified",
+          credential: {
+            credential: "api-key",
+            credentialId: "key-1",
+            userId: null,
+            scopes: [],
+          },
+        };
+      },
+    });
+    const app = new Hono();
+    mountServerEndpoints(app, ref);
+
+    const granted = await app.request("/api/sites/site%20one/reserve", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ siteId: "spoofed", operationId: "op-1" }),
+    });
+    expect(granted.status).toBe(200);
+    expect(inputs).toEqual([{ siteId: "site one", operationId: "op-1" }]);
+    expect(resolverCalls).toBe(1);
+
+    const missingBodyField = await app.request("/api/sites/site-one/reserve", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(missingBodyField.status).toBe(400);
+    expect((await missingBodyField.json()) as object).toMatchObject({
+      diagnostic: { code: "INPUT_VALIDATION_FAILED" },
+    });
+    expect(inputs).toHaveLength(1);
+    expect(resolverCalls).toBe(2);
+
+    const malformedPath = await app.request("/api/sites/%GG/reserve", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ operationId: "op-2" }),
+    });
+    expect(malformedPath.status).toBe(400);
+    expect(inputs).toHaveLength(1);
+    expect(resolverCalls).toBe(3);
+  });
+
   it("returns 401 UNAUTHENTICATED when no session and Procedure requires auth", async () => {
     const app = buildApp(authFake(null));
     const res = await app.request("/api/staff-only", { method: "POST" });

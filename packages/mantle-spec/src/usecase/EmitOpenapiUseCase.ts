@@ -74,13 +74,31 @@ function httpOperation(
   p: ProcedureManifest,
   request: EmitOpenapiRequest,
 ): Record<string, unknown> {
-  const method = t.spec.source.kind === "http" ? t.spec.source.method : "POST";
+  const source = t.spec.source;
+  const method = source.kind === "http" ? source.method : "POST";
+  const pathParams = source.kind === "http" ? pathParameterNames(source.path) : [];
   const op: Record<string, unknown> = {
     operationId: `${method.toLowerCase()}_${p.metadata.name.replace(/[^a-z0-9]+/gi, "_")}`,
     summary: `Trigger ${t.metadata.name}`,
+    ...(pathParams.length > 0
+      ? {
+          parameters: pathParams.map((name) => ({
+            name,
+            in: "path",
+            required: true,
+            schema: collapseSchemaDescriptions(
+              p.spec.input.properties?.[name] ?? { type: "string" },
+            ),
+          })),
+        }
+      : {}),
     requestBody: {
       required: true,
-      content: { "application/json": { schema: collapseSchemaDescriptions(p.spec.input) } },
+      content: {
+        "application/json": {
+          schema: requestBodySchema(p.spec.input, pathParams),
+        },
+      },
     },
     responses: {
       "200": {
@@ -103,6 +121,30 @@ function httpOperation(
   };
   reflectAuthorization(op, op["responses"] as Record<string, unknown>, p.spec.requires, request, `Procedure '${p.metadata.name}'`);
   return op;
+}
+
+function pathParameterNames(path: string): string[] {
+  return [...path.matchAll(/\{([^{}]+)\}/g)].map((match) => match[1]!);
+}
+
+/** Project path-bound fields out of the HTTP body without changing the
+ * Procedure schema used by runtime validation. */
+function requestBodySchema(input: JsonSchema, pathParams: readonly string[]): JsonSchema {
+  if (pathParams.length === 0) return collapseSchemaDescriptions(input);
+  const pathNames = new Set(pathParams);
+  return collapseSchemaDescriptions({
+    ...input,
+    ...(input.properties
+      ? {
+          properties: Object.fromEntries(
+            Object.entries(input.properties).filter(([name]) => !pathNames.has(name)),
+          ),
+        }
+      : {}),
+    ...(input.required
+      ? { required: input.required.filter((name) => !pathNames.has(name)) }
+      : {}),
+  });
 }
 
 function viewOperation(v: ViewManifest, request: EmitOpenapiRequest): Record<string, unknown> {
