@@ -119,7 +119,7 @@ export {
   siteConfigFromDefaults,
   toUrlLocale,
 } from "./domain/service/LocaleNegotiator.js";
-export { matchPath } from "./domain/service/PathMatcher.js";
+export { compilePathMatcher, matchPath } from "./domain/service/PathMatcher.js";
 export { evaluateAuthAll } from "./domain/service/AuthPredicateEvaluator.js";
 export {
   coerceViewParams,

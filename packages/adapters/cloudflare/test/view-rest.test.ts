@@ -349,15 +349,19 @@ describe("GET /api/views/<name>", () => {
 
   it("authenticates configured OAuth bearer tokens on Views and enforces scope predicates", async () => {
     let scopes: readonly string[] = ["reports:read"];
+    let verifyCalls = 0;
     const bearerAuth: Auth = {
       ...stubAuth,
-      verifyOAuthAccessToken: async () => ({
-        ok: true,
-        userId: "user-1",
-        clientId: "client-1",
-        credentialId: "jti-1",
-        scopes,
-      }),
+      verifyOAuthAccessToken: async () => {
+        verifyCalls++;
+        return {
+          ok: true,
+          userId: "user-1",
+          clientId: "client-1",
+          credentialId: "jti-1",
+          scopes,
+        };
+      },
     };
     const gatedManifests: Manifest[] = [
       ...manifests(),
@@ -393,8 +397,10 @@ describe("GET /api/views/<name>", () => {
         headers: { authorization: "Bearer header.payload.signature" },
       });
     expect((await request()).status).toBe(200);
+    expect(verifyCalls).toBe(1);
     scopes = [];
     expect((await request()).status).toBe(403);
+    expect(verifyCalls).toBe(2);
   });
 
   it("auth gate runs BEFORE param coercion — anonymous probe doesn't leak the param contract (#210 PR13 CX2)", async () => {

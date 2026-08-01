@@ -32,7 +32,8 @@
     "prebuild": "rm -rf dist .tsbuildinfo",
     "build": "tsc -b tsconfig.lib.json",
     "typecheck": "tsc --noEmit -p tsconfig.lib.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bench:http-dispatch": "vitest bench --run test/http-dispatch.bench.ts"
   },
   "dependencies": {
     "@aotter/mantle-admin-ui": "workspace:*",

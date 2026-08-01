@@ -52,6 +52,23 @@ Core does not create credential or payment tables. See the shipped
 the exact resolver contract, OAuth resource helpers, manifest examples,
 status behavior, OpenAPI reflection, and runnable integration fixture.
 
+## HTTP Dispatch Benchmark
+
+Run the warm, in-process View and Procedure transport benchmark with:
+
+```sh
+pnpm --filter @aotter/mantle-cloudflare bench:http-dispatch
+```
+
+It includes Hono routing, one caller resolution, auth and scope checks,
+compiled-schema validation, a dynamic guard, an in-memory query or handler,
+and response-envelope serialization. On Node 22, the expected warm p50 is
+below 0.1 ms for each route. In a same-machine Wrangler comparison, Mantle's
+fixed p50 overhead over an equivalent handwritten route should stay below
+1 ms. Compare alternating warm runs on the same machine; these are regression
+budgets, not production latency promises, because D1 and credential I/O
+usually dominate the total request time.
+
 ## HTTP Cache Boundary
 
 Export `createOAuthProvider(...)` as the Worker's top-level handler. It marks
