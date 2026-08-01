@@ -23,10 +23,23 @@ import type { MediaPurposePolicy, SiteConfig, SiteDefaults } from "@aotter/mantl
 export interface SiteConfigRepository {
   seed(defaults: SiteDefaults | undefined): Promise<void>;
   load(): Promise<SiteConfig>;
+  /** Persist the operator-owned subset exposed by the Admin settings UI.
+   *  Omitted fields are unchanged; an empty string intentionally clears a
+   *  value. Code-canonical locales and media purposes are never writable
+   *  through this path. */
+  updateEditable(args: UpdateEditableSiteConfigArgs): Promise<void>;
   readLocales(): Promise<readonly string[]>;
   /** Declared media purpose taxonomy (`SiteConfig.media.purposes`).
    *  Empty array when the deployment didn't declare any — symmetric
    *  with "no `MediaStorage` configured" and used by the MCP tool
    *  catalog to gate `create_media_upload` / `commit_media_upload`. */
   readMediaPurposes(): Promise<readonly MediaPurposePolicy[]>;
+}
+
+export interface UpdateEditableSiteConfigArgs {
+  readonly brand?: string;
+  readonly title?: string;
+  readonly description?: string;
+  readonly ga4MeasurementId?: string;
+  readonly facebookPixelId?: string;
 }

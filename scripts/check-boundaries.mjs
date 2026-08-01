@@ -115,9 +115,14 @@ function checkEntryReadOwnership() {
     (path) => path.endsWith(".ts"),
   );
   const entrySql = /\b(?:FROM|INTO|UPDATE|DELETE\s+FROM)\s+entries\b/i;
+  const rawRuntimeDb = /\bruntime\.db\b/;
   for (const file of adapterFiles) {
-    if (entrySql.test(stripComments(readFileSync(file, "utf8")))) {
+    const source = stripComments(readFileSync(file, "utf8"));
+    if (entrySql.test(source)) {
       fail(file, "Cloudflare routes must use EntryReader instead of route-owned entries SQL");
+    }
+    if (rawRuntimeDb.test(source)) {
+      fail(file, "Cloudflare routes must use purpose-shaped runtime surfaces, not runtime.db");
     }
   }
 }

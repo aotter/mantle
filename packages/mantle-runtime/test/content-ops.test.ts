@@ -769,7 +769,9 @@ function fakeSiteConfig(locales: readonly string[]): SiteConfigRepository {
       origin: "https://example.com",
       locales,
     }),
+    updateEditable: async () => undefined,
     readLocales: async () => locales,
+    readMediaPurposes: async () => [],
   };
 }
 

@@ -16,6 +16,7 @@ import {
   type Manifest,
   type ProcedureManifest,
   type SchemaManifest,
+  type SiteConfig,
   type ViewManifest,
 } from "@aotter/mantle-spec";
 import {
@@ -406,9 +407,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
   guarded("get", "/admin/api/site-settings", async () =>
     runUseCase("GET /admin/api/site-settings", async () => {
       const runtime = await ref.get();
-      const site = await runtime.siteConfig.load();
-      const extra = await readSiteSettings(runtime);
-      return { ...site, ...extra };
+      return adminSiteSettings(await runtime.siteConfig.load());
     }),
   );
 
@@ -416,7 +415,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     runUseCase("PATCH /admin/api/site-settings", async () => {
       const runtime = await ref.get();
       const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
-      await writeSiteSettings(runtime, {
+      await runtime.siteConfig.updateEditable({
         brand: stringField(body.brand),
         title: stringField(body.title),
         description: stringField(body.description),
@@ -424,9 +423,7 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
         facebookPixelId: stringField(body.facebookPixelId),
       });
       await invalidatePublicRenderCache(runtime);
-      const site = await runtime.siteConfig.load();
-      const extra = await readSiteSettings(runtime);
-      return { ...site, ...extra };
+      return adminSiteSettings(await runtime.siteConfig.load());
     }),
   );
 
@@ -1422,44 +1419,12 @@ async function entriesByDataValue(
   });
 }
 
-async function readSiteSettings(runtime: CmsRuntime): Promise<{
-  ga4MeasurementId: string;
-  facebookPixelId: string;
-}> {
-  const rows = await runtime.db
-    .prepare(
-      `SELECT key, value FROM site_config
-       WHERE key IN (
-         'ga4MeasurementId',
-         'facebookPixelId'
-       )`,
-    )
-    .all<{ key: string; value: string }>();
-  const map = new Map(rows.map((row) => [row.key, row.value]));
+function adminSiteSettings(site: SiteConfig) {
   return {
-    ga4MeasurementId: map.get("ga4MeasurementId") ?? "",
-    facebookPixelId: map.get("facebookPixelId") ?? "",
+    ...site,
+    ga4MeasurementId: site.ga4MeasurementId ?? "",
+    facebookPixelId: site.facebookPixelId ?? "",
   };
-}
-
-async function writeSiteSettings(
-  runtime: CmsRuntime,
-  values: {
-    brand?: string;
-    title?: string;
-    description?: string;
-    ga4MeasurementId?: string;
-    facebookPixelId?: string;
-  },
-): Promise<void> {
-  const stmts = Object.entries(values)
-    .filter((entry): entry is [string, string] => typeof entry[1] === "string")
-    .map(([key, value]) =>
-      runtime.db
-        .prepare(`INSERT INTO site_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
-        .bind(key, value),
-    );
-  if (stmts.length > 0) await runtime.db.batch(stmts);
 }
 
 async function invalidatePublicRenderCache(runtime: CmsRuntime): Promise<void> {

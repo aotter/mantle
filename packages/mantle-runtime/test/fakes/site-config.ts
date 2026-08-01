@@ -1,5 +1,8 @@
 import type { MediaPurposePolicy, SiteConfig, SiteDefaults } from "@aotter/mantle-spec";
-import type { SiteConfigRepository } from "../../src/domain/port/SiteConfigRepository.js";
+import type {
+  SiteConfigRepository,
+  UpdateEditableSiteConfigArgs,
+} from "../../src/domain/port/SiteConfigRepository.js";
 
 /** Minimal `SiteConfigRepository` for tests. Holds `mediaPurposes` in
  *  memory — tests can hand a custom set or leave it empty to exercise
@@ -29,6 +32,10 @@ export class InMemorySiteConfigRepository implements SiteConfigRepository {
       brand: "Test",
       media: { purposes: this.purposes },
     };
+  }
+
+  async updateEditable(_args: UpdateEditableSiteConfigArgs): Promise<void> {
+    /* noop */
   }
 
   async readLocales(): Promise<readonly string[]> {
