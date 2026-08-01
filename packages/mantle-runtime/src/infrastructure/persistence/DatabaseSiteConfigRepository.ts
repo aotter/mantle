@@ -5,7 +5,10 @@ import {
   type SiteDefaults,
 } from "@aotter/mantle-spec";
 import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
-import type { SiteConfigRepository } from "../../domain/port/SiteConfigRepository.js";
+import type {
+  SiteConfigRepository,
+  UpdateEditableSiteConfigArgs,
+} from "../../domain/port/SiteConfigRepository.js";
 
 /**
  * `site_config` row read/write. `seed` runs once per boot (called from
@@ -55,6 +58,14 @@ const KEYS = {
   facebookPixelId: "facebookPixelId",
   mediaPurposes: "mediaPurposes",
 } as const;
+
+const EDITABLE_KEYS = [
+  KEYS.brand,
+  KEYS.title,
+  KEYS.description,
+  KEYS.ga4MeasurementId,
+  KEYS.facebookPixelId,
+] as const;
 
 function splitCsv(raw: string | undefined): string[] {
   if (!raw) return [];
@@ -135,12 +146,15 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
       .bind(key)
       .first<{ value: string }>();
     if (current?.value === value) return;
-    await this.db
+    await this.upsert(key, value).run();
+  }
+
+  private upsert(key: string, value: string) {
+    return this.db
       .prepare(
         `INSERT INTO site_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       )
-      .bind(key, value)
-      .run();
+      .bind(key, value);
   }
 
   async load(): Promise<SiteConfig> {
@@ -162,6 +176,16 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
       facebookPixelId: m.get(KEYS.facebookPixelId) || undefined,
       media: { purposes },
     };
+  }
+
+  async updateEditable(values: UpdateEditableSiteConfigArgs): Promise<void> {
+    const stmts = [];
+    for (const key of EDITABLE_KEYS) {
+      const value = values[key];
+      if (typeof value !== "string") continue;
+      stmts.push(this.upsert(key, value));
+    }
+    if (stmts.length > 0) await this.db.batch(stmts);
   }
 
   async readLocales(): Promise<readonly string[]> {

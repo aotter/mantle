@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
+import ts from "typescript";
 
 const ROOT = process.cwd();
 
@@ -31,6 +32,59 @@ function rel(path) {
 
 function fail(path, message) {
   failures.push(`${rel(path)}: ${message}`);
+}
+
+function propertyNameText(name) {
+  if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) return name.text;
+  if (ts.isComputedPropertyName(name) && ts.isStringLiteralLike(name.expression)) {
+    return name.expression.text;
+  }
+  return undefined;
+}
+
+function hasDatabasePropertyAccess(source, fileName = "boundary-fixture.ts") {
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  let found = false;
+
+  function visit(node) {
+    if (
+      (ts.isPropertyAccessExpression(node) && node.name.text === "db") ||
+      (ts.isElementAccessExpression(node) &&
+        node.argumentExpression !== undefined &&
+        ts.isStringLiteralLike(node.argumentExpression) &&
+        node.argumentExpression.text === "db") ||
+      (ts.isBindingElement(node) &&
+        ts.isObjectBindingPattern(node.parent) &&
+        propertyNameText(node.propertyName ?? node.name) === "db")
+    ) {
+      found = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return found;
+}
+
+function checkDatabasePropertyDetector() {
+  const fixtures = [
+    ["property access", "const raw = runtime.db;", true],
+    ["element access", 'const raw = runtime["db"];', true],
+    ["destructuring", "const { db: raw } = runtime;", true],
+    ["string literal", 'const note = "runtime.db";', false],
+  ];
+  for (const [name, source, expected] of fixtures) {
+    if (hasDatabasePropertyAccess(source) !== expected) {
+      throw new Error(`Database boundary detector failed its ${name} fixture`);
+    }
+  }
 }
 
 function checkRuntimeCloudflareFree() {
@@ -116,8 +170,20 @@ function checkEntryReadOwnership() {
   );
   const entrySql = /\b(?:FROM|INTO|UPDATE|DELETE\s+FROM)\s+entries\b/i;
   for (const file of adapterFiles) {
-    if (entrySql.test(stripComments(readFileSync(file, "utf8")))) {
+    const source = stripComments(readFileSync(file, "utf8"));
+    if (entrySql.test(source)) {
       fail(file, "Cloudflare routes must use EntryReader instead of route-owned entries SQL");
+    }
+  }
+
+  const mountDir = join(ROOT, "packages/adapters/cloudflare/src/mount");
+  const mountFiles = listFiles(
+    mountDir,
+    (path) => path.endsWith(".ts") && !path.endsWith("bootRuntimeOnce.ts"),
+  );
+  for (const file of mountFiles) {
+    if (hasDatabasePropertyAccess(readFileSync(file, "utf8"), file)) {
+      fail(file, "Cloudflare route mounts must not access a raw database property");
     }
   }
 }
@@ -138,6 +204,7 @@ function checkSkillDocsVersioned() {
   }
 }
 
+checkDatabasePropertyDetector();
 checkRuntimeCloudflareFree();
 checkPackageDirection();
 checkEntryReadOwnership();

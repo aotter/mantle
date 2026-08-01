@@ -44,7 +44,10 @@ export type {
   ReadPublishedEntriesArgs,
   FindManyEntriesByDataFieldArgs,
 } from "./EntryReader.js";
-export type { SiteConfigRepository } from "./SiteConfigRepository.js";
+export type {
+  SiteConfigRepository,
+  UpdateEditableSiteConfigArgs,
+} from "./SiteConfigRepository.js";
 export type {
   PublishOrchestrator,
   PublishEntryRequest,

@@ -61,11 +61,13 @@ await runtime.bootInit();
 
 `bootInit()` runs canonical migrations, seeds `siteDefaults`, and validates the manifest set. Call it once before serving CMS traffic. The Cloudflare adapter's reference pattern is `packages/adapters/cloudflare/src/mount/bootRuntimeOnce.ts`.
 
-For adapter-owned entry lookups, use `runtime.entryReader`; it applies Schema
-index declarations, locale semantics, and the public `Entry` projection.
-`runtime.db` remains available for compatibility and adapter-owned non-entry
-tables, but direct entry SQL bypasses those guarantees and is deprecated.
-Authoring continues through the pre-wired content use cases.
+Use purpose-shaped runtime surfaces for canonical data: `runtime.entryReader`
+applies Schema index declarations, locale semantics, and the public `Entry`
+projection; `runtime.siteConfig` owns site settings. `runtime.db` remains only
+for source compatibility and is deprecated. An adapter that owns additional
+tables should retain the `DatabaseDriver` it injected instead of reaching back
+through the assembled runtime. Authoring continues through the pre-wired
+content use cases.
 
 ## HTTP and MCP surfaces
 

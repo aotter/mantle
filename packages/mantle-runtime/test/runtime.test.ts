@@ -282,6 +282,43 @@ describe("createCmsRuntime + bootInit", () => {
     expect(site.brand).toBe("Operator-Edited");
   });
 
+  it("updates only provided editable site settings in one batch", async () => {
+    class CountingDatabase extends InMemoryDatabase {
+      batches = 0;
+
+      override async batch(stmts: Parameters<InMemoryDatabase["batch"]>[0]) {
+        this.batches += 1;
+        return super.batch(stmts);
+      }
+    }
+
+    const db = new CountingDatabase();
+    db.siteConfig.set("brand", "Old brand");
+    db.siteConfig.set("title", "Keep title");
+    db.siteConfig.set("description", "Old description");
+    db.siteConfig.set("origin", "https://example.com");
+    const repo = new DatabaseSiteConfigRepository(db);
+
+    await repo.updateEditable({
+      brand: "New brand",
+      title: "New title",
+      description: "",
+      ga4MeasurementId: "G-TEST",
+      facebookPixelId: "PIXEL-TEST",
+    });
+
+    expect(db.batches).toBe(1);
+    expect(db.siteConfig.get("brand")).toBe("New brand");
+    expect(db.siteConfig.get("title")).toBe("New title");
+    expect(db.siteConfig.get("description")).toBe("");
+    expect(db.siteConfig.get("ga4MeasurementId")).toBe("G-TEST");
+    expect(db.siteConfig.get("facebookPixelId")).toBe("PIXEL-TEST");
+    expect(db.siteConfig.get("origin")).toBe("https://example.com");
+
+    await repo.updateEditable({});
+    expect(db.batches).toBe(1);
+  });
+
   it("#441 re-boot syncs mediaPurposes from config even after first boot wrote a different value", async () => {
     const db = new InMemoryDatabase();
     const first = [

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
@@ -29,7 +29,13 @@ function sessionAs(role: string | null, userId = "user-1") {
   });
 }
 
-function harness(authOverride?: Partial<Auth>) {
+function harness(
+  authOverride?: Partial<Auth>,
+  bindings: {
+    readonly db?: InMemoryDatabase;
+    readonly kv?: InMemoryKv;
+  } = {},
+) {
   const getSession = authOverride?.getSession ?? stubAuth.getSession;
   const auth: Auth = {
     ...stubAuth,
@@ -42,19 +48,64 @@ function harness(authOverride?: Partial<Auth>) {
         return session?.user.role ?? null;
       }),
   };
+  const db = bindings.db ?? new InMemoryDatabase();
+  const kv = bindings.kv ?? new InMemoryKv();
   const ref = createCmsRef({
     manifests: [],
     handlers: {},
     bindings: {
-      db: new InMemoryDatabase(),
-      kv: new InMemoryKv(),
+      db,
+      kv,
       assets: new StubAssetServer(),
     },
     auth,
   });
   const app = new Hono();
   mountServerEndpoints(app, ref);
-  return { app };
+  return { app, db, kv };
+}
+
+class OrderedDatabase extends InMemoryDatabase {
+  constructor(
+    private readonly events: string[],
+    private readonly failWrites = false,
+  ) {
+    super();
+  }
+
+  override prepare(sql: string) {
+    if (sql.replace(/\s+/g, " ").trim().startsWith("SELECT key, value FROM site_config")) {
+      this.events.push("read");
+    }
+    return super.prepare(sql);
+  }
+
+  override async batch(stmts: Parameters<InMemoryDatabase["batch"]>[0]) {
+    if (this.failWrites) {
+      this.events.push("write-failed");
+      throw new Error("scripted site settings write failure");
+    }
+    const result = await super.batch(stmts);
+    this.events.push("write");
+    return result;
+  }
+}
+
+class OrderedKv extends InMemoryKv {
+  constructor(
+    private readonly events: string[],
+    private readonly failInvalidation = false,
+  ) {
+    super();
+  }
+
+  override async list(prefix: string) {
+    this.events.push("invalidate");
+    if (this.failInvalidation) {
+      throw new Error("scripted site settings invalidation failure");
+    }
+    return super.list(prefix);
+  }
 }
 
 const FIXTURE_USER: StaffUserInfo = {
@@ -83,6 +134,144 @@ describe("GET /admin/api/site", () => {
     expect(await res.json()).toMatchObject({
       mcpUrl: "https://example.test/mcp/staff",
     });
+  });
+});
+
+describe("/admin/api/site-settings", () => {
+  it("loads settings once and keeps missing tracking ids as empty strings", async () => {
+    const { app, db } = harness({ getSession: sessionAs("editor") });
+    db.siteConfig.set("brand", "Mantle");
+    db.siteConfig.set("title", "Mantle site");
+    db.siteConfig.set("description", "Fast by default");
+
+    const res = await app.request("/admin/api/site-settings");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      brand: "Mantle",
+      title: "Mantle site",
+      description: "Fast by default",
+      ga4MeasurementId: "",
+      facebookPixelId: "",
+    });
+    const reads = db.executions.filter(({ sql }) =>
+      sql.startsWith("SELECT key, value FROM site_config")
+    );
+    expect(reads).toHaveLength(1);
+  });
+
+  it("writes one partial batch before invalidation, then reads once", async () => {
+    const events: string[] = [];
+    const db = new OrderedDatabase(events);
+    const kv = new OrderedKv(events);
+    db.siteConfig.set("brand", "Old brand");
+    db.siteConfig.set("title", "Keep title");
+    db.siteConfig.set("description", "Old description");
+    db.siteConfig.set("facebookPixelId", "123");
+    await kv.put("entry:html:en/posts/old", "old entry");
+    await kv.put("list:html:posts:en", "old list");
+    await kv.put("llms:en", "old llms");
+    const { app } = harness(
+      { getSession: sessionAs("editor") },
+      { db, kv },
+    );
+
+    const res = await app.request(
+      "/admin/api/site-settings",
+      jsonInit("PATCH", {
+        brand: "New brand",
+        title: 42,
+        description: "",
+        ga4MeasurementId: "G-NEW",
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      brand: "New brand",
+      title: "Keep title",
+      description: "",
+      ga4MeasurementId: "G-NEW",
+      facebookPixelId: "123",
+    });
+    expect(db.siteConfig.get("brand")).toBe("New brand");
+    expect(db.siteConfig.get("title")).toBe("Keep title");
+    expect(db.siteConfig.get("description")).toBe("");
+    expect(db.siteConfig.get("ga4MeasurementId")).toBe("G-NEW");
+    expect(events).toEqual([
+      "write",
+      "invalidate",
+      "invalidate",
+      "invalidate",
+      "read",
+    ]);
+    await expect(kv.get("entry:html:en/posts/old")).resolves.toBeNull();
+    await expect(kv.get("list:html:posts:en")).resolves.toBeNull();
+    await expect(kv.get("llms:en")).resolves.toBeNull();
+  });
+
+  it("still invalidates and reloads when PATCH has no accepted fields", async () => {
+    const events: string[] = [];
+    const db = new OrderedDatabase(events);
+    const { app } = harness(
+      { getSession: sessionAs("editor") },
+      { db, kv: new OrderedKv(events) },
+    );
+
+    const res = await app.request(
+      "/admin/api/site-settings",
+      jsonInit("PATCH", { title: 42, facebookPixelId: null }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(events).toEqual([
+      "invalidate",
+      "invalidate",
+      "invalidate",
+      "read",
+    ]);
+  });
+
+  it("does not cross failed write or invalidation boundaries", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const writeEvents: string[] = [];
+      const writeFailure = harness(
+        { getSession: sessionAs("editor") },
+        {
+          db: new OrderedDatabase(writeEvents, true),
+          kv: new OrderedKv(writeEvents),
+        },
+      );
+      const writeResponse = await writeFailure.app.request(
+        "/admin/api/site-settings",
+        jsonInit("PATCH", { brand: "Never lands" }),
+      );
+      expect(writeResponse.status).toBe(500);
+      expect(writeEvents).toEqual(["write-failed"]);
+
+      const invalidationEvents: string[] = [];
+      const invalidationFailure = harness(
+        { getSession: sessionAs("editor") },
+        {
+          db: new OrderedDatabase(invalidationEvents),
+          kv: new OrderedKv(invalidationEvents, true),
+        },
+      );
+      const invalidationResponse = await invalidationFailure.app.request(
+        "/admin/api/site-settings",
+        jsonInit("PATCH", { brand: "Write lands" }),
+      );
+      expect(invalidationResponse.status).toBe(500);
+      expect(invalidationEvents).toEqual([
+        "write",
+        "invalidate",
+        "invalidate",
+        "invalidate",
+      ]);
+    } finally {
+      error.mockRestore();
+    }
   });
 });
 
