@@ -201,6 +201,26 @@ function createEntriesTable(db: DatabaseSync): void {
   `);
 }
 
+describe("canonical maintenance indexes", () => {
+  it("searches the pending-upload expiry index during cleanup", () => {
+    const db = new DatabaseSync(":memory:");
+    try {
+      for (const migration of CANONICAL_MIGRATIONS) db.exec(migration.sql);
+      const details = (db.prepare(
+        "EXPLAIN QUERY PLAN DELETE FROM pending_media_uploads WHERE expires_at <= ?",
+      ).all(1) as unknown as QueryPlanRow[]).map((row) => row.detail);
+
+      expect(details).toContainEqual(
+        expect.stringMatching(
+          /SEARCH pending_media_uploads USING INDEX pending_media_uploads_expires_at/,
+        ),
+      );
+    } finally {
+      db.close();
+    }
+  });
+});
+
 describe("declared Schema indexes against real SQLite", () => {
   let db: DatabaseSync;
 

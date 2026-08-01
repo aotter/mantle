@@ -14,18 +14,16 @@ export class DatabasePendingUploadRepository implements PendingUploadRepository 
         .bind(record.createdAt),
       this.db
         .prepare(
-          `INSERT INTO pending_media_uploads (id, record, expires_at, created_at)
-           VALUES (?, ?, ?, ?)
+          `INSERT INTO pending_media_uploads (id, record, expires_at)
+           VALUES (?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              record = excluded.record,
-             expires_at = excluded.expires_at,
-             created_at = excluded.created_at`,
+             expires_at = excluded.expires_at`,
         )
         .bind(
           uploadGroupId,
           JSON.stringify(record),
           record.expiresAt,
-          record.createdAt,
         ),
     ]);
   }

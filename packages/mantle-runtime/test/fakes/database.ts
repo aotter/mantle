@@ -51,7 +51,6 @@ export class InMemoryDatabase implements DatabaseDriver {
   pendingUploads = new Map<string, {
     record: string;
     expires_at: number;
-    created_at: number;
   }>();
   mediaAssets = new Map<string, {
     id: string;
@@ -388,8 +387,8 @@ class InMemoryStatement implements PreparedStatement {
       return { rows: [], changes };
     }
     if (sql.startsWith("INSERT INTO pending_media_uploads")) {
-      const [id, record, expires_at, created_at] = p as [string, string, number, number];
-      this.db.pendingUploads.set(id, { record, expires_at, created_at });
+      const [id, record, expires_at] = p as [string, string, number];
+      this.db.pendingUploads.set(id, { record, expires_at });
       return { rows: [], changes: 1 };
     }
     if (sql === "SELECT record FROM pending_media_uploads WHERE id = ?") {

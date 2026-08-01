@@ -236,9 +236,11 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
       CREATE TABLE IF NOT EXISTS pending_media_uploads (
         id          TEXT PRIMARY KEY,
         record      TEXT NOT NULL,
-        expires_at  INTEGER NOT NULL,
-        created_at  INTEGER NOT NULL
+        expires_at  INTEGER NOT NULL
       );
+
+      CREATE INDEX IF NOT EXISTS pending_media_uploads_expires_at
+        ON pending_media_uploads (expires_at);
     `,
   },
   {
