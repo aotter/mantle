@@ -6,6 +6,48 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.63] - 2026-08-01
+
+### Added
+
+- **`@aotter/mantle-runtime` / `@aotter/mantle-cloudflare`**: add
+  canonical D1-backed pending-media state, schema-aware entry access
+  paths, adapter-boundary D1 query metrics, and measured indexes for
+  public content and pending-upload expiry (#534, #536, #538, #539).
+- **`@aotter/mantle`**: ship `mantle-harness indexes` and
+  `mantle-harness http` so local development and CI can exercise real
+  generated DDL, skewed SQLite data, query plans, SELECTs, and HTTP
+  latency; add a Wrangler-local 100/10k-row Worker, API, and page
+  MISS/HIT benchmark for Core release gates (#534, #539).
+
+### Changed
+
+- **`@aotter/mantle-runtime` / `@aotter/mantle-cloudflare`**: centralize
+  site-config/default resolution and schema-aware reads behind Core
+  abstractions; public cache hits no longer load full editable settings,
+  safe cache misses may write in the background, and settings changes
+  await use-case-owned invalidation (#535, #536, #537, #538, #539).
+- **agent toolchain / starters**: teach coding agents to declare and
+  verify semantic access paths instead of depending on Cloudflare
+  internals; generated starters run the public index harness in CI while
+  retaining their publication ordering semantics
+  (aotter/mantle-starters#447, aotter/mantle-starters#448).
+
+### Fixed
+
+- **`@aotter/mantle-cloudflare`**: remove KV-backed pending-upload
+  read-after-write races and index expiry cleanup without duplicating an
+  unused creation-time index (#534, #539).
+- **`@aotter/mantle`**: fail index coverage when a public View is
+  omitted, a required View is misspelled, a predicate remains
+  unindexed, or SQLite still builds a temporary ordered result; require
+  complete benchmark metric headers instead of accepting partial data
+  (#534, #539).
+- **release fanout / starters**: keep reservation PII staff-only and
+  satisfy the crowded-data gate with measured indexes rather than
+  changing public sort behavior (aotter/mantle-starters#447,
+  aotter/mantle-starters#448).
+
 ## [0.0.11-alpha.62] - 2026-08-01
 
 ### Added
