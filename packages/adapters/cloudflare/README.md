@@ -62,7 +62,7 @@ pnpm --filter @aotter/mantle-cloudflare bench:http-dispatch
 
 It includes Hono routing, one caller resolution, auth and scope checks,
 compiled-schema validation, a dynamic guard, an in-memory query or handler,
-and response-envelope serialization. On Node 22, the expected warm p50 is
+and response-envelope serialization. On Node 22+, the expected warm p50 is
 below 0.1 ms for each route. In a same-machine Wrangler comparison, Mantle's
 fixed p50 overhead over an equivalent handwritten route should stay below
 1 ms. Compare alternating warm runs on the same machine; these are regression
