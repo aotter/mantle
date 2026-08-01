@@ -620,7 +620,7 @@ describe("EntryReader against crowded real SQLite", () => {
         insert.run(
           `${current.metadata.name}-${index}`,
           current.metadata.name,
-          "published",
+          index % 5 === 0 ? "published" : "draft",
           JSON.stringify({
             slug: `noise-${index}`,
             locale: index % 2 === 0 ? "en" : "zh-TW",
@@ -794,6 +794,41 @@ describe("EntryReader against crowded real SQLite", () => {
     expect(compatible?.id).toBe(`${slugLocale.metadata.name}-needle`);
     expect(Object.hasOwn(compatible ?? {}, "authorId")).toBe(false);
     expect(executions.at(-1)?.sql).toContain("json_extract(data, ?) = ?");
+  });
+
+  it("keeps published list, sitemap, and llms reads on measured system indexes", async () => {
+    const cases = [
+      {
+        args: { collection: slugLocale.metadata.name, locale: "en" },
+        index: "entries_published_collection_locale_updated",
+      },
+      {
+        args: { collection: slugLocale.metadata.name },
+        index: "entries_published_collection_updated",
+      },
+      {
+        args: { locale: "en" },
+        index: "entries_published_locale_updated",
+      },
+      {
+        args: {},
+        index: "entries_published_updated",
+        indexedScan: true,
+      },
+    ] as const;
+
+    for (const current of cases) {
+      executions.length = 0;
+      await reader.readPublished(current.args);
+      const plan = executionPlanDetails(db, executions.at(-1)!).join("\n");
+      expect(plan).toContain(`USING INDEX ${current.index}`);
+      if ("indexedScan" in current) {
+        expect(plan).toContain(`SCAN entries USING INDEX ${current.index}`);
+      } else {
+        expect(plan).not.toContain("SCAN entries");
+      }
+      expect(plan).not.toContain("USE TEMP B-TREE FOR ORDER BY");
+    }
   });
 
   it("chunks translation-parent reads below D1's 100-bind limit without N+1", async () => {

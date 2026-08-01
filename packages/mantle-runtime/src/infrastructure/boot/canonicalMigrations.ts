@@ -228,6 +228,41 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
         ON media_assets (owner_id, created_at DESC);
     `,
   },
+  {
+    id: "0003-pending-media-uploads",
+    description:
+      "Strongly-consistent create-to-commit media upload state; Workers KV remains derivative-only",
+    sql: `
+      CREATE TABLE IF NOT EXISTS pending_media_uploads (
+        id          TEXT PRIMARY KEY,
+        record      TEXT NOT NULL,
+        expires_at  INTEGER NOT NULL,
+        created_at  INTEGER NOT NULL
+      );
+    `,
+  },
+  {
+    id: "0004-published-entry-access-paths",
+    description:
+      "Measured indexes for published collection, locale, sitemap, and llms reads",
+    sql: `
+      ALTER TABLE entries ADD COLUMN entry_locale TEXT
+        GENERATED ALWAYS AS (json_extract(data, '$.locale')) VIRTUAL;
+
+      CREATE INDEX IF NOT EXISTS entries_published_updated
+        ON entries (updated_at DESC, id DESC)
+        WHERE status = 'published';
+      CREATE INDEX IF NOT EXISTS entries_published_locale_updated
+        ON entries (entry_locale, updated_at DESC, id DESC)
+        WHERE status = 'published';
+      CREATE INDEX IF NOT EXISTS entries_published_collection_updated
+        ON entries (collection, updated_at DESC, id DESC)
+        WHERE status = 'published';
+      CREATE INDEX IF NOT EXISTS entries_published_collection_locale_updated
+        ON entries (collection, entry_locale, updated_at DESC, id DESC)
+        WHERE status = 'published';
+    `,
+  },
 ];
 
 export function schemaIndexMigrations(

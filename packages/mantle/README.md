@@ -20,6 +20,7 @@ Adopters install this one package and import from subpaths. Sub-packages remain 
 |---|---|
 | `@aotter/mantle/spec` (or root) | Manifest grammar, validators, JSON-Schema→Zod, diagnostic catalog (no env / no IO) |
 | `@aotter/mantle/runtime` | Hexagonal runtime: domain ports, use cases, infrastructure helpers (no adapter deps) |
+| `@aotter/mantle/runtime/testing` | Node-only crowded SQLite planner and HTTP sampling helpers |
 | `@aotter/mantle/cloudflare` | Cloudflare Workers adapter — D1, KV, R2, Better Auth, MCP via `@cloudflare/workers-oauth-provider` |
 | `@aotter/mantle/admin-ui` | Pre-built React 19 admin SPA bundle |
 
@@ -27,6 +28,13 @@ Adopters install this one package and import from subpaths. Sub-packages remain 
 import { parseManifestsOrThrow } from "@aotter/mantle/spec";
 import { createCmsRuntime } from "@aotter/mantle/runtime";
 import { mountServerEndpoints } from "@aotter/mantle/cloudflare";
+```
+
+The package also installs `mantle-harness`:
+
+```bash
+pnpm exec mantle-harness indexes --require-public
+pnpm exec mantle-harness http --base-url http://127.0.0.1:8787 --route page=/en/example
 ```
 
 ## Getting started
@@ -97,6 +105,8 @@ The `mantle-runtime` package never imports Cloudflare-specific types — adapter
     Queue wiring, retry/DLQ, idempotency, and delivery guarantees)
   - `node_modules/@aotter/mantle/docs/schema-indexes.md` (ordered composite
     JSON-field indexes, D1 query plans, and the safe Procedure SQL helper)
+  - `node_modules/@aotter/mantle/docs/performance-harness.md` (crowded SQLite,
+    Wrangler-local D1, cache HIT/MISS, and coding-agent guardrails)
   - `node_modules/@aotter/mantle/docs/adr/`
   - `node_modules/@aotter/mantle/skills/develop/SKILL.md`
   - `node_modules/@aotter/mantle/skills/plugin/SKILL.md`

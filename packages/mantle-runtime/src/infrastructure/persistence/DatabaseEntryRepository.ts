@@ -311,12 +311,12 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
   ): Promise<readonly Entry[]> {
     const conditions = ["status = 'published'"];
     const binds: unknown[] = [];
-    const schema = args.collection
-      ? this.schemasByName.get(args.collection)
-      : undefined;
-    const compiled = compileDataPredicates(schema, localePredicates(args.locale));
-    conditions.push(...compiled.conditions);
-    binds.push(...compiled.binds);
+    if (args.locale === null) {
+      conditions.push("entry_locale IS NULL");
+    } else if (args.locale !== undefined) {
+      conditions.push("entry_locale = ?");
+      binds.push(args.locale);
+    }
     if (args.collection) {
       conditions.push("collection = ?");
       binds.push(args.collection);

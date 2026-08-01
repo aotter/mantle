@@ -301,7 +301,7 @@ describe("smoke: /admin/api/media/uploads", () => {
     expect(body.diagnostic.code).toBe("INPUT_VALIDATION_FAILED");
   });
 
-  it("commit returns MEDIA_UPLOAD_EXPIRED when the uploadGroupId has no KV record", async () => {
+  it("commit returns MEDIA_UPLOAD_EXPIRED when the uploadGroupId has no pending record", async () => {
     const h = harness({ withMedia: true, auth: staffAuth() });
     const res = await h.app.request("/admin/api/media/uploads/missing/commit", {
       method: "POST",

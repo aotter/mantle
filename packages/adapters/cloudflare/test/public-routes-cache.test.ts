@@ -49,9 +49,12 @@ function manifests(): Manifest[] {
   ];
 }
 
-function harness(locales: readonly string[] = ["en"], opts: { auth?: Auth } = {}) {
+function harness(
+  locales: readonly string[] = ["en"],
+  opts: { auth?: Auth; kv?: InMemoryKv } = {},
+) {
   const db = new InMemoryDatabase();
-  const kv = new InMemoryKv();
+  const kv = opts.kv ?? new InMemoryKv();
   const templates = new TemplateRegistry();
   templates.registerEntryTemplate("posts", ({ entry, site }) => `<article data-brand="${site.brand}"><h1>${entry.data["title"]}</h1></article>`);
   templates.registerListTemplate("posts", ({ entries, site }) => `<section data-brand="${site.brand}">${entries.map((e) => e.data["title"]).join(",")}</section>`);
@@ -105,11 +108,39 @@ describe("mountPublicRoutes read-through cache", () => {
     await h.kv.put("entry:md:en/posts/cached", "# Cached markdown");
 
     const html = await h.app.request("/en/posts/cached");
+    h.db.executions.length = 0;
     const markdown = await h.app.request("/en/posts/cached.md");
 
     await expect(html.text()).resolves.toContain("Cached HTML");
     await expect(markdown.text()).resolves.toContain("Cached markdown");
-    expect(h.db.executions.filter(({ sql }) => sql.includes("FROM entries"))).toEqual([]);
+    expect(h.db.executions).toEqual([]);
+  });
+
+  it("returns a cache miss before background KV write-back settles", async () => {
+    let settle: (() => void) | undefined;
+    const kv = new class extends InMemoryKv {
+      override async put(): Promise<void> {
+        await new Promise<void>((resolve) => { settle = resolve; });
+      }
+    }();
+    const h = harness(["en"], { kv });
+    seedPublishedPost(h.db);
+    const background: Promise<unknown>[] = [];
+
+    const res = await h.app.request(
+      "/en/posts/hello",
+      undefined,
+      undefined,
+      {
+        waitUntil: (promise) => background.push(promise),
+        passThroughOnException: () => undefined,
+      },
+    );
+
+    expect(res.status).toBe(200);
+    expect(background).toHaveLength(1);
+    settle?.();
+    await Promise.all(background);
   });
 
   it("renders list HTML from D1 on KV miss and populates KV", async () => {

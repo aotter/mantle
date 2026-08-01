@@ -27,13 +27,6 @@ export function isAllowedMime(mime: string, allowSvg: boolean): boolean {
 /** Upload-capability TTL: 15 minutes. Bearer URL is short-lived. */
 export const UPLOAD_URL_TTL_SECONDS = 15 * 60;
 
-/** KV record TTL: 1 hour. Outlives the upload URL so slow commits
- *  don't lose the mapping; orphan sweep cleans uncommitted objects
- *  separately. */
-export const PENDING_UPLOAD_KV_TTL_SECONDS = 60 * 60;
-
-export const PENDING_UPLOAD_KV_PREFIX = "media:pending:";
-
 /** Map a mime type to a conventional file extension for object key
  *  construction. Extension is purely cosmetic in R2 — server-side
  *  serving never infers content-type from the key. */

@@ -68,6 +68,7 @@ export type {
 } from "./MediaStorage.js";
 export { pickPrimaryVariant } from "./MediaStorage.js";
 export type { MediaAssetRepository } from "./MediaAssetRepository.js";
+export type { PendingUploadRepository } from "./PendingUploadRepository.js";
 export type {
   EmailSender,
   EmailSendArgs,

@@ -5,7 +5,7 @@ import {
 } from "@aotter/mantle-spec";
 import type { Clock } from "../../domain/port/Clock.js";
 import type { IdGenerator } from "../../domain/port/IdGenerator.js";
-import type { KvCache } from "../../domain/port/KvCache.js";
+import type { PendingUploadRepository } from "../../domain/port/PendingUploadRepository.js";
 import type {
   CreateUploadVariantSpec,
   MediaStorage,
@@ -26,15 +26,13 @@ import {
 } from "./diagnostics.js";
 import {
   MEDIA_SVG_MIME,
-  PENDING_UPLOAD_KV_PREFIX,
-  PENDING_UPLOAD_KV_TTL_SECONDS,
   UPLOAD_URL_TTL_SECONDS,
   isAllowedMime,
 } from "./mediaAllowlist.js";
 import type {
   PendingUploadRecord,
   PendingUploadVariant,
-} from "./PendingUploadRecord.js";
+} from "../../domain/model/PendingUploadRecord.js";
 
 /**
  * Issue presigned upload capabilities for every variant the agent
@@ -56,7 +54,7 @@ import type {
 export class CreateMediaUploadUseCase {
   constructor(
     private readonly storage: MediaStorage,
-    private readonly kv: KvCache,
+    private readonly pendingUploads: PendingUploadRepository,
     private readonly clock: Clock,
     private readonly idgen: IdGenerator,
     private readonly siteConfig: SiteConfigRepository,
@@ -118,11 +116,7 @@ export class CreateMediaUploadUseCase {
       createdAt: now,
     };
 
-    await this.kv.put(
-      `${PENDING_UPLOAD_KV_PREFIX}${result.uploadGroupId}`,
-      JSON.stringify(record),
-      { expirationTtl: PENDING_UPLOAD_KV_TTL_SECONDS },
-    );
+    await this.pendingUploads.save(result.uploadGroupId, record);
 
     return {
       uploadGroupId: result.uploadGroupId,

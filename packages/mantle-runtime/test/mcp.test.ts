@@ -68,6 +68,7 @@ function buildHarness(schemas = [postsSchema()]): Harness {
       unpublish: async ({ entryId }: { entryId: string }) => {
         unpublishCalls.push(entryId);
       },
+      invalidateAll: async () => {},
     },
   };
   const useCases: McpUseCases = {
@@ -120,6 +121,7 @@ function minimalUseCases(): McpUseCases {
     publishOrchestrator: {
       publish: async () => {},
       unpublish: async () => {},
+      invalidateAll: async () => {},
     },
   };
   return {

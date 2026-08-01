@@ -168,11 +168,12 @@ function checkEntryReadOwnership() {
     join(ROOT, "packages/adapters/cloudflare/src"),
     (path) => path.endsWith(".ts"),
   );
-  const entrySql = /\b(?:FROM|INTO|UPDATE|DELETE\s+FROM)\s+entries\b/i;
+  const mantleTableSql =
+    /\b(?:FROM|INTO|UPDATE|DELETE\s+FROM)\s+(?:entries|site_config)\b/i;
   for (const file of adapterFiles) {
     const source = stripComments(readFileSync(file, "utf8"));
-    if (entrySql.test(source)) {
-      fail(file, "Cloudflare routes must use EntryReader instead of route-owned entries SQL");
+    if (mantleTableSql.test(source)) {
+      fail(file, "Cloudflare routes must not own Mantle entries/site_config SQL");
     }
   }
 
@@ -185,6 +186,28 @@ function checkEntryReadOwnership() {
     if (hasDatabasePropertyAccess(readFileSync(file, "utf8"), file)) {
       fail(file, "Cloudflare route mounts must not access a raw database property");
     }
+  }
+}
+
+function checkNodeTestingBoundary() {
+  const root = join(ROOT, "packages/mantle-runtime/src");
+  const files = listFiles(root, (path) => path.endsWith(".ts"));
+  for (const file of files) {
+    const source = stripComments(readFileSync(file, "utf8"));
+    if (
+      source.includes("node:sqlite") &&
+      !file.includes(`${sep}infrastructure${sep}testing${sep}`)
+    ) {
+      fail(file, "node:sqlite belongs only in the explicit runtime/testing subpath");
+    }
+  }
+  const main = join(root, "index.ts");
+  if (/testing(?:\/index)?\.js/.test(stripComments(readFileSync(main, "utf8")))) {
+    fail(main, "the Worker-safe runtime entry must not re-export the Node testing harness");
+  }
+  const specMain = join(ROOT, "packages/mantle-spec/src/index.ts");
+  if (/from\s+["']\.\/infrastructure\/cli/.test(stripComments(readFileSync(specMain, "utf8")))) {
+    fail(specMain, "the pure spec entry must not re-export its Node CLI subpath");
   }
 }
 
@@ -208,6 +231,7 @@ checkDatabasePropertyDetector();
 checkRuntimeCloudflareFree();
 checkPackageDirection();
 checkEntryReadOwnership();
+checkNodeTestingBoundary();
 checkSkillDocsVersioned();
 
 if (failures.length > 0) {

@@ -1,0 +1,104 @@
+# Data access, cache policy, and performance harness
+
+Mantle site code declares intent; Core owns the shared storage layout and the
+Cloudflare adapter owns provider bindings. A site-building agent should not
+need Mantle table names, generated-column names, KV prefixes, or D1 APIs to
+make a normal content/API/page change.
+
+## Ownership
+
+| Read or state | Owner | Notes |
+|---|---|---|
+| Entry get/list and public slug/data-field/published reads | `DatabaseEntryRepository` through `EntryRepository` / `EntryReader` | Schema-aware field resolution is shared here. |
+| Manifest View execution | `ExecuteViewUseCase` + `ViewSqlCompiler` | The deliberate compiled-query exception; it still resolves declared Schema indexes. |
+| Editable settings and code-owned locale/media policy | `DatabaseSiteConfigRepository` | Editable values and dynamic media tool policy are read fresh; boot-seeded locale policy may be memoized within the runtime instance. |
+| Pending media uploads | `DatabasePendingUploadRepository` | Canonical, read-after-write D1 state; never publish-cache state. |
+| Rendered HTML, Markdown, and `llms.txt` | `HtmlPublishOrchestrator` plus the Cloudflare public-route cache policy | Reproducible derivatives live in KV. Settings updates invalidate through a runtime use case. |
+| D1/KV transport and optional query metrics | Cloudflare bindings | Bindings stay thin. Query/cache policy does not belong in a generic provider `BaseRepository`. |
+
+`CmsRuntime.db` remains deprecated compatibility surface. New site code uses
+Manifests, runtime use cases, `entryReader`, and `siteConfig`. A site may own
+additional tables behind its own repository at the composition root, but it
+must not query Mantle-owned tables through `runtime.db`.
+
+## Cache contract
+
+- D1 is canonical for entries, site settings, media metadata, and pending
+  uploads. KV contains only reproducible public artifacts.
+- A public KV hit checks the cache before loading full editable site settings.
+  Locale policy is the small boot-seeded exception. A warm entry/page artifact
+  therefore performs zero D1 queries.
+- A safe cache miss renders from canonical state and schedules KV write-back
+  with the request execution context. It waits inline only when no execution
+  context exists, such as a direct unit call.
+- Site-setting writes call the runtime settings use case, which completes
+  public-artifact invalidation before reporting success. HTTP routes do not
+  scan/delete KV prefixes themselves.
+- Do not cache every repository read. Cross-isolate correctness for editable
+  data wins unless a read has a measured hot-path contract and explicit
+  invalidation.
+
+## Index coverage
+
+The Node harness uses the real canonical migrations, generated Schema DDL,
+real View compiler, deterministic skewed rows, and SQLite
+`EXPLAIN QUERY PLAN`:
+
+```bash
+pnpm exec mantle-harness indexes --manifests ./manifests --format text
+pnpm exec mantle-harness indexes --require-public --format json
+pnpm exec mantle-harness indexes --require account-members --format json
+```
+
+Without `--require-public` or `--require`, findings are advisory. A required
+path fails on an `entries` table scan, a temporary ORDER BY B-tree, or a
+data-field predicate/order that does not use a declared Schema index.
+Projection alone does not require an index. `mantle validate` remains a pure
+correctness check; no performance grammar or manifest atom was added.
+
+Use the machine report in CI. It includes the compiled SQL and parameters,
+query-plan details, named indexes, scan/sort flags, result count, SQLite
+version, fixture row count, and required-failure summary.
+
+## Worker/API/page sampling
+
+Sample any running environment with the public HTTP helper:
+
+```bash
+pnpm exec mantle-harness http \
+  --base-url http://127.0.0.1:8787 \
+  --route recent=/api/views/recent-posts \
+  --route page=/en/posts/hello \
+  --rounds 20 --warmup 2 --format json
+```
+
+Timing always reports p50/p95/max. A test-only Worker wrapper may also return
+`x-mantle-query-count` and `x-mantle-rows-read`; those become distributions in
+the same report. Do not expose these diagnostic headers in production.
+
+Core CI runs `pnpm bench:wrangler` against real Wrangler-local D1, KV, Worker
+HTTP routing, View execution, and live page rendering. It compares 100 and
+10,000 row fixtures, then samples page MISS and HIT separately. CI gates
+row-read scaling, endpoint query budgets, and zero-D1 warm hits, not absolute
+milliseconds.
+
+## Seven findings: measured disposition
+
+Measured on the deterministic 2026-08-01 Wrangler-local fixture; timings are
+diagnostic, while query/row counts are the stable assertions.
+
+| Finding | Disposition |
+|---|---|
+| Public KV hits read D1 first | Fixed. A 10,000-row warm page measured 0 queries / 0 rows read. |
+| Slug/locale reads bypass generated indexes | Fixed by the shared schema-aware entry-read boundary. A 10,000-row page MISS measured 2 queries / 5 rows read. |
+| OFFSET pagination | Accepted for the v0.1 bounded-result surfaces: every response is capped at 500 rows and public hot paths must stay shallow. Deep/export workloads require a purpose-shaped cursor API before they are declared hot. |
+| Admin substring search scans | Accepted only for the authenticated Admin collection browser, with a 500-row response cap. Large/search-heavy sites should add a purpose-shaped indexed View or dedicated search service; do not expose this scan publicly. |
+| Published list/sitemap/llms paths lack system indexes | Fixed with measured partial indexes for published global, locale, collection, and collection+locale ordering. The 100-row and 10,000-row API runs both measured 1 query / 20 rows read. |
+| Page MISS waits for KV write-back | Fixed. Reproducible artifacts write through `waitUntil`; regression coverage proves response completion does not await KV. |
+| Benchmark stops at fake in-process dispatch | Fixed by the Node planner and Wrangler-local Worker/API/page layers. The old dispatch microbenchmark remains a narrow CPU signal only. |
+
+The retained OFFSET and substring-search trade-offs are visible exceptions,
+not patterns for new public APIs. Re-measure before widening either scope.
+
+See also [Schema indexes](./schema-indexes.md) and the official Cloudflare
+[D1 index guidance](https://developers.cloudflare.com/d1/best-practices/use-indexes/).

@@ -1,4 +1,8 @@
-export { D1DatabaseDriver } from "./D1DatabaseDriver.js";
+export {
+  D1DatabaseDriver,
+  type D1QueryMetric,
+  type D1QueryObserver,
+} from "./D1DatabaseDriver.js";
 export { KvCacheBinding } from "./KvCacheBinding.js";
 export { AssetsAssetServer } from "./AssetsAssetServer.js";
 export { R2MediaStorage } from "./R2MediaStorage.js";
