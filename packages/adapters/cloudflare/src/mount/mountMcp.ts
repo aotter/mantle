@@ -34,9 +34,9 @@ export interface CreateMcpApiHandlerOptions {
  * which broke the consent flow. Staff vs public is now purely D1-role
  * driven.
  */
-export function createMcpApiHandler(
+export function createMcpApiHandler<Env = Record<string, unknown>>(
   options: CreateMcpApiHandlerOptions,
-): ExportedHandler<Record<string, unknown>> {
+): ExportedHandler<Env> {
   const { ref, surface } = options;
   const requiredScopes = options.requiredScopes ?? ["mcp"];
   // Key the cached dispatcher to the runtime identity. Without this,
@@ -50,7 +50,7 @@ export function createMcpApiHandler(
   }>();
 
   return {
-    async fetch(request, _env, ctx) {
+    async fetch(request, env, ctx) {
       const props = (ctx as unknown as { props?: OAuthApiProps }).props;
       if (!props?.userId) return forbidden(requiredScopes);
       const grantedScopes = props.scopes?.length ? props.scopes : ["mcp"];
@@ -116,15 +116,20 @@ export function createMcpApiHandler(
         cached = { mediaPurposesKey, dispatcher };
         dispatcherCache.set(runtime, cached);
       }
-      return cached.dispatcher.dispatch(request, {
-        userId: props.userId,
-        staff: role && STAFF_ROLE_SET.has(role)
-          ? { userId: props.userId, role: role as StaffRole }
-          : null,
-        clientId: props.clientId ?? null,
-        credentialId: null,
-        scopes: grantedScopes,
-      });
+      const waitUntil = typeof ctx.waitUntil === "function" ? ctx.waitUntil.bind(ctx) : undefined;
+      return cached.dispatcher.dispatch(
+        request,
+        {
+          userId: props.userId,
+          staff: role && STAFF_ROLE_SET.has(role)
+            ? { userId: props.userId, role: role as StaffRole }
+            : null,
+          clientId: props.clientId ?? null,
+          credentialId: null,
+          scopes: grantedScopes,
+        },
+        { env, ...(waitUntil ? { waitUntil } : {}) },
+      );
     },
   };
 }

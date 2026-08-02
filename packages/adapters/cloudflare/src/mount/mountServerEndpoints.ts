@@ -1,4 +1,4 @@
-import type { Context, Hono } from "hono";
+import type { Context, Env, Hono } from "hono";
 import {
   DiagnosticError,
   HTTP_STATUS_BY_CODE,
@@ -41,8 +41,8 @@ const [PAGE_PARAM, SHOW_PARAM] = VIEW_PARAMS_RESERVED;
  *  provider lib (via `createMcpApiHandler`) — if a Trigger needs
  *  identity, route it under an MCP `apiHandler` instead of a Hono
  *  catch-all. */
-export function mountServerEndpoints(
-  app: Hono,
+export function mountServerEndpoints<E extends Env>(
+  app: Hono<E>,
   ref: CmsRuntimeRef,
 ): void {
   for (const t of ref.manifests) {
@@ -63,6 +63,7 @@ export function mountServerEndpoints(
         triggerName,
         path,
         matchTriggerPath(c.req.path) ?? {},
+        c.env,
         waitUntil,
       );
     });
@@ -78,13 +79,13 @@ export function mountServerEndpoints(
     app.get(`/api/views/${viewName}`, async (c) => {
       const runtime = await ref.get();
       const waitUntil = readWaitUntil(c);
-      return handleViewRequest(c.req.raw, runtime, viewName, ref, waitUntil, "/api/views");
+      return handleViewRequest(c.req.raw, runtime, viewName, ref, c.env, waitUntil, "/api/views");
     });
   }
   mountAdminBetterAuth(app, ref, ref.auth);
 }
 
-function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
+function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, auth: Auth): void {
   const authBasePath = auth.basePath;
   const spa = (): Response =>
     new Response(indexHtml, {
@@ -339,7 +340,15 @@ function mountAdminBetterAuth(app: Hono, ref: CmsRuntimeRef, auth: Auth): void {
     guarded("get", `/admin/api/views/${viewName}`, async (c) => {
       const runtime = await ref.get();
       const waitUntil = readWaitUntil(c);
-      return handleViewRequest(c.req.raw, runtime, viewName, ref, waitUntil, "/admin/api/views");
+      return handleViewRequest(
+        c.req.raw,
+        runtime,
+        viewName,
+        ref,
+        c.env,
+        waitUntil,
+        "/admin/api/views",
+      );
     });
   }
 
@@ -1471,7 +1480,7 @@ function adminHandlerContext(c: Context, gate: Extract<StaffGate, { kind: "ok" }
       clientId: null,
       scopes: [],
     },
-    env: {},
+    env: c.env ?? {},
     ...(waitUntil ? { waitUntil } : {}),
   };
 }
@@ -1500,6 +1509,7 @@ async function handleHttpTrigger(
   triggerName: string,
   triggerPath: string,
   pathParams: Readonly<Record<string, string>>,
+  env: unknown,
   waitUntil: ((p: Promise<unknown>) => void) | undefined,
 ): Promise<Response> {
   const trigger = runtime.triggersByName.get(triggerName);
@@ -1517,6 +1527,7 @@ async function handleHttpTrigger(
     auth: ref.auth,
     credentialResolver: ref.credentialResolver,
     oauthBearer: ref.oauthBearer,
+    env,
     waitUntil,
   });
   if (caller.kind === "invalid") {
@@ -1558,6 +1569,7 @@ async function handleViewRequest(
   runtime: CmsRuntime,
   viewName: string,
   ref: CmsRuntimeRef,
+  env: unknown,
   waitUntil: ((p: Promise<unknown>) => void) | undefined,
   // Mount prefix for this View's route. Passed by the caller because
   // the same handler serves BOTH the public mount (`/api/views`) and
@@ -1579,6 +1591,7 @@ async function handleViewRequest(
     auth: ref.auth,
     credentialResolver: ref.credentialResolver,
     oauthBearer: ref.oauthBearer,
+    env,
     waitUntil,
   });
   if (caller.kind === "invalid") {

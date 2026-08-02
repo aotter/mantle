@@ -132,13 +132,13 @@ function testAuth(authOverride?: Partial<Auth>): Auth {
 }
 
 function harness(authOverride?: Partial<Auth>) {
-  const calls: Array<{ input: unknown }> = [];
+  const calls: Array<{ input: unknown; env: unknown }> = [];
   const auth = testAuth(authOverride);
   const ref = createCmsRef({
     manifests: manifests(),
     handlers: {
-      recomputeInventory: (input) => {
-        calls.push({ input });
+      recomputeInventory: (input, ctx) => {
+        calls.push({ input, env: ctx.env });
         return { ok: true, sku: (input as { sku: string }).sku };
       },
       reindexCatalog: () => ({ ok: true }),
@@ -502,16 +502,21 @@ describe("GET /admin/api/operations — rowBindings (#430)", () => {
 describe("POST /admin/api/operations/:name", () => {
   it("invokes the procedure through the runtime and returns its output", async () => {
     const { app, calls } = harness();
-    const res = await app.request("/admin/api/operations/recompute-inventory", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sku: "sku-1" }),
-    });
+    const workerEnv = { ADMIN_SOURCE: "worker-env" };
+    const res = await app.request(
+      "/admin/api/operations/recompute-inventory",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sku: "sku-1" }),
+      },
+      workerEnv,
+    );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean; output?: { sku: string } };
     expect(body.ok).toBe(true);
     expect(body.output?.sku).toBe("sku-1");
-    expect(calls).toEqual([{ input: { sku: "sku-1" } }]);
+    expect(calls).toEqual([{ input: { sku: "sku-1" }, env: workerEnv }]);
   });
 
   it("404s on an unknown operation name", async () => {

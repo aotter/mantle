@@ -20,7 +20,7 @@ import type {
  * registered function before the runtime accepts traffic.
  */
 export interface HandlerRegistry {
-  register<I, O>(ref: string, fn: HandlerFn<I, O>): void;
+  register<I, O, Env = unknown>(ref: string, fn: HandlerFn<I, O, Env>): void;
   get(ref: string): AnyHandler | undefined;
   has(ref: string): boolean;
   /** Snapshot of registered refs — used by the boot validator to
@@ -31,7 +31,7 @@ export interface HandlerRegistry {
 export class InMemoryHandlerRegistry implements HandlerRegistry {
   private readonly map = new Map<string, AnyHandler>();
 
-  register<I, O>(ref: string, fn: HandlerFn<I, O>): void {
+  register<I, O, Env = unknown>(ref: string, fn: HandlerFn<I, O, Env>): void {
     this.map.set(ref, fn as AnyHandler);
   }
 

@@ -17,18 +17,16 @@ import type { EntryRow } from "./EntryRow.js";
  * value-typed concept used by domain / usecase / infrastructure
  * alike — it's a per-request VO, not a request DTO.
  */
-export interface HandlerContext {
+export interface HandlerContext<Env = unknown> {
   readonly user: { readonly id: string } | null;
   readonly staff: { readonly id: string; readonly role: StaffRole } | null;
   /** Verified credential metadata normalized by the adapter. Raw
    *  credentials never enter runtime context. Optional preserves
    *  source compatibility for legacy/internal invocations. */
   readonly auth?: HandlerAuthContext;
-  /** Adapter-specific bindings (D1 + KV + optional feature bindings on Cloudflare).
-   *  Untyped here so the runtime stays portable — consumer handlers
-   *  cast to their adapter's bindings type. The test harness passes
-   *  `{}` unless a test needs a specific shape. */
-  readonly env: unknown;
+  /** Adapter-specific bindings. The default stays portable; consumers may
+   *  supply their Worker Env type through `HandlerFn`/generated handlers. */
+  readonly env: Env;
   /** Cloudflare `ExecutionContext.waitUntil`-style fire-and-forget
    *  bridge. Adapter populates when running in a Worker; runtime uses
    *  it for after-publish KV cache writes that mustn't block the
@@ -72,9 +70,9 @@ export interface HandlerLifecycleEvent {
  * surfaces as `OUTPUT_VALIDATION_FAILED` to the caller and is a
  * handler bug.
  */
-export type HandlerFn<I = unknown, O = unknown> = (
+export type HandlerFn<I = unknown, O = unknown, Env = unknown> = (
   input: I,
-  ctx: HandlerContext,
+  ctx: HandlerContext<Env>,
 ) => Promise<O> | O;
 
 /**
@@ -84,4 +82,4 @@ export type HandlerFn<I = unknown, O = unknown> = (
  * appears only on registry boundaries.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyHandler = HandlerFn<any, any>;
+export type AnyHandler = HandlerFn<any, any, any>;

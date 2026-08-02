@@ -1,11 +1,12 @@
 import { Hono } from "hono";
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DiagnosticError,
   runtimeDiagnostic,
   type Manifest,
 } from "@aotter/mantle-spec";
+import type { HandlerFn } from "@aotter/mantle-runtime";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
 import { createMcpApiHandler } from "../src/mount/mountMcp.js";
@@ -74,6 +75,15 @@ function manifests(): Manifest[] {
     {
       apiVersion,
       kind: "Trigger",
+      metadata: { name: "read-account-staff-mcp" },
+      spec: {
+        source: { kind: "mcp", surface: "staff" },
+        target: { procedure: "read-account" },
+      },
+    },
+    {
+      apiVersion,
+      kind: "Trigger",
       metadata: { name: "read-account-mcp" },
       spec: {
         source: { kind: "mcp", surface: "public" },
@@ -122,12 +132,25 @@ describe("authorization integration: one target across REST and MCP", () => {
     let entitled = true;
     let targetCalls = 0;
     let guardCalls = 0;
+    const mcpWaitUntil = vi.fn<(promise: Promise<unknown>) => void>();
+    const workerEnv = { ENTITLEMENT_SOURCE: "worker-env" };
+    const readAccount: HandlerFn<
+      { accountId: string },
+      { accountId: string },
+      typeof workerEnv
+    > = (input, ctx) => {
+      targetCalls++;
+      expect(ctx.env.ENTITLEMENT_SOURCE).toBe("worker-env");
+      ctx.waitUntil?.(Promise.resolve());
+      return input;
+    };
     const ref = createCmsRef({
       manifests: manifests(),
       handlers: {
         requireActiveMembership: (_input, ctx) => {
           guardCalls++;
           expect(ctx.user?.id).toBe("user-1");
+          expect(ctx.env.ENTITLEMENT_SOURCE).toBe("worker-env");
           if (!entitled) {
             throw new DiagnosticError(
               runtimeDiagnostic({
@@ -140,17 +163,14 @@ describe("authorization integration: one target across REST and MCP", () => {
           }
           return {};
         },
-        readAccount: (input) => {
-          targetCalls++;
-          return input;
-        },
+        readAccount,
       },
       bindings: {
         db: new InMemoryDatabase(),
         kv: new InMemoryKv(),
         assets: new StubAssetServer(),
       },
-      auth: stubAuth,
+      auth: { ...stubAuth, getUserRole: async () => "owner" },
       credentialResolver: (request) => {
         const header = request.headers.get("authorization");
         if (header === null) return { kind: "not-handled" };
@@ -166,50 +186,63 @@ describe("authorization integration: one target across REST and MCP", () => {
         };
       },
     });
-    const app = new Hono();
+    const app = new Hono<{ Bindings: typeof workerEnv }>();
     mountServerEndpoints(app, ref);
-    const mcp = createMcpApiHandler({ ref, surface: "public" });
+    const publicMcp = createMcpApiHandler<typeof workerEnv>({ ref, surface: "public" });
+    const staffMcp = createMcpApiHandler<typeof workerEnv>({ ref, surface: "staff" });
     const mcpContext = {
       props: {
         userId: "user-1",
         clientId: "personal-client",
         scopes: ["mcp", "accounts:read"],
       },
+      waitUntil: mcpWaitUntil,
     } as unknown as ExecutionContext;
 
-    const restGranted = await app.request("/api/accounts/read", {
-      method: "POST",
-      headers: {
-        authorization: "Bearer site_pat_1",
-        "content-type": "application/json",
+    const restGranted = await app.request(
+      "/api/accounts/read",
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer site_pat_1",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ accountId: "acct-1" }),
       },
-      body: JSON.stringify({ accountId: "acct-1" }),
-    });
+      workerEnv,
+    );
     expect(restGranted.status).toBe(200);
-    const mcpGranted = await mcp.fetch!(mcpCall(), {}, mcpContext);
-    const mcpGrantedBody = (await mcpGranted.json()) as {
-      result?: { content?: Array<{ text?: string }> };
-    };
-    expect(JSON.parse(mcpGrantedBody.result?.content?.[0]?.text ?? "{}")).toEqual({
-      accountId: "acct-1",
-    });
-    expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 2, targetCalls: 2 });
+    for (const mcp of [publicMcp, staffMcp]) {
+      const mcpGranted = await mcp.fetch!(mcpCall(), workerEnv, mcpContext);
+      const mcpGrantedBody = (await mcpGranted.json()) as {
+        result?: { content?: Array<{ text?: string }> };
+      };
+      expect(JSON.parse(mcpGrantedBody.result?.content?.[0]?.text ?? "{}")).toEqual({
+        accountId: "acct-1",
+      });
+    }
+    expect(mcpWaitUntil).toHaveBeenCalledTimes(2);
+    expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 3, targetCalls: 3 });
 
     entitled = false;
-    const restDenied = await app.request("/api/accounts/read", {
-      method: "POST",
-      headers: {
-        authorization: "Bearer site_pat_1",
-        "content-type": "application/json",
+    const restDenied = await app.request(
+      "/api/accounts/read",
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer site_pat_1",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ accountId: "acct-1" }),
       },
-      body: JSON.stringify({ accountId: "acct-1" }),
-    });
+      workerEnv,
+    );
     expect(restDenied.status).toBe(402);
-    const mcpDenied = await mcp.fetch!(mcpCall(), {}, mcpContext);
+    const mcpDenied = await publicMcp.fetch!(mcpCall(), workerEnv, mcpContext);
     const mcpDeniedBody = (await mcpDenied.json()) as {
       error?: { data?: { code?: string } };
     };
     expect(mcpDeniedBody.error?.data?.code).toBe("ENTITLEMENT_REQUIRED");
-    expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 4, targetCalls: 2 });
+    expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 5, targetCalls: 3 });
   });
 });
