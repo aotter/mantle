@@ -159,6 +159,10 @@ Don't force-retag the broken alpha. Don't introduce a starter-only sub-tag like 
 
 ## Release fanout
 
+The repository boundary and its reconsideration criteria are governed by
+[ADR-0018](adr/0018-core-starters-repository-boundary.md). This section records
+the current mechanics only.
+
 `mantle/.github/workflows/release.yml` triggers on `v*` tag push.
 The full chain:
 
