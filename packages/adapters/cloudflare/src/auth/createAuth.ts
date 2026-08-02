@@ -1158,6 +1158,13 @@ export interface Auth {
   ) => Promise<RegisteredOAuthClient>;
 }
 
+const SETUP_INCOMPLETE_AUTHS = new WeakSet<Auth>();
+
+/** True only for the fail-closed facade returned by createSetupIncompleteAuth. */
+export function isSetupIncompleteAuth(auth: Auth): boolean {
+  return SETUP_INCOMPLETE_AUTHS.has(auth);
+}
+
 export function createAuth(config: CreateAuthConfig): Auth {
   const auth = buildAuth(config);
   const basePath = normalizeAuthBasePath(config.basePath);
@@ -1403,9 +1410,9 @@ export function createSetupIncompleteAuth(
     (() =>
       Response.json(
         { error: "setup_incomplete", message },
-        { status: 503, headers: { "cache-control": "no-store" } },
+        { status: 503, headers: { "cache-control": "private, no-store" } },
       ));
-  return {
+  const auth: Auth = {
     basePath,
     handler: async () => response(),
     getSession: async () => null,
@@ -1432,6 +1439,8 @@ export function createSetupIncompleteAuth(
       throw new Error(message);
     },
   };
+  SETUP_INCOMPLETE_AUTHS.add(auth);
+  return auth;
 }
 
 function bearerTokenFrom(tokenOrRequest: string | Request): string | null {

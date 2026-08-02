@@ -8,6 +8,7 @@ export * from "./mount/index.js";
 export * from "./handlers/index.js";
 export * from "./oauth/index.js";
 export * from "./auth/createAuth.js";
+export * from "./auth/conventionalAuth.js";
 export { ConsoleEmailSender } from "./auth/ConsoleEmailSender.js";
 export {
   appleClientSecret,
