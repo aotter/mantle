@@ -30,6 +30,46 @@ import { createCmsRuntime } from "@aotter/mantle/runtime";
 import { mountServerEndpoints } from "@aotter/mantle/cloudflare";
 ```
 
+## Minimal Worker, open underneath
+
+A generated site normally delegates the standard Cloudflare stack to Core:
+
+```ts
+import { createMantleWorker } from "@aotter/mantle/cloudflare";
+import { manifest } from "../.mantle/generated/site.js";
+
+export default createMantleWorker({ manifest });
+```
+
+Custom handlers are the only extra source required for referenced Procedures.
+Use `extend` to add routes or services to the same typed Hono/runtime/Auth
+stack. Use `bindings` to augment conventional adapters. If the deployment
+really needs a different architecture, compose the exported D1/KV/assets,
+runtime-ref, mount, OAuth/MCP, and cache helpers directly. The installed
+package includes the version-matched `fixtures/low-level-worker` recipe; it
+adds a Queue binding without private imports.
+
+This is progressive disclosure, not a lock. Generated UI and selected overlay
+source are project-owned and may be edited or ejected like shadcn components.
+The default bundle simply does not vendor unused framework or design-system
+code. The packaged [override and eject guide](./docs/site-overrides.md)
+maps the former `src/mantle/config.ts`, Kiwa tree, overlay seed, and repo-local
+updater to concrete supported paths.
+
+## Authoring CLI
+
+The umbrella package owns the `mantle` command:
+
+```bash
+pnpm exec mantle generate       # parsed manifest module, handler/View types, local skills
+pnpm exec mantle validate
+pnpm exec mantle update --ref vX.Y.Z  # report only; never overwrites local work
+```
+
+`mantle generate --check` fails on stale generated files. `mantle update`
+compares the exact recorded source ref, target bundle, and local project, then
+writes `.mantle/update-report.json` for a reviewed manual port.
+
 The package also installs `mantle-harness`:
 
 ```bash
@@ -107,6 +147,9 @@ The `mantle-runtime` package never imports Cloudflare-specific types — adapter
     JSON-field indexes, D1 query plans, and the safe Procedure SQL helper)
   - `node_modules/@aotter/mantle/docs/performance-harness.md` (crowded SQLite,
     Wrangler-local D1, cache HIT/MISS, and coding-agent guardrails)
+  - `node_modules/@aotter/mantle/docs/site-overrides.md` (typed façade
+    extensions, low-level composition, selected-source eject, seed, and updater
+    migration)
   - `node_modules/@aotter/mantle/docs/adr/`
   - `node_modules/@aotter/mantle/skills/develop/SKILL.md`
   - `node_modules/@aotter/mantle/skills/plugin/SKILL.md`

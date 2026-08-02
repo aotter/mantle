@@ -1216,6 +1216,41 @@ describe("Auth.listUsers", () => {
   });
 });
 
+describe("Auth.getUser", () => {
+  it("returns the stable projection without exposing the Better Auth row", async () => {
+    const auth = createAuth(
+      baseConfig({
+        database: fakeDbWith({
+          firstResult: {
+            id: "u-1",
+            email: "owner@example.com",
+            name: "Owner",
+            image: "https://images.example/owner.png",
+            role: "owner",
+            githubLogin: "owner-gh",
+            emailVerified: 1,
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        }),
+      }),
+    );
+
+    await expect(auth.getUser("u-1")).resolves.toMatchObject({
+      id: "u-1",
+      email: "owner@example.com",
+      image: "https://images.example/owner.png",
+      role: "owner",
+      emailVerified: true,
+    });
+    expect((await auth.getUser("u-1"))?.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("returns null when no user exists", async () => {
+    const auth = createAuth(baseConfig({ database: fakeDbWith({ firstResult: null }) }));
+    await expect(auth.getUser("missing")).resolves.toBeNull();
+  });
+});
+
 describe("Auth.setUserRole", () => {
   it("throws on a non-staff role string — programmer error, not operator input", async () => {
     const auth = createAuth(baseConfig({ database: fakeDbWith({}) }));

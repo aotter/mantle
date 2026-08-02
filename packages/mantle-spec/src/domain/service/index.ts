@@ -5,6 +5,7 @@
 export * from "./LocaleCanonicalizer.js";
 export * from "./LifecycleStateMachine.js";
 export * from "./ManifestParser.js";
+export * from "./ManifestPartition.js";
 export * from "./CrossSchemaChecker.js";
 export * from "./ManifestPathDiagnoser.js";
 export * from "./SchemaDdlEmitter.js";

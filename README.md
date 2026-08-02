@@ -35,9 +35,11 @@ continues through private GitHub repo creation, Cloudflare deployment, and
 optional paid hosted auth. Local cold start stops before those provider
 operations.
 
-Generated projects include the `mantle` authoring CLI from
-`@aotter/mantle-spec`: `validate`, `introspect`, `emit-openapi`, and
-`emit-types`. The umbrella package also ships `mantle-harness` for crowded
+Generated projects get the `mantle` authoring CLI from the umbrella
+`@aotter/mantle` package: `generate`, `update`, `validate`, `introspect`,
+`emit-openapi`, and `emit-types`. Direct `@aotter/mantle-spec` consumers use
+the narrower `mantle-spec` binary. The umbrella package also ships
+`mantle-harness` for crowded
 SQLite index coverage and live Worker/API/page sampling; see
 [`docs/performance-harness.md`](docs/performance-harness.md).
 
@@ -188,7 +190,10 @@ owning a generated site's local grants or member records.
 
 Starter taxonomy. Mantle landing fetches `provision-bundles/<type>.json` from [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters), substitutes launch facts, commits the repo, and connects Cloudflare Workers CI when possible.
 
-The starter repo owns blank source, small type overlays, vendored Kiwa source, and deterministic provision bundles. Theme selection is not a first-run path; agents continue from the generated repo and the after-launch handoff shown by landing.
+The starter repo owns a headless blank, thin manifest/business/static-UI overlays,
+and deterministic provision bundles. Generated sites edit their materialized UI
+directly or copy/eject only a selected version-matched recipe on demand; they do
+not vendor Kiwa by default. Theme selection is not a first-run gate.
 
 Generated repos carry vendored copies of Core-owned `mantle:*` skills from
 `@aotter/mantle`, including `mantle:plugin` for marketplace capability work.

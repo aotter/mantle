@@ -87,8 +87,10 @@ network. Runs in the AI's terminal in milliseconds. Reads YAML files
 and handler registration source files; emits structured diagnostics;
 exits non-zero on any error.
 
-The CLI ships in the `@aotter/mantle-spec` package — it's the
-spec authority for what a v0.1 manifest must look like.
+The validation implementation ships in `@aotter/mantle-spec`, the spec
+authority for what a v0.1 manifest must look like. Superseding CLI packaging:
+generated sites invoke it through the umbrella package's `mantle` command;
+direct spec-only installs expose `mantle-spec`.
 
 What it catches:
 - Manifest envelope (`apiVersion`, `kind`, `metadata.name`)

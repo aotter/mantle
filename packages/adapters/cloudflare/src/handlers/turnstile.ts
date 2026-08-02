@@ -17,10 +17,11 @@ export interface CloudflareTurnstileCheckOptions {
    *  local check (`token === "fail"` is rejected, anything else
    *  passes) — useful for integration smokes that run with no
    *  network. Any other value triggers real `siteverify`. */
-  readonly secret: string;
+  /** Missing/blank keeps the optional guard disabled. */
+  readonly secret?: string | null;
   /** Field name on the procedure input carrying the client-side
-   *  widget token. Defaults to `"turnstileToken"` (matches the
-   *  starter's contact-messages Schema). */
+   *  widget token. Defaults to `"turnstileToken"`; pass the actual
+   *  form/manifest field when it differs. */
   readonly tokenField?: string;
 }
 
@@ -51,13 +52,15 @@ export interface CloudflareTurnstileCheckOptions {
  * bug.
  */
 export function cloudflareTurnstileCheck(options: CloudflareTurnstileCheckOptions) {
-  const { secret, tokenField = "turnstileToken" } = options;
+  const secret = options.secret?.trim();
+  const { tokenField = "turnstileToken" } = options;
   return async function turnstileCheck(
-    input: Record<string, unknown>,
+    input: object,
     ctx: HandlerContext,
   ): Promise<{ ok: true }> {
     if (ctx.user) return { ok: true };
-    const tokenRaw = input[tokenField];
+    if (!secret) return { ok: true };
+    const tokenRaw = (input as Record<string, unknown>)[tokenField];
     const token = typeof tokenRaw === "string" ? tokenRaw : "";
     if (!token) reject("missing turnstile token");
     if (secret === "dev-stub") {

@@ -1067,28 +1067,4 @@ function validateTriggerSpec(m: TriggerManifest, idx: number): TriggerManifest {
   return m;
 }
 
-/**
- * Bucketize a flat `Manifest[]` (parser output) into typed per-kind
- * arrays. Lives next to the parser because every caller pairs it with
- * `parseManifests` — they're the parser-output pipeline.
- */
-export function partitionManifests(manifests: ReadonlyArray<Manifest>): {
-  schemas: SchemaManifest[];
-  views: ViewManifest[];
-  procedures: ProcedureManifest[];
-  triggers: TriggerManifest[];
-} {
-  const schemas: SchemaManifest[] = [];
-  const views: ViewManifest[] = [];
-  const procedures: ProcedureManifest[] = [];
-  const triggers: TriggerManifest[] = [];
-  for (const m of manifests) {
-    if (m.kind === "Schema") schemas.push(m);
-    else if (m.kind === "View") views.push(m);
-    else if (m.kind === "Procedure") procedures.push(m);
-    else triggers.push(m);
-  }
-  return { schemas, views, procedures, triggers };
-}
-
 export type { FilterAst };

@@ -48,5 +48,38 @@ jobs:
 
       - run: pnpm test
 
+      - uses: actions/checkout@v7.0.0
+        with:
+          repository: aotter/mantle-starters
+          ref: develop
+          path: .downstream/mantle-starters
+          fetch-depth: 0
+
+      - name: Use a paired starters branch when one exists
+        working-directory: .downstream/mantle-starters
+        env:
+          PAIRED_REF: ${{ github.head_ref }}
+        run: |
+          if [ -n "$PAIRED_REF" ] && git ls-remote --exit-code origin "refs/heads/$PAIRED_REF" >/dev/null 2>&1; then
+            git fetch --depth=1 origin "refs/heads/$PAIRED_REF"
+            git checkout --detach FETCH_HEAD
+          fi
+
+      - name: Validate exact packed SDK in external starter consumer
+        shell: bash
+        run: |
+          node .downstream/mantle-starters/scripts/build-provision-bundle.mjs --check
+          if node -e 'process.exit(require("./.downstream/mantle-starters/package.json").scripts?.["check:packed"] ? 0 : 1)'; then
+            node scripts/run-packed-downstream.mjs --project .downstream/mantle-starters -- pnpm check:packed
+          else
+            node scripts/run-packed-downstream.mjs --project .downstream/mantle-starters -- pnpm --dir blank check
+          fi
+
+      - name: Keep the low-level Cloudflare composition escape hatch usable
+        run: node scripts/run-packed-downstream.mjs --package-project fixtures/low-level-worker -- pnpm check
+
+      - name: Preserve alpha.63 project ownership through the Core CLI bridge
+        run: node scripts/check-alpha63-upgrade.mjs --starters .downstream/mantle-starters
+
       - name: Check crowded D1 and public cache paths
         run: pnpm bench:wrangler

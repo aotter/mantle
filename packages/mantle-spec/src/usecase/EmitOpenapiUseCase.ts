@@ -1,4 +1,4 @@
-import { partitionManifests } from "../domain/service/ManifestParser.js";
+import { partitionManifests } from "../domain/service/ManifestPartition.js";
 import { resolveLocalizedText } from "../domain/model/ManifestGrammar.js";
 import type {
   AuthorizationRequirements,

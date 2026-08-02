@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "mantle-low-level-worker-fixture",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-30",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "cache": { "enabled": true },
+  "assets": { "binding": "ASSETS", "directory": "./public", "run_worker_first": true },
+  "d1_databases": [{ "binding": "DB", "database_name": "mantle-low-level-fixture" }],
+  "kv_namespaces": [{ "binding": "KV" }, { "binding": "OAUTH_KV" }],
+  "queues": {
+    "producers": [{ "binding": "AUDIT_QUEUE", "queue": "mantle-low-level-audit" }]
+  }
+}

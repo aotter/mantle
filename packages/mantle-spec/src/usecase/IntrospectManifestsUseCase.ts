@@ -1,4 +1,4 @@
-import { partitionManifests } from "../domain/service/ManifestParser.js";
+import { partitionManifests } from "../domain/service/ManifestPartition.js";
 import type {
   IntrospectManifestsRequest,
 } from "./dto/IntrospectManifestsRequest.js";

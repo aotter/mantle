@@ -1,6 +1,6 @@
 ---
 name: theme
-description: Apply brand and visual direction in a generated Mantle project using its repo-owned theme and UI contracts.
+description: Change a Mantle site's visible design in the smallest project-owned UI surface that actually ships.
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/theme/SKILL.md
@@ -9,40 +9,45 @@ metadata:
 
 # Mantle Theme
 
-Theme work is project-owned source editing. Starters may ship Kiwa files,
-tokens, or recipes, but the skill contract is Core-owned.
+Theme work is project-owned UI work. Do not assume a component framework,
+vendored design system, or generated theme tree exists.
 
 ## First Read
 
-1. `.mantle/handoff.md` and `.mantle/recipes/` if present.
-2. `styles/`, `components/`, `src/web/`, `src/theme*`, and `kiwa-ui.json`
-   if present.
-3. `kiwa/manifest.json` for the pinned source and per-file `mirrors`.
-4. `manifests/` to understand which content shape drives the public UI.
+1. `.mantle/handoff.md` and the manifest that defines visible content.
+2. `public/index.html` when present; this is the editable page in minimal
+   provisioned sites.
+3. Only then inspect real project-owned `src/web`, `src/theme`, `components`,
+   or styles directories that the Worker imports.
 
-## Ownership
+Never edit `.mantle/generated/` or a provision bundle. Do not recreate Kiwa,
+Tailwind, React, or a component tree merely to change copy, spacing, colors, or
+layout in a static page.
 
-- `styles/globals.css` is the token contract. Start a whole-site reskin with
-  its `:root` and `.dark` values; Kiwa components inherit those variables.
-- `src/web/` is project-owned. Put new sections and page composition there.
-- `kiwa/` is a vendored snapshot. In `components/`, treat paths whose manifest
-  entry's `mirrors` contains `blank` as sync-managed in the project root. For
-  a structural variant, fork or wrap the block under `src/web/sections/`
-  instead of editing a synced file.
+The minimal surface is a default, not a restriction. `public/index.html` is
+already project-owned/ejected source. When a deeper structural override is
+chosen, follow the shadcn model: copy only the selected overlay recipe or
+component into a project-owned path, keep its provenance/license, and edit it
+freely. Do not vendor an entire theme catalog for one block.
+
+The checked zero-dependency page recipe and historical Kiwa recovery map live
+in `node_modules/@aotter/mantle/docs/site-overrides.md`. The last full Kiwa
+catalog is starter `v0.0.11-alpha.63`; its TSX requires its explicit JSX,
+utility, and CSS dependencies and is not a drop-in minimal-starter default.
 
 ## Work
 
-- Use existing tokens, CSS, components, and installed dependencies first.
-- For a standard hero image, set the section's `image: { src, alt }`; use
-  `showImage: false` for text-only hero/content blocks. Put non-image media in
-  a project-owned section.
-- Keep accessibility basics: semantic HTML, focus states, contrast, and
-  keyboard reachability. Against a non-default background, check
-  `--foreground-muted` and `--primary`, not only `--foreground`; keep normal
-  text at 4.5:1 or better.
-- Do not require registry access for a project that already vendors UI source.
-- Add UI dependencies only when existing source cannot cover the requested
-  change.
+- Reuse the existing HTML, CSS variables, components, and dependencies first.
+- Keep semantic HTML, visible focus, keyboard reachability, responsive layout,
+  and at least 4.5:1 contrast for normal text.
+- Keep form names and fixed option values aligned with the manifest Procedure.
+- Add image `alt` text and avoid loading decorative media that does not help
+  the page.
+- Add a UI dependency only when the requested interaction or reuse cannot be
+  expressed cleanly in the current surface.
+- It is valid to replace the static page with a custom renderer or app when the
+  developer chooses that tradeoff; connect it through the existing Worker
+  façade/extension or public low-level SDK instead of forking Core internals.
 
 ## Check
 
@@ -52,7 +57,5 @@ pnpm typecheck
 pnpm dev
 ```
 
-If utility classes changed, rebuild `styles/generated.css` with the project's
-`build:styles`, `check`, or `dev` script. Remove routes/imports for replaced
-assets or styles, then visually verify light/dark contrast and responsive
-behavior before calling the work done.
+Visually verify narrow/wide layouts, keyboard interaction, and light/dark
+contrast where supported. Run the full `pnpm check` before shipping.

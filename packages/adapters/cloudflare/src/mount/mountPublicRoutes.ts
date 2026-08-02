@@ -1,4 +1,4 @@
-import type { Context, Hono } from "hono";
+import type { Context, Env as HonoEnv, Hono } from "hono";
 import type { SiteConfig } from "@aotter/mantle-spec";
 import {
   entryHtmlKeyFromParts,
@@ -64,30 +64,30 @@ export interface CollectionRouteConfig {
   readonly homeSlug?: string;
 }
 
-export interface PublicRouteContext {
-  readonly c: Context;
+export interface PublicRouteContext<E extends HonoEnv = HonoEnv> {
+  readonly c: Context<E>;
   readonly runtime: CmsRuntime;
   readonly site: SiteConfig;
   readonly locale: string;
 }
 
-export interface SlugOverride {
+export interface SlugOverride<E extends HonoEnv = HonoEnv> {
   readonly collection: string;
   readonly slug: string;
-  readonly render: (ctx: PublicRouteContext) => Promise<Response>;
+  readonly render: (ctx: PublicRouteContext<E>) => Promise<Response>;
 }
 
-export interface MountPublicRoutesOptions {
+export interface MountPublicRoutesOptions<E extends HonoEnv = HonoEnv> {
   readonly collectionRoutes: ReadonlyArray<CollectionRouteConfig>;
   /** Renderer for `/{locale}` — typically composes home page +
    *  recent posts across collections. Optional; without it `/` and
    *  `/{locale}` are not registered. */
-  readonly homeRenderer?: (ctx: PublicRouteContext) => Promise<Response>;
+  readonly homeRenderer?: (ctx: PublicRouteContext<E>) => Promise<Response>;
   /** Renderer for the locale 404 fallback. Required — every miss
    *  falls through here. */
-  readonly notFoundRenderer: (ctx: PublicRouteContext) => Promise<Response>;
+  readonly notFoundRenderer: (ctx: PublicRouteContext<E>) => Promise<Response>;
   /** Per-(collection, slug) override taking precedence over KV. */
-  readonly slugOverrides?: ReadonlyArray<SlugOverride>;
+  readonly slugOverrides?: ReadonlyArray<SlugOverride<E>>;
   /** Live-dev flag — bypasses KV for entry / list HTML. Default
    *  false. */
   readonly liveDev?: boolean;
@@ -127,10 +127,10 @@ const SITEMAP_HEADERS = {
   "cache-control": PUBLIC_CACHE_CONTROL,
 } as const;
 
-export function mountPublicRoutes(
-  app: Hono,
+export function mountPublicRoutes<E extends HonoEnv>(
+  app: Hono<E>,
   ref: CmsRuntimeRef,
-  options: MountPublicRoutesOptions,
+  options: MountPublicRoutesOptions<E>,
 ): void {
   const liveDev = options.liveDev === true;
   const overrideIndex = buildOverrideIndex(options.slugOverrides ?? []);
@@ -220,13 +220,13 @@ export function mountPublicRoutes(
   });
 }
 
-function mountCollection(
-  app: Hono,
+function mountCollection<E extends HonoEnv>(
+  app: Hono<E>,
   ref: CmsRuntimeRef,
-  options: MountPublicRoutesOptions,
+  options: MountPublicRoutesOptions<E>,
   route: CollectionRouteConfig,
   liveDev: boolean,
-  overrides: ReadonlyMap<string, SlugOverride>,
+  overrides: ReadonlyMap<string, SlugOverride<E>>,
 ): void {
   const segPath = route.segment ? `/${route.segment}` : "";
 
@@ -402,7 +402,7 @@ interface WaitUntilContext {
   waitUntil(promise: Promise<unknown>): void;
 }
 
-function safeExecutionCtx(c: Context): WaitUntilContext | undefined {
+function safeExecutionCtx<E extends HonoEnv>(c: Context<E>): WaitUntilContext | undefined {
   try {
     return c.executionCtx;
   } catch {
@@ -477,12 +477,12 @@ function lazySite(runtime: CmsRuntime): () => Promise<SiteConfig> {
   return () => pending ??= runtime.siteConfig.load();
 }
 
-function buildCtx(
-  c: Context,
+function buildCtx<E extends HonoEnv>(
+  c: Context<E>,
   runtime: CmsRuntime,
   site: SiteConfig,
   locale: string,
-): PublicRouteContext {
+): PublicRouteContext<E> {
   return { c, runtime, site, locale };
 }
 
@@ -494,10 +494,10 @@ function canonicalLocaleParam(
   return locales.find((candidate) => toUrlLocale(candidate) === target) ?? null;
 }
 
-function buildOverrideIndex(
-  overrides: ReadonlyArray<SlugOverride>,
-): ReadonlyMap<string, SlugOverride> {
-  const map = new Map<string, SlugOverride>();
+function buildOverrideIndex<E extends HonoEnv>(
+  overrides: ReadonlyArray<SlugOverride<E>>,
+): ReadonlyMap<string, SlugOverride<E>> {
+  const map = new Map<string, SlugOverride<E>>();
   for (const o of overrides) map.set(overrideKey(o.collection, o.slug), o);
   return map;
 }

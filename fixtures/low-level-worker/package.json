@@ -1,0 +1,17 @@
+{
+  "name": "mantle-low-level-worker-fixture",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit && node check.mjs && wrangler deploy --dry-run --outdir .wrangler/dry-run"
+  },
+  "dependencies": {
+    "@aotter/mantle": "0.0.11-alpha.63",
+    "hono": "^4.12.30"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260730.1",
+    "typescript": "^6.0.3",
+    "wrangler": "^4.118.0"
+  }
+}

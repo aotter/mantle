@@ -1,4 +1,4 @@
-import type { Context, Hono } from "hono";
+import type { Context, Env, Hono } from "hono";
 import type { Auth } from "../auth/createAuth.js";
 import {
   detectConsentLocale,
@@ -26,7 +26,7 @@ export interface MountAuthorizeOptions {
  * the OAuthProvider itself and never reach defaultHandler — do not
  * mount them here.
  */
-export function mountAuthorize(app: Hono, options: MountAuthorizeOptions): void {
+export function mountAuthorize<E extends Env>(app: Hono<E>, options: MountAuthorizeOptions): void {
   const { auth, loginPath = "/admin/sign-in" } = options;
 
   const consentHandler = async (c: Context): Promise<Response> => {

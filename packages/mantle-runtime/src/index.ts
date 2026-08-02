@@ -85,6 +85,7 @@ export { type IdGenerator, RandomUuidGenerator } from "./domain/port/IdGenerator
 // Consumer/starter handler and render contracts.
 export type {
   AnyHandler,
+  HandlerFn,
   HandlerContext,
   HandlerAuthContext,
   HandlerLifecycleEvent,
@@ -150,3 +151,10 @@ export { CANONICAL_MIGRATIONS } from "./infrastructure/boot/canonicalMigrations.
 // Procedure handler failure carrier used by platform helper handlers
 // such as Cloudflare Turnstile.
 export { InvokeFailure } from "./usecase/procedure/InvokeProcedureUseCase.js";
+export type {
+  ExecuteViewRequest,
+} from "./usecase/dto/view/ExecuteViewRequest.js";
+export type {
+  ExecuteViewResponse,
+  ViewQueryResult,
+} from "./usecase/view/ExecuteViewUseCase.js";

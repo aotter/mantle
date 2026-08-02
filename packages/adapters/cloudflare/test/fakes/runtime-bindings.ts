@@ -44,6 +44,7 @@ export const stubAuth: Auth = {
   handler: async () => new Response(null, { status: 404 }),
   getSession: async () => null,
   getUserRole: async () => null,
+  getUser: async () => null,
   getProviderAccessToken: async () => {
     throw new Error("stub auth has no linked provider token");
   },

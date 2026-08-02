@@ -1,6 +1,6 @@
 ---
 name: plugin
-description: Discover, plan, apply, and verify Mantle marketplace plugins through the Core SDK contract. Use when the user wants to add an installable capability without hand-planning provisioning steps.
+description: Add, update, or remove a declared Mantle capability with the smallest manifest and business-code diff.
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/plugin/SKILL.md
@@ -9,111 +9,53 @@ metadata:
 
 # Mantle Plugin
 
-Mantle plugins are Core SDK capability packages. They are not starter overlays
-and they are not provider provisioning scripts.
-
-A plugin may contribute:
-
-- manifests: `Schema`, `View`, `Procedure`, `Trigger`;
-- handler source or handler registration notes;
-- site defaults or media policy additions;
-- expected HTTP, admin, and MCP surfaces;
-- adapter capability requirements and provider setup notes.
-
-## User Install Entry
-
-The user-facing install path is:
-
-```txt
-Use repo-local mantle:plugin to install <plugin slug or recipe URL> in this repo.
-Use repo-local mantle:plugin to update <plugin id> in this repo.
-Use repo-local mantle:plugin to remove <plugin id> from this repo.
-```
-
-There is no `mantle plugin add` CLI yet. Do not invent one. Install from a
-marketplace entry, plugin package, or recipe URL that declares enough data for
-an agent to apply the capability deterministically.
-
-A valid marketplace entry must include:
-
-- plugin id, title, source, and version;
-- supported Mantle version range;
-- files, manifests, handlers, routes, MCP tools, and admin surfaces it adds;
-- adapter capabilities and provider resources it requires;
-- required env vars and secrets, without secret values;
-- verification commands and expected surfaces.
-
-If the marketplace page is only marketing copy or lacks an install recipe,
-stop and ask for the recipe instead of guessing.
+A plugin is a declared capability package, not a starter overlay or arbitrary
+installer. There is no `mantle plugin add` command yet; do not invent one.
 
 ## First Read
 
-1. `package.json` for Mantle version and adapter package.
-2. `manifests/` for current atom names and route/tool collisions.
-3. `src/mantle/config.ts` and `src/mantle/handlers/` for registered handlers, templates, and optional ports. Older projects may use `src/mantleConfig.ts`.
-4. `.mantle/plugins.json` and `.mantle/plugins.lock.json` if present.
-5. `.mantle/launch-state.json` only as context, not as plugin authority.
+1. `package.json`, `wrangler.jsonc`, and the installed Mantle version.
+2. `manifests/` for atom and route collisions.
+3. `src/handlers.ts` and `src/index.ts` for the current business and extension
+   seams.
+4. `.mantle/plugins.json` and `.mantle/plugins.lock.json` when present.
 
-## Plan First
-
-Before applying any plugin, produce a plan:
-
-- files to add or change;
-- atoms to add and their names;
-- HTTP routes and MCP tools that will appear;
-- required runtime ports;
-- adapter-specific resources, env vars, and secrets;
-- checks to run.
-
-If the plugin needs a capability the current adapter does not expose, stop
-with the missing capability instead of inventing provider steps.
+Require an install recipe that names its version, supported Mantle range,
+files, atoms, handler refs, routes/tools, bindings, env/secrets, and checks.
+Marketing copy is not an install recipe.
 
 ## Apply
 
-Apply the smallest deterministic diff. Do not run arbitrary install scripts
-from a plugin package. Copy declared files, wire declared handlers, update the
-plugin ledger, then validate.
+Plan the exact files, atoms, public surfaces, provider resources, and checks.
+Then make the smallest deterministic diff:
 
-Suggested ledger paths:
+- add or edit manifest atoms;
+- add only referenced handlers or business services;
+- register a custom route through `createMantleWorker({ extend })` rather than
+  creating a second router;
+- add a binding or low-level adapter only when the declared capability needs
+  it;
+- record owned files/atoms in the plugin ledger.
 
-```txt
-.mantle/plugins.json
-.mantle/plugins.lock.json
-```
+Do not run arbitrary package install scripts or commit secrets. If the active
+adapter lacks a required capability, stop and report that gap.
 
-Keep starter launch state separate from plugin state. `.mantle/features.json`
-is launch/starter context, not the Core plugin ledger.
-
-## Update
-
-Compare the installed lock entry against the marketplace entry or recipe URL.
-Apply only the declared version diff, update `.mantle/plugins.lock.json`, then
-run the same verification checks.
-
-## Remove
-
-Use the lock entry as the removal manifest. Delete only files and atoms owned
-by that plugin, unwind handler registrations it added, remove its ledger entry,
-then validate. If another plugin or local code depends on a removed atom, stop
-and report the dependency instead of deleting through it.
-
-## Verify
+Regenerate and verify:
 
 ```bash
+pnpm exec mantle generate
 pnpm validate
+pnpm check:generated
 pnpm typecheck
+pnpm check
 ```
 
-Then verify the plugin's declared surfaces:
+Exercise every declared View, HTTP Trigger, and MCP tool. Test stored results,
+not only successful envelopes.
 
-- `GET /api/views/<name>` for View reads;
-- HTTP Trigger path for public writes;
-- Staff/Public MCP `tools/list` for MCP Trigger or Schema-derived tools;
-- adapter resource presence when the plugin requires optional ports.
+## Update or Remove
 
-## Don't
-
-- Don't treat a starter archetype as a plugin.
-- Don't assume Cloudflare; inspect the active adapter and capability ports.
-- Don't create a second skill namespace for starter-specific plugins.
-- Don't commit secrets. Provider secrets stay in the platform secret store.
+Compare against the locked recipe version. Apply only its declared delta.
+For removal, delete only files and atoms owned by that plugin; stop if local
+code or another plugin depends on them. Never treat `.mantle/features.json` or
+launch state as the plugin ownership ledger.

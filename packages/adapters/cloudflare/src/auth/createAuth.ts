@@ -1016,6 +1016,11 @@ export interface StaffUserInfo {
   readonly createdAt: Date;
 }
 
+/** Stable, secret-free user projection for consumer-owned services. */
+export interface AuthUserInfo extends StaffUserInfo {
+  readonly image: string | null;
+}
+
 /** Result of `inviteUser`. `exists` carries the prior row's id so the
  *  caller can point the operator at the existing user instead of
  *  surfacing a bare failure. */
@@ -1066,6 +1071,8 @@ export interface Auth {
    *  (MCP, HTTP Triggers) need this because OAuth access tokens carry
    *  userId + scopes but not the user's role. */
   readonly getUserRole: (userId: string) => Promise<string | null>;
+  /** Read one Better Auth-owned user without coupling consumers to its SQL schema. */
+  readonly getUser: (userId: string) => Promise<AuthUserInfo | null>;
   /** Retrieve (and, when expired, refresh) a linked provider token for
    *  the user identified by the current local session request. Refresh
    *  tokens and account rows are never returned. */
@@ -1150,6 +1157,13 @@ export interface Auth {
   ) => Promise<RegisteredOAuthClient>;
 }
 
+const SETUP_INCOMPLETE_AUTHS = new WeakSet<Auth>();
+
+/** True only for the fail-closed facade returned by createSetupIncompleteAuth. */
+export function isSetupIncompleteAuth(auth: Auth): boolean {
+  return SETUP_INCOMPLETE_AUTHS.has(auth);
+}
+
 export function createAuth(config: CreateAuthConfig): Auth {
   const auth = buildAuth(config);
   const basePath = normalizeAuthBasePath(config.basePath);
@@ -1180,6 +1194,35 @@ export function createAuth(config: CreateAuthConfig): Auth {
         .bind(userId)
         .first<{ role: string | null }>();
       return row?.role ?? null;
+    },
+    getUser: async (userId) => {
+      const row = await config.database
+        .prepare(
+          "SELECT id, email, name, image, role, githubLogin, emailVerified, createdAt FROM user WHERE id = ? LIMIT 1",
+        )
+        .bind(userId)
+        .first<{
+          id: string;
+          email: string;
+          name: string;
+          image: string | null;
+          role: string | null;
+          githubLogin: string | null;
+          emailVerified: number;
+          createdAt: string;
+        }>();
+      return row
+        ? {
+            id: row.id,
+            email: row.email,
+            name: row.name,
+            image: row.image,
+            role: row.role,
+            githubLogin: row.githubLogin,
+            emailVerified: row.emailVerified !== 0,
+            createdAt: new Date(row.createdAt),
+          }
+        : null;
     },
     getProviderAccessToken: (request, providerId) =>
       getProviderAccessTokenForRequest(api, request, providerId),
@@ -1365,11 +1408,12 @@ export function createSetupIncompleteAuth(
         { error: "setup_incomplete", message },
         { status: 503, headers: { "cache-control": "no-store" } },
       ));
-  return {
+  const auth: Auth = {
     basePath,
     handler: async () => response(),
     getSession: async () => null,
     getUserRole: async () => null,
+    getUser: async () => null,
     getProviderAccessToken: async () => {
       throw new Error(message);
     },
@@ -1391,6 +1435,8 @@ export function createSetupIncompleteAuth(
       throw new Error(message);
     },
   };
+  SETUP_INCOMPLETE_AUTHS.add(auth);
+  return auth;
 }
 
 function bearerTokenFrom(tokenOrRequest: string | Request): string | null {

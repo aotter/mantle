@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadManifestsFromRoot } from "../src/infrastructure/cli/loadManifests.js";
-import { partitionManifests } from "../src/domain/service/ManifestParser.js";
+import { partitionManifests } from "../src/domain/service/ManifestPartition.js";
 import {
   parseArgs as parseOpenapiArgs,
   run as runEmitOpenapi,
