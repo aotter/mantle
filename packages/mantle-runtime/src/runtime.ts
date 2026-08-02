@@ -1,5 +1,4 @@
 import {
-  partitionManifests,
   runtimeDiagnostic,
   type Manifest,
   type ProcedureManifest,
@@ -8,6 +7,7 @@ import {
   type TriggerManifest,
   type ViewManifest,
 } from "@aotter/mantle-spec";
+import { partitionManifests } from "@aotter/mantle-spec/partition";
 import type { AnyHandler } from "./domain/model/HandlerContext.js";
 import type { TemplateRegistry } from "./domain/model/TemplateRegistry.js";
 import type { AssetServer } from "./domain/port/AssetServer.js";

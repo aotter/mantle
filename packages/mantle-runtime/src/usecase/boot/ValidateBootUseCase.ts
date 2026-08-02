@@ -1,6 +1,5 @@
 import {
   bootDiagnostic,
-  partitionManifests,
   checkLocaleAndTranslates,
   ValidateManifestsUseCase,
   type Diagnostic,
@@ -9,6 +8,7 @@ import {
   type SchemaManifest,
   type TriggerManifest,
 } from "@aotter/mantle-spec";
+import { partitionManifests } from "@aotter/mantle-spec/partition";
 import type { HandlerRegistry } from "../../domain/port/HandlerRegistry.js";
 import {
   mcpToolNameSegment,

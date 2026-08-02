@@ -13,7 +13,7 @@ import {
   type TriggerManifest,
   type ViewManifest,
 } from "../domain/model/ManifestGrammar.js";
-import { partitionManifests } from "../domain/service/ManifestParser.js";
+import { partitionManifests } from "../domain/service/ManifestPartition.js";
 import { checkLocaleAndTranslates } from "../domain/service/CrossSchemaChecker.js";
 import {
   checkSchemaIndexes,

@@ -67,7 +67,13 @@ export async function loadManifestsFromRoot(rootArg: string): Promise<LoadManife
     }
     try {
       const parsed = parseManifests(text);
-      parseErrors.push(...parsed.diagnostics);
+      parseErrors.push(...parsed.diagnostics.map((diagnostic) => ({
+        ...diagnostic,
+        path: diagnostic.path.replace(
+          /^manifest:doc\/(\d+)#/,
+          (_match, docIndex: string) => `${file}#/${docIndex}`,
+        ),
+      })));
       parsed.manifests.forEach((m, i) => {
         manifests.push(m);
         const key = `${m.kind}/${m.metadata.name}`;
