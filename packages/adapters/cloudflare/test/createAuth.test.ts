@@ -771,6 +771,7 @@ describe("createAuth — boot invariants", () => {
     expect(auth.methods).toEqual([]);
     expect(await auth.getSession(req)).toBeNull();
     expect(await auth.getUserRole("user_1")).toBeNull();
+    expect(await auth.getUser?.("user_1")).toBeNull();
     expect(await auth.handler(req)).toMatchObject({ status: 503 });
     expect(await auth.listLinkedAccounts("user_1")).toEqual([]);
     expect(await auth.unlinkAccount("user_1", "github")).toBe(false);
@@ -881,12 +882,13 @@ describe("createAuth — boot invariants", () => {
     ]);
   });
 
-  it("returns an Auth surface with handler / getSession / getUserRole", () => {
+  it("returns an Auth surface with handler / getSession / user lookup", () => {
     const auth = createAuth(baseConfig());
     expect(auth.basePath).toBe("/api/auth");
     expect(typeof auth.handler).toBe("function");
     expect(typeof auth.getSession).toBe("function");
     expect(typeof auth.getUserRole).toBe("function");
+    expect(typeof auth.getUser).toBe("function");
     expect(typeof auth.registerOAuthClient).toBe("function");
   });
 
@@ -1213,6 +1215,66 @@ describe("Auth.listUsers", () => {
     expect(users[0]).toMatchObject({ id: "u-1", emailVerified: true });
     expect(users[0]!.createdAt).toBeInstanceOf(Date);
     expect(users[1]).toMatchObject({ id: "u-2", role: null, emailVerified: false });
+  });
+});
+
+describe("Auth.getUser", () => {
+  it("maps one secret-free user projection", async () => {
+    const auth = createAuth(
+      baseConfig({
+        database: fakeDbWith({
+          firstResult: {
+            id: "u-1",
+            email: "owner@example.com",
+            name: "Owner",
+            image: "https://example.com/avatar.png",
+            role: "owner",
+            githubLogin: "owner-gh",
+            emailVerified: 1,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            refreshToken: "must-not-escape",
+          },
+        }),
+      }),
+    );
+
+    expect(await auth.getUser!("u-1")).toEqual({
+      id: "u-1",
+      email: "owner@example.com",
+      name: "Owner",
+      image: "https://example.com/avatar.png",
+      role: "owner",
+      githubLogin: "owner-gh",
+      emailVerified: true,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+  });
+
+  it("returns null when the user does not exist", async () => {
+    const auth = createAuth(baseConfig({ database: fakeDbWith({ firstResult: null }) }));
+
+    expect(await auth.getUser!("missing")).toBeNull();
+  });
+
+  it("rejects a malformed stored timestamp", async () => {
+    const auth = createAuth(
+      baseConfig({
+        database: fakeDbWith({
+          firstResult: {
+            id: "u-1",
+            email: "owner@example.com",
+            name: "Owner",
+            image: null,
+            role: "owner",
+            githubLogin: null,
+            emailVerified: 1,
+            createdAt: "not-a-date",
+          },
+        }),
+      }),
+    );
+
+    await expect(auth.getUser!("u-1")).rejects.toThrow(/invalid createdAt/);
   });
 });
 

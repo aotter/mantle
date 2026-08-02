@@ -1016,6 +1016,11 @@ export interface StaffUserInfo {
   readonly createdAt: Date;
 }
 
+/** Stable, secret-free user projection for consumer-owned services. */
+export interface AuthUserInfo extends StaffUserInfo {
+  readonly image: string | null;
+}
+
 /** Result of `inviteUser`. `exists` carries the prior row's id so the
  *  caller can point the operator at the existing user instead of
  *  surfacing a bare failure. */
@@ -1066,6 +1071,9 @@ export interface Auth {
    *  (MCP, HTTP Triggers) need this because OAuth access tokens carry
    *  userId + scopes but not the user's role. */
   readonly getUserRole: (userId: string) => Promise<string | null>;
+  /** Read one Better Auth-owned user without coupling consumers to its SQL schema.
+   *  Optional so existing custom Auth implementations remain source-compatible. */
+  readonly getUser?: (userId: string) => Promise<AuthUserInfo | null>;
   /** Retrieve (and, when expired, refresh) a linked provider token for
    *  the user identified by the current local session request. Refresh
    *  tokens and account rows are never returned. */
@@ -1180,6 +1188,38 @@ export function createAuth(config: CreateAuthConfig): Auth {
         .bind(userId)
         .first<{ role: string | null }>();
       return row?.role ?? null;
+    },
+    getUser: async (userId) => {
+      const row = await config.database
+        .prepare(
+          "SELECT id, email, name, image, role, githubLogin, emailVerified, createdAt FROM user WHERE id = ? LIMIT 1",
+        )
+        .bind(userId)
+        .first<{
+          id: string;
+          email: string;
+          name: string;
+          image: string | null;
+          role: string | null;
+          githubLogin: string | null;
+          emailVerified: number;
+          createdAt: string;
+        }>();
+      if (!row) return null;
+      const createdAt = new Date(row.createdAt);
+      if (Number.isNaN(createdAt.getTime())) {
+        throw new Error("Auth user row has an invalid createdAt timestamp.");
+      }
+      return {
+        id: row.id,
+        email: row.email,
+        name: row.name,
+        image: row.image,
+        role: row.role,
+        githubLogin: row.githubLogin,
+        emailVerified: row.emailVerified !== 0,
+        createdAt,
+      };
     },
     getProviderAccessToken: (request, providerId) =>
       getProviderAccessTokenForRequest(api, request, providerId),
@@ -1370,6 +1410,7 @@ export function createSetupIncompleteAuth(
     handler: async () => response(),
     getSession: async () => null,
     getUserRole: async () => null,
+    getUser: async () => null,
     getProviderAccessToken: async () => {
       throw new Error(message);
     },
