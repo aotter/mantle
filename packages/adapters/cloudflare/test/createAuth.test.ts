@@ -482,6 +482,26 @@ describe("buildGenericOAuthProviders", () => {
     expect(out[0]).toMatchObject({ clientId: "client", pkce: true });
   });
 
+  it("passes the validated profile mapper to Better Auth", async () => {
+    const mapProfileToUser = (profile: Record<string, unknown>) => ({
+      githubLogin: profile.github_login,
+    });
+    const [provider] = buildGenericOAuthProviders([
+      {
+        kind: "oauth",
+        providerId: "mantle-hosted-auth",
+        clientId: "client",
+        discoveryUrl: "https://auth.mantle.tools/.well-known/openid-configuration",
+        mapProfileToUser,
+      },
+    ]);
+
+    expect(provider?.mapProfileToUser).toBe(mapProfileToUser);
+    expect(await provider?.mapProfileToUser?.({ github_login: "guyspy" })).toEqual({
+      githubLogin: "guyspy",
+    });
+  });
+
   it("maps an RFC 8707 resource to authorization and token params", () => {
     const out = buildGenericOAuthProviders([
       {
