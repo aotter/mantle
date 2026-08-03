@@ -19,12 +19,13 @@ or update the existing one.
 
 ## Skill authority
 
-The `mantle:*` namespace is owned by `@aotter/mantle`. Generated starters may
-vendor Core workflow skills pinned to their starter ref for offline use. Use
-those skills for workflow and compatibility recovery; use the installed
-package version plus `node_modules/@aotter/mantle/docs/` for runtime/API
-behavior. Starter launch files and plugin recipes are project context, not
-competing contracts.
+The `mantle:*` namespace is owned by `@aotter/mantle`. Run `mantle skills` to
+project the installed package's `develop`, `plugin`, `theme`, and `update`
+skills to identical `.agent` and `.claude` paths; use `mantle skills --check`
+to fail closed on drift. The installed package and
+`node_modules/@aotter/mantle/docs/` are the single version-matched authority.
+Starter launch files and plugin recipes are project context, not competing
+contracts.
 
 ## Marketplace install
 

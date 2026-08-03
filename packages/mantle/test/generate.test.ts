@@ -85,6 +85,7 @@ spec:
       expect(await runGenerate(generateArgs)).toBe(0);
       const sitePath = join(root, ".mantle", "generated", "site.ts");
       const typesPath = join(root, ".mantle", "generated", "types.d.ts");
+      await expect(readFile(join(root, ".agent", "skills", "mantle-develop", "SKILL.md"))).rejects.toThrow();
       const firstSite = await readFile(sitePath, "utf8");
       const firstTypes = await readFile(typesPath, "utf8");
       expect(firstSite).toContain("as const satisfies readonly Manifest[]");
