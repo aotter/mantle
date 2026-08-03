@@ -43,6 +43,41 @@ pnpm exec mantle-harness http --base-url http://127.0.0.1:8787 --route page=/en/
 parsed manifest module and handler declarations to `.mantle/generated/`.
 It does not sync skills, update packages, style, provision, or deploy.
 
+## Conventional Cloudflare Worker
+
+The normal Worker entry delegates Core-owned assembly to the SDK:
+
+```ts
+import { createMantleWorker } from "@aotter/mantle/cloudflare";
+import { manifest } from "../.mantle/generated/site.js";
+
+export default createMantleWorker({ manifest });
+```
+
+`createMantleWorker` owns conventional D1/KV/assets bindings, Auth, Admin,
+manifest REST/HTTP routes, OAuth, MCP, cache safety, and rejection-safe
+per-isolate boot. Use its single `extend` seam for application handlers and
+new Hono routes; use the public low-level exports when the deployment does not
+fit the conventional binding or lifecycle contract.
+
+Extensions may add routes but may not replace Core surfaces. These paths are
+reserved:
+
+- `/admin` and `/admin/*`
+- `/api/auth` and `/api/auth/*`
+- `/api/views` and `/api/views/*`
+- `/oauth` and `/oauth/*`
+- `/mcp` and `/mcp/*`
+- `/.well-known/oauth*`
+- `/favicon.svg`
+- global `*` and `/*` handlers
+
+A custom Auth factory's `basePath` and exact manifest-owned method/path pairs
+are also reserved at assembly. Static literal conflicts fail TypeScript during
+the consumer build. Computed paths cannot be proven statically, so the facade
+checks Hono's assembled route table and fails closed before serving requests.
+There is no standard-route override option.
+
 ## Getting started
 
 Give the [Mantle repo](https://github.com/aotter/mantle) to a coding agent or
