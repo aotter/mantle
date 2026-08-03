@@ -55,7 +55,7 @@ Output: TypeScript declarations on stdout unless --output is set.
 One namespace contains:
   - Schemas:    interface Entry_<name> { /* data fields */ }
   - Procedures: interface ProcInput_<name> / ProcOutput_<name>
-  - Views:      type ViewRow_<name> = projected row shape
+  - Views:      type ViewParams_<name> / ViewRow_<name>
 `);
 }
 

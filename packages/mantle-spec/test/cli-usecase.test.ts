@@ -406,12 +406,14 @@ spec:
 });
 
 describe("EmitTypesUseCase", () => {
-  it("emits Entry / ProcInput / ProcOutput / ViewRow interfaces", () => {
+  it("emits Entry / ProcInput / ProcOutput / ViewParams / ViewRow interfaces", () => {
     const { source } = EmitTypesUseCase.run({ manifests: fixture(), namespace: "Test" });
     expect(source).toContain("export namespace Test {");
     expect(source).toContain("export interface Entry_posts");
     expect(source).toContain("export interface ProcInput_submitContact");
     expect(source).toContain("export interface ProcOutput_submitContact");
+    expect(source).toContain("export type ViewParams_posts_by_locale");
+    expect(source).toMatch(/ViewParams_posts_by_locale[^}]+locale: string;/s);
     expect(source).toContain("export interface ViewRow_posts_by_locale");
     // Required field is non-optional, optional field has `?`
     expect(source).toMatch(/slug: string;\n\s+title\?: string;/);

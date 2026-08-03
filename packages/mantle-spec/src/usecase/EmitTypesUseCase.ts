@@ -11,7 +11,7 @@ import type { EmitTypesResponse } from "./dto/EmitTypesResponse.js";
  * Generate TypeScript declarations from v0.1 manifests:
  *   - Schema → Entry_<name> data shape
  *   - Procedure → ProcInput_<name> / ProcOutput_<name>
- *   - View → ViewRow_<name> projection over the parent Schema
+ *   - View → ViewParams_<name> / ViewRow_<name>
  *
  * Covers v0.1 JsonSchema features (string / integer / number /
  * boolean / object / array / enum / required / items). Skips $ref /
@@ -57,6 +57,13 @@ export class EmitTypesUseCase {
 
     for (const v of views) {
       const parent = schemaByName.get(v.spec.from);
+      if (v.spec.params) {
+        out.push(`  /** Parameters accepted by View '${v.metadata.name}' */`);
+        out.push(
+          `  export type ViewParams_${tsId(v.metadata.name)} = ${renderType(v.spec.params, "  ")};`,
+        );
+        out.push("");
+      }
       out.push(`  /** Row shape returned by GET /api/views/${v.metadata.name} */`);
       if (!parent) {
         out.push(`  export type ViewRow_${tsId(v.metadata.name)} = unknown;`);
