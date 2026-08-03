@@ -6,6 +6,15 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.67] - 2026-08-03
+
+### Fixed
+
+- **release pipeline**: No SDK runtime code changes. alpha.67 fixes forward
+  from the incomplete alpha.66 release: the Starter worker now preserves its
+  generated release branch across workflow steps, so the controller can create
+  the canonical Starter PR and immutable tag (aotter/mantle-starters#459).
+
 ## [0.0.11-alpha.66] - 2026-08-03
 
 ### Fixed
