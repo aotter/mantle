@@ -20,3 +20,4 @@ dist-*/
 .idea/
 .vscode/
 coverage/
+.packed-consumer/
