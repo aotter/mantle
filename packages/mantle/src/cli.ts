@@ -8,6 +8,7 @@ import {
 } from "@aotter/mantle-spec/cli";
 import { runGenerate } from "./generate.js";
 import { runSkills } from "./skills.js";
+import { runUpdate } from "./update.js";
 
 async function main(): Promise<number> {
   const command = argv[2];
@@ -19,6 +20,7 @@ Usage: mantle <subcommand> [options]
 Subcommands:
   generate       Compile manifests and handler types
   skills         Project version-matched Core skills
+  update         Compare local work with provision bundles
   validate       Static manifest + handler-source validation
   introspect     Dump parsed manifest tree as JSON
   emit-openapi   Emit OpenAPI 3.1 from Triggers + Views
@@ -32,6 +34,8 @@ Subcommands:
       return runGenerate(rest);
     case "skills":
       return runSkills(rest);
+    case "update":
+      return runUpdate(rest);
     case "validate":
       return runValidate(rest);
     case "introspect":

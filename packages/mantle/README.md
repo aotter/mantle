@@ -37,6 +37,7 @@ pnpm exec mantle generate
 pnpm exec mantle generate --check
 pnpm exec mantle skills
 pnpm exec mantle skills --check
+pnpm exec mantle update --ref <immutable-starter-ref>
 pnpm exec mantle-harness indexes --require-public
 pnpm exec mantle-harness http --base-url http://127.0.0.1:8787 --route page=/en/example
 ```
@@ -59,6 +60,13 @@ const notes = await site.views["published-notes"]();
 `.claude/skills/mantle-*` paths. Both tool layouts receive identical bytes;
 `--check` detects drift without writing. Manifest generation never rewrites
 agent instructions.
+
+`mantle update` compares the recorded source bundle, a target bundle, and the
+local project, then writes `.mantle/update-report.json`. It never applies the
+diff. Configure `.mantle/features.json` `registry.bundleBaseUrl` with a URL
+containing `{ref}`, or pass `--bundle-base-url` for the alpha.63 bridge. The
+report carries the only supported metadata migration; review and apply it
+after porting selected upstream changes.
 
 ## Conventional Cloudflare Worker
 

@@ -19,23 +19,37 @@ Use this for drift checks. Do not blindly overwrite user-owned code.
 3. `.mantle/plugins.json` and `.mantle/plugins.lock.json` when plugins are
    installed.
 4. Existing project scripts such as `mantle:update`, `validate`, and
-   `typecheck`.
+   `typecheck`; the installed `mantle update` command is authoritative.
 
 ## Workflow
 
 1. Start from a clean git worktree.
 2. Resolve a mutable target branch to its current commit SHA, then run the
-   project's existing update or compare script with that immutable ref.
-   If it exits before writing a report (for example, an older
-   `mantle:update` rejects a new bundle placeholder), fetch the provision
-   bundle from that `aotter/mantle-starters` commit, extract
-   `scripts/update.mjs` and `scripts/materialize.mjs` together into a temporary
-   directory, and run the updater from the project root with the same commit
-   SHA. Do not replace the project's updater before reviewing the report.
+   installed command with that immutable ref:
+
+```bash
+pnpm exec mantle update --ref <immutable-ref>
+```
+
+   For the one-time alpha.63 bridge, invoke the exact newer Core package and
+   provide the current bundle location because alpha.63 metadata does not
+   contain it:
+
+```bash
+pnpm dlx @aotter/mantle@<exact-version> update \
+  --ref <immutable-ref> \
+  --bundle-base-url 'https://raw.githubusercontent.com/aotter/mantle-starters/{ref}/provision-bundles'
+```
+
+   Do not extract or replace a repo-local updater. The Core command accepts
+   the alpha.63 no-`v` source ref, writes only the report, and records the
+   versioned bundle location for the reviewed metadata migration.
 3. Read the generated report before editing.
 4. Triage each path; do not treat the report as a patch or merge plan.
 5. Port confirmed upstream changes one hunk at a time.
-6. Re-run:
+6. Apply only the report's `.mantle/launch-state.json` and
+   `.mantle/features.json` metadata migration, preserving every other field.
+7. Re-run:
 
 ```bash
 pnpm validate
@@ -49,15 +63,13 @@ ref, and the local project.
 
 - Review `upstream` to find starter changes worth porting. Use `local` only to
   understand project-owned drift from the original starter.
-- Never copy generated comparison versions of `wrangler.toml`,
-  `.dev.vars.example`, `.mantle/launch-state.json`, or
-  `.mantle/features.json`. Preserve Worker/D1 names, bindings, origins,
-  provider values, and launch state. Port a reviewed upstream line manually
-  only when it does not replace project identity or state.
-- The updater omits the two `.mantle/*.json` state files and reproduces project
-  identity. If `upstream` proposes `mantle-<type>` names for a real project,
-  stop: the comparator is stale or incompatible. Use the target updater
-  recovery in step 2, then regenerate the report.
+- Never copy generated comparison versions of `.mantle/launch-state.json` or
+  `.mantle/features.json`; the report omits them and gives a field-level
+  migration instead. Preserve Worker/D1 names, bindings, origins, provider
+  values, and all unlisted launch state.
+- The updater reproduces project identity in legacy Wrangler files. If
+  `upstream` proposes `mantle-<type>` names for a real project, stop: the
+  bundle is incompatible and must not be ported.
 - A large `local` section is normal after customization. Counts are not a
   confidence score.
 
