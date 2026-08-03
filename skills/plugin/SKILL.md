@@ -4,7 +4,7 @@ description: Discover, plan, apply, and verify Mantle marketplace plugins throug
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/plugin/SKILL.md
-  applies_to: mantle@v0.1.0
+  applies_to: mantle grammar v0.1
 ---
 
 # Mantle Plugin

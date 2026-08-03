@@ -20,10 +20,10 @@ import type {
  *   UI (`/admin/api/site-settings`) can edit a subset of these
  *   directly, and the rest are conceptually the same "operator can
  *   override" bucket — either way, DB wins once the row exists, so a
- *   later `mantleConfig.ts` edit never clobbers an operator's change.
+ *   later `src/mantle/config.ts` edit never clobbers an operator's change.
  *
  * - **code-canonical, boot-synced** (`mediaPurposes`, `locales`):
- *   these have no admin-UI edit path — `mantleConfig.ts` is the only
+ *   these have no admin-UI edit path — `src/mantle/config.ts` is the only
  *   source of truth — so `seed` upserts them on every boot, writing
  *   only when the serialized value actually differs from what's
  *   stored (read-compare-write; avoids a write on every boot when
@@ -129,7 +129,7 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
     }
 
     // Code-canonical, boot-synced — no admin-UI edit path for these
-    // keys, so `mantleConfig.ts` is the only source of truth. Upsert
+    // keys, so `src/mantle/config.ts` is the only source of truth. Upsert
     // whenever the serialized value differs from what's stored;
     // read-compare-write avoids issuing a write on every boot when
     // nothing actually changed (#441).

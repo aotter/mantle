@@ -1,6 +1,6 @@
 # CLAUDE.md — orientation for AI contributors
 
-This is `@aotter/mantle-*`: MCP-native headless CMS for Cloudflare Workers, built around a 4-atom YAML manifest model. **v0.1.0 is in development**; until v0.1.0 tags, the runtime is stubbed in places and ships in incremental commits per the plan in [#1](https://github.com/aotter/mantle/issues/1).
+This is `@aotter/mantle-*`: MCP-native headless CMS for Cloudflare Workers, built around a 4-atom YAML manifest model. **v0.1.0 is in development**; until v0.1.0 tags, use the checked-out source, tests, and version-matched embedded docs as the current contract rather than historical issue plans.
 
 ## Mantle thesis (read first)
 
@@ -28,13 +28,13 @@ This is the lens for every architectural decision in this codebase.
 |---|---|
 | `docs/adr/` | Architecture Decision Records — *why* the system is shaped this way. |
 | `docs/design-references/` | Preserved visual systems from retired starter experiments. Design reference only; not runnable templates. |
-| `docs/design-atoms.md` | The 4-atom manifest reference. (Stubbed during v0.1.0 dev.) |
-| `docs/getting-started.md` | Human Quickstart. (Stubbed during v0.1.0 dev.) |
+| `docs/design-atoms.md` | The shipped 4-atom manifest reference and DRAFT boundary. |
+| `skills/install/SKILL.md` | Version-aware consumer quickstart for creating or continuing a site. |
 | `docs/release-process.md` | Release + publish discipline. Branch model (`develop` → `main`), channel rules (alpha / beta / RC / stable), npm dist-tags, dependency-order publish, deprecation policy. Read before any version bump or publish. |
 | `CONTRIBUTING.md` | Workflow contract for AI + human contributors. Branch prefixes, commit shape, PR template, architecture gates. Entry point for anyone (or any agent) about to file an issue or open a PR. |
 | `CHANGELOG.md` | Versioned change log. Each release tag gets an entry here before the release PR merges. |
 | `.claude/skills/mantle-release/SKILL.md` | Repo-local release agent skill. Read before any version bump, tag, npm publish, starter fanout, or landing deploy. |
-| `skills/<name>/SKILL.md` | AI-agent-readable briefs for install / provision / extend / customize-design flows. Discoverable by URL — no Claude plugin install required. |
+| `skills/<name>/SKILL.md` | AI-agent-readable install, provision, develop, plugin, theme, and update workflows. Versioned copies ship in the umbrella package. |
 | `packages/mantle-spec/` | Spec engine. ESM, `sideEffects: false`, zero env / adapter deps. |
 | `packages/mantle-runtime/` | Runtime engine. Defines the required adapter ports plus optional feature ports. Adapter-agnostic — see "MUST NOT" rule below. |
 | `packages/mantle-admin-ui/` | React 19 + Vite admin SPA. Pre-built `dist/` consumed via workspace dep by adapters. |
@@ -42,7 +42,6 @@ This is the lens for every architectural decision in this codebase.
 | `packages/adapters/netlify/` | **README stub.** Coming v0.2. The stub is an engineering forcing function. |
 | [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters) | End-user starter source repo. Contains `blank/`, small `overlays/<type>/`, vendored Kiwa source, repo-local skills, and generated `provision-bundles/<type>.json` artifacts consumed by local cold starts and Mantle landing. |
 | `starters/blank/` | **README stub.** Migrated to `mantle-starters/blank/` (#99). The stub is the same engineering forcing function as `packages/adapters/netlify/`. |
-| `starters/_archive/` | Frozen snapshots of retired starters. Not maintained. |
 
 ## Hard invariants (cross-cutting; never violate)
 
@@ -107,7 +106,7 @@ kernel ← domain (model + port + service) ← usecase ← infrastructure
 ## Build / test / typecheck
 
 ```bash
-pnpm install        # workspace install (pnpm 9, node ≥ 20)
+pnpm install        # workspace install (pnpm 9, node ≥ 22)
 pnpm build          # tsc -b across all packages
 pnpm typecheck      # tsc --noEmit
 pnpm test           # vitest across all packages
@@ -115,17 +114,17 @@ pnpm test           # vitest across all packages
 
 Each package has its own `build` / `typecheck` / `test` script that the workspace forwards to.
 
-## Stub policy
+## Deferred and optional features
 
-Several v0.1.x features ship as **interface defined, impl stubbed** in v0.1.0:
-
-- R2 media uploads — optional port interface in runtime; no first-run provisioning or required CF binding
-- Sitemap auto-emit — starter ships a hand-rolled `<SitemapStub />`
-- Editorial lifecycle — schema accepts `lifecycle: editorial` but boot validator rejects with a clear "v0.1.x" message; starters use `simple` only
-- Image variants / OG card generation — not present; lands after R2 impl
-- `mantle-netlify` package — README only
-
-The "stub" pattern lets consumers compile against the real interface. Replacing the stub with a real impl in v0.1.x doesn't break consumer code.
+- R2 media uploads and multi-variant assets are implemented in the Cloudflare
+  adapter but remain optional post-launch work; first-run provisioning does not
+  require an R2 binding.
+- Editorial lifecycle grammar is reserved: the parser accepts
+  `lifecycle: editorial`, while boot rejects it with a clear v0.1.x diagnostic
+  until the approval runtime lands.
+- OG-card generation is not a Core runtime feature. Image variants are
+  agent-produced and uploaded through the optional media flow.
+- `mantle-netlify` is a README-only v0.2 forcing function.
 
 ### Grammar promoted, runtime wired
 
@@ -136,16 +135,14 @@ Two grammar items that were originally committed as v0.1.x are in v0.1.0:
 
 ## Failure modes to avoid (encoded in the ADRs)
 
-- **Adapter coupling creep.** A PR adds a "small convenience" import of `D1Database` in `mantle-runtime`. Reject. The whole point of the 5-port boundary is that runtime stays portable.
+- **Adapter coupling creep.** A PR adds a "small convenience" import of `D1Database` in `mantle-runtime`. Reject. The whole point of the port boundary is that runtime stays portable.
 - **Grammar speculation.** Marking new keys DRAFT until a real use case applies pressure. Locked grammar is more valuable than complete grammar.
 - **Doctrine bloat.** Two ways to do the same thing because "doctrine resolves it." Pick one. POC accumulated several of these (Procedure.expose: shortcut, scaffold/ subdir, virtual:cms-config); the rebuild starts clean.
 - **ADR proliferation.** ADRs are for genuinely path-dependent decisions where the *why* would be lost in code ("we picked X over Y, X is irreversible"). File-format specs, taxonomies, and skill behavior contracts live elsewhere — reference docs, inline `> why:` comments, or PR descriptions. If a change ships and the ADR is mostly redescribing the diff, the ADR isn't load-bearing — delete it. (See Epic #116 for the cleanup that retired ADR-0015 and slimmed ADR-0016.)
 
-## Migration shape
+## Release posture
 
-v0.1.0 ships in 10 commits (see #1's "Initial commit sequence"). Each commit is independently reviewable, typechecks, tests pass. No commit lands without a manual stop-and-review.
-
-After v0.1.0 tags:
-- `aotter/mantle` (the POC) gets deleted by the user (no redirect — these repos are independent)
-- `npm publish` / GitHub Packages decision finalised
-- Public-launch banner on the README
+Every PR must remain independently reviewable and leave the relevant checks
+green. Package versions, tags, npm publication, starter fanout, and launch
+metadata are governed by `docs/release-process.md` and the repo-local release
+skill, not by historical issue commit plans.

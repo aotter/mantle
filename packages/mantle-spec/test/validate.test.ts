@@ -1134,8 +1134,7 @@ spec:
  * `Procedure.handler.ref` with an actual registration in the consumer's
  * `src/`. Two registration patterns are valid evidence:
  *
- *   1. Quoted string literal — `registerHandler('captchaCheck', fn)`
- *      or `handlers: { 'captchaCheck': fn }`.
+ *   1. Quoted object key — `handlers: { 'captchaCheck': fn }`.
  *   2. Unquoted object-property key — `{ captchaCheck: fn }`, the
  *      JS shorthand the publication / intake / presence starters use
  *      in `src/handlers/index.ts`'s `buildHandlers()`. Previously this

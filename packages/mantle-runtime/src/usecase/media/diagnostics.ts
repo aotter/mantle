@@ -101,7 +101,7 @@ export function mediaPurposeRejectedDiagnostic(
     suggestion:
       declared.length > 0
         ? "pass one of the declared purposes; starters own the taxonomy"
-        : "add `media.purposes` to `siteDefaults` in mantleConfig.ts to enable uploads",
+        : "add `media.purposes` to `siteDefaults` in `src/mantle/config.ts` to enable uploads",
   });
 }
 

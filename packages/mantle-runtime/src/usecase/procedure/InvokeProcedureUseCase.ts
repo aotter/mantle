@@ -214,7 +214,7 @@ export class InvokeProcedureUseCase {
               severity: "error",
               path: `${procPath}#/handler/ref`,
               value: handlerBinding.ref,
-              expected: "a ref registered via the handlers option / sdk.registerHandler",
+              expected: "a ref registered via the handlers option",
               candidates: this.registry.list(),
             }),
           };

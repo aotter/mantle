@@ -5,19 +5,19 @@
 >
 > **Status**: v0.1 grammar lock. Atoms are shipped; rich sub-spec
 > grammar (policies, recursive views, temporal predicates, quotas,
-> projection triggers, builtin handler ops, lifecycle Triggers) is
+> projection triggers, cron/queue sources, and extended lifecycle hooks) is
 > reserved as **DRAFT** — see "Future grammar" appendix. Editorial
 > lifecycle is the one shipped grammar key whose runtime is **deferred
-> to v0.1.x**: the boot validator accepts the key shape but rejects
-> `lifecycle: editorial` with a clear "v0.1.x" diagnostic until the
-> approval-queue runtime lands.
+> to v0.1.x**: parser and boot accept the shape, while
+> `request_publish` rejects it with `LIFECYCLE_NOT_IN_V010` until the approval
+> queue lands. Do not use editorial for a v0.1 publishing workflow.
 >
 > **This is the reference manual** — what the system is. For *why* it
 > ended up this shape (alternatives considered, trade-offs accepted),
 > see the Architecture Decision Records under [`docs/adr/`](adr/README.md).
 > For the SDK's contract with its primary author (CLI feedback loops,
-> error catalog, test recipes), see
-> [`docs/authoring-contract.md`](authoring-contract.md).
+> structured diagnostics, deterministic authoring), see
+> [ADR-0007](adr/0007-ai-as-primary-author.md).
 
 ## TL;DR
 
@@ -31,7 +31,7 @@ primitives Postgres has shipped for 30 years.
 | Our atom | Postgres equivalent | Externally exposed by itself? | Has user code? |
 |---|---|---|---|
 | **`Schema`** | `CREATE TABLE` | no (manipulated via View / Procedure) | no |
-| **`View`** | `CREATE VIEW` | **yes** (auto-mounted at `GET /api/views/<name>` — `SELECT FROM` analogue, see ADR-0012) | no |
+| **`View`** | `CREATE VIEW` | **yes** (auto-mounted on its declared public/staff REST and MCP surface; see ADR-0012) | no |
 | **`Procedure`** | `CREATE FUNCTION ... LANGUAGE plpgsql` | **no** (transport-agnostic; needs a `Trigger` to bind it) | **yes — handler ref to consumer's TS file** |
 | **`Trigger`** | `CREATE TRIGGER` + `pg_cron` + PostgREST route + `LISTEN/NOTIFY` | yes (the binding atom — turns Procedures into HTTP endpoints, cron jobs, MCP tools, lifecycle hooks) | no |
 
@@ -73,7 +73,7 @@ A logical feature commonly bundles a Procedure + a Trigger (and often a
 Schema and a View). Put related atoms in one file separated by `---`:
 
 ```yaml
-# starters/blog/manifests/contact.yaml
+# manifests/contact.yaml
 apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure
 metadata: { name: send-contact-message }
@@ -112,7 +112,7 @@ metadata: { name: posts }
 spec:
   title: Posts                    # required: human-readable label for the admin UI
   localized: true                 # opt-in: row carries data.locale (ADR-0010)
-  lifecycle: simple               # v0.1.0 only ships 'simple'; 'editorial' is reserved (see Lifecycle below)
+  lifecycle: simple               # default; 'none' is operational, 'editorial' is reserved
   schema:
     $schema: https://json-schema.org/draft/2020-12/schema
     type: object
@@ -157,12 +157,11 @@ entry's state machine.
   in v0.1.0.**
 - `editorial` — the six-state machine with an approval queue
   (`draft → review → approved → scheduled → published → archived`,
-  with `published` returnable to `draft` for republish). **Grammar
-  key is reserved; the runtime is on the v0.1.x
-  roadmap.** v0.1.0's boot validator rejects `lifecycle: editorial`
-  with the diagnostic `LIFECYCLE_NOT_IN_V010` and a message
-  pointing at the v0.1.x roadmap. Authors should not write
-  `lifecycle: editorial` in v0.1.0 manifests; it will fail boot.
+  with `published` returnable to `draft` for republish). The grammar and
+  state-machine vocabulary are reserved for forward compatibility, but the
+  approval/request-publish runtime is on the v0.1.x roadmap. In v0.1,
+  `request_publish` rejects with `LIFECYCLE_NOT_IN_V010`; do not declare
+  editorial for a current publishing workflow.
 - `none` — **operational records**, not authored content: orders,
   inventory snapshots, grant/audit rows — anything written by
   Procedures as a side effect rather than drafted by a person. No
@@ -291,12 +290,14 @@ appendix.
 **Postgres analogue**: `CREATE TABLE posts (id UUID PRIMARY KEY, ...,
 UNIQUE (slug, locale));`
 
-### 2. `View` — the read surface (auto-exposed)
+### 2. `View` — the read surface (auto-exposed by surface)
 
-A named, declarative read over Schemas. **Auto-mounted** at
-`GET /api/views/<name>` by the SDK — no Trigger required, just like
-`SELECT FROM view_name` in Postgres works without a separate route
-declaration. See ADR-0012 for the full design rationale.
+A named, declarative read over Schemas. No Trigger is required. A View with
+no `spec.surface` (or `surface: public`) mounts at
+`GET /api/views/<name>` and becomes `query_view_<name>` on `/mcp`.
+`surface: staff` instead mounts at `GET /admin/api/views/<name>` behind the
+staff gate and appears only on `/mcp/staff`. See ADR-0012 for the full design
+rationale.
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v1
@@ -334,7 +335,7 @@ spec:
   limit: 100
 ```
 
-Public callers paginate via reserved query-string knobs `?page=&show=`
+REST callers paginate via reserved query-string knobs `?page=&show=`
 (1-indexed page, server caps `show` at `View.spec.limit`). Reserved
 names — `page` / `show` / `cursor` — must NOT appear in
 `spec.params.properties` (the parser rejects with
@@ -405,9 +406,12 @@ spec:
 ```
 
 ```ts
-// consumer's TS at boot
+// src/mantle/config.ts
 import { sendContactMessage } from "./handlers/send-contact-message";
-sdk.registerHandler("send-contact-message", sendContactMessage);
+
+export const handlers = {
+  "send-contact-message": sendContactMessage,
+};
 ```
 
 **v0.1 `requires.auth`**: `{ all: [<predicate>] }` only. Predicates:
@@ -442,11 +446,10 @@ the consumer guard handler, not in a new atom or Core repository. See
 
 **v0.1.0 `handler.kind`**: `ref` (author-supplied function) or
 `builtin` (SDK-supplied CRUD shortcut). For `builtin`, declare
-`op: <create | update | upsert | delete>` and `schema: <Schema name>`
-in place of `ref`. The runtime dispatch path is implemented by
-`InvokeBuiltinUseCase`; the feature-named diagnostic remains as a
-defense-in-depth guard if a builtin Procedure reaches an unsupported
-runtime path.
+`op: <create | update | upsert | delete | archive>` and
+`schema: <Schema name>` in place of `ref`. The runtime dispatch path is
+implemented by `InvokeBuiltinUseCase`; parser and boot validation fail closed
+on unknown ops, Schemas, or incompatible lifecycle use.
 
 **Postgres analogue**: `CREATE FUNCTION send_contact_message(input
 JSONB) RETURNS JSONB LANGUAGE plpgsql AS $$ ... $$;`. PG functions are
@@ -467,7 +470,7 @@ kind: Trigger
 metadata: { name: contact-http }
 spec:
   source:
-    kind:   http                       # v0.1 ONLY supports http source
+    kind:   http                       # v0.1 also supports mcp and lifecycle
     method: POST                       # POST | PUT | PATCH | DELETE
     path:   /api/contact               # OpenAPI {param} syntax for path params
                                        # path params auto-bind to identically-named input fields
@@ -484,7 +487,7 @@ shared.
 **v0.1 `Trigger.source.kind`**: `http` (public endpoint), `mcp` (named
 tool on `surface: public | staff`), or `lifecycle` (entry-writer hook). For `lifecycle`, declare `schema`,
 `on: [<hook>, ...]` from `LifecycleHook`, and optional `errorPolicy`
-(`abort` rejects only on `before_*` hooks; `continue` is the default).
+(`abort` is the `before_*` default; `continue` is the `after_*` default).
 Lifecycle hooks are wired through `LifecycleHookingEntryRepository`, so
 MCP, admin, and builtin write paths share the same hook behavior.
 
@@ -494,8 +497,8 @@ MCP, admin, and builtin write paths share the same hook behavior.
 The state-machine "lifecycle" from the Schema atom
 (`Schema.spec.lifecycle: simple | editorial`) is a separate domain
 that shares the word. The Schema setting governs which states an
-entry can be in; lifecycle Triggers (when they ship; see Future
-grammar) govern what fires around mutations.
+entry can be in; shipped lifecycle Triggers govern what fires around
+mutations.
 
 **Postgres analogue**: `CREATE TRIGGER ... AFTER INSERT ON posts
 EXECUTE FUNCTION ...` (lifecycle); `pg_cron` extension (cron); plus
@@ -771,10 +774,10 @@ narrow at v0.1.0 and grows in two tiers:
 1. **v0.1.0 shipped** — grammar parses and runtime behavior is wired
    in the current rebuild.
 2. **v0.1.x committed** — on the patch-release roadmap. Spec is
-   documented; implementation lands within the v0.1 series. Boot
-   validator rejects these keys with a code naming the feature.
+   documented; implementation lands within the v0.1 series. The unsupported
+   runtime path fails closed with a code naming the feature.
 3. **DRAFT (v0.2+)** — speculative, gated by concrete consumer
-   demand. Boot validator rejects with `DRAFT_KEY_USED`. May or may
+   demand. Parser/static validation rejects with `DRAFT_KEY_USED`. May or may
    not ship — depends on whether real use cases apply pressure.
 
 ### v0.1.0 shipped
@@ -790,7 +793,7 @@ Full shape lives further down.
 
 Grammar lives in v0.1.0. Runtime is the
 `InvokeBuiltinUseCase` that dispatches `op: create | update | upsert
-| delete` against the entry-writer chokepoint with `x-mantle-bind`
+| delete | archive` against the entry-writer chokepoint with `x-mantle-bind`
 stamping and `input ∩ Schema.properties` projection. Full shape lives
 further down.
 
@@ -801,19 +804,18 @@ surface. Procedures/Views share `ctx.auth`/scope predicates and optional guard
 orchestration across REST and MCP. Staff role is loaded live for each protected
 call; staff Views remain absent and un-callable on public MCP.
 
-### v0.1.x committed
+### Detailed shipped grammar and v0.1.x reservation
 
 > The `handler.kind: builtin` and `Trigger.source.kind: lifecycle`
-> sections below now describe shipped v0.1.0 behavior. The
-> `Schema.spec.lifecycle: editorial` subsection remains v0.1.x-
-> committed proper.
+> sections below describe shipped v0.1.0 behavior. Only the
+> `Schema.spec.lifecycle: editorial` subsection remains v0.1.x-committed.
 
 #### `Schema.spec.lifecycle: editorial` runtime
 
-Grammar key already accepted in v0.1.0 (writes parse) but the boot
-validator emits `LIFECYCLE_NOT_IN_V010` because the approval-queue
-runtime ships in v0.1.x. When v0.1.x lands, the same manifest
-deploys without changes — that's why the key is reserved now.
+Grammar and boot already accept the key, but `request_publish` emits
+`LIFECYCLE_NOT_IN_V010` because the approval-queue runtime ships in v0.1.x.
+When that runtime lands, the same manifest can use the publish workflow without
+a grammar change.
 
 #### `handler.kind: builtin` — thin shortcut over the storage adapter for trivial CRUD-shaped Procedures
 
@@ -832,11 +834,11 @@ spec:
 
 | op | Behavior |
 |---|---|
-| `create` | INSERT a new row. Project `input ∩ Schema.spec.schema.properties`; stamp `x-mantle-bind` fields; status='draft'; generated id. |
+| `create` | INSERT a new row. Project `input ∩ Schema.spec.schema.properties`; stamp `x-mantle-bind` fields; generated id; status is `draft`, or immediately `published` for `lifecycle: none`. |
 | `update` | UPDATE in place. `input.id` + `input.expectedVersion` (OCC) required. Bumps version. |
 | `upsert` | If `input.id` resolves, behaves as `update`; else as `create`. |
 | `delete` | Hard DELETE by id. |
-| `archive` | Soft-archive (status='archived'). Editorial-lifecycle Schemas only; on `simple` Schemas this is a parse error. (Editorial runtime ships in v0.1.x — `archive` becomes available the same release.) |
+| `archive` | Soft-archive (status='archived'). The manifest validator permits this builtin only for `editorial` Schemas; the archive transition itself is runtime-wired, while editorial approval/request-publish remains deferred. |
 
 The Procedure's `input` is the contract with the *caller*. It MAY
 declare fields the Schema does not (e.g. a Turnstile token). The
@@ -876,8 +878,8 @@ spec:
 | `after_update` | After UPDATE. Default best-effort. |
 | `before_delete` | Before DELETE. Throw cancels. |
 | `after_delete` | After DELETE. Default best-effort. |
-| `before_publish` | Before status flips to `published`. Editorial Schemas only. |
-| `after_publish` | After status flips to `published`. Editorial Schemas only. |
+| `before_publish` | Before any supported status transition to `published` (the shipped workflow is `simple`). |
+| `after_publish` | After any supported status transition to `published` (the shipped workflow is `simple`). |
 
 **Atomicity defaults by phase**:
 - `before_*`: `errorPolicy: abort`. Handler throw cancels the
@@ -921,15 +923,15 @@ Cloudflare wiring, the 128 KB platform limit, retry/DLQ configuration,
 idempotency, and legacy-envelope draining are specified in
 [Deferred lifecycle hooks on Cloudflare Queues](deferred-lifecycle-queues.md).
 
-**Editorial-lifecycle hooks** (`before_publish`, `after_publish`)
-depend on the `lifecycle: editorial` runtime, which ships in the
-same v0.1.x cut.
+`before_publish` and `after_publish` already wrap the shipped simple publish
+transition. When editorial approval lands, the same hooks wrap its final
+transition to `published`; no second hook grammar is planned.
 
 ### DRAFT (v0.2+, speculative)
 
 Each item below lands when the first concrete real-world use case
-forces it, not on speculation. Today, do not implement; the boot
-validator rejects with `DRAFT_KEY_USED`.
+forces it, not on speculation. Today, do not implement; parser/static
+validation rejects it with `DRAFT_KEY_USED`.
 
 #### Schema future
 - **`x-mantle-ref` auto-lift to virtual column** — when a property
@@ -983,13 +985,13 @@ validator rejects with `DRAFT_KEY_USED`.
 #### Trigger future
 - **`source.kind: cron`** with `expr:` — scheduled invocation.
 - **`source.kind: queue`** — async fan-out / message-driven invocation.
-- **`source.kind: lifecycle.foo`** — DRAFT extensions to the v0.1.x
+- **`source.kind: lifecycle.foo`** — DRAFT extensions to the shipped
   lifecycle hooks (e.g. `before_archive`, `after_request_publish`).
-  The 8 hooks listed in the v0.1.x committed section are the floor,
+  The 8 hooks listed in the detailed shipped section are the floor,
   not the ceiling.
 
-(Full lifecycle Trigger spec for the 8 v0.1.x-committed hooks lives
-in the v0.1.x committed section above. The remaining DRAFT items
+(Full lifecycle Trigger spec for the 8 shipped hooks lives
+in the detailed section above. The remaining DRAFT items
 below are the speculative v0.2+ shapes that haven't yet been promoted
 to a committed roadmap.)
 

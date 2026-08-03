@@ -102,7 +102,7 @@ Usage: mantle validate [options]
 
 Options:
   --manifests <dir>   Manifest root (default: ./manifests)
-  --source <dir>      Handler source root for register-handler grep
+  --source <dir>      Handler source root for handlers-map grep
                       (default: ./src)
   --no-source         Skip the handler-source grep entirely
   --phase <phase>     'preview' (default) or 'deploy'.

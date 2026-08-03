@@ -2,7 +2,8 @@
 
 Umbrella entry for the Mantle SDK — a manifest-driven CMS for Cloudflare Workers, built around a 4-atom YAML model (Schema / View / Procedure / Trigger) where agents write config and the runtime carries the complexity.
 
-> v0.1.x is in development. APIs may change between minor versions.
+> Mantle is prerelease software. Use this package's `package.json` as the exact
+> installed version; APIs may change between prereleases until v0.1.0.
 
 ## Install
 
@@ -125,13 +126,16 @@ installed package for repo-local use.
 
 Install the Mantle Core skill bundle before working on generated repos:
 
+Replace `<installed-version>` with the exact version from this package's
+`package.json`. Do not point a versioned consumer at a mutable branch.
+
 ```bash
 # Claude Code
-/plugin marketplace add aotter/mantle
+/plugin marketplace add aotter/mantle@v<installed-version>
 /plugin install mantle@mantle
 
 # Codex
-codex plugin marketplace add aotter/mantle --ref develop
+codex plugin marketplace add aotter/mantle --ref v<installed-version>
 codex plugin add mantle@mantle
 ```
 
@@ -185,12 +189,12 @@ The `mantle-runtime` package never imports Cloudflare-specific types — adapter
   - `node_modules/@aotter/mantle/skills/update/SKILL.md`
   - `node_modules/@aotter/mantle/skills/install/SKILL.md`
   - `node_modules/@aotter/mantle/skills/provision/SKILL.md`
-- [Repo](https://github.com/aotter/mantle)
-- [4-atom manifest model (ADR-0001)](https://github.com/aotter/mantle/blob/develop/docs/adr/0001-four-atom-manifest-model.md)
-- [API and MCP authorization](https://github.com/aotter/mantle/blob/develop/docs/api-mcp-authorization.md)
-- [Deferred lifecycle Queues](https://github.com/aotter/mantle/blob/develop/docs/deferred-lifecycle-queues.md)
-- [Schema indexes on D1](https://github.com/aotter/mantle/blob/develop/docs/schema-indexes.md)
-- [Release process](https://github.com/aotter/mantle/blob/develop/docs/release-process.md)
+- [4-atom manifest model (ADR-0001)](docs/adr/0001-four-atom-manifest-model.md)
+- [API and MCP authorization](docs/api-mcp-authorization.md)
+- [Deferred lifecycle Queues](docs/deferred-lifecycle-queues.md)
+- [Schema indexes on D1](docs/schema-indexes.md)
+- [Release process](docs/release-process.md)
+- [Source repository](https://github.com/aotter/mantle)
 - [Issues](https://github.com/aotter/mantle/issues)
 
 ## License

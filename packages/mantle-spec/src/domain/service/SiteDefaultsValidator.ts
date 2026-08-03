@@ -23,10 +23,9 @@ import {
  * semantics the runtime depends on.
  *
  * Lives in spec (not runtime) because it's pure validation against
- * the `SiteConfig` contract — no env, no DB. Runtime calls this at
- * module init (`bootInit`) so a typo in `mantleConfig.ts >
- * siteDefaults` surfaces in `wrangler tail` before the worker
- * accepts traffic.
+ * the `SiteConfig` contract — no env, no DB. Runtime calls this during
+ * `bootInit()` so a typo in `src/mantle/config.ts > siteDefaults` rejects boot
+ * before the runtime accepts traffic.
  */
 export class InvalidSiteDefaultsError extends Error {
   constructor(public readonly invalidLocales: ReadonlyArray<string>) {

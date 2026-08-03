@@ -340,7 +340,7 @@ describe("createCmsRuntime + bootInit", () => {
     expect((await repo.readMediaPurposes()).map((p) => p.name)).toEqual(["post-cover"]);
 
     // Config changes (new purpose, adjusted maxBytes) — as if a
-    // developer edited `mantleConfig.ts > siteDefaults.media.purposes`
+    // developer edited `src/mantle/config.ts > siteDefaults.media.purposes`
     // and redeployed. Boot again against the same DB.
     const second = [
       {
@@ -389,7 +389,7 @@ describe("createCmsRuntime + bootInit", () => {
     // Operator edits brand directly via the admin settings UI.
     db.siteConfig.set("brand", "Operator-Edited");
 
-    // Developer adds a locale in `mantleConfig.ts` and redeploys.
+    // Developer adds a locale in `src/mantle/config.ts` and redeploys.
     const runtime2 = createCmsRuntime({
       manifests: [],
       db,

@@ -1,20 +1,26 @@
-# ADR-0012: Views as the public REST surface
+# ADR-0012: Views as named REST and MCP read surfaces
 
-**Status:** Accepted for v0.1.0. New ADR.
+**Status:** Accepted for v0.1.0. Amended to match the shipped public/staff
+surface and authorization contract.
 
-**Date:** 2026-05-05
+**Date:** 2026-05-05; amended 2026-08-03
 
 ## Context
 
 mantle ships two read-side surfaces and one write-side surface:
 
 - **Templates** (rendered HTML / Markdown / `llms.txt`) — composed by the consumer's `TemplateRegistry` from runtime APIs. The starter blog uses these for `/{locale}/posts/{slug}` etc.
-- **MCP tools** — agent-facing CRUD over the entry chokepoint. Every Schema gets `create_draft_<n>` / `update_draft_<n>` per-collection authoring tools plus generic tools (`list_entries`, `get_entry`, `request_publish`, `unpublish_entry`, `archive_entry`).
+- **MCP tools** — the staff surface exposes entry authoring and lifecycle
+  tools; both public and staff surfaces expose `query_view_<name>` for Views
+  assigned to that surface.
 - **HTTP Triggers** — write-side endpoints declared by the consumer (`Trigger.source.kind: http`, methods `POST | PUT | PATCH | DELETE` only). Per ADR-0001 grammar, **`GET` is intentionally absent** because read endpoints belong to Views, not Procedures.
 
 What was missing: a stable, consumer-facing **public REST read surface**. The starter blog had no JSON API at all. The CMS needed an answer to "I'm a downstream service that wants `posts` filtered by locale — how do I read?" without forcing every consumer to hand-write a route handler that re-implements filtering.
 
-This ADR answers that question: **every parsed View auto-exposes `GET /api/views/<view-name>`**, and Schemas do not get a public REST surface at all. Public reads always go through a named query.
+This ADR answers that question: **every parsed View is a named read surface**.
+Views default to public and auto-expose `GET /api/views/<view-name>` plus a
+matching public MCP tool. `surface: staff` moves both transports to the guarded
+staff surfaces. Schemas do not get a public REST surface at all.
 
 (Schemas remain available on the **admin** REST surface — `/admin/api/*` — which lands with the admin UI commit and is auth-gated to staff. That's a separate cut and out of scope here.)
 
@@ -34,13 +40,30 @@ No version prefix. `apiVersion: cms.mantle.aotter.net/v1` is the manifest-gramma
 
 `<view-name>` is `View.metadata.name` verbatim. Authors are free to pick kebab-case (`recent-posts`) or any URL-safe identifier; the runtime mounts the route as-is.
 
-### 3. Views auto-expose; opt-out is "don't write a View"
+### 3. Views auto-expose on one declared surface
 
-We considered adding `View.spec.expose: { rest: false }`. Rejected — the shape `View` already has IS "public read API". Authors who want a private named query write a TypeScript helper and call `runtime` directly from their template.
+`View.spec.surface` uses the closed `public | staff` vocabulary and defaults to
+`public`:
+
+- public Views mount at `GET /api/views/<name>` and appear as
+  `query_view_<name>` on `/mcp`;
+- staff Views mount at `GET /admin/api/views/<name>` behind the live staff-role
+  gate and appear only on `/mcp/staff`.
+
+The adapter filters the View set before constructing each MCP dispatcher, so a
+guessed public tool call cannot reach a staff View. `View.spec.requires` then
+applies the same static predicates and optional guard Procedure on REST and MCP
+calls. Surface selects transport visibility; authorization decides whether the
+verified caller may execute the View.
+
+We still reject a second `expose.rest` switch. A View is externally queryable
+on exactly one surface; internal-only helpers remain TypeScript code.
 
 ### 4. Pagination knobs are reserved query-string names
 
-Public callers pass `?page=<1-indexed>&show=<page-size>`. Internally the runtime emits `LIMIT show OFFSET (page-1)*show`.
+REST callers pass `?page=<1-indexed>&show=<page-size>`. MCP callers pass the
+same reserved names as tool arguments. Internally the runtime emits
+`LIMIT show OFFSET (page-1)*show`.
 
 `page` / `show` / `cursor` are reserved names. The parser rejects any `View.spec.params.properties.<name>` colliding with these (`VIEW_PARAMS_RESERVED_NAME`). The author owns the rest of the query-string namespace.
 
@@ -93,7 +116,7 @@ The required-only rule is a v0.1.0 simplification. v0.1.x will promote optional-
 
 `hasMore = (rows.length === effectiveShow)` — the lazy semantics. We do **not** issue a separate `COUNT(*)` query, and we do not pull `LIMIT n+1` to probe. If the server returns exactly `show` rows, the caller may or may not have more; if fewer, we know definitively. The trade is one false-positive on the boundary case (caller asks for next page, gets empty) in exchange for no extra round-trip per request.
 
-### 7. Param coercion happens at the adapter boundary
+### 7. Param coercion happens at the transport boundary
 
 Query strings arrive as strings; `View.spec.params` declares the JSON Schema type. The Cloudflare adapter (`coerceViewParams` in `mountServerEndpoints.ts`) coerces per-property:
 
@@ -109,29 +132,34 @@ Required params not present → `400 INPUT_VALIDATION_FAILED`. Coercion failure 
 
 ## Out of scope (deferred)
 
-- **MCP tools for Views.** MCP is for agents doing ops; readers don't need a separate MCP tool when they have a stable REST endpoint. Reconsider in v0.2 if downstream agent tooling demands it.
 - **`Trigger.target.view`** (lifecycle/projection triggers fired by Views). Tracked separately as a v0.2 grammar move.
 - **`spec.output.kind`** (declaring scalar / tree / tabular result shape per View). Lands with join + group-by support in v0.1.x.
 - **Optional param-ref drop semantics in the parser.** Runtime is already implemented; parser promotes when v0.1.x lands.
 - **DRAFT filter operators** (`contains` / `in` / `like` / `not`). v0.1 keeps comparison operators closed to `eq` / `gt` / `gte` / `lt` / `lte`; field-to-field comparisons remain out of scope.
-- **Auth on the public View REST surface.** v0.1.0 Views are public-read by definition. Member-gated reads land with the member system in v0.2.
+- **Row-level policy rewriting.** `requires` authorizes the whole View; it does
+  not inject per-row visibility predicates. Consumer-specific membership,
+  payment, or entitlement checks belong in the optional guard Procedure.
 
 ## Consequences
 
 **Authors gain:**
-- Public REST surface for free — declare a View, get an endpoint.
-- Single mental model for "how do consumers read?": always Views.
+- REST and MCP read surfaces for free — declare a View and choose public or
+  staff visibility once.
+- Single mental model for "how do consumers and agents read?": always Views.
 - Cheap pagination + dynamic filters without hand-writing handlers.
 
 **Authors lose:**
 - A View per filter combination (until DRAFT operators land). `posts-by-locale` plus `posts-by-tag` plus `posts-by-locale-and-tag` would be three Views in v0.1.0.
-- No way to write a "private" named query — moves to a TS helper.
+- No internal-only View surface; choose public/staff or keep the query in a TS
+  helper.
 
 **Runtime gains:**
-- One auto-mount path covers every public-read use case for v0.1.0.
+- One executor and response shape cover public/staff REST and MCP reads.
 - Forward-compat for join / group-by / aggregation: envelope generalises by Views declaring `output.kind` later.
 
 **Reviewers / future contributors should:**
 - Reject any PR adding `Schema.spec.expose.rest` or a similar Schema-level public-read flag.
 - Reject any PR introducing a second public read surface (e.g. `/api/<collection>` shortcut).
+- Require REST and MCP mounts to filter by the same `View.spec.surface` value,
+  and keep authorization in the shared `ExecuteViewUseCase` path.
 - Reject any PR that lets `filter` reference state outside the declared `params` (e.g. `{ $env: ... }`, `{ $cookie: ... }`) without a matching ADR amendment.

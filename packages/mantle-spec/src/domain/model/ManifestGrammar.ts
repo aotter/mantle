@@ -12,17 +12,14 @@
  *
  * v0.1 grammar lock — see `docs/design-atoms.md` and ADR-0001
  * § "Future grammar discipline". DRAFT keys (policies, recursive views,
- * temporal predicates, quotas, projection triggers, mcp / cron / queue
- * Trigger source kinds) are intentionally absent from this file. They
- * land alongside their design pass; until then, the parser warns on
- * their use.
+ * temporal predicates, quotas, projection triggers, and cron / queue
+ * Trigger source kinds) are intentionally absent from this file and rejected
+ * until a grammar promotion.
  *
- * v0.1.x extensions — see ADR-0001 § "What's DRAFT". `handler.kind: builtin`
- * and `Trigger.source.kind: lifecycle` are reserved as v0.1.x-committed
- * (will land before v0.2 once the lifecycle / editorial design pass
- * settles); the parser rejects them today with a fine-grained code so
- * authors who reach for them get a clear "not in v0.1.0 yet" message
- * rather than the generic DRAFT_KEY_USED.
+ * v0.1 ships builtin Procedure handlers plus MCP and lifecycle Trigger
+ * sources. `Schema.spec.lifecycle: editorial` is structurally accepted for
+ * forward compatibility, but its approval/request-publish runtime remains
+ * deferred with a feature-specific diagnostic.
  */
 
 export const API_VERSION = "cms.mantle.aotter.net/v1" as const;
@@ -201,10 +198,9 @@ export interface SchemaManifestSpec {
    *  Schemas (orders, inventory snapshots, audit rows) that are written
    *  by Procedures rather than authored: entries are live on creation,
    *  editable in place, and have no publish/unpublish transitions — the
-   *  admin hides the content-lifecycle chrome for them. The v0.1.0 boot
-   *  validator currently rejects `'editorial'` with a clear "v0.1.x"
-   *  message; the parser accepts all three values structurally so the
-   *  schema stays stable across the v0.1 → v0.1.x bump. */
+   *  admin hides the content-lifecycle chrome for them. The parser and boot
+   *  accept all three values structurally; the v0.1 `request_publish` use case
+   *  rejects `'editorial'` with a clear deferred-runtime diagnostic. */
   readonly lifecycle?: LifecycleMode;
 }
 
@@ -367,14 +363,14 @@ export interface ProcedureManifestSpec {
 export type HandlerBinding = HandlerRefBinding | HandlerBuiltinBinding;
 export interface HandlerRefBinding {
   readonly kind: "ref";
-  /** Opaque registration key (NOT a path). The consumer's project calls
-   *  `sdk.registerHandler("<ref>", fn)` at boot to bind a function. */
+  /** Opaque registration key (NOT a path). The consumer passes a matching
+   *  key in the runtime/Worker `handlers` map. */
   readonly ref: string;
 }
 
-/** v0.1.x-committed builtin op vocabulary — see ADR-0001 § "What's DRAFT".
- *  Reserved for the lifecycle / editorial design pass; not implemented
- *  in v0.1.0. New entries require an explicit grammar-revise round. */
+/** Shipped v0.1 builtin op vocabulary. `archive` is runtime-wired but
+ *  meaningful only for a lifecycle that can transition to archived.
+ *  New entries require an explicit grammar-revise round. */
 export const BUILTIN_OPS = ["create", "update", "upsert", "delete", "archive"] as const;
 export type BuiltinOp = (typeof BUILTIN_OPS)[number];
 
@@ -475,10 +471,9 @@ export interface HttpTriggerSource {
   readonly path: string;
 }
 
-/** v0.1.x-committed lifecycle hook vocabulary. The 6 SQL-92 hooks
- *  (before/after × create/update/delete) plus the editorial publish
- *  boundary (before/after publish). Not implemented in v0.1.0. New
- *  entries require an explicit grammar-revise round. */
+/** Shipped v0.1 lifecycle hook vocabulary: before/after ×
+ *  create/update/delete plus the publish boundary. New entries require an
+ *  explicit grammar-revise round. */
 export const LIFECYCLE_HOOKS = [
   "before_create",
   "after_create",

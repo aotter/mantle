@@ -26,8 +26,8 @@ import { assertEntryWritable } from "../../domain/service/io/EntryWriteGuard.js"
  * `RequestPublishUseCase` — publish or queue-for-approval, depending
  * on the Schema's `lifecycle` mode.
  *
- * v0.1.0 ships `simple` only — request goes straight to `published`
- * with a status guard via the spec's state machine. The Schema parser
+ * v0.1.0 ships the `simple` publish workflow — request goes straight to
+ * `published` with a status guard via the spec's state machine. The Schema parser
  * accepts `lifecycle: editorial` (it's a v0.1.x-committed mode in
  * `V01_LIFECYCLE_MODES`), so this use case is the only line of
  * defense: when a Schema declares `editorial`, it surfaces a
@@ -57,8 +57,8 @@ export class RequestPublishUseCase {
           severity: "error",
           path: opPath,
           value: resolveLifecycle(schema),
-          expected: "lifecycle: 'simple' (editorial lands in v0.1.x)",
-          message: `Schema '${existing.collection}' uses lifecycle: 'editorial', which is v0.1.x-committed. v0.1.0 only supports 'simple' lifecycle.`,
+          expected: "lifecycle: 'simple' for request_publish ('none' records are already operational; editorial lands in v0.1.x)",
+          message: `Schema '${existing.collection}' uses lifecycle: 'editorial'; its approval/request-publish runtime lands in v0.1.x.`,
         }),
       );
     }

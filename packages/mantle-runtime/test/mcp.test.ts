@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import packageJson from "../package.json" with { type: "json" };
 import {
   McpJsonRpcDispatcher,
   type McpUseCases,
@@ -148,8 +149,14 @@ describe("McpJsonRpcDispatcher", () => {
   it("initialize returns protocol info", async () => {
     const { dispatcher } = buildHarness();
     const res = await dispatcher.dispatch(jsonRpcReq("initialize"), { userId: "u1" });
-    const body = (await res.json()) as { result: { protocolVersion: string } };
+    const body = (await res.json()) as {
+      result: { protocolVersion: string; serverInfo: { name: string; version: string } };
+    };
     expect(body.result.protocolVersion).toBe("2025-03-26");
+    expect(body.result.serverInfo).toEqual({
+      name: "@aotter/mantle-runtime/mcp",
+      version: packageJson.version,
+    });
   });
 
   it("tools/list emits generic + per-collection tools", async () => {

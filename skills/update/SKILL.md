@@ -4,7 +4,7 @@ description: Check a Mantle project for drift against its Core SDK, starter sour
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/update/SKILL.md
-  applies_to: mantle@v0.1.0
+  applies_to: mantle grammar v0.1
 ---
 
 # Mantle Update

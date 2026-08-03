@@ -9,7 +9,7 @@
       "source": {
         "source": "url",
         "url": "https://github.com/aotter/mantle.git",
-        "ref": "develop"
+        "ref": "v0.0.11-alpha.63"
       },
       "policy": {
         "installation": "AVAILABLE",

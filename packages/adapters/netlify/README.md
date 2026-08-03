@@ -29,7 +29,7 @@ This README declares the public commitment to a second adapter. PR reviewers can
 - `AssetServer` → Netlify static publish dir (consumes `mantle-admin-ui` dist same as Cloudflare)
 - Better Auth factory → Netlify-compatible database adapter, GitHub/social providers, and MCP OAuth/DCR
 
-The adapter implementation entry point is [`docs/adapter-guide.md`](../../docs/adapter-guide.md). The port contract is documented in [`docs/adr/0011-adapter-port-spec.md`](../../docs/adr/0011-adapter-port-spec.md).
+The adapter implementation entry point is [`docs/adapter-guide.md`](../../../docs/adapter-guide.md). The port contract is documented in [`docs/adr/0011-adapter-port-spec.md`](../../../docs/adr/0011-adapter-port-spec.md).
 
 ## Want this sooner?
 
