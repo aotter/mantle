@@ -6,6 +6,21 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.69] - 2026-08-03
+
+### Changed
+
+- **`@aotter/mantle-cloudflare`**: route conventional customer-site Hosted
+  Auth through the distinct public OAuth proxy with PKCE and GitHub-login
+  owner bootstrap, removing the unshipped Platform OIDC, client-secret, and
+  owner-email preview contract (#588).
+
+### Fixed
+
+- **`@aotter/mantle-cloudflare`**: make the generic OAuth profile mapper
+  accept Mantle's typed `githubLogin` additional field and allow a trusted
+  generic GitHub provider to reuse the existing atomic bootstrap rule (#588).
+
 ## [0.0.11-alpha.68] - 2026-08-03
 
 ### Added
