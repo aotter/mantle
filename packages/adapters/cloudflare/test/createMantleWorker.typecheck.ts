@@ -3,10 +3,12 @@ import type {
   MantleCloudflareEnv,
   MantleExtensionApp,
 } from "../src/worker/createMantleWorker.js";
+import { runMantleWorkerRequest } from "../src/worker/index.js";
 
 declare const app: MantleExtensionApp<MantleCloudflareEnv>;
 
 if (false) {
+  void runMantleWorkerRequest(() => new Response("ok"));
   app.get("/custom", (c) => c.text("ok"));
   app.route("/tools", new Hono<{ Bindings: MantleCloudflareEnv }>());
   app.route("/assets", new Hono());

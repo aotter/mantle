@@ -18,6 +18,11 @@ paths. The canonical contract and reserved path list live in the umbrella
 package's [Conventional Cloudflare Worker](../../mantle/README.md#conventional-cloudflare-worker)
 section.
 
+When the conventional lifecycle really does not fit, copy the
+[low-level composition fixture](../../../docs/cloudflare-low-level-composition.md).
+It uses the same public bindings, Auth, runtime, OAuth/MCP, cache and error
+primitives as the facade, and states which code becomes application-owned.
+
 ## Better Auth Boundaries
 
 `createAuth()` exposes curated Better Auth configuration fields, not a
