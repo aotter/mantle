@@ -19,15 +19,12 @@ import {
 /**
  * `ValidateBootUseCase` — Loop 3 of the SDK authoring contract (see
  * ADR-0007). Walks the parsed manifest set + in-memory handler
- * registry; refuses to proceed if any load-bearing invariant is
- * violated. Per ADR-0007: "process exit non-zero, do not serve" — a
- * missing handler ref must surface as a deploy failure, not a runtime
- * 500 to a customer.
- *
- * In Cloudflare Workers context "process exit" maps to: throw at
- * runtime module-init so `wrangler tail` reports the init error and
- * subsequent requests get the runtime's generic 500 (instead of
- * unevaluated handlers being exercised).
+ * registry; refuses to proceed if any load-bearing invariant is violated. A
+ * failure rejects `bootInit()` with `BootValidationError`; adapters must not
+ * dispatch through an unbooted runtime. The conventional Cloudflare adapter
+ * resets its rejected lazy-boot promise so transient infrastructure failures
+ * can retry, while readiness/smoke requests surface deterministic authoring
+ * failures before production traffic.
  *
  * v0.1.0 invariants:
  *   - Every `Procedure.handler.ref` is in the supplied registry.
@@ -88,7 +85,7 @@ export class ValidateBootUseCase {
             severity: "error",
             path: `manifest:Procedure/${p.metadata.name}#/spec/handler/ref`,
             value: h.ref,
-            expected: `a function registered via the handlers option / sdk.registerHandler('${h.ref}', fn)`,
+            expected: `a function passed through the handlers option under key '${h.ref}'`,
             candidates: handlerCandidates,
             message: `Procedure '${p.metadata.name}' declares handler.ref '${h.ref}' but no handler is registered for that key. Wire it in your project's handlers map: { '${h.ref}': ... }.`,
           }),

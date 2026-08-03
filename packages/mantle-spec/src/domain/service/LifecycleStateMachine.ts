@@ -3,10 +3,10 @@ import type { LifecycleMode } from "../model/ManifestGrammar.js";
 
 /**
  * Per-Schema lifecycle state machine. Each Schema declares
- * `spec.lifecycle: 'simple' | 'editorial'` (default `'simple'`); this
- * module translates that into the allowed state transitions and tells
- * callers whether a `requestPublish` should write to the approvals
- * queue or publish directly.
+ * `spec.lifecycle: 'simple' | 'editorial' | 'none'` (default `'simple'`); this
+ * module translates that into allowed state transitions and tells callers
+ * whether a publish request would require the deferred editorial approval
+ * runtime or can publish directly.
  *
  * Pure functions — no env, no DB. Feeds the dispatcher's
  * requestPublish branching and runtime state-transition validation.
@@ -31,9 +31,9 @@ export function resolveLifecycle(schema: LifecycleSchemaLike | undefined): Lifec
 }
 
 /**
- * Whether `requestPublish` on an entry of this Schema should write an
- * approval row and flip the entry to `'review'` (editorial) versus
- * publishing immediately and skipping the approval table (simple).
+ * Whether `requestPublish` would require editorial approval rather than the
+ * shipped direct simple transition. Current `RequestPublishUseCase` rejects
+ * when this returns true; it does not write an approval row yet.
  */
 export function publishRequiresApproval(schema: LifecycleSchemaLike | undefined): boolean {
   return resolveLifecycle(schema) === "editorial";

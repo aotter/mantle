@@ -43,6 +43,7 @@ import {
   jsonRpcOk,
   jsonRpcOkRaw,
 } from "./McpResponses.js";
+import packageJson from "../../../package.json" with { type: "json" };
 
 /** JSON-RPC dispatcher for the MCP transport. Env-agnostic; the
  *  adapter resolves the caller's identity and hands `dispatch` a
@@ -165,7 +166,7 @@ export class McpJsonRpcDispatcher {
         return jsonRpcOk(id, {
           protocolVersion: "2025-03-26",
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "@aotter/mantle-runtime/mcp", version: "0.0.11-alpha.35" },
+          serverInfo: { name: "@aotter/mantle-runtime/mcp", version: packageJson.version },
         });
       case "tools/list":
         return jsonRpcOkRaw(id, this.catalogWireJson);

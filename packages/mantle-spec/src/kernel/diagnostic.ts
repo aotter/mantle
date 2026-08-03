@@ -1,7 +1,8 @@
 /**
  * Structured diagnostic shape — see ADR-0008. Used uniformly across
- * static validation, test harness, boot-time, and runtime feedback
- * loops.
+ * static validation, boot-time, and runtime feedback. The public `test`
+ * phase remains reserved for consumer-authored test diagnostics; Core's
+ * shipped performance harnesses emit purpose-shaped reports instead.
  *
  * Codes are unprefixed UPPER_SNAKE strings; the `phase` field
  * disambiguates which loop emitted each diagnostic. The same `code`
@@ -49,14 +50,13 @@ export const DIAGNOSTIC_CODES = [
   "SCHEMA_INDEX_FIELD_UNKNOWN",
   "UNIQUE_INDEX_FIELD_UNKNOWN",
   "DRAFT_KEY_USED",
-  // v0.1.x-committed keys present in v0.1.0 manifests are rejected
-  // with a code naming the feature (per ADR-0011 § "boot validator
-  // framing"), distinct from the speculative-DRAFT bucket.
+  // Reserved v0.1.x behavior fails closed with a code naming the feature,
+  // distinct from the speculative-DRAFT bucket.
   "LIFECYCLE_NOT_IN_V010",
   "HANDLER_BUILTIN_NOT_IN_V010",
   "MANIFEST_ROOT_NOT_FOUND",
   "MANIFEST_READ_FAILED",
-  // Test-harness only.
+  // Reserved for consumer-authored test diagnostics.
   "FIXTURE_SCHEMA_VIOLATION",
   // Cross-phase (validate / boot / runtime as applicable).
   "HANDLER_NOT_REGISTERED",
@@ -79,7 +79,7 @@ export const DIAGNOSTIC_CODES = [
   "TRANSLATES_FIELD_NOT_IN_PARENT",
   "TRANSLATES_FIELD_NOT_IN_CHILD",
   "TRANSLATES_PARENT_IS_LOCALIZED",
-  // Runtime-only (and test harness when the dispatcher reports them).
+  // Runtime-only. Consumer tests may preserve or restamp the phase.
   "INPUT_VALIDATION_FAILED",
   "UNAUTHENTICATED",
   "AUTH_DENIED",
@@ -172,9 +172,8 @@ export function httpStatusFor(d: Diagnostic): RuntimeHttpStatus {
 }
 
 /**
- * Build a Diagnostic with a derived `message`. Call sites populate
- * the structured fields; `message` is generated from them so prose
- * cannot drift from structure.
+ * Build a Diagnostic with a derived default `message`. Call sites may supply
+ * contextual prose, but the structured fields remain authoritative.
  */
 export function makeDiagnostic(
   input: Omit<Diagnostic, "message"> & { message?: string },
@@ -192,9 +191,9 @@ export function makeDiagnostic(
 }
 
 /** Phase-stamping helpers — equivalent to `makeDiagnostic({...input, phase})`
- *  but read cleaner at call sites. `phase: "test"` has no helper — the
- *  test harness (ADR-0007) will add one when it lands; the phase value
- *  itself stays part of the public Diagnostic contract per ADR-0008. */
+ *  but read cleaner at call sites. `phase: "test"` has no Core helper because
+ *  the shipped performance harnesses emit purpose-shaped reports; the phase
+ *  remains part of the public Diagnostic contract for consumer tests. */
 export const validateDiagnostic = (input: PhaselessInput): Diagnostic => makeDiagnostic({ ...input, phase: "validate" });
 export const bootDiagnostic = (input: PhaselessInput): Diagnostic => makeDiagnostic({ ...input, phase: "boot" });
 export const runtimeDiagnostic = (input: PhaselessInput): Diagnostic => makeDiagnostic({ ...input, phase: "runtime" });

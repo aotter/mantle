@@ -14,7 +14,8 @@ mantle is in `0.0.x-alpha` until the v0.1.0 release gate closes. The process bel
 - Use semver after v0.1.0.
 - Tag format is `vMAJOR.MINOR.PATCH`, for example `v0.1.0`.
 - Alpha tags may use prerelease suffixes, for example `v0.0.6-alpha`.
-- Package versions and agent plugin manifest versions must stay aligned unless
+- Package versions, agent plugin manifest versions, and the immutable
+  `.agents/plugins/marketplace.json` `v<version>` ref must stay aligned unless
   a future ADR explicitly changes release policy.
 
 ## Release channels
@@ -26,8 +27,8 @@ new capability, starter changes, and compatibility-breaking pre-v0.1
 behavior. Use alpha for official-site dogfood, provision-path testing,
 and early consumer projects that can tolerate churn.
 
-- Version suffix: `-alpha`, e.g. `0.0.7-alpha`.
-- Git tag: `v0.0.7-alpha`.
+- Version suffix: `-alpha.N`, e.g. `0.0.0-alpha.1`.
+- Git tag: `v0.0.0-alpha.1`.
 - GitHub Release: mark as prerelease.
 - npm dist-tag: `alpha`.
 - npm `latest` (pre-v0.1.0 policy): `latest` tracks the most
@@ -36,9 +37,9 @@ and early consumer projects that can tolerate churn.
   beta; otherwise it follows the most recent alpha. Once v0.1.0
   stable ships, `latest` switches to stable-only and never points
   at a prerelease again.
-- Required before publish: `pnpm run check`, changelog entry (written
-  at release time, see playbook step 2 below), release PR merged to
-  `main`, tag pushed.
+- Required before publish: `pnpm run check`, changelog entry (written at
+  release time, see playbook step 2 below), release PR merged to the branch
+  required by the cadence below, and tag pushed.
 
 ### Beta
 
@@ -76,7 +77,9 @@ The release pipeline is automated end-to-end (#191). Pushing a `v*` tag
 fans out: npm publish → starters bump → starters tag → landing bump →
 landing deploy. The human steps are:
 
-1. Confirm the release scope and blocking issues.
+1. Confirm the release scope, intended version, and blocking issues. The
+   release PR aligns every package/plugin version and the agent marketplace ref
+   to the intended `v<version>` tag.
 2. **Write the `CHANGELOG.md` entry for this release.** Per-PR `[Unreleased]` entries are not used (see `CONTRIBUTING.md § Changelog`). Aggregate the merged-since-last-tag commit log into Keep-a-Changelog buckets (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`), prefix package scope when relevant (`**`@aotter/mantle-runtime`**: ...`), cross-link the closing PR + issue. The entry lives under a new `## [vX.Y.Z] - YYYY-MM-DD` heading directly; no `[Unreleased]` placeholder. Useful command for the aggregation pass:
 
    ```bash
@@ -316,8 +319,9 @@ pnpm -C packages/mantle            pack --pack-destination /tmp/mantle-pack
 tar tzf /tmp/mantle-pack/aotter-mantle-<ver>.tgz | head    # spot-check
 ```
 
-Confirm each tarball contains only intended `dist`, `README.md`,
-`LICENSE`, and `package.json` payloads for that package. Do not publish
+Confirm sub-package tarballs contain only their intended `dist`, `README.md`,
+`LICENSE`, and `package.json` payloads. The umbrella package must additionally
+contain the version-matched `docs/` and `skills/` trees. Do not publish
 tarballs containing local state, `.wrangler/`, secrets, fixtures, or
 workspace-only artifacts.
 
@@ -392,7 +396,7 @@ also smoke-test installability after publish:
 mkdir -p /tmp/install-smoke && cd /tmp/install-smoke
 echo '{"name":"smoke","private":true}' > package.json
 npm install @aotter/mantle@alpha --no-package-lock --no-save
-ls node_modules/@aotter/mantle  # expect: dist/ package.json README.md
+ls node_modules/@aotter/mantle  # expect: dist/ docs/ skills/ package.json README.md
 ```
 
 If `npm install` 404s for >15 min despite `pnpm publish` succeeding,
@@ -410,7 +414,7 @@ is broken:
 Example:
 
 ```bash
-npm deprecate @aotter/mantle-runtime@0.0.7-alpha "Broken alpha; use 0.0.8-alpha"
+npm deprecate @aotter/mantle-runtime@0.0.0-alpha.1 "Broken alpha; use 0.0.0-alpha.2"
 ```
 
 Only unpublish when the tarball contains secrets, private files, or a
@@ -541,7 +545,8 @@ Use hotfixes only for released `main` defects.
 - [ ] `CHANGELOG.md` has the release entry. If it's a no-op SDK bump to re-spin starter content, the entry MUST say so explicitly (see [§ Re-spin release for a downstream-content-only fix](#re-spin-release-for-a-downstream-content-only-fix)).
 - [ ] **Cross-repo type-shape audit ran** if this release widens any SDK type — see [§ Cross-repo type-shape changes](#cross-repo-type-shape-changes). Skipping this is how alpha.9 shipped with broken starter content.
 - [ ] `pnpm run check` passed or failures are documented and accepted.
-- [ ] Package versions and tag name match.
+- [ ] Package/plugin versions, `.agents/plugins/marketplace.json` ref, and tag
+      name match.
 - [ ] GitHub release notes link the relevant issues and ADRs.
 - [ ] Automated `release.yml` published packed tarballs to npmjs and
       mirrored them to GitHub Packages before dispatching downstream

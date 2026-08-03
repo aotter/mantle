@@ -29,7 +29,7 @@ import type { ValidateManifestsResponse } from "./dto/ValidateManifestsResponse.
 
 /**
  * `ValidateManifestsUseCase` — Loop 1 of the SDK authoring contract
- * (ADR-0007 / authoring-contract.md). Pure: no DB, no network. The
+ * (ADR-0007 / `docs/design-atoms.md`). Pure: no DB, no network. The
  * structural parser (`ManifestParser`) catches single-manifest
  * envelope / shape / DRAFT-key errors. This use case catches everything
  * that requires looking at MULTIPLE manifests together (cross-refs,
@@ -462,8 +462,8 @@ function checkBuiltinHandler(
         severity: "error",
         path: manifestPath("Procedure", p.metadata.name, "/spec/handler/op", filePaths),
         value: "archive",
-        expected: `Schema '${h.schema}' to declare lifecycle: editorial (op: archive is editorial-only — see ADR-0011)`,
-        message: `Procedure '${p.metadata.name}' uses op: archive on Schema '${h.schema}', but that Schema's lifecycle is 'simple'. Either set Schema.spec.lifecycle: editorial or use op: delete.`,
+        expected: `Schema '${h.schema}' to declare lifecycle: editorial (builtin op: archive is editorial-only)`,
+        message: `Procedure '${p.metadata.name}' uses op: archive on Schema '${h.schema}', but that Schema's lifecycle is '${lifecycle}'. Either use an editorial Schema or choose another builtin op.`,
       }),
     );
   }
@@ -692,8 +692,7 @@ function checkHandlerRefsInSource(
     const ref = p.spec.handler.ref;
     const escaped = ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     // Two registration patterns we accept as evidence:
-    //   1. Quoted string literal: `registerHandler('captchaCheck', ...)`
-    //      or `handlers: { 'captchaCheck': ... }`
+    //   1. Quoted object key: `handlers: { 'captchaCheck': ... }`
     //   2. Unquoted object-property-key shorthand:
     //      `{ captchaCheck: someFn, slackNotify: otherFn }` —
     //      the idiomatic JS form the publication / intake / presence
@@ -716,7 +715,7 @@ function checkHandlerRefsInSource(
             filePaths,
           ),
           value: ref,
-          expected: `'${ref}' to appear in handler source as a quoted string (e.g. registerHandler('${ref}', ...)) or an unquoted object-property key (e.g. { ${ref}: someFn })`,
+          expected: `'${ref}' to appear in the handlers map as a quoted or unquoted object-property key (e.g. { '${ref}': someFn })`,
           message: `Procedure '${p.metadata.name}' handler.ref '${ref}' was not found in any handler source file. The boot-time validator will hard-fail if it isn't registered at runtime.`,
         }),
       );

@@ -4,7 +4,7 @@ description: Ship a local or Mantle landing-generated project to Cloudflare and 
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/provision/SKILL.md
-  applies_to: mantle@v0.1.0
+  applies_to: mantle grammar v0.1
 ---
 
 # Provision a Mantle Project

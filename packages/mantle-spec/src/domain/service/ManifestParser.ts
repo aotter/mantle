@@ -110,7 +110,7 @@ function validateLocalizedText(
 /**
  * Day-1 envelope-and-shape parser. Loop 1 (`mantle validate`) does
  * the cross-manifest checks (Trigger.target.procedure exists, View.from
- * is a Schema, etc.) — see ADR-0007 / `docs/authoring-contract.md`.
+ * is a Schema, etc.) — see ADR-0007 and `docs/design-atoms.md`.
  *
  * Diagnostics emitted here are intentionally narrow: bad envelope,
  * structurally malformed spec, use of a DRAFT or v0.1.x-not-yet-shipped

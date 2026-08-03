@@ -1,12 +1,18 @@
-# ADR-0014: Better Auth as the auth + MCP authorization server, scope-derived multi-tenant MCP
+# ADR-0014: Adapter-owned identity and MCP authorization
 
 ## Status
 
-Accepted (new). Amended 2026-05-14 — formalize "Better Auth as default implementation, `Auth` interface as the SDK contract" (see § "Auth as contract, Better Auth as default").
+Accepted. Amended 2026-05-14, 2026-05-15, 2026-06-30, 2026-07-15, and
+2026-08-03.
 
 ## Date
 
-2026-05-09 (amended 2026-05-14)
+2026-05-09 (last amended 2026-08-03)
+
+> **Current authority:** the original decision below records the rejected
+> Better-Auth-for-MCP design. The 2026-05-15 carve-out and 2026-07-15 unified
+> authorization amendment are authoritative where they conflict. Operational
+> guidance in "How to apply" is maintained against the current adapter/runtime.
 
 ## Context
 
@@ -40,7 +46,7 @@ A 2026 Workers-friendly auth library — [Better Auth](https://better-auth.com) 
 
 Better Auth depends on a Kysely / Drizzle / Prisma adapter for the database, not on any Cloudflare-specific service. The auth machinery becomes platform-agnostic — porting to Netlify / Bun / Deno is config-only.
 
-## Decision
+## Decision (historical baseline; amended below)
 
 ### 1. Better Auth replaces both layers
 
@@ -310,7 +316,7 @@ Keep our `staff` overlay and `D1StaffRepository`. Use Better Auth only for ident
 
 **Rejected** — duplicate role data (Better Auth `admin` plugin + our staff overlay) is worse than picking one. Audit trail is the only thing the standalone overlay buys, and v0.1.0 doesn't need it.
 
-## Implementation status
+## Implementation status (historical snapshot)
 
 Phase 0 (spike, 0.5–1d) — pending:
 
@@ -351,13 +357,31 @@ Phase 3 (v0.2+, with community / fan-club):
 
 When reviewing or implementing a change that touches auth, MCP routing, or roles:
 
-1. **Identity / session / account state** — Better Auth API. Don't hand-write D1 reads against `user` / `session` / `account`. Use `auth.api.*`.
-2. **Role check** — read `session.user.role` (from `auth.api.getSession()` or `auth.api.getMcpSession()`). Don't query a `staff` table; it doesn't exist.
-3. **MCP tool routing** — let the dispatcher derive surface from `Procedure.requires.auth.all`. Don't add a per-tool `surface: 'staff' | 'public'` field; the predicate is the source of truth.
-4. **DCR consent gating** — scope-based via Better Auth `oauthProvider` config. `mcp:staff` requires admin role; `mcp:read` accepts any signed-in user. Don't add a separate consent path or config flag.
-5. **Token props** — minimal. If you need role in the token payload for caller convenience, add via `customAccessTokenClaims`, but always re-validate fresh on the server side.
-6. **Email** — call `EmailSender` port. CF adapter binds Resend; consumer can swap.
-7. **Adapter portability** — the auth surface is platform-agnostic. A new adapter (Netlify / Bun / Deno) constructs Better Auth with its preferred DB adapter and passes the instance to the runtime. No port re-implementation needed.
+1. **Identity and local sessions** — depend on the adapter's public `Auth`
+   interface. `createAuth()` is the curated Better Auth-backed Cloudflare
+   default; do not import Better Auth internals outside that implementation or
+   add an un-curated passthrough.
+2. **Mutable staff privilege** — call `auth.getUserRole(userId)` on every
+   protected REST/MCP invocation. Do not trust a role captured in an OAuth
+   grant or long-lived token.
+3. **MCP transport** — export `createOAuthProvider(...)` at the Worker top
+   level. It owns DCR/PKCE/token verification and dispatches `/mcp` and
+   `/mcp/staff`; the consent handler uses the current local `Auth` session.
+4. **MCP surface** — use explicit `View.spec.surface` and
+   `Trigger.source.surface`. The adapter pre-filters each catalog; the shared
+   runtime evaluator then enforces the target's `requires.auth.all` and
+   optional guard on every call.
+5. **Scopes and props** — advertise the compatibility scope `mcp`. Store only
+   immutable grant identity (`userId`, `clientId`, scopes); never store mutable
+   staff role or raw/refresh tokens in runtime context.
+6. **REST credentials** — normalize sessions, OAuth JWTs, and an optional
+   consumer `credentialResolver` into `HandlerContext`. A recognized invalid
+   API key/PAT fails closed and never falls back to a cookie. Standard remote
+   MCP does not promise raw REST key/PAT support.
+7. **Adapter portability** — auth remains adapter-owned. A future adapter
+   verifies its platform's credentials and supplies the same normalized
+   runtime context; `mantle-runtime` does not gain a Better Auth dependency or
+   an auth storage port.
 
 ## Sources
 
@@ -408,17 +432,19 @@ The original ADR-0014 §"Auth as contract, Better Auth as default" framing stays
 
 ### What didn't change
 
-- The auth port is still removed (the runtime takes the Better Auth instance directly).
+- The auth storage port remains removed; the adapter owns `Auth` and passes
+  verified, normalized caller context into runtime dispatchers.
 - Apple's `trustedOrigins` auto-append (`https://appleid.apple.com`) and `sameSite=none` cookie injection for cross-site `form_post` callback stay.
 - `appleClientSecret()` helper (from PR #173) stays.
 - All non-OAuth admin endpoints (`/api/auth/*`, `/api/auth/methods`, admin SPA mount) stay on Better Auth.
 - The `bootstrapOwner` + email-OTP + magic-link + `methods[]` carve-out stay.
 
-### Future work
+### Compatibility constraints to re-test before changing
 
-- A `@cloudflare/vitest-pool-workers`-based integration test covering the full OAuth flow (DCR → consent → token → MCP RPC). Node-vitest can't load `@cloudflare/workers-oauth-provider` because it imports from `cloudflare:workers`.
-- Starters (`aotter/mantle-starters`) migration to the same top-level OAuthProvider shape. All 8 archetypes currently use the pre-carve-out `mountMcp` API and need updating before the next starter tag.
-- Track whether Anthropic relaxes (1) the `/mcp` resource-path-prefix requirement and (2) the no-colon-in-scope requirement. Both are de-facto MCP client behaviors, not RFC requirements; if upstream relaxes them, the SDK can re-introduce `mcp:read` / `mcp:staff` scopes for finer-grained delegation.
+- Anthropic clients required the `/mcp` resource-path prefix during the
+  carve-out verification.
+- Colon-shaped advertised scopes broke the same clients; Mantle therefore
+  advertises one `mcp` scope and re-evaluates target authorization server-side.
 
 ## Amendment — 2026-06-30: Hosted-auth boundary and first-party cookie fields
 

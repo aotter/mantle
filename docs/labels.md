@@ -29,7 +29,7 @@ For package README or package-local docs changes, prefer the package area label 
 | `area:runtime` | `packages/mantle-runtime` behavior, ports, use cases, dispatcher, render, MCP runtime. |
 | `area:spec` | `packages/mantle-spec`, manifest parsing, validation, diagnostics, CLI, spec types. |
 | `area:cf` | `packages/adapters/cloudflare`, Workers adapter, D1/KV/ASSETS wiring, Cloudflare deploy behavior. |
-| `area:starters` | `starters/*` consumer templates and starter validation. |
+| `area:starters` | External `aotter/mantle-starters` integration, release fanout, and the local moved-starter stub. |
 | `area:skills` | `skills/*` agent briefs and install/extend/provision workflows. |
 | `area:admin-ui` | `packages/mantle-admin-ui` React admin SPA. |
 | `area:docs` | Repo-wide human docs, governance docs, ADR text, release docs, root README content, and cross-cutting documentation work. |

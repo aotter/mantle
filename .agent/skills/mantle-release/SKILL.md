@@ -12,6 +12,7 @@ Read these files before changing versions or pushing tags:
 - every workspace package `package.json` whose version participates in the release
 - `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`,
   `.copilot-plugin/plugin.json`, and `.cursor-plugin/plugin.json`
+- `.agents/plugins/marketplace.json`
 
 For cross-repo fanout work, also inspect the sibling checkouts:
 
@@ -46,7 +47,9 @@ Do not push a `v*` tag until every item below is true.
    ```
 
 2. Confirm all Mantle package and agent plugin manifest versions are aligned
-   to the intended version unless an ADR explicitly permits divergence.
+   to the intended version, and `.agents/plugins/marketplace.json` points to
+   the exact `v<intended-version>` tag, unless an ADR explicitly permits
+   divergence.
 
 3. Run the SDK repo gate.
 
@@ -57,6 +60,7 @@ Do not push a `v*` tag until every item below is true.
 4. If docs or agent skills changed, inspect the packed umbrella package and verify the package includes the embedded `docs/` and `skills/` payload.
 
    ```bash
+   mkdir -p /tmp/mantle-pack
    pnpm -C packages/mantle pack --pack-destination /tmp/mantle-pack
    tar tzf /tmp/mantle-pack/aotter-mantle-*.tgz | rg '^(package/)?(docs|skills)/'
    ```

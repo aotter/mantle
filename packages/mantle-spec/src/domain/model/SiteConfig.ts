@@ -15,7 +15,7 @@
  *
  * Future v0.1.x: optional standalone `site.yaml` parsed via a
  * `kind: SiteConfig` envelope sibling to the 4-atom manifest grammar.
- * Today the consumer declares `siteDefaults` in `mantleConfig.ts` as a
+ * Today the consumer declares `siteDefaults` in `src/mantle/config.ts` as a
  * TS object; either path conforms to this type.
  */
 export interface SiteConfig {
@@ -121,22 +121,21 @@ export interface MediaPurposePolicy {
 }
 
 /**
- * First-deploy seed declared by the consumer in `mantleConfig.ts`. The
+ * First-deploy seed declared by the consumer in `src/mantle/config.ts`. The
  * runtime applies via `INSERT … ON CONFLICT(key) DO NOTHING` — operator
  * edits via the admin Settings page are never overwritten on
  * subsequent deploys. Empty / blank fields skip, preventing a partial
  * seed from clobbering rows the operator already set.
  *
- * Validated synchronously at module-init by
- * `assertSiteDefaultsCanonical`; a non-canonical locale tag fails fast
- * in `wrangler tail` rather than corrupting the seed.
+ * Validated during `bootInit()` by `assertSiteDefaultsCanonical`; a
+ * non-canonical locale tag rejects boot rather than corrupting the seed.
  *
  * `SiteDefaults` is the **author-time** declaration (what the consumer
  * writes); `SiteConfig` (above) is the **runtime read shape**
  * (what the dispatcher and templates see after the seed has been
- * applied and the operator has had a chance to edit). The conversion
- * happens in `mantle-runtime` via `loadSiteConfig(env)` — spec
- * defines both types and the validator, runtime owns the read/write.
+ * applied and the operator has had a chance to edit). The runtime's
+ * `DatabaseSiteConfigRepository` owns that seed/load conversion; spec defines
+ * both types and the validator.
  */
 export interface SiteDefaults {
   readonly locales?: ReadonlyArray<string>;
@@ -149,7 +148,7 @@ export interface SiteDefaults {
    *  `https://my-blog.com`. The render pipeline uses this to build
    *  absolute URLs in `/llms.txt` and the `.md` mirrors; an empty
    *  origin produces relative URLs that are useless to off-site agent
-   *  consumers. Seed it from `mantleConfig.ts` so a fresh deploy gets
+   *  consumers. Seed it from `src/mantle/config.ts` so a fresh deploy gets
    *  correct URLs without an admin-UI round trip. */
   readonly origin?: string;
   /** Absolute or root-relative favicon URL. */

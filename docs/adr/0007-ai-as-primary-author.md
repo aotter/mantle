@@ -1,8 +1,9 @@
-# ADR-0007: AI-as-primary-author — three feedback loops, two role surfaces
+# ADR-0007: AI-as-primary-author — three pre-serve loops, two role surfaces
 
-**Status:** Carried over from POC v0.0.x; refreshed and folded for v0.1.0 (incorporates POC ADR-0013).
+**Status:** Carried over from POC v0.0.x; amended for the shipped v0.1 CLI,
+testing, plugin, and MCP surfaces (incorporates POC ADR-0013).
 
-**Date**: 2026-05-03
+**Date:** 2026-05-03; last amended 2026-08-03
 
 **Deciders**: phsu
 
@@ -74,11 +75,12 @@ client like Claude Desktop, talking to the deployed Worker over MCP).
 
 ## Decision
 
-### Part A — Three feedback loops for the coder agent
+### Part A — Three pre-serve feedback loops for the coder agent
 
-The SDK provides **three explicit feedback loops**, ordered by
-"leftward shift" — catch the failure as early in the author's
-workflow as physically possible:
+The SDK provides **three explicit pre-serve feedback loops**, ordered by
+"leftward shift" — catch the failure as early in the author's workflow as
+physically possible. Runtime diagnostics remain the final, serving-time
+boundary rather than a fourth authoring gate.
 
 #### Loop 1 — Static validation (`mantle validate`)
 
@@ -87,8 +89,9 @@ network. Runs in the AI's terminal in milliseconds. Reads YAML files
 and handler registration source files; emits structured diagnostics;
 exits non-zero on any error.
 
-The CLI ships in the `@aotter/mantle-spec` package — it's the
-spec authority for what a v0.1 manifest must look like.
+The implementation lives in `@aotter/mantle-spec`. Adopters run it through the
+umbrella package's `mantle` binary; a direct spec install exposes the fallback
+`mantle-spec` binary.
 
 What it catches:
 - Manifest envelope (`apiVersion`, `kind`, `metadata.name`)
@@ -101,61 +104,32 @@ What it catches:
 - `requires.auth.all` predicates are in the v0.1 vocabulary
 - `Trigger.source.path` does not collide with another Trigger
 - `metadata.name` is unique within `kind`
-- Each `Procedure.handler.ref` has a corresponding
-  `sdk.registerHandler("<ref>", ...)` call somewhere in the
-  consumer's TS source (textual grep, not runtime — boot loop is
-  Loop 2's job)
+- Each `Procedure.handler.ref` appears as a key in the consumer's TypeScript
+  handler map (textual grep, not runtime — boot Loop 3 verifies the actual
+  map)
 
 This is the cheapest loop; it must be runnable without booting
 anything. AI authors should run it after every manifest edit.
 
-#### Test harness (planned public package surface)
+#### Loop 2 — Local tests and measured harnesses
 
-Supporting tooling that consumers use inside their own test suites —
-it is not itself a feedback loop, it's the harness those tests run
-against. In-memory dispatcher invocation: the consumer's test suite
-imports a public testing module that spins up a complete dispatcher
-against an in-memory D1 substitute, seeds rows, and calls Procedures
-or Views directly without going through HTTP.
+Consumer tests exercise exported runtime use cases or the adapter application
+with project-owned fakes appropriate to that test. Core does not ship a second
+in-memory Worker or dispatcher abstraction.
 
-Target API sketch:
+The public Node-only `@aotter/mantle/runtime/testing` surface instead provides
+the two shared measurements that are expensive for each consumer to rebuild:
 
-```ts
-import { createTestDispatcher } from "@aotter/mantle-runtime/testing";
-import { manifests } from "../manifests"; // loaded by build hook
-import { handlers } from "../handlers";   // map of ref → fn
+- crowded real-SQLite View execution and `EXPLAIN QUERY PLAN` index coverage;
+- HTTP sampling for a running Worker, including optional test-only query/row
+  metric headers.
 
-const dispatcher = await createTestDispatcher({ manifests, handlers });
-await dispatcher.seed({ collection: "posts", rows: [...] });
+The umbrella package exposes both through `mantle-harness`. These checks use the
+real manifest validator, migrations, View compiler, SQL, and HTTP surface; they
+do not pretend an in-memory adapter proves Cloudflare behavior. Project tests
+still own handler logic, auth combinations, and product-specific fixtures.
 
-const result = await dispatcher.invoke(
-  "send-contact-message",
-  { name: "Alex", message: "hi" },
-  { user: { id: "user-uuid" } },
-);
-expect(result).toEqual({ ok: true });
-
-const view = await dispatcher.queryView("recent-published");
-expect(view.items).toHaveLength(2);
-```
-
-Catches:
-- Handler logic bugs (validation rules, branching, error returns)
-- Auth predicate evaluation (handler called with wrong user/staff
-  context returns `AUTH_DENIED`)
-- Input/output schema enforcement (caller-supplied `x-mantle-bind` field
-  is rejected; handler-returned shape mismatching `output` is
-  rejected)
-- View result correctness against fixture data
-- Cross-Trigger correctness when one Procedure has multiple bindings
-
-The test harness is **not** mocked — it should share the real
-dispatcher, validator, handler registry, and in-memory runtime ports.
-The public `testing` export has not shipped yet; current v0.1.0 code
-uses runtime package tests plus starter integration smokes to cover
-the same contract until the consumer-facing harness is promoted.
-
-#### Loop 2 — Boot-time fail-fast
+#### Loop 3 — Boot-time fail-fast
 
 Dispatcher build phase, after manifests are parsed and handlers are
 registered, before the serve loop starts. Walks the entire manifest
@@ -163,38 +137,37 @@ graph and the in-memory handler registry; refuses to start serving if
 anything is missing or inconsistent.
 
 What it catches that Loop 1 cannot:
-- `Procedure.handler.ref` that has a `sdk.registerHandler(...)` call
-  in source (Loop 1 saw it textually) but did not actually execute
-  (e.g. the registration file wasn't imported, the boot function was
-  skipped behind a feature flag)
-- D1 schema drift — table state in the connected D1 does not match
-  the DDL derived from current manifests; SDK refuses to serve until
-  a migration is applied or the drift is acknowledged
+- `Procedure.handler.ref` that appeared textually in source (Loop 1 saw it) but
+  is absent from the actual `handlers` map passed to runtime assembly
+- Current site locale state that conflicts with localized/translation Schemas
+- Generated index state that cannot be reconciled with declared Schema indexes
 - Cross-manifest references that a recent deploy introduced without
   the corresponding atom (e.g. updated Trigger pointed at a Procedure
   that wasn't included in the deploy bundle)
 
-Failure mode is **process exit non-zero**, not "log a warning and
-serve anyway." A missing handler must not surface as a runtime 500 to
-a customer; it must surface as a boot failure to the deploy pipeline,
-which is visible to the AI author who just shipped.
+Failure mode is a rejected `bootInit()` promise carrying structured boot
+diagnostics, not "log a warning and serve anyway." The conventional adapter
+does not dispatch through an unbooted runtime and resets a rejected lazy-boot
+promise so a transient infrastructure failure can retry. Deployment workflows
+must exercise the Worker readiness/smoke path if they need the failure before
+traffic.
 
-#### Loop 3 — Runtime errors
+#### Runtime diagnostics
 
 Runtime diagnostics (see ADR-0008 and the design-atoms reference)
 cover the cases that reach this far. The contract's job is to make
-Loop 3 the layer that handles **input it had no way to predict**
+the serving boundary handle **input it had no way to predict**
 (request shape, auth state, transient infrastructure failures), not
-the layer that handles **author-side mistakes** (those are Loops 1
-and 2's job).
+the layer that handles **author-side mistakes** (those belong in the earliest
+applicable pre-serve loop).
 
 #### Phase ordering rationale
 
 The author's lifecycle is:
 
 ```
-edit YAML → run validate (Loop 1) → run tests (test harness)
-         → push → deploy boots (Loop 2) → serves (Loop 3)
+edit YAML → run validate (Loop 1) → run tests/harnesses (Loop 2)
+         → push → deploy boots (Loop 3) → serves (runtime diagnostics)
 ```
 
 The earlier a class of error is caught, the cheaper it is to fix and
@@ -225,13 +198,11 @@ Two AI agents read and write to a `@aotter/mantle-*` deployment:
    and network access in the consumer's dev environment.
 
 2. **The operator agent** — a content-editing client (Claude Desktop,
-   claude.ai, or any MCP-speaking host) connected to the deployed
-   Worker's `/mcp` endpoint over OAuth. Calls the Day-1 MCP tool
-   catalog: generic tools (`list_entries`, `get_entry`,
-   `request_publish`, `unpublish_entry`, `archive_entry`) plus
-   per-collection authoring tools (`create_draft_<collection>`,
-   `update_draft_<collection>`). Has *only* the MCP tools the Worker
-   exposes; no shell, no filesystem, no git.
+   claude.ai, or any MCP-speaking host) connected to the deployed Worker over
+   OAuth. `/mcp` carries public View queries and explicitly public MCP
+   Triggers; `/mcp/staff` carries staff View queries, authoring/lifecycle
+   builtins, and explicitly staff MCP Triggers. The agent has *only* the tools
+   on its authorized catalog; no shell, filesystem, or git.
 
 These are different roles with different *capability surfaces*. The
 coder agent has many more capabilities than the operator agent *by
@@ -266,25 +237,24 @@ SDK TS API instead of needing a matching MCP tool).
   operator never sees the manifest layer.
 - Anything that requires **shell or filesystem access** —
   scaffolding, test running, deploy.
-- Anything **dev-loop shaped** — the three feedback loops above
-  (validate / boot / runtime) plus the test harness are
-  coder-surface concerns, not operator-surface.
+- Anything **dev-loop shaped** — static validation, local
+  tests/measurements, and boot verification are coder-surface concerns, not
+  operator-surface.
 - Anything that **mutates code** in the consumer's repo — registering
   handlers, wiring imports, updating `wrangler.toml`.
 - **Skill files** carrying domain context. cc reads these; MCP clients
   do not.
 
 Concrete artifacts today:
-- `skills/<name>/SKILL.md` files in the
-  [`aotter/mantle`](https://github.com/aotter/mantle)
-  repo, discoverable by URL. Distribution as a Claude plugin is
-  **optional** (a v0.1.x convenience), not required — the canonical
-  location is the in-repo path, and any agent that can fetch a URL
-  can consume them.
-- `mantle validate` CLI (shipped in `@aotter/mantle-spec`)
-- `mantle emit-openapi` CLI (likewise)
-- Public testing harness (planned; current coverage is SDK tests +
-  starter integration smokes)
+
+- Version-matched Core skills ship inside `@aotter/mantle`, through the Mantle
+  agent plugin, and through exact-byte repo-local projections written by
+  `mantle skills`.
+- The umbrella `mantle` CLI exposes `validate`, `generate`, `skills`, `update`,
+  `introspect`, `emit-openapi`, and `emit-types`; direct spec installs expose
+  the authoring subset through `mantle-spec`.
+- `@aotter/mantle/runtime/testing` and `mantle-harness` expose the measured
+  SQLite/index and live-HTTP checks described in Loop 2.
 
 #### What goes on MCP (operator surface)
 
@@ -301,20 +271,18 @@ Concrete artifacts today:
 
 #### What goes on neither (the SDK TS API only)
 
-A small third category exists: APIs that only the **runtime itself**
-consumes (the dispatcher, the boot validator, the diagnostic types).
-These are exported from `@aotter/mantle-spec` for the coder to
-import inside their handler code, but are not CLI commands and not
-MCP tools — they're library types.
+A small third category exists: library APIs such as manifest/diagnostic types,
+runtime use cases, dispatchers, and the boot validator. They are exported from
+the matching `@aotter/mantle` subpath for composition or tests, but are not
+separate CLI commands or MCP tools.
 
 #### What does NOT go on either surface
 
-- **Consumer Procedures auto-emitted as MCP tools.** This was
-  considered as `Trigger.source.kind: mcp` and rejected. A
-  consumer-defined Procedure carries arbitrary code; auto-emitting it
-  to MCP would let the operator agent trigger arbitrary side effects
-  defined by the coder agent. The role boundary collapses. Ops-role
-  verbs land as SDK builtins, not as auto-bound consumer Procedures.
+- **Unbound consumer Procedures auto-emitted as MCP tools.** A Procedure carries
+  arbitrary code and is transport-neutral by itself. Exposure requires an
+  explicit `Trigger.source.kind: mcp`, a declared `public | staff` surface, and
+  the target's authorization predicates/guard. Core also emits its closed
+  authoring/lifecycle builtins and View query tools on the matching surface.
 - **CLI commands that mutate runtime state.** The CLI is for the
   pre-deploy authoring loop. Once deployed, runtime state changes via
   MCP (operator) or via direct SDK calls inside handler code
@@ -331,11 +299,11 @@ MCP tools — they're library types.
   just executed. Boot errors → deploy pipeline log the deploy is
   blocked on. Runtime errors → customer-visible failures (the only
   place runtime errors should appear).
-- One diagnostic format (ADR-0008) across all loops means the coder
-  agent writes one parser, not three.
-- Test harness as a public SDK export means consumer apps can ship
-  handler tests as part of normal CI without wiring up their own
-  dispatcher harness.
+- One diagnostic format (ADR-0008) across validation, boot, and runtime
+  failures means the coder agent writes one parser. Measured harnesses use
+  separate stable report types because they are results, not failures.
+- Public measured harnesses let consumers gate index access paths and live HTTP
+  behavior without rebuilding Core's migration/compiler instrumentation.
 - Boot fail-fast turns a class of "runtime 500 reaches customer"
   failures into "deploy blocked, fix forward" failures.
 - The framing — coder agent as primary author, operator agent as
@@ -356,11 +324,8 @@ MCP tools — they're library types.
 - v0.1 ships more than just a runtime: also the `mantle validate`
   CLI, a public testing module, and a boot validator. Roughly +30%
   of the v0.1 dispatcher work.
-- Test harness needs an in-memory D1 substitute (most plausible:
-  `better-sqlite3` or an equivalent SQLite binding running the same
-  DDL the production D1 adapter applies). Adds a dev-dependency to
-  the SDK and a compatibility surface to keep honest against real D1
-  quirks.
+- The Node-only planner uses the platform's `node:sqlite`; it is a compatibility
+  surface to keep honest against real D1 and does not enter Worker bundles.
 - Diagnostic format is locked early (ADR-0008); any field-shape
   change forces a doc revise and a code change across all loops.
 - The error catalog (one named code per failure mode, per loop) must
@@ -372,9 +337,8 @@ MCP tools — they're library types.
   versioning, and contracts apply to both. Mitigated by the fact
   that the two surfaces have little overlap by design — most features
   touch only one.
-- No cross-surface convenience. A hypothetical "consumer defines a
-  Procedure that's also an MCP tool with one YAML block" would be
-  ergonomically nice but is structurally rejected by Part B.
+- No implicit cross-surface convenience. A consumer Procedure reaches MCP only
+  through an explicit MCP Trigger and its surface/authorization declaration.
 
 ### Risks
 
@@ -383,20 +347,18 @@ MCP tools — they're library types.
   Mitigation: validator MUST err on the permissive side; ambiguous
   cases emit `severity: warning` not `error`; exit code 0 unless an
   error is found.
-- **Test harness diverges from runtime**: in-memory SQLite has
-  slightly different SQL semantics (collation, type affinity, JSON1
-  edge cases) from production D1. Tests pass here, prod fails. Same
-  trap as mocking the database. Mitigation: SDK itself runs starter
-  integration tests against real D1 in CI; document the
-  known-divergence list in the testing module's README.
+- **SQLite planner diverges from D1**: local SQLite can differ in collation,
+  type affinity, JSON, or planner choices. Mitigation: Core CI also runs the
+  Wrangler-local Worker benchmark; local planner output gates query shape and
+  access paths, not provider equivalence.
 - **Boot fail-fast aggressiveness**: if boot refuses to start on
   cosmetic issues (a Schema property has an unrecognized but harmless
   `x-` extension), the deploy pipeline becomes hostile. Mitigation:
   boot validates only **load-bearing** invariants (missing handler
   refs, dangling Trigger targets, schema drift). Cosmetic / advisory
-  checks are warnings via `--strict` flag, not errors.
+  checks remain non-blocking diagnostics rather than boot errors.
 - **AI authors over-trust the contract**: "the SDK said it was fine
-  therefore it is fine." Loop 3 (runtime) still exists for reasons
+  therefore it is fine." Runtime diagnostics still exist for reasons
   the contract cannot prevent. Mitigation: docs make clear that
   runtime errors are still possible and that the contract reduces —
   not eliminates — surface area.
@@ -425,21 +387,20 @@ UI for that author. Failures must land in the loop the author is
 currently in.
 
 **(b) Static validation only.**
-Rejected as insufficient: cannot catch handler logic bugs, cannot
-verify that a `registerHandler` call actually executes (only that it
-appears textually), cannot test data-flow against fixtures.
+Rejected as insufficient: cannot catch handler logic bugs, cannot verify that
+a textual handler key reaches the assembled runtime map, and cannot test
+data-flow against fixtures.
 
 **(c) Test harness only.**
 Rejected: better than (a) but still lets misconfigurations land in
 deploys (handler renamed but not re-registered, manifest references
 stale schema name). Static is cheaper and finds these faster.
 
-**(d) Skip the test harness; rely on consumer's own integration
-tests.**
-Rejected: it is the SDK's job to make handler-level testing trivial;
-pushing the dispatcher-spin-up burden to every consumer is exactly
-the kind of boilerplate that demotivates writing tests in the first
-place.
+**(d) Ship a second full in-memory Worker/dispatcher harness.**
+Deferred. Consumer tests can call the public use cases or adapter app directly;
+Core only centralizes the real-SQLite planner and live-HTTP measurements whose
+instrumentation would otherwise be duplicated. Add a fuller factory only when
+multiple consumers demonstrate the same unavoidable setup.
 
 **(e) Prose error messages.**
 Rejected: see ADR-0008. AI parseability outweighs human readability
@@ -479,16 +440,16 @@ When proposing a new SDK feature or behavior, declare:
      CLI/skills, operator never sees it). Real "both" cases should
      be vanishingly rare.
 
-2. **Which loop owns the failure mode?** (Loop 1 static, Loop 2
-   boot, Loop 3 runtime)
+2. **Which loop owns the failure mode?** (Loop 1 static, Loop 2 local
+   tests/harnesses, Loop 3 boot; unpredictable serving conditions stay runtime)
 
 3. **Could it move left?** (e.g. a runtime check that could be a
    boot check, a boot check that could be a static check)
 
 4. **Does it emit the structured diagnostic shape?** (ADR-0008)
 
-5. **Can a consumer reproduce the failure offline?** (i.e. is it
-   visible to Loop 1 or to the test harness, not only Loop 3)
+5. **Can a consumer reproduce the failure offline?** (i.e. is it visible to
+   Loop 1 or Loop 2, not only after boot or at runtime)
 
 6. **Does the feature mutate the consumer's repo?** → CLI (or SDK
    API the CLI uses). Never MCP — the operator agent is not in the
@@ -498,7 +459,8 @@ When proposing a new SDK feature or behavior, declare:
    Worker?** → MCP tool, with the ops-role description in the
    tool's `description` field. Or HTTP Trigger + handler if the
    feature is consumer-shaped (a Procedure the consumer wrote).
-   Don't auto-bridge consumer Procedures to MCP.
+   An MCP Trigger is the explicit bridge when a consumer intentionally exposes
+   a Procedure to an operator surface.
 
 Reviewers should treat "this lands as a runtime 500 only" as a
 yellow flag — sometimes correct (genuine runtime conditions), often

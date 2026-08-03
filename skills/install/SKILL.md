@@ -4,7 +4,7 @@ description: Start a new Mantle site locally from a deterministic starter bundle
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/install/SKILL.md
-  applies_to: mantle@v0.1.0
+  applies_to: mantle grammar v0.1
 ---
 
 # Mantle Install
@@ -75,6 +75,8 @@ the generated bundle JSON.
 cd <target-dir>
 git init -b main
 pnpm install --frozen-lockfile
+pnpm exec mantle skills
+pnpm exec mantle skills --check
 pnpm validate
 pnpm typecheck
 pnpm dev
@@ -93,6 +95,18 @@ Read these before editing:
 1. `.mantle/launch-state.json`, `.mantle/features.json`, and
    `.mantle/handoff.md`.
 2. `package.json` for the installed `@aotter/mantle*` versions.
+
+Install the locked dependency graph and replace any stale projected Core
+skills before reading them:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm exec mantle skills
+pnpm exec mantle skills --check
+```
+
+Then read:
+
 3. Repo-local Mantle skills under `.agent/skills/` or `.claude/skills/`.
 4. Matching embedded docs under `node_modules/@aotter/mantle/docs/`.
 
@@ -105,7 +119,7 @@ live URL, and auth response, then skip work that is already complete.
 Then run:
 
 ```bash
-pnpm install --frozen-lockfile
+pnpm exec mantle skills --check
 pnpm validate
 pnpm typecheck
 ```

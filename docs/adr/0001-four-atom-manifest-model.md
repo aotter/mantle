@@ -209,12 +209,11 @@ See § Authoring shape below for the full retirement rationale.
 
 ## Implementation status
 
-Names + PG-1:1 framing are documented in this ADR and the
-manifest grammar reference. Manifest TS types live in
-`packages/mantle-spec/`. Starter manifests under
-`starters/` declare instances of each. Runtime dispatcher /
-View executor / Procedure dispatcher are tracked under the
-v0.1.0 ship list in [aotter/mantle](https://github.com/aotter/mantle).
+Names + PG-1:1 framing are documented in this ADR and the manifest grammar
+reference. Manifest TS types live in `packages/mantle-spec/`. The external
+[`aotter/mantle-starters`](https://github.com/aotter/mantle-starters)
+repository declares consumer instances of each atom. Runtime dispatcher, View
+executor, and Procedure dispatcher live in this repository.
 
 ---
 
@@ -500,7 +499,7 @@ YAML's standard `---` separator allows multiple documents in
 one file. A "feature file" carries all atoms for that feature:
 
 ```yaml
-# starters/<starter>/manifests/contact.yaml
+# manifests/contact.yaml
 apiVersion: cms.mantle.aotter.net/v1
 kind: Schema
 metadata: { name: contact-messages }

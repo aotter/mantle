@@ -16,7 +16,7 @@ Start here before changing code or docs. For deeper engineering rules, read [`CL
 
 Requirements:
 
-- Node.js >= 20
+- Node.js >= 22
 - pnpm >= 9
 
 Install and check the repo:

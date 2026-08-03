@@ -1,270 +1,143 @@
 # ADR-0009: Consumer-supplied manifests at SDK boot
 
-**Status:** Carried over from POC v0.0.x; refreshed for v0.1.0.
+**Status:** Carried over from POC v0.0.x; amended for the parser-free v0.1
+consumer boundary.
 
-**Date**: 2026-05-01 (POC); refreshed 2026-05-03 for v0.1.0 rebuild
+**Date:** 2026-05-01 (POC); last amended 2026-08-03
 
-**Deciders**: phsu
-
-**Related**: [ADR-0001](0001-four-atom-manifest-model.md) (the manifest model whose authoring path this ADR opens to consumers), [ADR-0007](0007-ai-as-primary-author.md) (the AI-author DX this unblocks at the per-project layer)
-
----
+**Related:** [ADR-0001](0001-four-atom-manifest-model.md),
+[ADR-0007](0007-ai-as-primary-author.md),
+[ADR-0018](0018-core-starters-repository-boundary.md)
 
 ## Context
 
-The 4-atom manifest model ([ADR-0001](0001-four-atom-manifest-model.md))
-promises that "anything more domain-shaped is composed in the
-consumer's project." For that promise to hold, the SDK has to accept
-manifest content from the consumer rather than baking any in itself.
+The four-atom model promises that domain shape is authored in the consumer's
+project. Core therefore cannot ship a fixed manifest set: doing so would force
+every new Schema, View, Procedure, or Trigger through an SDK fork/release.
 
-The natural failure mode — and the one this ADR forecloses — is the
-SDK shipping with a fixed manifest set hand-maintained inside the
-package (e.g. a TS string mirror of starter YAML files compiled into
-the SDK bundle). A consumer who wants a `comments` Schema, a
-`like-post` Procedure, or a cron Trigger then has two bad options:
-
-1. Edit the embedded set inside the SDK (forks the SDK; loses upgrades), or
-2. Wait for a future SDK release that ships the manifest they want.
-
-Either option is incompatible with the AI-as-primary-author contract
-([ADR-0007](0007-ai-as-primary-author.md)): the AI is
-working *inside the consumer's project*, not inside the SDK monorepo.
-It cannot extend the SDK without a fork-and-publish loop that has none
-of the three feedback loops the contract guarantees.
-
-Consumer-supplied manifests are the path that keeps the 4-atom model
-a property of *the SDK* rather than of *whatever starter the SDK
-ships*.
+The first v0.1 implementation imported YAML as Wrangler Text modules and parsed
+it during Worker startup. That kept ownership correct but leaked authoring-only
+YAML machinery into the runtime bundle and coupled consumers to Wrangler
+`[[rules]]`. The public CLI now provides one build-time compilation boundary.
 
 ## Decision
 
-The SDK's mount factory accepts manifest YAML text passed in by the
-consumer. The SDK ships **zero** embedded manifests; the registry is
-built exclusively from what the consumer passes. The resulting
-registry feeds `createCmsRuntime(...).bootInit()`, the HTTP Trigger
-mounts, the View executor, and the MCP tool catalog.
+Consumers own YAML under `manifests/`. The installed `mantle` CLI parses and
+validates that YAML, then writes the machine-owned runtime module and handler
+types:
+
+```bash
+pnpm exec mantle generate
+pnpm exec mantle generate --check
+```
+
+The outputs are:
+
+- `.mantle/generated/site.ts` — a parser-free `readonly Manifest[]` export;
+- `.mantle/generated/types.d.ts` — handler declarations derived from the same
+  validated manifest set.
+
+The Worker imports the generated array rather than YAML text:
 
 ```ts
-export interface CmsConfig {
-  /** Procedure handlers keyed by `Procedure.spec.handler.ref`. */
-  readonly handlers?: Readonly<Record<string, AnyHandler>>;
-  /** Parsed consumer-authored manifests. Starters usually import YAML
-   *  as text via Wrangler rules and call `parseManifestsOrThrow()`
-   *  before passing them to the adapter. */
-  readonly manifests: readonly Manifest[];
-}
+import { createMantleWorker } from "@aotter/mantle/cloudflare";
+import { manifest } from "../.mantle/generated/site.js";
+
+export default createMantleWorker({ manifest });
 ```
 
-The consumer's config file remains `src/mantleConfig.ts` (unchanged
-from v0.0.x). YAML manifests are imported as **Text modules** via
-Wrangler's `[[rules]]` block — the standard CF Workers mechanism for
-bundling text assets into a Worker without a codegen step:
+Low-level composition passes the same array as `CmsConfig.manifests`. Core and
+adapters ship zero application manifests. The registry, boot validator, View
+executor, HTTP/MCP mounts, and tool catalog are built only from the consumer's
+generated array.
 
-```ts
-// consumer's src/mantleConfig.ts
-import postsYaml from "../manifests/posts.yaml";
-import contactYaml from "../manifests/contact.yaml";
-import { sendContactMessage } from "./handlers/send-contact-message.js";
+`mantle generate --check` must gate validation/deploy so authored YAML cannot
+drift from checked-in generated output. Generation never edits YAML, handlers,
+skills, package metadata, styles, or provider configuration.
 
-export const cmsConfig: CmsConfig = {
-  manifests: [postsYaml, contactYaml],
-  handlers: { "send-contact-message": sendContactMessage },
-};
-```
+### Adapter scope
 
-```toml
-# wrangler.toml — bundle every manifests/*.yaml as text
-[[rules]]
-type = "Text"
-globs = ["**/*.yaml"]
-fallthrough = true
-```
+Compilation is adapter-independent and uses Node at author/build time. The
+Worker runtime receives plain typed objects, so Cloudflare needs no YAML Text
+module rule and a future adapter needs no equivalent bundler hook.
 
-A small ambient `yaml.d.ts` declaration tells TypeScript that
-`*.yaml` imports resolve to a string. The contract the SDK consumes
-is just "an array of YAML strings"; how the consumer's bundler
-produces them is their choice.
+### Single authority
 
-### Adapter scope for v0.1.0
-
-The Cloudflare adapter (`@aotter/mantle-cloudflare`) is the
-only shipping adapter in v0.1.0, so the Text-import-via-`[[rules]]`
-pattern is the canonical path. When other adapters (Netlify, etc.)
-ship, they will need their own equivalent text-import mechanism, but
-the SDK boundary remains unchanged: an array of YAML strings in,
-parsed registry out.
-
-### Single-slice ship
-
-The grammar lock applies to the spec shape, not to how the SDK ships
-internally. v0.1.0 lands consumer-supplied manifests as the only
-path from day one — no embedded fallback, no deprecation window, no
-override semantics. This is a fresh build with no existing v0.1.x
-deployments to migrate.
-
-This means:
-- The mount factory requires `manifests` to be passed in for any
-  Schema / View / Trigger functionality. Calling it without manifests
-  yields an admin-only Worker (no Schema, no View, no Trigger), with
-  the boot validator surfacing the empty set as a warning.
-- No conflict policy is needed: the SDK ships no manifests, so there
-  is no merge surface where an override could disagree with a default.
+YAML remains the authored source of truth. Generated TypeScript is a
+deterministic transport artifact and must not be hand-edited. Parser
+diagnostics point to the consumer manifest document/pointer before generation;
+runtime boot validation covers cross-manifest and registered-handler facts.
 
 ## Worked example
 
-The v0.1.0 starter ships at `starters/blog/manifests/` and is the
-canonical example consumers copy from. It demonstrates the full
-pattern: a `posts` Schema, a `contact` multi-doc Procedure + Trigger,
-the `[[rules]] type = "Text"` block in `wrangler.toml`, the ambient
-`yaml.d.ts`, and the `src/mantleConfig.ts` file that wires manifests
-+ handlers into the SDK. The blog `SKILL.md` walks AI install agents
-through the sequence.
+The external [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters)
+repository owns the blank project and typed overlays. Materialized projects
+carry their own `manifests/`, generated module, handlers, and package scripts;
+they consume the exact packed Core artifact rather than a workspace link.
 
 ## Consequences
 
-### Pros
+### Benefits
 
-- Consumers can compose all four atoms in their own project per the
-  ADR-0001 promise. The 4-atom model is a property of the SDK, not
-  of the starters.
-- The static-validation feedback loop (`mantle validate`) reads
-  from a `manifests/` directory in the consumer's project; the
-  validate path is uniformly applicable to consumer-authored
-  manifests across all four feedback loops.
-- The SDK bundle ships no manifest content. Consumers who don't need
-  a given starter's atoms (e.g. a docs site that only uses
-  `posts`-shaped content) don't pay for unrelated atoms.
-- Text-imported YAML keeps manifests as the YAML source-of-truth on
-  disk — no codegen step in the build, no parser drift between
-  author-time YAML and runtime parse. Multi-doc YAML grouping
-  ([ADR-0001](0001-four-atom-manifest-model.md) §"Authoring shape: multi-doc YAML")
-  is preserved end-to-end.
-- The MCP tool catalog automatically picks up the consumer's atoms —
-  no separate registration call. The consumer adds a `comments` Schema
-  and the operator agent sees `create_draft_comments` /
-  `update_draft_comments` on the next deploy.
+- Consumers can compose all four atoms without forking or publishing Core.
+- One CLI parse/validation path drives runtime objects and handler types.
+- Worker bundles do not include the YAML parser or consumer YAML text imports.
+- Every REST/MCP catalog automatically reflects the generated consumer set.
+- Other adapters consume the same `readonly Manifest[]` with no filesystem or
+  bundler-specific manifest loader.
 
 ### Costs
 
-- The consumer project carries a `manifests/` directory, a
-  `wrangler.toml` `[[rules]]` block, and a `src/yaml.d.ts` ambient
-  declaration. The install agent has these files to copy and one
-  more import to wire (the blog `SKILL.md` covers the sequence).
-- Text imports for YAML are a property of the consumer's build
-  system, not the SDK. Consumers using a non-standard build need to
-  ensure their bundler resolves `*.yaml` to a string. This is a
-  documentation issue, not a contract change — alternative paths
-  (codegen, embedded literal, fetch from KV) all work the same way
-  at the SDK boundary as long as they yield a string.
-- Boot validation needs to surface "the consumer wrote invalid YAML"
-  clearly. The diagnostic's `path` field references the consumer
-  file (e.g. `consumer-manifest:[2]#/spec/...`) so deploy logs point
-  at the right file.
+- Projects keep deterministic generated files and must run `generate` after
+  editing YAML.
+- CI/deploy must run `generate --check`; otherwise an old generated module can
+  outlive its source YAML.
+- Merge conflicts in generated output are resolved by re-running the installed
+  command, never by editing the artifact.
 
-### Risks
+### Risks and controls
 
-- **Build-step coupling.** Text imports depend on the consumer's
-  bundler. If a future Wrangler version changes the `[[rules]]`
-  surface the docs need updating. Mitigation: spec the import
-  contract loosely — "a string carrying the YAML text" — so any
-  other path (codegen, embedded literal, `fetch` from KV) works the
-  same way at the SDK boundary.
-- **Manifest drift between dev and prod.** The consumer edits a YAML
-  file; until they re-run `wrangler deploy`, the runtime keeps
-  serving the previous bundle. This is the existing Worker dev-loop;
-  the validate CLI catches the static checks pre-deploy and the
-  boot validator catches handler-ref mismatches at deploy. No new
-  risk; just call out in the docs that "rebuild required after
-  manifest edit."
-- **Multi-tenant deployments amplifying conflict.** A single Worker
-  running multiple tenants would want each tenant's manifests
-  isolated. The atom model has no `namespace` field
-  ([ADR-0001](0001-four-atom-manifest-model.md)) on purpose —
-  multi-tenancy lives in the consumer app layer with `tenant_id`
-  columns. Consumer-supplied manifests don't change this; the SDK
-  still sees one flat manifest set per Worker. Multi-tenant
-  SaaS-on-this-CMS is a separate design question.
-- **Manifest set growth.** A large consumer (50+ Procedures, 20+
-  Schemas) makes per-file imports verbose. Mitigation: a future
-  ergonomic helper (`loadManifestsFromGlob`) can be added without
-  changing the SDK contract — the contract is "pass an array of YAML
-  strings"; how the consumer assembles the array is their choice.
+- **Version skew:** always run the generator from the installed package and
+  read its embedded docs. Do not generate a versioned project from `develop`.
+- **Hidden stale output:** keep `mantle generate --check` in the normal project
+  validation gate.
+- **Runtime/parser divergence:** generated objects come from the same parser
+  used by `validate`; focused packed-package tests compare the consumer output.
+- **Multi-tenancy pressure:** Core still sees one flat manifest set per Worker.
+  Tenant isolation remains an application concern; this ADR adds no namespace.
 
 ## Alternatives considered
 
-**(A) `manifests: readonly Manifest[]`** — pre-parsed manifest
-objects instead of YAML strings. Rejected: pre-parsing means the
-consumer must call `parseManifests` themselves, losing multi-doc
-YAML grouping unless they call it once per file. The SDK already
-parses YAML inside its boot pipeline; pushing parse responsibility
-to the consumer is unforced complexity. Diagnostic paths also
-degrade: parse errors surface as JS exceptions in consumer code,
-not as Diagnostic JSON tied to a file path.
+**Runtime YAML Text imports.** Replaced. They require Wrangler-specific rules,
+ambient YAML modules, and ship authoring-only parse machinery in the Worker.
 
-**(B) Filesystem-based manifest discovery** — SDK reads manifests
-from `process.cwd()/manifests/*.yaml` at boot. Rejected: Workers do
-not have a runtime filesystem. Even at build time, Wrangler doesn't
-provide a hook for the SDK to read consumer files — that's the
-consumer's bundler's job, which is exactly what Text-imported YAML
-is for.
+**Runtime filesystem discovery.** Rejected. Workers have no runtime filesystem,
+and hidden discovery would make inputs and diagnostics less deterministic.
 
-**(C) Separate `@aotter/mantle-manifests-<consumer>` package** —
-each consumer ships their manifests as an npm package; the SDK
-imports from `mantle-manifests-blog` etc. Rejected: 1:N package
-overhead for what should be a directory of YAML files. Tooling pain
-(versioning, publishing) for a layer that is fundamentally
-consumer-internal. Useful if a community emerges around shared
-manifest sets ("here's a forum schema as a package"), but YAGNI for
-the v0.1 baseline — that ergonomic can be added later by a wrapper
-that calls the mount factory with `pkg.manifests`.
+**Application-specific manifest packages.** Rejected for the baseline. It adds
+publish/version overhead to files that belong in one consumer repo.
 
-**(D) Embed manifests in the SDK and ignore the question** — ship
-the SDK with a fixed manifest set baked in. Rejected: fails the
-ADR-0001 promise and the AI-author contract. The SDK is supposed to
-be content-agnostic; making it content-prescriptive permanently is
-a strategic mistake.
-
-**(E) Override semantics for conflicts** — last-write-wins, with the
-consumer's manifest beating the SDK's. Rejected: only relevant if
-the SDK ships embedded manifests alongside consumer ones. With the
-SDK shipping zero manifests there is no conflict surface.
+**SDK-embedded manifests or override precedence.** Rejected. Core is
+content-agnostic, so there is no default manifest set and no merge policy.
 
 ## How to apply
 
-When proposing a new SDK feature that depends on knowing the
-manifest set (e.g. a new admin UI screen, a new MCP reflection
-method), assume the manifest set is consumer-owned. Don't hardcode
-collection names; iterate `getRegistry().schemas`. Don't assume the
-SDK knows about `posts`; it doesn't.
+When a Core feature needs the manifest set, accept the parsed consumer-owned
+array; never hardcode starter collection names or read consumer files at
+runtime.
 
-When writing or reviewing the install agent's path, the agent must:
-1. Copy the relevant `starters/<name>/` contents into the consumer's
-   project. The starter is self-contained — `manifests/`,
-   `src/yaml.d.ts`, the `[[rules]] type = "Text"` block in
-   `wrangler.toml`, and `src/mantleConfig.ts` all come along.
-2. Wire `import postsYaml from "../manifests/posts.yaml"` (and
-   peers) in `src/mantleConfig.ts`. No `?raw` suffix needed —
-   Wrangler's text rule covers plain imports.
-3. Pass `manifests: [postsYaml, contactYaml, ...]` in the exported
-   `cmsConfig` object.
+When authoring or reviewing a generated project:
 
-The blog `SKILL.md` walks this sequence.
+1. Edit YAML only under `manifests/`.
+2. Run the installed `pnpm exec mantle generate`.
+3. Import `manifest` from `.mantle/generated/site.js` into the conventional
+   Worker, or pass it as `CmsConfig.manifests` in low-level composition.
+4. Run `pnpm exec mantle generate --check` in validation and before deploy.
+5. Reject Wrangler YAML Text rules, runtime `parseManifests*` calls, or a second
+   manifest loader in a new generated project.
 
 ## Implementation status
 
-Accepted for v0.1.0. The implementation slice:
-
-- `CmsConfig` carries `manifests?: readonly string[]`.
-- The mount factory builds the registry from the consumer-supplied
-  YAML; no SDK fallback.
-- The `@aotter/mantle-cloudflare` package ships zero embedded
-  manifests.
-- The starter at `starters/blog/` is self-contained: `manifests/`,
-  `src/yaml.d.ts`, `wrangler.toml` `[[rules]]` block, and
-  `src/mantleConfig.ts` wiring it together.
-- Boot validator's `path` field on `INVALID_MANIFEST_ENVELOPE`-class
-  errors uses the consumer-supplied YAML index
-  (e.g. `consumer-manifest:[2]#/spec/...`) so deploy logs point at
-  the right file.
-
-Tracking: aotter/mantle.
+Implemented by the umbrella `mantle generate` command and the conventional
+Cloudflare Worker facade. Exact commands and output paths are documented in the
+version-matched `@aotter/mantle` README and embedded Core skills.

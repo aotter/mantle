@@ -3,11 +3,11 @@
 Cloudflare Workers adapter for mantle.
 
 This package mounts the runtime on Hono, implements the runtime ports against
-Cloudflare D1 / KV / Workers assets, and owns Better Auth wiring for GitHub
-OAuth plus MCP OAuth/DCR.
+Cloudflare D1 / KV / Workers assets, and owns curated identity/session wiring
+plus MCP OAuth/DCR.
 
-`0.0.7-alpha` is an early prerelease for the agent-provisioning proof. The API
-surface remains in flux until `v0.1.0`.
+This package is prerelease software. Its `package.json` is the exact version
+authority; the API surface may change until `v0.1.0`.
 
 ## Conventional Worker Facade
 
@@ -85,7 +85,9 @@ usually dominate the total request time.
 
 ## HTTP Cache Boundary
 
-Export `createOAuthProvider(...)` as the Worker's top-level handler. It marks
+The conventional facade owns the top-level OAuth provider. In low-level
+composition, export `createOAuthProvider(...)` as the Worker's top-level
+handler. It marks
 admin, auth, API, OAuth, MCP, redirects, and errors `private, no-store` and
 removes Cloudflare CDN cache overrides. Only anonymous 200 `GET`/`HEAD`
 responses that explicitly declare `public` plus shared freshness remain
@@ -102,7 +104,7 @@ R2-backed staff media uploads are adapter-specific post-launch work, not part
 of the Core SDK skill contract or Day 1 landing path. Use the Cloudflare recipe
 only when a site actually needs staff-managed images or files:
 
-<https://raw.githubusercontent.com/aotter/mantle/develop/docs/media-uploads.md>
+[Cloudflare R2 media uploads](../../../docs/media-uploads.md)
 
 ## Optional deferred lifecycle hooks
 

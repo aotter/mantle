@@ -3,7 +3,7 @@
 # Triggered by pushing a `v*` tag. Does:
 #
 #   1. Build + test (gate — bad tag never publishes)
-#   2. Verify the tag's version matches every public package.json
+#   2. Verify the tag matches every package/plugin version and marketplace ref
 #   3. Pack every public SDK package
 #   4. Publish to npmjs with npm dist-tag inferred from the prerelease
 #      suffix (see § "npm tag inference" below)
@@ -122,15 +122,20 @@ jobs:
           echo "npm_tag=$NPM_TAG" >> "$GITHUB_OUTPUT"
           echo "Tag $TAG → version $VERSION → npm dist-tag $NPM_TAG"
 
-      - name: Verify package versions match ${{ steps.ver.outputs.version }}
+      - name: Verify package, plugin, and marketplace versions match ${{ steps.ver.outputs.version }}
         run: |
           set -euo pipefail
           node --input-type=module -e "
-            import { readFileSync } from 'node:fs';
+            import { readdirSync, readFileSync } from 'node:fs';
             const expected = '${{ steps.ver.outputs.version }}';
             let failed = false;
-            for (const dir of process.env.PKG_DIRS.split(/\s+/)) {
-              const path = dir + '/package.json';
+            const packagePaths = [
+              'package.json',
+              ...readdirSync('packages', { recursive: true })
+                .filter((path) => path.endsWith('/package.json') && !path.includes('/node_modules/'))
+                .map((path) => 'packages/' + path),
+            ];
+            for (const path of packagePaths) {
               const pkg = JSON.parse(readFileSync(path, 'utf8'));
               if (pkg.version !== expected) {
                 console.error(path + ' version ' + pkg.version + ' does not match tag version ' + expected);
@@ -148,6 +153,14 @@ jobs:
                 console.error(path + ' version ' + plugin.version + ' does not match tag version ' + expected);
                 failed = true;
               }
+            }
+            const marketplacePath = '.agents/plugins/marketplace.json';
+            const marketplace = JSON.parse(readFileSync(marketplacePath, 'utf8'));
+            const marketplaceRef = marketplace.plugins?.[0]?.source?.ref;
+            const expectedRef = 'v' + expected;
+            if (marketplaceRef !== expectedRef) {
+              console.error(marketplacePath + ' ref ' + marketplaceRef + ' does not match tag ' + expectedRef);
+              failed = true;
             }
             if (failed) process.exit(1);
           "

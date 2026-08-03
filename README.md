@@ -96,17 +96,25 @@ Install the Mantle agent plugin to create or continue sites. Generated starter
 repos project the same version-matched Core workflow skills locally; use those
 for project workflow and the installed package docs for SDK behavior.
 
+Resolve the current published prerelease once, then substitute that exact value
+below. In an existing project, use its installed `@aotter/mantle` version
+instead of the npm dist-tag.
+
+```bash
+npm view @aotter/mantle@alpha version
+```
+
 **Claude Code**
 
 ```bash
-/plugin marketplace add aotter/mantle
+/plugin marketplace add aotter/mantle@v<version-from-above>
 /plugin install mantle@mantle
 ```
 
 **Codex**
 
 ```bash
-codex plugin marketplace add aotter/mantle --ref develop
+codex plugin marketplace add aotter/mantle --ref v<version-from-above>
 codex plugin add mantle@mantle
 ```
 
@@ -123,8 +131,8 @@ the repo is cloned or opened.
 
 | Agent | Status | Install method |
 |---|---|---|
-| Claude Code | supported | `/plugin marketplace add aotter/mantle` then `/plugin install mantle@mantle` |
-| Codex | supported | `codex plugin marketplace add aotter/mantle --ref develop` then `codex plugin add mantle@mantle` |
+| Claude Code | supported | `/plugin marketplace add aotter/mantle@v<version>` then `/plugin install mantle@mantle` |
+| Codex | supported | `codex plugin marketplace add aotter/mantle --ref v<version>` then `codex plugin add mantle@mantle` |
 | Cursor | supported | Auto-discovery via `.cursor-plugin/plugin.json` |
 | VS Code + GitHub Copilot | supported | Auto-discovery via `.copilot-plugin/plugin.json` |
 
@@ -160,7 +168,7 @@ Core surfaces on a Cloudflare Worker at
 
 - `/admin` — React admin SPA, role-gated after sign-in (GitHub / Google / Apple / 30+ social providers, email-OTP, magic-link — adopter picks the methods)
 - `/mcp/staff` — staff MCP endpoint, owner/editor agents connect here to edit content
-- `/mcp` — end-user/read MCP endpoint for public View tools and future member flows
+- `/mcp` — public MCP endpoint for public View tools and explicitly public MCP Triggers
 - public surface in your taste (the v0.1.0 starter ships Hono + hono/jsx + Tailwind)
 
 Public render routes are opt-in consumer wiring. When a project registers
@@ -178,7 +186,7 @@ For a guided install, follow the steps in [`skills/install/SKILL.md`](skills/ins
 | `@aotter/mantle-spec` | Spec engine — types + parse + validate + diagnostics + JSON-Schema → zod converter + CLI. Zero env deps. |
 | `@aotter/mantle-runtime` | Runtime engine — dispatcher + entry-writer + view executor + content-ops + render + MCP. Defines required adapter ports plus optional feature ports. |
 | `@aotter/mantle-admin-ui` | Admin SPA — React 19 + Vite + Tailwind v4. In development; ships in v0.1.0. |
-| `@aotter/mantle-cloudflare` | Cloudflare Workers adapter. Implements ports against D1 / KV / ASSETS. Ships `createAuth()` — the Better Auth-backed *default* implementation of the SDK's `Auth` contract (see [ADR-0014](docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md) § "Auth as contract, Better Auth as default"); replace by passing your own `Auth` instance. |
+| `@aotter/mantle-cloudflare` | Cloudflare Workers adapter. Implements ports against D1 / KV / ASSETS. Ships `createAuth()` — the Better Auth-backed *default* implementation of the SDK's `Auth` contract (see [ADR-0014](docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md)); the conventional Worker accepts a replacement factory `(env) => Auth`. |
 | `@aotter/mantle-netlify` | **Stub.** Coming v0.2. Engineering forcing function: keeps `mantle-runtime` adapter-agnostic. |
 
 Auth and hosted-identity boundaries are documented in
@@ -189,7 +197,11 @@ owning a generated site's local grants or member records.
 
 ## Starters
 
-Starter taxonomy. Mantle landing fetches `provision-bundles/<type>.json` from [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters), substitutes launch facts, commits the repo, and connects Cloudflare Workers CI when possible.
+Starter taxonomy. Mantle landing fetches `provision-bundles/<type>.json` from a
+version-matched tag in
+[`aotter/mantle-starters`](https://github.com/aotter/mantle-starters),
+substitutes launch facts, commits the repo, and connects Cloudflare Workers CI
+when possible.
 
 The starter repo owns blank source, small type overlays, vendored Kiwa source, and deterministic provision bundles. Theme selection is not a first-run path; agents continue from the generated repo and the after-launch handoff shown by landing.
 
@@ -199,13 +211,13 @@ capability work.
 
 | Starter | Family | Status | What |
 |---|---|---|---|
-| [`mantle-starters/blank`](https://github.com/aotter/mantle-starters/tree/develop/blank) | blank | available | Headless API + MCP only. Drop-in backend for consumers bringing their own frontend. |
-| [`overlays/presence`](https://github.com/aotter/mantle-starters/tree/develop/overlays/presence) | presence | available | Small public presence and contact intent. |
-| [`overlays/intake`](https://github.com/aotter/mantle-starters/tree/develop/overlays/intake) | intake | available | Structured submission and intake workflow intent. |
-| [`overlays/publication`](https://github.com/aotter/mantle-starters/tree/develop/overlays/publication) | publication | available | Pages, posts, docs-lite, project updates, and contact flow atoms. |
-| [`overlays/transaction`](https://github.com/aotter/mantle-starters/tree/develop/overlays/transaction) | transaction | available | Small catalog/order workflow intent; payment/provider details remain post-launch work. |
-| [`overlays/reservation`](https://github.com/aotter/mantle-starters/tree/develop/overlays/reservation) | reservation | available | Booking/request intent; provider-specific fulfillment remains post-launch work. |
-| [`overlays/community`](https://github.com/aotter/mantle-starters/tree/develop/overlays/community) | community | available | Member/community intent with moderation and participation atoms. |
+| `blank/` | blank | available | Headless API + MCP only. Drop-in backend for consumers bringing their own frontend. |
+| `overlays/presence/` | presence | available | Small public presence and contact intent. |
+| `overlays/intake/` | intake | available | Structured submission and intake workflow intent. |
+| `overlays/publication/` | publication | available | Pages, posts, docs-lite, project updates, and contact flow atoms. |
+| `overlays/transaction/` | transaction | available | Small catalog/order workflow intent; payment/provider details remain post-launch work. |
+| `overlays/reservation/` | reservation | available | Booking/request intent; provider-specific fulfillment remains post-launch work. |
+| `overlays/community/` | community | available | Member/community intent with moderation and participation atoms. |
 
 ## Repo conventions
 

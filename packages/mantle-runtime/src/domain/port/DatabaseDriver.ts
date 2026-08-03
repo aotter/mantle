@@ -1,9 +1,8 @@
 /**
  * `DatabaseDriver` — runtime's adapter-agnostic interface to
- * persistent relational state. The canonical tables (`entries`,
- * `revisions`, `approvals`, `users`, `staff`, `sessions`,
- * `site_config`) live behind this
- * surface; the runtime never sees `D1Database`, `Pool` (postgres),
+ * persistent relational state. Entries, revisions, approvals, site config,
+ * auth support, and media tables declared by the canonical migrations live
+ * behind this surface; the runtime never sees `D1Database`, `Pool` (postgres),
  * or any concrete driver.
  *
  * The shape is intentionally close to D1's API (which is itself close
@@ -13,7 +12,7 @@
  *
  *   - `mantle-cloudflare` wraps `env.DB` (D1) directly (1:1 surface).
  *   - A future Postgres adapter wraps `pg` to the same shape.
- *   - The test harness ships an in-memory impl in `test/fakes/`.
+ *   - Core tests supply in-memory implementations under `test/fakes/`.
  *
  * See ADR-0011 § DatabaseDriver for the rationale (and the alternatives
  * — mega-port, function-injection, plugin packages — that were

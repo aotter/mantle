@@ -11,7 +11,8 @@ import type {
  *
  * The registry is a usecase-level port: use cases (specifically
  * `InvokeProcedureUseCase`) depend on it; the consumer's
- * `mantleConfig.ts` populates it. Lives here in `domain/port/` (not
+ * `src/mantle/config.ts` supplies it through the runtime/Worker `handlers`
+ * option. Lives here in `domain/port/` (not
  * `usecase/port/`) because the implementation IS the port — there's
  * no separate adapter for it.
  *

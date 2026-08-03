@@ -19,5 +19,5 @@ Queue-backed `after_*` lifecycle delivery is optional and at-least-once. See
 for the strict envelope, idempotency key, Cloudflare bindings, retry/DLQ
 behavior, and upgrade procedure.
 
-`0.0.7-alpha` is an early prerelease for the agent-provisioning proof. The API
-surface remains in flux until `v0.1.0`.
+This package is prerelease software. Its `package.json` is the exact version
+authority; the API surface may change until `v0.1.0`.

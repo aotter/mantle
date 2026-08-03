@@ -75,7 +75,7 @@ wrangler secret put R2_ACCESS_KEY_ID
 wrangler secret put R2_SECRET_ACCESS_KEY
 ```
 
-## `src/mantleConfig.ts`
+## `src/mantle/config.ts`
 
 ```ts
 import { R2MediaStorage, type CmsConfig } from "@aotter/mantle/cloudflare";

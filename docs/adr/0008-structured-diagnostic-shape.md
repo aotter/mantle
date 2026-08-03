@@ -1,8 +1,9 @@
 # ADR-0008: Structured diagnostic shape for AI-parseable errors
 
-**Status:** Carried over from POC v0.0.x; refreshed for v0.1.0.
+**Status:** Carried over from POC v0.0.x; amended for the shipped v0.1
+diagnostic emitters and measured harnesses.
 
-**Date**: 2026-04-30 (POC); refreshed 2026-05-03 for v0.1.0 rebuild.
+**Date:** 2026-04-30 (POC); last amended 2026-08-03.
 
 **Deciders**: phsu
 
@@ -12,11 +13,12 @@
 
 ## Context
 
-ADR-0007 commits the SDK to three feedback loops (static
-validation, test harness, boot-time fail-fast) on top of the
-existing runtime layer. Each loop emits errors. If each emits
-its own ad-hoc shape, the consumer Claude Code reading those
-errors must write three or four parsers — defeating the
+ADR-0007 commits the SDK to three pre-serve feedback loops (static
+validation, local tests/measurements, and boot-time fail-fast) before the
+runtime layer. Authoring/runtime failures need one stable record shape; the
+measured index and HTTP harnesses use their own purpose-shaped JSON reports.
+If each failure emitter used an ad-hoc shape, the consumer agent reading those
+errors would need multiple parsers — defeating the
 "deterministic feedback" property that justified the contract in
 the first place.
 
@@ -32,8 +34,9 @@ free-form message. That is under-specified for the new loops:
   the AI author can fix without doing its own grep.
 - A boot error needs to declare **what was checked and what was
   missing**, so the deploy log is self-explanatory.
-- All four loops should agree on **severity** (error vs warning)
-  so CI integrations don't need per-loop logic.
+- Validation, boot, runtime, and consumer-authored test diagnostics should
+  agree on **severity** (error vs warning) so integrations do not need
+  per-phase logic.
 
 A free-form message field carries all of this in prose, but
 forces the AI author to do natural-language parsing on every
@@ -41,11 +44,11 @@ diagnostic before it can route a fix. Structure is cheaper.
 
 ## Decision
 
-All four feedback loops emit diagnostics in the following shape.
-The canonical type, the diagnostic-code constants, and the phase
-helpers all live in `@aotter/mantle-spec`; every other
-package (runtime, cloudflare adapter, admin UI, CLI) imports from
-there.
+Core validation, boot, and runtime emit diagnostics in the following shape.
+The public `test` phase is reserved for consumer test diagnostics; the shipped
+`mantle-harness` commands emit `IndexCoverageReport` and `HttpBenchmarkReport`
+instead. The canonical type, diagnostic-code constants, and shipped phase
+helpers live in `@aotter/mantle-spec`; every other package imports from there.
 
 ```ts
 type Phase = "validate" | "test" | "boot" | "runtime";
@@ -90,13 +93,13 @@ by `phase` (this-loop-only handling). Concrete examples:
 | `HANDLER_NOT_REGISTERED` | `validate`, `boot`, `runtime` | textual grep miss (warning, validate); registry lookup miss (error, boot); dispatch attempt miss (error, runtime, defense-in-depth) |
 | `TRIGGER_TARGET_PROCEDURE_UNKNOWN` | `validate`, `boot` | dangling reference caught by either loop |
 | `TRIGGER_PATH_COLLISION` | `validate`, `boot` | two http Triggers on same method+path |
-| `NOT_FOUND` | `test`, `runtime` | unknown name in queryView / GET /api/views/X |
-| `INPUT_VALIDATION_FAILED` | `runtime`, `test` | zod validation fail (test harness shares the dispatcher path) |
+| `NOT_FOUND` | `runtime` (`test` reserved) | unknown name in queryView / GET /api/views/X |
+| `INPUT_VALIDATION_FAILED` | `runtime` (`test` reserved) | zod validation failure at the serving boundary |
 
-Codes that are loop-exclusive simply never appear with another
-phase — e.g. `FIXTURE_SCHEMA_VIOLATION` only fires in
-`phase: "test"`; `INVALID_MANIFEST_ENVELOPE` only in
-`phase: "validate"`.
+Codes that are phase-exclusive simply never appear with another phase.
+`INVALID_MANIFEST_ENVELOPE` is validate-only. The catalog reserves
+`FIXTURE_SCHEMA_VIOLATION` for consumer-authored `phase: "test"` diagnostics;
+Core does not currently emit it.
 
 ### Why no prefixes
 
@@ -123,8 +126,8 @@ code string. That was retired because:
 ### `path` format
 
 - For static validation: filesystem path + JSON Pointer fragment,
-  e.g. `starters/blog/manifests/recent-published.view.yaml#/spec/from`.
-- For test harness: test file path + assertion location when
+  e.g. `manifests/recent-published.view.yaml#/spec/from`.
+- For a consumer test diagnostic: test file path + assertion location when
   available, e.g. `tests/handlers/contact.test.ts:42`.
 - For boot-time: manifest pointer (no on-disk path because boot
   reads parsed manifests, not files), e.g.
@@ -159,53 +162,47 @@ before applying.
 ### CLI output mode
 
 - `--format=json` (default when stdout is **not** a TTY, e.g. CI,
-  AI-author): emits `{ "diagnostics": [<Diagnostic>, ...] }` on
-  stdout; exit code 1 if any has `severity: "error"`, else 0.
+  AI-author): emits `{ phase, diagnostics, errorCount, warningCount }` on
+  stdout; exit code 1 if any diagnostic has `severity: "error"`, else 0.
 - `--format=text` (default when stdout **is** a TTY, i.e. human
-  at terminal): pretty-prints with file:line, colored severity,
-  prose message, and a "did you mean?" line when `suggestion`
-  is set.
+  at terminal): prints severity, code, path, structured details, prose message,
+  and suggestion when present.
 
 The same diagnostic objects power both modes; text mode is a
 formatter, not a separate code path. AI authors invoking the CLI
 get JSON automatically because they pipe through subprocess; no
 flag needed.
 
-### Test harness diagnostic surface
+### Consumer test diagnostic surface
 
-Test harness errors are returned as result objects, not thrown:
-
-```ts
-type InvokeResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; diagnostic: Diagnostic };
-```
-
-Tests check `result.ok` and assert against `result.diagnostic.code`
-(stable string), not against thrown exception types. This makes
-test code robust to error-class refactoring inside the SDK.
+Runtime use cases return result objects carrying runtime-phase diagnostics, so
+consumer tests can assert stable `diagnostic.code` values without matching
+exception prose. A consumer that emits its own fixture/setup diagnostic may use
+`makeDiagnostic({ phase: "test", ... })`. Core currently exports no
+`testDiagnostic` helper and its measured planner/HTTP harnesses return their
+purpose-shaped reports instead of `Diagnostic` objects.
 
 ### Runtime diagnostic surface
 
-Runtime HTTP responses on error paths emit a JSON body of the
-same shape, plus the HTTP status from the existing error-code
-table. The `path` field becomes the HTTP request locator
-(method + URL + JSON Pointer for body issues). The `candidates`
-field is **always omitted** at runtime to avoid leaking schema
-information to untrusted callers.
+Runtime HTTP responses on error paths wrap the same redacted object as
+`{ ok: false, diagnostic }`, plus the HTTP status from the shared error-code
+table. The `path` carries the most specific request/use-case locator available.
+The `candidates` field is **always omitted** at wire egress to avoid leaking
+schema information to untrusted callers.
 
 ```http
 HTTP/1.1 400 Bad Request
 Content-Type: application/json
 
 {
-  "code": "INPUT_VALIDATION_FAILED",
-  "phase": "runtime",
-  "severity": "error",
-  "path": "POST /api/contact#/body/email",
-  "value": "not-an-email",
-  "expected": "string matching format=email",
-  "message": "Field 'email' must be a valid email address."
+  "ok": false,
+  "diagnostic": {
+    "code": "INPUT_VALIDATION_FAILED",
+    "phase": "runtime",
+    "severity": "error",
+    "path": "POST /api/contact#/body/email",
+    "message": "Field 'email' must be a valid email address."
+  }
 }
 ```
 
@@ -221,22 +218,15 @@ runtime validator a manifest author's request body hits is a
 zod schema, produced by the JSON-Schema → zod converter in
 `@aotter/mantle-spec` (see [`docs/design-atoms.md`](../design-atoms.md) § "Manifest validation — JSON Schema in, zod at runtime").
 
-Concretely, the translation now consumes `ZodError.issues`:
+Concretely, runtime entry validation consumes `ZodError.issues`:
 
-- `issue.path: (string|number)[]` → JSON Pointer fragment on the
-  diagnostic's `path` (URL-encoded indices, `/` between segments).
-- `issue.code` (`invalid_type`, `too_small`, `invalid_string`,
-  `invalid_enum_value`, `unrecognized_keys`, …) → mapped to a
-  small enumerated `expected` string, not surfaced as the
-  Diagnostic `code` itself. The Diagnostic `code` stays
-  `INPUT_VALIDATION_FAILED` for the family — keeping the consumer
-  contract stable across validator-library swaps.
-- `invalid_enum_value.options` → `candidates` (validate / test /
-  boot phases only; stripped at runtime per the rule above).
-- `issue.message` is treated as fallback prose; the Diagnostic's
-  `message` is regenerated from the structured fields by the
-  shared formatter, so a future zod upgrade that re-words its
-  defaults doesn't ripple into our consumer-facing strings.
+- `issue.path: PropertyKey[]` becomes an RFC 6901 JSON Pointer (`~` and `/`
+  escaped, numeric segments preserved);
+- every issue stays in the stable `INPUT_VALIDATION_FAILED` family rather than
+  exposing zod's internal issue-code vocabulary;
+- `issue.message` supplies fallback human prose. Call sites with known
+  trust-boundary context may additionally populate `value`, `expected`, or a
+  more specific message before wire redaction.
 
 The same rule that retired Ajv's per-validator error format as a
 Diagnostic candidate (alternative (d) below) applies to zod —
@@ -246,8 +236,8 @@ Diagnostic candidate (alternative (d) below) applies to zod —
 
 ### Pros
 
-- One parser handles errors from any loop. AI consumer code can
-  branch on `code` prefix or suffix without per-loop adapters.
+- One parser handles diagnostics from any phase. AI consumer code branches on
+  the exact `code` and optionally `phase`, without per-emitter adapters.
 - `candidates` + `suggestion` make the most common author errors
   (typo, unknown name, wrong enum value) one-step fixes — the AI
   author reads the diagnostic and writes the corrected manifest
@@ -265,9 +255,8 @@ Diagnostic candidate (alternative (d) below) applies to zod —
 
 ### Costs
 
-- Shape locked early: any field-shape change forces a doc revise
-  + a code change across CLI / harness / runtime / consumer
-  parsers.
+- Shape locked early: any field-shape change forces a doc revise and code
+  change across CLI, runtime, adapters, and consumer parsers.
 - Implementing `candidates` and `suggestion` correctly requires
   the validator/dispatcher to track richer context (the set of
   declared Schema names, the registered ref list, etc.). More
@@ -284,11 +273,10 @@ Diagnostic candidate (alternative (d) below) applies to zod —
   failure mode, not by individual assertion. `INVALID_NAME`
   with `expected: "kebab-case, 1-64 chars"` covers the family;
   the `value` and `expected` fields carry the specifics.
-- **`message` and structured fields drift**. The free-form
-  message contradicts the structured fields. Mitigation: in the
-  spec package, `message` is generated FROM the structured
-  fields by a single formatter; not authored separately per
-  diagnostic site.
+- **`message` and structured fields drift**. Mitigation: `makeDiagnostic`
+  derives a default message from the structured fields. Explicit contextual
+  messages are allowed, but reviewers treat `code`, `phase`, `path`, `value`,
+  and `expected` as authoritative and reject contradictions.
 - **`candidates` leaks information at runtime**. Already
   addressed: runtime responses omit `candidates`. Code review
   should treat any runtime path that populates `candidates` as a
@@ -327,27 +315,19 @@ objects feed *into* the Diagnostic translator described under
   code module; do not redeclare per-package.
 - When the same root cause can be caught by multiple loops,
   reuse the code; let `phase` distinguish.
-- Implementation: `message` is derived from structured fields by
-  a single helper (`makeDiagnostic` + phase-helpers
-  `validateDiagnostic` / `testDiagnostic` / `bootDiagnostic` /
-  `runtimeDiagnostic`), all exported from
-  `@aotter/mantle-spec`, not authored at each error site.
-- Documentation: every code in the catalog gets one row in the
-  v0.1.0 authoring-contract doc (when ported) under
-  § Error catalog with `code`, applicable phases,
-  when-it-fires, and an example diagnostic.
+- Implementation: use `makeDiagnostic` or the shipped phase helpers
+  `validateDiagnostic`, `bootDiagnostic`, and `runtimeDiagnostic`, all exported
+  from `@aotter/mantle-spec`. Consumer test diagnostics call `makeDiagnostic`
+  with `phase: "test"` directly.
+- Documentation: keep phase/applicability prose in this ADR and the
+  version-matched design/runtime references synchronized with the exported
+  catalog.
 
 ## Implementation status
 
-**v0.1.0 rebuild — porting in progress.** The shape is locked
-by this ADR; the canonical declarations land in
-`@aotter/mantle-spec/src/diagnostic.ts` (interface +
-`DIAGNOSTIC_CODES` constants + `makeDiagnostic` formatter +
-`validateDiagnostic` / `testDiagnostic` / `bootDiagnostic` /
-`runtimeDiagnostic` phase helpers). `@aotter/mantle-runtime`
-imports them for the dispatcher and the boot validator;
-`@aotter/mantle-cloudflare` imports them for HTTP error
-responses; the admin UI imports them so the in-browser editor
-surfaces the same structured errors the CLI does. The
-`aotter/mantle` v0.1.0 milestone tracks the per-package
-landings.
+Implemented. Canonical declarations live in
+`packages/mantle-spec/src/kernel/diagnostic.ts`; runtime, Cloudflare adapter,
+admin UI, and CLI import the public spec exports. `redactForWire` removes
+`candidates` before REST/MCP egress. The `test` phase and
+`FIXTURE_SCHEMA_VIOLATION` remain reserved compatibility surface; Core ships no
+test-phase helper or emitter today.
