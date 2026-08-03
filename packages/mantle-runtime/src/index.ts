@@ -85,6 +85,7 @@ export { type IdGenerator, RandomUuidGenerator } from "./domain/port/IdGenerator
 // Consumer/starter handler and render contracts.
 export type {
   AnyHandler,
+  HandlerFn,
   HandlerContext,
   HandlerAuthContext,
   HandlerLifecycleEvent,
