@@ -78,6 +78,11 @@ the consumer build. Computed paths cannot be proven statically, so the facade
 checks Hono's assembled route table and fails closed before serving requests.
 There is no standard-route override option.
 
+For an uncommon deployment that must own the top-level assembly, use the
+embedded [`docs/cloudflare-low-level-composition.md`](docs/cloudflare-low-level-composition.md)
+fixture. It composes the same public primitives without importing package
+internals or rebuilding Mantle's adapters.
+
 ## Getting started
 
 Give the [Mantle repo](https://github.com/aotter/mantle) to a coding agent or

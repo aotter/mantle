@@ -3,6 +3,7 @@ export {
   MANTLE_RESERVED_PATH_PREFIXES,
   MANTLE_RESERVED_WELL_KNOWN_PREFIX,
   createMantleWorker,
+  runMantleWorkerRequest,
   type CreateMantleWorkerOptions,
   type MantleCloudflareEnv,
   type MantleExtensionApp,

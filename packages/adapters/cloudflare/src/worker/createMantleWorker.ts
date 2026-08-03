@@ -232,8 +232,8 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
   };
 }
 
-/** Redacted fail-closed boundary shared by all facade assembly failures. */
-async function runMantleWorkerRequest(
+/** Redacted fail-closed boundary for facade and low-level Worker assembly failures. */
+export async function runMantleWorkerRequest(
   run: () => Response | Promise<Response>,
 ): Promise<Response> {
   try {
