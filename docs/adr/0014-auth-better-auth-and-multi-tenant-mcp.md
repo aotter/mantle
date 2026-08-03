@@ -448,11 +448,15 @@ The original ADR-0014 §"Auth as contract, Better Auth as default" framing stays
 
 ## Amendment — 2026-06-30: Hosted-auth boundary and first-party cookie fields
 
-Mantle Platform introduces a first-party hosted-auth use case:
-`platform.mantle.tools` owns site-owner account, billing, hosted
-identity, and platform email, while generated sites still own local
-grants, member records, content, commerce, forms, and legal copy. The
-product boundary is documented in
+Mantle Platform introduces a first-party hosted-auth use case. Platform owns
+site-owner accounts, billing, entitlement, provider credentials, and managed
+email, while Hosted Auth is an OAuth proxy rather than a member directory.
+Each customer site owns its Better Auth users, linked provider accounts,
+sessions, roles, and grants. For Hosted GitHub, the validated proxy profile's
+`github_login` maps to the existing site-local `user.githubLogin`, so hosted
+and self-managed GitHub reuse the same atomic first-owner bootstrap rule. The
+wire contract remains in [Platform #35](https://github.com/aotter/mantle-platform/issues/35),
+and the product boundary is documented in
 [`docs/auth-hosting-model.md`](../auth-hosting-model.md).
 
 This does not change ADR-0014's core rule: Mantle does not expose an

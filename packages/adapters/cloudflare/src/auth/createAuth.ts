@@ -9,7 +9,10 @@ import type { SocialProvider } from "better-auth/social-providers";
 import { admin, emailOTP, jwt, magicLink } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
-import { genericOAuth } from "better-auth/plugins/generic-oauth";
+import {
+  genericOAuth,
+  type GenericOAuthConfig,
+} from "better-auth/plugins/generic-oauth";
 import { splitSetCookieHeader } from "better-auth/cookies";
 import { oauthProvider, type Scope } from "@better-auth/oauth-provider";
 import type { EmailSender } from "@aotter/mantle-runtime";
@@ -107,6 +110,8 @@ export type AuthMethodConfig =
       /** RFC 8707 resource indicator. Mantle carries it through the
        * authorization request, code exchange, and refresh exchange. */
       readonly resource?: string;
+      /** Maps the validated provider profile into the site-local Better Auth user. */
+      readonly mapProfileToUser?: GenericOAuthConfig["mapProfileToUser"];
     }
   | {
       readonly kind: "email-otp";
@@ -418,6 +423,7 @@ export function buildGenericOAuthProviders(
   authentication?: "basic" | "post";
   prompt?: Extract<AuthMethodConfig, { kind: "oauth" }>["prompt"];
   resource?: string;
+  mapProfileToUser?: GenericOAuthConfig["mapProfileToUser"];
   authorizationUrlParams?: Record<string, string>;
   tokenUrlParams?: Record<string, string>;
 }> {
@@ -465,6 +471,7 @@ export function buildGenericOAuthProviders(
       ...(method.pkce !== undefined ? { pkce: method.pkce } : {}),
       ...(method.authentication ? { authentication: method.authentication } : {}),
       ...(method.prompt ? { prompt: method.prompt } : {}),
+      ...(method.mapProfileToUser ? { mapProfileToUser: method.mapProfileToUser } : {}),
       ...(method.resource
         ? {
             resource: method.resource,
