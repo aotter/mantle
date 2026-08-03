@@ -43,7 +43,7 @@ describe("mantle update", () => {
         required: true,
         files: [
           { path: ".mantle/launch-state.json", set: { starter_ref: "v2" } },
-          { path: ".mantle/features.json", set: { registry: { version: "v2" } } },
+          { path: ".mantle/features.json", set: { "registry.version": "v2" } },
         ],
       });
       expect(await readFile(join(root, "src", "index.ts"), "utf8")).toBe(before);
@@ -101,9 +101,9 @@ describe("mantle update", () => {
       expect(requested).toContain("/v0.0.11-alpha.63/blank.json");
       expect(report.local.differing).not.toContainEqual(expect.objectContaining({ path: "wrangler.toml" }));
       expect(report.local.differing).not.toContainEqual(expect.objectContaining({ path: ".dev.vars.example" }));
-      expect(report.metadata_migration.files[1].set.registry).toEqual({
-        version: "v0.0.11-alpha.64",
-        bundleBaseUrl: `${server.url}/{ref}`,
+      expect(report.metadata_migration.files[1].set).toEqual({
+        "registry.version": "v0.0.11-alpha.64",
+        "registry.bundleBaseUrl": `${server.url}/{ref}`,
       });
     } finally {
       server.close();

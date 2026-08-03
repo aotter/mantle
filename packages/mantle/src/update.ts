@@ -376,12 +376,13 @@ function metadataMigration(
       {
         path: ".mantle/launch-state.json",
         set: { starter_ref: targetRef },
-        preserve_other_fields: true,
       },
       {
         path: ".mantle/features.json",
-        set: { registry: { version: targetRef, bundleBaseUrl } },
-        preserve_other_fields: true,
+        set: {
+          "registry.version": targetRef,
+          "registry.bundleBaseUrl": bundleBaseUrl,
+        },
       },
     ],
   };
