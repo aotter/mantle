@@ -1,7 +1,7 @@
 {
   "name": "mantle-monorepo",
   "private": true,
-  "version": "0.0.11-alpha.65",
+  "version": "0.0.11-alpha.66",
   "description": "MCP-native headless CMS for Cloudflare Workers.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
