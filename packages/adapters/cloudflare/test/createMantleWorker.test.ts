@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
@@ -55,21 +54,6 @@ describe("createMantleWorker", () => {
     ]) {
       expect(docs).toContain(`\`${path}`);
     }
-  });
-
-  it("rejects fixed reserved literals during consumer typecheck", () => {
-    execFileSync(process.execPath, [
-      fileURLToPath(new URL("../../../../node_modules/typescript/bin/tsc", import.meta.url)),
-      "--ignoreConfig",
-      "--noEmit",
-      "--strict",
-      "--target", "ES2022",
-      "--module", "NodeNext",
-      "--moduleResolution", "NodeNext",
-      "--skipLibCheck",
-      "--types", "@cloudflare/workers-types,node",
-      "test/createMantleWorker.typecheck.ts",
-    ], { cwd: fileURLToPath(new URL("..", import.meta.url)) });
   });
 
   it("assembles once, boots a no-handler manifest, and exposes real Worker context", async () => {

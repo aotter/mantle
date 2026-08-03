@@ -32,7 +32,8 @@
     "prebuild": "rm -rf dist .tsbuildinfo",
     "build": "tsc -b tsconfig.lib.json",
     "typecheck": "tsc --noEmit -p tsconfig.lib.json",
-    "test": "vitest run",
+    "test": "pnpm test:facade-types && vitest run",
+    "test:facade-types": "tsc --ignoreConfig --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --types @cloudflare/workers-types,node test/createMantleWorker.typecheck.ts",
     "bench:http-dispatch": "vitest bench --run test/http-dispatch.bench.ts",
     "bench:wrangler": "pnpm --filter @aotter/mantle-runtime build && node ../../../scripts/run-wrangler-performance.mjs"
   },
