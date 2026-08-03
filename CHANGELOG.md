@@ -6,6 +6,47 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.64] - 2026-08-03
+
+### Added
+
+- **`@aotter/mantle` / `@aotter/mantle-cloudflare`**: add the conventional
+  `createMantleWorker` assembly path, typed handler environments, conventional
+  Auth/bindings, secret-free Auth user lookup, and generated typed handler and
+  View helpers while preserving the public low-level composition escape hatch
+  (#547, #549–#557).
+- **`@aotter/mantle` / agent toolchain**: add deterministic `mantle generate`,
+  version-matched `mantle skills` projection/checking, and non-mutating
+  `mantle update` reports backed by immutable Starter bundles (#553, #560,
+  #561).
+
+### Changed
+
+- **release fanout / starters**: make `blank` a small headless Core consumer
+  and converge every typed archetype on `blank base → typed-web layer → type
+  overlay`; typed launches retain their visible cold-start experience and the
+  current replaceable offline UI palette without runtime imports
+  (aotter/mantle-starters#451, #452).
+- **release pipeline**: gate Core against exact packed tarballs in the final
+  reviewed Starter SHA, replace overlapping publish/fanout paths with one
+  resumable fail-closed controller, and make the Starter release worker merge
+  the exact checked state atomically (aotter/mantle#558, #559;
+  aotter/mantle-starters#456).
+
+### Fixed
+
+- **docs / agent plugins**: align embedded docs, maintained skills, package and
+  marketplace refs, runtime examples, Node requirements, and MCP server
+  metadata with the installed immutable Mantle version; remove obsolete
+  duplicate skills (#573).
+
+### Security
+
+- **`@aotter/mantle-cloudflare`**: centralize caller, cache, and redacted error
+  boundaries for facade and low-level consumers, and reject extension routes
+  that collide with reserved Admin, Auth, API, OAuth, MCP, well-known, favicon,
+  or catch-all surfaces (#547, #548, #554).
+
 ## [0.0.11-alpha.63] - 2026-08-01
 
 ### Added
