@@ -42,6 +42,15 @@ pnpm exec mantle-harness http --base-url http://127.0.0.1:8787 --route page=/en/
 `mantle generate` validates the YAML under `./manifests`, then writes the
 parsed manifest module and handler declarations to `.mantle/generated/`.
 It does not sync skills, update packages, style, provision, or deploy.
+When manifests declare Views, the generated `site.ts` also exports
+`bindMantleSite(runtime)`: its `views` keys, params and returned rows come from
+those manifests, while diagnostics still come directly from `executeView`.
+Dynamic `runtime.viewsByName` access remains available for low-level code.
+
+```ts
+const site = bindMantleSite(runtime);
+const notes = await site.views["published-notes"]();
+```
 
 ## Conventional Cloudflare Worker
 
