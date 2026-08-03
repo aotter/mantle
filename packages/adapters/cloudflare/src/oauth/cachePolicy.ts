@@ -1,8 +1,16 @@
+import {
+  OAUTH_AUTHORIZE_PATH,
+  OAUTH_REGISTER_PATH,
+  OAUTH_TOKEN_PATH,
+} from "./oauthConstants.js";
+
 /** Apply the Worker's final cache decision after OAuth/default dispatch. */
 export function applyCachePolicy(request: Request, response: Response): Response {
   const headers = new Headers(response.headers);
   const directives = parseCacheDirectives(headers.get("cache-control"));
+  const pathname = new URL(request.url).pathname;
   const publicResponse =
+    !isPrivateSurfacePath(pathname) &&
     (request.method === "GET" || request.method === "HEAD") &&
     response.status === 200 &&
     request.headers.get("cookie") === null &&
@@ -31,6 +39,19 @@ export function applyCachePolicy(request: Request, response: Response): Response
     headers,
     webSocket: response.webSocket,
   });
+}
+
+function isPrivateSurfacePath(pathname: string): boolean {
+  return pathname === "/admin"
+    || pathname.startsWith("/admin/")
+    || pathname === "/api/auth"
+    || pathname.startsWith("/api/auth/")
+    || pathname === OAUTH_AUTHORIZE_PATH
+    || pathname === OAUTH_TOKEN_PATH
+    || pathname === OAUTH_REGISTER_PATH
+    || pathname.startsWith("/.well-known/oauth")
+    || pathname === "/mcp"
+    || pathname.startsWith("/mcp/");
 }
 
 function parseCacheDirectives(value: string | null): ReadonlyMap<string, string | null> {

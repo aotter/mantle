@@ -1,4 +1,5 @@
 export { mountServerEndpoints } from "./mountServerEndpoints.js";
+export { runMantleUseCase } from "./runMantleUseCase.js";
 export {
   resolveCaller,
   type CallerResolution,

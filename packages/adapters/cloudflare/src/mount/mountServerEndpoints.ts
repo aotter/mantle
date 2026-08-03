@@ -31,6 +31,7 @@ import {
 import { indexHtml } from "@aotter/mantle-admin-ui";
 import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
 import { resolveCaller } from "./resolveCaller.js";
+import { runMantleUseCase } from "./runMantleUseCase.js";
 import { STAFF_ROLE_SET, type StaffRole, type Auth } from "../auth/createAuth.js";
 import { AOTTER_FAVICON_SVG } from "../assets/aotterFavicon.js";
 
@@ -380,7 +381,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
         }),
       }, { status: 404 });
     }
-    return runUseCase(`POST /admin/api/operations/${name}`, async () => {
+    return runMantleUseCase(`POST /admin/api/operations/${name}`, async () => {
       const runtime = await ref.get();
       const input = (await c.req.raw.json().catch(() => ({}))) as unknown;
       // Reuse the exact use case the staff MCP surface invokes
@@ -414,14 +415,14 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
   });
 
   guarded("get", "/admin/api/site-settings", async () =>
-    runUseCase("GET /admin/api/site-settings", async () => {
+    runMantleUseCase("GET /admin/api/site-settings", async () => {
       const runtime = await ref.get();
       return adminSiteSettings(await runtime.siteConfig.load());
     }),
   );
 
   guarded("patch", "/admin/api/site-settings", async (c) =>
-    runUseCase("PATCH /admin/api/site-settings", async () => {
+    runMantleUseCase("PATCH /admin/api/site-settings", async () => {
       const runtime = await ref.get();
       const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
       const site = await runtime.updateSiteSettings.execute({
@@ -511,7 +512,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
   });
 
   guarded("get", "/admin/api/entries/:id", async (c) =>
-    runUseCase(`GET /admin/api/entries/${c.req.param("id")}`, async () => {
+    runMantleUseCase(`GET /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
       const row = await runtime.getEntry.execute({ id });
@@ -520,7 +521,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
   );
 
   guarded("post", "/admin/api/entries", async (c, gate) =>
-    runUseCase("POST /admin/api/entries", async () => {
+    runMantleUseCase("POST /admin/api/entries", async () => {
       const runtime = await ref.get();
       const body = (await c.req.raw.json().catch(() => ({}))) as {
         collection?: unknown;
@@ -549,7 +550,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
   );
 
   guarded("patch", "/admin/api/entries/:id", async (c, gate) =>
-    runUseCase(`PATCH /admin/api/entries/${c.req.param("id")}`, async () => {
+    runMantleUseCase(`PATCH /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
       const body = (await c.req.raw.json().catch(() => ({}))) as {
@@ -568,7 +569,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
   );
 
   guarded("post", "/admin/api/entries/:id/publish", async (c, gate) =>
-    runUseCase(`POST /admin/api/entries/${c.req.param("id")}/publish`, async () => {
+    runMantleUseCase(`POST /admin/api/entries/${c.req.param("id")}/publish`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
       const body = await c.req.raw.json().catch(() => ({}));
@@ -582,7 +583,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
   );
 
   guarded("post", "/admin/api/entries/:id/unpublish", async (c, gate) =>
-    runUseCase(`POST /admin/api/entries/${c.req.param("id")}/unpublish`, async () => {
+    runMantleUseCase(`POST /admin/api/entries/${c.req.param("id")}/unpublish`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
       const body = await c.req.raw.json().catch(() => ({}));
@@ -596,7 +597,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
   );
 
   guarded("delete", "/admin/api/entries/:id", async (c, gate) =>
-    runUseCase(`DELETE /admin/api/entries/${c.req.param("id")}`, async () => {
+    runMantleUseCase(`DELETE /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
       const body = await c.req.raw.json().catch(() => ({}));
@@ -679,7 +680,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
       variants.push({ mimeType, byteSize, role });
     }
     const { filename, purpose } = body;
-    return runUseCase(`POST ${MEDIA_UPLOADS_PATH}`, () =>
+    return runMantleUseCase(`POST ${MEDIA_UPLOADS_PATH}`, () =>
       media.createUpload.execute({
         filename,
         purpose,
@@ -701,7 +702,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
       alt?: unknown;
       caption?: unknown;
     };
-    return runUseCase(`POST ${MEDIA_COMMIT_PATH}`, () =>
+    return runMantleUseCase(`POST ${MEDIA_COMMIT_PATH}`, () =>
       media.commitUpload.execute({
         uploadGroupId,
         alt: typeof body.alt === "string" ? body.alt : undefined,
@@ -722,7 +723,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     if (!media) return mediaNotConfiguredResponse(`GET ${MEDIA_LIST_PATH}`);
     const rawLimit = c.req.query("limit");
     const parsedLimit = rawLimit ? Number.parseInt(rawLimit, 10) : NaN;
-    return runUseCase(`GET ${MEDIA_LIST_PATH}`, async () => {
+    return runMantleUseCase(`GET ${MEDIA_LIST_PATH}`, async () => {
       const result = await media.listAssets.execute({
         limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
         cursor: c.req.query("cursor") ?? undefined,
@@ -740,7 +741,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     const media = runtime.media;
     if (!media) return mediaNotConfiguredResponse(`GET ${MEDIA_ASSET_PATH}`);
     const id = c.req.param("id")!;
-    return runUseCase(`GET ${MEDIA_ASSET_PATH}`, async () =>
+    return runMantleUseCase(`GET ${MEDIA_ASSET_PATH}`, async () =>
       adminMediaItem(await media.getAsset.execute(id)),
     );
   });
@@ -769,7 +770,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
         }),
       }, { status: 400 });
     }
-    return runUseCase(`PATCH ${MEDIA_ASSET_PATH}`, async () =>
+    return runMantleUseCase(`PATCH ${MEDIA_ASSET_PATH}`, async () =>
       adminMediaItem(
         await media.updateAsset.execute({
           id,
@@ -785,7 +786,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     const media = runtime.media;
     if (!media) return mediaNotConfiguredResponse(`DELETE ${MEDIA_ASSET_PATH}`);
     const id = c.req.param("id")!;
-    return runUseCase(`DELETE ${MEDIA_ASSET_PATH}`, () => media.deleteAsset.execute(id));
+    return runMantleUseCase(`DELETE ${MEDIA_ASSET_PATH}`, () => media.deleteAsset.execute(id));
   });
 }
 
@@ -1773,30 +1774,6 @@ function jsonError(args: { status: number; code: string; message: string }): Res
     message: args.message,
   };
   return Response.json({ ok: false, diagnostic }, { status: args.status });
-}
-
-async function runUseCase<T>(opPath: string, fn: () => Promise<T>): Promise<Response> {
-  try {
-    const result = await fn();
-    return Response.json(result);
-  } catch (e) {
-    if (e instanceof DiagnosticError) {
-      const status = HTTP_STATUS_BY_CODE[e.diagnostic.code] ?? 500;
-      return Response.json({ ok: false, diagnostic: redactForWire(e.diagnostic) }, { status });
-    }
-    // Don't leak raw exception strings on the wire — R2 / D1 / aws4fetch
-    // errors can carry bucket names, account IDs, or query fragments.
-    console.error(`[runUseCase ${opPath}] unhandled error`, e);
-    return Response.json({
-      ok: false,
-      diagnostic: runtimeDiagnostic({
-        code: "INTERNAL_ERROR",
-        severity: "error",
-        path: opPath,
-        message: "An internal error occurred.",
-      }),
-    }, { status: 500 });
-  }
 }
 
 function mediaNotConfiguredResponse(path: string): Response {

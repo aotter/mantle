@@ -60,6 +60,27 @@ describe("top-level OAuth cache boundary", () => {
   });
 
   it.each([
+    "/admin",
+    "/admin/api/site",
+    "/api/auth/session",
+    "/oauth/authorize",
+    "/oauth/token",
+    "/oauth/register",
+    "/.well-known/oauth-authorization-server",
+    "/mcp",
+    "/mcp/staff",
+  ])("never caches the private surface %s", (path) => {
+    const response = applyCachePolicy(
+      new Request(`https://example.test${path}`),
+      new Response("private", {
+        headers: { "cache-control": "public, s-maxage=300" },
+      }),
+    );
+
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it.each([
     ["cookie request", "/public", { headers: { cookie: "session=secret" } }],
     ["authorized request", "/public", { headers: { authorization: "Bearer secret" } }],
     ["response cookie", "/public-with-cookie", undefined],
