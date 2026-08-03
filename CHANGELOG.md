@@ -6,6 +6,16 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.66] - 2026-08-03
+
+### Fixed
+
+- **release pipeline**: No SDK runtime code changes. alpha.66 fixes forward
+  from the incomplete alpha.65 release: GitHub Packages operations now
+  override the repository's npmjs scope mapping at CLI precedence and verify
+  the effective registry before creating an immutable tag, so mirror and
+  promotion commands cannot silently query npmjs (#582).
+
 ## [0.0.11-alpha.65] - 2026-08-03
 
 ### Fixed
