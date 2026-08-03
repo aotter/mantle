@@ -17,6 +17,8 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0013](0013-agent-provisioned-consumer-projects.md) | Historical agent-provisioned consumer projects path. Superseded for first launch by landing provision bundles. | Superseded |
 | [0014](0014-auth-better-auth-and-multi-tenant-mcp.md) | Better Auth for staff sign-in (D1 session); the MCP OAuth surface carves out to `@cloudflare/workers-oauth-provider` (KV grant store) at top level. The two meet at `/oauth/authorize` where the consent handler reads the Better Auth session. MCP splits into `/mcp/staff` (write, admin-role) and `/mcp` (read, any signed-in). Scope advertised as `["mcp"]` (single non-colon) because claude.ai rejects colon-shaped scopes. Auth port disappears; runtime takes Better Auth instance directly. See § "Amendment 2026-05-15". | Accepted + amended |
 | [0016](0016-site-semantic-layer.md) | Site semantic layer: `AGENTS.md` (cross-tool entry) + `.mantle/launch-state.json` (deterministic install context). The older `mantle/site.md` letter surface is suspended from first-run scaffolds. | Accepted (slimmed) |
+| [0017](0017-media-multi-variant-agent-side-optimization.md) | Multi-variant media assets with agent-side optimization and asset-id entry references. | Accepted |
+| [0018](0018-core-starters-repository-boundary.md) | Core produces published SDK artifacts; the separate starters repository validates them as an external consumer. Revisit after release-contract simplification. | Accepted for now |
 
 ## Reading order
 
@@ -50,7 +52,7 @@ The rebuild's ADR-0011 (new) is the most load-bearing addition — the POC accum
 
 ## Contributing a new ADR
 
-1. Pick the next number (currently 0017).
+1. Pick the next number (currently 0019).
 2. File: `docs/adr/<NNNN>-<kebab-title>.md`.
 3. Sections: Status, Date, Context, Decision, Consequences, Alternatives, How to apply, Implementation status.
 4. Link from this README's table.
