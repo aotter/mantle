@@ -6,6 +6,16 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.65] - 2026-08-03
+
+### Fixed
+
+- **release pipeline**: No SDK runtime code changes. alpha.65 fixes forward
+  from the incomplete alpha.64 release: npm readiness now waits for immutable
+  integrity metadata instead of the optional registry README body, while the
+  following gate still compares every local tarball to the public artifact
+  before channel promotion (#579).
+
 ## [0.0.11-alpha.64] - 2026-08-03
 
 ### Added
