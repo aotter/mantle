@@ -232,7 +232,7 @@ jobs:
             echo "always-auth=true"
           } > "$GPR_NPMRC"
           npm whoami --userconfig "$NPMRC" --registry https://registry.npmjs.org >/dev/null
-          npm access list packages --json --userconfig "$NPMRC" \
+          npm access list packages @aotter --json --userconfig "$NPMRC" \
             --registry https://registry.npmjs.org | \
             node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{const access=JSON.parse(s);const denied=process.argv.slice(1).filter(p=>access[p]!=='read-write');if(denied.length){console.error('NPM_TOKEN lacks read-write access: '+denied.join(', '));process.exit(1)}})" \
             $PKG_NAMES
