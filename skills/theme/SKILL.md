@@ -17,18 +17,20 @@ tokens, or recipes, but the skill contract is Core-owned.
 1. `.mantle/handoff.md` and `.mantle/recipes/` if present.
 2. `styles/`, `components/`, `src/web/`, `src/theme*`, and `kiwa-ui.json`
    if present.
-3. `kiwa/manifest.json` for the pinned source and per-file `mirrors`.
+3. `kiwa/manifest.json` and `kiwa/LICENSE` for pinned palette provenance.
 4. `manifests/` to understand which content shape drives the public UI.
 
 ## Ownership
 
 - `styles/globals.css` is the token contract. Start a whole-site reskin with
   its `:root` and `.dark` values; Kiwa components inherit those variables.
-- `src/web/` is project-owned. Put new sections and page composition there.
-- `kiwa/` is a vendored snapshot. In `components/`, treat paths whose manifest
-  entry's `mirrors` contains `blank` as sync-managed in the project root. For
-  a structural variant, fork or wrap the block under `src/web/sections/`
-  instead of editing a synced file.
+- `components/` is the selected runtime-facing Kiwa surface. `src/web/` is
+  project-owned composition; put new sections there.
+- Typed projects keep the complete `kiwa/` snapshot, license, and manifest as
+  an offline reference palette and provenance record, not runtime source. To
+  adopt an item, copy only the needed primitive or block into `components/`,
+  or fork/wrap it under `src/web/sections/`. Never import `kiwa/` from Worker
+  or runtime code.
 
 ## Work
 
