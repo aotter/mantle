@@ -34,6 +34,19 @@ export const STAFF_ROLE_SET: ReadonlySet<string> = new Set(STAFF_ROLES);
  */
 export type SocialProviderId = SocialProvider;
 
+export type OAuthProfileMapper = (
+  profile: Readonly<Record<string, unknown>>,
+) => OAuthMappedProfile | Promise<OAuthMappedProfile>;
+
+export type OAuthMappedProfile = Readonly<Partial<{
+  id: string | number;
+  email: string;
+  emailVerified: boolean;
+  name: string;
+  image: string | null;
+  githubLogin: string | null;
+}>>;
+
 /**
  * Auth method config (discriminated union). Each `kind` is one auth
  * surface adopters can opt into; adding a new method = adding a new
@@ -111,7 +124,7 @@ export type AuthMethodConfig =
        * authorization request, code exchange, and refresh exchange. */
       readonly resource?: string;
       /** Maps the validated provider profile into the site-local Better Auth user. */
-      readonly mapProfileToUser?: GenericOAuthConfig["mapProfileToUser"];
+      readonly mapProfileToUser?: OAuthProfileMapper;
     }
   | {
       readonly kind: "email-otp";
@@ -471,7 +484,9 @@ export function buildGenericOAuthProviders(
       ...(method.pkce !== undefined ? { pkce: method.pkce } : {}),
       ...(method.authentication ? { authentication: method.authentication } : {}),
       ...(method.prompt ? { prompt: method.prompt } : {}),
-      ...(method.mapProfileToUser ? { mapProfileToUser: method.mapProfileToUser } : {}),
+      ...(method.mapProfileToUser
+        ? { mapProfileToUser: method.mapProfileToUser as GenericOAuthConfig["mapProfileToUser"] }
+        : {}),
       ...(method.resource
         ? {
             resource: method.resource,
@@ -564,7 +579,7 @@ function buildEmailOTPPlugin(method: Extract<AuthMethodConfig, { kind: "email-ot
  * Cross-check bootstrap rule against registered methods. Catches the
  * silent-no-op case where the rule's discriminator can never match
  * any signal a registered method actually produces — e.g.
- * `match: "github-login"` with no `github` method registered. Throws
+ * `match: "github-login"` with no `github` provider registered. Throws
  * at construction so vibe-coders see the mistake before the first
  * sign-in attempt.
  *
@@ -579,12 +594,14 @@ export function validateBootstrap(
 ): void {
   if (rule.match === "github-login") {
     const hasGithub = methods.some(
-      (m) => m.kind === "social" && m.provider === "github",
+      (method) =>
+        (method.kind === "social" && method.provider === "github") ||
+        (method.kind === "oauth" && method.providerId === "github"),
     );
     if (!hasGithub) {
       throw new Error(
-        "createAuth: bootstrapOwner.match='github-login' but no `social` method with provider='github' is registered. " +
-          "Either register a github social method or switch to `bootstrapOwner: { match: 'email', value: '…' }`.",
+        "createAuth: bootstrapOwner.match='github-login' but no GitHub provider is registered. " +
+          "Register social GitHub or a trusted OAuth providerId='github', or switch to email matching.",
       );
     }
   }

@@ -455,7 +455,10 @@ Each customer site owns its Better Auth users, linked provider accounts,
 sessions, roles, and grants. For Hosted GitHub, the validated proxy profile's
 `github_login` maps to the existing site-local `user.githubLogin`, so hosted
 and self-managed GitHub reuse the same atomic first-owner bootstrap rule. The
-wire contract remains in [Platform #35](https://github.com/aotter/mantle-platform/issues/35),
+conventional customer-site path uses the proxy's public OAuth client with PKCE
+and `ADMIN_GITHUB_LOGIN`; it does not use Platform Account OIDC, a client
+secret, or an owner email handoff. The local provider id remains `github`.
+The wire contract remains in [Platform #35](https://github.com/aotter/mantle-platform/issues/35),
 and the product boundary is documented in
 [`docs/auth-hosting-model.md`](../auth-hosting-model.md).
 

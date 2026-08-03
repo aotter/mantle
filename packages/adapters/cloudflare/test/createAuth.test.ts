@@ -200,7 +200,22 @@ describe("validateBootstrap", () => {
     ).not.toThrow();
   });
 
-  it("throws when match='github-login' but no github social method is registered", () => {
+  it("accepts match='github-login' for a trusted generic GitHub proxy", () => {
+    expect(() =>
+      validateBootstrap(
+        { match: "github-login", value: "alice" },
+        [{
+          kind: "oauth",
+          providerId: "github",
+          clientId: "https://auth.example/clients/site-1",
+          authorizationUrl: "https://auth.example/authorize",
+          tokenUrl: "https://auth.example/token",
+        }],
+      ),
+    ).not.toThrow();
+  });
+
+  it("throws when match='github-login' but no GitHub provider is registered", () => {
     expect(() =>
       validateBootstrap(
         { match: "github-login", value: "alice" },
@@ -484,7 +499,7 @@ describe("buildGenericOAuthProviders", () => {
 
   it("passes the validated profile mapper to Better Auth", async () => {
     const mapProfileToUser = (profile: Record<string, unknown>) => ({
-      githubLogin: profile.github_login,
+      githubLogin: typeof profile.github_login === "string" ? profile.github_login : null,
     });
     const [provider] = buildGenericOAuthProviders([
       {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createConventionalAuth,
+  mapHostedGithubProfile,
   setupIncompleteAuthResponse,
 } from "../src/auth/conventionalAuth.js";
 import { createSetupIncompleteAuth } from "../src/auth/createAuth.js";
@@ -42,16 +43,34 @@ describe("conventional Auth", () => {
     const auth = createConventionalAuth({
       DB: fakeDb(),
       BETTER_AUTH_SECRET: "x".repeat(40),
-      MANTLE_PLATFORM_AUTH_ISSUER: "https://platform.example.test",
-      MANTLE_PLATFORM_AUTH_CLIENT_ID: "site-client",
-      MANTLE_SITE_OWNER_EMAIL: "owner@example.test",
+      MANTLE_HOSTED_AUTH_ISSUER: "https://auth.example.test",
+      MANTLE_HOSTED_AUTH_CLIENT_ID: "https://auth.example.test/clients/site-1",
+      ADMIN_GITHUB_LOGIN: "owner",
     });
 
     expect(auth.methods).toEqual([{
       kind: "oauth",
-      providerId: "mantle-platform",
-      displayName: "Mantle Platform",
+      providerId: "github",
+      displayName: "GitHub",
     }]);
+  });
+
+  it("fails closed for a hosted client outside its issuer", () => {
+    const auth = createConventionalAuth({
+      DB: fakeDb(),
+      BETTER_AUTH_SECRET: "x".repeat(40),
+      MANTLE_HOSTED_AUTH_ISSUER: "https://auth.example.test",
+      MANTLE_HOSTED_AUTH_CLIENT_ID: "https://attacker.example/clients/site-1",
+      ADMIN_GITHUB_LOGIN: "owner",
+    });
+
+    expect(auth.methods).toEqual([]);
+  });
+
+  it("maps only a valid GitHub login from the verified proxy profile", () => {
+    expect(mapHostedGithubProfile({ github_login: "Guy-Spy" })).toEqual({ githubLogin: "Guy-Spy" });
+    expect(mapHostedGithubProfile({ github_login: "-not-a-login" })).toEqual({});
+    expect(mapHostedGithubProfile({ githubLogin: "browser-supplied" })).toEqual({});
   });
 
   it("selects self-managed GitHub auth independently", () => {
