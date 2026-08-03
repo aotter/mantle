@@ -231,6 +231,12 @@ jobs:
             echo "//npm.pkg.github.com/:_authToken=${GPR_TOKEN}"
             echo "always-auth=true"
           } > "$GPR_NPMRC"
+          [ "$(npm config get @aotter:registry \
+            --userconfig "$GPR_NPMRC" \
+            --@aotter:registry=https://npm.pkg.github.com)" = https://npm.pkg.github.com ] || {
+              echo "::error::Could not override the repository npmjs scope mapping for GitHub Packages"
+              exit 1
+            }
           npm whoami --userconfig "$NPMRC" --registry https://registry.npmjs.org >/dev/null
           npm access list packages @aotter --json --userconfig "$NPMRC" \
             --registry https://registry.npmjs.org | \
@@ -253,7 +259,7 @@ jobs:
             label="$4"
             set +e
             output=$(npm view "$pkg@$VERSION" version --userconfig "$npmrc" \
-              --registry "$registry" 2>&1)
+              --registry "$registry" --@aotter:registry="$registry" 2>&1)
             status=$?
             set -e
             if [ "$status" = 0 ]; then
@@ -440,6 +446,11 @@ jobs:
             echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}"
             echo "always-auth=true"
           } > "$GPR_NPMRC"
+          gpr_npm() {
+            npm --userconfig "$GPR_NPMRC" \
+              --registry https://npm.pkg.github.com \
+              --@aotter:registry=https://npm.pkg.github.com "$@"
+          }
           VERSION="${{ steps.ver.outputs.version }}"
           mkdir -p .github-package-tarballs
 
@@ -455,15 +466,10 @@ jobs:
             )
             rm -rf "$work"
             gpr_tgz="$GITHUB_WORKSPACE/.github-package-tarballs/$(basename "$tgz")"
-            if npm view "$pkg@$VERSION" version \
-              --userconfig "$GPR_NPMRC" \
-              --registry https://npm.pkg.github.com >/dev/null 2>&1; then
+            if gpr_npm view "$pkg@$VERSION" version >/dev/null 2>&1; then
               echo "$pkg@$VERSION already exists on GitHub Packages; skipping publish"
             else
-              npm publish "$gpr_tgz" \
-                --userconfig "$GPR_NPMRC" \
-                --registry https://npm.pkg.github.com \
-                --tag mantle-release \
+              gpr_npm publish "$gpr_tgz" --tag mantle-release \
                 --access public
             fi
             LOCAL_INTEGRITY=$(node --input-type=module -e "
@@ -471,8 +477,7 @@ jobs:
               import { readFileSync } from 'node:fs';
               console.log('sha512-' + createHash('sha512').update(readFileSync(process.argv[1])).digest('base64'));
             " "$gpr_tgz")
-            REMOTE_INTEGRITY=$(npm view "$pkg@$VERSION" dist.integrity --json \
-              --userconfig "$GPR_NPMRC" --registry https://npm.pkg.github.com | \
+            REMOTE_INTEGRITY=$(gpr_npm view "$pkg@$VERSION" dist.integrity --json | \
               node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>console.log(JSON.parse(s)))")
             [ "$LOCAL_INTEGRITY" = "$REMOTE_INTEGRITY" ] || {
               echo "::error::$pkg@$VERSION integrity differs from the GitHub Packages tarball"
@@ -495,12 +500,16 @@ jobs:
             echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}"
             echo "always-auth=true"
           } > "$NPMRC"
+          gpr_npm() {
+            npm --userconfig "$NPMRC" \
+              --registry https://npm.pkg.github.com \
+              --@aotter:registry=https://npm.pkg.github.com "$@"
+          }
 
           promote() {
             pkg="$1"
             tag="$2"
-            current=$(npm view "$pkg" "dist-tags.$tag" --userconfig "$NPMRC" \
-              --registry https://npm.pkg.github.com)
+            current=$(gpr_npm view "$pkg" "dist-tags.$tag")
             if [ "$current" = "$VERSION" ]; then
               echo "$pkg@$VERSION already owns GitHub Packages dist-tag $tag; no-op."
               return
@@ -512,8 +521,7 @@ jobs:
                 return
               }
             fi
-            npm dist-tag add "$pkg@$VERSION" "$tag" --userconfig "$NPMRC" \
-              --registry https://npm.pkg.github.com
+            gpr_npm dist-tag add "$pkg@$VERSION" "$tag"
           }
 
           for pkg in $PKG_NAMES; do
@@ -521,11 +529,9 @@ jobs:
             if [[ "$VERSION" == 0.0.* && "$CHANNEL" != latest ]]; then
               promote "$pkg" latest
             fi
-            staging=$(npm view "$pkg" dist-tags.mantle-release --userconfig "$NPMRC" \
-              --registry https://npm.pkg.github.com)
+            staging=$(gpr_npm view "$pkg" dist-tags.mantle-release)
             if [ "$staging" = "$VERSION" ]; then
-              npm dist-tag rm "$pkg" mantle-release --userconfig "$NPMRC" \
-                --registry https://npm.pkg.github.com
+              gpr_npm dist-tag rm "$pkg" mantle-release
             fi
           done
 
