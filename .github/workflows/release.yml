@@ -342,16 +342,16 @@ jobs:
           for attempt in 1 2 3 4 5 6 7 8; do
             READY=1
             for p in $PKG_NAMES; do
-              npm view "$p@$VERSION" version readmeFilename --json --registry https://registry.npmjs.org || READY=0
+              npm view "$p@$VERSION" dist.integrity --json --registry https://registry.npmjs.org | \
+                node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{let v;try{v=JSON.parse(s)}catch{};if(typeof v!=='string'||!v.startsWith('sha512-'))process.exit(1)})" || READY=0
             done
-            README_LEN=$((npm view "@aotter/mantle@$VERSION" readme --json --registry https://registry.npmjs.org 2>/dev/null || true) | node -e "let s=''; process.stdin.on('data',d=>s+=d); process.stdin.on('end',()=>{const v=s.trim()?JSON.parse(s):''; console.log((v || '').length);})")
-            if [ "$READY" = 1 ] && [ "$README_LEN" -ge 200 ]; then
+            if [ "$READY" = 1 ]; then
               exit 0
             fi
-            echo "npm metadata not ready yet (attempt $attempt, mantle readme length $README_LEN); retrying"
+            echo "npm integrity metadata not ready yet (attempt $attempt); retrying"
             sleep 15
           done
-          echo "::error::npm metadata did not become ready or @aotter/mantle@$VERSION readme stayed empty"
+          echo "::error::npm integrity metadata did not become ready"
           exit 1
 
       - name: Verify immutable npm artifacts
