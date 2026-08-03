@@ -50,3 +50,24 @@ jobs:
 
       - name: Check crowded D1 and public cache paths
         run: pnpm bench:wrangler
+
+      - name: Check packed-consumer provenance rejection
+        run: node scripts/check-packed-consumer.mjs --self-test
+
+      - name: Check out the exact Starter consumer
+        uses: actions/checkout@v7.0.0
+        with:
+          repository: aotter/mantle-starters
+          ref: 708f5e1a3462c36087f080920fb6b58d3e69b32a
+          path: .packed-consumer/mantle-starters
+          persist-credentials: false
+
+      - name: Test packed Core in the exact Starter consumer
+        # Mirror the downstream bump controller: project skills from the new
+        # package before rebuilding and checking the immutable Starter source.
+        run: >-
+          node scripts/check-packed-consumer.mjs
+          --project .packed-consumer/mantle-starters --
+          sh -euc 'pnpm --dir blank exec mantle skills;
+          pnpm build:provision-bundle;
+          pnpm check:packed'
