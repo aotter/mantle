@@ -20,7 +20,8 @@
     "test": "pnpm -r --filter '@aotter/mantle*' test",
     "bench:wrangler": "pnpm --filter @aotter/mantle-cloudflare bench:wrangler",
     "check:boundaries": "node scripts/check-boundaries.mjs",
-    "check": "pnpm run check:boundaries && pnpm build && pnpm typecheck && pnpm test"
+    "check:release": "node scripts/release-tag-order.mjs --self-test",
+    "check": "pnpm run check:boundaries && pnpm run check:release && pnpm build && pnpm typecheck && pnpm test"
   },
   "devDependencies": {
     "typescript": "catalog:"

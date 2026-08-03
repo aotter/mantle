@@ -1,140 +1,88 @@
 # Mantle Release Skill
 
-Use this skill for any Mantle release, prerelease, version bump, npm publish, GitHub tag, fanout repair, downstream starter release, or landing deploy caused by an SDK release.
+Use this skill for a Mantle version bump, npm publish, Core or Starter tag,
+release recovery, or an explicit Landing release caused by Core.
 
-## Required Reading
+## Required reading
 
-Read these files before changing versions or pushing tags:
+Before changing a version or running the controller, read completely:
 
 - `docs/release-process.md`
 - `CHANGELOG.md`
-- `package.json`
-- every workspace package `package.json` whose version participates in the release
-- `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`,
-  `.copilot-plugin/plugin.json`, and `.cursor-plugin/plugin.json`
+- root and workspace `package.json` files
+- all four agent plugin manifests
 - `.agents/plugins/marketplace.json`
+- `.github/workflows/release.yml`
 
-For cross-repo fanout work, also inspect the sibling checkouts:
+Inspect the exact `mantle-starters` commit intended for the release. Inspect
+Landing only when `deploy_landing=true` is explicitly in scope.
 
-- `../mantle-starters`
-- `../mantle-landing`
+When changing release automation, follow `docs/release-process.md` section
+"Changing release automation" before editing workflow code.
 
-## First Principle
+## Contract
 
-Published versions are immutable. Once an npm package, GitHub tag, GitHub
-release, or starter provision bundle is public, do not force-retag, overwrite,
-or pretend the version can be repaired in place.
+Public versions and tags are immutable. `.github/workflows/release.yml` is the
+only release controller. Do not push a release tag, invoke the Starter worker,
+or repair public state manually.
 
-If a public version is incomplete, fix forward with the next version. For an alpha re-spin, the next alpha must say explicitly in `CHANGELOG.md` that it has no SDK code changes and exists to re-run the release fanout.
+For the current pre-v0.1 alpha cadence:
 
-## Release Mode
+- merge a reviewed release PR into `develop`;
+- dispatch the controller from that merge commit;
+- leave `deploy_landing=false` unless Landing was separately reviewed.
 
-Choose the mode before editing:
+The controller gates source and exact-packed Starter before tagging Core,
+publishes and verifies the registries, waits for the Starter's exact tagged
+merge, tests that tag against the public registry, then creates the Core
+GitHub Release. Starter does not promote `main`, backport, or dispatch Landing.
 
-- Pre-v0.1 alpha: release from `develop`; tag the merged release commit on `develop`.
-- Beta, RC, or stable: promote `develop` to `main`, then tag the `main` release commit.
-- Downstream-only repair after a published SDK release: fix forward. Do not edit or retag the already-published version.
+## Prepare the release PR
 
-## Pre-Tag Gate
-
-Do not push a `v*` tag until every item below is true.
-
-1. Fetch all three repos and identify the intended release version.
-
-   ```bash
-   git fetch origin --prune
-   git status --short --branch
-   ```
-
-2. Confirm all Mantle package and agent plugin manifest versions are aligned
-   to the intended version, and `.agents/plugins/marketplace.json` points to
-   the exact `v<intended-version>` tag, unless an ADR explicitly permits
-   divergence.
-
-3. Run the SDK repo gate.
+1. Fetch Core and Starter remotes. Prove the intended version and both tags are
+   unused.
+2. Add the dated `CHANGELOG.md` entry from commits since the previous tag.
+3. Align every workspace package, plugin manifest, and marketplace ref to the
+   exact version.
+4. Pin the controller and Core CI to the reviewed Starter `develop` commit.
+   Never substitute a branch or floating tag.
+5. Audit downstream literals when an SDK type or closed enum changed.
+6. Run:
 
    ```bash
-   pnpm run check
+   pnpm check
+   node scripts/check-packed-consumer.mjs --self-test
    ```
 
-4. If docs or agent skills changed, inspect the packed umbrella package and verify the package includes the embedded `docs/` and `skills/` payload.
+7. Inspect the diff and packed umbrella payload. Merge a same-repository PR
+   only after CI and review pass; direct-push commits are not releasable.
 
-   ```bash
-   mkdir -p /tmp/mantle-pack
-   pnpm -C packages/mantle pack --pack-destination /tmp/mantle-pack
-   tar tzf /tmp/mantle-pack/aotter-mantle-*.tgz | rg '^(package/)?(docs|skills)/'
-   ```
+## Run and watch
 
-5. Check downstream readiness before tagging the SDK.
+Dispatch `release.yml` with the version without `v`. Watch until all of these
+are proven:
 
-   In `../mantle-starters`, confirm required blank source, overlays, provision
-   bundles, the local materializer, and repo-local skills are merged to
-   `develop`.
+1. Core tag resolves to the release merge commit.
+2. All five npmjs artifacts exist with matching integrity and no `workspace:*`.
+3. GitHub Packages mirrors exist.
+4. Starter's canonical release PR passes the named gates, merges into
+   `develop`, and its tag resolves to that recorded merge.
+5. The frozen Starter tag passes the public-registry bundle gate.
+6. The Core GitHub Release exists.
+7. Landing was dispatched only when the input was explicitly true.
 
-   ```bash
-   git -C ../mantle-starters status --short --branch
-   pnpm --dir ../mantle-starters check:provision-bundle
-   pnpm --dir ../mantle-starters smoke:provision-bundle
-   pnpm --dir ../mantle-starters check:repo-local-skills
-   pnpm --dir ../mantle-starters check:starter-locks
-   ```
+Then clone the Starter tag fresh, run its checks, and materialize a typed
+project. Verify repo-local Mantle skills and the intended runtime surface.
 
-   In `../mantle-landing`, confirm prompt, handoff, and UI assumptions are compatible with the intended starter release.
+## Recovery
 
-   ```bash
-   git -C ../mantle-landing status --short --branch
-   pnpm --dir ../mantle-landing check
-   ```
-
-6. If a downstream repo still has required, unmerged release content, stop. Merge that content first or plan an explicit next-alpha re-spin. Do not tag the SDK while the downstream release artifact would still be missing required content.
-
-## Fanout Watch
-
-After pushing the tag, watch the whole chain. Do not call the release complete after npm publish alone.
-
-1. `aotter/mantle` release workflow publishes npm packages and dispatches to `mantle-starters`.
-2. `aotter/mantle-starters` bump PR updates runtime deps, passes starter gates, merges to `main`.
-3. `aotter/mantle-starters` tags `vX.Y.Z` with matching provision bundles.
-4. `aotter/mantle-landing` bump PR updates the landing package, passes gates, merges to `main`.
-5. `aotter/mantle-landing` deploys production.
-
-Required post-fanout checks:
-
-```bash
-gh -R aotter/mantle release view vX.Y.Z
-gh -R aotter/mantle-starters release view vX.Y.Z
-npm view @aotter/mantle@X.Y.Z version dist-tags --json
-```
-
-Clone the matching starters tag and materialize at least one local project.
-Verify generated repos include repo-local agent skills:
-
-```bash
-git clone --depth 1 --branch vX.Y.Z https://github.com/aotter/mantle-starters.git /tmp/mantle-starters-smoke
-pnpm --dir /tmp/mantle-starters-smoke materialize presence --out /tmp/mantle-smoke --brand "Release Smoke"
-rg --files /tmp/mantle-smoke | rg '(^|/)\\.agent/skills/mantle-|(^|/)\\.claude/skills/mantle-'
-```
-
-Verify production landing renders a handoff that points to the same version:
-
-```bash
-curl -fsSL 'https://mantle.tools/skill/install?...' | rg 'vX\\.Y\\.Z|provision-bundles'
-```
-
-## Failure Handling
-
-- Failed downstream validate gate before merge: fix the downstream PR, wait for CI, then merge. Do not republish SDK.
-- Downstream release artifact is already public but missing required content: publish the next alpha as a re-spin. Do not force-retag.
-- Manual downstream `main` fix: immediately backport `main` to `develop` in that repo so the next fanout does not conflict with an older integration branch.
-- Workflow re-run is only useful for transient infrastructure failures. If the source state is wrong, fix the source state first.
-
-## Red Flags
-
-Stop and explain the situation to the user if any of these appear:
-
-- The intended release tag already exists.
-- npm already has the intended version.
-- `mantle-starters/main` contains release changes that are not backported to `mantle-starters/develop`.
-- The starter tarball version does not match the SDK version.
-- Landing points to a starter tarball version different from the intended release.
-- A prompt or skill URL uses a floating branch for production instead of a released tag.
+- Transient or partial run: rerun the same controller commit and version. Each
+  existing mutation must verify exact identity or fail; an older rerun must
+  never move a registry channel tag backward.
+- Wrong public artifact: fix forward with the next version. Never force-retag,
+  overwrite, or reuse an npm version.
+- Missing or stale Starter source: merge the Starter correction first, then
+  pin that exact SHA in the next Core release PR.
+- Closed/non-canonical Starter release PR, mismatched tag, advanced gated base,
+  or missing credential: stop and repair the explicit state. Do not guess a
+  fallback branch, commit, or tag.

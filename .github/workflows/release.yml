@@ -1,93 +1,55 @@
-# Release fanout — Step 1 of #191.
+# Single release controller for aotter/mantle#559.
 #
-# Triggered by pushing a `v*` tag. Does:
+# Manually dispatched from the merged release commit. It owns the order:
 #
-#   1. Build + test (gate — bad tag never publishes)
-#   2. Verify the tag matches every package/plugin version and marketplace ref
-#   3. Pack every public SDK package
-#   4. Publish to npmjs with npm dist-tag inferred from the prerelease
-#      suffix (see § "npm tag inference" below)
-#   5. Verify npmjs metadata propagated
-#   6. Mirror the same package tarballs to GitHub Packages
-#   7. Create a GitHub release with auto-generated notes
-#   8. Dispatch `aotter/mantle-starters` with the new SDK version
-#      so its `bump-from-sdk.yml` workflow opens a downstream bump PR
+#   source gates -> exact packed Starter -> Core tag -> registries ->
+#   Starter tag -> published-registry Starter gate -> GitHub release
 #
-# Steps 2-3 of the fanout (starters bump → tag → landing bump → deploy)
-# live in the downstream repos' workflows; see the issue body for the
-# whole chain.
-#
-# ── Operator setup (one-time, repo secrets) ───────────────────────────
-#
-#   NPM_TOKEN              — npmjs automation token with publish access to
-#                            `@aotter/*`. Repo Settings → Secrets →
-#                            Actions → New repository secret.
-#
-#   GitHub Packages publish uses this workflow's GITHUB_TOKEN, so no extra
-#   package secret is needed. The packages are mirrors; npmjs remains the
-#   canonical public registry for adopters.
-#
-#   RELEASE_FANOUT_TOKEN   — fine-grained PAT (or GitHub App installation
-#                            token) with `contents: write` +
-#                            `pull-requests: write` on `mantle-starters`.
-#                            Used for the `repository_dispatch` API call.
-#                            GITHUB_TOKEN can't dispatch across repos, so
-#                            this is required.
-#
-# Without these secrets, the workflow fails fast at the publish / dispatch
-# step — the publish gate already gates on tests, so a missing token can't
-# leak a partial release.
-#
-# ── npm tag inference ────────────────────────────────────────────────
-#
-#   v1.2.3            → latest
-#   v0.0.11-alpha.4   → alpha
-#   v0.0.11-beta.1    → beta
-#   v0.0.11-rc.1      → rc
-#
-# The mapping is in the "Extract version + infer npm tag" step. Without
-# it, every prerelease would land on `latest` and break adopters running
-# `npm install @aotter/mantle` without a tag.
+# Duplicate dispatches verify the same immutable state and skip existing
+# registry/tag/release mutations. Landing stays untouched by default.
 
 name: release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version without leading v'
+        required: true
+        type: string
+      deploy_landing:
+        description: 'Dispatch the existing Landing release worker after all gates'
+        required: true
+        type: boolean
+        default: false
 
-# Only one release run at a time per tag — if two tag pushes race
-# somehow, the later one queues until the first finishes.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-controller
   cancel-in-progress: false
 
 permissions:
-  contents: write   # create GitHub release
+  contents: write   # create Core tag and GitHub release
   packages: write   # mirror SDK packages to GitHub Packages
-  id-token: write   # npm provenance (when we opt in later)
+  pull-requests: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Single source of truth for the five public packages. PKG_DIRS is in
-    # dependency order for pack; tarball names derive from PKG_NAMES by
-    # stripping `@` and mapping `/` to `-`, matching pnpm pack's naming.
+    # Single source of truth for the five public packages, in dependency order.
+    # Names are read from these package.json files during packing.
     env:
+      STARTER_SHA: 33d2cf9b9a591704281b9cdf5d8182f93dd2060f
       PKG_DIRS: >-
         packages/mantle-spec
         packages/mantle-admin-ui
         packages/mantle-runtime
         packages/adapters/cloudflare
         packages/mantle
-      PKG_NAMES: >-
-        @aotter/mantle-spec
-        @aotter/mantle-admin-ui
-        @aotter/mantle-runtime
-        @aotter/mantle-cloudflare
-        @aotter/mantle
     steps:
       - uses: actions/checkout@v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - uses: pnpm/action-setup@v6.0.9
 
@@ -97,22 +59,54 @@ jobs:
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: Build (release gate)
-        run: pnpm build
-
-      - name: Test (release gate)
-        run: pnpm test
-
-      - name: Extract version + infer npm tag
+      - name: Resolve release state
         id: ver
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF#refs/tags/}"
-          VERSION="${TAG#v}"
+          [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]] || {
+            echo "::error::Invalid version: $VERSION"
+            exit 1
+          }
+          TAG="v$VERSION"
+          CORE_SHA=$(git rev-parse HEAD)
+          SOURCE_BRANCH=main
+          [[ "$VERSION" == 0.0.*-alpha* ]] && SOURCE_BRANCH=develop
+          git fetch origin --tags
+          TAG_SHA=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" || true)
+          if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$CORE_SHA" ]; then
+            echo "::error::$TAG already points to $TAG_SHA, not controller commit $CORE_SHA"
+            exit 1
+          fi
+          if [ -z "$TAG_SHA" ]; then
+            git fetch origin "refs/heads/$SOURCE_BRANCH:refs/remotes/origin/$SOURCE_BRANCH"
+            SOURCE_SHA=$(git rev-parse "refs/remotes/origin/$SOURCE_BRANCH")
+            [ "$CORE_SHA" = "$SOURCE_SHA" ] || {
+              echo "::error::Untagged release commit $CORE_SHA is not the current $SOURCE_BRANCH tip $SOURCE_SHA"
+              exit 1
+            }
+          fi
+          PULLS=$(gh api "repos/$GITHUB_REPOSITORY/commits/$CORE_SHA/pulls")
+          MERGED_PR_COUNT=$(jq \
+            --arg base "$SOURCE_BRANCH" \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg sha "$CORE_SHA" \
+            '[.[] | select(.merged_at != null and .base.ref == $base and .head.repo.full_name == $repo and .merge_commit_sha == $sha)] | length' \
+            <<< "$PULLS")
+          [ "$MERGED_PR_COUNT" = 1 ] || {
+            echo "::error::Release commit $CORE_SHA is not one canonical merged PR commit on $SOURCE_BRANCH"
+            exit 1
+          }
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "core_sha=$CORE_SHA" >> "$GITHUB_OUTPUT"
+          if [ -n "$TAG_SHA" ]; then
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+          fi
           case "$VERSION" in
             *-alpha*) NPM_TAG=alpha ;;
             *-beta*)  NPM_TAG=beta ;;
@@ -120,7 +114,12 @@ jobs:
             *)        NPM_TAG=latest ;;
           esac
           echo "npm_tag=$NPM_TAG" >> "$GITHUB_OUTPUT"
-          echo "Tag $TAG → version $VERSION → npm dist-tag $NPM_TAG"
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Core source
+        run: pnpm check
 
       - name: Verify package, plugin, and marketplace versions match ${{ steps.ver.outputs.version }}
         run: |
@@ -165,14 +164,34 @@ jobs:
             if (failed) process.exit(1);
           "
 
+      - name: Check out the gated Starter source
+        uses: actions/checkout@v7.0.0
+        with:
+          repository: aotter/mantle-starters
+          ref: ${{ env.STARTER_SHA }}
+          path: .packed-consumer/mantle-starters
+          persist-credentials: false
+
+      - name: Verify exact packed Core in the gated Starter
+        run: >-
+          node scripts/check-packed-consumer.mjs
+          --project .packed-consumer/mantle-starters --
+          sh -euc 'pnpm --dir blank exec mantle skills;
+          pnpm build:provision-bundle;
+          pnpm check:packed'
+
       - name: Pack release tarballs
         run: |
           set -euo pipefail
           VERSION="${{ steps.ver.outputs.version }}"
           mkdir -p .release-tarballs
+          PKG_NAMES=""
           for dir in $PKG_DIRS; do
             pnpm -C "$dir" pack --pack-destination "$PWD/.release-tarballs"
+            name=$(node -p "require('./$dir/package.json').name")
+            PKG_NAMES="${PKG_NAMES:+$PKG_NAMES }$name"
           done
+          echo "PKG_NAMES=$PKG_NAMES" >> "$GITHUB_ENV"
 
           # Version lockstep: pnpm pack names tarballs <name>-<version>.tgz,
           # so a package whose version drifted from the tag fails here.
@@ -181,16 +200,117 @@ jobs:
             test -f ".release-tarballs/${base//\//-}-$VERSION.tgz"
           done
 
+      - name: Verify release credentials
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_FANOUT_TOKEN }}
+          GPR_TOKEN: ${{ github.token }}
+          DEPLOY_LANDING: ${{ inputs.deploy_landing }}
+          TAG_EXISTS: ${{ steps.ver.outputs.tag_exists }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          [ -n "${NODE_AUTH_TOKEN:-}" ] || {
+            echo "::error::NPM_TOKEN is required before creating an immutable tag"
+            exit 1
+          }
+          [ -n "${GH_TOKEN:-}" ] || {
+            echo "::error::RELEASE_FANOUT_TOKEN is required before creating an immutable tag"
+            exit 1
+          }
+          NPMRC="$RUNNER_TEMP/npmjs-preflight.npmrc"
+          GPR_NPMRC="$RUNNER_TEMP/github-packages-preflight.npmrc"
+          trap 'rm -f "$NPMRC" "$GPR_NPMRC"' EXIT
+          {
+            echo "registry=https://registry.npmjs.org/"
+            echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}"
+            echo "always-auth=true"
+          } > "$NPMRC"
+          {
+            echo "@aotter:registry=https://npm.pkg.github.com"
+            echo "//npm.pkg.github.com/:_authToken=${GPR_TOKEN}"
+            echo "always-auth=true"
+          } > "$GPR_NPMRC"
+          npm whoami --userconfig "$NPMRC" --registry https://registry.npmjs.org >/dev/null
+          npm access list packages --json --userconfig "$NPMRC" \
+            --registry https://registry.npmjs.org | \
+            node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{const access=JSON.parse(s);const denied=process.argv.slice(1).filter(p=>access[p]!=='read-write');if(denied.length){console.error('NPM_TOKEN lacks read-write access: '+denied.join(', '));process.exit(1)}})" \
+            $PKG_NAMES
+          [ "$(gh api repos/aotter/mantle-starters --jq '.permissions.push // false')" = true ] || {
+            echo "::error::RELEASE_FANOUT_TOKEN lacks Contents write on mantle-starters"
+            exit 1
+          }
+          if [ "$DEPLOY_LANDING" = true ]; then
+            [ "$(gh api repos/aotter/mantle-landing --jq '.permissions.push // false')" = true ] || {
+              echo "::error::RELEASE_FANOUT_TOKEN lacks Contents write on mantle-landing"
+              exit 1
+            }
+          fi
+          assert_absent() {
+            pkg="$1"
+            npmrc="$2"
+            registry="$3"
+            label="$4"
+            set +e
+            output=$(npm view "$pkg@$VERSION" version --userconfig "$npmrc" \
+              --registry "$registry" 2>&1)
+            status=$?
+            set -e
+            if [ "$status" = 0 ]; then
+              echo "::error::$pkg@$VERSION already exists on $label without the Core tag"
+              exit 1
+            fi
+            grep -Eq 'E404|404 Not Found' <<< "$output" || {
+              echo "::error::Could not prove $pkg@$VERSION is absent from $label"
+              exit 1
+            }
+          }
+          STARTER_TAG_SHA=$(git ls-remote https://github.com/aotter/mantle-starters.git "refs/tags/v$VERSION" | awk '{print $1}')
+          if [ "$TAG_EXISTS" = false ]; then
+            for pkg in $PKG_NAMES; do
+              assert_absent "$pkg" "$NPMRC" https://registry.npmjs.org npmjs
+              assert_absent "$pkg" "$GPR_NPMRC" https://npm.pkg.github.com 'GitHub Packages'
+            done
+            if [ -n "$STARTER_TAG_SHA" ]; then
+              echo "::error::mantle-starters v$VERSION already exists without the Core tag"
+              exit 1
+            fi
+          fi
+          if [ "$TAG_EXISTS" = false ]; then
+            REMOTE_STARTER_SHA=$(git ls-remote https://github.com/aotter/mantle-starters.git refs/heads/develop | awk '{print $1}')
+            [ "$REMOTE_STARTER_SHA" = "$STARTER_SHA" ] || {
+              echo "::error::Gated Starter $STARTER_SHA is no longer the develop tip $REMOTE_STARTER_SHA"
+              exit 1
+            }
+          fi
+
+      - name: Create immutable Core tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          CORE_SHA: ${{ steps.ver.outputs.core_sha }}
+        run: |
+          set -euo pipefail
+          TAG_SHA=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" || true)
+          if [ -n "$TAG_SHA" ]; then
+            [ "$TAG_SHA" = "$CORE_SHA" ] || {
+              echo "::error::$TAG points to $TAG_SHA, not $CORE_SHA"
+              exit 1
+            }
+            echo "$TAG already exists at $TAG_SHA; no-op."
+          else
+            git tag "$TAG" "$CORE_SHA"
+            gh auth setup-git
+            git push origin "$TAG"
+          fi
+
       - name: Publish to npmjs
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "::error::NPM_TOKEN is not set; refusing to start a partial release."
-            exit 1
-          fi
-          NPMJS_NPMRC="$PWD/.npmrc.npmjs"
+          NPMJS_NPMRC="$RUNNER_TEMP/npmjs.npmrc"
+          trap 'rm -f "$NPMJS_NPMRC"' EXIT
           {
             echo "registry=https://registry.npmjs.org/"
             echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}"
@@ -198,13 +318,6 @@ jobs:
           } > "$NPMJS_NPMRC"
           npm whoami --userconfig "$NPMJS_NPMRC" --registry https://registry.npmjs.org >/dev/null
           VERSION="${{ steps.ver.outputs.version }}"
-          PUBLISH_TAG="${{ steps.ver.outputs.npm_tag }}"
-          # Pre-v0.1 policy: npm latest follows the most user-useful
-          # prerelease. Publishing with the primary tag set to latest
-          # also keeps npmjs.com's package README metadata fresh.
-          if [[ "$VERSION" == 0.0.* && "$PUBLISH_TAG" != "latest" ]]; then
-            PUBLISH_TAG=latest
-          fi
 
           for pkg in $PKG_NAMES; do
             base="${pkg#@}"
@@ -218,17 +331,9 @@ jobs:
             npm publish "$tgz" \
               --userconfig "$NPMJS_NPMRC" \
               --registry https://registry.npmjs.org \
-              --tag "$PUBLISH_TAG" \
+              --tag mantle-release \
               --access public
           done
-
-          if [[ "$PUBLISH_TAG" != "${{ steps.ver.outputs.npm_tag }}" ]]; then
-            for p in $PKG_NAMES; do
-              npm dist-tag add "$p@$VERSION" "${{ steps.ver.outputs.npm_tag }}" \
-                --userconfig "$NPMJS_NPMRC" \
-                --registry https://registry.npmjs.org
-            done
-          fi
 
       - name: Verify npm metadata
         run: |
@@ -249,33 +354,98 @@ jobs:
           echo "::error::npm metadata did not become ready or @aotter/mantle@$VERSION readme stayed empty"
           exit 1
 
+      - name: Verify immutable npm artifacts
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          for pkg in $PKG_NAMES; do
+            base="${pkg#@}"
+            tgz=".release-tarballs/${base//\//-}-$VERSION.tgz"
+            LOCAL_INTEGRITY=$(node --input-type=module -e "
+              import { createHash } from 'node:crypto';
+              import { readFileSync } from 'node:fs';
+              console.log('sha512-' + createHash('sha512').update(readFileSync(process.argv[1])).digest('base64'));
+            " "$tgz")
+            REMOTE_INTEGRITY=$(npm view "$pkg@$VERSION" dist.integrity --json \
+              --registry https://registry.npmjs.org | node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>console.log(JSON.parse(s)))")
+            [ "$LOCAL_INTEGRITY" = "$REMOTE_INTEGRITY" ] || {
+              echo "::error::$pkg@$VERSION integrity differs from the packed release tarball"
+              exit 1
+            }
+            npm view "$pkg@$VERSION" dependencies --json --registry https://registry.npmjs.org | \
+              node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{const deps=s.trim()?JSON.parse(s):{};if(Object.values(deps).some(v=>String(v).startsWith('workspace:')))process.exit(1)})" || {
+                echo "::error::$pkg@$VERSION leaked a workspace dependency"
+                exit 1
+              }
+          done
+
+      - name: Promote npmjs channel tags
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          CORE_SHA: ${{ steps.ver.outputs.core_sha }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          CHANNEL: ${{ steps.ver.outputs.npm_tag }}
+        run: |
+          set -euo pipefail
+          NPMRC="$RUNNER_TEMP/npmjs-promote.npmrc"
+          trap 'rm -f "$NPMRC"' EXIT
+          {
+            echo "registry=https://registry.npmjs.org/"
+            echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}"
+            echo "always-auth=true"
+          } > "$NPMRC"
+
+          promote() {
+            pkg="$1"
+            tag="$2"
+            current=$(npm view "$pkg" "dist-tags.$tag" --userconfig "$NPMRC" \
+              --registry https://registry.npmjs.org)
+            if [ "$current" = "$VERSION" ]; then
+              echo "$pkg@$VERSION already owns npmjs dist-tag $tag; no-op."
+              return
+            fi
+            if [ -n "$current" ]; then
+              decision=$(node scripts/release-tag-order.mjs "$CORE_SHA" "$current")
+              [ "$decision" != preserve ] || {
+                echo "Preserving newer npmjs dist-tag $pkg@$tag at $current."
+                return
+              }
+            fi
+            npm dist-tag add "$pkg@$VERSION" "$tag" --userconfig "$NPMRC" \
+              --registry https://registry.npmjs.org
+          }
+
+          for pkg in $PKG_NAMES; do
+            promote "$pkg" "$CHANNEL"
+            if [[ "$VERSION" == 0.0.* && "$CHANNEL" != latest ]]; then
+              promote "$pkg" latest
+            fi
+            staging=$(npm view "$pkg" dist-tags.mantle-release --userconfig "$NPMRC" \
+              --registry https://registry.npmjs.org)
+            if [ "$staging" = "$VERSION" ]; then
+              npm dist-tag rm "$pkg" mantle-release --userconfig "$NPMRC" \
+                --registry https://registry.npmjs.org
+            fi
+          done
+
       - name: Mirror to GitHub Packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          GPR_NPMRC="$PWD/.npmrc.github"
+          GPR_NPMRC="$RUNNER_TEMP/github-packages.npmrc"
+          trap 'rm -f "$GPR_NPMRC"' EXIT
           {
             echo "@aotter:registry=https://npm.pkg.github.com"
             echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}"
             echo "always-auth=true"
           } > "$GPR_NPMRC"
           VERSION="${{ steps.ver.outputs.version }}"
-          PUBLISH_TAG="${{ steps.ver.outputs.npm_tag }}"
-          if [[ "$VERSION" == 0.0.* && "$PUBLISH_TAG" != "latest" ]]; then
-            PUBLISH_TAG=latest
-          fi
           mkdir -p .github-package-tarballs
 
           for pkg in $PKG_NAMES; do
             base="${pkg#@}"
             tgz=".release-tarballs/${base//\//-}-$VERSION.tgz"
-            if npm view "$pkg@$VERSION" version \
-              --userconfig "$GPR_NPMRC" \
-              --registry https://npm.pkg.github.com >/dev/null 2>&1; then
-              echo "$pkg@$VERSION already exists on GitHub Packages; skipping publish"
-              continue
-            fi
             work="$(mktemp -d)"
             tar -xzf "$tgz" -C "$work"
             node -e "const fs=require('node:fs'); const path=process.argv[1]; const pkg=JSON.parse(fs.readFileSync(path,'utf8')); pkg.publishConfig={...(pkg.publishConfig||{}), registry:'https://npm.pkg.github.com'}; fs.writeFileSync(path, JSON.stringify(pkg,null,2)+'\n');" "$work/package/package.json"
@@ -283,53 +453,160 @@ jobs:
               cd "$work/package"
               npm pack --pack-destination "$GITHUB_WORKSPACE/.github-package-tarballs" >/dev/null
             )
-            gpr_tgz="$GITHUB_WORKSPACE/.github-package-tarballs/$(basename "$tgz")"
-            npm publish "$gpr_tgz" \
-              --userconfig "$GPR_NPMRC" \
-              --registry https://npm.pkg.github.com \
-              --tag "$PUBLISH_TAG" \
-              --access public
             rm -rf "$work"
+            gpr_tgz="$GITHUB_WORKSPACE/.github-package-tarballs/$(basename "$tgz")"
+            if npm view "$pkg@$VERSION" version \
+              --userconfig "$GPR_NPMRC" \
+              --registry https://npm.pkg.github.com >/dev/null 2>&1; then
+              echo "$pkg@$VERSION already exists on GitHub Packages; skipping publish"
+            else
+              npm publish "$gpr_tgz" \
+                --userconfig "$GPR_NPMRC" \
+                --registry https://npm.pkg.github.com \
+                --tag mantle-release \
+                --access public
+            fi
+            LOCAL_INTEGRITY=$(node --input-type=module -e "
+              import { createHash } from 'node:crypto';
+              import { readFileSync } from 'node:fs';
+              console.log('sha512-' + createHash('sha512').update(readFileSync(process.argv[1])).digest('base64'));
+            " "$gpr_tgz")
+            REMOTE_INTEGRITY=$(npm view "$pkg@$VERSION" dist.integrity --json \
+              --userconfig "$GPR_NPMRC" --registry https://npm.pkg.github.com | \
+              node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>console.log(JSON.parse(s)))")
+            [ "$LOCAL_INTEGRITY" = "$REMOTE_INTEGRITY" ] || {
+              echo "::error::$pkg@$VERSION integrity differs from the GitHub Packages tarball"
+              exit 1
+            }
           done
 
-          if [[ "$PUBLISH_TAG" != "${{ steps.ver.outputs.npm_tag }}" ]]; then
-            for p in $PKG_NAMES; do
-              npm dist-tag add "$p@$VERSION" "${{ steps.ver.outputs.npm_tag }}" \
-                --userconfig "$GPR_NPMRC" \
-                --registry https://npm.pkg.github.com
-            done
-          fi
-
-      - name: Create GitHub release
+      - name: Promote GitHub Packages channel tags
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ github.token }}
+          CORE_SHA: ${{ steps.ver.outputs.core_sha }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          CHANNEL: ${{ steps.ver.outputs.npm_tag }}
         run: |
           set -euo pipefail
-          # Mark prereleases so GitHub UI / consumers can filter.
-          PRERELEASE_FLAG=""
-          if [[ "${{ steps.ver.outputs.npm_tag }}" != "latest" ]]; then
-            PRERELEASE_FLAG="--prerelease"
-          fi
-          if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
-            echo "GitHub release ${{ github.ref_name }} already exists; skipping create."
-          else
-            gh release create "${{ github.ref_name }}" \
-              --generate-notes \
-              --title "${{ github.ref_name }}" \
-              $PRERELEASE_FLAG
-          fi
+          NPMRC="$RUNNER_TEMP/github-packages-promote.npmrc"
+          trap 'rm -f "$NPMRC"' EXIT
+          {
+            echo "@aotter:registry=https://npm.pkg.github.com"
+            echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}"
+            echo "always-auth=true"
+          } > "$NPMRC"
 
-      - name: Dispatch starters bump-from-sdk
+          promote() {
+            pkg="$1"
+            tag="$2"
+            current=$(npm view "$pkg" "dist-tags.$tag" --userconfig "$NPMRC" \
+              --registry https://npm.pkg.github.com)
+            if [ "$current" = "$VERSION" ]; then
+              echo "$pkg@$VERSION already owns GitHub Packages dist-tag $tag; no-op."
+              return
+            fi
+            if [ -n "$current" ]; then
+              decision=$(node scripts/release-tag-order.mjs "$CORE_SHA" "$current")
+              [ "$decision" != preserve ] || {
+                echo "Preserving newer GitHub Packages dist-tag $pkg@$tag at $current."
+                return
+              }
+            fi
+            npm dist-tag add "$pkg@$VERSION" "$tag" --userconfig "$NPMRC" \
+              --registry https://npm.pkg.github.com
+          }
+
+          for pkg in $PKG_NAMES; do
+            promote "$pkg" "$CHANNEL"
+            if [[ "$VERSION" == 0.0.* && "$CHANNEL" != latest ]]; then
+              promote "$pkg" latest
+            fi
+            staging=$(npm view "$pkg" dist-tags.mantle-release --userconfig "$NPMRC" \
+              --registry https://npm.pkg.github.com)
+            if [ "$staging" = "$VERSION" ]; then
+              npm dist-tag rm "$pkg" mantle-release --userconfig "$NPMRC" \
+                --registry https://npm.pkg.github.com
+            fi
+          done
+
+      - name: Dispatch Starter release worker
         env:
           GH_TOKEN: ${{ secrets.RELEASE_FANOUT_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::warning::RELEASE_FANOUT_TOKEN not set — starters bump skipped. SDK is published to npmjs and GitHub Packages; set the secret and re-dispatch via the Actions UI to continue the fanout."
-            exit 0
-          fi
           gh api "repos/${{ github.repository_owner }}/mantle-starters/dispatches" \
             -f event_type=sdk-published \
             -F "client_payload[sdk_version]=${{ steps.ver.outputs.version }}" \
-            -F "client_payload[npm_tag]=${{ steps.ver.outputs.npm_tag }}"
-          echo "Dispatched mantle-starters bump-from-sdk for ${{ steps.ver.outputs.version }}"
+            -F "client_payload[core_sha]=${{ steps.ver.outputs.core_sha }}" \
+            -F "client_payload[starter_sha]=$STARTER_SHA"
+
+      - name: Wait for immutable Starter tag
+        id: starter
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 120); do
+            SHA=$(git ls-remote https://github.com/aotter/mantle-starters.git "refs/tags/v$VERSION^{}" | awk '{print $1}')
+            if [ -z "$SHA" ]; then
+              SHA=$(git ls-remote https://github.com/aotter/mantle-starters.git "refs/tags/v$VERSION" | awk '{print $1}')
+            fi
+            if [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Waiting for mantle-starters v$VERSION ($attempt/120)."
+            sleep 15
+          done
+          echo "::error::mantle-starters v$VERSION did not appear within 30 minutes"
+          exit 1
+
+      - name: Check out the released Starter
+        uses: actions/checkout@v7.0.0
+        with:
+          repository: aotter/mantle-starters
+          ref: ${{ steps.starter.outputs.sha }}
+          path: .published-consumer/mantle-starters
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate released Starter provenance
+        working-directory: .published-consumer/mantle-starters
+        run: >-
+          node scripts/check-release-candidate.mjs
+          ${{ steps.starter.outputs.sha }}
+          ${{ steps.ver.outputs.version }}
+          ${{ steps.ver.outputs.core_sha }}
+          ${{ env.STARTER_SHA }}
+
+      - name: Test released Starter against the public registry
+        working-directory: .published-consumer/mantle-starters
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm check:starter-locks
+          pnpm check:provision-bundle
+          pnpm check:packed
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "GitHub release $TAG already exists; no-op."
+          elif [[ "${{ steps.ver.outputs.npm_tag }}" = latest ]]; then
+            gh release create "$TAG" --generate-notes --title "$TAG"
+          else
+            gh release create "$TAG" --generate-notes --title "$TAG" --prerelease
+          fi
+
+      - name: Dispatch Landing release worker
+        if: ${{ inputs.deploy_landing }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_FANOUT_TOKEN }}
+        run: |
+          gh api "repos/${{ github.repository_owner }}/mantle-landing/dispatches" \
+            -f event_type=starters-released \
+            -F "client_payload[starters_version]=${{ steps.ver.outputs.version }}"
