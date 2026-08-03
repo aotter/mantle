@@ -36,10 +36,10 @@ optional paid hosted auth. Local cold start stops before those provider
 operations.
 
 Generated projects include the `mantle` authoring CLI from
-`@aotter/mantle`: `generate`, `validate`, `introspect`, `emit-openapi`, and
-`emit-types`. `generate` compiles YAML into `.mantle/generated/site.ts` and
-`types.d.ts`; `--check` verifies freshness without writing. The umbrella
-package also ships `mantle-harness` for crowded
+`@aotter/mantle`: `generate`, `skills`, `validate`, `introspect`,
+`emit-openapi`, and `emit-types`. `generate` compiles YAML into
+`.mantle/generated/site.ts` and `types.d.ts`; `--check` verifies freshness
+without writing. The umbrella package also ships `mantle-harness` for crowded
 SQLite index coverage and live Worker/API/page sampling; see
 [`docs/performance-harness.md`](docs/performance-harness.md).
 
@@ -82,18 +82,19 @@ Before working:
 → **Check SDK / starter / plugin drift** — start at [`skills/update/SKILL.md`](skills/update/SKILL.md).
 → **Finish production deploy** (GitHub repo, Cloudflare dashboard first deploy, OAuth App, Wrangler secrets, smoke) — start at [`skills/provision/SKILL.md`](skills/provision/SKILL.md).
 
-The `mantle:*` namespace is owned by `@aotter/mantle`. Generated starters
-vendor Core workflow skills pinned to their starter ref for offline use.
-Those skills may include updater compatibility guidance, but the installed
-package version and its embedded docs remain the runtime/API contract.
+The `mantle:*` namespace is owned by `@aotter/mantle`. `mantle skills`
+projects the installed package's Core workflow skills to repo-local `.agent`
+and `.claude` paths; `mantle skills --check` fails on drift without writing.
+The installed package version and its embedded docs remain the runtime/API
+contract.
 `.mantle/*` launch files and plugin recipes are project context, not another
 contract.
 
 ### Install Mantle Core skills
 
 Install the Mantle agent plugin to create or continue sites. Generated starter
-repos also vendor the Core workflow skills locally; use those for project
-workflow and the installed package docs for SDK behavior.
+repos project the same version-matched Core workflow skills locally; use those
+for project workflow and the installed package docs for SDK behavior.
 
 **Claude Code**
 
@@ -192,8 +193,9 @@ Starter taxonomy. Mantle landing fetches `provision-bundles/<type>.json` from [`
 
 The starter repo owns blank source, small type overlays, vendored Kiwa source, and deterministic provision bundles. Theme selection is not a first-run path; agents continue from the generated repo and the after-launch handoff shown by landing.
 
-Generated repos carry vendored copies of Core-owned `mantle:*` skills from
-`@aotter/mantle`, including `mantle:plugin` for marketplace capability work.
+Generated repos carry projected copies of Core-owned `mantle:*` skills from
+their installed `@aotter/mantle`, including `mantle:plugin` for marketplace
+capability work.
 
 | Starter | Family | Status | What |
 |---|---|---|---|

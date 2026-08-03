@@ -35,6 +35,8 @@ The package also installs `mantle` and `mantle-harness`:
 ```bash
 pnpm exec mantle generate
 pnpm exec mantle generate --check
+pnpm exec mantle skills
+pnpm exec mantle skills --check
 pnpm exec mantle-harness indexes --require-public
 pnpm exec mantle-harness http --base-url http://127.0.0.1:8787 --route page=/en/example
 ```
@@ -51,6 +53,12 @@ Dynamic `runtime.viewsByName` access remains available for low-level code.
 const site = bindMantleSite(runtime);
 const notes = await site.views["published-notes"]();
 ```
+
+`mantle skills` explicitly copies the installed package's `develop`, `plugin`,
+`theme`, and `update` skills to matching `.agent/skills/mantle-*` and
+`.claude/skills/mantle-*` paths. Both tool layouts receive identical bytes;
+`--check` detects drift without writing. Manifest generation never rewrites
+agent instructions.
 
 ## Conventional Cloudflare Worker
 
@@ -102,8 +110,8 @@ materializes a local project, and verifies it before any provider work.
 
 [Mantle landing](https://mantle.tools) uses the same bundles and continues
 through private GitHub repo creation, Cloudflare deployment, and optional paid
-hosted auth. Generated repos vendor Core-owned `mantle:*` skills from this
-package for repo-local use.
+hosted auth. Generated repos project Core-owned `mantle:*` skills from their
+installed package for repo-local use.
 
 ## Agent marketplace install
 

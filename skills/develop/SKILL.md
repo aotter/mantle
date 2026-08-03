@@ -9,9 +9,9 @@ metadata:
 
 # Mantle Develop
 
-This is the Core workflow skill for an existing Mantle project. A repo-local
-copy may carry compatibility guidance pinned to the starter ref; the installed
-package version and embedded docs govern runtime/API behavior.
+This is the Core workflow skill for an existing Mantle project. Repo-local
+copies are byte-for-byte projections from the installed package; its embedded
+docs govern runtime/API behavior.
 
 ## First Read
 
