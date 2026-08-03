@@ -30,12 +30,18 @@ import { createCmsRuntime } from "@aotter/mantle/runtime";
 import { mountServerEndpoints } from "@aotter/mantle/cloudflare";
 ```
 
-The package also installs `mantle-harness`:
+The package also installs `mantle` and `mantle-harness`:
 
 ```bash
+pnpm exec mantle generate
+pnpm exec mantle generate --check
 pnpm exec mantle-harness indexes --require-public
 pnpm exec mantle-harness http --base-url http://127.0.0.1:8787 --route page=/en/example
 ```
+
+`mantle generate` validates the YAML under `./manifests`, then writes the
+parsed manifest module and handler declarations to `.mantle/generated/`.
+It does not sync skills, update packages, style, provision, or deploy.
 
 ## Getting started
 

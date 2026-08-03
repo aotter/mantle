@@ -14,6 +14,7 @@
   "main": "./dist/spec.js",
   "types": "./dist/spec.d.ts",
   "bin": {
+    "mantle": "./dist/cli.js",
     "mantle-harness": "./dist/harness-cli.js"
   },
   "publishConfig": {
@@ -70,6 +71,7 @@
     "prebuild": "rm -rf dist .tsbuildinfo",
     "build": "tsc -b tsconfig.lib.json",
     "typecheck": "tsc --noEmit -p tsconfig.lib.json",
+    "test": "vitest run",
     "prepack": "node ../../scripts/sync-package-docs.mjs .",
     "postpack": "node ../../scripts/sync-package-docs.mjs . --clean"
   },
@@ -80,6 +82,7 @@
     "better-auth": "catalog:",
     "hono": "catalog:",
     "typescript": "catalog:",
+    "vitest": "catalog:",
     "zod": "catalog:"
   },
   "engines": {

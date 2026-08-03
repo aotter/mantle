@@ -2,12 +2,12 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import {
   RESERVED_ENTRY_COLUMNS,
   buildDdl,
-  partitionManifests,
   type FilterAst,
   type Manifest,
   type SchemaManifest,
   type ViewManifest,
 } from "@aotter/mantle-spec";
+import { partitionManifests } from "@aotter/mantle-spec/partition";
 import { compileView } from "../../domain/service/ViewSqlCompiler.js";
 import { CANONICAL_MIGRATIONS } from "../boot/canonicalMigrations.js";
 

@@ -19,12 +19,16 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "mantle": "./dist/infrastructure/cli/MantleCli.js"
+    "mantle-spec": "./dist/infrastructure/cli/MantleCli.js"
   },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./partition": {
+      "types": "./dist/partition.d.ts",
+      "import": "./dist/partition.js"
     },
     "./cli": {
       "types": "./dist/infrastructure/cli/index.d.ts",

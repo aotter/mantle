@@ -36,8 +36,10 @@ optional paid hosted auth. Local cold start stops before those provider
 operations.
 
 Generated projects include the `mantle` authoring CLI from
-`@aotter/mantle-spec`: `validate`, `introspect`, `emit-openapi`, and
-`emit-types`. The umbrella package also ships `mantle-harness` for crowded
+`@aotter/mantle`: `generate`, `validate`, `introspect`, `emit-openapi`, and
+`emit-types`. `generate` compiles YAML into `.mantle/generated/site.ts` and
+`types.d.ts`; `--check` verifies freshness without writing. The umbrella
+package also ships `mantle-harness` for crowded
 SQLite index coverage and live Worker/API/page sampling; see
 [`docs/performance-harness.md`](docs/performance-harness.md).
 
