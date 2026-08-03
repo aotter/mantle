@@ -203,7 +203,12 @@ version-matched tag in
 substitutes launch facts, commits the repo, and connects Cloudflare Workers CI
 when possible.
 
-The starter repo owns blank source, small type overlays, vendored Kiwa source, and deterministic provision bundles. Theme selection is not a first-run path; agents continue from the generated repo and the after-launch handoff shown by landing.
+The starter repo owns blank source, a shared typed-web layer, small type
+overlays, and deterministic provision bundles. A Starter revision may also
+ship a replaceable, vendored UI reference palette; that implementation is not
+part of Mantle Core's contract. Theme selection is not a first-run path;
+agents continue from the generated repo and the after-launch handoff shown by
+landing.
 
 Generated repos carry projected copies of Core-owned `mantle:*` skills from
 their installed `@aotter/mantle`, including `mantle:plugin` for marketplace

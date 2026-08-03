@@ -117,7 +117,7 @@ Read the relevant ADRs before touching architecture. The most common gates are:
 
 **Don't add `CHANGELOG.md` entries on every PR.** The PR title + body + commit messages are the source of truth for what changed in any given PR. Per-PR `[Unreleased]` entries bloat unboundedly between releases, force conflict-merging the section on every release cycle, and duplicate information that's already in git.
 
-Changelog entries are written at release time as part of the release PR (see [`docs/release-process.md`](docs/release-process.md) § Normal release playbook step 2). The release author aggregates `git log` since the previous tag into Keep-a-Changelog buckets (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`), prefixes package scope when relevant (`**`@aotter/mantle-runtime`**: ...`), and cross-links closing PR + issue. The entry lives under a new `## [vX.Y.Z] - YYYY-MM-DD` heading; no `[Unreleased]` placeholder.
+Changelog entries are written at release time as part of the release PR (see [`docs/release-process.md`](docs/release-process.md) § Release PR). The release author aggregates `git log` since the previous tag into Keep-a-Changelog buckets (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`), prefixes package scope when relevant (`**`@aotter/mantle-runtime`**: ...`), and cross-links closing PR + issue. The entry lives under a new `## [vX.Y.Z] - YYYY-MM-DD` heading; no `[Unreleased]` placeholder.
 
 ## Release process
 
