@@ -6,6 +6,15 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.68] - 2026-08-03
+
+### Added
+
+- **`@aotter/mantle-cloudflare`**: expose Better Auth's typed generic OAuth
+  profile mapper so a validated Hosted GitHub profile can populate the
+  existing site-local `githubLogin` field and reuse the atomic first-owner
+  bootstrap rule (#516).
+
 ## [0.0.11-alpha.67] - 2026-08-03
 
 ### Fixed
