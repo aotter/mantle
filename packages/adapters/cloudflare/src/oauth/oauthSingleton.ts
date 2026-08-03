@@ -17,7 +17,7 @@ export interface CreateOAuthProviderArgs<Env = Record<string, unknown>> {
    *  `ctx.props` set to whatever was passed to
    *  `completeAuthorization({ props })`. Use `createMcpApiHandler`
    *  to build the handler value for each entry. */
-  readonly apiHandlers: Record<string, ExportedHandler<Record<string, unknown>>>;
+  readonly apiHandlers: Record<string, ExportedHandler<Env>>;
   /** Scopes advertised in `scopes_supported` for both AS metadata
    *  (RFC 8414) and PRM (RFC 9728). Defaults to `["mcp"]` — a single
    *  non-colon-namespaced scope, which is what claude.ai's MCP OAuth

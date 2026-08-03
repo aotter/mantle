@@ -9,6 +9,15 @@ OAuth plus MCP OAuth/DCR.
 `0.0.7-alpha` is an early prerelease for the agent-provisioning proof. The API
 surface remains in flux until `v0.1.0`.
 
+## Conventional Worker Facade
+
+`createMantleWorker({ manifest })` is the normal assembly path. It composes the
+adapter's existing Auth, binding, Hono, OAuth and MCP primitives once per
+isolate; `extend` may add application routes but cannot replace Core-owned
+paths. The canonical contract and reserved path list live in the umbrella
+package's [Conventional Cloudflare Worker](../../mantle/README.md#conventional-cloudflare-worker)
+section.
+
 ## Better Auth Boundaries
 
 `createAuth()` exposes curated Better Auth configuration fields, not a
