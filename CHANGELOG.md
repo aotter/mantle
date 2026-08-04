@@ -6,6 +6,23 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.73] - 2026-08-04
+
+### Changed
+
+- **`@aotter/mantle-cloudflare`**: keep Hosted Auth composition in each
+  Mantle site while the conventional worker path remains the minimal
+  self-managed GitHub OAuth default (#601).
+
+### Fixed
+
+- **`@aotter/mantle-cloudflare`**: preserve trusted provider-owned GitHub
+  logins through Better Auth profile mapping so the configured GitHub owner
+  can be bootstrapped atomically without exposing that field to user input
+  (#600).
+- **`@aotter/mantle-cloudflare`**: finish runtime initialization and schema
+  migrations before the first auth request reaches Better Auth (#601).
+
 ## [0.0.11-alpha.72] - 2026-08-04
 
 ### Fixed

@@ -38,7 +38,7 @@ jobs:
     # Single source of truth for the five public packages, in dependency order.
     # Names are read from these package.json files during packing.
     env:
-      STARTER_SHA: 67d3854a78910cb111d4c5a02bf7b871b3c7aad2
+      STARTER_SHA: 8567c0b66ace703430205d136038b6e4169e17a9
       PKG_DIRS: >-
         packages/mantle-spec
         packages/mantle-admin-ui
