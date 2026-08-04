@@ -6,6 +6,14 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.70] - 2026-08-04
+
+### Fixed
+
+- **`@aotter/mantle-runtime`**: normalize D1/SQLite `0`/`1` values for
+  projected Schema boolean fields so View rows match their generated
+  `boolean` TypeScript contract (#591).
+
 ## [0.0.11-alpha.69] - 2026-08-03
 
 ### Changed
