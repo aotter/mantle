@@ -152,6 +152,7 @@ export interface MantleWorkerHandler<Env extends MantleCloudflareEnv> {
 
 interface AssembledWorker<Env extends MantleCloudflareEnv> {
   readonly auth: Auth;
+  readonly getRuntime: () => Promise<CmsRuntime>;
   readonly fetch: (
     request: Request,
     env: Env,
@@ -214,6 +215,7 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
     });
     const next: AssembledWorker<Env> = {
       auth,
+      getRuntime,
       fetch: (request, workerEnv, ctx) => provider.fetch(request, workerEnv, ctx),
     };
     assembled = next;
@@ -224,6 +226,7 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
     async fetch(request, env, ctx) {
       return runMantleWorkerRequest(async () => {
         const worker = assemble(env);
+        await worker.getRuntime();
         const setupIncomplete = await setupIncompleteAuthResponse(request, worker.auth);
         if (setupIncomplete) return setupIncomplete;
         return worker.fetch(request, env, ctx);

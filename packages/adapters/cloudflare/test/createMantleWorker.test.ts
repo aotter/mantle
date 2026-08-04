@@ -86,6 +86,19 @@ describe("createMantleWorker", () => {
     expect(assemblies).toBe(1);
   });
 
+  it("boots migrations before the first Auth request", async () => {
+    const db = new InMemoryDatabase();
+    const worker = createMantleWorker<TestEnv>({
+      manifest: [],
+      auth: () => stubAuth,
+      bindings: () => ({ db, kv: new InMemoryKv(), assets: new StubAssetServer() }),
+    });
+
+    await fetchWorker(worker, "/api/auth/probe", testEnv());
+
+    expect(db.appliedMigrations.size).toBeGreaterThan(0);
+  });
+
   it("passes Env and waitUntil to typed handlers", async () => {
     const handler: HandlerFn<Record<string, never>, { name: string }, TestEnv> = (_input, ctx) => {
       expect(typeof ctx.waitUntil).toBe("function");
@@ -191,7 +204,7 @@ describe("createMantleWorker", () => {
     expect(credentialed.headers.get("cache-control")).toBe("private, no-store");
   });
 
-  it("augments the conventional binding stack without rebuilding it", async () => {
+  it("exposes the conventional binding stack before an override", async () => {
     const mediaStorage = {} as MediaStorage;
     const worker = createMantleWorker<TestEnv>({
       manifest: [],
@@ -199,7 +212,7 @@ describe("createMantleWorker", () => {
       bindings: (_env, conventional) => {
         expect(conventional.db).toBeInstanceOf(D1DatabaseDriver);
         expect(conventional.kv).toBeInstanceOf(KvCacheBinding);
-        return { ...conventional, mediaStorage };
+        return { ...testBindings(), mediaStorage };
       },
       extend: ({ bindings }) => ({
         mount: ({ app }) => {

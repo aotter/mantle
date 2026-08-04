@@ -107,7 +107,7 @@ Follow the landing handoff and generated client configuration. Hosted
 configuration remains in landing-managed Cloudflare Worker bindings; do not
 write client secrets into `wrangler.toml`.
 
-Verify that admin sign-in redirects to Mantle Platform and Staff MCP
+Verify that admin sign-in redirects to Mantle Hosted Auth and Staff MCP
 authenticates, then skip the self-hosted flow.
 
 ## Smoke Test

@@ -16,7 +16,7 @@ docs govern runtime/API behavior.
 ## First Read
 
 1. `package.json` for the installed `@aotter/mantle*` versions.
-2. `manifests/` and `src/mantle/config.ts` for the active atoms and adapter wiring. If the project is older, check `src/mantleConfig.ts`.
+2. `manifests/`, the active adapter config, and `src/auth.ts` when present. If the project is older, check `src/mantleConfig.ts`.
 3. The active `.mantle/overlays/<type>/seed.json`, when present; generated
    homepages commonly import visible copy and form structure from it.
 4. Optional local context: `.mantle/launch-state.json`, `.mantle/handoff.md`,
@@ -124,6 +124,15 @@ names, or construct SDK KV keys. Cloudflare bindings belong only at the
 composition root. If a normal feature cannot be expressed through a
 purpose-shaped surface, treat that as a Core abstraction gap instead of
 teaching the project Mantle internals.
+
+## Auth Composition
+
+When a generated repo contains `src/auth.ts`, the repo owns its auth
+composition. Preserve the explicit mode recorded in its launch state and
+Worker config; do not infer a mode from whichever credentials happen to be
+present or configure competing paths. Keep provider secrets out of source.
+Follow the repo handoff for provider-specific setup rather than adding product
+policy to Core.
 
 ## Performance Loop
 
