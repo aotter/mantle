@@ -142,6 +142,7 @@ export class ExecuteViewUseCase {
       if (!guarded.ok) return guarded;
     }
 
+    const schema = this.schemasByName.get(request.view.spec.from);
     let compiled;
     try {
       compiled = compileView(
@@ -150,7 +151,7 @@ export class ExecuteViewUseCase {
           ...request.options,
           params: validatedParams,
         },
-        this.schemasByName.get(request.view.spec.from),
+        schema,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -171,13 +172,14 @@ export class ExecuteViewUseCase {
         .prepare(compiled.sql)
         .bind(...compiled.params)
         .all<R>();
+      const normalizedRows = normalizeBooleanFields(rows, request.view.spec.fields, schema);
       return {
         ok: true,
         result: {
-          rows,
+          rows: normalizedRows,
           page: compiled.effectivePage,
           show: compiled.effectiveShow,
-          hasMore: rows.length === compiled.effectiveShow,
+          hasMore: normalizedRows.length === compiled.effectiveShow,
         },
       };
     } catch (err) {
@@ -194,4 +196,29 @@ export class ExecuteViewUseCase {
       };
     }
   }
+}
+
+function normalizeBooleanFields<R>(
+  rows: readonly R[],
+  fields: readonly string[] | undefined,
+  schema: SchemaManifest | undefined,
+): readonly R[] {
+  const properties = schema?.spec.schema.properties;
+  const booleanFields = fields?.filter((field) => isBooleanProperty(properties?.[field])) ?? [];
+  if (booleanFields.length === 0) return rows;
+
+  return rows.map((row) => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) return row;
+    const normalized = { ...row } as Record<string, unknown>;
+    for (const field of booleanFields) {
+      if (normalized[field] === 0) normalized[field] = false;
+      if (normalized[field] === 1) normalized[field] = true;
+    }
+    return normalized as R;
+  });
+}
+
+function isBooleanProperty(property: SchemaManifest["spec"]["schema"] | undefined): boolean {
+  const types = Array.isArray(property?.type) ? property.type : [property?.type];
+  return types.includes("boolean") && types.every((type) => type === "boolean" || type === "null");
 }
