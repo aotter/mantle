@@ -9,6 +9,7 @@ import {
   createAuth,
   createSetupIncompleteAuth,
   getProviderAccessTokenForRequest,
+  guardGithubLoginProfile,
   mapRegisteredOAuthClient,
   normalizeAuthResponseCookies,
   pickLocale,
@@ -440,6 +441,43 @@ describe("buildSocialProviders", () => {
         { kind: "social", provider: "google", clientId: "b", clientSecret: "b" },
       ]),
     ).toThrow(/'google'.*registered more than once/i);
+  });
+});
+
+describe("guardGithubLoginProfile", () => {
+  it("accepts only registered provider callback profiles", () => {
+    const hosted = {
+      kind: "oauth",
+      providerId: "github",
+      clientId: "client",
+      authorizationUrl: "https://auth.example/authorize",
+      tokenUrl: "https://auth.example/token",
+      mapProfileToUser: () => ({ githubLogin: "owner" }),
+    } as const satisfies AuthMethodConfig;
+
+    expect(guardGithubLoginProfile(
+      { githubLogin: "owner" },
+      { path: "/oauth2/callback/:providerId", params: { providerId: "github" } },
+      [hosted],
+    )).toBeUndefined();
+    expect(guardGithubLoginProfile(
+      { githubLogin: "owner" },
+      { path: "/update-user", params: {} },
+      [hosted],
+    )).toEqual({ data: { githubLogin: null } });
+    expect(guardGithubLoginProfile(
+      { githubLogin: "owner" },
+      { path: "/oauth2/callback/:providerId", params: { providerId: "other" } },
+      [hosted],
+    )).toEqual({ data: { githubLogin: null } });
+  });
+
+  it("accepts the built-in GitHub social callback", () => {
+    expect(guardGithubLoginProfile(
+      { githubLogin: "owner" },
+      { path: "/callback/:id", params: { id: "github" } },
+      [GITHUB_METHOD_FIXTURE],
+    )).toBeUndefined();
   });
 });
 

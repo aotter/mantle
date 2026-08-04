@@ -621,6 +621,34 @@ export function shouldPromoteToOwner(
   }
 }
 
+type AuthHookContext = {
+  readonly path: string;
+  readonly params?: Readonly<Record<string, unknown>>;
+} | null;
+
+/** @internal Keep provider-owned GitHub logins off user-controlled auth paths. */
+export function guardGithubLoginProfile(
+  user: Readonly<Record<string, unknown>>,
+  context: AuthHookContext,
+  methods: ReadonlyArray<AuthMethodConfig>,
+): { readonly data: { readonly githubLogin: null } } | undefined {
+  if (!("githubLogin" in user)) return undefined;
+  const providerId = context?.path === "/callback/:id"
+    ? context.params?.id
+    : context?.path === "/oauth2/callback/:providerId"
+      ? context.params?.providerId
+      : null;
+  const trusted = typeof providerId === "string" && methods.some((method) =>
+    method.kind === "social"
+      ? context?.path === "/callback/:id" && method.provider === "github" && providerId === "github"
+      : method.kind === "oauth" &&
+        context?.path === "/oauth2/callback/:providerId" &&
+        method.providerId === providerId &&
+        Boolean(method.mapProfileToUser),
+  );
+  return trusted ? undefined : { data: { githubLogin: null } };
+}
+
 /**
  * Find the at-most-one method of `kind`. Throws when adopters register
  * the same kind twice — Better Auth's plugin layer accepts duplicates
@@ -903,7 +931,9 @@ function buildAuth(config: CreateAuthConfig) {
       githubLogin: {
         type: "string" as const,
         required: false,
-        input: false,
+        // Better Auth applies `input: false` to trusted provider profiles too.
+        // Database hooks below keep this field provider-only instead.
+        input: true,
       },
     },
   };
@@ -971,7 +1001,15 @@ function buildAuth(config: CreateAuthConfig) {
   };
   const databaseHooks = {
     user: {
-      create: { after: sdkUserCreateAfter },
+      create: {
+        before: async (user: Readonly<Record<string, unknown>>, context: AuthHookContext) =>
+          guardGithubLoginProfile(user, context, config.methods),
+        after: sdkUserCreateAfter,
+      },
+      update: {
+        before: async (user: Readonly<Record<string, unknown>>, context: AuthHookContext) =>
+          guardGithubLoginProfile(user, context, config.methods),
+      },
     },
   };
 
