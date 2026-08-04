@@ -6,6 +6,14 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.71] - 2026-08-04
+
+### Fixed
+
+- **Release controller**: retain the reusable `mantle-release` staging
+  dist-tag after channel promotion instead of requiring a tag-delete
+  permission that npm granular publish tokens do not provide (#594).
+
 ## [0.0.11-alpha.70] - 2026-08-04
 
 ### Fixed
