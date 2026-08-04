@@ -426,12 +426,6 @@ jobs:
             if [[ "$VERSION" == 0.0.* && "$CHANNEL" != latest ]]; then
               promote "$pkg" latest
             fi
-            staging=$(npm view "$pkg" dist-tags.mantle-release --userconfig "$NPMRC" \
-              --registry https://registry.npmjs.org)
-            if [ "$staging" = "$VERSION" ]; then
-              npm dist-tag rm "$pkg" mantle-release --userconfig "$NPMRC" \
-                --registry https://registry.npmjs.org
-            fi
           done
 
       - name: Mirror to GitHub Packages
@@ -528,10 +522,6 @@ jobs:
             promote "$pkg" "$CHANNEL"
             if [[ "$VERSION" == 0.0.* && "$CHANNEL" != latest ]]; then
               promote "$pkg" latest
-            fi
-            staging=$(gpr_npm view "$pkg" dist-tags.mantle-release)
-            if [ "$staging" = "$VERSION" ]; then
-              gpr_npm dist-tag rm "$pkg" mantle-release
             fi
           done
 
