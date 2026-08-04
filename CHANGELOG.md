@@ -6,6 +6,14 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.0.11-alpha.72] - 2026-08-04
+
+### Fixed
+
+- **`@aotter/mantle-runtime`**: decode D1/SQLite object and array View
+  projections so runtime rows match their generated TypeScript contract
+  (#597).
+
 ## [0.0.11-alpha.71] - 2026-08-04
 
 ### Fixed
