@@ -274,11 +274,18 @@ describe("compileView", () => {
 });
 
 describe("ExecuteViewUseCase", () => {
-  it("normalizes SQLite boolean projections to the generated View row shape", async () => {
+  it("normalizes SQLite JSON projections to the generated View row shape", async () => {
     const db = {
       prepare: () => ({
         bind: () => ({
-          all: async () => [{ enabled: 1, disabled: 0, optional: null, count: 1 }],
+          all: async () => [{
+            enabled: 1,
+            disabled: 0,
+            optional: null,
+            config: '{"version":1}',
+            tags: '["one","two"]',
+            count: 1,
+          }],
         }),
       }),
     } as unknown as DatabaseDriver;
@@ -294,6 +301,8 @@ describe("ExecuteViewUseCase", () => {
             enabled: { type: "boolean" },
             disabled: { type: "boolean" },
             optional: { type: ["boolean", "null"] },
+            config: { type: ["object", "null"] },
+            tags: { type: "array" },
             count: { type: "integer" },
           },
         },
@@ -306,14 +315,21 @@ describe("ExecuteViewUseCase", () => {
     const result = await useCase.execute({
       view: view({
         from: "settings",
-        fields: ["enabled", "disabled", "optional", "count"],
+        fields: ["enabled", "disabled", "optional", "config", "tags", "count"],
       }),
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.result.rows).toEqual([
-      { enabled: true, disabled: false, optional: null, count: 1 },
+      {
+        enabled: true,
+        disabled: false,
+        optional: null,
+        config: { version: 1 },
+        tags: ["one", "two"],
+        count: 1,
+      },
     ]);
   });
 
