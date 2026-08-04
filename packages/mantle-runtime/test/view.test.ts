@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import { compileView } from "../src/domain/service/ViewSqlCompiler.js";
 import { ExecuteViewUseCase } from "../src/usecase/view/ExecuteViewUseCase.js";
 import { InMemoryDatabase } from "./fakes/database.js";
-import { runtimeDiagnostic, type ViewManifest } from "@aotter/mantle-spec";
+import {
+  runtimeDiagnostic,
+  type SchemaManifest,
+  type ViewManifest,
+} from "@aotter/mantle-spec";
+import type { DatabaseDriver } from "../src/domain/port/DatabaseDriver.js";
 
 function view(opts: Partial<ViewManifest["spec"]> & { from: string }): ViewManifest {
   return {
@@ -269,6 +274,49 @@ describe("compileView", () => {
 });
 
 describe("ExecuteViewUseCase", () => {
+  it("normalizes SQLite boolean projections to the generated View row shape", async () => {
+    const db = {
+      prepare: () => ({
+        bind: () => ({
+          all: async () => [{ enabled: 1, disabled: 0, optional: null, count: 1 }],
+        }),
+      }),
+    } as unknown as DatabaseDriver;
+    const schema: SchemaManifest = {
+      apiVersion: "cms.mantle.aotter.net/v1",
+      kind: "Schema",
+      metadata: { name: "settings" },
+      spec: {
+        title: "Settings",
+        schema: {
+          type: "object",
+          properties: {
+            enabled: { type: "boolean" },
+            disabled: { type: "boolean" },
+            optional: { type: ["boolean", "null"] },
+            count: { type: "integer" },
+          },
+        },
+        localized: false,
+        lifecycle: "none",
+      },
+    };
+    const useCase = new ExecuteViewUseCase(db, undefined, new Map([["settings", schema]]));
+
+    const result = await useCase.execute({
+      view: view({
+        from: "settings",
+        fields: ["enabled", "disabled", "optional", "count"],
+      }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.result.rows).toEqual([
+      { enabled: true, disabled: false, optional: null, count: 1 },
+    ]);
+  });
+
   it("returns published entries for a status=published filter", async () => {
     const db = new InMemoryDatabase();
     db.entries.set("p1", {
