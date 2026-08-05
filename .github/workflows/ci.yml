@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
 
       - uses: pnpm/action-setup@v6.0.9
 
@@ -55,7 +55,7 @@ jobs:
         run: node scripts/check-packed-consumer.mjs --self-test
 
       - name: Check out the exact Starter consumer
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           repository: aotter/mantle-starters
           ref: 8567c0b66ace703430205d136038b6e4169e17a9

@@ -46,7 +46,7 @@ jobs:
         packages/adapters/cloudflare
         packages/mantle
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -165,7 +165,7 @@ jobs:
           "
 
       - name: Check out the gated Starter source
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           repository: aotter/mantle-starters
           ref: ${{ env.STARTER_SHA }}
@@ -558,7 +558,7 @@ jobs:
           exit 1
 
       - name: Check out the released Starter
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           repository: aotter/mantle-starters
           ref: ${{ steps.starter.outputs.sha }}
