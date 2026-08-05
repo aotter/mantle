@@ -52,14 +52,14 @@
   },
   "devDependencies": {
     "@cloudflare/workers-oauth-provider": "catalog:",
-    "@cloudflare/workers-types": "^5.20260708.1",
+    "@cloudflare/workers-types": "^5.20260722.1",
     "@types/node": "catalog:",
     "aws4fetch": "catalog:",
     "better-auth": "catalog:",
     "hono": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "wrangler": "^4.111.0",
+    "wrangler": "^4.113.0",
     "zod": "catalog:"
   }
 }
