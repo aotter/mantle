@@ -27,7 +27,7 @@ catalogs:
     zod: ^4.0.0
     better-auth: ^1.6.24
     aws4fetch: ^1.0.20
-    '@cloudflare/workers-oauth-provider': ^0.8.0
+    '@cloudflare/workers-oauth-provider': ^0.8.2
 
 catalog:
   # Shared runtime deps — tracked via lockfile, bumped by dependabot.
@@ -36,7 +36,7 @@ catalog:
   better-auth: ^1.6.24
   '@better-auth/oauth-provider': ^1.6.23
   aws4fetch: ^1.0.20
-  '@cloudflare/workers-oauth-provider': ^0.8.0
+  '@cloudflare/workers-oauth-provider': ^0.8.2
   # Shared toolchain — every package's devDeps.
   typescript: ^6.0.3
   '@types/node': ^26
