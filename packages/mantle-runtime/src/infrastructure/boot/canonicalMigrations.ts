@@ -265,6 +265,20 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
         WHERE status = 'published';
     `,
   },
+  {
+    id: "0005-admin-entry-list-access-paths",
+    description: "Keyset indexes for bounded admin entry listing",
+    sql: `
+      CREATE INDEX IF NOT EXISTS entries_by_collection_updated_id
+        ON entries (collection, updated_at DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS entries_by_collection_status_updated_id
+        ON entries (collection, status, updated_at DESC, id DESC);
+
+      DROP INDEX IF EXISTS entries_by_collection_updated;
+      DROP INDEX IF EXISTS entries_by_collection_status;
+      DROP INDEX IF EXISTS entries_published_collection_updated;
+    `,
+  },
 ];
 
 export function schemaIndexMigrations(
