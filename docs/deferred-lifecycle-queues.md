@@ -103,7 +103,6 @@ import type { DeferredHookEnvelope } from "@aotter/mantle/runtime";
 import {
   AssetsAssetServer,
   D1DatabaseDriver,
-  KvCacheBinding,
   WorkersQueueHookDispatcher,
   createCmsRef,
   createQueueHandler,
@@ -112,7 +111,6 @@ import {
 
 interface Env {
   DB: D1Database;
-  KV: KVNamespace;
   ASSETS: Fetcher;
   MANTLE_INTERNAL_QUEUE: Queue<DeferredHookEnvelope>;
 }
@@ -124,7 +122,6 @@ function buildWorker(env: Env) {
     auth: createSiteAuth(env),
     bindings: {
       db: new D1DatabaseDriver(env.DB),
-      kv: new KvCacheBinding(env.KV),
       assets: new AssetsAssetServer(env.ASSETS),
       deferredHookDispatcher: new WorkersQueueHookDispatcher(
         env.MANTLE_INTERNAL_QUEUE,

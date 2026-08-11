@@ -4,7 +4,6 @@ import { BootValidationError } from "../src/usecase/boot/index.js";
 import { DatabaseSiteConfigRepository } from "../src/infrastructure/persistence/DatabaseSiteConfigRepository.js";
 import { schemaIndexMigrations } from "../src/infrastructure/boot/index.js";
 import { InMemoryDatabase } from "./fakes/database.js";
-import { InMemoryKv } from "./fakes/kv.js";
 import { makeProcedure, postsSchema } from "./fakes/manifests.js";
 import type { AssetServer } from "../src/domain/port/index.js";
 
@@ -19,7 +18,6 @@ describe("createCmsRuntime + bootInit", () => {
     const runtime = createCmsRuntime({
       manifests: [],
       db: new InMemoryDatabase(),
-      kv: new InMemoryKv(),
       assets: noopAssets,
     });
     expect(runtime.schemasByName.size).toBe(0);
@@ -33,7 +31,6 @@ describe("createCmsRuntime + bootInit", () => {
       manifests: [makeProcedure()],
       handlers: { echoHandler: () => ({ ok: true }) },
       db,
-      kv: new InMemoryKv(),
       assets: noopAssets,
       siteDefaults: {
         brand: "Blog",
@@ -65,7 +62,6 @@ describe("createCmsRuntime + bootInit", () => {
     const runtime = createCmsRuntime({
       manifests: [indexedSchema],
       db,
-      kv: new InMemoryKv(),
       assets: noopAssets,
     });
 
@@ -92,7 +88,6 @@ describe("createCmsRuntime + bootInit", () => {
       createCmsRuntime({
         manifests: [manifest(indexes)],
         db,
-        kv: new InMemoryKv(),
         assets: noopAssets,
       });
 
@@ -127,7 +122,6 @@ describe("createCmsRuntime + bootInit", () => {
       createCmsRuntime({
         manifests: [{ ...schema, spec: { ...schema.spec, uniqueIndexes } }],
         db,
-        kv: new InMemoryKv(),
         assets: noopAssets,
       });
 
@@ -157,7 +151,6 @@ describe("createCmsRuntime + bootInit", () => {
         },
       }],
       db,
-      kv: new InMemoryKv(),
       assets: noopAssets,
     });
 
@@ -176,7 +169,6 @@ describe("createCmsRuntime + bootInit", () => {
         spec: { ...schema.spec, indexes: [["missing"]] },
       }],
       db,
-      kv: new InMemoryKv(),
       assets: noopAssets,
     });
 
@@ -196,7 +188,6 @@ describe("createCmsRuntime + bootInit", () => {
     const runtime = createCmsRuntime({
       manifests: [makeProcedure({ handlerRef: "missing" })],
       db,
-      kv: new InMemoryKv(),
       assets: noopAssets,
     });
     await expect(runtime.bootInit()).rejects.toBeInstanceOf(BootValidationError);
@@ -227,7 +218,6 @@ describe("createCmsRuntime + bootInit", () => {
     const runtime = createCmsRuntime({
       manifests: [],
       db,
-      kv: new InMemoryKv(),
       assets: noopAssets,
       siteDefaults: { media: { purposes: seeded } },
     });
@@ -248,7 +238,6 @@ describe("createCmsRuntime + bootInit", () => {
     const runtime = createCmsRuntime({
       manifests: [],
       db,
-      kv: new InMemoryKv(),
       assets: noopAssets,
       siteDefaults: { brand: "No-media starter" },
     });
@@ -262,7 +251,6 @@ describe("createCmsRuntime + bootInit", () => {
     const runtime = createCmsRuntime({
       manifests: [],
       db,
-      kv: new InMemoryKv(),
       assets: noopAssets,
       siteDefaults: { brand: "First" },
     });
@@ -273,7 +261,6 @@ describe("createCmsRuntime + bootInit", () => {
     const runtime2 = createCmsRuntime({
       manifests: [],
       db,
-      kv: new InMemoryKv(),
       assets: noopAssets,
       siteDefaults: { brand: "Second" },
     });
@@ -331,7 +318,6 @@ describe("createCmsRuntime + bootInit", () => {
     const runtime = createCmsRuntime({
       manifests: [],
       db,
-      kv: new InMemoryKv(),
       assets: noopAssets,
       siteDefaults: { media: { purposes: first } },
     });
@@ -357,7 +343,6 @@ describe("createCmsRuntime + bootInit", () => {
     const runtime2 = createCmsRuntime({
       manifests: [],
       db,
-      kv: new InMemoryKv(),
       assets: noopAssets,
       siteDefaults: { media: { purposes: second } },
     });
@@ -378,7 +363,6 @@ describe("createCmsRuntime + bootInit", () => {
     const runtime = createCmsRuntime({
       manifests: [],
       db,
-      kv: new InMemoryKv(),
       assets: noopAssets,
       siteDefaults: { brand: "First", locales: ["en"] },
     });
@@ -393,7 +377,6 @@ describe("createCmsRuntime + bootInit", () => {
     const runtime2 = createCmsRuntime({
       manifests: [],
       db,
-      kv: new InMemoryKv(),
       assets: noopAssets,
       siteDefaults: { brand: "Second", locales: ["en", "ja"] },
     });

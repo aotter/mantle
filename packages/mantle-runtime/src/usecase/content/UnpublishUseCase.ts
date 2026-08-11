@@ -8,10 +8,6 @@ import type { Clock } from "../../domain/port/Clock.js";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
 import type { UnpublishRequest } from "../dto/content/index.js";
 import {
-  unpublishCache,
-  type ContentPublishEffects,
-} from "./ContentPublishEffects.js";
-import {
   illegalTransitionDiagnostic,
   notFoundDiagnostic,
   withConflictDiagnostic,
@@ -26,7 +22,6 @@ export class UnpublishUseCase {
     private readonly entries: EntryRepository,
     private readonly schemas: ReadonlyMap<string, SchemaManifest>,
     private readonly clock: Clock,
-    private readonly effects?: ContentPublishEffects,
   ) {}
 
   async execute(request: UnpublishRequest): Promise<EntryRow> {
@@ -56,7 +51,6 @@ export class UnpublishUseCase {
         originalInput: request.originalInput,
       }),
     );
-    await unpublishCache(this.effects, unpublished.id);
     return unpublished;
   }
 }

@@ -51,9 +51,8 @@ export async function joinParentIfTranslation(
  * parent lookups across the list, deduplicating join values — so a
  * 20-locale list keyed off the same parent slug costs 1 D1 read, not
  * 20. Assumes all entries share a single collection (the contract of
- * `RenderListLiveUseCase` / `HtmlPublishOrchestrator.renderList`); if
- * mixed collections ever land here, fall back path-per-entry would
- * be needed.
+ * `RenderListLiveUseCase`); if mixed collections ever land here, fall
+ * back path-per-entry would be needed.
  */
 export async function joinParentForList(
   reader: EntryReader,

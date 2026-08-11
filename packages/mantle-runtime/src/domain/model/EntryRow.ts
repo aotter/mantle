@@ -11,8 +11,8 @@ import type { ContentState, Entry } from "@aotter/mantle-spec";
  * `data.locale` (json_extract) so the lookup is uniform with every
  * other Schema-property field. `EntryRow.locale?` is a hydrated
  * convenience: every repository impl lifts `data.locale` onto the
- * top-level field at read time so callers (publish pipeline, KV-key
- * derivation, MCP `get_entry` clients) can branch on `row.locale`
+ * top-level field at read time so renderers, path resolvers, and MCP
+ * `get_entry` clients can branch on `row.locale`
  * without drilling into `data`. Mirrors spec `Entry`'s `locale?`
  * field for the same reason. The DB column shape stays unchanged;
  * this is purely a read-side projection.

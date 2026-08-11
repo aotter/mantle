@@ -6,7 +6,6 @@
  * directly by their consumers — NOT re-exported here, so the barrel's
  * purity claim above holds.
  */
-export * from "./PublishKeys.js";
 export * from "./MarkdownSerializer.js";
 export * from "./SitemapSerializer.js";
 export * from "./HtmlRenderer.js";

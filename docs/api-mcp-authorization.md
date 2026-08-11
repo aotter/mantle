@@ -173,7 +173,6 @@ import {
   createMcpApiHandler,
   createOAuthProvider,
   D1DatabaseDriver,
-  KvCacheBinding,
   mountServerEndpoints,
 } from "@aotter/mantle/cloudflare";
 
@@ -182,7 +181,6 @@ const runtimeRef = createCmsRef({
   handlers,
   bindings: {
     db: new D1DatabaseDriver(env.DB),
-    kv: new KvCacheBinding(env.KV),
     assets: env.ASSETS
       ? new AssetsAssetServer(env.ASSETS)
       : { fetch: async () => null },

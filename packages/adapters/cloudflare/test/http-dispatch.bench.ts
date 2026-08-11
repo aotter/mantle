@@ -5,7 +5,6 @@ import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js
 import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
 import {
-  InMemoryKv,
   StubAssetServer,
   stubAuth,
 } from "./fakes/runtime-bindings.js";
@@ -105,7 +104,6 @@ function harness(): Hono {
     },
     bindings: {
       db: new InMemoryDatabase(),
-      kv: new InMemoryKv(),
       assets: new StubAssetServer(),
     },
     auth: stubAuth,

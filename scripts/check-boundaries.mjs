@@ -153,7 +153,6 @@ function checkEntryReadOwnership() {
   const runtimeReadDirs = [
     "packages/mantle-runtime/src/domain/service/io",
     "packages/mantle-runtime/src/usecase/render",
-    "packages/mantle-runtime/src/infrastructure/render",
   ];
   for (const dir of runtimeReadDirs) {
     const files = listFiles(join(ROOT, dir), (path) => path.endsWith(".ts"));

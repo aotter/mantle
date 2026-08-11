@@ -6,7 +6,7 @@ import type { MediaAsset } from "../port/MediaStorage.js";
  * Render-pipeline types + consumer-supplied template registry.
  *
  * The runtime stays string-typed — templates return complete HTML
- * body strings (no doctype prefix; the publish pipeline adds it) so
+ * body strings (no doctype prefix; the HTML renderer adds it) so
  * the runtime carries no JSX dependency. Consumers using JSX in
  * their public surface (Hono + hono/jsx) call their JSX → string
  * function before the template returns.
@@ -21,8 +21,8 @@ import type { MediaAsset } from "../port/MediaStorage.js";
  * directly) when present. Renderers that skip composition leave
  * `seo` undefined so opt-out templates don't break.
  *
- * Lives in `domain/model/` because both the `PublishOrchestrator`
- * port and the HTML adapter that implements it need to reference it.
+ * Lives in `domain/model/` because runtime render use cases and
+ * consumer-supplied templates both reference it.
  */
 export interface EntryContext {
   readonly entry: Entry;

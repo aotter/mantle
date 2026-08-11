@@ -11,7 +11,7 @@ import type { ConsumerCredentialResolver } from "./resolveCaller.js";
 /**
  * Consumer-supplied config for the Cloudflare adapter mounts. `auth`
  * (Better Auth) gates `/admin/api/*` + MCP bearers. `bindings` carries
- * the three runtime-port adapters (db / kv / assets).
+ * the runtime-port adapters (db / assets).
  */
 export interface CmsConfig {
   readonly manifests: readonly Manifest[];
@@ -19,7 +19,7 @@ export interface CmsConfig {
   readonly templates?: TemplateRegistry;
   readonly siteDefaults?: SiteDefaults;
   readonly publicPathResolver?: PublicPathResolver;
-  readonly bindings: Pick<CreateCmsRuntimeArgs, "db" | "kv" | "assets"> & {
+  readonly bindings: Pick<CreateCmsRuntimeArgs, "db" | "assets"> & {
     /** Optional media storage adapter. When set, media MCP tools and
      *  `/admin/api/media/*` endpoints are registered. Forwarded to the
      *  runtime as `mediaStorage`. */

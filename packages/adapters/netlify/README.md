@@ -9,7 +9,7 @@ This package is intentionally empty in v0.1.0.
 It exists as an **engineering forcing function**.
 
 The required adapter ports defined in `@aotter/mantle-runtime`
-(`DatabaseDriver`, `KvCache`, `AssetServer`) only stay
+(`DatabaseDriver`, `AssetServer`) only stay
 adapter-agnostic if there's pressure to implement them in more than
 one place. Auth is supplied by an adapter-owned Better Auth instance;
 optional feature ports, such as media hosting, must stay optional
@@ -25,7 +25,6 @@ This README declares the public commitment to a second adapter. PR reviewers can
 
 - Netlify Functions handler (replaces Cloudflare Workers' Hono adapter)
 - `DatabaseDriver` → Postgres-via-Neon impl, OR Netlify Blob storage if first-party support exists
-- `KvCache` → Netlify Blobs (or Redis bridge)
 - `AssetServer` → Netlify static publish dir (consumes `mantle-admin-ui` dist same as Cloudflare)
 - Better Auth factory → Netlify-compatible database adapter, GitHub/social providers, and MCP OAuth/DCR
 
@@ -37,4 +36,4 @@ Open an issue. Implementation work for the second adapter is a discrete chunk; o
 
 ## Until v0.2
 
-Use [`@aotter/mantle-cloudflare`](../cloudflare/README.md). Cloudflare Workers gives you D1 + KV + ASSETS in one place at zero cost (no credit card needed for the v0.1.0 starter set).
+Use [`@aotter/mantle-cloudflare`](../cloudflare/README.md). Cloudflare Workers gives you D1 + ASSETS in one place at zero cost (no credit card needed for the v0.1.0 starter set).

@@ -1,20 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { HtmlPublishOrchestrator } from "../src/infrastructure/render/HtmlPublishOrchestrator.js";
-import { ComposeEntrySeoMetaUseCase } from "../src/usecase/render/ComposeEntrySeoMetaUseCase.js";
-import { ComposeLlmsTxtUseCase } from "../src/usecase/render/ComposeLlmsTxtUseCase.js";
 import { RenderEntryLiveUseCase } from "../src/usecase/render/RenderEntryLiveUseCase.js";
 import { DatabaseEntryRepository } from "../src/infrastructure/persistence/DatabaseEntryRepository.js";
-import {
-  entryHtmlKey,
-  entryMarkdownKey,
-  listHtmlKey,
-  llmsTxtKey,
-} from "../src/domain/service/PublishKeys.js";
 import { TemplateRegistry } from "../src/domain/model/TemplateRegistry.js";
 import type { MediaAssetRepository } from "../src/domain/port/MediaAssetRepository.js";
 import type { MediaAsset } from "../src/domain/port/MediaStorage.js";
 import { InMemoryDatabase } from "./fakes/database.js";
-import { InMemoryKv } from "./fakes/kv.js";
 import type { SiteConfig } from "@aotter/mantle-spec";
 
 const site: SiteConfig = {
@@ -43,7 +33,7 @@ function seedEntry(
   });
 }
 
-describe("HtmlPublishOrchestrator", () => {
+describe("RenderEntryLiveUseCase", () => {
   it("injects configured tracking scripts into rendered entry HTML", async () => {
     const db = new InMemoryDatabase();
     seedEntry(db, { id: "p1", data: { title: "Hi", slug: "hi", locale: "en" } });
@@ -114,120 +104,6 @@ describe("HtmlPublishOrchestrator", () => {
     expect(repo.lookups).toEqual([["cover"]]);
   });
 
-  it("writes entry HTML, .md, list HTML, and llms.txt to KV", async () => {
-    const db = new InMemoryDatabase();
-    const kv = new InMemoryKv();
-    seedEntry(db, { id: "p1", data: { title: "Hi", slug: "hi", content: "Hello." } });
-    const templates = new TemplateRegistry();
-    templates.registerEntryTemplate(
-      "posts",
-      ({ entry }) => `<h1>${entry.data["title"] as string}</h1>`,
-    );
-    templates.registerListTemplate("posts", ({ entries }) => `<ul>${entries.length}</ul>`);
-
-    const reader = new DatabaseEntryRepository(db);
-    const orchestrator = new HtmlPublishOrchestrator(reader, kv, null, new ComposeEntrySeoMetaUseCase(reader), new ComposeLlmsTxtUseCase(reader), new Map());
-    await orchestrator.publish({ entryId: "p1", site, templates });
-
-    const snap = kv._snapshot();
-    expect(
-      snap.get(entryHtmlKey({ id: "p1", collection: "posts", status: "published", version: 1, data: { slug: "hi" }, createdAt: 1, updatedAt: 2 })),
-    ).toContain("<h1>Hi</h1>");
-    const md = snap.get(
-      entryMarkdownKey({
-        id: "p1", collection: "posts", status: "published", version: 1, data: { slug: "hi" }, createdAt: 1, updatedAt: 2,
-      }),
-    );
-    expect(md).toContain("# Hi");
-    expect(md).toContain("Hello.");
-    expect(snap.get(listHtmlKey("posts", ""))).toContain("<ul>1</ul>");
-    expect(snap.get(llmsTxtKey(""))).toContain("[Hi](https://example.com/posts/hi.md)");
-  });
-
-  it("throws NOT_FOUND for unknown entry id", async () => {
-    const db = new InMemoryDatabase();
-    const kv = new InMemoryKv();
-    const reader = new DatabaseEntryRepository(db);
-    const orchestrator = new HtmlPublishOrchestrator(reader, kv, null, new ComposeEntrySeoMetaUseCase(reader), new ComposeLlmsTxtUseCase(reader), new Map());
-    await expect(
-      orchestrator.publish({
-        entryId: "ghost",
-        site,
-        templates: new TemplateRegistry(),
-      }),
-    ).rejects.toMatchObject({ diagnostic: { code: "NOT_FOUND" } });
-  });
-
-  it("invalidates the cross-locale llms cache on localized publish and unpublish", async () => {
-    const db = new InMemoryDatabase();
-    const kv = new InMemoryKv();
-    seedEntry(db, {
-      id: "p1",
-      data: { title: "Hi", slug: "hi", locale: "en" },
-    });
-    const reader = new DatabaseEntryRepository(db);
-    const orchestrator = new HtmlPublishOrchestrator(
-      reader,
-      kv,
-      null,
-      new ComposeEntrySeoMetaUseCase(reader),
-      new ComposeLlmsTxtUseCase(reader),
-      new Map(),
-    );
-    const rootKey = llmsTxtKey("");
-
-    await kv.put(rootKey, "stale before publish");
-    await orchestrator.publish({
-      entryId: "p1",
-      site: { ...site, locales: ["en"] },
-      templates: new TemplateRegistry(),
-    });
-    expect(kv._snapshot().get(rootKey)).toBeUndefined();
-
-    await kv.put(rootKey, "stale before unpublish");
-    db.entries.set("p1", {
-      ...db.entries.get("p1")!,
-      status: "draft",
-      version: 2,
-      updated_at: 3,
-    });
-    await orchestrator.unpublish({
-      entryId: "p1",
-      site: { ...site, locales: ["en"] },
-      templates: new TemplateRegistry(),
-    });
-    expect(kv._snapshot().get(rootKey)).toBeUndefined();
-  });
-
-  it("unpublish removes entry blobs and rewrites derived list/llms caches", async () => {
-    const db = new InMemoryDatabase();
-    const kv = new InMemoryKv();
-    seedEntry(db, { id: "p1", data: { title: "Hi", slug: "hi", content: "Hello." } });
-    const templates = new TemplateRegistry();
-    templates.registerEntryTemplate("posts", ({ entry }) => `<h1>${entry.data["title"] as string}</h1>`);
-    templates.registerListTemplate("posts", ({ entries }) => `<ul>${entries.length}</ul>`);
-
-    const reader = new DatabaseEntryRepository(db);
-    const orchestrator = new HtmlPublishOrchestrator(reader, kv, null, new ComposeEntrySeoMetaUseCase(reader), new ComposeLlmsTxtUseCase(reader), new Map());
-    await orchestrator.publish({ entryId: "p1", site, templates });
-    db.entries.set("p1", {
-      ...db.entries.get("p1")!,
-      status: "draft",
-      version: 2,
-      updated_at: 3,
-    });
-    await orchestrator.unpublish({ entryId: "p1", site, templates });
-
-    const snap = kv._snapshot();
-    expect(
-      snap.get(entryHtmlKey({ id: "p1", collection: "posts", status: "draft", version: 2, data: { slug: "hi" }, createdAt: 1, updatedAt: 3 })),
-    ).toBeUndefined();
-    expect(
-      snap.get(entryMarkdownKey({ id: "p1", collection: "posts", status: "draft", version: 2, data: { slug: "hi" }, createdAt: 1, updatedAt: 3 })),
-    ).toBeUndefined();
-    expect(snap.get(listHtmlKey("posts", ""))).toContain("<ul>0</ul>");
-    expect(snap.get(llmsTxtKey(""))).not.toContain("Hi");
-  });
 });
 
 function asset(id: string): MediaAsset {

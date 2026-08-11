@@ -1,14 +1,14 @@
 # ADR-0011: Adapter port spec
 
-**Status:** Accepted for v0.1.0. New ADR. Replaces the architectural concerns previously tracked in POC ADR-0015 (`cms-astro` internal seam discipline).
+**Status:** Accepted for v0.1.0. Amended 2026-08-11 to remove the rendered-artifact `KvCache` port.
 
-**Date:** 2026-05-04 (revised 2026-05-09 to absorb ADR-0014; revised 2026-05-10 to remove obsolete pre-ADR-0014 port text).
+**Date:** 2026-05-04 (revised 2026-05-09, 2026-05-10, and 2026-08-11).
 
 ## Context
 
 `@aotter/mantle-runtime` is adapter-agnostic. It owns dispatcher, entry-writer, view executor, content-ops, render pipeline, boot validation, and MCP JSON-RPC dispatch. It depends only on `@aotter/mantle-spec` and a small set of TypeScript interfaces it defines itself.
 
-`@aotter/mantle-cloudflare` is the only adapter shipping in v0.1.0. It binds the runtime's interfaces against Cloudflare Workers' D1, KV, ASSETS, and supplies a Better Auth instance (per ADR-0014) for sign-in + MCP bearer validation.
+`@aotter/mantle-cloudflare` is the only adapter shipping in v0.1.0. It binds the runtime's interfaces against Cloudflare Workers' D1 and ASSETS, and supplies a Better Auth instance (per ADR-0014) for sign-in + MCP bearer validation. OAuth grant KV remains adapter-owned infrastructure and is not a runtime port.
 
 `@aotter/mantle-netlify` is a v0.2 stub — README only. It exists in the package layout as an engineering forcing function: with N=1 adapter, "adapter-agnostic" silently rots in PR review (a `D1Database` import slips into runtime, then a second, then five). With a second adapter visible in the workspace (even if its impl is a TODO), reviewers have somewhere to point when blocking the slip.
 
@@ -21,13 +21,17 @@ The POC accumulated multiple half-decisions about this seam (POC ADR-0015 docume
 
 ## Decision
 
-**Three required adapter ports**, defined as TypeScript interfaces in `@aotter/mantle-runtime/src/domain/port/`. Concrete adapters provide implementations and inject them into `createCmsRuntime`.
+**Two required adapter ports**, defined as TypeScript interfaces in `@aotter/mantle-runtime/src/domain/port/`. Concrete adapters provide implementations and inject them into `createCmsRuntime`.
 
 | Port | Surface |
 |---|---|
 | `DatabaseDriver` | All persistent state — `entries`, `site_config`, `staff`, `users`, `approvals`, plus migrations. |
-| `KvCache` | Publish-pipeline cache — pre-rendered HTML, `.md` mirrors, `llms.txt` per locale. Read-mostly, written by the publish pipeline. |
 | `AssetServer` | Static-asset serving for the admin SPA. The runtime hands the adapter an asset path + `Request`; the adapter returns a `Response` with the right MIME and caching. |
+
+Rendered public artifacts are not a second storage model. D1 stays canonical;
+adapters render on origin misses and may use their native HTTP response cache.
+The Cloudflare adapter uses version-local Workers Cache, which runs before the
+Worker for eligible anonymous responses.
 
 Optional feature ports may also live in `domain/port/`, but they are
 not part of the first-run adapter contract until a feature is enabled.
@@ -121,20 +125,6 @@ The runtime never sees `D1Database`, `Pool` (postgres), or any concrete driver. 
 
 The CF adapter's impl is a thin proxy over `env.DB` (D1). A future Postgres-via-Hyperdrive adapter wraps `pg` to the same shape; a Netlify adapter could wrap Neon, Supabase, or PlanetScale.
 
-### `KvCache`
-
-```ts
-export interface KvCache {
-  get(key: string): Promise<string | null>;
-  put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
-  delete(key: string): Promise<void>;
-  /** List keys with a prefix — used by sitemap / llms.txt aggregation. */
-  list(prefix: string, cursor?: string | null): Promise<{ keys: string[]; cursor: string | null }>;
-}
-```
-
-CF adapter: Workers KV. Future: Redis, FS, S3-compatible store.
-
 ### `AssetServer`
 
 ```ts
@@ -164,7 +154,6 @@ import {
   mountServerEndpoints,
   AssetsAssetServer,
   D1DatabaseDriver,
-  KvCacheBinding,
 } from "@aotter/mantle-cloudflare";
 
 const auth = createAuth({
@@ -188,7 +177,6 @@ const cms = createCmsRef({
   handlers,
   bindings: {
     db: new D1DatabaseDriver(env.DB),
-    kv: new KvCacheBinding(env.KV),
     assets: new AssetsAssetServer(env.ASSETS),
   },
   auth,
@@ -224,10 +212,10 @@ There's no module-global state holding adapter-specific bindings.
 - Removing a port is also possible (if a port is found to overlap or be unnecessary), again by amending this ADR.
 
 **Discoverability for adapter authors**:
-- A future Bun/Deno/Vercel/Netlify port author reads this ADR + [`docs/adapter-guide.md`](../adapter-guide.md), implements the three required ports, then wires boot and HTTP/MCP surfaces. That's the contract. No hidden state, no implicit assumptions about the HTTP framework.
+- A future Bun/Deno/Vercel/Netlify port author reads this ADR + [`docs/adapter-guide.md`](../adapter-guide.md), implements the two required ports, then wires boot and HTTP/MCP surfaces. That's the contract. No hidden state, no implicit assumptions about the HTTP framework.
 
 **Test ergonomics**:
-- Each port is small and isolated. Tests can mock individual ports without spinning up D1 / KV / OAuth provider.
+- Each port is small and isolated. Tests can mock individual ports without spinning up D1 or an OAuth provider.
 - The runtime's test suite exercises against in-memory port impls; the adapter's test suite exercises the binding against real CF resources via `wrangler dev` or live deploy.
 
 **The Netlify stub's job**:
@@ -235,11 +223,11 @@ There's no module-global state holding adapter-specific bindings.
 
 ## Alternatives considered
 
-**(a) Single mega-port** — One `RuntimePorts` interface containing every method (db.prepare, kv.get, assets.fetch, media.createUpload, …). **Rejected**: leaks the entire surface onto every adapter. Adapter authors who only want to swap KV would have to touch the mega-port impl. Discrete ports keep change blast radius per port.
+**(a) Single mega-port** — One `RuntimePorts` interface containing every method (db.prepare, assets.fetch, media.createUpload, …). **Rejected**: leaks the entire surface onto every adapter. Discrete ports keep change blast radius per port.
 
 **(b) Concrete CF types in runtime** — Just `import type { D1Database } from "@cloudflare/workers-types"` directly into `mantle-runtime`. Treat "CF-only" as a v0.1.0 reality, defer the abstraction. **Rejected**: this is what the POC did (via `cms-server` having implicit assumptions about D1 shape) and it's the trap the rebuild exists to escape. Once concrete CF types land in runtime, removing them is a multi-PR uplift later. Cheaper to do it right at v0.1.0.
 
-**(c) Function-injection (no interfaces, just functions)** — Runtime accepts a record of functions: `{ dbPrepare, kvGet, kvPut, sessionRead, … }`. **Rejected**: TypeScript interfaces are more discoverable (an adapter author IDE-jumps from `DatabaseDriver` to its surface; jumping from `dbPrepare` is harder). Interfaces also document grouping; functions don't.
+**(c) Function-injection (no interfaces, just functions)** — Runtime accepts a record of functions such as `{ dbPrepare, assetFetch, sessionRead, … }`. **Rejected**: TypeScript interfaces are more discoverable and document grouping.
 
 **(d) Plugin pattern (each port is a separate package)** — `@aotter/mantle-port-database`, `@aotter/mantle-port-kv`, etc., and runtime depends on one package per port. **Rejected**: the port set is too small to warrant per-port packages. The current 5-package structure (spec / runtime / admin-ui / cloudflare / netlify) is already at the boundary of "too many"; splitting further increases the maintenance tax without useful benefit. Ports are TS interfaces in `mantle-runtime`'s `src/domain/port/` directory — that's enough.
 
@@ -251,12 +239,12 @@ When you're authoring `@aotter/mantle-runtime` code:
 
 1. If you reach for a CF-specific type, **stop**. Define a method on a port instead.
 2. If a port is missing the method you need, **amend this ADR first** in the same PR, then add the method. Adapters in the same PR.
-3. Tests must use port mocks (in-memory implementations) — never reach into a real D1 / KV from runtime tests.
+3. Tests must use port mocks (in-memory implementations) — never reach into a real D1 from runtime tests.
 
 When you're authoring an adapter (`@aotter/mantle-cloudflare` for v0.1.0; future `mantle-netlify`, `mantle-bun`, …):
 
 1. Read `mantle-runtime/src/domain/port/`. Implement each required port against your runtime's primitives.
-2. Compose the runtime via `createCmsRuntime({ db, kv, assets, manifests, handlers, templates, siteDefaults, ... })`.
+2. Compose the runtime via `createCmsRuntime({ db, assets, manifests, handlers, templates, siteDefaults, ... })`.
 3. Call `runtime.bootInit()` once before serving CMS traffic.
 4. Bind to your HTTP framework — Hono on CF, Netlify Functions handler, raw `fetch` Worker, …
 5. Provide adapter-owned auth and map sessions/scopes/roles into runtime handler context.

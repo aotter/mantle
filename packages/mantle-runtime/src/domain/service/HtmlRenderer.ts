@@ -9,13 +9,8 @@ import type { MediaAsset } from "../port/MediaStorage.js";
 
 /**
  * Pure render functions over the consumer-supplied template registry.
- * Used by:
- *   - `HtmlPublishOrchestrator` (publish-time → write KV)
- *   - request-time route handlers in adapters (live-render bypass,
- *     preview surface)
- *
- * Both call sites previously inlined the template-lookup + doctype
- * concatenation. Extracting here keeps the contract single-sourced
+ * Request-time public and preview renderers share this template lookup
+ * and doctype concatenation so the contract stays single-sourced
  * — adding a doctype mode, an OG-meta wrapper, or a per-collection
  * pre/post hook is one edit. No I/O; no DB; no env access.
  */

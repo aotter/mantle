@@ -10,7 +10,6 @@ import type {
 import type { Manifest } from "@aotter/mantle-spec";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import { D1DatabaseDriver } from "../src/bindings/D1DatabaseDriver.js";
-import { KvCacheBinding } from "../src/bindings/KvCacheBinding.js";
 import {
   MANTLE_RESERVED_EXACT_PATHS,
   MANTLE_RESERVED_PATH_PREFIXES,
@@ -19,7 +18,7 @@ import {
   type MantleCloudflareEnv,
   type MantleWorkerHandler,
 } from "../src/worker/createMantleWorker.js";
-import { InMemoryKv, StubAssetServer, stubAuth } from "./fakes/runtime-bindings.js";
+import { StubAssetServer, stubAuth } from "./fakes/runtime-bindings.js";
 
 const oauthState = vi.hoisted(() => ({ scopes: [] as string[] }));
 
@@ -91,7 +90,7 @@ describe("createMantleWorker", () => {
     const worker = createMantleWorker<TestEnv>({
       manifest: [],
       auth: () => stubAuth,
-      bindings: () => ({ db, kv: new InMemoryKv(), assets: new StubAssetServer() }),
+      bindings: () => ({ db, assets: new StubAssetServer() }),
     });
 
     await fetchWorker(worker, "/api/auth/probe", testEnv());
@@ -211,7 +210,6 @@ describe("createMantleWorker", () => {
       auth: () => stubAuth,
       bindings: (_env, conventional) => {
         expect(conventional.db).toBeInstanceOf(D1DatabaseDriver);
-        expect(conventional.kv).toBeInstanceOf(KvCacheBinding);
         return { ...testBindings(), mediaStorage };
       },
       extend: ({ bindings }) => ({
@@ -320,7 +318,7 @@ describe("createMantleWorker", () => {
     const worker = createMantleWorker<TestEnv>({
       manifest: [],
       auth: () => stubAuth,
-      bindings: () => ({ db, kv: new InMemoryKv(), assets: new StubAssetServer() }),
+      bindings: () => ({ db, assets: new StubAssetServer() }),
       extend: () => ({
         mount: ({ app, getRuntime }) => {
           app.get("/probe", async (c) => {
@@ -393,7 +391,6 @@ function envProbeManifests(): Manifest[] {
 function testBindings() {
   return {
     db: new InMemoryDatabase(),
-    kv: new InMemoryKv(),
     assets: new StubAssetServer(),
   };
 }
@@ -401,7 +398,6 @@ function testBindings() {
 function testEnv(extra: Partial<TestEnv> = {}): TestEnv {
   return {
     DB: {} as D1Database,
-    KV: {} as KVNamespace,
     OAUTH_KV: {} as KVNamespace,
     ...extra,
   };

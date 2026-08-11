@@ -23,7 +23,6 @@ import type {
   DeferredHookEnvelope,
 } from "../src/domain/port/DeferredHookDispatcher.js";
 import { TriggerIndex } from "../src/domain/service/TriggerIndex.js";
-import { TemplateRegistry } from "../src/domain/model/TemplateRegistry.js";
 import { LifecycleHookingEntryRepository } from "../src/infrastructure/persistence/LifecycleHookingEntryRepository.js";
 import { RunLifecycleHooksUseCase } from "../src/usecase/lifecycle/RunLifecycleHooksUseCase.js";
 import { InMemoryEntryRepository } from "./fakes/in-memory-store.js";
@@ -37,8 +36,6 @@ import {
 interface Harness {
   store: InMemoryEntryRepository;
   dispatcher: McpJsonRpcDispatcher;
-  publishCalls: string[];
-  unpublishCalls: string[];
 }
 
 function buildHarness(schemas = [postsSchema()]): Harness {
@@ -47,46 +44,19 @@ function buildHarness(schemas = [postsSchema()]): Harness {
   let i = 1;
   const clock: Clock = { now: () => 1_000_000 };
   const idgen: IdGenerator = { next: () => `mcp-${i++}` };
-  const publishCalls: string[] = [];
-  const unpublishCalls: string[] = [];
-  const templates = new TemplateRegistry();
-  const effects = {
-    templates,
-    siteConfig: {
-      load: async () => ({
-        title: "Test",
-        brand: "Test",
-        description: "",
-        origin: "https://example.com",
-        locales: ["en"],
-        canonicalLocale: "en",
-      }),
-    },
-    publishOrchestrator: {
-      publish: async ({ entryId }: { entryId: string }) => {
-        publishCalls.push(entryId);
-      },
-      unpublish: async ({ entryId }: { entryId: string }) => {
-        unpublishCalls.push(entryId);
-      },
-      invalidateAll: async () => {},
-    },
-  };
   const useCases: McpUseCases = {
     listEntries: new ListEntriesUseCase(store, schemasByName),
     getEntry: new GetEntryUseCase(store),
     createDraft: new CreateDraftUseCase(store, schemasByName, clock, idgen),
     updateDraft: new UpdateDraftUseCase(store, schemasByName, clock),
-    requestPublish: new RequestPublishUseCase(store, schemasByName, clock, effects),
-    unpublish: new UnpublishUseCase(store, schemasByName, clock, effects),
-    archive: new ArchiveUseCase(store, schemasByName, clock, effects),
+    requestPublish: new RequestPublishUseCase(store, schemasByName, clock),
+    unpublish: new UnpublishUseCase(store, schemasByName, clock),
+    archive: new ArchiveUseCase(store, schemasByName, clock),
     deleteEntry: new DeleteEntryUseCase(store, schemasByName),
   };
   return {
     store,
     dispatcher: new McpJsonRpcDispatcher(useCases, schemas),
-    publishCalls,
-    unpublishCalls,
   };
 }
 
@@ -106,33 +76,14 @@ function minimalUseCases(): McpUseCases {
   const schemasByName = new Map([["posts", postsSchema()]]);
   const clock: Clock = { now: () => 0 };
   const idgen: IdGenerator = { next: () => "x" };
-  const templates = new TemplateRegistry();
-  const effects = {
-    templates,
-    siteConfig: {
-      load: async () => ({
-        title: "T",
-        brand: "T",
-        description: "",
-        origin: "https://example.com",
-        locales: ["en"],
-        canonicalLocale: "en",
-      }),
-    },
-    publishOrchestrator: {
-      publish: async () => {},
-      unpublish: async () => {},
-      invalidateAll: async () => {},
-    },
-  };
   return {
     listEntries: new ListEntriesUseCase(store, schemasByName),
     getEntry: new GetEntryUseCase(store),
     createDraft: new CreateDraftUseCase(store, schemasByName, clock, idgen),
     updateDraft: new UpdateDraftUseCase(store, schemasByName, clock),
-    requestPublish: new RequestPublishUseCase(store, schemasByName, clock, effects),
-    unpublish: new UnpublishUseCase(store, schemasByName, clock, effects),
-    archive: new ArchiveUseCase(store, schemasByName, clock, effects),
+    requestPublish: new RequestPublishUseCase(store, schemasByName, clock),
+    unpublish: new UnpublishUseCase(store, schemasByName, clock),
+    archive: new ArchiveUseCase(store, schemasByName, clock),
     deleteEntry: new DeleteEntryUseCase(store, schemasByName),
   };
 }
@@ -512,7 +463,7 @@ describe("McpJsonRpcDispatcher", () => {
   });
 
   it("tools/call request_publish flips draft → published", async () => {
-    const { dispatcher, store, publishCalls } = buildHarness();
+    const { dispatcher, store } = buildHarness();
     const created = await store.create({
       id: "p1",
       collection: "posts",
@@ -531,11 +482,10 @@ describe("McpJsonRpcDispatcher", () => {
     const body = (await res.json()) as { result: { content: { text: string }[] } };
     const result = JSON.parse(body.result.content[0]!.text) as { status: string };
     expect(result.status).toBe("published");
-    expect(publishCalls).toEqual([created.id]);
   });
 
   it("tools/call unpublish_entry flips published → draft", async () => {
-    const { dispatcher, store, unpublishCalls } = buildHarness();
+    const { dispatcher, store } = buildHarness();
     const created = await store.create({
       id: "p1",
       collection: "posts",
@@ -554,7 +504,6 @@ describe("McpJsonRpcDispatcher", () => {
     const body = (await res.json()) as { result: { content: { text: string }[] } };
     const result = JSON.parse(body.result.content[0]!.text) as { status: string };
     expect(result.status).toBe("draft");
-    expect(unpublishCalls).toEqual([created.id]);
   });
 
   it("tools/call request_publish rejects orphan translated children", async () => {

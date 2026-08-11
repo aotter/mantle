@@ -4,7 +4,6 @@ import type {
   DatabaseDriver,
   DeferredHookEnvelope,
   CmsRuntime,
-  KvCache,
 } from "@aotter/mantle-runtime";
 import { createCmsRuntime } from "@aotter/mantle-runtime";
 import type { LifecycleHook } from "@aotter/mantle-spec";
@@ -18,7 +17,7 @@ import {
   makeProcedure,
   postsSchema,
 } from "../../../mantle-runtime/test/fakes/manifests.js";
-import { InMemoryKv, StubAssetServer } from "./fakes/runtime-bindings.js";
+import { StubAssetServer } from "./fakes/runtime-bindings.js";
 
 interface CapturedSend<T> {
   body: T;
@@ -243,7 +242,6 @@ describe("createQueueHandler", () => {
         },
       },
       db: {} as DatabaseDriver,
-      kv: {} as KvCache,
       assets: {} as AssetServer,
     });
     const handler = createQueueHandler<unknown>({ get: async () => runtime });
@@ -301,7 +299,6 @@ describe("createQueueHandler", () => {
         },
       },
       db: new InMemoryDatabase(),
-      kv: new InMemoryKv(),
       assets: new StubAssetServer(),
       deferredHookDispatcher,
       clock: { now: () => 1 },

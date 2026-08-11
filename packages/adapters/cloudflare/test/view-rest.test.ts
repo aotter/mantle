@@ -6,7 +6,6 @@ import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
 import type { Auth } from "../src/auth/createAuth.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
-  InMemoryKv,
   StubAssetServer,
   stubAuth,
 } from "./fakes/runtime-bindings.js";
@@ -78,7 +77,6 @@ function harness(seed?: (db: InMemoryDatabase) => void) {
     siteDefaults: { locales: ["en", "zh-TW"] },
     bindings: {
       db,
-      kv: new InMemoryKv(),
       assets: new StubAssetServer(),
     },
     auth: stubAuth,
@@ -138,7 +136,7 @@ function staffHarness(
   const ref = createCmsRef({
     manifests: staffViewManifests,
     siteDefaults: { locales: ["en", "zh-TW"] },
-    bindings: { db, kv: new InMemoryKv(), assets: new StubAssetServer() },
+    bindings: { db, assets: new StubAssetServer() },
     auth,
   });
   const app = new Hono();
@@ -273,7 +271,7 @@ describe("GET /api/views/<name>", () => {
     const ref = createCmsRef({
       manifests: gatedManifests,
       siteDefaults: { locales: ["en"] },
-      bindings: { db, kv: new InMemoryKv(), assets: new StubAssetServer() },
+      bindings: { db, assets: new StubAssetServer() },
       auth: ownerAuth,
     });
     const app = new Hono();
@@ -299,7 +297,7 @@ describe("GET /api/views/<name>", () => {
     const ref = createCmsRef({
       manifests: gatedManifests,
       siteDefaults: { locales: ["en"] },
-      bindings: { db, kv: new InMemoryKv(), assets: new StubAssetServer() },
+      bindings: { db, assets: new StubAssetServer() },
       auth: stubAuth,
     });
     const app = new Hono();
@@ -336,7 +334,7 @@ describe("GET /api/views/<name>", () => {
     const ref = createCmsRef({
       manifests: gatedManifests,
       siteDefaults: { locales: ["en"] },
-      bindings: { db, kv: new InMemoryKv(), assets: new StubAssetServer() },
+      bindings: { db, assets: new StubAssetServer() },
       auth: customerAuth,
     });
     const app = new Hono();
@@ -384,7 +382,6 @@ describe("GET /api/views/<name>", () => {
       siteDefaults: { locales: ["en"] },
       bindings: {
         db: new InMemoryDatabase(),
-        kv: new InMemoryKv(),
         assets: new StubAssetServer(),
       },
       auth: bearerAuth,
@@ -430,7 +427,7 @@ describe("GET /api/views/<name>", () => {
     const ref = createCmsRef({
       manifests: gatedManifests,
       siteDefaults: { locales: ["en"] },
-      bindings: { db, kv: new InMemoryKv(), assets: new StubAssetServer() },
+      bindings: { db, assets: new StubAssetServer() },
       auth: stubAuth,
     });
     const app = new Hono();
@@ -498,7 +495,7 @@ describe("GET /api/views/<name>", () => {
     const ref = createCmsRef({
       manifests: gatedManifests,
       siteDefaults: { locales: ["en"] },
-      bindings: { db, kv: new InMemoryKv(), assets: new StubAssetServer() },
+      bindings: { db, assets: new StubAssetServer() },
       auth: customerAuth,
     });
     const app = new Hono();
