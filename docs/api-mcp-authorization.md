@@ -128,6 +128,13 @@ Mantle Platform user id, Hosted Auth upstream subject, email, or provider id.
 Hosted Auth may establish the site session, but Platform is not part of the
 View query path.
 
+## Site OAuth symmetry
+
+A site-issued OAuth access token represents the same caller on public MCP and
+manifest HTTP routes. Both surfaces populate `ctx.user` and `ctx.auth` from the
+same token grant; expiry, revocation, scope, client, and resource audience are
+enforced before the Procedure or View runs.
+
 ## Cloudflare consumer wiring
 
 Pass one site-owned resolver to `createCmsRef`. Return `not-handled` when the
