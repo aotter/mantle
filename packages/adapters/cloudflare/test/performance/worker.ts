@@ -71,6 +71,33 @@ const manifests: Manifest[] = [
   })),
   {
     apiVersion: "cms.mantle.aotter.net/v1",
+    kind: "Procedure",
+    metadata: { name: "create-comment" },
+    spec: {
+      input: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          postId: { type: "string" },
+          body: { type: "string" },
+        },
+        required: ["postId", "body"],
+      },
+      output: { type: "object" },
+      handler: { kind: "builtin", op: "create", schema: "comments" },
+    },
+  },
+  {
+    apiVersion: "cms.mantle.aotter.net/v1",
+    kind: "Trigger",
+    metadata: { name: "create-comment-http" },
+    spec: {
+      source: { kind: "http", method: "POST", path: "/api/comments" },
+      target: { procedure: "create-comment" },
+    },
+  },
+  {
+    apiVersion: "cms.mantle.aotter.net/v1",
     kind: "View",
     metadata: { name: "recent-posts" },
     spec: {

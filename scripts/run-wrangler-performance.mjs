@@ -101,6 +101,22 @@ try {
     rounds: 10,
     warmup: 2,
   });
+  const publicCreate = await benchmarkHttpRoutes({
+    targets: [{
+      name: "public-builtin-create",
+      url: `${baseUrl}/api/comments`,
+      init: {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          postId: "post-0",
+          body: "Measure the public write path",
+        }),
+      },
+    }],
+    rounds: 10,
+    warmup: 2,
+  });
   const smallRows = metric(small, "rowsRead");
   const crowdedRows = metric(crowded, "rowsRead");
   const crowdedQueries = metric(crowded, "queryCount");
@@ -112,6 +128,8 @@ try {
   const adminDetailSparseQueries = metric(adminDetailSparse, "queryCount");
   const adminDetailDenseRows = metric(adminDetailDense, "rowsRead");
   const adminDetailDenseQueries = metric(adminDetailDense, "queryCount");
+  const publicCreateRows = metric(publicCreate, "rowsRead");
+  const publicCreateQueries = metric(publicCreate, "queryCount");
   const gates = {
     crowdedRowsReadBounded: crowdedRows.p95 <= Math.max(100, smallRows.p95 * 4),
     publicApiUsesOneQuery: crowdedQueries.max <= 1,
@@ -122,6 +140,8 @@ try {
       adminDetailSparseQueries.max <= 4 && adminDetailSparseRows.p95 <= 10,
     adminDetailDenseReadsStayBounded:
       adminDetailDenseQueries.max <= 4 && adminDetailDenseRows.p95 <= 200,
+    publicBuiltinCreateUsesOneQuery:
+      publicCreateQueries.max <= 1 && publicCreateRows.p95 <= 1,
   };
   const report = {
     version: 1,
@@ -134,6 +154,7 @@ try {
       ...admin.results,
       ...adminDetailSparse.results,
       ...adminDetailDense.results,
+      ...publicCreate.results,
     ],
     gates,
   };
