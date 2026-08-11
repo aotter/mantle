@@ -6,6 +6,15 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.1.0-alpha.2] - 2026-08-11
+
+### Fixed
+
+- **`@aotter/mantle-cloudflare`**: authenticate site-issued opaque OAuth
+  bearer tokens on manifest HTTP Trigger and View routes through the same
+  provider verification used by public MCP, preserving audience, expiry,
+  revocation, scope, and live-role checks across both surfaces (#621, #625).
+
 ## [0.1.0-alpha.1] - 2026-08-11
 
 ### Added
