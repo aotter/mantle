@@ -18,14 +18,20 @@ describe("resolveCaller", () => {
     });
   });
 
-  it("normalizes a cookie session and reads the staff role live", async () => {
-    const result = await resolveCaller(new Request("https://example.test/api/x"), {
+  it("normalizes a cookie session without re-reading its staff role", async () => {
+    let roleCalls = 0;
+    const result = await resolveCaller(new Request("https://example.test/api/x", {
+      headers: { cookie: "better-auth.session_token=session-1" },
+    }), {
       auth: auth({
         getSession: async () => ({
           session: { id: "session-1", userId: "user-1", expiresAt: new Date() },
-          user: { id: "user-1", email: "u@example.test", name: "U", role: null },
+          user: { id: "user-1", email: "u@example.test", name: "U", role: "editor" },
         }),
-        getUserRole: async () => "editor",
+        getUserRole: async () => {
+          roleCalls += 1;
+          return "editor";
+        },
       }),
     });
     expect(result).toMatchObject({
@@ -40,6 +46,28 @@ describe("resolveCaller", () => {
         },
       },
     });
+    expect(roleCalls).toBe(0);
+  });
+
+  it("reads the live role when a custom session omits it", async () => {
+    let roleCalls = 0;
+    const result = await resolveCaller(new Request("https://example.test/api/x"), {
+      auth: auth({
+        getSession: async () => ({
+          session: { id: "session-1", userId: "user-1", expiresAt: new Date() },
+          user: { id: "user-1", email: "u@example.test", name: "U" },
+        }),
+        getUserRole: async () => {
+          roleCalls += 1;
+          return "owner";
+        },
+      }),
+    });
+    expect(result).toMatchObject({
+      kind: "authenticated",
+      context: { staff: { id: "user-1", role: "owner" } },
+    });
+    expect(roleCalls).toBe(1);
   });
 
   it("normalizes service API keys and user personal tokens without Core storage", async () => {

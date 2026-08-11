@@ -1,6 +1,7 @@
 import {
   canTransition,
   DiagnosticError,
+  EntryDataValidator,
   resolveLifecycle,
   runtimeDiagnostic,
   type SchemaManifest,
@@ -53,6 +54,7 @@ export class InvokeBuiltinUseCase {
     private readonly clock: Clock,
     private readonly idgen: IdGenerator,
     private readonly siteConfig?: SiteConfigRepository,
+    private readonly validator = new EntryDataValidator(),
   ) {}
 
   async run(request: InvokeBuiltinRequest): Promise<unknown> {
@@ -128,6 +130,7 @@ export class InvokeBuiltinUseCase {
       entries: this.entries,
       schema,
       data,
+      validator: this.validator,
       siteConfig: this.siteConfig,
     });
     return this.entries.create({
@@ -183,6 +186,7 @@ export class InvokeBuiltinUseCase {
       entries: this.entries,
       schema,
       data,
+      validator: this.validator,
       excludeId: id,
       siteConfig: this.siteConfig,
     });

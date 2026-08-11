@@ -13,6 +13,7 @@ export interface AssertEntryWritableArgs {
   readonly entries: EntryRepository;
   readonly schema: SchemaManifest;
   readonly data: Record<string, unknown>;
+  readonly validator: EntryDataValidator;
   readonly excludeId?: string;
   readonly siteConfig?: SiteConfigRepository;
   /** Draft mode: skip required-field + locale-presence checks so a
@@ -28,8 +29,7 @@ export interface AssertEntryWritableArgs {
  * semantics cannot drift by transport.
  */
 export async function assertEntryWritable(args: AssertEntryWritableArgs): Promise<void> {
-  const validator = new EntryDataValidator();
-  const diagnostics = validator.validate(args.schema, dataForValidation(args.schema, args.data), {
+  const diagnostics = args.validator.validate(args.schema, dataForValidation(args.schema, args.data), {
     partial: args.partial ?? false,
   });
   if (diagnostics.length > 0) throw new DiagnosticError(diagnostics);
