@@ -10,7 +10,6 @@ import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
 import type { Auth } from "../src/auth/createAuth.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
-  InMemoryKv,
   StubAssetServer,
   stubAuth,
 } from "./fakes/runtime-bindings.js";
@@ -92,7 +91,6 @@ function buildApp(auth: Auth): Hono {
     },
     bindings: {
       db: new InMemoryDatabase(),
-      kv: new InMemoryKv(),
       assets: new StubAssetServer(),
     },
     auth,
@@ -145,7 +143,6 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
       },
       bindings: {
         db: new InMemoryDatabase(),
-        kv: new InMemoryKv(),
         assets: new StubAssetServer(),
       },
       auth: stubAuth,
@@ -268,7 +265,6 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
       handlers: { userOnlyOp: () => ({ ok: true }) },
       bindings: {
         db: new InMemoryDatabase(),
-        kv: new InMemoryKv(),
         assets: new StubAssetServer(),
       },
       auth: authFake({ role: null }),
@@ -331,7 +327,6 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
       handlers: { scopedOp: () => ({ ok: true }) },
       bindings: {
         db: new InMemoryDatabase(),
-        kv: new InMemoryKv(),
         assets: new StubAssetServer(),
       },
       auth,
@@ -430,7 +425,6 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
       },
       bindings: {
         db: new InMemoryDatabase(),
-        kv: new InMemoryKv(),
         assets: new StubAssetServer(),
       },
       auth: authFake(null),
@@ -501,7 +495,6 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
       handlers: { openOp: () => ({ ok: true }) },
       bindings: {
         db: new InMemoryDatabase(),
-        kv: new InMemoryKv(),
         assets: new StubAssetServer(),
       },
       auth: authFake(null),

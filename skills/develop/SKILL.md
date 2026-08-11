@@ -108,8 +108,8 @@ the atoms cannot express the behavior.
 
 ## Adapter Boundary
 
-The runtime is adapter-neutral. Required runtime ports are `DatabaseDriver`,
-`KvCache`, and `AssetServer`. Optional feature ports, such as `MediaStorage`
+The runtime is adapter-neutral. Required runtime ports are `DatabaseDriver`
+and `AssetServer`. Optional feature ports, such as `MediaStorage`
 or `DeferredHookDispatcher`, are enabled only when the current adapter wires
 them.
 

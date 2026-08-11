@@ -72,7 +72,7 @@ function assemble(env: Env) {
 }
 ```
 
-Keep the conventional `DB`, `KV` and `OAUTH_KV` bindings and
+Keep the conventional `DB` and `OAUTH_KV` bindings and
 `nodejs_compat`; add the Queue producer in `wrangler.jsonc`:
 
 ```jsonc

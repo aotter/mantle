@@ -30,7 +30,6 @@ export function createCmsRef(config: CmsConfig): CmsRuntimeRef {
     publicPathResolver: config.publicPathResolver,
     mediaAllowSvg: config.mediaAllowSvg,
     db: config.bindings.db,
-    kv: config.bindings.kv,
     assets: config.bindings.assets,
     mediaStorage: config.bindings.mediaStorage,
     deferredHookDispatcher: config.bindings.deferredHookDispatcher,

@@ -3,7 +3,7 @@
  * Concrete implementations live in `infrastructure/` (or in adapter
  * packages like `@aotter/mantle-cloudflare`).
  *
- * Required adapter ports — `DatabaseDriver`, `KvCache`, `AssetServer`.
+ * Required adapter ports — `DatabaseDriver`, `AssetServer`.
  * Optional feature ports — `MediaStorage` (public-bucket media
  * uploads), `EmailSender` (transactional email — passwordless auth,
  * receipts). Dispatcher-internal seams — `Clock`, `IdGenerator`,
@@ -21,7 +21,6 @@ export type {
   MigrationRunner,
   Migration,
 } from "./DatabaseDriver.js";
-export type { KvCache, KvPutOptions, KvListResult } from "./KvCache.js";
 export type { AssetServer } from "./AssetServer.js";
 export type {
   EntryRepository,
@@ -48,10 +47,6 @@ export type {
   SiteConfigRepository,
   UpdateEditableSiteConfigArgs,
 } from "./SiteConfigRepository.js";
-export type {
-  PublishOrchestrator,
-  PublishEntryRequest,
-} from "./PublishOrchestrator.js";
 export type {
   MediaStorage,
   CreateUploadArgs,

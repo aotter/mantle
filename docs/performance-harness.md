@@ -13,8 +13,8 @@ make a normal content/API/page change.
 | Manifest View execution | `ExecuteViewUseCase` + `ViewSqlCompiler` | The deliberate compiled-query exception; it still resolves declared Schema indexes. |
 | Editable settings and code-owned locale/media policy | `DatabaseSiteConfigRepository` | Editable values and dynamic media tool policy are read fresh; boot-seeded locale policy may be memoized within the runtime instance. |
 | Pending media uploads | `DatabasePendingUploadRepository` | Canonical, read-after-write D1 state; never publish-cache state. |
-| Rendered HTML, Markdown, and `llms.txt` | `HtmlPublishOrchestrator` plus the Cloudflare public-route cache policy | Reproducible derivatives live in KV. Settings updates invalidate through a runtime use case. |
-| D1/KV transport and optional query metrics | Cloudflare bindings | Bindings stay thin. Query/cache policy does not belong in a generic provider `BaseRepository`. |
+| Rendered HTML, Markdown, and `llms.txt` | Request-time render use cases plus the Cloudflare public-route cache policy | D1 is canonical; version-local Workers Cache stores anonymous HTTP responses. |
+| D1 transport and optional query metrics | Cloudflare bindings | Bindings stay thin. Query/cache policy does not belong in a generic provider `BaseRepository`. |
 
 `CmsRuntime.db` remains deprecated compatibility surface. New site code uses
 Manifests, runtime use cases, `entryReader`, and `siteConfig`. A site may own
@@ -24,16 +24,14 @@ must not query Mantle-owned tables through `runtime.db`.
 ## Cache contract
 
 - D1 is canonical for entries, site settings, media metadata, and pending
-  uploads. KV contains only reproducible public artifacts.
-- A public KV hit checks the cache before loading full editable site settings.
-  Locale policy is the small boot-seeded exception. A warm entry/page artifact
-  therefore performs zero D1 queries.
-- A safe cache miss renders from canonical state and schedules KV write-back
-  with the request execution context. It waits inline only when no execution
-  context exists, such as a direct unit call.
-- Site-setting writes call the runtime settings use case, which completes
-  public-artifact invalidation before reporting success. HTTP routes do not
-  scan/delete KV prefixes themselves.
+  uploads. Core stores no rendered artifact copies.
+- Public routes render canonical state and return
+  `Cache-Control: public, max-age=0, s-maxage=300`.
+- Cloudflare Workers Cache checks eligible anonymous responses before invoking
+  the Worker. Cache keys are version-local, so a deploy starts with no stale
+  response from the previous Worker version.
+- Site-setting and content writes only persist canonical state. They do not
+  wait for render work or scan/delete cache prefixes.
 - Do not cache every repository read. Cross-isolate correctness for editable
   data wins unless a read has a measured hot-path contract and explicit
   invalidation.
@@ -76,11 +74,12 @@ Timing always reports p50/p95/max. A test-only Worker wrapper may also return
 `x-mantle-query-count` and `x-mantle-rows-read`; those become distributions in
 the same report. Do not expose these diagnostic headers in production.
 
-Core CI runs `pnpm bench:wrangler` against real Wrangler-local D1, KV, Worker
-HTTP routing, View execution, and live page rendering. It compares 100 and
-10,000 row fixtures, then samples page MISS and HIT separately. CI gates
-row-read scaling, endpoint query budgets, and zero-D1 warm hits, not absolute
-milliseconds.
+Core CI runs `pnpm bench:wrangler` against real Wrangler-local D1, Worker HTTP
+routing, View execution, and origin page rendering. It compares 100 and 10,000
+row fixtures and gates row-read scaling plus endpoint query budgets, not
+absolute milliseconds. Wrangler-local does not emulate the new entrypoint
+Workers Cache, so cache hits are a deployment-level smoke check rather than a
+fabricated local metric.
 
 ## Seven findings: measured disposition
 
@@ -89,12 +88,12 @@ diagnostic, while query/row counts are the stable assertions.
 
 | Finding | Disposition |
 |---|---|
-| Public KV hits read D1 first | Fixed. A 10,000-row warm page measured 0 queries / 0 rows read. |
+| Public cache hits read D1 first | Removed from Worker code. Cloudflare's entrypoint Workers Cache runs before the Worker; Core has no inner render cache. |
 | Slug/locale reads bypass generated indexes | Fixed by the shared schema-aware entry-read boundary. A 10,000-row page MISS measured 2 queries / 5 rows read. |
 | OFFSET pagination | Accepted for the v0.1 bounded-result surfaces: every response is capped at 500 rows and public hot paths must stay shallow. Deep/export workloads require a purpose-shaped cursor API before they are declared hot. |
 | Admin substring search scans | Accepted only for the authenticated Admin collection browser, with a 500-row response cap. Large/search-heavy sites should add a purpose-shaped indexed View or dedicated search service; do not expose this scan publicly. |
 | Published list/sitemap/llms paths lack system indexes | Fixed with measured partial indexes for published global, locale, collection, and collection+locale ordering. The 100-row and 10,000-row API runs both measured 1 query / 20 rows read. |
-| Page MISS waits for KV write-back | Fixed. Reproducible artifacts write through `waitUntil`; regression coverage proves response completion does not await KV. |
+| Page MISS waits for cache write-back | Removed. Origin rendering returns directly; Workers Cache owns response storage outside the Worker. |
 | Benchmark stops at fake in-process dispatch | Fixed by the Node planner and Wrangler-local Worker/API/page layers. The old dispatch microbenchmark remains a narrow CPU signal only. |
 
 The retained OFFSET and substring-search trade-offs are visible exceptions,

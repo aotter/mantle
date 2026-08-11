@@ -29,8 +29,8 @@ export interface HandlerContext<Env = unknown> {
   readonly env: Env;
   /** Cloudflare `ExecutionContext.waitUntil`-style fire-and-forget
    *  bridge. Adapter populates when running in a Worker; runtime uses
-   *  it for after-publish KV cache writes that mustn't block the
-   *  request. Optional so non-Worker adapters can leave it out. */
+   *  it for deferred lifecycle-hook fallback. Optional so non-Worker
+   *  adapters can leave it out. */
   readonly waitUntil?: (p: Promise<unknown>) => void;
   /** Lifecycle event metadata. Populated by `RunLifecycleHooksUseCase`
    *  when this ctx is passed to a Procedure invoked AS a lifecycle hook

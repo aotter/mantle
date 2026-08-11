@@ -15,9 +15,7 @@ import type { DatabaseDriver } from "./domain/port/DatabaseDriver.js";
 import type { DeferredHookDispatcher } from "./domain/port/DeferredHookDispatcher.js";
 import type { EntryReader } from "./domain/port/EntryReader.js";
 import type { EntryRepository } from "./domain/port/EntryRepository.js";
-import type { KvCache } from "./domain/port/KvCache.js";
 import type { MediaStorage } from "./domain/port/MediaStorage.js";
-import type { PublishOrchestrator } from "./domain/port/PublishOrchestrator.js";
 import type { SiteConfigRepository } from "./domain/port/SiteConfigRepository.js";
 import { SystemClock, type Clock } from "./domain/port/Clock.js";
 import {
@@ -76,7 +74,6 @@ import { DatabaseMediaAssetRepository } from "./infrastructure/persistence/Datab
 import { DatabasePendingUploadRepository } from "./infrastructure/persistence/DatabasePendingUploadRepository.js";
 import { DatabaseSiteConfigRepository } from "./infrastructure/persistence/DatabaseSiteConfigRepository.js";
 import { LifecycleHookingEntryRepository } from "./infrastructure/persistence/LifecycleHookingEntryRepository.js";
-import { HtmlPublishOrchestrator } from "./infrastructure/render/index.js";
 import {
   CANONICAL_MIGRATIONS,
   reconcileSchemaIndexes,
@@ -105,15 +102,10 @@ export interface CreateCmsRuntimeArgs {
   readonly handlers?: Readonly<Record<string, AnyHandler>>;
   readonly templates?: TemplateRegistry;
   readonly siteDefaults?: SiteDefaults;
-  /** Required ADR-0011 ports. */
+  /** Required adapter ports. */
   readonly db: DatabaseDriver;
-  readonly kv: KvCache;
   readonly assets: AssetServer;
-  /** Optional public-path resolver. When set, the publish pipeline
-   *  composes SEO/AEO meta on every entry render and the resolved
-   *  paths drive sitemap / hreflang sibling URLs. Adapters that
-   *  expose request-time render routes should also pass this through
-   *  so request-time HTML matches publish-time HTML. */
+  /** Optional public-path resolver for sitemap and SEO sibling URLs. */
   readonly publicPathResolver?: PublicPathResolver;
   /** Optional media storage adapter. When unset, media MCP tools and
    *  admin upload endpoints are not registered — uploads return 404 /
@@ -136,12 +128,11 @@ export interface CreateCmsRuntimeArgs {
 }
 
 export interface CmsRuntime {
-  /** Raw ADR-0011 database driver, retained for adapter compatibility.
+  /** Raw database driver, retained for adapter compatibility.
    *  @deprecated Use purpose-shaped surfaces such as `entryReader` and
    *  `siteConfig`; adapters should retain their injected driver for tables
    *  they own. */
   readonly db: DatabaseDriver;
-  readonly kv: KvCache;
   readonly assets: AssetServer;
   /** Schema-aware, lifecycle-neutral entry reads for adapter-owned routes. */
   readonly entryReader: EntryReader;
@@ -164,7 +155,6 @@ export interface CmsRuntime {
   readonly renderListLive: RenderListLiveUseCase;
   readonly previewEntry: PreviewEntryUseCase;
   readonly validateBoot: ValidateBootUseCase;
-  readonly publishOrchestrator: PublishOrchestrator;
   readonly siteConfig: SiteConfigRepository;
   readonly updateSiteSettings: UpdateSiteSettingsUseCase;
   /** The resolver passed at boot, or `null` when the consumer didn't
@@ -279,19 +269,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
   const composeLlmsTxt = new ComposeLlmsTxtUseCase(entryReader);
   const mediaAssets = new DatabaseMediaAssetRepository(args.db);
   const pendingUploads = new DatabasePendingUploadRepository(args.db);
-  const publishOrchestrator = new HtmlPublishOrchestrator(
-    entryReader,
-    args.kv,
-    publicPathResolver,
-    composeEntrySeoMeta,
-    composeLlmsTxt,
-    schemasByName,
-    mediaAssets,
-  );
-  const updateSiteSettings = new UpdateSiteSettingsUseCase(
-    siteConfig,
-    publishOrchestrator,
-  );
+  const updateSiteSettings = new UpdateSiteSettingsUseCase(siteConfig);
 
   // Content / view / boot use cases. They see `entries` only as the
   // chokepoint port — hook firing is invisible to them.
@@ -299,16 +277,14 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
   const updateDraft = new UpdateDraftUseCase(entries, schemasByName, clock, siteConfig);
   const getEntry = new GetEntryUseCase(entries);
   const listEntries = new ListEntriesUseCase(entries, schemasByName);
-  const contentPublishEffects = { publishOrchestrator, siteConfig, templates };
   const requestPublish = new RequestPublishUseCase(
     entries,
     schemasByName,
     clock,
-    contentPublishEffects,
     siteConfig,
   );
-  const unpublish = new UnpublishUseCase(entries, schemasByName, clock, contentPublishEffects);
-  const archive = new ArchiveUseCase(entries, schemasByName, clock, contentPublishEffects);
+  const unpublish = new UnpublishUseCase(entries, schemasByName, clock);
+  const archive = new ArchiveUseCase(entries, schemasByName, clock);
   const deleteEntry = new DeleteEntryUseCase(entries, schemasByName);
   const executeView = new ExecuteViewUseCase(
     args.db,
@@ -388,7 +364,6 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
 
   return {
     db: args.db,
-    kv: args.kv,
     assets: args.assets,
     entryReader,
 
@@ -409,7 +384,6 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     renderListLive,
     previewEntry,
     validateBoot,
-    publishOrchestrator,
     siteConfig,
     updateSiteSettings,
     publicPathResolver,

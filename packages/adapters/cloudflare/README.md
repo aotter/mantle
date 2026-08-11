@@ -3,7 +3,7 @@
 Cloudflare Workers adapter for mantle.
 
 This package mounts the runtime on Hono, implements the runtime ports against
-Cloudflare D1 / KV / Workers assets, and owns curated identity/session wiring
+Cloudflare D1 / Workers assets, and owns curated identity/session wiring
 plus MCP OAuth/DCR.
 
 This package is prerelease software. Its `package.json` is the exact version
@@ -93,9 +93,9 @@ removes Cloudflare CDN cache overrides. Only anonymous 200 `GET`/`HEAD`
 responses that explicitly declare `public` plus shared freshness remain
 cacheable; they vary on `Cookie` and `Authorization`.
 
-`mountPublicRoutes(...)` applies that explicit public contract to pre-rendered
-HTML, markdown, `llms.txt`, and sitemap responses. A consumer Workers Cache may
-store only responses that still satisfy the contract. See the
+`mountPublicRoutes(...)` renders D1-backed HTML, markdown, `llms.txt`, and
+sitemap responses with that explicit public contract. Workers Cache stores
+only responses that still satisfy it, and remains version-local. See the
 [adapter implementation guide](../../../docs/adapter-guide.md#http-cache-contract).
 
 ## Optional R2 Media Uploads

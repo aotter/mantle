@@ -3,7 +3,6 @@ import type { Manifest } from "@aotter/mantle-spec";
 import { TemplateRegistry } from "@aotter/mantle-runtime";
 import {
   D1DatabaseDriver,
-  KvCacheBinding,
   createCmsRef,
   mountPublicRoutes,
   mountServerEndpoints,
@@ -13,7 +12,6 @@ import { StubAssetServer, stubAuth } from "../fakes/runtime-bindings.js";
 
 interface Env {
   readonly DB: D1Database;
-  readonly CACHE: KVNamespace;
 }
 
 const manifests: Manifest[] = [
@@ -73,7 +71,6 @@ function createState(env: Env) {
     },
     bindings: {
       db: new D1DatabaseDriver(env.DB, (metric) => activeMetrics?.push(metric)),
-      kv: new KvCacheBinding(env.CACHE),
       assets: new StubAssetServer(),
     },
     auth: stubAuth,

@@ -67,30 +67,21 @@ try {
     rounds: 10,
     warmup: 2,
   });
-  await checkedFetch(`${baseUrl}/en/posts/post-0`);
-  const hits = await benchmarkHttpRoutes({
-    targets: [{ name: "page-hit-10000", url: `${baseUrl}/en/posts/post-0` }],
-    rounds: 10,
-    warmup: 2,
-  });
-
   const smallRows = metric(small, "rowsRead");
   const crowdedRows = metric(crowded, "rowsRead");
   const crowdedQueries = metric(crowded, "queryCount");
   const missRows = metric(misses, "rowsRead");
   const missQueries = metric(misses, "queryCount");
-  const hitQueries = metric(hits, "queryCount");
   const gates = {
     crowdedRowsReadBounded: crowdedRows.p95 <= Math.max(100, smallRows.p95 * 4),
     publicApiUsesOneQuery: crowdedQueries.max <= 1,
     pageMissStaysBounded: missQueries.max <= 2 && missRows.p95 <= 10,
-    warmPageUsesNoD1: hitQueries.max === 0,
   };
   const report = {
     version: 1,
     environment: "wrangler-local",
     datasets: [100, 10_000],
-    results: [...small.results, ...crowded.results, ...misses.results, ...hits.results],
+    results: [...small.results, ...crowded.results, ...misses.results],
     gates,
   };
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);

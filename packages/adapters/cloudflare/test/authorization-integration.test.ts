@@ -12,7 +12,6 @@ import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
 import { createMcpApiHandler } from "../src/mount/mountMcp.js";
 import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
 import {
-  InMemoryKv,
   StubAssetServer,
   stubAuth,
 } from "./fakes/runtime-bindings.js";
@@ -167,7 +166,6 @@ describe("authorization integration: one target across REST and MCP", () => {
       },
       bindings: {
         db: new InMemoryDatabase(),
-        kv: new InMemoryKv(),
         assets: new StubAssetServer(),
       },
       auth: { ...stubAuth, getUserRole: async () => "owner" },

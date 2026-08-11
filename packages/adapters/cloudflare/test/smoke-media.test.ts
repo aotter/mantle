@@ -16,7 +16,6 @@ import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
 import type { Auth } from "../src/auth/createAuth.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
-  InMemoryKv,
   StubAssetServer,
   stubAuth,
 } from "./fakes/runtime-bindings.js";
@@ -164,7 +163,6 @@ function harness(opts: {
     },
     bindings: {
       db: new InMemoryDatabase(),
-      kv: new InMemoryKv(),
       assets: new StubAssetServer(),
       ...(storage ? { mediaStorage: storage } : {}),
     },
@@ -355,7 +353,6 @@ describe("smoke: MCP media tool catalog", () => {
       siteDefaults: { media: { purposes: initialPolicies } },
       bindings: {
         db,
-        kv: new InMemoryKv(),
         assets: new StubAssetServer(),
         mediaStorage: storage,
       },
@@ -678,7 +675,6 @@ describe("MCP View surface gating (#438)", () => {
       siteDefaults: { media: { purposes: [postCoverPolicy()] } },
       bindings: {
         db: new InMemoryDatabase(),
-        kv: new InMemoryKv(),
         assets: new StubAssetServer(),
       },
       auth,

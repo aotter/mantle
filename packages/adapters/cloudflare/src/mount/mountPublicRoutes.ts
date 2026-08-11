@@ -1,15 +1,10 @@
 import type { Context, Hono } from "hono";
 import type { SiteConfig } from "@aotter/mantle-spec";
 import {
-  entryHtmlKeyFromParts,
-  entryMarkdownKeyFromParts,
   inferLocaleFromPath,
-  listHtmlKey,
-  llmsTxtKey,
   serializeEntryAsMarkdown,
   toUrlLocale,
   type CmsRuntime,
-  type KvCache,
 } from "@aotter/mantle-runtime";
 import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
 import { STAFF_ROLE_SET } from "../auth/createAuth.js";
@@ -23,26 +18,23 @@ import { STAFF_ROLE_SET } from "../auth/createAuth.js";
  *
  *   - `GET /`                                  → 302 to `/{canonicalLocale}` (skipped if `homeRenderer` not set)
  *   - `GET /{locale}`                          → `homeRenderer` (composed; cross-collection)
- *   - `GET /{locale}/{segment}`                → KV-cached collection list
- *   - `GET /{locale}/{segment}/{slug}`         → KV-cached entry HTML
- *   - `GET /{locale}/{segment}/{slug}.md`      → KV-cached entry markdown mirror (AEO)
+ *   - `GET /{locale}/{segment}`                → collection list
+ *   - `GET /{locale}/{segment}/{slug}`         → entry HTML
+ *   - `GET /{locale}/{segment}/{slug}.md`      → entry markdown mirror (AEO)
  *   - `GET /{locale}/{segment}/{slug}?preview=1` → live render via `previewEntry` use case
- *   - `GET /{locale}/llms.txt`                 → KV-cached llms.txt
- *   - `GET /llms.txt`                          → KV-cached root llms.txt
+ *   - `GET /{locale}/llms.txt`                 → composed llms.txt
+ *   - `GET /llms.txt`                          → composed root llms.txt
  *   - `GET /sitemap.xml`                       → composed sitemap
  *
  * Slug overrides intercept `(collection, slug)` pairs the consumer
  * wants to serve from a hand-rolled template (e.g. a contact form
  * page that needs `<TURNSTILE_SITE_KEY>` injected) rather than a
- * pre-rendered KV blob. Overrides take precedence over preview /
- * live-dev / KV.
+ * rendered entry. Overrides take precedence over preview and the
+ * standard renderer.
  *
- * `liveDev: true` (typically `env.MANTLE_LOCAL_DEV === "1"`) bypasses
- * KV for entry / list HTML — every request live-renders against
- * current D1 state via the `RenderEntryLiveUseCase` /
- * `RenderListLiveUseCase`. `.md` mirrors and `llms.txt` still come
- * from KV (those are cheap to rebuild via `pnpm fixture`). Don't set
- * in production — defeats the publish pipeline cache.
+ * Public responses are rendered from canonical D1 state and carry
+ * `s-maxage` for Cloudflare's version-local Workers Cache. `liveDev`
+ * switches entry/list responses to `private, no-store`.
  */
 export interface CollectionRouteConfig {
   /** Schema name (e.g. `"post-translations"`). */
@@ -55,8 +47,7 @@ export interface CollectionRouteConfig {
    *  list. Default false (most starters use a hand-rolled list page). */
   readonly listRoute?: boolean;
   /** When true, expose `GET /{locale}/{segment}/{slug}.md` for the
-   *  AEO markdown mirror. Default true — the publish pipeline already
-   *  writes the mirror to KV; not exposing it would be silent waste. */
+   *  AEO markdown mirror. Default true. */
   readonly markdownMirror?: boolean;
   /** Slug to collapse to `/{locale}` (no trailing segment + slug).
    *  Used for the home page when it lives in a translations
@@ -86,17 +77,14 @@ export interface MountPublicRoutesOptions {
   /** Renderer for the locale 404 fallback. Required — every miss
    *  falls through here. */
   readonly notFoundRenderer: (ctx: PublicRouteContext) => Promise<Response>;
-  /** Per-(collection, slug) override taking precedence over KV. */
+  /** Per-(collection, slug) override taking precedence over standard rendering. */
   readonly slugOverrides?: ReadonlyArray<SlugOverride>;
-  /** Live-dev flag — bypasses KV for entry / list HTML. Default
-   *  false. */
+  /** Live-dev flag — disables public caching for entry / list HTML. */
   readonly liveDev?: boolean;
 }
 
 const PUBLIC_CACHE_CONTROL = "public, max-age=0, s-maxage=300";
 const PRIVATE_CACHE_CONTROL = "private, no-store";
-const ROOT_LLMS_FALLBACK_TTL_SECONDS = 300;
-
 const HTML_NO_STORE = {
   "content-type": "text/html; charset=utf-8",
   "cache-control": PRIVATE_CACHE_CONTROL,
@@ -138,23 +126,10 @@ export function mountPublicRoutes(
   // Literal root paths register BEFORE any param-catch-all routes —
   // Hono's trie matches `/llms.txt` against `/:locale` with
   // `:locale = "llms.txt"` if the literal route registers later.
-  //
-  // Live-fallback on KV miss: a first-visit AI agent (or a freshly-
-  // deployed worker that hasn't published anything yet) gets a
-  // composed body inline; the cache write rides ctx.waitUntil so the
-  // response stays fast and subsequent requests hit the warm KV.
-  app.get("/llms.txt", async (c) => {
+  app.get("/llms.txt", async () => {
     const runtime = await ref.get();
-    return readThroughCache(
-      runtime.kv,
-      llmsTxtKey(""),
-      TEXT_PUBLIC,
-      async () => composeRootLlmsTxt(runtime, await runtime.siteConfig.load()),
-      {
-        executionCtx: safeExecutionCtx(c),
-        expirationTtl: ROOT_LLMS_FALLBACK_TTL_SECONDS,
-      },
-    );
+    const body = await composeRootLlmsTxt(runtime, await runtime.siteConfig.load());
+    return new Response(body, { status: 200, headers: TEXT_PUBLIC });
   });
 
   app.get("/sitemap.xml", async (c) => {
@@ -196,16 +171,11 @@ export function mountPublicRoutes(
       await runtime.siteConfig.readLocales(),
     );
     if (locale === null) return new Response("not found", { status: 404, headers: TEXT_NO_STORE });
-    return readThroughCache(
-      runtime.kv,
-      llmsTxtKey(locale),
-      TEXT_PUBLIC,
-      async () => runtime.composeLlmsTxt.execute({
-        site: await runtime.siteConfig.load(),
-        locale,
-      }),
-      { executionCtx: safeExecutionCtx(c) },
-    );
+    const body = await runtime.composeLlmsTxt.execute({
+      site: await runtime.siteConfig.load(),
+      locale,
+    });
+    return new Response(body, { status: 200, headers: TEXT_PUBLIC });
   });
 
   for (const route of options.collectionRoutes) {
@@ -245,35 +215,26 @@ function mountCollection(
         );
       };
       if (locale === null) return notFound();
-      if (liveDev) {
-        const site = await loadSite();
-        const html = await runtime.renderListLive.execute({
-          collection: route.collection,
-          locale,
-          site,
-        });
-        if (html === null) return notFound();
-        return new Response(html, { status: 200, headers: HTML_NO_STORE });
-      }
-      return readThroughCache(runtime.kv, listHtmlKey(route.collection, locale), HTML_PUBLIC, async () =>
-        runtime.renderListLive.execute({
-          collection: route.collection,
-          locale,
-          site: await loadSite(),
-        }), {
-          fallback: notFound,
-          executionCtx: safeExecutionCtx(c),
-        });
+      const html = await runtime.renderListLive.execute({
+        collection: route.collection,
+        locale,
+        site: await loadSite(),
+      });
+      if (html === null) return notFound();
+      return new Response(html, {
+        status: 200,
+        headers: liveDev ? HTML_NO_STORE : HTML_PUBLIC,
+      });
     });
   }
 
   // Register the `.md` mirror BEFORE the bare `:slug` entry route —
   // Hono matches in registration order, so without this the entry
-  // route swallows `slug = "foo.md"` and 404s on KV lookup.
+  // route swallows `slug = "foo.md"` and looks up the wrong slug.
   if (route.markdownMirror !== false) {
     // `[^/]+\\.md` (not `.+\\.md`) so a malicious crawler can't
-    // squat sub-paths like `/en/posts/long/random.md` and burn KV
-    // reads — the `:slug` group stays single-segment.
+    // squat sub-paths like `/en/posts/long/random.md`; the `:slug`
+    // group stays single-segment.
     app.get(`/:locale${segPath}/:slug{[^/]+\\.md}`, async (c) => {
       const runtime = await ref.get();
       const locale = canonicalLocaleParam(
@@ -284,19 +245,16 @@ function mountCollection(
       const slug = slugParam.endsWith(".md") ? slugParam.slice(0, -3) : slugParam;
       const notFound = (): Response => new Response("not found", { status: 404, headers: TEXT_NO_STORE });
       if (locale === null) return notFound();
-      const key = entryMarkdownKeyFromParts(route.collection, locale, slug);
-      return readThroughCache(runtime.kv, key, MD_PUBLIC, async () => {
-        const entry = await runtime.entryReader.readBySlug({
-          collection: route.collection,
-          slug,
-          locale,
-          status: "published",
-        });
-        if (!entry) return null;
-        return serializeEntryAsMarkdown(entry);
-      }, {
-        fallback: notFound,
-        executionCtx: safeExecutionCtx(c),
+      const entry = await runtime.entryReader.readBySlug({
+        collection: route.collection,
+        slug,
+        locale,
+        status: "published",
+      });
+      if (!entry) return notFound();
+      return new Response(serializeEntryAsMarkdown(entry), {
+        status: 200,
+        headers: MD_PUBLIC,
       });
     });
   }
@@ -337,30 +295,16 @@ function mountCollection(
       return new Response(html, { status: 200, headers: HTML_NO_STORE });
     }
 
-    if (liveDev) {
-      const site = await loadSite();
-      const html = await runtime.renderEntryLive.execute({
-        collection: route.collection,
-        slug,
-        locale,
-        site,
-      });
-      if (html === null) return notFound();
-      return new Response(html, { status: 200, headers: HTML_NO_STORE });
-    }
-
-    const key = entryHtmlKeyFromParts(route.collection, locale, slug);
-    return readThroughCache(runtime.kv, key, HTML_PUBLIC, async () => {
-      const html = await runtime.renderEntryLive.execute({
-        collection: route.collection,
-        slug,
-        locale,
-        site: await loadSite(),
-      });
-      return html;
-    }, {
-      fallback: notFound,
-      executionCtx: safeExecutionCtx(c),
+    const html = await runtime.renderEntryLive.execute({
+      collection: route.collection,
+      slug,
+      locale,
+      site: await loadSite(),
+    });
+    if (html === null) return notFound();
+    return new Response(html, {
+      status: 200,
+      headers: liveDev ? HTML_NO_STORE : HTML_PUBLIC,
     });
   });
 
@@ -394,22 +338,6 @@ async function assertStaffSession(
   return null;
 }
 
-/** Hono throws on `c.executionCtx` access when there is no
- *  ExecutionContext (test harnesses, in-process `app.request`).
- *  Wrap the read so callers can opt out of background write-back
- *  silently — the read-through helper falls back to an inline `await`. */
-interface WaitUntilContext {
-  waitUntil(promise: Promise<unknown>): void;
-}
-
-function safeExecutionCtx(c: Context): WaitUntilContext | undefined {
-  try {
-    return c.executionCtx;
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Cross-locale aggregate body for `/llms.txt` (no `:locale` segment).
  *
@@ -438,38 +366,6 @@ async function composeRootLlmsTxt(
     if (body.trim()) parts.push(body);
   }
   return parts.length > 0 ? parts.join("\n---\n\n") : "";
-}
-
-async function readThroughCache(
-  kv: KvCache,
-  key: string,
-  headers: Record<string, string>,
-  populate: () => Promise<string | null>,
-  options: {
-    readonly fallback?: () => Promise<Response> | Response;
-    readonly executionCtx?: WaitUntilContext;
-    readonly expirationTtl?: number;
-  } = {},
-): Promise<Response> {
-  const cached = await kv.get(key);
-  if (cached !== null) return new Response(cached, { status: 200, headers });
-
-  const rendered = await populate();
-  if (rendered === null) {
-    if (options.fallback) return options.fallback();
-    return new Response("not found", { status: 404, headers: TEXT_NO_STORE });
-  }
-
-  const writeBack = kv.put(
-    key,
-    rendered,
-    options.expirationTtl === undefined
-      ? undefined
-      : { expirationTtl: options.expirationTtl },
-  );
-  if (options.executionCtx) options.executionCtx.waitUntil(writeBack);
-  else await writeBack;
-  return new Response(rendered, { status: 200, headers });
 }
 
 function lazySite(runtime: CmsRuntime): () => Promise<SiteConfig> {

@@ -4,7 +4,6 @@ import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
-  InMemoryKv,
   StubAssetServer,
   stubAuth,
 } from "./fakes/runtime-bindings.js";
@@ -33,7 +32,6 @@ function harness(
   authOverride?: Partial<Auth>,
   bindings: {
     readonly db?: InMemoryDatabase;
-    readonly kv?: InMemoryKv;
   } = {},
 ) {
   const getSession = authOverride?.getSession ?? stubAuth.getSession;
@@ -49,20 +47,18 @@ function harness(
       }),
   };
   const db = bindings.db ?? new InMemoryDatabase();
-  const kv = bindings.kv ?? new InMemoryKv();
   const ref = createCmsRef({
     manifests: [],
     handlers: {},
     bindings: {
       db,
-      kv,
       assets: new StubAssetServer(),
     },
     auth,
   });
   const app = new Hono();
   mountServerEndpoints(app, ref);
-  return { app, db, kv };
+  return { app, db };
 }
 
 class OrderedDatabase extends InMemoryDatabase {
@@ -88,23 +84,6 @@ class OrderedDatabase extends InMemoryDatabase {
     const result = await super.batch(stmts);
     this.events.push("write");
     return result;
-  }
-}
-
-class OrderedKv extends InMemoryKv {
-  constructor(
-    private readonly events: string[],
-    private readonly failInvalidation = false,
-  ) {
-    super();
-  }
-
-  override async list(prefix: string) {
-    this.events.push("invalidate");
-    if (this.failInvalidation) {
-      throw new Error("scripted site settings invalidation failure");
-    }
-    return super.list(prefix);
   }
 }
 
@@ -160,21 +139,14 @@ describe("/admin/api/site-settings", () => {
     expect(reads).toHaveLength(1);
   });
 
-  it("writes one partial batch before invalidation, then reads once", async () => {
+  it("writes one partial batch, then reads once", async () => {
     const events: string[] = [];
     const db = new OrderedDatabase(events);
-    const kv = new OrderedKv(events);
     db.siteConfig.set("brand", "Old brand");
     db.siteConfig.set("title", "Keep title");
     db.siteConfig.set("description", "Old description");
     db.siteConfig.set("facebookPixelId", "123");
-    await kv.put("entry:html:en/posts/old", "old entry");
-    await kv.put("list:html:posts:en", "old list");
-    await kv.put("llms:en", "old llms");
-    const { app } = harness(
-      { getSession: sessionAs("editor") },
-      { db, kv },
-    );
+    const { app } = harness({ getSession: sessionAs("editor") }, { db });
 
     const res = await app.request(
       "/admin/api/site-settings",
@@ -198,25 +170,13 @@ describe("/admin/api/site-settings", () => {
     expect(db.siteConfig.get("title")).toBe("Keep title");
     expect(db.siteConfig.get("description")).toBe("");
     expect(db.siteConfig.get("ga4MeasurementId")).toBe("G-NEW");
-    expect(events).toEqual([
-      "write",
-      "invalidate",
-      "invalidate",
-      "invalidate",
-      "read",
-    ]);
-    await expect(kv.get("entry:html:en/posts/old")).resolves.toBeNull();
-    await expect(kv.get("list:html:posts:en")).resolves.toBeNull();
-    await expect(kv.get("llms:en")).resolves.toBeNull();
+    expect(events).toEqual(["write", "read"]);
   });
 
-  it("still invalidates and reloads when PATCH has no accepted fields", async () => {
+  it("reloads when PATCH has no accepted fields", async () => {
     const events: string[] = [];
     const db = new OrderedDatabase(events);
-    const { app } = harness(
-      { getSession: sessionAs("editor") },
-      { db, kv: new OrderedKv(events) },
-    );
+    const { app } = harness({ getSession: sessionAs("editor") }, { db });
 
     const res = await app.request(
       "/admin/api/site-settings",
@@ -224,24 +184,16 @@ describe("/admin/api/site-settings", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(events).toEqual([
-      "invalidate",
-      "invalidate",
-      "invalidate",
-      "read",
-    ]);
+    expect(events).toEqual(["read"]);
   });
 
-  it("does not cross failed write or invalidation boundaries", async () => {
+  it("does not report success after a failed write", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       const writeEvents: string[] = [];
       const writeFailure = harness(
         { getSession: sessionAs("editor") },
-        {
-          db: new OrderedDatabase(writeEvents, true),
-          kv: new OrderedKv(writeEvents),
-        },
+        { db: new OrderedDatabase(writeEvents, true) },
       );
       const writeResponse = await writeFailure.app.request(
         "/admin/api/site-settings",
@@ -250,25 +202,6 @@ describe("/admin/api/site-settings", () => {
       expect(writeResponse.status).toBe(500);
       expect(writeEvents).toEqual(["write-failed"]);
 
-      const invalidationEvents: string[] = [];
-      const invalidationFailure = harness(
-        { getSession: sessionAs("editor") },
-        {
-          db: new OrderedDatabase(invalidationEvents),
-          kv: new OrderedKv(invalidationEvents, true),
-        },
-      );
-      const invalidationResponse = await invalidationFailure.app.request(
-        "/admin/api/site-settings",
-        jsonInit("PATCH", { brand: "Write lands" }),
-      );
-      expect(invalidationResponse.status).toBe(500);
-      expect(invalidationEvents).toEqual([
-        "write",
-        "invalidate",
-        "invalidate",
-        "invalidate",
-      ]);
     } finally {
       error.mockRestore();
     }

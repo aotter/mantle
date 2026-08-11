@@ -1,23 +1,19 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { Manifest } from "@aotter/mantle-spec";
-import { llmsTxtKey, TemplateRegistry } from "@aotter/mantle-runtime";
+import { TemplateRegistry } from "@aotter/mantle-runtime";
+import type { Auth } from "../src/auth/createAuth.js";
 import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountPublicRoutes } from "../src/mount/mountPublicRoutes.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
-import type { Auth } from "../src/auth/createAuth.js";
-import {
-  InMemoryKv,
-  StubAssetServer,
-  stubAuth,
-} from "./fakes/runtime-bindings.js";
+import { StubAssetServer, stubAuth } from "./fakes/runtime-bindings.js";
 
-function staffAuth(role: "owner" | "editor" | "contributor" = "owner"): Auth {
+function auth(role: string | null): Auth {
   return {
     handler: async () => new Response(null, { status: 404 }),
     getSession: async () => ({
       session: { id: "s1", userId: "u1", expiresAt: new Date(Date.now() + 60_000) },
-      user: { id: "u1", email: "x@y.z", name: "Staff", role, githubLogin: "staff" },
+      user: { id: "u1", email: "x@y.z", name: "User", role, githubLogin: null },
     }),
     getUserRole: async () => role,
     methods: [],
@@ -25,39 +21,42 @@ function staffAuth(role: "owner" | "editor" | "contributor" = "owner"): Auth {
 }
 
 function manifests(): Manifest[] {
-  return [
-    {
-      apiVersion: "cms.mantle.aotter.net/v1",
-      kind: "Schema",
-      metadata: { name: "posts" },
-      spec: {
-        title: "Posts",
-        schema: {
-          type: "object",
-          properties: {
-            slug: { type: "string" },
-            locale: { type: "string" },
-            title: { type: "string" },
-            body: { type: "string" },
-          },
-          required: ["slug", "locale", "title"],
+  return [{
+    apiVersion: "cms.mantle.aotter.net/v1",
+    kind: "Schema",
+    metadata: { name: "posts" },
+    spec: {
+      title: "Posts",
+      schema: {
+        type: "object",
+        properties: {
+          slug: { type: "string" },
+          locale: { type: "string" },
+          title: { type: "string" },
+          body: { type: "string" },
         },
-        localized: true,
-        lifecycle: "simple",
+        required: ["slug", "locale", "title"],
       },
+      localized: true,
+      lifecycle: "simple",
     },
-  ];
+  }];
 }
 
 function harness(
   locales: readonly string[] = ["en"],
-  opts: { auth?: Auth; kv?: InMemoryKv } = {},
+  sessionAuth: Auth = stubAuth,
 ) {
   const db = new InMemoryDatabase();
-  const kv = opts.kv ?? new InMemoryKv();
   const templates = new TemplateRegistry();
-  templates.registerEntryTemplate("posts", ({ entry, site }) => `<article data-brand="${site.brand}"><h1>${entry.data["title"]}</h1></article>`);
-  templates.registerListTemplate("posts", ({ entries, site }) => `<section data-brand="${site.brand}">${entries.map((e) => e.data["title"]).join(",")}</section>`);
+  templates.registerEntryTemplate(
+    "posts",
+    ({ entry, site }) => `<article data-brand="${site.brand}"><h1>${entry.data["title"]}</h1></article>`,
+  );
+  templates.registerListTemplate(
+    "posts",
+    ({ entries, site }) => `<section data-brand="${site.brand}">${entries.map((e) => e.data["title"]).join(",")}</section>`,
+  );
   const ref = createCmsRef({
     manifests: manifests(),
     templates,
@@ -67,307 +66,106 @@ function harness(
       origin: "https://example.com",
       locales,
     },
-    bindings: {
-      db,
-      kv,
-      assets: new StubAssetServer(),
-    },
-    auth: opts.auth ?? stubAuth,
+    bindings: { db, assets: new StubAssetServer() },
+    auth: sessionAuth,
   });
   const app = new Hono();
   mountPublicRoutes(app, ref, {
     collectionRoutes: [{ collection: "posts", segment: "posts", listRoute: true }],
     notFoundRenderer: async () => new Response("missing", { status: 404 }),
   });
-  return { app, db, kv };
+  return { app, db };
 }
 
 function seedPublishedPost(db: InMemoryDatabase, locale = "en"): void {
-  const id = `p1-${locale}`;
-  db.entries.set(id, {
-    id,
+  db.entries.set(`p1-${locale}`, {
+    id: `p1-${locale}`,
     collection: "posts",
     status: "published",
     version: 1,
-    data: JSON.stringify({
-      slug: "hello",
-      locale,
-      title: "Hello",
-      body: "World",
-    }),
+    data: JSON.stringify({ slug: "hello", locale, title: "Hello", body: "World" }),
     author_id: null,
     created_at: 1,
     updated_at: 2,
   });
 }
 
-describe("mountPublicRoutes read-through cache", () => {
-  it("serves warm HTML and markdown without an entry lookup", async () => {
+describe("mountPublicRoutes response-cache contract", () => {
+  it("renders list, entry, and markdown from canonical D1 state", async () => {
     const h = harness();
-    await h.kv.put("entry:html:en/posts/cached", "<h1>Cached HTML</h1>");
-    await h.kv.put("entry:md:en/posts/cached", "# Cached markdown");
-
-    const html = await h.app.request("/en/posts/cached");
-    h.db.executions.length = 0;
-    const markdown = await h.app.request("/en/posts/cached.md");
-
-    await expect(html.text()).resolves.toContain("Cached HTML");
-    await expect(markdown.text()).resolves.toContain("Cached markdown");
-    expect(h.db.executions).toEqual([]);
-  });
-
-  it("returns a cache miss before background KV write-back settles", async () => {
-    let settle: (() => void) | undefined;
-    const kv = new class extends InMemoryKv {
-      override async put(): Promise<void> {
-        await new Promise<void>((resolve) => { settle = resolve; });
-      }
-    }();
-    const h = harness(["en"], { kv });
-    seedPublishedPost(h.db);
-    const background: Promise<unknown>[] = [];
-
-    const res = await h.app.request(
-      "/en/posts/hello",
-      undefined,
-      undefined,
-      {
-        waitUntil: (promise) => background.push(promise),
-        passThroughOnException: () => undefined,
-      },
-    );
-
-    expect(res.status).toBe(200);
-    expect(background).toHaveLength(1);
-    settle?.();
-    await Promise.all(background);
-  });
-
-  it("renders list HTML from D1 on KV miss and populates KV", async () => {
-    const h = harness();
-    seedPublishedPost(h.db);
-
-    const res = await h.app.request("/en/posts");
-    expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
-    await expect(res.text()).resolves.toContain("<section data-brand=\"Blog\">Hello</section>");
-    await expect(h.kv.get("list:html:en/posts")).resolves.toContain("<section data-brand=\"Blog\">Hello</section>");
-  });
-
-  it("renders entry HTML from D1 on KV miss and populates KV", async () => {
-    const h = harness();
-    seedPublishedPost(h.db);
-
-    const res = await h.app.request("/en/posts/hello");
-    expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
-    await expect(res.text()).resolves.toContain("<h1>Hello</h1>");
-    await expect(h.kv.get("entry:html:en/posts/hello")).resolves.toContain("<h1>Hello</h1>");
-  });
-
-  it("canonicalizes locale casing before D1 lookup and KV population", async () => {
-    const h = harness(["en", "zh-TW"]);
-    seedPublishedPost(h.db, "zh-TW");
-
-    const list = await h.app.request("/zh-tw/posts");
-    expect(list.status).toBe(200);
-    await expect(list.text()).resolves.toContain("<section data-brand=\"Blog\">Hello</section>");
-    await expect(h.kv.get("list:html:zh-tw/posts")).resolves.toContain("<section data-brand=\"Blog\">Hello</section>");
-
-    const entry = await h.app.request("/zh-tw/posts/hello");
-    expect(entry.status).toBe(200);
-    await expect(entry.text()).resolves.toContain("<h1>Hello</h1>");
-    await expect(h.kv.get("entry:html:zh-tw/posts/hello")).resolves.toContain("<h1>Hello</h1>");
-  });
-
-  it("uses operator-edited site_config for read-through renders", async () => {
-    const h = harness();
-    h.db.siteConfig.set("brand", "Operator Brand");
     seedPublishedPost(h.db);
 
     const list = await h.app.request("/en/posts");
-    expect(list.status).toBe(200);
-    await expect(list.text()).resolves.toContain("data-brand=\"Operator Brand\"");
-
     const entry = await h.app.request("/en/posts/hello");
-    expect(entry.status).toBe(200);
-    await expect(entry.text()).resolves.toContain("data-brand=\"Operator Brand\"");
+    const markdown = await h.app.request("/en/posts/hello.md");
+
+    expect(list.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
+    await expect(list.text()).resolves.toContain("Hello");
+    await expect(entry.text()).resolves.toContain("<h1>Hello</h1>");
+    await expect(markdown.text()).resolves.toContain("# Hello");
   });
 
-  it("renders markdown from D1 on KV miss and populates KV", async () => {
+  it("does not retain rendered artifacts inside the Worker", async () => {
     const h = harness();
     seedPublishedPost(h.db);
+    await h.app.request("/en/posts/hello");
 
-    const res = await h.app.request("/en/posts/hello.md");
-    expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
-    const body = await res.text();
-    expect(body).toContain("# Hello");
-    expect(body).toContain("World");
-    await expect(h.kv.get("entry:md:en/posts/hello")).resolves.toContain("# Hello");
-  });
-
-  it("returns 404 without populating KV when D1 has no published entry", async () => {
-    const h = harness();
-
-    const res = await h.app.request("/en/posts/ghost");
-    expect(res.status).toBe(404);
-    await expect(h.kv.get("entry:html:en/posts/ghost")).resolves.toBeNull();
-  });
-
-  it("preview returns 401 without a session", async () => {
-    const h = harness();
-    seedPublishedPost(h.db);
-    const res = await h.app.request("/en/posts/hello?preview=1");
-    expect(res.status).toBe(401);
-  });
-
-  it("preview returns 403 for a non-staff session", async () => {
-    // stubAuth has getUserRole → null; staffAuth("contributor") still
-    // qualifies as staff, so build a custom auth that returns no role.
-    const customerAuth: Auth = {
-      handler: async () => new Response(null, { status: 404 }),
-      getSession: async () => ({
-        session: { id: "s", userId: "u", expiresAt: new Date(Date.now() + 60_000) },
-        user: { id: "u", email: "x@y.z", name: "Customer", role: null, githubLogin: null },
-      }),
-      getUserRole: async () => null,
-      methods: [],
-    };
-    const h = harness(["en"], { auth: customerAuth });
-    seedPublishedPost(h.db);
-    const res = await h.app.request("/en/posts/hello?preview=1");
-    expect(res.status).toBe(403);
-  });
-
-  it("preview returns 200 for a staff session", async () => {
-    const h = harness(["en"], { auth: staffAuth("editor") });
-    seedPublishedPost(h.db);
-    const res = await h.app.request("/en/posts/hello?preview=1");
-    expect(res.status).toBe(200);
-  });
-
-  it("preview prefers a draft over published content with the same route identity", async () => {
-    const h = harness(["en"], { auth: staffAuth("editor") });
-    seedPublishedPost(h.db);
-    h.db.entries.set("p1-en-draft", {
-      ...h.db.entries.get("p1-en")!,
-      id: "p1-en-draft",
-      status: "draft",
-      data: JSON.stringify({
-        slug: "hello",
-        locale: "en",
-        title: "Draft wins",
-        body: "Unpublished",
-      }),
+    const row = h.db.entries.get("p1-en")!;
+    h.db.entries.set("p1-en", {
+      ...row,
+      version: 2,
+      data: JSON.stringify({ slug: "hello", locale: "en", title: "Updated", body: "World" }),
       updated_at: 3,
     });
+    h.db.siteConfig.set("brand", "Updated Brand");
 
-    const res = await h.app.request("/en/posts/hello?preview=1");
-    expect(res.status).toBe(200);
-    await expect(res.text()).resolves.toContain("Draft wins");
+    const entry = await h.app.request("/en/posts/hello");
+    await expect(entry.text()).resolves.toContain("data-brand=\"Updated Brand\"><h1>Updated</h1>");
   });
 
-  it("preview returns 403 when getUserRole returns a non-staff role string", async () => {
-    // Defends against future extension where getUserRole might return
-    // a custom role (e.g. "viewer") not in STAFF_ROLE_SET.
-    const oddRoleAuth: Auth = {
-      handler: async () => new Response(null, { status: 404 }),
-      getSession: async () => ({
-        session: { id: "s", userId: "u", expiresAt: new Date(Date.now() + 60_000) },
-        user: { id: "u", email: "x@y.z", name: "Viewer", role: null, githubLogin: null },
-      }),
-      getUserRole: async () => "viewer",
-      methods: [],
-    };
-    const h = harness(["en"], { auth: oddRoleAuth });
-    seedPublishedPost(h.db);
-    const res = await h.app.request("/en/posts/hello?preview=1");
-    expect(res.status).toBe(403);
-  });
-});
+  it("canonicalizes locale casing and returns 404 for missing content", async () => {
+    const h = harness(["en", "zh-TW"]);
+    seedPublishedPost(h.db, "zh-TW");
 
-describe("mountPublicRoutes llms.txt live-fallback", () => {
-  it("returns KV value on hit without recomposing", async () => {
-    const h = harness(["en"]);
-    seedPublishedPost(h.db);
-    await h.kv.put("llms:en", "# Cached from KV\n\n## posts\n\n- [Cached](https://example.com/en/posts/cached.md)\n");
-
-    const res = await h.app.request("/en/llms.txt");
-    expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
-    expect(res.headers.get("content-type")).toContain("text/plain");
-    const body = await res.text();
-    expect(body).toContain("# Cached from KV");
-    expect(body).not.toContain("Hello"); // the seeded D1 entry — composer would have included it
-    expect(h.db.executions.filter(({ sql }) => sql.includes("FROM entries"))).toEqual([]);
+    expect((await h.app.request("/zh-tw/posts/hello")).status).toBe(200);
+    expect((await h.app.request("/zh-tw/posts/missing")).status).toBe(404);
   });
 
-  it("composes per-locale llms.txt live on KV miss and writes back", async () => {
-    const h = harness(["en"]);
-    seedPublishedPost(h.db);
+  it("keeps preview staff-only and prefers the draft", async () => {
+    const denied = harness();
+    seedPublishedPost(denied.db);
+    expect((await denied.app.request("/en/posts/hello?preview=1")).status).toBe(401);
 
-    // KV is empty for `llms:en`.
-    expect(await h.kv.get("llms:en")).toBeNull();
+    const customer = harness(["en"], auth(null));
+    seedPublishedPost(customer.db);
+    expect((await customer.app.request("/en/posts/hello?preview=1")).status).toBe(403);
 
-    const res = await h.app.request("/en/llms.txt");
-    expect(res.status).toBe(200);
-    const body = await res.text();
-    expect(body).toContain("# Blog");
-    expect(body).toContain("Locale: en");
-    expect(body).toContain("## posts");
-    expect(body).toContain("Hello");
-    expect(body).toMatch(/https:\/\/example\.com\/en\/posts\/hello\.md/);
-
-    // Cache write-back populated KV — InMemoryKv is synchronous, so
-    // by the time we observe it the write has landed.
-    const cached = await h.kv.get("llms:en");
-    expect(cached).toBe(body);
+    const staff = harness(["en"], auth("editor"));
+    seedPublishedPost(staff.db);
+    staff.db.entries.set("draft", {
+      ...staff.db.entries.get("p1-en")!,
+      id: "draft",
+      status: "draft",
+      data: JSON.stringify({ slug: "hello", locale: "en", title: "Draft wins", body: "" }),
+      updated_at: 3,
+    });
+    const response = await staff.app.request("/en/posts/hello?preview=1");
+    expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toContain("Draft wins");
   });
 
-  it("composes cross-locale root llms.txt by concatenating per-locale sections", async () => {
+  it("composes locale and root llms.txt from D1", async () => {
     const h = harness(["en", "zh-TW"]);
     seedPublishedPost(h.db, "en");
     seedPublishedPost(h.db, "zh-TW");
 
-    await h.kv.put("llms:root", "# Stale alpha.58 value");
-    const rootKey = llmsTxtKey("");
-    expect(rootKey).toBe("llms:root:v2");
-    expect(await h.kv.get(rootKey)).toBeNull();
-
-    const res = await h.app.request("/llms.txt");
-    expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
-    const body = await res.text();
-    // Both locale sections present in the aggregate.
-    expect(body).toContain("Locale: en");
-    expect(body).toContain("Locale: zh-TW");
-    // URLs carry the right locale prefix per section.
-    expect(body).toMatch(/https:\/\/example\.com\/en\/posts\/hello\.md/);
-    expect(body).toMatch(/https:\/\/example\.com\/zh-tw\/posts\/hello\.md/);
-    // Cache write-back lands at the root key.
-    expect(body).not.toContain("Stale alpha.58");
-    const cached = await h.kv.get(rootKey);
-    expect(cached).toBe(body);
-    expect(h.kv._ttl(rootKey)).toBe(300);
-  });
-
-  it("never returns 404 from /llms.txt — always composes at minimum the site header", async () => {
-    // Empty DB. Composer still emits title + description header.
-    const h = harness(["en"]);
-
-    const res = await h.app.request("/en/llms.txt");
-    expect(res.status).toBe(200);
-    const body = await res.text();
-    expect(body).toContain("# Blog");
-    // No collections, no entries — but no 404 either.
-    expect(body).not.toContain("not found");
-  });
-
-  it("rejects /:locale/llms.txt with an unknown locale", async () => {
-    const h = harness(["en"]);
-    const res = await h.app.request("/fr/llms.txt");
-    expect(res.status).toBe(404);
-    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    const locale = await h.app.request("/en/llms.txt");
+    const root = await h.app.request("/llms.txt");
+    expect(locale.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
+    await expect(locale.text()).resolves.toContain("Locale: en");
+    const rootBody = await root.text();
+    expect(rootBody).toContain("Locale: en");
+    expect(rootBody).toContain("Locale: zh-TW");
+    expect((await h.app.request("/fr/llms.txt")).status).toBe(404);
   });
 });

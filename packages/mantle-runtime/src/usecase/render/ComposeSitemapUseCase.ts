@@ -1,6 +1,6 @@
 import type { Entry } from "@aotter/mantle-spec";
 import type { EntryReader } from "../../domain/port/EntryReader.js";
-import { entryPublicPath } from "../../domain/service/PublishKeys.js";
+import { entryPublicPath } from "../../domain/service/PublicPathResolver.js";
 import { serializeSitemap } from "../../domain/service/SitemapSerializer.js";
 import type { ComposeSitemapRequest } from "../dto/render/ComposeSitemapRequest.js";
 

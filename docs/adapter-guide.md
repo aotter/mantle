@@ -8,12 +8,11 @@ Adapter packages live under `packages/adapters/<platform>/` using a plural `adap
 
 ## Required runtime ports
 
-A first-run adapter must implement exactly these three runtime ports:
+A first-run adapter must implement exactly these two runtime ports:
 
 | Contract | Source | Cloudflare example |
 |---|---|---|
 | `DatabaseDriver` plus `PreparedStatement` and `MigrationRunner` | `packages/mantle-runtime/src/domain/port/DatabaseDriver.ts` | `packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts` |
-| `KvCache` | `packages/mantle-runtime/src/domain/port/KvCache.ts` | `packages/adapters/cloudflare/src/bindings/KvCacheBinding.ts` |
 | `AssetServer` | `packages/mantle-runtime/src/domain/port/AssetServer.ts` | `packages/adapters/cloudflare/src/bindings/AssetsAssetServer.ts` |
 
 The runtime must not import platform types such as `D1Database`, `KVNamespace`, Cloudflare `Fetcher`, Netlify request objects, Postgres pools, or adapter SDK types. Those live in adapter packages.
@@ -49,7 +48,6 @@ const runtime = createCmsRuntime({
   templates,
   siteDefaults,
   db,
-  kv,
   assets,
   publicPathResolver,
   mediaStorage,
@@ -116,7 +114,7 @@ response policy covers admin, auth, API, OAuth, MCP, redirects, and errors.
 Those responses receive `Cache-Control: private, no-store`; Cloudflare-specific
 CDN cache overrides are removed.
 
-`mountPublicRoutes(...)` opts only successful pre-rendered HTML, markdown,
+`mountPublicRoutes(...)` renders canonical D1 state and opts only successful HTML, markdown,
 `llms.txt`, and sitemap responses into the shared cache with
 `Cache-Control: public, max-age=0, s-maxage=300`. The top-level policy preserves
 that opt-in only for anonymous `GET`/`HEAD` responses with status 200, explicit
@@ -149,7 +147,6 @@ Minimum auth/MCP behavior:
 ## Implementation checklist
 
 - [ ] Implement `DatabaseDriver`, including canonical migration tracking.
-- [ ] Implement `KvCache`, including prefix listing and opaque cursors.
 - [ ] Implement `AssetServer` for the admin UI assets.
 - [ ] Compose `createCmsRuntime` with manifests, handlers, templates, site defaults, and required ports.
 - [ ] Call `bootInit()` before serving CMS traffic.

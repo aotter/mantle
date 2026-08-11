@@ -13,13 +13,12 @@ import {
 import { resolveMediaAssetsForEntries } from "../../domain/service/io/MediaAssetReferences.js";
 
 /**
- * Render a single entry from current DB state. Used by adapter live-
- * dev routes (`MANTLE_LOCAL_DEV=1`) to bypass the KV cache and pick up
- * template / chrome edits without re-running the publish pipeline.
+ * Render a single entry from current canonical DB state. Public and
+ * live-dev routes share this path; adapters decide the HTTP cache policy.
  *
  * When the runtime was built with a `publicPathResolver`, the SEO/AEO
  * meta block is composed and threaded into `EntryContext.seo` — so
- * live-rendered HTML carries the same meta KV-cached HTML does.
+ * rendered HTML includes canonical and sibling metadata.
  *
  * When the entry belongs to a collection with `translates.parent`,
  * the parent's data is merged into the translation's data (ADR-0010)

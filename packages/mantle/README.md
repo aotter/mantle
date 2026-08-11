@@ -22,7 +22,7 @@ Adopters install this one package and import from subpaths. Sub-packages remain 
 | `@aotter/mantle/spec` (or root) | Manifest grammar, validators, JSON-Schema→Zod, diagnostic catalog (no env / no IO) |
 | `@aotter/mantle/runtime` | Hexagonal runtime: domain ports, use cases, infrastructure helpers (no adapter deps) |
 | `@aotter/mantle/runtime/testing` | Node-only crowded SQLite planner and HTTP sampling helpers |
-| `@aotter/mantle/cloudflare` | Cloudflare Workers adapter — D1, KV, R2, Better Auth, MCP via `@cloudflare/workers-oauth-provider` |
+| `@aotter/mantle/cloudflare` | Cloudflare Workers adapter — D1, Workers Cache, R2, Better Auth, MCP via `@cloudflare/workers-oauth-provider` |
 | `@aotter/mantle/admin-ui` | Pre-built React 19 admin SPA bundle |
 
 ```ts
@@ -80,7 +80,7 @@ import { manifest } from "../.mantle/generated/site.js";
 export default createMantleWorker({ manifest });
 ```
 
-`createMantleWorker` owns conventional D1/KV/assets bindings, Auth, Admin,
+`createMantleWorker` owns conventional D1/assets bindings, Auth, Admin,
 manifest REST/HTTP routes, OAuth, MCP, cache safety, and rejection-safe
 per-isolate boot. Use its single `extend` seam for application handlers and
 new Hono routes; use the public low-level exports when the deployment does not
@@ -166,7 +166,7 @@ Core-owned `mantle:plugin` skill and records it in `.mantle/plugins.json` plus
 | Cloudflare Workers | ✅ shipping |
 | Netlify | 📋 README stub — engineering forcing function for v0.2 (`@aotter/mantle-netlify`) |
 
-The `mantle-runtime` package never imports Cloudflare-specific types — adapters bind concrete drivers (D1 / KV / R2) to the runtime's `domain/port/*` interfaces, so adding a new adapter is a port-implementation exercise, not a refactor.
+The `mantle-runtime` package never imports Cloudflare-specific types — adapters bind concrete drivers (D1 / R2) to the runtime's `domain/port/*` interfaces, so adding a new adapter is a port-implementation exercise, not a refactor.
 
 ## Documentation
 
@@ -181,7 +181,7 @@ The `mantle-runtime` package never imports Cloudflare-specific types — adapter
   - `node_modules/@aotter/mantle/docs/schema-indexes.md` (ordered composite
     JSON-field indexes, D1 query plans, and the safe Procedure SQL helper)
   - `node_modules/@aotter/mantle/docs/performance-harness.md` (crowded SQLite,
-    Wrangler-local D1, cache HIT/MISS, and coding-agent guardrails)
+    Wrangler-local D1 origin paths and coding-agent guardrails)
   - `node_modules/@aotter/mantle/docs/adr/`
   - `node_modules/@aotter/mantle/skills/develop/SKILL.md`
   - `node_modules/@aotter/mantle/skills/plugin/SKILL.md`

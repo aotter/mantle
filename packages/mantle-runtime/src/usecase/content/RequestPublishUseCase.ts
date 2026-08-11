@@ -12,10 +12,6 @@ import type { EntryRepository } from "../../domain/port/EntryRepository.js";
 import type { SiteConfigRepository } from "../../domain/port/SiteConfigRepository.js";
 import type { RequestPublishRequest } from "../dto/content/index.js";
 import {
-  publishCache,
-  type ContentPublishEffects,
-} from "./ContentPublishEffects.js";
-import {
   illegalTransitionDiagnostic,
   notFoundDiagnostic,
   withConflictDiagnostic,
@@ -39,7 +35,6 @@ export class RequestPublishUseCase {
     private readonly entries: EntryRepository,
     private readonly schemas: ReadonlyMap<string, SchemaManifest>,
     private readonly clock: Clock,
-    private readonly effects?: ContentPublishEffects,
     private readonly siteConfig?: SiteConfigRepository,
   ) {}
 
@@ -95,7 +90,6 @@ export class RequestPublishUseCase {
         originalInput: request.originalInput,
       }),
     );
-    await publishCache(this.effects, published.id);
     return published;
   }
 

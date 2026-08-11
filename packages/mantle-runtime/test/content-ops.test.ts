@@ -71,7 +71,7 @@ function harness(opts: {
     updateDraft: new UpdateDraftUseCase(store, schemas, clock, opts.siteConfig),
     getEntry: new GetEntryUseCase(store),
     listEntries: new ListEntriesUseCase(store, schemas),
-    requestPublish: new RequestPublishUseCase(store, schemas, clock, undefined, opts.siteConfig),
+    requestPublish: new RequestPublishUseCase(store, schemas, clock, opts.siteConfig),
     unpublish: new UnpublishUseCase(store, schemas, clock),
     archive: new ArchiveUseCase(store, schemas, clock),
     deleteEntry: new DeleteEntryUseCase(store, schemas),

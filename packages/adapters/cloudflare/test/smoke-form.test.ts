@@ -5,7 +5,6 @@ import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
-  InMemoryKv,
   StubAssetServer,
   stubAuth,
 } from "./fakes/runtime-bindings.js";
@@ -147,7 +146,6 @@ function harness(opts: { captchaPasses: boolean }): Harness {
     },
     bindings: {
       db,
-      kv: new InMemoryKv(),
       assets: new StubAssetServer(),
     },
     auth: stubAuth,

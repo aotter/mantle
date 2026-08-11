@@ -6,7 +6,6 @@ import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
 import type { Auth } from "../src/auth/createAuth.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
-  InMemoryKv,
   StubAssetServer,
   stubAuth,
 } from "./fakes/runtime-bindings.js";
@@ -80,7 +79,6 @@ function harness(
     manifests: manifestSet,
     bindings: {
       db,
-      kv: new InMemoryKv(),
       assets: new StubAssetServer(),
     },
     auth,

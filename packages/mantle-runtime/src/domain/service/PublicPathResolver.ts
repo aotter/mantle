@@ -1,5 +1,18 @@
 import { toUrlLocale, type Entry } from "@aotter/mantle-spec";
-import { entrySlug } from "./PublishKeys.js";
+
+export function entrySlug(entry: { id: string; data: Record<string, unknown> }): string {
+  const fromData = entry.data["slug"];
+  if (typeof fromData === "string" && /^[a-z0-9][a-z0-9-]*$/.test(fromData)) {
+    return fromData;
+  }
+  return entry.id;
+}
+
+export function entryPublicPath(entry: Entry): string {
+  const slug = entrySlug(entry);
+  if (entry.locale) return `/${toUrlLocale(entry.locale)}/${entry.collection}/${slug}`;
+  return `/${entry.collection}/${slug}`;
+}
 
 /**
  * Resolves a public URL path for an entry, given the consumer's

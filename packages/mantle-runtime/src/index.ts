@@ -33,7 +33,6 @@ export type {
   MigrationRunner,
   Migration,
 } from "./domain/port/DatabaseDriver.js";
-export type { KvCache, KvPutOptions, KvListResult } from "./domain/port/KvCache.js";
 export type { AssetServer } from "./domain/port/AssetServer.js";
 export type {
   EntryReader,
@@ -113,14 +112,6 @@ export {
 
 // Public route / starter fixture helpers. These are intentionally
 // exported one-by-one instead of exposing the whole service barrel.
-export {
-  entryHtmlKey,
-  entryMarkdownKey,
-  entryHtmlKeyFromParts,
-  entryMarkdownKeyFromParts,
-  listHtmlKey,
-  llmsTxtKey,
-} from "./domain/service/PublishKeys.js";
 export { serializeEntryAsMarkdown } from "./domain/service/MarkdownSerializer.js";
 export { readEntryBySlug } from "./infrastructure/persistence/DatabaseEntryRepository.js";
 export {

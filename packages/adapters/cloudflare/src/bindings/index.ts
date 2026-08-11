@@ -3,7 +3,6 @@ export {
   type D1QueryMetric,
   type D1QueryObserver,
 } from "./D1DatabaseDriver.js";
-export { KvCacheBinding } from "./KvCacheBinding.js";
 export { AssetsAssetServer } from "./AssetsAssetServer.js";
 export {
   createConventionalBindings,

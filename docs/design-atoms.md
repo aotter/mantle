@@ -714,16 +714,16 @@ grammar, leftmost-prefix rules, SQL helper, and query-plan examples.
 ### Practical scale envelope on D1
 
 - **Blog-scale (< 10k entries / collection)**: today's design is
-  comfortable. Public render hits KV cache, not D1.
+  comfortable. Anonymous public responses can hit version-local Workers
+  Cache before the Worker; origin misses use indexed D1 reads.
 - **Mid-scale (10k – 100k entries)**: declare measured list/filter
   access paths with ordered `indexes`. Cross-collection JSON-path joins
   may eventually gain `x-mantle-ref` auto-lift; that remains DRAFT.
 - **Hard D1 limits**: 1 MB max row size; 5,000 rows per query result;
   single-writer per database (concurrent writes serialize).
-- **Cross-region read**: D1 is region-pinned; first hit from a
-  far region is ~100–200 ms cold replica. Public reads should hit
-  the SDK's KV render cache, not D1, so this rarely matters at the
-  CMS layer.
+- **Cross-region read**: D1 is region-pinned; first origin hit from a
+  far region may pay replica latency. Eligible anonymous responses are
+  then served by version-local Workers Cache.
 
 ### Scale-up path: D1 → Postgres via Cloudflare Hyperdrive
 

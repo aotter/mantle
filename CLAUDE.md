@@ -14,7 +14,7 @@ Concretely, when designing or reviewing a change, ask:
 - **Did this make the agent's job harder?** Adding a new manifest key with subtle semantics, a new closed-enum member that's "almost but not quite" like the others, or a runtime behavior that varies by undocumented context — all symptoms of the runtime offloading work onto the author.
 - **Can a non-coder safely benefit from this change?** Vibe-coders won't read source code. They paste a URL into Claude Code and trust the agent. If a misuse of the SDK silently corrupts production data instead of surfacing as a `pre-deploy` diagnostic, you've broken the safety promise.
 
-Hard problems live in the runtime. Examples in this repo: schema validation (zod-translated from JSON Schema; Workers-CSP-safe by construction), locale canonicalization (Mantle v0.1 accepts language + optional region, rejecting script subtags such as `zh-Hant` with explicit guidance), OAuth (DCR-compliant out of the box), KV cache invalidation, and entry-writer chokepoint enforcement. Authors never see those — they see the manifest YAML.
+Hard problems live in the runtime. Examples in this repo: schema validation (zod-translated from JSON Schema; Workers-CSP-safe by construction), locale canonicalization (Mantle v0.1 accepts language + optional region, rejecting script subtags such as `zh-Hant` with explicit guidance), OAuth (DCR-compliant out of the box), public response cache policy, and entry-writer chokepoint enforcement. Authors never see those — they see the manifest YAML.
 
 This is the lens for every architectural decision in this codebase.
 
@@ -75,7 +75,6 @@ kernel ← domain (model + port + service) ← usecase ← infrastructure
 
 - `*Repository` for data access (CRUD): `EntryRepository`, `SessionRepository`
 - `*Driver` for raw drivers under repositories: `DatabaseDriver`
-- `*Cache` for read-mostly stores: `KvCache`
 - `*Server` for transport-shaped surfaces: `AssetServer`
 - `*Verifier`, `*Reader`, `*Generator`, `*Resolver`, `*Assembler`, `*Orchestrator`, `*Dispatcher`, `*Compiler`, `*Serializer` for narrowly-shaped roles
 - `*UseCase` for application services: `CreateDraftUseCase`, `InvokeProcedureUseCase`
@@ -86,7 +85,7 @@ kernel ← domain (model + port + service) ← usecase ← infrastructure
 
 - One barrel `index.ts` per folder.
 - Adding a new top-level folder under `domain/` / `usecase/` / `infrastructure/` requires an ADR-lite paragraph in the PR description.
-- Required adapter ports — `DatabaseDriver`, `KvCache`, `AssetServer` — live in `mantle-runtime/src/domain/port/`. Auth is owned by adapters via Better Auth mount wiring (ADR-0014), not by runtime ports. Optional feature ports such as `MediaStorage` / `DeferredHookDispatcher` also live in `domain/port/` but must not become mandatory first-run bindings. Concrete impls live in `mantle-runtime/src/infrastructure/persistence/` (those backed by `DatabaseDriver`) or in adapter packages (`packages/adapters/cloudflare`, future `packages/adapters/netlify`).
+- Required adapter ports — `DatabaseDriver`, `AssetServer` — live in `mantle-runtime/src/domain/port/`. Auth is owned by adapters via Better Auth mount wiring (ADR-0014), not by runtime ports. Optional feature ports such as `MediaStorage` / `DeferredHookDispatcher` also live in `domain/port/` but must not become mandatory first-run bindings. Concrete impls live in `mantle-runtime/src/infrastructure/persistence/` (those backed by `DatabaseDriver`) or in adapter packages (`packages/adapters/cloudflare`, future `packages/adapters/netlify`).
 
 ### Spec/runtime type boundary (separate from layer rules)
 

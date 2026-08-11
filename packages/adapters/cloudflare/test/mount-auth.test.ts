@@ -5,7 +5,6 @@ import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
 import { mountAuthorize } from "../src/oauth/mountOAuth.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
-  InMemoryKv,
   StubAssetServer,
   stubAuth,
 } from "./fakes/runtime-bindings.js";
@@ -18,7 +17,6 @@ function harness(authOverride?: Partial<Auth>) {
     handlers: {},
     bindings: {
       db: new InMemoryDatabase(),
-      kv: new InMemoryKv(),
       assets: new StubAssetServer(),
     },
     auth,
