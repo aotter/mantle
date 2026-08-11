@@ -48,14 +48,16 @@ decision instead of starting another local redesign loop.
 ## Branches and channels
 
 - Feature and release PRs target `develop`.
-- Pre-v0.1 alphas release directly from the merged `develop` release commit.
+- Alpha prereleases before stable v0.1.0 release directly from the merged
+  `develop` release commit.
 - Beta, RC, and stable promotion to `main` remains a deliberate human decision;
   it is not part of the alpha controller.
 - Alpha, beta, and RC GitHub releases are prereleases.
 - npm dist-tags follow the suffix: `alpha`, `beta`, `rc`, or `latest` for
   stable versions.
-- During the current `0.0.x-alpha` cadence, `latest` follows the current alpha
-  while the `alpha` tag remains available.
+- During the legacy `0.0.x-alpha` cadence, `latest` follows the current alpha.
+  The final `0.1.0-alpha.N` candidates advance only `alpha`; `latest` moves to
+  `0.1.0` after the stable gate passes.
 
 ## Release PR
 

@@ -73,7 +73,7 @@ jobs:
           TAG="v$VERSION"
           CORE_SHA=$(git rev-parse HEAD)
           SOURCE_BRANCH=main
-          [[ "$VERSION" == 0.0.*-alpha* ]] && SOURCE_BRANCH=develop
+          [[ "$VERSION" =~ -alpha(\.|$) ]] && SOURCE_BRANCH=develop
           git fetch origin --tags
           TAG_SHA=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" || true)
           if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$CORE_SHA" ]; then
