@@ -367,6 +367,23 @@ describe("declared Schema indexes against real SQLite", () => {
     expect(skippedPlan).not.toContain(accountIndex.name);
   });
 
+  it("keeps a ctx.user-bound View on the declared identity index", () => {
+    const actorIndex = findIndex(db, ["userId", "state", "accountId"], false);
+    const compiled = compileView(view({
+      fields: ["userId", "state"],
+      requires: { auth: { all: ["ctx.user"] } },
+      filter: {
+        and: [
+          { eq: { field: "userId", value: { "$ctx.user": "id" } } },
+          { eq: { field: "state", value: "active" } },
+        ],
+      },
+    }), { ctxUserId: "u1" }, schema);
+    const plan = planDetails(db, compiled).join("\n");
+    expect(plan).toContain(`SEARCH entries USING INDEX ${actorIndex.name}`);
+    expect(plan).not.toContain("SCAN entries");
+  });
+
   it("keeps projection aliases, JSON fallback, native aliases, and Schema identity safe", () => {
     const compiled = compileView(view({
       fields: ["userId", "role", "createdAt"],

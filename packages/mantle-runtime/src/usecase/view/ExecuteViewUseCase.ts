@@ -150,6 +150,7 @@ export class ExecuteViewUseCase {
         {
           ...request.options,
           params: validatedParams,
+          ctxUserId: request.ctx?.user?.id,
         },
         schema,
       );

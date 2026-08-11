@@ -127,6 +127,24 @@ describe("compileView", () => {
     expect(c.sql).toContain(`json_extract(data, '$."locale"') = ?`);
   });
 
+  it("binds the normalized site-local user id for $ctx.user filters", () => {
+    const c = compileView(
+      view({
+        from: "orders",
+        filter: { eq: { field: "userId", value: { "$ctx.user": "id" } } },
+      }),
+      { ctxUserId: "site-user-1" },
+    );
+    expect(c.params).toEqual(["orders", "site-user-1"]);
+    expect(c.sql).toContain(`json_extract(data, '$."userId"') = ?`);
+    expect(() => compileView(
+      view({
+        from: "orders",
+        filter: { eq: { field: "userId", value: { "$ctx.user": "id" } } },
+      }),
+    )).toThrow(/requires ctx\.user\.id/);
+  });
+
   it("drops a filter eq whose param-ref resolves to undefined (forward-compat for v0.1.x optional)", () => {
     const c = compileView(
       view({
@@ -274,6 +292,49 @@ describe("compileView", () => {
 });
 
 describe("ExecuteViewUseCase", () => {
+  it("returns only rows owned by the normalized ctx.user", async () => {
+    const db = new InMemoryDatabase();
+    for (const [id, userId, status, placedAt] of [
+      ["o1", "user-a", "published", 3],
+      ["o2", "user-b", "published", 2],
+      ["o3", "user-a", "draft", 1],
+    ] as const) {
+      db.entries.set(id, {
+        id,
+        collection: "orders",
+        status,
+        version: 1,
+        data: JSON.stringify({ userId, placedAt }),
+        author_id: null,
+        created_at: placedAt,
+        updated_at: placedAt,
+      });
+    }
+    const useCase = new ExecuteViewUseCase(db);
+    const result = await useCase.execute({
+      view: view({
+        from: "orders",
+        fields: ["id"],
+        requires: { auth: { all: ["ctx.user"] } },
+        filter: {
+          and: [
+            { eq: { field: "status", value: "published" } },
+            { eq: { field: "userId", value: { "$ctx.user": "id" } } },
+          ],
+        },
+      }),
+      ctx: {
+        user: { id: "user-a" },
+        staff: null,
+        env: {},
+        request: new Request("https://example.test/api/views/my-orders"),
+        waitUntil: () => {},
+      },
+    });
+    if (!result.ok) throw new Error(JSON.stringify(result.diagnostic));
+    expect(result.result.rows).toEqual([{ id: "o1" }]);
+  });
+
   it("normalizes SQLite JSON projections to the generated View row shape", async () => {
     const db = {
       prepare: () => ({

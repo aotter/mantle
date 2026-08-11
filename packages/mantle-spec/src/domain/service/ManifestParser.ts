@@ -13,6 +13,8 @@ import {
   FILTER_COMPARISON_OPS,
   VIEW_PARAMS_RESERVED,
   isParamRef,
+  hasCtxUserRefKey,
+  isCtxUserRef,
   isStaffRole,
   type AuthPredicate,
   type BuiltinOp,
@@ -631,7 +633,16 @@ function validateFilterAst(
     if (!("value" in e)) {
       throw new ManifestParseError(`${path}.${op}.value is required`, idx, `${jsonPointer}/${op}/value`);
     }
-    if (isParamRef(e["value"])) {
+    if (hasCtxUserRefKey(e["value"])) {
+      if (op !== "eq" || !isCtxUserRef(e["value"])) {
+        throw new ManifestParseError(
+          `${path}.${op}.value must use the exact identity sentinel { "$ctx.user": "id" } with eq.`,
+          idx,
+          `${jsonPointer}/${op}/value`,
+          "VIEW_FILTER_CTX_USER_REF_INVALID",
+        );
+      }
+    } else if (isParamRef(e["value"])) {
       validateParamRef(e["value"].$param, idx, `${jsonPointer}/${op}/value/$param`, paramSchema);
     }
     return;

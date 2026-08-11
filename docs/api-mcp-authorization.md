@@ -78,6 +78,56 @@ Missing/invalid credentials return `401`; a verified caller missing a required
 role or scope returns `403`; a site guard may return
 `ENTITLEMENT_REQUIRED`/`402`. Guards run on every call and are not cached.
 
+### Identity-bound Views
+
+Use the closed `{ "$ctx.user": "id" }` filter sentinel for rows owned by the
+current site-local Better Auth user. The caller never supplies this value, so
+the same View is safe on both REST and public MCP:
+
+```yaml
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: orders }
+spec:
+  schema:
+    type: object
+    properties:
+      userId: { type: string, x-mantle-bind: ctx.user }
+      orderNumber: { type: string }
+      orderStatus: { type: string }
+      totalMinor: { type: integer }
+      placedAt: { type: integer }
+  indexes: [[userId, placedAt]]
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: my-orders }
+spec:
+  surface: public
+  from: orders
+  requires:
+    auth:
+      all: [ctx.user]
+  filter:
+    and:
+      - { eq: { field: status, value: published } }
+      - { eq: { field: userId, value: { "$ctx.user": id } } }
+  fields: [orderNumber, orderStatus, totalMinor, placedAt]
+  orderBy: [{ field: placedAt, direction: desc }]
+  limit: 50
+```
+
+Core rejects this sentinel unless the View requires `ctx.user` and the bound
+field is the leftmost field of a declared Schema index. Missing identity fails
+with `401`; it never drops the filter or falls back to all rows. REST exposes
+`GET /api/views/my-orders`; public MCP exposes `query_view_my_orders`. Both
+call `ExecuteViewUseCase` and bind the same `ctx.user.id`.
+
+The id belongs to the customer site's Better Auth user row. It is not a
+Mantle Platform user id, Hosted Auth upstream subject, email, or provider id.
+Hosted Auth may establish the site session, but Platform is not part of the
+View query path.
+
 ## Cloudflare consumer wiring
 
 Pass one site-owned resolver to `createCmsRef`. Return `not-handled` when the

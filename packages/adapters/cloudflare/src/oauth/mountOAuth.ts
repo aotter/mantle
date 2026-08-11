@@ -1,5 +1,6 @@
 import type { Context, Env, Hono } from "hono";
 import type { Auth } from "../auth/createAuth.js";
+import { rejectCrossOriginMutation } from "../auth/rejectCrossOriginMutation.js";
 import {
   detectConsentLocale,
   renderConsentHtml,
@@ -61,14 +62,8 @@ export function mountAuthorize<E extends Env>(app: Hono<E>, options: MountAuthor
       // any request a browser flags as cross-site / cross-origin; browsers
       // always send these on a real consent submit, and non-browser
       // clients can't ride a victim's cookie cross-site anyway. (#389)
-      const secFetchSite = c.req.header("sec-fetch-site");
-      if (secFetchSite && secFetchSite !== "same-origin" && secFetchSite !== "none") {
-        return new Response("cross-site consent submission rejected", { status: 403 });
-      }
-      const origin = c.req.header("origin");
-      if (origin && origin !== new URL(c.req.url).origin) {
-        return new Response("origin mismatch", { status: 403 });
-      }
+      const rejected = rejectCrossOriginMutation(c.req.raw);
+      if (rejected) return rejected;
       const form = await c.req.raw.formData();
       const oauthRequestJson = form.get("oauth_request");
       if (typeof oauthRequestJson !== "string") {

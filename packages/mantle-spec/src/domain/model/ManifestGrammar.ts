@@ -249,8 +249,8 @@ export interface ViewManifestSpec {
    *  `ctx.auth.scope`; an optional guard names one consumer Procedure. */
   readonly requires?: AuthorizationRequirements;
   /** Filter AST. v0.1 grammar: comparison ops plus and/or. Comparison
-   *  values may be literals or `{ $param: <name> }` sentinels referencing
-   *  `spec.params`. */
+   *  values may be literals, `{ $param: <name> }`, or the identity-bound
+   *  `{ "$ctx.user": "id" }` sentinel. */
   readonly filter?: FilterAst;
   /** Projection. */
   readonly fields?: readonly string[];
@@ -277,9 +277,8 @@ export type FilterAst = FilterComparison | FilterAnd | FilterOr;
 export type FilterComparison = FilterEq | FilterGt | FilterGte | FilterLt | FilterLte;
 interface FilterComparisonNode {
   readonly field: string;
-  /** Comparison value. Either a literal or a `ParamRef` sentinel
-   *  (`{ $param: <name> }`) substituted at request time from
-   *  `View.spec.params`. See `isParamRef`. */
+  /** Comparison value. Either a literal, a request `ParamRef`, or the
+   *  site-local identity `CtxUserRef`. */
   readonly value: unknown;
 }
 export interface FilterEq {
@@ -299,9 +298,7 @@ export interface FilterLte {
 }
 
 /** Sentinel object form for filter values that pull from caller-supplied
- *  params at request time. The discriminator key `$param` was chosen to
- *  match the JSON Schema `$ref` convention; future sentinels for `now`,
- *  `ctx.user`, etc. follow the same `$<name>` shape. */
+ *  params at request time. */
 export interface ParamRef {
   readonly $param: string;
 }
@@ -312,6 +309,29 @@ export function isParamRef(v: unknown): v is ParamRef {
     v !== null &&
     !Array.isArray(v) &&
     typeof (v as Record<string, unknown>)["$param"] === "string"
+  );
+}
+
+/** Site-local Better Auth user id. Deliberately closed to `id`; provider
+ *  claims and Platform identities do not belong in View filters. */
+export interface CtxUserRef {
+  readonly "$ctx.user": "id";
+}
+
+export function hasCtxUserRefKey(v: unknown): v is Record<"$ctx.user", unknown> {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    !Array.isArray(v) &&
+    Object.prototype.hasOwnProperty.call(v, "$ctx.user")
+  );
+}
+
+export function isCtxUserRef(v: unknown): v is CtxUserRef {
+  return (
+    hasCtxUserRefKey(v) &&
+    Object.keys(v).length === 1 &&
+    v["$ctx.user"] === "id"
   );
 }
 
