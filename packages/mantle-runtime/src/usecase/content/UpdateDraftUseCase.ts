@@ -1,5 +1,6 @@
 import {
   DiagnosticError,
+  EntryDataValidator,
   resolveLifecycle,
   runtimeDiagnostic,
   type SchemaManifest,
@@ -28,6 +29,7 @@ export class UpdateDraftUseCase {
     private readonly schemas: ReadonlyMap<string, SchemaManifest>,
     private readonly clock: Clock,
     private readonly siteConfig?: SiteConfigRepository,
+    private readonly validator = new EntryDataValidator(),
   ) {}
 
   async execute(request: UpdateDraftRequest): Promise<EntryRow> {
@@ -79,6 +81,7 @@ export class UpdateDraftUseCase {
       entries: this.entries,
       schema,
       data,
+      validator: this.validator,
       excludeId: existing.id,
       siteConfig: this.siteConfig,
       // Real drafts save incomplete; lifecycle:none records are live immediately.

@@ -130,6 +130,7 @@ export async function resolveCaller(
       },
       options.auth,
       base,
+      session.user.role,
     ),
   };
 }
@@ -139,8 +140,11 @@ async function contextForUser(
   authContext: NonNullable<HandlerContext["auth"]>,
   auth: Auth,
   base: Pick<HandlerContext, "env" | "waitUntil">,
+  knownRole?: string | null,
 ): Promise<HandlerContext> {
-  const role = userId ? await auth.getUserRole(userId) : null;
+  const role = knownRole === undefined && userId
+    ? await auth.getUserRole(userId)
+    : knownRole ?? null;
   const staff =
     userId && role && STAFF_ROLE_SET.has(role)
       ? { id: userId, role: role as StaffRole }

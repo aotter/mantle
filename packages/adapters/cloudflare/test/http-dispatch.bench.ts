@@ -92,6 +92,25 @@ function manifests(): Manifest[] {
         target: { procedure: "reserve-site" },
       },
     },
+    {
+      apiVersion,
+      kind: "Procedure",
+      metadata: { name: "create-site" },
+      spec: {
+        input: accountInput,
+        output: { type: "object" },
+        handler: { kind: "builtin", op: "create", schema: "sites" },
+      },
+    },
+    {
+      apiVersion,
+      kind: "Trigger",
+      metadata: { name: "create-site-http" },
+      spec: {
+        source: { kind: "http", method: "POST", path: "/api/sites" },
+        target: { procedure: "create-site" },
+      },
+    },
   ];
 }
 
@@ -138,6 +157,11 @@ beforeAll(async () => {
     headers: { ...headers, "content-type": "application/json" },
     body: JSON.stringify({ operationId: "op-1" }),
   });
+  await request("/api/sites", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ accountId: "acct-1" }),
+  });
 });
 
 describe("warm native HTTP dispatch", () => {
@@ -150,6 +174,14 @@ describe("warm native HTTP dispatch", () => {
       method: "POST",
       headers: { ...headers, "content-type": "application/json" },
       body: JSON.stringify({ operationId: "op-1" }),
+    });
+  });
+
+  bench("builtin write HTTP Trigger", async () => {
+    await request("/api/sites", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ accountId: "acct-1" }),
     });
   });
 });

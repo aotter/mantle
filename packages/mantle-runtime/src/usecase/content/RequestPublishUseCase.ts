@@ -1,6 +1,7 @@
 import {
   canTransition,
   DiagnosticError,
+  EntryDataValidator,
   publishRequiresApproval,
   resolveLifecycle,
   runtimeDiagnostic,
@@ -36,6 +37,7 @@ export class RequestPublishUseCase {
     private readonly schemas: ReadonlyMap<string, SchemaManifest>,
     private readonly clock: Clock,
     private readonly siteConfig?: SiteConfigRepository,
+    private readonly validator = new EntryDataValidator(),
   ) {}
 
   async execute(request: RequestPublishRequest): Promise<EntryRow> {
@@ -69,6 +71,7 @@ export class RequestPublishUseCase {
         entries: this.entries,
         schema,
         data: existing.data,
+        validator: this.validator,
         excludeId: existing.id,
         siteConfig: this.siteConfig,
       });

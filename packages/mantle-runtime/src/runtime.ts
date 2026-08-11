@@ -1,4 +1,5 @@
 import {
+  EntryDataValidator,
   runtimeDiagnostic,
   type Manifest,
   type ProcedureManifest,
@@ -217,6 +218,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
   const templates = args.templates ?? new TemplateRegistryImpl();
   const clock = args.clock ?? SystemClock;
   const idgen = args.idgen ?? RandomUuidGenerator;
+  const entryDataValidator = new EntryDataValidator();
 
   // Repositories: DB-backed inner + lifecycle-hook decorator. Every
   // mutation through `entries` (create / update / delete /
@@ -249,6 +251,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     clock,
     idgen,
     siteConfig,
+    entryDataValidator,
   );
   const invokeProcedure = new InvokeProcedureUseCase(registry, invokeBuiltin, proceduresByName);
   const lifecycleHooks = new RunLifecycleHooksUseCase(
@@ -273,8 +276,21 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
 
   // Content / view / boot use cases. They see `entries` only as the
   // chokepoint port — hook firing is invisible to them.
-  const createDraft = new CreateDraftUseCase(entries, schemasByName, clock, idgen, siteConfig);
-  const updateDraft = new UpdateDraftUseCase(entries, schemasByName, clock, siteConfig);
+  const createDraft = new CreateDraftUseCase(
+    entries,
+    schemasByName,
+    clock,
+    idgen,
+    siteConfig,
+    entryDataValidator,
+  );
+  const updateDraft = new UpdateDraftUseCase(
+    entries,
+    schemasByName,
+    clock,
+    siteConfig,
+    entryDataValidator,
+  );
   const getEntry = new GetEntryUseCase(entries);
   const listEntries = new ListEntriesUseCase(entries, schemasByName);
   const requestPublish = new RequestPublishUseCase(
@@ -282,6 +298,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     schemasByName,
     clock,
     siteConfig,
+    entryDataValidator,
   );
   const unpublish = new UnpublishUseCase(entries, schemasByName, clock);
   const archive = new ArchiveUseCase(entries, schemasByName, clock);

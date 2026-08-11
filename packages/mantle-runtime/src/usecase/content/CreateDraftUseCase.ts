@@ -1,5 +1,6 @@
 import {
   DiagnosticError,
+  EntryDataValidator,
   resolveLifecycle,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
@@ -28,6 +29,7 @@ export class CreateDraftUseCase {
     private readonly clock: Clock,
     private readonly idgen: IdGenerator,
     private readonly siteConfig?: SiteConfigRepository,
+    private readonly validator = new EntryDataValidator(),
   ) {}
 
   async execute(request: CreateDraftRequest): Promise<EntryRow> {
@@ -48,6 +50,7 @@ export class CreateDraftUseCase {
       entries: this.entries,
       schema,
       data,
+      validator: this.validator,
       siteConfig: this.siteConfig,
       // Real drafts save incomplete; lifecycle:none records are live immediately.
       partial: lifecycle !== "none",
