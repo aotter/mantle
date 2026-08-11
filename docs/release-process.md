@@ -62,8 +62,9 @@ decision instead of starting another local redesign loop.
 ## Release PR
 
 1. Fetch Core and Starter remotes and choose the next unused version.
-2. Read `CHANGELOG.md` completely. Add a dated Keep-a-Changelog entry from the
-   merged commits since the previous tag; do not add an `[Unreleased]` bucket.
+2. Preview GitHub's generated notes for the merged commits since the previous
+   tag. Correct PR titles and labels before release; do not duplicate the notes
+   in `CHANGELOG.md`. Label the release-only PR `skip-release-notes`.
 3. Set that exact version in every workspace package and in all four agent
    plugin manifests. Set `.agents/plugins/marketplace.json` to the immutable
    `v<version>` ref.
@@ -76,6 +77,16 @@ decision instead of starting another local redesign loop.
 6. Run `pnpm check`, inspect the packed umbrella package, and run the exact
    packed-consumer gate. Review and merge a same-repository PR into `develop`;
    the controller rejects a direct-push release commit.
+
+Preview the native notes before merging the release PR:
+
+```bash
+gh api --method POST repos/aotter/mantle/releases/generate-notes \
+  -f tag_name=vX.Y.Z \
+  -f target_commitish="$(git rev-parse origin/develop)" \
+  -f previous_tag_name=vPREVIOUS \
+  --jq .body
+```
 
 The five public packages publish in dependency order:
 
@@ -179,7 +190,7 @@ deployment was started.
 ## Fix-forward policy
 
 - Broken public package or Starter bundle: publish the next alpha and explain
-  the re-spin in `CHANGELOG.md`.
+  the re-spin in the fix PR and generated GitHub Release notes.
 - Use `npm deprecate` to steer consumers away from a broken version.
 - Unpublish only for secrets, private files, or similarly severe exposure;
   npm versions cannot be reused and registry metadata may remain unavailable
