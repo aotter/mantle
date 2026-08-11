@@ -263,18 +263,19 @@ class InMemoryStatement implements PreparedStatement {
     if (
       sql.startsWith("SELECT id, collection, status, version, data, author_id, created_at, updated_at FROM entries") &&
       sql.includes(" FROM entries WHERE ") &&
-      !sql.includes("LIMIT ? OFFSET ?")
+      !sql.includes("ORDER BY updated_at DESC, id DESC LIMIT ?")
     ) {
       return { rows: runEntryReaderQuery(this.db, sql, p), changes: 0 };
     }
 
-    // SELECT … FROM entries WHERE collection = ? [AND status = ?] [AND (id LIKE ... OR data LIKE ...)] ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?
+    // SELECT … FROM entries WHERE collection = ? [AND status = ?] [AND search] [AND keyset] ORDER BY updated_at DESC, id DESC LIMIT ?
     if (
       sql.startsWith("SELECT id, collection, status, version, data, author_id, created_at, updated_at FROM entries WHERE collection = ?") &&
       sql.includes("ORDER BY updated_at DESC, id DESC")
     ) {
       const hasStatus = sql.includes("AND status = ?");
       const hasSearch = sql.includes("id LIKE");
+      const hasCursor = sql.includes("(updated_at, id) < (?, ?)");
       const collection = p[0] as string;
       let pi = 1;
       const status = hasStatus ? (p[pi++] as string) : null;
@@ -283,14 +284,19 @@ class InMemoryStatement implements PreparedStatement {
         searchTerm = p[pi++] as string;
         pi++; // second bound param is the same term (id + data)
       }
+      const cursorUpdatedAt = hasCursor ? (p[pi++] as number) : null;
+      const cursorId = hasCursor ? (p[pi++] as string) : null;
       const limit = (p[pi++] as number) ?? 100;
-      const offset = (p[pi++] as number) ?? 0;
       const filtered = [...this.db.entries.values()]
         .filter((r) => r.collection === collection)
         .filter((r) => (status ? r.status === status : true))
         .filter((r) => (searchTerm ? matchesLikeSearch(r, searchTerm) : true))
+        .filter((r) =>
+          cursorUpdatedAt === null ||
+          r.updated_at < cursorUpdatedAt ||
+          (r.updated_at === cursorUpdatedAt && r.id < cursorId!))
         .sort((a, b) => b.updated_at - a.updated_at || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
-        .slice(offset, offset + limit);
+        .slice(0, limit);
       return { rows: filtered.map((r) => ({ ...r })), changes: 0 };
     }
 

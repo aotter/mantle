@@ -148,6 +148,19 @@ function row(id: string, data: Record<string, unknown>, updatedAt = 1) {
 }
 
 describe("GET /admin/api/entries?search=", () => {
+  it("reuses the role already loaded with the session", async () => {
+    let roleReads = 0;
+    const { app } = harness(undefined, {
+      getUserRole: async () => {
+        roleReads++;
+        return "editor";
+      },
+    });
+    const res = await app.request("/admin/api/entries?collection=posts");
+    expect(res.status).toBe(200);
+    expect(roleReads).toBe(0);
+  });
+
   it("filters rows whose id or data matches the search term", async () => {
     const { app } = harness((db) => {
       db.entries.set("p1", row("p1", { title: "Hello world", slug: "hello" }));

@@ -67,21 +67,48 @@ try {
     rounds: 10,
     warmup: 2,
   });
+  const admin = await benchmarkHttpRoutes({
+    targets: [
+      {
+        name: "admin-first-10000",
+        url: `${baseUrl}/admin/api/entries?collection=posts&limit=20`,
+      },
+      {
+        name: "admin-late-10000",
+        url: `${baseUrl}/admin/api/entries?collection=posts&limit=20&cursor=e%3A1000%3Apost-1000`,
+      },
+      {
+        name: "admin-published-late-10000",
+        url: `${baseUrl}/admin/api/entries?collection=posts&status=published&limit=20&cursor=e%3A1000%3Apost-1000`,
+      },
+    ],
+    rounds: 10,
+    warmup: 2,
+  });
   const smallRows = metric(small, "rowsRead");
   const crowdedRows = metric(crowded, "rowsRead");
   const crowdedQueries = metric(crowded, "queryCount");
   const missRows = metric(misses, "rowsRead");
   const missQueries = metric(misses, "queryCount");
+  const adminQueryMax = Math.max(...admin.results.map((result) => result.queryCount?.max ?? Infinity));
+  const adminRowsP95 = Math.max(...admin.results.map((result) => result.rowsRead?.p95 ?? Infinity));
   const gates = {
     crowdedRowsReadBounded: crowdedRows.p95 <= Math.max(100, smallRows.p95 * 4),
     publicApiUsesOneQuery: crowdedQueries.max <= 1,
     pageMissStaysBounded: missQueries.max <= 2 && missRows.p95 <= 10,
+    adminListUsesOneQuery: adminQueryMax <= 1,
+    adminListRowsReadBounded: adminRowsP95 <= 100,
   };
   const report = {
     version: 1,
     environment: "wrangler-local",
     datasets: [100, 10_000],
-    results: [...small.results, ...crowded.results, ...misses.results],
+    results: [
+      ...small.results,
+      ...crowded.results,
+      ...misses.results,
+      ...admin.results,
+    ],
     gates,
   };
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);

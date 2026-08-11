@@ -14,6 +14,21 @@ interface Env {
   readonly DB: D1Database;
 }
 
+const staffAuth = {
+  ...stubAuth,
+  getSession: async () => ({
+    session: { id: "performance-session", userId: "performance-user", expiresAt: new Date(0) },
+    user: {
+      id: "performance-user",
+      email: "performance@example.test",
+      name: "Performance",
+      role: "owner",
+      githubLogin: null,
+    },
+  }),
+  getUserRole: async () => "owner",
+};
+
 const manifests: Manifest[] = [
   {
     apiVersion: "cms.mantle.aotter.net/v1",
@@ -73,7 +88,7 @@ function createState(env: Env) {
       db: new D1DatabaseDriver(env.DB, (metric) => activeMetrics?.push(metric)),
       assets: new StubAssetServer(),
     },
-    auth: stubAuth,
+    auth: staffAuth,
   });
   const app = new Hono();
   mountServerEndpoints(app, ref);

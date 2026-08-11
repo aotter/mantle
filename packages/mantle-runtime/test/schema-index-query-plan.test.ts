@@ -824,7 +824,7 @@ describe("EntryReader against crowded real SQLite", () => {
       },
       {
         args: { collection: slugLocale.metadata.name },
-        index: "entries_published_collection_updated",
+        index: "entries_by_collection_status_updated_id",
       },
       {
         args: { locale: "en" },

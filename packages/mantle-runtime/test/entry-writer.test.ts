@@ -241,6 +241,41 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
     expect(published.rows.map((r) => r.id)).toEqual(["p3", "p1"]);
   });
 
+  it("paginates equal timestamps without overlap", async () => {
+    const db = new InMemoryDatabase();
+    const repo = new DatabaseEntryRepository(db);
+    for (const id of ["p1", "p2", "p3", "p4", "p5"]) {
+      await repo.create({
+        id,
+        collection: "posts",
+        status: "draft",
+        data: {},
+        authorId: null,
+        now: 1,
+      });
+    }
+    const first = await repo.list({ collection: "posts", limit: 2 });
+    const second = await repo.list({
+      collection: "posts",
+      limit: 2,
+      cursor: first.nextCursor,
+    });
+    const third = await repo.list({
+      collection: "posts",
+      limit: 2,
+      cursor: second.nextCursor,
+    });
+    expect([...first.rows, ...second.rows, ...third.rows].map((row) => row.id)).toEqual([
+      "p5",
+      "p4",
+      "p3",
+      "p2",
+      "p1",
+    ]);
+    expect(first.nextCursor).toMatch(/^e:/);
+    expect(third.nextCursor).toBeUndefined();
+  });
+
   it("findByDataField finds a matching row with optional status filter", async () => {
     const db = new InMemoryDatabase();
     const repo = new DatabaseEntryRepository(db);

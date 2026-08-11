@@ -30,7 +30,7 @@ import {
 } from "@aotter/mantle-runtime";
 import { indexHtml } from "@aotter/mantle-admin-ui";
 import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
-import { resolveCaller } from "./resolveCaller.js";
+import { resolveCaller, resolveUserRole } from "./resolveCaller.js";
 import { runMantleUseCase } from "./runMantleUseCase.js";
 import { STAFF_ROLE_SET, type StaffRole, type Auth } from "../auth/createAuth.js";
 import { AOTTER_FAVICON_SVG } from "../assets/aotterFavicon.js";
@@ -1489,7 +1489,7 @@ function adminHandlerContext(c: Context, gate: Extract<StaffGate, { kind: "ok" }
 async function readStaffGate(c: Context, auth: Auth): Promise<StaffGate> {
   const session = await auth.getSession(c.req.raw);
   if (!session) return { kind: "unauth" };
-  const role = await auth.getUserRole(session.user.id);
+  const role = await resolveUserRole(auth, session.user.id, session.user.role);
   const login = session.user.githubLogin ?? null;
   if (!role || !STAFF_ROLE_SET.has(role)) {
     return { kind: "forbidden", login };

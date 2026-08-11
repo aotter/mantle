@@ -32,7 +32,11 @@ import {
   projectPublicEntry,
   type EntryRow,
 } from "../../domain/model/EntryRow.js";
-import { decodeCursor, encodeCursor, escapeLikeTerm } from "./Pagination.js";
+import {
+  decodeEntryCursor,
+  encodeEntryCursor,
+  escapeLikeTerm,
+} from "./Pagination.js";
 
 /**
  * `EntryRepository` impl backed by `DatabaseDriver`. Adapters that
@@ -198,7 +202,7 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
     // adapters that bypass the use case) get the same default page
     // size as ListEntriesUseCase — not a silently different 100.
     const limit = clampLimit(args.limit);
-    const offset = decodeCursor(args.cursor);
+    const cursor = decodeEntryCursor(args.cursor);
     // Fetch limit+1 to detect a next page without a second query —
     // the extra row never reaches the caller.
     const probe = limit + 1;
@@ -217,12 +221,16 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
       conditions.push("(id LIKE '%'||?||'%' ESCAPE '\\' OR data LIKE '%'||?||'%' ESCAPE '\\')");
       binds.push(term, term);
     }
-    binds.push(probe, offset);
+    if (cursor) {
+      conditions.push("(updated_at, id) < (?, ?)");
+      binds.push(...cursor);
+    }
+    binds.push(probe);
     const stmt = this.db
       .prepare(
         `SELECT id, collection, status, version, data, author_id, created_at, updated_at
          FROM entries WHERE ${conditions.join(" AND ")}
-         ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?`,
+         ORDER BY updated_at DESC, id DESC LIMIT ?`,
       )
       .bind(...binds);
     const rows = await stmt.all<EntryDbRow>();
@@ -230,7 +238,9 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
     const page = hasMore ? rows.slice(0, limit) : rows;
     return {
       rows: page.map(rowFromDb),
-      nextCursor: hasMore ? encodeCursor(offset + limit) : undefined,
+      nextCursor: hasMore && page.length > 0
+        ? encodeEntryCursor(page[page.length - 1]!.updated_at, page[page.length - 1]!.id)
+        : undefined,
     };
   }
 

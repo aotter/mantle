@@ -16,12 +16,10 @@ import type {
   TransitionStatusArgs,
   UpdateEntryArgs,
 } from "../../src/domain/port/EntryRepository.js";
-
-function decodeOffsetCursor(cursor: string | undefined): number {
-  if (!cursor || !cursor.startsWith("o:")) return 0;
-  const n = Number(cursor.slice(2));
-  return Number.isInteger(n) && n >= 0 ? n : 0;
-}
+import {
+  decodeEntryCursor,
+  encodeEntryCursor,
+} from "../../src/infrastructure/persistence/Pagination.js";
 
 /**
  * In-memory `EntryRepository` for content-op + state-machine tests.
@@ -108,7 +106,7 @@ export class InMemoryEntryRepository implements EntryRepository {
 
   async list(args: ListEntriesArgs): Promise<ListEntriesResult> {
     const limit = args.limit ?? 100;
-    const offset = decodeOffsetCursor(args.cursor);
+    const cursor = decodeEntryCursor(args.cursor);
     const filtered: EntryRow[] = [];
     for (const row of this.rows.values()) {
       if (row.collection !== args.collection) continue;
@@ -117,11 +115,16 @@ export class InMemoryEntryRepository implements EntryRepository {
     }
     // Match real DB ordering: updated_at DESC, id DESC.
     filtered.sort((a, b) => b.updatedAt - a.updatedAt || (b.id > a.id ? 1 : b.id < a.id ? -1 : 0));
-    const page = filtered.slice(offset, offset + limit);
-    const hasMore = offset + limit < filtered.length;
+    const remaining = cursor
+      ? filtered.filter((row) =>
+          row.updatedAt < cursor[0] || (row.updatedAt === cursor[0] && row.id < cursor[1]))
+      : filtered;
+    const page = remaining.slice(0, limit);
+    const hasMore = remaining.length > limit;
+    const last = page[page.length - 1];
     return {
       rows: page,
-      nextCursor: hasMore ? `o:${offset + limit}` : undefined,
+      nextCursor: hasMore && last ? encodeEntryCursor(last.updatedAt, last.id) : undefined,
     };
   }
 
