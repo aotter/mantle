@@ -237,7 +237,12 @@ properties:
 Informational FK marker on a string-typed field that holds an ID
 referencing rows in another Schema. Not enforced in v0.1 (the SDK
 passes it through; no foreign-key constraint, no cascade, no orphan
-detection). Future grammar may upgrade it to enforced.
+detection). The admin uses declared refs to show related rows and to nest
+required child collections; it does not infer relationships from field names.
+Declare a single-field `indexes` entry for the ref field (for example,
+`indexes: [[authorId]]`) when reverse lookups must stay bounded. Mantle adds
+the native entry-order columns to that access path. Future grammar may upgrade
+it to enforced.
 
 **Example**:
 ```yaml

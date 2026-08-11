@@ -109,6 +109,24 @@ describe("SchemaDdlEmitter", () => {
     expect(schemaIndexedFieldSql(manifest, "title")).toBeNull();
   });
 
+  it("covers reverse relationship ordering with an explicit single-field index", () => {
+    const manifest = baseManifest("comments", {
+      schema: {
+        type: "object",
+        properties: {
+          postId: { type: "string", "x-mantle-ref": "posts" },
+        },
+      },
+      uniqueIndexes: [],
+      indexes: [["postId"]],
+    });
+
+    const [index] = buildDdl(manifest).indexes;
+
+    expect(index?.name).toMatch(/^m2r_/);
+    expect(index?.sql).toContain(', "updated_at" DESC, "id" DESC)');
+  });
+
   it("fails closed on unsafe or invalid declarations", () => {
     expect(() => buildDdl(baseManifest("1posts"))).toThrow(/safe index identifier/);
     expect(() =>

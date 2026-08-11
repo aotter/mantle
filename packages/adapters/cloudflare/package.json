@@ -35,7 +35,7 @@
     "test": "pnpm test:facade-types && vitest run",
     "test:facade-types": "tsc --ignoreConfig --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --types @cloudflare/workers-types,node test/createMantleWorker.typecheck.ts",
     "bench:http-dispatch": "vitest bench --run test/http-dispatch.bench.ts",
-    "bench:wrangler": "pnpm --filter @aotter/mantle-runtime build && node ../../../scripts/run-wrangler-performance.mjs"
+    "bench:wrangler": "pnpm --filter @aotter/mantle-spec build && pnpm --filter @aotter/mantle-runtime build && node ../../../scripts/run-wrangler-performance.mjs"
   },
   "dependencies": {
     "@aotter/mantle-admin-ui": "workspace:*",
