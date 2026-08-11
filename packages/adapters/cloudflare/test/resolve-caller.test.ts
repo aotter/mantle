@@ -189,4 +189,45 @@ describe("resolveCaller", () => {
       diagnostic: { code: "AUTH_DENIED" },
     });
   });
+
+  it("normalizes the site's opaque OAuth bearer on manifest HTTP routes", async () => {
+    const unwrapToken = async (token: string) => token === "user-1:grant-1:secret"
+      ? {
+          id: "token-1",
+          grantId: "grant-1",
+          userId: "user-1",
+          createdAt: 1,
+          expiresAt: 2,
+          audience: "https://example.test/api",
+          scope: ["mcp"],
+          grant: { clientId: "client-1", scope: ["mcp"], props: {} },
+        }
+      : null;
+    const options = {
+      auth: auth({ getUserRole: async () => "viewer" }),
+      env: { OAUTH_PROVIDER: { unwrapToken } },
+    };
+
+    const allowed = await resolveCaller(new Request("https://example.test/api/orders", {
+      headers: { authorization: "Bearer user-1:grant-1:secret" },
+    }), options);
+    expect(allowed).toMatchObject({
+      kind: "authenticated",
+      context: {
+        user: { id: "user-1" },
+        staff: null,
+        auth: {
+          credential: "oauth",
+          credentialId: "token-1",
+          clientId: "client-1",
+          scopes: ["mcp"],
+        },
+      },
+    });
+
+    const wrongAudience = await resolveCaller(new Request("https://other.test/api/orders", {
+      headers: { authorization: "Bearer user-1:grant-1:secret" },
+    }), options);
+    expect(wrongAudience).toMatchObject({ kind: "invalid", status: 401 });
+  });
 });
