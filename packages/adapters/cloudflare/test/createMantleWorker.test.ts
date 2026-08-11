@@ -31,6 +31,14 @@ vi.mock("@cloudflare/workers-oauth-provider", () => ({
       oauthState.scopes = options.scopesSupported ?? [];
     }
     fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+      const pathname = new URL(request.url).pathname;
+      if (
+        pathname === "/oauth/token" ||
+        pathname === "/oauth/register" ||
+        pathname.startsWith("/.well-known/oauth") ||
+        ((pathname === "/mcp" || pathname.startsWith("/mcp/")) &&
+          !request.headers.has("authorization"))
+      ) return Promise.resolve(new Response("oauth transport"));
       const fetch = this.options.defaultHandler.fetch;
       if (!fetch) throw new Error("default handler fetch is missing");
       return fetch(request, env, ctx);
@@ -95,6 +103,29 @@ describe("createMantleWorker", () => {
 
     await fetchWorker(worker, "/api/auth/probe", testEnv());
 
+    expect(db.appliedMigrations.size).toBeGreaterThan(0);
+  });
+
+  it("does not boot the CMS runtime for OAuth transport-only requests", async () => {
+    const db = new InMemoryDatabase();
+    const worker = createMantleWorker<TestEnv>({
+      manifest: [],
+      auth: () => stubAuth,
+      bindings: () => ({ db, assets: new StubAssetServer() }),
+    });
+
+    for (const path of [
+      "/.well-known/oauth-authorization-server",
+      "/.well-known/oauth-protected-resource/mcp/staff",
+      "/oauth/register",
+      "/oauth/token",
+      "/mcp/staff",
+    ]) {
+      expect((await fetchWorker(worker, path, testEnv())).status, path).toBe(200);
+    }
+
+    expect(db.appliedMigrations.size).toBe(0);
+    await fetchWorker(worker, "/oauth/authorize", testEnv());
     expect(db.appliedMigrations.size).toBeGreaterThan(0);
   });
 
