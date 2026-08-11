@@ -27,6 +27,7 @@ import { createMcpApiHandler } from "../mount/mountMcp.js";
 import { mountServerEndpoints } from "../mount/mountServerEndpoints.js";
 import type { ConsumerCredentialResolver } from "../mount/resolveCaller.js";
 import { mountAuthorize } from "../oauth/mountOAuth.js";
+import { OAUTH_REGISTER_PATH, OAUTH_TOKEN_PATH } from "../oauth/oauthConstants.js";
 import { createOAuthProvider } from "../oauth/oauthSingleton.js";
 
 /** Fixed namespaces owned by Mantle's standard Worker surfaces. */
@@ -225,13 +226,24 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
     async fetch(request, env, ctx) {
       return runMantleWorkerRequest(async () => {
         const worker = assemble(env);
-        await worker.getRuntime();
         const setupIncomplete = await setupIncompleteAuthResponse(request, worker.auth);
         if (setupIncomplete) return setupIncomplete;
+        if (!isRuntimeIndependentOAuthRequest(request)) await worker.getRuntime();
         return worker.fetch(request, env, ctx);
       });
     },
   };
+}
+
+function isRuntimeIndependentOAuthRequest(request: Request): boolean {
+  const pathname = new URL(request.url).pathname;
+  if (
+    pathname === OAUTH_TOKEN_PATH ||
+    pathname === OAUTH_REGISTER_PATH ||
+    pathname.startsWith(MANTLE_RESERVED_WELL_KNOWN_PREFIX)
+  ) return true;
+  return (pathname === "/mcp" || pathname.startsWith("/mcp/")) &&
+    !request.headers.has("authorization");
 }
 
 /** Redacted fail-closed boundary for facade and low-level Worker assembly failures. */
