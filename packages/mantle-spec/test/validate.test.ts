@@ -727,6 +727,71 @@ spec:
   });
 });
 
+describe("View $ctx.user filter", () => {
+  it("parses only the exact eq identity sentinel", () => {
+    const valid = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: myOrders }
+spec:
+  from: orders
+  requires: { auth: { all: [ctx.user] } }
+  filter: { eq: { field: userId, value: { "$ctx.user": id } } }
+`);
+    expect(valid.diagnostics).toEqual([]);
+
+    for (const filter of [
+      `{ gt: { field: userId, value: { "$ctx.user": id } } }`,
+      `{ eq: { field: userId, value: { "$ctx.user": email } } }`,
+      `{ eq: { field: userId, value: { "$ctx.user": id, extra: true } } }`,
+    ]) {
+      const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: myOrders }
+spec:
+  from: orders
+  filter: ${filter}
+`);
+      expect(result.diagnostics.map((d) => d.code)).toContain(
+        "VIEW_FILTER_CTX_USER_REF_INVALID",
+      );
+    }
+  });
+
+  it("requires ctx.user auth and a leftmost Schema index", () => {
+    const orders = schema("orders", {
+      schema: {
+        type: "object",
+        properties: {
+          userId: { type: "string" },
+          placedAt: { type: "integer" },
+        },
+      },
+    });
+    const myOrders = view("myOrders", "orders", {
+      filter: { eq: { field: "userId", value: { "$ctx.user": "id" } } },
+    });
+    const missing = ValidateManifestsUseCase.run({ manifests: [orders, myOrders] });
+    expect(missing.diagnostics.map((d) => d.code)).toEqual(expect.arrayContaining([
+      "VIEW_FILTER_CTX_USER_REF_REQUIRES_AUTH",
+      "VIEW_FILTER_CTX_USER_REF_REQUIRES_INDEX",
+    ]));
+
+    const valid = ValidateManifestsUseCase.run({
+      manifests: [
+        { ...orders, spec: { ...orders.spec, indexes: [["userId", "placedAt"]] } },
+        {
+          ...myOrders,
+          spec: {
+            ...myOrders.spec,
+            requires: { auth: { all: ["ctx.user"] } },
+          },
+        },
+      ],
+    });
+    expect(valid.errorCount).toBe(0);
+  });
+});
+
 describe("requires.guard", () => {
   it("parses the single Procedure guard sub-spec on Procedure and View", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v1

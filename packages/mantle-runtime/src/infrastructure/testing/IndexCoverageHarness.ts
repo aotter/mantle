@@ -119,7 +119,7 @@ function inspectView(
   explicitlyRequired: boolean,
 ): IndexCoveragePath {
   const params = sampleParams(view);
-  const compiled = compileView(view, { params, page: 1 }, schema);
+  const compiled = compileView(view, { params, page: 1, ctxUserId: "index-harness-user" }, schema);
   const sqliteParams = compiled.params.map(toSqliteValue);
   const plan = (db.prepare(`EXPLAIN QUERY PLAN ${compiled.sql}`)
     .all(...sqliteParams) as unknown as QueryPlanRow[])

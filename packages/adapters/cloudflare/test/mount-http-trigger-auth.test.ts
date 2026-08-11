@@ -8,6 +8,7 @@ import {
 import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
 import type { Auth } from "../src/auth/createAuth.js";
+import { rejectCrossOriginMutation } from "../src/auth/rejectCrossOriginMutation.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
   StubAssetServer,
@@ -273,6 +274,28 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
     mountServerEndpoints(app, ref);
     const res = await app.request("/api/user-only", { method: "POST" });
     expect(res.status).toBe(200);
+  });
+
+  it("rejects cross-origin cookie-session mutations before invoking the target", async () => {
+    const app = buildApp(authFake({ role: "owner" }));
+    const rejected = await app.request("https://site.test/api/staff-only", {
+      method: "POST",
+      headers: { origin: "https://evil.test" },
+    });
+    expect(rejected.status).toBe(403);
+
+    const accepted = await app.request("https://site.test/api/staff-only", {
+      method: "POST",
+      headers: { origin: "https://site.test" },
+    });
+    expect(accepted.status).toBe(200);
+  });
+
+  it("does not apply the mutation guard to safe methods", async () => {
+    const response = rejectCrossOriginMutation(new Request("https://site.test/api/view", {
+      headers: { origin: "https://other.test" },
+    }));
+    expect(response).toBeNull();
   });
 
   it("rejects a bearer token when OAuth bearer verification is not configured", async () => {

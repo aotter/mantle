@@ -1,6 +1,7 @@
 import {
   DiagnosticError,
   RESERVED_ENTRY_COLUMNS,
+  isCtxUserRef,
   isParamRef,
   runtimeDiagnostic,
   schemaIndexedFieldSql,
@@ -20,8 +21,9 @@ import { clampPage, clampShow } from "./Pagination.js";
  *
  * v0.1 filter AST supports comparison operators (`eq`, `gt`, `gte`,
  * `lt`, `lte`) plus `and` / `or`; comparison values may be literals or
- * `{ $param: <name> }` sentinels substituted from `options.params` at
- * compile time. Pagination knobs `page` / `show` come in via
+ * `{ $param: <name> }` sentinels substituted from `options.params`, plus
+ * `{ "$ctx.user": "id" }` bound from the normalized site caller. Pagination
+ * knobs `page` / `show` come in via
  * `options`; the runtime owns the LIMIT/OFFSET emission.
  */
 export interface CompiledView {
@@ -38,6 +40,8 @@ export interface CompileViewOptions {
   readonly page?: number;
   /** Caller's requested page size; clamped to View.spec.limit. */
   readonly show?: number;
+  /** Site-local Better Auth user id for identity-bound filters. */
+  readonly ctxUserId?: string;
 }
 
 // alias → SQL column. Aliases mirror RESERVED_ENTRY_COLUMNS from
@@ -95,7 +99,12 @@ export function compileView(
   const selectExpr = buildSelect(view.spec.fields, schema);
   const whereParts: string[] = ["collection = ?"];
   if (view.spec.filter) {
-    const compiled = compileFilter(view.spec.filter, options.params ?? {}, schema);
+    const compiled = compileFilter(
+      view.spec.filter,
+      options.params ?? {},
+      options.ctxUserId,
+      schema,
+    );
     if (compiled !== null) {
       whereParts.push(`(${compiled.sql})`);
       sqlParams.push(...compiled.params);
@@ -157,13 +166,17 @@ interface CompiledFragment {
 function compileFilter(
   node: FilterAst,
   paramValues: Record<string, unknown>,
+  ctxUserId?: string,
   schema?: SchemaManifest,
 ): CompiledFragment | null {
   const comparison = getFilterComparison(node);
   if (comparison) {
     const value = comparison.node.value;
     let bound: unknown;
-    if (isParamRef(value)) {
+    if (isCtxUserRef(value)) {
+      if (!ctxUserId) throw new Error('View filter requires ctx.user.id.');
+      bound = ctxUserId;
+    } else if (isParamRef(value)) {
       const resolved = paramValues[value.$param];
       if (resolved === undefined) return null;
       bound = resolved;
@@ -178,7 +191,7 @@ function compileFilter(
   const op = "and" in node ? "AND" : "OR";
   const children = "and" in node ? node.and : "or" in node ? node.or : [];
   const compiled = children
-    .map((c) => compileFilter(c, paramValues, schema))
+    .map((c) => compileFilter(c, paramValues, ctxUserId, schema))
     .filter((c): c is CompiledFragment => c !== null);
   if (compiled.length === 0) return null;
   return {

@@ -88,7 +88,7 @@ spec:
     eq: { field: locale, value: { $param: locale } }
 ```
 
-The `$param` discriminator key was chosen to match the JSON Schema `$ref` convention. Future sentinels (`$now`, `$ctx.user`) follow the same `$<name>` shape; this ADR adds none of them.
+The `$param` discriminator key was chosen to match the JSON Schema `$ref` convention. The later closed `{ "$ctx.user": "id" }` sentinel follows the same `$<name>` shape; `$now` remains unimplemented.
 
 Boot validator gates:
 - `View.spec.params` MUST be `type: object` with `properties` declared (`VIEW_PARAMS_INVALID_SHAPE`).

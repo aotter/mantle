@@ -6,6 +6,8 @@ import {
   MANTLE_BIND_VALUES,
   FILTER_COMPARISON_OPS,
   RESERVED_ENTRY_COLUMNS,
+  hasCtxUserRefKey,
+  isCtxUserRef,
   type AuthPredicate,
   type FilterAst,
   type ProcedureManifest,
@@ -343,6 +345,7 @@ function checkViewRefs(
         filePaths,
       ),
     );
+    out.push(...checkCtxUserFilter(v, schema, filePaths));
   }
 
   if (v.spec.orderBy) {
@@ -370,6 +373,80 @@ function checkViewRefs(
   }
 
   return out;
+}
+
+function checkCtxUserFilter(
+  view: ViewManifest,
+  schema: SchemaManifest,
+  filePaths?: ManifestFilePaths,
+): Diagnostic[] {
+  if (!view.spec.filter) return [];
+  const refs = collectCtxUserFilters(view.spec.filter, "/spec/filter");
+  if (refs.length === 0) return [];
+  const out: Diagnostic[] = [];
+  const hasUserGate = view.spec.requires?.auth?.all?.includes("ctx.user") ?? false;
+  const indexes = [...(schema.spec.uniqueIndexes ?? []), ...(schema.spec.indexes ?? [])];
+  for (const ref of refs) {
+    if (!ref.valid) {
+      out.push(validateDiagnostic({
+        code: "VIEW_FILTER_CTX_USER_REF_INVALID",
+        severity: "error",
+        path: manifestPath("View", view.metadata.name, ref.pointer, filePaths),
+        value: ref.value,
+        expected: 'exactly { "$ctx.user": "id" } as an eq comparison value',
+        message: `View '${view.metadata.name}' has an invalid ctx.user filter sentinel.`,
+      }));
+      continue;
+    }
+    if (!hasUserGate) {
+      out.push(validateDiagnostic({
+        code: "VIEW_FILTER_CTX_USER_REF_REQUIRES_AUTH",
+        severity: "error",
+        path: manifestPath("View", view.metadata.name, "/spec/requires/auth/all", filePaths),
+        expected: "ctx.user",
+        message: `View '${view.metadata.name}' binds a filter to ctx.user but does not require ctx.user.`,
+      }));
+    }
+    if (!indexes.some((index) => index[0] === ref.field)) {
+      out.push(validateDiagnostic({
+        code: "VIEW_FILTER_CTX_USER_REF_REQUIRES_INDEX",
+        severity: "error",
+        path: manifestPath("View", view.metadata.name, ref.fieldPointer, filePaths),
+        value: ref.field,
+        expected: `Schema '${schema.metadata.name}' index whose first field is '${ref.field}'`,
+        message: `View '${view.metadata.name}' must index identity-bound field '${ref.field}' as the leftmost field.`,
+      }));
+    }
+  }
+  return out;
+}
+
+function collectCtxUserFilters(
+  node: FilterAst,
+  pointer: string,
+): Array<{
+  readonly field: string;
+  readonly fieldPointer: string;
+  readonly pointer: string;
+  readonly value: unknown;
+  readonly valid: boolean;
+}> {
+  const comparison = getFilterComparison(node);
+  if (comparison) {
+    if (!hasCtxUserRefKey(comparison.node.value)) return [];
+    return [{
+      field: comparison.node.field,
+      fieldPointer: `${pointer}/${comparison.op}/field`,
+      pointer: `${pointer}/${comparison.op}/value`,
+      value: comparison.node.value,
+      valid: comparison.op === "eq" && isCtxUserRef(comparison.node.value),
+    }];
+  }
+  const children = "and" in node ? node.and : "or" in node ? node.or : [];
+  const key = "and" in node ? "and" : "or";
+  return children.flatMap((child, index) =>
+    collectCtxUserFilters(child, `${pointer}/${key}/${index}`),
+  );
 }
 
 function checkFilterFields(

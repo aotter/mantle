@@ -33,6 +33,7 @@ import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
 import { resolveCaller, resolveUserRole } from "./resolveCaller.js";
 import { runMantleUseCase } from "./runMantleUseCase.js";
 import { STAFF_ROLE_SET, type StaffRole, type Auth } from "../auth/createAuth.js";
+import { rejectCrossOriginMutation } from "../auth/rejectCrossOriginMutation.js";
 import { AOTTER_FAVICON_SVG } from "../assets/aotterFavicon.js";
 
 const [PAGE_PARAM, SHOW_PARAM] = VIEW_PARAMS_RESERVED;
@@ -1490,6 +1491,10 @@ async function handleHttpTrigger(
       { ok: false, diagnostic: caller.diagnostic },
       { status: caller.status },
     );
+  }
+  if (caller.context.auth?.credential === "session") {
+    const rejected = rejectCrossOriginMutation(req);
+    if (rejected) return rejected;
   }
 
   const body = await readBody(req);
