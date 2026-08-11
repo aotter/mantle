@@ -92,26 +92,25 @@ function relatedManifests(): Manifest[] {
   const apiVersion = "cms.mantle.aotter.net/v1" as const;
   const schema = (
     name: string,
-    properties: Record<string, { type: "string" | "number" | "boolean" }>,
+    properties: Record<string, { type: "string"; "x-mantle-ref"?: string }>,
+    required: string[] = [],
   ): Manifest => ({
     apiVersion,
     kind: "Schema",
     metadata: { name },
     spec: {
       title: name,
-      schema: { type: "object", properties },
+      schema: { type: "object", properties, required },
       lifecycle: "simple",
     },
   });
   return [
     schema("parents", {
       key: { type: "string" },
-      count: { type: "number" },
-      enabled: { type: "boolean" },
     }),
-    schema("string-children", { parentKey: { type: "string" } }),
-    schema("number-children", { parentCount: { type: "number" } }),
-    schema("boolean-children", { parentEnabled: { type: "boolean" } }),
+    schema("comments", { parentId: { type: "string", "x-mantle-ref": "parents" } }, ["parentId"]),
+    schema("reactions", { parentId: { type: "string", "x-mantle-ref": "parents" } }),
+    schema("legacy-children", { parentKey: { type: "string" } }),
   ];
 }
 
@@ -268,14 +267,12 @@ describe("GET /admin/api/entries/export", () => {
 });
 
 describe("GET /admin/api/entries/:id related entries", () => {
-  it("keeps primitive matching, all-status ordering, and the 50-row cap", async () => {
+  it("uses explicit refs, keeps all-status ordering, and caps each section at 50 rows", async () => {
     const { app, db } = harness((database) => {
       database.entries.set(
         "parent",
         relatedRow("parent", "parents", "draft", {
           key: "alpha",
-          count: 7,
-          enabled: true,
         }, 1),
       );
       for (let index = 0; index < 55; index += 1) {
@@ -283,28 +280,24 @@ describe("GET /admin/api/entries/:id related entries", () => {
           `string-${index}`,
           relatedRow(
             `string-${index}`,
-            "string-children",
+            "comments",
             index % 2 === 0 ? "published" : "archived",
-            { parentKey: "alpha" },
+            { parentId: "parent" },
             index,
           ),
         );
       }
       database.entries.set(
-        "number-a",
-        relatedRow("number-a", "number-children", "draft", { parentCount: 7 }, 100),
+        "reaction-a",
+        relatedRow("reaction-a", "reactions", "draft", { parentId: "parent" }, 100),
       );
       database.entries.set(
-        "number-z",
-        relatedRow("number-z", "number-children", "archived", { parentCount: 7 }, 100),
+        "reaction-z",
+        relatedRow("reaction-z", "reactions", "archived", { parentId: "parent" }, 100),
       );
       database.entries.set(
-        "boolean-true",
-        relatedRow("boolean-true", "boolean-children", "published", { parentEnabled: true }, 1),
-      );
-      database.entries.set(
-        "boolean-false",
-        relatedRow("boolean-false", "boolean-children", "published", { parentEnabled: false }, 2),
+        "legacy",
+        relatedRow("legacy", "legacy-children", "published", { parentKey: "alpha" }, 1),
       );
     }, undefined, relatedManifests());
 
@@ -312,30 +305,35 @@ describe("GET /admin/api/entries/:id related entries", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       related: Array<{
-        collection: { name: string };
+        collection: {
+          name: string;
+          parent: { collection: string; parentField: string; childField: string } | null;
+        };
         entries: Array<{ id: string; status: string }>;
       }>;
     };
     const byCollection = new Map(
       body.related.map((section) => [section.collection.name, section.entries]),
     );
-    const strings = byCollection.get("string-children")!;
+    const strings = byCollection.get("comments")!;
     expect(strings).toHaveLength(50);
     expect(strings.slice(0, 2).map(({ id }) => id)).toEqual(["string-54", "string-53"]);
     expect(new Set(strings.map(({ status }) => status))).toEqual(
       new Set(["published", "archived"]),
     );
-    expect(byCollection.get("number-children")?.map(({ id }) => id)).toEqual([
-      "number-z",
-      "number-a",
+    expect(byCollection.get("reactions")?.map(({ id }) => id)).toEqual([
+      "reaction-z",
+      "reaction-a",
     ]);
-    expect(byCollection.get("boolean-children")?.map(({ id }) => id)).toEqual([
-      "boolean-true",
-    ]);
+    expect(body.related.find(({ collection }) => collection.name === "comments")?.collection.parent)
+      .toEqual({ collection: "parents", parentField: "id", childField: "parentId" });
+    expect(body.related.find(({ collection }) => collection.name === "reactions")?.collection.parent)
+      .toBeNull();
+    expect(byCollection.has("legacy-children")).toBe(false);
     const relatedReads = db.executions.filter(({ sql }) =>
       sql.includes("ORDER BY updated_at DESC, id DESC LIMIT 50")
     );
-    expect(relatedReads).toHaveLength(3);
+    expect(relatedReads).toHaveLength(2);
     expect(relatedReads.every(({ sql }) =>
       sql.includes("json_extract(data, ?) = ?")
     )).toBe(true);

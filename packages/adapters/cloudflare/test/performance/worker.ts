@@ -51,6 +51,24 @@ const manifests: Manifest[] = [
       uniqueIndexes: [["slug", "locale"]],
     },
   },
+  ...["comments", "reactions", "audits"].map((name): Manifest => ({
+    apiVersion: "cms.mantle.aotter.net/v1",
+    kind: "Schema",
+    metadata: { name },
+    spec: {
+      title: name,
+      lifecycle: "simple",
+      schema: {
+        type: "object",
+        properties: {
+          postId: { type: "string", "x-mantle-ref": "posts" },
+          body: { type: "string" },
+        },
+        required: ["postId"],
+      },
+      indexes: [["postId"]],
+    },
+  })),
   {
     apiVersion: "cms.mantle.aotter.net/v1",
     kind: "View",
@@ -103,13 +121,13 @@ async function seed(env: Env, until: number): Promise<Response> {
   const current = state ??= createState(env);
   await current.ref.get();
   const row = await env.DB
-    .prepare("SELECT COUNT(*) AS count FROM entries")
+    .prepare("SELECT COUNT(*) AS count FROM entries WHERE collection = 'posts'")
     .first<{ count: number }>();
   const start = Number(row?.count ?? 0);
   const target = Math.max(start, Math.min(50_000, Math.floor(until)));
-  for (let offset = start; offset < target; offset += 80) {
+  for (let offset = start; offset < target; offset += 20) {
     const statements: D1PreparedStatement[] = [];
-    for (let index = offset; index < Math.min(offset + 80, target); index += 1) {
+    for (let index = offset; index < Math.min(offset + 20, target); index += 1) {
       statements.push(env.DB.prepare(
         `INSERT OR IGNORE INTO entries
          (id, collection, status, version, data, author_id, created_at, updated_at)
@@ -126,6 +144,22 @@ async function seed(env: Env, until: number): Promise<Response> {
         index,
         index,
       ));
+      for (const collection of ["comments", "reactions", "audits"]) {
+        statements.push(env.DB.prepare(
+          `INSERT OR IGNORE INTO entries
+           (id, collection, status, version, data, author_id, created_at, updated_at)
+           VALUES (?, ?, 'published', 1, ?, NULL, ?, ?)`,
+        ).bind(
+          `${collection}-${index}`,
+          collection,
+          JSON.stringify({
+            postId: index === 0 ? "post-99" : "post-0",
+            body: `Fixture ${collection} row ${index}`,
+          }),
+          index,
+          index,
+        ));
+      }
     }
     await env.DB.batch(statements);
   }

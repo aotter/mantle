@@ -85,6 +85,22 @@ try {
     rounds: 10,
     warmup: 2,
   });
+  const adminDetailSparse = await benchmarkHttpRoutes({
+    targets: [{
+      name: "admin-detail-related-sparse-10000",
+      url: `${baseUrl}/admin/api/entries/post-99`,
+    }],
+    rounds: 10,
+    warmup: 2,
+  });
+  const adminDetailDense = await benchmarkHttpRoutes({
+    targets: [{
+      name: "admin-detail-related-dense-10000",
+      url: `${baseUrl}/admin/api/entries/post-0`,
+    }],
+    rounds: 10,
+    warmup: 2,
+  });
   const smallRows = metric(small, "rowsRead");
   const crowdedRows = metric(crowded, "rowsRead");
   const crowdedQueries = metric(crowded, "queryCount");
@@ -92,12 +108,20 @@ try {
   const missQueries = metric(misses, "queryCount");
   const adminQueryMax = Math.max(...admin.results.map((result) => result.queryCount?.max ?? Infinity));
   const adminRowsP95 = Math.max(...admin.results.map((result) => result.rowsRead?.p95 ?? Infinity));
+  const adminDetailSparseRows = metric(adminDetailSparse, "rowsRead");
+  const adminDetailSparseQueries = metric(adminDetailSparse, "queryCount");
+  const adminDetailDenseRows = metric(adminDetailDense, "rowsRead");
+  const adminDetailDenseQueries = metric(adminDetailDense, "queryCount");
   const gates = {
     crowdedRowsReadBounded: crowdedRows.p95 <= Math.max(100, smallRows.p95 * 4),
     publicApiUsesOneQuery: crowdedQueries.max <= 1,
     pageMissStaysBounded: missQueries.max <= 2 && missRows.p95 <= 10,
     adminListUsesOneQuery: adminQueryMax <= 1,
     adminListRowsReadBounded: adminRowsP95 <= 100,
+    adminDetailSparseReadsStayBounded:
+      adminDetailSparseQueries.max <= 4 && adminDetailSparseRows.p95 <= 10,
+    adminDetailDenseReadsStayBounded:
+      adminDetailDenseQueries.max <= 4 && adminDetailDenseRows.p95 <= 200,
   };
   const report = {
     version: 1,
@@ -108,6 +132,8 @@ try {
       ...crowded.results,
       ...misses.results,
       ...admin.results,
+      ...adminDetailSparse.results,
+      ...adminDetailDense.results,
     ],
     gates,
   };

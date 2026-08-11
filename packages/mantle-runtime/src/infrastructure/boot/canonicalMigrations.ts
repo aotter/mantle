@@ -309,7 +309,7 @@ export function schemaIndexMigrations(
 
 const SCHEMA_INDEX_V2_PREFIX = "schema-index-v2:index:";
 const LEGACY_UNIQUE_INDEX_PREFIX = "schema-unique-index:";
-const SAFE_SCHEMA_INDEX_V2 = /^m2[ui]_[0-9a-f]+_[0-9a-f]+_[0-9a-f]+(?:__[0-9a-f]+_[0-9a-f]+)*$/;
+const SAFE_SCHEMA_INDEX_V2 = /^m2[uir]_[0-9a-f]+_[0-9a-f]+_[0-9a-f]+(?:__[0-9a-f]+_[0-9a-f]+)*$/;
 const SAFE_LEGACY_UNIQUE_INDEX = /^uq_[a-z0-9_.-]+(?:__[a-z0-9_.-]+)+$/i;
 
 /**

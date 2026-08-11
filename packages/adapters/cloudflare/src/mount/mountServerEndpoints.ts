@@ -1280,7 +1280,6 @@ function discoverChildRelationships(
   schemas: SchemaManifest[],
 ): DiscoveredRelationship[] {
   const parentName = parentSchema.metadata.name;
-  const parentProps = parentSchema.spec.schema.properties ?? {};
   const relationships: DiscoveredRelationship[] = [];
   const seen = new Set<string>();
   const add = (
@@ -1288,8 +1287,9 @@ function discoverChildRelationships(
     kind: "translation" | "field",
     parentField: string,
     childField: string,
+    rawParentValue: unknown,
   ): void => {
-    const parentValue = primitiveJoinValue(parentRow.data[parentField]);
+    const parentValue = primitiveJoinValue(rawParentValue);
     if (parentValue == null) return;
     const key = `${childSchema.metadata.name}:${kind}:${parentField}:${childField}:${String(parentValue)}`;
     if (seen.has(key)) return;
@@ -1308,42 +1308,24 @@ function discoverChildRelationships(
     const childProps = childSchema.spec.schema.properties ?? {};
     const translates = childSchema.spec.translates;
     if (translates?.parent === parentName) {
-      add(childSchema, "translation", translates.on, translates.on);
+      add(
+        childSchema,
+        "translation",
+        translates.on,
+        translates.on,
+        parentRow.data[translates.on],
+      );
       continue;
     }
 
-    for (const [childField] of Object.entries(childProps)) {
-      const parentField = conventionalParentField(parentName, childField, parentProps);
-      if (parentField) add(childSchema, "field", parentField, childField);
+    for (const [childField, childProperty] of Object.entries(childProps)) {
+      if (childProperty[MANTLE_REF_KEYWORD] === parentName) {
+        add(childSchema, "field", "id", childField, parentRow.id);
+      }
     }
   }
 
   return relationships;
-}
-
-function conventionalParentField(
-  parentCollectionName: string,
-  childField: string,
-  parentProps: Readonly<Record<string, JsonSchema>>,
-): string | null {
-  const bases = new Set([
-    camelCaseIdentifier(parentCollectionName),
-    singularizeIdentifier(camelCaseIdentifier(parentCollectionName)),
-  ]);
-  for (const base of bases) {
-    for (const [parentField, parentSchema] of Object.entries(parentProps)) {
-      if (!isPrimitiveJoinSchema(parentSchema)) continue;
-      if (childField === `${base}${capitalizeIdentifier(parentField)}`) return parentField;
-    }
-  }
-  return null;
-}
-
-function isPrimitiveJoinSchema(schema: JsonSchema): boolean {
-  const rawType = schema.type;
-  const types = Array.isArray(rawType) ? rawType : rawType ? [rawType] : [];
-  if (types.length === 0 && schema.enum) return true;
-  return types.some((type) => type === "string" || type === "number" || type === "integer" || type === "boolean");
 }
 
 function collectionParentFor(
@@ -1363,23 +1345,17 @@ function collectionParentFor(
   // parent, so it's buried under the parent in the sidebar). Optional
   // ref = weak reference — the collection stays top-level.
   const childRequired = new Set(childSchema.spec.schema.required ?? []);
-  for (const parentSchema of schemas) {
-    if (parentSchema.metadata.name === childSchema.metadata.name) continue;
-    if (parentSchema.spec.translates) continue;
-    const parentProps = parentSchema.spec.schema.properties ?? {};
-
-    for (const [childField] of Object.entries(childProps)) {
-      if (!childRequired.has(childField)) continue;
-      const parentField = conventionalParentField(parentSchema.metadata.name, childField, parentProps);
-      if (parentField) {
-        return {
-          collection: parentSchema.metadata.name,
-          parentField,
-          childField,
-        };
-      }
+  const schemaNames = new Set(
+    schemas
+      .filter((schema) => !schema.spec.translates)
+      .map((schema) => schema.metadata.name),
+  );
+  for (const [childField, childProperty] of Object.entries(childProps)) {
+    if (!childRequired.has(childField)) continue;
+    const parent = childProperty[MANTLE_REF_KEYWORD];
+    if (typeof parent === "string" && schemaNames.has(parent)) {
+      return { collection: parent, parentField: "id", childField };
     }
-
   }
 
   return null;
@@ -1390,28 +1366,6 @@ function primitiveJoinValue(value: unknown): string | number | boolean | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "boolean") return value;
   return null;
-}
-
-function camelCaseIdentifier(value: string): string {
-  return value
-    .split(/[^a-zA-Z0-9]+/)
-    .filter(Boolean)
-    .map((part, index) => {
-      const lower = part.charAt(0).toLowerCase() + part.slice(1);
-      return index === 0 ? lower : capitalizeIdentifier(lower);
-    })
-    .join("");
-}
-
-function singularizeIdentifier(value: string): string {
-  if (value.endsWith("ies")) return `${value.slice(0, -3)}y`;
-  if (value.endsWith("ses")) return value.slice(0, -2);
-  if (value.endsWith("s") && value.length > 1) return value.slice(0, -1);
-  return value;
-}
-
-function capitalizeIdentifier(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 async function entriesByDataValue(

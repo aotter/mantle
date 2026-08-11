@@ -1,4 +1,7 @@
-import type { SchemaManifest } from "../model/ManifestGrammar.js";
+import {
+  MANTLE_REF_KEYWORD,
+  type SchemaManifest,
+} from "../model/ManifestGrammar.js";
 import {
   checkSchemaIndexes,
   type ResolvedSchemaIndexField,
@@ -26,6 +29,9 @@ export function buildDdl(manifest: SchemaManifest): DdlStatements {
   const indexes: Array<DdlStatements["indexes"][number]> = [];
 
   for (const declaration of checked.declarations) {
+    const relationOrdered = !declaration.unique &&
+      declaration.fields.length === 1 &&
+      isRelationshipField(manifest, declaration.fields[0]!.name);
     const columnNames = declaration.fields.map((field) => {
       const name = generatedColumnName(manifest.metadata.name, field);
       if (!columns.has(name)) {
@@ -45,12 +51,15 @@ export function buildDdl(manifest: SchemaManifest): DdlStatements {
       manifest.metadata.name,
       declaration.fields,
       declaration.unique,
+      relationOrdered,
     );
+    const indexColumns = columnNames.map(quoteIdent);
+    if (relationOrdered) indexColumns.push('"updated_at" DESC', '"id" DESC');
     indexes.push({
       name,
       sql:
         `CREATE ${declaration.unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${quoteIdent(name)} ` +
-        `ON entries(${columnNames.map(quoteIdent).join(", ")}) ` +
+        `ON entries(${indexColumns.join(", ")}) ` +
         `WHERE ${quoteIdent(columnNames[0]!)} IS NOT NULL`,
     });
   }
@@ -94,11 +103,17 @@ function generatedIndexName(
   collection: string,
   fields: readonly ResolvedSchemaIndexField[],
   unique: boolean,
+  relationOrdered: boolean,
 ): string {
   const encodedFields = fields
     .map((field) => `${utf8Hex(field.name)}_${utf8Hex(field.affinity)}`)
     .join("__");
-  return `m2${unique ? "u" : "i"}_${utf8Hex(collection)}_${encodedFields}`;
+  return `m2${relationOrdered ? "r" : unique ? "u" : "i"}_${utf8Hex(collection)}_${encodedFields}`;
+}
+
+function isRelationshipField(manifest: SchemaManifest, field: string): boolean {
+  return manifest.spec.translates?.on === field ||
+    typeof manifest.spec.schema.properties?.[field]?.[MANTLE_REF_KEYWORD] === "string";
 }
 
 function utf8Hex(value: string): string {
