@@ -6,6 +6,37 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 <!-- No [Unreleased] section. Entries are written at release time per CONTRIBUTING.md § Changelog and docs/release-process.md § Normal release playbook step 2. -->
 
+## [0.1.0-alpha.1] - 2026-08-11
+
+### Added
+
+- **`@aotter/mantle-runtime` / `@aotter/mantle-cloudflare`**: add the closed
+  `{ "$ctx.user": "id" }` View filter sentinel so public HTTP and MCP share
+  the same indexed, site-local ownership guard (#620).
+
+### Changed
+
+- **`@aotter/mantle-cloudflare`**: make D1 the sole canonical content and
+  site-state store, render public responses from origin state, and rely on
+  Cloudflare Workers Cache instead of the removed rendered-artifact KV
+  pipeline (#614).
+- **`@aotter/mantle-runtime` / `@aotter/mantle-cloudflare`**: require explicit
+  relationship metadata and identity-leading indexes, removing relationship
+  name guessing while keeping sparse and high-fan-out admin reads bounded
+  (#617, aotter/mantle-starters#476).
+- **Release controller**: admit final `0.1.0-alpha.N` candidates from
+  `develop` while reserving `latest` for the gated stable `0.1.0` release
+  (#622).
+
+### Performance
+
+- **`@aotter/mantle-cloudflare`**: cache runtime validators, reuse authenticated
+  roles, use keyset admin pagination, and retain one-query public create paths
+  across HTTP Trigger and admin entry workflows (#615-#618).
+- **`@aotter/mantle-cloudflare`**: avoid CMS runtime boot for OAuth metadata,
+  DCR, token, and unauthenticated MCP transport requests while preserving it
+  for authorization and authenticated MCP calls (#619).
+
 ## [0.0.11-alpha.73] - 2026-08-04
 
 ### Changed
