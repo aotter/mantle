@@ -34,7 +34,7 @@ export interface ResolveCallerOptions {
   readonly auth: Auth;
   readonly credentialResolver?: ConsumerCredentialResolver;
   /** Enables JWT bearer verification against this Auth issuer/JWKS. */
-  readonly oauthBearer?: {
+  readonly jwtBearer?: {
     readonly audience: string;
     /** Optional server-wide floor. Manifest operation scopes are still
      * evaluated by the runtime's ctx.auth.scope predicates. */
@@ -74,7 +74,7 @@ export async function resolveCaller(
       const credential = resolved.credential;
       return {
         kind: "authenticated",
-        context: await contextForUser(
+        context: await contextForVerifiedUser(
           credential.userId,
           {
             credential: credential.credential,
@@ -103,7 +103,7 @@ export async function resolveCaller(
       }
       return {
         kind: "authenticated",
-        context: await contextForUser(
+        context: await contextForVerifiedUser(
           verified.userId,
           {
             credential: "oauth",
@@ -116,15 +116,15 @@ export async function resolveCaller(
         ),
       };
     }
-    if (!options.oauthBearer) return invalidCredential(401);
+    if (!options.jwtBearer) return invalidCredential(401);
     const verified = await options.auth.verifyOAuthAccessToken(request, {
-      audience: options.oauthBearer.audience,
-      scopes: options.oauthBearer.scopes,
+      audience: options.jwtBearer.audience,
+      scopes: options.jwtBearer.scopes,
     });
     if (!verified.ok) return invalidCredential(verified.status);
     return {
       kind: "authenticated",
-      context: await contextForUser(
+      context: await contextForVerifiedUser(
         verified.userId,
         {
           credential: "oauth",
@@ -147,7 +147,7 @@ export async function resolveCaller(
   }
   return {
     kind: "authenticated",
-    context: await contextForUser(
+    context: await contextForVerifiedUser(
       session.user.id,
       {
         credential: "session",
@@ -185,7 +185,7 @@ function audienceAllows(
   });
 }
 
-async function contextForUser(
+export async function contextForVerifiedUser(
   userId: string | null,
   authContext: NonNullable<HandlerContext["auth"]>,
   auth: Auth,

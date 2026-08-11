@@ -385,7 +385,7 @@ describe("GET /api/views/<name>", () => {
         assets: new StubAssetServer(),
       },
       auth: bearerAuth,
-      oauthBearer: { audience: "https://api.example.test" },
+      jwtBearer: { audience: "https://api.example.test" },
     });
     const app = new Hono();
     mountServerEndpoints(app, ref);

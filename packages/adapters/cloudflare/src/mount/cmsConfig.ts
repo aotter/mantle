@@ -40,7 +40,7 @@ export interface CmsConfig {
    *  consumer code. */
   readonly credentialResolver?: ConsumerCredentialResolver;
   /** Enable OAuth JWT bearer authentication on manifest REST routes. */
-  readonly oauthBearer?: {
+  readonly jwtBearer?: {
     readonly audience: string;
     readonly scopes?: readonly string[];
   };

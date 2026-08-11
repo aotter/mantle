@@ -131,7 +131,6 @@ export {
 // export the whole MCP infrastructure barrel from the root.
 export {
   McpJsonRpcDispatcher,
-  type McpAuthContext,
   type McpUseCases,
 } from "./infrastructure/mcp/McpJsonRpcDispatcher.js";
 

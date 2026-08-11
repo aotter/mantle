@@ -106,13 +106,9 @@ export function mountAuthorize<E extends Env>(app: Hono<E>, options: MountAuthor
         userId: session.user.id,
         metadata: {},
         scope: grantedScope,
-        // Store immutable grant identity only. Staff role is mutable
-        // authorization state and is re-read from D1 on every MCP call.
-        props: {
-          userId: session.user.id,
-          clientId: reqInfo.clientId,
-          scopes: grantedScope,
-        },
+        // The provider's token-exchange callback derives token-specific API
+        // props from verified grant fields and the effective token scope.
+        props: {},
       });
       return new Response(null, { status: 302, headers: { location: redirectTo } });
     }
@@ -164,12 +160,4 @@ interface OauthHelpers {
     scope: readonly string[];
     props: Record<string, unknown>;
   }): Promise<{ redirectTo: string }>;
-}
-
-/** Props that mountAuthorize stashes during completeAuthorization and
- *  that `createMcpApiHandler` reads from `ctx.props`. */
-export interface OAuthApiProps {
-  readonly userId: string;
-  readonly clientId: string;
-  readonly scopes: readonly string[];
 }

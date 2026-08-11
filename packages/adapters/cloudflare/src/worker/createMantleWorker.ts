@@ -120,7 +120,7 @@ export interface MantleWorkerMountContext<Env extends MantleCloudflareEnv>
 export interface MantleWorkerExtension<Env extends MantleCloudflareEnv> {
   readonly handlers?: Readonly<Record<string, AnyHandler>>;
   readonly credentialResolver?: ConsumerCredentialResolver;
-  readonly oauthBearer?: CmsConfig["oauthBearer"];
+  readonly jwtBearer?: CmsConfig["jwtBearer"];
   readonly scopesSupported?: readonly string[];
   /** Standard routes mount first; extension routes may only add new paths. */
   readonly mount?: (context: MantleWorkerMountContext<Env>) => void;
@@ -189,7 +189,7 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
       bindings,
       auth,
       credentialResolver: extension.credentialResolver,
-      oauthBearer: extension.oauthBearer,
+      jwtBearer: extension.jwtBearer,
     });
 
     const app = new Hono<WorkerHonoEnv<Env>>();

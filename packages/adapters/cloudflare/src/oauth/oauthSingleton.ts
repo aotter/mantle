@@ -14,9 +14,8 @@ export interface CreateOAuthProviderArgs<Env = Record<string, unknown>> {
   readonly defaultHandler: ExportedHandler<Env>;
   /** Map of MCP resource path → worker handler. Lib verifies the
    *  bearer token, then dispatches to the matching handler with
-   *  `ctx.props` set to whatever was passed to
-   *  `completeAuthorization({ props })`. Use `createMcpApiHandler`
-   *  to build the handler value for each entry. */
+   *  token-specific identity and scopes in `ctx.props`. Use
+   *  `createMcpApiHandler` to build the handler value for each entry. */
   readonly apiHandlers: Record<string, ExportedHandler<Env>>;
   /** Scopes advertised in `scopes_supported` for both AS metadata
    *  (RFC 8414) and PRM (RFC 9728). Defaults to `["mcp"]` — a single
@@ -48,6 +47,12 @@ export function createOAuthProvider<Env = Record<string, unknown>>(
     tokenEndpoint: OAUTH_TOKEN_PATH,
     clientRegistrationEndpoint: OAUTH_REGISTER_PATH,
     scopesSupported: [...(args.scopesSupported ?? ["mcp"])],
+    // Grant props are long-lived, but access tokens may be downscoped during
+    // code exchange or refresh. Store only the effective token claims in the
+    // props handed to API handlers so MCP authorization cannot overgrant.
+    tokenExchangeCallback: ({ userId, clientId, requestedScope }) => ({
+      accessTokenProps: { userId, clientId, scopes: requestedScope },
+    }),
   });
 }
 

@@ -1482,7 +1482,7 @@ async function handleHttpTrigger(
   const caller = await resolveCaller(req, {
     auth: ref.auth,
     credentialResolver: ref.credentialResolver,
-    oauthBearer: ref.oauthBearer,
+    jwtBearer: ref.jwtBearer,
     env,
     waitUntil,
   });
@@ -1550,7 +1550,7 @@ async function handleViewRequest(
   const caller = await resolveCaller(req, {
     auth: ref.auth,
     credentialResolver: ref.credentialResolver,
-    oauthBearer: ref.oauthBearer,
+    jwtBearer: ref.jwtBearer,
     env,
     waitUntil,
   });

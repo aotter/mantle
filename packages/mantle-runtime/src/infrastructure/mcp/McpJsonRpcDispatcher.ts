@@ -5,7 +5,6 @@ import {
   type MediaPurposePolicy,
   type ProcedureManifest,
   type SchemaManifest,
-  type StaffRole,
   type ViewManifest,
 } from "@aotter/mantle-spec";
 import type { MediaVariantRole } from "../../domain/port/MediaStorage.js";
@@ -46,21 +45,8 @@ import {
 import packageJson from "../../../package.json" with { type: "json" };
 
 /** JSON-RPC dispatcher for the MCP transport. Env-agnostic; the
- *  adapter resolves the caller's identity and hands `dispatch` a
- *  `McpAuthContext` plus the use-case bag. */
-export interface McpAuthContext {
-  readonly userId: string;
-  /** Caller's staff role; null for non-staff bearers. */
-  readonly staff: { readonly userId: string; readonly role: StaffRole } | null;
-  /** OAuth client/token metadata. Optional keeps callers compiled
-   *  against older adapters working; the compatibility scope remains
-   *  `mcp` when no explicit scope list is supplied. */
-  readonly clientId?: string | null;
-  readonly credentialId?: string | null;
-  readonly scopes?: readonly string[];
-}
-
-type McpRequestContext = Partial<Pick<HandlerContext, "env" | "waitUntil">>;
+ *  adapter resolves the caller's identity and hands `dispatch` the same
+ *  normalized `HandlerContext` used by HTTP transports. */
 
 /**
  * The use-case bag the dispatcher needs. Adapter constructs this once
@@ -79,7 +65,7 @@ export interface McpUseCases {
   readonly executeView?: ExecuteViewUseCase;
   /** Optional. When set together with `options.procedures`, MCP
    *  Triggers (#281) route through here. The dispatcher evaluates the
-   *  Procedure's `requires.auth` against the McpAuthContext before
+   *  Procedure's `requires.auth` against the HandlerContext before
    *  invoking. */
   readonly invokeProcedure?: InvokeProcedureUseCase;
   /** Optional. When set, `create_media_upload` and
@@ -143,8 +129,7 @@ export class McpJsonRpcDispatcher {
 
   async dispatch(
     req: Request,
-    auth: McpAuthContext,
-    requestContext: McpRequestContext = {},
+    ctx: HandlerContext,
   ): Promise<Response> {
     if (req.method === "GET") {
       return new Response("MCP endpoint — POST JSON-RPC here.", { status: 200 });
@@ -171,7 +156,7 @@ export class McpJsonRpcDispatcher {
       case "tools/list":
         return jsonRpcOkRaw(id, this.catalogWireJson);
       case "tools/call":
-        return this.handleToolCall(id, params, auth, requestContext);
+        return this.handleToolCall(id, params, ctx);
       default:
         return jsonRpcError(id, -32601, `unknown method: ${method}`);
     }
@@ -180,8 +165,7 @@ export class McpJsonRpcDispatcher {
   private async handleToolCall(
     reqId: unknown,
     params: unknown,
-    auth: McpAuthContext,
-    requestContext: McpRequestContext,
+    ctx: HandlerContext,
   ): Promise<Response> {
     const p = params as { name?: string; arguments?: Record<string, unknown> } | undefined;
     if (!p || typeof p.name !== "string") {
@@ -193,7 +177,7 @@ export class McpJsonRpcDispatcher {
     }
 
     try {
-      const result = await this.dispatchToolByName(p.name, args, auth, requestContext);
+      const result = await this.dispatchToolByName(p.name, args, ctx);
       if (result === UNKNOWN_TOOL) {
         return jsonRpcError(reqId, -32601, `unknown tool: ${p.name}`);
       }
@@ -218,8 +202,7 @@ export class McpJsonRpcDispatcher {
   private async dispatchToolByName(
     name: string,
     args: Record<string, unknown>,
-    auth: McpAuthContext,
-    requestContext: McpRequestContext,
+    ctx: HandlerContext,
   ): Promise<unknown | typeof UNKNOWN_TOOL | typeof MISSING_ARG> {
     // Procedure-derived MCP tools (#281). Check first on every
     // surface — a Procedure's tool name lives in the same namespace
@@ -232,7 +215,7 @@ export class McpJsonRpcDispatcher {
       const result = await this.useCases.invokeProcedure.execute({
         procedure,
         input: args,
-        ctx: ctxFromAuth(auth, requestContext),
+        ctx,
         pathPrefix: `MCP ${name}`,
       });
       if (!result.ok) throw new DiagnosticError(result.diagnostic);
@@ -246,8 +229,8 @@ export class McpJsonRpcDispatcher {
     if (viewSegment) {
       const view = this.viewBySegment.get(viewSegment);
       if (!view || !this.useCases.executeView) return UNKNOWN_TOOL;
-      // Build ctx from the bearer-derived McpAuthContext so the
-      // executeView use case can evaluate `requires.auth.all`. Without
+      // Use the adapter-normalized caller so the executeView use case can
+      // evaluate `requires.auth.all`. Without
       // this, every auth-gated public-surface View returned
       // UNAUTHENTICATED for every caller including authenticated staff.
       const result = await this.useCases.executeView.execute({
@@ -258,7 +241,7 @@ export class McpJsonRpcDispatcher {
           show: typeof args["show"] === "number" ? args["show"] : undefined,
         },
         pathPrefix: `MCP ${name}`,
-        ctx: ctxFromAuth(auth, requestContext),
+        ctx,
       });
       if (!result.ok) throw new DiagnosticError(result.diagnostic);
       return result.result;
@@ -268,7 +251,6 @@ export class McpJsonRpcDispatcher {
       return UNKNOWN_TOOL;
     }
 
-    const hookCtx = ctxFromAuth(auth, requestContext);
     switch (name) {
       case "list_entries": {
         const collection = args["collection"];
@@ -293,7 +275,7 @@ export class McpJsonRpcDispatcher {
         if (typeof id !== "string") return MISSING_ARG;
         return this.useCases.requestPublish.execute({
           id,
-          ctx: hookCtx,
+          ctx,
           originalInput: args,
         });
       }
@@ -302,7 +284,7 @@ export class McpJsonRpcDispatcher {
         if (typeof id !== "string") return MISSING_ARG;
         return this.useCases.unpublish.execute({
           id,
-          ctx: hookCtx,
+          ctx,
           originalInput: args,
         });
       }
@@ -311,7 +293,7 @@ export class McpJsonRpcDispatcher {
         if (typeof id !== "string") return MISSING_ARG;
         return this.useCases.archive.execute({
           id,
-          ctx: hookCtx,
+          ctx,
           originalInput: args,
         });
       }
@@ -320,7 +302,7 @@ export class McpJsonRpcDispatcher {
         if (typeof id !== "string") return MISSING_ARG;
         return this.useCases.deleteEntry.execute({
           id,
-          ctx: hookCtx,
+          ctx,
           originalInput: args,
         });
       }
@@ -390,8 +372,8 @@ export class McpJsonRpcDispatcher {
           return this.useCases.createDraft.execute({
             collection,
             data,
-            authorId: auth.userId,
-            ctx: hookCtx,
+            authorId: ctx.user?.id ?? null,
+            ctx,
             originalInput: data,
           });
         }
@@ -412,7 +394,7 @@ export class McpJsonRpcDispatcher {
             id,
             expectedVersion: expected,
             data,
-            ctx: hookCtx,
+            ctx,
             originalInput: data,
           });
         }
@@ -424,21 +406,6 @@ export class McpJsonRpcDispatcher {
 
 const UNKNOWN_TOOL = Symbol("unknown-tool");
 const MISSING_ARG = Symbol("missing-arg");
-
-function ctxFromAuth(auth: McpAuthContext, requestContext: McpRequestContext): HandlerContext {
-  return {
-    user: { id: auth.userId },
-    staff: auth.staff ? { id: auth.staff.userId, role: auth.staff.role } : null,
-    auth: {
-      credential: "oauth",
-      credentialId: auth.credentialId ?? null,
-      clientId: auth.clientId ?? null,
-      scopes: auth.scopes ?? ["mcp"],
-    },
-    env: requestContext.env ?? {},
-    ...(requestContext.waitUntil ? { waitUntil: requestContext.waitUntil } : {}),
-  };
-}
 
 /**
  * Strip the `id` + `expected_version` envelope keys before passing

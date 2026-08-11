@@ -18,7 +18,7 @@ export interface CmsRuntimeRef {
   readonly manifests: readonly Manifest[];
   readonly auth: Auth;
   readonly credentialResolver?: ConsumerCredentialResolver;
-  readonly oauthBearer?: CmsConfig["oauthBearer"];
+  readonly jwtBearer?: CmsConfig["jwtBearer"];
 }
 
 export function createCmsRef(config: CmsConfig): CmsRuntimeRef {
@@ -40,7 +40,7 @@ export function createCmsRef(config: CmsConfig): CmsRuntimeRef {
     manifests: config.manifests,
     auth: config.auth,
     credentialResolver: config.credentialResolver,
-    oauthBearer: config.oauthBearer,
+    jwtBearer: config.jwtBearer,
     get(): Promise<CmsRuntime> {
       if (booted) return booted;
       booted = runtime

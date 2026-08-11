@@ -20,15 +20,24 @@ import {
 } from "../src/worker/createMantleWorker.js";
 import { StubAssetServer, stubAuth } from "./fakes/runtime-bindings.js";
 
-const oauthState = vi.hoisted(() => ({ scopes: [] as string[] }));
+const oauthState = vi.hoisted(() => ({
+  scopes: [] as string[],
+  tokenExchangeCallback: undefined as undefined | ((options: {
+    readonly userId: string;
+    readonly clientId: string;
+    readonly requestedScope: string[];
+  }) => unknown),
+}));
 
 vi.mock("@cloudflare/workers-oauth-provider", () => ({
   OAuthProvider: class<Env> {
     constructor(private readonly options: {
       readonly defaultHandler: ExportedHandler<Env>;
       readonly scopesSupported?: string[];
+      readonly tokenExchangeCallback?: typeof oauthState.tokenExchangeCallback;
     }) {
       oauthState.scopes = options.scopesSupported ?? [];
+      oauthState.tokenExchangeCallback = options.tokenExchangeCallback;
     }
     fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
       const pathname = new URL(request.url).pathname;
@@ -190,7 +199,7 @@ describe("createMantleWorker", () => {
       auth: () => ({ ...stubAuth, verifyOAuthAccessToken }),
       bindings: testBindings,
       extend: () => ({
-        oauthBearer: { audience: "https://platform.test/api", scopes: ["platform:read"] },
+        jwtBearer: { audience: "https://platform.test/api", scopes: ["platform:read"] },
       }),
     });
 
@@ -376,6 +385,27 @@ describe("createMantleWorker", () => {
 
     await fetchWorker(worker, "/favicon.svg", testEnv());
     expect(oauthState.scopes).toEqual(["mcp", "platform:read"]);
+  });
+
+  it("puts the effective access-token scope in API props", async () => {
+    const worker = createMantleWorker<TestEnv>({
+      manifest: [],
+      auth: () => stubAuth,
+      bindings: testBindings,
+    });
+    await fetchWorker(worker, "/favicon.svg", testEnv());
+
+    expect(oauthState.tokenExchangeCallback?.({
+      userId: "user-1",
+      clientId: "client-1",
+      requestedScope: ["sites.read"],
+    })).toEqual({
+      accessTokenProps: {
+        userId: "user-1",
+        clientId: "client-1",
+        scopes: ["sites.read"],
+      },
+    });
   });
 
 });

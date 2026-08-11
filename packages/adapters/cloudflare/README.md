@@ -55,7 +55,7 @@ participating subdomain. For a customer-owned domain such as
 ## API and MCP Authorization
 
 `createCmsRef()` accepts an optional `credentialResolver` for site-owned API
-keys and personal tokens, plus optional `oauthBearer` JWT verification for
+keys and personal tokens, plus optional `jwtBearer` verification for
 manifest REST routes. The adapter normalizes those callers, cookie sessions,
 and MCP OAuth callers into the same runtime auth context. Manifest
 `ctx.auth`/scope predicates and `guard.procedure` then enforce the target on

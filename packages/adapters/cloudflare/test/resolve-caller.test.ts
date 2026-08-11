@@ -159,7 +159,7 @@ describe("resolveCaller", () => {
           scopes: ["orders:read"],
         }),
       }),
-      oauthBearer: { audience: "https://api.example.test" },
+      jwtBearer: { audience: "https://api.example.test" },
     });
     expect(allowed).toMatchObject({
       kind: "authenticated",
@@ -181,7 +181,7 @@ describe("resolveCaller", () => {
           missingScopes: ["admin"],
         }),
       }),
-      oauthBearer: { audience: "https://api.example.test", scopes: ["admin"] },
+      jwtBearer: { audience: "https://api.example.test", scopes: ["admin"] },
     });
     expect(denied).toMatchObject({
       kind: "invalid",
@@ -229,5 +229,10 @@ describe("resolveCaller", () => {
       headers: { authorization: "Bearer user-1:grant-1:secret" },
     }), options);
     expect(wrongAudience).toMatchObject({ kind: "invalid", status: 401 });
+
+    const revokedOrExpired = await resolveCaller(new Request("https://example.test/api/orders", {
+      headers: { authorization: "Bearer user-1:grant-1:gone" },
+    }), options);
+    expect(revokedOrExpired).toMatchObject({ kind: "invalid", status: 401 });
   });
 });
