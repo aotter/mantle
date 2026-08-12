@@ -114,8 +114,9 @@ export class InMemoryEntryRepository implements EntryRepository {
       if (row.collection !== args.collection) continue;
       if (args.status && row.status !== args.status) continue;
       if (search && !row.id.toLowerCase().includes(search) &&
-        !row.status.toLowerCase().includes(search) &&
-        !containsText(row.data, search)) continue;
+        !(args.searchFields ?? []).some((field) =>
+          typeof row.data[field] === "string" &&
+          row.data[field].toLowerCase().includes(search))) continue;
       filtered.push(row);
     }
     const compare = (a: EntryRow, value: string | number, id: string): number => {
@@ -174,15 +175,6 @@ export class InMemoryEntryRepository implements EntryRepository {
   _seed(row: EntryRow): void {
     this.rows.set(row.id, row);
   }
-}
-
-function containsText(value: unknown, term: string): boolean {
-  if (typeof value === "string") return value.toLowerCase().includes(term);
-  if (Array.isArray(value)) return value.some((item) => containsText(item, term));
-  if (value && typeof value === "object") {
-    return Object.values(value).some((item) => containsText(item, term));
-  }
-  return false;
 }
 
 function entrySortValue(row: EntryRow, field: string): string | number {

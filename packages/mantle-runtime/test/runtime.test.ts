@@ -147,6 +147,7 @@ describe("createCmsRuntime + bootInit", () => {
             type: "object",
             properties: { "a.b": { type: "string" } },
           },
+          searchableFields: [],
           uniqueIndexes: [["a.b"]],
         },
       }],

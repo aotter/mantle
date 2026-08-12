@@ -285,6 +285,7 @@ forces it.
 - `spec.schema:` (JSON Schema 2020-12 body)
 - `spec.uniqueIndexes:` (composite uniques)
 - `spec.indexes:` (ordered composite, non-unique access paths)
+- `spec.searchableFields:` (top-level string allowlist; entry id is implicit)
 - Property extensions: `x-mantle-bind`, `x-mantle-ref`, `x-mcp-hint`
 
 **View (v0.1)**:

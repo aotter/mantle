@@ -33,6 +33,7 @@ import {
   checkSchemaIndexes,
   schemaIndexDiagnosticCode,
 } from "./SchemaIndexChecker.js";
+import { checkSchemaSearchableFields } from "./SchemaSearchChecker.js";
 
 /**
  * Shared shape validator for `LocalizedText` fields (`Schema.spec.title`
@@ -394,6 +395,19 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
       idx,
       indexProblem.pointer,
       schemaIndexDiagnosticCode(indexProblem, true),
+    );
+  }
+  const searchProblem = checkSchemaSearchableFields(m)[0];
+  if (searchProblem) {
+    throw new ManifestParseError(
+      searchProblem.message,
+      idx,
+      searchProblem.pointer,
+      searchProblem.category === "shape"
+        ? "INVALID_MANIFEST_ENVELOPE"
+        : searchProblem.category === "field-unknown"
+          ? "SCHEMA_SEARCH_FIELD_UNKNOWN"
+          : "SCHEMA_SEARCH_INVALID",
     );
   }
   if ("localized" in s && typeof s["localized"] !== "boolean") {

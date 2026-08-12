@@ -273,9 +273,14 @@ class InMemoryStatement implements PreparedStatement {
       let pi = 1;
       const status = hasStatus ? (p[pi++] as string) : null;
       let searchTerm: string | null = null;
+      const searchFields: string[] = [];
       if (hasSearch) {
         searchTerm = p[pi++] as string;
-        pi += 2; // status and textual JSON values use the same term
+        const fieldCount = sql.match(/json_extract\(data, \?\) LIKE/g)?.length ?? 0;
+        for (let index = 0; index < fieldCount; index += 1) {
+          searchFields.push(fieldFromJsonPath(p[pi++] as string));
+          pi += 1; // each field uses the same escaped search term
+        }
       }
       const cursorValue = cursorMatch ? (p[pi++] as string | number) : null;
       const cursorId = cursorMatch ? (p[pi++] as string) : null;
@@ -285,7 +290,7 @@ class InMemoryStatement implements PreparedStatement {
       const filtered = [...this.db.entries.values()]
         .filter((r) => r.collection === collection)
         .filter((r) => (status ? r.status === status : true))
-        .filter((r) => (searchTerm ? matchesLikeSearch(r, searchTerm) : true))
+        .filter((r) => (searchTerm ? matchesLikeSearch(r, searchTerm, searchFields) : true))
         .filter((r) => cursorValue === null || compareListRow(r, sortField, cursorValue, cursorId!) ===
           (cursorMatch![2] === ">" ? 1 : -1))
         .sort((a, b) => compareListRows(a, b, sortField) * (direction === "ASC" ? 1 : -1))
@@ -504,21 +509,16 @@ function snapshotMatches(db: InMemoryDatabase, values: readonly unknown[]): bool
   return row?.collection === collection && row.status === status && row.version === version;
 }
 
-/** Mirrors the repository's id/status/textual-JSON LIKE search. */
-function matchesLikeSearch(row: EntryRecord, escapedTerm: string): boolean {
+/** Mirrors the repository's id + manifest-declared field LIKE search. */
+function matchesLikeSearch(
+  row: EntryRecord,
+  escapedTerm: string,
+  fields: readonly string[],
+): boolean {
   const literal = unescapeLike(escapedTerm).toLowerCase();
-  return row.id.toLowerCase().includes(literal) ||
-    row.status.toLowerCase().includes(literal) ||
-    containsText(JSON.parse(row.data), literal);
-}
-
-function containsText(value: unknown, term: string): boolean {
-  if (typeof value === "string") return value.toLowerCase().includes(term);
-  if (Array.isArray(value)) return value.some((item) => containsText(item, term));
-  if (value && typeof value === "object") {
-    return Object.values(value).some((item) => containsText(item, term));
-  }
-  return false;
+  const data = JSON.parse(row.data) as Record<string, unknown>;
+  return row.id.toLowerCase().includes(literal) || fields.some((field) =>
+    typeof data[field] === "string" && data[field].toLowerCase().includes(literal));
 }
 
 function listSortField(sql: string): string {

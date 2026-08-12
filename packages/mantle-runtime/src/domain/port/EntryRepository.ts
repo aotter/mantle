@@ -113,10 +113,11 @@ export interface ListEntriesArgs {
   readonly cursor?: string;
   /** Fetch the page before `cursor`; default is the page after it. */
   readonly cursorDirection?: "forward" | "backward";
-  /** Free-text filter matched against `id`, status, and textual JSON
-   *  values (substring, case-insensitive for ASCII per SQLite `LIKE`).
-   *  Composes with `status` — both narrow the same query. */
+  /** Free-text filter matched against `id` and `searchFields`
+   *  (substring, case-insensitive for ASCII per SQLite `LIKE`). */
   readonly search?: string;
+  /** Trusted top-level string fields resolved from Schema.searchableFields. */
+  readonly searchFields?: readonly string[];
   /** Native fields or Schema-indexed scalar data fields only. */
   readonly sort?: EntrySort;
 }

@@ -184,6 +184,11 @@ export interface SchemaManifestSpec {
   readonly uniqueIndexes?: ReadonlyArray<ReadonlyArray<string>>;
   /** Ordered composite non-unique indexes over top-level scalar fields. */
   readonly indexes?: ReadonlyArray<ReadonlyArray<string>>;
+  /** Top-level string fields included in Admin/MCP free-text search.
+   *  Entry id is always searched; absent or empty means id-only. This is
+   *  intentionally independent from `indexes`: substring LIKE queries do
+   *  not benefit from ordinary B-tree indexes. */
+  readonly searchableFields?: readonly string[];
   /** Whether entries in this collection carry a per-row locale. Default
    *  `false`. When `true`, `data.locale` MUST be present and ∈ site
    *  `locales`; when `false`, `data.locale` MUST be absent. See

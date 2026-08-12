@@ -21,6 +21,7 @@ import {
   checkSchemaIndexes,
   schemaIndexDiagnosticCode,
 } from "../domain/service/SchemaIndexChecker.js";
+import { checkSchemaSearchableFields } from "../domain/service/SchemaSearchChecker.js";
 import {
   bestMatch,
   manifestPath,
@@ -217,6 +218,26 @@ function checkSchemaInternals(
           typeof problem.value === "string"
             ? bestMatch(problem.value, candidates)
             : undefined,
+        message: problem.message,
+      }),
+    );
+  }
+
+  for (const problem of checkSchemaSearchableFields(s)) {
+    const candidates = problem.candidates ?? [];
+    out.push(
+      validateDiagnostic({
+        code: problem.category === "field-unknown"
+          ? "SCHEMA_SEARCH_FIELD_UNKNOWN"
+          : "SCHEMA_SEARCH_INVALID",
+        severity: "error",
+        path: manifestPath("Schema", s.metadata.name, problem.pointer, filePaths),
+        value: problem.value,
+        expected: problem.expected,
+        candidates: problem.candidates,
+        suggestion: typeof problem.value === "string"
+          ? bestMatch(problem.value, candidates)
+          : undefined,
         message: problem.message,
       }),
     );

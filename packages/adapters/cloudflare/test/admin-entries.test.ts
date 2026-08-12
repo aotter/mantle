@@ -33,6 +33,7 @@ function manifests(): Manifest[] {
           },
           required: ["slug"],
         },
+        searchableFields: ["title", "slug"],
         lifecycle: "publishing",
       },
     },
@@ -160,7 +161,7 @@ describe("GET /admin/api/entries?search=", () => {
     expect(roleReads).toBe(0);
   });
 
-  it("filters rows whose id or textual data matches the search term", async () => {
+  it("filters rows whose id or declared searchable data matches the search term", async () => {
     const { app } = harness((db) => {
       db.entries.set("p1", row("p1", { title: "Hello world", slug: "hello" }));
       db.entries.set("p2", row("p2", { title: "Goodbye", slug: "goodbye" }));
@@ -172,9 +173,13 @@ describe("GET /admin/api/entries?search=", () => {
     expect(body.items[0]!.id).toBe("p1");
   });
 
-  it("does not match numeric values or JSON field names", async () => {
+  it("does not match undeclared strings, numeric values, or JSON field names", async () => {
     const { app } = harness((db) => {
-      db.entries.set("p1", row("p1", { title: "No match", sequence86: 1786 }));
+      db.entries.set("p1", row("p1", {
+        title: "No match",
+        placedAt: "2026-08-06T00:00:00Z",
+        sequence86: 1786,
+      }));
       db.entries.set("p2", row("p2", { title: "Order 86", sequence86: 1 }));
     });
     const res = await app.request("/admin/api/entries?collection=posts&search=86");

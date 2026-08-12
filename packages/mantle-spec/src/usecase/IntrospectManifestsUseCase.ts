@@ -28,6 +28,7 @@ export class IntrospectManifestsUseCase {
         translates: s.spec.translates ?? null,
         uniqueIndexes: s.spec.uniqueIndexes ?? [],
         indexes: s.spec.indexes ?? [],
+        searchableFields: s.spec.searchableFields ?? [],
         properties: Object.keys(properties),
       };
     });

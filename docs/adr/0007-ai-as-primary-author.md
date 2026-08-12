@@ -100,6 +100,7 @@ What it catches:
   `View.filter` refer only to declared properties of that Schema
 - `Schema.uniqueIndexes` and `Schema.indexes` contain valid ordered
   tuples of scalar properties declared in `spec.schema.properties`
+- `Schema.searchableFields` contains unique top-level string properties
 - `x-mantle-bind: <value>` is in the closed enum
 - `requires.auth.all` predicates are in the v0.1 vocabulary
 - `Trigger.source.path` does not collide with another Trigger

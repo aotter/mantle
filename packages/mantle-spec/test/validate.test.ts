@@ -454,6 +454,58 @@ describe("ValidateManifestsUseCase — Schema index semantics", () => {
   });
 });
 
+describe("Schema searchableFields", () => {
+  it("accepts top-level string fields and preserves their order", () => {
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  schema:
+    type: object
+    properties:
+      orderNumber: { type: string }
+      customer: { type: [string, 'null'] }
+      placedAt: { type: integer }
+  searchableFields: [orderNumber, customer]
+`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect((result.manifests[0] as SchemaManifest).spec.searchableFields)
+      .toEqual(["orderNumber", "customer"]);
+  });
+
+  it.each([
+    ["non-array", "orderNumber", "INVALID_MANIFEST_ENVELOPE"],
+    ["unknown field", "[missing]", "SCHEMA_SEARCH_FIELD_UNKNOWN"],
+    ["non-string property", "[placedAt]", "SCHEMA_SEARCH_INVALID"],
+    ["duplicate field", "[orderNumber, orderNumber]", "SCHEMA_SEARCH_INVALID"],
+  ])("rejects %s", (_label, searchableFields, code) => {
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  schema:
+    type: object
+    properties:
+      orderNumber: { type: string }
+      placedAt: { type: integer }
+  searchableFields: ${searchableFields}
+`);
+
+    expect(result.diagnostics[0]?.code).toBe(code);
+  });
+
+  it("validates programmatically constructed manifests", () => {
+    const result = ValidateManifestsUseCase.run({
+      manifests: [schema("orders", { searchableFields: ["missing"] })],
+    });
+
+    expect(result.diagnostics[0]?.code).toBe("SCHEMA_SEARCH_FIELD_UNKNOWN");
+  });
+});
+
 describe("parseManifests() — v0.1.0 promoted grammar", () => {
   it("accepts Procedure.handler.kind: 'builtin' with op + schema", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v1

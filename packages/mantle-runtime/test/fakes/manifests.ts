@@ -28,6 +28,7 @@ export function postsSchema(): SchemaManifest {
         },
         required: ["title"],
       },
+      searchableFields: ["title"],
       lifecycle: "publishing",
     },
   };

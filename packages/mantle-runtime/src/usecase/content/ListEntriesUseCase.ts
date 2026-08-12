@@ -73,6 +73,7 @@ export class ListEntriesUseCase {
       cursor: request.cursor,
       cursorDirection: request.cursorDirection,
       search: request.search,
+      searchFields: schema.spec.searchableFields ?? [],
       sort: request.sort,
     });
   }

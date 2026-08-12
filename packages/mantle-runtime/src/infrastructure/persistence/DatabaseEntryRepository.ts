@@ -220,17 +220,14 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
       binds.push(args.status);
     }
     if (args.search) {
-      // Search human text, not the serialized JSON blob: matching raw
-      // JSON made "86" hit unrelated numeric timestamps and field names.
       const term = escapeLikeTerm(args.search);
-      conditions.push(
-        "(id LIKE '%'||?||'%' ESCAPE '\\' " +
-        "OR status LIKE '%'||?||'%' ESCAPE '\\' " +
-        "OR EXISTS (SELECT 1 FROM json_tree(data) " +
-        "WHERE json_tree.type = 'text' " +
-        "AND CAST(json_tree.value AS TEXT) LIKE '%'||?||'%' ESCAPE '\\'))",
-      );
-      binds.push(term, term, term);
+      const searchConditions = ["id LIKE '%'||?||'%' ESCAPE '\\'"];
+      binds.push(term);
+      for (const field of args.searchFields ?? []) {
+        searchConditions.push("json_extract(data, ?) LIKE '%'||?||'%' ESCAPE '\\'");
+        binds.push(jsonPathForTopLevelField(field), term);
+      }
+      conditions.push(`(${searchConditions.join(" OR ")})`);
     }
     if (cursor) {
       const comparison = backward

@@ -172,7 +172,7 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
       properties: {
         collection: { type: "string" },
         status: { type: "string", enum: ["draft", "published", "archived"] },
-        search: { type: "string", description: "Substring matched against id, status, and textual data values." },
+        search: { type: "string", description: "Substring matched against entry id and the Schema's searchableFields." },
         sort: { type: "string", description: "id, status, updatedAt, or a Schema-indexed required scalar field." },
         direction: { type: "string", enum: ["asc", "desc"] },
         limit: { type: "number" },

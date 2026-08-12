@@ -49,7 +49,7 @@ export interface ListEntriesRequest {
   /** Opaque cursor from a prior `ListEntriesResult.nextCursor`. */
   readonly cursor?: string;
   readonly cursorDirection?: "forward" | "backward";
-  /** Free-text filter matched against id, status, and textual data values. */
+  /** Free-text filter matched against id and Schema.searchableFields. */
   readonly search?: string;
   readonly sort?: EntrySort;
 }

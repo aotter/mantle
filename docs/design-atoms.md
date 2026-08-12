@@ -126,7 +126,8 @@ spec:
                                    # against localized Schemas.
       content:  { type: string }
       authorId: { type: string, format: uuid, x-mantle-bind: ctx.user }
-      createdAt: { type: string, format: date-time, x-mantle-bind: now }
+      createdAt: { type: integer, x-mcp-hint: timestamp-ms, x-mantle-bind: now }
+  searchableFields: [title, slug]   # id is always searched
   uniqueIndexes: [[slug, locale]]
   indexes: [[locale, title]]        # ordered, non-unique hot path
 ```
@@ -134,6 +135,11 @@ spec:
 **`spec.title`** — admin UI label. Required. AI authors must populate
 in the user's primary language (the install-time chosen locale); the
 SPA shows this everywhere instead of `metadata.name`.
+
+**`spec.searchableFields`** — optional allowlist of top-level string
+properties used by Admin and Staff MCP substring search. Entry id is always
+searchable. This is separate from `indexes`; ordinary B-tree indexes do not
+accelerate leading-wildcard substring search.
 
 **`spec.localized: bool`** (default `false`, ADR-0010) — opt-in per
 Schema. Localized Schemas store locale in `data.locale`; non-localized
