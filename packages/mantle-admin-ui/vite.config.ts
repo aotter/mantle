@@ -48,18 +48,15 @@ export default defineConfig({
 });
 
 /**
- * Reads `dist/index.html` after viteSingleFile inlines all assets,
- * writes a sibling `dist/index-html.js` (+ `.d.ts`) exporting the
- * HTML as a string. Adapter packages import that module so the
- * Worker bundler resolves it as ordinary JS — no `?raw` query, no
- * loader plugin. Fires on every `closeBundle` so `vite build --watch`
- * keeps the JS module in lockstep with the HTML.
+ * Writes siblings exporting the HTML after Vite has written the
+ * inlined bundle. `writeBundle` is the first hook that guarantees
+ * `dist/index.html` exists, including in clean parallel CI builds.
  */
 function inlineIndexHtmlPlugin(): Plugin {
   return {
     name: "inline-index-html",
     apply: "build",
-    closeBundle() {
+    writeBundle() {
       const dist = resolve(__dirname, "dist");
       const html = readFileSync(resolve(dist, "index.html"), "utf8");
       const escaped = JSON.stringify(html);
