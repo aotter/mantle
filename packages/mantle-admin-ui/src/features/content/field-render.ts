@@ -1,5 +1,3 @@
-import type { AdminLanguage } from "../../app/preferences";
-import { t } from "../../app/i18n";
 import type { JsonSchema } from "../../lib/types";
 
 const TIMESTAMP_FMT = new Intl.DateTimeFormat(undefined, {
@@ -56,13 +54,6 @@ export function timestampMsFromInput(value: string): number | null {
   if (!value) return null;
   const timestamp = new Date(value).getTime();
   return Number.isFinite(timestamp) ? timestamp : null;
-}
-
-/** Localize conventional hints; preserve custom manifest tokens. */
-export function hintBadgeLabel(hint: string, language: AdminLanguage): string {
-  if (hint === "money-minor") return t(language, "field.hint.moneyMinor");
-  if (hint === "timestamp-ms") return t(language, "field.hint.timestampMs");
-  return hint;
 }
 
 /** Keep the distinguishing suffix; callers expose the full id in `title`. */

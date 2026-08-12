@@ -7,6 +7,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  color-scheme: light;
   --mantle-blue-deep: #1a3062;
   --mantle-blue-mid: #345093;
   --mantle-blue-light: #4d6aac;
@@ -54,6 +55,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --app-base: #02050d;
   --chrome-glass: color-mix(in srgb, var(--app-base) 52%, transparent);
   --app-background:

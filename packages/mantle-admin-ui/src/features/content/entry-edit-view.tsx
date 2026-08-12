@@ -18,7 +18,6 @@ import type {
   StaffOperation,
 } from "../../lib/types";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
@@ -46,7 +45,6 @@ import { collectionSummaryKey } from "./collection-view";
 import {
   formatMoneyMinor,
   formatTimestampMs,
-  hintBadgeLabel,
   moneyMinorHint,
   timestampHint,
   timestampMsForInput,
@@ -477,16 +475,9 @@ function SchemaField({
 
   return (
     <div className="space-y-2">
-      <label className="flex items-center justify-between gap-3 text-sm font-semibold text-foreground">
-        <span>
-          {label}
-          {required ? <span className="ml-1 text-destructive">*</span> : null}
-        </span>
-        {schema["x-mcp-hint"] ? (
-          <Badge variant="secondary" title={String(schema["x-mcp-hint"])}>
-            {hintBadgeLabel(String(schema["x-mcp-hint"]), language)}
-          </Badge>
-        ) : null}
+      <label className="text-sm font-semibold text-foreground">
+        {label}
+        {required ? <span className="ml-1 text-destructive">*</span> : null}
       </label>
       {description ? <p className="text-xs leading-5 text-muted-foreground">{description}</p> : null}
       {readOnly ? (
@@ -525,6 +516,7 @@ function SchemaField({
               type="datetime-local"
               aria-label={label}
               value={timestampMsForInput(value)}
+              onClick={(event) => event.currentTarget.showPicker?.()}
               onChange={(event) => setValue(timestampMsFromInput(event.target.value))}
             />
           ) : (
@@ -591,6 +583,9 @@ function SchemaField({
           type={schema.format === "date-time" ? "datetime-local" : "text"}
           aria-label={label}
           value={stringForInput(value)}
+          onClick={(event) => {
+            if (event.currentTarget.type === "datetime-local") event.currentTarget.showPicker?.();
+          }}
           onChange={(event) => setValue(event.target.value)}
         />
       )}

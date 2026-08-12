@@ -344,8 +344,6 @@ const STRINGS = {
     "collection.schemaSummary.i18nOnly": "Manage items and localized content for {name}.",
     "collection.schemaSummary.plain": "Manage items for {name}.",
     "entryEdit.mediaMissing": "This image is missing or was deleted.",
-    "field.hint.moneyMinor": "amount (minor units)",
-    "field.hint.timestampMs": "timestamp (ms)",
   },
   "zh-TW": {
     "admin.consoleTitle": "管理後台",
@@ -672,8 +670,6 @@ const STRINGS = {
     "collection.schemaSummary.i18nOnly": "管理 {name} 的項目與多語內容。",
     "collection.schemaSummary.plain": "管理 {name} 的項目。",
     "entryEdit.mediaMissing": "這張圖片已遺失或已被刪除。",
-    "field.hint.moneyMinor": "金額（最小單位）",
-    "field.hint.timestampMs": "時間戳記（毫秒）",
   },
   "zh-CN": {
     "admin.consoleTitle": "管理后台",
@@ -950,8 +946,6 @@ const STRINGS = {
     "collection.schemaSummary.i18nOnly": "管理 {name} 的项目与多语内容。",
     "collection.schemaSummary.plain": "管理 {name} 的项目。",
     "entryEdit.mediaMissing": "这张图片已丢失或已被删除。",
-    "field.hint.moneyMinor": "金额（最小单位）",
-    "field.hint.timestampMs": "时间戳（毫秒）",
   },
   de: {
     "auth.signIn.title": "Anmelden",
