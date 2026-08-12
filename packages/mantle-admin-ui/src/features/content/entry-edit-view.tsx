@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { CollapsibleDescription, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { CollapsibleDescription, ErrorBox, FormActionBar, PageHeader, SectionCard } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
 import { RichTextEditor } from "../editor/rich-text-editor";
 import { primaryPublicUrl, purposeForMediaField, uploadMediaAsset } from "../media/media-upload";
@@ -175,40 +175,6 @@ export function EntryEditView({
                 </Button>
               }
             />
-            {canManageContent && !isOperational && (isDraft ? (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => publish.mutate()}
-                disabled={actionPending || dirty}
-                title={dirty ? t(language, "entryEdit.publishDisabledDirty") : t(language, "entryEdit.publishTooltip")}
-              >
-                <Send className="size-4" aria-hidden />
-                {publish.isPending ? t(language, "entryEdit.publishing") : t(language, "entryEdit.publish")}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => unpublish.mutate()}
-                disabled={actionPending}
-                title={t(language, "entryEdit.unpublishTooltip")}
-              >
-                <RotateCcw className="size-4" aria-hidden />
-                {unpublish.isPending ? t(language, "entryEdit.unpublishing") : t(language, "entryEdit.unpublish")}
-              </Button>
-            ))}
-            {canEdit ? (
-              <Button
-                type="button"
-                onClick={() => save.mutate(data)}
-                disabled={actionPending || !canSave}
-                title={t(language, "entryEdit.saveTooltip")}
-              >
-                <Save className="size-4" aria-hidden />
-                {save.isPending ? t(language, "crud.saving") : t(language, "entryEdit.save")}
-              </Button>
-            ) : null}
           </>
         }
       />
@@ -291,6 +257,57 @@ export function EntryEditView({
           ) : null}
         </div>
       </div>
+
+      {canEdit || (canManageContent && !isOperational) ? (
+        <FormActionBar
+          status={save.isPending
+            ? t(language, "crud.saving")
+            : publish.isPending
+            ? t(language, "entryEdit.publishing")
+            : unpublish.isPending
+            ? t(language, "entryEdit.unpublishing")
+            : dirty
+            ? t(language, "common.unsavedChanges")
+            : save.isSuccess
+            ? t(language, "common.saved")
+            : undefined}
+        >
+          {canManageContent && !isOperational && (isDraft ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => publish.mutate()}
+              disabled={actionPending || dirty}
+              title={dirty ? t(language, "entryEdit.publishDisabledDirty") : t(language, "entryEdit.publishTooltip")}
+            >
+              <Send className="size-4" aria-hidden />
+              {publish.isPending ? t(language, "entryEdit.publishing") : t(language, "entryEdit.publish")}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => unpublish.mutate()}
+              disabled={actionPending}
+              title={t(language, "entryEdit.unpublishTooltip")}
+            >
+              <RotateCcw className="size-4" aria-hidden />
+              {unpublish.isPending ? t(language, "entryEdit.unpublishing") : t(language, "entryEdit.unpublish")}
+            </Button>
+          ))}
+          {canEdit ? (
+            <Button
+              type="button"
+              onClick={() => save.mutate(data)}
+              disabled={actionPending || !canSave}
+              title={t(language, "entryEdit.saveTooltip")}
+            >
+              <Save className="size-4" aria-hidden />
+              {save.isPending ? t(language, "crud.saving") : t(language, "entryEdit.save")}
+            </Button>
+          ) : null}
+        </FormActionBar>
+      ) : null}
     </div>
   );
 }
