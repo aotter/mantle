@@ -1,5 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../src/lib/api";
 import type { MediaPurposePolicy } from "../src/lib/types";
+import { isMediaNotConfigured } from "../src/features/media/media-library-view";
+
+describe("media setup state", () => {
+  it("only treats the explicit missing-storage diagnostic as setup work", () => {
+    expect(isMediaNotConfigured(new ApiError("501", 501, {
+      diagnostic: { code: "MEDIA_NOT_CONFIGURED" },
+    }))).toBe(true);
+    expect(isMediaNotConfigured(new ApiError("503", 503, {
+      diagnostic: { code: "MEDIA_NOT_CONFIGURED" },
+    }))).toBe(false);
+  });
+});
 
 /**
  * #440 — real browsers never support `canvas.toBlob("image/avif")` (or
