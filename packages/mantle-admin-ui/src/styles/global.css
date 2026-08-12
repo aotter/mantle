@@ -186,7 +186,7 @@
   }
 
   [data-slot="app-header"],
-  [data-slot="form-action-bar"] {
+  [data-slot="status-bar"] {
     -webkit-backdrop-filter: blur(8px) saturate(135%);
     backdrop-filter: blur(8px) saturate(135%);
   }
@@ -196,8 +196,13 @@
   }
 
   [data-slot="app-header"],
-  [data-slot="form-action-bar"] {
+  [data-slot="status-bar"] {
     background: var(--chrome-glass);
+  }
+
+  [data-slot="status-bar-action-host"]:not(:empty)
+    + [data-slot="status-bar-meta"] {
+    display: none;
   }
 
   .dark [data-slot="card"] {

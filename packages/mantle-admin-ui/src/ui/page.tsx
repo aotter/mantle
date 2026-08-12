@@ -66,7 +66,7 @@ export function FormActionBar({
   return createPortal(
     <div
       data-slot="form-action-bar"
-      className="flex min-h-16 flex-wrap items-center justify-between gap-3 border-t px-4 py-3 sm:px-6"
+      className="flex w-full flex-wrap items-center justify-between gap-3"
     >
       <div className="min-h-5 min-w-0 text-sm text-muted-foreground" aria-live="polite">
         {status}

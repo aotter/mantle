@@ -109,7 +109,29 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
             publicUrl={site.data?.publicUrl}
           />
           <Main className="min-h-0 overflow-y-auto overscroll-contain pt-20 pb-20">{children}</Main>
-          <div ref={setFormActionBarHost} className="absolute inset-x-0 bottom-0 z-30" />
+          <footer
+            data-slot="status-bar"
+            className="absolute inset-x-0 bottom-0 z-30 flex min-h-16 items-center border-t px-4 py-3 sm:px-6"
+          >
+            <div
+              ref={setFormActionBarHost}
+              data-slot="status-bar-action-host"
+              className="contents"
+            />
+            <div
+              data-slot="status-bar-meta"
+              className="ms-auto flex items-center justify-end"
+            >
+              <a
+                href={`https://www.npmjs.com/package/@aotter/mantle/v/${__MANTLE_VERSION__}`}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md px-2 py-1 font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                @aotter/mantle-{__MANTLE_VERSION__}
+              </a>
+            </div>
+          </footer>
         </SidebarInset>
       </SidebarProvider>
     </FormActionBarHostContext.Provider>
