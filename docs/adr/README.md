@@ -41,10 +41,10 @@ for new v0.1.0 boundaries, and folds / drops the rest:
 - **POC ADR-0004** D1 today, Hyperdrive PG tomorrow → folded into `mantle-cloudflare` README (now a v0.2 roadmap item, not an architectural decision).
 - **POC ADR-0005** v0.1 minimum vs DRAFT discipline → folded into ADR-0001 §"Future grammar discipline."
 - **POC ADR-0006** multi-doc YAML → folded into ADR-0001 §"Authoring shape: multi-doc YAML."
-- **POC ADR-0011** lifecycle binary opt-in → distilled to a §"Lifecycle" subsection in `docs/design-atoms.md`. v0.1.0 ships `publishing` and `operational`; `editorial` is a v0.1.x feature.
+- **POC ADR-0011** lifecycle binary opt-in → distilled to a §"Lifecycle" subsection in `docs/design-atoms.md`. v0.1.0 ships `publishing` and `operational`; `editorial` is reserved for a later release.
 - **POC ADR-0012** strategic posture vs adjacent CMS designs → strategic / marketing material, lives in `README.md` if anywhere.
 - **POC ADR-0013** role-split surfaces (coder agent vs operator agent) → folded into ADR-0007 (Part B).
-- **POC ADR-0014** builtin handlers and lifecycle Triggers → promoted to v0.1.0 and implemented in the rebuild via `LifecycleHookingEntryRepository` and `InvokeBuiltinUseCase`. Editorial lifecycle remains v0.1.x-gated. Full shape spec lives in `docs/design-atoms.md`.
+- **POC ADR-0014** builtin handlers and lifecycle Triggers → promoted to v0.1.0 and implemented in the rebuild via `LifecycleHookingEntryRepository` and `InvokeBuiltinUseCase`. Editorial lifecycle remains reserved. Full shape spec lives in `docs/design-atoms.md`.
 - **POC ADR-0015** cms-astro internal seam discipline → POC-specific to a package that no longer exists; replaced by ADR-0011 (adapter port spec).
 - **POC ADR-0029** drop Astro from cms-cloudflare → POC-specific historical record; the rebuild starts post-Astro.
 

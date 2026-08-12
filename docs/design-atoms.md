@@ -159,9 +159,9 @@ entry's state machine.
   (`draft → review → approved → scheduled → published → archived`,
   with `published` returnable to `draft` for republish). The grammar and
   state-machine vocabulary are reserved for forward compatibility, but the
-  approval/request-publish runtime is on the v0.1.x roadmap. In v0.1,
-  `request_publish` rejects with `LIFECYCLE_NOT_IN_V010`; do not declare
-  editorial for a current publishing workflow.
+  approval/request-publish runtime is deferred until after v0.1. In v0.1,
+  manifest validation rejects it with `LIFECYCLE_NOT_IN_V010`; do not declare
+  editorial for a current workflow.
 - `operational` — records that are not authored content: orders,
   inventory snapshots, grant/audit rows — anything written by
   Procedures as a side effect rather than drafted by a person. No
@@ -809,18 +809,17 @@ surface. Procedures/Views share `ctx.auth`/scope predicates and optional guard
 orchestration across REST and MCP. Staff role is loaded live for each protected
 call; staff Views remain absent and un-callable on public MCP.
 
-### Detailed shipped grammar and v0.1.x reservation
+### Detailed shipped grammar and reserved lifecycle
 
 > The `handler.kind: builtin` and `Trigger.source.kind: lifecycle`
 > sections below describe shipped v0.1.0 behavior. Only the
-> `Schema.spec.lifecycle: editorial` subsection remains v0.1.x-committed.
+> `Schema.spec.lifecycle: editorial` remains reserved for a later release.
 
 #### `Schema.spec.lifecycle: editorial` runtime
 
-Grammar and boot already accept the key, but `request_publish` emits
-`LIFECYCLE_NOT_IN_V010` because the approval-queue runtime ships in v0.1.x.
-When that runtime lands, the same manifest can use the publish workflow without
-a grammar change.
+The parser reserves the key, but manifest validation emits
+`LIFECYCLE_NOT_IN_V010`. When the approval-queue runtime lands, the same grammar
+can be enabled without inventing a second lifecycle name.
 
 #### `handler.kind: builtin` — thin shortcut over the storage adapter for trivial CRUD-shaped Procedures
 

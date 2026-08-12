@@ -157,6 +157,18 @@ function checkSchemaInternals(
   filePaths?: ManifestFilePaths,
 ): Diagnostic[] {
   const out: Diagnostic[] = [];
+  if (s.spec.lifecycle === "editorial") {
+    out.push(
+      validateDiagnostic({
+        code: "LIFECYCLE_NOT_IN_V010",
+        severity: "error",
+        path: manifestPath("Schema", s.metadata.name, "/spec/lifecycle", filePaths),
+        value: "editorial",
+        expected: "publishing or operational",
+        message: `Schema '${s.metadata.name}' declares lifecycle: editorial, which is reserved but not supported in v0.1. Use publishing or operational until the editorial workflow ships.`,
+      }),
+    );
+  }
   const schema = s.spec.schema as {
     properties?: Record<string, unknown>;
     required?: unknown;

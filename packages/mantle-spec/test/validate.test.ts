@@ -99,6 +99,20 @@ describe("ValidateManifestsUseCase.run()", () => {
     expect(result.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
   });
 
+  it("rejects editorial lifecycle before deploy", () => {
+    const result = ValidateManifestsUseCase.run({
+      manifests: [schema("stories", { lifecycle: "editorial" })],
+    });
+
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "LIFECYCLE_NOT_IN_V010",
+        severity: "error",
+        value: "editorial",
+      }),
+    );
+  });
+
   it("validates comparison filter field references against the source Schema", () => {
     const result = ValidateManifestsUseCase.run({
       manifests: [

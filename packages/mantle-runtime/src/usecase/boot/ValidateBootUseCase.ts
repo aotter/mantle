@@ -70,7 +70,7 @@ export class ValidateBootUseCase {
     for (const diagnostic of ValidateManifestsUseCase.run({
       manifests: request.manifests,
     }).diagnostics) {
-      if (isSchemaIndexDiagnostic(diagnostic)) {
+      if (isBootBlockingManifestDiagnostic(diagnostic)) {
         diagnostics.push({ ...diagnostic, phase: "boot" });
       }
     }
@@ -231,8 +231,9 @@ export class ValidateBootUseCase {
   }
 }
 
-function isSchemaIndexDiagnostic(diagnostic: Diagnostic): boolean {
-  return diagnostic.code === "SCHEMA_INDEX_INVALID" ||
+function isBootBlockingManifestDiagnostic(diagnostic: Diagnostic): boolean {
+  return diagnostic.code === "LIFECYCLE_NOT_IN_V010" ||
+    diagnostic.code === "SCHEMA_INDEX_INVALID" ||
     diagnostic.code === "SCHEMA_INDEX_FIELD_UNKNOWN" ||
     diagnostic.code === "UNIQUE_INDEX_FIELD_UNKNOWN";
 }

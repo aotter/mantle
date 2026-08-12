@@ -140,7 +140,6 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     "/admin/c/:collection",
     "/admin/c/:collection/:id",
     "/admin/media",
-    "/admin/approvals",
     "/admin/preferences",
     "/admin/settings",
     "/admin/staff",

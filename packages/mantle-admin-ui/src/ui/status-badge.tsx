@@ -14,7 +14,7 @@ const STATUS_CLASS: Record<ContentStatus, string> = {
 };
 
 // Localized labels for the shipped publishing statuses; approved
-// and scheduled are editorial-only (v0.1.x) and fall back to the raw
+// and scheduled are editorial-only (reserved for a later release) and fall back to the raw
 // value until that runtime + its i18n keys land.
 const STATUS_LABEL_KEY: Partial<Record<string, I18nKey>> = {
   draft: "status.draft",

@@ -2,7 +2,6 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarChart3,
-  ClipboardList,
   Folder,
   Globe,
   Home,
@@ -130,7 +129,6 @@ function buildNavGroups(
   const primaryCollections = collections.filter((collection) => !collection.parent);
   const contentCollections = primaryCollections.filter((c) => c.lifecycle !== "operational");
   const operationalCollections = primaryCollections.filter((c) => c.lifecycle === "operational");
-  const hasEditorial = collections.some((c) => c.lifecycle === "editorial");
   const homeGroup: NavGroupData = {
     items: [
       {
@@ -189,12 +187,6 @@ function buildNavGroups(
   const moreGroup: NavGroupData = {
     title: t(language, "nav.more"),
     items: [
-      // Deep links to /admin/approvals stay live regardless; the nav
-      // entry only shows up when there's an editorial collection with
-      // an approval queue behind it.
-      ...(hasEditorial
-        ? [{ title: t(language, "nav.approvals"), url: "/admin/approvals", icon: ClipboardList }]
-        : []),
       { title: t(language, "nav.media"), url: "/admin/media", icon: Images },
       { title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon },
       // Staff management is owner-only server-side; hide the entry for
