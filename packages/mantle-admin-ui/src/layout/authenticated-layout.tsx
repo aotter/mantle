@@ -43,8 +43,18 @@ interface AuthenticatedLayoutProps {
 
 export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): React.ReactElement {
   const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
+  const [hasFormActions, setHasFormActions] = React.useState(false);
   const { pathname, search } = useAdminLocation();
   const { language } = usePreferences();
+
+  React.useLayoutEffect(() => {
+    if (!formActionBarHost) return;
+    const sync = (): void => setHasFormActions(formActionBarHost.childElementCount > 0);
+    const observer = new MutationObserver(sync);
+    observer.observe(formActionBarHost, { childList: true });
+    sync();
+    return () => observer.disconnect();
+  }, [formActionBarHost]);
 
   const me = useQuery<AdminUser>({
     queryKey: ["me"],
@@ -118,19 +128,21 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
               data-slot="status-bar-action-host"
               className="contents"
             />
-            <div
-              data-slot="status-bar-meta"
-              className="ms-auto flex items-center justify-end"
-            >
-              <a
-                href={`https://www.npmjs.com/package/@aotter/mantle/v/${__MANTLE_VERSION__}`}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-md px-2 py-1 font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            {!hasFormActions ? (
+              <div
+                data-slot="status-bar-meta"
+                className="ms-auto flex items-center justify-end"
               >
-                @aotter/mantle-{__MANTLE_VERSION__}
-              </a>
-            </div>
+                <a
+                  href={`https://www.npmjs.com/package/@aotter/mantle/v/${__MANTLE_VERSION__}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-md px-2 py-1 font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                >
+                  @aotter/mantle-{__MANTLE_VERSION__}
+                </a>
+              </div>
+            ) : null}
           </footer>
         </SidebarInset>
       </SidebarProvider>

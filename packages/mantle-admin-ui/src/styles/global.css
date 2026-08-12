@@ -200,11 +200,6 @@
     background: var(--chrome-glass);
   }
 
-  [data-slot="status-bar-action-host"]:not(:empty)
-    + [data-slot="status-bar-meta"] {
-    display: none;
-  }
-
   .dark [data-slot="card"] {
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / 3%),
