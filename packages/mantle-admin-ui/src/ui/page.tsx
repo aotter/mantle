@@ -68,7 +68,7 @@ export function EmptyState({
       </div>
       <h2 className="text-lg">{title}</h2>
       {description ? (
-        <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+        <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
           {description}
         </p>
       ) : null}
