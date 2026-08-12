@@ -166,14 +166,18 @@ function buildCreateMediaUploadTool(
 export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   {
     name: "list_entries",
-    description: "List entries in a collection. Optional filter by status. Result is { rows, nextCursor? }: when `nextCursor` is present, pass it back as `cursor` to fetch the next page. Absent `nextCursor` means this is the last page.",
+    description: "Search, sort, and page through entries in a collection. Result is { rows, previousCursor?, nextCursor? }; cursors are opaque.",
     inputSchema: {
       type: "object",
       properties: {
         collection: { type: "string" },
         status: { type: "string", enum: ["draft", "published", "archived"] },
+        search: { type: "string", description: "Substring matched against id, status, and textual data values." },
+        sort: { type: "string", description: "id, status, updatedAt, or a Schema-indexed required scalar field." },
+        direction: { type: "string", enum: ["asc", "desc"] },
         limit: { type: "number" },
         cursor: { type: "string", description: "Opaque continuation token from a previous list_entries response." },
+        cursorDirection: { type: "string", enum: ["forward", "backward"] },
       },
       required: ["collection"],
     },

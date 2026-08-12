@@ -1,5 +1,6 @@
 import {
   DiagnosticError,
+  schemaIndexedFieldSql,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
 import type { EntryRow } from "../../domain/model/EntryRow.js";
@@ -9,7 +10,10 @@ import { clampLimit } from "../../domain/service/Pagination.js";
 import type {
   ListEntriesRequest,
 } from "../dto/content/index.js";
-import { schemaUnknownDiagnostic } from "./diagnostics.js";
+import {
+  schemaUnknownDiagnostic,
+  sortFieldUnavailableDiagnostic,
+} from "./diagnostics.js";
 
 /**
  * `ListEntriesUseCase` — list entries in a collection, optionally
@@ -53,17 +57,29 @@ export class ListEntriesUseCase {
     request: ListEntriesRequest,
   ): Promise<ListEntriesResult> {
     const opPath = `usecase/ListEntries/${request.collection}`;
-    if (!this.schemas.has(request.collection)) {
+    const schema = this.schemas.get(request.collection);
+    if (!schema) {
       throw new DiagnosticError(
         schemaUnknownDiagnostic(opPath, request.collection, [...this.schemas.keys()]),
       );
+    }
+    if (request.sort && !isSortableField(schema, request.sort.field)) {
+      throw new DiagnosticError(sortFieldUnavailableDiagnostic(opPath, request.sort.field));
     }
     return this.entries.list({
       collection: request.collection,
       status: request.status,
       limit: clampLimit(request.limit),
       cursor: request.cursor,
+      cursorDirection: request.cursorDirection,
       search: request.search,
+      sort: request.sort,
     });
   }
+}
+
+function isSortableField(schema: SchemaManifest, field: string): boolean {
+  if (field === "id" || field === "status" || field === "updatedAt") return true;
+  return (schema.spec.schema.required ?? []).includes(field) &&
+    schemaIndexedFieldSql(schema, field) !== null;
 }

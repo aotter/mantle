@@ -33,8 +33,8 @@ import {
   type EntryRow,
 } from "../../domain/model/EntryRow.js";
 import {
-  decodeEntryCursor,
-  encodeEntryCursor,
+  decodeEntrySortCursor,
+  encodeEntrySortCursor,
   escapeLikeTerm,
 } from "./Pagination.js";
 
@@ -202,7 +202,14 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
     // adapters that bypass the use case) get the same default page
     // size as ListEntriesUseCase — not a silently different 100.
     const limit = clampLimit(args.limit);
-    const cursor = decodeEntryCursor(args.cursor);
+    const sort = args.sort ?? { field: "updatedAt", direction: "desc" };
+    const sortSql = entrySortSql(this.schemasByName.get(args.collection), sort.field);
+    if (!sortSql) throw new Error(`unavailable entry sort field: ${sort.field}`);
+    const cursor = decodeEntrySortCursor(args.cursor, sort.field, sort.direction);
+    const backward = args.cursorDirection === "backward" && cursor !== null;
+    const queryDirection = backward
+      ? (sort.direction === "asc" ? "DESC" : "ASC")
+      : sort.direction.toUpperCase();
     // Fetch limit+1 to detect a next page without a second query —
     // the extra row never reaches the caller.
     const probe = limit + 1;
@@ -213,16 +220,23 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
       binds.push(args.status);
     }
     if (args.search) {
-      // LIKE over the raw JSON blob is dumb but fine at this scale —
-      // there's no FTS index. Escape the caller's own wildcards so a
-      // search for "50%" or "a_b" doesn't turn into an unintended
-      // pattern.
+      // Search human text, not the serialized JSON blob: matching raw
+      // JSON made "86" hit unrelated numeric timestamps and field names.
       const term = escapeLikeTerm(args.search);
-      conditions.push("(id LIKE '%'||?||'%' ESCAPE '\\' OR data LIKE '%'||?||'%' ESCAPE '\\')");
-      binds.push(term, term);
+      conditions.push(
+        "(id LIKE '%'||?||'%' ESCAPE '\\' " +
+        "OR status LIKE '%'||?||'%' ESCAPE '\\' " +
+        "OR EXISTS (SELECT 1 FROM json_tree(data) " +
+        "WHERE json_tree.type = 'text' " +
+        "AND CAST(json_tree.value AS TEXT) LIKE '%'||?||'%' ESCAPE '\\'))",
+      );
+      binds.push(term, term, term);
     }
     if (cursor) {
-      conditions.push("(updated_at, id) < (?, ?)");
+      const comparison = backward
+        ? (sort.direction === "asc" ? "<" : ">")
+        : (sort.direction === "asc" ? ">" : "<");
+      conditions.push(`(${sortSql}, id) ${comparison} (?, ?)`);
       binds.push(...cursor);
     }
     binds.push(probe);
@@ -230,16 +244,22 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
       .prepare(
         `SELECT id, collection, status, version, data, author_id, created_at, updated_at
          FROM entries WHERE ${conditions.join(" AND ")}
-         ORDER BY updated_at DESC, id DESC LIMIT ?`,
+         ORDER BY ${sortSql} ${queryDirection}, id ${queryDirection} LIMIT ?`,
       )
       .bind(...binds);
     const rows = await stmt.all<EntryDbRow>();
     const hasMore = rows.length > limit;
-    const page = hasMore ? rows.slice(0, limit) : rows;
+    const page = [...(hasMore ? rows.slice(0, limit) : rows)];
+    if (backward) page.reverse();
+    const first = page[0];
+    const last = page[page.length - 1];
     return {
       rows: page.map(rowFromDb),
-      nextCursor: hasMore && page.length > 0
-        ? encodeEntryCursor(page[page.length - 1]!.updated_at, page[page.length - 1]!.id)
+      previousCursor: first && (backward ? hasMore : cursor !== null)
+        ? encodeEntrySortCursor(sort.field, sort.direction, entrySortValueFromDb(first, sort.field), first.id)
+        : undefined,
+      nextCursor: last && (backward ? cursor !== null : hasMore)
+        ? encodeEntrySortCursor(sort.field, sort.direction, entrySortValueFromDb(last, sort.field), last.id)
         : undefined,
     };
   }
@@ -510,6 +530,24 @@ interface EntryDbRow {
   readonly author_id: string | null;
   readonly created_at: number;
   readonly updated_at: number;
+}
+
+function entrySortSql(schema: SchemaManifest | undefined, field: string): string | null {
+  if (field === "id") return "id";
+  if (field === "status") return "status";
+  if (field === "updatedAt") return "updated_at";
+  return schema ? schemaIndexedFieldSql(schema, field) : null;
+}
+
+function entrySortValueFromDb(row: EntryDbRow, field: string): string | number {
+  if (field === "id") return row.id;
+  if (field === "status") return row.status;
+  if (field === "updatedAt") return row.updated_at;
+  const value = (JSON.parse(row.data) as Record<string, unknown>)[field];
+  if (typeof value !== "string" && typeof value !== "number") {
+    throw new Error(`non-scalar sort value for ${field}`);
+  }
+  return value;
 }
 
 function rowFromDb(row: EntryDbRow): EntryRow {

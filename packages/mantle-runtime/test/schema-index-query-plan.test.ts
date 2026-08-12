@@ -499,6 +499,43 @@ describe("declared Schema indexes against real SQLite", () => {
     expect(executions.at(-1)?.sql).toContain("json_extract(data, ?) = ?");
   });
 
+  it("repository sorts an indexed field with reversible keyset cursors", async () => {
+    const executions: RecordedExecution[] = [];
+    const repository = new DatabaseEntryRepository(
+      createSqliteDriver(db, executions),
+      new Map([[schema.metadata.name, schema]]),
+    );
+    const sort = { field: "userId", direction: "asc" } as const;
+    const first = await repository.list({
+      collection: schema.metadata.name,
+      limit: 3,
+      sort,
+    });
+    expect(first.rows).toHaveLength(3);
+    expect(first.nextCursor).toBeDefined();
+    expect(executions.at(-1)?.sql).toContain(
+      `ORDER BY ${schemaIndexedFieldSql(schema, "userId")} ASC, id ASC`,
+    );
+
+    const second = await repository.list({
+      collection: schema.metadata.name,
+      limit: 3,
+      cursor: first.nextCursor,
+      sort,
+    });
+    expect(second.previousCursor).toBeDefined();
+    expect(new Set([...first.rows, ...second.rows].map((row) => row.id)).size).toBe(6);
+
+    const back = await repository.list({
+      collection: schema.metadata.name,
+      limit: 3,
+      cursor: second.previousCursor,
+      cursorDirection: "backward",
+      sort,
+    });
+    expect(back.rows.map((row) => row.id)).toEqual(first.rows.map((row) => row.id));
+  });
+
   it("ExecuteViewUseCase resolves the View's Schema from its injected map", async () => {
     const executions: RecordedExecution[] = [];
     const useCase = new ExecuteViewUseCase(

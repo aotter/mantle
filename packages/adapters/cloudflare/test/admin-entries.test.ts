@@ -160,7 +160,7 @@ describe("GET /admin/api/entries?search=", () => {
     expect(roleReads).toBe(0);
   });
 
-  it("filters rows whose id or data matches the search term", async () => {
+  it("filters rows whose id or textual data matches the search term", async () => {
     const { app } = harness((db) => {
       db.entries.set("p1", row("p1", { title: "Hello world", slug: "hello" }));
       db.entries.set("p2", row("p2", { title: "Goodbye", slug: "goodbye" }));
@@ -170,6 +170,17 @@ describe("GET /admin/api/entries?search=", () => {
     const body = (await res.json()) as { items: Array<{ id: string }> };
     expect(body.items).toHaveLength(1);
     expect(body.items[0]!.id).toBe("p1");
+  });
+
+  it("does not match numeric values or JSON field names", async () => {
+    const { app } = harness((db) => {
+      db.entries.set("p1", row("p1", { title: "No match", sequence86: 1786 }));
+      db.entries.set("p2", row("p2", { title: "Order 86", sequence86: 1 }));
+    });
+    const res = await app.request("/admin/api/entries?collection=posts&search=86");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { items: Array<{ id: string }> };
+    expect(body.items.map((item) => item.id)).toEqual(["p2"]);
   });
 
   it("matches on id even when the term isn't in the data blob", async () => {
@@ -205,6 +216,30 @@ describe("GET /admin/api/entries?search=", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { items: unknown[] };
     expect(body.items).toHaveLength(0);
+  });
+});
+
+describe("GET /admin/api/entries pagination", () => {
+  it("round-trips sorting and cursor state", async () => {
+    const { app } = harness((db) => {
+      db.entries.set("p2", row("p2", { title: "Second", slug: "second" }));
+      db.entries.set("p1", row("p1", { title: "First", slug: "first" }));
+    });
+    const first = await app.request(
+      "/admin/api/entries?collection=posts&sort=id&direction=asc&limit=1",
+    );
+    const firstPage = (await first.json()) as {
+      items: Array<{ id: string }>;
+      next_cursor: string | null;
+    };
+    expect(firstPage.items.map((item) => item.id)).toEqual(["p1"]);
+    expect(firstPage.next_cursor).toEqual(expect.any(String));
+
+    const second = await app.request(
+      `/admin/api/entries?collection=posts&sort=id&direction=asc&limit=1&cursor=${encodeURIComponent(firstPage.next_cursor!)}`,
+    );
+    const secondPage = (await second.json()) as { items: Array<{ id: string }> };
+    expect(secondPage.items.map((item) => item.id)).toEqual(["p2"]);
   });
 });
 

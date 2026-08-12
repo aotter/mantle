@@ -947,6 +947,51 @@ describe("GetEntryUseCase / ListEntriesUseCase / DeleteEntryUseCase", () => {
     expect(new Set(allIds).size).toBe(5);
   });
 
+  it("sorts indexed fields and walks cursor pages in both directions", async () => {
+    const indexedPosts: SchemaManifest = {
+      ...postsSchema(),
+      spec: { ...postsSchema().spec, indexes: [["title"]] },
+    };
+    const h = harness({ schemas: new Map([["posts", indexedPosts]]) });
+    for (const title of ["C", "A", "B"]) {
+      await h.createDraft.execute({ collection: "posts", data: { title }, authorId: null });
+    }
+    const first = await h.listEntries.executePage({
+      collection: "posts",
+      limit: 2,
+      sort: { field: "title", direction: "asc" },
+    });
+    expect(first.rows.map((row) => row.data.title)).toEqual(["A", "B"]);
+    expect(first.previousCursor).toBeUndefined();
+    expect(first.nextCursor).toBeDefined();
+
+    const second = await h.listEntries.executePage({
+      collection: "posts",
+      limit: 2,
+      cursor: first.nextCursor,
+      sort: { field: "title", direction: "asc" },
+    });
+    expect(second.rows.map((row) => row.data.title)).toEqual(["C"]);
+    expect(second.previousCursor).toBeDefined();
+
+    const back = await h.listEntries.executePage({
+      collection: "posts",
+      limit: 2,
+      cursor: second.previousCursor,
+      cursorDirection: "backward",
+      sort: { field: "title", direction: "asc" },
+    });
+    expect(back.rows.map((row) => row.data.title)).toEqual(["A", "B"]);
+  });
+
+  it("rejects sorting on an unindexed data field", async () => {
+    const h = harness();
+    await expect(h.listEntries.executePage({
+      collection: "posts",
+      sort: { field: "title", direction: "asc" },
+    })).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
+  });
+
   it("ListEntriesUseCase.execute() only returns the first page (silent cap)", async () => {
     const h = harness();
     for (let i = 1; i <= 5; i++) {

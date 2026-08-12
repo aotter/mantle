@@ -1,6 +1,9 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Check,
   Copy,
   Download,
@@ -30,6 +33,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -47,9 +58,11 @@ import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t, type I18nKey } from "../../app/i18n";
 import { formatTimestampMs, idTail } from "./field-render";
 import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
-import { useCursorPagination } from "../../lib/use-cursor-pagination";
 import { renderDataValue } from "../../lib/render-data-value";
 import { renderTitleText } from "../../lib/entry-title";
+
+const COLLECTION_PAGE_SIZE = 50;
+type SortDirection = "asc" | "desc";
 
 export function CollectionView({
   collectionName,
@@ -62,6 +75,11 @@ export function CollectionView({
   const params = new URLSearchParams(location.search);
   const status = params.get("status") ?? undefined;
   const searchTerm = params.get("search")?.trim() ?? "";
+  const sortField = params.get("sort") || "updatedAt";
+  const sortDirection: SortDirection = params.get("direction") === "asc" ? "asc" : "desc";
+  const cursor = params.get("cursor") || undefined;
+  const cursorDirection = params.get("cursor_direction") === "backward" ? "backward" : "forward";
+  const page = Math.max(1, Number.parseInt(params.get("page") ?? "1", 10) || 1);
 
   const collectionsQuery = useQuery<Collection[]>({
     queryKey: ["collections"],
@@ -89,15 +107,29 @@ export function CollectionView({
     [operationsQuery.data, collectionName],
   );
   const entries = useQuery<ListEntriesResult>({
-    queryKey: ["entries", collectionName, status ?? "all", language, searchTerm],
+    queryKey: [
+      "entries",
+      collectionName,
+      status ?? "all",
+      language,
+      searchTerm,
+      sortField,
+      sortDirection,
+      cursor ?? "first",
+      cursorDirection,
+    ],
     queryFn: () => {
       const qs = new URLSearchParams({
         collection: collectionName,
-        limit: "99",
+        limit: String(COLLECTION_PAGE_SIZE),
         locale: language,
+        sort: sortField,
+        direction: sortDirection,
       });
       if (status) qs.set("status", status);
       if (searchTerm) qs.set("search", searchTerm);
+      if (cursor) qs.set("cursor", cursor);
+      if (cursorDirection === "backward") qs.set("cursor_direction", "backward");
       return api.get<ListEntriesResult>(`/entries?${qs.toString()}`);
     },
   });
@@ -105,27 +137,7 @@ export function CollectionView({
   React.useEffect(() => {
     if (entries.data) setVisibleEntries(entries.data);
   }, [entries.data]);
-  const loadEntriesPage = React.useCallback(async (cursor: string) => {
-    const qs = new URLSearchParams({
-      collection: collectionName,
-      limit: "99",
-      locale: language,
-      cursor,
-    });
-    if (status) qs.set("status", status);
-    if (searchTerm) qs.set("search", searchTerm);
-    return api.get<ListEntriesResult>(`/entries?${qs.toString()}`);
-  }, [collectionName, language, searchTerm, status]);
-  const baseEntries = entries.data ?? visibleEntries;
-  const pagination = useCursorPagination<EntryRow>(baseEntries, {
-    resetKey: `${collectionName}:${status ?? "all"}:${language}:${searchTerm}`,
-    resetOnPageChange: true,
-    loadPage: loadEntriesPage,
-  });
-  const displayedEntries = React.useMemo(() => {
-    if (!baseEntries) return baseEntries;
-    return { ...baseEntries, items: pagination.items };
-  }, [baseEntries, pagination.items]);
+  const displayedEntries = entries.data ?? visibleEntries;
   const isFirstLoad = entries.isLoading && !displayedEntries;
 
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
@@ -139,6 +151,15 @@ export function CollectionView({
   const canManageContent = me.data?.role === "owner" || me.data?.role === "editor";
   const canCreateDraft = Boolean(me.data?.role) && !isOperationalCollection;
   const dataColumns = React.useMemo(() => dataPreviewColumns(collection), [collection]);
+  const titleField = isOperationalCollection ? collectionTitleField(collection) : null;
+  const titleColumnLabel = isOperationalCollection
+    ? propertyLabel(
+        titleField ?? "title",
+        collection?.schema?.properties?.[titleField ?? ""],
+        language,
+        canonical,
+      )
+    : t(language, "collection.table.title");
   const refreshEntries = React.useCallback(() => {
     clearSelection();
     void queryClient.invalidateQueries({ queryKey: ["entries", collectionName] });
@@ -225,6 +246,8 @@ export function CollectionView({
           collectionName={collection.name}
           status={status}
           searchTerm={searchTerm}
+          sortField={sortField}
+          sortDirection={sortDirection}
           language={language}
         />
       ) : null}
@@ -234,6 +257,8 @@ export function CollectionView({
           collection={collection}
           activeStatus={status}
           searchTerm={searchTerm}
+          sortField={sortField}
+          sortDirection={sortDirection}
           language={language}
         />
       ) : null}
@@ -291,31 +316,57 @@ export function CollectionView({
                     />
                   ) : null}
                 </TableHead>
-                <TableHead>{t(language, "collection.table.id")}</TableHead>
-                <TableHead>
-                  {isOperationalCollection
-                    ? propertyLabel(
-                        collectionTitleField(collection) ?? "title",
-                        collection?.schema?.properties?.[collectionTitleField(collection) ?? ""],
-                        language,
-                        canonical,
-                      )
-                    : t(language, "collection.table.title")}
-                </TableHead>
+                <SortableTableHead
+                  label={t(language, "collection.table.id")}
+                  field="id"
+                  activeField={sortField}
+                  direction={sortDirection}
+                  href={sortHref(collectionName, status, searchTerm, "id", sortField, sortDirection)}
+                />
+                {titleField && collection?.sortableFields?.includes(titleField)
+                  ? <SortableTableHead
+                      label={titleColumnLabel}
+                      field={titleField}
+                      activeField={sortField}
+                      direction={sortDirection}
+                      href={sortHref(collectionName, status, searchTerm, titleField, sortField, sortDirection)}
+                    />
+                  : <TableHead>{titleColumnLabel}</TableHead>}
                 {isOperationalCollection ? (
                   dataColumns.map((name) => (
-                    <TableHead key={name}>
-                      {propertyLabel(name, collection?.schema?.properties?.[name], language, canonical)}
-                    </TableHead>
+                    collection?.sortableFields?.includes(name)
+                      ? <SortableTableHead
+                          key={name}
+                          label={propertyLabel(name, collection?.schema?.properties?.[name], language, canonical)}
+                          field={name}
+                          activeField={sortField}
+                          direction={sortDirection}
+                          href={sortHref(collectionName, status, searchTerm, name, sortField, sortDirection)}
+                        />
+                      : <TableHead key={name}>
+                          {propertyLabel(name, collection?.schema?.properties?.[name], language, canonical)}
+                        </TableHead>
                   ))
                 ) : (
                   <>
-                    <TableHead>{t(language, "collection.table.status")}</TableHead>
+                    <SortableTableHead
+                      label={t(language, "collection.table.status")}
+                      field="status"
+                      activeField={sortField}
+                      direction={sortDirection}
+                      href={sortHref(collectionName, status, searchTerm, "status", sortField, sortDirection)}
+                    />
                     <TableHead>{t(language, "collection.table.locale")}</TableHead>
                     <TableHead>{t(language, "collection.table.version")}</TableHead>
                   </>
                 )}
-                <TableHead>{t(language, "collection.table.updated")}</TableHead>
+                <SortableTableHead
+                  label={t(language, "collection.table.updated")}
+                  field="updatedAt"
+                  activeField={sortField}
+                  direction={sortDirection}
+                  href={sortHref(collectionName, status, searchTerm, "updatedAt", sortField, sortDirection)}
+                />
                 <TableHead>{t(language, "collection.table.actions")}</TableHead>
               </TableRow>
             </TableHeader>
@@ -361,19 +412,17 @@ export function CollectionView({
               {t(language, "collection.refreshing")}
             </p>
           ) : null}
-          {pagination.loadMoreError ? <ErrorBox error={pagination.loadMoreError} /> : null}
-          {pagination.nextCursor ? (
-            <div className="mt-3">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => void pagination.loadMore()}
-                disabled={pagination.isLoadingMore}
-              >
-                {pagination.isLoadingMore ? t(language, "crud.saving") : t(language, "collection.loadMore")}
-              </Button>
-            </div>
-          ) : null}
+          <CollectionPagination
+            collectionName={collectionName}
+            status={status}
+            searchTerm={searchTerm}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            page={page}
+            previousCursor={displayedEntries.previous_cursor}
+            nextCursor={displayedEntries.next_cursor}
+            language={language}
+          />
         </>
       )}
     </div>
@@ -482,30 +531,35 @@ function CollectionSearch({
   collectionName,
   status,
   searchTerm,
+  sortField,
+  sortDirection,
   language,
 }: {
   collectionName: string;
   status: string | undefined;
   searchTerm: string;
+  sortField: string;
+  sortDirection: SortDirection;
   language: AdminLanguage;
 }): React.ReactElement {
   const [draft, setDraft] = React.useState(searchTerm);
   React.useEffect(() => setDraft(searchTerm), [searchTerm]);
   return (
     <form
-      className="mb-3 max-w-xl"
+      className="mb-3 flex max-w-xl gap-2"
       role="search"
       onSubmit={(event) => {
         event.preventDefault();
         const next = draft.trim();
-        const params = new URLSearchParams();
-        if (status) params.set("status", status);
-        if (next) params.set("search", next);
-        const suffix = params.toString();
-        window.location.href = `/admin/c/${encodeURIComponent(collectionName)}${suffix ? `?${suffix}` : ""}`;
+        window.location.href = collectionHref(collectionName, {
+          status,
+          searchTerm: next,
+          sortField,
+          sortDirection,
+        });
       }}
     >
-      <label className="relative block">
+      <label className="relative block flex-1" aria-label={t(language, "collection.searchPlaceholder")}>
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
         <Input
           className="h-9 ps-9"
@@ -514,6 +568,10 @@ function CollectionSearch({
           placeholder={t(language, "collection.searchPlaceholder")}
         />
       </label>
+      <Button type="submit" variant="secondary" size="sm" className="h-9">
+        <Search className="size-4" aria-hidden />
+        {t(language, "collection.search")}
+      </Button>
     </form>
   );
 }
@@ -559,11 +617,15 @@ function StatusFilter({
   collection,
   activeStatus,
   searchTerm,
+  sortField,
+  sortDirection,
   language,
 }: {
   collection: Collection;
   activeStatus: string | undefined;
   searchTerm: string;
+  sortField: string;
+  sortDirection: SortDirection;
   language: AdminLanguage;
 }): React.ReactElement {
   const statuses = collection.lifecycle === "editorial"
@@ -573,7 +635,7 @@ function StatusFilter({
   return (
     <div className="mb-5 flex gap-2 overflow-x-auto pb-1">
       <StatusFilterLink
-        href={collectionFilterHref(collection.name, undefined, searchTerm)}
+        href={collectionHref(collection.name, { searchTerm, sortField, sortDirection })}
         active={!activeStatus}
       >
         {t(language, "collection.filter.all")}
@@ -581,7 +643,12 @@ function StatusFilter({
       {statuses.map((s) => (
         <StatusFilterLink
           key={s}
-          href={collectionFilterHref(collection.name, s, searchTerm)}
+          href={collectionHref(collection.name, {
+            status: s,
+            searchTerm,
+            sortField,
+            sortDirection,
+          })}
           active={activeStatus === s}
         >
           {statusLabel(language, s)}
@@ -591,16 +658,138 @@ function StatusFilter({
   );
 }
 
-function collectionFilterHref(
+function collectionHref(
+  collectionName: string,
+  state: {
+    status?: string;
+    searchTerm?: string;
+    sortField?: string;
+    sortDirection?: SortDirection;
+    cursor?: string;
+    cursorDirection?: "forward" | "backward";
+    page?: number;
+  },
+): string {
+  const params = new URLSearchParams();
+  if (state.status) params.set("status", state.status);
+  if (state.searchTerm) params.set("search", state.searchTerm);
+  if (state.sortField && state.sortField !== "updatedAt") params.set("sort", state.sortField);
+  if (state.sortDirection && state.sortDirection !== "desc") {
+    params.set("direction", state.sortDirection);
+  }
+  if (state.cursor) params.set("cursor", state.cursor);
+  if (state.cursorDirection === "backward") params.set("cursor_direction", "backward");
+  if (state.page && state.page > 1) params.set("page", String(state.page));
+  const suffix = params.toString();
+  return `/admin/c/${encodeURIComponent(collectionName)}${suffix ? `?${suffix}` : ""}`;
+}
+
+function sortHref(
   collectionName: string,
   status: string | undefined,
   searchTerm: string,
+  field: string,
+  activeField: string,
+  direction: SortDirection,
 ): string {
-  const params = new URLSearchParams();
-  if (status) params.set("status", status);
-  if (searchTerm) params.set("search", searchTerm);
-  const suffix = params.toString();
-  return `/admin/c/${encodeURIComponent(collectionName)}${suffix ? `?${suffix}` : ""}`;
+  return collectionHref(collectionName, {
+    status,
+    searchTerm,
+    sortField: field,
+    sortDirection: activeField === field
+      ? (direction === "asc" ? "desc" : "asc")
+      : (field === "updatedAt" ? "desc" : "asc"),
+  });
+}
+
+function SortableTableHead({
+  label,
+  field,
+  activeField,
+  direction,
+  href,
+}: {
+  label: React.ReactNode;
+  field: string;
+  activeField: string;
+  direction: SortDirection;
+  href: string;
+}): React.ReactElement {
+  const Icon = activeField !== field ? ArrowUpDown : direction === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <TableHead>
+      <a href={href} className="inline-flex items-center gap-1.5 font-medium hover:text-foreground">
+        {label}
+        <Icon className={cn("size-3.5", activeField === field ? "opacity-100" : "opacity-35")} aria-hidden />
+      </a>
+    </TableHead>
+  );
+}
+
+function CollectionPagination({
+  collectionName,
+  status,
+  searchTerm,
+  sortField,
+  sortDirection,
+  page,
+  previousCursor,
+  nextCursor,
+  language,
+}: {
+  collectionName: string;
+  status: string | undefined;
+  searchTerm: string;
+  sortField: string;
+  sortDirection: SortDirection;
+  page: number;
+  previousCursor: string | null;
+  nextCursor: string | null;
+  language: AdminLanguage;
+}): React.ReactElement | null {
+  if (!previousCursor && !nextCursor) return null;
+  const base = { status, searchTerm, sortField, sortDirection };
+  return (
+    <Pagination className="mt-4 justify-end" aria-label={t(language, "collection.pagination")}>
+      <PaginationContent>
+        <PaginationItem>
+          <PaginationPrevious
+            href={previousCursor ? collectionHref(collectionName, {
+              ...base,
+              cursor: previousCursor,
+              cursorDirection: "backward",
+              page: Math.max(1, page - 1),
+            }) : undefined}
+            text={t(language, "collection.previousPage")}
+            aria-label={t(language, "collection.previousPage")}
+            aria-disabled={!previousCursor || undefined}
+            tabIndex={previousCursor ? undefined : -1}
+            className={cn(!previousCursor && "pointer-events-none opacity-50")}
+          />
+        </PaginationItem>
+        <PaginationItem>
+          <PaginationLink isActive aria-label={t(language, "collection.page", { page: String(page) })}>
+            {page}
+          </PaginationLink>
+        </PaginationItem>
+        <PaginationItem>
+          <PaginationNext
+            href={nextCursor ? collectionHref(collectionName, {
+              ...base,
+              cursor: nextCursor,
+              cursorDirection: "forward",
+              page: page + 1,
+            }) : undefined}
+            text={t(language, "collection.nextPage")}
+            aria-label={t(language, "collection.nextPage")}
+            aria-disabled={!nextCursor || undefined}
+            tabIndex={nextCursor ? undefined : -1}
+            className={cn(!nextCursor && "pointer-events-none opacity-50")}
+          />
+        </PaginationItem>
+      </PaginationContent>
+    </Pagination>
+  );
 }
 
 function StatusFilterLink({

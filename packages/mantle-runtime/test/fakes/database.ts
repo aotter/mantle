@@ -257,47 +257,49 @@ class InMemoryStatement implements PreparedStatement {
       return { rows: [r as unknown as Record<string, unknown>], changes: 1 };
     }
 
-    // EntryReader queries. Keep one matcher for single, batch, and
-    // published reads so the fake follows the production read boundary
-    // instead of duplicating every emitted SQL shape.
-    if (
-      sql.startsWith("SELECT id, collection, status, version, data, author_id, created_at, updated_at FROM entries") &&
-      sql.includes(" FROM entries WHERE ") &&
-      !sql.includes("ORDER BY updated_at DESC, id DESC LIMIT ?")
-    ) {
-      return { rows: runEntryReaderQuery(this.db, sql, p), changes: 0 };
-    }
-
-    // SELECT … FROM entries WHERE collection = ? [AND status = ?] [AND search] [AND keyset] ORDER BY updated_at DESC, id DESC LIMIT ?
+    // SELECT … FROM entries WHERE collection = ? [AND filters/keyset]
+    // ORDER BY native-or-generated-column, id LIMIT ?
     if (
       sql.startsWith("SELECT id, collection, status, version, data, author_id, created_at, updated_at FROM entries WHERE collection = ?") &&
-      sql.includes("ORDER BY updated_at DESC, id DESC")
+      sql.includes(" ORDER BY ") &&
+      sql.endsWith(" LIMIT ?")
     ) {
       const hasStatus = sql.includes("AND status = ?");
       const hasSearch = sql.includes("id LIKE");
-      const hasCursor = sql.includes("(updated_at, id) < (?, ?)");
+      const cursorMatch = /\(([^,]+), id\) ([<>]) \(\?, \?\)/.exec(sql);
+      const orderMatch = / ORDER BY (.+) (ASC|DESC), id \2 LIMIT \?$/.exec(sql);
+      if (!orderMatch) throw new Error(`fake DB: unsupported list order: ${sql}`);
       const collection = p[0] as string;
       let pi = 1;
       const status = hasStatus ? (p[pi++] as string) : null;
       let searchTerm: string | null = null;
       if (hasSearch) {
         searchTerm = p[pi++] as string;
-        pi++; // second bound param is the same term (id + data)
+        pi += 2; // status and textual JSON values use the same term
       }
-      const cursorUpdatedAt = hasCursor ? (p[pi++] as number) : null;
-      const cursorId = hasCursor ? (p[pi++] as string) : null;
+      const cursorValue = cursorMatch ? (p[pi++] as string | number) : null;
+      const cursorId = cursorMatch ? (p[pi++] as string) : null;
       const limit = (p[pi++] as number) ?? 100;
+      const sortField = listSortField(orderMatch[1]!);
+      const direction = orderMatch[2]!;
       const filtered = [...this.db.entries.values()]
         .filter((r) => r.collection === collection)
         .filter((r) => (status ? r.status === status : true))
         .filter((r) => (searchTerm ? matchesLikeSearch(r, searchTerm) : true))
-        .filter((r) =>
-          cursorUpdatedAt === null ||
-          r.updated_at < cursorUpdatedAt ||
-          (r.updated_at === cursorUpdatedAt && r.id < cursorId!))
-        .sort((a, b) => b.updated_at - a.updated_at || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+        .filter((r) => cursorValue === null || compareListRow(r, sortField, cursorValue, cursorId!) ===
+          (cursorMatch![2] === ">" ? 1 : -1))
+        .sort((a, b) => compareListRows(a, b, sortField) * (direction === "ASC" ? 1 : -1))
         .slice(0, limit);
       return { rows: filtered.map((r) => ({ ...r })), changes: 0 };
+    }
+
+    // EntryReader queries. Keep one matcher for single, batch, and
+    // published reads so the fake follows the production read boundary.
+    if (
+      sql.startsWith("SELECT id, collection, status, version, data, author_id, created_at, updated_at FROM entries") &&
+      sql.includes(" FROM entries WHERE ")
+    ) {
+      return { rows: runEntryReaderQuery(this.db, sql, p), changes: 0 };
     }
 
     // Snapshot-guarded parent delete.
@@ -502,12 +504,53 @@ function snapshotMatches(db: InMemoryDatabase, values: readonly unknown[]): bool
   return row?.collection === collection && row.status === status && row.version === version;
 }
 
-/** Mirrors `(id LIKE '%'||?||'%' ESCAPE '\' OR data LIKE '%'||?||'%' ESCAPE '\')`
- *  against the in-memory store: unescape the caller's LIKE-escaped
- *  term back to a literal substring and check `id`/`data` for it. */
+/** Mirrors the repository's id/status/textual-JSON LIKE search. */
 function matchesLikeSearch(row: EntryRecord, escapedTerm: string): boolean {
-  const literal = unescapeLike(escapedTerm);
-  return row.id.includes(literal) || row.data.includes(literal);
+  const literal = unescapeLike(escapedTerm).toLowerCase();
+  return row.id.toLowerCase().includes(literal) ||
+    row.status.toLowerCase().includes(literal) ||
+    containsText(JSON.parse(row.data), literal);
+}
+
+function containsText(value: unknown, term: string): boolean {
+  if (typeof value === "string") return value.toLowerCase().includes(term);
+  if (Array.isArray(value)) return value.some((item) => containsText(item, term));
+  if (value && typeof value === "object") {
+    return Object.values(value).some((item) => containsText(item, term));
+  }
+  return false;
+}
+
+function listSortField(sql: string): string {
+  if (sql === "updated_at") return "updatedAt";
+  if (sql === "id" || sql === "status") return sql;
+  const generated = /^"m2c_[0-9a-f]+_([0-9a-f]+)_[0-9a-f]+"$/.exec(sql);
+  if (generated) return decodeHex(generated[1]!);
+  throw new Error(`fake DB: unsupported list sort field: ${sql}`);
+}
+
+function listSortValue(row: EntryRecord, field: string): string | number {
+  if (field === "updatedAt") return row.updated_at;
+  if (field === "id") return row.id;
+  if (field === "status") return row.status;
+  return readEntryDataField(row, field) as string | number;
+}
+
+function compareListRows(left: EntryRecord, right: EntryRecord, field: string): number {
+  const a = listSortValue(left, field);
+  const b = listSortValue(right, field);
+  return a < b ? -1 : a > b ? 1 : left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+
+function compareListRow(
+  row: EntryRecord,
+  field: string,
+  cursorValue: string | number,
+  cursorId: string,
+): number {
+  const value = listSortValue(row, field);
+  return value < cursorValue ? -1 : value > cursorValue ? 1 :
+    row.id < cursorId ? -1 : row.id > cursorId ? 1 : 0;
 }
 
 /** Reverse the `ESCAPE '\'` LIKE-escaping the repos apply to search

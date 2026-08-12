@@ -39,6 +39,8 @@ export interface Collection {
   /** Schema properties carrying `x-mcp-hint: media-*`. Upload hosting
    *  is optional; this only marks which fields are media-shaped. */
   mediaFields?: Array<{ name: string; hint: string }>;
+  /** Required scalar fields backed by a declared Schema index. */
+  sortableFields?: string[];
   schema?: JsonSchema;
 }
 
@@ -151,6 +153,7 @@ export interface EntryRow {
 
 export interface ListEntriesResult {
   items: EntryRow[];
+  previous_cursor: string | null;
   next_cursor: string | null;
 }
 

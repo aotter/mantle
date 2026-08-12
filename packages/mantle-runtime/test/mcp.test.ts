@@ -149,6 +149,40 @@ describe("McpJsonRpcDispatcher", () => {
     expect(names).not.toContain("create_draft");
   });
 
+  it("list_entries shares search, indexed sort, and cursor paging with HTTP admin", async () => {
+    const { dispatcher, store } = buildHarness();
+    await store.create({
+      id: "p2",
+      collection: "posts",
+      status: "draft",
+      data: { title: "Second match", slug: "second" },
+      authorId: null,
+      now: 2,
+    });
+    await store.create({
+      id: "p1",
+      collection: "posts",
+      status: "draft",
+      data: { title: "First match", slug: "first" },
+      authorId: null,
+      now: 1,
+    });
+
+    const res = await dispatcher.dispatch(jsonRpcReq("tools/call", {
+      name: "list_entries",
+      arguments: { collection: "posts", search: "match", sort: "id", direction: "asc", limit: 1 },
+    }), mcpContext());
+    const body = (await res.json()) as {
+      result: { content: Array<{ text: string }> };
+    };
+    const page = JSON.parse(body.result.content[0]!.text) as {
+      rows: Array<{ id: string }>;
+      nextCursor?: string;
+    };
+    expect(page.rows.map((row) => row.id)).toEqual(["p1"]);
+    expect(page.nextCursor).toEqual(expect.any(String));
+  });
+
   it("uses record tools for lifecycle: operational collections and creates them live", async () => {
     const { dispatcher } = buildHarness([operationalPostsSchema()]);
     const list = await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext());

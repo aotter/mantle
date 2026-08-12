@@ -1,4 +1,5 @@
 import type { ContentState } from "@aotter/mantle-spec";
+import type { EntrySort } from "../../../domain/port/EntryRepository.js";
 import type { HandlerContext } from "../../../domain/model/HandlerContext.js";
 
 /**
@@ -47,8 +48,10 @@ export interface ListEntriesRequest {
   readonly limit?: number;
   /** Opaque cursor from a prior `ListEntriesResult.nextCursor`. */
   readonly cursor?: string;
-  /** Free-text filter matched against `id` and the raw data blob. */
+  readonly cursorDirection?: "forward" | "backward";
+  /** Free-text filter matched against id, status, and textual data values. */
   readonly search?: string;
+  readonly sort?: EntrySort;
 }
 
 export interface RequestPublishRequest extends ContentMutationFields {

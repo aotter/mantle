@@ -261,8 +261,16 @@ export class McpJsonRpcDispatcher {
         return this.useCases.listEntries.executePage({
           collection,
           status: args["status"] as ContentState | undefined,
+          search: typeof args["search"] === "string" ? args["search"] : undefined,
+          sort: typeof args["sort"] === "string"
+            ? {
+                field: args["sort"],
+                direction: args["direction"] === "asc" ? "asc" : "desc",
+              }
+            : undefined,
           limit: typeof args["limit"] === "number" ? args["limit"] : undefined,
           cursor: typeof args["cursor"] === "string" ? args["cursor"] : undefined,
+          cursorDirection: args["cursorDirection"] === "backward" ? "backward" : "forward",
         });
       }
       case "get_entry": {

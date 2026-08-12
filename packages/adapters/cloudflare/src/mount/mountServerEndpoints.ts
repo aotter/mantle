@@ -462,6 +462,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     const rawLimit = c.req.query("limit");
     const parsedLimit = rawLimit ? Number.parseInt(rawLimit, 10) : NaN;
     const statusQuery = c.req.query("status");
+    const sortDirection = c.req.query("direction") === "asc" ? "asc" : "desc";
     // Admin pagination needs the cursored shape — `executePage` returns
     // `{ rows, nextCursor? }`. `execute()` is the flat-array variant
     // for app code.
@@ -470,10 +471,19 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
       status: statusQuery && statusQuery !== "all" ? (statusQuery as ContentState) : undefined,
       limit: Number.isFinite(parsedLimit) ? parsedLimit : 99,
       cursor: c.req.query("cursor") ?? undefined,
+      cursorDirection: c.req.query("cursor_direction") === "backward" ? "backward" : "forward",
       search: c.req.query("search") || undefined,
+      sort: {
+        field: c.req.query("sort") || "updatedAt",
+        direction: sortDirection,
+      },
     });
     const items = result.rows.map((row) => adminListItem(row, schemasByName));
-    return Response.json({ items, next_cursor: result.nextCursor ?? null });
+    return Response.json({
+      items,
+      previous_cursor: result.previousCursor ?? null,
+      next_cursor: result.nextCursor ?? null,
+    });
   });
 
   guarded("get", "/admin/api/entries/export", async (c) => {
@@ -1204,6 +1214,7 @@ type AdminEditorCollection = {
   readonly schema: JsonSchema;
   readonly uiSchema: Record<string, unknown> | null;
   readonly mediaFields: Array<{ name: string; hint: string }>;
+  readonly sortableFields: readonly string[];
 };
 
 type AdminEditorEntry = {
@@ -1249,6 +1260,10 @@ function adminEditorCollection(
     schema: schema.spec.schema,
     uiSchema: schema.spec.uiSchema ?? null,
     mediaFields: mediaFieldsForCollection(schema, schemas),
+    sortableFields: [...new Set([
+      ...(schema.spec.uniqueIndexes ?? []).flat(),
+      ...(schema.spec.indexes ?? []).flat(),
+    ])].filter((field) => (schema.spec.schema.required ?? []).includes(field)),
   };
 }
 

@@ -17,8 +17,8 @@ import type {
   UpdateEntryArgs,
 } from "../../src/domain/port/EntryRepository.js";
 import {
-  decodeEntryCursor,
-  encodeEntryCursor,
+  decodeEntrySortCursor,
+  encodeEntrySortCursor,
 } from "../../src/infrastructure/persistence/Pagination.js";
 
 /**
@@ -106,25 +106,45 @@ export class InMemoryEntryRepository implements EntryRepository {
 
   async list(args: ListEntriesArgs): Promise<ListEntriesResult> {
     const limit = args.limit ?? 100;
-    const cursor = decodeEntryCursor(args.cursor);
+    const sort = args.sort ?? { field: "updatedAt", direction: "desc" };
+    const cursor = decodeEntrySortCursor(args.cursor, sort.field, sort.direction);
     const filtered: EntryRow[] = [];
+    const search = args.search?.toLowerCase();
     for (const row of this.rows.values()) {
       if (row.collection !== args.collection) continue;
       if (args.status && row.status !== args.status) continue;
+      if (search && !row.id.toLowerCase().includes(search) &&
+        !row.status.toLowerCase().includes(search) &&
+        !containsText(row.data, search)) continue;
       filtered.push(row);
     }
-    // Match real DB ordering: updated_at DESC, id DESC.
-    filtered.sort((a, b) => b.updatedAt - a.updatedAt || (b.id > a.id ? 1 : b.id < a.id ? -1 : 0));
-    const remaining = cursor
-      ? filtered.filter((row) =>
-          row.updatedAt < cursor[0] || (row.updatedAt === cursor[0] && row.id < cursor[1]))
+    const compare = (a: EntryRow, value: string | number, id: string): number => {
+      const av = entrySortValue(a, sort.field);
+      const valueOrder = av < value ? -1 : av > value ? 1 : 0;
+      const idOrder = a.id < id ? -1 : a.id > id ? 1 : 0;
+      const order = valueOrder || idOrder;
+      return sort.direction === "asc" ? order : -order;
+    };
+    filtered.sort((a, b) => compare(a, entrySortValue(b, sort.field), b.id));
+    const candidates = cursor
+      ? filtered.filter((row) => args.cursorDirection === "backward"
+        ? compare(row, cursor[0], cursor[1]) < 0
+        : compare(row, cursor[0], cursor[1]) > 0)
       : filtered;
-    const page = remaining.slice(0, limit);
-    const hasMore = remaining.length > limit;
+    const queried = args.cursorDirection === "backward" ? [...candidates].reverse() : candidates;
+    const hasMore = queried.length > limit;
+    const page = queried.slice(0, limit);
+    if (args.cursorDirection === "backward") page.reverse();
+    const first = page[0];
     const last = page[page.length - 1];
     return {
       rows: page,
-      nextCursor: hasMore && last ? encodeEntryCursor(last.updatedAt, last.id) : undefined,
+      previousCursor: first && (args.cursorDirection === "backward" ? hasMore : cursor !== null)
+        ? encodeEntrySortCursor(sort.field, sort.direction, entrySortValue(first, sort.field), first.id)
+        : undefined,
+      nextCursor: last && (args.cursorDirection === "backward" ? cursor !== null : hasMore)
+        ? encodeEntrySortCursor(sort.field, sort.direction, entrySortValue(last, sort.field), last.id)
+        : undefined,
     };
   }
 
@@ -154,4 +174,24 @@ export class InMemoryEntryRepository implements EntryRepository {
   _seed(row: EntryRow): void {
     this.rows.set(row.id, row);
   }
+}
+
+function containsText(value: unknown, term: string): boolean {
+  if (typeof value === "string") return value.toLowerCase().includes(term);
+  if (Array.isArray(value)) return value.some((item) => containsText(item, term));
+  if (value && typeof value === "object") {
+    return Object.values(value).some((item) => containsText(item, term));
+  }
+  return false;
+}
+
+function entrySortValue(row: EntryRow, field: string): string | number {
+  if (field === "id") return row.id;
+  if (field === "status") return row.status;
+  if (field === "updatedAt") return row.updatedAt;
+  const value = row.data[field];
+  if (typeof value !== "string" && typeof value !== "number") {
+    throw new Error(`non-scalar sort value for ${field}`);
+  }
+  return value;
 }

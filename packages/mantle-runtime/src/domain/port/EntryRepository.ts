@@ -111,14 +111,25 @@ export interface ListEntriesArgs {
   /** Opaque continuation token from a prior `ListEntriesResult.nextCursor`.
    *  Caller must round-trip without interpreting; format is impl-defined. */
   readonly cursor?: string;
-  /** Free-text filter matched against `id` and the raw `data` JSON
-   *  blob (substring, case-sensitive per SQLite's default `LIKE`).
+  /** Fetch the page before `cursor`; default is the page after it. */
+  readonly cursorDirection?: "forward" | "backward";
+  /** Free-text filter matched against `id`, status, and textual JSON
+   *  values (substring, case-insensitive for ASCII per SQLite `LIKE`).
    *  Composes with `status` — both narrow the same query. */
   readonly search?: string;
+  /** Native fields or Schema-indexed scalar data fields only. */
+  readonly sort?: EntrySort;
+}
+
+export interface EntrySort {
+  readonly field: string;
+  readonly direction: "asc" | "desc";
 }
 
 export interface ListEntriesResult {
   readonly rows: readonly EntryRow[];
+  /** Pass back with `cursorDirection: "backward"`. */
+  readonly previousCursor?: string;
   /** Present when there may be more rows beyond this page. Undefined
    *  signals "this is the last page". Pass back as `cursor` to
    *  continue. */
