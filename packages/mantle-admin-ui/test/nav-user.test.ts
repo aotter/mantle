@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { initialsFor } from "../src/layout/nav-user";
+import { initialsFor } from "../src/lib/initials";
 
 describe("initialsFor", () => {
   it.each([

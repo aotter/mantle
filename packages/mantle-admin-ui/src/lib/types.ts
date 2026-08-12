@@ -154,6 +154,7 @@ export interface SiteInfo {
   brand: string;
   locales: string[];
   canonicalLocale: string | null;
+  faviconUrl?: string;
   publicUrl: string;
   mcpUrl: string;
   media?: {

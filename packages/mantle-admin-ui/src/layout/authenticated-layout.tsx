@@ -43,7 +43,6 @@ interface AuthenticatedLayoutProps {
 
 const DEFAULT_BRAND: AdminBrand = {
   title: "CMS",
-  subtitle: "admin",
   href: "/admin",
 };
 
@@ -76,7 +75,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
     () => ({
       ...DEFAULT_BRAND,
       title: site.data?.brand ?? DEFAULT_BRAND.title,
-      subtitle: site.data?.canonicalLocale ?? DEFAULT_BRAND.subtitle,
+      image: site.data?.faviconUrl,
     }),
     [site.data],
   );

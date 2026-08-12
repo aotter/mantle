@@ -33,6 +33,6 @@ export interface NavGroupData {
 
 export interface AdminBrand {
   readonly title: string;
-  readonly subtitle?: string;
+  readonly image?: string;
   readonly href?: string;
 }

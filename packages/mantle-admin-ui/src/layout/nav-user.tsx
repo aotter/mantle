@@ -19,6 +19,7 @@ import {
 import { usePreferences } from "@/app/preferences";
 import { t } from "@/app/i18n";
 import { signOut } from "@/lib/auth";
+import { initialsFor } from "@/lib/initials";
 
 export interface NavUserProps {
   login: string | null;
@@ -79,14 +80,6 @@ export function NavUser({ login, image, role }: NavUserProps): React.ReactElemen
       </SidebarMenuItem>
     </SidebarMenu>
   );
-}
-
-export function initialsFor(login: string | null): string {
-  const parts = login?.trim().split(/[\s._-]+/).filter(Boolean) ?? [];
-  const value = parts.length > 1
-    ? `${parts[0]?.[0] ?? ""}${parts[parts.length - 1]?.[0] ?? ""}`
-    : (parts[0] ?? "?").slice(0, 2);
-  return value.toUpperCase();
 }
 
 function UserAvatar({ src, fallback }: { src: string | null; fallback: string }): React.ReactElement {

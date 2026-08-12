@@ -13,7 +13,6 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { fieldLabel } from "@/lib/field-label";
@@ -48,8 +47,7 @@ export function Header({
         className,
       )}
     >
-      <SidebarTrigger className="-ms-1" />
-      <Separator orientation="vertical" className="me-2 h-4" />
+      <SidebarTrigger className="-ms-1 md:hidden" />
       <Breadcrumb className="min-w-0">
         <BreadcrumbList className="flex-nowrap">
           <BreadcrumbItem className="hidden sm:block">

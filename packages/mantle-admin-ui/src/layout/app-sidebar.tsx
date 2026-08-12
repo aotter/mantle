@@ -5,7 +5,7 @@ import {
   SidebarFooter,
   SidebarHeader,
   SidebarRail,
-  SidebarSeparator,
+  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { usePreferences } from "../app/preferences";
 import { AppTitle } from "./app-title";
@@ -39,10 +39,12 @@ export function AppSidebar({
       collapsible="icon"
       dir={direction}
     >
-      <SidebarHeader>
-        <AppTitle brand={brand} />
+      <SidebarHeader className="h-14 justify-center border-b border-sidebar-border px-2 py-0">
+        <div className="flex min-w-0 items-center gap-1">
+          <AppTitle brand={brand} />
+          <SidebarTrigger className="shrink-0 group-data-[collapsible=icon]:mx-auto" />
+        </div>
       </SidebarHeader>
-      <SidebarSeparator />
       <SidebarContent>
         {groups.map((group, idx) => (
           <NavGroup
@@ -53,8 +55,7 @@ export function AppSidebar({
           />
         ))}
       </SidebarContent>
-      <SidebarSeparator />
-      <SidebarFooter>
+      <SidebarFooter className="border-t border-sidebar-border">
         <NavUser login={user.login} image={user.image} role={user.role} />
       </SidebarFooter>
       <SidebarRail />
