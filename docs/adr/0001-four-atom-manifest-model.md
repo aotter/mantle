@@ -286,6 +286,7 @@ forces it.
 - `spec.uniqueIndexes:` (composite uniques)
 - `spec.indexes:` (ordered composite, non-unique access paths)
 - `spec.searchableFields:` (top-level string allowlist; entry id is implicit)
+- `spec.uiSchema.list.filterField:` (Admin-only operational enum tabs; indexed)
 - Property extensions: `x-mantle-bind`, `x-mantle-ref`, `x-mcp-hint`
 
 **View (v0.1)**:

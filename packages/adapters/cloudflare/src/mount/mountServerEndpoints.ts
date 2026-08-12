@@ -9,6 +9,7 @@ import {
   meetsRole,
   redactForWire,
   runtimeDiagnostic,
+  checkSchemaListFilter,
   type ContentState,
   type Diagnostic,
   type Entry,
@@ -463,6 +464,20 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     const parsedLimit = rawLimit ? Number.parseInt(rawLimit, 10) : NaN;
     const statusQuery = c.req.query("status");
     const sortDirection = c.req.query("direction") === "asc" ? "asc" : "desc";
+    const filterField = c.req.query("filter_field");
+    const filterValue = c.req.query("filter_value");
+    if (Boolean(filterField) !== Boolean(filterValue)) {
+      return Response.json({
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "INPUT_VALIDATION_FAILED",
+          severity: "error",
+          path: "GET /admin/api/entries",
+          expected: "filter_field and filter_value together",
+          message: "List filters require both `filter_field` and `filter_value`.",
+        }),
+      }, { status: 400 });
+    }
     // Admin pagination needs the cursored shape — `executePage` returns
     // `{ rows, nextCursor? }`. `execute()` is the flat-array variant
     // for app code.
@@ -473,6 +488,9 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
       cursor: c.req.query("cursor") ?? undefined,
       cursorDirection: c.req.query("cursor_direction") === "backward" ? "backward" : "forward",
       search: c.req.query("search") || undefined,
+      filter: filterField && filterValue
+        ? { field: filterField, value: filterValue }
+        : undefined,
       sort: {
         field: c.req.query("sort") || "updatedAt",
         direction: sortDirection,
@@ -1215,6 +1233,7 @@ type AdminEditorCollection = {
   readonly uiSchema: Record<string, unknown> | null;
   readonly mediaFields: Array<{ name: string; hint: string }>;
   readonly sortableFields: readonly string[];
+  readonly filter: { readonly field: string; readonly values: readonly string[] } | null;
 };
 
 type AdminEditorEntry = {
@@ -1264,6 +1283,7 @@ function adminEditorCollection(
       ...(schema.spec.uniqueIndexes ?? []).flat(),
       ...(schema.spec.indexes ?? []).flat(),
     ])].filter((field) => (schema.spec.schema.required ?? []).includes(field)),
+    filter: checkSchemaListFilter(schema).filter,
   };
 }
 

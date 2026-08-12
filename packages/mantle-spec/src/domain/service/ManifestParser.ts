@@ -34,6 +34,7 @@ import {
   schemaIndexDiagnosticCode,
 } from "./SchemaIndexChecker.js";
 import { checkSchemaSearchableFields } from "./SchemaSearchChecker.js";
+import { checkSchemaListFilter } from "./SchemaAdminUiChecker.js";
 
 /**
  * Shared shape validator for `LocalizedText` fields (`Schema.spec.title`
@@ -408,6 +409,15 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
         : searchProblem.category === "field-unknown"
           ? "SCHEMA_SEARCH_FIELD_UNKNOWN"
           : "SCHEMA_SEARCH_INVALID",
+    );
+  }
+  const listFilterProblem = checkSchemaListFilter(m).problems[0];
+  if (listFilterProblem) {
+    throw new ManifestParseError(
+      listFilterProblem.message,
+      idx,
+      listFilterProblem.pointer,
+      "SCHEMA_UI_INVALID",
     );
   }
   if ("localized" in s && typeof s["localized"] !== "boolean") {

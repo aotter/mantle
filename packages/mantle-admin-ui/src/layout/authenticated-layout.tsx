@@ -219,6 +219,18 @@ function collectionNavItem(c: Collection, language: AdminLanguage, canonical: st
     icon: Folder,
     marker: c.hasTranslations ? Globe : undefined,
   };
+  if (c.lifecycle === "operational" && c.filter) {
+    return {
+      ...base,
+      items: [
+        { title: t(language, "collection.filter.all"), url: `/admin/c/${c.name}` },
+        ...c.filter.values.map<NavLink>((value) => ({
+          title: fieldLabel(value),
+          url: `/admin/c/${c.name}?filter_field=${encodeURIComponent(c.filter!.field)}&filter_value=${encodeURIComponent(value)}`,
+        })),
+      ],
+    };
+  }
   const statuses = statusesFor(c);
   // Operational records (lifecycle: operational) have no status buckets —
   // a plain link beats a collapsible with one child.

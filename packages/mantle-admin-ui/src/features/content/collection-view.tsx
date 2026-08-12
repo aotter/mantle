@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useAdminLocation } from "../../app/router";
 import { api } from "../../lib/api";
-import { propertyLabel } from "../../lib/field-label";
+import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { operationsQueryOptions } from "../../lib/queries";
 import type {
@@ -75,6 +75,8 @@ export function CollectionView({
   const params = new URLSearchParams(location.search);
   const status = params.get("status") ?? undefined;
   const searchTerm = params.get("search")?.trim() ?? "";
+  const filterField = params.get("filter_field") ?? undefined;
+  const filterValue = params.get("filter_value") ?? undefined;
   const sortField = params.get("sort") || "updatedAt";
   const sortDirection: SortDirection = params.get("direction") === "asc" ? "asc" : "desc";
   const cursor = params.get("cursor") || undefined;
@@ -113,6 +115,8 @@ export function CollectionView({
       status ?? "all",
       language,
       searchTerm,
+      filterField ?? "no-filter",
+      filterValue ?? "no-value",
       sortField,
       sortDirection,
       cursor ?? "first",
@@ -128,6 +132,10 @@ export function CollectionView({
       });
       if (status) qs.set("status", status);
       if (searchTerm) qs.set("search", searchTerm);
+      if (filterField && filterValue) {
+        qs.set("filter_field", filterField);
+        qs.set("filter_value", filterValue);
+      }
       if (cursor) qs.set("cursor", cursor);
       if (cursorDirection === "backward") qs.set("cursor_direction", "backward");
       return api.get<ListEntriesResult>(`/entries?${qs.toString()}`);
@@ -246,16 +254,20 @@ export function CollectionView({
           collectionName={collection.name}
           status={status}
           searchTerm={searchTerm}
+          filterField={filterField}
+          filterValue={filterValue}
           sortField={sortField}
           sortDirection={sortDirection}
           language={language}
         />
       ) : null}
 
-      {collection && collection.lifecycle !== "operational" ? (
-        <StatusFilter
+      {collection && (collection.lifecycle !== "operational" || collection.filter) ? (
+        <CollectionFilterTabs
           collection={collection}
           activeStatus={status}
+          activeFilterField={filterField}
+          activeFilterValue={filterValue}
           searchTerm={searchTerm}
           sortField={sortField}
           sortDirection={sortDirection}
@@ -272,6 +284,8 @@ export function CollectionView({
           description={
             searchTerm
               ? t(language, "collection.empty.search", { search: searchTerm })
+              : filterValue
+              ? t(language, "collection.empty.withStatus", { status: fieldLabel(filterValue) })
               : status
               ? t(language, "collection.empty.withStatus", { status })
               : t(language, "collection.empty.all")
@@ -321,7 +335,7 @@ export function CollectionView({
                   field="id"
                   activeField={sortField}
                   direction={sortDirection}
-                  href={sortHref(collectionName, status, searchTerm, "id", sortField, sortDirection)}
+                  href={sortHref(collectionName, status, searchTerm, "id", sortField, sortDirection, filterField, filterValue)}
                 />
                 {titleField && collection?.sortableFields?.includes(titleField)
                   ? <SortableTableHead
@@ -329,7 +343,7 @@ export function CollectionView({
                       field={titleField}
                       activeField={sortField}
                       direction={sortDirection}
-                      href={sortHref(collectionName, status, searchTerm, titleField, sortField, sortDirection)}
+                      href={sortHref(collectionName, status, searchTerm, titleField, sortField, sortDirection, filterField, filterValue)}
                     />
                   : <TableHead>{titleColumnLabel}</TableHead>}
                 {isOperationalCollection ? (
@@ -341,7 +355,7 @@ export function CollectionView({
                           field={name}
                           activeField={sortField}
                           direction={sortDirection}
-                          href={sortHref(collectionName, status, searchTerm, name, sortField, sortDirection)}
+                          href={sortHref(collectionName, status, searchTerm, name, sortField, sortDirection, filterField, filterValue)}
                         />
                       : <TableHead key={name}>
                           {propertyLabel(name, collection?.schema?.properties?.[name], language, canonical)}
@@ -354,7 +368,7 @@ export function CollectionView({
                       field="status"
                       activeField={sortField}
                       direction={sortDirection}
-                      href={sortHref(collectionName, status, searchTerm, "status", sortField, sortDirection)}
+                      href={sortHref(collectionName, status, searchTerm, "status", sortField, sortDirection, filterField, filterValue)}
                     />
                     <TableHead>{t(language, "collection.table.locale")}</TableHead>
                     <TableHead>{t(language, "collection.table.version")}</TableHead>
@@ -365,7 +379,7 @@ export function CollectionView({
                   field="updatedAt"
                   activeField={sortField}
                   direction={sortDirection}
-                  href={sortHref(collectionName, status, searchTerm, "updatedAt", sortField, sortDirection)}
+                  href={sortHref(collectionName, status, searchTerm, "updatedAt", sortField, sortDirection, filterField, filterValue)}
                 />
                 <TableHead>{t(language, "collection.table.actions")}</TableHead>
               </TableRow>
@@ -416,6 +430,8 @@ export function CollectionView({
             collectionName={collectionName}
             status={status}
             searchTerm={searchTerm}
+            filterField={filterField}
+            filterValue={filterValue}
             sortField={sortField}
             sortDirection={sortDirection}
             page={page}
@@ -531,6 +547,8 @@ function CollectionSearch({
   collectionName,
   status,
   searchTerm,
+  filterField,
+  filterValue,
   sortField,
   sortDirection,
   language,
@@ -538,6 +556,8 @@ function CollectionSearch({
   collectionName: string;
   status: string | undefined;
   searchTerm: string;
+  filterField: string | undefined;
+  filterValue: string | undefined;
   sortField: string;
   sortDirection: SortDirection;
   language: AdminLanguage;
@@ -554,6 +574,8 @@ function CollectionSearch({
         window.location.href = collectionHref(collectionName, {
           status,
           searchTerm: next,
+          filterField,
+          filterValue,
           sortField,
           sortDirection,
         });
@@ -613,9 +635,11 @@ export function collectionSummaryKey(collection: Collection | undefined): I18nKe
   return "collection.schemaSummary.plain";
 }
 
-function StatusFilter({
+function CollectionFilterTabs({
   collection,
   activeStatus,
+  activeFilterField,
+  activeFilterValue,
   searchTerm,
   sortField,
   sortDirection,
@@ -623,6 +647,8 @@ function StatusFilter({
 }: {
   collection: Collection;
   activeStatus: string | undefined;
+  activeFilterField: string | undefined;
+  activeFilterValue: string | undefined;
   searchTerm: string;
   sortField: string;
   sortDirection: SortDirection;
@@ -631,16 +657,32 @@ function StatusFilter({
   const statuses = collection.lifecycle === "editorial"
     ? (["draft", "review", "published", "archived"] as const)
     : (["draft", "published", "archived"] as const);
+  const filter = collection.lifecycle === "operational" ? collection.filter : null;
 
   return (
     <div className="mb-5 flex gap-2 overflow-x-auto pb-1">
       <StatusFilterLink
         href={collectionHref(collection.name, { searchTerm, sortField, sortDirection })}
-        active={!activeStatus}
+        active={!activeStatus && !activeFilterValue}
       >
         {t(language, "collection.filter.all")}
       </StatusFilterLink>
-      {statuses.map((s) => (
+      {filter?.values.map((value) => (
+        <StatusFilterLink
+          key={value}
+          href={collectionHref(collection.name, {
+            searchTerm,
+            filterField: filter.field,
+            filterValue: value,
+            sortField,
+            sortDirection,
+          })}
+          active={activeFilterField === filter.field && activeFilterValue === value}
+        >
+          {fieldLabel(value)}
+        </StatusFilterLink>
+      ))}
+      {!filter && statuses.map((s) => (
         <StatusFilterLink
           key={s}
           href={collectionHref(collection.name, {
@@ -663,6 +705,8 @@ function collectionHref(
   state: {
     status?: string;
     searchTerm?: string;
+    filterField?: string;
+    filterValue?: string;
     sortField?: string;
     sortDirection?: SortDirection;
     cursor?: string;
@@ -673,6 +717,10 @@ function collectionHref(
   const params = new URLSearchParams();
   if (state.status) params.set("status", state.status);
   if (state.searchTerm) params.set("search", state.searchTerm);
+  if (state.filterField && state.filterValue) {
+    params.set("filter_field", state.filterField);
+    params.set("filter_value", state.filterValue);
+  }
   if (state.sortField && state.sortField !== "updatedAt") params.set("sort", state.sortField);
   if (state.sortDirection && state.sortDirection !== "desc") {
     params.set("direction", state.sortDirection);
@@ -691,10 +739,14 @@ function sortHref(
   field: string,
   activeField: string,
   direction: SortDirection,
+  filterField?: string,
+  filterValue?: string,
 ): string {
   return collectionHref(collectionName, {
     status,
     searchTerm,
+    filterField,
+    filterValue,
     sortField: field,
     sortDirection: activeField === field
       ? (direction === "asc" ? "desc" : "asc")
@@ -730,6 +782,8 @@ function CollectionPagination({
   collectionName,
   status,
   searchTerm,
+  filterField,
+  filterValue,
   sortField,
   sortDirection,
   page,
@@ -740,6 +794,8 @@ function CollectionPagination({
   collectionName: string;
   status: string | undefined;
   searchTerm: string;
+  filterField: string | undefined;
+  filterValue: string | undefined;
   sortField: string;
   sortDirection: SortDirection;
   page: number;
@@ -748,7 +804,7 @@ function CollectionPagination({
   language: AdminLanguage;
 }): React.ReactElement | null {
   if (!previousCursor && !nextCursor) return null;
-  const base = { status, searchTerm, sortField, sortDirection };
+  const base = { status, searchTerm, filterField, filterValue, sortField, sortDirection };
   return (
     <Pagination className="mt-4 justify-end" aria-label={t(language, "collection.pagination")}>
       <PaginationContent>

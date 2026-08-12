@@ -22,6 +22,7 @@ import {
   schemaIndexDiagnosticCode,
 } from "../domain/service/SchemaIndexChecker.js";
 import { checkSchemaSearchableFields } from "../domain/service/SchemaSearchChecker.js";
+import { checkSchemaListFilter } from "../domain/service/SchemaAdminUiChecker.js";
 import {
   bestMatch,
   manifestPath,
@@ -238,6 +239,19 @@ function checkSchemaInternals(
         suggestion: typeof problem.value === "string"
           ? bestMatch(problem.value, candidates)
           : undefined,
+        message: problem.message,
+      }),
+    );
+  }
+
+  for (const problem of checkSchemaListFilter(s).problems) {
+    out.push(
+      validateDiagnostic({
+        code: "SCHEMA_UI_INVALID",
+        severity: "error",
+        path: manifestPath("Schema", s.metadata.name, problem.pointer, filePaths),
+        value: problem.value,
+        expected: problem.expected,
         message: problem.message,
       }),
     );

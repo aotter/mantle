@@ -282,6 +282,9 @@ class InMemoryStatement implements PreparedStatement {
           pi += 1; // each field uses the same escaped search term
         }
       }
+      const filterMatch = /AND ("m2c_[0-9a-f]+_[0-9a-f]+_[0-9a-f]+") = \?/.exec(sql);
+      const filterField = filterMatch ? listSortField(filterMatch[1]!) : null;
+      const filterValue = filterField ? p[pi++] : null;
       const cursorValue = cursorMatch ? (p[pi++] as string | number) : null;
       const cursorId = cursorMatch ? (p[pi++] as string) : null;
       const limit = (p[pi++] as number) ?? 100;
@@ -291,6 +294,7 @@ class InMemoryStatement implements PreparedStatement {
         .filter((r) => r.collection === collection)
         .filter((r) => (status ? r.status === status : true))
         .filter((r) => (searchTerm ? matchesLikeSearch(r, searchTerm, searchFields) : true))
+        .filter((r) => filterField ? JSON.parse(r.data)[filterField] === filterValue : true)
         .filter((r) => cursorValue === null || compareListRow(r, sortField, cursorValue, cursorId!) ===
           (cursorMatch![2] === ">" ? 1 : -1))
         .sort((a, b) => compareListRows(a, b, sortField) * (direction === "ASC" ? 1 : -1))

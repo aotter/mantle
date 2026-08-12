@@ -117,6 +117,7 @@ export class InMemoryEntryRepository implements EntryRepository {
         !(args.searchFields ?? []).some((field) =>
           typeof row.data[field] === "string" &&
           row.data[field].toLowerCase().includes(search))) continue;
+      if (args.filter && row.data[args.filter.field] !== args.filter.value) continue;
       filtered.push(row);
     }
     const compare = (a: EntryRow, value: string | number, id: string): number => {

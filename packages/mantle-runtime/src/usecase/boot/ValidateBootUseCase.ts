@@ -237,7 +237,8 @@ function isBootBlockingManifestDiagnostic(diagnostic: Diagnostic): boolean {
     diagnostic.code === "SCHEMA_INDEX_FIELD_UNKNOWN" ||
     diagnostic.code === "UNIQUE_INDEX_FIELD_UNKNOWN" ||
     diagnostic.code === "SCHEMA_SEARCH_INVALID" ||
-    diagnostic.code === "SCHEMA_SEARCH_FIELD_UNKNOWN";
+    diagnostic.code === "SCHEMA_SEARCH_FIELD_UNKNOWN" ||
+    diagnostic.code === "SCHEMA_UI_INVALID";
 }
 
 function checkHttpRouteCollisions(triggers: readonly TriggerManifest[]): Diagnostic[] {

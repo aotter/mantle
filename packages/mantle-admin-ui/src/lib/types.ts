@@ -41,6 +41,8 @@ export interface Collection {
   mediaFields?: Array<{ name: string; hint: string }>;
   /** Required scalar fields backed by a declared Schema index. */
   sortableFields?: string[];
+  /** Primary Admin list filter declared at uiSchema.list.filterField. */
+  filter?: { field: string; values: string[] } | null;
   schema?: JsonSchema;
 }
 

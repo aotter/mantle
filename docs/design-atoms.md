@@ -141,6 +141,12 @@ properties used by Admin and Staff MCP substring search. Entry id is always
 searchable. This is separate from `indexes`; ordinary B-tree indexes do not
 accelerate leading-wildcard substring search.
 
+**`spec.uiSchema.list.filterField`** — optional Admin-only primary filter for
+an operational collection. The field must declare a non-empty string `enum`
+and be the first field of an `indexes` or `uniqueIndexes` tuple. Admin reuses
+the enum for sidebar links and list tabs; Staff MCP uses declared Views for
+richer query capabilities instead of reading UI configuration.
+
 **`spec.localized: bool`** (default `false`, ADR-0010) — opt-in per
 Schema. Localized Schemas store locale in `data.locale`; non-localized
 Schemas reject `data.locale` writes. Site config must declare the set

@@ -8,6 +8,7 @@ export * from "./ManifestParser.js";
 export * from "./CrossSchemaChecker.js";
 export * from "./ManifestPathDiagnoser.js";
 export * from "./SchemaDdlEmitter.js";
+export * from "./SchemaAdminUiChecker.js";
 export * from "./EntryDataValidator.js";
 export * from "./SiteDefaultsValidator.js";
 export * from "./JsonSchemaToZod.js";

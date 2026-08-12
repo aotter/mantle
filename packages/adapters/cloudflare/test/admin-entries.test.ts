@@ -40,6 +40,27 @@ function manifests(): Manifest[] {
   ];
 }
 
+function filteredManifests(): Manifest[] {
+  return [{
+    apiVersion: "cms.mantle.aotter.net/v1",
+    kind: "Schema",
+    metadata: { name: "orders" },
+    spec: {
+      title: "Orders",
+      lifecycle: "operational",
+      schema: {
+        type: "object",
+        properties: {
+          orderState: { type: "string", enum: ["pending", "paid"] },
+          placedAt: { type: "integer" },
+        },
+      },
+      indexes: [["orderState", "placedAt"]],
+      uiSchema: { list: { filterField: "orderState" } },
+    },
+  }];
+}
+
 function sessionAsStaff() {
   return async () => ({
     session: { id: "s-1", userId: "user-1", expiresAt: new Date(Date.now() + 60_000) },
@@ -221,6 +242,38 @@ describe("GET /admin/api/entries?search=", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { items: unknown[] };
     expect(body.items).toHaveLength(0);
+  });
+});
+
+describe("GET /admin/api/entries exact list filter", () => {
+  it("projects the filter metadata and filters by its indexed enum value", async () => {
+    const { app, db } = harness(undefined, undefined, filteredManifests());
+    db.entries.set("o1", relatedRow("o1", "orders", "draft", { orderState: "paid", placedAt: 2 }, 2));
+    db.entries.set("o2", relatedRow("o2", "orders", "draft", { orderState: "pending", placedAt: 1 }, 1));
+
+    const collections = await app.request("/admin/api/collections");
+    expect(await collections.json()).toMatchObject({
+      collections: [{ filter: { field: "orderState", values: ["pending", "paid"] } }],
+    });
+
+    const response = await app.request(
+      "/admin/api/entries?collection=orders&filter_field=orderState&filter_value=paid",
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { items: Array<{ id: string }> };
+    expect(body.items.map(({ id }) => id)).toEqual(["o1"]);
+    expect(db.executions.at(-1)?.sql).toContain('"m2c_');
+  });
+
+  it("rejects incomplete filter parameters", async () => {
+    const { app } = harness(undefined, undefined, filteredManifests());
+    const response = await app.request(
+      "/admin/api/entries?collection=orders&filter_field=orderState",
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      diagnostic: { code: "INPUT_VALIDATION_FAILED" },
+    });
   });
 });
 

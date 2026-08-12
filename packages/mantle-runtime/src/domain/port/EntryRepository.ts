@@ -118,6 +118,8 @@ export interface ListEntriesArgs {
   readonly search?: string;
   /** Trusted top-level string fields resolved from Schema.searchableFields. */
   readonly searchFields?: readonly string[];
+  /** Trusted exact enum filter resolved from the Schema's indexed fields. */
+  readonly filter?: { readonly field: string; readonly value: string };
   /** Native fields or Schema-indexed scalar data fields only. */
   readonly sort?: EntrySort;
 }

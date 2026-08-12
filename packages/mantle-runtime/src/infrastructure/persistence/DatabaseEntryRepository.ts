@@ -203,7 +203,8 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
     // size as ListEntriesUseCase — not a silently different 100.
     const limit = clampLimit(args.limit);
     const sort = args.sort ?? { field: "updatedAt", direction: "desc" };
-    const sortSql = entrySortSql(this.schemasByName.get(args.collection), sort.field);
+    const schema = this.schemasByName.get(args.collection);
+    const sortSql = entrySortSql(schema, sort.field);
     if (!sortSql) throw new Error(`unavailable entry sort field: ${sort.field}`);
     const cursor = decodeEntrySortCursor(args.cursor, sort.field, sort.direction);
     const backward = args.cursorDirection === "backward" && cursor !== null;
@@ -228,6 +229,15 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
         binds.push(jsonPathForTopLevelField(field), term);
       }
       conditions.push(`(${searchConditions.join(" OR ")})`);
+    }
+    if (args.filter) {
+      const compiled = compileDataPredicates(schema, [{
+        field: args.filter.field,
+        kind: "equal",
+        value: args.filter.value,
+      }]);
+      conditions.push(...compiled.conditions);
+      binds.push(...compiled.binds);
     }
     if (cursor) {
       const comparison = backward

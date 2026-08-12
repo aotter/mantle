@@ -101,6 +101,7 @@ What it catches:
 - `Schema.uniqueIndexes` and `Schema.indexes` contain valid ordered
   tuples of scalar properties declared in `spec.schema.properties`
 - `Schema.searchableFields` contains unique top-level string properties
+- `Schema.uiSchema.list.filterField` names an indexed operational string enum
 - `x-mantle-bind: <value>` is in the closed enum
 - `requires.auth.all` predicates are in the v0.1 vocabulary
 - `Trigger.source.path` does not collide with another Trigger

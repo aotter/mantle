@@ -506,6 +506,42 @@ spec:
   });
 });
 
+describe("Schema uiSchema list filter", () => {
+  const yaml = (filterField: string, index = "[orderState, placedAt]") => `apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  lifecycle: operational
+  schema:
+    type: object
+    properties:
+      orderState: { type: string, enum: [pending, paid] }
+      placedAt: { type: integer }
+  indexes: [${index}]
+  uiSchema:
+    list:
+      filterField: ${filterField}
+`;
+
+  it("accepts one indexed string-enum field", () => {
+    expect(parseManifests(yaml("orderState")).diagnostics).toEqual([]);
+  });
+
+  it.each([
+    ["unknown", "missing", "[orderState, placedAt]"],
+    ["not an enum", "placedAt", "[placedAt]"],
+    ["not a left-prefix index", "orderState", "[placedAt, orderState]"],
+  ])("rejects %s", (_label, field, index) => {
+    expect(parseManifests(yaml(field, index)).diagnostics[0]?.code).toBe("SCHEMA_UI_INVALID");
+  });
+
+  it("rejects list filters on publishing collections", () => {
+    expect(parseManifests(yaml("orderState").replace("lifecycle: operational", "lifecycle: publishing"))
+      .diagnostics[0]?.code).toBe("SCHEMA_UI_INVALID");
+  });
+});
+
 describe("parseManifests() — v0.1.0 promoted grammar", () => {
   it("accepts Procedure.handler.kind: 'builtin' with op + schema", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v1

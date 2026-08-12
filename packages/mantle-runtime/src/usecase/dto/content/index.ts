@@ -51,7 +51,14 @@ export interface ListEntriesRequest {
   readonly cursorDirection?: "forward" | "backward";
   /** Free-text filter matched against id and Schema.searchableFields. */
   readonly search?: string;
+  /** One exact, indexed enum filter exposed by the Schema. */
+  readonly filter?: EntryFilter;
   readonly sort?: EntrySort;
+}
+
+export interface EntryFilter {
+  readonly field: string;
+  readonly value: string;
 }
 
 export interface RequestPublishRequest extends ContentMutationFields {

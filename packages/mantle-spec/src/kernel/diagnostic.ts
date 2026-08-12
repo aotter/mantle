@@ -54,6 +54,7 @@ export const DIAGNOSTIC_CODES = [
   "UNIQUE_INDEX_FIELD_UNKNOWN",
   "SCHEMA_SEARCH_INVALID",
   "SCHEMA_SEARCH_FIELD_UNKNOWN",
+  "SCHEMA_UI_INVALID",
   "DRAFT_KEY_USED",
   // Reserved v0.1.x behavior fails closed with a code naming the feature,
   // distinct from the speculative-DRAFT bucket.

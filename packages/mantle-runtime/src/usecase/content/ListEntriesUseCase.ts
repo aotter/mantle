@@ -1,5 +1,7 @@
 import {
   DiagnosticError,
+  checkSchemaListFilter,
+  runtimeDiagnostic,
   schemaIndexedFieldSql,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
@@ -66,6 +68,12 @@ export class ListEntriesUseCase {
     if (request.sort && !isSortableField(schema, request.sort.field)) {
       throw new DiagnosticError(sortFieldUnavailableDiagnostic(opPath, request.sort.field));
     }
+    const listFilter = checkSchemaListFilter(schema).filter;
+    if (request.filter && !(
+      listFilter?.field === request.filter.field && listFilter.values.includes(request.filter.value)
+    )) {
+      throw new DiagnosticError(filterUnavailableDiagnostic(opPath, request.filter));
+    }
     return this.entries.list({
       collection: request.collection,
       status: request.status,
@@ -74,9 +82,24 @@ export class ListEntriesUseCase {
       cursorDirection: request.cursorDirection,
       search: request.search,
       searchFields: schema.spec.searchableFields ?? [],
+      filter: request.filter,
       sort: request.sort,
     });
   }
+}
+
+function filterUnavailableDiagnostic(
+  path: string,
+  filter: NonNullable<ListEntriesRequest["filter"]>,
+) {
+  return runtimeDiagnostic({
+    code: "INPUT_VALIDATION_FAILED",
+    severity: "error",
+    path: `${path}/filter`,
+    value: filter,
+    expected: "an indexed string-enum field and one of its declared values",
+    message: `Filter '${filter.field}=${filter.value}' is not available.`,
+  });
 }
 
 function isSortableField(schema: SchemaManifest, field: string): boolean {
