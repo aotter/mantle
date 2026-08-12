@@ -54,7 +54,7 @@ export function HomeView(): React.ReactElement {
     <div className="space-y-6">
       <PageHeader
         eyebrow={t(language, "console.eyebrow")}
-        title={siteInfo?.brand ?? "AotterMantle"}
+        title={siteInfo?.brand ?? "CMS"}
         description={
           siteInfo
             ? t(language, "console.description", { title: siteInfo.title })

@@ -118,7 +118,7 @@ describe("GET /admin/api/site", () => {
 
 describe("/admin/api/site-settings", () => {
   it("loads settings once and keeps missing tracking ids as empty strings", async () => {
-    const { app, db } = harness({ getSession: sessionAs("editor") });
+    const { app, db } = harness({ getSession: sessionAs("owner") });
     db.siteConfig.set("brand", "Mantle");
     db.siteConfig.set("title", "Mantle site");
     db.siteConfig.set("description", "Fast by default");
@@ -146,7 +146,7 @@ describe("/admin/api/site-settings", () => {
     db.siteConfig.set("title", "Keep title");
     db.siteConfig.set("description", "Old description");
     db.siteConfig.set("facebookPixelId", "123");
-    const { app } = harness({ getSession: sessionAs("editor") }, { db });
+    const { app } = harness({ getSession: sessionAs("owner") }, { db });
 
     const res = await app.request(
       "/admin/api/site-settings",
@@ -176,7 +176,7 @@ describe("/admin/api/site-settings", () => {
   it("reloads when PATCH has no accepted fields", async () => {
     const events: string[] = [];
     const db = new OrderedDatabase(events);
-    const { app } = harness({ getSession: sessionAs("editor") }, { db });
+    const { app } = harness({ getSession: sessionAs("owner") }, { db });
 
     const res = await app.request(
       "/admin/api/site-settings",
@@ -192,7 +192,7 @@ describe("/admin/api/site-settings", () => {
     try {
       const writeEvents: string[] = [];
       const writeFailure = harness(
-        { getSession: sessionAs("editor") },
+        { getSession: sessionAs("owner") },
         { db: new OrderedDatabase(writeEvents, true) },
       );
       const writeResponse = await writeFailure.app.request(
@@ -205,6 +205,31 @@ describe("/admin/api/site-settings", () => {
     } finally {
       error.mockRestore();
     }
+  });
+
+  it("rejects editors because site settings are owner-only", async () => {
+    const { app } = harness({ getSession: sessionAs("editor") });
+    const res = await app.request("/admin/api/site-settings");
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("built-in admin role boundaries", () => {
+  it("rejects contributor publishing", async () => {
+    const { app } = harness({ getSession: sessionAs("contributor") });
+    const res = await app.request(
+      "/admin/api/entries/entry-1/publish",
+      jsonInit("POST", {}),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects contributor media access but lets editors reach media setup", async () => {
+    const contributor = harness({ getSession: sessionAs("contributor") });
+    expect((await contributor.app.request("/admin/api/media")).status).toBe(403);
+
+    const editor = harness({ getSession: sessionAs("editor") });
+    expect((await editor.app.request("/admin/api/media")).status).toBe(501);
   });
 });
 
@@ -220,7 +245,7 @@ describe("GET /admin/api/staff", () => {
     const res = await app.request("/admin/api/staff");
     expect(res.status).toBe(403);
     const body = (await res.json()) as { diagnostic: { message: string } };
-    expect(body.diagnostic.message).toMatch(/owner-only/i);
+    expect(body.diagnostic.message).toMatch(/owner role/i);
   });
 
   it("returns the user list for owner", async () => {

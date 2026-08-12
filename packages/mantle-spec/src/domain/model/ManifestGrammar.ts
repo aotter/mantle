@@ -444,7 +444,7 @@ export interface CtxAuthScopePredicate {
  *
  *   owner       — full control, manages staff, manages settings
  *   editor      — publish, approve/reject, manage all entries
- *   contributor — create drafts, request publish, sees only own entries
+ *   contributor — create and edit drafts
  *
  * `StaffRole` lives in spec because the manifest grammar references
  * it directly: `requires.auth.all: [{ "ctx.staff": [<role>, ...] }]`

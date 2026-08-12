@@ -8,6 +8,7 @@ import { propertyDescription, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { operationsQueryOptions } from "../../lib/queries";
 import type {
+  AdminUser,
   EntryEditorPayload,
   JsonSchema,
   MediaLibraryItem,
@@ -63,6 +64,11 @@ export function EntryEditView({
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
   });
+  const me = useQuery<AdminUser>({
+    queryKey: ["me"],
+    queryFn: () => api.get<AdminUser>("/me"),
+    retry: false,
+  });
   // Row-bound operations (#430) for this entry's own collection — same
   // query key as `collection-view.tsx`/`authenticated-layout.tsx`
   // (`operationsQueryOptions()`), so this hits react-query's shared
@@ -117,7 +123,10 @@ export function EntryEditView({
   // of the stored status.
   const isOperational = payload.collection.lifecycle === "operational";
   const isDraft = payload.entry.status === "draft";
-  const canSave = dirty && (isDraft || isOperational);
+  const canManageContent = me.data?.role === "owner" || me.data?.role === "editor";
+  const canEdit = canManageContent ||
+    (me.data?.role === "contributor" && !isOperational && isDraft);
+  const canSave = canEdit && dirty && (isDraft || isOperational);
   const actionPending = save.isPending || publish.isPending || unpublish.isPending;
   const mediaPurposes = site.data?.media?.purposes ?? [];
   const parentLink = parentAdminLink(payload.collection, data);
@@ -166,7 +175,7 @@ export function EntryEditView({
                 </Button>
               }
             />
-            {!isOperational && (isDraft ? (
+            {canManageContent && !isOperational && (isDraft ? (
               <Button
                 type="button"
                 variant="secondary"
@@ -189,15 +198,17 @@ export function EntryEditView({
                 {unpublish.isPending ? t(language, "entryEdit.unpublishing") : t(language, "entryEdit.unpublish")}
               </Button>
             ))}
-            <Button
-              type="button"
-              onClick={() => save.mutate(data)}
-              disabled={actionPending || !canSave}
-              title={t(language, "entryEdit.saveTooltip")}
-            >
-              <Save className="size-4" aria-hidden />
-              {save.isPending ? t(language, "crud.saving") : t(language, "entryEdit.save")}
-            </Button>
+            {canEdit ? (
+              <Button
+                type="button"
+                onClick={() => save.mutate(data)}
+                disabled={actionPending || !canSave}
+                title={t(language, "entryEdit.saveTooltip")}
+              >
+                <Save className="size-4" aria-hidden />
+                {save.isPending ? t(language, "crud.saving") : t(language, "entryEdit.save")}
+              </Button>
+            ) : null}
           </>
         }
       />
@@ -227,16 +238,21 @@ export function EntryEditView({
                 ) : undefined
               }
             />
-            <SchemaFields
-              schema={payload.collection.schema}
-              value={data}
-              path={[]}
-              onChange={setData}
-              language={language}
-              canonical={canonical}
-              collectionName={payload.collection.name}
-              mediaPurposes={mediaPurposes}
-            />
+            <fieldset
+              disabled={!canEdit}
+              className={canEdit ? undefined : "pointer-events-none opacity-70"}
+            >
+              <SchemaFields
+                schema={payload.collection.schema}
+                value={data}
+                path={[]}
+                onChange={setData}
+                language={language}
+                canonical={canonical}
+                collectionName={payload.collection.name}
+                mediaPurposes={mediaPurposes}
+              />
+            </fieldset>
           </SectionCard>
 
           {inlineRelated.length > 0 ? (

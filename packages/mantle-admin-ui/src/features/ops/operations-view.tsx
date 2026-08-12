@@ -39,7 +39,6 @@ export function OperationsView(): React.ReactElement {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="AotterMantle"
         title={t(language, "ops.page.title")}
         description={t(language, "ops.page.body")}
       />

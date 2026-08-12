@@ -44,7 +44,6 @@ export function SettingsView(): React.ReactElement {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="AotterMantle"
         title={t(language, "settings.page.title")}
         description={t(language, "settings.page.body")}
         actions={

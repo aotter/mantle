@@ -123,7 +123,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   if (!view) {
     return (
       <div className="space-y-6">
-        <PageHeader eyebrow="AotterMantle" title={t(language, "views.notFound.title")} />
+        <PageHeader title={t(language, "views.notFound.title")} />
       </div>
     );
   }
@@ -135,7 +135,6 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="AotterMantle"
         title={viewTitle}
         description={t(language, "views.page.body", { schema: view.from })}
       />

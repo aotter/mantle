@@ -1,5 +1,22 @@
 import { api } from "./api";
-import type { StaffOperation, ViewManifestInfo } from "./types";
+import type { AuthMethodInfo, StaffOperation, ViewManifestInfo } from "./types";
+
+export function authMethodsQueryOptions(): {
+  queryKey: readonly ["auth-methods"];
+  queryFn: () => Promise<AuthMethodInfo[]>;
+  retry: false;
+} {
+  return {
+    queryKey: ["auth-methods"] as const,
+    queryFn: async () => {
+      const res = await fetch("/api/auth/methods", { credentials: "include" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { methods?: AuthMethodInfo[] };
+      return data.methods ?? [];
+    },
+    retry: false,
+  };
+}
 
 /**
  * Shared react-query options for `GET /admin/api/views-manifest`

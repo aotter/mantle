@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
+import { authMethodsQueryOptions } from "../../lib/queries";
+import type { AuthMethodInfo } from "../../lib/types";
 import { signOut } from "../../lib/auth";
 
 export function GateLoading(): React.ReactElement {
@@ -69,16 +71,6 @@ export function AccessDeniedView({
   );
 }
 
-// Mirrors `AuthMethodInfo` exported from `@aotter/mantle-cloudflare`
-// (see `createAuth.ts`). Duplicated here because the admin SPA is built
-// adapter-agnostic and can't import from the adapter package; the
-// `/api/auth/methods` endpoint is the wire contract between them.
-type AuthMethodInfo =
-  | { kind: "email-otp" }
-  | { kind: "magic-link" }
-  | { kind: "social"; provider: string }
-  | { kind: "oauth"; providerId: string; displayName?: string };
-
 // Per-section spacing. `first:` zeroes top spacing for whichever
 // section the server returns first — keeps the spacing rules
 // co-located with the section instead of threading an `isFirst` prop.
@@ -117,16 +109,7 @@ export function SignInView(): React.ReactElement {
   // ever emits `pathname+search`. (#387)
   const ret = safeReturnPath(params.get("return"));
 
-  const methods = useQuery<AuthMethodInfo[]>({
-    queryKey: ["auth-methods"],
-    queryFn: async () => {
-      const res = await fetch("/api/auth/methods", { credentials: "include" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { methods?: AuthMethodInfo[] };
-      return data.methods ?? [];
-    },
-    retry: false,
-  });
+  const methods = useQuery<AuthMethodInfo[]>(authMethodsQueryOptions());
 
   return (
     <div className="flex min-h-svh items-center justify-center p-6">

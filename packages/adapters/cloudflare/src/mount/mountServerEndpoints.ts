@@ -6,6 +6,7 @@ import {
   MCP_HINT_KEYWORD,
   VIEW_PARAMS_RESERVED,
   isMediaMcpHint,
+  meetsRole,
   redactForWire,
   runtimeDiagnostic,
   type ContentState,
@@ -206,16 +207,16 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     });
   };
 
-  // Staff management is owner-only — a step above `guarded` (any
-  // staff). Role semantics follow StaffRoleHierarchy: only `owner`
-  // "manages staff".
-  const ownerGuarded = (
+  const roleGuarded = (
     method: "get" | "post" | "patch" | "delete",
     path: string,
+    minimumRole: StaffRole,
     body: (c: Context, gate: StaffGateOk) => Response | Promise<Response>,
   ): void => {
     guarded(method, path, (c, gate) => {
-      if (gate.role !== "owner") return adminNotOwner(c, path);
+      if (!meetsRole(gate.role, minimumRole)) {
+        return adminInsufficientRole(c, path, minimumRole);
+      }
       return body(c, gate);
     });
   };
@@ -224,11 +225,11 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     Response.json({ login: gate.login, role: gate.role, userId: gate.userId, image: gate.image }),
   );
 
-  ownerGuarded("get", "/admin/api/staff", async () =>
+  roleGuarded("get", "/admin/api/staff", "owner", async () =>
     Response.json({ users: await auth.listUsers() }),
   );
 
-  ownerGuarded("patch", "/admin/api/staff/:id/role", async (c, gate) => {
+  roleGuarded("patch", "/admin/api/staff/:id/role", "owner", async (c, gate) => {
     const userId = c.req.param("id") ?? "";
     const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
     const role = body.role === null ? null : typeof body.role === "string" ? body.role : undefined;
@@ -275,7 +276,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     return Response.json({ ok: true });
   });
 
-  ownerGuarded("post", "/admin/api/staff/invitations", async (c) => {
+  roleGuarded("post", "/admin/api/staff/invitations", "owner", async (c) => {
     const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const role = typeof body.role === "string" ? body.role : "";
@@ -309,7 +310,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     return Response.json({ ok: true, userId: result.id });
   });
 
-  ownerGuarded("delete", "/admin/api/staff/invitations/:id", async (c) => {
+  roleGuarded("delete", "/admin/api/staff/invitations/:id", "owner", async (c) => {
     const revoked = await auth.revokeInvite(c.req.param("id") ?? "");
     if (!revoked) {
       return Response.json({
@@ -353,9 +354,16 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     });
   }
 
-  guarded("get", "/admin/api/operations", () =>
+  guarded("get", "/admin/api/operations", (c, gate) =>
     Response.json({
-      operations: operations.map((op) => ({
+      operations: operations.filter((op) =>
+        evaluateAuthAll(
+          op.procedure.spec.requires,
+          adminHandlerContext(c, gate),
+          `GET /admin/api/operations/${op.name}`,
+          "runtime",
+        ) === null
+      ).map((op) => ({
         name: op.name,
         title: op.title,
         description: op.description,
@@ -414,14 +422,14 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     });
   });
 
-  guarded("get", "/admin/api/site-settings", async () =>
+  roleGuarded("get", "/admin/api/site-settings", "owner", async () =>
     runMantleUseCase("GET /admin/api/site-settings", async () => {
       const runtime = await ref.get();
       return adminSiteSettings(await runtime.siteConfig.load());
     }),
   );
 
-  guarded("patch", "/admin/api/site-settings", async (c) =>
+  roleGuarded("patch", "/admin/api/site-settings", "owner", async (c) =>
     runMantleUseCase("PATCH /admin/api/site-settings", async () => {
       const runtime = await ref.get();
       const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
@@ -538,6 +546,16 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
           }),
         );
       }
+      if (
+        gate.role === "contributor" &&
+        (schemasByName.get(body.collection)?.spec.lifecycle ?? "publishing") === "operational"
+      ) {
+        throw new DiagnosticError(adminRoleDiagnostic(
+          "POST /admin/api/entries",
+          "editor",
+          "Contributors can create drafts, not operational records.",
+        ));
+      }
       const row = await runtime.createDraft.execute({
         collection: body.collection,
         data: objectField(body.data),
@@ -553,6 +571,17 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     runMantleUseCase(`PATCH /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
+      if (gate.role === "contributor") {
+        const current = await runtime.getEntry.execute({ id });
+        const lifecycle = schemasByName.get(current.collection)?.spec.lifecycle ?? "publishing";
+        if (lifecycle === "operational" || current.status !== "draft") {
+          throw new DiagnosticError(adminRoleDiagnostic(
+            `PATCH /admin/api/entries/${id}`,
+            "editor",
+            "Contributors can edit drafts only.",
+          ));
+        }
+      }
       const body = (await c.req.raw.json().catch(() => ({}))) as {
         data?: unknown;
         expectedVersion?: unknown;
@@ -568,7 +597,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     }),
   );
 
-  guarded("post", "/admin/api/entries/:id/publish", async (c, gate) =>
+  roleGuarded("post", "/admin/api/entries/:id/publish", "editor", async (c, gate) =>
     runMantleUseCase(`POST /admin/api/entries/${c.req.param("id")}/publish`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
@@ -582,7 +611,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     }),
   );
 
-  guarded("post", "/admin/api/entries/:id/unpublish", async (c, gate) =>
+  roleGuarded("post", "/admin/api/entries/:id/unpublish", "editor", async (c, gate) =>
     runMantleUseCase(`POST /admin/api/entries/${c.req.param("id")}/unpublish`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
@@ -596,7 +625,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     }),
   );
 
-  guarded("delete", "/admin/api/entries/:id", async (c, gate) =>
+  roleGuarded("delete", "/admin/api/entries/:id", "editor", async (c, gate) =>
     runMantleUseCase(`DELETE /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
@@ -615,7 +644,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
   const MEDIA_UPLOADS_PATH = "/admin/api/media/uploads";
   const MEDIA_COMMIT_PATH = "/admin/api/media/uploads/:uploadGroupId/commit";
 
-  guarded("post", MEDIA_UPLOADS_PATH, async (c) => {
+  roleGuarded("post", MEDIA_UPLOADS_PATH, "editor", async (c) => {
     const runtime = await ref.get();
     const media = runtime.media;
     if (!media) return mediaNotConfiguredResponse(`POST ${MEDIA_UPLOADS_PATH}`);
@@ -691,7 +720,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     );
   });
 
-  guarded("post", MEDIA_COMMIT_PATH, async (c) => {
+  roleGuarded("post", MEDIA_COMMIT_PATH, "editor", async (c) => {
     const runtime = await ref.get();
     const media = runtime.media;
     if (!media) return mediaNotConfiguredResponse(`POST ${MEDIA_COMMIT_PATH}`);
@@ -717,7 +746,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
   const MEDIA_LIST_PATH = "/admin/api/media";
   const MEDIA_ASSET_PATH = "/admin/api/media/:id";
 
-  guarded("get", MEDIA_LIST_PATH, async (c) => {
+  roleGuarded("get", MEDIA_LIST_PATH, "editor", async (c) => {
     const runtime = await ref.get();
     const media = runtime.media;
     if (!media) return mediaNotConfiguredResponse(`GET ${MEDIA_LIST_PATH}`);
@@ -736,7 +765,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     });
   });
 
-  guarded("get", MEDIA_ASSET_PATH, async (c) => {
+  roleGuarded("get", MEDIA_ASSET_PATH, "editor", async (c) => {
     const runtime = await ref.get();
     const media = runtime.media;
     if (!media) return mediaNotConfiguredResponse(`GET ${MEDIA_ASSET_PATH}`);
@@ -746,7 +775,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     );
   });
 
-  guarded("patch", MEDIA_ASSET_PATH, async (c) => {
+  roleGuarded("patch", MEDIA_ASSET_PATH, "editor", async (c) => {
     const runtime = await ref.get();
     const media = runtime.media;
     if (!media) return mediaNotConfiguredResponse(`PATCH ${MEDIA_ASSET_PATH}`);
@@ -781,7 +810,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     );
   });
 
-  guarded("delete", MEDIA_ASSET_PATH, async (c) => {
+  roleGuarded("delete", MEDIA_ASSET_PATH, "editor", async (c) => {
     const runtime = await ref.get();
     const media = runtime.media;
     if (!media) return mediaNotConfiguredResponse(`DELETE ${MEDIA_ASSET_PATH}`);
@@ -1698,18 +1727,36 @@ function adminUnauthenticated(c: Context, path: string): Response {
 // instead of bouncing them back to /admin/sign-in (which the OAuth
 // re-auth then silently fast-forwards through, producing a visible
 // 5-step redirect chain that looks like an infinite loop).
-function adminNotOwner(c: Context, path: string): Response {
+function adminInsufficientRole(
+  c: Context,
+  path: string,
+  minimumRole: StaffRole,
+): Response {
+  const diagnostic = adminRoleDiagnostic(
+    `${c.req.method} ${path}`,
+    minimumRole,
+    `This action requires the ${minimumRole} role.`,
+  );
   return Response.json({
     ok: false,
-    diagnostic: runtimeDiagnostic({
-      code: "AUTH_DENIED",
-      severity: "error",
-      path: `${c.req.method} ${path}`,
-      expected: "owner role for the signed-in user",
-      message: "Staff management is owner-only.",
-    }),
+    diagnostic,
   }, { status: 403 });
 }
+
+function adminRoleDiagnostic(
+  path: string,
+  minimumRole: StaffRole,
+  message: string,
+): Diagnostic {
+  return runtimeDiagnostic({
+    code: "AUTH_DENIED",
+    severity: "error",
+    path,
+    expected: `${minimumRole} role or higher for the signed-in user`,
+    message,
+  });
+}
+
 function adminNotStaff(c: Context, path: string, login: string | null): Response {
   return Response.json({
     ok: false,

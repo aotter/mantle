@@ -187,12 +187,14 @@ function buildNavGroups(
   const moreGroup: NavGroupData = {
     title: t(language, "nav.more"),
     items: [
-      { title: t(language, "nav.media"), url: "/admin/media", icon: Images },
-      { title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon },
-      // Staff management is owner-only server-side; hide the entry for
-      // everyone else rather than render a guaranteed 403.
+      ...(role === "owner" || role === "editor"
+        ? [{ title: t(language, "nav.media"), url: "/admin/media", icon: Images }]
+        : []),
       ...(role === "owner"
-        ? [{ title: t(language, "nav.staff"), url: "/admin/staff", icon: Users }]
+        ? [
+            { title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon },
+            { title: t(language, "nav.staff"), url: "/admin/staff", icon: Users },
+          ]
         : []),
     ],
   };
@@ -203,7 +205,7 @@ function buildNavGroups(
     ...(recordsGroup ? [recordsGroup] : []),
     ...(opsGroup ? [opsGroup] : []),
     ...(reportsGroup ? [reportsGroup] : []),
-    moreGroup,
+    ...(moreGroup.items.length > 0 ? [moreGroup] : []),
   ];
 }
 

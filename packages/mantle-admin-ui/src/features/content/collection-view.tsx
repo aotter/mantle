@@ -17,6 +17,7 @@ import { propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { operationsQueryOptions } from "../../lib/queries";
 import type {
+  AdminUser,
   Collection,
   EntryEditorPayload,
   EntryRow,
@@ -72,6 +73,11 @@ export function CollectionView({
   const site = useQuery<SiteInfo>({
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
+  });
+  const me = useQuery<AdminUser>({
+    queryKey: ["me"],
+    queryFn: () => api.get<AdminUser>("/me"),
+    retry: false,
   });
   const canonical = site.data?.canonicalLocale ?? null;
   // #430 row actions — same query key as `authenticated-layout.tsx` /
@@ -130,6 +136,8 @@ export function CollectionView({
     ? resolveLocalizedText(collection.title, language, canonical) ?? collection.name
     : collectionName;
   const isOperationalCollection = collection?.lifecycle === "operational";
+  const canManageContent = me.data?.role === "owner" || me.data?.role === "editor";
+  const canCreateDraft = Boolean(me.data?.role) && !isOperationalCollection;
   const dataColumns = React.useMemo(() => dataPreviewColumns(collection), [collection]);
   const refreshEntries = React.useCallback(() => {
     clearSelection();
@@ -185,7 +193,7 @@ export function CollectionView({
               <Download className="size-4" aria-hidden />
               {t(language, "collection.export")}
             </Button>
-            {collection && !isOperationalCollection ? (
+            {collection && canCreateDraft ? (
               <Button
                 type="button"
                 onClick={() => createMutation.mutate()}
@@ -247,7 +255,7 @@ export function CollectionView({
       )}
       {displayedEntries && displayedEntries.items.length > 0 && (
         <>
-          {selected.size > 0 ? (
+          {selected.size > 0 && canManageContent ? (
             <BulkActionBar
               language={language}
               collection={collection}
@@ -260,26 +268,28 @@ export function CollectionView({
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10">
-                  <Checkbox
-                    aria-label={t(language, "collection.table.selectAll")}
-                    checked={
-                      displayedEntries.items.every((row) => selected.has(row.id))
-                        ? true
-                        : displayedEntries.items.some((row) => selected.has(row.id))
-                          ? "indeterminate"
-                          : false
-                    }
-                    onCheckedChange={(checked) => {
-                      setSelected((prev) => {
-                        const next = new Set(prev);
-                        for (const row of displayedEntries.items) {
-                          if (checked === true) next.add(row.id);
-                          else next.delete(row.id);
-                        }
-                        return next;
-                      });
-                    }}
-                  />
+                  {canManageContent ? (
+                    <Checkbox
+                      aria-label={t(language, "collection.table.selectAll")}
+                      checked={
+                        displayedEntries.items.every((row) => selected.has(row.id))
+                          ? true
+                          : displayedEntries.items.some((row) => selected.has(row.id))
+                            ? "indeterminate"
+                            : false
+                      }
+                      onCheckedChange={(checked) => {
+                        setSelected((prev) => {
+                          const next = new Set(prev);
+                          for (const row of displayedEntries.items) {
+                            if (checked === true) next.add(row.id);
+                            else next.delete(row.id);
+                          }
+                          return next;
+                        });
+                      }}
+                    />
+                  ) : null}
                 </TableHead>
                 <TableHead>{t(language, "collection.table.id")}</TableHead>
                 <TableHead>
@@ -335,6 +345,13 @@ export function CollectionView({
                     (titleMutation.isPending && titleMutation.variables?.id === row.id) ||
                     (deleteMutation.isPending && deleteMutation.variables === row.id)
                   }
+                  canEdit={
+                    canManageContent ||
+                    (me.data?.role === "contributor" &&
+                      !isOperationalCollection &&
+                      row.status === "draft")
+                  }
+                  canDelete={canManageContent}
                 />
               ))}
             </TableBody>
@@ -679,6 +696,8 @@ function EntryRowDisplay({
   onRename,
   onDelete,
   busy,
+  canEdit,
+  canDelete,
 }: {
   row: EntryRow;
   language: AdminLanguage;
@@ -696,6 +715,8 @@ function EntryRowDisplay({
   onRename: (title: string) => Promise<unknown>;
   onDelete: () => Promise<unknown>;
   busy: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
 }): React.ReactElement {
   const itemName = renderTitleText(row.title, language);
   const isOperational = dataColumns !== null;
@@ -739,11 +760,13 @@ function EntryRowDisplay({
   return (
     <TableRow>
       <TableCell>
-        <Checkbox
-          aria-label={t(language, "collection.table.selectRow", { name: itemName })}
-          checked={selected}
-          onCheckedChange={(checked) => onToggleSelect(checked === true)}
-        />
+        {canDelete ? (
+          <Checkbox
+            aria-label={t(language, "collection.table.selectRow", { name: itemName })}
+            checked={selected}
+            onCheckedChange={(checked) => onToggleSelect(checked === true)}
+          />
+        ) : null}
       </TableCell>
       <TableCell className="font-mono text-xs text-muted-foreground">
         <CopyIdButton id={String(row.id)} language={language} />
@@ -782,7 +805,7 @@ function EntryRowDisplay({
                 <X className="size-3.5" aria-hidden />
               </Button>
             </div>
-          ) : (
+          ) : canEdit ? (
             <button
               type="button"
               className="group inline-flex max-w-full items-center gap-2 text-left"
@@ -792,6 +815,14 @@ function EntryRowDisplay({
               <span className="truncate">{renderTitle(row.title, language)}</span>
               <PencilLine className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" aria-hidden />
             </button>
+          ) : (
+            <a
+              href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}
+              className="block truncate font-medium hover:underline"
+              title={itemName}
+            >
+              {renderTitle(row.title, language)}
+            </a>
           )}
           {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
         </div>
@@ -818,14 +849,18 @@ function EntryRowDisplay({
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-1">
-          <Button asChild variant="ghost" size="icon-sm">
-            <a title={t(language, "crud.editTooltip", { name: itemName })} href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}>
-              <PencilLine className="size-3.5" aria-hidden />
-            </a>
-          </Button>
-          <Button type="button" variant="ghost" size="icon-sm" title={t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy} onClick={() => void remove()}>
-            <Trash2 className="size-3.5" aria-hidden />
-          </Button>
+          {canEdit ? (
+            <Button asChild variant="ghost" size="icon-sm">
+              <a title={t(language, "crud.editTooltip", { name: itemName })} href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}>
+                <PencilLine className="size-3.5" aria-hidden />
+              </a>
+            </Button>
+          ) : null}
+          {canDelete ? (
+            <Button type="button" variant="ghost" size="icon-sm" title={t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy} onClick={() => void remove()}>
+              <Trash2 className="size-3.5" aria-hidden />
+            </Button>
+          ) : null}
           <RowOperationsMenu
             row={row}
             operations={boundOperations}
