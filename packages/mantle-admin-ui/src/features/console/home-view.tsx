@@ -219,11 +219,6 @@ export function HomeView(): React.ReactElement {
                               i18n
                             </Badge>
                           ) : null}
-                          {collection.mediaFields?.length ? (
-                            <Badge variant="outline" className="text-success">
-                              media
-                            </Badge>
-                          ) : null}
                           <ChevronRight className="size-4 text-muted-foreground" aria-hidden />
                         </div>
                       </a>
