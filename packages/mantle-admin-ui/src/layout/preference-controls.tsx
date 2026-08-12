@@ -15,6 +15,7 @@ import {
 } from "../app/preferences";
 import { t } from "../app/i18n";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "../lib/utils";
 
 export function LanguagePreferenceDropdown({ compact = false }: { compact?: boolean }): React.ReactElement {
@@ -24,20 +25,26 @@ export function LanguagePreferenceDropdown({ compact = false }: { compact?: bool
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size={compact ? "icon-sm" : "sm"}
-          aria-label={t(language, "preferences.language")}
-          title={t(language, "preferences.language")}
-        >
-          <Languages aria-hidden />
-          <span className={compact ? "sr-only" : "hidden text-xs font-medium sm:inline"}>
-            {current.nativeLabel}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex">
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size={compact ? "icon-sm" : "sm"}
+                aria-label={t(language, "preferences.language")}
+              >
+                <Languages aria-hidden />
+                <span className={compact ? "sr-only" : "hidden text-xs font-medium sm:inline"}>
+                  {current.nativeLabel}
+                </span>
+              </Button>
+            </DropdownMenuTrigger>
           </span>
-        </Button>
-      </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>{t(language, "preferences.language")}</TooltipContent>
+      </Tooltip>
       <DropdownMenuContent align="end" className="max-h-[min(28rem,80vh)] w-52 overflow-y-auto">
         <DropdownMenuLabel>
           {t(language, "preferences.language")}
@@ -70,20 +77,26 @@ export function ThemePreferenceDropdown({ compact = false }: { compact?: boolean
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size={compact ? "icon-sm" : "sm"}
-          aria-label={t(language, "preferences.appearance")}
-          title={t(language, "preferences.appearance")}
-        >
-          <Icon aria-hidden />
-          <span className={compact ? "sr-only" : "hidden text-xs font-medium sm:inline"}>
-            {current?.label ?? t(language, "preferences.system")}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex">
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size={compact ? "icon-sm" : "sm"}
+                aria-label={t(language, "preferences.appearance")}
+              >
+                <Icon aria-hidden />
+                <span className={compact ? "sr-only" : "hidden text-xs font-medium sm:inline"}>
+                  {current?.label ?? t(language, "preferences.system")}
+                </span>
+              </Button>
+            </DropdownMenuTrigger>
           </span>
-        </Button>
-      </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>{t(language, "preferences.appearance")}</TooltipContent>
+      </Tooltip>
       <DropdownMenuContent align="end" className="w-44">
         <DropdownMenuLabel>
           {t(language, "preferences.appearance")}

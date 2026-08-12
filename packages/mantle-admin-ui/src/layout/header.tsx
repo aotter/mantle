@@ -14,6 +14,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { fieldLabel } from "@/lib/field-label";
 import type { AdminBrand } from "./types";
@@ -65,17 +66,21 @@ export function Header({
       </Breadcrumb>
       <div className="ms-auto flex shrink-0 items-center gap-1">
         {publicUrl ? (
-          <Button asChild variant="ghost" size="icon-sm">
-            <a
-              href={publicUrl}
-              target="_blank"
-              rel="noreferrer"
-              title={t(language, "common.viewSite")}
-              aria-label={t(language, "common.viewSite")}
-            >
-              <ExternalLink aria-hidden />
-            </a>
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button asChild variant="ghost" size="icon-sm">
+                <a
+                  href={publicUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={t(language, "common.viewSite")}
+                >
+                  <ExternalLink aria-hidden />
+                </a>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t(language, "common.viewSite")}</TooltipContent>
+          </Tooltip>
         ) : null}
         <LanguagePreferenceDropdown compact />
         <ThemePreferenceDropdown compact />
