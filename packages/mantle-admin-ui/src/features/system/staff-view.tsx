@@ -196,7 +196,13 @@ function InviteCard({ onInvited }: { onInvited: () => void }): React.ReactElemen
     <SectionCard className="grid gap-4">
       <h2 className="text-sm font-semibold">{t(language, "staff.invite.title")}</h2>
       {invite.isError ? <ErrorBox error={asRenderable(invite.error)} /> : null}
-      <div className="flex flex-wrap items-end gap-3">
+      <form
+        className="grid max-w-4xl gap-4 md:grid-cols-[minmax(0,1fr)_18rem]"
+        onSubmit={(event) => {
+          event.preventDefault();
+          invite.mutate();
+        }}
+      >
         <label className="grid min-w-64 flex-1 gap-1.5 text-sm font-medium">
           <span>{t(language, "staff.invite.emailLabel")}</span>
           <Input
@@ -205,6 +211,9 @@ function InviteCard({ onInvited }: { onInvited: () => void }): React.ReactElemen
             placeholder={t(language, "staff.invite.emailPlaceholder")}
             onChange={(event) => setEmail(event.target.value)}
           />
+          <span className="text-xs font-normal leading-5 text-muted-foreground">
+            {t(language, "staff.invite.hint")}
+          </span>
         </label>
         <label className="grid gap-1.5 text-sm font-medium">
           <span>{t(language, "staff.invite.roleLabel")}</span>
@@ -214,13 +223,25 @@ function InviteCard({ onInvited }: { onInvited: () => void }): React.ReactElemen
               if (isStaffRole(next)) setRole(next);
             }}
           >
-            <SelectTrigger>
-              <SelectValue />
+            <SelectTrigger className="w-full">
+              <SelectValue>{t(language, `staff.role.${role}`)}</SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="min-w-72">
               {INVITABLE.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {t(language, `staff.role.${option}`)}
+                <SelectItem
+                  key={option}
+                  value={option}
+                  textValue={t(language, `staff.role.${option}`)}
+                  className="items-start py-2"
+                >
+                  <span className="grid gap-0.5">
+                    <span className="font-medium">
+                      {t(language, `staff.role.${option}`)}
+                    </span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {t(language, `staff.role.${option}.help`)}
+                    </span>
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -229,19 +250,18 @@ function InviteCard({ onInvited }: { onInvited: () => void }): React.ReactElemen
             {t(language, `staff.role.${role}.help`)}
           </span>
         </label>
-        <Button
-          onClick={() => invite.mutate()}
-          disabled={invite.isPending || email.trim() === ""}
-        >
-          <UserPlus className="size-4" aria-hidden />
-          {invite.isPending
-            ? t(language, "staff.invite.sending")
-            : t(language, "staff.invite.button")}
-        </Button>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        {t(language, "staff.invite.hint")}
-      </p>
+        <div className="flex justify-end md:col-span-2">
+          <Button
+            type="submit"
+            disabled={invite.isPending || email.trim() === ""}
+          >
+            <UserPlus className="size-4" aria-hidden />
+            {invite.isPending
+              ? t(language, "staff.invite.sending")
+              : t(language, "staff.invite.button")}
+          </Button>
+        </div>
+      </form>
     </SectionCard>
   );
 }
