@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatMoneyMinor, hintBadgeLabel, idTail } from "../src/features/content/field-render";
+import {
+  formatMoneyMinor,
+  hintBadgeLabel,
+  idTail,
+  timestampMsForInput,
+  timestampMsFromInput,
+} from "../src/features/content/field-render";
 
 /**
  * #444 — pure-logic coverage for the three helpers that changed as
@@ -85,5 +91,18 @@ describe("hintBadgeLabel", () => {
     // recognize (no hardcoded domain map to localize it against).
     expect(hintBadgeLabel("media-hero", "en")).toBe("media-hero");
     expect(hintBadgeLabel("some-custom-hint", "zh-TW")).toBe("some-custom-hint");
+  });
+});
+
+describe("timestamp datetime input", () => {
+  it("round-trips an epoch-millisecond value through local datetime input", () => {
+    const timestamp = new Date(2026, 7, 12, 17, 30).getTime();
+    expect(timestampMsFromInput(timestampMsForInput(timestamp))).toBe(timestamp);
+  });
+
+  it("keeps empty and invalid input empty", () => {
+    expect(timestampMsForInput(null)).toBe("");
+    expect(timestampMsFromInput("")).toBeNull();
+    expect(timestampMsFromInput("not-a-date")).toBeNull();
   });
 });

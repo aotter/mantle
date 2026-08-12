@@ -141,9 +141,9 @@ export function RichTextEditor({
   }
 
   return (
-    <div className="space-y-2">
+    <div>
       <div
-        className="flex flex-wrap items-center gap-1 rounded-lg border bg-muted/30 p-1"
+        className="flex flex-wrap items-center gap-1 rounded-t-lg border bg-muted/30 p-1"
         aria-label={t(language, "editor.toolbar")}
       >
         <ToolbarButton title={t(language, "editor.undo")} onClick={() => runTextCommand("undo", textRef.current)}>
@@ -261,12 +261,12 @@ export function RichTextEditor({
 
       <Textarea
         ref={textRef}
-        className={compact ? "min-h-32 resize-y font-mono" : "min-h-64 resize-y font-mono"}
+        className={`${compact ? "min-h-32" : "min-h-64"} rounded-t-none border-t-0 resize-y font-mono`}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
-      {uploading ? <p className="text-xs text-muted-foreground">{t(language, "editor.uploading")}</p> : null}
+      {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
+      {uploading ? <p className="mt-2 text-xs text-muted-foreground">{t(language, "editor.uploading")}</p> : null}
       {mediaOpen ? (
         <MediaInsertDialog
           language={language}

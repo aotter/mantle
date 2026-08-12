@@ -44,6 +44,20 @@ export function formatTimestampMs(value: unknown): string | null {
   }
 }
 
+/** Epoch milliseconds <-> native datetime-local value. */
+export function timestampMsForInput(value: unknown): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Date(value - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+export function timestampMsFromInput(value: string): number | null {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
 /** #444: the field-editor badge used to show the raw `x-mcp-hint`
  *  token verbatim (e.g. the literal string `money-minor`), which reads
  *  as an internal implementation detail rather than a label meant for

@@ -43,7 +43,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { collectionSummaryKey } from "./collection-view";
-import { formatMoneyMinor, formatTimestampMs, hintBadgeLabel, moneyMinorHint, timestampHint } from "./field-render";
+import {
+  formatMoneyMinor,
+  formatTimestampMs,
+  hintBadgeLabel,
+  moneyMinorHint,
+  timestampHint,
+  timestampMsForInput,
+  timestampMsFromInput,
+} from "./field-render";
 import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
 
 export function EntryEditView({
@@ -475,17 +483,26 @@ function SchemaField({
         </label>
       ) : type === "number" || type === "integer" ? (
         <div className="space-y-1">
-          <Input
-            type="number"
-            aria-label={label}
-            value={numberForInput(value)}
-            min={schema.minimum}
-            max={schema.maximum}
-            onChange={(event) => {
-              const raw = event.target.value;
-              setValue(raw === "" ? null : Number(raw));
-            }}
-          />
+          {timestampHint(schema) ? (
+            <Input
+              type="datetime-local"
+              aria-label={label}
+              value={timestampMsForInput(value)}
+              onChange={(event) => setValue(timestampMsFromInput(event.target.value))}
+            />
+          ) : (
+            <Input
+              type="number"
+              aria-label={label}
+              value={numberForInput(value)}
+              min={schema.minimum}
+              max={schema.maximum}
+              onChange={(event) => {
+                const raw = event.target.value;
+                setValue(raw === "" ? null : Number(raw));
+              }}
+            />
+          )}
           <NumberFieldPreview schema={schema} value={value} rootValue={rootValue} />
         </div>
       ) : type === "object" ? (
