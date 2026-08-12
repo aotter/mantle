@@ -592,7 +592,7 @@ function entryReadSchema(
     spec: {
       title: name,
       localized: true,
-      lifecycle: "simple",
+      lifecycle: "publishing",
       schema: {
         type: "object",
         properties: {

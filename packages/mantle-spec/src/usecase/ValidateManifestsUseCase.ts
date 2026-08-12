@@ -531,7 +531,7 @@ function checkBuiltinHandler(
   // op: archive is editorial-only. Inline the lifecycle resolution
   // here — we need only the Schema.spec.lifecycle default, not the
   // full state-machine helpers.
-  const lifecycle = target.spec.lifecycle ?? "simple";
+  const lifecycle = target.spec.lifecycle ?? "publishing";
   if (h.op === "archive" && lifecycle !== "editorial") {
     out.push(
       validateDiagnostic({

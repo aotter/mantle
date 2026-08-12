@@ -8,9 +8,18 @@ import { viewsManifestQueryOptions } from "../../lib/queries";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { Collection, SiteInfo, ViewManifestInfo } from "../../lib/types";
-import { TableCell, TableHeadCell, TableShell } from "../../ui/admin-table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/ui/button";
 import { SchemaFields } from "../content/entry-edit-view";
 import { renderDataValue } from "../../lib/render-data-value";
 
@@ -108,7 +117,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   });
 
   if (viewsQuery.isLoading || collectionsQuery.isLoading) {
-    return <div className="glass-card h-64 animate-pulse" />;
+    return <Skeleton className="h-64 w-full" />;
   }
   if (viewsQuery.isError) return <ErrorBox error={viewsQuery.error} />;
   if (!view) {
@@ -161,28 +170,28 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
       ) : null}
 
       {rows.length > 0 ? (
-        <TableShell>
-          <thead>
-            <tr className="border-b border-[var(--glass-border)]">
+        <Table>
+          <TableHeader>
+            <TableRow>
               {columns.map((col) => (
-                <TableHeadCell key={col}>
+                <TableHead key={col}>
                   {propertyLabel(col, sourceSchema?.properties?.[col], language, canonical)}
-                </TableHeadCell>
+                </TableHead>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {rows.map((row, index) => (
-              <tr key={index} className="border-t border-[var(--glass-border)]">
+              <TableRow key={index}>
                 {columns.map((col) => (
                   <TableCell key={col} className="text-muted-foreground">
                     {renderDataValue(sourceSchema?.properties?.[col], row[col])}
                   </TableCell>
                 ))}
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </TableShell>
+          </TableBody>
+        </Table>
       ) : null}
     </div>
   );
@@ -204,8 +213,8 @@ function ReservedParamInputs({
     <div className="flex flex-wrap gap-3">
       <label className="grid gap-1.5 text-sm font-medium">
         <span>{fieldLabel(pageParam)}</span>
-        <input
-          className="admin-input w-28"
+        <Input
+          className="w-28"
           type="number"
           min={1}
           value={page}
@@ -214,8 +223,8 @@ function ReservedParamInputs({
       </label>
       <label className="grid gap-1.5 text-sm font-medium">
         <span>{fieldLabel(showParam)}</span>
-        <input
-          className="admin-input w-28"
+        <Input
+          className="w-28"
           type="number"
           min={1}
           value={show}

@@ -112,7 +112,7 @@ metadata: { name: posts }
 spec:
   title: Posts                    # required: human-readable label for the admin UI
   localized: true                 # opt-in: row carries data.locale (ADR-0010)
-  lifecycle: simple               # default; 'none' is operational, 'editorial' is reserved
+  lifecycle: publishing               # default; 'operational' is operational, 'editorial' is reserved
   schema:
     $schema: https://json-schema.org/draft/2020-12/schema
     type: object
@@ -149,10 +149,10 @@ admin UI surfaces the child only as locale tabs in the parent's editor.
 
 #### Lifecycle
 
-**`spec.lifecycle: 'simple' | 'editorial' | 'none'`** — controls the
+**`spec.lifecycle: 'publishing' | 'editorial' | 'operational'`** — controls the
 entry's state machine.
 
-- `simple` (default) — `draft → published → archived`. No approval
+- `publishing` (default) — `draft → published → archived`. No approval
   queue. **This is the only content-workflow mode whose runtime ships
   in v0.1.0.**
 - `editorial` — the six-state machine with an approval queue
@@ -162,7 +162,7 @@ entry's state machine.
   approval/request-publish runtime is on the v0.1.x roadmap. In v0.1,
   `request_publish` rejects with `LIFECYCLE_NOT_IN_V010`; do not declare
   editorial for a current publishing workflow.
-- `none` — **operational records**, not authored content: orders,
+- `operational` — records that are not authored content: orders,
   inventory snapshots, grant/audit rows — anything written by
   Procedures as a side effect rather than drafted by a person. No
   content workflow applies: entries are live (`published`) the moment
@@ -175,8 +175,8 @@ entry's state machine.
   `update_record_<schema>` for these Schemas instead of draft tools.
 
 The modes are **per-Schema and mix freely** within a site. There is no
-site-wide lifecycle setting; one Schema can be `simple` while another
-is `editorial` and a third is `none`.
+site-wide lifecycle setting; one Schema can be `publishing` while another
+is `editorial` and a third is `operational`.
 
 **Property-level extensions** (JSON Schema vendor keywords, all optional):
 
@@ -500,7 +500,7 @@ MCP, admin, and builtin write paths share the same hook behavior.
   concrete consumer demand. Same appendix § "DRAFT (v0.2+)."
 
 The state-machine "lifecycle" from the Schema atom
-(`Schema.spec.lifecycle: simple | editorial`) is a separate domain
+(`Schema.spec.lifecycle: publishing | editorial`) is a separate domain
 that shares the word. The Schema setting governs which states an
 entry can be in; shipped lifecycle Triggers govern what fires around
 mutations.
@@ -839,7 +839,7 @@ spec:
 
 | op | Behavior |
 |---|---|
-| `create` | INSERT a new row. Project `input ∩ Schema.spec.schema.properties`; stamp `x-mantle-bind` fields; generated id; status is `draft`, or immediately `published` for `lifecycle: none`. |
+| `create` | INSERT a new row. Project `input ∩ Schema.spec.schema.properties`; stamp `x-mantle-bind` fields; generated id; status is `draft`, or immediately `published` for `lifecycle: operational`. |
 | `update` | UPDATE in place. `input.id` + `input.expectedVersion` (OCC) required. Bumps version. |
 | `upsert` | If `input.id` resolves, behaves as `update`; else as `create`. |
 | `delete` | Hard DELETE by id. |
@@ -883,8 +883,8 @@ spec:
 | `after_update` | After UPDATE. Default best-effort. |
 | `before_delete` | Before DELETE. Throw cancels. |
 | `after_delete` | After DELETE. Default best-effort. |
-| `before_publish` | Before any supported status transition to `published` (the shipped workflow is `simple`). |
-| `after_publish` | After any supported status transition to `published` (the shipped workflow is `simple`). |
+| `before_publish` | Before any supported status transition to `published` (the shipped workflow is `publishing`). |
+| `after_publish` | After any supported status transition to `published` (the shipped workflow is `publishing`). |
 
 **Atomicity defaults by phase**:
 - `before_*`: `errorPolicy: abort`. Handler throw cancels the
@@ -928,7 +928,7 @@ Cloudflare wiring, the 128 KB platform limit, retry/DLQ configuration,
 idempotency, and legacy-envelope draining are specified in
 [Deferred lifecycle hooks on Cloudflare Queues](deferred-lifecycle-queues.md).
 
-`before_publish` and `after_publish` already wrap the shipped simple publish
+`before_publish` and `after_publish` already wrap the shipped publishing
 transition. When editorial approval lands, the same hooks wrap its final
 transition to `published`; no second hook grammar is planned.
 

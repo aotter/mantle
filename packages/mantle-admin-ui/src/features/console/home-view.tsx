@@ -12,7 +12,9 @@ import {
 import { api } from "../../lib/api";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { Collection, SiteInfo } from "../../lib/types";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { CopyField, EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
@@ -63,7 +65,7 @@ export function HomeView(): React.ReactElement {
       />
 
       {site.isLoading ? (
-        <div className="glass-card h-72 animate-pulse" />
+        <Skeleton className="h-72 w-full" />
       ) : site.isError ? (
         <ErrorBox error={site.error} />
       ) : siteInfo ? (
@@ -81,8 +83,8 @@ export function HomeView(): React.ReactElement {
               </div>
             </div>
             <div className="flex gap-2">
-              <span className="badge-status bg-foreground text-background">Claude</span>
-              <span className="badge-status bg-accent text-accent-foreground">MCP</span>
+              <Badge>Claude</Badge>
+              <Badge variant="secondary">MCP</Badge>
             </div>
           </div>
 
@@ -143,7 +145,7 @@ export function HomeView(): React.ReactElement {
       ) : null}
 
       <div className="grid grid-cols-1 gap-4">
-        <SectionCard className="admin-dashboard-panel">
+        <SectionCard>
           <div className="mb-4 flex items-start gap-3">
             <div className="rounded-xl bg-primary/15 p-2 text-primary">
               <PencilLine className="size-5" aria-hidden />
@@ -178,7 +180,7 @@ export function HomeView(): React.ReactElement {
         {collectionsQuery.isLoading && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="glass-card h-36 animate-pulse" />
+              <Skeleton key={i} className="h-36 w-full" />
             ))}
           </div>
         )}
@@ -199,7 +201,7 @@ export function HomeView(): React.ReactElement {
               <a
                 key={c.name}
                 href={`/admin/c/${encodeURIComponent(c.name)}`}
-                className="glass-card card-lift block p-5 no-underline text-foreground"
+                className="block rounded-xl border bg-card p-5 text-card-foreground shadow-xs transition-colors hover:bg-muted/50"
               >
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -221,14 +223,14 @@ export function HomeView(): React.ReactElement {
                 )}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {c.hasTranslations ? (
-                    <span className="badge-status bg-[color-mix(in_srgb,var(--info)_16%,transparent)] text-[color:var(--info)]">
+                    <Badge variant="outline" className="text-info">
                       i18n
-                    </span>
+                    </Badge>
                   ) : null}
                   {c.mediaFields?.length ? (
-                    <span className="badge-status bg-[color-mix(in_srgb,var(--success)_16%,transparent)] text-[color:var(--success)]">
+                    <Badge variant="outline" className="text-success">
                       media
-                    </span>
+                    </Badge>
                   ) : null}
                 </div>
               </a>
@@ -259,10 +261,12 @@ function QuickAction({
   label: string;
 }): React.ReactElement {
   return (
-    <a href={href} title={label} className="quick-action">
-      <Icon className="size-4" aria-hidden />
-      <span>{label}</span>
-    </a>
+    <Button asChild variant="outline" className="w-full justify-start">
+      <a href={href} title={label}>
+        <Icon aria-hidden />
+        <span className="truncate">{label}</span>
+      </a>
+    </Button>
   );
 }
 

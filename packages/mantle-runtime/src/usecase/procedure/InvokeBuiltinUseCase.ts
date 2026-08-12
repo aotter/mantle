@@ -29,7 +29,7 @@ import type { InvokeBuiltinRequest } from "../dto/procedure/index.js";
  * (POC ADR-0014). The four ops map 1:1 to the entry-writer chokepoint:
  *
  *   - `create` → `entries.create` with a generated id. Content starts
- *     as a draft; `lifecycle: none` operational records start live.
+ *     as a draft; `lifecycle: operational` records start live.
  *     Input is projected through
  *     `domain/service/BuiltinProjector.projectAndStamp` so only
  *     Schema-declared keys land in `data` and `x-mantle-bind` fields are
@@ -136,7 +136,7 @@ export class InvokeBuiltinUseCase {
     return this.entries.create({
       id: this.idgen.next(),
       collection: schema.metadata.name,
-      status: resolveLifecycle(schema) === "none" ? "published" : "draft",
+      status: resolveLifecycle(schema) === "operational" ? "published" : "draft",
       data,
       authorId: ctx.user?.id ?? null,
       now,

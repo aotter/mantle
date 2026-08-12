@@ -222,7 +222,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
   };
 
   guarded("get", "/admin/api/me", (_c, gate) =>
-    Response.json({ login: gate.login, role: gate.role, userId: gate.userId }),
+    Response.json({ login: gate.login, role: gate.role, userId: gate.userId, image: gate.image }),
   );
 
   ownerGuarded("get", "/admin/api/staff", async () =>
@@ -1016,7 +1016,7 @@ function titleFieldKey(data: Record<string, unknown>, schema?: JsonSchema): stri
  *  fuzzy/semantic matching, just these two well-known reserved names. */
 const DATA_PREVIEW_SYSTEM_COLUMN_NAMES = new Set(["updatedAt", "createdAt"]);
 
-/** Operational (`lifecycle: none`) collections have no title/status
+/** Operational collections have no title/status
  *  workflow worth a dedicated column — instead the admin list shows up
  *  to 3 raw data columns. Mirrors the client-side column-picking rule
  *  in `collection-view.tsx`: first 3 `required` properties, skipping
@@ -1027,7 +1027,7 @@ function adminDataPreview(
   data: Record<string, unknown>,
   manifest?: SchemaManifest,
 ): Record<string, unknown> | undefined {
-  if (!manifest || manifest.spec.lifecycle !== "none") return undefined;
+  if (!manifest || manifest.spec.lifecycle !== "operational") return undefined;
   const schema = manifest.spec.schema;
   // Schema-stable skip (not per-row): rows with a blank title field
   // must still produce the same columns as every other row, or the
@@ -1164,7 +1164,7 @@ type AdminEditorCollection = {
   readonly name: string;
   readonly title: LocalizedText;
   readonly description: LocalizedText | null;
-  readonly lifecycle: "simple" | "editorial" | "none";
+  readonly lifecycle: "publishing" | "editorial" | "operational";
   readonly parent: {
     readonly collection: string;
     readonly parentField: string;
@@ -1213,7 +1213,7 @@ function adminEditorCollection(
     name: schema.metadata.name,
     title: schema.spec.title,
     description: schema.spec.description ?? null,
-    lifecycle: schema.spec.lifecycle ?? "simple",
+    lifecycle: schema.spec.lifecycle ?? "publishing",
     parent: collectionParentFor(schema, schemas),
     hasTranslations: schemas.some((candidate) => candidate.spec.translates?.parent === schema.metadata.name),
     localized: schema.spec.localized ?? Boolean(schema.spec.translates),
@@ -1421,6 +1421,7 @@ type StaffGate =
       kind: "ok";
       userId: string;
       login: string | null;
+      image: string | null;
       role: StaffRole;
       sessionId: string;
     };
@@ -1453,6 +1454,7 @@ async function readStaffGate(c: Context, auth: Auth): Promise<StaffGate> {
     kind: "ok",
     userId: session.user.id,
     login,
+    image: session.user.image ?? null,
     role: role as StaffRole,
     sessionId: session.session.id,
   };

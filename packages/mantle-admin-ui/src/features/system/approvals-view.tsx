@@ -6,7 +6,8 @@ import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { Collection, EntryRow, ListEntriesResult, SiteInfo } from "../../lib/types";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
 import { statusLabel } from "../content/status";
@@ -69,7 +70,7 @@ export function ApprovalsView(): React.ReactElement {
                   </a>
                 </Button>
               </div>
-              <div className="divide-y divide-[var(--glass-border)] overflow-hidden rounded-lg border border-[var(--glass-border)] bg-background/25">
+              <div className="divide-y overflow-hidden rounded-lg border">
                 {group.entries.map((entry) => (
                   <ApprovalRow
                     key={entry.id}
@@ -145,15 +146,15 @@ function ApprovalRow({
 
 function ApprovalsSkeleton(): React.ReactElement {
   return (
-    <div className="glass-card overflow-hidden">
+    <div className="overflow-hidden rounded-lg border">
       {[0, 1, 2].map((index) => (
         <div
           key={index}
-          className="flex items-center gap-4 border-b border-[var(--glass-border)] p-4 last:border-b-0"
+          className="flex items-center gap-4 border-b p-4 last:border-b-0"
         >
-          <div className="h-3 w-32 animate-pulse rounded bg-muted" />
-          <div className="h-3 flex-1 animate-pulse rounded bg-muted" />
-          <div className="h-8 w-24 animate-pulse rounded bg-muted" />
+          <Skeleton className="h-3 w-32" />
+          <Skeleton className="h-3 flex-1" />
+          <Skeleton className="h-8 w-24" />
         </div>
       ))}
     </div>

@@ -12,14 +12,14 @@ import {
   Wrench,
 } from "lucide-react";
 
-import { readSidebarOpenCookie, SidebarInset, SidebarProvider } from "../ui/sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { api } from "../lib/api";
 import { fieldLabel } from "../lib/field-label";
 import { operationsQueryOptions, viewsManifestQueryOptions } from "../lib/queries";
 import { resolveLocalizedText } from "../lib/localized-text";
 import {
   EDITORIAL_STATUSES,
-  SIMPLE_STATUSES,
+  PUBLISHING_STATUSES,
   type AdminUser,
   type Collection,
   type SiteInfo,
@@ -35,9 +35,7 @@ import { Main } from "./main";
 import { SkipToMain } from "./skip-to-main";
 import { statusLabel } from "../features/content/status";
 import { t } from "../app/i18n";
-import { AdminAttribution } from "../brand/aotter-mantle";
 import type { AdminBrand, NavGroupData, NavItem, NavLink } from "./types";
-import { GuideOverlay, useGuideOverlay } from "../features/console/guide-overlay";
 
 interface AuthenticatedLayoutProps {
   children: React.ReactNode;
@@ -52,7 +50,6 @@ const DEFAULT_BRAND: AdminBrand = {
 export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): React.ReactElement {
   const { pathname, search } = useAdminLocation();
   const { language } = usePreferences();
-  const guide = useGuideOverlay();
 
   const me = useQuery<AdminUser>({
     queryKey: ["me"],
@@ -97,47 +94,28 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
       ),
     [collectionsQuery.data, operationsQuery.data, viewsQuery.data, language, canonical, me.data?.role],
   );
-  const firstCollection = React.useMemo<{ name: string } | null>(() => {
-    const first = (collectionsQuery.data ?? []).find((collection) => !collection.parent);
-    return first ? { name: first.name } : null;
-  }, [collectionsQuery.data]);
-
   return (
-    <SidebarProvider defaultOpen={readSidebarOpenCookie() ?? true}>
-        <SkipToMain />
-        <AppSidebar
-          brand={resolvedBrand}
-          groups={groups}
-          pathname={pathname}
-          search={search}
-          user={{
-            login: me.data?.login ?? null,
-            role: me.data?.role ?? null,
-          }}
+    <SidebarProvider>
+      <SkipToMain />
+      <AppSidebar
+        brand={resolvedBrand}
+        groups={groups}
+        pathname={pathname}
+        search={search}
+        user={{
+          login: me.data?.login ?? null,
+          image: me.data?.image ?? null,
+          role: me.data?.role ?? null,
+        }}
+      />
+      <SidebarInset>
+        <Header
+          fixed
+          site={resolvedBrand}
+          publicUrl={site.data?.publicUrl}
         />
-        <SidebarInset>
-          <Header
-            fixed
-            site={resolvedBrand}
-            publicUrl={site.data?.publicUrl}
-            onOpenGuide={guide.showGuide}
-            user={{
-              login: me.data?.login ?? null,
-              role: me.data?.role ?? null,
-            }}
-          />
-          <Main>
-            {children}
-          </Main>
-        </SidebarInset>
-          <AdminAttribution />
-          {guide.open ? (
-            <GuideOverlay
-              language={guide.language}
-              firstCollection={firstCollection}
-              onClose={guide.closeGuide}
-            />
-          ) : null}
+        <Main>{children}</Main>
+      </SidebarInset>
     </SidebarProvider>
   );
 }
@@ -151,8 +129,8 @@ function buildNavGroups(
   role: AdminUser["role"],
 ): ReadonlyArray<NavGroupData> {
   const primaryCollections = collections.filter((collection) => !collection.parent);
-  const contentCollections = primaryCollections.filter((c) => c.lifecycle !== "none");
-  const operationalCollections = primaryCollections.filter((c) => c.lifecycle === "none");
+  const contentCollections = primaryCollections.filter((c) => c.lifecycle !== "operational");
+  const operationalCollections = primaryCollections.filter((c) => c.lifecycle === "operational");
   const hasEditorial = collections.some((c) => c.lifecycle === "editorial");
   const homeGroup: NavGroupData = {
     items: [
@@ -249,7 +227,7 @@ function collectionNavItem(c: Collection, language: AdminLanguage, canonical: st
     marker: c.hasTranslations ? Globe : undefined,
   };
   const statuses = statusesFor(c);
-  // Operational records (lifecycle: none) have no status buckets —
+  // Operational records (lifecycle: operational) have no status buckets —
   // a plain link beats a collapsible with one child.
   if (statuses.length === 0) {
     return { ...base, url: `/admin/c/${c.name}` };
@@ -271,6 +249,6 @@ function collectionNavItem(c: Collection, language: AdminLanguage, canonical: st
 
 function statusesFor(c: Collection): ReadonlyArray<SidebarStatus> {
   if (c.lifecycle === "editorial") return EDITORIAL_STATUSES;
-  if (c.lifecycle === "none") return [];
-  return SIMPLE_STATUSES;
+  if (c.lifecycle === "operational") return [];
+  return PUBLISHING_STATUSES;
 }

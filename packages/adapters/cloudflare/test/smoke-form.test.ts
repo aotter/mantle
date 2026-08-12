@@ -34,7 +34,7 @@ function manifests(): Manifest[] {
           },
           required: ["name", "message"],
         },
-        lifecycle: "simple",
+        lifecycle: "publishing",
       },
     },
     {

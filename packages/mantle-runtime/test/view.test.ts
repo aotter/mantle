@@ -368,7 +368,7 @@ describe("ExecuteViewUseCase", () => {
           },
         },
         localized: false,
-        lifecycle: "none",
+        lifecycle: "operational",
       },
     };
     const useCase = new ExecuteViewUseCase(db, undefined, new Map([["settings", schema]]));

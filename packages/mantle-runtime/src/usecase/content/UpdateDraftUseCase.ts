@@ -52,10 +52,10 @@ export class UpdateDraftUseCase {
         }),
       );
     }
-    // lifecycle: none records have no draft/published workflow — they
+    // Operational records have no draft/published workflow — they
     // are editable in place regardless of stored status.
     const lifecycle = resolveLifecycle(schema);
-    if (existing.status !== "draft" && lifecycle !== "none") {
+    if (existing.status !== "draft" && lifecycle !== "operational") {
       throw new DiagnosticError(
         runtimeDiagnostic({
           code: "CONFLICT",
@@ -84,8 +84,8 @@ export class UpdateDraftUseCase {
       validator: this.validator,
       excludeId: existing.id,
       siteConfig: this.siteConfig,
-      // Real drafts save incomplete; lifecycle:none records are live immediately.
-      partial: lifecycle !== "none",
+      // Real drafts save incomplete; operational records are live immediately.
+      partial: lifecycle !== "operational",
     });
     return withConflictDiagnostic(opPath, () =>
       this.entries.update({

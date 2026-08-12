@@ -8,7 +8,7 @@
  *  `resolveLocalizedText` in `lib/localized-text.ts`. */
 export type LocalizedText = string | Readonly<Record<string, string>>;
 
-export type Lifecycle = "simple" | "editorial" | "none";
+export type Lifecycle = "publishing" | "editorial" | "operational";
 
 export type ContentStatus =
   | "draft"
@@ -111,6 +111,7 @@ export type StaffRole = "owner" | "editor" | "contributor";
 
 export interface AdminUser {
   login: string | null;
+  image: string | null;
   role: StaffRole | null;
   userId?: string;
 }
@@ -137,7 +138,7 @@ export interface EntryRow {
   title: unknown;
   updated_at: number;
   /** First 3 `required` schema properties (skipping the one used as
-   *  the title), present only for `lifecycle: "none"` collections. */
+   *  the title), present only for `lifecycle: "operational"` collections. */
   data_preview?: Record<string, unknown>;
 }
 
@@ -235,4 +236,4 @@ export const EDITORIAL_STATUSES: SidebarStatus[] = [
   "published",
   "archived",
 ];
-export const SIMPLE_STATUSES: SidebarStatus[] = ["draft", "published", "archived"];
+export const PUBLISHING_STATUSES: SidebarStatus[] = ["draft", "published", "archived"];

@@ -12,7 +12,9 @@ import type {
   SiteInfo,
 } from "../../lib/types";
 import { cn } from "../../lib/utils";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useConfirm } from "../../ui/confirm-dialog";
 import { EmptyState, ErrorBox, PageHeader } from "../../ui/page";
 import { uploadMediaAsset } from "./media-upload";
@@ -273,7 +275,7 @@ function MediaTile({
   }
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-[var(--glass-border)] bg-card/50">
+    <div className="flex flex-col overflow-hidden rounded-lg border bg-card">
       <div className="relative aspect-square bg-muted/40">
         {item.primaryUrl ? (
           <img
@@ -320,15 +322,13 @@ function MediaTile({
 
         {onPick ? null : (
           <>
-            <input
-              className="admin-input h-8 text-sm"
+            <Input
               value={alt}
               placeholder={t(language, "media.altPlaceholder")}
               aria-label={t(language, "media.alt")}
               onChange={(e) => setAlt(e.target.value)}
             />
-            <input
-              className="admin-input h-8 text-sm"
+            <Input
               value={caption}
               placeholder={t(language, "media.captionPlaceholder")}
               aria-label={t(language, "media.caption")}
@@ -337,25 +337,29 @@ function MediaTile({
             <div className="mt-1 flex items-center justify-between gap-2">
               <div className="flex items-center gap-1">
                 {item.primaryUrl ? (
-                  <a
-                    className="row-action"
-                    href={item.primaryUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    title={t(language, "media.open")}
-                  >
-                    <ExternalLink className="size-3.5" aria-hidden />
-                  </a>
+                  <Button asChild variant="ghost" size="icon-sm">
+                    <a
+                      href={item.primaryUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={t(language, "media.open")}
+                      aria-label={t(language, "media.open")}
+                    >
+                      <ExternalLink className="size-3.5" aria-hidden />
+                    </a>
+                  </Button>
                 ) : null}
-                <button
+                <Button
                   type="button"
-                  className="row-action"
+                  variant="ghost"
+                  size="icon-sm"
                   title={t(language, "media.delete")}
+                  aria-label={t(language, "media.delete")}
                   disabled={remove.isPending}
                   onClick={() => void confirmDelete()}
                 >
                   <Trash2 className="size-3.5" aria-hidden />
-                </button>
+                </Button>
               </div>
               <Button
                 type="button"
@@ -410,8 +414,8 @@ function MediaSearch({
     >
       <label className="relative block">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <input
-          className="admin-input h-10 pl-9"
+        <Input
+          className="pl-9"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={t(language, "media.searchPlaceholder")}
@@ -425,11 +429,11 @@ function MediaSkeleton(): React.ReactElement {
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
       {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-        <div key={i} className="overflow-hidden rounded-xl border border-[var(--glass-border)]">
-          <div className="aspect-square animate-pulse bg-muted" />
+        <div key={i} className="overflow-hidden rounded-lg border">
+          <Skeleton className="aspect-square rounded-none" />
           <div className="space-y-2 p-3">
-            <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
-            <div className="h-8 animate-pulse rounded bg-muted" />
+            <Skeleton className="h-3 w-1/2" />
+            <Skeleton className="h-8" />
           </div>
         </div>
       ))}

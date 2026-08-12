@@ -5,7 +5,10 @@ import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import { cn } from "../../lib/utils";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 
 interface SiteSettings {
@@ -35,7 +38,7 @@ export function SettingsView(): React.ReactElement {
     onSuccess: (data) => setForm(data),
   });
 
-  if (query.isLoading || !form) return <div className="glass-card h-64 animate-pulse" />;
+  if (query.isLoading || !form) return <Skeleton className="h-64 w-full" />;
   if (query.isError) return <ErrorBox error={query.error} />;
 
   return (
@@ -56,7 +59,7 @@ export function SettingsView(): React.ReactElement {
       <div
         role="tablist"
         aria-label={t(language, "settings.tabsLabel")}
-        className="inline-flex gap-1 rounded-lg border border-[var(--glass-border)] bg-background/60 p-1"
+        className="inline-flex gap-1 rounded-lg border bg-muted/40 p-1"
       >
         <TabButton
           active={activeTab === "brand"}
@@ -76,13 +79,13 @@ export function SettingsView(): React.ReactElement {
         <SectionCard className="grid max-w-5xl gap-4">
           <SectionIntro title={t(language, "settings.brandSection")} body={t(language, "settings.brandSectionBody")} />
           <Field label={t(language, "settings.siteBrand")}>
-            <input className="admin-input" value={form.brand} onChange={(event) => setField(setForm, "brand", event.target.value)} />
+            <Input value={form.brand} onChange={(event) => setField(setForm, "brand", event.target.value)} />
           </Field>
           <Field label={t(language, "settings.siteTitle")}>
-            <input className="admin-input" value={form.title} onChange={(event) => setField(setForm, "title", event.target.value)} />
+            <Input value={form.title} onChange={(event) => setField(setForm, "title", event.target.value)} />
           </Field>
           <Field label={t(language, "settings.siteDescription")}>
-            <textarea className="admin-textarea min-h-24" value={form.description} onChange={(event) => setField(setForm, "description", event.target.value)} />
+            <Textarea className="min-h-24" value={form.description} onChange={(event) => setField(setForm, "description", event.target.value)} />
           </Field>
         </SectionCard>
       ) : null}
@@ -92,10 +95,10 @@ export function SettingsView(): React.ReactElement {
           <SectionIntro title={t(language, "settings.trackingSection")} body={t(language, "settings.trackingSectionBody")} />
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={t(language, "settings.ga4MeasurementId")} description={t(language, "settings.ga4MeasurementIdHelp")}>
-              <input className="admin-input" value={form.ga4MeasurementId} placeholder="G-XXXXXXXXXX" onChange={(event) => setField(setForm, "ga4MeasurementId", event.target.value)} />
+              <Input value={form.ga4MeasurementId} placeholder="G-XXXXXXXXXX" onChange={(event) => setField(setForm, "ga4MeasurementId", event.target.value)} />
             </Field>
             <Field label={t(language, "settings.facebookPixelId")} description={t(language, "settings.facebookPixelIdHelp")}>
-              <input className="admin-input" value={form.facebookPixelId} placeholder="123456789012345" onChange={(event) => setField(setForm, "facebookPixelId", event.target.value)} />
+              <Input value={form.facebookPixelId} placeholder="123456789012345" onChange={(event) => setField(setForm, "facebookPixelId", event.target.value)} />
             </Field>
           </div>
         </SectionCard>

@@ -25,8 +25,19 @@ import type {
   StaffOperation,
 } from "../../lib/types";
 import { cn } from "../../lib/utils";
-import { Button } from "../../ui/button";
-import { TableCell, TableHeadCell, TableShell } from "../../ui/admin-table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useConfirm } from "../../ui/confirm-dialog";
 import { CollapsibleDescription, EmptyState, ErrorBox, PageHeader } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
@@ -118,7 +129,7 @@ export function CollectionView({
   const heading = collection
     ? resolveLocalizedText(collection.title, language, canonical) ?? collection.name
     : collectionName;
-  const isOperationalCollection = collection?.lifecycle === "none";
+  const isOperationalCollection = collection?.lifecycle === "operational";
   const dataColumns = React.useMemo(() => dataPreviewColumns(collection), [collection]);
   const refreshEntries = React.useCallback(() => {
     clearSelection();
@@ -188,12 +199,12 @@ export function CollectionView({
             ) : null}
             {status ? <StatusBadge status={status} /> : null}
             {collection?.hasTranslations ? (
-              <span className="badge-status bg-accent text-accent-foreground">i18n</span>
+              <Badge variant="secondary">i18n</Badge>
             ) : null}
             {collection?.mediaFields?.length ? (
-              <span className="badge-status bg-[color-mix(in_srgb,var(--success)_16%,transparent)] text-[color:var(--success)]">
+              <Badge variant="outline" className="text-success">
                 media
-              </span>
+              </Badge>
             ) : null}
           </div>
         }
@@ -210,7 +221,7 @@ export function CollectionView({
         />
       ) : null}
 
-      {collection && collection.lifecycle !== "none" ? (
+      {collection && collection.lifecycle !== "operational" ? (
         <StatusFilter
           collection={collection}
           activeStatus={status}
@@ -245,53 +256,60 @@ export function CollectionView({
               onClear={clearSelection}
             />
           ) : null}
-          <TableShell>
-            <thead>
-              <tr className="border-b border-[var(--glass-border)]">
-                <TableHeadCell className="w-10">
-                  <input
-                    type="checkbox"
-                    className="size-4 accent-[var(--primary)]"
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
                     aria-label={t(language, "collection.table.selectAll")}
-                    checked={selected.size > 0 && displayedEntries.items.every((row) => selected.has(row.id))}
-                    ref={(el) => {
-                      if (!el) return;
-                      const someSelected = displayedEntries.items.some((row) => selected.has(row.id));
-                      const allSelected = displayedEntries.items.every((row) => selected.has(row.id));
-                      el.indeterminate = someSelected && !allSelected;
-                    }}
-                    onChange={(event) => {
+                    checked={
+                      displayedEntries.items.every((row) => selected.has(row.id))
+                        ? true
+                        : displayedEntries.items.some((row) => selected.has(row.id))
+                          ? "indeterminate"
+                          : false
+                    }
+                    onCheckedChange={(checked) => {
                       setSelected((prev) => {
                         const next = new Set(prev);
                         for (const row of displayedEntries.items) {
-                          if (event.target.checked) next.add(row.id);
+                          if (checked === true) next.add(row.id);
                           else next.delete(row.id);
                         }
                         return next;
                       });
                     }}
                   />
-                </TableHeadCell>
-                <TableHeadCell>{t(language, "collection.table.id")}</TableHeadCell>
-                <TableHeadCell>{t(language, "collection.table.title")}</TableHeadCell>
+                </TableHead>
+                <TableHead>{t(language, "collection.table.id")}</TableHead>
+                <TableHead>
+                  {isOperationalCollection
+                    ? propertyLabel(
+                        collectionTitleField(collection) ?? "title",
+                        collection?.schema?.properties?.[collectionTitleField(collection) ?? ""],
+                        language,
+                        canonical,
+                      )
+                    : t(language, "collection.table.title")}
+                </TableHead>
                 {isOperationalCollection ? (
                   dataColumns.map((name) => (
-                    <TableHeadCell key={name}>
+                    <TableHead key={name}>
                       {propertyLabel(name, collection?.schema?.properties?.[name], language, canonical)}
-                    </TableHeadCell>
+                    </TableHead>
                   ))
                 ) : (
                   <>
-                    <TableHeadCell>{t(language, "collection.table.status")}</TableHeadCell>
-                    <TableHeadCell>{t(language, "collection.table.locale")}</TableHeadCell>
-                    <TableHeadCell>{t(language, "collection.table.version")}</TableHeadCell>
+                    <TableHead>{t(language, "collection.table.status")}</TableHead>
+                    <TableHead>{t(language, "collection.table.locale")}</TableHead>
+                    <TableHead>{t(language, "collection.table.version")}</TableHead>
                   </>
                 )}
-                <TableHeadCell>{t(language, "collection.table.updated")}</TableHeadCell>
-                <TableHeadCell>{t(language, "collection.table.actions")}</TableHeadCell>
-              </tr>
-            </thead>
-            <tbody>
+                <TableHead>{t(language, "collection.table.updated")}</TableHead>
+                <TableHead>{t(language, "collection.table.actions")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {displayedEntries.items.map((row) => (
                 <EntryRowDisplay
                   key={row.id}
@@ -319,8 +337,8 @@ export function CollectionView({
                   }
                 />
               ))}
-            </tbody>
-          </TableShell>
+            </TableBody>
+          </Table>
           {entries.isFetching && !entries.data ? (
             <p className="mt-3 text-xs text-muted-foreground">
               {t(language, "collection.refreshing")}
@@ -360,7 +378,7 @@ function BulkActionBar({
 }): React.ReactElement {
   const [pending, setPending] = React.useState(false);
   const [failures, setFailures] = React.useState<unknown[]>([]);
-  const canPublish = collection && collection.lifecycle !== "none";
+  const canPublish = collection && collection.lifecycle !== "operational";
   const confirm = useConfirm();
 
   async function runBulk(call: (id: string) => Promise<unknown>): Promise<void> {
@@ -388,7 +406,7 @@ function BulkActionBar({
   }
 
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--glass-border)] bg-accent/40 px-3 py-2">
+    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
       <span className="text-sm font-medium">
         {t(language, "collection.bulk.selectedCount", { count: String(selectedIds.length) })}
       </span>
@@ -472,8 +490,8 @@ function CollectionSearch({
     >
       <label className="relative block">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <input
-          className="admin-input h-10 pl-9"
+        <Input
+          className="h-9 ps-9"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder={t(language, "collection.searchPlaceholder")}
@@ -506,13 +524,13 @@ function renderCollectionDescription(
 
 /** #444: the subtitle used to say "items, publishing state, and
  *  localized content" for every collection, including `lifecycle:
- *  "none"` ones that have neither a publish workflow nor translations.
+ *  "operational"` ones that have neither a publish workflow nor translations.
  *  Picks from four i18n variants using capabilities the UI already has
  *  on hand (`collection.lifecycle`, `collection.hasTranslations`) —
  *  same fields `CollectionView` already reads for
  *  `isOperationalCollection` / the `i18n` badge, no new server data. */
 export function collectionSummaryKey(collection: Collection | undefined): I18nKey {
-  const hasLifecycle = collection ? collection.lifecycle !== "none" : true;
+  const hasLifecycle = collection ? collection.lifecycle !== "operational" : true;
   const hasTranslations = collection?.hasTranslations ?? false;
   if (hasLifecycle && hasTranslations) return "collection.schemaSummary.lifecycleAndI18n";
   if (hasLifecycle) return "collection.schemaSummary.lifecycleOnly";
@@ -536,7 +554,7 @@ function StatusFilter({
     : (["draft", "published", "archived"] as const);
 
   return (
-    <div className="mb-5 flex gap-2 overflow-x-auto pb-1" data-tour="status-filter">
+    <div className="mb-5 flex gap-2 overflow-x-auto pb-1">
       <StatusFilterLink
         href={collectionFilterHref(collection.name, undefined, searchTerm)}
         active={!activeStatus}
@@ -585,7 +603,7 @@ function StatusFilterLink({
         "inline-flex h-8 shrink-0 items-center justify-center rounded-lg border px-3 text-xs font-medium",
         "transition-colors duration-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
         active
-          ? "border-[var(--glass-border)] bg-secondary text-secondary-foreground"
+          ? "border-border bg-secondary text-secondary-foreground"
           : "border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
       )}
     >
@@ -596,15 +614,15 @@ function StatusFilterLink({
 
 function EntriesSkeleton(): React.ReactElement {
   return (
-    <div className="glass-card overflow-hidden">
+    <div className="overflow-hidden rounded-lg border">
       {[0, 1, 2, 3, 4].map((i) => (
         <div
           key={i}
-          className="flex items-center gap-4 border-b border-[var(--glass-border)] p-3 last:border-b-0"
+          className="flex items-center gap-4 border-b p-3 last:border-b-0"
         >
-          <div className="h-3 w-16 animate-pulse rounded bg-muted" />
-          <div className="h-3 flex-1 animate-pulse rounded bg-muted" />
-          <div className="h-6 w-20 animate-pulse rounded-full bg-muted" />
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 flex-1" />
+          <Skeleton className="h-6 w-20 rounded-full" />
         </div>
       ))}
     </div>
@@ -666,7 +684,7 @@ function EntryRowDisplay({
   language: AdminLanguage;
   canonical: string | null;
   collection: Collection | undefined;
-  /** Non-null (possibly empty) for `lifecycle: "none"` collections —
+  /** Non-null (possibly empty) for `lifecycle: "operational"` collections —
    *  swaps the status/locale/version cells for these data columns. */
   dataColumns: string[] | null;
   /** Staff operations (#430) whose `rowBindings` include this
@@ -680,6 +698,7 @@ function EntryRowDisplay({
   busy: boolean;
 }): React.ReactElement {
   const itemName = renderTitleText(row.title, language);
+  const isOperational = dataColumns !== null;
   const [editing, setEditing] = React.useState(false);
   const [draftTitle, setDraftTitle] = React.useState(itemName);
   const [error, setError] = React.useState<string | null>(null);
@@ -718,14 +737,12 @@ function EntryRowDisplay({
   }
 
   return (
-    <tr className="border-t border-[var(--glass-border)] hover:bg-accent/40">
+    <TableRow>
       <TableCell>
-        <input
-          type="checkbox"
-          className="size-4 accent-[var(--primary)]"
+        <Checkbox
           aria-label={t(language, "collection.table.selectRow", { name: itemName })}
           checked={selected}
-          onChange={(event) => onToggleSelect(event.target.checked)}
+          onCheckedChange={(checked) => onToggleSelect(checked === true)}
         />
       </TableCell>
       <TableCell className="font-mono text-xs text-muted-foreground">
@@ -733,10 +750,18 @@ function EntryRowDisplay({
       </TableCell>
       <TableCell className="max-w-[28rem]">
         <div className="min-w-[16rem]">
-          {editing ? (
+          {isOperational ? (
+            <a
+              href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}
+              className="block truncate font-medium hover:underline"
+              title={itemName}
+            >
+              {renderTitle(row.title, language)}
+            </a>
+          ) : editing ? (
             <div className="flex items-center gap-1">
-              <input
-                className="admin-input h-9 min-w-0 flex-1"
+              <Input
+                className="h-8 min-w-0 flex-1"
                 value={draftTitle}
                 autoFocus
                 disabled={busy}
@@ -750,12 +775,12 @@ function EntryRowDisplay({
                   }
                 }}
               />
-              <button type="button" className="row-action" title={t(language, "crud.saveTitle")} disabled={busy} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveTitle()}>
+              <Button type="button" variant="ghost" size="icon-sm" title={t(language, "crud.saveTitle")} disabled={busy} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveTitle()}>
                 <Check className="size-3.5" aria-hidden />
-              </button>
-              <button type="button" className="row-action" title={t(language, "crud.cancelTitle")} disabled={busy} onMouseDown={(event) => event.preventDefault()} onClick={() => { setDraftTitle(itemName); setEditing(false); }}>
+              </Button>
+              <Button type="button" variant="ghost" size="icon-sm" title={t(language, "crud.cancelTitle")} disabled={busy} onMouseDown={(event) => event.preventDefault()} onClick={() => { setDraftTitle(itemName); setEditing(false); }}>
                 <X className="size-3.5" aria-hidden />
-              </button>
+              </Button>
             </div>
           ) : (
             <button
@@ -792,13 +817,15 @@ function EntryRowDisplay({
         {formatTimestampMs(row.updated_at) ?? "-"}
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-1" data-tour="entry-actions">
-          <a className="row-action" title={t(language, "crud.editTooltip", { name: itemName })} href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}>
-            <PencilLine className="size-3.5" aria-hidden />
-          </a>
-          <button type="button" className="row-action" title={t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy} onClick={() => void remove()}>
+        <div className="flex items-center gap-1">
+          <Button asChild variant="ghost" size="icon-sm">
+            <a title={t(language, "crud.editTooltip", { name: itemName })} href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}>
+              <PencilLine className="size-3.5" aria-hidden />
+            </a>
+          </Button>
+          <Button type="button" variant="ghost" size="icon-sm" title={t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy} onClick={() => void remove()}>
             <Trash2 className="size-3.5" aria-hidden />
-          </button>
+          </Button>
           <RowOperationsMenu
             row={row}
             operations={boundOperations}
@@ -811,7 +838,7 @@ function EntryRowDisplay({
           {collection ? resolveLocalizedText(collection.title, language, canonical) ?? collection.name : ""}
         </span>
       </TableCell>
-    </tr>
+    </TableRow>
   );
 }
 
@@ -838,26 +865,33 @@ function renderTitle(
  *  these two well-known reserved names, no fuzzy matching. */
 const DATA_PREVIEW_SYSTEM_COLUMN_NAMES = new Set(["updatedAt", "createdAt"]);
 
-/** For `lifecycle: "none"` collections: up to 3 data columns from the
+/** For `lifecycle: "operational"` collections: up to 3 data columns from the
  *  schema's `required` properties, skipping the schema-stable title
  *  field and the system-column-name collisions above (#443). MUST
  *  mirror `schemaTitleKey` / `adminDataPreview` server-side in
  *  `mountServerEndpoints.ts` — both sides derive from the schema alone
  *  so headers and cell values can never disagree. */
 function dataPreviewColumns(collection: Collection | undefined): string[] {
-  if (!collection || collection.lifecycle !== "none") return [];
+  if (!collection || collection.lifecycle !== "operational") return [];
   const schema = collection.schema;
   const required = schema?.required ?? [];
+  const titleKey = collectionTitleField(collection);
+  return required
+    .filter((key) => key !== titleKey && !DATA_PREVIEW_SYSTEM_COLUMN_NAMES.has(key))
+    .slice(0, 3);
+}
+
+function collectionTitleField(collection: Collection | undefined): string | null {
+  const schema = collection?.schema;
   const properties = schema?.properties ?? {};
-  const titleKey =
+  const required = schema?.required ?? [];
+  return (
     ["title", "name", "slug"].find((key) => key in properties) ??
     required.find((key) => {
       const raw = properties[key]?.type;
       const types = Array.isArray(raw) ? raw : raw ? [raw] : [];
       return types.includes("string");
     }) ??
-    null;
-  return required
-    .filter((key) => key !== titleKey && !DATA_PREVIEW_SYSTEM_COLUMN_NAMES.has(key))
-    .slice(0, 3);
+    null
+  );
 }

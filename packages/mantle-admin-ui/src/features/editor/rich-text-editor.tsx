@@ -27,13 +27,24 @@ import {
   Upload,
   Video,
   Wand2,
-  X,
 } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import type { SiteInfo } from "../../lib/types";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import { primaryPublicUrl, uploadMediaAsset } from "../media/media-upload";
 
 export function RichTextEditor({
@@ -130,8 +141,11 @@ export function RichTextEditor({
   }
 
   return (
-    <div className="rich-editor">
-      <div className="rich-editor-toolbar" aria-label={t(language, "editor.toolbar")}>
+    <div className="space-y-2">
+      <div
+        className="flex flex-wrap items-center gap-1 rounded-lg border bg-muted/30 p-1"
+        aria-label={t(language, "editor.toolbar")}
+      >
         <ToolbarButton title={t(language, "editor.undo")} onClick={() => runTextCommand("undo", textRef.current)}>
           <Undo2 className="size-4" aria-hidden />
         </ToolbarButton>
@@ -156,9 +170,13 @@ export function RichTextEditor({
           }}
         />
         <ToolbarDivider />
-        <label className="rich-editor-select" title={t(language, "editor.textStyle")}>
+        <label
+          className="flex h-8 items-center gap-1 rounded-md px-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          title={t(language, "editor.textStyle")}
+        >
           <Type className="size-4" aria-hidden />
           <select
+            className="bg-transparent text-sm outline-none"
             onChange={(event) => {
               applyTextStyle(event.target.value);
               event.target.value = "paragraph";
@@ -241,9 +259,9 @@ export function RichTextEditor({
         </ToolbarButton>
       </div>
 
-      <textarea
+      <Textarea
         ref={textRef}
-        className={compact ? "admin-textarea admin-textarea-compact rich-editor-textarea" : "admin-textarea rich-editor-textarea"}
+        className={compact ? "min-h-32 resize-y font-mono" : "min-h-64 resize-y font-mono"}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
@@ -282,14 +300,22 @@ function ToolbarButton({
   children: React.ReactNode;
 }): React.ReactElement {
   return (
-    <button type="button" title={title} aria-label={title} onClick={onClick} disabled={disabled}>
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      disabled={disabled}
+    >
       {children}
-    </button>
+    </Button>
   );
 }
 
 function ToolbarDivider(): React.ReactElement {
-  return <span className="rich-editor-divider" aria-hidden />;
+  return <Separator orientation="vertical" className="mx-1 h-5" aria-hidden />;
 }
 
 function MediaInsertDialog({
@@ -304,25 +330,35 @@ function MediaInsertDialog({
   const [url, setUrl] = React.useState("");
   const [alt, setAlt] = React.useState("");
   return (
-    <div className="rich-editor-dialog-backdrop" role="presentation">
-      <div className="rich-editor-dialog" role="dialog" aria-modal="true" aria-label={t(language, "editor.mediaLibrary")}>
-        <DialogHeader title={t(language, "editor.insertImage")} onClose={onClose} />
-        <div className="grid gap-3">
-          <label className="grid gap-1 text-sm font-medium">
-            {t(language, "editor.imageUrl")}
-            <input className="admin-input" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://..." />
-          </label>
-          <label className="grid gap-1 text-sm font-medium">
-            {t(language, "media.alt")}
-            <input className="admin-input" value={alt} onChange={(event) => setAlt(event.target.value)} />
-          </label>
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t(language, "editor.insertImage")}</DialogTitle>
+          <DialogDescription className="sr-only">{t(language, "editor.mediaLibrary")}</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="rich-editor-image-url">{t(language, "editor.imageUrl")}</Label>
+            <Input
+              id="rich-editor-image-url"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              placeholder="https://..."
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="rich-editor-image-alt">{t(language, "media.alt")}</Label>
+            <Input id="rich-editor-image-alt" value={alt} onChange={(event) => setAlt(event.target.value)} />
+          </div>
+        </div>
+        <DialogFooter>
           <Button type="button" disabled={!url.trim()} onClick={() => onInsert(url.trim(), alt.trim())}>
             <Check className="size-4" aria-hidden />
             {t(language, "editor.insertImage")}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -337,36 +373,29 @@ function VideoInsertDialog({
 }): React.ReactElement {
   const [url, setUrl] = React.useState("");
   return (
-    <div className="rich-editor-dialog-backdrop" role="presentation">
-      <div className="rich-editor-dialog" role="dialog" aria-modal="true" aria-label={t(language, "editor.videoUrl")}>
-        <DialogHeader title={t(language, "editor.insertVideo")} onClose={onClose} />
-        <label className="grid gap-1 text-sm font-medium">
-          {t(language, "editor.videoUrl")}
-          <input className="admin-input" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="YouTube / Dailymotion URL" />
-        </label>
-        <Button type="button" className="mt-3" disabled={!url.trim()} onClick={() => onInsert(url.trim())}>
-          <Video className="size-4" aria-hidden />
-          {t(language, "editor.insertVideo")}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function DialogHeader({
-  title,
-  onClose,
-}: {
-  title: string;
-  onClose: () => void;
-}): React.ReactElement {
-  return (
-    <div className="mb-4 flex items-center justify-between gap-3">
-      <h2 className="text-lg font-semibold">{title}</h2>
-      <button type="button" className="row-action" onClick={onClose} aria-label="Close">
-        <X className="size-4" aria-hidden />
-      </button>
-    </div>
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t(language, "editor.insertVideo")}</DialogTitle>
+          <DialogDescription className="sr-only">{t(language, "editor.videoUrl")}</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          <Label htmlFor="rich-editor-video-url">{t(language, "editor.videoUrl")}</Label>
+          <Input
+            id="rich-editor-video-url"
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            placeholder="YouTube / Dailymotion URL"
+          />
+        </div>
+        <DialogFooter>
+          <Button type="button" disabled={!url.trim()} onClick={() => onInsert(url.trim())}>
+            <Video className="size-4" aria-hidden />
+            {t(language, "editor.insertVideo")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

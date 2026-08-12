@@ -7,10 +7,10 @@ import {
   resolveLifecycle,
 } from "../src/domain/service/LifecycleStateMachine.js";
 
-const simpleSchema: LifecycleSchemaLike = { spec: {} };
-const explicitSimpleSchema: LifecycleSchemaLike = { spec: { lifecycle: "simple" } };
+const defaultPublishingSchema: LifecycleSchemaLike = { spec: {} };
+const explicitPublishingSchema: LifecycleSchemaLike = { spec: { lifecycle: "publishing" } };
 const editorialSchema: LifecycleSchemaLike = { spec: { lifecycle: "editorial" } };
-const noneSchema: LifecycleSchemaLike = { spec: { lifecycle: "none" } };
+const operationalSchema: LifecycleSchemaLike = { spec: { lifecycle: "operational" } };
 
 describe("ContentState const-object", () => {
   it("exports the documented status values", () => {
@@ -24,74 +24,74 @@ describe("ContentState const-object", () => {
 });
 
 describe("resolveLifecycle", () => {
-  it("returns 'simple' when Schema omits the lifecycle key", () => {
-    expect(resolveLifecycle(simpleSchema)).toBe("simple");
+  it("returns 'publishing' when Schema omits the lifecycle key", () => {
+    expect(resolveLifecycle(defaultPublishingSchema)).toBe("publishing");
   });
 
-  it("returns 'simple' for an undefined Schema (defense-in-depth)", () => {
-    expect(resolveLifecycle(undefined)).toBe("simple");
+  it("returns 'publishing' for an undefined Schema (defense-in-depth)", () => {
+    expect(resolveLifecycle(undefined)).toBe("publishing");
   });
 
   it("returns the explicit value when set", () => {
     expect(resolveLifecycle(editorialSchema)).toBe("editorial");
-    expect(resolveLifecycle(explicitSimpleSchema)).toBe("simple");
+    expect(resolveLifecycle(explicitPublishingSchema)).toBe("publishing");
   });
 });
 
 describe("publishRequiresApproval", () => {
   it("returns true only for editorial Schemas", () => {
     expect(publishRequiresApproval(editorialSchema)).toBe(true);
-    expect(publishRequiresApproval(simpleSchema)).toBe(false);
-    expect(publishRequiresApproval(explicitSimpleSchema)).toBe(false);
+    expect(publishRequiresApproval(defaultPublishingSchema)).toBe(false);
+    expect(publishRequiresApproval(explicitPublishingSchema)).toBe(false);
     expect(publishRequiresApproval(undefined)).toBe(false);
   });
 });
 
-describe("canTransition — none lifecycle (operational records)", () => {
+describe("canTransition — operational lifecycle (operational records)", () => {
   it("allows no transitions from any state", () => {
     const states = ["draft", "review", "approved", "scheduled", "published", "archived"] as const;
     for (const from of states) {
       for (const to of states) {
-        expect(canTransition(noneSchema, from, to)).toBe(false);
+        expect(canTransition(operationalSchema, from, to)).toBe(false);
       }
     }
   });
 
   it("does not require approval to publish (publish simply never applies)", () => {
-    expect(publishRequiresApproval(noneSchema)).toBe(false);
+    expect(publishRequiresApproval(operationalSchema)).toBe(false);
   });
 });
 
-describe("canTransition — simple lifecycle", () => {
+describe("canTransition — publishing lifecycle", () => {
   it("allows draft → published and draft → archived", () => {
-    expect(canTransition(simpleSchema, "draft", "published")).toBe(true);
-    expect(canTransition(simpleSchema, "draft", "archived")).toBe(true);
+    expect(canTransition(defaultPublishingSchema, "draft", "published")).toBe(true);
+    expect(canTransition(defaultPublishingSchema, "draft", "archived")).toBe(true);
   });
 
-  it("rejects draft → review (no review state in simple)", () => {
-    expect(canTransition(simpleSchema, "draft", "review")).toBe(false);
+  it("rejects draft → review (no review state in publishing)", () => {
+    expect(canTransition(defaultPublishingSchema, "draft", "review")).toBe(false);
   });
 
   it("allows published → archived and published → draft (unpublish)", () => {
-    expect(canTransition(simpleSchema, "published", "archived")).toBe(true);
-    expect(canTransition(simpleSchema, "published", "draft")).toBe(true);
+    expect(canTransition(defaultPublishingSchema, "published", "archived")).toBe(true);
+    expect(canTransition(defaultPublishingSchema, "published", "draft")).toBe(true);
   });
 
   it("allows archived → draft (restore)", () => {
-    expect(canTransition(simpleSchema, "archived", "draft")).toBe(true);
+    expect(canTransition(defaultPublishingSchema, "archived", "draft")).toBe(true);
   });
 
   it("rejects archived → published directly (must restore first)", () => {
-    expect(canTransition(simpleSchema, "archived", "published")).toBe(false);
+    expect(canTransition(defaultPublishingSchema, "archived", "published")).toBe(false);
   });
 
-  it("rejects review/approved/scheduled as source — they don't exist in simple", () => {
-    expect(canTransition(simpleSchema, "review", "published")).toBe(false);
-    expect(canTransition(simpleSchema, "approved", "published")).toBe(false);
-    expect(canTransition(simpleSchema, "scheduled", "published")).toBe(false);
+  it("rejects review/approved/scheduled as source — they don't exist in publishing", () => {
+    expect(canTransition(defaultPublishingSchema, "review", "published")).toBe(false);
+    expect(canTransition(defaultPublishingSchema, "approved", "published")).toBe(false);
+    expect(canTransition(defaultPublishingSchema, "scheduled", "published")).toBe(false);
   });
 
-  it("treats undefined schema as simple", () => {
+  it("treats undefined schema as publishing", () => {
     expect(canTransition(undefined, "draft", "published")).toBe(true);
     expect(canTransition(undefined, "draft", "review")).toBe(false);
   });

@@ -4,7 +4,7 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "../ui/collapsible";
+} from "@/components/ui/collapsible";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +12,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu";
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -23,7 +23,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   useSidebar,
-} from "../ui/sidebar";
+} from "@/components/ui/sidebar";
 import { cn } from "../lib/utils";
 import { usePreferences } from "../app/preferences";
 import {
@@ -114,7 +114,6 @@ function NavLinkItem({
         <a
           href={item.url}
           title={item.title}
-          data-tour={tourIdForUrl(item.url)}
           onClick={() => setOpenMobile(false)}
           {...(item.external
             ? { target: "_blank", rel: "noreferrer" }
@@ -153,7 +152,7 @@ function NavCollapsibleExpanded({
     >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton isActive={groupActive} data-tour={tourIdForUrl(item.items[0]?.url)}>
+          <SidebarMenuButton isActive={groupActive}>
             {item.icon && <item.icon aria-hidden />}
             <span data-sidebar-label className="flex-1 truncate" title={item.title}>{item.title}</span>
             {item.marker && (
@@ -201,25 +200,13 @@ function NavSubLink({
   return (
     <SidebarMenuSubItem>
       <SidebarMenuSubButton asChild isActive={active}>
-        <a href={link.url} title={link.title} data-tour={tourIdForUrl(link.url)} onClick={() => setOpenMobile(false)}>
+        <a href={link.url} title={link.title} onClick={() => setOpenMobile(false)}>
           {link.icon && <link.icon aria-hidden />}
           <span>{link.title}</span>
         </a>
       </SidebarMenuSubButton>
     </SidebarMenuSubItem>
   );
-}
-
-function tourIdForUrl(url: string | undefined): string | undefined {
-  if (!url) return undefined;
-  if (url === "/admin") return "nav-home";
-  if (url === "/admin/settings") return "nav-settings";
-  // Only the plain collection link (no `?status=` filter) gets a tour
-  // id, so each collection's main nav item has exactly one stable
-  // anchor for the guide overlay to target.
-  const match = url.match(/^\/admin\/c\/([^/?]+)$/);
-  if (match) return `nav-c-${decodeURIComponent(match[1]!)}`;
-  return undefined;
 }
 
 function NavCollapsibleDropdown({

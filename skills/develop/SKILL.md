@@ -82,9 +82,9 @@ the atoms cannot express the behavior.
   `Procedure.spec.input` before the seed/form. Keep public mutation inputs
   `additionalProperties: false`; otherwise JSON Schema's default may strip an
   undeclared field while returning success.
-- Use `lifecycle: none` for submissions, inquiries, orders, and other
+- Use `lifecycle: operational` for submissions, inquiries, orders, and other
   Procedure-created operational records that staff inspect or correct. Reserve
-  `simple` for content a person stages and publishes.
+  `publishing` for content a person stages and publishes.
 - When a form's fixed option values change, update the stored Schema and public
   Procedure input `enum` together. Keep translated labels in the page seed;
   Admin and Staff MCP derive their typed controls from the manifest values.

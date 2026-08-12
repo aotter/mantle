@@ -104,7 +104,7 @@ function manifests(): Manifest[] {
           },
           required: ["slug"],
         },
-        lifecycle: "simple",
+        lifecycle: "publishing",
       },
     },
   ];

@@ -6,9 +6,10 @@ import { api } from "../../lib/api";
 import { asRenderable } from "../../lib/errors";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { EntryEditorPayload, StaffOperation } from "../../lib/types";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorBox, OperationErrorBox } from "../../ui/page";
-import { useToast } from "../../ui/toast";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -16,13 +17,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../../ui/dialog";
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "../../ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu";
 import type { AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { SchemaFields } from "./entry-edit-view";
@@ -83,14 +84,15 @@ export function RowOperationsMenu({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           {trigger ?? (
-            <button
+            <Button
               type="button"
-              className="row-action"
+              variant="ghost"
+              size="icon-sm"
               title={t(language, "rowActions.menuLabel")}
               aria-label={t(language, "rowActions.menuLabel")}
             >
               <MoreHorizontal className="size-3.5" aria-hidden />
-            </button>
+            </Button>
           )}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -199,7 +201,6 @@ function RowActionDialog({
       fieldLabel(inputField)
     : null;
 
-  const { showToast } = useToast();
   const invoke = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api.post<{ ok: true; output: unknown }>(`/operations/${encodeURIComponent(operation.name)}`, body),
@@ -207,7 +208,7 @@ function RowActionDialog({
       // #444: the dialog closes right after this and the list refreshes
       // silently — without a toast the operator has no confirmation the
       // operation actually ran, only that the modal is gone.
-      showToast(t(language, "ops.success", { name: title }));
+      toast.success(t(language, "ops.success", { name: title }));
       onSuccess();
     },
   });
@@ -223,13 +224,13 @@ function RowActionDialog({
         </DialogHeader>
 
         {entryQuery.isLoading ? (
-          <div className="glass-card h-24 animate-pulse" />
+          <Skeleton className="h-24 w-full" />
         ) : (
           <div className="space-y-5">
             {inputField ? (
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground">{boundFieldLabel}</label>
-                <p className="admin-input cursor-not-allowed bg-muted/40 text-muted-foreground">
+                <p className="min-h-8 rounded-md border bg-muted/40 px-3 py-1.5 text-sm text-muted-foreground">
                   {stringifyBoundValue(prefillValue)}
                 </p>
               </div>

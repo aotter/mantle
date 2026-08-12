@@ -6,7 +6,25 @@ import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import { asRenderable } from "../../lib/errors";
 import type { AdminUser, StaffRole, StaffUser } from "../../lib/types";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 
 /** Owner-only staff management: list every user, assign roles, invite
@@ -56,7 +74,7 @@ export function StaffView(): React.ReactElement {
 
   if (staff.isError) return <ErrorBox error={staff.error} />;
   if (staff.isLoading || !staff.data) {
-    return <div className="glass-card h-64 animate-pulse" />;
+    return <Skeleton className="h-64 w-full" />;
   }
 
   const roleLabel = (role: StaffRole | "none"): string =>
@@ -73,16 +91,16 @@ export function StaffView(): React.ReactElement {
       {revoke.isError ? <ErrorBox error={asRenderable(revoke.error)} /> : null}
       <InviteCard onInvited={refetch} />
       <SectionCard className="overflow-x-auto p-0">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-left [&>th]:px-4 [&>th]:py-3 [&>th]:font-medium">
-              <th>{t(language, "staff.table.name")}</th>
-              <th>{t(language, "staff.table.email")}</th>
-              <th>{t(language, "staff.table.status")}</th>
-              <th>{t(language, "staff.table.role")}</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t(language, "staff.table.name")}</TableHead>
+              <TableHead>{t(language, "staff.table.email")}</TableHead>
+              <TableHead>{t(language, "staff.table.status")}</TableHead>
+              <TableHead>{t(language, "staff.table.role")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {staff.data.users.map((user) => {
               const isSelf = user.id === me.data?.userId;
               const invited = !user.emailVerified && !user.githubLogin;
@@ -90,15 +108,15 @@ export function StaffView(): React.ReactElement {
                 ? user.role
                 : "none";
               return (
-                <tr key={user.id} className="border-b last:border-b-0 [&>td]:px-4 [&>td]:py-3">
-                  <td>{user.name}</td>
-                  <td>{user.email}</td>
-                  <td>
+                <TableRow key={user.id}>
+                  <TableCell>{user.name}</TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>
                     {invited ? (
                       <span className="inline-flex items-center gap-2">
-                        <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                        <Badge variant="secondary">
                           {t(language, "staff.badge.invited")}
-                        </span>
+                        </Badge>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -113,38 +131,41 @@ export function StaffView(): React.ReactElement {
                     ) : (
                       t(language, "staff.status.emailSignIn")
                     )}
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     {isSelf ? (
                       <span className="text-muted-foreground">
                         {roleLabel(current)} · {t(language, "staff.self")}
                       </span>
                     ) : (
-                      <select
-                        className="admin-input max-w-56"
+                      <Select
                         value={current}
                         disabled={setRole.isPending}
-                        onChange={(event) => {
-                          const next = event.target.value;
+                        onValueChange={(next) => {
                           setRole.mutate({
                             userId: user.id,
                             role: isStaffRole(next) ? next : null,
                           });
                         }}
                       >
-                        {ASSIGNABLE.map((role) => (
-                          <option key={role} value={role}>
-                            {roleLabel(role)}
-                          </option>
-                        ))}
-                      </select>
+                        <SelectTrigger className="w-44">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ASSIGNABLE.map((role) => (
+                            <SelectItem key={role} value={role}>
+                              {roleLabel(role)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </SectionCard>
       <p className="text-sm text-muted-foreground">
         {t(language, "staff.invite.hint")}
@@ -173,8 +194,7 @@ function InviteCard({ onInvited }: { onInvited: () => void }): React.ReactElemen
       <div className="flex flex-wrap items-end gap-3">
         <label className="grid min-w-64 flex-1 gap-1.5 text-sm font-medium">
           <span>{t(language, "staff.invite.emailLabel")}</span>
-          <input
-            className="admin-input"
+          <Input
             type="email"
             value={email}
             placeholder={t(language, "staff.invite.emailPlaceholder")}
@@ -183,20 +203,23 @@ function InviteCard({ onInvited }: { onInvited: () => void }): React.ReactElemen
         </label>
         <label className="grid gap-1.5 text-sm font-medium">
           <span>{t(language, "staff.invite.roleLabel")}</span>
-          <select
-            className="admin-input"
+          <Select
             value={role}
-            onChange={(event) => {
-              const next = event.target.value;
+            onValueChange={(next) => {
               if (isStaffRole(next)) setRole(next);
             }}
           >
-            {INVITABLE.map((option) => (
-              <option key={option} value={option}>
-                {t(language, `staff.role.${option}`)}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {INVITABLE.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {t(language, `staff.role.${option}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </label>
         <Button
           onClick={() => invite.mutate()}

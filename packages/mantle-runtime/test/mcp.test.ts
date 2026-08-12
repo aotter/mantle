@@ -63,7 +63,7 @@ function buildHarness(schemas = [postsSchema()]): Harness {
 
 function operationalPostsSchema() {
   const schema = postsSchema();
-  return { ...schema, spec: { ...schema.spec, lifecycle: "none" as const } };
+  return { ...schema, spec: { ...schema.spec, lifecycle: "operational" as const } };
 }
 
 /**
@@ -149,7 +149,7 @@ describe("McpJsonRpcDispatcher", () => {
     expect(names).not.toContain("create_draft");
   });
 
-  it("uses record tools for lifecycle:none collections and creates them live", async () => {
+  it("uses record tools for lifecycle: operational collections and creates them live", async () => {
     const { dispatcher } = buildHarness([operationalPostsSchema()]);
     const list = await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext());
     const listBody = (await list.json()) as {
@@ -812,7 +812,7 @@ function translatedSchemas() {
           },
           required: ["slug", "locale", "title", "body"],
         },
-        lifecycle: "simple" as const,
+        lifecycle: "publishing" as const,
       },
     },
   ];

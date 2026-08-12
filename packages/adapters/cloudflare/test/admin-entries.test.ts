@@ -33,7 +33,7 @@ function manifests(): Manifest[] {
           },
           required: ["slug"],
         },
-        lifecycle: "simple",
+        lifecycle: "publishing",
       },
     },
   ];
@@ -101,7 +101,7 @@ function relatedManifests(): Manifest[] {
     spec: {
       title: name,
       schema: { type: "object", properties, required },
-      lifecycle: "simple",
+      lifecycle: "publishing",
     },
   });
   return [

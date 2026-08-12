@@ -2,7 +2,8 @@ import * as React from "react";
 import { AlertCircle, Check, Copy, ExternalLink, type LucideIcon } from "lucide-react";
 import { ApiError } from "../lib/api";
 import { cn } from "../lib/utils";
-import { Button } from "./button";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { usePreferences } from "../app/preferences";
 import { t } from "../app/i18n";
 
@@ -20,8 +21,8 @@ export function PageHeader({
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        {eyebrow ? <p className="label-eyebrow mb-1">{eyebrow}</p> : null}
-        <h1 className="text-2xl">{title}</h1>
+        {eyebrow ? <div className="mb-1 text-sm text-muted-foreground">{eyebrow}</div> : null}
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         {description ? (
           <div className="mt-1 max-w-3xl text-sm text-muted-foreground">
             {description}
@@ -43,9 +44,9 @@ export function SectionCard({
   children: React.ReactNode;
 }): React.ReactElement {
   return (
-    <section id={id} className={cn("glass-card p-5", className)}>
+    <Card id={id} className={cn("p-5", className)}>
       {children}
-    </section>
+    </Card>
   );
 }
 
@@ -185,9 +186,9 @@ export function CopyField({
   }
 
   return (
-    <div className="rounded-lg border border-border/70 bg-background/30 p-3">
+    <div className="rounded-lg border bg-muted/30 p-3">
       <div className="mb-1 flex items-center justify-between gap-3">
-        <span className="label-eyebrow">{label}</span>
+        <span className="text-xs font-medium text-muted-foreground">{label}</span>
         <div className="flex items-center gap-1">
           {href ? (
             <Button asChild variant="ghost" size="icon" className="size-7">

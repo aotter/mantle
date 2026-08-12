@@ -2,6 +2,7 @@ import type { ContentStatus } from "../lib/types";
 import { cn } from "../lib/utils";
 import { usePreferences } from "../app/preferences";
 import { t, type I18nKey } from "../app/i18n";
+import { Badge } from "@/components/ui/badge";
 
 const STATUS_CLASS: Record<ContentStatus, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -12,7 +13,7 @@ const STATUS_CLASS: Record<ContentStatus, string> = {
   archived: "bg-secondary text-muted-foreground",
 };
 
-// Localized labels for the shipped (simple-lifecycle) statuses; approved
+// Localized labels for the shipped publishing statuses; approved
 // and scheduled are editorial-only (v0.1.x) and fall back to the raw
 // value until that runtime + its i18n keys land.
 const STATUS_LABEL_KEY: Partial<Record<string, I18nKey>> = {
@@ -33,15 +34,15 @@ export function StatusBadge({
   const known = isContentStatus(status);
   const labelKey = STATUS_LABEL_KEY[status];
   return (
-    <span
+    <Badge
+      variant="secondary"
       className={cn(
-        "badge-status",
         known ? STATUS_CLASS[status] : "bg-accent text-accent-foreground",
         className,
       )}
     >
       {labelKey ? t(language, labelKey) : status}
-    </span>
+    </Badge>
   );
 }
 

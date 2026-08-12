@@ -1,7 +1,10 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, LogOut } from "lucide-react";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { signOut } from "../../lib/auth";
@@ -9,13 +12,13 @@ import { signOut } from "../../lib/auth";
 export function GateLoading(): React.ReactElement {
   return (
     <div className="flex min-h-svh items-center justify-center p-6">
-      <div className="glass-card w-full max-w-sm p-6">
-        <div className="mb-4 h-4 w-24 animate-pulse rounded bg-muted" />
+      <Card className="w-full max-w-sm p-6">
+        <Skeleton className="mb-4 h-4 w-24" />
         <div className="space-y-2">
-          <div className="h-3 w-full animate-pulse rounded bg-muted" />
-          <div className="h-3 w-2/3 animate-pulse rounded bg-muted" />
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-2/3" />
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -25,10 +28,10 @@ export function GateError({ error }: { error: unknown }): React.ReactElement {
   const message = error instanceof Error ? error.message : "Unknown error.";
   return (
     <div className="flex min-h-svh items-center justify-center p-6">
-      <div className="glass-card animate-rise w-full max-w-sm p-8 text-center">
+      <Card className="w-full max-w-sm p-8 text-center">
         <h1 className="mb-2 text-xl">{t(language, "auth.error.title")}</h1>
         <p className="text-sm text-muted-foreground">{message}</p>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -41,7 +44,7 @@ export function AccessDeniedView({
   const { language } = usePreferences();
   return (
     <div className="flex min-h-svh items-center justify-center p-6">
-      <div className="glass-card animate-rise w-full max-w-md p-8 text-center">
+      <Card className="w-full max-w-md p-8 text-center">
         <div className="mx-auto mb-3 inline-flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
           <AlertTriangle className="size-5" aria-hidden />
         </div>
@@ -61,7 +64,7 @@ export function AccessDeniedView({
           <LogOut className="me-2 size-4" aria-hidden />
           {t(language, "common.signOut")}
         </Button>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -75,12 +78,6 @@ type AuthMethodInfo =
   | { kind: "magic-link" }
   | { kind: "social"; provider: string }
   | { kind: "oauth"; providerId: string; displayName?: string };
-
-// Shared input styling for the email-otp form. Lives at module scope
-// so we don't reallocate the string on every render and so a future
-// `ui/input` component can swap in by replacing this one constant.
-const INPUT_CLASS =
-  "w-full rounded border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
 // Per-section spacing. `first:` zeroes top spacing for whichever
 // section the server returns first — keeps the spacing rules
@@ -133,8 +130,8 @@ export function SignInView(): React.ReactElement {
 
   return (
     <div className="flex min-h-svh items-center justify-center p-6">
-      <div className="glass-card animate-rise w-full max-w-sm p-8">
-        <p className="label-eyebrow mb-2">{t(language, "auth.signIn.eyebrow")}</p>
+      <Card className="w-full max-w-sm p-8">
+        <p className="mb-2 text-sm text-muted-foreground">{t(language, "auth.signIn.eyebrow")}</p>
         <h1 className="mb-2 text-xl">{t(language, "auth.signIn.title")}</h1>
 
         {methods.isError ? (
@@ -171,7 +168,7 @@ export function SignInView(): React.ReactElement {
             ))}
           </div>
         ) : null}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -396,7 +393,7 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
           <label htmlFor="signin-email" className="sr-only">
             {t(language, "auth.signIn.method.email-otp.emailLabel")}
           </label>
-          <input
+          <Input
             id="signin-email"
             type="email"
             value={email}
@@ -404,7 +401,6 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
             placeholder={t(language, "auth.signIn.method.email-otp.emailPlaceholder")}
             required
             autoComplete="email"
-            className={INPUT_CLASS}
           />
           <Button type="submit" className="w-full" disabled={busy || !email}>
             {t(language, "auth.signIn.method.email-otp.sendButton")}
@@ -418,7 +414,7 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
           <label htmlFor="signin-otp" className="sr-only">
             {t(language, "auth.signIn.method.email-otp.otpLabel")}
           </label>
-          <input
+          <Input
             id="signin-otp"
             type="text"
             inputMode="numeric"
@@ -427,7 +423,6 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
             onChange={(e) => setOtp(e.currentTarget.value)}
             placeholder={t(language, "auth.signIn.method.email-otp.otpPlaceholder")}
             required
-            className={INPUT_CLASS}
           />
           <Button type="submit" className="w-full" disabled={busy || !otp}>
             {t(language, "auth.signIn.method.email-otp.verifyButton")}
@@ -517,7 +512,7 @@ function MagicLinkSection({ returnTo }: { returnTo: string }): React.ReactElemen
           <label htmlFor="signin-mlink-email" className="sr-only">
             {t(language, "auth.signIn.method.magic-link.emailLabel")}
           </label>
-          <input
+          <Input
             id="signin-mlink-email"
             type="email"
             value={email}
@@ -525,7 +520,6 @@ function MagicLinkSection({ returnTo }: { returnTo: string }): React.ReactElemen
             placeholder={t(language, "auth.signIn.method.magic-link.emailPlaceholder")}
             required
             autoComplete="email"
-            className={INPUT_CLASS}
           />
           <Button type="submit" className="w-full" disabled={busy || !email}>
             {t(language, "auth.signIn.method.magic-link.sendButton")}

@@ -129,13 +129,13 @@ describe("CreateDraftUseCase", () => {
     });
   });
 
-  describe("lifecycle: none (operational records)", () => {
-    const noneSchema = () => {
+  describe("lifecycle: operational (operational records)", () => {
+    const operationalSchema = () => {
       const base = postsSchema();
-      return { ...base, spec: { ...base.spec, lifecycle: "none" as const } };
+      return { ...base, spec: { ...base.spec, lifecycle: "operational" as const } };
     };
     const noneHarness = () => {
-      const schema = noneSchema();
+      const schema = operationalSchema();
       return harness({ schemas: new Map([[schema.metadata.name, schema]]) });
     };
 
@@ -293,7 +293,7 @@ describe("CreateDraftUseCase", () => {
           },
           required: ["name", "email", "message"],
         },
-        lifecycle: "simple",
+        lifecycle: "publishing",
       },
     };
     const h = harness({ schemas: new Map([[schema.metadata.name, schema]]) });
@@ -359,7 +359,7 @@ describe("CreateDraftUseCase", () => {
           },
           required: ["slug", "locale", "title", "body"],
         },
-        lifecycle: "simple",
+        lifecycle: "publishing",
       },
     };
     const h = harness({
@@ -398,7 +398,7 @@ describe("CreateDraftUseCase", () => {
           },
           required: ["slug", "locale", "title", "body"],
         },
-        lifecycle: "simple",
+        lifecycle: "publishing",
       },
     };
     const h = harness({
@@ -560,7 +560,7 @@ describe("UpdateDraftUseCase", () => {
   });
 });
 
-describe("RequestPublishUseCase (simple lifecycle)", () => {
+describe("RequestPublishUseCase (publishing lifecycle)", () => {
   it("flips draft → published with status guard", async () => {
     const h = harness();
     const created = await h.createDraft.execute({
@@ -750,7 +750,7 @@ function translatedSchemas(): ReadonlyMap<string, SchemaManifest> {
         },
         required: ["slug", "locale", "title", "body"],
       },
-      lifecycle: "simple",
+      lifecycle: "publishing",
     },
   };
   return new Map([
@@ -815,7 +815,7 @@ describe("UnpublishUseCase", () => {
 });
 
 describe("ArchiveUseCase", () => {
-  it("flips draft → archived (simple lifecycle allows direct archive)", async () => {
+  it("flips draft → archived (publishing lifecycle allows direct archive)", async () => {
     const h = harness();
     const created = await h.createDraft.execute({
       collection: "posts",

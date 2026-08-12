@@ -4,9 +4,9 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
+  SidebarRail,
   SidebarSeparator,
-  SidebarTrigger,
-} from "../ui/sidebar";
+} from "@/components/ui/sidebar";
 import { usePreferences } from "../app/preferences";
 import { AppTitle } from "./app-title";
 import { NavGroup } from "./nav-group";
@@ -18,7 +18,11 @@ interface AppSidebarProps {
   groups: ReadonlyArray<NavGroupData>;
   pathname: string;
   search: string;
-  user: { login: string | null; role: "owner" | "editor" | "contributor" | null };
+  user: {
+    login: string | null;
+    image: string | null;
+    role: "owner" | "editor" | "contributor" | null;
+  };
 }
 
 export function AppSidebar({
@@ -30,12 +34,13 @@ export function AppSidebar({
 }: AppSidebarProps): React.ReactElement {
   const { direction } = usePreferences();
   return (
-    <Sidebar side={direction === "rtl" ? "right" : "left"}>
+    <Sidebar
+      side={direction === "rtl" ? "right" : "left"}
+      collapsible="icon"
+      dir={direction}
+    >
       <SidebarHeader>
-        <div className="sidebar-chrome-row">
-          <AppTitle brand={brand} />
-          <SidebarTrigger />
-        </div>
+        <AppTitle brand={brand} />
       </SidebarHeader>
       <SidebarSeparator />
       <SidebarContent>
@@ -50,8 +55,9 @@ export function AppSidebar({
       </SidebarContent>
       <SidebarSeparator />
       <SidebarFooter>
-        <NavUser login={user.login} role={user.role} />
+        <NavUser login={user.login} image={user.image} role={user.role} />
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   );
 }

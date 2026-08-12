@@ -4,10 +4,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "../ui/sidebar";
+} from "@/components/ui/sidebar";
 import { AotterMantleMark } from "../brand/aotter-mantle";
-import { usePreferences } from "../app/preferences";
-import { t } from "../app/i18n";
 import type { AdminBrand } from "./types";
 
 interface AppTitleProps {
@@ -16,7 +14,6 @@ interface AppTitleProps {
 
 export function AppTitle({ brand }: AppTitleProps): React.ReactElement {
   const { setOpenMobile } = useSidebar();
-  const { language } = usePreferences();
   const href = brand.href ?? "/admin";
   return (
     <SidebarMenu>
@@ -27,11 +24,14 @@ export function AppTitle({ brand }: AppTitleProps): React.ReactElement {
           className="data-[slot=sidebar-menu-button]:!p-1.5"
         >
           <a href={href} onClick={() => setOpenMobile(false)}>
-            <span className="text-primary flex aspect-square size-8 items-center justify-center">
+            <span className="flex aspect-square size-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
               <AotterMantleMark className="size-5" />
             </span>
             <div data-sidebar-label className="grid flex-1 text-start text-sm leading-tight">
-              <span className="truncate font-semibold">{t(language, "admin.consoleTitle")}</span>
+              <span className="truncate font-semibold">{brand.title}</span>
+              {brand.subtitle ? (
+                <span className="truncate text-xs text-muted-foreground">{brand.subtitle}</span>
+              ) : null}
             </div>
           </a>
         </SidebarMenuButton>

@@ -20,7 +20,7 @@ export function assertEntryDeletable(args: AssertEntryDeletableArgs): void {
   if (expectedCollection && entry.collection !== expectedCollection) {
     throw new DiagnosticError(notFoundDiagnostic(opPath, expectedCollection, entry.id));
   }
-  if (entry.status !== "published" || resolveLifecycle(args.schema) === "none") return;
+  if (entry.status !== "published" || resolveLifecycle(args.schema) === "operational") return;
   throw new DiagnosticError(
     runtimeDiagnostic({
       code: "CONFLICT",

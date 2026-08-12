@@ -3,7 +3,8 @@ import type { LifecycleMode } from "../model/ManifestGrammar.js";
 
 /**
  * Per-Schema lifecycle state machine. Each Schema declares
- * `spec.lifecycle: 'simple' | 'editorial' | 'none'` (default `'simple'`); this
+ * `spec.lifecycle: 'publishing' | 'editorial' | 'operational'` (default
+ * `'publishing'`); this
  * module translates that into allowed state transitions and tells callers
  * whether a publish request would require the deferred editorial approval
  * runtime or can publish directly.
@@ -24,7 +25,7 @@ export interface LifecycleSchemaLike {
   };
 }
 
-const DEFAULT_LIFECYCLE: LifecycleMode = "simple";
+const DEFAULT_LIFECYCLE: LifecycleMode = "publishing";
 
 export function resolveLifecycle(schema: LifecycleSchemaLike | undefined): LifecycleMode {
   return schema?.spec.lifecycle ?? DEFAULT_LIFECYCLE;
@@ -32,7 +33,7 @@ export function resolveLifecycle(schema: LifecycleSchemaLike | undefined): Lifec
 
 /**
  * Whether `requestPublish` would require editorial approval rather than the
- * shipped direct simple transition. Current `RequestPublishUseCase` rejects
+ * shipped direct publishing transition. Current `RequestPublishUseCase` rejects
  * when this returns true; it does not write an approval row yet.
  */
 export function publishRequiresApproval(schema: LifecycleSchemaLike | undefined): boolean {
@@ -44,7 +45,7 @@ export function publishRequiresApproval(schema: LifecycleSchemaLike | undefined)
  * and admin endpoints to gate operations. Unknown transitions return
  * `false` and the caller should reject with `CONFLICT`.
  *
- * Simple lifecycle:
+ * Publishing lifecycle:
  *   draft → published, draft → archived
  *   published → archived, published → draft (unpublish-as-edit)
  *   archived → draft
@@ -66,7 +67,7 @@ export function canTransition(
   return allowed[from]?.has(to) ?? false;
 }
 
-const SIMPLE_TRANSITIONS: Readonly<Record<ContentState, ReadonlySet<ContentState>>> = {
+const PUBLISHING_TRANSITIONS: Readonly<Record<ContentState, ReadonlySet<ContentState>>> = {
   draft: new Set<ContentState>(["published", "archived"]),
   review: new Set(),
   approved: new Set(),
@@ -84,10 +85,10 @@ const EDITORIAL_TRANSITIONS: Readonly<Record<ContentState, ReadonlySet<ContentSt
   archived: new Set<ContentState>(["draft"]),
 };
 
-/** `lifecycle: none` — operational records (orders, snapshots, audit
+/** `lifecycle: operational` — orders, snapshots, audit
  *  rows). No content workflow: entries are live on creation, editable
  *  in place, and never publish/unpublish/archive. */
-const NONE_TRANSITIONS: Readonly<Record<ContentState, ReadonlySet<ContentState>>> = {
+const OPERATIONAL_TRANSITIONS: Readonly<Record<ContentState, ReadonlySet<ContentState>>> = {
   draft: new Set(),
   review: new Set(),
   approved: new Set(),
@@ -98,6 +99,6 @@ const NONE_TRANSITIONS: Readonly<Record<ContentState, ReadonlySet<ContentState>>
 
 function transitionsFor(mode: LifecycleMode): Readonly<Record<ContentState, ReadonlySet<ContentState>>> {
   if (mode === "editorial") return EDITORIAL_TRANSITIONS;
-  if (mode === "none") return NONE_TRANSITIONS;
-  return SIMPLE_TRANSITIONS;
+  if (mode === "operational") return OPERATIONAL_TRANSITIONS;
+  return PUBLISHING_TRANSITIONS;
 }

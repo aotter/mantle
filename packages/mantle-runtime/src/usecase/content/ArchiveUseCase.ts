@@ -14,7 +14,7 @@ import {
 } from "./diagnostics.js";
 
 /**
- * `ArchiveUseCase` — flip an entry to `'archived'`. Per the simple-
+ * `ArchiveUseCase` — flip an entry to `'archived'`. Per the publishing-
  * lifecycle state machine, draft and published rows can both be
  * archived; archived rows go back to draft via `Unpublish`.
  */

@@ -189,7 +189,7 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
   {
     name: "request_publish",
-    description: "Publish a draft. v0.1.0 simple lifecycle: publishes immediately. Not available for lifecycle:none operational records.",
+    description: "Publish a draft immediately. Not available for operational records.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" } },
@@ -198,7 +198,7 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
   {
     name: "unpublish_entry",
-    description: "Unpublish a content entry back to draft before editing. Not available for lifecycle:none operational records.",
+    description: "Unpublish a content entry back to draft before editing. Not available for operational records.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" } },
@@ -207,7 +207,7 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
   {
     name: "archive_entry",
-    description: "Archive a content entry. Not available for lifecycle:none operational records.",
+    description: "Archive a content entry. Not available for operational records.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" } },
@@ -303,7 +303,7 @@ function buildCreateTool(schema: SchemaManifest): McpToolDefinition {
   };
   if (required.length > 0) inputSchema["required"] = required;
   return {
-    name: `${resolveLifecycle(schema) === "none" ? CREATE_RECORD_PREFIX : CREATE_DRAFT_PREFIX}${mcpToolNameSegment(schema.metadata.name)}`,
+    name: `${resolveLifecycle(schema) === "operational" ? CREATE_RECORD_PREFIX : CREATE_DRAFT_PREFIX}${mcpToolNameSegment(schema.metadata.name)}`,
     description: describeCreateTool(schema),
     inputSchema,
   };
@@ -324,7 +324,7 @@ function buildUpdateTool(schema: SchemaManifest): McpToolDefinition {
     required: ["id", "expected_version", ...required],
   };
   return {
-    name: `${resolveLifecycle(schema) === "none" ? UPDATE_RECORD_PREFIX : UPDATE_DRAFT_PREFIX}${mcpToolNameSegment(schema.metadata.name)}`,
+    name: `${resolveLifecycle(schema) === "operational" ? UPDATE_RECORD_PREFIX : UPDATE_DRAFT_PREFIX}${mcpToolNameSegment(schema.metadata.name)}`,
     description: describeUpdateTool(schema),
     inputSchema,
   };
@@ -405,14 +405,14 @@ function authorizationSummary(
 }
 
 function describeCreateTool(schema: SchemaManifest): string {
-  const base = resolveLifecycle(schema) === "none"
+  const base = resolveLifecycle(schema) === "operational"
     ? `Create a live operational record in '${schema.metadata.name}'.`
     : `Create a new draft entry in '${schema.metadata.name}'.`;
   return schema.spec.description ? `${base} ${schema.spec.description}`.trim() : base;
 }
 
 function describeUpdateTool(schema: SchemaManifest): string {
-  return resolveLifecycle(schema) === "none"
+  return resolveLifecycle(schema) === "operational"
     ? `Update an operational record in '${schema.metadata.name}' with optimistic-concurrency check.`
     : `Update a draft entry in '${schema.metadata.name}' with optimistic-concurrency check.`;
 }

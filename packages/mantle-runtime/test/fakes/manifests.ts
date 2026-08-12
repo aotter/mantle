@@ -28,7 +28,7 @@ export function postsSchema(): SchemaManifest {
         },
         required: ["title"],
       },
-      lifecycle: "simple",
+      lifecycle: "publishing",
     },
   };
 }

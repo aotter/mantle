@@ -193,8 +193,8 @@ export interface SchemaManifestSpec {
    *  companion to a non-localized parent Schema, joined by a shared
    *  field. Implies `localized: true`. See ADR-0010. */
   readonly translates?: TranslatesBinding;
-  /** Content-workflow opt-in. Default `'simple'` (draft → published →
-   *  archived, no approval queue). `'none'` marks operational record
+  /** Content-workflow mode. Default `'publishing'` (draft → published →
+   *  archived, no approval queue). `'operational'` marks record
    *  Schemas (orders, inventory snapshots, audit rows) that are written
    *  by Procedures rather than authored: entries are live on creation,
    *  editable in place, and have no publish/unpublish transitions — the
@@ -215,7 +215,7 @@ export interface TranslatesBinding {
   readonly on: string;
 }
 
-export type LifecycleMode = "simple" | "editorial" | "none";
+export type LifecycleMode = "publishing" | "editorial" | "operational";
 
 /* ─── View ─── */
 

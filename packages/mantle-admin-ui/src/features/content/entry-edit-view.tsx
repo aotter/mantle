@@ -16,7 +16,19 @@ import type {
   SiteInfo,
   StaffOperation,
 } from "../../lib/types";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { CollapsibleDescription, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
 import { RichTextEditor } from "../editor/rich-text-editor";
@@ -28,7 +40,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "../../ui/dialog";
+} from "@/components/ui/dialog";
 import { collectionSummaryKey } from "./collection-view";
 import { formatMoneyMinor, formatTimestampMs, hintBadgeLabel, moneyMinorHint, timestampHint } from "./field-render";
 import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
@@ -90,7 +102,7 @@ export function EntryEditView({
     onSuccess: syncPayload,
   });
 
-  if (query.isLoading) return <div className="glass-card h-64 animate-pulse" />;
+  if (query.isLoading) return <Skeleton className="h-64" />;
   if (query.isError) return <ErrorBox error={query.error} />;
   if (!query.data || !data) return <ErrorBox error={new Error("Missing entry editor payload.")} />;
 
@@ -100,10 +112,10 @@ export function EntryEditView({
   const collectionTitle = resolveLocalizedText(payload.collection.title, language, canonical) ?? payload.collection.name;
   const collectionDescription = resolveLocalizedText(payload.collection.description, language, canonical);
   const dirty = JSON.stringify(data) !== JSON.stringify(payload.entry.data);
-  // Operational records (lifecycle: none) have no content workflow:
+  // Operational records (lifecycle: operational) have no content workflow:
   // no publish/unpublish controls, and they save in place regardless
   // of the stored status.
-  const isOperational = payload.collection.lifecycle === "none";
+  const isOperational = payload.collection.lifecycle === "operational";
   const isDraft = payload.entry.status === "draft";
   const canSave = dirty && (isDraft || isOperational);
   const actionPending = save.isPending || publish.isPending || unpublish.isPending;
@@ -386,47 +398,46 @@ function SchemaField({
           {required ? <span className="ml-1 text-destructive">*</span> : null}
         </span>
         {schema["x-mcp-hint"] ? (
-          <span
-            className="badge-status bg-accent text-accent-foreground"
-            title={String(schema["x-mcp-hint"])}
-          >
+          <Badge variant="secondary" title={String(schema["x-mcp-hint"])}>
             {hintBadgeLabel(String(schema["x-mcp-hint"]), language)}
-          </span>
+          </Badge>
         ) : null}
       </label>
       {description ? <p className="text-xs leading-5 text-muted-foreground">{description}</p> : null}
       {readOnly ? (
-        <p className="admin-input cursor-not-allowed bg-muted/40 text-muted-foreground" title={String(schema["x-mantle-bind"])}>
+        <p className="min-h-8 rounded-lg border bg-muted/40 px-2.5 py-1 text-sm text-muted-foreground" title={String(schema["x-mantle-bind"])}>
           {stringForInput(value) || t(language, "entryEdit.emptyOption")}
         </p>
       ) : schema.enum ? (
-        <select
-          className="admin-input"
-          value={stringForInput(value)}
-          onChange={(event) => setValue(event.target.value)}
+        <Select
+          value={stringForInput(value) || "__empty__"}
+          onValueChange={(next) => setValue(next === "__empty__" ? "" : next)}
         >
-          <option value="">{t(language, "entryEdit.emptyOption")}</option>
-          {schema.enum.map((option) => (
-            <option key={String(option)} value={String(option)}>
-              {String(option)}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="w-full" aria-label={label}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__empty__">{t(language, "entryEdit.emptyOption")}</SelectItem>
+            {schema.enum.map((option) => (
+              <SelectItem key={String(option)} value={String(option)}>
+                {String(option)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       ) : type === "boolean" ? (
         <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-          <input
-            type="checkbox"
-            className="size-4 accent-[var(--primary)]"
+          <Checkbox
             checked={Boolean(value)}
-            onChange={(event) => setValue(event.target.checked)}
+            onCheckedChange={(checked) => setValue(checked === true)}
           />
           {t(language, "entryEdit.boolean")}
         </label>
       ) : type === "number" || type === "integer" ? (
         <div className="space-y-1">
-          <input
-            className="admin-input"
+          <Input
             type="number"
+            aria-label={label}
             value={numberForInput(value)}
             min={schema.minimum}
             max={schema.maximum}
@@ -438,7 +449,7 @@ function SchemaField({
           <NumberFieldPreview schema={schema} value={value} rootValue={rootValue} />
         </div>
       ) : type === "object" ? (
-        <div className="rounded-lg border border-[var(--glass-border)] bg-background/30 p-4">
+        <div className="rounded-lg border bg-muted/20 p-4">
           {schema.properties ? (
             <SchemaFields
               schema={schema}
@@ -482,9 +493,9 @@ function SchemaField({
           onChange={setValue}
         />
       ) : (
-        <input
-          className="admin-input"
+        <Input
           type={schema.format === "date-time" ? "datetime-local" : "text"}
+          aria-label={label}
           value={stringForInput(value)}
           onChange={(event) => setValue(event.target.value)}
         />
@@ -541,19 +552,21 @@ function ArrayField({
   const itemSchema = schema.items ?? {};
   const setArray = (next: unknown[]): void => onChange(writePath(rootValue, path, next));
   return (
-    <div className="space-y-3 rounded-lg border border-[var(--glass-border)] bg-background/30 p-3">
+    <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
       {value.map((item, index) => (
         <div key={index} className="rounded-lg border border-border/70 bg-card/50 p-3">
           <div className="mb-3 flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-muted-foreground">#{index + 1}</span>
-            <button
+            <Button
               type="button"
-              className="row-action"
+              variant="ghost"
+              size="icon-sm"
               title={t(language, "entryEdit.removeItem")}
+              aria-label={t(language, "entryEdit.removeItem")}
               onClick={() => setArray(value.filter((_, i) => i !== index))}
             >
               <Trash2 className="size-3.5" aria-hidden />
-            </button>
+            </Button>
           </div>
           {schemaType(itemSchema) === "object" && itemSchema.properties ? (
             <SchemaFields
@@ -567,8 +580,7 @@ function ArrayField({
               mediaPurposes={mediaPurposes}
             />
           ) : (
-            <input
-              className="admin-input"
+            <Input
               value={stringForInput(item)}
               onChange={(event) => {
                 const next = [...value];
@@ -652,8 +664,8 @@ function MediaAssetField({
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <MediaAssetThumbnail assetId={assetId} asset={assetQuery.data} isError={assetQuery.isError} language={language} />
-        <input
-          className="admin-input min-w-0 flex-1"
+        <Input
+          className="min-w-0 flex-1"
           value={stringForInput(value)}
           onChange={(event) => onChange(event.target.value)}
           placeholder="media_assets id"
@@ -738,7 +750,7 @@ function MediaAssetThumbnail({
   if (!assetId) return null;
   return (
     <div
-      className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[var(--glass-border)] bg-muted/40"
+      className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted/40"
       title={isError ? t(language, "entryEdit.mediaMissing") : assetId}
     >
       {asset?.primaryUrl ? (
@@ -764,8 +776,8 @@ function JsonEditor({
   }, [value]);
   return (
     <div className="space-y-2">
-      <textarea
-        className="admin-textarea admin-textarea-compact font-mono"
+      <Textarea
+        className="min-h-32 font-mono"
         value={draft}
         onChange={(event) => {
           const next = event.target.value;
@@ -828,7 +840,7 @@ function RelatedSections({
                 section.entries.map((entry) => (
                   <div
                     key={entry.id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-[var(--glass-border)] bg-background/35 p-3 text-sm text-foreground transition hover:border-primary hover:bg-accent"
+                    className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3 text-sm text-foreground transition-colors hover:bg-accent"
                   >
                     <a
                       href={`/admin/c/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}

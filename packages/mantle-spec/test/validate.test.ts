@@ -1127,7 +1127,7 @@ spec:
   title: Posts
   schema: { type: object, properties: { slug: { type: string } } }
   uniqueIndexes: [[slug]]
-  lifecycle: simple
+  lifecycle: publishing
 `;
 
   it("returns the parsed manifests when no diagnostics fire", () => {
