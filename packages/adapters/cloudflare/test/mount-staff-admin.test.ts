@@ -154,7 +154,7 @@ describe("/admin/api/site-settings", () => {
         brand: "New brand",
         title: 42,
         description: "",
-        ga4MeasurementId: "G-NEW",
+        ga4MeasurementId: "g-new1",
       }),
     );
 
@@ -163,13 +163,13 @@ describe("/admin/api/site-settings", () => {
       brand: "New brand",
       title: "Keep title",
       description: "",
-      ga4MeasurementId: "G-NEW",
+      ga4MeasurementId: "G-NEW1",
       facebookPixelId: "123",
     });
     expect(db.siteConfig.get("brand")).toBe("New brand");
     expect(db.siteConfig.get("title")).toBe("Keep title");
     expect(db.siteConfig.get("description")).toBe("");
-    expect(db.siteConfig.get("ga4MeasurementId")).toBe("G-NEW");
+    expect(db.siteConfig.get("ga4MeasurementId")).toBe("G-NEW1");
     expect(events).toEqual(["write", "read"]);
   });
 
@@ -185,6 +185,20 @@ describe("/admin/api/site-settings", () => {
 
     expect(res.status).toBe(200);
     expect(events).toEqual(["read"]);
+  });
+
+  it("rejects tracking IDs that would be silently ignored while rendering", async () => {
+    const { app, db } = harness({ getSession: sessionAs("owner") });
+    const res = await app.request(
+      "/admin/api/site-settings",
+      jsonInit("PATCH", { ga4MeasurementId: "not-a-ga-id" }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      diagnostic: { code: "INPUT_VALIDATION_FAILED" },
+    });
+    expect(db.siteConfig.has("ga4MeasurementId")).toBe(false);
   });
 
   it("does not report success after a failed write", async () => {

@@ -1,5 +1,9 @@
-import type { SiteConfig } from "@aotter/mantle-spec";
+import { DiagnosticError, runtimeDiagnostic, type SiteConfig } from "@aotter/mantle-spec";
 import type { SiteConfigRepository } from "../../domain/port/SiteConfigRepository.js";
+import {
+  normalizeFacebookPixelId,
+  normalizeGa4MeasurementId,
+} from "../../domain/service/HtmlRenderer.js";
 import type { UpdateSiteSettingsRequest } from "../dto/site/index.js";
 
 /** Persist editable site settings. */
@@ -10,7 +14,41 @@ export class UpdateSiteSettingsUseCase {
     if (!this.siteConfig.updateEditable) {
       throw new Error("SiteConfigRepository.updateEditable is unavailable");
     }
-    await this.siteConfig.updateEditable(request);
+    await this.siteConfig.updateEditable({
+      ...request,
+      ga4MeasurementId: normalizeOptionalId(
+        request.ga4MeasurementId,
+        normalizeGa4MeasurementId,
+        "ga4MeasurementId",
+        "a GA4 Measurement ID such as G-XXXXXXXXXX, or an empty string",
+      ),
+      facebookPixelId: normalizeOptionalId(
+        request.facebookPixelId,
+        normalizeFacebookPixelId,
+        "facebookPixelId",
+        "a numeric Facebook Pixel ID, or an empty string",
+      ),
+    });
     return this.siteConfig.load();
   }
+}
+
+function normalizeOptionalId(
+  value: string | undefined,
+  normalize: (value: string | undefined) => string | null,
+  field: string,
+  expected: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (!value.trim()) return "";
+  const normalized = normalize(value);
+  if (normalized) return normalized;
+  throw new DiagnosticError(runtimeDiagnostic({
+    code: "INPUT_VALIDATION_FAILED",
+    severity: "error",
+    path: `usecase/UpdateSiteSettings/${field}`,
+    value,
+    expected,
+    message: `Invalid ${field}.`,
+  }));
 }
