@@ -34,7 +34,7 @@ catalog:
   hono: ^4.12.34
   zod: ^4.4.2
   better-auth: ^1.6.24
-  '@better-auth/oauth-provider': ^1.6.23
+  '@better-auth/oauth-provider': ^1.6.25
   aws4fetch: ^1.0.20
   '@cloudflare/workers-oauth-provider': ^0.8.2
   # Shared toolchain — every package's devDeps.
