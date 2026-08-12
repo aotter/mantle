@@ -38,7 +38,7 @@ catalog:
   aws4fetch: ^1.0.20
   '@cloudflare/workers-oauth-provider': ^0.8.2
   # Shared toolchain — every package's devDeps.
-  typescript: ^6.0.3
+  typescript: ^7.0.2
   '@types/node': ^26
   vitest: ^4.1.10
 
