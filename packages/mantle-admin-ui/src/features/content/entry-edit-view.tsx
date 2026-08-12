@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CalendarIcon, ExternalLink, Images, ImagePlus, MoreHorizontal, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarIcon, ExternalLink, Images, ImagePlus, LockKeyhole, MoreHorizontal, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
@@ -476,14 +476,19 @@ function SchemaField({
 
   return (
     <div className="space-y-2">
-      <label className="text-sm font-semibold text-foreground">
+      <label className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
         {label}
-        {required ? <span className="ml-1 text-destructive">*</span> : null}
+        {required && !readOnly ? <span className="text-destructive">*</span> : null}
       </label>
       {description ? <p className="text-xs leading-5 text-muted-foreground">{description}</p> : null}
       {readOnly ? (
-        <p className="min-h-8 rounded-lg border bg-muted/40 px-2.5 py-1 text-sm text-muted-foreground" title={String(schema["x-mantle-bind"])}>
-          {(timestampHint(schema) ? formatTimestampMs(value) : stringForInput(value)) || t(language, "entryEdit.emptyOption")}
+        <p
+          role="textbox"
+          aria-readonly="true"
+          className="flex min-h-9 cursor-not-allowed items-center justify-between gap-3 rounded-lg border border-transparent bg-muted px-3 py-2 text-sm text-muted-foreground"
+        >
+          <span>{(timestampHint(schema) ? formatTimestampMs(value) : stringForInput(value)) || t(language, "entryEdit.emptyOption")}</span>
+          <LockKeyhole className="size-4 shrink-0" aria-hidden="true" />
         </p>
       ) : schema.enum ? (
         <Select
