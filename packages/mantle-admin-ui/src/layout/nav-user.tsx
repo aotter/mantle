@@ -70,6 +70,9 @@ export function NavUser({ login, image, role }: NavUserProps): React.ReactElemen
                 {t(language, "preferences.page.open")}
               </a>
             </DropdownMenuItem>
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+              Mantle v{__MANTLE_VERSION__}
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => signOut()}>
               <LogOut aria-hidden />

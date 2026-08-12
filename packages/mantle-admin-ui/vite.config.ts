@@ -5,6 +5,10 @@ import { viteSingleFile } from "vite-plugin-singlefile";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+const { version } = JSON.parse(
+  readFileSync(resolve(__dirname, "package.json"), "utf8"),
+) as { version: string };
+
 /**
  * Admin SPA build — emits ONE self-contained `dist/index.html` with
  * JS / CSS / assets all inlined. Platform-agnostic: any adapter
@@ -29,6 +33,9 @@ import { resolve } from "node:path";
  */
 export default defineConfig({
   base: "/admin/",
+  define: {
+    __MANTLE_VERSION__: JSON.stringify(version),
+  },
   plugins: [
     react(),
     tailwindcss(),
