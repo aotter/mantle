@@ -40,15 +40,7 @@ interface ViewQueryResult {
   };
 }
 
-/** Fetches `GET /admin/api/views/<name>` — the staff-gated View REST
- *  surface (#433). Since `/admin/api/views-manifest` now returns ONLY
- *  `surface: staff` Views, every View reachable from the 報表 sidebar
- *  (which drives this page) is a staff View mounted behind the admin
- *  gate; the public `/api/views/<name>` path no longer serves them.
- *  We fetch directly rather than through `lib/api.ts`'s `api` helper so
- *  we can pass the caller's page/show/param query string verbatim.
- *  Reuses the admin session cookie via `credentials: same-origin` same
- *  as `lib/api.ts`. */
+/** Fetch a staff View while preserving its declared query parameters. */
 async function fetchView(
   name: string,
   params: Record<string, unknown>,
@@ -71,17 +63,7 @@ async function fetchView(
   return body;
 }
 
-/** #426 — read-only View page. Fetches the View's row set from the
- *  staff-gated `/admin/api/views/<name>` REST surface (#433 — the 報表
- *  sidebar only lists staff Views now), renders a
- *  SchemaFields-driven parameter form when the View declares
- *  `params`, and a plain table for the rows. Column formatting
- *  (money-minor / timestamp-ms) is resolved against the source
- *  Schema's properties when that Schema is present in the
- *  client-side collections list (already fetched by
- *  `AuthenticatedLayout`); falls back to raw values when the View's
- *  `from` is a translation-child Schema not exposed on
- *  `/admin/api/collections`. */
+/** Render a read-only View with schema-driven parameters and formatting. */
 export function ViewPage({ name }: { name: string }): React.ReactElement {
   const { language } = usePreferences();
   const viewsQuery = useQuery<ViewManifestInfo[]>(viewsManifestQueryOptions());

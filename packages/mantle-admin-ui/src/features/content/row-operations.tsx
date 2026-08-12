@@ -28,22 +28,13 @@ import type { AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { SchemaFields } from "./entry-edit-view";
 
-/** Minimal row identity a row-bound operation needs to prefill and
- *  invoke itself: which entry, in which collection. Both `EntryRow`
- *  (`lib/types.ts`, the collection list) and `EntryEditorEntry` (the
- *  entry editor + its related/child sections) satisfy this shape,
- *  which is what lets `RowOperationsMenu`/`RowActionDialog` serve the
- *  list's "⋯" menu (#430), the entry editor's page-header actions, and
- *  the parent editor's child-entry rows (#442) off one implementation. */
+/** Minimal row identity needed to prefill a bound operation. */
 type OperableRow = {
   id: string;
   collection: string;
 };
 
-/** Staff operations (#430) whose `rowBindings` include `collectionName`
- *  — the same filter `collection-view.tsx` has always applied, now
- *  shared so the entry editor (#442) derives the identical set for its
- *  own collection and for each child-entries section. */
+/** Operations bound to rows from this collection. */
 export function boundOperationsFor(
   operations: readonly StaffOperation[] | undefined,
   collectionName: string,
@@ -51,13 +42,7 @@ export function boundOperationsFor(
   return (operations ?? []).filter((op) => op.rowBindings.some((b) => b.collection === collectionName));
 }
 
-/**
- * "⋯" row-operations menu (#430, shared #442): given the staff
- * operations already bound to `row.collection` (via `boundOperationsFor`
- * above), renders a dropdown of their labels and opens `RowActionDialog`
- * for whichever one the user picks. Renders nothing (`null`) when there
- * are no bound operations — callers can render this unconditionally.
- */
+/** Row operation menu shared by lists and entry pages. */
 export function RowOperationsMenu({
   row,
   operations,
@@ -121,30 +106,10 @@ export function RowOperationsMenu({
   );
 }
 
-/** Row-action modal (#430, shared #442): pre-fills and locks the
- *  operation's bound `x-mantle-ref` input field to this row's identity,
- *  then renders the rest of the operation's `input` schema as an
- *  editable form.
- *
- *  Design decision: `SchemaFields`/`SchemaField` have no generic
- *  "render this one property read-only" prop (only the hardcoded
- *  `x-mantle-bind` check). Rather than thread a new prop through the
- *  whole recursive renderer for a single call site, the bound field is
- *  rendered here as its own read-only block (mirroring the existing
- *  read-only style block in `SchemaField`), and `SchemaFields` renders
- *  a shallow-cloned copy of `operation.input` with that ONE property
- *  omitted from `properties`/`required` — so the field can't be edited
- *  twice or shown twice. The bound value is merged back into the POST
- *  body from component state seeded on fetch, independent of whatever
- *  `SchemaFields`'s onChange produces for the remaining fields.
- *
- *  `binding.rowField` is resolved server-side by the same-name-first
- *  rule in `discoverRowBindings`/`sameNameField` (M5,
- *  `mountServerEndpoints.ts`): a same-named property on the target
- *  collection wins over falling back to a single-field unique index,
- *  which itself wins over the reserved `id` column. This component
- *  only consumes the already-resolved `rowField` — it does not
- *  re-derive or duplicate that rule. */
+/**
+ * Locks the bound reference to this row and renders the remaining
+ * operation input as an editable form. The server resolves `rowField`.
+ */
 function RowActionDialog({
   operation,
   binding,
@@ -191,9 +156,7 @@ function RowActionDialog({
     return { ...operation.input, properties, required };
   }, [operation.input, inputField]);
 
-  // Label precedence (#443): the property's `title` keyword first, then
-  // the pre-#443 `description`-as-label reuse (kept for manifests
-  // written before `title` existed), then the humanized field name.
+  // Preserve description-as-label for older manifests without titles.
   const inputFieldSchema = inputField ? operation.input.properties?.[inputField] : undefined;
   const boundFieldLabel = inputField
     ? resolveLocalizedText(inputFieldSchema?.title, language, canonical) ??
@@ -205,9 +168,6 @@ function RowActionDialog({
     mutationFn: (body: Record<string, unknown>) =>
       api.post<{ ok: true; output: unknown }>(`/operations/${encodeURIComponent(operation.name)}`, body),
     onSuccess: () => {
-      // #444: the dialog closes right after this and the list refreshes
-      // silently — without a toast the operator has no confirmation the
-      // operation actually ran, only that the modal is gone.
       toast.success(t(language, "ops.success", { name: title }));
       onSuccess();
     },
@@ -217,7 +177,7 @@ function RowActionDialog({
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent>
+      <DialogContent closeLabel={t(language, "common.close")}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}

@@ -30,7 +30,6 @@ import type {
 } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
@@ -100,9 +99,6 @@ export function CollectionView({
     retry: false,
   });
   const canonical = site.data?.canonicalLocale ?? null;
-  // #430 row actions — same query key as `authenticated-layout.tsx` /
-  // `operations-view.tsx` (`operationsQueryOptions()`), so this hits
-  // react-query's cache instead of triggering a duplicate fetch.
   const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
   const boundOperations = React.useMemo(
     () => boundOperationsFor(operationsQuery.data, collectionName),
@@ -235,14 +231,6 @@ export function CollectionView({
               </Button>
             ) : null}
             {status ? <StatusBadge status={status} /> : null}
-            {collection?.hasTranslations ? (
-              <Badge variant="secondary">i18n</Badge>
-            ) : null}
-            {collection?.mediaFields?.length ? (
-              <Badge variant="outline" className="text-success">
-                media
-              </Badge>
-            ) : null}
           </div>
         }
       />
@@ -619,13 +607,7 @@ function renderCollectionDescription(
   );
 }
 
-/** #444: the subtitle used to say "items, publishing state, and
- *  localized content" for every collection, including `lifecycle:
- *  "operational"` ones that have neither a publish workflow nor translations.
- *  Picks from four i18n variants using capabilities the UI already has
- *  on hand (`collection.lifecycle`, `collection.hasTranslations`) —
- *  same fields `CollectionView` already reads for
- *  `isOperationalCollection` / the `i18n` badge, no new server data. */
+/** Pick the collection summary from its lifecycle and translation support. */
 export function collectionSummaryKey(collection: Collection | undefined): I18nKey {
   const hasLifecycle = collection ? collection.lifecycle !== "operational" : true;
   const hasTranslations = collection?.hasTranslations ?? false;
@@ -891,13 +873,7 @@ function EntriesSkeleton(): React.ReactElement {
   );
 }
 
-/** Truncated ID cell that copies the full id on click, mirroring the
- *  `CopyField` pattern in `ui/page.tsx` (brief check-mark state via a
- *  timeout, no shared state beyond this row). #444: shows the TAIL of
- *  the id (`idTail`) rather than the head — ids share a `<prefix>_
- *  <collection>_` head across every row in a collection, so the head
- *  read as a meaningless constant. The full id is still one click
- *  away (copy) or a hover (title tooltip) away. */
+/** Show a short id suffix while copy and tooltip retain the full value. */
 function CopyIdButton({ id, language }: { id: string; language: AdminLanguage }): React.ReactElement {
   const [copied, setCopied] = React.useState(false);
 
@@ -951,8 +927,7 @@ function EntryRowDisplay({
   /** Non-null (possibly empty) for `lifecycle: "operational"` collections —
    *  swaps the status/locale/version cells for these data columns. */
   dataColumns: string[] | null;
-  /** Staff operations (#430) whose `rowBindings` include this
-   *  collection — renders the "⋯" row-action menu only when non-empty. */
+  /** Operations bound to this collection's rows. */
   boundOperations: StaffOperation[];
   onOperationSuccess: () => void;
   selected: boolean;
@@ -1137,20 +1112,10 @@ function renderTitle(
   return <span className="font-mono text-xs">{JSON.stringify(title)}</span>;
 }
 
-/** Schema property names that collide in MEANING with a system column
- *  the admin list already renders unconditionally (the "updated"
- *  column reads the reserved `updatedAt` storage column, formatted via
- *  `row.updated_at`). MUST mirror `DATA_PREVIEW_SYSTEM_COLUMN_NAMES`
- *  server-side in `mountServerEndpoints.ts` (#443) — NAME-based only,
- *  these two well-known reserved names, no fuzzy matching. */
+/** Must match the reserved columns filtered by the Admin API. */
 const DATA_PREVIEW_SYSTEM_COLUMN_NAMES = new Set(["updatedAt", "createdAt"]);
 
-/** For `lifecycle: "operational"` collections: up to 3 data columns from the
- *  schema's `required` properties, skipping the schema-stable title
- *  field and the system-column-name collisions above (#443). MUST
- *  mirror `schemaTitleKey` / `adminDataPreview` server-side in
- *  `mountServerEndpoints.ts` — both sides derive from the schema alone
- *  so headers and cell values can never disagree. */
+/** Derive up to three operational preview columns from required fields. */
 function dataPreviewColumns(collection: Collection | undefined): string[] {
   if (!collection || collection.lifecycle !== "operational") return [];
   const schema = collection.schema;

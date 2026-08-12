@@ -2,16 +2,6 @@ import { describe, expect, it } from "vitest";
 import { collectionSummaryKey } from "../src/features/content/collection-view";
 import type { Collection } from "../src/lib/types";
 
-/**
- * #444 item 5 — the collection-page subtitle used to say "items,
- * publishing state, and localized content" for every collection,
- * including `lifecycle: "operational"` ones that have neither a publish
- * workflow nor translations. `collectionSummaryKey` picks one of four
- * i18n keys from capabilities the UI already has on hand
- * (`lifecycle`, `hasTranslations`) — this locks in that mapping so a
- * future edit can't silently go back to one-size-fits-all copy.
- */
-
 function collection(overrides: Partial<Collection>): Collection {
   return {
     name: "widgets",

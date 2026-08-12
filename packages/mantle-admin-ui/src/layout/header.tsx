@@ -24,14 +24,12 @@ import {
 } from "./preference-controls";
 
 interface HeaderProps {
-  fixed?: boolean;
   className?: string;
   site?: AdminBrand;
   publicUrl?: string;
 }
 
 export function Header({
-  fixed = false,
   className,
   site,
   publicUrl,
@@ -42,17 +40,17 @@ export function Header({
 
   return (
     <header
+      data-slot="app-header"
       className={cn(
-        "flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4",
-        fixed && "sticky top-0 z-20",
+        "flex h-14 shrink-0 items-center gap-2 border-b px-4",
         className,
       )}
     >
-      <SidebarTrigger className="-ms-1 md:hidden" />
-      <Breadcrumb className="min-w-0">
+      <SidebarTrigger className="-ms-1 md:hidden" aria-label={t(language, "common.toggleSidebar")} />
+      <Breadcrumb className="min-w-0" aria-label={t(language, "common.breadcrumb")}>
         <BreadcrumbList className="flex-nowrap">
           <BreadcrumbItem className="hidden sm:block">
-            <BreadcrumbLink href="/admin">{site?.title ?? "Admin"}</BreadcrumbLink>
+            <BreadcrumbLink href="/admin">{site?.title ?? t(language, "admin.consoleTitle")}</BreadcrumbLink>
           </BreadcrumbItem>
           {current ? (
             <>

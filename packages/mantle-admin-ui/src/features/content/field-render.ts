@@ -58,28 +58,14 @@ export function timestampMsFromInput(value: string): number | null {
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 
-/** #444: the field-editor badge used to show the raw `x-mcp-hint`
- *  token verbatim (e.g. the literal string `money-minor`), which reads
- *  as an internal implementation detail rather than a label meant for
- *  an operator. Localizes the two conventional hints this package
- *  already renders specially (`moneyMinorHint` / `timestampHint`
- *  above); any other hint value is domain-specific and stays as its
- *  raw token — there's no i18n key we could pick for a token a manifest
- *  author invented, and hardcoding a token → label map defeats the
- *  point of `x-mcp-hint` staying free-form. */
+/** Localize conventional hints; preserve custom manifest tokens. */
 export function hintBadgeLabel(hint: string, language: AdminLanguage): string {
   if (hint === "money-minor") return t(language, "field.hint.moneyMinor");
   if (hint === "timestamp-ms") return t(language, "field.hint.timestampMs");
   return hint;
 }
 
-/** #444: ids are commonly `<prefix>_<collection>_<random>` (e.g.
- *  `entry_o_9f2c...`), so truncating from the head — the old behavior
- *  — showed the same meaningless `entry_o_` for every row in a
- *  collection. The tail carries the actual distinguishing suffix, so
- *  that's what a short display value should show; callers pair this
- *  with a `title` attribute carrying the full id for anyone who needs
- *  it verbatim. */
+/** Keep the distinguishing suffix; callers expose the full id in `title`. */
 export function idTail(id: string, length = 8): string {
   return id.length <= length ? id : id.slice(-length);
 }

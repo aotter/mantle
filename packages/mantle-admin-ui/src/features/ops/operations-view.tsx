@@ -16,13 +16,7 @@ import { EmptyState, ErrorBox, OperationErrorBox, PageHeader, SectionCard } from
 import { toast } from "sonner";
 import { SchemaFields } from "../content/entry-edit-view";
 
-/** #426 — staff operations surface. Lists every staff-operable
- *  Procedure (derived server-side from Trigger + auth-predicate
- *  manifests, see `discoverStaffOperations` in
- *  `mountServerEndpoints.ts`) and lets a signed-in staff member
- *  invoke one directly through a schema-driven form. The URL hash
- *  (`/admin/ops#<name>`) expands and scrolls to that operation, so
- *  the sidebar's per-procedure links land on the right card. */
+/** Render staff-operable Procedures as schema-driven forms. */
 export function OperationsView(): React.ReactElement {
   const { language } = usePreferences();
   const operations = useQuery(operationsQueryOptions());

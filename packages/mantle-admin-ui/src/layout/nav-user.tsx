@@ -40,7 +40,7 @@ export function NavUser({ login, image, role }: NavUserProps): React.ReactElemen
             <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent">
               <UserAvatar src={image} fallback={initials} />
               <div className="grid min-w-0 flex-1 text-start text-sm leading-tight">
-                <span className="truncate font-medium">{login ?? "Signed in"}</span>
+                <span className="truncate font-medium">{login ?? t(language, "common.signedIn")}</span>
                 <span className="truncate text-xs text-muted-foreground">
                   {role ?? t(language, "common.signedIn")}
                 </span>
@@ -57,7 +57,7 @@ export function NavUser({ login, image, role }: NavUserProps): React.ReactElemen
             <DropdownMenuLabel className="flex items-center gap-2">
               <UserAvatar src={image} fallback={initials} />
               <div className="grid min-w-0 flex-1 leading-tight">
-                <span className="truncate font-medium">{login ?? "Signed in"}</span>
+                <span className="truncate font-medium">{login ?? t(language, "common.signedIn")}</span>
                 <span className="truncate text-xs text-muted-foreground">
                   {role ?? t(language, "common.signedIn")}
                 </span>

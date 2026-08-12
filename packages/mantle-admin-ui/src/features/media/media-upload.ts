@@ -30,11 +30,12 @@ export async function uploadMediaAsset(args: {
   caption?: string;
   language?: AdminLanguage;
 }): Promise<CommittedMediaAsset> {
+  const language = args.language ?? "en";
   const purpose = selectPurpose(args.purposes, args.preferredPurpose);
   if (!purpose) {
-    throw new Error("No media upload purpose is configured for this site.");
+    throw new Error(t(language, "media.noPurpose"));
   }
-  const variants = await prepareImageVariants(args.file, purpose, args.language ?? "en");
+  const variants = await prepareImageVariants(args.file, purpose, language);
   const created = await api.post<MediaUploadResponse>("/media/uploads", {
     filename: args.file.name,
     purpose: purpose.name,
@@ -52,13 +53,16 @@ export async function uploadMediaAsset(args: {
       (cap) => cap.mimeType === variant.mimeType && cap.role === variant.role,
     );
     if (!capability) {
-      throw new Error(`Upload capability missing for ${variant.mimeType}.`);
+      throw new Error(t(language, "media.capabilityMissing", { mime: variant.mimeType }));
     }
-    await fetch(capability.uploadUrl, {
+    const response = await fetch(capability.uploadUrl, {
       method: capability.method,
       headers: capability.requiredHeaders ?? { "Content-Type": variant.mimeType },
       body: variant.blob,
     });
+    if (!response.ok) {
+      throw new Error(t(language, "media.variantUploadFailed", { mime: variant.mimeType }));
+    }
   }
 
   return api.post<CommittedMediaAsset>(
@@ -113,11 +117,11 @@ async function prepareImageVariants(
   language: AdminLanguage,
 ): Promise<PreparedVariant[]> {
   if (!file.type.startsWith("image/") || file.type === "image/svg+xml") {
-    throw new Error("Only raster image uploads are supported in the admin UI.");
+    throw new Error(t(language, "media.rasterOnly"));
   }
   const slots = expandRequired(policy.required);
   if (slots.length === 0) {
-    throw new Error(`Media purpose '${policy.name}' does not declare required image variants.`);
+    throw new Error(t(language, "media.noRequiredVariants"));
   }
   const bitmap = await createImageBitmap(file);
   try {
@@ -215,12 +219,12 @@ export async function encodeBitmap(
   let best: Blob | null = null;
   for (let attempt = 0; attempt < 6; attempt += 1) {
     for (const quality of qualitySteps) {
-      const blob = await drawAndEncode(bitmap, mimeType, scale, quality);
+      const blob = await drawAndEncode(bitmap, mimeType, scale, quality, language);
       if (blob.type !== mimeType) {
         // First attempt came back as a different type than requested —
         // the encoder doesn't support this mime at all, so every further
         // scale/quality retry would fail the same way. Bail immediately
-        // instead of burning 6 scales x 4 qualities on a lost cause (#440).
+        // instead of burning 6 scales x 4 qualities on a lost cause.
         if (attempt === 0 && best === null) {
           throw new Error(t(language, "media.encoderUnsupported", { mime: mimeType }));
         }
@@ -232,7 +236,7 @@ export async function encodeBitmap(
     scale *= 0.82;
   }
   if (best) return best;
-  throw new Error(`This browser cannot encode ${mimeType}.`);
+  throw new Error(t(language, "media.encoderUnsupported", { mime: mimeType }));
 }
 
 async function drawAndEncode(
@@ -240,15 +244,16 @@ async function drawAndEncode(
   mimeType: string,
   scale: number,
   quality: number,
+  language: AdminLanguage,
 ): Promise<Blob> {
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(bitmap.width * scale));
   canvas.height = Math.max(1, Math.round(bitmap.height * scale));
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not prepare image upload.");
+  if (!ctx) throw new Error(t(language, "media.prepareFailed"));
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, mimeType, quality));
-  if (!blob) throw new Error(`This browser cannot encode ${mimeType}.`);
+  if (!blob) throw new Error(t(language, "media.encoderUnsupported", { mime: mimeType }));
   return blob;
 }
 

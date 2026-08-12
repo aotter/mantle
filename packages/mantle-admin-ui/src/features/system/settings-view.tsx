@@ -54,7 +54,7 @@ export function SettingsView(): React.ReactElement {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex min-h-full flex-col gap-6">
       <PageHeader
         title={t(language, "settings.page.title")}
         description={t(language, "settings.page.body")}

@@ -27,7 +27,7 @@ export function GateLoading(): React.ReactElement {
 
 export function GateError({ error }: { error: unknown }): React.ReactElement {
   const { language } = usePreferences();
-  const message = error instanceof Error ? error.message : "Unknown error.";
+  const message = error instanceof Error ? error.message : t(language, "common.unknownError");
   return (
     <div className="flex min-h-svh items-center justify-center p-6">
       <Card className="w-full max-w-sm p-8 text-center">
@@ -82,7 +82,7 @@ const SECTION_DIVIDED = "first:mt-0 first:border-t-0 first:pt-0 mt-6 border-t bo
  * Accepts only values that start with a single `/` (rejecting absolute
  * `https://…` and protocol-relative `//host` URLs), falling back to
  * `/admin`. Prevents an open redirect on the OTP success path, which
- * navigates client-side with the raw value. (#387)
+ * navigates client-side with the raw value.
  */
 export function safeReturnPath(raw: string | null | undefined): string {
   if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
@@ -102,11 +102,6 @@ export function safeReturnPath(raw: string | null | undefined): string {
 export function SignInView(): React.ReactElement {
   const { language } = usePreferences();
   const params = new URLSearchParams(window.location.search);
-  // Only accept a same-origin path. The OTP success path navigates
-  // client-side via `window.location.assign(returnTo)`, so an absolute
-  // (`https://evil`) or protocol-relative (`//evil`) value would be a
-  // post-login open redirect. The gate that produces this param only
-  // ever emits `pathname+search`. (#387)
   const ret = safeReturnPath(params.get("return"));
 
   const methods = useQuery<AuthMethodInfo[]>(authMethodsQueryOptions());

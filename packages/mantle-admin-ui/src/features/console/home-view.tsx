@@ -54,7 +54,7 @@ export function HomeView(): React.ReactElement {
     <div className="space-y-6">
       <PageHeader
         eyebrow={t(language, "console.eyebrow")}
-        title={siteInfo?.brand ?? "CMS"}
+        title={siteInfo?.brand ?? t(language, "admin.consoleTitle")}
         description={
           siteInfo
             ? t(language, "console.description", { title: siteInfo.title })
@@ -214,11 +214,6 @@ export function HomeView(): React.ReactElement {
                           ) : null}
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                          {collection.hasTranslations ? (
-                            <Badge variant="outline" className="text-info">
-                              i18n
-                            </Badge>
-                          ) : null}
                           <ChevronRight className="size-4 text-muted-foreground" aria-hidden />
                         </div>
                       </a>

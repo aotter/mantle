@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { AlertCircle, Check, Copy, ExternalLink, type LucideIcon } from "lucide-react";
 import { ApiError } from "../lib/api";
 import { cn } from "../lib/utils";
@@ -6,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { usePreferences } from "../app/preferences";
 import { t } from "../app/i18n";
+
+export const FormActionBarHostContext = React.createContext<HTMLElement | null>(null);
 
 export function PageHeader({
   eyebrow,
@@ -57,13 +60,20 @@ export function FormActionBar({
   status?: React.ReactNode;
   children: React.ReactNode;
 }): React.ReactElement {
-  return (
-    <div className="sticky bottom-0 z-20 -mx-4 -mb-6 flex min-h-16 flex-wrap items-center justify-between gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:-mx-6 sm:px-6">
+  const host = React.useContext(FormActionBarHostContext);
+  if (!host) return <></>;
+
+  return createPortal(
+    <div
+      data-slot="form-action-bar"
+      className="flex min-h-16 flex-wrap items-center justify-between gap-3 border-t px-4 py-3 sm:px-6"
+    >
       <div className="min-h-5 min-w-0 text-sm text-muted-foreground" aria-live="polite">
         {status}
       </div>
       <div className="ms-auto flex shrink-0 items-center gap-2">{children}</div>
-    </div>
+    </div>,
+    host,
   );
 }
 
@@ -96,14 +106,9 @@ export function EmptyState({
 
 export function ErrorBox({ error }: { error: unknown }): React.ReactElement | null {
   const { language } = usePreferences();
-  const is401 = error instanceof ApiError && error.status === 401;
-  React.useEffect(() => {
-    if (!is401 || typeof window === "undefined") return;
-    const ret = window.location.pathname + window.location.search;
-    window.location.href = `/admin/sign-in?return=${encodeURIComponent(ret)}`;
-  }, [is401]);
+  const is401 = useUnauthorizedRedirect(error);
   if (is401) return null;
-  const message = error instanceof Error ? error.message : "Unknown error.";
+  const message = error instanceof Error ? error.message : t(language, "common.unknownError");
   return (
     <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
       {t(language, "common.failedToLoad")}: {message}
@@ -111,23 +116,9 @@ export function ErrorBox({ error }: { error: unknown }): React.ReactElement | nu
   );
 }
 
-/** Operation-invoke failure (#444): `ErrorBox` prefixes every message
- *  with "Failed to load" (`common.failedToLoad`), which reads wrong for
- *  an operation that ran and was refused/threw rather than failing to
- *  load. This renders a generic, localized "execution failed" message
- *  instead, with the raw handler/server detail tucked behind a
- *  collapsed `<details>` so operators aren't handed an internal error
- *  string as the headline. 401s still redirect to sign-in exactly like
- *  `ErrorBox`, since an expired session surfacing here is the same
- *  case, not an operation failure. */
 export function OperationErrorBox({ error }: { error: unknown }): React.ReactElement | null {
   const { language } = usePreferences();
-  const is401 = error instanceof ApiError && error.status === 401;
-  React.useEffect(() => {
-    if (!is401 || typeof window === "undefined") return;
-    const ret = window.location.pathname + window.location.search;
-    window.location.href = `/admin/sign-in?return=${encodeURIComponent(ret)}`;
-  }, [is401]);
+  const is401 = useUnauthorizedRedirect(error);
   if (is401) return null;
   const detail = error instanceof Error ? error.message : String(error);
   return (
@@ -143,6 +134,16 @@ export function OperationErrorBox({ error }: { error: unknown }): React.ReactEle
       </details>
     </div>
   );
+}
+
+function useUnauthorizedRedirect(error: unknown): boolean {
+  const is401 = error instanceof ApiError && error.status === 401;
+  React.useEffect(() => {
+    if (!is401 || typeof window === "undefined") return;
+    const ret = window.location.pathname + window.location.search;
+    window.location.href = `/admin/sign-in?return=${encodeURIComponent(ret)}`;
+  }, [is401]);
+  return is401;
 }
 
 /** Renders `description` plainly unless it looks like raw schema notes

@@ -150,7 +150,7 @@ function LanguageSearchSelect({
                 if (event.key === "Escape") setOpen(false);
               }}
               placeholder={t(language, "preferences.language.search")}
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
             />
           </div>
           <div className="max-h-72 overflow-y-auto p-1">

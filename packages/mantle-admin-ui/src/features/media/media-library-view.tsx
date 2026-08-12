@@ -25,8 +25,7 @@ const MEDIA_SETUP_GUIDE_URL =
   "https://github.com/aotter/mantle/blob/main/docs/media-uploads.md";
 const MEDIA_SETUP_PROMPT = `Enable Mantle media storage for this site using the runtime's supported storage adapter. If this is a Cloudflare deployment, follow node_modules/@aotter/mantle/docs/media-uploads.md: create and bind an R2 bucket, configure its S3 credentials and public URL, wire mediaStorage, validate, deploy, and verify /admin/media.`;
 
-/** Full-page media library (#434): thumbnail grid of committed assets,
- *  drag-drop + button upload, search, inline alt/caption edit, delete. */
+/** Full-page media library for committed assets. */
 export function MediaLibraryView(): React.ReactElement {
   const { language } = usePreferences();
   const location = useAdminLocation();
@@ -318,9 +317,6 @@ function MediaTile({
   const confirm = useConfirm();
 
   async function confirmDelete(): Promise<void> {
-    // #444: styled dialog instead of `window.confirm` — consistent with
-    // the rest of the app's modals and doesn't block automation drivers
-    // that can't dismiss native browser dialogs.
     if (!(await confirm({ description: t(language, "media.deleteConfirm") }))) return;
     remove.mutate();
   }

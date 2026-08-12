@@ -34,18 +34,15 @@ import { Main } from "./main";
 import { SkipToMain } from "./skip-to-main";
 import { statusLabel } from "../features/content/status";
 import { t } from "../app/i18n";
+import { FormActionBarHostContext } from "../ui/page";
 import type { AdminBrand, NavGroupData, NavItem, NavLink } from "./types";
 
 interface AuthenticatedLayoutProps {
   children: React.ReactNode;
 }
 
-const DEFAULT_BRAND: AdminBrand = {
-  title: "CMS",
-  href: "/admin",
-};
-
 export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): React.ReactElement {
+  const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
   const { pathname, search } = useAdminLocation();
   const { language } = usePreferences();
 
@@ -65,18 +62,16 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
   });
-  // One extra query each (#426), cached under their own query keys so
-  // they don't refetch alongside unrelated collection/site changes.
   const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
   const viewsQuery = useQuery<ViewManifestInfo[]>(viewsManifestQueryOptions());
 
   const resolvedBrand = React.useMemo<AdminBrand>(
     () => ({
-      ...DEFAULT_BRAND,
-      title: site.data?.brand ?? DEFAULT_BRAND.title,
+      title: site.data?.brand ?? t(language, "admin.consoleTitle"),
+      href: "/admin",
       image: site.data?.faviconUrl,
     }),
-    [site.data],
+    [language, site.data],
   );
 
   const canonical = site.data?.canonicalLocale ?? null;
@@ -93,28 +88,31 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
     [collectionsQuery.data, operationsQuery.data, viewsQuery.data, language, canonical, me.data?.role],
   );
   return (
-    <SidebarProvider>
-      <SkipToMain />
-      <AppSidebar
-        brand={resolvedBrand}
-        groups={groups}
-        pathname={pathname}
-        search={search}
-        user={{
-          login: me.data?.login ?? null,
-          image: me.data?.image ?? null,
-          role: me.data?.role ?? null,
-        }}
-      />
-      <SidebarInset>
-        <Header
-          fixed
-          site={resolvedBrand}
-          publicUrl={site.data?.publicUrl}
+    <FormActionBarHostContext.Provider value={formActionBarHost}>
+      <SidebarProvider className="h-svh min-h-0 overflow-hidden">
+        <SkipToMain />
+        <AppSidebar
+          brand={resolvedBrand}
+          groups={groups}
+          pathname={pathname}
+          search={search}
+          user={{
+            login: me.data?.login ?? null,
+            image: me.data?.image ?? null,
+            role: me.data?.role ?? null,
+          }}
         />
-        <Main>{children}</Main>
-      </SidebarInset>
-    </SidebarProvider>
+        <SidebarInset className="min-h-0 overflow-hidden">
+          <Header
+            className="absolute inset-x-0 top-0 z-30"
+            site={resolvedBrand}
+            publicUrl={site.data?.publicUrl}
+          />
+          <Main className="min-h-0 overflow-y-auto overscroll-contain pt-20 pb-20">{children}</Main>
+          <div ref={setFormActionBarHost} className="absolute inset-x-0 bottom-0 z-30" />
+        </SidebarInset>
+      </SidebarProvider>
+    </FormActionBarHostContext.Provider>
   );
 }
 
@@ -152,11 +150,7 @@ function buildNavGroups(
         }
       : null;
 
-  // 「操作」— one item per UNBOUND staff-operable Procedure (#426,
-  // narrowed #433). Operations with `rowBindings` already surface from
-  // the entry-row "⋯" menu of the bound collection, so listing them in
-  // the sidebar too is redundant (operator review Q1). Only operations
-  // with NO row bindings get a sidebar item; empty → group hidden.
+  // Bound operations already live in their collection's row menu.
   const unboundOperations = operations.filter((op) => op.rowBindings.length === 0);
   const opsGroup: NavGroupData | null =
     unboundOperations.length > 0
@@ -170,8 +164,7 @@ function buildNavGroups(
         }
       : null;
 
-  // 「報表」— one item per read-only View (#426). `title` (#443) falls
-  // back to the humanized name, exactly as before this field existed.
+  // Read-only views get direct sidebar links.
   const reportsGroup: NavGroupData | null =
     views.length > 0
       ? {

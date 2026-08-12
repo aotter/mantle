@@ -109,7 +109,7 @@ export function RichTextEditor({
         language,
       });
       const url = primaryPublicUrl(committed);
-      if (!url) throw new Error("Uploaded media has no public URL.");
+      if (!url) throw new Error(t(language, "common.unknownError"));
       insertImage(url, committed.alt ?? file.name);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -120,7 +120,7 @@ export function RichTextEditor({
   }
 
   function insertImage(url: string, alt: string): void {
-    insertBlock(`![${alt || "image"}](${url})`);
+    insertBlock(`![${alt}](${url})`);
   }
 
   function insertVideo(url: string): void {
@@ -137,7 +137,7 @@ export function RichTextEditor({
       return;
     }
     if (style === "quote") insertBlock("> ");
-    if (style === "code") insert("```\n", "\n```", "code");
+    if (style === "code") insert("```\n", "\n```");
   }
 
   return (
@@ -153,7 +153,7 @@ export function RichTextEditor({
           <Redo2 className="size-4" aria-hidden />
         </ToolbarButton>
         <ToolbarDivider />
-        <ToolbarButton title={t(language, "editor.aiClean")} onClick={() => insertBlock("> 重點提示：")}>
+        <ToolbarButton title={t(language, "editor.aiClean")} onClick={() => insertBlock("> ")}>
           <Wand2 className="size-4" aria-hidden />
         </ToolbarButton>
         <ToolbarButton title={t(language, "editor.uploadImage")} onClick={() => fileRef.current?.click()} disabled={uploading}>
@@ -183,15 +183,15 @@ export function RichTextEditor({
             }}
             defaultValue="paragraph"
           >
-            <option value="paragraph">Paragraph</option>
+            <option value="paragraph">{t(language, "editor.paragraph")}</option>
             <option value="h1">H1</option>
             <option value="h2">H2</option>
             <option value="h3">H3</option>
             <option value="h4">H4</option>
             <option value="h5">H5</option>
             <option value="h6">H6</option>
-            <option value="quote">Quote</option>
-            <option value="code">Code</option>
+            <option value="quote">{t(language, "editor.quote")}</option>
+            <option value="code">{t(language, "editor.code")}</option>
           </select>
         </label>
         <ToolbarDivider />
@@ -207,7 +207,7 @@ export function RichTextEditor({
         <ToolbarButton title={t(language, "editor.strike")} onClick={() => insert("~~", "~~", t(language, "editor.selectedText"))}>
           <Strikethrough className="size-4" aria-hidden />
         </ToolbarButton>
-        <ToolbarButton title={t(language, "editor.inlineCode")} onClick={() => insert("`", "`", "code")}>
+        <ToolbarButton title={t(language, "editor.inlineCode")} onClick={() => insert("`", "`")}>
           <Code2 className="size-4" aria-hidden />
         </ToolbarButton>
         <ToolbarButton title={t(language, "editor.textColor")} onClick={() => insert('<span class="text-accent">', "</span>", t(language, "editor.selectedText"))}>
@@ -245,7 +245,7 @@ export function RichTextEditor({
         <ToolbarButton title={t(language, "editor.link")} onClick={() => insert("[", "](https://)", t(language, "editor.linkText"))}>
           <Link className="size-4" aria-hidden />
         </ToolbarButton>
-        <ToolbarButton title={t(language, "editor.table")} onClick={() => insertBlock("| 欄位 | 說明 |\n| --- | --- |\n|  |  |")}>
+        <ToolbarButton title={t(language, "editor.table")} onClick={() => insertBlock("|  |  |\n| --- | --- |\n|  |  |")}>
           <Table2 className="size-4" aria-hidden />
         </ToolbarButton>
         <ToolbarButton title={t(language, "editor.mediaLibrary")} onClick={() => setMediaOpen(true)}>
@@ -331,7 +331,7 @@ function MediaInsertDialog({
   const [alt, setAlt] = React.useState("");
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent>
+      <DialogContent closeLabel={t(language, "common.close")}>
         <DialogHeader>
           <DialogTitle>{t(language, "editor.insertImage")}</DialogTitle>
           <DialogDescription className="sr-only">{t(language, "editor.mediaLibrary")}</DialogDescription>
@@ -374,7 +374,7 @@ function VideoInsertDialog({
   const [url, setUrl] = React.useState("");
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent>
+      <DialogContent closeLabel={t(language, "common.close")}>
         <DialogHeader>
           <DialogTitle>{t(language, "editor.insertVideo")}</DialogTitle>
           <DialogDescription className="sr-only">{t(language, "editor.videoUrl")}</DialogDescription>
@@ -385,7 +385,7 @@ function VideoInsertDialog({
             id="rich-editor-video-url"
             value={url}
             onChange={(event) => setUrl(event.target.value)}
-            placeholder="YouTube / Dailymotion URL"
+            placeholder={t(language, "editor.videoUrl")}
           />
         </div>
         <DialogFooter>
@@ -409,11 +409,11 @@ function videoEmbed(rawUrl: string): string {
   if (!url) return `<a href="${escapeAttribute(rawUrl)}">${escapeHtml(rawUrl)}</a>`;
   const youtube = youtubeId(url);
   if (youtube) {
-    return `<iframe src="https://www.youtube.com/embed/${youtube}" title="YouTube video" loading="lazy" allowfullscreen></iframe>`;
+    return `<iframe src="https://www.youtube.com/embed/${youtube}" title="YouTube" loading="lazy" allowfullscreen></iframe>`;
   }
   const dailymotion = dailymotionId(url);
   if (dailymotion) {
-    return `<iframe src="https://www.dailymotion.com/embed/video/${dailymotion}" title="Dailymotion video" loading="lazy" allowfullscreen></iframe>`;
+    return `<iframe src="https://www.dailymotion.com/embed/video/${dailymotion}" title="Dailymotion" loading="lazy" allowfullscreen></iframe>`;
   }
   return `<a href="${escapeAttribute(url.toString())}">${escapeHtml(url.toString())}</a>`;
 }

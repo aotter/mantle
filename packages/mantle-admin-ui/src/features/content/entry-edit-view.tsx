@@ -77,11 +77,6 @@ export function EntryEditView({
     queryFn: () => api.get<AdminUser>("/me"),
     retry: false,
   });
-  // Row-bound operations (#430) for this entry's own collection — same
-  // query key as `collection-view.tsx`/`authenticated-layout.tsx`
-  // (`operationsQueryOptions()`), so this hits react-query's shared
-  // cache instead of a duplicate fetch (#442: this is what lets the
-  // entry editor surface e.g. "Restock" from its page header).
   const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
   const boundOperations = React.useMemo(
     () => boundOperationsFor(operationsQuery.data, collectionName),
@@ -118,7 +113,7 @@ export function EntryEditView({
 
   if (query.isLoading) return <Skeleton className="h-64" />;
   if (query.isError) return <ErrorBox error={query.error} />;
-  if (!query.data || !data) return <ErrorBox error={new Error("Missing entry editor payload.")} />;
+  if (!query.data || !data) return <ErrorBox error={new Error(t(language, "common.unknownError"))} />;
 
   const payload = query.data;
   const canonical = site.data?.canonicalLocale ?? null;
@@ -143,7 +138,7 @@ export function EntryEditView({
   const sidebarRelated = payload.related.filter((section) => !isPrimaryInlineSection(section));
 
   return (
-    <div className="space-y-6">
+    <div className="flex min-h-full flex-col gap-6">
       <PageHeader
         eyebrow={
           <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -427,15 +422,9 @@ function SchemaField({
 }): React.ReactElement {
   const type = schemaType(schema);
   const label = propertyLabel(name, schema, language, canonical);
-  // #453: `description` is the same string-or-LocalizedText shape as
-  // `title` (#443) — resolve it the same way instead of only rendering
-  // the plain-string case, matching the row-operation dialog
-  // (`row-operations.tsx`).
   const description = propertyDescription(schema, language, canonical);
   const setValue = (next: unknown): void => onChange(writePath(rootValue, path, next));
-  // Server-stamped field (#428): the runtime writes `x-mantle-bind`
-  // properties itself (ctx.user / ctx.staff / now) — caller writes are
-  // rejected anyway, so render read-only instead of a live control.
+  // The runtime owns bound values, so the form keeps them read-only.
   const readOnly = isMantleBoundField(schema);
 
   return (
@@ -684,12 +673,7 @@ function MediaAssetField({
   const purpose = purposeForMediaField(mediaPurposes, collectionName, path);
   const assetId = typeof value === "string" ? value : "";
 
-  // #444: a field that already has a value only ever showed the raw
-  // asset id/UUID — no confirmation of which image it actually points
-  // at. `publicUrl` is only populated in-memory right after an
-  // upload/pick in THIS session, so entries loaded with an existing
-  // value need their own fetch via the same `GET /admin/api/media/:id`
-  // the media library already uses.
+  // Resolve persisted asset ids so existing entries still show a preview.
   const assetQuery = useQuery({
     queryKey: ["media-asset", assetId],
     queryFn: () => api.get<MediaLibraryItem>(`/media/${encodeURIComponent(assetId)}`),
@@ -725,7 +709,6 @@ function MediaAssetField({
           className="min-w-0 flex-1"
           value={stringForInput(value)}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="media_assets id"
         />
         <Button
           type="button"
@@ -765,7 +748,7 @@ function MediaAssetField({
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
       <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
-        <DialogContent className="max-h-[85vh] w-full max-w-3xl overflow-y-auto">
+        <DialogContent closeLabel={t(language, "common.close")} className="max-h-[85vh] w-full max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t(language, "media.pickTitle")}</DialogTitle>
             <DialogDescription>{t(language, "media.pickDescription")}</DialogDescription>
@@ -787,12 +770,7 @@ function MediaAssetField({
   );
 }
 
-/** Small thumbnail chip (#444) next to an asset-id field: confirms
- *  which image the stored id actually points at instead of leaving the
- *  operator to trust a bare UUID. `isError` covers a deleted/missing
- *  asset — the field must keep rendering normally rather than crash or
- *  block editing, so this renders a neutral placeholder icon instead
- *  of propagating the fetch error anywhere. */
+/** Preview a media reference without blocking edits when the asset is missing. */
 function MediaAssetThumbnail({
   assetId,
   asset,
@@ -862,11 +840,7 @@ function RelatedSections({
   sections: RelatedEntrySection[];
   language: AdminLanguage;
   canonical: string | null;
-  /** All staff operations (#430); each row derives its own bound
-   *  subset via `boundOperationsFor(operations, section.collection.name)`
-   *  — the child collection, not the parent entry's collection (#442:
-   *  this is what lets e.g. a product's "Product SKUs" child rows
-   *  offer "Restock" without the parent editor knowing that name). */
+  /** Child rows derive their own bound operations. */
   operations: readonly StaffOperation[] | undefined;
   onOperationSuccess: () => void;
 }): React.ReactElement {

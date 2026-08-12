@@ -1,11 +1,4 @@
-/** A human-facing label/blurb that is either a plain string or a map
- *  of locale code → string (e.g. `{ en: "Products", "zh-TW": "商品" }`)
- *  — mirrors `LocalizedText` in `@aotter/mantle-spec`'s manifest
- *  grammar (#430). This package doesn't depend on `@aotter/mantle-spec`
- *  (it only talks JSON over HTTP — same reasoning as the inlined
- *  `VIEW_PARAMS_RESERVED` copy in `features/ops/view-page.tsx`), so the
- *  type + its resolver are copied here rather than imported. See
- *  `resolveLocalizedText` in `lib/localized-text.ts`. */
+/** Human-facing copy as a plain string or locale map. */
 export type LocalizedText = string | Readonly<Record<string, string>>;
 
 export type Lifecycle = "publishing" | "editorial" | "operational";
@@ -63,14 +56,9 @@ export interface JsonSchema {
   nullable?: boolean;
   default?: unknown;
   additionalProperties?: boolean | JsonSchema;
-  /** Standard JSON Schema keyword — plain string or the same
-   *  `LocalizedText` shape as `Collection.description` (#453, mirroring
-   *  the property `title` keyword's #443 shape). Optional; absent
-   *  renders no help text. */
+  /** Optional JSON Schema help text. */
   description?: LocalizedText;
-  /** Standard JSON Schema keyword (#443) — plain string or the same
-   *  `LocalizedText` shape as `Collection.title`. Optional; absent
-   *  means the consumer humanizes the property name instead. */
+  /** Optional JSON Schema field label. */
   title?: LocalizedText;
   "x-mantle-ref"?: string;
   "x-mcp-hint"?: string;
@@ -195,9 +183,7 @@ export interface CommittedMediaAsset {
   variants: MediaAssetVariant[];
 }
 
-/** `GET /admin/api/media` item + `GET|PATCH /admin/api/media/:id` body
- *  (#434). The primary variant's url/mime/bytes are lifted to the top
- *  level so the grid renders a thumbnail without walking `variants`. */
+/** Media API item with its primary variant lifted for list rendering. */
 export interface MediaLibraryItem {
   id: string;
   variants: MediaAssetVariant[];
@@ -214,27 +200,18 @@ export interface MediaLibraryListResult {
   next_cursor: string | null;
 }
 
-/** `GET /admin/api/operations` entry (#426, extended #430) — a
- *  staff-operable Procedure derived from the manifest (some Trigger
- *  targets it via `source.kind: "mcp"` + `surface: "staff"`, or
- *  `source.kind: "http"` with a `ctx.staff` auth predicate). */
+/** Staff-operable Procedure derived from the manifest. */
 export interface StaffOperation {
   name: string;
   title: LocalizedText | null;
   description: LocalizedText | null;
   input: JsonSchema;
   triggers: Array<"mcp" | "http">;
-  /** Row-action bindings (#430): which `x-mantle-ref` input properties
-   *  point at a real (non-"translates") collection, so the admin SPA
-   *  can offer this operation from that collection's row "⋯" menu. */
+  /** References that expose this operation from collection row menus. */
   rowBindings: Array<{ collection: string; inputField: string; rowField: string }>;
 }
 
-/** `GET /admin/api/views-manifest` entry (#426, extended #443 with
- *  `title`) — a read-only View projection over a Schema. `params` is
- *  the View's declared parameter JSON Schema, or `null` when the View
- *  takes none. `title` is `null` when the View manifest declares none
- *  — callers fall back to a Title-Cased rendering of `name`. */
+/** Read-only View projection exposed by the Admin API. */
 export interface ViewManifestInfo {
   name: string;
   title: LocalizedText | null;

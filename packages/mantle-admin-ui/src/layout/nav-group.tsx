@@ -175,6 +175,7 @@ function NavCollapsibleExpanded({
               <NavSubLink
                 key={sub.url}
                 link={sub}
+                siblings={item.items}
                 pathname={pathname}
                 search={search}
               />
@@ -188,15 +189,17 @@ function NavCollapsibleExpanded({
 
 function NavSubLink({
   link,
+  siblings,
   pathname,
   search,
 }: {
   link: NavLink;
+  siblings: ReadonlyArray<NavLink>;
   pathname: string;
   search: string;
 }): React.ReactElement {
   const { setOpenMobile } = useSidebar();
-  const active = isLinkActive(link, pathname, search);
+  const active = isSubLinkActive(link, siblings, pathname, search);
   return (
     <SidebarMenuSubItem>
       <SidebarMenuSubButton asChild isActive={active}>
@@ -242,7 +245,7 @@ function NavCollapsibleDropdown({
               <a
                 href={sub.url}
                 className={cn(
-                  isLinkActive(sub, pathname, search) && "font-medium",
+                  isSubLinkActive(sub, item.items, pathname, search) && "font-medium",
                 )}
               >
                 {sub.title}
@@ -270,6 +273,20 @@ function isLinkActive(
     if (have.get(key) !== value) return false;
   }
   return true;
+}
+
+export function isSubLinkActive(
+  link: NavLink,
+  siblings: ReadonlyArray<NavLink>,
+  pathname: string,
+  search: string,
+): boolean {
+  if (!isLinkActive(link, pathname, search)) return false;
+  if (new URL(link.url, "http://x").search) return true;
+  return !siblings.some((sibling) => {
+    if (sibling.url === link.url || !new URL(sibling.url, "http://x").search) return false;
+    return isLinkActive(sibling, pathname, search);
+  });
 }
 
 // Highlight (and auto-expand) the group whenever the user is on a sub-link's
