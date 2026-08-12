@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  dateFromFieldValue,
   formatMoneyMinor,
   idTail,
-  timestampMsForInput,
-  timestampMsFromInput,
 } from "../src/features/content/field-render";
+
+describe("dateFromFieldValue", () => {
+  it("accepts epoch milliseconds and ISO strings but rejects invalid values", () => {
+    expect(dateFromFieldValue(1_786_405_800_000)?.getTime()).toBe(1_786_405_800_000);
+    expect(dateFromFieldValue("2026-08-12T09:30:00.000Z")?.toISOString()).toBe("2026-08-12T09:30:00.000Z");
+    expect(dateFromFieldValue("not-a-date")).toBeUndefined();
+  });
+});
 
 describe("idTail", () => {
   it("returns the last N characters, not the first", () => {
@@ -50,18 +57,5 @@ describe("formatMoneyMinor", () => {
   it("returns null for a non-numeric value", () => {
     expect(formatMoneyMinor("128000", "USD")).toBeNull();
     expect(formatMoneyMinor(undefined, "USD")).toBeNull();
-  });
-});
-
-describe("timestamp datetime input", () => {
-  it("round-trips an epoch-millisecond value through local datetime input", () => {
-    const timestamp = new Date(2026, 7, 12, 17, 30).getTime();
-    expect(timestampMsFromInput(timestampMsForInput(timestamp))).toBe(timestamp);
-  });
-
-  it("keeps empty and invalid input empty", () => {
-    expect(timestampMsForInput(null)).toBe("");
-    expect(timestampMsFromInput("")).toBeNull();
-    expect(timestampMsFromInput("not-a-date")).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Images, ImagePlus, MoreHorizontal, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarIcon, ExternalLink, Images, ImagePlus, MoreHorizontal, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
@@ -18,8 +18,10 @@ import type {
   StaffOperation,
 } from "../../lib/types";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -43,12 +45,11 @@ import {
 } from "@/components/ui/dialog";
 import { collectionSummaryKey } from "./collection-view";
 import {
+  dateFromFieldValue,
   formatMoneyMinor,
   formatTimestampMs,
   moneyMinorHint,
   timestampHint,
-  timestampMsForInput,
-  timestampMsFromInput,
 } from "./field-render";
 import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
 
@@ -482,7 +483,7 @@ function SchemaField({
       {description ? <p className="text-xs leading-5 text-muted-foreground">{description}</p> : null}
       {readOnly ? (
         <p className="min-h-8 rounded-lg border bg-muted/40 px-2.5 py-1 text-sm text-muted-foreground" title={String(schema["x-mantle-bind"])}>
-          {stringForInput(value) || t(language, "entryEdit.emptyOption")}
+          {(timestampHint(schema) ? formatTimestampMs(value) : stringForInput(value)) || t(language, "entryEdit.emptyOption")}
         </p>
       ) : schema.enum ? (
         <Select
@@ -512,12 +513,11 @@ function SchemaField({
       ) : type === "number" || type === "integer" ? (
         <div className="space-y-1">
           {timestampHint(schema) ? (
-            <Input
-              type="datetime-local"
-              aria-label={label}
-              value={timestampMsForInput(value)}
-              onClick={(event) => event.currentTarget.showPicker?.()}
-              onChange={(event) => setValue(timestampMsFromInput(event.target.value))}
+            <DateTimePicker
+              label={label}
+              language={language}
+              value={value}
+              onChange={(date) => setValue(date?.getTime() ?? null)}
             />
           ) : (
             <Input
@@ -579,17 +579,86 @@ function SchemaField({
           onChange={setValue}
         />
       ) : (
-        <Input
-          type={schema.format === "date-time" ? "datetime-local" : "text"}
-          aria-label={label}
-          value={stringForInput(value)}
-          onClick={(event) => {
-            if (event.currentTarget.type === "datetime-local") event.currentTarget.showPicker?.();
-          }}
-          onChange={(event) => setValue(event.target.value)}
-        />
+        schema.format === "date-time" ? (
+          <DateTimePicker
+            label={label}
+            language={language}
+            value={value}
+            onChange={(date) => setValue(date?.toISOString() ?? "")}
+          />
+        ) : (
+          <Input
+            type="text"
+            aria-label={label}
+            value={stringForInput(value)}
+            onChange={(event) => setValue(event.target.value)}
+          />
+        )
       )}
     </div>
+  );
+}
+
+function DateTimePicker({
+  label,
+  language,
+  value,
+  onChange,
+}: {
+  label: string;
+  language: AdminLanguage;
+  value: unknown;
+  onChange: (date: Date | undefined) => void;
+}): React.ReactElement {
+  const selected = dateFromFieldValue(value);
+  const timeId = React.useId();
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full justify-start font-normal"
+          aria-label={label}
+        >
+          <CalendarIcon />
+          {selected ? formatTimestampMs(selected.getTime()) : t(language, "entryEdit.dateTime.select")}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={selected}
+          defaultMonth={selected}
+          onSelect={(day) => {
+            if (!day) return;
+            const next = new Date(day);
+            next.setHours(selected?.getHours() ?? 0, selected?.getMinutes() ?? 0, 0, 0);
+            onChange(next);
+          }}
+        />
+        <div className="flex items-center gap-3 border-t p-3">
+          <label className="text-sm font-medium" htmlFor={timeId}>
+            {t(language, "entryEdit.dateTime.time")}
+          </label>
+          <Input
+            id={timeId}
+            type="time"
+            className="w-32"
+            disabled={!selected}
+            value={selected ? `${String(selected.getHours()).padStart(2, "0")}:${String(selected.getMinutes()).padStart(2, "0")}` : ""}
+            onChange={(event) => {
+              if (!selected) return;
+              const [hours, minutes] = event.target.value.split(":").map(Number);
+              const next = new Date(selected);
+              next.setHours(hours, minutes, 0, 0);
+              onChange(next);
+            }}
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

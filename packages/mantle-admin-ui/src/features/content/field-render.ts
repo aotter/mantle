@@ -42,18 +42,10 @@ export function formatTimestampMs(value: unknown): string | null {
   }
 }
 
-/** Epoch milliseconds <-> native datetime-local value. */
-export function timestampMsForInput(value: unknown): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "";
+export function dateFromFieldValue(value: unknown): Date | undefined {
+  if (typeof value !== "number" && typeof value !== "string") return undefined;
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Date(value - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-
-export function timestampMsFromInput(value: string): number | null {
-  if (!value) return null;
-  const timestamp = new Date(value).getTime();
-  return Number.isFinite(timestamp) ? timestamp : null;
+  return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
 /** Keep the distinguishing suffix; callers expose the full id in `title`. */
