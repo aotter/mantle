@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ErrorBox, FormActionBar, PageHeader, SectionCard } from "../../ui/page";
+import { ErrorBox, FormActionBar, OperationErrorBox, PageHeader, SectionCard } from "../../ui/page";
 
 interface SiteSettings {
   brand: string;
@@ -59,7 +59,7 @@ export function SettingsView(): React.ReactElement {
         title={t(language, "settings.page.title")}
         description={t(language, "settings.page.body")}
       />
-      {save.isError ? <ErrorBox error={asRenderable(save.error)} /> : null}
+      {save.isError ? <OperationErrorBox error={asRenderable(save.error)} /> : null}
 
       <div
         role="tablist"

@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { CollapsibleDescription, ErrorBox, FormActionBar, PageHeader, SectionCard } from "../../ui/page";
+import { CollapsibleDescription, ErrorBox, FormActionBar, OperationErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
 import { RichTextEditor } from "../editor/rich-text-editor";
 import { primaryPublicUrl, purposeForMediaField, uploadMediaAsset } from "../media/media-upload";
@@ -114,7 +114,7 @@ export function EntryEditView({
 
   const payload = query.data;
   const canonical = site.data?.canonicalLocale ?? null;
-  const title = entryTitle(data, payload.entry.id, payload.collection.schema);
+  const title = entryTitle(data, t(language, "collection.untitled"), payload.collection.schema);
   const collectionTitle = resolveLocalizedText(payload.collection.title, language, canonical) ?? payload.collection.name;
   const collectionDescription = resolveLocalizedText(payload.collection.description, language, canonical);
   const dirty = JSON.stringify(data) !== JSON.stringify(payload.entry.data);
@@ -123,6 +123,7 @@ export function EntryEditView({
   // of the stored status.
   const isOperational = payload.collection.lifecycle === "operational";
   const isDraft = payload.entry.status === "draft";
+  const missingRequired = hasMissingRequired(data, payload.collection.schema);
   const canManageContent = me.data?.role === "owner" || me.data?.role === "editor";
   const canEdit = canManageContent ||
     (me.data?.role === "contributor" && !isOperational && isDraft);
@@ -183,9 +184,9 @@ export function EntryEditView({
         <p className="-mt-4 text-sm text-muted-foreground">{t(language, "entryEdit.operationalHint")}</p>
       ) : null}
 
-      {save.isError ? <ErrorBox error={save.error} /> : null}
-      {publish.isError ? <ErrorBox error={publish.error} /> : null}
-      {unpublish.isError ? <ErrorBox error={unpublish.error} /> : null}
+      {save.isError ? <OperationErrorBox error={save.error} /> : null}
+      {publish.isError ? <OperationErrorBox error={publish.error} /> : null}
+      {unpublish.isError ? <OperationErrorBox error={unpublish.error} /> : null}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-5">
@@ -268,6 +269,8 @@ export function EntryEditView({
             ? t(language, "entryEdit.unpublishing")
             : dirty
             ? t(language, "common.unsavedChanges")
+            : isDraft && !isOperational && missingRequired
+            ? t(language, "entryEdit.publishMissingRequired")
             : save.isSuccess
             ? t(language, "common.saved")
             : undefined}
@@ -277,8 +280,12 @@ export function EntryEditView({
               type="button"
               variant="secondary"
               onClick={() => publish.mutate()}
-              disabled={actionPending || dirty}
-              title={dirty ? t(language, "entryEdit.publishDisabledDirty") : t(language, "entryEdit.publishTooltip")}
+              disabled={actionPending || dirty || missingRequired}
+              title={dirty
+                ? t(language, "entryEdit.publishDisabledDirty")
+                : missingRequired
+                ? t(language, "entryEdit.publishMissingRequired")
+                : t(language, "entryEdit.publishTooltip")}
             >
               <Send className="size-4" aria-hidden />
               {publish.isPending ? t(language, "entryEdit.publishing") : t(language, "entryEdit.publish")}
@@ -881,7 +888,7 @@ function RelatedSections({
                     >
                       <span className="min-w-0">
                         <span className="block truncate font-semibold">
-                          {entryTitle(entry.data, entry.id, section.collection.schema)}
+                          {entryTitle(entry.data, t(language, "collection.untitled"), section.collection.schema)}
                         </span>
                         <span className="block text-xs text-muted-foreground">
                           {entry.collection} / v{entry.version}
@@ -943,7 +950,15 @@ function entryTitle(data: Record<string, unknown>, fallback: string, schema?: Js
       if (typeof value === "string" && value.trim()) return value;
     }
   }
-  return fallback.slice(0, 8);
+  return fallback;
+}
+
+export function hasMissingRequired(data: Record<string, unknown>, schema: JsonSchema): boolean {
+  return (schema.required ?? []).some((key) => {
+    const value = data[key];
+    return value === undefined || value === null || value === "" ||
+      (Array.isArray(value) && value.length === 0);
+  });
 }
 
 function schemaType(schema: JsonSchema): string {

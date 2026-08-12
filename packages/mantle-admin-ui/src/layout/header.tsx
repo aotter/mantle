@@ -91,6 +91,8 @@ export function Header({
 
 function currentPage(pathname: string, language: ReturnType<typeof usePreferences>["language"]): string | null {
   if (pathname === "/admin" || pathname === "/admin/") return null;
+  const collectionMatch = pathname.match(/^\/admin\/c\/([^/]+)/);
+  if (collectionMatch) return fieldLabel(decodeURIComponent(collectionMatch[1]!));
   const parts = pathname.split("/").filter(Boolean);
   const segment = decodeURIComponent(parts[parts.length - 1] ?? "");
   if (pathname === "/admin/media") return t(language, "nav.media");
