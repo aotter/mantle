@@ -18,6 +18,7 @@ kind: Schema
 metadata: { name: posts }
 spec:
   title: Posts
+  localized: true
   schema:
     type: object
     required: [slug]

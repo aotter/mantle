@@ -165,6 +165,19 @@ function checkSchemaInternals(
   };
   const properties = schema.properties ?? {};
 
+  if (s.spec.localized !== true && "locale" in properties) {
+    out.push(
+      validateDiagnostic({
+        code: "INVALID_MANIFEST_ENVELOPE",
+        severity: "error",
+        path: manifestPath("Schema", s.metadata.name, "/spec/schema/properties/locale", filePaths),
+        value: "locale",
+        expected: "no locale property on a non-localized Schema",
+        message: `Non-localized Schema '${s.metadata.name}' must not declare the reserved entry field 'locale'; use a domain name such as 'orderLocale', or set localized: true.`,
+      }),
+    );
+  }
+
   // `required` entries that aren't declared in `properties` are never
   // added to the generated zod shape — so a typo'd required field is
   // silently unenforced. Surface it at pre-deploy. (#399)

@@ -282,7 +282,7 @@ ${indexYaml}
 
   it("accepts and preserves ordered composite indexes", () => {
     const result = parseSchema(
-      "  indexes: [[slug, locale], [locale, slug], [slug]]",
+      "  localized: true\n  indexes: [[slug, locale], [locale, slug], [slug]]",
       "slug: { type: string }, locale: { type: [string, 'null'] }",
     );
 
@@ -529,6 +529,31 @@ spec:
 });
 
 describe("parseManifests() — v0.1.0 promoted grammar", () => {
+  it("rejects locale as a property of a non-localized Schema", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  schema:
+    type: object
+    properties:
+      locale: { type: string }
+`;
+    expect(parseManifests(yaml).diagnostics[0]).toMatchObject({
+      code: "INVALID_MANIFEST_ENVELOPE",
+      path: "manifest:doc/0#/spec/schema/properties/locale",
+    });
+    expect(ValidateManifestsUseCase.run({
+      manifests: [schema("orders", {
+        schema: { type: "object", properties: { locale: { type: "string" } } },
+      })],
+    }).diagnostics[0]).toMatchObject({
+      code: "INVALID_MANIFEST_ENVELOPE",
+      path: "manifest:Schema/orders#/spec/schema/properties/locale",
+    });
+  });
+
   it("rejects a translation child with no locale-specific payload field", () => {
     const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
 kind: Schema

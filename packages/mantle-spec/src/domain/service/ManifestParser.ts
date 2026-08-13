@@ -449,6 +449,18 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
       "/spec/localized",
     );
   }
+  const schema = s["schema"] as Record<string, unknown>;
+  const properties = schema["properties"];
+  const propertyNames = properties && typeof properties === "object" && !Array.isArray(properties)
+    ? Object.keys(properties)
+    : [];
+  if (s["localized"] !== true && propertyNames.includes("locale")) {
+    throw new ManifestParseError(
+      "Non-localized Schema must not declare the reserved entry field 'locale'; use a domain name such as 'orderLocale', or set localized: true.",
+      idx,
+      "/spec/schema/properties/locale",
+    );
+  }
   if ("lifecycle" in s) {
     const lc = s["lifecycle"];
     if (typeof lc !== "string" || !V01_LIFECYCLE_MODES.has(lc)) {
@@ -491,11 +503,6 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
         "/spec/translates",
       );
     }
-    const schema = s["schema"] as Record<string, unknown>;
-    const properties = schema["properties"];
-    const propertyNames = properties && typeof properties === "object" && !Array.isArray(properties)
-      ? Object.keys(properties)
-      : [];
     if (!propertyNames.some((name) => name !== "locale" && name !== tr["on"])) {
       throw new ManifestParseError(
         "Schema.spec.translates requires at least one locale-specific field besides 'locale' and the join field",
