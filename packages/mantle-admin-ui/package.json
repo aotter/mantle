@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle-admin-ui",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "description": "Admin SPA for mantle — React 19 + Vite + Tailwind v4 + shadcn. Platform-agnostic: ships a single self-contained HTML string consumed by adapter mount layers.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
