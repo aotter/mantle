@@ -41,24 +41,6 @@ describe("ValidateBootUseCase", () => {
     });
   });
 
-  it("rejects editorial lifecycle at boot", () => {
-    const manifest = postsSchema();
-    const result = new ValidateBootUseCase().execute({
-      manifests: [{
-        ...manifest,
-        spec: { ...manifest.spec, lifecycle: "editorial" },
-      }],
-      registry: new InMemoryHandlerRegistry(),
-    });
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.diagnostics).toContainEqual(expect.objectContaining({
-      code: "LIFECYCLE_NOT_IN_V010",
-      phase: "boot",
-    }));
-  });
-
   it("rejects missing, self-referencing, builtin, and chained guard Procedures", () => {
     const reg = new InMemoryHandlerRegistry();
     reg.register("echoHandler", () => ({ ok: true }));

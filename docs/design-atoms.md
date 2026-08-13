@@ -3,14 +3,7 @@
 > If you're an AI working in a project that consumes `@aotter/mantle-*`,
 > read this first. It explains the entire surface area in one page.
 >
-> **Status**: v0.1 grammar lock. Atoms are shipped; rich sub-spec
-> grammar (policies, recursive views, temporal predicates, quotas,
-> projection triggers, cron/queue sources, and extended lifecycle hooks) is
-> reserved as **DRAFT** — see "Future grammar" appendix. Editorial
-> lifecycle is the one shipped grammar key whose runtime is **deferred
-> to v0.1.x**: parser and boot accept the shape, while
-> `request_publish` rejects it with `LIFECYCLE_NOT_IN_V010` until the approval
-> queue lands. Do not use editorial for a v0.1 publishing workflow.
+> **Status**: v0.1 shipped grammar. Unknown keys and enum values are rejected.
 >
 > **This is the reference manual** — what the system is. For *why* it
 > ended up this shape (alternatives considered, trade-offs accepted),
@@ -33,7 +26,7 @@ primitives Postgres has shipped for 30 years.
 | **`Schema`** | `CREATE TABLE` | no (manipulated via View / Procedure) | no |
 | **`View`** | `CREATE VIEW` | **yes** (auto-mounted on its declared public/staff REST and MCP surface; see ADR-0012) | no |
 | **`Procedure`** | `CREATE FUNCTION ... LANGUAGE plpgsql` | **no** (transport-agnostic; needs a `Trigger` to bind it) | **yes — handler ref to consumer's TS file** |
-| **`Trigger`** | `CREATE TRIGGER` + `pg_cron` + PostgREST route + `LISTEN/NOTIFY` | yes (the binding atom — turns Procedures into HTTP endpoints, cron jobs, MCP tools, lifecycle hooks) | no |
+| **`Trigger`** | `CREATE TRIGGER` + route/tool binding | yes (the binding atom — turns Procedures into HTTP endpoints, MCP tools, and lifecycle hooks) | no |
 
 The **read/write asymmetry is by design** and matches HTTP safe-vs-unsafe
 semantics. Reads (`View`) are idempotent and cacheable; the SDK
@@ -53,7 +46,6 @@ apiVersion: cms.mantle.aotter.net/v1
 kind: Schema | View | Procedure | Trigger
 metadata:
   name: posts                # required, kebab-case, unique within deployment
-  labels: { ... }            # optional, free-form
 spec:
   ...                        # kind-specific
 ```
@@ -112,7 +104,7 @@ metadata: { name: posts }
 spec:
   title: Posts                    # required: human-readable label for the admin UI
   localized: true                 # opt-in: row carries data.locale (ADR-0010)
-  lifecycle: publishing               # default; 'operational' is operational, 'editorial' is reserved
+  lifecycle: publishing               # default; use 'operational' for live records
   schema:
     $schema: https://json-schema.org/draft/2020-12/schema
     type: object
@@ -167,19 +159,10 @@ relationship is what powers translation grouping and completeness in Admin.
 
 #### Lifecycle
 
-**`spec.lifecycle: 'publishing' | 'editorial' | 'operational'`** — controls the
+**`spec.lifecycle: 'publishing' | 'operational'`** — controls the
 entry's state machine.
 
-- `publishing` (default) — `draft → published → archived`. No approval
-  queue. **This is the only content-workflow mode whose runtime ships
-  in v0.1.0.**
-- `editorial` — the six-state machine with an approval queue
-  (`draft → review → approved → scheduled → published → archived`,
-  with `published` returnable to `draft` for republish). The grammar and
-  state-machine vocabulary are reserved for forward compatibility, but the
-  approval/request-publish runtime is deferred until after v0.1. In v0.1,
-  manifest validation rejects it with `LIFECYCLE_NOT_IN_V010`; do not declare
-  editorial for a current workflow.
+- `publishing` (default) — `draft → published → archived`. No approval queue.
 - `operational` — records that are not authored content: orders,
   inventory snapshots, grant/audit rows — anything written by
   Procedures as a side effect rather than drafted by a person. No
@@ -194,7 +177,7 @@ entry's state machine.
 
 The modes are **per-Schema and mix freely** within a site. There is no
 site-wide lifecycle setting; one Schema can be `publishing` while another
-is `editorial` and a third is `operational`.
+is `operational`.
 
 **Property-level extensions** (JSON Schema vendor keywords, all optional):
 
@@ -222,17 +205,11 @@ wire.
 | `now` | Server timestamp at write (ISO-8601 string with timezone) | `createdAt`, `submittedAt`, `grantedAt` |
 
 **v0.1 stamping behavior**:
-- Stamped on `INSERT` only. Update-stamping (e.g. `updatedAt: now` that
-  re-stamps on every UPDATE) is DRAFT — it lands when first use case
-  surfaces.
+- Stamped on `INSERT` only.
 - Caller-supplied value: rejected at input validation. The Procedure's
   effective input schema strips bound fields before checking caller
   input, so callers can't accidentally send them.
 - Visible in View output: yes, as ordinary columns. No special masking.
-- Used by `requires.auth.owns:` predicate (DRAFT): the predicate
-  compares a row's `x-mantle-bind: ctx.user` field to the current
-  `:ctx.user` to verify ownership without configuring per-Schema
-  owner-column names.
 
 **Why a closed enum** (highest-leverage discipline in the spec): bind
 values are server-controlled identity + time facts. If we accepted
@@ -259,8 +236,7 @@ detection). The admin uses declared refs to show related rows and to nest
 required child collections; it does not infer relationships from field names.
 Declare a single-field `indexes` entry for the ref field (for example,
 `indexes: [[authorId]]`) when reverse lookups must stay bounded. Mantle adds
-the native entry-order columns to that access path. Future grammar may upgrade
-it to enforced.
+the native entry-order columns to that access path.
 
 **Example**:
 ```yaml
@@ -303,12 +279,6 @@ conventional values are `markdown`, `richtext`, `code`, `media`,
 MCP tool schemas preserve the hint for agents. Admin surfaces expose
 media-shaped fields but first-party upload hosting is optional and not
 part of first-run provisioning.
-
----
-
-Anything beyond these three (policies, computed columns, RBAC grants,
-owner declarations, `x-mantle-bind` enum extension) is **DRAFT** — see
-appendix.
 
 **Postgres analogue**: `CREATE TABLE posts (id UUID PRIMARY KEY, ...,
 UNIQUE (slug, locale));`
@@ -381,11 +351,8 @@ query, no `LIMIT n+1` probe.
 
 **v0.1 filter AST**: comparison operators (`eq`, `gt`, `gte`, `lt`,
 `lte`) plus `and` / `or`. Comparison `value` may be a literal or a
-`{ $param: <name> }` sentinel. v0.1.0 enforces required-only param refs;
-optional-with-skip semantics are reserved for v0.1.x. Field-to-field
-comparisons are not supported yet; compare a field to a literal or
-param. Anything else (`contains`, `recursive`, `gatedBy`,
-`join.aggregate`, `policies.skip`) is DRAFT.
+`{ $param: <name> }` sentinel. Param refs must be required. Field-to-field
+comparisons are not supported; compare a field to a literal or param.
 
 **Postgres analogue**: `CREATE VIEW recent_published AS SELECT ...
 FROM posts WHERE status = 'published' ORDER BY updated_at DESC LIMIT
@@ -401,8 +368,8 @@ provides the handler function with auto-generated TS types.
 `Procedure` is **transport-agnostic and not directly exposed**. It does
 not contain HTTP paths, methods, or MCP tool names. To call a Procedure
 from outside the SDK runtime, declare a `Trigger` whose `target` points
-at it. The same Procedure can be bound by multiple Triggers (HTTP +
-cron + MCP + lifecycle, all sharing one handler).
+at it. The same Procedure can be bound by multiple Triggers (HTTP + MCP +
+lifecycle, all sharing one handler).
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v1
@@ -443,9 +410,6 @@ export const handlers = {
 - `ctx.auth` — caller supplied any adapter-verified credential
 - `ctx.auth.scope: <scope>` — verified credential carries the exact opaque,
   consumer-owned scope; repeat to require multiple scopes
-
-Anything beyond this (`any:`, `owns:`, `withinMinutes:`, `contains:`,
-`requires.window`, `requires.quota`, `errors`, `retry`) is DRAFT.
 
 Both Procedures and Views may add one dynamic guard beside `auth`:
 
@@ -503,7 +467,7 @@ spec:
 ```
 
 The same Procedure can have multiple Triggers — that's how it becomes
-"an HTTP endpoint AND a cron job AND an MCP tool" without duplicating
+an HTTP endpoint and an MCP tool without duplicating
 handler logic. Each transport is one Trigger; the Procedure body is
 shared.
 
@@ -514,17 +478,14 @@ tool on `surface: public | staff`), or `lifecycle` (entry-writer hook). For `lif
 Lifecycle hooks are wired through `LifecycleHookingEntryRepository`, so
 MCP, admin, and builtin write paths share the same hook behavior.
 
-- `cron` / `queue` are **DRAFT (v0.2+)** — speculative, gated by
-  concrete consumer demand. Same appendix § "DRAFT (v0.2+)."
-
 The state-machine "lifecycle" from the Schema atom
-(`Schema.spec.lifecycle: publishing | editorial`) is a separate domain
+(`Schema.spec.lifecycle: publishing | operational`) is a separate domain
 that shares the word. The Schema setting governs which states an
 entry can be in; shipped lifecycle Triggers govern what fires around
 mutations.
 
 **Postgres analogue**: `CREATE TRIGGER ... AFTER INSERT ON posts
-EXECUTE FUNCTION ...` (lifecycle); `pg_cron` extension (cron); plus
+EXECUTE FUNCTION ...` (lifecycle), plus
 `CREATE FUNCTION` exposed via PostgREST routes (http) — Postgres has
 had all of these via extensions for years, just split across multiple
 mechanisms. We unify them under one atom.
@@ -602,7 +563,7 @@ different constraints.
 | `UNAUTHENTICATED` | `401` | no active session (admin API: missing/expired session cookie) |
 | `AUTH_DENIED` | `403` | `requires.auth` predicate evaluated false (or admin: caller lacks required staff role) |
 | `ENTITLEMENT_REQUIRED` | `402` | consumer guard denies current payment/membership/transaction entitlement |
-| `NOT_FOUND` | `404` | resource not found — admin: approval id; runtime: View name at `/api/views/<name>` |
+| `NOT_FOUND` | `404` | resource not found — entry id or View name at `/api/views/<name>` |
 | `HANDLER_NOT_REGISTERED` | `500` | `handler.ref` key not registered at boot |
 | `DISPATCHER_NOT_BUILT` | `501` | runtime feature not implemented in this SDK build |
 | `INTERNAL_ERROR` | `500` | uncaught handler exception |
@@ -613,26 +574,13 @@ may also fire in earlier loops (e.g. `HANDLER_NOT_REGISTERED`
 fires at boot — `phase: "boot"` — and that's where it should be
 caught; the runtime occurrence is defense-in-depth).
 
-Additional runtime codes activate as future grammar surfaces (e.g.
-`QUOTA_EXCEEDED → 429` arrives with `requires.quota`).
-
-## RBAC — what v0.1 ships, what's DRAFT
+## RBAC
 
 v0.1 auth gates use `requires.auth.all` with `ctx.user`,
 `ctx.staff: [<roles>]`, `ctx.auth`, and `ctx.auth.scope` predicates on
 Procedures and Views. This covers staff-only, logged-in-only,
 credential-protected, and delegated-scope targets. One Procedure-backed guard
 handles mutable consumer business state without widening the static grammar.
-
-**Not yet shipped** (DRAFT):
-- Row-level read visibility (private posts, friend-only audiences)
-- Field-level write policies (this user can update body but not
-  parent_id)
-- Cross-Schema policy inheritance (gatedBy)
-- Quotas, edit-windows, rate limits
-
-These all live as `Schema.spec.policies.*` and `Procedure.spec.requires.*`
-sub-specs in the DRAFT spec. See "Future grammar" appendix.
 
 ## How to think when extending this CMS
 
@@ -642,13 +590,11 @@ sub-specs in the DRAFT spec. See "Future grammar" appendix.
    external read endpoints).
 3. **What operations?** → `Procedure` for each. One Procedure = one
    typed function call. Compose in handler code, not in YAML.
-4. **What invokes them?** → `Trigger` per source. Multiple Triggers
-   can target the same Procedure (HTTP + MCP + cron, all on one
-   handler).
+4. **What invokes them?** → `Trigger` per declared HTTP, MCP, or lifecycle
+   source. Site-owned events can call the same Procedure binding directly.
 5. **Who's allowed?** → `Procedure/View.spec.requires.auth` for static
    identity/scope; optional `requires.guard.procedure` for one live,
-   consumer-owned business check. Row-level and field-level rules remain
-   future grammar.
+   consumer-owned business check.
 
 If you find yourself wanting a 5th kind, **stop**. Sketch the same
 thing as a composition of the four; almost always it works.
@@ -740,8 +686,7 @@ grammar, leftmost-prefix rules, SQL helper, and query-plan examples.
   comfortable. Anonymous public responses can hit version-local Workers
   Cache before the Worker; origin misses use indexed D1 reads.
 - **Mid-scale (10k – 100k entries)**: declare measured list/filter
-  access paths with ordered `indexes`. Cross-collection JSON-path joins
-  may eventually gain `x-mantle-ref` auto-lift; that remains DRAFT.
+  access paths with ordered `indexes`.
 - **Hard D1 limits**: 1 MB max row size; 5,000 rows per query result;
   single-writer per database (concurrent writes serialize).
 - **Cross-region read**: D1 is region-pinned; first origin hit from a
@@ -771,7 +716,6 @@ When this path is taken (post-v0.1; not implemented yet), the
 | `json_each` → array operators (`@>`, `&&`) | none — predicates stay declarative |
 | SDK-stamped `now` → `DEFAULT now()` (optional) | none |
 | SDK-side policy rewriting → native RLS (optional) | none |
-| `Trigger.target.project` single-writer DO → real same-transaction trigger | atomicity guarantee strengthens; YAML grammar unchanged (the `atomicity:` declaration just stops needing the eventual-consistency caveat) |
 
 Migration shape: `entries` table dumped from D1, restored to PG. Stay
 single-table-with-discriminator (drop-in) or split into
@@ -779,67 +723,12 @@ table-per-collection (more PG-idiomatic, longer migration). Both shapes
 remain valid `cms.mantle.aotter.net/v1` deployments.
 
 **v0.1 commitment**: D1 only via the Cloudflare adapter. Hyperdrive +
-PG path is documented as the upgrade route but not implemented. SDKs
-and starters target D1 exclusively. The Netlify adapter package
-(`@aotter/mantle-netlify`) is a README stub for v0.2; its
-existence is an engineering forcing function ensuring the runtime
-package stays portable across adapters.
+PG is an upgrade route, not an implemented adapter. SDKs and starters target
+D1 exclusively.
 
-## Roadmap — what's not in v0.1.0
+## Detailed shipped grammar
 
-> See [ADR-0001 §"Future grammar discipline"](adr/0001-four-atom-manifest-model.md#future-grammar-discipline-was-poc-adr-0005)
-> for the v0.1 minimum-vs-roadmap discipline, the promotion process,
-> and the YAGNI argument that gates speculative shipping.
-
-The atoms are locked at 4. Their **inner grammar** is intentionally
-narrow at v0.1.0 and grows in two tiers:
-
-1. **v0.1.0 shipped** — grammar parses and runtime behavior is wired
-   in the current rebuild.
-2. **v0.1.x committed** — on the patch-release roadmap. Spec is
-   documented; implementation lands within the v0.1 series. The unsupported
-   runtime path fails closed with a code naming the feature.
-3. **DRAFT (v0.2+)** — speculative, gated by concrete consumer
-   demand. Parser/static validation rejects with `DRAFT_KEY_USED`. May or may
-   not ship — depends on whether real use cases apply pressure.
-
-### v0.1.0 shipped
-
-#### `Trigger.source.kind: lifecycle` — bind a Procedure to a Schema event
-
-Grammar lives in v0.1.0. Runtime is the
-`LifecycleHookingEntryRepository` decorator wrapping the entry-writer
-chokepoint so MCP / admin / builtin paths all fire the same hooks.
-Full shape lives further down.
-
-#### `Procedure.handler.kind: builtin` — SDK-supplied CRUD Procedure
-
-Grammar lives in v0.1.0. Runtime is the
-`InvokeBuiltinUseCase` that dispatches `op: create | update | upsert
-| delete | archive` against the entry-writer chokepoint with `x-mantle-bind`
-stamping and `input ∩ Schema.properties` projection. Full shape lives
-further down.
-
-#### `Trigger.source.kind: mcp` and shared authorization
-
-An MCP Trigger binds a declared Procedure to either the public or staff MCP
-surface. Procedures/Views share `ctx.auth`/scope predicates and optional guard
-orchestration across REST and MCP. Staff role is loaded live for each protected
-call; staff Views remain absent and un-callable on public MCP.
-
-### Detailed shipped grammar and reserved lifecycle
-
-> The `handler.kind: builtin` and `Trigger.source.kind: lifecycle`
-> sections below describe shipped v0.1.0 behavior. Only the
-> `Schema.spec.lifecycle: editorial` remains reserved for a later release.
-
-#### `Schema.spec.lifecycle: editorial` runtime
-
-The parser reserves the key, but manifest validation emits
-`LIFECYCLE_NOT_IN_V010`. When the approval-queue runtime lands, the same grammar
-can be enabled without inventing a second lifecycle name.
-
-#### `handler.kind: builtin` — thin shortcut over the storage adapter for trivial CRUD-shaped Procedures
+### `handler.kind: builtin` — thin shortcut over the storage adapter for trivial CRUD-shaped Procedures
 
 Use when the body is "insert a row" / "update a row" / "delete a
 row"; reach for `ref` when there is real business logic. Shape:
@@ -860,7 +749,7 @@ spec:
 | `update` | UPDATE in place. `input.id` + `input.expectedVersion` (OCC) required. Bumps version. |
 | `upsert` | If `input.id` resolves, behaves as `update`; else as `create`. |
 | `delete` | Hard DELETE by id. |
-| `archive` | Soft-archive (status='archived'). The manifest validator permits this builtin only for `editorial` Schemas; the archive transition itself is runtime-wired, while editorial approval/request-publish remains deferred. |
+| `archive` | Soft-archive a publishing entry (`status='archived'`). |
 
 The Procedure's `input` is the contract with the *caller*. It MAY
 declare fields the Schema does not (e.g. a Turnstile token). The
@@ -870,11 +759,10 @@ the side-channel fields pass validation. To act on those fields
 (read the token, call the vendor), declare a `before_create`
 lifecycle Trigger — see below.
 
-`request_publish` and `publish` are intentionally not in the
-builtin vocabulary. They are editorial-workflow operations, not CRUD
-primitives.
+`request_publish` and `publish` are intentionally not in the builtin
+vocabulary. They are lifecycle operations, not CRUD primitives.
 
-#### `Trigger.source.kind: lifecycle` — bind a Procedure to a Schema event
+### `Trigger.source.kind: lifecycle` — bind a Procedure to a Schema event
 
 Shape:
 
@@ -932,9 +820,8 @@ post-mutation row for every `after_*`.
 
 **Hook ordering**: when multiple lifecycle Triggers bind the same
 `(schema, hook)`, the runtime fires them **alphabetically by
-`Trigger.metadata.name`**. A `priority: number` key is reserved for
-v0.2; today, choose names that sort correctly (`010-bot-check`,
-`020-rate-limit`).
+`Trigger.metadata.name`**. Choose names that sort correctly
+(`010-bot-check`, `020-rate-limit`).
 
 For deferred delivery, that ordered Trigger-name list is captured in
 one strict versioned event. Every captured Trigger runs before a
@@ -945,103 +832,7 @@ Cloudflare wiring, the 128 KB platform limit, retry/DLQ configuration,
 idempotency, and legacy-envelope draining are specified in
 [Deferred lifecycle hooks on Cloudflare Queues](deferred-lifecycle-queues.md).
 
-`before_publish` and `after_publish` already wrap the shipped publishing
-transition. When editorial approval lands, the same hooks wrap its final
-transition to `published`; no second hook grammar is planned.
-
-### DRAFT (v0.2+, speculative)
-
-Each item below lands when the first concrete real-world use case
-forces it, not on speculation. Today, do not implement; parser/static
-validation rejects it with `DRAFT_KEY_USED`.
-
-#### Schema future
-- **`x-mantle-ref` auto-lift to virtual column** — when a property
-  carrying `x-mantle-ref: <other-schema>` is referenced in any registered
-  View's `filter:` or future `join:`, the SDK auto-creates the virtual
-  column + non-unique index without requiring an explicit `indexes`
-  declaration. Solves cross-collection JSON-path join
-  performance without making authors think about it. Pure SDK
-  behavior; no new YAML grammar.
-- **`spec.policies.visible`** — row-level read predicate auto-AND'd
-  into Views from this Schema. Lands with first private/audience
-  feature.
-- **`spec.policies.readable.fields`** — field-level wire-mask. Lands
-  when staff-only fields surface (e.g. `threadLength` visible to
-  editors only).
-- **`spec.policies.writable.{fields, create}`** — field-level write
-  gate auto-applied to all writers.
-- **`spec.policies.owner`** — names the ownership column for `owns:`
-  predicate. Currently implicit (`authorId`).
-- **Computed columns via projection Trigger** — see `Trigger.target`.
-
-#### View future
-- **`recursive: { parent, rootWhen, pathBy, depthAs?, pathAs?, maxDepth }`**
-  — declarative recursive CTE. Lands with first threaded-reads feature
-  (comments, taxonomies).
-- **`params: { <name>: <jsonschema> }`** — caller-bound view parameters.
-- **`gatedBy: [{ schema, policy, on }]`** — cross-Schema visibility
-  inheritance.
-- **`join: [{ as, from, on, project?, aggregate?: count|exists, bind? }]`**
-  — joined relations with optional reducer (per-row count or boolean).
-- **`policies: { skip: [<policy-name> | field, ...] }`** — explicit
-  bypass for admin/audit Views.
-- Filter AST extension: `contains` (array containment), `not`, `in`, `like`.
-
-#### Procedure future
-- **`requires.auth.any`** with disjunction; the shipped `all` predicate
-  vocabulary extends to `owns: { schema, idFrom }`, `contains: {
-  schema, idFrom, field, valueFrom }`.
-- **`requires.window.{withinMinutes, column?}`** — temporal
-  precondition, sibling-modifier of `owns:`. DRY rule: window MUST
-  sit beside exactly one `(schema, id)`-binding predicate in the same
-  any/all group.
-- **`requires.quota.{key, limit, per, overrideFrom?}`** — declarative
-  rate cap. Override Schema lookup keyed by `ctx.user`. Counter
-  substrate: Durable Object.
-- **`errors.{onHandlerThrow, onRecursionDepth, maxDepth}`** + **`retry.{
-  limit, backoff, retryOn, idempotencyKey?}`** — failure-policy
-  declared. Retry + `op: create` requires `idempotencyKey:` (parse
-  error otherwise).
-
-#### Trigger future
-- **`source.kind: cron`** with `expr:` — scheduled invocation.
-- **`source.kind: queue`** — async fan-out / message-driven invocation.
-- **`source.kind: lifecycle.foo`** — DRAFT extensions to the shipped
-  lifecycle hooks (e.g. `before_archive`, `after_request_publish`).
-  The 8 hooks listed in the detailed shipped section are the floor,
-  not the ceiling.
-
-(Full lifecycle Trigger spec for the 8 shipped hooks lives
-in the detailed section above. The remaining DRAFT items
-below are the speculative v0.2+ shapes that haven't yet been promoted
-to a committed roadmap.)
-
-- **`target.project: { schema, where, set: { <col>: { aggregate, from,
-  where } } }`** — declarative aggregate-projection across Schemas.
-  Replaces hand-written counter handlers. Same-transaction on PG;
-  bounded-eventual on D1 via single-writer DO.
-- **`atomicity: same-transaction | best-effort`** — explicit guarantee
-  declaration when projection Triggers ship.
-
-#### Cross-cutting future
-- **Closed `ctx.*` predicate identity**: v0.1 `{ user, staff, auth,
-  auth.scope }`
-  extends to `{ ..., system }` when SDK-internal Trigger executor
-  paths land. Multi-tenant deployments would add `{ tenant }` via
-  grammar-revise round if/when that product shape is pursued. New
-  entries require explicit grammar-revise (closed enum is
-  load-bearing infrastructure).
-- **Placeholder namespace `$.*`**: `$.input.<f>`, `$.row.<f>`, `$.op`,
-  `$.params.<f>`, `$.source` — write-time data-flow bindings inside
-  policy ASTs and handler signatures. Distinct from `:ctx.*` identity
-  bindings; one-site evaluation rule.
-- **`Schema.spec.staffBypass: [<role>]`** — DRY shortcut once
-  `ctx.staff: [editor, owner]` repetition crosses 4+ schemas.
-
-Each extension goes through a 3-agent review (yml-editor proposes /
-code-impler tests buildability / fresh-dev verifies clarity) before
-locking. v0.1 is the floor, not the ceiling.
+`before_publish` and `after_publish` wrap the shipped publishing transition.
 
 ## Lineage — the academic foundations
 
@@ -1054,6 +845,6 @@ locking. v0.1 is the floor, not the ceiling.
 
 The composite design — declarative resources + ECA-fired procedures +
 policy-gated execution — is sometimes labeled **Active Database +
-Policy-Based Management**. Postgres + PostgREST + pg_cron is the
+Policy-Based Management**. Postgres + PostgREST is the
 canonical full-stack reference; we abstract that pattern up to the
 application layer with K8s-style YAML manifests.

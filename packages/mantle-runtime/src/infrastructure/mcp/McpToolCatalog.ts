@@ -220,7 +220,7 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
   {
     name: "delete_entry",
-    description: "Permanently delete an entry and its revision history. For content lifecycles, prefer archive_entry when reversibility matters.",
+    description: "Permanently delete an entry. For content lifecycles, prefer archive_entry when reversibility matters.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" } },

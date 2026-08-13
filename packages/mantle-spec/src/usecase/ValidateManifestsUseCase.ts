@@ -35,7 +35,7 @@ import type { ValidateManifestsResponse } from "./dto/ValidateManifestsResponse.
  * `ValidateManifestsUseCase` — Loop 1 of the SDK authoring contract
  * (ADR-0007 / `docs/design-atoms.md`). Pure: no DB, no network. The
  * structural parser (`ManifestParser`) catches single-manifest
- * envelope / shape / DRAFT-key errors. This use case catches everything
+ * envelope / shape errors. This use case catches everything
  * that requires looking at MULTIPLE manifests together (cross-refs,
  * duplicates, path collisions) plus Schema-aware checks.
  *
@@ -159,18 +159,6 @@ function checkSchemaInternals(
   filePaths?: ManifestFilePaths,
 ): Diagnostic[] {
   const out: Diagnostic[] = [];
-  if (s.spec.lifecycle === "editorial") {
-    out.push(
-      validateDiagnostic({
-        code: "LIFECYCLE_NOT_IN_V010",
-        severity: "error",
-        path: manifestPath("Schema", s.metadata.name, "/spec/lifecycle", filePaths),
-        value: "editorial",
-        expected: "publishing or operational",
-        message: `Schema '${s.metadata.name}' declares lifecycle: editorial, which is reserved but not supported in v0.1. Use publishing or operational until the editorial workflow ships.`,
-      }),
-    );
-  }
   const schema = s.spec.schema as {
     properties?: Record<string, unknown>;
     required?: unknown;
@@ -574,22 +562,6 @@ function checkBuiltinHandler(
       }),
     );
     return out;
-  }
-  // op: archive is editorial-only. Inline the lifecycle resolution
-  // here — we need only the Schema.spec.lifecycle default, not the
-  // full state-machine helpers.
-  const lifecycle = target.spec.lifecycle ?? "publishing";
-  if (h.op === "archive" && lifecycle !== "editorial") {
-    out.push(
-      validateDiagnostic({
-        code: "BUILTIN_HANDLER_SCHEMA_NOT_EDITORIAL",
-        severity: "error",
-        path: manifestPath("Procedure", p.metadata.name, "/spec/handler/op", filePaths),
-        value: "archive",
-        expected: `Schema '${h.schema}' to declare lifecycle: editorial (builtin op: archive is editorial-only)`,
-        message: `Procedure '${p.metadata.name}' uses op: archive on Schema '${h.schema}', but that Schema's lifecycle is '${lifecycle}'. Either use an editorial Schema or choose another builtin op.`,
-      }),
-    );
   }
   return out;
 }

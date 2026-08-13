@@ -17,7 +17,7 @@ function collection(overrides: Partial<Collection>): Collection {
 
 describe("collectionSummaryKey", () => {
   it("picks the lifecycle+i18n variant when both capabilities are present", () => {
-    expect(collectionSummaryKey(collection({ lifecycle: "editorial", hasTranslations: true }))).toBe(
+    expect(collectionSummaryKey(collection({ lifecycle: "publishing", hasTranslations: true }))).toBe(
       "collection.schemaSummary.lifecycleAndI18n",
     );
   });

@@ -91,6 +91,7 @@ describe("createMantleWorker", () => {
       },
     });
     const env = testEnv({ TEST_NAME: "same-stack" });
+    const runtime = await worker.getRuntime(env);
 
     const [first, second] = await Promise.all([
       fetchWorker(worker, "/health", env),
@@ -99,6 +100,7 @@ describe("createMantleWorker", () => {
 
     expect(await first.text()).toBe("same-stack");
     expect(await second.text()).toBe("same-stack");
+    expect(await worker.getRuntime(env)).toBe(runtime);
     expect(assemblies).toBe(1);
   });
 

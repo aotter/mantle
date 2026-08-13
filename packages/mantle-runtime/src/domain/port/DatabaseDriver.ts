@@ -1,6 +1,6 @@
 /**
  * `DatabaseDriver` — runtime's adapter-agnostic interface to
- * persistent relational state. Entries, revisions, approvals, site config,
+ * persistent relational state. Entries, site config,
  * auth support, and media tables declared by the canonical migrations live
  * behind this surface; the runtime never sees `D1Database`, `Pool` (postgres),
  * or any concrete driver.

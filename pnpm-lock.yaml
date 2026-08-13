@@ -88,8 +88,6 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
 
-  packages/adapters/netlify: {}
-
   packages/mantle:
     dependencies:
       '@aotter/mantle-admin-ui':

@@ -96,8 +96,6 @@ Boot validator gates:
 - Every `{ $param: <name> }` ref MUST resolve to a declared param (`VIEW_FILTER_PARAM_REF_UNKNOWN`).
 - Every `{ $param: <name> }` ref MUST appear in `params.required` (`VIEW_FILTER_PARAM_REF_NOT_REQUIRED`).
 
-The required-only rule is a v0.1.0 simplification. v0.1.x will promote optional-with-skip semantics (filter clauses referencing missing optional params evaluate to TRUE / no-op) — the runtime compiler already implements drop semantics for forward compatibility, but the parser rejects it today so authors get a clear "not yet" diagnostic.
-
 ### 6. Response envelope is `{ rows, page, show, hasMore }`
 
 ```json
@@ -130,12 +128,11 @@ Query strings arrive as strings; `View.spec.params` declares the JSON Schema typ
 
 Required params not present → `400 INPUT_VALIDATION_FAILED`. Coercion failure → `400 INPUT_VALIDATION_FAILED`. Unknown query-string keys are silently ignored (lenient v0.1.0; strict mode is a candidate v0.1.x flag).
 
-## Out of scope (deferred)
+## Current limits
 
-- **`Trigger.target.view`** (lifecycle/projection triggers fired by Views). Tracked separately as a v0.2 grammar move.
-- **`spec.output.kind`** (declaring scalar / tree / tabular result shape per View). Lands with join + group-by support in v0.1.x.
-- **Optional param-ref drop semantics in the parser.** Runtime is already implemented; parser promotes when v0.1.x lands.
-- **DRAFT filter operators** (`contains` / `in` / `like` / `not`). v0.1 keeps comparison operators closed to `eq` / `gt` / `gte` / `lt` / `lte`; field-to-field comparisons remain out of scope.
+- Param refs must be required.
+- Filter operators are closed to `eq` / `gt` / `gte` / `lt` / `lte`;
+  field-to-field comparisons are unsupported.
 - **Row-level policy rewriting.** `requires` authorizes the whole View; it does
   not inject per-row visibility predicates. Consumer-specific membership,
   payment, or entitlement checks belong in the optional guard Procedure.
@@ -149,13 +146,12 @@ Required params not present → `400 INPUT_VALIDATION_FAILED`. Coercion failure 
 - Cheap pagination + dynamic filters without hand-writing handlers.
 
 **Authors lose:**
-- A View per filter combination (until DRAFT operators land). `posts-by-locale` plus `posts-by-tag` plus `posts-by-locale-and-tag` would be three Views in v0.1.0.
+- Each named query shape remains an explicit View.
 - No internal-only View surface; choose public/staff or keep the query in a TS
   helper.
 
 **Runtime gains:**
 - One executor and response shape cover public/staff REST and MCP reads.
-- Forward-compat for join / group-by / aggregation: envelope generalises by Views declaring `output.kind` later.
 
 **Reviewers / future contributors should:**
 - Reject any PR adding `Schema.spec.expose.rest` or a similar Schema-level public-read flag.

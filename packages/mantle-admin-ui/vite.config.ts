@@ -12,7 +12,7 @@ const { version } = JSON.parse(
 /**
  * Admin SPA build — emits ONE self-contained `dist/index.html` with
  * JS / CSS / assets all inlined. Platform-agnostic: any adapter
- * (cloudflare, netlify, ...) serves the file as a single string for
+ * serves the file as a single string for
  * every URL under `/admin/*` — no `/admin/assets/*` plumbing needed.
  *
  * Trade-off: each cold load fetches the full bundle (no HTTP caching

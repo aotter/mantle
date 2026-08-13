@@ -105,10 +105,8 @@ export function compileView(
       options.ctxUserId,
       schema,
     );
-    if (compiled !== null) {
-      whereParts.push(`(${compiled.sql})`);
-      sqlParams.push(...compiled.params);
-    }
+    whereParts.push(`(${compiled.sql})`);
+    sqlParams.push(...compiled.params);
   }
   const where = `WHERE ${whereParts.join(" AND ")}`;
   const orderBy = buildOrderBy(view.spec.orderBy, schema);
@@ -152,23 +150,12 @@ interface CompiledFragment {
   readonly params: readonly unknown[];
 }
 
-/**
- * Returns `null` when the node has no constraint to emit: an `eq`
- * whose `{ $param }` ref is unresolved, or an AND/OR whose children
- * all dropped. v0.1.0 parser enforces required-only param refs so
- * the drop path is dead today; kept so v0.1.x "optional param ref"
- * promotion is a parser-only change.
- *
- * Each node returns its own `{ sql, params }` (vs. pushing into a
- * shared array) so a dropped sub-tree can never leave orphan params
- * bound to the parent's `?` placeholders.
- */
 function compileFilter(
   node: FilterAst,
   paramValues: Record<string, unknown>,
   ctxUserId?: string,
   schema?: SchemaManifest,
-): CompiledFragment | null {
+): CompiledFragment {
   const comparison = getFilterComparison(node);
   if (comparison) {
     const value = comparison.node.value;
@@ -178,7 +165,9 @@ function compileFilter(
       bound = ctxUserId;
     } else if (isParamRef(value)) {
       const resolved = paramValues[value.$param];
-      if (resolved === undefined) return null;
+      if (resolved === undefined) {
+        throw new Error(`View filter requires param '${value.$param}'.`);
+      }
       bound = resolved;
     } else {
       bound = value;
@@ -191,9 +180,7 @@ function compileFilter(
   const op = "and" in node ? "AND" : "OR";
   const children = "and" in node ? node.and : "or" in node ? node.or : [];
   const compiled = children
-    .map((c) => compileFilter(c, paramValues, ctxUserId, schema))
-    .filter((c): c is CompiledFragment => c !== null);
-  if (compiled.length === 0) return null;
+    .map((c) => compileFilter(c, paramValues, ctxUserId, schema));
   return {
     sql: compiled.map((c) => `(${c.sql})`).join(` ${op} `),
     params: compiled.flatMap((c) => c.params),

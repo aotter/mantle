@@ -21,7 +21,7 @@ export type Phase = "validate" | "test" | "boot" | "runtime";
  * below are not raised by spec source — they live here because the
  * catalog is the public contract, not the union of what spec happens
  * to throw today. Adding a new code is a grammar-revise event
- * (ADR-0001 § Future grammar discipline).
+ * (ADR-0001).
  *
  * Single source of truth: the const array drives `DiagnosticCode`
  * (type), so adding a code is one edit.
@@ -55,10 +55,6 @@ export const DIAGNOSTIC_CODES = [
   "SCHEMA_SEARCH_INVALID",
   "SCHEMA_SEARCH_FIELD_UNKNOWN",
   "SCHEMA_UI_INVALID",
-  "DRAFT_KEY_USED",
-  // Reserved v0.1.x behavior fails closed with a code naming the feature,
-  // distinct from the speculative-DRAFT bucket.
-  "LIFECYCLE_NOT_IN_V010",
   "HANDLER_BUILTIN_NOT_IN_V010",
   "MANIFEST_ROOT_NOT_FOUND",
   "MANIFEST_READ_FAILED",
@@ -75,7 +71,6 @@ export const DIAGNOSTIC_CODES = [
   "METHOD_NOT_ALLOWED",
   // Builtin handlers + lifecycle hooks: validate / boot.
   "BUILTIN_HANDLER_SCHEMA_UNKNOWN",
-  "BUILTIN_HANDLER_SCHEMA_NOT_EDITORIAL",
   "LIFECYCLE_SCHEMA_UNKNOWN",
   "LIFECYCLE_HOOK_REJECTED",
   // Locale + translates: validate / boot.

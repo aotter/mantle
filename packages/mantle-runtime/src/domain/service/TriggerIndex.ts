@@ -7,9 +7,8 @@ import type { LifecycleHook, TriggerManifest } from "@aotter/mantle-spec";
  * mutation.
  *
  * Within a `(schema, hook)` group, Triggers fire in **alphabetical
- * order by `Trigger.metadata.name`** — a `priority: number` key is
- * reserved for v0.2 (POC ADR-0014). Authors choose names that sort
- * correctly today (`010-bot-check`, `020-rate-limit`).
+ * order by `Trigger.metadata.name`**. Authors choose names that sort
+ * correctly (`010-bot-check`, `020-rate-limit`).
  *
  * Pure data-structure — no I/O, no manifest validation. Lives in
  * `domain/service/`.

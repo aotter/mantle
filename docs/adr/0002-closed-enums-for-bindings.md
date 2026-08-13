@@ -96,26 +96,19 @@ The vocabulary is exactly:
 
 - `ctx.user` — caller is signed in as an end-user
 - `ctx.staff: [<role>, ...]` — caller is signed in as staff in one of these roles
-
-Anything beyond (`any:` disjunction; `owns:`, `withinMinutes:`,
-`contains:`, quota predicates) is DRAFT — see
-[ADR-0001](0001-four-atom-manifest-model.md) § Future grammar
-discipline.
+- `ctx.auth` — caller supplied an adapter-verified credential
+- `ctx.auth.scope: <scope>` — credential carries the exact scope
 
 ### Adding a new entry is an explicit grammar-revise round
 
-New `x-mantle-bind` values or `ctx.*` predicates do not get added
-ad-hoc. They go through the discipline gate documented in
-[ADR-0001](0001-four-atom-manifest-model.md) § Future grammar
-discipline:
+New `x-mantle-bind` values or `ctx.*` predicates do not get added ad hoc:
 
 1. A documented use case showing the existing closed set cannot
    express the requirement.
 2. A design pass on what the new value's runtime semantics are
    (where does it come from? when is it null? what happens at
    the storage layer?).
-3. A spec doc revision, including the v0.1-vs-DRAFT
-   classification.
+3. A spec doc revision.
 4. Code that updates the validator to accept the new value.
 
 This treats the closed set as load-bearing infrastructure, not
@@ -208,10 +201,8 @@ attributes.
 - New manifest using a value not in the enum: parse error,
   exact diagnostic shape with `candidates` populated. AI authors
   fix in one turn.
-- New use case wanting an entry not in the enum: open a
-  grammar-revise discussion per ADR-0001 § Future grammar
-  discipline. Document the use case in the spec PR; do not
-  fast-track.
+- New use case wanting an entry not in the enum: document the concrete
+  semantics and add validation, runtime behavior, and docs together.
 - Lookups (e.g. "stamp the team_id"): handler-side TS, not
   binding metadata. The Procedure handler has the lookup
   context anyway.

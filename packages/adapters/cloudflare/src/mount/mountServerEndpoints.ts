@@ -1296,7 +1296,7 @@ type AdminEditorCollection = {
   readonly name: string;
   readonly title: LocalizedText;
   readonly description: LocalizedText | null;
-  readonly lifecycle: "publishing" | "editorial" | "operational";
+  readonly lifecycle: "publishing" | "operational";
   readonly parent: {
     readonly collection: string;
     readonly parentField: string;

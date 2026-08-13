@@ -40,15 +40,11 @@ import {
 
 /**
  * `EntryRepository` impl backed by `DatabaseDriver`. Adapters that
- * implement `DatabaseDriver` (CF binds D1; future Postgres, Neon,
- * etc.) get this repository for free; the SQL is SQLite-shaped
- * (which Postgres can also execute via Hyperdrive when v0.2 lands).
+ * implement the SQLite-shaped `DatabaseDriver` contract get this
+ * repository for free.
  *
  * `UPDATE … RETURNING` collapses the post-write SELECT to one round
- * trip on SQLite ≥ 3.35 / Postgres. `delete` uses
- * `DatabaseDriver.batch` because SQLite doesn't enforce FK ON DELETE
- * CASCADE by default and we'd otherwise orphan revisions / approvals
- * when the parent goes.
+ * trip on SQLite ≥ 3.35 / Postgres.
  *
  * Lifts `data.locale` to `EntryRow.locale` at the rowFromDb boundary
  * — see ADR-0010 + `domain/model/EntryRow.ts`.
@@ -128,25 +124,11 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
       args.expectedStatus,
       args.expectedVersion,
     ] as const;
-    const result = await this.db.batch([
-      this.db
-        .prepare(
-          `DELETE FROM revisions WHERE entry_id = ?
-           AND EXISTS (SELECT 1 FROM entries WHERE ${parentMatches})`,
-        )
-        .bind(args.id, ...parentSnapshot),
-      this.db
-        .prepare(
-          `DELETE FROM approvals WHERE entry_id = ?
-           AND EXISTS (SELECT 1 FROM entries WHERE ${parentMatches})`,
-        )
-        .bind(args.id, ...parentSnapshot),
-      this.db
-        .prepare(`DELETE FROM entries WHERE ${parentMatches}`)
-        .bind(...parentSnapshot),
-    ]);
-    const last = result[result.length - 1];
-    if ((last?.meta.changes ?? 0) > 0) return { removed: true };
+    const result = await this.db
+      .prepare(`DELETE FROM entries WHERE ${parentMatches}`)
+      .bind(...parentSnapshot)
+      .run();
+    if (result.meta.changes > 0) return { removed: true };
     const after = await this.db
       .prepare(`SELECT collection, status, version FROM entries WHERE id = ?`)
       .bind(args.id)

@@ -6,7 +6,7 @@
 
 **Deciders**: phsu
 
-**Related**: [ADR-0001](0001-four-atom-manifest-model.md) (the Schema atom this extends; §"Future grammar discipline" covers the v0.1-vs-DRAFT window this lands in).
+**Related**: [ADR-0001](0001-four-atom-manifest-model.md) (the Schema atom this extends).
 
 ---
 
@@ -70,7 +70,7 @@ matches the principle that locale is opt-in.
 
 The boot validator only inspects the manifest at this layer. It
 checks shape (every `localized: true` Schema is well-formed, every
-`translates:` block resolves) and rejects DRAFT keys; it does **not**
+`translates:` block resolves) and rejects unsupported keys; it does **not**
 read D1 to confirm that the site actually has any locales configured.
 That cross-check is deferred to runtime (Layer 3).
 
@@ -251,9 +251,6 @@ all treat the relation as known structure rather than convention:
 - Admin UI groups parent + per-locale translation entries together.
 - Boot validate enforces parent existence and join-field presence in
   both parent and child JSON Schemas (manifest shape, no D1 reads).
-- View executor (when `View.join` lands per the future-grammar
-  appendix) can auto-join parent + child without per-View
-  configuration.
 - AI authoring an entry against the child knows from the manifest
   that there's a parent it must reference by `slug`.
 

@@ -250,7 +250,7 @@ Diagnostic candidate (alternative (d) below) applies to zod —
   and AI authors see the same structure.
 - Single source of truth. The interface, code constants, and
   formatter all live in `@aotter/mantle-spec`; the runtime
-  package and adapters import them. A future `mantle-netlify`
+  package and adapters import them. A future adapter
   inherits the shape for free.
 
 ### Costs

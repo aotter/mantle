@@ -33,7 +33,7 @@ For package README or package-local docs changes, prefer the package area label 
 | `area:skills` | `skills/*` agent briefs and install/extend/provision workflows. |
 | `area:admin-ui` | `packages/mantle-admin-ui` React admin SPA. |
 | `area:docs` | Repo-wide human docs, governance docs, ADR text, release docs, root README content, and cross-cutting documentation work. |
-| `area:adapter` | Adapter boundary work spanning Cloudflare, Netlify stub, or future adapters. |
+| `area:adapter` | Adapter boundary work spanning Cloudflare or future adapters. |
 
 ## Release and review gates
 

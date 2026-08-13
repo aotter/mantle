@@ -17,9 +17,8 @@
  * at validation time. Wrapping JSON Schema → zod here is therefore
  * Workers-safe.
  *
- * Coverage = exactly the keywords v0.1 grammar uses. DRAFT future
- * grammar (oneOf / anyOf / $ref / if-then-else) deliberately not
- * supported — extend here when ADR-0005 promotes them.
+ * Coverage = exactly the keywords the shipped grammar uses. Unsupported
+ * grammar (oneOf / anyOf / $ref / if-then-else) is deliberately rejected.
  */
 import { z, type ZodType } from "zod";
 import type { JsonSchema } from "../model/ManifestGrammar.js";

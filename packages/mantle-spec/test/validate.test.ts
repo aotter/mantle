@@ -99,20 +99,6 @@ describe("ValidateManifestsUseCase.run()", () => {
     expect(result.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
   });
 
-  it("rejects editorial lifecycle before deploy", () => {
-    const result = ValidateManifestsUseCase.run({
-      manifests: [schema("stories", { lifecycle: "editorial" })],
-    });
-
-    expect(result.diagnostics).toContainEqual(
-      expect.objectContaining({
-        code: "LIFECYCLE_NOT_IN_V010",
-        severity: "error",
-        value: "editorial",
-      }),
-    );
-  });
-
   it("validates comparison filter field references against the source Schema", () => {
     const result = ValidateManifestsUseCase.run({
       manifests: [
@@ -323,11 +309,11 @@ ${indexYaml}
     });
   });
 
-  it("keeps indexedFields rejected as a DRAFT alias", () => {
+  it("rejects unknown Schema keys", () => {
     const result = parseSchema("  indexedFields: [slug]");
 
     expect(result.diagnostics[0]).toMatchObject({
-      code: "DRAFT_KEY_USED",
+      code: "INVALID_MANIFEST_ENVELOPE",
       path: expect.stringContaining("/spec/indexedFields"),
     });
   });
@@ -709,9 +695,10 @@ spec:
   target: { procedure: bar }
 `;
     const result = parseManifests(yaml);
-    expect(result.diagnostics.map((d) => d.message).join("\n")).toMatch(
-      /schema,on,errorPolicy.*are invalid when source.kind is 'mcp'/,
-    );
+    expect(result.diagnostics[0]).toMatchObject({
+      code: "INVALID_MANIFEST_ENVELOPE",
+      path: expect.stringContaining("/spec/source/schema"),
+    });
   });
 
   it("rejects Trigger.source.kind: 'mcp' mixed with http keys (method/path)", () => {
@@ -727,9 +714,10 @@ spec:
   target: { procedure: bar }
 `;
     const result = parseManifests(yaml);
-    expect(result.diagnostics.map((d) => d.message).join("\n")).toMatch(
-      /method,path.*are invalid when source.kind is 'mcp'/,
-    );
+    expect(result.diagnostics[0]).toMatchObject({
+      code: "INVALID_MANIFEST_ENVELOPE",
+      path: expect.stringContaining("/spec/source/method"),
+    });
   });
 
   it("rejects errorPolicy: 'abort' when an after_* hook is mixed with before_* hooks", () => {
@@ -817,7 +805,7 @@ spec:
     expect(result.diagnostics.map((d) => d.code)).toContain("AUTH_PREDICATE_NOT_IN_ENUM");
   });
 
-  it("rejects View.requires.auth.any (DRAFT)", () => {
+  it("rejects unsupported View auth keys", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: vAny }
@@ -828,7 +816,24 @@ spec:
       any: [ctx.user]
 `;
     const result = parseManifests(yaml);
-    expect(result.diagnostics.map((d) => d.code)).toContain("DRAFT_KEY_USED");
+    expect(result.diagnostics.map((d) => d.code)).toContain("INVALID_MANIFEST_ENVELOPE");
+  });
+
+  it("rejects extra keys beside a valid auth predicate", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: mixedPredicate }
+spec:
+  from: posts
+  requires:
+    auth:
+      all: [{ "ctx.staff": [editor], owns: posts }]
+`;
+    const result = parseManifests(yaml);
+    expect(result.diagnostics[0]).toMatchObject({
+      code: "INVALID_MANIFEST_ENVELOPE",
+      path: expect.stringContaining("/spec/requires/auth/all/0/owns"),
+    });
   });
 
   it("rejects View.requires.auth.all with a non-STAFF_ROLES role (parser-level)", () => {
@@ -1262,7 +1267,7 @@ metadata: { name: posts }
 spec:
   schema: { type: object }
   uniqueIndexes: [[ "slug" ]]
-  lifecycle: editorial
+  lifecycle: unknown
 `;
     expect(() => parseManifestsOrThrow(bad)).toThrow(/Manifest parse failed:/);
     try {

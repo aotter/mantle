@@ -7,7 +7,7 @@ import type { JsonSchema, ViewManifest } from "@aotter/mantle-spec";
  * unknown query keys are silently ignored (lenient v0.1.0).
  *
  * Lives in `mantle-runtime` (not the CF adapter) so future adapters
- * — Netlify, Bun, Deno — share one coercion path. Throws a
+ * share one coercion path. Throws a
  * `ViewParamCoercionError` so the adapter can map the message into its
  * own diagnostic envelope without parsing prose.
  */

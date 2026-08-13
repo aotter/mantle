@@ -29,7 +29,7 @@ import type {
   SiteInfo,
   StaffOperation,
 } from "../../lib/types";
-import { EDITORIAL_STATUSES, PUBLISHING_STATUSES } from "../../lib/types";
+import { PUBLISHING_STATUSES } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -648,9 +648,7 @@ function CollectionFilterTabs({
   sortDirection: SortDirection;
   language: AdminLanguage;
 }): React.ReactElement {
-  const statuses = collection.lifecycle === "editorial"
-    ? EDITORIAL_STATUSES
-    : PUBLISHING_STATUSES;
+  const statuses = PUBLISHING_STATUSES;
   const filter = collection.lifecycle === "operational" ? collection.filter : null;
 
   return (

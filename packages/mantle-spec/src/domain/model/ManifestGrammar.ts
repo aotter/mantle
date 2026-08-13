@@ -10,16 +10,8 @@
  * project and is parsed there — the two systems share lineage and mantle.ai
  * domain but not parsers.
  *
- * v0.1 grammar lock — see `docs/design-atoms.md` and ADR-0001
- * § "Future grammar discipline". DRAFT keys (policies, recursive views,
- * temporal predicates, quotas, projection triggers, and cron / queue
- * Trigger source kinds) are intentionally absent from this file and rejected
- * until a grammar promotion.
- *
- * v0.1 ships builtin Procedure handlers plus MCP and lifecycle Trigger
- * sources. `Schema.spec.lifecycle: editorial` is structurally accepted for
- * forward compatibility, but its approval/request-publish runtime remains
- * deferred with a feature-specific diagnostic.
+ * The parser rejects keys and enum values outside this shipped grammar.
+ * Future syntax is added only with its implementation.
  */
 
 export const API_VERSION = "cms.mantle.aotter.net/v1" as const;
@@ -146,8 +138,6 @@ export interface ManifestMetadata {
   /** Resource identifier, e.g. `posts`. Required. Globally unique within
    *  `(kind, deployment)`. */
   readonly name: string;
-  /** Free-form labels for filtering / discovery. Reserved; not used today. */
-  readonly labels?: Readonly<Record<string, string>>;
 }
 
 interface ManifestEnvelope<K extends ManifestKind, S> {
@@ -204,9 +194,7 @@ export interface SchemaManifestSpec {
    *  Schemas (orders, inventory snapshots, audit rows) that are written
    *  by Procedures rather than authored: entries are live on creation,
    *  editable in place, and have no publish/unpublish transitions — the
-   *  admin hides the content-lifecycle chrome for them. The parser and boot
-   *  accept all three values structurally; the v0.1 `request_publish` use case
-   *  rejects `'editorial'` with a clear deferred-runtime diagnostic. */
+   *  admin hides the content-lifecycle chrome for them. */
   readonly lifecycle?: LifecycleMode;
 }
 
@@ -221,7 +209,7 @@ export interface TranslatesBinding {
   readonly on: string;
 }
 
-export type LifecycleMode = "publishing" | "editorial" | "operational";
+export type LifecycleMode = "publishing" | "operational";
 
 /* ─── View ─── */
 
@@ -277,8 +265,7 @@ export interface ViewManifestSpec {
 export const FILTER_COMPARISON_OPS = ["eq", "gt", "gte", "lt", "lte"] as const;
 export type FilterComparisonOp = (typeof FILTER_COMPARISON_OPS)[number];
 
-/** v0.1 filter AST. Anything beyond comparison/and/or is DRAFT (`contains`,
- *  `not`, `in`, `like`, `recursive`, `gatedBy`, `join.aggregate`). */
+/** v0.1 filter AST: comparisons plus `and` / `or`. */
 export type FilterAst = FilterComparison | FilterAnd | FilterOr;
 export type FilterComparison = FilterEq | FilterGt | FilterGte | FilterLt | FilterLte;
 interface FilterComparisonNode {
@@ -370,11 +357,9 @@ export interface ProcedureManifestSpec {
    *  field (replaces the pre-#430 hack of reading
    *  `spec.input.description`). */
   readonly description?: LocalizedText;
-  /** Authorization. v0.1: `requires.auth.all` plus one optional
+  /** Authorization via `requires.auth.all` plus one optional
    *  `requires.guard.procedure`; static predicates are closed to
-   *  `ctx.user`, `ctx.staff`, `ctx.auth`, and `ctx.auth.scope`. DRAFT:
-   *  `requires.auth.any`, `owns:`, `withinMinutes:`, `contains:`,
-   *  `requires.window`, `requires.quota`. See ADR-0002. */
+   *  `ctx.user`, `ctx.staff`, `ctx.auth`, and `ctx.auth.scope`. */
   readonly requires?: AuthorizationRequirements;
   /** JSON Schema for the request body. */
   readonly input: JsonSchema;
@@ -409,14 +394,10 @@ export interface HandlerBuiltinBinding {
   readonly schema: string;
 }
 
-/** v0.1 closed predicate vocabulary. `ctx.user` and `ctx.auth` are bare
+/** Closed predicate vocabulary. `ctx.user` and `ctx.auth` are bare
  *  strings; `ctx.staff` and `ctx.auth.scope` carry scalar data under
  *  literal object keys.
- *
- *  v0.1.x roadmap (annotation only — DO NOT IMPLEMENT until ADR-promoted):
- *  extend with `ctx.user.{tier, verified, owns, in-group}` when platform
- *  mode lands and user-level auth is needed. Closed enums for `tier` /
- *  group identity will live next to STAFF_ROLES below. */
+ */
 export interface AuthorizationRequirements {
   readonly auth?: { readonly all: readonly AuthPredicate[] };
   /** Dynamic, consumer-owned authorization check. The named Procedure
@@ -479,11 +460,7 @@ export interface TriggerManifestSpec {
   readonly target: { readonly procedure: string };
 }
 
-/** v0.1.0 ships `http`, `lifecycle`, and `mcp`. `cron` / `queue` stay
- *  DRAFT and are rejected by the parser with DRAFT_KEY_USED. `mcp`
- *  was promoted from DRAFT in alpha.16 (#281): it lets a Procedure
- *  expose itself as a tool on `/mcp/staff` or `/mcp` without a
- *  parallel hand-wired HTTP handler. */
+/** Supported Trigger sources. */
 export type TriggerSource =
   | HttpTriggerSource
   | LifecycleTriggerSource

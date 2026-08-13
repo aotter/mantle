@@ -13,7 +13,7 @@ import type {
  * outside the supported set throw with the offending SQL so a
  * diverging test is easy to diagnose.
  *
- * Tables modelled: `entries`, `revisions`, `approvals`, `users`,
+ * Tables modelled: `entries`, `users`,
  * `staff`, `sessions`, `site_config`, pending uploads, and media assets.
  * Migrations runner records applied ids in a Set; no DDL execution.
  */
@@ -43,8 +43,6 @@ interface UserRecord {
 export class InMemoryDatabase implements DatabaseDriver {
   readonly executions: Array<{ readonly sql: string; readonly params: readonly unknown[] }> = [];
   entries = new Map<string, EntryRecord>();
-  revisions = new Map<string, { entry_id: string }>();
-  approvals = new Map<string, { entry_id: string }>();
   staff = new Map<string, StaffRecord>();
   users = new Map<string, UserRecord>();
   siteConfig = new Map<string, string>();
@@ -331,37 +329,6 @@ class InMemoryStatement implements PreparedStatement {
       const removed = this.db.entries.delete(p[0] as string);
       return { rows: [], changes: removed ? 1 : 0 };
     }
-    // DELETE FROM revisions WHERE entry_id = ?
-    if (sql.startsWith("DELETE FROM revisions WHERE entry_id = ?")) {
-      const eid = p[0] as string;
-      if (sql.includes("AND EXISTS") && !snapshotMatches(this.db, p.slice(1))) {
-        return { rows: [], changes: 0 };
-      }
-      let n = 0;
-      for (const [k, v] of this.db.revisions) {
-        if (v.entry_id === eid) {
-          this.db.revisions.delete(k);
-          n++;
-        }
-      }
-      return { rows: [], changes: n };
-    }
-    // DELETE FROM approvals WHERE entry_id = ?
-    if (sql.startsWith("DELETE FROM approvals WHERE entry_id = ?")) {
-      const eid = p[0] as string;
-      if (sql.includes("AND EXISTS") && !snapshotMatches(this.db, p.slice(1))) {
-        return { rows: [], changes: 0 };
-      }
-      let n = 0;
-      for (const [k, v] of this.db.approvals) {
-        if (v.entry_id === eid) {
-          this.db.approvals.delete(k);
-          n++;
-        }
-      }
-      return { rows: [], changes: n };
-    }
-
     // INSERT INTO site_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING
     if (sql.startsWith("INSERT INTO site_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING")) {
       const [key, value] = p as [string, string];
@@ -505,12 +472,6 @@ class InMemoryStatement implements PreparedStatement {
 
 function normalize(sql: string): string {
   return sql.replace(/\s+/g, " ").trim();
-}
-
-function snapshotMatches(db: InMemoryDatabase, values: readonly unknown[]): boolean {
-  const [id, collection, status, version] = values as [string, string, string, number];
-  const row = db.entries.get(id);
-  return row?.collection === collection && row.status === status && row.version === version;
 }
 
 /** Mirrors the repository's id + manifest-declared field LIKE search. */

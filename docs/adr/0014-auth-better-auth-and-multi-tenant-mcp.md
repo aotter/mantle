@@ -44,7 +44,7 @@ A 2026 Workers-friendly auth library — [Better Auth](https://better-auth.com) 
 - **MCP plugin (`mcp`)** — purpose-built on top of the OAuth 2.1 provider for MCP DCR; auto-mounts `.well-known/oauth-authorization-server` + `.well-known/oauth-protected-resource`, exposes `auth.api.getMcpSession()` for protected-resource validation
 - Account linking with policies (verified-email match + reauth requirement)
 
-Better Auth depends on a Kysely / Drizzle / Prisma adapter for the database, not on any Cloudflare-specific service. The auth machinery becomes platform-agnostic — porting to Netlify / Bun / Deno is config-only.
+Better Auth depends on a Kysely / Drizzle / Prisma adapter for the database, not on any Cloudflare-specific service. The auth machinery remains platform-agnostic.
 
 ## Decision (historical baseline; amended below)
 
@@ -64,7 +64,7 @@ Adopt Better Auth as the SDK's full auth surface. It owns:
 
 The auth runtime stops being an adapter port. `OAuthVerifier` port + `WorkersOAuthVerifier` adapter are deleted. Validating bearer tokens at `/mcp` and `/staff/mcp` becomes `auth.api.getMcpSession(req.raw)` — a direct Better Auth API call, no port indirection.
 
-This makes the runtime more platform-agnostic, not less: Better Auth runs on Workers (D1 via Kysely), Bun (sqlite), Node (postgres) without code changes. Future Netlify / partner adapters get the auth surface for free.
+This makes the runtime more platform-agnostic, not less: Better Auth runs on Workers (D1 via Kysely), Bun (sqlite), and Node (postgres) without runtime changes.
 
 ### 2. `staff` table → `user.role` via Better Auth admin plugin
 
@@ -81,23 +81,18 @@ admin({
 
 The manifest grammar predicate `requires.auth.all: [{ "ctx.staff": ["editor"] }]` evaluates against `session.user.role` at runtime. Closed enum membership unchanged.
 
-What we lose: `grantedBy` / `grantedAt` audit trail. v0.1.0 doesn't need this; v0.1.x can re-add via `additionalFields` on user, or via a separate append-only `staff_audit_log` table.
+### 3. Two explicit MCP surfaces
 
-### 3. Two MCP routes, surface-derived from manifest predicate
-
-`/mcp` and `/staff/mcp` are mounted side-by-side from boot. v0.1.0 ships the conservative partition: `/staff/mcp` exposes all staff authoring/lifecycle tools and requires `mcp:staff` plus an admin role; `/mcp` exposes only read-only `query_view_<name>` tools and requires `mcp:read`. The v0.2+ extension point is **automatic** surface partition derived from each Procedure's `requires.auth.all` predicate:
-
-```
-predicate contains ctx.staff: [...]    → tool exposed on /staff/mcp only
-predicate only ctx.user / no predicate → tool exposed on /mcp only
-```
+`/mcp` and `/staff/mcp` are mounted side-by-side from boot. `/staff/mcp`
+exposes staff authoring/lifecycle tools and `/mcp` exposes declared public
+Views and Procedures. An MCP Trigger explicitly chooses `surface: public |
+staff`; the target's `requires.auth` still gates every call.
 
 Tool partition rules:
 
 - Per-collection auto-emitted authoring tools (`create_draft_<schema>`, `update_draft_<schema>`) — predicate baked-in to require `ctx.staff: [contributor+]`; route to `/staff/mcp`
 - `list_entries` / `get_entry` / `request_publish` / `archive_entry` / `unpublish_entry` — staff-only (return drafts, mutate state); `/staff/mcp` only
-- `query_view_<name>` (auto-emitted from each parsed View, mirroring the existing `/api/views/<name>` REST shape) — public; `/mcp` only
-- v0.2 community / v0.2.x fan-club user-facing writes (comment, reaction, subscribe, ...) — predicate `ctx.user` or `ctx.user.subscription`; `/mcp`
+- `query_view_<name>` follows `View.spec.surface`.
 
 ### 4. Scope-aware DCR via Better Auth `oauthProvider`
 
@@ -140,7 +135,7 @@ The token can carry `role` via `customAccessTokenClaims` for caller convenience,
 
 ### 6. Single auth surface, no port indirection
 
-Auth is no longer an adapter port. `mantle-runtime` does NOT define an auth port and `createCmsRuntime()` does not accept auth. Adapter packages (`mantle-cloudflare`, future `mantle-netlify`) construct the Better Auth instance with the right database adapter for their platform and keep it in the adapter-owned HTTP/MCP mount layer.
+Auth is no longer an adapter port. `mantle-runtime` does NOT define an auth port and `createCmsRuntime()` does not accept auth. Adapter packages construct the Better Auth instance with the right database adapter for their platform and keep it in the adapter-owned HTTP/MCP mount layer.
 
 The adapter uses Better Auth to validate sessions, MCP bearer tokens, scopes, and roles, then passes authenticated user/staff context into runtime dispatchers. Better Auth remains platform-agnostic, but it is not a runtime dependency.
 
@@ -188,7 +183,7 @@ This makes the implicit explicit. The SDK's auth surface is committee-curated; u
 
 ### 8. Path to `@aotter/mantle-better-auth` separate package (deferred)
 
-When `mantle-netlify` lands, the Better Auth wiring moves to its own package. Today the seam is in place:
+Each adapter owns its Better Auth wiring. Today the seam is:
 
 - `Auth` interface lives in the adapter (could move to runtime or a separate package without breaking the contract — adapters consume the type, not the implementation).
 - `createAuth.ts` is the only file with `import { betterAuth }` (~290 LOC, no Cloudflare-binding-specific code outside `config.database: D1Database`).
@@ -201,10 +196,10 @@ The future split looks like:
 @aotter/mantle-runtime           ← ports + use cases (today)
 @aotter/mantle-better-auth       ← createAuth + EmailSender impls + appleClientSecret (new, when needed)
 @aotter/mantle-cloudflare        ← Workers adapter; depends on (or accepts) Auth-shape (today)
-@aotter/mantle-netlify           ← Netlify adapter; same shape (v0.2)
+future adapter                   ← same contract, implemented when needed
 ```
 
-The pivot point — when to extract — is when the second adapter (`mantle-netlify`) needs the same wiring. Until then, in-place co-location is cheaper than a new package boundary.
+The pivot point — when to extract — is when a second adapter needs the same wiring. Until then, in-place co-location is cheaper than a new package boundary.
 
 ## Consequences
 
@@ -241,7 +236,6 @@ The pivot point — when to extract — is when the second adapter (`mantle-netl
 - `databaseHooks.user.create.after` for `ensureBootstrapOwner` semantics
 - Two `/.well-known/oauth-protected-resource/*` metadata endpoints (Better Auth helpers)
 - Public View MCP tools: dispatcher emits `query_view_<name>` on `/mcp`.
-- Future manifest grammar tools: dispatcher will read `Procedure.requires.auth.all` to route user-facing tools to `/mcp` or `/staff/mcp`.
 - Skills + docs updates for the dual MCP URL handoff
 
 ### Backward compatibility
@@ -263,20 +257,9 @@ User MCP URL:   https://<worker>.workers.dev/mcp           (give to visitors / t
 The publication starter repo's production smoke recipe uses `/mcp/staff`
 for the MCP operator smoke step.
 
-### Future-proof for v0.2
-
-The end-user MCP via DCR + role-gated content (community / fan-club) requires no architectural change — just:
-
-- Enable Better Auth `socialProviders.google` / `.apple` (config-only)
-- Enable `magicLink` and `emailOTP` plugins (config + `EmailSender` wiring already in place)
-- Promote DRAFT manifest grammar from POC ADR-0005 — `Schema.spec.policies.readable: ctx.user` and `requires.auth.all: [{ ctx.user.subscription: [premium] }]`
-- Add `additionalFields: { subscriptionTier: ... }` on user when Stripe entitlement lands
-
-No config flag flips, no surface migration. The dispatcher partition rule (predicate → surface) handles new tool emission automatically.
-
 ### Platform agnosticism
 
-By removing `@cloudflare/workers-oauth-provider` and routing auth through Better Auth, the SDK no longer depends on any CF-specific auth service. A future Netlify adapter constructs a Better Auth instance backed by a Netlify-compatible D1 / postgres / sqlite database; the rest of the runtime + dispatcher + skills + prompts work unchanged. ADR-0011 (adapter port spec) is amended: the `OAuthVerifier` port disappears; auth becomes a direct constructor argument with platform-agnostic Better Auth as the type.
+By removing `@cloudflare/workers-oauth-provider` and routing auth through Better Auth, the SDK no longer depends on any CF-specific auth service. A future adapter can construct Better Auth against its database while the runtime + dispatcher + skills + prompts stay unchanged. ADR-0011 (adapter port spec) is amended: the `OAuthVerifier` port disappears; auth becomes adapter-owned, with platform-agnostic Better Auth as the type.
 
 ## Alternatives considered
 
@@ -345,13 +328,6 @@ Phase 2 (v0.1.x):
 - Enable Google + Apple `socialProviders` (config-only — Apple needs Apple Developer cert setup which is consumer-side)
 - Magic-link + email-OTP plugins enabled (need `ResendEmailSender` wired)
 - Account-linking with reauth UI in publication starter
-
-Phase 3 (v0.2+, with community / fan-club):
-
-- POC ADR-0005 DRAFT grammar promotion: `Schema.spec.policies.readable`, `requires.auth.all: ctx.user.subscription[*]`
-- Subscription tier on user (`additionalFields`)
-- Stripe webhook → entitlement updater
-- Community / fan-club starter manifests
 
 ## How to apply
 

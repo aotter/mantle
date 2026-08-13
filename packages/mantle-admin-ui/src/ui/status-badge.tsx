@@ -6,19 +6,12 @@ import { Badge } from "@/components/ui/badge";
 
 const STATUS_CLASS: Record<ContentStatus, string> = {
   draft: "bg-muted text-muted-foreground",
-  review: "bg-[color-mix(in_srgb,var(--warning)_18%,transparent)] text-[color:var(--warning)]",
-  approved: "bg-[color-mix(in_srgb,var(--success)_18%,transparent)] text-[color:var(--success)]",
-  scheduled: "bg-[color-mix(in_srgb,var(--info)_18%,transparent)] text-[color:var(--info)]",
   published: "bg-[color-mix(in_srgb,var(--success)_18%,transparent)] text-[color:var(--success)]",
   archived: "bg-secondary text-muted-foreground",
 };
 
-// Localized labels for the shipped publishing statuses; approved
-// and scheduled are editorial-only (reserved for a later release) and fall back to the raw
-// value until that runtime + its i18n keys land.
 const STATUS_LABEL_KEY: Partial<Record<string, I18nKey>> = {
   draft: "status.draft",
-  review: "status.review",
   published: "status.published",
   archived: "status.archived",
 };

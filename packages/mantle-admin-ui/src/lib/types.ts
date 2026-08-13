@@ -1,17 +1,14 @@
 /** Human-facing copy as a plain string or locale map. */
 export type LocalizedText = string | Readonly<Record<string, string>>;
 
-export type Lifecycle = "publishing" | "editorial" | "operational";
+export type Lifecycle = "publishing" | "operational";
 
 export type ContentStatus =
   | "draft"
-  | "review"
-  | "approved"
-  | "scheduled"
   | "published"
   | "archived";
 
-export type SidebarStatus = "draft" | "review" | "published" | "archived";
+export type SidebarStatus = ContentStatus;
 
 export interface Collection {
   name: string;
@@ -237,10 +234,4 @@ export interface ViewManifestInfo {
   fields: string[] | null;
 }
 
-export const EDITORIAL_STATUSES: SidebarStatus[] = [
-  "draft",
-  "review",
-  "published",
-  "archived",
-];
 export const PUBLISHING_STATUSES: SidebarStatus[] = ["draft", "published", "archived"];

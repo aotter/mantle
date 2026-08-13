@@ -16,6 +16,11 @@ function tableSql(sql: string, table: string): string {
 }
 
 describe("CANONICAL_MIGRATIONS", () => {
+  it("does not provision unused editorial tables", () => {
+    const init = migrationSql("0001-init");
+    expect(init).not.toMatch(/CREATE TABLE IF NOT EXISTS (approvals|revisions)\b/);
+  });
+
   it("keeps Better Auth OAuth provider tables in the canonical init schema", () => {
     const init = migrationSql("0001-init");
     expect(init).not.toMatch(/CREATE TABLE IF NOT EXISTS oauthApplication\b/);

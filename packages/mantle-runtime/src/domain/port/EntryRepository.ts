@@ -21,7 +21,6 @@ export interface EntryRepository {
   get(id: string): Promise<EntryRow | null>;
   /** Throws `EntryVersionConflict` on OCC mismatch. */
   update(args: UpdateEntryArgs): Promise<EntryRow>;
-  /** Cascades to revisions + approvals child rows for the entry id. */
   delete(args: DeleteEntryArgs): Promise<{ readonly removed: boolean }>;
   /** Status flip without data update. `expectedStatus`, when set,
    *  atomically asserts pre-flip status to prevent races (e.g. a

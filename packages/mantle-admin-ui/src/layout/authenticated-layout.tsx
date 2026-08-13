@@ -18,7 +18,6 @@ import { fieldLabel } from "../lib/field-label";
 import { operationsQueryOptions, viewsManifestQueryOptions } from "../lib/queries";
 import { resolveLocalizedText } from "../lib/localized-text";
 import {
-  EDITORIAL_STATUSES,
   PUBLISHING_STATUSES,
   type AdminUser,
   type Collection,
@@ -270,7 +269,6 @@ function collectionNavItem(c: Collection, language: AdminLanguage, canonical: st
 }
 
 function statusesFor(c: Collection): ReadonlyArray<SidebarStatus> {
-  if (c.lifecycle === "editorial") return EDITORIAL_STATUSES;
   if (c.lifecycle === "operational") return [];
   return PUBLISHING_STATUSES;
 }

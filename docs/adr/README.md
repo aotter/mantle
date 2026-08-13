@@ -12,7 +12,7 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0008](0008-structured-diagnostic-shape.md) | Diagnostic shape for validate/boot/runtime failures, with a reserved consumer-test phase; measured harnesses keep purpose-shaped reports. | Accepted + amended |
 | [0009](0009-consumer-supplied-manifests.md) | Consumers own manifest YAML; the installed CLI emits the parser-free runtime module and handler types. Core ships no application manifests. | Accepted + amended |
 | [0010](0010-locale-and-translates.md) | Locale 3-layer (manifest / D1 site_config / data field) + translates pattern. Boot decoupled from `site_config` (issue #60 fix). | Accepted (refreshed) |
-| [0011](0011-adapter-port-spec.md) | Adapter port spec. Required runtime ports plus optional feature ports. CF impl + Netlify stub. | Accepted (new) |
+| [0011](0011-adapter-port-spec.md) | Adapter port spec. Required runtime ports plus optional feature ports. | Accepted (new) |
 | [0012](0012-views-as-public-rest.md) | Views auto-expose matching REST and `query_view_*` MCP reads on their declared `public` or `staff` surface. Schemas never get a public REST endpoint. | Accepted + amended |
 | [0013](0013-agent-provisioned-consumer-projects.md) | Historical agent-provisioned consumer projects path. Superseded for first launch by landing provision bundles. | Superseded |
 | [0014](0014-auth-better-auth-and-multi-tenant-mcp.md) | The Cloudflare adapter owns the curated Better Auth identity/session facade and top-level `@cloudflare/workers-oauth-provider` MCP transport. Both normalize verified callers into runtime context; mutable staff role and target authorization are re-evaluated per call. | Accepted + amended |
@@ -39,12 +39,12 @@ for new v0.1.0 boundaries, and folds / drops the rest:
 
 - **POC ADR-0003** OpenAPI emission → folded into `mantle-spec` README (the *what* is implementation; the *why* was already captured by ADR-0001's grammar lock).
 - **POC ADR-0004** D1 today, Hyperdrive PG tomorrow → folded into `mantle-cloudflare` README (now a v0.2 roadmap item, not an architectural decision).
-- **POC ADR-0005** v0.1 minimum vs DRAFT discipline → folded into ADR-0001 §"Future grammar discipline."
+- **POC ADR-0005** v0.1 minimum grammar → folded into ADR-0001's fail-closed grammar policy.
 - **POC ADR-0006** multi-doc YAML → folded into ADR-0001 §"Authoring shape: multi-doc YAML."
-- **POC ADR-0011** lifecycle binary opt-in → distilled to a §"Lifecycle" subsection in `docs/design-atoms.md`. v0.1.0 ships `publishing` and `operational`; `editorial` is reserved for a later release.
+- **POC ADR-0011** lifecycle binary opt-in → distilled to a §"Lifecycle" subsection in `docs/design-atoms.md`. v0.1.0 ships `publishing` and `operational`.
 - **POC ADR-0012** strategic posture vs adjacent CMS designs → strategic / marketing material, lives in `README.md` if anywhere.
 - **POC ADR-0013** role-split surfaces (coder agent vs operator agent) → folded into ADR-0007 (Part B).
-- **POC ADR-0014** builtin handlers and lifecycle Triggers → promoted to v0.1.0 and implemented in the rebuild via `LifecycleHookingEntryRepository` and `InvokeBuiltinUseCase`. Editorial lifecycle remains reserved. Full shape spec lives in `docs/design-atoms.md`.
+- **POC ADR-0014** builtin handlers and lifecycle Triggers → promoted to v0.1.0 and implemented in the rebuild via `LifecycleHookingEntryRepository` and `InvokeBuiltinUseCase`. Full shape spec lives in `docs/design-atoms.md`.
 - **POC ADR-0015** cms-astro internal seam discipline → POC-specific to a package that no longer exists; replaced by ADR-0011 (adapter port spec).
 - **POC ADR-0029** drop Astro from cms-cloudflare → POC-specific historical record; the rebuild starts post-Astro.
 

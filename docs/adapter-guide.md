@@ -15,7 +15,7 @@ A first-run adapter must implement exactly these two runtime ports:
 | `DatabaseDriver` plus `PreparedStatement` and `MigrationRunner` | `packages/mantle-runtime/src/domain/port/DatabaseDriver.ts` | `packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts` |
 | `AssetServer` | `packages/mantle-runtime/src/domain/port/AssetServer.ts` | `packages/adapters/cloudflare/src/bindings/AssetsAssetServer.ts` |
 
-The runtime must not import platform types such as `D1Database`, `KVNamespace`, Cloudflare `Fetcher`, Netlify request objects, Postgres pools, or adapter SDK types. Those live in adapter packages.
+The runtime must not import platform types such as `D1Database`, `KVNamespace`, Cloudflare `Fetcher`, Postgres pools, or adapter SDK types. Those live in adapter packages.
 
 ## Optional capabilities
 

@@ -232,8 +232,7 @@ export class ValidateBootUseCase {
 }
 
 function isBootBlockingManifestDiagnostic(diagnostic: Diagnostic): boolean {
-  return diagnostic.code === "LIFECYCLE_NOT_IN_V010" ||
-    diagnostic.code === "SCHEMA_INDEX_INVALID" ||
+  return diagnostic.code === "SCHEMA_INDEX_INVALID" ||
     diagnostic.code === "SCHEMA_INDEX_FIELD_UNKNOWN" ||
     diagnostic.code === "UNIQUE_INDEX_FIELD_UNKNOWN" ||
     diagnostic.code === "SCHEMA_SEARCH_INVALID" ||

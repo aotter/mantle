@@ -654,24 +654,6 @@ describe("RequestPublishUseCase (publishing lifecycle)", () => {
     );
   });
 
-  it("LIFECYCLE_NOT_IN_V010 if Schema is editorial", async () => {
-    const editorialSchema: SchemaManifest = {
-      ...postsSchema(),
-      spec: { ...postsSchema().spec, lifecycle: "editorial" as const },
-    };
-    const h = harness({
-      schemas: new Map([[editorialSchema.metadata.name, editorialSchema]]),
-    });
-    const created = await h.createDraft.execute({
-      collection: "posts",
-      data: { title: "x" },
-      authorId: null,
-    });
-    await expect(h.requestPublish.execute({ id: created.id })).rejects.toMatchObject({
-      diagnostic: { code: "LIFECYCLE_NOT_IN_V010" },
-    });
-  });
-
   it("rejects publishing a translated child without a published parent", async () => {
     const h = harness({ schemas: translatedSchemas() });
     const child = await h.createDraft.execute({

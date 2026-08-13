@@ -147,6 +147,9 @@ export interface CreateMantleWorkerOptions<Env extends MantleCloudflareEnv> {
 }
 
 export interface MantleWorkerHandler<Env extends MantleCloudflareEnv> {
+  /** Boot and return the same runtime used by fetch. Queue/scheduled handlers
+   *  use this instead of constructing a second runtime or bypassing it. */
+  getRuntime(env: Env): Promise<CmsRuntime>;
   fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response>;
 }
 
@@ -223,6 +226,9 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
   };
 
   return {
+    getRuntime(env) {
+      return assemble(env).getRuntime();
+    },
     async fetch(request, env, ctx) {
       return runMantleWorkerRequest(async () => {
         const worker = assemble(env);

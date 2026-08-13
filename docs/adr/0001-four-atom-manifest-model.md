@@ -78,14 +78,14 @@ the `cms.mantle.aotter.net/v1` API group:
 | `Schema` | `CREATE TABLE` | no | no |
 | `View` | `CREATE VIEW` | yes (auto-mounted at `GET /api/views/<name>`; see ADR-0012) | no |
 | `Procedure` | `CREATE FUNCTION ... LANGUAGE plpgsql` | **no** (transport-agnostic; needs a Trigger to bind) | **yes — handler ref to consumer's TS** |
-| `Trigger` | `CREATE TRIGGER` + `pg_cron` + PostgREST route + `LISTEN/NOTIFY` | yes (the binding atom) | no |
+| `Trigger` | `CREATE TRIGGER` + route/tool binding | yes (the binding atom) | no |
 
 ### Path A: Trigger does all binding
 
 A Procedure is **not externally exposed by itself**. To make it
-callable over HTTP / MCP / cron / lifecycle / queue, declare a
+callable over HTTP / MCP / lifecycle, declare a
 `Trigger` whose `target.procedure` points at it. The same
-Procedure can be bound by multiple Triggers (HTTP + cron + MCP,
+Procedure can be bound by multiple Triggers (HTTP + MCP,
 all sharing one handler).
 
 This is "Path A" relative to an alternative considered (and
@@ -135,9 +135,6 @@ existing atoms cannot express it.
   by multi-doc YAML grouping (see § Authoring shape below).
 - "Procedure is not directly exposed" is a teaching point; new
   authors initially try to call a Procedure URL and get 404.
-  Mitigated by the dispatcher emitting a hint in the 404 if a
-  Procedure exists with no Trigger binding (DRAFT — not yet
-  spec'd as a code).
 - The PG-1:1 pitch breaks down once authors look at the actual
   storage layer (D1 today). The mapping is conceptual; the
   runtime is SQLite + JSON.
@@ -150,12 +147,9 @@ existing atoms cannot express it.
   multi-doc YAML keeping atoms separate while the file count
   stays low; reviewers should push back when a single Procedure's
   handler becomes a workflow engine.
-- **Trigger.source.kind expansion pressure.** v0.1 only ships
-  `http`. As MCP / cron / lifecycle / queue source kinds land
-  (DRAFT — see § Future grammar discipline below), the same
-  atom has to accommodate radically different invocation shapes.
-  The contract holds (one binding atom, many source kinds) but
-  each new kind is a design pass.
+- **Trigger.source.kind expansion pressure.** v0.1 ships `http`, `mcp`,
+  and `lifecycle`. Each new source kind requires a complete grammar and
+  runtime design pass.
 - **The PG-1:1 pitch may become a constraint.** If a future
   capability has no PG analogue, framing pressure will push to
   shoehorn it into the table or to break the pitch. Either is
@@ -178,8 +172,8 @@ Rejected: under R7's reframing, the right axis is contract /
 implementation × state / event, not "PG attachment." Schema
 holds state; Procedure holds operations against state; folding
 them conflates "what data exists" with "what can happen to data."
-Also the LOC win that motivated the fold (92→58 via default-CRUD)
-was recovered without folding — captured in the DRAFT
+Also the LOC win that motivated the fold (92→58 via default CRUD)
+was recovered without folding through the shipped
 `handler.kind: builtin` shortcut.
 
 **(d) 4 kinds with `Procedure` retaining inline
@@ -217,253 +211,12 @@ executor, and Procedure dispatcher live in this repository.
 
 ---
 
-## Future grammar discipline (was POC ADR-0005)
+## Grammar changes
 
-> Folded in 2026-05-03 from POC ADR-0005 ("v0.1 minimum essential
-> grammar; rich grammar reserved as DRAFT"). The discipline below
-> applies to every key inside every atom defined above.
-
-### Context
-
-The 4-atom design experiment (same 6 rounds + R6.5 + R7 cited
-above) produced a rich inner grammar:
-
-- 18 grammar keys across the 4 atoms
-- 7 meta-rules (DRY across `requires` siblings; one-site
-  placeholder evaluation; SDK helper doctrine; closed
-  `x-mantle-bind` enum; list-shape for cross-resource refs;
-  singleton-fallback exception; ctx.system origin invariant)
-- 2 closed enums (`x-mantle-bind`, `ctx.*` predicate identity)
-- 2 placeholder namespaces (`:ctx.*` identity bindings, `$.*`
-  data-flow bindings)
-- ~36 cognitive surface units (consumer-cc count)
-
-The pressure-tested grammar covered features as ambitious as
-`Trigger.target.project` (declarative cross-Schema aggregate
-projection in same-tx), `Schema.spec.policies.{visible,
-readable, writable}` (PG-RLS-style row/field policy),
-`View.recursive` (declarative recursive CTEs),
-`requires.window/quota/owns/contains` (temporal predicates,
-rate caps, row ownership, array containment), and
-`handler.kind: builtin` (default-CRUD shortcut).
-
-Shipping all of that in v0.1 would mean roughly 5–10× the
-dispatcher / validator / type-system surface v0.1 actually
-needs, plus an OpenAPI emission story for keys (recursive CTEs,
-RLS) that have no clean OpenAPI mapping.
-
-The user principle, articulated 2026-04-30 EOD:
-
-> 本次 iteration 只匡出四個 yml 最 minimum essential 的 grammar，
-> 四個都蓋出來且能動，之後當應用場景擴充真的有需要再往上蓋。
-
-(Translation: this iteration only ships the absolute minimum
-grammar to make the 4 atoms work end-to-end; each extension
-arrives when a real application use case demands it.)
-
-This is YAGNI applied to grammar surface, motivated by:
-
-- The runtime cost above.
-- The risk that speculative grammar locks the wrong shape —
-  features designed in the abstract often look different once a
-  real use case applies pressure (R3-R5 of the design experiment
-  showed multiple grammar shapes proposed and revised as
-  features unfolded).
-- The maintenance cost of keys nobody uses but everybody must
-  understand.
-
-### Decision
-
-The v0.1 ship targets **minimum essential grammar only**. Rich
-grammar from the design experiment is preserved as DRAFT in the
-manifest grammar reference; it lands when a concrete use case
-forces it.
-
-#### v0.1 grammar lock per atom
-
-**Schema (v0.1)**:
-- `spec.schema:` (JSON Schema 2020-12 body)
-- `spec.uniqueIndexes:` (composite uniques)
-- `spec.indexes:` (ordered composite, non-unique access paths)
-- `spec.searchableFields:` (top-level string allowlist; entry id is implicit)
-- `spec.uiSchema.list.filterField:` (Admin-only operational enum tabs; indexed)
-- Property extensions: `x-mantle-bind`, `x-mantle-ref`, `x-mcp-hint`
-
-**View (v0.1)**:
-- `spec.from:` (source Schema)
-- `spec.fields:` (projected fields)
-- `spec.filter:` AST — `eq`, `gt`, `gte`, `lt`, `lte`, `and`, `or`
-- `spec.orderBy:`
-- `spec.limit:`
-- `spec.params:` (required query params referenced by filter values)
-- `spec.requires.{auth, guard}:` (same authorization contract as Procedure)
-
-**Procedure (v0.1)**:
-- `spec.requires.auth.all:` (closed predicate vocabulary)
-- `spec.requires.guard.procedure:` (one consumer-owned dynamic guard)
-- `spec.input:` (JSON Schema 2020-12)
-- `spec.output:` (JSON Schema 2020-12)
-- `spec.handler.{kind: ref, ref: <opaque-key>}` — author-supplied
-  handler function
-- `spec.handler.{kind: builtin, op: <create | update | upsert |
-  delete>, schema: <Schema name>}` — SDK-supplied CRUD shortcut
-  (promoted to v0.1.0; runtime implemented by `InvokeBuiltinUseCase`)
-
-**Trigger (v0.1)**:
-- `spec.source.kind: http` — public HTTP endpoint
-- `spec.source.{method, path}` (when `kind: http`)
-- `spec.source.kind: lifecycle` — entry-writer hook (promoted to
-  v0.1.0; runtime implemented by `LifecycleHookingEntryRepository`)
-- `spec.source.{schema, on, errorPolicy}` (when `kind: lifecycle`)
-- `spec.source.kind: mcp` plus `surface: public | staff` — MCP tool
-  exposure for a declared Procedure
-- `spec.target.procedure:`
-
-#### v0.1 closed enums
-
-- `x-mantle-bind: {ctx.user, ctx.staff, now}`
-- `ctx.*` predicate vocabulary: `{user, staff, auth, auth.scope}` (no
-  `system` until a use case forces it)
-- `Trigger.source.kind: {http, lifecycle, mcp}`
-- `Procedure.handler.kind: {ref, builtin}`
-- `BuiltinOp: {create, update, upsert, delete}`
-- `LifecycleHook: {before_create, after_create, before_update,
-  after_update, before_delete, after_delete, before_publish,
-  after_publish}`
-
-#### What's DRAFT (do not implement, do not type)
-
-- Schema: `policies.{visible, readable, writable, owner}`,
-  `x-mantle-ref` auto-lift to virtual column,
-  computed columns via projection Trigger
-- View: `recursive`, `gatedBy`, `join`, `policies.skip`,
-  filter AST extensions (`contains`, `not`, `in`, `like`)
-- Procedure: `requires.auth.{any | all}` with disjunction;
-  `owns:`, `contains:`, `withinMinutes:`, `requires.window`,
-  `requires.quota`, `errors`, `retry`
-- Trigger: `source.kind: {cron, queue}`,
-  `target.project`, `atomicity`
-  (`source.kind: mcp` was promoted in alpha.16 — #281)
-- Cross-cutting: `ctx.system`, `$.*` placeholder namespace,
-  `staffBypass:`
-
-#### Discipline
-
-- The v0.1 validator **rejects DRAFT keys at parse time** with a
-  `DRAFT_KEY_USED` warning (not error — see the
-  AI-as-primary-author contract on permissive bias). The
-  diagnostic explicitly references the future-grammar reference
-  so authors know the key is reserved, not
-  unsupported-and-forgotten.
-- Each DRAFT key has a documented **landing condition** (the
-  use case that surfaces it). Promoting a key to v0.1+ requires
-  showing that condition has been met — not just "it would be
-  nice to have."
-- Each promotion goes through a 3-agent design review
-  (yml-editor proposes / code-impler tests buildability /
-  fresh-dev verifies clarity) before locking.
-- The v0.1 floor is the floor, not the ceiling. The atom set
-  (4) is locked; the grammar inside each atom is permitted to
-  grow.
-
-### Consequences
-
-#### Pros
-
-- v0.1 dispatcher / validator / types are tractable in a small
-  number of weeks, not many months.
-- Author cognitive surface is small: 4 atoms × ~5 keys each ≈
-  20 things to learn, instead of 18 keys with ~36 cognitive
-  surface units.
-- DRAFT keys document where the spec is **going**, so authors
-  with future requirements can tell whether the project is on
-  trajectory or not — without those features being prematurely
-  committed.
-- Each DRAFT promotion gets a real use case attached, so the
-  grammar evolves under empirical pressure rather than
-  speculation. This was the design experiment's strongest
-  signal: features like `View.recursive` and
-  `Trigger.target.project` looked very different once a real
-  feature (threaded comments, cross-Schema invariants) applied
-  pressure.
-
-#### Costs
-
-- Authors with ambitions beyond v0.1 (private posts, role-gated
-  reads, rate limits, recursive views) must wait or write
-  handler-side TS. For some projects this is enough to shop
-  elsewhere; that's acceptable for an OSS v0.1.
-- DRAFT documentation is itself a maintenance burden — the
-  reference has to stay coherent as the spec evolves; stale
-  DRAFT entries (features no longer planned) need pruning.
-- The "warning, not error, on DRAFT keys" rule means an author
-  who copies a DRAFT example into a manifest doesn't fail —
-  they get a warning. This requires the validator to know the
-  full DRAFT vocabulary, not just the v0.1 vocabulary.
-
-#### Risks
-
-- **Grammar surface grows ad-hoc.** Each DRAFT promotion looks
-  reasonable; together they reproduce the over-grammar v0.1
-  was avoiding. Mitigation: 3-agent review per promotion;
-  promotions land in batches with documented use cases, not
-  one-by-one.
-- **DRAFT becomes vaporware.** Some DRAFT features are listed
-  but never land because their use case never surfaces.
-  Mitigation: this is fine — the appendix is documenting
-  shapes, not commitments. If a DRAFT entry stays cold for >12
-  months, prune it from the appendix and let the future
-  proposer re-derive it.
-- **Authors hit walls and route around the SDK.** "I need
-  `View.recursive` so I'll just write raw SQL in a Procedure
-  handler" — over time this drifts the actual extension shape
-  away from what the SDK eventually builds. Mitigation: when
-  ad-hoc handler patterns repeat, that's the use case that
-  promotes the DRAFT key. Watch handler implementations for
-  recurring patterns.
-
-### Alternatives considered
-
-**(a) Ship the full experiment grammar in v0.1**.
-Rejected: 5–10× the dispatcher work; locks shapes in the
-abstract before real use cases apply pressure; author surface
-explodes.
-
-**(b) Don't document DRAFT at all; ship v0.1 spec only**.
-Rejected: authors with future requirements have no way to
-evaluate trajectory; the design experiment's results would be
-lost institutionally; future proposals would re-litigate solved
-questions. The DRAFT reference is a forward-looking invariant.
-
-**(c) Ship a subset of DRAFT in v0.1 (e.g. `policies.visible`
-and `requires.auth.any`)**.
-Rejected: any line we draw between v0.1 and DRAFT has the same
-litigation problem. The principled cut is "minimum essential to
-make 4 atoms work end-to-end"; anything richer needs a specific
-motivation. None of the DRAFT features had that motivation in
-the v0.1 ship list.
-
-**(d) Promote DRAFT keys lazily — implement at runtime when
-authors ask, no spec lock**.
-Rejected: spec coherence demands keys are spec'd before they
-ship. Authors writing against runtime-only features get
-silently broken on SDK upgrades.
-
-### How to apply
-
-- Authoring v0.1 manifests: stick to the v0.1 vocabulary above.
-  If something seems missing, check the DRAFT reference; if it's
-  there and you have a concrete use case, file an issue
-  describing the use case.
-- SDK code: implement only v0.1 keys in the dispatcher /
-  validator / types. DRAFT keys are documented but not handled.
-- DRAFT promotion: needs a documented use case + 3-agent design
-  review + ADR landing the promotion (with cross-link to the
-  use case).
-- Pruning DRAFT: if an entry has stayed cold for 12+ months,
-  propose removal in a small ADR. Removal is reversible (the
-  shape is in the experiment transcripts and prior ADR
-  history).
+The parser accepts only grammar implemented by the current SDK. Unknown keys and
+closed-enum values fail validation; Mantle does not reserve speculative syntax.
+Add new grammar only alongside a concrete use case, runtime behavior, validation,
+and an ADR update. Earlier experiments remain available in git history.
 
 ---
 
@@ -562,7 +315,7 @@ Path B created **two ways to bind a Procedure to HTTP**:
 
 - For a Procedure with one HTTP transport: inline `expose:` on
   Procedure
-- For a Procedure with multiple transports (HTTP + cron + MCP):
+- For a Procedure with multiple transports (HTTP + MCP):
   separate `Trigger` per transport
 
 This is the exact "two ways to do the same thing" failure mode.
@@ -669,8 +422,8 @@ explicit `Trigger` + explicit `expose:`).
 - Reviewing: when an author writes a Procedure with an inline
   HTTP binding, push back with this section.
 - Refactoring: a feature that grew from one HTTP binding to
-  one HTTP + one cron + one MCP doesn't change the Procedure;
-  it adds two more Triggers in the same file.
+  HTTP + MCP doesn't change the Procedure; it adds one Trigger
+  in the same file.
 - Tooling: SDK loader reads `<manifest-root>/site.yaml` and parses each `---`
   block; static validator emits diagnostics
   with file path + manifest pointer

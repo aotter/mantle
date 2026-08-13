@@ -14,7 +14,7 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
   {
     id: "0001-init",
     description:
-      "v0.1.0 schema: entries / revisions / approvals / site_config + Better Auth tables (ADR-0014)",
+      "v0.1.0 schema: entries / site_config + Better Auth tables (ADR-0014)",
     // SQLite: Better Auth serializes Date → ISO 8601 string and
     // boolean → 0/1, so date columns are TEXT and booleans INTEGER.
     sql: `
@@ -32,31 +32,6 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
         ON entries (collection, updated_at DESC);
       CREATE INDEX IF NOT EXISTS entries_by_collection_status
         ON entries (collection, status);
-
-      CREATE TABLE IF NOT EXISTS revisions (
-        id          TEXT PRIMARY KEY,
-        entry_id    TEXT NOT NULL,
-        version     INTEGER NOT NULL,
-        data        TEXT NOT NULL,
-        created_at  INTEGER NOT NULL,
-        author_id   TEXT,
-        note        TEXT
-      );
-      CREATE INDEX IF NOT EXISTS revisions_by_entry_version
-        ON revisions (entry_id, version DESC);
-
-      CREATE TABLE IF NOT EXISTS approvals (
-        id            TEXT PRIMARY KEY,
-        entry_id      TEXT NOT NULL,
-        requested_by  TEXT NOT NULL,
-        requested_at  INTEGER NOT NULL,
-        note          TEXT,
-        status        TEXT NOT NULL,
-        resolved_by   TEXT,
-        resolved_at   INTEGER
-      );
-      CREATE INDEX IF NOT EXISTS approvals_by_entry
-        ON approvals (entry_id);
 
       CREATE TABLE IF NOT EXISTS site_config (
         key   TEXT PRIMARY KEY,

@@ -116,9 +116,8 @@ function validateLocalizedText(
  * the cross-manifest checks (Trigger.target.procedure exists, View.from
  * is a Schema, etc.) — see ADR-0007 and `docs/design-atoms.md`.
  *
- * Diagnostics emitted here are intentionally narrow: bad envelope,
- * structurally malformed spec, use of a DRAFT or v0.1.x-not-yet-shipped
- * key the v0.1.0 parser does not accept.
+ * Diagnostics emitted here are intentionally narrow: bad envelope or
+ * structurally malformed shipped grammar.
  *
  * Return shape is `{ manifests, diagnostics }`: parse-fatal docs are
  * skipped (manifest absent from `manifests`) and reported via a
@@ -161,10 +160,6 @@ const V01_TRIGGER_SOURCE_KINDS: ReadonlySet<string> = new Set([
   "lifecycle",
   "mcp",
 ]);
-const DRAFT_TRIGGER_SOURCE_KINDS: ReadonlySet<string> = new Set([
-  "cron",
-  "queue",
-]);
 
 const V01_HTTP_METHODS: ReadonlySet<HttpMethod> = new Set([
   "POST",
@@ -178,9 +173,25 @@ const V01_BUILTIN_OPS: ReadonlySet<BuiltinOp> = new Set(BUILTIN_OPS);
 const V01_LIFECYCLE_HOOKS: ReadonlySet<LifecycleHook> = new Set(LIFECYCLE_HOOKS);
 const V01_HOOK_ERROR_POLICIES: ReadonlySet<string> = new Set(["abort", "continue"]);
 const V01_MCP_TRIGGER_SURFACES: ReadonlySet<string> = new Set(MCP_TRIGGER_SURFACES);
-const DRAFT_FILTER_OPS: ReadonlySet<string> = new Set(["contains", "not", "in", "like"]);
 const FILTER_COMPARISON_OP_SET: ReadonlySet<string> = new Set(FILTER_COMPARISON_OPS);
-const V01_LIFECYCLE_MODES: ReadonlySet<string> = new Set(["publishing", "editorial", "operational"]);
+const V01_LIFECYCLE_MODES: ReadonlySet<string> = new Set(["publishing", "operational"]);
+
+function rejectUnknownKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+  idx: number,
+  pointer: string,
+): void {
+  const unknown = Object.keys(value).find((key) => !allowed.includes(key));
+  if (unknown !== undefined) {
+    const unknownPointer = pointer === "/" ? `/${unknown}` : `${pointer}/${unknown}`;
+    throw new ManifestParseError(
+      `${unknownPointer.replaceAll("/", ".").slice(1)} is not supported`,
+      idx,
+      unknownPointer,
+    );
+  }
+}
 
 /** Result of `parseManifests`. */
 export interface ParseManifestsResult {
@@ -319,6 +330,7 @@ function validateEnvelope(raw: unknown, docIndex: number): Manifest {
     throw new ManifestParseError("manifest must be a YAML mapping", docIndex);
   }
   const m = raw as Record<string, unknown>;
+  rejectUnknownKeys(m, ["apiVersion", "kind", "metadata", "spec"], docIndex, "/");
 
   if (m["apiVersion"] !== API_VERSION) {
     throw new ManifestParseError(
@@ -340,6 +352,7 @@ function validateEnvelope(raw: unknown, docIndex: number): Manifest {
     throw new ManifestParseError("metadata is required and must be a mapping", docIndex, "/metadata");
   }
   const name = (meta as Record<string, unknown>)["name"];
+  rejectUnknownKeys(meta as Record<string, unknown>, ["name"], docIndex, "/metadata");
   if (typeof name !== "string" || name.length === 0) {
     throw new ManifestParseError("metadata.name is required (non-empty string)", docIndex, "/metadata/name");
   }
@@ -364,6 +377,23 @@ function validateEnvelope(raw: unknown, docIndex: number): Manifest {
 
 function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
   const s = m.spec as unknown as Record<string, unknown>;
+  rejectUnknownKeys(
+    s,
+    [
+      "title",
+      "description",
+      "schema",
+      "uiSchema",
+      "uniqueIndexes",
+      "indexes",
+      "searchableFields",
+      "localized",
+      "translates",
+      "lifecycle",
+    ],
+    idx,
+    "/spec",
+  );
   if (typeof s["schema"] !== "object" || s["schema"] === null) {
     throw new ManifestParseError("Schema.spec.schema is required", idx, "/spec/schema");
   }
@@ -381,14 +411,6 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
     "Schema.spec.description",
     false,
   );
-  if ("indexedFields" in s) {
-    throw new ManifestParseError(
-      "Schema.spec.indexedFields is DRAFT and superseded by ordered composite Schema.spec.indexes; not supported in v0.1",
-      idx,
-      "/spec/indexedFields",
-      "DRAFT_KEY_USED",
-    );
-  }
   const indexProblem = checkSchemaIndexes(m).problems[0];
   if (indexProblem) {
     throw new ManifestParseError(
@@ -447,6 +469,7 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
       );
     }
     const tr = t as Record<string, unknown>;
+    rejectUnknownKeys(tr, ["parent", "on"], idx, "/spec/translates");
     if (typeof tr["parent"] !== "string" || (tr["parent"] as string).length === 0) {
       throw new ManifestParseError(
         "Schema.spec.translates.parent is required (non-empty Schema name)",
@@ -482,19 +505,17 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
       );
     }
   }
-  if ("policies" in s) {
-    throw new ManifestParseError(
-      "Schema.spec.policies is DRAFT (see ADR-0001 § \"What's DRAFT\" / Schema); not supported in v0.1",
-      idx,
-      "/spec/policies",
-      "DRAFT_KEY_USED",
-    );
-  }
   return m;
 }
 
 function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   const s = m.spec as unknown as Record<string, unknown>;
+  rejectUnknownKeys(
+    s,
+    ["title", "from", "surface", "requires", "filter", "fields", "orderBy", "limit", "params"],
+    idx,
+    "/spec",
+  );
   validateLocalizedText(
     s["title"],
     idx,
@@ -532,16 +553,6 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   if ("orderBy" in s && s["orderBy"] != null) {
     validateViewOrderBy(s["orderBy"], idx);
   }
-  for (const draft of ["recursive", "gatedBy", "join", "policies"] as const) {
-    if (draft in s) {
-      throw new ManifestParseError(
-        `View.spec.${draft} is DRAFT (see ADR-0001 § "What's DRAFT" / View); not supported in v0.1`,
-        idx,
-        `/spec/${draft}`,
-        "DRAFT_KEY_USED",
-      );
-    }
-  }
   return m;
 }
 
@@ -570,6 +581,7 @@ function validateViewOrderBy(raw: unknown, idx: number): void {
       );
     }
     const o = entry as Record<string, unknown>;
+    rejectUnknownKeys(o, ["field", "direction"], idx, `/spec/orderBy/${i}`);
     if (typeof o["field"] !== "string" || (o["field"] as string).length === 0) {
       throw new ManifestParseError(
         "View.spec.orderBy[].field is required (non-empty string)",
@@ -660,6 +672,7 @@ function validateFilterAst(
       throw new ManifestParseError(`${path}.${op} must be an object`, idx, `${jsonPointer}/${op}`);
     }
     const e = comparison as Record<string, unknown>;
+    rejectUnknownKeys(e, ["field", "value"], idx, `${jsonPointer}/${op}`);
     if (typeof e["field"] !== "string" || (e["field"] as string).length === 0) {
       throw new ManifestParseError(
         `${path}.${op}.field is required (non-empty string)`,
@@ -693,14 +706,6 @@ function validateFilterAst(
       validateFilterAst(arr[i], idx, `${path}.${op}[${i}]`, `${jsonPointer}/${op}/${i}`, paramSchema);
     }
     return;
-  }
-  if (DRAFT_FILTER_OPS.has(op)) {
-    throw new ManifestParseError(
-      `${path} operator '${op}' is DRAFT (see ADR-0001 § "What's DRAFT" / View); not supported in v0.1`,
-      idx,
-      jsonPointer,
-      "DRAFT_KEY_USED",
-    );
   }
   throw new ManifestParseError(
     `${path} operator must be one of ${FILTER_COMPARISON_OPS.join(", ")}, and, or; got '${op}'`,
@@ -742,7 +747,7 @@ function validateParamRef(
   const required = paramSchema.required ?? [];
   if (!required.includes(name)) {
     throw new ManifestParseError(
-      `filter references optional param '${name}'; v0.1.0 requires every param-ref'd name to appear in View.spec.params.required (optional-skip semantics are reserved for v0.1.x).`,
+      `filter references optional param '${name}'; every param-ref'd name must appear in View.spec.params.required.`,
       idx,
       pointer,
       "VIEW_FILTER_PARAM_REF_NOT_REQUIRED",
@@ -752,6 +757,12 @@ function validateParamRef(
 
 function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureManifest {
   const s = m.spec as unknown as Record<string, unknown>;
+  rejectUnknownKeys(
+    s,
+    ["title", "description", "requires", "input", "output", "handler"],
+    idx,
+    "/spec",
+  );
   validateLocalizedText(
     s["title"],
     idx,
@@ -780,16 +791,6 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
   if ("requires" in s && s["requires"] != null) {
     validateRequires(s["requires"], idx, "Procedure");
   }
-  for (const draft of ["errors", "retry", "idempotency"] as const) {
-    if (draft in s) {
-      throw new ManifestParseError(
-        `Procedure.spec.${draft} is DRAFT (see ADR-0001 § "What's DRAFT" / Procedure); not supported in v0.1`,
-        idx,
-        `/spec/${draft}`,
-        "DRAFT_KEY_USED",
-      );
-    }
-  }
   return m;
 }
 
@@ -810,6 +811,7 @@ function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
     );
   }
   if (kind === "ref") {
+    rejectUnknownKeys(h, ["kind", "ref"], idx, "/spec/handler");
     if (typeof h["ref"] !== "string" || (h["ref"] as string).length === 0) {
       throw new ManifestParseError(
         "Procedure.spec.handler.ref is required (non-empty registration key)",
@@ -819,6 +821,7 @@ function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
     }
     return;
   }
+  rejectUnknownKeys(h, ["kind", "op", "schema"], idx, "/spec/handler");
   const op = h["op"];
   if (typeof op !== "string" || !V01_BUILTIN_OPS.has(op as BuiltinOp)) {
     throw new ManifestParseError(
@@ -848,18 +851,7 @@ function validateRequires(req: unknown, idx: number, atom: "Procedure" | "View")
     throw new ManifestParseError(`${atom}.spec.requires must be an object`, idx);
   }
   const r = req as Record<string, unknown>;
-  // window / quota are Procedure-only DRAFT keys; reject early on both
-  // atoms so a misplaced key surfaces with a clear diagnostic.
-  for (const draft of ["window", "quota"] as const) {
-    if (draft in r) {
-      throw new ManifestParseError(
-        `${atom}.spec.requires.${draft} is DRAFT (see ADR-0001 § "What's DRAFT" / Procedure); not supported in v0.1`,
-        idx,
-        undefined,
-        "DRAFT_KEY_USED",
-      );
-    }
-  }
+  rejectUnknownKeys(r, ["auth", "guard"], idx, "/spec/requires");
   if ("guard" in r) {
     const guard = r["guard"];
     if (typeof guard !== "object" || guard === null || Array.isArray(guard)) {
@@ -886,14 +878,7 @@ function validateRequires(req: unknown, idx: number, atom: "Procedure" | "View")
     throw new ManifestParseError(`${atom}.spec.requires.auth must be an object`, idx);
   }
   const a = auth as Record<string, unknown>;
-  if ("any" in a) {
-    throw new ManifestParseError(
-      `${atom}.spec.requires.auth.any is DRAFT; v0.1 supports only \`all\``,
-      idx,
-      undefined,
-      "DRAFT_KEY_USED",
-    );
-  }
+  rejectUnknownKeys(a, ["all"], idx, "/spec/requires/auth");
   if (!("all" in a)) {
     throw new ManifestParseError(
       `${atom}.spec.requires.auth must declare \`all\` (v0.1)`,
@@ -908,15 +893,26 @@ function validateRequires(req: unknown, idx: number, atom: "Procedure" | "View")
     );
   }
   for (let i = 0; i < all.length; i++) {
-    validateAuthPredicate(all[i], idx, `${atom}.spec.requires.auth.all[${i}]`);
+    validateAuthPredicate(
+      all[i],
+      idx,
+      `${atom}.spec.requires.auth.all[${i}]`,
+      `/spec/requires/auth/all/${i}`,
+    );
   }
 }
 
-function validateAuthPredicate(p: unknown, idx: number, path: string): asserts p is AuthPredicate {
+function validateAuthPredicate(
+  p: unknown,
+  idx: number,
+  path: string,
+  pointer: string,
+): asserts p is AuthPredicate {
   if (p === "ctx.user" || p === "ctx.auth") return;
   if (typeof p === "object" && p !== null && !Array.isArray(p)) {
     const o = p as Record<string, unknown>;
     if ("ctx.auth.scope" in o) {
+      rejectUnknownKeys(o, ["ctx.auth.scope"], idx, pointer);
       const scope = o["ctx.auth.scope"];
       if (typeof scope !== "string" || scope.length === 0) {
         throw new ManifestParseError(
@@ -927,6 +923,7 @@ function validateAuthPredicate(p: unknown, idx: number, path: string): asserts p
       return;
     }
     if ("ctx.staff" in o) {
+      rejectUnknownKeys(o, ["ctx.staff"], idx, pointer);
       const roles = o["ctx.staff"];
       if (!Array.isArray(roles) || roles.length === 0 || roles.some((r) => typeof r !== "string")) {
         throw new ManifestParseError(
@@ -946,18 +943,6 @@ function validateAuthPredicate(p: unknown, idx: number, path: string): asserts p
       return;
     }
   }
-  if (typeof p === "object" && p !== null) {
-    const draftKeys = ["owns", "withinMinutes", "contains"];
-    const used = draftKeys.find((k) => k in (p as Record<string, unknown>));
-    if (used) {
-      throw new ManifestParseError(
-        `${path}: predicate '${used}' is DRAFT (see ADR-0001 § "What's DRAFT" / Procedure); not supported in v0.1`,
-        idx,
-        undefined,
-        "DRAFT_KEY_USED",
-      );
-    }
-  }
   throw new ManifestParseError(
     `${path} must be 'ctx.user', 'ctx.auth', { 'ctx.auth.scope': <scope> }, or { 'ctx.staff': [<role>, ...] }; got ${JSON.stringify(p)}`,
     idx,
@@ -965,6 +950,7 @@ function validateAuthPredicate(p: unknown, idx: number, path: string): asserts p
 }
 
 function validateHttpSource(source: Record<string, unknown>, idx: number): void {
+  rejectUnknownKeys(source, ["kind", "method", "path"], idx, "/spec/source");
   const method = source["method"];
   if (typeof method !== "string" || !V01_HTTP_METHODS.has(method as HttpMethod)) {
     throw new ManifestParseError(
@@ -984,6 +970,12 @@ function validateHttpSource(source: Record<string, unknown>, idx: number): void 
 }
 
 function validateLifecycleSource(source: Record<string, unknown>, idx: number): void {
+  rejectUnknownKeys(
+    source,
+    ["kind", "schema", "on", "errorPolicy"],
+    idx,
+    "/spec/source",
+  );
   if (typeof source["schema"] !== "string" || (source["schema"] as string).length === 0) {
     throw new ManifestParseError(
       "Trigger.spec.source.schema is required (Schema metadata.name) when source.kind is 'lifecycle'",
@@ -1026,16 +1018,10 @@ function validateLifecycleSource(source: Record<string, unknown>, idx: number): 
       );
     }
   }
-  if ("method" in source || "path" in source) {
-    throw new ManifestParseError(
-      "Trigger.spec.source.{method,path} are invalid when source.kind is 'lifecycle' (those keys belong to source.kind: 'http')",
-      idx,
-      "/spec/source",
-    );
-  }
 }
 
 function validateMcpSource(source: Record<string, unknown>, idx: number): void {
+  rejectUnknownKeys(source, ["kind", "surface"], idx, "/spec/source");
   const surface = source["surface"];
   if (typeof surface !== "string" || !V01_MCP_TRIGGER_SURFACES.has(surface)) {
     throw new ManifestParseError(
@@ -1044,24 +1030,11 @@ function validateMcpSource(source: Record<string, unknown>, idx: number): void {
       "/spec/source/surface",
     );
   }
-  if ("method" in source || "path" in source) {
-    throw new ManifestParseError(
-      "Trigger.spec.source.{method,path} are invalid when source.kind is 'mcp' (those keys belong to source.kind: 'http')",
-      idx,
-      "/spec/source",
-    );
-  }
-  if ("schema" in source || "on" in source || "errorPolicy" in source) {
-    throw new ManifestParseError(
-      "Trigger.spec.source.{schema,on,errorPolicy} are invalid when source.kind is 'mcp' (those keys belong to source.kind: 'lifecycle')",
-      idx,
-      "/spec/source",
-    );
-  }
 }
 
 function validateTriggerSpec(m: TriggerManifest, idx: number): TriggerManifest {
   const s = m.spec as unknown as Record<string, unknown>;
+  rejectUnknownKeys(s, ["source", "target"], idx, "/spec");
   const source = s["source"] as Record<string, unknown> | undefined;
   if (!source) {
     throw new ManifestParseError("Trigger.spec.source is required", idx, "/spec/source");
@@ -1072,14 +1045,6 @@ function validateTriggerSpec(m: TriggerManifest, idx: number): TriggerManifest {
       `Trigger.spec.source.kind is required (one of ${[...V01_TRIGGER_SOURCE_KINDS].join(", ")})`,
       idx,
       "/spec/source/kind",
-    );
-  }
-  if (DRAFT_TRIGGER_SOURCE_KINDS.has(sourceKind)) {
-    throw new ManifestParseError(
-      `Trigger.spec.source.kind '${sourceKind}' is DRAFT (see ADR-0001 § "What's DRAFT" / Trigger); not supported in v0.1`,
-      idx,
-      "/spec/source/kind",
-      "DRAFT_KEY_USED",
     );
   }
   if (!V01_TRIGGER_SOURCE_KINDS.has(sourceKind)) {
@@ -1096,22 +1061,7 @@ function validateTriggerSpec(m: TriggerManifest, idx: number): TriggerManifest {
   if (!target || typeof target["procedure"] !== "string") {
     throw new ManifestParseError("Trigger.spec.target.procedure is required (string)", idx, "/spec/target/procedure");
   }
-  if ("project" in target) {
-    throw new ManifestParseError(
-      "Trigger.spec.target.project is DRAFT (see ADR-0001 § \"What's DRAFT\" / Trigger); not supported in v0.1",
-      idx,
-      undefined,
-      "DRAFT_KEY_USED",
-    );
-  }
-  if ("atomicity" in s) {
-    throw new ManifestParseError(
-      "Trigger.spec.atomicity is DRAFT (see ADR-0001 § \"What's DRAFT\" / Trigger); not supported in v0.1",
-      idx,
-      undefined,
-      "DRAFT_KEY_USED",
-    );
-  }
+  rejectUnknownKeys(target, ["procedure"], idx, "/spec/target");
   return m;
 }
 
