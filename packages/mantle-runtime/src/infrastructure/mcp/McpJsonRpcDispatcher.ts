@@ -5,6 +5,7 @@ import {
   type MediaPurposePolicy,
   type ProcedureManifest,
   type SchemaManifest,
+  type SiteIcon,
   type ViewManifest,
 } from "@aotter/mantle-spec";
 import type { MediaVariantRole } from "../../domain/port/MediaStorage.js";
@@ -43,6 +44,16 @@ import {
   jsonRpcOkRaw,
 } from "./McpResponses.js";
 import packageJson from "../../../package.json" with { type: "json" };
+
+export const MCP_PROTOCOL_VERSION = "2025-11-25";
+
+export interface McpServerInfo {
+  readonly name: string;
+  readonly title?: string;
+  readonly description?: string;
+  readonly websiteUrl?: string;
+  readonly icons?: readonly SiteIcon[];
+}
 
 /** JSON-RPC dispatcher for the MCP transport. Env-agnostic; the
  *  adapter resolves the caller's identity and hands `dispatch` the same
@@ -103,6 +114,7 @@ export class McpJsonRpcDispatcher {
        *  `Trigger.source.kind: "mcp"` (#281). Adapter pre-filters
        *  by surface; dispatcher trusts the slice. */
       readonly procedures?: ReadonlyArray<ProcedureManifest>;
+      readonly serverInfo?: McpServerInfo;
     } = {},
   ) {
     this.catalog = buildMcpToolCatalog(schemas, {
@@ -132,27 +144,39 @@ export class McpJsonRpcDispatcher {
     ctx: HandlerContext,
   ): Promise<Response> {
     if (req.method === "GET") {
-      return new Response("MCP endpoint — POST JSON-RPC here.", { status: 200 });
+      return new Response("method not allowed", { status: 405, headers: { allow: "POST" } });
     }
     if (req.method !== "POST") {
       return new Response("method not allowed", { status: 405 });
     }
 
-    let body: { id?: number | string | null; method?: string; params?: unknown };
+    let body: { jsonrpc?: string; id?: number | string | null; method?: string; params?: unknown };
     try {
       body = (await req.json()) as typeof body;
     } catch {
       return jsonRpcError(null, -32700, "parse error");
     }
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return jsonRpcError(null, -32600, "invalid request");
+    }
     const { id = null, method, params } = body;
+
+    if (method !== "initialize" && req.headers.get("mcp-protocol-version") !== MCP_PROTOCOL_VERSION) {
+      return new Response(`MCP-Protocol-Version must be ${MCP_PROTOCOL_VERSION}.`, { status: 400 });
+    }
 
     switch (method) {
       case "initialize":
         return jsonRpcOk(id, {
-          protocolVersion: "2025-03-26",
+          protocolVersion: MCP_PROTOCOL_VERSION,
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "@aotter/mantle-runtime/mcp", version: packageJson.version },
+          serverInfo: {
+            ...(this.options.serverInfo ?? { name: "aotter.mantle" }),
+            version: packageJson.version,
+          },
         });
+      case "notifications/initialized":
+        return new Response(null, { status: 202 });
       case "tools/list":
         return jsonRpcOkRaw(id, this.catalogWireJson);
       case "tools/call":

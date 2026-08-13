@@ -8,6 +8,7 @@ import {
   stubAuth,
 } from "./fakes/runtime-bindings.js";
 import type { Auth, StaffUserInfo } from "../src/auth/createAuth.js";
+import type { AssetServer } from "@aotter/mantle-runtime";
 
 /** /admin/api/staff* endpoint contract: owner-only gating, the
  *  self-role-change guard, input validation, and the conflict shapes
@@ -32,6 +33,7 @@ function harness(
   authOverride?: Partial<Auth>,
   bindings: {
     readonly db?: InMemoryDatabase;
+    readonly assets?: AssetServer;
   } = {},
 ) {
   const getSession = authOverride?.getSession ?? stubAuth.getSession;
@@ -52,7 +54,7 @@ function harness(
     handlers: {},
     bindings: {
       db,
-      assets: new StubAssetServer(),
+      assets: bindings.assets ?? new StubAssetServer(),
     },
     auth,
   });
@@ -60,6 +62,34 @@ function harness(
   mountServerEndpoints(app, ref);
   return { app, db };
 }
+
+describe("Admin static shell", () => {
+  it("loads SPA deep links through the configured static asset binding", async () => {
+    const requested: string[] = [];
+    const assets: AssetServer = {
+      async fetch(request) {
+        requested.push(new URL(request.url).pathname);
+        return new Response("<main>Mantle Admin</main>", {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      },
+    };
+    const { app } = harness(undefined, { assets });
+
+    const response = await app.request("https://example.test/admin/c/posts");
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Mantle Admin");
+    expect(requested).toEqual(["/_mantle/admin/index.html"]);
+  });
+
+  it("fails clearly when generated Admin assets are absent", async () => {
+    const { app } = harness();
+    const response = await app.request("https://example.test/admin");
+    expect(response.status).toBe(503);
+    expect(await response.text()).toContain("mantle generate");
+  });
+});
 
 class OrderedDatabase extends InMemoryDatabase {
   constructor(
@@ -114,6 +144,7 @@ describe("GET /admin/api/site", () => {
     expect(body).toMatchObject({
       publicUrl: "https://example.test",
       mcpUrl: "https://example.test/mcp/staff",
+      icons: [{ src: "/_mantle/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
     });
     expect(body).not.toHaveProperty("origin");
   });

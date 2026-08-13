@@ -167,13 +167,20 @@ export interface SiteInfo {
   brand: string;
   locales: string[];
   canonicalLocale: string | null;
-  faviconUrl?: string;
+  icons: SiteIcon[];
   /** Canonical deployment URL projected by the server. Never derive it from the Admin request origin. */
   publicUrl: string;
   mcpUrl: string;
   media?: {
     purposes?: MediaPurposePolicy[];
   };
+}
+
+export interface SiteIcon {
+  src: string;
+  mimeType?: string;
+  sizes?: string[];
+  theme?: "light" | "dark";
 }
 
 export interface MediaPurposePolicy {

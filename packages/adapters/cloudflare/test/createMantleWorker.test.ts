@@ -494,6 +494,7 @@ function testEnv(extra: Partial<TestEnv> = {}): TestEnv {
   return {
     DB: {} as D1Database,
     OAUTH_KV: {} as KVNamespace,
+    ASSETS: { fetch: async () => new Response(null, { status: 404 }) } as Fetcher,
     ...extra,
   };
 }

@@ -88,6 +88,8 @@ spec:
       await expect(readFile(join(root, ".agent", "skills", "mantle-develop", "SKILL.md"))).rejects.toThrow();
       const firstSite = await readFile(sitePath, "utf8");
       const firstTypes = await readFile(typesPath, "utf8");
+      const adminIndexPath = join(root, "public", "_mantle", "admin", "index.html");
+      expect(await readFile(adminIndexPath, "utf8")).toContain("/_mantle/admin/");
       expect(firstSite).toContain("as const satisfies readonly Manifest[]");
       expect(firstSite).toContain("export function bindMantleSite(runtime: CmsRuntime)");
       expect(firstSite).toContain('procedures: {');
@@ -148,6 +150,11 @@ site.views["products-by-sku"]();
       expect(await readFile(sitePath, "utf8")).toBe(firstSite);
       expect(await readFile(typesPath, "utf8")).toBe(firstTypes);
       expect(await runGenerate([...generateArgs, "--check"])).toBe(0);
+
+      await writeFile(adminIndexPath, "stale\n");
+      expect(await runGenerate([...generateArgs, "--check"])).toBe(1);
+      expect(await readFile(adminIndexPath, "utf8")).toBe("stale\n");
+      expect(await runGenerate(generateArgs)).toBe(0);
 
       await writeFile(sitePath, "stale\n");
       const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);

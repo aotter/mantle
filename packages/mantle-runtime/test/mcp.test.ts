@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import packageJson from "../package.json" with { type: "json" };
 import {
   McpJsonRpcDispatcher,
+  MCP_PROTOCOL_VERSION,
   type McpUseCases,
 } from "../src/infrastructure/mcp/McpJsonRpcDispatcher.js";
 import {
@@ -92,7 +93,10 @@ function minimalUseCases(): McpUseCases {
 function jsonRpcReq(method: string, params?: unknown, id: number | string = 1): Request {
   return new Request("https://example.com/mcp", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "mcp-protocol-version": MCP_PROTOCOL_VERSION,
+    },
     body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
   });
 }
@@ -122,11 +126,38 @@ describe("McpJsonRpcDispatcher", () => {
     const body = (await res.json()) as {
       result: { protocolVersion: string; serverInfo: { name: string; version: string } };
     };
-    expect(body.result.protocolVersion).toBe("2025-03-26");
+    expect(body.result.protocolVersion).toBe(MCP_PROTOCOL_VERSION);
     expect(body.result.serverInfo).toEqual({
-      name: "@aotter/mantle-runtime/mcp",
+      name: "aotter.mantle",
       version: packageJson.version,
     });
+  });
+
+  it("requires the negotiated protocol version after initialize", async () => {
+    const { dispatcher } = buildHarness();
+    const missing = new Request("https://example.com/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    });
+    expect((await dispatcher.dispatch(missing, mcpContext())).status).toBe(400);
+    expect((await dispatcher.dispatch(new Request("https://example.com/mcp"), mcpContext())).status)
+      .toBe(405);
+  });
+
+  it("accepts the initialized notification without a response body", async () => {
+    const { dispatcher } = buildHarness();
+    const request = new Request("https://example.com/mcp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "mcp-protocol-version": MCP_PROTOCOL_VERSION,
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
+    });
+    const response = await dispatcher.dispatch(request, mcpContext());
+    expect(response.status).toBe(202);
+    expect(await response.text()).toBe("");
   });
 
   it("tools/list emits generic + per-collection tools", async () => {

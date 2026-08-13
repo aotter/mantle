@@ -1,6 +1,7 @@
 import {
   MEDIA_PURPOSE_SLUG_PATTERN,
   type MediaPurposePolicy,
+  type SiteIcon,
   type SiteDefaults,
 } from "../model/SiteConfig.js";
 import {
@@ -18,9 +19,10 @@ import {
  * canonicalization. Throws `InvalidMediaPurposesError` when any
  * declared `media.purposes` entry's `name` fails the slug pattern,
  * its `required` mime list is empty, or its `maxBytes` map is
- * missing entries for any required mime. Brand / title / description /
- * origin are not validated — only the fields whose values carry
- * semantics the runtime depends on.
+ * missing entries for any required mime. Throws `InvalidSiteIconsError`
+ * when a declared site icon cannot be served safely. Brand / title /
+ * description / origin are not validated — only the fields whose values
+ * carry semantics the runtime depends on.
  *
  * Lives in spec (not runtime) because it's pure validation against
  * the `SiteConfig` contract — no env, no DB. Runtime calls this during
@@ -91,6 +93,16 @@ export class InvalidMediaPurposesError extends Error {
   }
 }
 
+export class InvalidSiteIconsError extends Error {
+  constructor(public readonly invalidIcons: ReadonlyArray<SiteIcon>) {
+    super(
+      "Invalid CmsConfig.siteDefaults.icons: each icon needs a root-relative or absolute HTTPS src, " +
+        "an optional supported image mimeType, and sizes such as '64x64' or 'any'.",
+    );
+    this.name = "InvalidSiteIconsError";
+  }
+}
+
 export function assertSiteDefaultsCanonical(
   defaults: SiteDefaults | undefined,
 ): void {
@@ -98,11 +110,30 @@ export function assertSiteDefaultsCanonical(
     const { invalid } = canonicalizeLocaleList(defaults.locales);
     if (invalid.length > 0) throw new InvalidSiteDefaultsError(invalid);
   }
+  if (defaults?.icons) {
+    const invalid = defaults.icons.filter((icon) => !validSiteIcon(icon));
+    if (defaults.icons.length === 0 || invalid.length > 0) {
+      throw new InvalidSiteIconsError(invalid.length > 0 ? invalid : defaults.icons);
+    }
+  }
   const purposes = defaults?.media?.purposes;
   if (purposes && purposes.length > 0) {
     const issues = collectMediaPurposeIssues(purposes);
     if (issues.length > 0) throw new InvalidMediaPurposesError(issues);
   }
+}
+
+function validSiteIcon(icon: SiteIcon): boolean {
+  if (!icon || typeof icon !== "object" || typeof icon.src !== "string") return false;
+  const validSrc = (/^\/(?!\/)[^\s\\]*$/.test(icon.src))
+    || (URL.canParse(icon.src) && new URL(icon.src).protocol === "https:");
+  return Boolean(
+    validSrc
+      && (!icon.mimeType || ["image/png", "image/jpeg", "image/svg+xml", "image/webp"].includes(icon.mimeType))
+      && (!icon.theme || icon.theme === "light" || icon.theme === "dark")
+      && (!icon.sizes || (Array.isArray(icon.sizes) && icon.sizes.length > 0))
+      && (icon.sizes?.every((size) => typeof size === "string" && (size === "any" || /^[1-9]\d*x[1-9]\d*$/.test(size))) ?? true),
+  );
 }
 
 function collectMediaPurposeIssues(

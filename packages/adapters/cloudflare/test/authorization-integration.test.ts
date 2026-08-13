@@ -95,7 +95,10 @@ function manifests(): Manifest[] {
 function mcpCall(): Request {
   return new Request("https://example.test/mcp", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "mcp-protocol-version": "2025-11-25",
+    },
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: 1,

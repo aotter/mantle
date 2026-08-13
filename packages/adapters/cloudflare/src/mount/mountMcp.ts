@@ -2,6 +2,7 @@ import { McpJsonRpcDispatcher } from "@aotter/mantle-runtime";
 import type { ProcedureManifest, TriggerManifest, ViewManifest } from "@aotter/mantle-spec";
 import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
 import { contextForVerifiedUser } from "./resolveCaller.js";
+import { rejectCrossOriginMutation } from "../auth/rejectCrossOriginMutation.js";
 
 export interface CreateMcpApiHandlerOptions {
   readonly ref: CmsRuntimeRef;
@@ -39,12 +40,14 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
   // pointing at the pre-reset use-cases. A WeakMap also lets the GC
   // reclaim the dispatcher if the runtime is replaced.
   const dispatcherCache = new WeakMap<object, {
-    readonly mediaPurposesKey: string;
+    readonly configKey: string;
     readonly dispatcher: McpJsonRpcDispatcher;
   }>();
 
   return {
     async fetch(request, env, ctx) {
+      const rejected = rejectCrossOriginMutation(request);
+      if (rejected) return rejected;
       const props = readOAuthApiProps((ctx as unknown as { props?: unknown }).props);
       if (!props) return forbidden(requiredScopes);
       const grantedScopes = props.scopes;
@@ -73,16 +76,27 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
       // the tools in tools/list at all. Read this before consulting the
       // dispatcher cache so operator edits to site_config update the
       // MCP catalog without a redeploy/runtime reset.
-      const mediaPurposes = runtime.media
-        ? await runtime.siteConfig.readMediaPurposes()
-        : [];
+      const site = await runtime.siteConfig.load();
+      const mediaPurposes = runtime.media ? site.media.purposes : [];
       // Serialise the whole policy set as the cache key — name + required
       // mimes + per-mime maxBytes all participate. Operator edits to any
       // of these (admin Settings → media taxonomy) rebuild the dispatcher
       // so tools/list reflects the latest contract without a redeploy.
-      const mediaPurposesKey = JSON.stringify(mediaPurposes);
+      const publicUrl = URL.canParse(site.origin) ? site.origin : new URL(request.url).origin;
+      const iconBase = `${publicUrl}/`;
+      const serverInfo = {
+        name: `aotter.mantle.${surface}`,
+        title: site.brand,
+        description: site.description || undefined,
+        websiteUrl: publicUrl,
+        icons: site.icons.filter((icon) => URL.canParse(icon.src, iconBase)).map((icon) => ({
+          ...icon,
+          src: new URL(icon.src, iconBase).href,
+        })),
+      };
+      const configKey = JSON.stringify({ mediaPurposes, serverInfo });
       let cached = dispatcherCache.get(runtime);
-      if (!cached || cached.mediaPurposesKey !== mediaPurposesKey) {
+      if (!cached || cached.configKey !== configKey) {
         const mediaEnabled = runtime.media !== null && mediaPurposes.length > 0;
         const dispatcher = new McpJsonRpcDispatcher(
           {
@@ -116,9 +130,10 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
                 m.kind === "View" && (m.spec.surface ?? "public") === surface,
             ),
             procedures: collectMcpProcedures(runtime.triggers, runtime.proceduresByName, surface),
+            serverInfo,
           },
         );
-        cached = { mediaPurposesKey, dispatcher };
+        cached = { configKey, dispatcher };
         dispatcherCache.set(runtime, cached);
       }
       return cached.dispatcher.dispatch(request, handlerContext);

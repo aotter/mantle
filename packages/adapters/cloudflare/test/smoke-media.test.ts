@@ -644,7 +644,10 @@ describe("media library: /admin/api/media", () => {
 function jsonRpcReq(method: string, params?: unknown): Request {
   return new Request("https://example.test/mcp/staff", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "mcp-protocol-version": "2025-11-25",
+    },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   });
 }
@@ -678,7 +681,12 @@ describe("MCP View surface gating (#438)", () => {
   function viewRef(auth: Auth = staffAuth()) {
     return createCmsRef({
       manifests: viewManifests(),
-      siteDefaults: { media: { purposes: [postCoverPolicy()] } },
+      siteDefaults: {
+        brand: "Example Shop",
+        origin: "https://shop.example",
+        icons: [{ src: "/site-icon.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
+        media: { purposes: [postCoverPolicy()] },
+      },
       bindings: {
         db: new InMemoryDatabase(),
         assets: new StubAssetServer(),
@@ -712,6 +720,29 @@ describe("MCP View surface gating (#438)", () => {
     const names = await toolNames("public");
     expect(names).toContain("query_view_public_posts");
     expect(names).not.toContain("query_view_staff_report");
+  });
+
+  it("projects the canonical site identity into current MCP server metadata", async () => {
+    const handler = createMcpApiHandler({ ref: viewRef(), surface: "public" });
+    const response = await handler.fetch!(
+      jsonRpcReq("initialize"),
+      {},
+      props as unknown as ExecutionContext,
+    );
+    const body = (await response.json()) as {
+      result: { protocolVersion: string; serverInfo: Record<string, unknown> };
+    };
+    expect(body.result.protocolVersion).toBe("2025-11-25");
+    expect(body.result.serverInfo).toMatchObject({
+      name: "aotter.mantle.public",
+      title: "Example Shop",
+      websiteUrl: "https://shop.example",
+      icons: [{
+        src: "https://shop.example/site-icon.svg",
+        mimeType: "image/svg+xml",
+        sizes: ["any"],
+      }],
+    });
   });
 
   it("returns a standards-compatible 403 challenge when the MCP scope is missing", async () => {

@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { cwd, stderr, stdout } from "node:process";
 import { parseArgs } from "node:util";
@@ -55,6 +56,9 @@ export async function runGenerate(rawArgs: readonly string[]): Promise<number> {
   for (const [path, source] of files) {
     stale = !(await syncText(path, source, options.check)) || stale;
   }
+  const adminSource = dirname(fileURLToPath(import.meta.resolve("@aotter/mantle-admin-ui/index.html")));
+  const adminTarget = resolve(cwd(), "public/_mantle/admin");
+  stale = !(await syncAdminAssets(adminSource, adminTarget, options.check)) || stale;
   if (stale && options.check) {
     stderr.write("Mantle generated files are stale; run `mantle generate`.\n");
     return 1;
@@ -95,7 +99,7 @@ Options:
   --manifests <dir>   Directory containing site.yaml (default: ./manifests)
   -o, --output <dir>  Generated root (default: .mantle/generated)
   --namespace <name>  Generated type namespace (default: MantleSite)
-  --check             Fail without writing when output is stale
+  --check             Fail without writing when generated code or Admin assets are stale
   -h, --help          This help
 `);
 }
@@ -214,6 +218,34 @@ async function syncText(path: string, expected: string, check: boolean): Promise
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, expected, "utf8");
   return true;
+}
+
+async function syncAdminAssets(source: string, target: string, check: boolean): Promise<boolean> {
+  const sourceFiles = (await listFiles(source)).filter((path) => !path.startsWith("server."));
+  const targetFiles = await listFiles(target).catch(() => []);
+  const current = sourceFiles.length === targetFiles.length
+    && sourceFiles.every((path, index) => path === targetFiles[index])
+    && (await Promise.all(sourceFiles.map(async (path) =>
+      (await readFile(join(source, path))).equals(await readFile(join(target, path))),
+    ))).every(Boolean);
+  if (current || check) return current;
+
+  await rm(target, { recursive: true, force: true });
+  for (const path of sourceFiles) {
+    const destination = join(target, path);
+    await mkdir(dirname(destination), { recursive: true });
+    await writeFile(destination, await readFile(join(source, path)));
+  }
+  return true;
+}
+
+async function listFiles(root: string, prefix = ""): Promise<string[]> {
+  const entries = await readdir(join(root, prefix), { withFileTypes: true });
+  const files = await Promise.all(entries.map((entry) => {
+    const path = join(prefix, entry.name);
+    return entry.isDirectory() ? listFiles(root, path) : [path];
+  }));
+  return files.flat().sort();
 }
 
 function message(error: unknown): string {

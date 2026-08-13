@@ -1,4 +1,5 @@
 import {
+  DEFAULT_SITE_ICONS,
   URL_LOCALE,
   toUrlLocale,
   type SiteConfig,
@@ -34,7 +35,7 @@ export function siteConfigFromDefaults(defaults: SiteDefaults): SiteConfig {
     origin: defaults.origin ?? "",
     locales,
     canonicalLocale: locales[0] ?? null,
-    faviconUrl: defaults.faviconUrl,
+    icons: defaults.icons ?? DEFAULT_SITE_ICONS,
     media: { purposes: [...(defaults.media?.purposes ?? [])] },
   };
 }

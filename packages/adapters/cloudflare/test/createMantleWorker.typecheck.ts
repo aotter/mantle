@@ -17,6 +17,8 @@ if (false) {
 
   // @ts-expect-error Mantle owns the Admin namespace.
   app.get("/admin/settings", (c) => c.text("no"));
+  // @ts-expect-error Mantle owns generated static assets.
+  app.get("/_mantle/admin/index.html", (c) => c.text("no"));
   // @ts-expect-error Mantle owns the Auth namespace.
   app.post("/api/auth/callback", (c) => c.text("no"));
   // @ts-expect-error Mantle owns manifest View REST routes.
@@ -27,8 +29,7 @@ if (false) {
   app.get("/mcp/staff", (c) => c.text("no"));
   // @ts-expect-error Mantle owns OAuth discovery endpoints.
   app.get("/.well-known/oauth-authorization-server", (c) => c.text("no"));
-  // @ts-expect-error Mantle owns its favicon route.
-  app.get("/favicon.svg", (c) => c.text("no"));
+  app.get("/favicon.svg", (c) => c.text("consumer asset fallback"));
   // @ts-expect-error Global catch-alls could affect Core surfaces.
   app.all("*", (c) => c.text("no"));
 }

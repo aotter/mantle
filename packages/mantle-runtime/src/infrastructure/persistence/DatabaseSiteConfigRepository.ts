@@ -1,8 +1,10 @@
 import {
   assertSiteDefaultsCanonical,
+  DEFAULT_SITE_ICONS,
   type MediaPurposePolicy,
   type SiteConfig,
   type SiteDefaults,
+  type SiteIcon,
 } from "@aotter/mantle-spec";
 import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
 import type {
@@ -15,14 +17,14 @@ import type {
  * `bootInit`) and treats keys differently depending on who owns them:
  *
  * - **UI-editable, seed-once** (`brand`, `title`, `description`,
- *   `faviconUrl`, `ga4MeasurementId`, `facebookPixelId`):
+ *   `ga4MeasurementId`, `facebookPixelId`):
  *   written via INSERT … ON CONFLICT DO NOTHING. The admin settings
  *   UI (`/admin/api/site-settings`) can edit a subset of these
  *   directly, and the rest are conceptually the same "operator can
  *   override" bucket — either way, DB wins once the row exists, so a
  *   later `src/mantle/config.ts` edit never clobbers an operator's change.
  *
- * - **code-canonical, boot-synced** (`origin`, `mediaPurposes`, `locales`):
+ * - **code-canonical, boot-synced** (`origin`, `icons`, `mediaPurposes`, `locales`):
  *   these have no admin-UI edit path — `src/mantle/config.ts` is the only
  *   source of truth — so `seed` upserts them on every boot, writing
  *   only when the serialized value actually differs from what's
@@ -83,6 +85,19 @@ function parseMediaPurposes(raw: string | undefined): readonly MediaPurposePolic
   }
 }
 
+function parseIcons(raw: string | undefined): readonly SiteIcon[] {
+  if (!raw) return DEFAULT_SITE_ICONS;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0
+      ? parsed as readonly SiteIcon[]
+      : DEFAULT_SITE_ICONS;
+  } catch {
+    // Alpha compatibility: older releases stored one plain favicon URL.
+    return [{ src: raw }];
+  }
+}
+
 export class DatabaseSiteConfigRepository implements SiteConfigRepository {
   private cacheLocales = false;
   private cachedLocales: readonly string[] | undefined;
@@ -101,7 +116,6 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
       [KEYS.brand, defaults.brand],
       [KEYS.title, defaults.title],
       [KEYS.description, defaults.description],
-      [KEYS.faviconUrl, defaults.faviconUrl],
       [KEYS.ga4MeasurementId, defaults.ga4MeasurementId],
       [KEYS.facebookPixelId, defaults.facebookPixelId],
     ];
@@ -131,6 +145,7 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
     // nothing actually changed (#441).
     const syncedValues: Array<[string, string | undefined]> = [
       [KEYS.origin, defaults.origin && defaults.origin.length > 0 ? defaults.origin : undefined],
+      [KEYS.faviconUrl, defaults.icons ? JSON.stringify(defaults.icons) : undefined],
       [KEYS.locales, defaults.locales && defaults.locales.length > 0 ? defaults.locales.join(",") : undefined],
       [
         KEYS.mediaPurposes,
@@ -177,7 +192,7 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
       locales,
       canonicalLocale: locales[0] ?? null,
       brand: m.get(KEYS.brand) ?? "AotterMantle",
-      faviconUrl: m.get(KEYS.faviconUrl) || undefined,
+      icons: parseIcons(m.get(KEYS.faviconUrl)),
       ga4MeasurementId: m.get(KEYS.ga4MeasurementId) || undefined,
       facebookPixelId: m.get(KEYS.facebookPixelId) || undefined,
       media: { purposes },

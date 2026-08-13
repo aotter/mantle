@@ -31,7 +31,6 @@ import {
   type HandlerContext,
   type MediaAsset,
 } from "@aotter/mantle-runtime";
-import { indexHtml } from "@aotter/mantle-admin-ui";
 import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
 import { resolveCaller } from "./resolveCaller.js";
 import { runMantleUseCase } from "./runMantleUseCase.js";
@@ -42,7 +41,6 @@ import {
   type Auth,
 } from "../auth/createAuth.js";
 import { rejectCrossOriginMutation } from "../auth/rejectCrossOriginMutation.js";
-import { AOTTER_FAVICON_SVG } from "../assets/aotterFavicon.js";
 
 const [PAGE_PARAM, SHOW_PARAM] = VIEW_PARAMS_RESERVED;
 
@@ -96,19 +94,16 @@ export function mountServerEndpoints<E extends Env>(
 
 function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, auth: Auth): void {
   const authBasePath = auth.basePath;
-  const spa = (): Response =>
-    new Response(indexHtml, {
-      headers: { "content-type": "text/html; charset=utf-8" },
-    });
-
-  app.get("/favicon.svg", () =>
-    new Response(AOTTER_FAVICON_SVG, {
-      headers: {
-        "content-type": "image/svg+xml; charset=utf-8",
-        "cache-control": "public, max-age=86400",
-      },
-    }),
-  );
+  const spa = async (c: Context): Promise<Response> => {
+    const runtime = await ref.get();
+    const asset = await runtime.assets.fetch(
+      new Request(new URL("/_mantle/admin/index.html", c.req.url)),
+    );
+    return asset ?? new Response(
+      "Mantle Admin assets are missing; run `mantle generate` and configure the ASSETS binding.",
+      { status: 503, headers: { "cache-control": "private, no-store" } },
+    );
+  };
 
   // Public read-only manifest of registered sign-in methods. The admin
   // SPA hits this on sign-in-page mount so it can render per-method

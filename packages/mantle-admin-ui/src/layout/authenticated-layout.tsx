@@ -22,6 +22,7 @@ import {
   type AdminUser,
   type Collection,
   type SiteInfo,
+  type SiteIcon,
   type SidebarStatus,
   type StaffOperation,
   type ViewManifestInfo,
@@ -65,11 +66,25 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
   const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
   const viewsQuery = useQuery<ViewManifestInfo[]>(viewsManifestQueryOptions());
 
+  React.useEffect(() => {
+    if (!site.data?.icons.length) return;
+    document.querySelectorAll("link[rel~='icon']").forEach((link) => link.remove());
+    for (const icon of site.data.icons) {
+      const link = document.createElement("link");
+      link.rel = "icon";
+      link.href = icon.src;
+      if (icon.mimeType) link.type = icon.mimeType;
+      if (icon.sizes) link.sizes.add(...icon.sizes);
+      if (icon.theme) link.media = `(prefers-color-scheme: ${icon.theme})`;
+      document.head.append(link);
+    }
+  }, [site.data?.icons]);
+
   const resolvedBrand = React.useMemo<AdminBrand>(
     () => ({
       title: site.data?.brand ?? t(language, "admin.consoleTitle"),
       href: "/admin",
-      image: site.data?.faviconUrl,
+      image: preferredAdminIcon(site.data?.icons),
     }),
     [language, site.data],
   );
@@ -136,6 +151,12 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
       </SidebarProvider>
     </FormActionBarHostContext.Provider>
   );
+}
+
+function preferredAdminIcon(icons: readonly SiteIcon[] | undefined): string | undefined {
+  return icons?.find((icon) => icon.sizes?.includes("64x64") && !icon.theme)?.src
+    ?? icons?.find((icon) => !icon.theme)?.src
+    ?? icons?.[0]?.src;
 }
 
 export function buildNavGroups(
