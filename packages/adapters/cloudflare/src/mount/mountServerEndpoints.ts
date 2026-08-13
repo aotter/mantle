@@ -35,7 +35,12 @@ import { indexHtml } from "@aotter/mantle-admin-ui";
 import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
 import { resolveCaller, resolveUserRole } from "./resolveCaller.js";
 import { runMantleUseCase } from "./runMantleUseCase.js";
-import { STAFF_ROLE_SET, type StaffRole, type Auth } from "../auth/createAuth.js";
+import {
+  decodeMemberCursor,
+  STAFF_ROLE_SET,
+  type StaffRole,
+  type Auth,
+} from "../auth/createAuth.js";
 import { rejectCrossOriginMutation } from "../auth/rejectCrossOriginMutation.js";
 import { AOTTER_FAVICON_SVG } from "../assets/aotterFavicon.js";
 
@@ -146,6 +151,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     "/admin/preferences",
     "/admin/settings",
     "/admin/staff",
+    "/admin/members",
     "/admin/ops",
     "/admin/views/:name",
   ]) {
@@ -231,6 +237,37 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     Response.json({ users: await auth.listUsers() }),
   );
 
+  roleGuarded("get", "/admin/api/members", "editor", async (c) => {
+    const rawLimit = c.req.query("limit");
+    const limit = rawLimit === undefined ? 50 : Number(rawLimit);
+    const cursor = c.req.query("cursor") || undefined;
+    const search = c.req.query("search")?.trim() || undefined;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 ||
+        (cursor && !decodeMemberCursor(cursor)) || (search?.length ?? 0) > 200) {
+      return Response.json({
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "INPUT_VALIDATION_FAILED",
+          severity: "error",
+          path: "GET /admin/api/members",
+          expected: "limit 1..100, a valid cursor, and search up to 200 characters",
+          message: "Member list parameters are invalid.",
+        }),
+      }, { status: 400 });
+    }
+    const result = await auth.listMembers({
+      limit,
+      search,
+      cursor,
+      cursorDirection: c.req.query("cursor_direction") === "backward" ? "backward" : "forward",
+    });
+    return Response.json({
+      items: result.items,
+      previous_cursor: result.previousCursor,
+      next_cursor: result.nextCursor,
+    });
+  });
+
   roleGuarded("patch", "/admin/api/staff/:id/role", "owner", async (c, gate) => {
     const userId = c.req.param("id") ?? "";
     const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
@@ -278,7 +315,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     return Response.json({ ok: true });
   });
 
-  roleGuarded("post", "/admin/api/staff/invitations", "owner", async (c) => {
+  roleGuarded("post", "/admin/api/staff/invitations", "owner", async (c, gate) => {
     const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const role = typeof body.role === "string" ? body.role : "";
@@ -296,18 +333,19 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     }
     const result = await auth.inviteUser(email, role as StaffRole);
     if (result.kind === "exists") {
-      return Response.json({
-        ok: false,
-        userId: result.id,
-        diagnostic: runtimeDiagnostic({
-          code: "CONFLICT",
-          severity: "error",
-          path: "POST /admin/api/staff/invitations",
-          expected: "an email without an existing user row",
-          message:
-            "That email already has an account — adjust its role in the staff list instead.",
-        }),
-      }, { status: 409 });
+      if (result.id === gate.userId) {
+        return Response.json({
+          ok: false,
+          diagnostic: runtimeDiagnostic({
+            code: "AUTH_DENIED",
+            severity: "error",
+            path: "POST /admin/api/staff/invitations",
+            expected: "an email other than the caller's",
+            message: "You cannot change your own role.",
+          }),
+        }, { status: 403 });
+      }
+      await auth.setUserRole(result.id, role as StaffRole);
     }
     return Response.json({ ok: true, userId: result.id });
   });

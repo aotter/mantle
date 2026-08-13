@@ -7,6 +7,7 @@ import {
   Home,
   Images,
   Settings as SettingsIcon,
+  ContactRound,
   Users,
   Wrench,
 } from "lucide-react";
@@ -138,7 +139,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
   );
 }
 
-function buildNavGroups(
+export function buildNavGroups(
   collections: ReadonlyArray<Collection>,
   operations: ReadonlyArray<StaffOperation>,
   views: ReadonlyArray<ViewManifestInfo>,
@@ -203,7 +204,10 @@ function buildNavGroups(
     title: t(language, "nav.more"),
     items: [
       ...(role === "owner" || role === "editor"
-        ? [{ title: t(language, "nav.media"), url: "/admin/media", icon: Images }]
+        ? [
+            { title: t(language, "nav.media"), url: "/admin/media", icon: Images },
+            { title: t(language, "nav.members"), url: "/admin/members", icon: ContactRound },
+          ]
         : []),
       ...(role === "owner"
         ? [

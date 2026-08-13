@@ -1064,9 +1064,8 @@ export interface LinkedAccountInfo {
  * `user` table's identity columns; password hashes, ban metadata, and
  * other secret-shaped columns are intentionally excluded.
  *
- * `emailVerified: false` + a `null` role is the resting state of an
- * *invitation* (a row pre-created by `inviteUser` that nobody has
- * signed in to yet) — the admin SPA renders those as "invited".
+ * `emailVerified: false` + no linked account identifies a pending
+ * invitation; invited rows already carry their requested staff role.
  */
 export interface StaffUserInfo {
   readonly id: string;
@@ -1076,6 +1075,46 @@ export interface StaffUserInfo {
   readonly githubLogin: string | null;
   readonly emailVerified: boolean;
   readonly createdAt: Date;
+}
+
+export type MemberUserInfo = Pick<
+  StaffUserInfo,
+  "id" | "email" | "name" | "emailVerified" | "createdAt"
+>;
+
+export interface MemberListResult {
+  readonly items: readonly MemberUserInfo[];
+  readonly previousCursor: string | null;
+  readonly nextCursor: string | null;
+}
+
+export interface ListMembersArgs {
+  readonly search?: string;
+  readonly cursor?: string;
+  readonly cursorDirection?: "forward" | "backward";
+  readonly limit: number;
+}
+
+const MEMBER_CURSOR_PREFIX = "m:";
+
+/** @internal Exported for endpoint and regression-test validation. */
+export function encodeMemberCursor(createdAt: string, id: string): string {
+  return `${MEMBER_CURSOR_PREFIX}${encodeURIComponent(JSON.stringify([createdAt, id]))}`;
+}
+
+/** @internal Exported for endpoint and regression-test validation. */
+export function decodeMemberCursor(cursor: string): readonly [string, string] | null {
+  if (!cursor.startsWith(MEMBER_CURSOR_PREFIX)) return null;
+  try {
+    const value = JSON.parse(decodeURIComponent(cursor.slice(MEMBER_CURSOR_PREFIX.length))) as unknown;
+    return Array.isArray(value) && value.length === 2 &&
+        typeof value[0] === "string" && !Number.isNaN(Date.parse(value[0])) &&
+        typeof value[1] === "string" && value[1]
+      ? [value[0], value[1]]
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Stable, secret-free user projection for consumer-owned services. */
@@ -1177,11 +1216,12 @@ export interface Auth {
     userId: string,
     providerId: string,
   ) => Promise<boolean>;
-  /** List every user row for the staff-management surface, ordered by
-   *  `createdAt` ascending. Read-only — uses the underlying D1 binding
-   *  directly. Owner-only enforcement is the mount layer's job
-   *  (`/admin/api/staff`); this method does not gate. */
+  /** List only users with a staff role, ordered by `createdAt`
+   *  ascending. End-user identities stay outside the team-management
+   *  surface. Owner-only enforcement is the mount layer's job. */
   readonly listUsers: () => Promise<readonly StaffUserInfo[]>;
+  /** List non-staff identities for the member-management surface. */
+  readonly listMembers: (args: ListMembersArgs) => Promise<MemberListResult>;
   /** Assign or clear a user's staff role. `null` revokes staff access
    *  (the row keeps existing — the user can still sign in, but every
    *  staff-gated surface 403s). Returns false when no row matched.
@@ -1343,10 +1383,12 @@ export function createAuth(config: CreateAuthConfig): Auth {
       return (result.meta?.changes ?? 0) > 0;
     },
     listUsers: async () => {
+      const placeholders = STAFF_ROLES.map(() => "?").join(",");
       const result = await config.database
         .prepare(
-          "SELECT id, email, name, role, githubLogin, emailVerified, createdAt FROM user ORDER BY createdAt ASC, id ASC",
+          `SELECT id, email, name, role, githubLogin, emailVerified, createdAt FROM user WHERE role IN (${placeholders}) ORDER BY createdAt ASC, id ASC`,
         )
+        .bind(...STAFF_ROLES)
         .all<{
           id: string;
           email: string;
@@ -1365,6 +1407,59 @@ export function createAuth(config: CreateAuthConfig): Auth {
         emailVerified: row.emailVerified !== 0,
         createdAt: new Date(row.createdAt),
       }));
+    },
+    listMembers: async ({ search, cursor, cursorDirection = "forward", limit }) => {
+      const parsedCursor = cursor ? decodeMemberCursor(cursor) : null;
+      const backward = cursorDirection === "backward";
+      const conditions = [
+        `(role IS NULL OR role NOT IN (${STAFF_ROLES.map(() => "?").join(",")}))`,
+      ];
+      const bindings: unknown[] = [...STAFF_ROLES];
+      const term = search?.trim().toLowerCase();
+      if (term) {
+        conditions.push("(LOWER(name) LIKE ? ESCAPE '\\' OR LOWER(email) LIKE ? ESCAPE '\\')");
+        const like = `%${term.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
+        bindings.push(like, like);
+      }
+      if (parsedCursor) {
+        const operator = backward ? "<" : ">";
+        conditions.push(`(createdAt ${operator} ? OR (createdAt = ? AND id ${operator} ?))`);
+        bindings.push(parsedCursor[0], parsedCursor[0], parsedCursor[1]);
+      }
+      bindings.push(limit + 1);
+      const result = await config.database
+        .prepare(
+          `SELECT id, email, name, emailVerified, createdAt FROM user WHERE ${conditions.join(" AND ")} ORDER BY createdAt ${backward ? "DESC" : "ASC"}, id ${backward ? "DESC" : "ASC"} LIMIT ?`,
+        )
+        .bind(...bindings)
+        .all<{
+          id: string;
+          email: string;
+          name: string;
+          emailVerified: number;
+          createdAt: string;
+        }>();
+      const rows = (result.results ?? []).slice(0, limit);
+      if (backward) rows.reverse();
+      const items = rows.map((row) => ({
+        id: row.id,
+        email: row.email,
+        name: row.name,
+        emailVerified: row.emailVerified !== 0,
+        createdAt: new Date(row.createdAt),
+      }));
+      const hasMore = (result.results?.length ?? 0) > limit;
+      return {
+        items,
+        previousCursor:
+          (backward ? hasMore : Boolean(parsedCursor)) && rows[0]
+            ? encodeMemberCursor(rows[0].createdAt, rows[0].id)
+            : null,
+        nextCursor:
+          (backward ? Boolean(parsedCursor) : hasMore) && rows.at(-1)
+            ? encodeMemberCursor(rows.at(-1)!.createdAt, rows.at(-1)!.id)
+            : null,
+      };
     },
     setUserRole: async (userId, role) => {
       if (role !== null && !STAFF_ROLE_SET.has(role)) {
@@ -1492,6 +1587,7 @@ export function createSetupIncompleteAuth(
     listLinkedAccounts: async () => [],
     unlinkAccount: async () => false,
     listUsers: async () => [],
+    listMembers: async () => ({ items: [], previousCursor: null, nextCursor: null }),
     setUserRole: async () => false,
     inviteUser: async () => {
       throw new Error(message);

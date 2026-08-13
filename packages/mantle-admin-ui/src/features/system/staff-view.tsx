@@ -31,8 +31,8 @@ import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 const EMAIL_SETUP_GUIDE_URL = "https://developers.cloudflare.com/email-service/";
 const EMAIL_SETUP_PROMPT = `Enable email sign-in for this Mantle site. Implement the Mantle EmailSender port with a transactional email provider. For Cloudflare, prefer an Email Service binding. Register either { kind: "email-otp", sender } or { kind: "magic-link", sender } in createAuth(), keep credentials in Worker secrets, deploy, then verify that /api/auth/methods lists the method and a real email arrives.`;
 
-/** Owner-only staff management: list every user, assign roles, invite
- *  by email. The server enforces owner-only (403 for editor and
+/** Owner-only staff management: list staff, assign roles, invite by
+ *  email. The server enforces owner-only (403 for editor and
  *  contributor) and the self-role-change guard; this view renders
  *  those denials, it does not re-derive them. */
 

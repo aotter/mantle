@@ -16,6 +16,7 @@ import { NotFoundView } from "../features/system/not-found-view";
 import { PreferencesView } from "../features/system/preferences-view";
 import { SettingsView } from "../features/system/settings-view";
 import { StaffView } from "../features/system/staff-view";
+import { MembersView } from "../features/system/members-view";
 
 export function AdminApp(): React.ReactElement {
   const location = useAdminLocation();
@@ -109,6 +110,14 @@ function Gate({ path }: { path: string }): React.ReactElement {
     return (
       <AuthenticatedLayout>
         <StaffView />
+      </AuthenticatedLayout>
+    );
+  }
+
+  if (path === "/admin/members") {
+    return (
+      <AuthenticatedLayout>
+        <MembersView />
       </AuthenticatedLayout>
     );
   }

@@ -296,6 +296,46 @@ describe("GET /admin/api/staff", () => {
   });
 });
 
+describe("GET /admin/api/members", () => {
+  it("allows editors and maps the member cursor envelope", async () => {
+    const listMembers = vi.fn(async () => ({
+      items: [{
+        id: "member-1",
+        email: "member@example.com",
+        name: "Member",
+        emailVerified: true,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      }],
+      previousCursor: null,
+      nextCursor: "next",
+    }));
+    const { app } = harness({ getSession: sessionAs("editor"), listMembers });
+
+    const res = await app.request("/admin/api/members?limit=25&search=member");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      items: [{ id: "member-1" }],
+      previous_cursor: null,
+      next_cursor: "next",
+    });
+    expect(listMembers).toHaveBeenCalledWith({
+      limit: 25,
+      search: "member",
+      cursor: undefined,
+      cursorDirection: "forward",
+    });
+  });
+
+  it("rejects contributors and malformed cursors", async () => {
+    const contributor = harness({ getSession: sessionAs("contributor") });
+    expect((await contributor.app.request("/admin/api/members")).status).toBe(403);
+
+    const editor = harness({ getSession: sessionAs("editor") });
+    expect((await editor.app.request("/admin/api/members?cursor=broken")).status).toBe(400);
+  });
+});
+
 describe("PATCH /admin/api/staff/:id/role", () => {
   it("rejects a non-staff role string with 400", async () => {
     const { app } = harness({ getSession: sessionAs("owner") });
@@ -375,17 +415,38 @@ describe("POST /admin/api/staff/invitations", () => {
     expect(await res.json()).toMatchObject({ ok: true, userId: "new-id" });
   });
 
-  it("409s when the email already has a row, carrying that row's id", async () => {
+  it("assigns the requested staff role when the email already has an end-user row", async () => {
+    const assigned: Array<[string, string | null]> = [];
     const { app } = harness({
       getSession: sessionAs("owner"),
       inviteUser: async () => ({ kind: "exists", id: "old-id" }),
+      setUserRole: async (id, role) => {
+        assigned.push([id, role]);
+        return true;
+      },
     });
     const res = await app.request(
       "/admin/api/staff/invitations",
       jsonInit("POST", { email: "dup@example.com", role: "editor" }),
     );
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ ok: false, userId: "old-id" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, userId: "old-id" });
+    expect(assigned).toEqual([["old-id", "editor"]]);
+  });
+
+  it("does not let an owner change their own role through the invite form", async () => {
+    const setUserRole = vi.fn(async () => true);
+    const { app } = harness({
+      getSession: sessionAs("owner", "self-id"),
+      inviteUser: async () => ({ kind: "exists", id: "self-id" }),
+      setUserRole,
+    });
+    const res = await app.request(
+      "/admin/api/staff/invitations",
+      jsonInit("POST", { email: "self@example.com", role: "contributor" }),
+    );
+    expect(res.status).toBe(403);
+    expect(setUserRole).not.toHaveBeenCalled();
   });
 });
 

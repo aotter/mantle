@@ -130,6 +130,20 @@ export interface StaffUser {
   createdAt: string;
 }
 
+export interface MemberUser {
+  id: string;
+  email: string;
+  name: string;
+  emailVerified: boolean;
+  createdAt: string;
+}
+
+export interface MemberListResult {
+  items: MemberUser[];
+  previous_cursor: string | null;
+  next_cursor: string | null;
+}
+
 export interface EntryRow {
   id: string;
   collection: string;
