@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "description": "Umbrella entry for @aotter/mantle. Adopters install this one package and import from subpaths: /spec, /runtime, /cloudflare, /admin-ui. Sub-packages remain individually installable on npm for tooling and adapter authors.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
