@@ -30,7 +30,7 @@ describe("Windows path compatibility", () => {
     const source = join(projectRoot, "src");
     await mkdir(manifests, { recursive: true });
     await mkdir(source, { recursive: true });
-    await writeFile(join(manifests, "pages.yaml"), SCHEMA_YAML, "utf8");
+    await writeFile(join(manifests, "site.yaml"), SCHEMA_YAML, "utf8");
 
     process.chdir(projectRoot);
 

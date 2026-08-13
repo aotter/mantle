@@ -52,7 +52,7 @@ function printHelp(): void {
 Usage: mantle emit-openapi [options]
 
 Options:
-  --manifests <dir>            Manifest root (default: ./manifests)
+  --manifests <dir>            Directory containing site.yaml (default: ./manifests)
   --title <str>                OpenAPI info.title (default: mantle)
   --version <str>              OpenAPI info.version (default: 0.1.0)
   --session-cookie-name <str>  Better Auth session-cookie name used

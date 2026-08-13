@@ -18,7 +18,7 @@ tokens, or recipes, but the skill contract is Core-owned.
 2. `styles/`, `components/`, `src/web/`, `src/theme*`, and UI-library config
    if present.
 3. A vendored UI palette's manifest and license, if present.
-4. `manifests/` to understand which content shape drives the public UI.
+4. `manifests/site.yaml` to understand which content shape drives the public UI.
 
 ## Ownership
 

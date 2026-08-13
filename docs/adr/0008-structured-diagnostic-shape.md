@@ -126,7 +126,7 @@ code string. That was retired because:
 ### `path` format
 
 - For static validation: filesystem path + JSON Pointer fragment,
-  e.g. `manifests/recent-published.view.yaml#/spec/from`.
+  e.g. `manifests/site.yaml#/3/spec/from`.
 - For a consumer test diagnostic: test file path + assertion location when
   available, e.g. `tests/handlers/contact.test.ts:42`.
 - For boot-time: manifest pointer (no on-disk path because boot

@@ -10,10 +10,10 @@ describe("manifestPath", () => {
 
   it("uses file path + docIndex when supplied", () => {
     const fp = new Map([
-      ["Schema/posts", [{ file: "/abs/manifests/posts.yaml", docIndex: 0 }]],
+      ["Schema/posts", [{ file: "/abs/manifests/site.yaml", docIndex: 0 }]],
     ]);
     expect(manifestPath("Schema", "posts", "/spec/title", fp)).toBe(
-      "/abs/manifests/posts.yaml#/0/spec/title",
+      "/abs/manifests/site.yaml#/0/spec/title",
     );
   });
 

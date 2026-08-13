@@ -484,7 +484,7 @@ bundles multiple atoms. A contact form is at minimum:
   inserts)
 - A `Trigger` binding the Procedure to `POST /api/contact`
 
-Three atoms, three manifests. With one file per manifest, a
+Three atoms, three documents. With one file per atom, a
 small site with 10 features has 30+ manifest files. An early
 design-experiment vibe-user called this out:
 
@@ -498,10 +498,10 @@ Two paths surfaced to address the file count:
 #### Path A — Multi-doc YAML
 
 YAML's standard `---` separator allows multiple documents in
-one file. A "feature file" carries all atoms for that feature:
+one file. The fixed site manifest carries all atoms:
 
 ```yaml
-# manifests/contact.yaml
+# manifests/site.yaml
 apiVersion: cms.mantle.aotter.net/v1
 kind: Schema
 metadata: { name: contact-messages }
@@ -527,7 +527,7 @@ spec:
 ```
 
 One file, three atoms, conceptual separation preserved. The
-loader walks files and parses each `---` block as a separate
+loader reads `site.yaml` and parses each `---` block as a separate
 manifest.
 
 #### Path B — Inline shortcut on Procedure (`expose:`)
@@ -584,31 +584,20 @@ multi") but creates permanent tax:
 
 #### What multi-doc YAML accomplishes
 
-- File count drops without inventing redundancy. A feature →
-  one file, regardless of how many atoms it requires.
+- File count drops without inventing redundancy. A site has one
+  authored manifest file regardless of how many atoms it requires.
 - Atom separation stays honest. Every atom has its own
   envelope (`apiVersion`, `kind`, `metadata`, `spec`); there
   is no "shortcut form."
-- Related atoms sit next to each other for readers reviewing a
-  feature.
+- Related atoms sit next to each other for readers reviewing the site.
 - The PG-1:1 framing stays clean: Procedure is
   internal-callable, Trigger is the binding atom.
 
-#### File organization conventions (suggested, not enforced)
+#### Fixed file contract
 
-- One feature → one file. Name the file by feature
-  (`contact.yaml`, `posts.yaml`, `comments.yaml`), not by atom
-  type.
-- The shared file holds the Procedure + its Trigger + (when
-  feature-specific) the Schema and View.
-- Schemas that are referenced by many features can live in
-  their own `<schema-name>.schema.yaml` file.
-- Views with no Procedure / Trigger neighbors live in
-  `<view-name>.view.yaml`.
-
-The validator does not enforce naming conventions; it walks
-all `*.yaml` under the manifest root and parses every `---`
-block as a manifest.
+The authored file is always `manifests/site.yaml`. The common loader rejects
+a missing or differently named file, and every `---` document becomes one
+atom. This is enforced so humans and agents never need a file-discovery rule.
 
 ### Consequences
 
@@ -618,8 +607,7 @@ block as a manifest.
   OpenAPI emitter, runtime dispatcher all walk one shape.
 - Conceptual atom separation preserved. The 4-atom story holds
   for every feature.
-- File count tractable. A typical small site is 5–20 manifest
-  files, not 30+.
+- File count is fixed at one authored manifest.
 - Cardinality changes (1 HTTP → HTTP + cron) are additive (add
   a Trigger); no refactor needed.
 - AI authors learn one mental model, not two.
@@ -632,9 +620,8 @@ block as a manifest.
 - Some loaders (older / non-compliant) don't handle multi-doc.
   Standard `js-yaml` / `yaml` libraries do; the SDK uses
   `yaml` (already a dependency).
-- File-discovery patterns (`find . -name "send-contact-message.trigger.yaml"`)
-  no longer work for atoms inside multi-doc files. Authors
-  must `grep` instead.
+- Authors use `grep` by atom name inside `manifests/site.yaml` instead of
+  discovering feature-specific filenames.
 - Editor support: YAML language servers handle multi-doc, but
   some IDE features (e.g. JSON Schema validation per document
   in a multi-doc file) work less smoothly than in single-doc
@@ -649,18 +636,9 @@ block as a manifest.
   ways is permanent tax that grows with the codebase.
   Mitigation: this section is the answer to that argument; flag
   attempts and link here.
-- **Multi-doc files grow unwieldy.** A "shop" feature might
-  have a Schema + 3 Procedures + 5 Triggers + 2 Views. One
-  file with 11 atoms is harder to navigate than 11 files.
-  Mitigation: file-organization convention is suggestion, not
-  rule; authors are free to split when it stops helping.
-- **Co-location breaks discoverability for shared atoms.**
-  A Schema referenced by 4 features can live in any of those
-  4 files (or its own). Without grep / IDE go-to-def, finding
-  the Schema definition requires knowing where the author
-  put it. Mitigation: Loop 1 (`mantle validate`) emits the
-  filesystem path in `VIEW_FROM_UNKNOWN_SCHEMA` diagnostics;
-  IDE-shaped tooling (LSP — DRAFT) closes the rest.
+- **`site.yaml` can grow.** Search by `kind` plus `metadata.name`; reconsider
+  splitting only when real projects show that one deterministic location is
+  worse than file discovery.
 
 ### Alternatives considered
 
@@ -687,14 +665,14 @@ explicit `Trigger` + explicit `expose:`).
 
 ### How to apply
 
-- Authoring: one feature → one file with `---` separators.
+- Authoring: put every atom in `manifests/site.yaml`, separated by `---`.
 - Reviewing: when an author writes a Procedure with an inline
   HTTP binding, push back with this section.
 - Refactoring: a feature that grew from one HTTP binding to
   one HTTP + one cron + one MCP doesn't change the Procedure;
   it adds two more Triggers in the same file.
-- Tooling: SDK loader walks `*.yaml` under manifest root and
-  parses each `---` block; static validator emits diagnostics
+- Tooling: SDK loader reads `<manifest-root>/site.yaml` and parses each `---`
+  block; static validator emits diagnostics
   with file path + manifest pointer
-  (`feature.yaml#/2/spec/from`) so multi-doc location stays
+  (`site.yaml#/2/spec/from`) so multi-doc location stays
   precise.

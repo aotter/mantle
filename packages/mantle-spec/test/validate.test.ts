@@ -543,6 +543,23 @@ spec:
 });
 
 describe("parseManifests() — v0.1.0 promoted grammar", () => {
+  it("rejects a translation child with no locale-specific payload field", () => {
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: story-translations }
+spec:
+  title: Story translations
+  localized: true
+  translates: { parent: stories, on: slug }
+  schema:
+    type: object
+    properties:
+      slug: { type: string }
+      locale: { type: string }
+`);
+    expect(result.diagnostics[0]?.code).toBe("TRANSLATES_REQUIRES_CONTENT_FIELD");
+  });
+
   it("accepts Procedure.handler.kind: 'builtin' with op + schema", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure

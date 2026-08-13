@@ -73,7 +73,7 @@ A logical feature commonly bundles a Procedure + a Trigger (and often a
 Schema and a View). Put related atoms in one file separated by `---`:
 
 ```yaml
-# manifests/contact.yaml
+# manifests/site.yaml
 apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure
 metadata: { name: send-contact-message }
@@ -93,8 +93,8 @@ spec:
   target: { procedure: send-contact-message }
 ```
 
-One file, two atoms. File count stays low; conceptual atom separation
-stays honest.
+One fixed file, two documents. Add every atom to `manifests/site.yaml` with
+`---`; the loader rejects other manifest filenames.
 
 ## What each atom is for (v0.1 minimum essential grammar)
 
@@ -156,8 +156,14 @@ validates manifest shape.
 
 **`spec.translates: { parent, on }`** (ADR-0010) — declares this
 Schema as the translation companion to a non-localized parent, joined
-on the named field (typically `slug`). Implies `localized: true`. The
+on the named field (typically `slug`). Requires an explicit
+`localized: true`. The
 admin UI surfaces the child only as locale tabs in the parent's editor.
+
+Use a standalone localized Schema only when each locale row is an
+independent record. When several locale rows are versions of one entity,
+declare a non-localized parent plus a localized `translates` child; that
+relationship is what powers translation grouping and completeness in Admin.
 
 #### Lifecycle
 

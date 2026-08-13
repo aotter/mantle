@@ -49,7 +49,7 @@ stop and ask for the recipe instead of guessing.
 ## First Read
 
 1. `package.json` for Mantle version and adapter package.
-2. `manifests/` for current atom names and route/tool collisions.
+2. `manifests/site.yaml` for current atom names and route/tool collisions.
 3. `src/mantle/config.ts` and `src/mantle/handlers/` for registered handlers, templates, and optional ports. Older projects may use `src/mantleConfig.ts`.
 4. `.mantle/plugins.json` and `.mantle/plugins.lock.json` if present.
 5. `.mantle/launch-state.json` only as context, not as plugin authority.

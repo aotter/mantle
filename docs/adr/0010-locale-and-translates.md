@@ -206,29 +206,35 @@ apiVersion: cms.mantle.aotter.net/v1
 kind: Schema
 metadata: { name: products }
 spec:
+  title: Products
+  localized: false
   schema:
+    type: object
     properties:
       slug: { type: string }
       sku:  { type: string }
       price: { type: number }
     required: [slug, sku, price]
-  unique: [slug]
+  uniqueIndexes: [[slug]]
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: Schema
 metadata: { name: product-translations }
 spec:
+  title: Product translations
   localized: true
   translates:
     parent: products
     on: slug
   schema:
+    type: object
     properties:
       slug: { type: string }
+      locale: { type: string }
       title: { type: string }
       description: { type: string }
-    required: [slug, title]
-  unique: [[slug, locale]]
+    required: [slug, locale, title]
+  uniqueIndexes: [[slug, locale]]
 ```
 
 `Schema.spec.translates` declares the parent/child relationship as
@@ -262,6 +268,8 @@ Validation rules introduced:
 - `TRANSLATES_REQUIRES_LOCALIZED` — `translates: ...` declared on a
   Schema where `localized` isn't `true`. (A non-localized translation
   table makes no sense.)
+- `TRANSLATES_REQUIRES_CONTENT_FIELD` — the child declares only its join
+  field and `locale`, with no locale-specific payload to translate.
 
 ## Consequences
 

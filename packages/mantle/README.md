@@ -43,7 +43,7 @@ pnpm exec mantle-harness indexes --require-public
 pnpm exec mantle-harness http --base-url http://127.0.0.1:8787 --route page=/en/example
 ```
 
-`mantle generate` validates the YAML under `./manifests`, then writes the
+`mantle generate` validates `./manifests/site.yaml`, then writes the
 parsed manifest module and handler declarations to `.mantle/generated/`.
 It does not sync skills, update packages, style, provision, or deploy.
 When manifests declare Views, the generated `site.ts` also exports

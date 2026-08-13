@@ -92,7 +92,7 @@ function printHelp(): void {
 Usage: mantle generate [options]
 
 Options:
-  --manifests <dir>   Manifest root (default: ./manifests)
+  --manifests <dir>   Directory containing site.yaml (default: ./manifests)
   -o, --output <dir>  Generated root (default: .mantle/generated)
   --namespace <name>  Generated type namespace (default: MantleSite)
   --check             Fail without writing when output is stale

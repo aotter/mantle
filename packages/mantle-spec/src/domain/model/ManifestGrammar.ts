@@ -196,7 +196,8 @@ export interface SchemaManifestSpec {
   readonly localized?: boolean;
   /** Parent/child translation pattern: this Schema is the translatable
    *  companion to a non-localized parent Schema, joined by a shared
-   *  field. Implies `localized: true`. See ADR-0010. */
+   *  field. Requires explicit `localized: true` and at least one
+   *  locale-specific field besides `locale` and the join field. See ADR-0010. */
   readonly translates?: TranslatesBinding;
   /** Content-workflow mode. Default `'publishing'` (draft → published →
    *  archived, no approval queue). `'operational'` marks record

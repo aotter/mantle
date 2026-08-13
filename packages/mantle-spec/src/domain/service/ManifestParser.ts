@@ -125,8 +125,8 @@ function validateLocalizedText(
  * `severity: "error"` diagnostic. Per ADR-0008 the caller (the CLI / boot
  * validator / consumer) routes diagnostics; we don't throw.
  *
- * Multi-doc YAML support per ADR-0001 § "Authoring shape" — one feature
- * per file, atoms separated by `---`.
+ * Multi-doc YAML support per ADR-0001 § "Authoring shape" — all site atoms
+ * in manifests/site.yaml, separated by `---`.
  */
 
 /**
@@ -466,6 +466,19 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
         "Schema.spec.translates requires Schema.spec.localized: true (a non-localized translation table is meaningless)",
         idx,
         "/spec/translates",
+      );
+    }
+    const schema = s["schema"] as Record<string, unknown>;
+    const properties = schema["properties"];
+    const propertyNames = properties && typeof properties === "object" && !Array.isArray(properties)
+      ? Object.keys(properties)
+      : [];
+    if (!propertyNames.some((name) => name !== "locale" && name !== tr["on"])) {
+      throw new ManifestParseError(
+        "Schema.spec.translates requires at least one locale-specific field besides 'locale' and the join field",
+        idx,
+        "/spec/schema/properties",
+        "TRANSLATES_REQUIRES_CONTENT_FIELD",
       );
     }
   }

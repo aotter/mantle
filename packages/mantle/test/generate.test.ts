@@ -152,7 +152,7 @@ site.views["products-by-sku"]();
     const root = await mkdtemp(join(tmpdir(), "mantle-generate-invalid-"));
     try {
       await mkdir(join(root, "manifests"));
-      const manifestPath = join(root, "manifests", "broken.yaml");
+      const manifestPath = join(root, "manifests", "site.yaml");
       await writeFile(manifestPath, `
 apiVersion: wrong
 kind: Schema
@@ -168,7 +168,7 @@ spec: {}
 
       expect(await runGenerate([])).toBe(1);
       expect(error).toContain("INVALID_MANIFEST_ENVELOPE");
-      expect(error).toContain("broken.yaml#/0/apiVersion");
+      expect(error).toContain("site.yaml#/0/apiVersion");
       await expect(readFile(join(root, ".mantle", "generated", "site.ts"))).rejects.toThrow();
     } finally {
       await rm(root, { recursive: true, force: true });

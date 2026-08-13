@@ -16,7 +16,7 @@ docs govern runtime/API behavior.
 ## First Read
 
 1. `package.json` for the installed `@aotter/mantle*` versions.
-2. `manifests/`, the active adapter config, and `src/auth.ts` when present. If the project is older, check `src/mantleConfig.ts`.
+2. `manifests/site.yaml`, the active adapter config, and `src/auth.ts` when present. If the project is older, check `src/mantleConfig.ts`.
 3. The active `.mantle/overlays/<type>/seed.json`, when present; generated
    homepages commonly import visible copy and form structure from it.
 4. Optional local context: `.mantle/launch-state.json`, `.mantle/handoff.md`,
@@ -98,6 +98,10 @@ the atoms cannot express the behavior.
 
 - `data.locale` is reserved for `localized: true` Schemas. A non-localized
   Schema must use a domain field such as `replyLocale`.
+- Use a standalone localized Schema only for independent locale rows. For
+  versions of one entity, use a non-localized parent plus a localized child
+  with `translates: { parent, on }`. The child must own at least one field
+  besides `locale` and the join field.
 - Parallel locale blocks must keep field names, option values, step IDs, and
   result keys identical; translate display strings only.
 - `siteDefaults.locales` is code-owned and boot-synced. Brand, title,
@@ -203,7 +207,8 @@ cache.
 
 ## Rules
 
-- Prefer manifest YAML for content model changes.
+- Put all content model changes in `manifests/site.yaml`; other manifest
+  filenames are rejected.
 - Use a generated overlay `seed.json` for the auth-free local first page when
   it is already imported by `src/web/content/*`.
 - Add TypeScript only for handlers, rendering, adapter wiring, or real behavior.

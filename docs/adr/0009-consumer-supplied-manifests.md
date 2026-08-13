@@ -22,9 +22,10 @@ YAML machinery into the runtime bundle and coupled consumers to Wrangler
 
 ## Decision
 
-Consumers own YAML under `manifests/`. The installed `mantle` CLI parses and
-validates that YAML, then writes the machine-owned runtime module and handler
-types:
+Consumers own exactly `manifests/site.yaml`. The installed `mantle` CLI parses
+and validates its multi-document YAML, then writes the machine-owned runtime
+module and handler types. A missing or differently named file fails before
+generation:
 
 ```bash
 pnpm exec mantle generate
@@ -72,7 +73,7 @@ runtime boot validation covers cross-manifest and registered-handler facts.
 
 The external [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters)
 repository owns the blank project and typed overlays. Materialized projects
-carry their own `manifests/`, generated module, handlers, and package scripts;
+carry their own `manifests/site.yaml`, generated module, handlers, and package scripts;
 they consume the exact packed Core artifact rather than a workspace link.
 
 ## Consequences
@@ -128,7 +129,7 @@ runtime.
 
 When authoring or reviewing a generated project:
 
-1. Edit YAML only under `manifests/`.
+1. Edit only `manifests/site.yaml`; do not create feature-named manifest files.
 2. Run the installed `pnpm exec mantle generate`.
 3. Import `manifest` from `.mantle/generated/site.js` into the conventional
    Worker, or pass it as `CmsConfig.manifests` in low-level composition.
