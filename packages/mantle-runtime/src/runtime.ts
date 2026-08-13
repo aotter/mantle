@@ -128,6 +128,8 @@ export interface CreateCmsRuntimeArgs {
   readonly clock?: Clock;
   /** Optional id generator — test seam. Defaults to `RandomUuidGenerator`. */
   readonly idgen?: IdGenerator;
+  /** Adapter-owned invalidation after any successful content/site mutation. */
+  readonly onPublicChange?: () => Promise<void>;
 }
 
 export interface CmsRuntime {
@@ -261,20 +263,22 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     proceduresByName,
     (req) => invokeProcedure.execute(req),
   );
-  entries = new LifecycleHookingEntryRepository(
+  entries = invalidateAfterWrites(new LifecycleHookingEntryRepository(
     innerEntries,
     triggerIndex,
     lifecycleHooks,
     idgen,
     args.deferredHookDispatcher,
+  ), args.onPublicChange, (collection) =>
+    (schemasByName.get(collection)?.spec.lifecycle ?? "publishing") === "publishing"
   );
   const runDeferredHook = new RunDeferredHookUseCase(lifecycleHooks);
   const publicPathResolver = args.publicPathResolver ?? null;
   const composeEntrySeoMeta = new ComposeEntrySeoMetaUseCase(entryReader);
-  const composeLlmsTxt = new ComposeLlmsTxtUseCase(entryReader);
+  const composeLlmsTxt = new ComposeLlmsTxtUseCase(entryReader, publicPathResolver);
   const mediaAssets = new DatabaseMediaAssetRepository(args.db);
   const pendingUploads = new DatabasePendingUploadRepository(args.db);
-  const updateSiteSettings = new UpdateSiteSettingsUseCase(siteConfig);
+  const updateSiteSettings = new UpdateSiteSettingsUseCase(siteConfig, args.onPublicChange);
 
   // Content / view / boot use cases. They see `entries` only as the
   // chokepoint port — hook firing is invisible to them.
@@ -434,5 +438,39 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
       await args.db.migrations.runAll(indexMigrations);
       await reconcileSchemaIndexes(args.db, indexMigrations, schemas);
     },
+  };
+}
+
+function invalidateAfterWrites(
+  inner: EntryRepository,
+  invalidate: (() => Promise<void>) | undefined,
+  affectsPublicOutput: (collection: string) => boolean,
+): EntryRepository {
+  if (!invalidate) return inner;
+  return {
+    async create(args) {
+      const row = await inner.create(args);
+      if (affectsPublicOutput(args.collection)) await invalidate();
+      return row;
+    },
+    get: (id) => inner.get(id),
+    async update(args) {
+      const row = await inner.update(args);
+      if (affectsPublicOutput(args.collection)) await invalidate();
+      return row;
+    },
+    async delete(args) {
+      const result = await inner.delete(args);
+      if (result.removed && affectsPublicOutput(args.collection)) await invalidate();
+      return result;
+    },
+    async transitionStatus(args) {
+      const row = await inner.transitionStatus(args);
+      if (affectsPublicOutput(args.collection)) await invalidate();
+      return row;
+    },
+    list: (args) => inner.list(args),
+    findByDataField: (args) => inner.findByDataField(args),
+    findByDataFields: (args) => inner.findByDataFields(args),
   };
 }

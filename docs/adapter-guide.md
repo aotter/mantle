@@ -116,7 +116,8 @@ CDN cache overrides are removed.
 
 `mountPublicRoutes(...)` renders canonical D1 state and opts only successful HTML, markdown,
 `llms.txt`, and sitemap responses into the shared cache with
-`Cache-Control: public, max-age=0, s-maxage=300`. The top-level policy preserves
+`Cache-Control: public, max-age=0, s-maxage=300` and the site-level
+`Cache-Tag: mantle-public`. The top-level policy preserves
 that opt-in only for anonymous `GET`/`HEAD` responses with status 200, explicit
 shared freshness, no request `Cookie` or `Authorization`, and no response
 `Set-Cookie`. It also varies public responses by `Cookie` and `Authorization`.
@@ -124,7 +125,10 @@ shared freshness, no request `Cookie` or `Authorization`, and no response
 A starter-level Workers Cache may therefore store only responses that still
 meet that exact public contract. It must bypass credentialed/cookie requests
 and must never infer cacheability from a URL prefix. Cache entries remain
-version-local; cross-version caching is outside this contract.
+version-local; cross-version caching is outside this contract. Successful
+publishing-content and site-setting mutations purge `mantle-public` through
+Cloudflare's native cache API. Operational records and immutable assets do not
+purge the public render cache.
 
 Minimum auth/MCP behavior:
 

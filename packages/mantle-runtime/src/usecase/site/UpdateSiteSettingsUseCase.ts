@@ -8,7 +8,10 @@ import type { UpdateSiteSettingsRequest } from "../dto/site/index.js";
 
 /** Persist editable site settings. */
 export class UpdateSiteSettingsUseCase {
-  constructor(private readonly siteConfig: SiteConfigRepository) {}
+  constructor(
+    private readonly siteConfig: SiteConfigRepository,
+    private readonly onPublicChange?: () => Promise<void>,
+  ) {}
 
   async execute(request: UpdateSiteSettingsRequest): Promise<SiteConfig> {
     if (!this.siteConfig.updateEditable) {
@@ -29,6 +32,7 @@ export class UpdateSiteSettingsUseCase {
         "a numeric Facebook Pixel ID, or an empty string",
       ),
     });
+    await this.onPublicChange?.();
     return this.siteConfig.load();
   }
 }

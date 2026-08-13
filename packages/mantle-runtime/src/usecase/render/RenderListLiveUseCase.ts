@@ -29,7 +29,7 @@ export class RenderListLiveUseCase {
   async execute(request: RenderListLiveRequest): Promise<string | null> {
     const raw = await this.reader.readPublished({
       collection: request.collection,
-      locale: request.locale,
+      locale: request.contentLocale === undefined ? request.locale : request.contentLocale,
     });
     const entries = await joinParentForList(this.reader, this.schemas, raw, {
       parentStatus: "published",
@@ -42,6 +42,7 @@ export class RenderListLiveUseCase {
       site: request.site,
       templates: this.templates,
       mediaAssets,
+      seo: request.seo,
     });
   }
 }

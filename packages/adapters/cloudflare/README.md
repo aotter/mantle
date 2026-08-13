@@ -100,8 +100,11 @@ responses that explicitly declare `public` plus shared freshness remain
 cacheable; they vary on `Cookie` and `Authorization`.
 
 `mountPublicRoutes(...)` renders D1-backed HTML, markdown, `llms.txt`, and
-sitemap responses with that explicit public contract. Workers Cache stores
-only responses that still satisfy it, and remains version-local. See the
+sitemap responses with that explicit public contract and one `mantle-public`
+Cache-Tag. Publishing-content and site-setting mutations purge that tag through
+the native Workers cache API; immutable assets and operational records stay
+outside the purge boundary. Workers Cache stores only responses that still
+satisfy the anonymous policy, and remains version-local. See the
 [adapter implementation guide](../../../docs/adapter-guide.md#http-cache-contract).
 
 ## Optional R2 Media Uploads

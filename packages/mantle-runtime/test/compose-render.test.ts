@@ -3,6 +3,7 @@ import type { SiteConfig } from "@aotter/mantle-spec";
 import { DatabaseEntryRepository } from "../src/infrastructure/persistence/DatabaseEntryRepository.js";
 import { ComposeLlmsTxtUseCase } from "../src/usecase/render/ComposeLlmsTxtUseCase.js";
 import { ComposeSitemapUseCase } from "../src/usecase/render/ComposeSitemapUseCase.js";
+import { createPublicPathResolver } from "../src/domain/service/PublicPathResolver.js";
 import { InMemoryDatabase } from "./fakes/database.js";
 
 const site: SiteConfig = {
@@ -13,6 +14,12 @@ const site: SiteConfig = {
   canonicalLocale: "en",
   brand: "Blog",
 };
+const paths = createPublicPathResolver({
+  collectionRoutes: {
+    posts: { segment: "posts" },
+    guides: { segment: "guides" },
+  },
+});
 
 function seedPublished(
   db: InMemoryDatabase,
@@ -51,7 +58,7 @@ describe("ComposeLlmsTxtUseCase", () => {
       locale: "zh-TW",
       data: { slug: "ni-hao", title: "你好", content: "正文" },
     });
-    const out = await new ComposeLlmsTxtUseCase(new DatabaseEntryRepository(db)).execute({ site, locale: "en" });
+    const out = await new ComposeLlmsTxtUseCase(new DatabaseEntryRepository(db), paths).execute({ site, locale: "en" });
     expect(out).toContain("[Hello]");
     expect(out).not.toContain("[你好]");
   });
@@ -69,7 +76,7 @@ describe("ComposeLlmsTxtUseCase", () => {
       collection: "guides",
       data: { slug: "intro", title: "Intro", content: "Welcome" },
     });
-    const out = await new ComposeLlmsTxtUseCase(new DatabaseEntryRepository(db)).execute({ site, locale: null });
+    const out = await new ComposeLlmsTxtUseCase(new DatabaseEntryRepository(db), paths).execute({ site, locale: null });
     expect(out).toContain("[Intro]");
     expect(out).not.toContain("[Hello]");
   });

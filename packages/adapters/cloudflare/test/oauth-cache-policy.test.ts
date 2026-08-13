@@ -8,6 +8,7 @@ function responseFor(request: Request): Response {
       headers: {
         "cache-control": "public, max-age=0, s-maxage=300",
         "cloudflare-cdn-cache-control": "public, s-maxage=86400",
+        "cache-tag": "mantle-public",
         vary: "Accept-Encoding",
       },
     });
@@ -57,6 +58,7 @@ describe("top-level OAuth cache boundary", () => {
     expect(response.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
     expect(response.headers.get("cloudflare-cdn-cache-control")).toBeNull();
     expect(response.headers.get("vary")).toBe("Accept-Encoding, Cookie, Authorization");
+    expect(response.headers.get("cache-tag")).toBe("mantle-public");
   });
 
   it.each([
@@ -78,6 +80,7 @@ describe("top-level OAuth cache boundary", () => {
     );
 
     expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("cache-tag")).toBeNull();
   });
 
   it.each([

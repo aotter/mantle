@@ -173,8 +173,10 @@ Core surfaces on a Cloudflare Worker at
 
 Public render routes are opt-in consumer wiring. When a project registers
 `mountPublicRoutes`, matching templates, and a `publicPathResolver`, the SDK
-can expose `/<locale>/<collection>/<slug>`, its `.md` mirror,
-`/<locale>/llms.txt`, and `/sitemap.xml`. Generated projects document the
+can expose localized home, list, and entry HTML; non-empty `.md` mirrors;
+root and locale `llms.txt`; and `/sitemap.xml`. Canonical, hreflang/x-default,
+Open Graph, Twitter, and JSON-LD metadata use the same public path mapping.
+Generated projects document the
 routes they actually mount; Mantle does not publish every Schema by default.
 
 For a guided install, follow the steps in [`skills/install/SKILL.md`](skills/install/SKILL.md).

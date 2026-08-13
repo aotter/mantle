@@ -16,6 +16,7 @@ export {
   mountPublicRoutes,
   type CollectionRouteConfig,
   type MountPublicRoutesOptions,
+  type PublicContentContext,
   type PublicRouteContext,
   type SlugOverride,
 } from "./mountPublicRoutes.js";

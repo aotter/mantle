@@ -1,5 +1,6 @@
 import type { Entry, SiteConfig } from "@aotter/mantle-spec";
 import type { PublicPathResolver } from "../../../domain/service/PublicPathResolver.js";
+import type { SiblingTranslation } from "../../../domain/service/SeoMetaComposer.js";
 
 /**
  * Request DTO for `ComposeEntrySeoMetaUseCase`. Caller passes the
@@ -11,4 +12,7 @@ export interface ComposeEntrySeoMetaRequest {
   readonly site: SiteConfig;
   readonly paths: PublicPathResolver;
   readonly type?: "article" | "website";
+  readonly publicPath?: string;
+  readonly publicLocale?: string;
+  readonly siblings?: ReadonlyArray<SiblingTranslation>;
 }

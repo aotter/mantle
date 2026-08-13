@@ -11,10 +11,9 @@ import type { MediaAsset } from "../port/MediaStorage.js";
  * their public surface (Hono + hono/jsx) call their JSX → string
  * function before the template returns.
  *
- * Schemas without a registered entry/list template still get
- * markdown / `llms.txt` mirrors — the HTML surfaces are simply
- * skipped (per ADR-0009-extended: the SDK ships zero opinionated
- * templates).
+ * Schemas without a registered entry/list template skip HTML.
+ * Their agent mirrors are emitted only when a public path resolves
+ * and the entry has serializable content.
  *
  * `seo` is populated when the renderer is given a composed SeoMeta
  * block — templates render `<SeoTags seo={seo} />` (or read fields

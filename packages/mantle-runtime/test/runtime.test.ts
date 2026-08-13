@@ -48,6 +48,44 @@ describe("createCmsRuntime + bootInit", () => {
     expect(site.origin).toBe("https://example.com");
   });
 
+  it("invalidates once after every successful content and site mutation", async () => {
+    const calls: string[] = [];
+    const operational = {
+      ...postsSchema(),
+      metadata: { name: "events" },
+      spec: { ...postsSchema().spec, lifecycle: "operational" as const },
+    };
+    const runtime = createCmsRuntime({
+      manifests: [postsSchema(), operational],
+      db: new InMemoryDatabase(),
+      assets: noopAssets,
+      siteDefaults: { brand: "Blog", title: "Blog" },
+      onPublicChange: async () => { calls.push("purge"); },
+    });
+    await runtime.bootInit();
+    const created = await runtime.createDraft.execute({
+      collection: "posts",
+      data: { title: "Hello", slug: "hello", content: "Body" },
+      authorId: null,
+    });
+    const updated = await runtime.updateDraft.execute({
+      id: created.id,
+      expectedVersion: created.version,
+      data: { title: "Updated" },
+    });
+    const published = await runtime.requestPublish.execute({ id: updated.id });
+    const draft = await runtime.unpublish.execute({ id: published.id });
+    await runtime.deleteEntry.execute({ id: draft.id });
+    await runtime.updateSiteSettings.execute({ title: "New title" });
+    await runtime.createDraft.execute({
+      collection: "events",
+      data: { title: "Private event", slug: "private-event", content: "Operational" },
+      authorId: null,
+    });
+
+    expect(calls).toHaveLength(6);
+  });
+
   it("bootInit installs manifest Schema indexes", async () => {
     const db = new InMemoryDatabase();
     const schema = postsSchema();

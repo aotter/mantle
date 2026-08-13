@@ -45,14 +45,14 @@ export class RenderEntryLiveUseCase {
     const raw = await this.reader.readBySlug({
       collection: request.collection,
       slug: request.slug,
-      locale: request.locale,
+      locale: request.contentLocale === undefined ? request.locale : request.contentLocale,
       status,
     });
     if (!raw) return null;
     const entry = await joinParentIfTranslation(this.reader, this.schemas, raw, {
       parentStatus: status,
     });
-    const seo = await composeSeoIfPathed(this.composeSeo, this.paths, entry, request.site);
+    const seo = await composeSeoIfPathed(this.composeSeo, this.paths, entry, request.site, request);
     const mediaAssets = await resolveMediaAssetsForEntries(this.mediaAssets, [entry]);
     return renderEntryHtml({
       entry,

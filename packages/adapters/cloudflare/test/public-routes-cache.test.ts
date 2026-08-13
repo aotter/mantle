@@ -1,7 +1,11 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { Manifest } from "@aotter/mantle-spec";
-import { TemplateRegistry } from "@aotter/mantle-runtime";
+import {
+  createPublicPathResolver,
+  renderSeoTagsHtml,
+  TemplateRegistry,
+} from "@aotter/mantle-runtime";
 import type { Auth } from "../src/auth/createAuth.js";
 import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountPublicRoutes } from "../src/mount/mountPublicRoutes.js";
@@ -51,11 +55,11 @@ function harness(
   const templates = new TemplateRegistry();
   templates.registerEntryTemplate(
     "posts",
-    ({ entry, site }) => `<article data-brand="${site.brand}"><h1>${entry.data["title"]}</h1></article>`,
+    ({ entry, site, seo }) => `<html><head>${seo ? renderSeoTagsHtml(seo) : ""}</head><body><article data-brand="${site.brand}"><h1>${entry.data["title"]}</h1></article></body></html>`,
   );
   templates.registerListTemplate(
     "posts",
-    ({ entries, site }) => `<section data-brand="${site.brand}">${entries.map((e) => e.data["title"]).join(",")}</section>`,
+    ({ entries, site, seo }) => `<html><head>${seo ? renderSeoTagsHtml(seo) : ""}</head><body><section data-brand="${site.brand}">${entries.map((e) => e.data["title"]).join(",")}</section></body></html>`,
   );
   const ref = createCmsRef({
     manifests: manifests(),
@@ -68,10 +72,17 @@ function harness(
     },
     bindings: { db, assets: new StubAssetServer() },
     auth: sessionAuth,
+    publicPathResolver: createPublicPathResolver({
+      collectionRoutes: { posts: { segment: "posts", homeSlug: "home" } },
+    }),
   });
   const app = new Hono();
   mountPublicRoutes(app, ref, {
-    collectionRoutes: [{ collection: "posts", segment: "posts", listRoute: true }],
+    collectionRoutes: [{ collection: "posts", segment: "posts", listRoute: true, homeSlug: "home" }],
+    homeRenderer: async ({ locale, seo }) => new Response(
+      `<html lang="${locale}"><head>${renderSeoTagsHtml(seo)}</head><body>Home</body></html>`,
+      { headers: { "content-type": "text/html" } },
+    ),
     notFoundRenderer: async () => new Response("missing", { status: 404 }),
   });
   return { app, db };
@@ -100,9 +111,75 @@ describe("mountPublicRoutes response-cache contract", () => {
     const markdown = await h.app.request("/en/posts/hello.md");
 
     expect(list.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
+    expect(list.headers.get("cache-tag")).toBe("mantle-public");
     await expect(list.text()).resolves.toContain("Hello");
     await expect(entry.text()).resolves.toContain("<h1>Hello</h1>");
     await expect(markdown.text()).resolves.toContain("# Hello");
+  });
+
+  it("composes home/list/single discovery surfaces from one public path map", async () => {
+    const h = harness(["en", "zh-TW"]);
+    seedPublishedPost(h.db, "en");
+    seedPublishedPost(h.db, "zh-TW");
+    h.db.entries.set("home-en", {
+      id: "home-en",
+      collection: "posts",
+      status: "published",
+      version: 1,
+      data: JSON.stringify({
+        slug: "home",
+        locale: "en",
+        title: "Home",
+        sections: [{ type: "content", title: "Welcome", body: "Ocean home" }],
+      }),
+      author_id: null,
+      created_at: 1,
+      updated_at: 2,
+    });
+
+    const home = await h.app.request("/en");
+    const list = await h.app.request("/en/posts");
+    const single = await h.app.request("/en/posts/hello");
+    const homeMarkdown = await h.app.request("/en.md");
+    const listMarkdown = await h.app.request("/en/posts.md");
+    const sitemap = await (await h.app.request("/sitemap.xml")).text();
+
+    for (const response of [home, list, single]) {
+      const html = await response.text();
+      expect(html).toContain('rel="canonical"');
+      expect(html).toContain('hreflang="zh-TW"');
+      expect(html).toContain('hreflang="x-default"');
+      expect(html).toContain('property="og:title"');
+      expect(html).toContain('name="twitter:card"');
+      expect(html).toContain('type="application/ld+json"');
+    }
+    expect(homeMarkdown.status).toBe(200);
+    await expect(homeMarkdown.text()).resolves.toContain("Ocean home");
+    expect(listMarkdown.status).toBe(200);
+    await expect(listMarkdown.text()).resolves.toContain(
+      "https://example.com/en/posts/hello.md",
+    );
+    expect(sitemap).toContain("<loc>https://example.com/en</loc>");
+    expect(sitemap).toContain("<loc>https://example.com/zh-tw/posts</loc>");
+    expect(sitemap.match(/<loc>https:\/\/example\.com\/en<\/loc>/g)).toHaveLength(1);
+  });
+
+  it("returns a clear 404 for an entry with no markdown payload", async () => {
+    const h = harness();
+    h.db.entries.set("empty", {
+      id: "empty",
+      collection: "posts",
+      status: "published",
+      version: 1,
+      data: JSON.stringify({ slug: "empty", locale: "en", title: "Empty" }),
+      author_id: null,
+      created_at: 1,
+      updated_at: 2,
+    });
+
+    expect((await h.app.request("/en/posts/empty.md")).status).toBe(404);
+    const html = await (await h.app.request("/en/posts/empty")).text();
+    expect(html).not.toContain('type="text/markdown"');
   });
 
   it("does not retain rendered artifacts inside the Worker", async () => {

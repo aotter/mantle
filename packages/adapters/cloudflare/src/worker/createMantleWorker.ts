@@ -29,6 +29,7 @@ import type { ConsumerCredentialResolver } from "../mount/resolveCaller.js";
 import { mountAuthorize } from "../oauth/mountOAuth.js";
 import { OAUTH_REGISTER_PATH, OAUTH_TOKEN_PATH } from "../oauth/oauthConstants.js";
 import { createOAuthProvider } from "../oauth/oauthSingleton.js";
+import { PUBLIC_CACHE_TAG } from "../oauth/cachePolicy.js";
 
 /** Fixed namespaces owned by Mantle's standard Worker surfaces. */
 export const MANTLE_RESERVED_PATH_PREFIXES = [
@@ -193,6 +194,7 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
       auth,
       credentialResolver: extension.credentialResolver,
       jwtBearer: extension.jwtBearer,
+      onPublicChange: purgePublicCache,
     });
 
     const app = new Hono<WorkerHonoEnv<Env>>();
@@ -239,6 +241,16 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
       });
     },
   };
+}
+
+async function purgePublicCache(): Promise<void> {
+  const { cache } = await import("cloudflare:workers");
+  // Miniflare does not simulate entrypoint caching or its purge API.
+  if (typeof cache.purge !== "function") return;
+  const result = await cache.purge({ tags: [PUBLIC_CACHE_TAG] });
+  if (!result.success) {
+    console.error("Mantle public cache purge failed", result.errors);
+  }
 }
 
 function isRuntimeIndependentOAuthRequest(request: Request): boolean {

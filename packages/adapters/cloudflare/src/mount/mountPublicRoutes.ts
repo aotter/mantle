@@ -1,13 +1,17 @@
 import type { Context, Hono } from "hono";
-import type { SiteConfig } from "@aotter/mantle-spec";
+import type { Entry, SiteConfig } from "@aotter/mantle-spec";
 import {
+  absoluteUrl,
+  composePageSeoMeta,
   inferLocaleFromPath,
   serializeEntryAsMarkdown,
   toUrlLocale,
   type CmsRuntime,
+  type SeoMeta,
 } from "@aotter/mantle-runtime";
 import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
 import { STAFF_ROLE_SET } from "../auth/createAuth.js";
+import { PUBLIC_CACHE_TAG } from "../oauth/cachePolicy.js";
 
 /**
  * `mountPublicRoutes` — mounts the SDK-managed public surface on the
@@ -55,11 +59,15 @@ export interface CollectionRouteConfig {
   readonly homeSlug?: string;
 }
 
-export interface PublicRouteContext {
-  readonly c: Context;
+export interface PublicContentContext {
   readonly runtime: CmsRuntime;
   readonly site: SiteConfig;
   readonly locale: string;
+}
+
+export interface PublicRouteContext extends PublicContentContext {
+  readonly c: Context;
+  readonly seo: SeoMeta;
 }
 
 export interface SlugOverride {
@@ -74,6 +82,8 @@ export interface MountPublicRoutesOptions {
    *  recent posts across collections. Optional; without it `/` and
    *  `/{locale}` are not registered. */
   readonly homeRenderer?: (ctx: PublicRouteContext) => Promise<Response>;
+  /** Agent-readable home body for composed homes without one backing Entry. */
+  readonly homeMarkdown?: (ctx: PublicContentContext) => Promise<string | null>;
   /** Renderer for the locale 404 fallback. Required — every miss
    *  falls through here. */
   readonly notFoundRenderer: (ctx: PublicRouteContext) => Promise<Response>;
@@ -93,16 +103,19 @@ const HTML_NO_STORE = {
 const HTML_PUBLIC = {
   "content-type": "text/html; charset=utf-8",
   "cache-control": PUBLIC_CACHE_CONTROL,
+  "cache-tag": PUBLIC_CACHE_TAG,
 } as const;
 
 const MD_PUBLIC = {
   "content-type": "text/markdown; charset=utf-8",
   "cache-control": PUBLIC_CACHE_CONTROL,
+  "cache-tag": PUBLIC_CACHE_TAG,
 } as const;
 
 const TEXT_PUBLIC = {
   "content-type": "text/plain; charset=utf-8",
   "cache-control": PUBLIC_CACHE_CONTROL,
+  "cache-tag": PUBLIC_CACHE_TAG,
 } as const;
 
 const TEXT_NO_STORE = {
@@ -113,6 +126,7 @@ const TEXT_NO_STORE = {
 const SITEMAP_HEADERS = {
   "content-type": "application/xml; charset=utf-8",
   "cache-control": PUBLIC_CACHE_CONTROL,
+  "cache-tag": PUBLIC_CACHE_TAG,
 } as const;
 
 export function mountPublicRoutes(
@@ -128,7 +142,8 @@ export function mountPublicRoutes(
   // `:locale = "llms.txt"` if the literal route registers later.
   app.get("/llms.txt", async () => {
     const runtime = await ref.get();
-    const body = await composeRootLlmsTxt(runtime, await runtime.siteConfig.load());
+    const body = await composeRootLlmsTxt(runtime, await runtime.siteConfig.load(), options);
+    if (!body) return textNotFound();
     return new Response(body, { status: 200, headers: TEXT_PUBLIC });
   });
 
@@ -142,7 +157,25 @@ export function mountPublicRoutes(
     }
     const xml = await runtime.composeSitemap.execute({
       site,
-      pathFor: (e) => runtime.publicPathResolver!.forEntry(e),
+      pathFor: (entry) => {
+        const resolved = runtime.publicPathResolver!.forEntry(entry);
+        if (entry.locale || !resolved) return resolved;
+        const route = options.collectionRoutes.find((candidate) => candidate.collection === entry.collection);
+        if (!route) return resolved;
+        const slug = typeof entry.data["slug"] === "string" ? entry.data["slug"] : entry.id;
+        const suffix = route.homeSlug === slug
+          ? ""
+          : route.segment ? `${route.segment}/${slug}` : slug;
+        return site.locales.map((locale) => localizedPath(locale, suffix));
+      },
+      additionalPaths: options.homeRenderer
+        ? site.locales.flatMap((locale) => [
+            localizedPath(locale),
+            ...options.collectionRoutes
+              .filter((route) => route.listRoute && route.segment)
+              .map((route) => localizedPath(locale, route.segment)),
+          ])
+        : [],
     });
     return new Response(xml, { status: 200, headers: SITEMAP_HEADERS });
   });
@@ -154,13 +187,34 @@ export function mountPublicRoutes(
       const canonical = site.canonicalLocale ?? site.locales[0] ?? "en";
       return c.redirect(`/${toUrlLocale(canonical)}`);
     });
+    app.get("/:locale{[^/]+\\.md}", async (c) => {
+      const runtime = await ref.get();
+      const site = await runtime.siteConfig.load();
+      const raw = c.req.param("locale");
+      const locale = canonicalLocaleParam(raw.endsWith(".md") ? raw.slice(0, -3) : raw, site.locales);
+      if (locale === null) return textNotFound();
+      const ctx = buildCtx(c, runtime, site, locale, homeSeo(site, locale, false));
+      const body = options.homeMarkdown
+        ? await options.homeMarkdown(ctx)
+        : await readHomeMarkdown(runtime, options.collectionRoutes, locale);
+      return body ? new Response(body, { status: 200, headers: MD_PUBLIC }) : textNotFound();
+    });
     app.get("/:locale", async (c) => {
       const runtime = await ref.get();
       const site = await runtime.siteConfig.load();
       const locale = canonicalLocaleParam(c.req.param("locale"), site.locales);
-      const ctx = buildCtx(c, runtime, site, locale ?? inferLocaleFromPath(c.req.path, site));
-      if (locale === null) return options.notFoundRenderer(ctx);
-      return options.homeRenderer!(ctx);
+      const fallbackLocale = locale ?? inferLocaleFromPath(c.req.path, site);
+      if (locale === null) {
+        return options.notFoundRenderer(buildCtx(c, runtime, site, fallbackLocale, homeSeo(site, fallbackLocale, false)));
+      }
+      const baseCtx = buildCtx(c, runtime, site, locale, homeSeo(site, locale, false));
+      const markdown = options.homeMarkdown
+        ? await options.homeMarkdown(baseCtx)
+        : await readHomeMarkdown(runtime, options.collectionRoutes, locale);
+      const response = await options.homeRenderer!(
+        buildCtx(c, runtime, site, locale, homeSeo(site, locale, markdown !== null)),
+      );
+      return applyPublicHeaders(response, liveDev);
     });
   }
 
@@ -170,11 +224,10 @@ export function mountPublicRoutes(
       c.req.param("locale"),
       await runtime.siteConfig.readLocales(),
     );
-    if (locale === null) return new Response("not found", { status: 404, headers: TEXT_NO_STORE });
-    const body = await runtime.composeLlmsTxt.execute({
-      site: await runtime.siteConfig.load(),
-      locale,
-    });
+    if (locale === null) return textNotFound();
+    const site = await runtime.siteConfig.load();
+    const body = await composeLocaleLlmsTxt(runtime, site, locale, options);
+    if (!body) return textNotFound();
     return new Response(body, { status: 200, headers: TEXT_PUBLIC });
   });
 
@@ -186,7 +239,7 @@ export function mountPublicRoutes(
     const runtime = await ref.get();
     const site = await runtime.siteConfig.load();
     const locale = inferLocaleFromPath(c.req.path, site);
-    return options.notFoundRenderer(buildCtx(c, runtime, site, locale));
+    return options.notFoundRenderer(buildCtx(c, runtime, site, locale, homeSeo(site, locale, false)));
   });
 }
 
@@ -201,6 +254,24 @@ function mountCollection(
   const segPath = route.segment ? `/${route.segment}` : "";
 
   if (route.listRoute) {
+    if (route.markdownMirror !== false && route.segment) {
+      app.get(`/:locale${segPath}.md`, async (c) => {
+        const runtime = await ref.get();
+        const locale = canonicalLocaleParam(
+          c.req.param("locale") ?? "",
+          await runtime.siteConfig.readLocales(),
+        );
+        if (locale === null) return textNotFound();
+        const site = await runtime.siteConfig.load();
+        const body = await runtime.composeLlmsTxt.execute({
+          site,
+          locale: contentLocale(runtime, route.collection, locale),
+          collection: route.collection,
+          pathFor: (entry) => entryPathForLocale(runtime, options.collectionRoutes, entry, locale),
+        });
+        return body ? new Response(body, { status: 200, headers: MD_PUBLIC }) : textNotFound();
+      });
+    }
     app.get(`/:locale${segPath}`, async (c) => {
       const runtime = await ref.get();
       const locale = canonicalLocaleParam(
@@ -211,14 +282,39 @@ function mountCollection(
       const notFound = async (): Promise<Response> => {
         const site = await loadSite();
         return options.notFoundRenderer(
-          buildCtx(c, runtime, site, locale ?? inferLocaleFromPath(c.req.path, site)),
+          buildCtx(
+            c,
+            runtime,
+            site,
+            locale ?? inferLocaleFromPath(c.req.path, site),
+            homeSeo(site, locale ?? inferLocaleFromPath(c.req.path, site), false),
+          ),
         );
       };
       if (locale === null) return notFound();
+      const site = await loadSite();
+      const markdown = route.markdownMirror === false ? null : await runtime.composeLlmsTxt.execute({
+        site,
+        locale: contentLocale(runtime, route.collection, locale),
+        collection: route.collection,
+        pathFor: (entry) => entryPathForLocale(runtime, options.collectionRoutes, entry, locale),
+      });
+      const publicPath = localizedPath(locale, route.segment);
+      const schemaTitle = runtime.schemasByName.get(route.collection)?.spec.title;
+      const seo = composePageSeoMeta({
+        site,
+        locale,
+        publicPath,
+        title: schemaTitle ? `${schemaTitle} · ${site.brand}` : site.title,
+        markdown: markdown !== null,
+        pathForLocale: (candidate) => localizedPath(candidate, route.segment),
+      });
       const html = await runtime.renderListLive.execute({
         collection: route.collection,
         locale,
-        site: await loadSite(),
+        contentLocale: contentLocale(runtime, route.collection, locale),
+        site,
+        seo,
       });
       if (html === null) return notFound();
       return new Response(html, {
@@ -243,16 +339,18 @@ function mountCollection(
       );
       const slugParam = c.req.param("slug") ?? "";
       const slug = slugParam.endsWith(".md") ? slugParam.slice(0, -3) : slugParam;
-      const notFound = (): Response => new Response("not found", { status: 404, headers: TEXT_NO_STORE });
+      const notFound = (): Response => textNotFound();
       if (locale === null) return notFound();
       const entry = await runtime.entryReader.readBySlug({
         collection: route.collection,
         slug,
-        locale,
+        locale: contentLocale(runtime, route.collection, locale),
         status: "published",
       });
       if (!entry) return notFound();
-      return new Response(serializeEntryAsMarkdown(entry), {
+      const markdown = serializeEntryAsMarkdown(entry);
+      if (!markdown) return notFound();
+      return new Response(markdown, {
         status: 200,
         headers: MD_PUBLIC,
       });
@@ -270,7 +368,13 @@ function mountCollection(
     const notFound = async (): Promise<Response> => {
       const site = await loadSite();
       return options.notFoundRenderer(
-        buildCtx(c, runtime, site, locale ?? inferLocaleFromPath(c.req.path, site)),
+        buildCtx(
+          c,
+          runtime,
+          site,
+          locale ?? inferLocaleFromPath(c.req.path, site),
+          homeSeo(site, locale ?? inferLocaleFromPath(c.req.path, site), false),
+        ),
       );
     };
     if (locale === null) return notFound();
@@ -278,28 +382,49 @@ function mountCollection(
     const override = overrides.get(overrideKey(route.collection, slug));
     if (override) {
       const site = await loadSite();
-      return override.render(buildCtx(c, runtime, site, locale));
+      return applyPublicHeaders(
+        await override.render(buildCtx(c, runtime, site, locale, homeSeo(site, locale, false))),
+        liveDev,
+      );
     }
 
     if (c.req.query("preview") === "1") {
       const denied = await assertStaffSession(ref, c.req.raw);
       if (denied) return denied;
       const site = await loadSite();
+      const seoRoute = entrySeoRoute(
+        site,
+        route,
+        locale,
+        slug,
+        contentLocale(runtime, route.collection, locale) === null,
+      );
       const html = await runtime.previewEntry.execute({
         collection: route.collection,
         slug,
         locale,
+        contentLocale: contentLocale(runtime, route.collection, locale),
         site,
+        ...seoRoute,
       });
       if (html === null) return notFound();
       return new Response(html, { status: 200, headers: HTML_NO_STORE });
     }
 
+    const site = await loadSite();
     const html = await runtime.renderEntryLive.execute({
       collection: route.collection,
       slug,
       locale,
-      site: await loadSite(),
+      contentLocale: contentLocale(runtime, route.collection, locale),
+      site,
+      ...entrySeoRoute(
+        site,
+        route,
+        locale,
+        slug,
+        contentLocale(runtime, route.collection, locale) === null,
+      ),
     });
     if (html === null) return notFound();
     return new Response(html, {
@@ -356,16 +481,46 @@ async function assertStaffSession(
 async function composeRootLlmsTxt(
   runtime: CmsRuntime,
   site: SiteConfig,
-): Promise<string> {
+  options: MountPublicRoutesOptions,
+): Promise<string | null> {
+  const parts: string[] = [];
   if (site.locales.length === 0) {
     return runtime.composeLlmsTxt.execute({ site, locale: null });
   }
-  const parts: string[] = [];
   for (const locale of site.locales) {
-    const body = await runtime.composeLlmsTxt.execute({ site, locale });
-    if (body.trim()) parts.push(body);
+    const body = await composeLocaleLlmsTxt(runtime, site, locale, options);
+    if (body) parts.push(body);
   }
-  return parts.length > 0 ? parts.join("\n---\n\n") : "";
+  return parts.length > 0 ? parts.join("\n---\n\n") : null;
+}
+
+async function composeLocaleLlmsTxt(
+  runtime: CmsRuntime,
+  site: SiteConfig,
+  locale: string,
+  options: MountPublicRoutesOptions,
+): Promise<string | null> {
+  const parts: string[] = [];
+  if (options.homeMarkdown) {
+    if (await options.homeMarkdown({ runtime, site, locale })) {
+      parts.push(
+        `# ${site.title}\n\nLocale: ${locale}\n\n## Pages\n\n- [${site.title}](${absoluteUrl(site.origin, `${localizedPath(locale)}.md`)})\n`,
+      );
+    }
+  }
+  const entries = await runtime.composeLlmsTxt.execute({
+    site,
+    locale,
+    includeUnlocalized: true,
+    pathFor: (entry) => {
+      const route = options.collectionRoutes.find((candidate) => candidate.collection === entry.collection);
+      const slug = typeof entry.data["slug"] === "string" ? entry.data["slug"] : entry.id;
+      if (options.homeMarkdown && route?.homeSlug === slug) return null;
+      return entryPathForLocale(runtime, options.collectionRoutes, entry, locale);
+    },
+  });
+  if (entries) parts.push(entries);
+  return parts.length > 0 ? parts.join("\n---\n\n") : null;
 }
 
 function lazySite(runtime: CmsRuntime): () => Promise<SiteConfig> {
@@ -378,8 +533,99 @@ function buildCtx(
   runtime: CmsRuntime,
   site: SiteConfig,
   locale: string,
+  seo: SeoMeta,
 ): PublicRouteContext {
-  return { c, runtime, site, locale };
+  return { c, runtime, site, locale, seo };
+}
+
+function homeSeo(site: SiteConfig, locale: string, markdown: boolean): SeoMeta {
+  return composePageSeoMeta({
+    site,
+    locale,
+    publicPath: localizedPath(locale),
+    markdown,
+    pathForLocale: (candidate) => localizedPath(candidate),
+  });
+}
+
+function localizedPath(locale: string, segment?: string): string {
+  return `/${toUrlLocale(locale)}${segment ? `/${segment}` : ""}`;
+}
+
+function entrySeoRoute(
+  site: SiteConfig,
+  route: CollectionRouteConfig,
+  locale: string,
+  slug: string,
+  sharedAcrossLocales: boolean,
+): {
+  readonly publicPath: string;
+  readonly publicLocale: string;
+  readonly siblings?: ReadonlyArray<{ readonly locale: string; readonly publicPath: string }>;
+} {
+  const suffix = route.segment ? `${route.segment}/${slug}` : slug;
+  return {
+    publicPath: localizedPath(locale, suffix),
+    publicLocale: locale,
+    ...(!sharedAcrossLocales || !site.locales.some((candidate) => candidate.toLowerCase() !== locale.toLowerCase())
+      ? {}
+      : {
+          siblings: site.locales
+            .filter((candidate) => candidate.toLowerCase() !== locale.toLowerCase())
+            .map((candidate) => ({ locale: candidate, publicPath: localizedPath(candidate, suffix) })),
+        }),
+  };
+}
+
+function contentLocale(runtime: CmsRuntime, collection: string, locale: string): string | null {
+  return runtime.schemasByName.get(collection)?.spec.localized ? locale : null;
+}
+
+function entryPathForLocale(
+  runtime: CmsRuntime,
+  routes: ReadonlyArray<CollectionRouteConfig>,
+  entry: Entry,
+  locale: string,
+): string | null {
+  if (entry.locale) return runtime.publicPathResolver?.forEntry(entry) ?? null;
+  const route = routes.find((candidate) => candidate.collection === entry.collection);
+  if (!route) return runtime.publicPathResolver?.forEntry(entry) ?? null;
+  const slug = typeof entry.data["slug"] === "string" ? entry.data["slug"] : entry.id;
+  return localizedPath(locale, route.homeSlug === slug
+    ? ""
+    : route.segment ? `${route.segment}/${slug}` : slug);
+}
+
+async function readHomeMarkdown(
+  runtime: CmsRuntime,
+  routes: ReadonlyArray<CollectionRouteConfig>,
+  locale: string,
+): Promise<string | null> {
+  const route = routes.find((candidate) => candidate.homeSlug && candidate.markdownMirror !== false);
+  if (!route?.homeSlug) return null;
+  const entry = await runtime.entryReader.readBySlug({
+    collection: route.collection,
+    slug: route.homeSlug,
+    locale: contentLocale(runtime, route.collection, locale),
+    status: "published",
+  });
+  return entry ? serializeEntryAsMarkdown(entry) : null;
+}
+
+function applyPublicHeaders(response: Response, noStore: boolean): Response {
+  const headers = new Headers(response.headers);
+  headers.set("cache-control", noStore ? PRIVATE_CACHE_CONTROL : PUBLIC_CACHE_CONTROL);
+  if (noStore) headers.delete("cache-tag");
+  else headers.set("cache-tag", PUBLIC_CACHE_TAG);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function textNotFound(): Response {
+  return new Response("not found", { status: 404, headers: TEXT_NO_STORE });
 }
 
 function canonicalLocaleParam(

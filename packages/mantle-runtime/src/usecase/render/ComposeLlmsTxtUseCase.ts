@@ -1,5 +1,6 @@
 import type { Entry } from "@aotter/mantle-spec";
 import type { EntryReader } from "../../domain/port/EntryReader.js";
+import type { PublicPathResolver } from "../../domain/service/PublicPathResolver.js";
 import { serializeLlmsTxt } from "../../domain/service/MarkdownSerializer.js";
 import type { ComposeLlmsTxtRequest } from "../dto/render/ComposeLlmsTxtRequest.js";
 
@@ -12,15 +13,26 @@ import type { ComposeLlmsTxtRequest } from "../dto/render/ComposeLlmsTxtRequest.
  *                       iterate site.locales themselves and concat.
  */
 export class ComposeLlmsTxtUseCase {
-  constructor(private readonly reader: EntryReader) {}
+  constructor(
+    private readonly reader: EntryReader,
+    private readonly paths: PublicPathResolver | null,
+  ) {}
 
-  async execute(request: ComposeLlmsTxtRequest): Promise<string> {
-    const entries = await this.reader.readPublished({ locale: request.locale });
+  async execute(request: ComposeLlmsTxtRequest): Promise<string | null> {
+    if (!this.paths) return null;
+    const query = (locale: string | null) => this.reader.readPublished({
+      locale,
+      collection: request.collection,
+    });
+    const entries = request.locale !== null && request.includeUnlocalized
+      ? (await Promise.all([query(request.locale), query(null)])).flat()
+      : await query(request.locale);
     const grouped = groupByCollection(entries);
     return serializeLlmsTxt({
       site: request.site,
       locale: request.locale ?? "",
       entriesByCollection: grouped,
+      pathFor: request.pathFor ?? ((entry) => this.paths!.forEntry(entry)),
     });
   }
 }
