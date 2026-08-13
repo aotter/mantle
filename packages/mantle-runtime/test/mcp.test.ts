@@ -141,8 +141,23 @@ describe("McpJsonRpcDispatcher", () => {
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
     });
     expect((await dispatcher.dispatch(missing, mcpContext())).status).toBe(400);
-    expect((await dispatcher.dispatch(new Request("https://example.com/mcp"), mcpContext())).status)
-      .toBe(405);
+    const get = await dispatcher.dispatch(new Request("https://example.com/mcp"), mcpContext());
+    expect(get.status).toBe(405);
+    expect(get.headers.get("allow")).toBe("POST");
+  });
+
+  it("rejects malformed and batch JSON-RPC envelopes", async () => {
+    const { dispatcher } = buildHarness();
+    for (const body of [{ method: "initialize" }, [{ jsonrpc: "2.0", method: "initialize" }]]) {
+      const response = await dispatcher.dispatch(new Request("https://example.com/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }), mcpContext());
+      expect((await response.json()) as { error: { code: number } }).toMatchObject({
+        error: { code: -32600 },
+      });
+    }
   });
 
   it("accepts the initialized notification without a response body", async () => {

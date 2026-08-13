@@ -143,11 +143,8 @@ export class McpJsonRpcDispatcher {
     req: Request,
     ctx: HandlerContext,
   ): Promise<Response> {
-    if (req.method === "GET") {
-      return new Response("method not allowed", { status: 405, headers: { allow: "POST" } });
-    }
     if (req.method !== "POST") {
-      return new Response("method not allowed", { status: 405 });
+      return new Response("method not allowed", { status: 405, headers: { allow: "POST" } });
     }
 
     let body: { jsonrpc?: string; id?: number | string | null; method?: string; params?: unknown };
@@ -156,7 +153,13 @@ export class McpJsonRpcDispatcher {
     } catch {
       return jsonRpcError(null, -32700, "parse error");
     }
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
+    if (
+      !body
+      || typeof body !== "object"
+      || Array.isArray(body)
+      || body.jsonrpc !== "2.0"
+      || typeof body.method !== "string"
+    ) {
       return jsonRpcError(null, -32600, "invalid request");
     }
     const { id = null, method, params } = body;
