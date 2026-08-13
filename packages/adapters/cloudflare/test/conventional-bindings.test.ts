@@ -18,7 +18,7 @@ describe("createConventionalBindings", () => {
     expect(bindings.assets).toBeInstanceOf(AssetsAssetServer);
   });
 
-  it.each(["DB", "OAUTH_KV", "ASSETS"] as const)("names a missing %s binding", (name) => {
+  it.each(["DB", "OAUTH_KV"] as const)("names a missing %s binding", (name) => {
     const env: ConventionalBindingsEnv = {
       DB,
       OAUTH_KV,
@@ -27,6 +27,11 @@ describe("createConventionalBindings", () => {
     const missing = { ...env, [name]: undefined };
 
     expect(() => createConventionalBindings(missing)).toThrow(name);
+  });
+
+  it("keeps pre-static-assets starters runnable without serving fake assets", async () => {
+    const bindings = createConventionalBindings({ DB, OAUTH_KV });
+    await expect(bindings.assets.fetch(new Request("https://site.test/missing"))).resolves.toBeNull();
   });
 
 });

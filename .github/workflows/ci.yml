@@ -69,5 +69,6 @@ jobs:
           node scripts/check-packed-consumer.mjs
           --project .packed-consumer/mantle-starters --
           sh -euc 'pnpm --dir blank exec mantle skills;
+          pnpm --dir blank generate;
           pnpm build:provision-bundle;
           pnpm check:packed'
