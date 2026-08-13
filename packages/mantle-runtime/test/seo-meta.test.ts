@@ -3,6 +3,7 @@ import { DatabaseEntryRepository } from "../src/infrastructure/persistence/Datab
 import type { Entry, SiteConfig } from "@aotter/mantle-spec";
 import {
   composeEntrySeoMeta,
+  composePageSeoMeta,
   renderSeoTagsHtml,
 } from "../src/domain/service/SeoMetaComposer.js";
 import { createPublicPathResolver } from "../src/domain/service/PublicPathResolver.js";
@@ -43,6 +44,25 @@ describe("composeEntrySeoMeta", () => {
     expect(meta.alternateMarkdown).toBe("https://example.com/en/posts/hello.md");
   });
 
+  it("omits the markdown alternate when the entry has no serializable body", () => {
+    const meta = composeEntrySeoMeta({
+      entry: makeEntry({ data: { slug: "empty", title: "Empty" } }),
+      site,
+      publicPath: "/en/posts/empty",
+    });
+    expect(meta.alternateMarkdown).toBeNull();
+    expect(renderSeoTagsHtml(meta)).not.toContain("text/markdown");
+  });
+
+  it("uses the rendered entry locale in JSON-LD", () => {
+    const meta = composeEntrySeoMeta({
+      entry: makeEntry({ locale: "zh-TW" }),
+      site,
+      publicPath: "/zh-tw/posts/hello",
+    });
+    expect(meta.jsonLd).toMatchObject({ inLanguage: "zh-TW" });
+  });
+
   it("emits hreflangs + x-default for multi-locale sites", () => {
     const meta = composeEntrySeoMeta({
       entry: makeEntry(),
@@ -59,14 +79,14 @@ describe("composeEntrySeoMeta", () => {
     expect(xdef?.href).toBe("https://example.com/en/posts/hello");
   });
 
-  it("skips hreflangs entirely for single-locale sites", () => {
+  it("emits the locale and x-default for single-locale sites", () => {
     const singleLocale: SiteConfig = { ...site, locales: ["en"], canonicalLocale: "en" };
     const meta = composeEntrySeoMeta({
       entry: makeEntry(),
       site: singleLocale,
       publicPath: "/en/posts/hello",
     });
-    expect(meta.hreflangs).toEqual([]);
+    expect(meta.hreflangs.map((item) => item.locale)).toEqual(["en", "x-default"]);
   });
 
   it("infers og:type=article from publishedAt / body / content", () => {
@@ -104,6 +124,19 @@ describe("composeEntrySeoMeta", () => {
       publicPath: "/en/posts/h",
     });
     expect(meta.jsonLd).toMatchObject({ "@type": "Article", url: "https://example.com/en/posts/h" });
+  });
+});
+
+describe("composePageSeoMeta", () => {
+  it("emits every configured locale and x-default", () => {
+    const meta = composePageSeoMeta({
+      site,
+      locale: "en",
+      publicPath: "/en/posts",
+      markdown: true,
+      pathForLocale: (locale) => `/${locale.toLowerCase()}/posts`,
+    });
+    expect(meta.hreflangs.map((item) => item.locale)).toEqual(["en", "zh-TW", "x-default"]);
   });
 });
 

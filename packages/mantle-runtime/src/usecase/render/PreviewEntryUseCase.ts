@@ -50,7 +50,7 @@ export class PreviewEntryUseCase {
       raw = await this.reader.readBySlug({
         collection: request.collection,
         slug: request.slug,
-        locale: request.locale,
+        locale: request.contentLocale === undefined ? request.locale : request.contentLocale,
         status,
       });
       if (raw) break;
@@ -61,7 +61,7 @@ export class PreviewEntryUseCase {
     // already-published parent. RequestPublishUseCase enforces the
     // published-parent invariant at publish time.
     const entry = await joinParentIfTranslation(this.reader, this.schemas, raw);
-    const seo = await composeSeoIfPathed(this.composeSeo, this.paths, entry, request.site);
+    const seo = await composeSeoIfPathed(this.composeSeo, this.paths, entry, request.site, request);
     const mediaAssets = await resolveMediaAssetsForEntries(this.mediaAssets, [entry]);
     const html = renderEntryHtml({
       entry,

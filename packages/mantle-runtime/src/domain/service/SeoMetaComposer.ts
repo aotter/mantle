@@ -2,7 +2,7 @@ import { toUrlLocale, type Entry, type SiteConfig } from "@aotter/mantle-spec";
 import type { SeoMeta } from "../model/SeoMeta.js";
 import { absoluteUrl, appendMarkdownExt } from "./AbsoluteUrl.js";
 import { escapeHtml as escapeAttr } from "./HtmlEscaping.js";
-import { hasMarkdownBody } from "./MarkdownSerializer.js";
+import { getEntryDescription, hasMarkdownBody } from "./MarkdownSerializer.js";
 
 /**
  * Pure composer for SEO + AEO meta blocks emitted on every public
@@ -39,19 +39,21 @@ export interface ComposeEntrySeoMetaArgs {
   /** og:type. Defaults to `article` when the entry has a `publishedAt`
    *  (or `updatedAt`) field, `website` otherwise. */
   readonly type?: "article" | "website";
+  /** Public-route locale for non-localized entries mounted under a locale URL. */
+  readonly locale?: string;
 }
 
 export function composeEntrySeoMeta(args: ComposeEntrySeoMetaArgs): SeoMeta {
   const { entry, site, publicPath, siblings = [], type } = args;
   const data = entry.data as Record<string, unknown>;
   const canonical = absoluteUrl(site.origin, publicPath);
-  const alternateMarkdown = appendMarkdownExt(canonical);
+  const alternateMarkdown = hasMarkdownBody(entry) ? appendMarkdownExt(canonical) : null;
 
   const title = stringField(data, "title") ?? site.title;
-  const description = stringField(data, "description") ?? site.description ?? null;
+  const description = getEntryDescription(entry) ?? site.description ?? null;
   const image = stringField(data, "coverUrl") ?? stringField(data, "ogImage") ?? null;
   const ogType = type ?? (hasArticleSignal(entry) ? "article" : "website");
-  const entryLocale = entry.locale ?? site.canonicalLocale ?? "en";
+  const entryLocale = args.locale ?? entry.locale ?? site.canonicalLocale ?? "en";
 
   const hreflangs = buildHreflangs({
     site,
@@ -88,6 +90,69 @@ export function composeEntrySeoMeta(args: ComposeEntrySeoMetaArgs): SeoMeta {
       image,
       data,
       site,
+      locale: entryLocale,
+    }),
+  };
+}
+
+export interface ComposePageSeoMetaArgs {
+  readonly site: SiteConfig;
+  readonly locale: string;
+  readonly publicPath: string;
+  readonly title?: string;
+  readonly description?: string | null;
+  readonly markdown: boolean;
+  readonly pathForLocale: (locale: string) => string;
+}
+
+/** SEO for public home/list pages that are not represented by one Entry. */
+export function composePageSeoMeta(args: ComposePageSeoMetaArgs): SeoMeta {
+  const { site, locale, publicPath, pathForLocale } = args;
+  const canonical = absoluteUrl(site.origin, publicPath);
+  const title = args.title ?? site.title;
+  const description = args.description ?? site.description ?? null;
+  const hreflangs = [
+    ...site.locales.map((candidate) => ({
+      locale: candidate,
+      href: absoluteUrl(site.origin, pathForLocale(candidate)),
+    })),
+    {
+      locale: "x-default",
+      href: absoluteUrl(
+        site.origin,
+        pathForLocale(site.canonicalLocale ?? site.locales[0] ?? locale),
+      ),
+    },
+  ];
+  return {
+    canonical,
+    alternateMarkdown: args.markdown ? appendMarkdownExt(canonical) : null,
+    hreflangs,
+    description,
+    og: {
+      type: "website",
+      url: canonical,
+      title,
+      siteName: site.title || site.brand,
+      description,
+      image: null,
+      locale,
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description,
+      image: null,
+    },
+    jsonLd: buildJsonLd({
+      ogType: "website",
+      title,
+      description,
+      canonical,
+      image: null,
+      data: {},
+      site,
+      locale,
     }),
   };
 }
@@ -99,7 +164,6 @@ function buildHreflangs(args: {
   siblings: ReadonlyArray<SiblingTranslation>;
 }): SeoMeta["hreflangs"] {
   const { site, currentLocale, currentPublicPath, siblings } = args;
-  if (site.locales.length <= 1) return [];
   const out: Array<{ locale: string; href: string }> = [];
   const seen = new Set<string>();
   const push = (locale: string, path: string): void => {
@@ -131,8 +195,9 @@ function buildJsonLd(args: {
   image: string | null;
   data: Record<string, unknown>;
   site: SiteConfig;
+  locale: string;
 }): object | null {
-  const { ogType, title, description, canonical, image, data, site } = args;
+  const { ogType, title, description, canonical, image, data, site, locale } = args;
   const publishedAtMs = numericField(data, "publishedAt");
   const updatedAtMs = numericField(data, "updatedAt");
   const base = {
@@ -143,7 +208,7 @@ function buildJsonLd(args: {
     url: canonical,
     description: description ?? undefined,
     image: image ?? undefined,
-    inLanguage: site.canonicalLocale ?? undefined,
+    inLanguage: locale,
     publisher: site.title || site.brand
       ? {
           "@type": "Organization",
@@ -184,9 +249,11 @@ function hasArticleSignal(entry: Entry): boolean {
 export function renderSeoTagsHtml(meta: SeoMeta): string {
   const parts: string[] = [];
   parts.push(`<link rel="canonical" href="${escapeAttr(meta.canonical)}">`);
-  parts.push(
-    `<link rel="alternate" type="text/markdown" href="${escapeAttr(meta.alternateMarkdown)}">`,
-  );
+  if (meta.alternateMarkdown) {
+    parts.push(
+      `<link rel="alternate" type="text/markdown" href="${escapeAttr(meta.alternateMarkdown)}">`,
+    );
+  }
   for (const h of meta.hreflangs) {
     parts.push(
       `<link rel="alternate" hreflang="${escapeAttr(h.locale)}" href="${escapeAttr(h.href)}">`,

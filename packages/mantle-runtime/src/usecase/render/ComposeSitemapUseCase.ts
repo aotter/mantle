@@ -19,10 +19,19 @@ export class ComposeSitemapUseCase {
     const cap = request.maxUrls ?? SITEMAP_MAX_URLS_DEFAULT;
     const all = await this.reader.readPublished({ limit: cap });
     const mapper = request.pathFor ?? entryPublicPath;
-    const entries: { entry: Entry; path: string }[] = [];
+    const entries: { entry?: Entry; path: string }[] = [];
+    const seen = new Set<string>();
+    const push = (path: string, entry?: Entry): void => {
+      if (seen.has(path)) return;
+      seen.add(path);
+      entries.push(entry ? { entry, path } : { path });
+    };
+    for (const path of request.additionalPaths ?? []) push(path);
     for (const e of all) {
-      const path = mapper(e);
-      if (path !== null) entries.push({ entry: e, path });
+      const mapped = mapper(e);
+      for (const path of mapped === null ? [] : typeof mapped === "string" ? [mapped] : mapped) {
+        push(path, e);
+      }
     }
     return serializeSitemap({ site: request.site, entries });
   }

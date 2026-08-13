@@ -105,14 +105,21 @@ export {
 } from "./domain/service/PublicPathResolver.js";
 export {
   composeEntrySeoMeta,
+  composePageSeoMeta,
   renderSeoTagsHtml,
   type ComposeEntrySeoMetaArgs,
+  type ComposePageSeoMetaArgs,
   type SiblingTranslation,
 } from "./domain/service/SeoMetaComposer.js";
 
 // Public route / starter fixture helpers. These are intentionally
 // exported one-by-one instead of exposing the whole service barrel.
-export { serializeEntryAsMarkdown } from "./domain/service/MarkdownSerializer.js";
+export {
+  getEntryDescription,
+  getMarkdownBody,
+  serializeEntryAsMarkdown,
+} from "./domain/service/MarkdownSerializer.js";
+export { absoluteUrl } from "./domain/service/AbsoluteUrl.js";
 export { readEntryBySlug } from "./infrastructure/persistence/DatabaseEntryRepository.js";
 export {
   inferLocaleFromPath,

@@ -30,8 +30,9 @@ must not query Mantle-owned tables through `runtime.db`.
 - Cloudflare Workers Cache checks eligible anonymous responses before invoking
   the Worker. Cache keys are version-local, so a deploy starts with no stale
   response from the previous Worker version.
-- Site-setting and content writes only persist canonical state. They do not
-  wait for render work or scan/delete cache prefixes.
+- Successful publishing-content and site-setting writes purge the shared
+  `mantle-public` Cache-Tag through Cloudflare's native cache API. Operational
+  records and immutable assets stay outside that invalidation boundary.
 - Do not cache every repository read. Cross-isolate correctness for editable
   data wins unless a read has a measured hot-path contract and explicit
   invalidation.

@@ -29,9 +29,16 @@ export class ComposeEntrySeoMetaUseCase {
 
   async execute(request: ComposeEntrySeoMetaRequest): Promise<SeoMeta> {
     const { entry, site, paths, type } = request;
-    const publicPath = paths.forEntry(entry) ?? "";
-    const siblings = await readSiblings(this.reader, entry, site, paths);
-    return composeEntrySeoMeta({ entry, site, publicPath, siblings, type });
+    const publicPath = request.publicPath ?? paths.forEntry(entry) ?? "";
+    const siblings = request.siblings ?? await readSiblings(this.reader, entry, site, paths);
+    return composeEntrySeoMeta({
+      entry,
+      site,
+      publicPath,
+      siblings,
+      type,
+      locale: request.publicLocale,
+    });
   }
 }
 
@@ -40,9 +47,13 @@ export async function composeSeoIfPathed(
   paths: PublicPathResolver | null,
   entry: Entry,
   site: SiteConfig,
+  overrides: Pick<
+    ComposeEntrySeoMetaRequest,
+    "publicPath" | "publicLocale" | "siblings"
+  > = {},
 ): Promise<SeoMeta | undefined> {
-  if (!paths?.forEntry(entry)) return undefined;
-  return composer.execute({ entry, site, paths });
+  if (!paths || !(overrides.publicPath ?? paths.forEntry(entry))) return undefined;
+  return composer.execute({ entry, site, paths, ...overrides });
 }
 
 async function readSiblings(

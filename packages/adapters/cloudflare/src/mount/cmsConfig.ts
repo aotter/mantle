@@ -44,4 +44,5 @@ export interface CmsConfig {
     readonly audience: string;
     readonly scopes?: readonly string[];
   };
+  readonly onPublicChange?: CreateCmsRuntimeArgs["onPublicChange"];
 }

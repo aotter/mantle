@@ -14,7 +14,7 @@ export interface SeoMeta {
   readonly canonical: string;
   /** Absolute URL of the markdown mirror — `<link rel="alternate"
    *  type="text/markdown">`. AEO-critical. */
-  readonly alternateMarkdown: string;
+  readonly alternateMarkdown: string | null;
   /** One per locale this entry has a translation in, plus an
    *  `x-default` row when the site has multiple locales. */
   readonly hreflangs: ReadonlyArray<{ readonly locale: string; readonly href: string }>;

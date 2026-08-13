@@ -4,6 +4,8 @@ import {
   OAUTH_TOKEN_PATH,
 } from "./oauthConstants.js";
 
+export const PUBLIC_CACHE_TAG = "mantle-public";
+
 /** Apply the Worker's final cache decision after OAuth/default dispatch. */
 export function applyCachePolicy(request: Request, response: Response): Response {
   const headers = new Headers(response.headers);
@@ -31,6 +33,7 @@ export function applyCachePolicy(request: Request, response: Response): Response
     mergeVary(headers, "Cookie", "Authorization");
   } else {
     headers.set("cache-control", "private, no-store");
+    headers.delete("cache-tag");
   }
 
   return new Response(response.body, {

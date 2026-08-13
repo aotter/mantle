@@ -10,7 +10,7 @@ import { absoluteUrl } from "./AbsoluteUrl.js";
  * locale) row surfaces under the consumer's routing.
  */
 export interface SitemapEntry {
-  readonly entry: Entry;
+  readonly entry?: Entry;
   readonly path: string;
 }
 
@@ -28,7 +28,7 @@ export function serializeSitemap(input: SitemapInput): string {
     const loc = absoluteUrl(site.origin ?? "", path);
     out.push("  <url>");
     out.push(`    <loc>${escapeXml(loc)}</loc>`);
-    if (entry.updatedAt) {
+    if (entry?.updatedAt) {
       out.push(`    <lastmod>${new Date(entry.updatedAt).toISOString()}</lastmod>`);
     }
     out.push("  </url>");

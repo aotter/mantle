@@ -48,6 +48,33 @@ describe("serializeEntryAsMarkdown", () => {
     );
     expect(md).toContain("> summary");
   });
+
+  it("uses summary for product-style entries", () => {
+    const md = serializeEntryAsMarkdown(
+      entry({ title: "T", summary: "Useful product", slug: "t" }),
+    );
+    expect(md).toContain("description: Useful product");
+    expect(md).toContain("Useful product");
+  });
+
+  it("serializes structured page sections without a content field", () => {
+    const md = serializeEntryAsMarkdown(entry({
+      title: "About",
+      sections: [{
+        type: "content",
+        title: "Our story",
+        body: "Built for the ocean.",
+        items: [{ title: "North", body: "A clear direction." }],
+      }],
+    }));
+    expect(md).toContain("## Our story");
+    expect(md).toContain("Built for the ocean.");
+    expect(md).toContain("**North:** A clear direction.");
+  });
+
+  it("rejects blank content instead of emitting an empty mirror", () => {
+    expect(serializeEntryAsMarkdown(entry({ title: "Blank", content: "  " }))).toBeNull();
+  });
 });
 
 describe("serializeLlmsTxt", () => {
@@ -64,6 +91,7 @@ describe("serializeLlmsTxt", () => {
           ],
         ],
       ]),
+      pathFor: (e) => `/en-us/posts/${e.data["slug"]}`,
     });
     expect(out).toContain("# Blog");
     expect(out).toContain("## posts");
@@ -76,7 +104,8 @@ describe("serializeLlmsTxt", () => {
       site,
       locale: "",
       entriesByCollection: new Map(),
+      pathFor: () => null,
     });
-    expect(out).not.toContain("Locale:");
+    expect(out).toBeNull();
   });
 });

@@ -34,6 +34,7 @@ export function createCmsRef(config: CmsConfig): CmsRuntimeRef {
     assets: config.bindings.assets,
     mediaStorage: config.bindings.mediaStorage,
     deferredHookDispatcher: config.bindings.deferredHookDispatcher,
+    onPublicChange: config.onPublicChange,
   });
 
   let booted: Promise<CmsRuntime> | null = null;
