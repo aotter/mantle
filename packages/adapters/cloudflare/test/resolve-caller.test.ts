@@ -18,7 +18,7 @@ describe("resolveCaller", () => {
     });
   });
 
-  it("normalizes a cookie session without re-reading its staff role", async () => {
+  it("uses the live role instead of the session role snapshot", async () => {
     let roleCalls = 0;
     const result = await resolveCaller(new Request("https://example.test/api/x", {
       headers: { cookie: "better-auth.session_token=session-1" },
@@ -30,7 +30,7 @@ describe("resolveCaller", () => {
         }),
         getUserRole: async () => {
           roleCalls += 1;
-          return "editor";
+          return "contributor";
         },
       }),
     });
@@ -38,7 +38,7 @@ describe("resolveCaller", () => {
       kind: "authenticated",
       context: {
         user: { id: "user-1" },
-        staff: { id: "user-1", role: "editor" },
+        staff: { id: "user-1", role: "contributor" },
         auth: {
           credential: "session",
           credentialId: "session-1",
@@ -46,7 +46,7 @@ describe("resolveCaller", () => {
         },
       },
     });
-    expect(roleCalls).toBe(0);
+    expect(roleCalls).toBe(1);
   });
 
   it("reads the live role when a custom session omits it", async () => {
@@ -159,7 +159,7 @@ describe("resolveCaller", () => {
           scopes: ["orders:read"],
         }),
       }),
-      oauthBearer: { audience: "https://api.example.test" },
+      jwtBearer: { audience: "https://api.example.test" },
     });
     expect(allowed).toMatchObject({
       kind: "authenticated",
@@ -181,7 +181,7 @@ describe("resolveCaller", () => {
           missingScopes: ["admin"],
         }),
       }),
-      oauthBearer: { audience: "https://api.example.test", scopes: ["admin"] },
+      jwtBearer: { audience: "https://api.example.test", scopes: ["admin"] },
     });
     expect(denied).toMatchObject({
       kind: "invalid",
@@ -229,5 +229,10 @@ describe("resolveCaller", () => {
       headers: { authorization: "Bearer user-1:grant-1:secret" },
     }), options);
     expect(wrongAudience).toMatchObject({ kind: "invalid", status: 401 });
+
+    const revokedOrExpired = await resolveCaller(new Request("https://example.test/api/orders", {
+      headers: { authorization: "Bearer user-1:grant-1:gone" },
+    }), options);
+    expect(revokedOrExpired).toMatchObject({ kind: "invalid", status: 401 });
   });
 });

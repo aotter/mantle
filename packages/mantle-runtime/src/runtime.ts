@@ -103,6 +103,8 @@ export interface CreateCmsRuntimeArgs {
   readonly handlers?: Readonly<Record<string, AnyHandler>>;
   readonly templates?: TemplateRegistry;
   readonly siteDefaults?: SiteDefaults;
+  /** Adapter-owned HTTP namespaces that manifest Triggers must not claim. */
+  readonly reservedHttpPathPrefixes?: readonly string[];
   /** Required adapter ports. */
   readonly db: DatabaseDriver;
   readonly assets: AssetServer;
@@ -426,6 +428,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
         manifests: args.manifests,
         registry,
         siteLocales,
+        reservedHttpPathPrefixes: args.reservedHttpPathPrefixes,
       });
       const indexMigrations = schemaIndexMigrations(schemas);
       await args.db.migrations.runAll(indexMigrations);

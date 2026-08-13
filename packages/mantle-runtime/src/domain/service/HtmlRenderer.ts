@@ -105,12 +105,12 @@ function injectTrackingTags(html: string, site: SiteConfig): string {
   return `${tags}${html}`;
 }
 
-function normalizeGa4MeasurementId(value: string | undefined): string | null {
+export function normalizeGa4MeasurementId(value: string | undefined): string | null {
   const trimmed = value?.trim().toUpperCase() ?? "";
   return /^G-[A-Z0-9]{4,32}$/.test(trimmed) ? trimmed : null;
 }
 
-function normalizeFacebookPixelId(value: string | undefined): string | null {
+export function normalizeFacebookPixelId(value: string | undefined): string | null {
   const trimmed = value?.trim() ?? "";
   return /^[0-9]{5,32}$/.test(trimmed) ? trimmed : null;
 }

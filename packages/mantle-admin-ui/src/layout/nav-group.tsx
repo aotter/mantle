@@ -4,7 +4,7 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "../ui/collapsible";
+} from "@/components/ui/collapsible";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +12,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu";
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -23,8 +23,9 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   useSidebar,
-} from "../ui/sidebar";
+} from "@/components/ui/sidebar";
 import { cn } from "../lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePreferences } from "../app/preferences";
 import {
   isCollapsible,
@@ -114,7 +115,6 @@ function NavLinkItem({
         <a
           href={item.url}
           title={item.title}
-          data-tour={tourIdForUrl(item.url)}
           onClick={() => setOpenMobile(false)}
           {...(item.external
             ? { target: "_blank", rel: "noreferrer" }
@@ -122,13 +122,7 @@ function NavLinkItem({
         >
           {item.icon && <item.icon aria-hidden />}
           <span data-sidebar-label className="flex-1 truncate">{item.title}</span>
-          {item.marker && (
-            <item.marker
-              aria-hidden
-              data-sidebar-label
-              className="size-3.5 text-muted-foreground"
-            />
-          )}
+          <NavMarker item={item} />
         </a>
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -153,16 +147,10 @@ function NavCollapsibleExpanded({
     >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton isActive={groupActive} data-tour={tourIdForUrl(item.items[0]?.url)}>
+          <SidebarMenuButton isActive={groupActive}>
             {item.icon && <item.icon aria-hidden />}
             <span data-sidebar-label className="flex-1 truncate" title={item.title}>{item.title}</span>
-            {item.marker && (
-              <item.marker
-                aria-hidden
-                data-sidebar-label
-                className="size-3.5 text-muted-foreground"
-              />
-            )}
+            <NavMarker item={item} />
             <ChevronRight
               aria-hidden
               data-sidebar-label
@@ -176,6 +164,7 @@ function NavCollapsibleExpanded({
               <NavSubLink
                 key={sub.url}
                 link={sub}
+                siblings={item.items}
                 pathname={pathname}
                 search={search}
               />
@@ -189,37 +178,27 @@ function NavCollapsibleExpanded({
 
 function NavSubLink({
   link,
+  siblings,
   pathname,
   search,
 }: {
   link: NavLink;
+  siblings: ReadonlyArray<NavLink>;
   pathname: string;
   search: string;
 }): React.ReactElement {
   const { setOpenMobile } = useSidebar();
-  const active = isLinkActive(link, pathname, search);
+  const active = isSubLinkActive(link, siblings, pathname, search);
   return (
     <SidebarMenuSubItem>
       <SidebarMenuSubButton asChild isActive={active}>
-        <a href={link.url} title={link.title} data-tour={tourIdForUrl(link.url)} onClick={() => setOpenMobile(false)}>
+        <a href={link.url} title={link.title} onClick={() => setOpenMobile(false)}>
           {link.icon && <link.icon aria-hidden />}
           <span>{link.title}</span>
         </a>
       </SidebarMenuSubButton>
     </SidebarMenuSubItem>
   );
-}
-
-function tourIdForUrl(url: string | undefined): string | undefined {
-  if (!url) return undefined;
-  if (url === "/admin") return "nav-home";
-  if (url === "/admin/settings") return "nav-settings";
-  // Only the plain collection link (no `?status=` filter) gets a tour
-  // id, so each collection's main nav item has exactly one stable
-  // anchor for the guide overlay to target.
-  const match = url.match(/^\/admin\/c\/([^/?]+)$/);
-  if (match) return `nav-c-${decodeURIComponent(match[1]!)}`;
-  return undefined;
 }
 
 function NavCollapsibleDropdown({
@@ -237,7 +216,10 @@ function NavCollapsibleDropdown({
     <SidebarMenuItem>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <SidebarMenuButton isActive={groupActive}>
+          <SidebarMenuButton
+            isActive={groupActive}
+            tooltip={item.markerLabel ? `${item.title} · ${item.markerLabel}` : item.title}
+          >
             {item.icon && <item.icon aria-hidden />}
             <span data-sidebar-label title={item.title}>{item.title}</span>
             <ChevronRight aria-hidden data-sidebar-label className="ms-auto" />
@@ -255,7 +237,7 @@ function NavCollapsibleDropdown({
               <a
                 href={sub.url}
                 className={cn(
-                  isLinkActive(sub, pathname, search) && "font-medium",
+                  isSubLinkActive(sub, item.items, pathname, search) && "font-medium",
                 )}
               >
                 {sub.title}
@@ -265,6 +247,23 @@ function NavCollapsibleDropdown({
         </DropdownMenuContent>
       </DropdownMenu>
     </SidebarMenuItem>
+  );
+}
+
+function NavMarker({ item }: { item: NavLink | NavCollapsible }): React.ReactElement | null {
+  if (!item.marker) return null;
+  const Marker = item.marker;
+  const icon = (
+    <span data-sidebar-label className="inline-flex text-primary group-data-[active=true]/menu-button:text-sidebar-accent-foreground">
+      <Marker aria-hidden className="size-3.5" />
+    </span>
+  );
+  if (!item.markerLabel) return icon;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{icon}</TooltipTrigger>
+      <TooltipContent side="right">{item.markerLabel}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -283,6 +282,20 @@ function isLinkActive(
     if (have.get(key) !== value) return false;
   }
   return true;
+}
+
+export function isSubLinkActive(
+  link: NavLink,
+  siblings: ReadonlyArray<NavLink>,
+  pathname: string,
+  search: string,
+): boolean {
+  if (!isLinkActive(link, pathname, search)) return false;
+  if (new URL(link.url, "http://x").search) return true;
+  return !siblings.some((sibling) => {
+    if (sibling.url === link.url || !new URL(sibling.url, "http://x").search) return false;
+    return isLinkActive(sibling, pathname, search);
+  });
 }
 
 // Highlight (and auto-expand) the group whenever the user is on a sub-link's

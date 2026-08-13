@@ -1,5 +1,7 @@
 import * as React from "react";
 import { ChevronsUpDown, LogOut, Settings } from "lucide-react";
+
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -7,95 +9,70 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu";
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "../ui/sidebar";
-import { cn } from "../lib/utils";
-import { signOut } from "../lib/auth";
-import { usePreferences } from "../app/preferences";
-import { t } from "../app/i18n";
+} from "@/components/ui/sidebar";
+import { usePreferences } from "@/app/preferences";
+import { t } from "@/app/i18n";
+import { signOut } from "@/lib/auth";
+import { initialsFor } from "@/lib/initials";
 
 export interface NavUserProps {
   login: string | null;
+  image: string | null;
   role: "owner" | "editor" | "contributor" | null;
 }
 
-export function NavUser({ login, role }: NavUserProps): React.ReactElement {
+export function NavUser({ login, image, role }: NavUserProps): React.ReactElement {
   const { isMobile } = useSidebar();
   const { language } = usePreferences();
-  const initial = (login ?? "?").charAt(0).toUpperCase();
-  const avatarUrl = login
-    ? `https://github.com/${encodeURIComponent(login)}.png?size=80`
-    : null;
+  const initials = initialsFor(login);
 
   return (
     <SidebarMenu>
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <SidebarMenuButton
-              size="lg"
-              className="data-[state=open]:bg-accent/40"
-            >
-              <Avatar avatarUrl={avatarUrl} initial={initial} />
-              <div data-sidebar-label className="grid flex-1 text-start text-sm leading-tight">
-                <span className="truncate font-semibold">{login ?? "—"}</span>
+            <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent">
+              <UserAvatar src={image} fallback={initials} />
+              <div className="grid min-w-0 flex-1 text-start text-sm leading-tight">
+                <span className="truncate font-medium">{login ?? t(language, "common.signedIn")}</span>
                 <span className="truncate text-xs text-muted-foreground">
                   {role ?? t(language, "common.signedIn")}
                 </span>
               </div>
-              <ChevronsUpDown
-                data-sidebar-label
-                className="ms-auto size-4 text-muted-foreground"
-                aria-hidden
-              />
+              <ChevronsUpDown className="ms-auto" aria-hidden />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
             side={isMobile ? "bottom" : "right"}
-            sideOffset={6}
-            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+            sideOffset={4}
+            className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
           >
-            <DropdownMenuLabel className="flex items-center gap-3 py-2">
-              <Avatar avatarUrl={avatarUrl} initial={initial} large />
-              <div className="flex min-w-0 flex-col">
-                <span className="truncate text-sm font-medium text-foreground">
-                  {login ?? "—"}
-                </span>
-                <span className="label-eyebrow truncate">
+            <DropdownMenuLabel className="flex items-center gap-2">
+              <UserAvatar src={image} fallback={initials} />
+              <div className="grid min-w-0 flex-1 leading-tight">
+                <span className="truncate font-medium">{login ?? t(language, "common.signedIn")}</span>
+                <span className="truncate text-xs text-muted-foreground">
                   {role ?? t(language, "common.signedIn")}
                 </span>
               </div>
             </DropdownMenuLabel>
-
             <DropdownMenuSeparator />
-
             <DropdownMenuItem asChild>
-              <a href="/admin/preferences" className="flex items-center gap-2">
-                <Settings className="size-4" aria-hidden />
+              <a href="/admin/preferences">
+                <Settings aria-hidden />
                 {t(language, "preferences.page.open")}
               </a>
             </DropdownMenuItem>
-
-            <DropdownMenuSeparator />
-
-            <DropdownMenuItem
-              asChild
-              className="text-destructive focus:text-destructive focus:bg-destructive/10"
-            >
-              <button
-                type="button"
-                onClick={signOut}
-                className="flex w-full cursor-pointer items-center gap-2"
-              >
-                <LogOut className="size-4" aria-hidden />
-                {t(language, "common.signOut")}
-              </button>
+            <DropdownMenuItem variant="destructive" onSelect={() => signOut()}>
+              <LogOut aria-hidden />
+              {t(language, "common.signOut")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -104,36 +81,11 @@ export function NavUser({ login, role }: NavUserProps): React.ReactElement {
   );
 }
 
-function Avatar({
-  avatarUrl,
-  initial,
-  large = false,
-}: {
-  avatarUrl: string | null;
-  initial: string;
-  large?: boolean;
-}): React.ReactElement {
-  const size = large ? "size-9" : "size-8";
-  const text = large ? "text-sm" : "text-xs";
+function UserAvatar({ src, fallback }: { src: string | null; fallback: string }): React.ReactElement {
   return (
-    <span
-      className={cn(
-        "shrink-0 inline-flex items-center justify-center rounded-lg",
-        "bg-primary/15 text-foreground/80 ring-1 ring-border",
-        size,
-      )}
-      aria-hidden
-    >
-      {avatarUrl ? (
-        <img
-          src={avatarUrl}
-          alt=""
-          className="size-full rounded-lg object-cover"
-          decoding="async"
-        />
-      ) : (
-        <span className={cn("font-medium", text)}>{initial}</span>
-      )}
-    </span>
+    <Avatar className="size-8 rounded-lg">
+      {src ? <AvatarImage src={src} alt="" /> : null}
+      <AvatarFallback className="rounded-lg">{fallback}</AvatarFallback>
+    </Avatar>
   );
 }

@@ -28,7 +28,8 @@ export function postsSchema(): SchemaManifest {
         },
         required: ["title"],
       },
-      lifecycle: "simple",
+      searchableFields: ["title"],
+      lifecycle: "publishing",
     },
   };
 }

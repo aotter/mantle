@@ -7,7 +7,7 @@
  * returns the response.
  *
  * CF adapter: wraps `env.ASSETS.fetch(req)`. Future: filesystem read,
- * S3+CDN, Netlify static-publish dir.
+ * S3+CDN, or another platform asset service.
  *
  * Returning `null` lets the runtime's HTTP layer fall back to the
  * SPA's `index.html` catchall — the React Router routing model.

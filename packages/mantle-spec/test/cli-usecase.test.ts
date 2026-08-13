@@ -68,7 +68,7 @@ describe("IntrospectManifestsUseCase", () => {
     expect(out.schemas[0]!).toMatchObject({
       name: "posts",
       localized: false,
-      lifecycle: "simple",
+      lifecycle: "publishing",
       indexes: [["title", "slug"]],
       uniqueIndexes: [["slug"]],
     });

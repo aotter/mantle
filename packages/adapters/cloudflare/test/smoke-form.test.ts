@@ -34,7 +34,7 @@ function manifests(): Manifest[] {
           },
           required: ["name", "message"],
         },
-        lifecycle: "simple",
+        lifecycle: "publishing",
       },
     },
     {
@@ -156,6 +156,24 @@ function harness(opts: { captchaPasses: boolean }): Harness {
 }
 
 describe("smoke: HTTP Trigger → builtin → lifecycle hooks", () => {
+  it("rejects malformed JSON before invoking the Procedure", async () => {
+    const h = harness({ captchaPasses: true });
+    const res = await h.app.request("/api/contact", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{not-json",
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      ok: false,
+      diagnostic: { code: "INPUT_VALIDATION_FAILED" },
+    });
+    expect(h.captchaCalls).toHaveLength(0);
+    expect(h.slackCalls).toHaveLength(0);
+    expect(h.db.entries.size).toBe(0);
+  });
+
   it("happy path: CAPTCHA passes, row written, Slack fires", async () => {
     const h = harness({ captchaPasses: true });
     const res = await h.app.request("/api/contact", {

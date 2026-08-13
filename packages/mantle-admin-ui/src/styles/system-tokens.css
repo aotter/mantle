@@ -1,0 +1,92 @@
+:root {
+  color-scheme: light;
+  --mantle-blue-deep: #1a3062;
+  --mantle-blue-mid: #345093;
+  --mantle-blue-light: #4d6aac;
+  --app-base: #f6f8fc;
+  --chrome-glass: color-mix(in srgb, var(--app-base) 72%, transparent);
+  --app-background:
+    radial-gradient(120% 85% at 50% -20%, color-mix(in srgb, var(--mantle-blue-light) 12%, transparent), transparent 58%),
+    radial-gradient(90% 70% at 100% 100%, color-mix(in srgb, var(--mantle-blue-mid) 7%, transparent), transparent 64%),
+    var(--app-base);
+  --radius: 0.625rem;
+  --background: rgb(247 249 253 / 72%);
+  --foreground: #172033;
+  --card: rgb(255 255 255 / 70%);
+  --card-foreground: #172033;
+  --popover: rgb(255 255 255 / 96%);
+  --popover-foreground: #172033;
+  --primary: var(--mantle-blue-deep);
+  --primary-foreground: #ffffff;
+  --secondary: color-mix(in srgb, var(--mantle-blue-light) 9%, white);
+  --secondary-foreground: var(--mantle-blue-deep);
+  --muted: color-mix(in srgb, var(--mantle-blue-light) 7%, white);
+  --muted-foreground: #596579;
+  --accent: color-mix(in srgb, var(--mantle-blue-mid) 13%, white);
+  --accent-foreground: var(--mantle-blue-deep);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: color-mix(in srgb, var(--mantle-blue-deep) 14%, transparent);
+  --input: color-mix(in srgb, var(--mantle-blue-deep) 18%, transparent);
+  --ring: var(--mantle-blue-light);
+  --success: oklch(0.627 0.194 149.214);
+  --warning: oklch(0.769 0.188 70.08);
+  --info: oklch(0.623 0.214 259.815);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: rgb(250 252 255 / 72%);
+  --sidebar-foreground: #172033;
+  --sidebar-primary: var(--mantle-blue-deep);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: color-mix(in srgb, var(--mantle-blue-mid) 9%, transparent);
+  --sidebar-accent-foreground: var(--mantle-blue-deep);
+  --sidebar-border: color-mix(in srgb, var(--mantle-blue-deep) 14%, transparent);
+  --sidebar-ring: var(--mantle-blue-light);
+}
+
+.dark {
+  color-scheme: dark;
+  --app-base: #02050d;
+  --chrome-glass: color-mix(in srgb, var(--app-base) 52%, transparent);
+  --app-background:
+    radial-gradient(110% 75% at 68% 28%, color-mix(in srgb, var(--mantle-blue-light) 26%, transparent), transparent 62%),
+    radial-gradient(100% 70% at 34% 82%, color-mix(in srgb, var(--mantle-blue-mid) 16%, transparent), transparent 70%),
+    linear-gradient(135deg, transparent 16%, rgb(235 240 255 / 3%) 48%, transparent 76%),
+    var(--app-base);
+  --background: rgb(3 7 18 / 68%);
+  --foreground: #f1f4fb;
+  --card: rgb(10 17 36 / 54%);
+  --card-foreground: #f1f4fb;
+  --popover: rgb(9 15 32 / 96%);
+  --popover-foreground: #f1f4fb;
+  --primary: var(--mantle-blue-deep);
+  --primary-foreground: #ffffff;
+  --secondary: color-mix(in srgb, var(--mantle-blue-deep) 58%, transparent);
+  --secondary-foreground: #eef2fb;
+  --muted: color-mix(in srgb, var(--mantle-blue-deep) 48%, transparent);
+  --muted-foreground: #b8c3d8;
+  --accent: color-mix(in srgb, var(--mantle-blue-mid) 46%, transparent);
+  --accent-foreground: #f5f7fc;
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: color-mix(in srgb, var(--mantle-blue-light) 28%, transparent);
+  --input: color-mix(in srgb, var(--mantle-blue-light) 34%, transparent);
+  --ring: color-mix(in srgb, var(--mantle-blue-light) 76%, white);
+  --success: oklch(0.723 0.219 149.579);
+  --warning: oklch(0.828 0.189 84.429);
+  --info: oklch(0.707 0.165 254.624);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: rgb(5 10 24 / 58%);
+  --sidebar-foreground: #eef2fb;
+  --sidebar-primary: var(--mantle-blue-deep);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: color-mix(in srgb, var(--mantle-blue-mid) 42%, transparent);
+  --sidebar-accent-foreground: #f5f7fc;
+  --sidebar-border: color-mix(in srgb, var(--mantle-blue-light) 26%, transparent);
+  --sidebar-ring: color-mix(in srgb, var(--mantle-blue-light) 76%, white);
+}

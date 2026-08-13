@@ -90,6 +90,7 @@ spec:
       const firstTypes = await readFile(typesPath, "utf8");
       expect(firstSite).toContain("as const satisfies readonly Manifest[]");
       expect(firstSite).toContain("export function bindMantleSite(runtime: CmsRuntime)");
+      expect(firstSite).toContain('procedures: {');
       expect(firstTypes.match(/readonly "syncCatalog":/g)).toHaveLength(1);
       expect(firstTypes).toContain("ProcInput_import_product | CmsRuntime.ProcInput_remove_product");
       expect(firstTypes).toContain("ProcOutput_import_product | CmsRuntime.ProcOutput_remove_product");
@@ -103,6 +104,16 @@ import type { CmsRuntime } from "@aotter/mantle/runtime";
 
 declare const runtime: CmsRuntime;
 const site = bindMantleSite(runtime);
+const ctx = { user: null, staff: null, env: {} };
+const imported = await site.procedures["import-product"]({ sku: "sku-1" }, ctx);
+if (imported.ok) {
+  const ok: boolean | undefined = imported.data.imported;
+  void ok;
+}
+// @ts-expect-error Unknown Procedures are absent from the generated surface.
+site.procedures["missing"]({}, ctx);
+// @ts-expect-error Procedure input is generated from its manifest.
+site.procedures["import-product"]({ id: "wrong" }, ctx);
 const result = await site.views["products-by-sku"]({ params: { sku: "sku-1" } });
 if (result.ok) {
   const title: string | undefined = result.result.rows[0]?.title;
@@ -152,7 +163,7 @@ site.views["products-by-sku"]();
     const root = await mkdtemp(join(tmpdir(), "mantle-generate-invalid-"));
     try {
       await mkdir(join(root, "manifests"));
-      const manifestPath = join(root, "manifests", "broken.yaml");
+      const manifestPath = join(root, "manifests", "site.yaml");
       await writeFile(manifestPath, `
 apiVersion: wrong
 kind: Schema
@@ -168,7 +179,7 @@ spec: {}
 
       expect(await runGenerate([])).toBe(1);
       expect(error).toContain("INVALID_MANIFEST_ENVELOPE");
-      expect(error).toContain("broken.yaml#/0/apiVersion");
+      expect(error).toContain("site.yaml#/0/apiVersion");
       await expect(readFile(join(root, ".mantle", "generated", "site.ts"))).rejects.toThrow();
     } finally {
       await rm(root, { recursive: true, force: true });

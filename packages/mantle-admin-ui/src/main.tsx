@@ -6,8 +6,10 @@ import { PreferencesProvider } from "./app/preferences";
 import { queryClient } from "./app/query-client";
 import { AdminRouterProvider } from "./app/router";
 import { ConfirmProvider } from "./ui/confirm-dialog";
-import { ToastProvider } from "./ui/toast";
-import "./styles/index.css";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
+import { usePreferences } from "./app/preferences";
+import "./styles/global.css";
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {
@@ -19,13 +21,19 @@ ReactDOM.createRoot(rootElement).render(
     <QueryClientProvider client={queryClient}>
       <PreferencesProvider>
         <AdminRouterProvider>
-          <ToastProvider>
+          <TooltipProvider>
             <ConfirmProvider>
               <AdminApp />
+              <AdminToaster />
             </ConfirmProvider>
-          </ToastProvider>
+          </TooltipProvider>
         </AdminRouterProvider>
       </PreferencesProvider>
     </QueryClientProvider>
   </StrictMode>,
 );
+
+function AdminToaster(): React.ReactElement {
+  const { theme } = usePreferences();
+  return <Toaster theme={theme} position="bottom-right" />;
+}

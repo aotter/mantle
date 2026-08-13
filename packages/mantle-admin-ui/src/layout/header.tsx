@@ -1,117 +1,101 @@
 import * as React from "react";
-import { CircleHelp, ExternalLink } from "lucide-react";
-import { ProfileDropdown } from "./profile-dropdown";
-import { cn } from "../lib/utils";
-import { Button } from "../ui/button";
-import { usePreferences } from "../app/preferences";
-import { t } from "../app/i18n";
+import { ExternalLink } from "lucide-react";
+
+import { useAdminLocation } from "@/app/router";
+import { usePreferences } from "@/app/preferences";
+import { t } from "@/app/i18n";
+import { Button } from "@/components/ui/button";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { fieldLabel } from "@/lib/field-label";
 import type { AdminBrand } from "./types";
-import { SidebarTrigger } from "../ui/sidebar";
 import {
   LanguagePreferenceDropdown,
   ThemePreferenceDropdown,
 } from "./preference-controls";
 
 interface HeaderProps {
-  fixed?: boolean;
   className?: string;
-  /** Toolbar items rendered between the sidebar trigger and the
-   *  trailing ProfileDropdown — `me-auto` on the first child pushes
-   *  the dropdown to the far right (mirrors satnaing's pattern of
-   *  `<TopNav className="me-auto" /> <Search /> <ProfileDropdown />`). */
-  children?: React.ReactNode;
-  /** Identity for the trailing ProfileDropdown. `null`s render the
-   *  initial-fallback avatar. */
-  user?: {
-    login: string | null;
-    role: "owner" | "editor" | "contributor" | null;
-  };
   site?: AdminBrand;
   publicUrl?: string;
-  onOpenGuide?: () => void;
 }
 
 export function Header({
-  fixed = false,
   className,
-  children,
-  user,
   site,
   publicUrl,
-  onOpenGuide,
 }: HeaderProps): React.ReactElement {
+  const { pathname } = useAdminLocation();
   const { language } = usePreferences();
-  const [scrolled, setScrolled] = React.useState(false);
-  React.useEffect(() => {
-    if (!fixed) return;
-    const onScroll = () => setScrolled(window.scrollY > 10);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [fixed]);
+  const current = currentPage(pathname, language);
 
   return (
     <header
-      data-slot="header"
-      data-scrolled={scrolled || undefined}
+      data-slot="app-header"
       className={cn(
-        "admin-statusbar z-20 flex h-14 shrink-0 items-center gap-3 px-4",
-        fixed
-          ? "sticky top-0 w-[inherit] transition-shadow"
-          : "border-b border-border/40",
-        scrolled && "shadow-sm",
+        "flex h-14 shrink-0 items-center gap-2 border-b px-4",
         className,
       )}
     >
-      {/* Mobile-only entry to the off-canvas sidebar. On md+ the sidebar
-          is docked and carries its own collapse trigger in its header, so
-          this stays hidden there to avoid two triggers side by side. */}
-      <SidebarTrigger className="-ms-1 md:hidden" />
-      {site ? (
-        <div className="admin-site-status" aria-label="Current admin site">
-          <span>{site.title}</span>
-          {site.subtitle ? <small>{site.subtitle}</small> : null}
-        </div>
-      ) : null}
-      {publicUrl ? (
-        <Button asChild variant="secondary" size="sm" className="shrink-0">
-          <a href={publicUrl} target="_blank" rel="noreferrer" title={t(language, "common.viewSite")}>
-            <ExternalLink className="size-3.5" aria-hidden />
-            <span className="hidden sm:inline">{t(language, "common.viewSite")}</span>
-          </a>
-        </Button>
-      ) : null}
-      {children}
-      {user ? (
-        // `flex items-center` on the wrapper kills the inline-flex
-        // baseline descent gap — without it the wrap div is taller
-        // than the trigger by ~8px (line-height carry) and the
-        // avatar lands above center.
-        <div
-          className={cn(
-            "flex items-center gap-2",
-            children ? "" : "ms-auto",
-          )}
-        >
-          {onOpenGuide ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onOpenGuide}
-              data-tour="guide-button"
-              title={t(language, "guide.open")}
-              aria-label={t(language, "guide.open")}
-            >
-              <CircleHelp className="size-4" aria-hidden />
-              <span className="hidden sm:inline">{t(language, "guide.open")}</span>
-            </Button>
+      <SidebarTrigger className="-ms-1 md:hidden" aria-label={t(language, "common.toggleSidebar")} />
+      <Breadcrumb className="min-w-0" aria-label={t(language, "common.breadcrumb")}>
+        <BreadcrumbList className="flex-nowrap">
+          <BreadcrumbItem className="hidden sm:block">
+            <BreadcrumbLink href="/admin">{site?.title ?? t(language, "admin.consoleTitle")}</BreadcrumbLink>
+          </BreadcrumbItem>
+          {current ? (
+            <>
+              <BreadcrumbSeparator className="hidden sm:block" />
+              <BreadcrumbItem className="min-w-0">
+                <BreadcrumbPage className="truncate">{current}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </>
           ) : null}
-          <LanguagePreferenceDropdown />
-          <ThemePreferenceDropdown />
-          <ProfileDropdown login={user.login} role={user.role} />
-        </div>
-      ) : null}
+        </BreadcrumbList>
+      </Breadcrumb>
+      <div className="ms-auto flex shrink-0 items-center gap-1">
+        {publicUrl ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button asChild variant="ghost" size="icon-sm">
+                <a
+                  href={publicUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={t(language, "common.viewSite")}
+                >
+                  <ExternalLink aria-hidden />
+                </a>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t(language, "common.viewSite")}</TooltipContent>
+          </Tooltip>
+        ) : null}
+        <LanguagePreferenceDropdown compact />
+        <ThemePreferenceDropdown compact />
+      </div>
     </header>
   );
+}
+
+function currentPage(pathname: string, language: ReturnType<typeof usePreferences>["language"]): string | null {
+  if (pathname === "/admin" || pathname === "/admin/") return null;
+  const collectionMatch = pathname.match(/^\/admin\/c\/([^/]+)/);
+  if (collectionMatch) return fieldLabel(decodeURIComponent(collectionMatch[1]!));
+  const parts = pathname.split("/").filter(Boolean);
+  const segment = decodeURIComponent(parts[parts.length - 1] ?? "");
+  if (pathname === "/admin/media") return t(language, "nav.media");
+  if (pathname === "/admin/settings") return t(language, "nav.settings");
+  if (pathname === "/admin/staff") return t(language, "nav.staff");
+  if (pathname === "/admin/members") return t(language, "nav.members");
+  return segment ? fieldLabel(segment) : null;
 }

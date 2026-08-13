@@ -1,19 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../src/lib/api";
 import type { MediaPurposePolicy } from "../src/lib/types";
+import { isMediaNotConfigured } from "../src/features/media/media-library-view";
 
-/**
- * #440 — real browsers never support `canvas.toBlob("image/avif")` (or
- * any mime the encoder can't produce): `toBlob` silently falls back to
- * image/png instead of rejecting. `chooseMime` used to only check
- * `policy.maxBytes[mime]`, so an avif-only slot always got selected and
- * then died deep inside `encodeBitmap` after 24 wasted encode attempts.
- *
- * These tests stub `document.createElement("canvas")` to control which
- * mimes the fake encoder "supports" (an unsupported mime's `toBlob`
- * returns a blob whose `type` differs from the request, mirroring real
- * browser behavior), then exercise the module's exported internals
- * directly — no real DOM/canvas needed.
- */
+describe("media setup state", () => {
+  it("only treats the explicit missing-storage diagnostic as setup work", () => {
+    expect(isMediaNotConfigured(new ApiError("501", 501, {
+      diagnostic: { code: "MEDIA_NOT_CONFIGURED" },
+    }))).toBe(true);
+    expect(isMediaNotConfigured(new ApiError("503", 503, {
+      diagnostic: { code: "MEDIA_NOT_CONFIGURED" },
+    }))).toBe(false);
+  });
+});
 
 function fakeCanvas(supportedMimes: ReadonlySet<string>): {
   toBlob: (cb: (blob: Blob | null) => void, mimeType?: string) => void;
@@ -144,5 +143,48 @@ describe("encodeBitmap", () => {
     const { encodeBitmap } = await import("../src/features/media/media-upload");
     const blob = await encodeBitmap(bitmap, "image/webp", 200_000, "en");
     expect(blob.type).toBe("image/webp");
+  });
+});
+
+describe("uploadMediaAsset", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("does not commit when a variant upload fails", async () => {
+    stubDocument(new Set(["image/webp"]));
+    vi.stubGlobal("createImageBitmap", vi.fn().mockResolvedValue({
+      width: 10,
+      height: 10,
+      close: () => {},
+    }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/admin/api/media/uploads") {
+        return new Response(JSON.stringify({
+          uploadGroupId: "upload-1",
+          capabilities: [{
+            mimeType: "image/webp",
+            role: "primary",
+            method: "PUT",
+            uploadUrl: "https://upload.invalid/variant",
+          }],
+        }), { status: 200 });
+      }
+      return new Response(null, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { uploadMediaAsset } = await import("../src/features/media/media-upload");
+
+    await expect(uploadMediaAsset({
+      file: new File(["image"], "sample.webp", { type: "image/webp" }),
+      purposes: [{
+        name: "content",
+        required: ["image/webp"],
+        maxBytes: { "image/webp": 200_000 },
+      }],
+      language: "en",
+    })).rejects.toThrow(/image\/webp upload failed/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

@@ -18,6 +18,7 @@ kind: Schema
 metadata: { name: posts }
 spec:
   title: Posts
+  localized: true
   schema:
     type: object
     required: [slug]
@@ -70,15 +71,12 @@ async function fixtureRoot(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "mantle-cli-"));
   const m = join(dir, "manifests");
   await mkdir(m, { recursive: true });
-  await writeFile(join(m, "posts.yaml"), SCHEMA_YAML);
-  await writeFile(join(m, "view.yaml"), VIEW_YAML);
-  await writeFile(join(m, "proc.yaml"), PROC_YAML);
-  await writeFile(join(m, "trig.yaml"), TRIGGER_YAML);
+  await writeFile(join(m, "site.yaml"), [SCHEMA_YAML, VIEW_YAML, PROC_YAML, TRIGGER_YAML].join("---\n"));
   return m;
 }
 
 describe("loadManifestsFromRoot + partition", () => {
-  it("parses a multi-file fixture into all 4 atom buckets", async () => {
+  it("parses manifests/site.yaml into all 4 atom buckets", async () => {
     const root = await fixtureRoot();
     const { manifests, parseErrors } = await loadManifestsFromRoot(root);
     expect(parseErrors).toEqual([]);
@@ -101,6 +99,18 @@ describe("loadManifestsFromRoot + partition", () => {
     const { manifests, parseErrors } = await loadManifestsFromRoot("/nonexistent/path/mantle");
     expect(manifests).toHaveLength(0);
     expect(parseErrors[0]?.code).toBe("MANIFEST_ROOT_NOT_FOUND");
+  });
+
+  it("rejects a manifest root whose file is not named site.yaml", async () => {
+    const root = join(await mkdtemp(join(tmpdir(), "mantle-wrong-manifest-name-")), "manifests");
+    await mkdir(root);
+    await writeFile(join(root, "stories.yaml"), SCHEMA_YAML);
+    const { manifests, parseErrors } = await loadManifestsFromRoot(root);
+    expect(manifests).toEqual([]);
+    expect(parseErrors[0]).toMatchObject({
+      code: "MANIFEST_ROOT_NOT_FOUND",
+      path: join(root, "site.yaml"),
+    });
   });
 });
 
@@ -159,10 +169,12 @@ spec:
   source: { kind: http, method: POST, path: /api/foo }
   target: { procedure: ${target} }
 `;
-    await writeFile(join(m, "p1.yaml"), proc("alpha"));
-    await writeFile(join(m, "p2.yaml"), proc("beta"));
-    await writeFile(join(m, "t1.yaml"), trig("tAlpha", "alpha"));
-    await writeFile(join(m, "t2.yaml"), trig("tBeta", "beta"));
+    await writeFile(join(m, "site.yaml"), [
+      proc("alpha"),
+      proc("beta"),
+      trig("tAlpha", "alpha"),
+      trig("tBeta", "beta"),
+    ].join("---\n"));
 
     await expect(runEmitOpenapi(["--manifests", m])).resolves.toBe(1);
   });

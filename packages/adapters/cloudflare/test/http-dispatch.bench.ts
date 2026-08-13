@@ -38,7 +38,7 @@ function manifests(): Manifest[] {
           required: ["accountId"],
         },
         localized: false,
-        lifecycle: "none",
+        lifecycle: "operational",
       },
     },
     {

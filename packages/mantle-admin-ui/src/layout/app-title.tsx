@@ -4,10 +4,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "../ui/sidebar";
-import { AotterMantleMark } from "../brand/aotter-mantle";
-import { usePreferences } from "../app/preferences";
-import { t } from "../app/i18n";
+} from "@/components/ui/sidebar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { initialsFor } from "@/lib/initials";
 import type { AdminBrand } from "./types";
 
 interface AppTitleProps {
@@ -16,23 +15,22 @@ interface AppTitleProps {
 
 export function AppTitle({ brand }: AppTitleProps): React.ReactElement {
   const { setOpenMobile } = useSidebar();
-  const { language } = usePreferences();
   const href = brand.href ?? "/admin";
   return (
-    <SidebarMenu>
+    <SidebarMenu className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
       <SidebarMenuItem>
         <SidebarMenuButton
           asChild
-          size="lg"
-          className="data-[slot=sidebar-menu-button]:!p-1.5"
+          className="p-1"
         >
           <a href={href} onClick={() => setOpenMobile(false)}>
-            <span className="text-primary flex aspect-square size-8 items-center justify-center">
-              <AotterMantleMark className="size-5" />
-            </span>
-            <div data-sidebar-label className="grid flex-1 text-start text-sm leading-tight">
-              <span className="truncate font-semibold">{t(language, "admin.consoleTitle")}</span>
-            </div>
+            <Avatar className="size-7 rounded-md">
+              {brand.image ? <AvatarImage src={brand.image} alt="" /> : null}
+              <AvatarFallback className="rounded-md text-xs">
+                {initialsFor(brand.title)}
+              </AvatarFallback>
+            </Avatar>
+            <span className="truncate font-semibold">{brand.title}</span>
           </a>
         </SidebarMenuButton>
       </SidebarMenuItem>

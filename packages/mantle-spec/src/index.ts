@@ -14,7 +14,7 @@
  *  - `kernel/` — cross-cutting helpers (Diagnostic shape, codes,
  *    HTTP status mapping, DiagnosticError).
  *  - `domain/model/` — pure types: ManifestGrammar (4-atom envelope +
- *    closed enums), Entry / Revision / Approval, ContentState,
+ *    closed enums), Entry, ContentState,
  *    SiteConfig / SiteDefaults, Locale shape constants.
  *  - `domain/service/` — pure stateless algorithms operating on the
  *    domain model: LocaleCanonicalizer, LifecycleStateMachine,

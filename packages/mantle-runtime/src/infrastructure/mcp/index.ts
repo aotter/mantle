@@ -13,6 +13,5 @@ export {
 } from "./McpResponses.js";
 export {
   McpJsonRpcDispatcher,
-  type McpAuthContext,
   type McpUseCases,
 } from "./McpJsonRpcDispatcher.js";

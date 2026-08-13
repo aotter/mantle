@@ -136,14 +136,22 @@ class D1Migrations implements MigrationRunner {
   constructor(private readonly db: D1Database) {}
 
   async runAll(migrations: ReadonlyArray<Migration>): Promise<void> {
-    await this.db
+    const existingTables = await this.db
       .prepare(
-        `CREATE TABLE IF NOT EXISTS _migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)`,
+        `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('_migrations', '_mantle_migrations')`,
       )
-      .run();
-    // One-time copy from pre-rename `_mantle_migrations`: idempotent
-    // via `INSERT OR IGNORE` + `IF EXISTS`, so re-running on every
-    // boot is harmless after the rows have landed. We deliberately
+      .all<{ name: string }>();
+    const tables = new Set((existingTables.results ?? []).map(({ name }) => name));
+    if (!tables.has("_migrations")) {
+      await this.db
+        .prepare(
+          `CREATE TABLE IF NOT EXISTS _migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)`,
+        )
+        .run();
+    }
+    // One-time copy from pre-rename `_mantle_migrations`: compare the
+    // ledgers first so a fully migrated database keeps boot read-only.
+    // We deliberately
     // DON'T drop the legacy table — codex CX1 showed that any
     // copy-then-drop ordering races between concurrent boots
     // (Worker B's INSERT runs after Worker A's DROP succeeds and
@@ -151,15 +159,19 @@ class D1Migrations implements MigrationRunner {
     // around costs a few KB; eliminating it isn't worth the race
     // class. A standalone op (`mantle migrate drop-legacy`) can
     // remove it later under operator control if desired.
-    const legacy = await this.db
-      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='_mantle_migrations'`)
-      .first<{ name: string }>();
-    if (legacy) {
-      await this.db
+    if (tables.has("_mantle_migrations")) {
+      const uncopied = await this.db
         .prepare(
-          `INSERT OR IGNORE INTO _migrations (id, applied_at) SELECT id, applied_at FROM _mantle_migrations`,
+          `SELECT legacy.id FROM _mantle_migrations legacy LEFT JOIN _migrations current ON current.id = legacy.id WHERE current.id IS NULL LIMIT 1`,
         )
-        .run();
+        .first<{ id: string }>();
+      if (uncopied) {
+        await this.db
+          .prepare(
+            `INSERT OR IGNORE INTO _migrations (id, applied_at) SELECT id, applied_at FROM _mantle_migrations`,
+          )
+          .run();
+      }
     }
     const applied = await this.db
       .prepare(`SELECT id FROM _migrations`)

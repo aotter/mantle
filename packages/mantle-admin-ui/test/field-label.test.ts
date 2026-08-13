@@ -2,20 +2,6 @@ import { describe, expect, it } from "vitest";
 import { fieldLabel, propertyDescription, propertyLabel } from "../src/lib/field-label";
 import type { JsonSchema } from "../src/lib/types";
 
-/**
- * #443 — label resolution for JSON Schema properties. `propertyLabel`
- * reads the standard `title` keyword (plain string or LocalizedText
- * locale-map, resolved for the viewer's language with the site
- * canonical locale as fallback) and falls back to `fieldLabel`'s
- * humanized property name — the exact pre-#443 behavior — when no
- * title is declared.
- *
- * #453 — extends the same resolution to the `description` keyword via
- * `propertyDescription`, so entry-editor field help text can be
- * localized the same way (previously only a plain string rendered;
- * a LocalizedText `description` was silently dropped).
- */
-
 describe("fieldLabel", () => {
   it("title-cases camelCase names", () => {
     expect(fieldLabel("orderStatus")).toBe("Order Status");
@@ -58,7 +44,7 @@ describe("propertyLabel", () => {
     expect(propertyLabel("orderStatus", schema, "en", null)).toBe("注文状況");
   });
 
-  it("falls back to the humanized name when title is absent (pre-#443 behavior)", () => {
+  it("falls back to the humanized name when title is absent", () => {
     const schema: JsonSchema = { type: "string" };
     expect(propertyLabel("orderStatus", schema, "en", null)).toBe("Order Status");
     expect(propertyLabel("subtotal_minor", schema, "zh-TW", null)).toBe("Subtotal Minor");

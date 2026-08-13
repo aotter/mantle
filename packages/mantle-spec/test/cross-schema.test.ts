@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { checkLocaleAndTranslates } from "../src/domain/service/CrossSchemaChecker.js";
+import { parseManifests } from "../src/domain/service/ManifestParser.js";
+import { ValidateManifestsUseCase } from "../src/usecase/ValidateManifestsUseCase.js";
 import type { SchemaManifest } from "../src/domain/model/ManifestGrammar.js";
 
 // Cross-Schema validation from ADR-0010. Runs in the validate phase
 // (CLI, optional siteLocales) and the boot phase (Worker, always with
-// siteLocales from D1). All six new diagnostic codes are exercised here.
+// siteLocales from D1). Every locale/translation diagnostic is exercised here.
 
 function schema(name: string, spec: Partial<SchemaManifest["spec"]>): SchemaManifest {
   return {
@@ -13,7 +16,10 @@ function schema(name: string, spec: Partial<SchemaManifest["spec"]>): SchemaMani
     metadata: { name },
     spec: {
       title: name,
-      schema: { type: "object", properties: { slug: { type: "string" } } },
+      schema: {
+        type: "object",
+        properties: { slug: { type: "string" }, title: { type: "string" } },
+      },
       ...spec,
     } as SchemaManifest["spec"],
   };
@@ -98,6 +104,22 @@ describe("checkLocaleAndTranslates — TRANSLATES_REQUIRES_LOCALIZED", () => {
   });
 });
 
+describe("checkLocaleAndTranslates — TRANSLATES_REQUIRES_CONTENT_FIELD", () => {
+  it("rejects a translation child with only locale and its join field", () => {
+    const parent = schema("stories", {});
+    const child = schema("story-translations", {
+      localized: true,
+      translates: { parent: "stories", on: "slug" },
+      schema: {
+        type: "object",
+        properties: { slug: { type: "string" }, locale: { type: "string" } },
+      },
+    });
+    const diags = checkLocaleAndTranslates({ schemas: [parent, child], phase: "validate" });
+    expect(diags.map((d) => d.code)).toContain("TRANSLATES_REQUIRES_CONTENT_FIELD");
+  });
+});
+
 describe("checkLocaleAndTranslates — TRANSLATES_FIELD_NOT_IN_PARENT / _CHILD", () => {
   it("flags join field missing from parent Schema properties", () => {
     const parent: SchemaManifest = {
@@ -148,6 +170,19 @@ describe("checkLocaleAndTranslates — happy path (parent + child correctly wire
       siteLocales: ["en", "zh-TW"],
     });
     expect(diags).toEqual([]);
+  });
+
+  it("parses and validates the shipped parent/translation golden manifest", () => {
+    const yaml = readFileSync(
+      new URL("./fixtures/i18n-parent-child/manifests/site.yaml", import.meta.url),
+      "utf8",
+    );
+    const parsed = parseManifests(yaml);
+    expect(parsed.diagnostics).toEqual([]);
+    expect(ValidateManifestsUseCase.run({
+      manifests: parsed.manifests,
+      siteLocales: ["en", "zh-TW"],
+    }).diagnostics).toEqual([]);
   });
 });
 

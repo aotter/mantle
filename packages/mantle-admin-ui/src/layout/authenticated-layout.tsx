@@ -2,24 +2,23 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarChart3,
-  ClipboardList,
   Folder,
   Globe,
   Home,
   Images,
   Settings as SettingsIcon,
+  ContactRound,
   Users,
   Wrench,
 } from "lucide-react";
 
-import { readSidebarOpenCookie, SidebarInset, SidebarProvider } from "../ui/sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { api } from "../lib/api";
 import { fieldLabel } from "../lib/field-label";
 import { operationsQueryOptions, viewsManifestQueryOptions } from "../lib/queries";
 import { resolveLocalizedText } from "../lib/localized-text";
 import {
-  EDITORIAL_STATUSES,
-  SIMPLE_STATUSES,
+  PUBLISHING_STATUSES,
   type AdminUser,
   type Collection,
   type SiteInfo,
@@ -35,24 +34,17 @@ import { Main } from "./main";
 import { SkipToMain } from "./skip-to-main";
 import { statusLabel } from "../features/content/status";
 import { t } from "../app/i18n";
-import { AdminAttribution } from "../brand/aotter-mantle";
+import { FormActionBarHostContext } from "../ui/page";
 import type { AdminBrand, NavGroupData, NavItem, NavLink } from "./types";
-import { GuideOverlay, useGuideOverlay } from "../features/console/guide-overlay";
 
 interface AuthenticatedLayoutProps {
   children: React.ReactNode;
 }
 
-const DEFAULT_BRAND: AdminBrand = {
-  title: "CMS",
-  subtitle: "admin",
-  href: "/admin",
-};
-
 export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): React.ReactElement {
+  const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
   const { pathname, search } = useAdminLocation();
   const { language } = usePreferences();
-  const guide = useGuideOverlay();
 
   const me = useQuery<AdminUser>({
     queryKey: ["me"],
@@ -70,18 +62,16 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
   });
-  // One extra query each (#426), cached under their own query keys so
-  // they don't refetch alongside unrelated collection/site changes.
   const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
   const viewsQuery = useQuery<ViewManifestInfo[]>(viewsManifestQueryOptions());
 
   const resolvedBrand = React.useMemo<AdminBrand>(
     () => ({
-      ...DEFAULT_BRAND,
-      title: site.data?.brand ?? DEFAULT_BRAND.title,
-      subtitle: site.data?.canonicalLocale ?? DEFAULT_BRAND.subtitle,
+      title: site.data?.brand ?? t(language, "admin.consoleTitle"),
+      href: "/admin",
+      image: site.data?.faviconUrl,
     }),
-    [site.data],
+    [language, site.data],
   );
 
   const canonical = site.data?.canonicalLocale ?? null;
@@ -97,13 +87,9 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
       ),
     [collectionsQuery.data, operationsQuery.data, viewsQuery.data, language, canonical, me.data?.role],
   );
-  const firstCollection = React.useMemo<{ name: string } | null>(() => {
-    const first = (collectionsQuery.data ?? []).find((collection) => !collection.parent);
-    return first ? { name: first.name } : null;
-  }, [collectionsQuery.data]);
-
   return (
-    <SidebarProvider defaultOpen={readSidebarOpenCookie() ?? true}>
+    <FormActionBarHostContext.Provider value={formActionBarHost}>
+      <SidebarProvider className="h-svh min-h-0 overflow-hidden">
         <SkipToMain />
         <AppSidebar
           brand={resolvedBrand}
@@ -112,37 +98,47 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
           search={search}
           user={{
             login: me.data?.login ?? null,
+            image: me.data?.image ?? null,
             role: me.data?.role ?? null,
           }}
         />
-        <SidebarInset>
+        <SidebarInset className="min-h-0 overflow-hidden">
           <Header
-            fixed
+            className="absolute inset-x-0 top-0 z-30"
             site={resolvedBrand}
             publicUrl={site.data?.publicUrl}
-            onOpenGuide={guide.showGuide}
-            user={{
-              login: me.data?.login ?? null,
-              role: me.data?.role ?? null,
-            }}
           />
-          <Main>
-            {children}
-          </Main>
-        </SidebarInset>
-          <AdminAttribution />
-          {guide.open ? (
-            <GuideOverlay
-              language={guide.language}
-              firstCollection={firstCollection}
-              onClose={guide.closeGuide}
+          <Main className="min-h-0 overflow-y-auto overscroll-contain pt-20 pb-20">{children}</Main>
+          <footer
+            data-slot="status-bar"
+            className="absolute inset-x-0 bottom-0 z-30 flex min-h-16 items-center border-t px-4 py-3 sm:px-6"
+          >
+            <div
+              ref={setFormActionBarHost}
+              data-slot="status-bar-action-host"
+              className="contents"
             />
-          ) : null}
-    </SidebarProvider>
+            <div
+              data-slot="status-bar-meta"
+              className="ms-auto flex items-center justify-end"
+            >
+              <a
+                href={`https://www.npmjs.com/package/@aotter/mantle/v/${__MANTLE_VERSION__}`}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md px-2 py-1 font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                @aotter/mantle-{__MANTLE_VERSION__}
+              </a>
+            </div>
+          </footer>
+        </SidebarInset>
+      </SidebarProvider>
+    </FormActionBarHostContext.Provider>
   );
 }
 
-function buildNavGroups(
+export function buildNavGroups(
   collections: ReadonlyArray<Collection>,
   operations: ReadonlyArray<StaffOperation>,
   views: ReadonlyArray<ViewManifestInfo>,
@@ -151,9 +147,8 @@ function buildNavGroups(
   role: AdminUser["role"],
 ): ReadonlyArray<NavGroupData> {
   const primaryCollections = collections.filter((collection) => !collection.parent);
-  const contentCollections = primaryCollections.filter((c) => c.lifecycle !== "none");
-  const operationalCollections = primaryCollections.filter((c) => c.lifecycle === "none");
-  const hasEditorial = collections.some((c) => c.lifecycle === "editorial");
+  const contentCollections = primaryCollections.filter((c) => c.lifecycle !== "operational");
+  const operationalCollections = primaryCollections.filter((c) => c.lifecycle === "operational");
   const homeGroup: NavGroupData = {
     items: [
       {
@@ -177,11 +172,7 @@ function buildNavGroups(
         }
       : null;
 
-  // 「操作」— one item per UNBOUND staff-operable Procedure (#426,
-  // narrowed #433). Operations with `rowBindings` already surface from
-  // the entry-row "⋯" menu of the bound collection, so listing them in
-  // the sidebar too is redundant (operator review Q1). Only operations
-  // with NO row bindings get a sidebar item; empty → group hidden.
+  // Bound operations already live in their collection's row menu.
   const unboundOperations = operations.filter((op) => op.rowBindings.length === 0);
   const opsGroup: NavGroupData | null =
     unboundOperations.length > 0
@@ -195,8 +186,7 @@ function buildNavGroups(
         }
       : null;
 
-  // 「報表」— one item per read-only View (#426). `title` (#443) falls
-  // back to the humanized name, exactly as before this field existed.
+  // Read-only views get direct sidebar links.
   const reportsGroup: NavGroupData | null =
     views.length > 0
       ? {
@@ -212,18 +202,17 @@ function buildNavGroups(
   const moreGroup: NavGroupData = {
     title: t(language, "nav.more"),
     items: [
-      // Deep links to /admin/approvals stay live regardless; the nav
-      // entry only shows up when there's an editorial collection with
-      // an approval queue behind it.
-      ...(hasEditorial
-        ? [{ title: t(language, "nav.approvals"), url: "/admin/approvals", icon: ClipboardList }]
+      ...(role === "owner" || role === "editor"
+        ? [
+            { title: t(language, "nav.media"), url: "/admin/media", icon: Images },
+            { title: t(language, "nav.members"), url: "/admin/members", icon: ContactRound },
+          ]
         : []),
-      { title: t(language, "nav.media"), url: "/admin/media", icon: Images },
-      { title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon },
-      // Staff management is owner-only server-side; hide the entry for
-      // everyone else rather than render a guaranteed 403.
       ...(role === "owner"
-        ? [{ title: t(language, "nav.staff"), url: "/admin/staff", icon: Users }]
+        ? [
+            { title: t(language, "nav.settings"), url: "/admin/settings", icon: SettingsIcon },
+            { title: t(language, "nav.staff"), url: "/admin/staff", icon: Users },
+          ]
         : []),
     ],
   };
@@ -234,22 +223,32 @@ function buildNavGroups(
     ...(recordsGroup ? [recordsGroup] : []),
     ...(opsGroup ? [opsGroup] : []),
     ...(reportsGroup ? [reportsGroup] : []),
-    moreGroup,
+    ...(moreGroup.items.length > 0 ? [moreGroup] : []),
   ];
 }
 
 function collectionNavItem(c: Collection, language: AdminLanguage, canonical: string | null): NavItem {
-  // Leading icon is always Folder so every content row reads the
-  // same. The Globe sits in the trailing `marker` slot to mark
-  // collections that fold a translation-child schema underneath
-  // — POC sidebar contract.
+  const localized = c.localized || c.hasTranslations;
   const base = {
     title: resolveLocalizedText(c.title, language, canonical) ?? fieldLabel(c.name),
     icon: Folder,
-    marker: c.hasTranslations ? Globe : undefined,
+    marker: localized ? Globe : undefined,
+    markerLabel: localized ? t(language, "nav.localizedContent") : undefined,
   };
+  if (c.lifecycle === "operational" && c.filter) {
+    return {
+      ...base,
+      items: [
+        { title: t(language, "collection.filter.all"), url: `/admin/c/${c.name}` },
+        ...c.filter.values.map<NavLink>((value) => ({
+          title: fieldLabel(value),
+          url: `/admin/c/${c.name}?filter_field=${encodeURIComponent(c.filter!.field)}&filter_value=${encodeURIComponent(value)}`,
+        })),
+      ],
+    };
+  }
   const statuses = statusesFor(c);
-  // Operational records (lifecycle: none) have no status buckets —
+  // Operational records (lifecycle: operational) have no status buckets —
   // a plain link beats a collapsible with one child.
   if (statuses.length === 0) {
     return { ...base, url: `/admin/c/${c.name}` };
@@ -270,7 +269,6 @@ function collectionNavItem(c: Collection, language: AdminLanguage, canonical: st
 }
 
 function statusesFor(c: Collection): ReadonlyArray<SidebarStatus> {
-  if (c.lifecycle === "editorial") return EDITORIAL_STATUSES;
-  if (c.lifecycle === "none") return [];
-  return SIMPLE_STATUSES;
+  if (c.lifecycle === "operational") return [];
+  return PUBLISHING_STATUSES;
 }

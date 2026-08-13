@@ -1,4 +1,6 @@
 import * as React from "react";
+import { t } from "../app/i18n";
+import { usePreferences } from "../app/preferences";
 import { cn } from "../lib/utils";
 
 export const MAIN_CONTENT_ID = "content";
@@ -8,6 +10,7 @@ export function SkipToMain({
 }: {
   className?: string;
 }): React.ReactElement {
+  const { language } = usePreferences();
   return (
     <a
       href={`#${MAIN_CONTENT_ID}`}
@@ -20,7 +23,7 @@ export function SkipToMain({
         className,
       )}
     >
-      Skip to main content
+      {t(language, "common.skipToMain")}
     </a>
   );
 }

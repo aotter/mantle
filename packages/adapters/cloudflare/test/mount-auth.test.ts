@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
+import { renderConsentHtml } from "../src/oauth/consentHtml.js";
 import { mountAuthorize } from "../src/oauth/mountOAuth.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
@@ -91,6 +92,15 @@ describe("mountServerEndpoints: /api/auth/* surface", () => {
 });
 
 describe("mountAuthorize", () => {
+  it("renders consent with the shared admin system tokens", () => {
+    const html = renderConsentHtml("en", null);
+
+    expect(html).toContain("--mantle-blue-deep");
+    expect(html).toContain("background:var(--app-background)");
+    expect(html).toContain("button:focus-visible");
+    expect(html).not.toContain("--navy:");
+  });
+
   it("redirects anonymous OAuth clients to the admin sign-in return parameter", async () => {
     const app = new Hono();
     mountAuthorize(app, { auth: stubAuth });

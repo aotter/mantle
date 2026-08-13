@@ -21,6 +21,8 @@ import {
   checkSchemaIndexes,
   schemaIndexDiagnosticCode,
 } from "../domain/service/SchemaIndexChecker.js";
+import { checkSchemaSearchableFields } from "../domain/service/SchemaSearchChecker.js";
+import { checkSchemaListFilter } from "../domain/service/SchemaAdminUiChecker.js";
 import {
   bestMatch,
   manifestPath,
@@ -33,7 +35,7 @@ import type { ValidateManifestsResponse } from "./dto/ValidateManifestsResponse.
  * `ValidateManifestsUseCase` — Loop 1 of the SDK authoring contract
  * (ADR-0007 / `docs/design-atoms.md`). Pure: no DB, no network. The
  * structural parser (`ManifestParser`) catches single-manifest
- * envelope / shape / DRAFT-key errors. This use case catches everything
+ * envelope / shape errors. This use case catches everything
  * that requires looking at MULTIPLE manifests together (cross-refs,
  * duplicates, path collisions) plus Schema-aware checks.
  *
@@ -163,6 +165,19 @@ function checkSchemaInternals(
   };
   const properties = schema.properties ?? {};
 
+  if (s.spec.localized !== true && "locale" in properties) {
+    out.push(
+      validateDiagnostic({
+        code: "INVALID_MANIFEST_ENVELOPE",
+        severity: "error",
+        path: manifestPath("Schema", s.metadata.name, "/spec/schema/properties/locale", filePaths),
+        value: "locale",
+        expected: "no locale property on a non-localized Schema",
+        message: `Non-localized Schema '${s.metadata.name}' must not declare the reserved entry field 'locale'; use a domain name such as 'orderLocale', or set localized: true.`,
+      }),
+    );
+  }
+
   // `required` entries that aren't declared in `properties` are never
   // added to the generated zod shape — so a typo'd required field is
   // silently unenforced. Surface it at pre-deploy. (#399)
@@ -205,6 +220,39 @@ function checkSchemaInternals(
           typeof problem.value === "string"
             ? bestMatch(problem.value, candidates)
             : undefined,
+        message: problem.message,
+      }),
+    );
+  }
+
+  for (const problem of checkSchemaSearchableFields(s)) {
+    const candidates = problem.candidates ?? [];
+    out.push(
+      validateDiagnostic({
+        code: problem.category === "field-unknown"
+          ? "SCHEMA_SEARCH_FIELD_UNKNOWN"
+          : "SCHEMA_SEARCH_INVALID",
+        severity: "error",
+        path: manifestPath("Schema", s.metadata.name, problem.pointer, filePaths),
+        value: problem.value,
+        expected: problem.expected,
+        candidates: problem.candidates,
+        suggestion: typeof problem.value === "string"
+          ? bestMatch(problem.value, candidates)
+          : undefined,
+        message: problem.message,
+      }),
+    );
+  }
+
+  for (const problem of checkSchemaListFilter(s).problems) {
+    out.push(
+      validateDiagnostic({
+        code: "SCHEMA_UI_INVALID",
+        severity: "error",
+        path: manifestPath("Schema", s.metadata.name, problem.pointer, filePaths),
+        value: problem.value,
+        expected: problem.expected,
         message: problem.message,
       }),
     );
@@ -527,22 +575,6 @@ function checkBuiltinHandler(
       }),
     );
     return out;
-  }
-  // op: archive is editorial-only. Inline the lifecycle resolution
-  // here — we need only the Schema.spec.lifecycle default, not the
-  // full state-machine helpers.
-  const lifecycle = target.spec.lifecycle ?? "simple";
-  if (h.op === "archive" && lifecycle !== "editorial") {
-    out.push(
-      validateDiagnostic({
-        code: "BUILTIN_HANDLER_SCHEMA_NOT_EDITORIAL",
-        severity: "error",
-        path: manifestPath("Procedure", p.metadata.name, "/spec/handler/op", filePaths),
-        value: "archive",
-        expected: `Schema '${h.schema}' to declare lifecycle: editorial (builtin op: archive is editorial-only)`,
-        message: `Procedure '${p.metadata.name}' uses op: archive on Schema '${h.schema}', but that Schema's lifecycle is '${lifecycle}'. Either use an editorial Schema or choose another builtin op.`,
-      }),
-    );
   }
   return out;
 }

@@ -21,7 +21,6 @@ export interface EntryRepository {
   get(id: string): Promise<EntryRow | null>;
   /** Throws `EntryVersionConflict` on OCC mismatch. */
   update(args: UpdateEntryArgs): Promise<EntryRow>;
-  /** Cascades to revisions + approvals child rows for the entry id. */
   delete(args: DeleteEntryArgs): Promise<{ readonly removed: boolean }>;
   /** Status flip without data update. `expectedStatus`, when set,
    *  atomically asserts pre-flip status to prevent races (e.g. a
@@ -111,14 +110,28 @@ export interface ListEntriesArgs {
   /** Opaque continuation token from a prior `ListEntriesResult.nextCursor`.
    *  Caller must round-trip without interpreting; format is impl-defined. */
   readonly cursor?: string;
-  /** Free-text filter matched against `id` and the raw `data` JSON
-   *  blob (substring, case-sensitive per SQLite's default `LIKE`).
-   *  Composes with `status` — both narrow the same query. */
+  /** Fetch the page before `cursor`; default is the page after it. */
+  readonly cursorDirection?: "forward" | "backward";
+  /** Free-text filter matched against `id` and `searchFields`
+   *  (substring, case-insensitive for ASCII per SQLite `LIKE`). */
   readonly search?: string;
+  /** Trusted top-level string fields resolved from Schema.searchableFields. */
+  readonly searchFields?: readonly string[];
+  /** Trusted exact enum filter resolved from the Schema's indexed fields. */
+  readonly filter?: { readonly field: string; readonly value: string };
+  /** Native fields or Schema-indexed scalar data fields only. */
+  readonly sort?: EntrySort;
+}
+
+export interface EntrySort {
+  readonly field: string;
+  readonly direction: "asc" | "desc";
 }
 
 export interface ListEntriesResult {
   readonly rows: readonly EntryRow[];
+  /** Pass back with `cursorDirection: "backward"`. */
+  readonly previousCursor?: string;
   /** Present when there may be more rows beyond this page. Undefined
    *  signals "this is the last page". Pass back as `cursor` to
    *  continue. */

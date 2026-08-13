@@ -1,13 +1,7 @@
 import { McpJsonRpcDispatcher } from "@aotter/mantle-runtime";
-import type {
-  ProcedureManifest,
-  StaffRole,
-  TriggerManifest,
-  ViewManifest,
-} from "@aotter/mantle-spec";
-import { STAFF_ROLE_SET } from "../auth/createAuth.js";
-import type { OAuthApiProps } from "../oauth/mountOAuth.js";
+import type { ProcedureManifest, TriggerManifest, ViewManifest } from "@aotter/mantle-spec";
 import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
+import { contextForVerifiedUser } from "./resolveCaller.js";
 
 export interface CreateMcpApiHandlerOptions {
   readonly ref: CmsRuntimeRef;
@@ -23,10 +17,10 @@ export interface CreateMcpApiHandlerOptions {
  * resource path. Plug into `createOAuthProvider({ apiHandlers })`
  * keyed by the resource path (e.g. `/mcp/staff` or `/mcp`).
  *
- * The OAuthProvider lib verifies the bearer token, decrypts grant
- * props, and sets `ctx.props` BEFORE calling this handler. We read
- * immutable grant props and re-read the caller's mutable staff role
- * from D1 on every invocation.
+ * The OAuthProvider lib verifies the bearer token and sets its
+ * token-specific identity and scopes on `ctx.props` BEFORE calling
+ * this handler. We re-read the caller's mutable staff role from D1
+ * on every invocation.
  *
  * Note: OAuth scope distinction (`mcp:read` vs `mcp:staff`) used to
  * differentiate surfaces here. Removed because claude.ai's MCP client
@@ -51,14 +45,25 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
 
   return {
     async fetch(request, env, ctx) {
-      const props = (ctx as unknown as { props?: OAuthApiProps }).props;
-      if (!props?.userId) return forbidden(requiredScopes);
-      const grantedScopes = props.scopes?.length ? props.scopes : ["mcp"];
+      const props = readOAuthApiProps((ctx as unknown as { props?: unknown }).props);
+      if (!props) return forbidden(requiredScopes);
+      const grantedScopes = props.scopes;
       if (requiredScopes.some((scope) => !grantedScopes.includes(scope))) {
         return forbidden(requiredScopes);
       }
-      const role = await ref.auth.getUserRole(props.userId);
-      if (surface === "staff" && (!role || !STAFF_ROLE_SET.has(role))) {
+      const waitUntil = typeof ctx.waitUntil === "function" ? ctx.waitUntil.bind(ctx) : undefined;
+      const handlerContext = await contextForVerifiedUser(
+        props.userId,
+        {
+          credential: "oauth",
+          credentialId: null,
+          clientId: props.clientId,
+          scopes: grantedScopes,
+        },
+        ref.auth,
+        { env, ...(waitUntil ? { waitUntil } : {}) },
+      );
+      if (surface === "staff" && !handlerContext.staff) {
         return forbidden(requiredScopes);
       }
       const runtime = await ref.get();
@@ -116,21 +121,32 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
         cached = { mediaPurposesKey, dispatcher };
         dispatcherCache.set(runtime, cached);
       }
-      const waitUntil = typeof ctx.waitUntil === "function" ? ctx.waitUntil.bind(ctx) : undefined;
-      return cached.dispatcher.dispatch(
-        request,
-        {
-          userId: props.userId,
-          staff: role && STAFF_ROLE_SET.has(role)
-            ? { userId: props.userId, role: role as StaffRole }
-            : null,
-          clientId: props.clientId ?? null,
-          credentialId: null,
-          scopes: grantedScopes,
-        },
-        { env, ...(waitUntil ? { waitUntil } : {}) },
-      );
+      return cached.dispatcher.dispatch(request, handlerContext);
     },
+  };
+}
+
+interface OAuthApiProps {
+  readonly userId: string;
+  readonly clientId: string;
+  readonly scopes: readonly string[];
+}
+
+function readOAuthApiProps(value: unknown): OAuthApiProps | null {
+  if (!value || typeof value !== "object") return null;
+  const props = value as Record<string, unknown>;
+  if (
+    typeof props["userId"] !== "string" ||
+    props["userId"].length === 0 ||
+    typeof props["clientId"] !== "string" ||
+    props["clientId"].length === 0 ||
+    !Array.isArray(props["scopes"]) ||
+    !props["scopes"].every((scope) => typeof scope === "string")
+  ) return null;
+  return {
+    userId: props["userId"],
+    clientId: props["clientId"],
+    scopes: props["scopes"],
   };
 }
 

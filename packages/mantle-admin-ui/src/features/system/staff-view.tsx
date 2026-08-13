@@ -1,16 +1,38 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { UserPlus } from "lucide-react";
+import { Check, Copy, ExternalLink, MailWarning, UserPlus } from "lucide-react";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import { asRenderable } from "../../lib/errors";
+import { authMethodsQueryOptions } from "../../lib/queries";
 import type { AdminUser, StaffRole, StaffUser } from "../../lib/types";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 
-/** Owner-only staff management: list every user, assign roles, invite
- *  by email. The server enforces owner-only (403 for editor and
+const EMAIL_SETUP_GUIDE_URL = "https://developers.cloudflare.com/email-service/";
+const EMAIL_SETUP_PROMPT = `Enable email sign-in for this Mantle site. Implement the Mantle EmailSender port with a transactional email provider. For Cloudflare, prefer an Email Service binding. Register either { kind: "email-otp", sender } or { kind: "magic-link", sender } in createAuth(), keep credentials in Worker secrets, deploy, then verify that /api/auth/methods lists the method and a real email arrives.`;
+
+/** Owner-only staff management: list staff, assign roles, invite by
+ *  email. The server enforces owner-only (403 for editor and
  *  contributor) and the self-role-change guard; this view renders
  *  those denials, it does not re-derive them. */
 
@@ -36,6 +58,10 @@ export function StaffView(): React.ReactElement {
     queryFn: () => api.get<{ users: StaffUser[] }>("/staff"),
     retry: false,
   });
+  const authMethods = useQuery(authMethodsQueryOptions());
+  const hasEmailSignIn = authMethods.data?.some(
+    ({ kind }) => kind === "email-otp" || kind === "magic-link",
+  );
 
   const refetch = (): void => {
     void queryClient.invalidateQueries({ queryKey: ["staff"] });
@@ -56,7 +82,7 @@ export function StaffView(): React.ReactElement {
 
   if (staff.isError) return <ErrorBox error={staff.error} />;
   if (staff.isLoading || !staff.data) {
-    return <div className="glass-card h-64 animate-pulse" />;
+    return <Skeleton className="h-64 w-full" />;
   }
 
   const roleLabel = (role: StaffRole | "none"): string =>
@@ -65,24 +91,24 @@ export function StaffView(): React.ReactElement {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="AotterMantle"
         title={t(language, "staff.page.title")}
         description={t(language, "staff.page.body")}
       />
       {setRole.isError ? <ErrorBox error={asRenderable(setRole.error)} /> : null}
       {revoke.isError ? <ErrorBox error={asRenderable(revoke.error)} /> : null}
+      {authMethods.data && !hasEmailSignIn ? <EmailSignInSetup /> : null}
       <InviteCard onInvited={refetch} />
       <SectionCard className="overflow-x-auto p-0">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-left [&>th]:px-4 [&>th]:py-3 [&>th]:font-medium">
-              <th>{t(language, "staff.table.name")}</th>
-              <th>{t(language, "staff.table.email")}</th>
-              <th>{t(language, "staff.table.status")}</th>
-              <th>{t(language, "staff.table.role")}</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t(language, "staff.table.name")}</TableHead>
+              <TableHead>{t(language, "staff.table.email")}</TableHead>
+              <TableHead>{t(language, "staff.table.status")}</TableHead>
+              <TableHead>{t(language, "staff.table.role")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {staff.data.users.map((user) => {
               const isSelf = user.id === me.data?.userId;
               const invited = !user.emailVerified && !user.githubLogin;
@@ -90,15 +116,15 @@ export function StaffView(): React.ReactElement {
                 ? user.role
                 : "none";
               return (
-                <tr key={user.id} className="border-b last:border-b-0 [&>td]:px-4 [&>td]:py-3">
-                  <td>{user.name}</td>
-                  <td>{user.email}</td>
-                  <td>
+                <TableRow key={user.id}>
+                  <TableCell>{user.name}</TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>
                     {invited ? (
                       <span className="inline-flex items-center gap-2">
-                        <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                        <Badge variant="secondary">
                           {t(language, "staff.badge.invited")}
-                        </span>
+                        </Badge>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -113,42 +139,42 @@ export function StaffView(): React.ReactElement {
                     ) : (
                       t(language, "staff.status.emailSignIn")
                     )}
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     {isSelf ? (
                       <span className="text-muted-foreground">
                         {roleLabel(current)} · {t(language, "staff.self")}
                       </span>
                     ) : (
-                      <select
-                        className="admin-input max-w-56"
+                      <Select
                         value={current}
                         disabled={setRole.isPending}
-                        onChange={(event) => {
-                          const next = event.target.value;
+                        onValueChange={(next) => {
                           setRole.mutate({
                             userId: user.id,
                             role: isStaffRole(next) ? next : null,
                           });
                         }}
                       >
-                        {ASSIGNABLE.map((role) => (
-                          <option key={role} value={role}>
-                            {roleLabel(role)}
-                          </option>
-                        ))}
-                      </select>
+                        <SelectTrigger className="w-44">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ASSIGNABLE.map((role) => (
+                            <SelectItem key={role} value={role}>
+                              {roleLabel(role)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </SectionCard>
-      <p className="text-sm text-muted-foreground">
-        {t(language, "staff.invite.hint")}
-      </p>
     </div>
   );
 }
@@ -170,42 +196,111 @@ function InviteCard({ onInvited }: { onInvited: () => void }): React.ReactElemen
     <SectionCard className="grid gap-4">
       <h2 className="text-sm font-semibold">{t(language, "staff.invite.title")}</h2>
       {invite.isError ? <ErrorBox error={asRenderable(invite.error)} /> : null}
-      <div className="flex flex-wrap items-end gap-3">
+      <form
+        className="grid max-w-4xl gap-4 md:grid-cols-[minmax(0,1fr)_18rem]"
+        onSubmit={(event) => {
+          event.preventDefault();
+          invite.mutate();
+        }}
+      >
         <label className="grid min-w-64 flex-1 gap-1.5 text-sm font-medium">
           <span>{t(language, "staff.invite.emailLabel")}</span>
-          <input
-            className="admin-input"
+          <Input
             type="email"
             value={email}
             placeholder={t(language, "staff.invite.emailPlaceholder")}
             onChange={(event) => setEmail(event.target.value)}
           />
+          <span className="text-xs font-normal leading-5 text-muted-foreground">
+            {t(language, "staff.invite.hint")}
+          </span>
         </label>
         <label className="grid gap-1.5 text-sm font-medium">
           <span>{t(language, "staff.invite.roleLabel")}</span>
-          <select
-            className="admin-input"
+          <Select
             value={role}
-            onChange={(event) => {
-              const next = event.target.value;
+            onValueChange={(next) => {
               if (isStaffRole(next)) setRole(next);
             }}
           >
-            {INVITABLE.map((option) => (
-              <option key={option} value={option}>
-                {t(language, `staff.role.${option}`)}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="w-full">
+              <SelectValue>{t(language, `staff.role.${role}`)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent className="min-w-72">
+              {INVITABLE.map((option) => (
+                <SelectItem
+                  key={option}
+                  value={option}
+                  textValue={t(language, `staff.role.${option}`)}
+                  className="items-start py-2"
+                >
+                  <span className="grid gap-0.5">
+                    <span className="font-medium">
+                      {t(language, `staff.role.${option}`)}
+                    </span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {t(language, `staff.role.${option}.help`)}
+                    </span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="max-w-56 text-xs font-normal leading-5 text-muted-foreground">
+            {t(language, `staff.role.${role}.help`)}
+          </span>
         </label>
-        <Button
-          onClick={() => invite.mutate()}
-          disabled={invite.isPending || email.trim() === ""}
-        >
-          <UserPlus className="size-4" aria-hidden />
-          {invite.isPending
-            ? t(language, "staff.invite.sending")
-            : t(language, "staff.invite.button")}
+        <div className="flex justify-end md:col-span-2">
+          <Button
+            type="submit"
+            disabled={invite.isPending || email.trim() === ""}
+          >
+            <UserPlus className="size-4" aria-hidden />
+            {invite.isPending
+              ? t(language, "staff.invite.sending")
+              : t(language, "staff.invite.button")}
+          </Button>
+        </div>
+      </form>
+    </SectionCard>
+  );
+}
+
+function EmailSignInSetup(): React.ReactElement {
+  const { language } = usePreferences();
+  const [copied, setCopied] = React.useState(false);
+
+  async function copySetupPrompt(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(EMAIL_SETUP_PROMPT);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <SectionCard className="flex-row flex-wrap items-center gap-4">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+        <MailWarning className="size-5" aria-hidden />
+      </span>
+      <div className="min-w-64 flex-1">
+        <h2 className="font-semibold">{t(language, "staff.emailSetup.title")}</h2>
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          {t(language, "staff.emailSetup.body")}
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="secondary" onClick={() => void copySetupPrompt()}>
+          {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
+          {t(language, copied ? "staff.emailSetup.copied" : "staff.emailSetup.copy")}
+        </Button>
+        <Button asChild variant="outline">
+          <a href={EMAIL_SETUP_GUIDE_URL} target="_blank" rel="noreferrer">
+            <ExternalLink aria-hidden />
+            {t(language, "staff.emailSetup.guide")}
+          </a>
         </Button>
       </div>
     </SectionCard>

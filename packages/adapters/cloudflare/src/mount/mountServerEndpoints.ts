@@ -6,8 +6,11 @@ import {
   MCP_HINT_KEYWORD,
   VIEW_PARAMS_RESERVED,
   isMediaMcpHint,
+  meetsRole,
   redactForWire,
   runtimeDiagnostic,
+  checkSchemaListFilter,
+  schemaSortableFields,
   type ContentState,
   type Diagnostic,
   type Entry,
@@ -30,19 +33,23 @@ import {
 } from "@aotter/mantle-runtime";
 import { indexHtml } from "@aotter/mantle-admin-ui";
 import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
-import { resolveCaller, resolveUserRole } from "./resolveCaller.js";
+import { resolveCaller } from "./resolveCaller.js";
 import { runMantleUseCase } from "./runMantleUseCase.js";
-import { STAFF_ROLE_SET, type StaffRole, type Auth } from "../auth/createAuth.js";
+import {
+  decodeMemberCursor,
+  STAFF_ROLE_SET,
+  type StaffRole,
+  type Auth,
+} from "../auth/createAuth.js";
 import { rejectCrossOriginMutation } from "../auth/rejectCrossOriginMutation.js";
 import { AOTTER_FAVICON_SVG } from "../assets/aotterFavicon.js";
 
 const [PAGE_PARAM, SHOW_PARAM] = VIEW_PARAMS_RESERVED;
 
 /** Mount HTTP Triggers + Views + the Better Auth admin surface.
- *  HTTP Trigger bearer-token authentication is delegated to the OAuth
- *  provider lib (via `createMcpApiHandler`) — if a Trigger needs
- *  identity, route it under an MCP `apiHandler` instead of a Hono
- *  catch-all. */
+ *  HTTP Triggers resolve configured credentials and sessions through
+ *  `resolveCaller`; the target Procedure's `requires.auth` owns
+ *  authorization. */
 export function mountServerEndpoints<E extends Env>(
   app: Hono<E>,
   ref: CmsRuntimeRef,
@@ -140,10 +147,10 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     "/admin/c/:collection",
     "/admin/c/:collection/:id",
     "/admin/media",
-    "/admin/approvals",
     "/admin/preferences",
     "/admin/settings",
     "/admin/staff",
+    "/admin/members",
     "/admin/ops",
     "/admin/views/:name",
   ]) {
@@ -207,29 +214,60 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     });
   };
 
-  // Staff management is owner-only — a step above `guarded` (any
-  // staff). Role semantics follow StaffRoleHierarchy: only `owner`
-  // "manages staff".
-  const ownerGuarded = (
+  const roleGuarded = (
     method: "get" | "post" | "patch" | "delete",
     path: string,
+    minimumRole: StaffRole,
     body: (c: Context, gate: StaffGateOk) => Response | Promise<Response>,
   ): void => {
     guarded(method, path, (c, gate) => {
-      if (gate.role !== "owner") return adminNotOwner(c, path);
+      if (!meetsRole(gate.role, minimumRole)) {
+        return adminInsufficientRole(c, path, minimumRole);
+      }
       return body(c, gate);
     });
   };
 
   guarded("get", "/admin/api/me", (_c, gate) =>
-    Response.json({ login: gate.login, role: gate.role, userId: gate.userId }),
+    Response.json({ login: gate.login, role: gate.role, userId: gate.userId, image: gate.image }),
   );
 
-  ownerGuarded("get", "/admin/api/staff", async () =>
+  roleGuarded("get", "/admin/api/staff", "owner", async () =>
     Response.json({ users: await auth.listUsers() }),
   );
 
-  ownerGuarded("patch", "/admin/api/staff/:id/role", async (c, gate) => {
+  roleGuarded("get", "/admin/api/members", "editor", async (c) => {
+    const rawLimit = c.req.query("limit");
+    const limit = rawLimit === undefined ? 50 : Number(rawLimit);
+    const cursor = c.req.query("cursor") || undefined;
+    const search = c.req.query("search")?.trim() || undefined;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 ||
+        (cursor && !decodeMemberCursor(cursor)) || (search?.length ?? 0) > 200) {
+      return Response.json({
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "INPUT_VALIDATION_FAILED",
+          severity: "error",
+          path: "GET /admin/api/members",
+          expected: "limit 1..100, a valid cursor, and search up to 200 characters",
+          message: "Member list parameters are invalid.",
+        }),
+      }, { status: 400 });
+    }
+    const result = await auth.listMembers({
+      limit,
+      search,
+      cursor,
+      cursorDirection: c.req.query("cursor_direction") === "backward" ? "backward" : "forward",
+    });
+    return Response.json({
+      items: result.items,
+      previous_cursor: result.previousCursor,
+      next_cursor: result.nextCursor,
+    });
+  });
+
+  roleGuarded("patch", "/admin/api/staff/:id/role", "owner", async (c, gate) => {
     const userId = c.req.param("id") ?? "";
     const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
     const role = body.role === null ? null : typeof body.role === "string" ? body.role : undefined;
@@ -276,7 +314,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     return Response.json({ ok: true });
   });
 
-  ownerGuarded("post", "/admin/api/staff/invitations", async (c) => {
+  roleGuarded("post", "/admin/api/staff/invitations", "owner", async (c, gate) => {
     const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const role = typeof body.role === "string" ? body.role : "";
@@ -294,23 +332,24 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     }
     const result = await auth.inviteUser(email, role as StaffRole);
     if (result.kind === "exists") {
-      return Response.json({
-        ok: false,
-        userId: result.id,
-        diagnostic: runtimeDiagnostic({
-          code: "CONFLICT",
-          severity: "error",
-          path: "POST /admin/api/staff/invitations",
-          expected: "an email without an existing user row",
-          message:
-            "That email already has an account — adjust its role in the staff list instead.",
-        }),
-      }, { status: 409 });
+      if (result.id === gate.userId) {
+        return Response.json({
+          ok: false,
+          diagnostic: runtimeDiagnostic({
+            code: "AUTH_DENIED",
+            severity: "error",
+            path: "POST /admin/api/staff/invitations",
+            expected: "an email other than the caller's",
+            message: "You cannot change your own role.",
+          }),
+        }, { status: 403 });
+      }
+      await auth.setUserRole(result.id, role as StaffRole);
     }
     return Response.json({ ok: true, userId: result.id });
   });
 
-  ownerGuarded("delete", "/admin/api/staff/invitations/:id", async (c) => {
+  roleGuarded("delete", "/admin/api/staff/invitations/:id", "owner", async (c) => {
     const revoked = await auth.revokeInvite(c.req.param("id") ?? "");
     if (!revoked) {
       return Response.json({
@@ -354,9 +393,16 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     });
   }
 
-  guarded("get", "/admin/api/operations", () =>
+  guarded("get", "/admin/api/operations", (c, gate) =>
     Response.json({
-      operations: operations.map((op) => ({
+      operations: operations.filter((op) =>
+        evaluateAuthAll(
+          op.procedure.spec.requires,
+          adminHandlerContext(c, gate),
+          `GET /admin/api/operations/${op.name}`,
+          "runtime",
+        ) === null
+      ).map((op) => ({
         name: op.name,
         title: op.title,
         description: op.description,
@@ -406,23 +452,23 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
 
   guarded("get", "/admin/api/site", async (c) => {
     const runtime = await ref.get();
-    const site = await runtime.siteConfig.load();
-    const url = new URL(c.req.url);
+    const { origin, ...site } = await runtime.siteConfig.load();
+    const publicUrl = origin || new URL(c.req.url).origin;
     return Response.json({
       ...site,
-      publicUrl: site.origin || url.origin,
-      mcpUrl: `${url.origin}/mcp/staff`,
+      publicUrl,
+      mcpUrl: `${publicUrl}/mcp/staff`,
     });
   });
 
-  guarded("get", "/admin/api/site-settings", async () =>
+  roleGuarded("get", "/admin/api/site-settings", "owner", async () =>
     runMantleUseCase("GET /admin/api/site-settings", async () => {
       const runtime = await ref.get();
       return adminSiteSettings(await runtime.siteConfig.load());
     }),
   );
 
-  guarded("patch", "/admin/api/site-settings", async (c) =>
+  roleGuarded("patch", "/admin/api/site-settings", "owner", async (c) =>
     runMantleUseCase("PATCH /admin/api/site-settings", async () => {
       const runtime = await ref.get();
       const body = (await c.req.raw.json().catch(() => ({}))) as Record<string, unknown>;
@@ -455,6 +501,21 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     const rawLimit = c.req.query("limit");
     const parsedLimit = rawLimit ? Number.parseInt(rawLimit, 10) : NaN;
     const statusQuery = c.req.query("status");
+    const sortDirection = c.req.query("direction") === "asc" ? "asc" : "desc";
+    const filterField = c.req.query("filter_field");
+    const filterValue = c.req.query("filter_value");
+    if (Boolean(filterField) !== Boolean(filterValue)) {
+      return Response.json({
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "INPUT_VALIDATION_FAILED",
+          severity: "error",
+          path: "GET /admin/api/entries",
+          expected: "filter_field and filter_value together",
+          message: "List filters require both `filter_field` and `filter_value`.",
+        }),
+      }, { status: 400 });
+    }
     // Admin pagination needs the cursored shape — `executePage` returns
     // `{ rows, nextCursor? }`. `execute()` is the flat-array variant
     // for app code.
@@ -463,10 +524,55 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
       status: statusQuery && statusQuery !== "all" ? (statusQuery as ContentState) : undefined,
       limit: Number.isFinite(parsedLimit) ? parsedLimit : 99,
       cursor: c.req.query("cursor") ?? undefined,
+      cursorDirection: c.req.query("cursor_direction") === "backward" ? "backward" : "forward",
       search: c.req.query("search") || undefined,
+      filter: filterField && filterValue
+        ? { field: filterField, value: filterValue }
+        : undefined,
+      sort: {
+        field: c.req.query("sort") || "updatedAt",
+        direction: sortDirection,
+      },
     });
-    const items = result.rows.map((row) => adminListItem(row, schemasByName));
-    return Response.json({ items, next_cursor: result.nextCursor ?? null });
+    const translationLocales = new Map<string, Set<string>>();
+    const translationSchemas = schemas.filter((schema) => schema.spec.translates?.parent === collection);
+    for (const schema of translationSchemas) {
+      const field = schema.spec.translates!.on;
+      const parentValues = new Map<string, string | number | boolean>();
+      for (const row of result.rows) {
+        const value = primitiveJoinValue(row.data[field]);
+        if (value !== null) parentValues.set(joinValueKey(value), value);
+      }
+      const translations = await runtime.entryReader.readByDataFieldIn({
+        collection: schema.metadata.name,
+        field,
+        values: [...parentValues.values()],
+      });
+      const localesByValue = new Map<string, Set<string>>();
+      for (const entry of translations) {
+        const value = primitiveJoinValue(entry.data[field]);
+        if (value === null || !entry.locale) continue;
+        const key = joinValueKey(value);
+        const locales = localesByValue.get(key) ?? new Set<string>();
+        locales.add(entry.locale);
+        localesByValue.set(key, locales);
+      }
+      for (const row of result.rows) {
+        const value = primitiveJoinValue(row.data[field]);
+        if (value === null) continue;
+        const locales = translationLocales.get(row.id) ?? new Set<string>();
+        for (const locale of localesByValue.get(joinValueKey(value)) ?? []) locales.add(locale);
+        translationLocales.set(row.id, locales);
+      }
+    }
+    const items = result.rows.map((row) =>
+      adminListItem(row, schemasByName, [...(translationLocales.get(row.id) ?? [])])
+    );
+    return Response.json({
+      items,
+      previous_cursor: result.previousCursor ?? null,
+      next_cursor: result.nextCursor ?? null,
+    });
   });
 
   guarded("get", "/admin/api/entries/export", async (c) => {
@@ -539,6 +645,16 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
           }),
         );
       }
+      if (
+        gate.role === "contributor" &&
+        (schemasByName.get(body.collection)?.spec.lifecycle ?? "publishing") === "operational"
+      ) {
+        throw new DiagnosticError(adminRoleDiagnostic(
+          "POST /admin/api/entries",
+          "editor",
+          "Contributors can create drafts, not operational records.",
+        ));
+      }
       const row = await runtime.createDraft.execute({
         collection: body.collection,
         data: objectField(body.data),
@@ -554,6 +670,17 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     runMantleUseCase(`PATCH /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
+      if (gate.role === "contributor") {
+        const current = await runtime.getEntry.execute({ id });
+        const lifecycle = schemasByName.get(current.collection)?.spec.lifecycle ?? "publishing";
+        if (lifecycle === "operational" || current.status !== "draft") {
+          throw new DiagnosticError(adminRoleDiagnostic(
+            `PATCH /admin/api/entries/${id}`,
+            "editor",
+            "Contributors can edit drafts only.",
+          ));
+        }
+      }
       const body = (await c.req.raw.json().catch(() => ({}))) as {
         data?: unknown;
         expectedVersion?: unknown;
@@ -569,7 +696,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     }),
   );
 
-  guarded("post", "/admin/api/entries/:id/publish", async (c, gate) =>
+  roleGuarded("post", "/admin/api/entries/:id/publish", "editor", async (c, gate) =>
     runMantleUseCase(`POST /admin/api/entries/${c.req.param("id")}/publish`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
@@ -583,7 +710,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     }),
   );
 
-  guarded("post", "/admin/api/entries/:id/unpublish", async (c, gate) =>
+  roleGuarded("post", "/admin/api/entries/:id/unpublish", "editor", async (c, gate) =>
     runMantleUseCase(`POST /admin/api/entries/${c.req.param("id")}/unpublish`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
@@ -597,7 +724,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     }),
   );
 
-  guarded("delete", "/admin/api/entries/:id", async (c, gate) =>
+  roleGuarded("delete", "/admin/api/entries/:id", "editor", async (c, gate) =>
     runMantleUseCase(`DELETE /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
@@ -616,7 +743,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
   const MEDIA_UPLOADS_PATH = "/admin/api/media/uploads";
   const MEDIA_COMMIT_PATH = "/admin/api/media/uploads/:uploadGroupId/commit";
 
-  guarded("post", MEDIA_UPLOADS_PATH, async (c) => {
+  roleGuarded("post", MEDIA_UPLOADS_PATH, "editor", async (c) => {
     const runtime = await ref.get();
     const media = runtime.media;
     if (!media) return mediaNotConfiguredResponse(`POST ${MEDIA_UPLOADS_PATH}`);
@@ -692,7 +819,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     );
   });
 
-  guarded("post", MEDIA_COMMIT_PATH, async (c) => {
+  roleGuarded("post", MEDIA_COMMIT_PATH, "editor", async (c) => {
     const runtime = await ref.get();
     const media = runtime.media;
     if (!media) return mediaNotConfiguredResponse(`POST ${MEDIA_COMMIT_PATH}`);
@@ -718,7 +845,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
   const MEDIA_LIST_PATH = "/admin/api/media";
   const MEDIA_ASSET_PATH = "/admin/api/media/:id";
 
-  guarded("get", MEDIA_LIST_PATH, async (c) => {
+  roleGuarded("get", MEDIA_LIST_PATH, "editor", async (c) => {
     const runtime = await ref.get();
     const media = runtime.media;
     if (!media) return mediaNotConfiguredResponse(`GET ${MEDIA_LIST_PATH}`);
@@ -737,7 +864,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     });
   });
 
-  guarded("get", MEDIA_ASSET_PATH, async (c) => {
+  roleGuarded("get", MEDIA_ASSET_PATH, "editor", async (c) => {
     const runtime = await ref.get();
     const media = runtime.media;
     if (!media) return mediaNotConfiguredResponse(`GET ${MEDIA_ASSET_PATH}`);
@@ -747,7 +874,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     );
   });
 
-  guarded("patch", MEDIA_ASSET_PATH, async (c) => {
+  roleGuarded("patch", MEDIA_ASSET_PATH, "editor", async (c) => {
     const runtime = await ref.get();
     const media = runtime.media;
     if (!media) return mediaNotConfiguredResponse(`PATCH ${MEDIA_ASSET_PATH}`);
@@ -782,7 +909,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     );
   });
 
-  guarded("delete", MEDIA_ASSET_PATH, async (c) => {
+  roleGuarded("delete", MEDIA_ASSET_PATH, "editor", async (c) => {
     const runtime = await ref.get();
     const media = runtime.media;
     if (!media) return mediaNotConfiguredResponse(`DELETE ${MEDIA_ASSET_PATH}`);
@@ -1016,7 +1143,7 @@ function titleFieldKey(data: Record<string, unknown>, schema?: JsonSchema): stri
  *  fuzzy/semantic matching, just these two well-known reserved names. */
 const DATA_PREVIEW_SYSTEM_COLUMN_NAMES = new Set(["updatedAt", "createdAt"]);
 
-/** Operational (`lifecycle: none`) collections have no title/status
+/** Operational collections have no title/status
  *  workflow worth a dedicated column — instead the admin list shows up
  *  to 3 raw data columns. Mirrors the client-side column-picking rule
  *  in `collection-view.tsx`: first 3 `required` properties, skipping
@@ -1027,7 +1154,7 @@ function adminDataPreview(
   data: Record<string, unknown>,
   manifest?: SchemaManifest,
 ): Record<string, unknown> | undefined {
-  if (!manifest || manifest.spec.lifecycle !== "none") return undefined;
+  if (!manifest || manifest.spec.lifecycle !== "operational") return undefined;
   const schema = manifest.spec.schema;
   // Schema-stable skip (not per-row): rows with a blank title field
   // must still produce the same columns as every other row, or the
@@ -1067,6 +1194,7 @@ function isStringTypedSchema(schema: JsonSchema): boolean {
 function adminListItem(
   row: AdminEntryRow,
   schemasByName: ReadonlyMap<string, SchemaManifest>,
+  translationLocales: readonly string[] = [],
 ): {
   id: string;
   collection: string;
@@ -1075,6 +1203,7 @@ function adminListItem(
   version: number;
   title: unknown;
   updated_at: number;
+  translation_locales: readonly string[];
   data_preview?: Record<string, unknown>;
 } {
   const manifest = schemasByName.get(row.collection);
@@ -1086,6 +1215,7 @@ function adminListItem(
     version: row.version,
     title: adminEntryTitle(row.data, manifest?.spec.schema),
     updated_at: row.updatedAt,
+    translation_locales: translationLocales,
     data_preview: adminDataPreview(row.data, manifest),
   };
 }
@@ -1156,6 +1286,7 @@ async function entryEditorPayload(
   return {
     collection: adminEditorCollection(schema, schemas),
     entry: adminEditorEntry(row),
+    parentEntryId: await parentEntryId(runtime, schema, row, schemas),
     related,
   };
 }
@@ -1164,7 +1295,7 @@ type AdminEditorCollection = {
   readonly name: string;
   readonly title: LocalizedText;
   readonly description: LocalizedText | null;
-  readonly lifecycle: "simple" | "editorial" | "none";
+  readonly lifecycle: "publishing" | "operational";
   readonly parent: {
     readonly collection: string;
     readonly parentField: string;
@@ -1176,6 +1307,8 @@ type AdminEditorCollection = {
   readonly schema: JsonSchema;
   readonly uiSchema: Record<string, unknown> | null;
   readonly mediaFields: Array<{ name: string; hint: string }>;
+  readonly sortableFields: readonly string[];
+  readonly filter: { readonly field: string; readonly values: readonly string[] } | null;
 };
 
 type AdminEditorEntry = {
@@ -1191,6 +1324,7 @@ type AdminEditorEntry = {
 type AdminEntryEditorPayload = {
   readonly collection: AdminEditorCollection;
   readonly entry: AdminEditorEntry;
+  readonly parentEntryId: string | null;
   readonly related: AdminRelatedEntrySection[];
 };
 
@@ -1200,7 +1334,7 @@ type AdminRelatedEntrySection = {
     readonly kind: "translation" | "field";
     readonly parentField: string;
     readonly childField: string;
-    readonly parentValue: string | number | boolean;
+    readonly parentValue: string | number | boolean | null;
   };
   readonly entries: AdminEditorEntry[];
 };
@@ -1213,7 +1347,7 @@ function adminEditorCollection(
     name: schema.metadata.name,
     title: schema.spec.title,
     description: schema.spec.description ?? null,
-    lifecycle: schema.spec.lifecycle ?? "simple",
+    lifecycle: schema.spec.lifecycle ?? "publishing",
     parent: collectionParentFor(schema, schemas),
     hasTranslations: schemas.some((candidate) => candidate.spec.translates?.parent === schema.metadata.name),
     localized: schema.spec.localized ?? Boolean(schema.spec.translates),
@@ -1221,6 +1355,8 @@ function adminEditorCollection(
     schema: schema.spec.schema,
     uiSchema: schema.spec.uiSchema ?? null,
     mediaFields: mediaFieldsForCollection(schema, schemas),
+    sortableFields: schemaSortableFields(schema),
+    filter: checkSchemaListFilter(schema).filter,
   };
 }
 
@@ -1247,12 +1383,14 @@ async function relatedEntrySections(
   for (const relationship of relationships) {
     const childSchema = schemas.find((schema) => schema.metadata.name === relationship.collection);
     if (!childSchema) continue;
-    const entries = await entriesByDataValue(
-      runtime,
-      relationship.collection,
-      relationship.childField,
-      relationship.parentValue,
-    );
+    const entries = relationship.parentValue === null
+      ? []
+      : await entriesByDataValue(
+          runtime,
+          relationship.collection,
+          relationship.childField,
+          relationship.parentValue,
+        );
     sections.push({
       collection: adminEditorCollection(childSchema, schemas),
       relationship: {
@@ -1272,7 +1410,7 @@ type DiscoveredRelationship = {
   readonly kind: "translation" | "field";
   readonly parentField: string;
   readonly childField: string;
-  readonly parentValue: string | number | boolean;
+  readonly parentValue: string | number | boolean | null;
 };
 
 function discoverChildRelationships(
@@ -1291,7 +1429,7 @@ function discoverChildRelationships(
     rawParentValue: unknown,
   ): void => {
     const parentValue = primitiveJoinValue(rawParentValue);
-    if (parentValue == null) return;
+    if (parentValue == null && kind !== "translation") return;
     const key = `${childSchema.metadata.name}:${kind}:${parentField}:${childField}:${String(parentValue)}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -1303,6 +1441,17 @@ function discoverChildRelationships(
       parentValue,
     });
   };
+
+  const translates = parentSchema.spec.translates;
+  if (translates) {
+    add(
+      parentSchema,
+      "translation",
+      translates.on,
+      translates.on,
+      parentRow.data[translates.on],
+    );
+  }
 
   for (const childSchema of schemas) {
     if (childSchema.metadata.name === parentName) continue;
@@ -1362,11 +1511,29 @@ function collectionParentFor(
   return null;
 }
 
+async function parentEntryId(
+  runtime: CmsRuntime,
+  childSchema: SchemaManifest,
+  childRow: AdminEntryRow,
+  schemas: SchemaManifest[],
+): Promise<string | null> {
+  const parent = collectionParentFor(childSchema, schemas);
+  if (!parent) return null;
+  const value = primitiveJoinValue(childRow.data[parent.childField]);
+  if (value === null) return null;
+  if (parent.parentField === "id" && typeof value === "string") return value;
+  return (await entriesByDataValue(runtime, parent.collection, parent.parentField, value))[0]?.id ?? null;
+}
+
 function primitiveJoinValue(value: unknown): string | number | boolean | null {
   if (typeof value === "string" && value !== "") return value;
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "boolean") return value;
   return null;
+}
+
+function joinValueKey(value: string | number | boolean): string {
+  return `${typeof value}:${String(value)}`;
 }
 
 async function entriesByDataValue(
@@ -1385,7 +1552,9 @@ async function entriesByDataValue(
 
 function adminSiteSettings(site: SiteConfig) {
   return {
-    ...site,
+    brand: site.brand,
+    title: site.title,
+    description: site.description,
     ga4MeasurementId: site.ga4MeasurementId ?? "",
     facebookPixelId: site.facebookPixelId ?? "",
   };
@@ -1421,6 +1590,7 @@ type StaffGate =
       kind: "ok";
       userId: string;
       login: string | null;
+      image: string | null;
       role: StaffRole;
       sessionId: string;
     };
@@ -1444,7 +1614,7 @@ function adminHandlerContext(c: Context, gate: Extract<StaffGate, { kind: "ok" }
 async function readStaffGate(c: Context, auth: Auth): Promise<StaffGate> {
   const session = await auth.getSession(c.req.raw);
   if (!session) return { kind: "unauth" };
-  const role = await resolveUserRole(auth, session.user.id, session.user.role);
+  const role = await auth.getUserRole(session.user.id);
   const login = session.user.githubLogin ?? null;
   if (!role || !STAFF_ROLE_SET.has(role)) {
     return { kind: "forbidden", login };
@@ -1453,6 +1623,7 @@ async function readStaffGate(c: Context, auth: Auth): Promise<StaffGate> {
     kind: "ok",
     userId: session.user.id,
     login,
+    image: session.user.image ?? null,
     role: role as StaffRole,
     sessionId: session.session.id,
   };
@@ -1482,7 +1653,7 @@ async function handleHttpTrigger(
   const caller = await resolveCaller(req, {
     auth: ref.auth,
     credentialResolver: ref.credentialResolver,
-    oauthBearer: ref.oauthBearer,
+    jwtBearer: ref.jwtBearer,
     env,
     waitUntil,
   });
@@ -1497,7 +1668,22 @@ async function handleHttpTrigger(
     if (rejected) return rejected;
   }
 
-  const body = await readBody(req);
+  let body: Record<string, unknown>;
+  try {
+    body = await readBody(req);
+  } catch {
+    const diagnostic = runtimeDiagnostic({
+      code: "INPUT_VALIDATION_FAILED",
+      severity: "error",
+      path: `${triggerPathPrefix}#/body`,
+      expected: "valid JSON",
+      message: "HTTP Trigger request body is not valid JSON.",
+    });
+    return Response.json(
+      { ok: false, diagnostic: redactForWire(diagnostic) },
+      { status: 400 },
+    );
+  }
   // Spread order matters: URL path params are authoritative for the
   // resource identifier (a `DELETE /entries/{id}` body MUST NOT spoof
   // `id`). Body fields fill in non-path inputs only.
@@ -1550,7 +1736,7 @@ async function handleViewRequest(
   const caller = await resolveCaller(req, {
     auth: ref.auth,
     credentialResolver: ref.credentialResolver,
-    oauthBearer: ref.oauthBearer,
+    jwtBearer: ref.jwtBearer,
     env,
     waitUntil,
   });
@@ -1624,12 +1810,8 @@ async function readBody(req: Request): Promise<Record<string, unknown>> {
   }
   const ct = req.headers.get("content-type") ?? "";
   if (!ct.includes("json")) return {};
-  try {
-    const parsed = await req.json<Record<string, unknown>>();
-    return parsed ?? {};
-  } catch {
-    return {};
-  }
+  const parsed = await req.json<Record<string, unknown> | null>();
+  return parsed ?? {};
 }
 
 function openApiToHono(path: string): string {
@@ -1697,18 +1879,36 @@ function adminUnauthenticated(c: Context, path: string): Response {
 // instead of bouncing them back to /admin/sign-in (which the OAuth
 // re-auth then silently fast-forwards through, producing a visible
 // 5-step redirect chain that looks like an infinite loop).
-function adminNotOwner(c: Context, path: string): Response {
+function adminInsufficientRole(
+  c: Context,
+  path: string,
+  minimumRole: StaffRole,
+): Response {
+  const diagnostic = adminRoleDiagnostic(
+    `${c.req.method} ${path}`,
+    minimumRole,
+    `This action requires the ${minimumRole} role.`,
+  );
   return Response.json({
     ok: false,
-    diagnostic: runtimeDiagnostic({
-      code: "AUTH_DENIED",
-      severity: "error",
-      path: `${c.req.method} ${path}`,
-      expected: "owner role for the signed-in user",
-      message: "Staff management is owner-only.",
-    }),
+    diagnostic,
   }, { status: 403 });
 }
+
+function adminRoleDiagnostic(
+  path: string,
+  minimumRole: StaffRole,
+  message: string,
+): Diagnostic {
+  return runtimeDiagnostic({
+    code: "AUTH_DENIED",
+    severity: "error",
+    path,
+    expected: `${minimumRole} role or higher for the signed-in user`,
+    message,
+  });
+}
+
 function adminNotStaff(c: Context, path: string, login: string | null): Response {
   return Response.json({
     ok: false,

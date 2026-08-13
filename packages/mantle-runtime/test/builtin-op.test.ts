@@ -37,7 +37,7 @@ const postsSchemaWithBindings: SchemaManifest = {
         createdAt: { type: "number", "x-mantle-bind": "now" },
       },
     },
-    lifecycle: "simple",
+    lifecycle: "publishing",
   },
 };
 
@@ -173,10 +173,10 @@ describe("InvokeBuiltinUseCase — create", () => {
     expect((result.data as { data: { authorId: unknown } }).data.authorId).toBeNull();
   });
 
-  it("creates lifecycle:none operational records live", async () => {
+  it("creates lifecycle: operational operational records live", async () => {
     const schema = {
       ...postsSchemaWithBindings,
-      spec: { ...postsSchemaWithBindings.spec, lifecycle: "none" as const },
+      spec: { ...postsSchemaWithBindings.spec, lifecycle: "operational" as const },
     };
     const h = harness({ schemas: [schema] });
     const result = await h.invoke.execute({
@@ -364,10 +364,10 @@ describe("InvokeBuiltinUseCase — update / delete / upsert", () => {
     expect(await h.store.get("shared-id")).not.toBeNull();
   });
 
-  it("delete removes lifecycle:none records even though they are published", async () => {
+  it("delete removes lifecycle: operational records even though they are published", async () => {
     const schema: SchemaManifest = {
       ...postsSchemaWithBindings,
-      spec: { ...postsSchemaWithBindings.spec, lifecycle: "none" },
+      spec: { ...postsSchemaWithBindings.spec, lifecycle: "operational" },
     };
     const h = harness({ schemas: [schema] });
     const created = await h.invoke.execute({

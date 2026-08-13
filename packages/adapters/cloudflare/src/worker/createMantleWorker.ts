@@ -120,7 +120,7 @@ export interface MantleWorkerMountContext<Env extends MantleCloudflareEnv>
 export interface MantleWorkerExtension<Env extends MantleCloudflareEnv> {
   readonly handlers?: Readonly<Record<string, AnyHandler>>;
   readonly credentialResolver?: ConsumerCredentialResolver;
-  readonly oauthBearer?: CmsConfig["oauthBearer"];
+  readonly jwtBearer?: CmsConfig["jwtBearer"];
   readonly scopesSupported?: readonly string[];
   /** Standard routes mount first; extension routes may only add new paths. */
   readonly mount?: (context: MantleWorkerMountContext<Env>) => void;
@@ -147,6 +147,9 @@ export interface CreateMantleWorkerOptions<Env extends MantleCloudflareEnv> {
 }
 
 export interface MantleWorkerHandler<Env extends MantleCloudflareEnv> {
+  /** Boot and return the same runtime used by fetch. Queue/scheduled handlers
+   *  use this instead of constructing a second runtime or bypassing it. */
+  getRuntime(env: Env): Promise<CmsRuntime>;
   fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response>;
 }
 
@@ -189,7 +192,7 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
       bindings,
       auth,
       credentialResolver: extension.credentialResolver,
-      oauthBearer: extension.oauthBearer,
+      jwtBearer: extension.jwtBearer,
     });
 
     const app = new Hono<WorkerHonoEnv<Env>>();
@@ -223,6 +226,9 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
   };
 
   return {
+    getRuntime(env) {
+      return assemble(env).getRuntime();
+    },
     async fetch(request, env, ctx) {
       return runMantleWorkerRequest(async () => {
         const worker = assemble(env);

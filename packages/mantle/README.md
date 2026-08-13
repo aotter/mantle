@@ -43,17 +43,22 @@ pnpm exec mantle-harness indexes --require-public
 pnpm exec mantle-harness http --base-url http://127.0.0.1:8787 --route page=/en/example
 ```
 
-`mantle generate` validates the YAML under `./manifests`, then writes the
+`mantle generate` validates `./manifests/site.yaml`, then writes the
 parsed manifest module and handler declarations to `.mantle/generated/`.
 It does not sync skills, update packages, style, provision, or deploy.
-When manifests declare Views, the generated `site.ts` also exports
-`bindMantleSite(runtime)`: its `views` keys, params and returned rows come from
-those manifests, while diagnostics still come directly from `executeView`.
+When manifests declare Views or Procedures, the generated `site.ts` also exports
+`bindMantleSite(runtime)`: its `views` and `procedures` keys, inputs, and outputs
+come from those manifests, while diagnostics still come from the runtime use
+cases.
 Dynamic `runtime.viewsByName` access remains available for low-level code.
 
 ```ts
 const site = bindMantleSite(runtime);
 const notes = await site.views["published-notes"]();
+const result = await site.procedures["expire-order"](
+  { orderId },
+  { user: null, staff: null, env },
+);
 ```
 
 `mantle skills` explicitly copies the installed package's `develop`, `plugin`,
@@ -164,7 +169,6 @@ Core-owned `mantle:plugin` skill and records it in `.mantle/plugins.json` plus
 | Adapter | Status |
 |---|---|
 | Cloudflare Workers | ✅ shipping |
-| Netlify | 📋 README stub — engineering forcing function for v0.2 (`@aotter/mantle-netlify`) |
 
 The `mantle-runtime` package never imports Cloudflare-specific types — adapters bind concrete drivers (D1 / R2) to the runtime's `domain/port/*` interfaces, so adding a new adapter is a port-implementation exercise, not a refactor.
 

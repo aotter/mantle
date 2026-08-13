@@ -113,11 +113,15 @@ Read the relevant ADRs before touching architecture. The most common gates are:
 - Trust-boundary changes, auth changes, MCP surface changes, persistence boundaries, and public HTTP semantics need `needs-adr` unless an existing ADR clearly covers the decision.
 - **Auth surface — no Better Auth pass-through.** Better Auth is the default `createAuth` implementation, not the SDK's contract; the `Auth` interface is the contract (see ADR-0014 § "Auth as contract, Better Auth as default", as amended 2026-05-15 by the OAuth carve-out). PRs that only rename a Better Auth option into `CreateAuthConfig` and forward it verbatim must be refused. **Picking a different literal default for an existing Better Auth field does not justify a new field by itself** — that's pass-through dressed up. When a Better Auth knob is genuinely missing from the SDK contract, the answer is a curated first-class field with a concrete justification: Workers-aware behavior Better Auth doesn't supply, a cross-adapter port the runtime needs, a safety net Better Auth doesn't provide, a new abstraction that fuses multiple Better Auth surfaces, or a DX helper that removes a Workers-hostile dep. The un-curated `CreateAuthConfig.betterAuthOptions` escape hatch (from PR #175) was retracted by PR #193's carve-out — the carved-out OAuth surface plus the curated `methods[]` / `rateLimit` / `bootstrapOwner` fields cover the adopter contract without needing a passthrough.
 
-## Changelog
+## Release notes
 
-**Don't add `CHANGELOG.md` entries on every PR.** The PR title + body + commit messages are the source of truth for what changed in any given PR. Per-PR `[Unreleased]` entries bloat unboundedly between releases, force conflict-merging the section on every release cycle, and duplicate information that's already in git.
+GitHub Releases is the canonical public change history. Keep PR titles,
+descriptions, and labels accurate because GitHub generates each release from
+that metadata using `.github/release.yml`. Add `skip-release-notes` only to
+release bookkeeping that should not appear in user-facing notes.
 
-Changelog entries are written at release time as part of the release PR (see [`docs/release-process.md`](docs/release-process.md) § Release PR). The release author aggregates `git log` since the previous tag into Keep-a-Changelog buckets (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`), prefixes package scope when relevant (`**`@aotter/mantle-runtime`**: ...`), and cross-links closing PR + issue. The entry lives under a new `## [vX.Y.Z] - YYYY-MM-DD` heading; no `[Unreleased]` placeholder.
+Do not add version entries to `CHANGELOG.md`; it is a stable entry point to
+GitHub Releases and the archived pre-migration history.
 
 ## Release process
 

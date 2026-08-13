@@ -1,5 +1,8 @@
 import {
   DiagnosticError,
+  checkSchemaListFilter,
+  runtimeDiagnostic,
+  schemaSortableFields,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
 import type { EntryRow } from "../../domain/model/EntryRow.js";
@@ -9,7 +12,10 @@ import { clampLimit } from "../../domain/service/Pagination.js";
 import type {
   ListEntriesRequest,
 } from "../dto/content/index.js";
-import { schemaUnknownDiagnostic } from "./diagnostics.js";
+import {
+  schemaUnknownDiagnostic,
+  sortFieldUnavailableDiagnostic,
+} from "./diagnostics.js";
 
 /**
  * `ListEntriesUseCase` — list entries in a collection, optionally
@@ -53,17 +59,50 @@ export class ListEntriesUseCase {
     request: ListEntriesRequest,
   ): Promise<ListEntriesResult> {
     const opPath = `usecase/ListEntries/${request.collection}`;
-    if (!this.schemas.has(request.collection)) {
+    const schema = this.schemas.get(request.collection);
+    if (!schema) {
       throw new DiagnosticError(
         schemaUnknownDiagnostic(opPath, request.collection, [...this.schemas.keys()]),
       );
+    }
+    if (request.sort && !isSortableField(schema, request.sort.field)) {
+      throw new DiagnosticError(sortFieldUnavailableDiagnostic(opPath, request.sort.field));
+    }
+    const listFilter = checkSchemaListFilter(schema).filter;
+    if (request.filter && !(
+      listFilter?.field === request.filter.field && listFilter.values.includes(request.filter.value)
+    )) {
+      throw new DiagnosticError(filterUnavailableDiagnostic(opPath, request.filter));
     }
     return this.entries.list({
       collection: request.collection,
       status: request.status,
       limit: clampLimit(request.limit),
       cursor: request.cursor,
+      cursorDirection: request.cursorDirection,
       search: request.search,
+      searchFields: schema.spec.searchableFields ?? [],
+      filter: request.filter,
+      sort: request.sort,
     });
   }
+}
+
+function filterUnavailableDiagnostic(
+  path: string,
+  filter: NonNullable<ListEntriesRequest["filter"]>,
+) {
+  return runtimeDiagnostic({
+    code: "INPUT_VALIDATION_FAILED",
+    severity: "error",
+    path: `${path}/filter`,
+    value: filter,
+    expected: "an indexed string-enum field and one of its declared values",
+    message: `Filter '${filter.field}=${filter.value}' is not available.`,
+  });
+}
+
+function isSortableField(schema: SchemaManifest, field: string): boolean {
+  if (field === "id" || field === "status" || field === "updatedAt") return true;
+  return schemaSortableFields(schema).includes(field);
 }

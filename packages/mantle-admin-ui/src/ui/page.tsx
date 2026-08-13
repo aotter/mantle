@@ -1,10 +1,14 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { AlertCircle, Check, Copy, ExternalLink, type LucideIcon } from "lucide-react";
 import { ApiError } from "../lib/api";
 import { cn } from "../lib/utils";
-import { Button } from "./button";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { usePreferences } from "../app/preferences";
 import { t } from "../app/i18n";
+
+export const FormActionBarHostContext = React.createContext<HTMLElement | null>(null);
 
 export function PageHeader({
   eyebrow,
@@ -20,8 +24,8 @@ export function PageHeader({
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        {eyebrow ? <p className="label-eyebrow mb-1">{eyebrow}</p> : null}
-        <h1 className="text-2xl">{title}</h1>
+        {eyebrow ? <div className="mb-1 text-sm text-muted-foreground">{eyebrow}</div> : null}
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         {description ? (
           <div className="mt-1 max-w-3xl text-sm text-muted-foreground">
             {description}
@@ -43,9 +47,33 @@ export function SectionCard({
   children: React.ReactNode;
 }): React.ReactElement {
   return (
-    <section id={id} className={cn("glass-card p-5", className)}>
+    <Card id={id} className={cn("p-5", className)}>
       {children}
-    </section>
+    </Card>
+  );
+}
+
+export function FormActionBar({
+  status,
+  children,
+}: {
+  status?: React.ReactNode;
+  children: React.ReactNode;
+}): React.ReactElement {
+  const host = React.useContext(FormActionBarHostContext);
+  if (!host) return <></>;
+
+  return createPortal(
+    <div
+      data-slot="form-action-bar"
+      className="flex w-full flex-wrap items-center justify-between gap-3"
+    >
+      <div className="min-h-5 min-w-0 text-sm text-muted-foreground" aria-live="polite">
+        {status}
+      </div>
+      <div className="ms-auto flex shrink-0 items-center gap-2">{children}</div>
+    </div>,
+    host,
   );
 }
 
@@ -67,7 +95,7 @@ export function EmptyState({
       </div>
       <h2 className="text-lg">{title}</h2>
       {description ? (
-        <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+        <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
           {description}
         </p>
       ) : null}
@@ -78,14 +106,9 @@ export function EmptyState({
 
 export function ErrorBox({ error }: { error: unknown }): React.ReactElement | null {
   const { language } = usePreferences();
-  const is401 = error instanceof ApiError && error.status === 401;
-  React.useEffect(() => {
-    if (!is401 || typeof window === "undefined") return;
-    const ret = window.location.pathname + window.location.search;
-    window.location.href = `/admin/sign-in?return=${encodeURIComponent(ret)}`;
-  }, [is401]);
+  const is401 = useUnauthorizedRedirect(error);
   if (is401) return null;
-  const message = error instanceof Error ? error.message : "Unknown error.";
+  const message = error instanceof Error ? error.message : t(language, "common.unknownError");
   return (
     <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
       {t(language, "common.failedToLoad")}: {message}
@@ -93,23 +116,9 @@ export function ErrorBox({ error }: { error: unknown }): React.ReactElement | nu
   );
 }
 
-/** Operation-invoke failure (#444): `ErrorBox` prefixes every message
- *  with "Failed to load" (`common.failedToLoad`), which reads wrong for
- *  an operation that ran and was refused/threw rather than failing to
- *  load. This renders a generic, localized "execution failed" message
- *  instead, with the raw handler/server detail tucked behind a
- *  collapsed `<details>` so operators aren't handed an internal error
- *  string as the headline. 401s still redirect to sign-in exactly like
- *  `ErrorBox`, since an expired session surfacing here is the same
- *  case, not an operation failure. */
 export function OperationErrorBox({ error }: { error: unknown }): React.ReactElement | null {
   const { language } = usePreferences();
-  const is401 = error instanceof ApiError && error.status === 401;
-  React.useEffect(() => {
-    if (!is401 || typeof window === "undefined") return;
-    const ret = window.location.pathname + window.location.search;
-    window.location.href = `/admin/sign-in?return=${encodeURIComponent(ret)}`;
-  }, [is401]);
+  const is401 = useUnauthorizedRedirect(error);
   if (is401) return null;
   const detail = error instanceof Error ? error.message : String(error);
   return (
@@ -125,6 +134,16 @@ export function OperationErrorBox({ error }: { error: unknown }): React.ReactEle
       </details>
     </div>
   );
+}
+
+function useUnauthorizedRedirect(error: unknown): boolean {
+  const is401 = error instanceof ApiError && error.status === 401;
+  React.useEffect(() => {
+    if (!is401 || typeof window === "undefined") return;
+    const ret = window.location.pathname + window.location.search;
+    window.location.href = `/admin/sign-in?return=${encodeURIComponent(ret)}`;
+  }, [is401]);
+  return is401;
 }
 
 /** Renders `description` plainly unless it looks like raw schema notes
@@ -185,9 +204,9 @@ export function CopyField({
   }
 
   return (
-    <div className="rounded-lg border border-border/70 bg-background/30 p-3">
+    <div className="rounded-lg border bg-muted/30 p-3">
       <div className="mb-1 flex items-center justify-between gap-3">
-        <span className="label-eyebrow">{label}</span>
+        <span className="text-xs font-medium text-muted-foreground">{label}</span>
         <div className="flex items-center gap-1">
           {href ? (
             <Button asChild variant="ghost" size="icon" className="size-7">

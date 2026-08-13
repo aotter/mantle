@@ -18,7 +18,7 @@ const schema: SchemaManifest = {
         createdAt: { type: "number", "x-mantle-bind": "now" },
       },
     },
-    lifecycle: "simple",
+    lifecycle: "publishing",
   },
 };
 

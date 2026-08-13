@@ -8,9 +8,18 @@ import { viewsManifestQueryOptions } from "../../lib/queries";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { Collection, SiteInfo, ViewManifestInfo } from "../../lib/types";
-import { TableCell, TableHeadCell, TableShell } from "../../ui/admin-table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/ui/button";
 import { SchemaFields } from "../content/entry-edit-view";
 import { renderDataValue } from "../../lib/render-data-value";
 
@@ -31,15 +40,7 @@ interface ViewQueryResult {
   };
 }
 
-/** Fetches `GET /admin/api/views/<name>` — the staff-gated View REST
- *  surface (#433). Since `/admin/api/views-manifest` now returns ONLY
- *  `surface: staff` Views, every View reachable from the 報表 sidebar
- *  (which drives this page) is a staff View mounted behind the admin
- *  gate; the public `/api/views/<name>` path no longer serves them.
- *  We fetch directly rather than through `lib/api.ts`'s `api` helper so
- *  we can pass the caller's page/show/param query string verbatim.
- *  Reuses the admin session cookie via `credentials: same-origin` same
- *  as `lib/api.ts`. */
+/** Fetch a staff View while preserving its declared query parameters. */
 async function fetchView(
   name: string,
   params: Record<string, unknown>,
@@ -62,17 +63,7 @@ async function fetchView(
   return body;
 }
 
-/** #426 — read-only View page. Fetches the View's row set from the
- *  staff-gated `/admin/api/views/<name>` REST surface (#433 — the 報表
- *  sidebar only lists staff Views now), renders a
- *  SchemaFields-driven parameter form when the View declares
- *  `params`, and a plain table for the rows. Column formatting
- *  (money-minor / timestamp-ms) is resolved against the source
- *  Schema's properties when that Schema is present in the
- *  client-side collections list (already fetched by
- *  `AuthenticatedLayout`); falls back to raw values when the View's
- *  `from` is a translation-child Schema not exposed on
- *  `/admin/api/collections`. */
+/** Render a read-only View with schema-driven parameters and formatting. */
 export function ViewPage({ name }: { name: string }): React.ReactElement {
   const { language } = usePreferences();
   const viewsQuery = useQuery<ViewManifestInfo[]>(viewsManifestQueryOptions());
@@ -108,13 +99,13 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   });
 
   if (viewsQuery.isLoading || collectionsQuery.isLoading) {
-    return <div className="glass-card h-64 animate-pulse" />;
+    return <Skeleton className="h-64 w-full" />;
   }
   if (viewsQuery.isError) return <ErrorBox error={viewsQuery.error} />;
   if (!view) {
     return (
       <div className="space-y-6">
-        <PageHeader eyebrow="AotterMantle" title={t(language, "views.notFound.title")} />
+        <PageHeader title={t(language, "views.notFound.title")} />
       </div>
     );
   }
@@ -126,7 +117,6 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="AotterMantle"
         title={viewTitle}
         description={t(language, "views.page.body", { schema: view.from })}
       />
@@ -161,28 +151,28 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
       ) : null}
 
       {rows.length > 0 ? (
-        <TableShell>
-          <thead>
-            <tr className="border-b border-[var(--glass-border)]">
+        <Table>
+          <TableHeader>
+            <TableRow>
               {columns.map((col) => (
-                <TableHeadCell key={col}>
+                <TableHead key={col}>
                   {propertyLabel(col, sourceSchema?.properties?.[col], language, canonical)}
-                </TableHeadCell>
+                </TableHead>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {rows.map((row, index) => (
-              <tr key={index} className="border-t border-[var(--glass-border)]">
+              <TableRow key={index}>
                 {columns.map((col) => (
                   <TableCell key={col} className="text-muted-foreground">
                     {renderDataValue(sourceSchema?.properties?.[col], row[col])}
                   </TableCell>
                 ))}
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </TableShell>
+          </TableBody>
+        </Table>
       ) : null}
     </div>
   );
@@ -204,8 +194,8 @@ function ReservedParamInputs({
     <div className="flex flex-wrap gap-3">
       <label className="grid gap-1.5 text-sm font-medium">
         <span>{fieldLabel(pageParam)}</span>
-        <input
-          className="admin-input w-28"
+        <Input
+          className="w-28"
           type="number"
           min={1}
           value={page}
@@ -214,8 +204,8 @@ function ReservedParamInputs({
       </label>
       <label className="grid gap-1.5 text-sm font-medium">
         <span>{fieldLabel(showParam)}</span>
-        <input
-          className="admin-input w-28"
+        <Input
+          className="w-28"
           type="number"
           min={1}
           value={show}

@@ -104,7 +104,7 @@ function manifests(): Manifest[] {
           },
           required: ["slug"],
         },
-        lifecycle: "simple",
+        lifecycle: "publishing",
       },
     },
   ];
@@ -359,7 +359,13 @@ describe("smoke: MCP media tool catalog", () => {
       auth: staffAuth(),
     });
     const handler = createMcpApiHandler({ ref, surface: "staff" });
-    const props = { props: { userId: STAFF_USER.id, role: "owner" } };
+    const props = {
+      props: {
+        userId: STAFF_USER.id,
+        clientId: "mcp-client",
+        scopes: ["mcp"],
+      },
+    };
 
     const first = await handler.fetch!(
       jsonRpcReq("tools/list"),
@@ -724,6 +730,22 @@ describe("MCP View surface gating (#438)", () => {
     expect(res.status).toBe(403);
     expect(res.headers.get("www-authenticate")).toContain("insufficient_scope");
     expect(res.headers.get("www-authenticate")).toContain('scope="mcp"');
+  });
+
+  it.each([undefined, "mcp"])("fails closed for malformed token scopes: %s", async (scopes) => {
+    const handler = createMcpApiHandler({ ref: viewRef(), surface: "public" });
+    const res = await handler.fetch!(
+      jsonRpcReq("tools/list"),
+      {},
+      {
+        props: {
+          userId: STAFF_USER.id,
+          clientId: "mcp-client",
+          ...(scopes === undefined ? {} : { scopes }),
+        },
+      } as unknown as ExecutionContext,
+    );
+    expect(res.status).toBe(403);
   });
 
   it("public surface tools/call for a staff View returns unknown-tool", async () => {

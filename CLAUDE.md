@@ -32,7 +32,7 @@ This is the lens for every architectural decision in this codebase.
 | `skills/install/SKILL.md` | Version-aware consumer quickstart for creating or continuing a site. |
 | `docs/release-process.md` | Release + publish discipline. Branch model (`develop` → `main`), channel rules (alpha / beta / RC / stable), npm dist-tags, dependency-order publish, deprecation policy. Read before any version bump or publish. |
 | `CONTRIBUTING.md` | Workflow contract for AI + human contributors. Branch prefixes, commit shape, PR template, architecture gates. Entry point for anyone (or any agent) about to file an issue or open a PR. |
-| `CHANGELOG.md` | Versioned change log. Each release tag gets an entry here before the release PR merges. |
+| `CHANGELOG.md` | Entry point to canonical GitHub Release notes and the archived pre-migration changelog. |
 | `.claude/skills/mantle-release/SKILL.md` | Repo-local release agent skill. Read before any version bump, tag, npm publish, starter fanout, or landing deploy. |
 | `skills/<name>/SKILL.md` | AI-agent-readable install, provision, develop, plugin, theme, and update workflows. Versioned copies ship in the umbrella package. |
 | `packages/mantle-spec/` | Spec engine. ESM, `sideEffects: false`, zero env / adapter deps. |

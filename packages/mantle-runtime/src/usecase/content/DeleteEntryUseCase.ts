@@ -8,12 +8,10 @@ import type {
 import { notFoundDiagnostic, withConflictDiagnostic } from "./diagnostics.js";
 
 /**
- * `DeleteEntryUseCase` — permanently delete an entry + cascade
- * revisions / approvals. Distinct from `Archive` — archive is a
- * status flip, delete removes rows.
+ * `DeleteEntryUseCase` — permanently delete an entry. Distinct from
+ * `Archive`: archive is a status flip, delete removes the row.
  *
- * The chokepoint enforces the cascade via `DatabaseDriver.batch`. We
- * still read the row first so missing ids surface as a structured
+ * We read the row first so missing ids surface as a structured
  * `NOT_FOUND` (matching every other content-op use case) instead of
  * a silent `{ removed: false }` — callers building UIs need the
  * diagnostic to distinguish "you deleted nothing" from "you tried to

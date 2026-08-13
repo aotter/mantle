@@ -222,6 +222,15 @@ describe("authorization integration: one target across REST and MCP", () => {
     expect(mcpWaitUntil).toHaveBeenCalledTimes(2);
     expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 3, targetCalls: 3 });
 
+    mcpContext.props.scopes = ["mcp"];
+    const downscoped = await publicMcp.fetch!(mcpCall(), workerEnv, mcpContext);
+    const downscopedBody = (await downscoped.json()) as {
+      error?: { data?: { code?: string } };
+    };
+    expect(downscopedBody.error?.data?.code).toBe("AUTH_DENIED");
+    expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 3, targetCalls: 3 });
+    mcpContext.props.scopes = ["mcp", "accounts:read"];
+
     entitled = false;
     const restDenied = await app.request(
       "/api/accounts/read",

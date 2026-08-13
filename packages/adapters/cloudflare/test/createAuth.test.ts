@@ -8,12 +8,14 @@ import {
   buildTrustedOriginsFor,
   createAuth,
   createSetupIncompleteAuth,
+  decodeMemberCursor,
   getProviderAccessTokenForRequest,
   guardGithubLoginProfile,
   mapRegisteredOAuthClient,
   normalizeAuthResponseCookies,
   pickLocale,
   shouldPromoteToOwner,
+  STAFF_ROLES,
   validateBootstrap,
   verifyOAuthJwt,
   verifyOAuthJwtWithLocalJwks,
@@ -1256,10 +1258,14 @@ describe("Auth.unlinkAccount", () => {
 // --- listUsers / setUserRole / inviteUser / revokeInvite (staff management) ---
 
 describe("Auth.listUsers", () => {
-  it("maps rows, coercing emailVerified to boolean and createdAt to Date", async () => {
+  it("queries only staff roles and maps the result", async () => {
+    const prepared: string[] = [];
+    const binds: unknown[][] = [];
     const auth = createAuth(
       baseConfig({
         database: fakeDbWith({
+          onPrepare: (sql) => prepared.push(sql),
+          onBind: (args) => binds.push([...args]),
           allResults: [
             {
               id: "u-1",
@@ -1270,24 +1276,66 @@ describe("Auth.listUsers", () => {
               emailVerified: 1,
               createdAt: "2026-01-01T00:00:00.000Z",
             },
-            {
-              id: "u-2",
-              email: "b@example.com",
-              name: "b",
-              role: null,
-              githubLogin: null,
-              emailVerified: 0,
-              createdAt: "2026-01-02T00:00:00.000Z",
-            },
           ],
         }),
       }),
     );
     const users = await auth.listUsers();
-    expect(users).toHaveLength(2);
+    expect(users).toHaveLength(1);
     expect(users[0]).toMatchObject({ id: "u-1", emailVerified: true });
     expect(users[0]!.createdAt).toBeInstanceOf(Date);
-    expect(users[1]).toMatchObject({ id: "u-2", role: null, emailVerified: false });
+    expect(prepared.at(-1)).toContain("WHERE role IN (?,?,?)");
+    expect(binds.at(-1)).toEqual(STAFF_ROLES);
+  });
+});
+
+describe("Auth.listMembers", () => {
+  it("queries only non-staff users with escaped search and a keyset cursor", async () => {
+    const prepared: string[] = [];
+    const binds: unknown[][] = [];
+    const auth = createAuth(
+      baseConfig({
+        database: fakeDbWith({
+          onPrepare: (sql) => prepared.push(sql),
+          onBind: (args) => binds.push([...args]),
+          allResults: [
+            {
+              id: "u-1",
+              email: "one@example.com",
+              name: "One",
+              emailVerified: 1,
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+            {
+              id: "u-2",
+              email: "two@example.com",
+              name: "Two",
+              emailVerified: 0,
+              createdAt: "2026-01-02T00:00:00.000Z",
+            },
+            {
+              id: "u-3",
+              email: "three@example.com",
+              name: "Three",
+              emailVerified: 1,
+              createdAt: "2026-01-03T00:00:00.000Z",
+            },
+          ],
+        }),
+      }),
+    );
+
+    const result = await auth.listMembers({ limit: 2, search: "_%" });
+
+    expect(result.items.map(({ id }) => id)).toEqual(["u-1", "u-2"]);
+    expect(result.nextCursor && decodeMemberCursor(result.nextCursor)).toEqual([
+      "2026-01-02T00:00:00.000Z",
+      "u-2",
+    ]);
+    expect(result.previousCursor).toBeNull();
+    expect(prepared.at(-1)).toContain("role IS NULL OR role NOT IN (?,?,?)");
+    expect(prepared.at(-1)).toContain("LOWER(name) LIKE ?");
+    expect(binds.at(-1)).toEqual([...STAFF_ROLES, "%\\_\\%%", "%\\_\\%%", 3]);
   });
 });
 

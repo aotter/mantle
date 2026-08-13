@@ -26,6 +26,7 @@ export const stubAuth: Auth = {
   listLinkedAccounts: async () => [],
   unlinkAccount: async () => false,
   listUsers: async () => [],
+  listMembers: async () => ({ items: [], previousCursor: null, nextCursor: null }),
   setUserRole: async () => false,
   inviteUser: async () => ({ kind: "created", id: "stub-invite-id" }),
   revokeInvite: async () => false,

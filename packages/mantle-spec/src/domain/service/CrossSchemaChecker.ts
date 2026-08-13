@@ -142,6 +142,17 @@ export function checkLocaleAndTranslates(input: CrossSchemaCheckInput): Diagnost
         );
       }
       const childProps = propertyKeys(s);
+      if (![...childProps].some((name) => name !== "locale" && name !== translates.on)) {
+        out.push(
+          emit(phase, {
+            code: "TRANSLATES_REQUIRES_CONTENT_FIELD",
+            severity: "error",
+            path: path("/spec/schema/properties"),
+            expected: "at least one locale-specific field besides 'locale' and the join field",
+            message: `Schema '${s.metadata.name}' declares translates but has no locale-specific payload field.`,
+          }),
+        );
+      }
       if (!childProps.has(translates.on)) {
         out.push(
           emit(phase, {

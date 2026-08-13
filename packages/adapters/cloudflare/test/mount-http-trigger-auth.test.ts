@@ -353,7 +353,7 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
         assets: new StubAssetServer(),
       },
       auth,
-      oauthBearer: { audience: "https://api.example.test" },
+      jwtBearer: { audience: "https://api.example.test" },
     });
     const app = new Hono();
     mountServerEndpoints(app, ref);

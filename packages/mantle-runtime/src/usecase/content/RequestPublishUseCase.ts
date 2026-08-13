@@ -2,8 +2,6 @@ import {
   canTransition,
   DiagnosticError,
   EntryDataValidator,
-  publishRequiresApproval,
-  resolveLifecycle,
   runtimeDiagnostic,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
@@ -20,16 +18,8 @@ import {
 import { assertEntryWritable } from "../../domain/service/io/EntryWriteGuard.js";
 
 /**
- * `RequestPublishUseCase` — publish or queue-for-approval, depending
- * on the Schema's `lifecycle` mode.
- *
- * v0.1.0 ships the `simple` publish workflow — request goes straight to
- * `published` with a status guard via the spec's state machine. The Schema parser
- * accepts `lifecycle: editorial` (it's a v0.1.x-committed mode in
- * `V01_LIFECYCLE_MODES`), so this use case is the only line of
- * defense: when a Schema declares `editorial`, it surfaces a
- * structured `LIFECYCLE_NOT_IN_V010` error here at request time.
- * The approvals-queue branch lands in v0.1.x.
+ * `RequestPublishUseCase` — publish with a status guard via the
+ * Schema's state machine.
  */
 export class RequestPublishUseCase {
   constructor(
@@ -47,19 +37,6 @@ export class RequestPublishUseCase {
       throw new DiagnosticError(notFoundDiagnostic(opPath, "<unknown>", request.id));
     }
     const schema = this.schemas.get(existing.collection);
-    if (publishRequiresApproval(schema)) {
-      throw new DiagnosticError(
-        runtimeDiagnostic({
-          code: "LIFECYCLE_NOT_IN_V010",
-          severity: "error",
-          path: opPath,
-          value: resolveLifecycle(schema),
-          expected: "lifecycle: 'simple' for request_publish ('none' records are already operational; editorial lands in v0.1.x)",
-          message: `Schema '${existing.collection}' uses lifecycle: 'editorial'; its approval/request-publish runtime lands in v0.1.x.`,
-        }),
-      );
-    }
-
     if (!canTransition(schema, existing.status, "published")) {
       throw new DiagnosticError(
         illegalTransitionDiagnostic(opPath, existing.status, "published"),

@@ -1,35 +1,64 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, LogOut } from "lucide-react";
-import { Button } from "../../ui/button";
+import { AlertTriangle, Loader2Icon, LogOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
+import { authMethodsQueryOptions } from "../../lib/queries";
+import type { AuthMethodInfo } from "../../lib/types";
 import { signOut } from "../../lib/auth";
+
+function AuthPage({
+  children,
+  wide = false,
+}: {
+  children: React.ReactNode;
+  wide?: boolean;
+}): React.ReactElement {
+  return (
+    <main className="flex min-h-svh items-center justify-center p-6">
+      <Card className={wide ? "w-full max-w-md" : "w-full max-w-sm"}>
+        {children}
+      </Card>
+    </main>
+  );
+}
 
 export function GateLoading(): React.ReactElement {
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <div className="glass-card w-full max-w-sm p-6">
-        <div className="mb-4 h-4 w-24 animate-pulse rounded bg-muted" />
-        <div className="space-y-2">
-          <div className="h-3 w-full animate-pulse rounded bg-muted" />
-          <div className="h-3 w-2/3 animate-pulse rounded bg-muted" />
-        </div>
-      </div>
-    </div>
+    <AuthPage>
+      <CardHeader>
+        <Skeleton className="h-4 w-24" />
+      </CardHeader>
+      <CardContent className="space-y-2" aria-busy="true">
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-2/3" />
+      </CardContent>
+    </AuthPage>
   );
 }
 
 export function GateError({ error }: { error: unknown }): React.ReactElement {
   const { language } = usePreferences();
-  const message = error instanceof Error ? error.message : "Unknown error.";
+  const message = error instanceof Error ? error.message : t(language, "common.unknownError");
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <div className="glass-card animate-rise w-full max-w-sm p-8 text-center">
-        <h1 className="mb-2 text-xl">{t(language, "auth.error.title")}</h1>
-        <p className="text-sm text-muted-foreground">{message}</p>
-      </div>
-    </div>
+    <AuthPage>
+      <CardHeader className="text-center">
+        <CardTitle className="text-xl">
+          <h1>{t(language, "auth.error.title")}</h1>
+        </CardTitle>
+        <CardDescription role="alert">{message}</CardDescription>
+      </CardHeader>
+    </AuthPage>
   );
 }
 
@@ -40,17 +69,21 @@ export function AccessDeniedView({
 }): React.ReactElement {
   const { language } = usePreferences();
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <div className="glass-card animate-rise w-full max-w-md p-8 text-center">
+    <AuthPage wide>
+      <CardHeader className="text-center">
         <div className="mx-auto mb-3 inline-flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
           <AlertTriangle className="size-5" aria-hidden />
         </div>
-        <h1 className="mb-2 text-xl">{t(language, "auth.accessDenied.title")}</h1>
+        <CardTitle className="text-xl">
+          <h1>{t(language, "auth.accessDenied.title")}</h1>
+        </CardTitle>
         {login ? (
-          <p className="mb-1 text-sm font-medium text-foreground">
+          <CardDescription className="font-medium text-foreground">
             GitHub: {login}
-          </p>
+          </CardDescription>
         ) : null}
+      </CardHeader>
+      <CardContent className="text-center">
         <p className="mb-1 text-sm text-muted-foreground">
           {t(language, "auth.accessDenied.noStaff")}
         </p>
@@ -61,26 +94,10 @@ export function AccessDeniedView({
           <LogOut className="me-2 size-4" aria-hidden />
           {t(language, "common.signOut")}
         </Button>
-      </div>
-    </div>
+      </CardContent>
+    </AuthPage>
   );
 }
-
-// Mirrors `AuthMethodInfo` exported from `@aotter/mantle-cloudflare`
-// (see `createAuth.ts`). Duplicated here because the admin SPA is built
-// adapter-agnostic and can't import from the adapter package; the
-// `/api/auth/methods` endpoint is the wire contract between them.
-type AuthMethodInfo =
-  | { kind: "email-otp" }
-  | { kind: "magic-link" }
-  | { kind: "social"; provider: string }
-  | { kind: "oauth"; providerId: string; displayName?: string };
-
-// Shared input styling for the email-otp form. Lives at module scope
-// so we don't reallocate the string on every render and so a future
-// `ui/input` component can swap in by replacing this one constant.
-const INPUT_CLASS =
-  "w-full rounded border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
 // Per-section spacing. `first:` zeroes top spacing for whichever
 // section the server returns first — keeps the spacing rules
@@ -93,11 +110,31 @@ const SECTION_DIVIDED = "first:mt-0 first:border-t-0 first:pt-0 mt-6 border-t bo
  * Accepts only values that start with a single `/` (rejecting absolute
  * `https://…` and protocol-relative `//host` URLs), falling back to
  * `/admin`. Prevents an open redirect on the OTP success path, which
- * navigates client-side with the raw value. (#387)
+ * navigates client-side with the raw value.
  */
 export function safeReturnPath(raw: string | null | undefined): string {
-  if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
-  return "/admin";
+  if (!raw?.startsWith("/")) return "/admin";
+  try {
+    const base = "https://mantle.invalid";
+    const url = new URL(raw, base);
+    return url.origin === base ? `${url.pathname}${url.search}${url.hash}` : "/admin";
+  } catch {
+    return "/admin";
+  }
+}
+
+export function SignInButton({
+  busy,
+  children,
+  disabled,
+  ...props
+}: React.ComponentProps<typeof Button> & { busy: boolean }): React.ReactElement {
+  return (
+    <Button {...props} disabled={busy || disabled} aria-busy={busy || undefined}>
+      {busy ? <Loader2Icon className="animate-spin" aria-hidden /> : null}
+      {children}
+    </Button>
+  );
 }
 
 /**
@@ -113,39 +150,26 @@ export function safeReturnPath(raw: string | null | undefined): string {
 export function SignInView(): React.ReactElement {
   const { language } = usePreferences();
   const params = new URLSearchParams(window.location.search);
-  // Only accept a same-origin path. The OTP success path navigates
-  // client-side via `window.location.assign(returnTo)`, so an absolute
-  // (`https://evil`) or protocol-relative (`//evil`) value would be a
-  // post-login open redirect. The gate that produces this param only
-  // ever emits `pathname+search`. (#387)
   const ret = safeReturnPath(params.get("return"));
 
-  const methods = useQuery<AuthMethodInfo[]>({
-    queryKey: ["auth-methods"],
-    queryFn: async () => {
-      const res = await fetch("/api/auth/methods", { credentials: "include" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { methods?: AuthMethodInfo[] };
-      return data.methods ?? [];
-    },
-    retry: false,
-  });
+  const methods = useQuery<AuthMethodInfo[]>(authMethodsQueryOptions());
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <div className="glass-card animate-rise w-full max-w-sm p-8">
-        <p className="label-eyebrow mb-2">{t(language, "auth.signIn.eyebrow")}</p>
-        <h1 className="mb-2 text-xl">{t(language, "auth.signIn.title")}</h1>
-
+    <AuthPage>
+      <CardHeader>
+        <CardDescription>{t(language, "auth.signIn.eyebrow")}</CardDescription>
+        <CardTitle className="text-xl">
+          <h1>{t(language, "auth.signIn.title")}</h1>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
         {methods.isError ? (
-          <p className="mb-4 text-sm text-destructive">
+          <p className="mb-4 text-sm text-destructive" role="alert">
             {t(language, "auth.signIn.methodsLoadFailed")}
           </p>
         ) : null}
         {methods.isLoading ? (
-          <div className="space-y-2">
-            <div className="h-9 w-full animate-pulse rounded bg-muted" />
-          </div>
+          <Skeleton className="h-9 w-full" />
         ) : null}
         {methods.data?.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -171,8 +195,8 @@ export function SignInView(): React.ReactElement {
             ))}
           </div>
         ) : null}
-      </div>
-    </div>
+      </CardContent>
+    </AuthPage>
   );
 }
 
@@ -189,13 +213,21 @@ function MethodSection({
   // `provider` discriminator picks the button label.
   switch (method.kind) {
     case "social":
-      return <SocialSignInSection provider={method.provider} returnTo={returnTo} />;
+      return (
+        <RedirectSignInSection
+          endpoint="/api/auth/sign-in/social"
+          body={{ provider: method.provider, callbackURL: returnTo }}
+          buttonKey="auth.signIn.method.social.button"
+          displayName={SOCIAL_PROVIDER_DISPLAY_NAME[method.provider] ?? method.provider}
+        />
+      );
     case "oauth":
       return (
-        <OAuthSignInSection
-          providerId={method.providerId}
+        <RedirectSignInSection
+          endpoint="/api/auth/sign-in/oauth2"
+          body={{ providerId: method.providerId, callbackURL: returnTo }}
+          buttonKey="auth.signIn.method.oauth.button"
           displayName={method.displayName ?? method.providerId}
-          returnTo={returnTo}
         />
       );
     case "email-otp":
@@ -263,61 +295,47 @@ const SOCIAL_PROVIDER_DISPLAY_NAME: Readonly<Record<string, string>> = {
  * Unknown ids (a provider Better Auth adds before the SPA rebuilds)
  * render with the raw id as the substitution.
  */
-function SocialSignInSection({
-  provider,
-  returnTo,
-}: {
-  provider: string;
-  returnTo: string;
-}): React.ReactElement {
-  const { language } = usePreferences();
-  const displayName = SOCIAL_PROVIDER_DISPLAY_NAME[provider] ?? provider;
-  const startSocial = async (): Promise<void> => {
-    const res = await fetch("/api/auth/sign-in/social", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider, callbackURL: returnTo }),
-    });
-    if (!res.ok) return;
-    const data = (await res.json()) as { url?: string };
-    if (data.url) window.location.href = data.url;
-  };
-  return (
-    <div className={SECTION_PLAIN}>
-      <Button onClick={() => void startSocial()} className="w-full">
-        {t(language, "auth.signIn.method.social.button", { provider: displayName })}
-      </Button>
-    </div>
-  );
-}
-
-function OAuthSignInSection({
-  providerId,
+function RedirectSignInSection({
+  endpoint,
+  body,
+  buttonKey,
   displayName,
-  returnTo,
 }: {
-  providerId: string;
+  endpoint: string;
+  body: Record<string, string>;
+  buttonKey:
+    | "auth.signIn.method.social.button"
+    | "auth.signIn.method.oauth.button";
   displayName: string;
-  returnTo: string;
 }): React.ReactElement {
   const { language } = usePreferences();
-  const startOAuth = async (): Promise<void> => {
-    const res = await fetch("/api/auth/sign-in/oauth2", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ providerId, callbackURL: returnTo }),
-    });
-    if (!res.ok) return;
-    const data = (await res.json()) as { url?: string };
-    if (data.url) window.location.href = data.url;
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const start = async (): Promise<void> => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { url?: string };
+      if (!data.url) throw new Error("Missing sign-in URL");
+      window.location.assign(data.url);
+    } catch {
+      setError(t(language, "auth.signIn.startFailed"));
+      setBusy(false);
+    }
   };
   return (
     <div className={SECTION_PLAIN}>
-      <Button onClick={() => void startOAuth()} className="w-full">
-        {t(language, "auth.signIn.method.oauth.button", { provider: displayName })}
-      </Button>
+      <SignInButton busy={busy} onClick={() => void start()} className="w-full">
+        {t(language, buttonKey, { provider: displayName })}
+      </SignInButton>
+      {error ? <p className="mt-2 text-xs text-destructive" role="alert">{error}</p> : null}
     </div>
   );
 }
@@ -339,6 +357,8 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
     setError(null);
     try {
       await run();
+    } catch {
+      setError(t(language, "auth.signIn.requestFailed"));
     } finally {
       setBusy(false);
     }
@@ -396,7 +416,7 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
           <label htmlFor="signin-email" className="sr-only">
             {t(language, "auth.signIn.method.email-otp.emailLabel")}
           </label>
-          <input
+          <Input
             id="signin-email"
             type="email"
             value={email}
@@ -404,11 +424,10 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
             placeholder={t(language, "auth.signIn.method.email-otp.emailPlaceholder")}
             required
             autoComplete="email"
-            className={INPUT_CLASS}
           />
-          <Button type="submit" className="w-full" disabled={busy || !email}>
+          <SignInButton type="submit" className="w-full" busy={busy} disabled={!email}>
             {t(language, "auth.signIn.method.email-otp.sendButton")}
-          </Button>
+          </SignInButton>
         </form>
       ) : (
         <form onSubmit={verifyOtp} className="space-y-2">
@@ -418,7 +437,7 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
           <label htmlFor="signin-otp" className="sr-only">
             {t(language, "auth.signIn.method.email-otp.otpLabel")}
           </label>
-          <input
+          <Input
             id="signin-otp"
             type="text"
             inputMode="numeric"
@@ -427,11 +446,10 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
             onChange={(e) => setOtp(e.currentTarget.value)}
             placeholder={t(language, "auth.signIn.method.email-otp.otpPlaceholder")}
             required
-            className={INPUT_CLASS}
           />
-          <Button type="submit" className="w-full" disabled={busy || !otp}>
+          <SignInButton type="submit" className="w-full" busy={busy} disabled={!otp}>
             {t(language, "auth.signIn.method.email-otp.verifyButton")}
-          </Button>
+          </SignInButton>
           <button
             type="button"
             onClick={() => setStep("email")}
@@ -442,7 +460,7 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
         </form>
       )}
       {error ? (
-        <p className="mt-2 text-xs text-destructive">{error}</p>
+        <p className="mt-2 text-xs text-destructive" role="alert">{error}</p>
       ) : null}
     </div>
   );
@@ -465,6 +483,8 @@ function MagicLinkSection({ returnTo }: { returnTo: string }): React.ReactElemen
     setError(null);
     try {
       await run();
+    } catch {
+      setError(t(language, "auth.signIn.requestFailed"));
     } finally {
       setBusy(false);
     }
@@ -517,7 +537,7 @@ function MagicLinkSection({ returnTo }: { returnTo: string }): React.ReactElemen
           <label htmlFor="signin-mlink-email" className="sr-only">
             {t(language, "auth.signIn.method.magic-link.emailLabel")}
           </label>
-          <input
+          <Input
             id="signin-mlink-email"
             type="email"
             value={email}
@@ -525,15 +545,14 @@ function MagicLinkSection({ returnTo }: { returnTo: string }): React.ReactElemen
             placeholder={t(language, "auth.signIn.method.magic-link.emailPlaceholder")}
             required
             autoComplete="email"
-            className={INPUT_CLASS}
           />
-          <Button type="submit" className="w-full" disabled={busy || !email}>
+          <SignInButton type="submit" className="w-full" busy={busy} disabled={!email}>
             {t(language, "auth.signIn.method.magic-link.sendButton")}
-          </Button>
+          </SignInButton>
         </form>
       )}
       {error ? (
-        <p className="mt-2 text-xs text-destructive">{error}</p>
+        <p className="mt-2 text-xs text-destructive" role="alert">{error}</p>
       ) : null}
     </div>
   );

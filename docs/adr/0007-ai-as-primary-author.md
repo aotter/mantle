@@ -100,6 +100,8 @@ What it catches:
   `View.filter` refer only to declared properties of that Schema
 - `Schema.uniqueIndexes` and `Schema.indexes` contain valid ordered
   tuples of scalar properties declared in `spec.schema.properties`
+- `Schema.searchableFields` contains unique top-level string properties
+- `Schema.uiSchema.list.filterField` names an indexed operational string enum
 - `x-mantle-bind: <value>` is in the closed enum
 - `requires.auth.all` predicates are in the v0.1 vocabulary
 - `Trigger.source.path` does not collide with another Trigger
@@ -264,7 +266,7 @@ Concrete artifacts today:
   admin: write a post, update a draft, request publish, list
   submissions.
 - Future ops-role verbs that don't exist yet but have an obvious
-  operator use case ("translate this draft", "schedule for Friday").
+  operator use case ("translate this draft", "publish this entry").
   When added, they land as **new SDK builtin tools** — declared in
   the MCP catalog source under the closed Day-1 set, not
   auto-generated from consumer Procedures.

@@ -27,13 +27,24 @@ import {
   Upload,
   Video,
   Wand2,
-  X,
 } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import type { SiteInfo } from "../../lib/types";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import { primaryPublicUrl, uploadMediaAsset } from "../media/media-upload";
 
 export function RichTextEditor({
@@ -98,7 +109,7 @@ export function RichTextEditor({
         language,
       });
       const url = primaryPublicUrl(committed);
-      if (!url) throw new Error("Uploaded media has no public URL.");
+      if (!url) throw new Error(t(language, "common.unknownError"));
       insertImage(url, committed.alt ?? file.name);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -109,7 +120,7 @@ export function RichTextEditor({
   }
 
   function insertImage(url: string, alt: string): void {
-    insertBlock(`![${alt || "image"}](${url})`);
+    insertBlock(`![${alt}](${url})`);
   }
 
   function insertVideo(url: string): void {
@@ -126,12 +137,15 @@ export function RichTextEditor({
       return;
     }
     if (style === "quote") insertBlock("> ");
-    if (style === "code") insert("```\n", "\n```", "code");
+    if (style === "code") insert("```\n", "\n```");
   }
 
   return (
-    <div className="rich-editor">
-      <div className="rich-editor-toolbar" aria-label={t(language, "editor.toolbar")}>
+    <div>
+      <div
+        className="flex flex-wrap items-center gap-1 rounded-t-lg border bg-muted/30 p-1"
+        aria-label={t(language, "editor.toolbar")}
+      >
         <ToolbarButton title={t(language, "editor.undo")} onClick={() => runTextCommand("undo", textRef.current)}>
           <Undo2 className="size-4" aria-hidden />
         </ToolbarButton>
@@ -139,7 +153,7 @@ export function RichTextEditor({
           <Redo2 className="size-4" aria-hidden />
         </ToolbarButton>
         <ToolbarDivider />
-        <ToolbarButton title={t(language, "editor.aiClean")} onClick={() => insertBlock("> 重點提示：")}>
+        <ToolbarButton title={t(language, "editor.aiClean")} onClick={() => insertBlock("> ")}>
           <Wand2 className="size-4" aria-hidden />
         </ToolbarButton>
         <ToolbarButton title={t(language, "editor.uploadImage")} onClick={() => fileRef.current?.click()} disabled={uploading}>
@@ -156,24 +170,28 @@ export function RichTextEditor({
           }}
         />
         <ToolbarDivider />
-        <label className="rich-editor-select" title={t(language, "editor.textStyle")}>
+        <label
+          className="flex h-8 items-center gap-1 rounded-md px-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          title={t(language, "editor.textStyle")}
+        >
           <Type className="size-4" aria-hidden />
           <select
+            className="bg-transparent text-sm outline-none"
             onChange={(event) => {
               applyTextStyle(event.target.value);
               event.target.value = "paragraph";
             }}
             defaultValue="paragraph"
           >
-            <option value="paragraph">Paragraph</option>
+            <option value="paragraph">{t(language, "editor.paragraph")}</option>
             <option value="h1">H1</option>
             <option value="h2">H2</option>
             <option value="h3">H3</option>
             <option value="h4">H4</option>
             <option value="h5">H5</option>
             <option value="h6">H6</option>
-            <option value="quote">Quote</option>
-            <option value="code">Code</option>
+            <option value="quote">{t(language, "editor.quote")}</option>
+            <option value="code">{t(language, "editor.code")}</option>
           </select>
         </label>
         <ToolbarDivider />
@@ -189,7 +207,7 @@ export function RichTextEditor({
         <ToolbarButton title={t(language, "editor.strike")} onClick={() => insert("~~", "~~", t(language, "editor.selectedText"))}>
           <Strikethrough className="size-4" aria-hidden />
         </ToolbarButton>
-        <ToolbarButton title={t(language, "editor.inlineCode")} onClick={() => insert("`", "`", "code")}>
+        <ToolbarButton title={t(language, "editor.inlineCode")} onClick={() => insert("`", "`")}>
           <Code2 className="size-4" aria-hidden />
         </ToolbarButton>
         <ToolbarButton title={t(language, "editor.textColor")} onClick={() => insert('<span class="text-accent">', "</span>", t(language, "editor.selectedText"))}>
@@ -227,7 +245,7 @@ export function RichTextEditor({
         <ToolbarButton title={t(language, "editor.link")} onClick={() => insert("[", "](https://)", t(language, "editor.linkText"))}>
           <Link className="size-4" aria-hidden />
         </ToolbarButton>
-        <ToolbarButton title={t(language, "editor.table")} onClick={() => insertBlock("| 欄位 | 說明 |\n| --- | --- |\n|  |  |")}>
+        <ToolbarButton title={t(language, "editor.table")} onClick={() => insertBlock("|  |  |\n| --- | --- |\n|  |  |")}>
           <Table2 className="size-4" aria-hidden />
         </ToolbarButton>
         <ToolbarButton title={t(language, "editor.mediaLibrary")} onClick={() => setMediaOpen(true)}>
@@ -241,14 +259,14 @@ export function RichTextEditor({
         </ToolbarButton>
       </div>
 
-      <textarea
+      <Textarea
         ref={textRef}
-        className={compact ? "admin-textarea admin-textarea-compact rich-editor-textarea" : "admin-textarea rich-editor-textarea"}
+        className={`${compact ? "min-h-32" : "min-h-64"} rounded-t-none border-t-0 resize-y font-mono`}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
-      {uploading ? <p className="text-xs text-muted-foreground">{t(language, "editor.uploading")}</p> : null}
+      {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
+      {uploading ? <p className="mt-2 text-xs text-muted-foreground">{t(language, "editor.uploading")}</p> : null}
       {mediaOpen ? (
         <MediaInsertDialog
           language={language}
@@ -282,14 +300,22 @@ function ToolbarButton({
   children: React.ReactNode;
 }): React.ReactElement {
   return (
-    <button type="button" title={title} aria-label={title} onClick={onClick} disabled={disabled}>
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      disabled={disabled}
+    >
       {children}
-    </button>
+    </Button>
   );
 }
 
 function ToolbarDivider(): React.ReactElement {
-  return <span className="rich-editor-divider" aria-hidden />;
+  return <Separator orientation="vertical" className="mx-1 h-5" aria-hidden />;
 }
 
 function MediaInsertDialog({
@@ -304,25 +330,35 @@ function MediaInsertDialog({
   const [url, setUrl] = React.useState("");
   const [alt, setAlt] = React.useState("");
   return (
-    <div className="rich-editor-dialog-backdrop" role="presentation">
-      <div className="rich-editor-dialog" role="dialog" aria-modal="true" aria-label={t(language, "editor.mediaLibrary")}>
-        <DialogHeader title={t(language, "editor.insertImage")} onClose={onClose} />
-        <div className="grid gap-3">
-          <label className="grid gap-1 text-sm font-medium">
-            {t(language, "editor.imageUrl")}
-            <input className="admin-input" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://..." />
-          </label>
-          <label className="grid gap-1 text-sm font-medium">
-            {t(language, "media.alt")}
-            <input className="admin-input" value={alt} onChange={(event) => setAlt(event.target.value)} />
-          </label>
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent closeLabel={t(language, "common.close")}>
+        <DialogHeader>
+          <DialogTitle>{t(language, "editor.insertImage")}</DialogTitle>
+          <DialogDescription className="sr-only">{t(language, "editor.mediaLibrary")}</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="rich-editor-image-url">{t(language, "editor.imageUrl")}</Label>
+            <Input
+              id="rich-editor-image-url"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              placeholder="https://..."
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="rich-editor-image-alt">{t(language, "media.alt")}</Label>
+            <Input id="rich-editor-image-alt" value={alt} onChange={(event) => setAlt(event.target.value)} />
+          </div>
+        </div>
+        <DialogFooter>
           <Button type="button" disabled={!url.trim()} onClick={() => onInsert(url.trim(), alt.trim())}>
             <Check className="size-4" aria-hidden />
             {t(language, "editor.insertImage")}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -337,36 +373,29 @@ function VideoInsertDialog({
 }): React.ReactElement {
   const [url, setUrl] = React.useState("");
   return (
-    <div className="rich-editor-dialog-backdrop" role="presentation">
-      <div className="rich-editor-dialog" role="dialog" aria-modal="true" aria-label={t(language, "editor.videoUrl")}>
-        <DialogHeader title={t(language, "editor.insertVideo")} onClose={onClose} />
-        <label className="grid gap-1 text-sm font-medium">
-          {t(language, "editor.videoUrl")}
-          <input className="admin-input" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="YouTube / Dailymotion URL" />
-        </label>
-        <Button type="button" className="mt-3" disabled={!url.trim()} onClick={() => onInsert(url.trim())}>
-          <Video className="size-4" aria-hidden />
-          {t(language, "editor.insertVideo")}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function DialogHeader({
-  title,
-  onClose,
-}: {
-  title: string;
-  onClose: () => void;
-}): React.ReactElement {
-  return (
-    <div className="mb-4 flex items-center justify-between gap-3">
-      <h2 className="text-lg font-semibold">{title}</h2>
-      <button type="button" className="row-action" onClick={onClose} aria-label="Close">
-        <X className="size-4" aria-hidden />
-      </button>
-    </div>
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent closeLabel={t(language, "common.close")}>
+        <DialogHeader>
+          <DialogTitle>{t(language, "editor.insertVideo")}</DialogTitle>
+          <DialogDescription className="sr-only">{t(language, "editor.videoUrl")}</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          <Label htmlFor="rich-editor-video-url">{t(language, "editor.videoUrl")}</Label>
+          <Input
+            id="rich-editor-video-url"
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            placeholder={t(language, "editor.videoUrl")}
+          />
+        </div>
+        <DialogFooter>
+          <Button type="button" disabled={!url.trim()} onClick={() => onInsert(url.trim())}>
+            <Video className="size-4" aria-hidden />
+            {t(language, "editor.insertVideo")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -380,11 +409,11 @@ function videoEmbed(rawUrl: string): string {
   if (!url) return `<a href="${escapeAttribute(rawUrl)}">${escapeHtml(rawUrl)}</a>`;
   const youtube = youtubeId(url);
   if (youtube) {
-    return `<iframe src="https://www.youtube.com/embed/${youtube}" title="YouTube video" loading="lazy" allowfullscreen></iframe>`;
+    return `<iframe src="https://www.youtube.com/embed/${youtube}" title="YouTube" loading="lazy" allowfullscreen></iframe>`;
   }
   const dailymotion = dailymotionId(url);
   if (dailymotion) {
-    return `<iframe src="https://www.dailymotion.com/embed/video/${dailymotion}" title="Dailymotion video" loading="lazy" allowfullscreen></iframe>`;
+    return `<iframe src="https://www.dailymotion.com/embed/video/${dailymotion}" title="Dailymotion" loading="lazy" allowfullscreen></iframe>`;
   }
   return `<a href="${escapeAttribute(url.toString())}">${escapeHtml(url.toString())}</a>`;
 }

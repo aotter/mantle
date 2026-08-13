@@ -38,7 +38,7 @@ function manifests(): Manifest[] {
         required: ["slug", "locale", "title"],
       },
       localized: true,
-      lifecycle: "simple",
+      lifecycle: "publishing",
     },
   }];
 }

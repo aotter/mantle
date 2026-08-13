@@ -145,8 +145,8 @@ describe("compileView", () => {
     )).toThrow(/requires ctx\.user\.id/);
   });
 
-  it("drops a filter eq whose param-ref resolves to undefined (forward-compat for v0.1.x optional)", () => {
-    const c = compileView(
+  it("rejects a missing required filter param", () => {
+    expect(() => compileView(
       view({
         from: "posts",
         filter: {
@@ -157,39 +157,7 @@ describe("compileView", () => {
         },
       }),
       { params: {} },
-    );
-    expect(c.params).toEqual(["posts", "published"]);
-    expect(c.sql).not.toContain("locale");
-  });
-
-  it("partial-drop in nested AND keeps params bound 1:1 with `?` placeholders", () => {
-    // Regression: compileFilter now returns {sql, params} per node so
-    // dropped sub-trees can never push orphan params into the parent.
-    const c = compileView(
-      view({
-        from: "posts",
-        params: {
-          type: "object",
-          properties: { tag: { type: "string" } },
-          required: ["tag"],
-        },
-        filter: {
-          and: [
-            { eq: { field: "status", value: "published" } },
-            {
-              and: [
-                { eq: { field: "locale", value: "en-US" } },
-                { eq: { field: "tag", value: { $param: "tag" } } },
-              ],
-            },
-          ],
-        },
-      }),
-      { params: {} },
-    );
-    expect(c.params).toEqual(["posts", "published", "en-US"]);
-    const placeholders = (c.sql.match(/\?/g) ?? []).length;
-    expect(placeholders).toBe(3);
+    )).toThrow(/requires param 'locale'/);
   });
 
   it("accepts hyphenated field names via quoted JSON paths (#210 PR14 / codex CX3)", () => {
@@ -233,18 +201,6 @@ describe("compileView", () => {
         ),
       ).toThrow(/unrepresentable character|NUL|"|\\/);
     }
-  });
-
-  it("emits no WHERE filter when every filter clause drops", () => {
-    const c = compileView(
-      view({
-        from: "posts",
-        filter: { eq: { field: "tag", value: { $param: "tag" } } },
-      }),
-      { params: {} },
-    );
-    expect(c.params).toEqual(["posts"]);
-    expect(c.sql).toMatch(/WHERE collection = \? ORDER BY|WHERE collection = \? LIMIT/);
   });
 
   it("clamps caller-supplied show to View.spec.limit (server-enforced cap)", () => {
@@ -292,6 +248,20 @@ describe("compileView", () => {
 });
 
 describe("ExecuteViewUseCase", () => {
+  it("returns UNAUTHENTICATED when an identity-bound View reaches runtime without ctx.user", async () => {
+    const result = await new ExecuteViewUseCase(new InMemoryDatabase()).execute({
+      view: view({
+        from: "orders",
+        filter: { eq: { field: "userId", value: { "$ctx.user": "id" } } },
+      }),
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      diagnostic: { code: "UNAUTHENTICATED", phase: "runtime" },
+    });
+  });
+
   it("returns only rows owned by the normalized ctx.user", async () => {
     const db = new InMemoryDatabase();
     for (const [id, userId, status, placedAt] of [
@@ -368,7 +338,7 @@ describe("ExecuteViewUseCase", () => {
           },
         },
         localized: false,
-        lifecycle: "none",
+        lifecycle: "operational",
       },
     };
     const useCase = new ExecuteViewUseCase(db, undefined, new Map([["settings", schema]]));

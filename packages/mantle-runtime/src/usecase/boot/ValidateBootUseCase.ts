@@ -33,7 +33,7 @@ import {
  *     itself ships in `InvokeBuiltinUseCase`.
  *   - Every `Trigger.target.procedure` resolves to a manifest.
  *   - Every `http` Trigger has a unique `(method, path)` pair and a
- *     `/api/` prefix.
+ *     `/api/` prefix outside Core-owned route namespaces.
  *   - Every `Trigger.source.kind: lifecycle` watches a declared Schema
  *     (`LIFECYCLE_SCHEMA_UNKNOWN`). The hook runtime is the
  *     `LifecycleHookingEntryRepository` decorator.
@@ -47,6 +47,10 @@ export type ValidateBootResponse =
 export interface ValidateBootRequest {
   readonly manifests: readonly Manifest[];
   readonly registry: HandlerRegistry;
+  /** Adapter-owned route prefixes in addition to Core's fixed REST
+   *  namespaces. The Cloudflare adapter supplies its configured Auth
+   *  base path so HTTP Triggers cannot register ahead of Auth. */
+  readonly reservedHttpPathPrefixes?: readonly string[];
   /** Site config locales (ADR-0010). Empty/absent enables the
    *  zero-locale-site path: any localized Schema fails boot with
    *  `SCHEMA_LOCALIZED_REQUIRES_SITE_LOCALES`. The runtime's
@@ -70,7 +74,7 @@ export class ValidateBootUseCase {
     for (const diagnostic of ValidateManifestsUseCase.run({
       manifests: request.manifests,
     }).diagnostics) {
-      if (isSchemaIndexDiagnostic(diagnostic)) {
+      if (isBootBlockingManifestDiagnostic(diagnostic)) {
         diagnostics.push({ ...diagnostic, phase: "boot" });
       }
     }
@@ -199,9 +203,14 @@ export class ValidateBootUseCase {
       }
     }
 
-    // 3. HTTP trigger uniqueness + /api/ prefix.
+    // 3. HTTP trigger uniqueness + Core route ownership.
     diagnostics.push(...checkHttpRouteCollisions(partitioned.triggers));
-    diagnostics.push(...checkHttpRoutePrefix(partitioned.triggers));
+    diagnostics.push(
+      ...checkHttpRoutePrefix(
+        partitioned.triggers,
+        request.reservedHttpPathPrefixes,
+      ),
+    );
 
     // 4. MCP tool-name collision (POC PR #48): per-collection tool
     //    emission lowercases + kebab→snake the Schema name; two
@@ -231,10 +240,16 @@ export class ValidateBootUseCase {
   }
 }
 
-function isSchemaIndexDiagnostic(diagnostic: Diagnostic): boolean {
+function isBootBlockingManifestDiagnostic(diagnostic: Diagnostic): boolean {
   return diagnostic.code === "SCHEMA_INDEX_INVALID" ||
     diagnostic.code === "SCHEMA_INDEX_FIELD_UNKNOWN" ||
-    diagnostic.code === "UNIQUE_INDEX_FIELD_UNKNOWN";
+    diagnostic.code === "UNIQUE_INDEX_FIELD_UNKNOWN" ||
+    diagnostic.code === "SCHEMA_SEARCH_INVALID" ||
+    diagnostic.code === "SCHEMA_SEARCH_FIELD_UNKNOWN" ||
+    diagnostic.code === "SCHEMA_UI_INVALID" ||
+    diagnostic.code === "VIEW_FILTER_CTX_USER_REF_INVALID" ||
+    diagnostic.code === "VIEW_FILTER_CTX_USER_REF_REQUIRES_AUTH" ||
+    diagnostic.code === "VIEW_FILTER_CTX_USER_REF_REQUIRES_INDEX";
 }
 
 function checkHttpRouteCollisions(triggers: readonly TriggerManifest[]): Diagnostic[] {
@@ -262,28 +277,48 @@ function checkHttpRouteCollisions(triggers: readonly TriggerManifest[]): Diagnos
   return out;
 }
 
-function checkHttpRoutePrefix(triggers: readonly TriggerManifest[]): Diagnostic[] {
+const CORE_RESERVED_HTTP_PATH_PREFIXES = ["/api/auth", "/api/views"] as const;
+
+function checkHttpRoutePrefix(
+  triggers: readonly TriggerManifest[],
+  adapterReservedPrefixes: readonly string[] = [],
+): Diagnostic[] {
   const out: Diagnostic[] = [];
+  const reservedPrefixes = [
+    ...new Set([...CORE_RESERVED_HTTP_PATH_PREFIXES, ...adapterReservedPrefixes]),
+  ];
   for (const t of triggers) {
     if (t.spec.source.kind !== "http") continue;
     const path = t.spec.source.path;
-    if (!path.startsWith("/api/")) {
+    const reservedPrefix = reservedPrefixes.find((prefix) =>
+      prefix.length > 0 && hasPathPrefix(path, prefix)
+    );
+    if (!path.startsWith("/api/") || reservedPrefix) {
       out.push(
         bootDiagnostic({
           code: "TRIGGER_PATH_INVALID",
           severity: "error",
           path: `manifest:Trigger/${t.metadata.name}#/spec/source/path`,
           value: path,
-          expected: "path starting with '/api/'",
-          message:
-            `Trigger '${t.metadata.name}' has path '${path}' — http Trigger ` +
-            `paths MUST start with '/api/' so adapters can route public ` +
-            `pages and Procedure endpoints without ambiguity.`,
+          expected: reservedPrefix
+            ? `path outside Core-owned prefix '${reservedPrefix}'`
+            : "path starting with '/api/'",
+          message: reservedPrefix
+            ? `Trigger '${t.metadata.name}' has path '${path}', which is owned by Core under '${reservedPrefix}'.`
+            : `Trigger '${t.metadata.name}' has path '${path}' — http Trigger ` +
+              `paths MUST start with '/api/' so adapters can route public ` +
+              `pages and Procedure endpoints without ambiguity.`,
         }),
       );
     }
   }
   return out;
+}
+
+function hasPathPrefix(path: string, prefix: string): boolean {
+  return path === prefix ||
+    path.startsWith(`${prefix}/`) ||
+    path.startsWith(`${prefix}{`);
 }
 
 interface ToolNameOwner {

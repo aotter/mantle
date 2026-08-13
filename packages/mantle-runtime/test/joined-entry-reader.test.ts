@@ -27,7 +27,7 @@ function translationsSchema(): SchemaManifest {
       },
       localized: true,
       translates: { parent: "posts", on: "slug" },
-      lifecycle: "simple",
+      lifecycle: "publishing",
     },
   };
 }

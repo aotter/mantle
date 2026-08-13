@@ -4,7 +4,7 @@ import { Check, Copy, ExternalLink, Images, Search, Trash2, Upload, type LucideI
 import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { t } from "../../app/i18n";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
-import { api } from "../../lib/api";
+import { api, ApiError } from "../../lib/api";
 import type {
   MediaLibraryItem,
   MediaLibraryListResult,
@@ -12,15 +12,20 @@ import type {
   SiteInfo,
 } from "../../lib/types";
 import { cn } from "../../lib/utils";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useConfirm } from "../../ui/confirm-dialog";
 import { EmptyState, ErrorBox, PageHeader } from "../../ui/page";
 import { uploadMediaAsset } from "./media-upload";
 import { useCursorPagination } from "../../lib/use-cursor-pagination";
 import { formatTimestampMs } from "../content/field-render";
 
-/** Full-page media library (#434): thumbnail grid of committed assets,
- *  drag-drop + button upload, search, inline alt/caption edit, delete. */
+const MEDIA_SETUP_GUIDE_URL =
+  "https://github.com/aotter/mantle/blob/main/docs/media-uploads.md";
+const MEDIA_SETUP_PROMPT = `Enable Mantle media storage for this site using the runtime's supported storage adapter. If this is a Cloudflare deployment, follow node_modules/@aotter/mantle/docs/media-uploads.md: create and bind an R2 bucket, configure its S3 credentials and public URL, wire mediaStorage, validate, deploy, and verify /admin/media.`;
+
+/** Full-page media library for committed assets. */
 export function MediaLibraryView(): React.ReactElement {
   const { language } = usePreferences();
   const location = useAdminLocation();
@@ -40,12 +45,12 @@ export function MediaLibraryView(): React.ReactElement {
         title={t(language, "media.title")}
         description={t(language, "media.description")}
       />
-      <MediaSearch searchTerm={searchTerm} language={language} />
       <MediaBrowser
         language={language}
         purposes={purposes}
         searchTerm={searchTerm}
         emptyIcon={Images}
+        showSearch
       />
     </div>
   );
@@ -60,12 +65,14 @@ export function MediaBrowser({
   searchTerm,
   emptyIcon,
   onPick,
+  showSearch = false,
 }: {
   language: AdminLanguage;
   purposes: readonly MediaPurposePolicy[];
   searchTerm: string;
   emptyIcon: LucideIcon;
   onPick?: (item: MediaLibraryItem) => void;
+  showSearch?: boolean;
 }): React.ReactElement {
   const queryClient = useQueryClient();
   const listKey = ["media", searchTerm] as const;
@@ -90,6 +97,7 @@ export function MediaBrowser({
     loadPage: loadMediaPage,
   });
   const items = pagination.items;
+  const mediaNotConfigured = isMediaNotConfigured(page1.error);
 
   const [uploading, setUploading] = React.useState(false);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
@@ -136,93 +144,147 @@ export function MediaBrowser({
     }
   }
 
+  if (mediaNotConfigured) {
+    return <MediaSetupState language={language} />;
+  }
+
   return (
-    <div
-      onDragOver={(e) => {
-        if (!canUpload) return;
-        e.preventDefault();
-        setDragging(true);
-      }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={(e) => {
-        if (!canUpload) return;
-        e.preventDefault();
-        setDragging(false);
-        void uploadFiles(e.dataTransfer.files);
-      }}
-      className={cn(
-        "rounded-xl border border-dashed p-4 transition-colors",
-        dragging ? "border-primary bg-accent/40" : "border-transparent",
-      )}
-    >
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="default"
-          onClick={() => fileRef.current?.click()}
-          disabled={!canUpload}
-          title={purposes.length === 0 ? t(language, "media.noPurpose") : undefined}
-        >
-          <Upload className="size-4" aria-hidden />
-          {uploading ? t(language, "media.uploading") : t(language, "media.upload")}
-        </Button>
-        <span className="text-xs text-muted-foreground">{t(language, "media.dropHere")}</span>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            if (e.currentTarget.files) void uploadFiles(e.currentTarget.files);
-          }}
-        />
-      </div>
-
-      {uploadError ? <p className="mb-3 text-xs text-destructive">{uploadError}</p> : null}
-      {page1.isError ? <ErrorBox error={page1.error} /> : null}
-
-      {page1.isLoading ? (
-        <MediaSkeleton />
-      ) : items.length === 0 ? (
-        <EmptyState
-          icon={emptyIcon}
-          title={t(language, "media.empty.title")}
-          description={
-            searchTerm
-              ? t(language, "media.empty.search", { search: searchTerm })
-              : t(language, "media.empty.all")
-          }
-        />
-      ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {items.map((item) => (
-            <MediaTile
-              key={item.id}
-              item={item}
-              language={language}
-              onChanged={refresh}
-              onPick={onPick}
-            />
-          ))}
-        </div>
-      )}
-
-      {pagination.loadMoreError ? <ErrorBox error={pagination.loadMoreError} /> : null}
-      {pagination.nextCursor ? (
-        <div className="mt-4">
+    <>
+      {showSearch ? <MediaSearch searchTerm={searchTerm} language={language} /> : null}
+      <div
+        onDragOver={(e) => {
+          if (!canUpload) return;
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          if (!canUpload) return;
+          e.preventDefault();
+          setDragging(false);
+          void uploadFiles(e.dataTransfer.files);
+        }}
+        className={cn(
+          "rounded-xl border border-dashed p-4 transition-colors",
+          dragging ? "border-primary bg-accent/40" : "border-transparent",
+        )}
+      >
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <Button
             type="button"
-            variant="secondary"
-            onClick={() => void pagination.loadMore()}
-            disabled={pagination.isLoadingMore}
+            variant="default"
+            onClick={() => fileRef.current?.click()}
+            disabled={!canUpload}
+            title={purposes.length === 0 ? t(language, "media.noPurpose") : undefined}
           >
-            {pagination.isLoadingMore ? t(language, "media.saving") : t(language, "media.loadMore")}
+            <Upload className="size-4" aria-hidden />
+            {uploading ? t(language, "media.uploading") : t(language, "media.upload")}
+          </Button>
+          <span className="text-xs text-muted-foreground">{t(language, "media.dropHere")}</span>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.currentTarget.files) void uploadFiles(e.currentTarget.files);
+            }}
+          />
+        </div>
+
+        {uploadError ? <p className="mb-3 text-xs text-destructive">{uploadError}</p> : null}
+        {page1.isError ? <ErrorBox error={page1.error} /> : null}
+
+        {page1.isLoading ? (
+          <MediaSkeleton />
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon={emptyIcon}
+            title={t(language, "media.empty.title")}
+            description={
+              searchTerm
+                ? t(language, "media.empty.search", { search: searchTerm })
+                : t(language, "media.empty.all")
+            }
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {items.map((item) => (
+              <MediaTile
+                key={item.id}
+                item={item}
+                language={language}
+                onChanged={refresh}
+                onPick={onPick}
+              />
+            ))}
+          </div>
+        )}
+
+        {pagination.loadMoreError ? <ErrorBox error={pagination.loadMoreError} /> : null}
+        {pagination.nextCursor ? (
+          <div className="mt-4">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void pagination.loadMore()}
+              disabled={pagination.isLoadingMore}
+            >
+              {pagination.isLoadingMore ? t(language, "media.saving") : t(language, "media.loadMore")}
+            </Button>
+          </div>
+        ) : null}
+        </div>
+    </>
+  );
+}
+
+function MediaSetupState({ language }: { language: AdminLanguage }): React.ReactElement {
+  const [copied, setCopied] = React.useState(false);
+
+  async function copySetupPrompt(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(MEDIA_SETUP_PROMPT);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <EmptyState
+      icon={Images}
+      title={t(language, "media.setup.title")}
+      description={
+        <>
+          {t(language, "media.setup.body")}
+          <span className="mt-2 block">{t(language, "media.setup.cloudflare")}</span>
+        </>
+      }
+      action={
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button type="button" onClick={() => void copySetupPrompt()}>
+            {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
+            {t(language, copied ? "media.setup.copied" : "media.setup.copy")}
+          </Button>
+          <Button asChild variant="outline">
+            <a href={MEDIA_SETUP_GUIDE_URL} target="_blank" rel="noreferrer">
+              <ExternalLink aria-hidden />
+              {t(language, "media.setup.guide")}
+            </a>
           </Button>
         </div>
-      ) : null}
-    </div>
+      }
+    />
   );
+}
+
+export function isMediaNotConfigured(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 501) return false;
+  const body = error.body as { diagnostic?: { code?: unknown } } | null;
+  return body?.diagnostic?.code === "MEDIA_NOT_CONFIGURED";
 }
 
 function MediaTile({
@@ -255,9 +317,6 @@ function MediaTile({
   const confirm = useConfirm();
 
   async function confirmDelete(): Promise<void> {
-    // #444: styled dialog instead of `window.confirm` — consistent with
-    // the rest of the app's modals and doesn't block automation drivers
-    // that can't dismiss native browser dialogs.
     if (!(await confirm({ description: t(language, "media.deleteConfirm") }))) return;
     remove.mutate();
   }
@@ -273,7 +332,7 @@ function MediaTile({
   }
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-[var(--glass-border)] bg-card/50">
+    <div className="flex flex-col overflow-hidden rounded-lg border bg-card">
       <div className="relative aspect-square bg-muted/40">
         {item.primaryUrl ? (
           <img
@@ -320,15 +379,13 @@ function MediaTile({
 
         {onPick ? null : (
           <>
-            <input
-              className="admin-input h-8 text-sm"
+            <Input
               value={alt}
               placeholder={t(language, "media.altPlaceholder")}
               aria-label={t(language, "media.alt")}
               onChange={(e) => setAlt(e.target.value)}
             />
-            <input
-              className="admin-input h-8 text-sm"
+            <Input
               value={caption}
               placeholder={t(language, "media.captionPlaceholder")}
               aria-label={t(language, "media.caption")}
@@ -337,25 +394,29 @@ function MediaTile({
             <div className="mt-1 flex items-center justify-between gap-2">
               <div className="flex items-center gap-1">
                 {item.primaryUrl ? (
-                  <a
-                    className="row-action"
-                    href={item.primaryUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    title={t(language, "media.open")}
-                  >
-                    <ExternalLink className="size-3.5" aria-hidden />
-                  </a>
+                  <Button asChild variant="ghost" size="icon-sm">
+                    <a
+                      href={item.primaryUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={t(language, "media.open")}
+                      aria-label={t(language, "media.open")}
+                    >
+                      <ExternalLink className="size-3.5" aria-hidden />
+                    </a>
+                  </Button>
                 ) : null}
-                <button
+                <Button
                   type="button"
-                  className="row-action"
+                  variant="ghost"
+                  size="icon-sm"
                   title={t(language, "media.delete")}
+                  aria-label={t(language, "media.delete")}
                   disabled={remove.isPending}
                   onClick={() => void confirmDelete()}
                 >
                   <Trash2 className="size-3.5" aria-hidden />
-                </button>
+                </Button>
               </div>
               <Button
                 type="button"
@@ -410,8 +471,8 @@ function MediaSearch({
     >
       <label className="relative block">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <input
-          className="admin-input h-10 pl-9"
+        <Input
+          className="pl-9"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={t(language, "media.searchPlaceholder")}
@@ -425,11 +486,11 @@ function MediaSkeleton(): React.ReactElement {
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
       {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-        <div key={i} className="overflow-hidden rounded-xl border border-[var(--glass-border)]">
-          <div className="aspect-square animate-pulse bg-muted" />
+        <div key={i} className="overflow-hidden rounded-lg border">
+          <Skeleton className="aspect-square rounded-none" />
           <div className="space-y-2 p-3">
-            <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
-            <div className="h-8 animate-pulse rounded bg-muted" />
+            <Skeleton className="h-3 w-1/2" />
+            <Skeleton className="h-8" />
           </div>
         </div>
       ))}

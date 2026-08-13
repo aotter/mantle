@@ -166,14 +166,18 @@ function buildCreateMediaUploadTool(
 export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   {
     name: "list_entries",
-    description: "List entries in a collection. Optional filter by status. Result is { rows, nextCursor? }: when `nextCursor` is present, pass it back as `cursor` to fetch the next page. Absent `nextCursor` means this is the last page.",
+    description: "Search, sort, and page through entries in a collection. Result is { rows, previousCursor?, nextCursor? }; cursors are opaque.",
     inputSchema: {
       type: "object",
       properties: {
         collection: { type: "string" },
         status: { type: "string", enum: ["draft", "published", "archived"] },
+        search: { type: "string", description: "Substring matched against entry id and the Schema's searchableFields." },
+        sort: { type: "string", description: "id, status, updatedAt, or a Schema-indexed required scalar field." },
+        direction: { type: "string", enum: ["asc", "desc"] },
         limit: { type: "number" },
         cursor: { type: "string", description: "Opaque continuation token from a previous list_entries response." },
+        cursorDirection: { type: "string", enum: ["forward", "backward"] },
       },
       required: ["collection"],
     },
@@ -189,7 +193,7 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
   {
     name: "request_publish",
-    description: "Publish a draft. v0.1.0 simple lifecycle: publishes immediately. Not available for lifecycle:none operational records.",
+    description: "Publish a draft immediately. Not available for operational records.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" } },
@@ -198,7 +202,7 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
   {
     name: "unpublish_entry",
-    description: "Unpublish a content entry back to draft before editing. Not available for lifecycle:none operational records.",
+    description: "Unpublish a content entry back to draft before editing. Not available for operational records.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" } },
@@ -207,7 +211,7 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
   {
     name: "archive_entry",
-    description: "Archive a content entry. Not available for lifecycle:none operational records.",
+    description: "Archive a content entry. Not available for operational records.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" } },
@@ -216,7 +220,7 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
   {
     name: "delete_entry",
-    description: "Permanently delete an entry. Cascades to its revisions and approvals. For content lifecycles, prefer archive_entry when reversibility matters.",
+    description: "Permanently delete an entry. For content lifecycles, prefer archive_entry when reversibility matters.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" } },
@@ -303,7 +307,7 @@ function buildCreateTool(schema: SchemaManifest): McpToolDefinition {
   };
   if (required.length > 0) inputSchema["required"] = required;
   return {
-    name: `${resolveLifecycle(schema) === "none" ? CREATE_RECORD_PREFIX : CREATE_DRAFT_PREFIX}${mcpToolNameSegment(schema.metadata.name)}`,
+    name: `${resolveLifecycle(schema) === "operational" ? CREATE_RECORD_PREFIX : CREATE_DRAFT_PREFIX}${mcpToolNameSegment(schema.metadata.name)}`,
     description: describeCreateTool(schema),
     inputSchema,
   };
@@ -324,7 +328,7 @@ function buildUpdateTool(schema: SchemaManifest): McpToolDefinition {
     required: ["id", "expected_version", ...required],
   };
   return {
-    name: `${resolveLifecycle(schema) === "none" ? UPDATE_RECORD_PREFIX : UPDATE_DRAFT_PREFIX}${mcpToolNameSegment(schema.metadata.name)}`,
+    name: `${resolveLifecycle(schema) === "operational" ? UPDATE_RECORD_PREFIX : UPDATE_DRAFT_PREFIX}${mcpToolNameSegment(schema.metadata.name)}`,
     description: describeUpdateTool(schema),
     inputSchema,
   };
@@ -405,14 +409,14 @@ function authorizationSummary(
 }
 
 function describeCreateTool(schema: SchemaManifest): string {
-  const base = resolveLifecycle(schema) === "none"
+  const base = resolveLifecycle(schema) === "operational"
     ? `Create a live operational record in '${schema.metadata.name}'.`
     : `Create a new draft entry in '${schema.metadata.name}'.`;
   return schema.spec.description ? `${base} ${schema.spec.description}`.trim() : base;
 }
 
 function describeUpdateTool(schema: SchemaManifest): string {
-  return resolveLifecycle(schema) === "none"
+  return resolveLifecycle(schema) === "operational"
     ? `Update an operational record in '${schema.metadata.name}' with optimistic-concurrency check.`
     : `Update a draft entry in '${schema.metadata.name}' with optimistic-concurrency check.`;
 }

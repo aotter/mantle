@@ -1,7 +1,7 @@
 {
   "name": "@aotter/mantle-admin-ui",
-  "version": "0.1.0-alpha.1",
-  "description": "Admin SPA for mantle — React 19 + Vite + Tailwind v4 + shadcn. Platform-agnostic: ships a single self-contained HTML string consumed by mantle-cloudflare / mantle-netlify mount layers.",
+  "version": "0.1.0-alpha.2",
+  "description": "Admin SPA for mantle — React 19 + Vite + Tailwind v4 + shadcn. Platform-agnostic: ships a single self-contained HTML string consumed by adapter mount layers.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
   "repository": {
@@ -32,19 +32,19 @@
     "build": "vite build",
     "watch": "vite build --watch",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --config vite.config.ts"
   },
   "dependencies": {
-    "@radix-ui/react-collapsible": "^1.1.20",
-    "@radix-ui/react-dialog": "^1.1.23",
-    "@radix-ui/react-dropdown-menu": "^2.1.24",
-    "@radix-ui/react-slot": "^1.3.3",
     "@tanstack/react-query": "^5.101.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
     "lucide-react": "^1.27.0",
+    "radix-ui": "^1.6.7",
     "react": "^19.2.8",
+    "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.8",
+    "sonner": "^2.0.8",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
@@ -52,6 +52,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.0.4",
+    "shadcn": "^4.17.0",
     "tailwindcss": "^4.3.3",
     "tw-animate-css": "^1.4.0",
     "typescript": "catalog:",

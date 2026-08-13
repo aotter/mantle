@@ -173,7 +173,7 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
     expect(await repo.get("p1")).toBeNull();
   });
 
-  it("delete keeps parent and children when the loaded snapshot is stale", async () => {
+  it("delete keeps the row when the loaded snapshot is stale", async () => {
     const db = new InMemoryDatabase();
     const repo = new DatabaseEntryRepository(db);
     await repo.create({
@@ -184,8 +184,6 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
       authorId: null,
       now: 1,
     });
-    db.revisions.set("r1", { entry_id: "p1" });
-    db.approvals.set("a1", { entry_id: "p1" });
     await repo.transitionStatus({
       id: "p1",
       collection: "posts",
@@ -204,8 +202,6 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
       }),
     ).rejects.toBeInstanceOf(EntryVersionConflict);
     expect(await repo.get("p1")).not.toBeNull();
-    expect(db.revisions.has("r1")).toBe(true);
-    expect(db.approvals.has("a1")).toBe(true);
   });
 
   it("list orders by updated_at DESC and respects status filter", async () => {

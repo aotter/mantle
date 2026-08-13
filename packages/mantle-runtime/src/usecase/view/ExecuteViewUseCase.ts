@@ -1,4 +1,5 @@
 import {
+  DiagnosticError,
   firstZodIssueAsJsonPointer,
   jsonSchemaToZod,
   makeDiagnostic,
@@ -155,6 +156,9 @@ export class ExecuteViewUseCase {
         schema,
       );
     } catch (err) {
+      if (err instanceof DiagnosticError) {
+        return { ok: false, diagnostic: err.diagnostic };
+      }
       const msg = err instanceof Error ? err.message : String(err);
       return {
         ok: false,

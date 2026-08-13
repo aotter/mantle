@@ -33,22 +33,18 @@ import {
   type EntryRow,
 } from "../../domain/model/EntryRow.js";
 import {
-  decodeEntryCursor,
-  encodeEntryCursor,
+  decodeEntrySortCursor,
+  encodeEntrySortCursor,
   escapeLikeTerm,
 } from "./Pagination.js";
 
 /**
  * `EntryRepository` impl backed by `DatabaseDriver`. Adapters that
- * implement `DatabaseDriver` (CF binds D1; future Postgres, Neon,
- * etc.) get this repository for free; the SQL is SQLite-shaped
- * (which Postgres can also execute via Hyperdrive when v0.2 lands).
+ * implement the SQLite-shaped `DatabaseDriver` contract get this
+ * repository for free.
  *
  * `UPDATE … RETURNING` collapses the post-write SELECT to one round
- * trip on SQLite ≥ 3.35 / Postgres. `delete` uses
- * `DatabaseDriver.batch` because SQLite doesn't enforce FK ON DELETE
- * CASCADE by default and we'd otherwise orphan revisions / approvals
- * when the parent goes.
+ * trip on SQLite ≥ 3.35 / Postgres.
  *
  * Lifts `data.locale` to `EntryRow.locale` at the rowFromDb boundary
  * — see ADR-0010 + `domain/model/EntryRow.ts`.
@@ -128,25 +124,11 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
       args.expectedStatus,
       args.expectedVersion,
     ] as const;
-    const result = await this.db.batch([
-      this.db
-        .prepare(
-          `DELETE FROM revisions WHERE entry_id = ?
-           AND EXISTS (SELECT 1 FROM entries WHERE ${parentMatches})`,
-        )
-        .bind(args.id, ...parentSnapshot),
-      this.db
-        .prepare(
-          `DELETE FROM approvals WHERE entry_id = ?
-           AND EXISTS (SELECT 1 FROM entries WHERE ${parentMatches})`,
-        )
-        .bind(args.id, ...parentSnapshot),
-      this.db
-        .prepare(`DELETE FROM entries WHERE ${parentMatches}`)
-        .bind(...parentSnapshot),
-    ]);
-    const last = result[result.length - 1];
-    if ((last?.meta.changes ?? 0) > 0) return { removed: true };
+    const result = await this.db
+      .prepare(`DELETE FROM entries WHERE ${parentMatches}`)
+      .bind(...parentSnapshot)
+      .run();
+    if (result.meta.changes > 0) return { removed: true };
     const after = await this.db
       .prepare(`SELECT collection, status, version FROM entries WHERE id = ?`)
       .bind(args.id)
@@ -202,7 +184,15 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
     // adapters that bypass the use case) get the same default page
     // size as ListEntriesUseCase — not a silently different 100.
     const limit = clampLimit(args.limit);
-    const cursor = decodeEntryCursor(args.cursor);
+    const sort = args.sort ?? { field: "updatedAt", direction: "desc" };
+    const schema = this.schemasByName.get(args.collection);
+    const sortSql = entrySortSql(schema, sort.field);
+    if (!sortSql) throw new Error(`unavailable entry sort field: ${sort.field}`);
+    const cursor = decodeEntrySortCursor(args.cursor, sort.field, sort.direction);
+    const backward = args.cursorDirection === "backward" && cursor !== null;
+    const queryDirection = backward
+      ? (sort.direction === "asc" ? "DESC" : "ASC")
+      : sort.direction.toUpperCase();
     // Fetch limit+1 to detect a next page without a second query —
     // the extra row never reaches the caller.
     const probe = limit + 1;
@@ -213,16 +203,29 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
       binds.push(args.status);
     }
     if (args.search) {
-      // LIKE over the raw JSON blob is dumb but fine at this scale —
-      // there's no FTS index. Escape the caller's own wildcards so a
-      // search for "50%" or "a_b" doesn't turn into an unintended
-      // pattern.
       const term = escapeLikeTerm(args.search);
-      conditions.push("(id LIKE '%'||?||'%' ESCAPE '\\' OR data LIKE '%'||?||'%' ESCAPE '\\')");
-      binds.push(term, term);
+      const searchConditions = ["id LIKE '%'||?||'%' ESCAPE '\\'"];
+      binds.push(term);
+      for (const field of args.searchFields ?? []) {
+        searchConditions.push("json_extract(data, ?) LIKE '%'||?||'%' ESCAPE '\\'");
+        binds.push(jsonPathForTopLevelField(field), term);
+      }
+      conditions.push(`(${searchConditions.join(" OR ")})`);
+    }
+    if (args.filter) {
+      const compiled = compileDataPredicates(schema, [{
+        field: args.filter.field,
+        kind: "equal",
+        value: args.filter.value,
+      }]);
+      conditions.push(...compiled.conditions);
+      binds.push(...compiled.binds);
     }
     if (cursor) {
-      conditions.push("(updated_at, id) < (?, ?)");
+      const comparison = backward
+        ? (sort.direction === "asc" ? "<" : ">")
+        : (sort.direction === "asc" ? ">" : "<");
+      conditions.push(`(${sortSql}, id) ${comparison} (?, ?)`);
       binds.push(...cursor);
     }
     binds.push(probe);
@@ -230,16 +233,22 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
       .prepare(
         `SELECT id, collection, status, version, data, author_id, created_at, updated_at
          FROM entries WHERE ${conditions.join(" AND ")}
-         ORDER BY updated_at DESC, id DESC LIMIT ?`,
+         ORDER BY ${sortSql} ${queryDirection}, id ${queryDirection} LIMIT ?`,
       )
       .bind(...binds);
     const rows = await stmt.all<EntryDbRow>();
     const hasMore = rows.length > limit;
-    const page = hasMore ? rows.slice(0, limit) : rows;
+    const page = [...(hasMore ? rows.slice(0, limit) : rows)];
+    if (backward) page.reverse();
+    const first = page[0];
+    const last = page[page.length - 1];
     return {
       rows: page.map(rowFromDb),
-      nextCursor: hasMore && page.length > 0
-        ? encodeEntryCursor(page[page.length - 1]!.updated_at, page[page.length - 1]!.id)
+      previousCursor: first && (backward ? hasMore : cursor !== null)
+        ? encodeEntrySortCursor(sort.field, sort.direction, entrySortValueFromDb(first, sort.field), first.id)
+        : undefined,
+      nextCursor: last && (backward ? cursor !== null : hasMore)
+        ? encodeEntrySortCursor(sort.field, sort.direction, entrySortValueFromDb(last, sort.field), last.id)
         : undefined,
     };
   }
@@ -434,7 +443,7 @@ const ENTRY_READ_BATCH_SIZE = 95;
 
 type DataPredicate =
   | { readonly field: string; readonly kind: "equal"; readonly value: unknown }
-  | { readonly field: string; readonly kind: "in"; readonly values: readonly string[] }
+  | { readonly field: string; readonly kind: "in"; readonly values: readonly (string | number | boolean)[] }
   | { readonly field: string; readonly kind: "null" };
 
 function localePredicates(locale: string | null | undefined): DataPredicate[] {
@@ -510,6 +519,25 @@ interface EntryDbRow {
   readonly author_id: string | null;
   readonly created_at: number;
   readonly updated_at: number;
+}
+
+function entrySortSql(schema: SchemaManifest | undefined, field: string): string | null {
+  if (field === "id") return "id";
+  if (field === "status") return "status";
+  if (field === "updatedAt") return "updated_at";
+  return schema ? schemaIndexedFieldSql(schema, field) : null;
+}
+
+function entrySortValueFromDb(row: EntryDbRow, field: string): string | number {
+  if (field === "id") return row.id;
+  if (field === "status") return row.status;
+  if (field === "updatedAt") return row.updated_at;
+  const value = (JSON.parse(row.data) as Record<string, unknown>)[field];
+  if (typeof value === "boolean") return Number(value);
+  if (typeof value !== "string" && typeof value !== "number") {
+    throw new Error(`non-scalar sort value for ${field}`);
+  }
+  return value;
 }
 
 function rowFromDb(row: EntryDbRow): EntryRow {

@@ -1,24 +1,14 @@
-/** A human-facing label/blurb that is either a plain string or a map
- *  of locale code → string (e.g. `{ en: "Products", "zh-TW": "商品" }`)
- *  — mirrors `LocalizedText` in `@aotter/mantle-spec`'s manifest
- *  grammar (#430). This package doesn't depend on `@aotter/mantle-spec`
- *  (it only talks JSON over HTTP — same reasoning as the inlined
- *  `VIEW_PARAMS_RESERVED` copy in `features/ops/view-page.tsx`), so the
- *  type + its resolver are copied here rather than imported. See
- *  `resolveLocalizedText` in `lib/localized-text.ts`. */
+/** Human-facing copy as a plain string or locale map. */
 export type LocalizedText = string | Readonly<Record<string, string>>;
 
-export type Lifecycle = "simple" | "editorial" | "none";
+export type Lifecycle = "publishing" | "operational";
 
 export type ContentStatus =
   | "draft"
-  | "review"
-  | "approved"
-  | "scheduled"
   | "published"
   | "archived";
 
-export type SidebarStatus = "draft" | "review" | "published" | "archived";
+export type SidebarStatus = ContentStatus;
 
 export interface Collection {
   name: string;
@@ -36,9 +26,15 @@ export interface Collection {
    *  `spec.translates`) are filtered out of `/admin/api/collections`
    *  entirely; they fold into their parent in the sidebar. */
   hasTranslations: boolean;
+  /** The collection's own rows carry a locale. */
+  localized: boolean;
   /** Schema properties carrying `x-mcp-hint: media-*`. Upload hosting
    *  is optional; this only marks which fields are media-shaped. */
   mediaFields?: Array<{ name: string; hint: string }>;
+  /** Required scalar fields backed by a declared Schema index. */
+  sortableFields?: string[];
+  /** Primary Admin list filter declared at uiSchema.list.filterField. */
+  filter?: { field: string; values: string[] } | null;
   schema?: JsonSchema;
 }
 
@@ -59,14 +55,9 @@ export interface JsonSchema {
   nullable?: boolean;
   default?: unknown;
   additionalProperties?: boolean | JsonSchema;
-  /** Standard JSON Schema keyword — plain string or the same
-   *  `LocalizedText` shape as `Collection.description` (#453, mirroring
-   *  the property `title` keyword's #443 shape). Optional; absent
-   *  renders no help text. */
+  /** Optional JSON Schema help text. */
   description?: LocalizedText;
-  /** Standard JSON Schema keyword (#443) — plain string or the same
-   *  `LocalizedText` shape as `Collection.title`. Optional; absent
-   *  means the consumer humanizes the property name instead. */
+  /** Optional JSON Schema field label. */
   title?: LocalizedText;
   "x-mantle-ref"?: string;
   "x-mcp-hint"?: string;
@@ -74,7 +65,6 @@ export interface JsonSchema {
 }
 
 export interface EntryEditorCollection extends Collection {
-  localized: boolean;
   translates: { parent: string; on: string } | null;
   schema: JsonSchema;
   uiSchema: Record<string, unknown> | null;
@@ -96,7 +86,7 @@ export interface RelatedEntrySection {
     kind: "translation" | "field";
     parentField: string;
     childField: string;
-    parentValue: string | number | boolean;
+    parentValue: string | number | boolean | null;
   };
   entries: EntryEditorEntry[];
 }
@@ -104,6 +94,7 @@ export interface RelatedEntrySection {
 export interface EntryEditorPayload {
   collection: EntryEditorCollection;
   entry: EntryEditorEntry;
+  parentEntryId: string | null;
   related: RelatedEntrySection[];
 }
 
@@ -111,9 +102,17 @@ export type StaffRole = "owner" | "editor" | "contributor";
 
 export interface AdminUser {
   login: string | null;
+  image: string | null;
   role: StaffRole | null;
   userId?: string;
 }
+
+/** Public sign-in capabilities returned by `GET /api/auth/methods`. */
+export type AuthMethodInfo =
+  | { kind: "email-otp" }
+  | { kind: "magic-link" }
+  | { kind: "social"; provider: string }
+  | { kind: "oauth"; providerId: string; displayName?: string };
 
 /** Row from `GET /admin/api/staff` (owner-only). `createdAt` arrives
  *  as an ISO string over the wire. `emailVerified: false` with no
@@ -128,6 +127,20 @@ export interface StaffUser {
   createdAt: string;
 }
 
+export interface MemberUser {
+  id: string;
+  email: string;
+  name: string;
+  emailVerified: boolean;
+  createdAt: string;
+}
+
+export interface MemberListResult {
+  items: MemberUser[];
+  previous_cursor: string | null;
+  next_cursor: string | null;
+}
+
 export interface EntryRow {
   id: string;
   collection: string;
@@ -136,23 +149,26 @@ export interface EntryRow {
   version: number;
   title: unknown;
   updated_at: number;
+  translation_locales: string[];
   /** First 3 `required` schema properties (skipping the one used as
-   *  the title), present only for `lifecycle: "none"` collections. */
+   *  the title), present only for `lifecycle: "operational"` collections. */
   data_preview?: Record<string, unknown>;
 }
 
 export interface ListEntriesResult {
   items: EntryRow[];
+  previous_cursor: string | null;
   next_cursor: string | null;
 }
 
 export interface SiteInfo {
   title: string;
   description: string;
-  origin: string;
   brand: string;
   locales: string[];
   canonicalLocale: string | null;
+  faviconUrl?: string;
+  /** Canonical deployment URL projected by the server. Never derive it from the Admin request origin. */
   publicUrl: string;
   mcpUrl: string;
   media?: {
@@ -181,9 +197,7 @@ export interface CommittedMediaAsset {
   variants: MediaAssetVariant[];
 }
 
-/** `GET /admin/api/media` item + `GET|PATCH /admin/api/media/:id` body
- *  (#434). The primary variant's url/mime/bytes are lifted to the top
- *  level so the grid renders a thumbnail without walking `variants`. */
+/** Media API item with its primary variant lifted for list rendering. */
 export interface MediaLibraryItem {
   id: string;
   variants: MediaAssetVariant[];
@@ -200,27 +214,18 @@ export interface MediaLibraryListResult {
   next_cursor: string | null;
 }
 
-/** `GET /admin/api/operations` entry (#426, extended #430) — a
- *  staff-operable Procedure derived from the manifest (some Trigger
- *  targets it via `source.kind: "mcp"` + `surface: "staff"`, or
- *  `source.kind: "http"` with a `ctx.staff` auth predicate). */
+/** Staff-operable Procedure derived from the manifest. */
 export interface StaffOperation {
   name: string;
   title: LocalizedText | null;
   description: LocalizedText | null;
   input: JsonSchema;
   triggers: Array<"mcp" | "http">;
-  /** Row-action bindings (#430): which `x-mantle-ref` input properties
-   *  point at a real (non-"translates") collection, so the admin SPA
-   *  can offer this operation from that collection's row "⋯" menu. */
+  /** References that expose this operation from collection row menus. */
   rowBindings: Array<{ collection: string; inputField: string; rowField: string }>;
 }
 
-/** `GET /admin/api/views-manifest` entry (#426, extended #443 with
- *  `title`) — a read-only View projection over a Schema. `params` is
- *  the View's declared parameter JSON Schema, or `null` when the View
- *  takes none. `title` is `null` when the View manifest declares none
- *  — callers fall back to a Title-Cased rendering of `name`. */
+/** Read-only View projection exposed by the Admin API. */
 export interface ViewManifestInfo {
   name: string;
   title: LocalizedText | null;
@@ -229,10 +234,4 @@ export interface ViewManifestInfo {
   fields: string[] | null;
 }
 
-export const EDITORIAL_STATUSES: SidebarStatus[] = [
-  "draft",
-  "review",
-  "published",
-  "archived",
-];
-export const SIMPLE_STATUSES: SidebarStatus[] = ["draft", "published", "archived"];
+export const PUBLISHING_STATUSES: SidebarStatus[] = ["draft", "published", "archived"];

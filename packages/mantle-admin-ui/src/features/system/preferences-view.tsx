@@ -139,8 +139,8 @@ function LanguageSearchSelect({
       </button>
 
       {open ? (
-        <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-xl border border-[var(--glass-border)] bg-card shadow-[var(--glass-shadow-lg)] backdrop-blur-md">
-          <div className="flex items-center gap-2 border-b border-[var(--glass-border)] px-3 py-2">
+        <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-md">
+          <div className="flex items-center gap-2 border-b px-3 py-2">
             <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden />
             <input
               autoFocus
@@ -150,7 +150,7 @@ function LanguageSearchSelect({
                 if (event.key === "Escape") setOpen(false);
               }}
               placeholder={t(language, "preferences.language.search")}
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
             />
           </div>
           <div className="max-h-72 overflow-y-auto p-1">

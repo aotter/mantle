@@ -282,7 +282,7 @@ ${indexYaml}
 
   it("accepts and preserves ordered composite indexes", () => {
     const result = parseSchema(
-      "  indexes: [[slug, locale], [locale, slug], [slug]]",
+      "  localized: true\n  indexes: [[slug, locale], [locale, slug], [slug]]",
       "slug: { type: string }, locale: { type: [string, 'null'] }",
     );
 
@@ -309,11 +309,11 @@ ${indexYaml}
     });
   });
 
-  it("keeps indexedFields rejected as a DRAFT alias", () => {
+  it("rejects unknown Schema keys", () => {
     const result = parseSchema("  indexedFields: [slug]");
 
     expect(result.diagnostics[0]).toMatchObject({
-      code: "DRAFT_KEY_USED",
+      code: "INVALID_MANIFEST_ENVELOPE",
       path: expect.stringContaining("/spec/indexedFields"),
     });
   });
@@ -440,7 +440,137 @@ describe("ValidateManifestsUseCase — Schema index semantics", () => {
   });
 });
 
+describe("Schema searchableFields", () => {
+  it("accepts top-level string fields and preserves their order", () => {
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  schema:
+    type: object
+    properties:
+      orderNumber: { type: string }
+      customer: { type: [string, 'null'] }
+      placedAt: { type: integer }
+  searchableFields: [orderNumber, customer]
+`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect((result.manifests[0] as SchemaManifest).spec.searchableFields)
+      .toEqual(["orderNumber", "customer"]);
+  });
+
+  it.each([
+    ["non-array", "orderNumber", "INVALID_MANIFEST_ENVELOPE"],
+    ["unknown field", "[missing]", "SCHEMA_SEARCH_FIELD_UNKNOWN"],
+    ["non-string property", "[placedAt]", "SCHEMA_SEARCH_INVALID"],
+    ["duplicate field", "[orderNumber, orderNumber]", "SCHEMA_SEARCH_INVALID"],
+  ])("rejects %s", (_label, searchableFields, code) => {
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  schema:
+    type: object
+    properties:
+      orderNumber: { type: string }
+      placedAt: { type: integer }
+  searchableFields: ${searchableFields}
+`);
+
+    expect(result.diagnostics[0]?.code).toBe(code);
+  });
+
+  it("validates programmatically constructed manifests", () => {
+    const result = ValidateManifestsUseCase.run({
+      manifests: [schema("orders", { searchableFields: ["missing"] })],
+    });
+
+    expect(result.diagnostics[0]?.code).toBe("SCHEMA_SEARCH_FIELD_UNKNOWN");
+  });
+});
+
+describe("Schema uiSchema list filter", () => {
+  const yaml = (filterField: string, index = "[orderState, placedAt]") => `apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  lifecycle: operational
+  schema:
+    type: object
+    properties:
+      orderState: { type: string, enum: [pending, paid] }
+      placedAt: { type: integer }
+  indexes: [${index}]
+  uiSchema:
+    list:
+      filterField: ${filterField}
+`;
+
+  it("accepts one indexed string-enum field", () => {
+    expect(parseManifests(yaml("orderState")).diagnostics).toEqual([]);
+  });
+
+  it.each([
+    ["unknown", "missing", "[orderState, placedAt]"],
+    ["not an enum", "placedAt", "[placedAt]"],
+    ["not a left-prefix index", "orderState", "[placedAt, orderState]"],
+  ])("rejects %s", (_label, field, index) => {
+    expect(parseManifests(yaml(field, index)).diagnostics[0]?.code).toBe("SCHEMA_UI_INVALID");
+  });
+
+  it("rejects list filters on publishing collections", () => {
+    expect(parseManifests(yaml("orderState").replace("lifecycle: operational", "lifecycle: publishing"))
+      .diagnostics[0]?.code).toBe("SCHEMA_UI_INVALID");
+  });
+});
+
 describe("parseManifests() — v0.1.0 promoted grammar", () => {
+  it("rejects locale as a property of a non-localized Schema", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  schema:
+    type: object
+    properties:
+      locale: { type: string }
+`;
+    expect(parseManifests(yaml).diagnostics[0]).toMatchObject({
+      code: "INVALID_MANIFEST_ENVELOPE",
+      path: "manifest:doc/0#/spec/schema/properties/locale",
+    });
+    expect(ValidateManifestsUseCase.run({
+      manifests: [schema("orders", {
+        schema: { type: "object", properties: { locale: { type: "string" } } },
+      })],
+    }).diagnostics[0]).toMatchObject({
+      code: "INVALID_MANIFEST_ENVELOPE",
+      path: "manifest:Schema/orders#/spec/schema/properties/locale",
+    });
+  });
+
+  it("rejects a translation child with no locale-specific payload field", () => {
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: story-translations }
+spec:
+  title: Story translations
+  localized: true
+  translates: { parent: stories, on: slug }
+  schema:
+    type: object
+    properties:
+      slug: { type: string }
+      locale: { type: string }
+`);
+    expect(result.diagnostics[0]?.code).toBe("TRANSLATES_REQUIRES_CONTENT_FIELD");
+  });
+
   it("accepts Procedure.handler.kind: 'builtin' with op + schema", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure
@@ -590,9 +720,10 @@ spec:
   target: { procedure: bar }
 `;
     const result = parseManifests(yaml);
-    expect(result.diagnostics.map((d) => d.message).join("\n")).toMatch(
-      /schema,on,errorPolicy.*are invalid when source.kind is 'mcp'/,
-    );
+    expect(result.diagnostics[0]).toMatchObject({
+      code: "INVALID_MANIFEST_ENVELOPE",
+      path: expect.stringContaining("/spec/source/schema"),
+    });
   });
 
   it("rejects Trigger.source.kind: 'mcp' mixed with http keys (method/path)", () => {
@@ -608,9 +739,10 @@ spec:
   target: { procedure: bar }
 `;
     const result = parseManifests(yaml);
-    expect(result.diagnostics.map((d) => d.message).join("\n")).toMatch(
-      /method,path.*are invalid when source.kind is 'mcp'/,
-    );
+    expect(result.diagnostics[0]).toMatchObject({
+      code: "INVALID_MANIFEST_ENVELOPE",
+      path: expect.stringContaining("/spec/source/method"),
+    });
   });
 
   it("rejects errorPolicy: 'abort' when an after_* hook is mixed with before_* hooks", () => {
@@ -698,7 +830,7 @@ spec:
     expect(result.diagnostics.map((d) => d.code)).toContain("AUTH_PREDICATE_NOT_IN_ENUM");
   });
 
-  it("rejects View.requires.auth.any (DRAFT)", () => {
+  it("rejects unsupported View auth keys", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: vAny }
@@ -709,7 +841,24 @@ spec:
       any: [ctx.user]
 `;
     const result = parseManifests(yaml);
-    expect(result.diagnostics.map((d) => d.code)).toContain("DRAFT_KEY_USED");
+    expect(result.diagnostics.map((d) => d.code)).toContain("INVALID_MANIFEST_ENVELOPE");
+  });
+
+  it("rejects extra keys beside a valid auth predicate", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: mixedPredicate }
+spec:
+  from: posts
+  requires:
+    auth:
+      all: [{ "ctx.staff": [editor], owns: posts }]
+`;
+    const result = parseManifests(yaml);
+    expect(result.diagnostics[0]).toMatchObject({
+      code: "INVALID_MANIFEST_ENVELOPE",
+      path: expect.stringContaining("/spec/requires/auth/all/0/owns"),
+    });
   });
 
   it("rejects View.requires.auth.all with a non-STAFF_ROLES role (parser-level)", () => {
@@ -1127,7 +1276,7 @@ spec:
   title: Posts
   schema: { type: object, properties: { slug: { type: string } } }
   uniqueIndexes: [[slug]]
-  lifecycle: simple
+  lifecycle: publishing
 `;
 
   it("returns the parsed manifests when no diagnostics fire", () => {
@@ -1143,7 +1292,7 @@ metadata: { name: posts }
 spec:
   schema: { type: object }
   uniqueIndexes: [[ "slug" ]]
-  lifecycle: editorial
+  lifecycle: unknown
 `;
     expect(() => parseManifestsOrThrow(bad)).toThrow(/Manifest parse failed:/);
     try {

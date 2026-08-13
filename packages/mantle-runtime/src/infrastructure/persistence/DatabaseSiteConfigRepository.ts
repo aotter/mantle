@@ -15,14 +15,14 @@ import type {
  * `bootInit`) and treats keys differently depending on who owns them:
  *
  * - **UI-editable, seed-once** (`brand`, `title`, `description`,
- *   `origin`, `faviconUrl`, `ga4MeasurementId`, `facebookPixelId`):
+ *   `faviconUrl`, `ga4MeasurementId`, `facebookPixelId`):
  *   written via INSERT … ON CONFLICT DO NOTHING. The admin settings
  *   UI (`/admin/api/site-settings`) can edit a subset of these
  *   directly, and the rest are conceptually the same "operator can
  *   override" bucket — either way, DB wins once the row exists, so a
  *   later `src/mantle/config.ts` edit never clobbers an operator's change.
  *
- * - **code-canonical, boot-synced** (`mediaPurposes`, `locales`):
+ * - **code-canonical, boot-synced** (`origin`, `mediaPurposes`, `locales`):
  *   these have no admin-UI edit path — `src/mantle/config.ts` is the only
  *   source of truth — so `seed` upserts them on every boot, writing
  *   only when the serialized value actually differs from what's
@@ -97,35 +97,31 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
       return;
     }
     assertSiteDefaultsCanonical(defaults);
-    const stmts = [];
+    const seedOnceValues: Array<[string, string | undefined]> = [
+      [KEYS.brand, defaults.brand],
+      [KEYS.title, defaults.title],
+      [KEYS.description, defaults.description],
+      [KEYS.faviconUrl, defaults.faviconUrl],
+      [KEYS.ga4MeasurementId, defaults.ga4MeasurementId],
+      [KEYS.facebookPixelId, defaults.facebookPixelId],
+    ];
     const insertOnce = (key: string, value: string) =>
       this.db
         .prepare(`INSERT INTO site_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING`)
         .bind(key, value);
     // UI-editable, seed-once — DB wins once the row exists.
-    if (defaults.brand && defaults.brand.length > 0) {
-      stmts.push(insertOnce(KEYS.brand, defaults.brand));
-    }
-    if (defaults.title && defaults.title.length > 0) {
-      stmts.push(insertOnce(KEYS.title, defaults.title));
-    }
-    if (defaults.description && defaults.description.length > 0) {
-      stmts.push(insertOnce(KEYS.description, defaults.description));
-    }
-    if (defaults.origin && defaults.origin.length > 0) {
-      stmts.push(insertOnce(KEYS.origin, defaults.origin));
-    }
-    if (defaults.faviconUrl && defaults.faviconUrl.length > 0) {
-      stmts.push(insertOnce(KEYS.faviconUrl, defaults.faviconUrl));
-    }
-    if (defaults.ga4MeasurementId && defaults.ga4MeasurementId.length > 0) {
-      stmts.push(insertOnce(KEYS.ga4MeasurementId, defaults.ga4MeasurementId));
-    }
-    if (defaults.facebookPixelId && defaults.facebookPixelId.length > 0) {
-      stmts.push(insertOnce(KEYS.facebookPixelId, defaults.facebookPixelId));
-    }
-    if (stmts.length > 0) {
-      await this.db.batch(stmts);
+    const wanted = seedOnceValues.filter(
+      (entry): entry is [string, string] => Boolean(entry[1] && entry[1].length > 0),
+    );
+    if (wanted.length > 0) {
+      const existing = new Set(
+        (await this.db.prepare(`SELECT key, value FROM site_config`).all<{ key: string }>())
+          .map(({ key }) => key),
+      );
+      const missing = wanted
+        .filter(([key]) => !existing.has(key))
+        .map(([key, value]) => insertOnce(key, value));
+      if (missing.length > 0) await this.db.batch(missing);
     }
 
     // Code-canonical, boot-synced — no admin-UI edit path for these
@@ -134,6 +130,7 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
     // read-compare-write avoids issuing a write on every boot when
     // nothing actually changed (#441).
     const syncedValues: Array<[string, string | undefined]> = [
+      [KEYS.origin, defaults.origin && defaults.origin.length > 0 ? defaults.origin : undefined],
       [KEYS.locales, defaults.locales && defaults.locales.length > 0 ? defaults.locales.join(",") : undefined],
       [
         KEYS.mediaPurposes,

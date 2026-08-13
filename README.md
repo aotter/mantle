@@ -229,7 +229,7 @@ capability work.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — workflow contract for AI + human contributors (branch prefixes, commit shape, PR template, architecture gates).
 - [`CLAUDE.md`](CLAUDE.md) — in-repo conventions for agents writing code (PR base branch, manifest grammar lock, ADR discipline, clean-architecture rules).
 - [`docs/release-process.md`](docs/release-process.md) — release + publish discipline (channels, dist-tags, deprecation policy, pre-publish checks).
-- [`CHANGELOG.md`](CHANGELOG.md) — versioned change log.
+- [GitHub Releases](https://github.com/aotter/mantle/releases) — canonical versioned release notes.
 
 ## License
 

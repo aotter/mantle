@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Images, ImagePlus, MoreHorizontal, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarIcon, ExternalLink, Globe, Images, ImagePlus, LockKeyhole, MoreHorizontal, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
@@ -8,6 +8,8 @@ import { propertyDescription, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { operationsQueryOptions } from "../../lib/queries";
 import type {
+  AdminUser,
+  EntryEditorCollection,
   EntryEditorPayload,
   JsonSchema,
   MediaLibraryItem,
@@ -16,8 +18,22 @@ import type {
   SiteInfo,
   StaffOperation,
 } from "../../lib/types";
-import { Button } from "../../ui/button";
-import { CollapsibleDescription, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { CollapsibleDescription, ErrorBox, FormActionBar, OperationErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
 import { RichTextEditor } from "../editor/rich-text-editor";
 import { primaryPublicUrl, purposeForMediaField, uploadMediaAsset } from "../media/media-upload";
@@ -28,10 +44,17 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "../../ui/dialog";
+} from "@/components/ui/dialog";
 import { collectionSummaryKey } from "./collection-view";
-import { formatMoneyMinor, formatTimestampMs, hintBadgeLabel, moneyMinorHint, timestampHint } from "./field-render";
+import {
+  dateFromFieldValue,
+  formatMoneyMinor,
+  formatTimestampMs,
+  moneyMinorHint,
+  timestampHint,
+} from "./field-render";
 import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
+import { contentLocales, LocaleBadge, localeName } from "./locale-badge";
 
 export function EntryEditView({
   collectionName,
@@ -51,11 +74,11 @@ export function EntryEditView({
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
   });
-  // Row-bound operations (#430) for this entry's own collection — same
-  // query key as `collection-view.tsx`/`authenticated-layout.tsx`
-  // (`operationsQueryOptions()`), so this hits react-query's shared
-  // cache instead of a duplicate fetch (#442: this is what lets the
-  // entry editor surface e.g. "Restock" from its page header).
+  const me = useQuery<AdminUser>({
+    queryKey: ["me"],
+    queryFn: () => api.get<AdminUser>("/me"),
+    retry: false,
+  });
   const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
   const boundOperations = React.useMemo(
     () => boundOperationsFor(operationsQuery.data, collectionName),
@@ -89,40 +112,62 @@ export function EntryEditView({
     mutationFn: () => api.post<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}/unpublish`, {}),
     onSuccess: syncPayload,
   });
+  const createTranslation = useMutation({
+    mutationFn: ({ section, locale }: { section: RelatedEntrySection; locale: string }) =>
+      api.post<EntryEditorPayload>("/entries", {
+        collection: section.collection.name,
+        data: {
+          [section.relationship.childField]: section.relationship.parentValue,
+          locale,
+        },
+      }),
+    onSuccess: (next) => {
+      window.location.href = `/admin/c/${encodeURIComponent(next.entry.collection)}/${encodeURIComponent(next.entry.id)}`;
+    },
+  });
 
-  if (query.isLoading) return <div className="glass-card h-64 animate-pulse" />;
+  if (query.isLoading) return <EntryEditSkeleton />;
   if (query.isError) return <ErrorBox error={query.error} />;
-  if (!query.data || !data) return <ErrorBox error={new Error("Missing entry editor payload.")} />;
+  if (!query.data || !data) return <ErrorBox error={new Error(t(language, "common.unknownError"))} />;
 
   const payload = query.data;
   const canonical = site.data?.canonicalLocale ?? null;
-  const title = entryTitle(data, payload.entry.id, payload.collection.schema);
+  const title = entryTitle(data, t(language, "collection.untitled"), payload.collection.schema);
   const collectionTitle = resolveLocalizedText(payload.collection.title, language, canonical) ?? payload.collection.name;
+  const backCollection = payload.collection.translates?.parent ?? collectionName;
+  const backTitle = payload.collection.translates?.parent ?? collectionTitle;
   const collectionDescription = resolveLocalizedText(payload.collection.description, language, canonical);
   const dirty = JSON.stringify(data) !== JSON.stringify(payload.entry.data);
-  // Operational records (lifecycle: none) have no content workflow:
+  // Operational records (lifecycle: operational) have no content workflow:
   // no publish/unpublish controls, and they save in place regardless
   // of the stored status.
-  const isOperational = payload.collection.lifecycle === "none";
+  const isOperational = payload.collection.lifecycle === "operational";
   const isDraft = payload.entry.status === "draft";
-  const canSave = dirty && (isDraft || isOperational);
+  const missingRequired = hasMissingRequired(data, payload.collection.schema);
+  const canManageContent = me.data?.role === "owner" || me.data?.role === "editor";
+  const canEdit = canManageContent ||
+    (me.data?.role === "contributor" && !isOperational && isDraft);
+  const canSave = canEdit && dirty && (isDraft || isOperational);
   const actionPending = save.isPending || publish.isPending || unpublish.isPending;
   const mediaPurposes = site.data?.media?.purposes ?? [];
-  const parentLink = parentAdminLink(payload.collection, data);
+  const parentLink = parentAdminLink(payload.collection, data, payload.parentEntryId);
+  const translationSections = payload.related.filter((section) => section.relationship.kind === "translation");
   const inlineRelated = payload.related.filter(isPrimaryInlineSection);
-  const sidebarRelated = payload.related.filter((section) => !isPrimaryInlineSection(section));
+  const currentLocale = typeof data.locale === "string" ? data.locale : "";
+  const localeOptions = contentLocales(payload.collection.schema, site.data?.locales, currentLocale);
+  const hiddenFields = editorHiddenFields(payload.collection);
 
   return (
-    <div className="space-y-6">
+    <div className="flex min-h-full flex-col gap-6">
       <PageHeader
         eyebrow={
           <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
             <a
-              href={`/admin/c/${encodeURIComponent(collectionName)}`}
+              href={`/admin/c/${encodeURIComponent(backCollection)}`}
               className="inline-flex items-center gap-2 hover:underline"
             >
               <ArrowLeft className="size-3.5" aria-hidden />
-              {t(language, "entryEdit.back", { name: collectionTitle })}
+              {t(language, "entryEdit.back", { name: backTitle })}
             </a>
             {parentLink ? (
               <>
@@ -140,6 +185,15 @@ export function EntryEditView({
         })}
         actions={
           <>
+            {payload.collection.localized && !payload.collection.translates ? (
+              <ContentLanguageControl
+                language={language}
+                locale={currentLocale}
+                locales={localeOptions}
+                disabled={!canEdit || payload.entry.locale !== null}
+                onChange={(locale) => setData({ ...data, locale })}
+              />
+            ) : null}
             {!isOperational && <StatusBadge status={payload.entry.status} />}
             <RowOperationsMenu
               row={payload.entry}
@@ -154,49 +208,34 @@ export function EntryEditView({
                 </Button>
               }
             />
-            {!isOperational && (isDraft ? (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => publish.mutate()}
-                disabled={actionPending || dirty}
-                title={dirty ? t(language, "entryEdit.publishDisabledDirty") : t(language, "entryEdit.publishTooltip")}
-              >
-                <Send className="size-4" aria-hidden />
-                {publish.isPending ? t(language, "entryEdit.publishing") : t(language, "entryEdit.publish")}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => unpublish.mutate()}
-                disabled={actionPending}
-                title={t(language, "entryEdit.unpublishTooltip")}
-              >
-                <RotateCcw className="size-4" aria-hidden />
-                {unpublish.isPending ? t(language, "entryEdit.unpublishing") : t(language, "entryEdit.unpublish")}
-              </Button>
-            ))}
-            <Button
-              type="button"
-              onClick={() => save.mutate(data)}
-              disabled={actionPending || !canSave}
-              title={t(language, "entryEdit.saveTooltip")}
-            >
-              <Save className="size-4" aria-hidden />
-              {save.isPending ? t(language, "crud.saving") : t(language, "entryEdit.save")}
-            </Button>
           </>
         }
       />
+
+      {translationSections.map((section) => (
+        <TranslationTabs
+          key={`${section.collection.name}:${section.relationship.childField}`}
+          section={section}
+          currentCollection={payload.collection.name}
+          currentEntryId={payload.entry.id}
+          sharedHref={parentLink?.href}
+          language={language}
+          siteLocales={site.data?.locales}
+          canCreate={Boolean(me.data?.role)}
+          pending={createTranslation.isPending &&
+            createTranslation.variables?.section.collection.name === section.collection.name}
+          onCreate={(locale) => createTranslation.mutate({ section, locale })}
+        />
+      ))}
 
       {isOperational ? (
         <p className="-mt-4 text-sm text-muted-foreground">{t(language, "entryEdit.operationalHint")}</p>
       ) : null}
 
-      {save.isError ? <ErrorBox error={save.error} /> : null}
-      {publish.isError ? <ErrorBox error={publish.error} /> : null}
-      {unpublish.isError ? <ErrorBox error={unpublish.error} /> : null}
+      {save.isError ? <OperationErrorBox error={save.error} /> : null}
+      {publish.isError ? <OperationErrorBox error={publish.error} /> : null}
+      {unpublish.isError ? <OperationErrorBox error={unpublish.error} /> : null}
+      {createTranslation.isError ? <OperationErrorBox error={createTranslation.error} /> : null}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-5">
@@ -215,16 +254,22 @@ export function EntryEditView({
                 ) : undefined
               }
             />
-            <SchemaFields
-              schema={payload.collection.schema}
-              value={data}
-              path={[]}
-              onChange={setData}
-              language={language}
-              canonical={canonical}
-              collectionName={payload.collection.name}
-              mediaPurposes={mediaPurposes}
-            />
+            <fieldset
+              disabled={!canEdit}
+              className={canEdit ? undefined : "pointer-events-none opacity-70"}
+            >
+              <SchemaFields
+                schema={payload.collection.schema}
+                value={data}
+                path={[]}
+                onChange={setData}
+                language={language}
+                canonical={canonical}
+                collectionName={payload.collection.name}
+                mediaPurposes={mediaPurposes}
+                hiddenRootFields={hiddenFields}
+              />
+            </fieldset>
           </SectionCard>
 
           {inlineRelated.length > 0 ? (
@@ -248,21 +293,116 @@ export function EntryEditView({
               {!isOperational && (
                 <MetaRow label={t(language, "collection.table.status")} value={<StatusBadge status={payload.entry.status} />} />
               )}
-              <MetaRow label={t(language, "collection.table.locale")} value={payload.entry.locale ?? "-"} />
               <MetaRow label={t(language, "collection.table.version")} value={`v${payload.entry.version}`} />
             </dl>
           </SectionCard>
-          {sidebarRelated.length > 0 ? (
-            <RelatedSections
-              sections={sidebarRelated}
-              language={language}
-              canonical={canonical}
-              operations={operationsQuery.data}
-              onOperationSuccess={() => void queryClient.invalidateQueries({ queryKey })}
-            />
-          ) : null}
         </div>
       </div>
+
+      {canEdit || (canManageContent && !isOperational) ? (
+        <FormActionBar
+          status={save.isPending
+            ? t(language, "crud.saving")
+            : publish.isPending
+            ? t(language, "entryEdit.publishing")
+            : unpublish.isPending
+            ? t(language, "entryEdit.unpublishing")
+            : dirty
+            ? t(language, "common.unsavedChanges")
+            : isDraft && !isOperational && missingRequired
+            ? t(language, "entryEdit.publishMissingRequired")
+            : save.isSuccess
+            ? t(language, "common.saved")
+            : undefined}
+        >
+          {canManageContent && !isOperational && (isDraft ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => publish.mutate()}
+              disabled={actionPending || dirty || missingRequired}
+              title={dirty
+                ? t(language, "entryEdit.publishDisabledDirty")
+                : missingRequired
+                ? t(language, "entryEdit.publishMissingRequired")
+                : t(language, "entryEdit.publishTooltip")}
+            >
+              <Send className="size-4" aria-hidden />
+              {publish.isPending ? t(language, "entryEdit.publishing") : t(language, "entryEdit.publish")}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => unpublish.mutate()}
+              disabled={actionPending}
+              title={t(language, "entryEdit.unpublishTooltip")}
+            >
+              <RotateCcw className="size-4" aria-hidden />
+              {unpublish.isPending ? t(language, "entryEdit.unpublishing") : t(language, "entryEdit.unpublish")}
+            </Button>
+          ))}
+          {canEdit ? (
+            <Button
+              type="button"
+              onClick={() => save.mutate(data)}
+              disabled={actionPending || !canSave}
+              title={t(language, "entryEdit.saveTooltip")}
+            >
+              <Save className="size-4" aria-hidden />
+              {save.isPending ? t(language, "crud.saving") : t(language, "entryEdit.save")}
+            </Button>
+          ) : null}
+        </FormActionBar>
+      ) : null}
+    </div>
+  );
+}
+
+function EntryEditSkeleton(): React.ReactElement {
+  return (
+    <div className="flex min-h-full flex-col gap-6" aria-busy="true">
+      <div className="space-y-2" aria-hidden>
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-8 w-56 max-w-full" />
+        <Skeleton className="h-4 w-80 max-w-full" />
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]" aria-hidden>
+        <SectionCard>
+          <div className="mb-6 space-y-2">
+            <Skeleton className="h-6 w-28" />
+            <Skeleton className="h-4 w-2/3" />
+          </div>
+          <div className="space-y-5">
+            {["w-24", "w-36", "w-20", "w-32", "w-24"].map((width, index) => (
+              <div key={index} className="space-y-2">
+                <Skeleton className={`h-4 ${width}`} />
+                <Skeleton className={index === 2 ? "h-24 w-full" : "h-9 w-full"} />
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+
+        <SectionCard className="h-fit">
+          <div className="mb-5 space-y-2">
+            <Skeleton className="h-6 w-24" />
+            <Skeleton className="h-4 w-48 max-w-full" />
+          </div>
+          <div className="space-y-4">
+            {["w-20", "w-28", "w-24"].map((width, index) => (
+              <div key={index} className="flex items-center justify-between gap-4">
+                <Skeleton className={`h-4 ${width}`} />
+                <Skeleton className="h-4 w-16" />
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      </div>
+
+      <FormActionBar status={<Skeleton className="h-4 w-28" />}>
+        <Skeleton className="h-9 w-24" />
+      </FormActionBar>
     </div>
   );
 }
@@ -306,6 +446,7 @@ export function SchemaFields({
   canonical = null,
   collectionName,
   mediaPurposes,
+  hiddenRootFields = [],
 }: {
   schema: JsonSchema;
   value: Record<string, unknown>;
@@ -315,12 +456,15 @@ export function SchemaFields({
   canonical: string | null;
   collectionName: string;
   mediaPurposes: readonly MediaPurposePolicy[];
+  hiddenRootFields?: readonly string[];
 }): React.ReactElement {
   const properties = schema.properties ?? {};
   const required = new Set(schema.required ?? []);
   return (
     <div className="space-y-5">
-      {Object.entries(properties).map(([name, fieldSchema]) => (
+      {Object.entries(properties)
+        .filter(([name]) => path.length > 0 || !hiddenRootFields.includes(name))
+        .map(([name, fieldSchema]) => (
         <SchemaField
           key={[...path, name].join(".")}
           name={name}
@@ -335,9 +479,18 @@ export function SchemaFields({
           collectionName={collectionName}
           mediaPurposes={mediaPurposes}
         />
-      ))}
+        ))}
     </div>
   );
+}
+
+export function editorHiddenFields(
+  collection: Pick<EntryEditorCollection, "localized" | "translates">,
+): readonly string[] {
+  return [
+    ...(collection.localized ? ["locale"] : []),
+    ...(collection.translates ? [collection.translates.on] : []),
+  ];
 }
 
 function SchemaField({
@@ -367,78 +520,78 @@ function SchemaField({
 }): React.ReactElement {
   const type = schemaType(schema);
   const label = propertyLabel(name, schema, language, canonical);
-  // #453: `description` is the same string-or-LocalizedText shape as
-  // `title` (#443) — resolve it the same way instead of only rendering
-  // the plain-string case, matching the row-operation dialog
-  // (`row-operations.tsx`).
   const description = propertyDescription(schema, language, canonical);
   const setValue = (next: unknown): void => onChange(writePath(rootValue, path, next));
-  // Server-stamped field (#428): the runtime writes `x-mantle-bind`
-  // properties itself (ctx.user / ctx.staff / now) — caller writes are
-  // rejected anyway, so render read-only instead of a live control.
+  // The runtime owns bound values, so the form keeps them read-only.
   const readOnly = isMantleBoundField(schema);
 
   return (
     <div className="space-y-2">
-      <label className="flex items-center justify-between gap-3 text-sm font-semibold text-foreground">
-        <span>
-          {label}
-          {required ? <span className="ml-1 text-destructive">*</span> : null}
-        </span>
-        {schema["x-mcp-hint"] ? (
-          <span
-            className="badge-status bg-accent text-accent-foreground"
-            title={String(schema["x-mcp-hint"])}
-          >
-            {hintBadgeLabel(String(schema["x-mcp-hint"]), language)}
-          </span>
-        ) : null}
+      <label className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+        {label}
+        {required && !readOnly ? <span className="text-destructive">*</span> : null}
       </label>
       {description ? <p className="text-xs leading-5 text-muted-foreground">{description}</p> : null}
       {readOnly ? (
-        <p className="admin-input cursor-not-allowed bg-muted/40 text-muted-foreground" title={String(schema["x-mantle-bind"])}>
-          {stringForInput(value) || t(language, "entryEdit.emptyOption")}
+        <p
+          role="textbox"
+          aria-readonly="true"
+          className="flex min-h-9 cursor-not-allowed items-center justify-between gap-3 rounded-lg border border-transparent bg-muted px-3 py-2 text-sm text-muted-foreground"
+        >
+          <span>{(timestampHint(schema) ? formatTimestampMs(value) : stringForInput(value)) || t(language, "entryEdit.emptyOption")}</span>
+          <LockKeyhole className="size-4 shrink-0" aria-hidden="true" />
         </p>
       ) : schema.enum ? (
-        <select
-          className="admin-input"
-          value={stringForInput(value)}
-          onChange={(event) => setValue(event.target.value)}
+        <Select
+          value={stringForInput(value) || "__empty__"}
+          onValueChange={(next) => setValue(next === "__empty__" ? "" : next)}
         >
-          <option value="">{t(language, "entryEdit.emptyOption")}</option>
-          {schema.enum.map((option) => (
-            <option key={String(option)} value={String(option)}>
-              {String(option)}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="w-full" aria-label={label}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__empty__">{t(language, "entryEdit.emptyOption")}</SelectItem>
+            {schema.enum.map((option) => (
+              <SelectItem key={String(option)} value={String(option)}>
+                {String(option)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       ) : type === "boolean" ? (
         <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-          <input
-            type="checkbox"
-            className="size-4 accent-[var(--primary)]"
+          <Checkbox
             checked={Boolean(value)}
-            onChange={(event) => setValue(event.target.checked)}
+            onCheckedChange={(checked) => setValue(checked === true)}
           />
           {t(language, "entryEdit.boolean")}
         </label>
       ) : type === "number" || type === "integer" ? (
         <div className="space-y-1">
-          <input
-            className="admin-input"
-            type="number"
-            value={numberForInput(value)}
-            min={schema.minimum}
-            max={schema.maximum}
-            onChange={(event) => {
-              const raw = event.target.value;
-              setValue(raw === "" ? null : Number(raw));
-            }}
-          />
+          {timestampHint(schema) ? (
+            <DateTimePicker
+              label={label}
+              language={language}
+              value={value}
+              onChange={(date) => setValue(date?.getTime() ?? null)}
+            />
+          ) : (
+            <Input
+              type="number"
+              aria-label={label}
+              value={numberForInput(value)}
+              min={schema.minimum}
+              max={schema.maximum}
+              onChange={(event) => {
+                const raw = event.target.value;
+                setValue(raw === "" ? null : Number(raw));
+              }}
+            />
+          )}
           <NumberFieldPreview schema={schema} value={value} rootValue={rootValue} />
         </div>
       ) : type === "object" ? (
-        <div className="rounded-lg border border-[var(--glass-border)] bg-background/30 p-4">
+        <div className="rounded-lg border bg-muted/20 p-4">
           {schema.properties ? (
             <SchemaFields
               schema={schema}
@@ -482,14 +635,86 @@ function SchemaField({
           onChange={setValue}
         />
       ) : (
-        <input
-          className="admin-input"
-          type={schema.format === "date-time" ? "datetime-local" : "text"}
-          value={stringForInput(value)}
-          onChange={(event) => setValue(event.target.value)}
-        />
+        schema.format === "date-time" ? (
+          <DateTimePicker
+            label={label}
+            language={language}
+            value={value}
+            onChange={(date) => setValue(date?.toISOString() ?? "")}
+          />
+        ) : (
+          <Input
+            type="text"
+            aria-label={label}
+            value={stringForInput(value)}
+            onChange={(event) => setValue(event.target.value)}
+          />
+        )
       )}
     </div>
+  );
+}
+
+function DateTimePicker({
+  label,
+  language,
+  value,
+  onChange,
+}: {
+  label: string;
+  language: AdminLanguage;
+  value: unknown;
+  onChange: (date: Date | undefined) => void;
+}): React.ReactElement {
+  const selected = dateFromFieldValue(value);
+  const timeId = React.useId();
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full justify-start font-normal"
+          aria-label={label}
+        >
+          <CalendarIcon />
+          {selected ? formatTimestampMs(selected.getTime()) : t(language, "entryEdit.dateTime.select")}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={selected}
+          defaultMonth={selected}
+          onSelect={(day) => {
+            if (!day) return;
+            const next = new Date(day);
+            next.setHours(selected?.getHours() ?? 0, selected?.getMinutes() ?? 0, 0, 0);
+            onChange(next);
+          }}
+        />
+        <div className="flex items-center gap-3 border-t p-3">
+          <label className="text-sm font-medium" htmlFor={timeId}>
+            {t(language, "entryEdit.dateTime.time")}
+          </label>
+          <Input
+            id={timeId}
+            type="time"
+            className="w-32"
+            disabled={!selected}
+            value={selected ? `${String(selected.getHours()).padStart(2, "0")}:${String(selected.getMinutes()).padStart(2, "0")}` : ""}
+            onChange={(event) => {
+              if (!selected) return;
+              const [hours, minutes] = event.target.value.split(":").map(Number);
+              const next = new Date(selected);
+              next.setHours(hours, minutes, 0, 0);
+              onChange(next);
+            }}
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -541,19 +766,21 @@ function ArrayField({
   const itemSchema = schema.items ?? {};
   const setArray = (next: unknown[]): void => onChange(writePath(rootValue, path, next));
   return (
-    <div className="space-y-3 rounded-lg border border-[var(--glass-border)] bg-background/30 p-3">
+    <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
       {value.map((item, index) => (
         <div key={index} className="rounded-lg border border-border/70 bg-card/50 p-3">
           <div className="mb-3 flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-muted-foreground">#{index + 1}</span>
-            <button
+            <Button
               type="button"
-              className="row-action"
+              variant="ghost"
+              size="icon-sm"
               title={t(language, "entryEdit.removeItem")}
+              aria-label={t(language, "entryEdit.removeItem")}
               onClick={() => setArray(value.filter((_, i) => i !== index))}
             >
               <Trash2 className="size-3.5" aria-hidden />
-            </button>
+            </Button>
           </div>
           {schemaType(itemSchema) === "object" && itemSchema.properties ? (
             <SchemaFields
@@ -567,8 +794,7 @@ function ArrayField({
               mediaPurposes={mediaPurposes}
             />
           ) : (
-            <input
-              className="admin-input"
+            <Input
               value={stringForInput(item)}
               onChange={(event) => {
                 const next = [...value];
@@ -615,12 +841,7 @@ function MediaAssetField({
   const purpose = purposeForMediaField(mediaPurposes, collectionName, path);
   const assetId = typeof value === "string" ? value : "";
 
-  // #444: a field that already has a value only ever showed the raw
-  // asset id/UUID — no confirmation of which image it actually points
-  // at. `publicUrl` is only populated in-memory right after an
-  // upload/pick in THIS session, so entries loaded with an existing
-  // value need their own fetch via the same `GET /admin/api/media/:id`
-  // the media library already uses.
+  // Resolve persisted asset ids so existing entries still show a preview.
   const assetQuery = useQuery({
     queryKey: ["media-asset", assetId],
     queryFn: () => api.get<MediaLibraryItem>(`/media/${encodeURIComponent(assetId)}`),
@@ -652,11 +873,10 @@ function MediaAssetField({
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <MediaAssetThumbnail assetId={assetId} asset={assetQuery.data} isError={assetQuery.isError} language={language} />
-        <input
-          className="admin-input min-w-0 flex-1"
+        <Input
+          className="min-w-0 flex-1"
           value={stringForInput(value)}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="media_assets id"
         />
         <Button
           type="button"
@@ -696,7 +916,7 @@ function MediaAssetField({
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
       <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
-        <DialogContent className="max-h-[85vh] w-full max-w-3xl overflow-y-auto">
+        <DialogContent closeLabel={t(language, "common.close")} className="max-h-[85vh] w-full max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t(language, "media.pickTitle")}</DialogTitle>
             <DialogDescription>{t(language, "media.pickDescription")}</DialogDescription>
@@ -718,12 +938,7 @@ function MediaAssetField({
   );
 }
 
-/** Small thumbnail chip (#444) next to an asset-id field: confirms
- *  which image the stored id actually points at instead of leaving the
- *  operator to trust a bare UUID. `isError` covers a deleted/missing
- *  asset — the field must keep rendering normally rather than crash or
- *  block editing, so this renders a neutral placeholder icon instead
- *  of propagating the fetch error anywhere. */
+/** Preview a media reference without blocking edits when the asset is missing. */
 function MediaAssetThumbnail({
   assetId,
   asset,
@@ -738,7 +953,7 @@ function MediaAssetThumbnail({
   if (!assetId) return null;
   return (
     <div
-      className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[var(--glass-border)] bg-muted/40"
+      className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted/40"
       title={isError ? t(language, "entryEdit.mediaMissing") : assetId}
     >
       {asset?.primaryUrl ? (
@@ -764,8 +979,8 @@ function JsonEditor({
   }, [value]);
   return (
     <div className="space-y-2">
-      <textarea
-        className="admin-textarea admin-textarea-compact font-mono"
+      <Textarea
+        className="min-h-32 font-mono"
         value={draft}
         onChange={(event) => {
           const next = event.target.value;
@@ -793,21 +1008,10 @@ function RelatedSections({
   sections: RelatedEntrySection[];
   language: AdminLanguage;
   canonical: string | null;
-  /** All staff operations (#430); each row derives its own bound
-   *  subset via `boundOperationsFor(operations, section.collection.name)`
-   *  — the child collection, not the parent entry's collection (#442:
-   *  this is what lets e.g. a product's "Product SKUs" child rows
-   *  offer "Restock" without the parent editor knowing that name). */
+  /** Child rows derive their own bound operations. */
   operations: readonly StaffOperation[] | undefined;
   onOperationSuccess: () => void;
 }): React.ReactElement {
-  if (sections.length === 0) {
-    return (
-      <SectionCard>
-        <SectionTitle title={t(language, "entryEdit.related")} body={t(language, "entryEdit.noRelated")} />
-      </SectionCard>
-    );
-  }
   return (
     <>
       {sections.map((section) => {
@@ -828,7 +1032,7 @@ function RelatedSections({
                 section.entries.map((entry) => (
                   <div
                     key={entry.id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-[var(--glass-border)] bg-background/35 p-3 text-sm text-foreground transition hover:border-primary hover:bg-accent"
+                    className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3 text-sm text-foreground transition-colors hover:bg-accent"
                   >
                     <a
                       href={`/admin/c/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}
@@ -836,10 +1040,12 @@ function RelatedSections({
                     >
                       <span className="min-w-0">
                         <span className="block truncate font-semibold">
-                          {entryTitle(entry.data, entry.id, section.collection.schema)}
+                          {entryTitle(entry.data, t(language, "collection.untitled"), section.collection.schema)}
                         </span>
-                        <span className="block text-xs text-muted-foreground">
-                          {entry.collection} / v{entry.version}
+                        <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          {entry.collection}
+                          <StatusBadge status={entry.status} />
+                          <span>v{entry.version}</span>
                         </span>
                       </span>
                       <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -862,16 +1068,159 @@ function RelatedSections({
   );
 }
 
+function TranslationTabs({
+  section,
+  currentCollection,
+  currentEntryId,
+  sharedHref,
+  language,
+  siteLocales,
+  canCreate,
+  pending,
+  onCreate,
+}: {
+  section: RelatedEntrySection;
+  currentCollection: string;
+  currentEntryId: string;
+  sharedHref: string | undefined;
+  language: AdminLanguage;
+  siteLocales: readonly string[] | undefined;
+  canCreate: boolean;
+  pending: boolean;
+  onCreate: (locale: string) => void;
+}): React.ReactElement {
+  const locales = contentLocales(section.collection.schema, siteLocales);
+  const sharedActive = currentCollection !== section.collection.name;
+  return (
+    <nav aria-label={t(language, "entryEdit.languageTabs")} className="-mt-2 border-b">
+      <div role="tablist" className="flex max-w-full gap-1 overflow-x-auto pb-2">
+        {sharedActive ? (
+          <span
+            role="tab"
+            aria-selected="true"
+            className={buttonVariants({ variant: "secondary", size: "sm" })}
+          >
+            {t(language, "entryEdit.sharedFields")}
+          </span>
+        ) : sharedHref ? (
+          <a
+            role="tab"
+            aria-selected="false"
+            href={sharedHref}
+            className={buttonVariants({ variant: "ghost", size: "sm" })}
+          >
+            {t(language, "entryEdit.sharedFields")}
+          </a>
+        ) : null}
+        {locales.map((locale) => {
+          const entry = section.entries.find((candidate) => candidate.locale === locale);
+          const active = entry?.id === currentEntryId;
+          const label = `${localeName(locale)} · ${locale}`;
+          if (entry) {
+            return (
+              <Tooltip key={locale}>
+                <TooltipTrigger asChild>
+                  <a
+                    role="tab"
+                    aria-selected={active}
+                    aria-current={active ? "page" : undefined}
+                    href={`/admin/c/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}
+                    className={buttonVariants({ variant: active ? "secondary" : "ghost", size: "sm" })}
+                  >
+                    <Globe aria-hidden />
+                    <span className="max-w-40 truncate">{localeName(locale)}</span>
+                    <span className="font-mono text-[0.625rem] text-muted-foreground">{locale}</span>
+                  </a>
+                </TooltipTrigger>
+                <TooltipContent>{label}</TooltipContent>
+              </Tooltip>
+            );
+          }
+          const disabled = !canCreate || pending || section.relationship.parentValue === null;
+          const button = (
+            <Button
+              type="button"
+              role="tab"
+              aria-selected="false"
+              variant="outline"
+              size="sm"
+              className="border-dashed"
+              disabled={disabled}
+              onClick={() => onCreate(locale)}
+            >
+              <Plus aria-hidden />
+              <span className="max-w-40 truncate">{localeName(locale)}</span>
+              <span className="font-mono text-[0.625rem] text-muted-foreground">{locale}</span>
+            </Button>
+          );
+          return section.relationship.parentValue === null ? (
+            <Tooltip key={locale}>
+              <TooltipTrigger asChild><span className="inline-flex">{button}</span></TooltipTrigger>
+              <TooltipContent>{t(language, "entryEdit.saveSharedFirst")}</TooltipContent>
+            </Tooltip>
+          ) : <React.Fragment key={locale}>{button}</React.Fragment>;
+        })}
+      </div>
+    </nav>
+  );
+}
+
+function ContentLanguageControl({
+  language,
+  locale,
+  locales,
+  disabled,
+  onChange,
+}: {
+  language: AdminLanguage;
+  locale: string;
+  locales: readonly string[];
+  disabled: boolean;
+  onChange: (locale: string) => void;
+}): React.ReactElement {
+  if (disabled) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex cursor-default">
+            <LocaleBadge locale={locale || null} />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{t(language, "entryEdit.languageLocked")}</TooltipContent>
+      </Tooltip>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <Globe className="size-4 text-primary" aria-hidden />
+      <span className="sr-only">{t(language, "entryEdit.contentLanguage")}</span>
+      <Select value={locale || undefined} onValueChange={onChange}>
+        <SelectTrigger size="sm" aria-label={t(language, "entryEdit.contentLanguage")}>
+          <SelectValue placeholder={t(language, "entryEdit.selectLanguage")} />
+        </SelectTrigger>
+        <SelectContent>
+          {locales.map((option) => (
+            <SelectItem key={option} value={option}>
+              {localeName(option)} · {option}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 function parentAdminLink(
   collection: EntryEditorPayload["collection"],
   data: Record<string, unknown>,
+  parentEntryId: string | null,
 ): { href: string; label: string } | null {
-  if (!collection.parent) return null;
+  if (!collection.parent || !parentEntryId) return null;
   const parentValue = data[collection.parent.childField];
-  if (typeof parentValue !== "string" || !parentValue) return null;
+  if (typeof parentValue !== "string" && typeof parentValue !== "number" && typeof parentValue !== "boolean") return null;
   return {
-    href: `/admin/c/${encodeURIComponent(collection.parent.collection)}?search=${encodeURIComponent(parentValue)}`,
-    label: `${collection.parent.collection} / ${parentValue}`,
+    href: `/admin/c/${encodeURIComponent(collection.parent.collection)}/${encodeURIComponent(parentEntryId)}`,
+    label: `${collection.parent.collection} / ${String(parentValue)}`,
   };
 }
 
@@ -898,7 +1247,15 @@ function entryTitle(data: Record<string, unknown>, fallback: string, schema?: Js
       if (typeof value === "string" && value.trim()) return value;
     }
   }
-  return fallback.slice(0, 8);
+  return fallback;
+}
+
+export function hasMissingRequired(data: Record<string, unknown>, schema: JsonSchema): boolean {
+  return (schema.required ?? []).some((key) => {
+    const value = data[key];
+    return value === undefined || value === null || value === "" ||
+      (Array.isArray(value) && value.length === 0);
+  });
 }
 
 function schemaType(schema: JsonSchema): string {

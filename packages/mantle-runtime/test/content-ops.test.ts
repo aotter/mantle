@@ -129,13 +129,13 @@ describe("CreateDraftUseCase", () => {
     });
   });
 
-  describe("lifecycle: none (operational records)", () => {
-    const noneSchema = () => {
+  describe("lifecycle: operational (operational records)", () => {
+    const operationalSchema = () => {
       const base = postsSchema();
-      return { ...base, spec: { ...base.spec, lifecycle: "none" as const } };
+      return { ...base, spec: { ...base.spec, lifecycle: "operational" as const } };
     };
     const noneHarness = () => {
-      const schema = noneSchema();
+      const schema = operationalSchema();
       return harness({ schemas: new Map([[schema.metadata.name, schema]]) });
     };
 
@@ -293,7 +293,7 @@ describe("CreateDraftUseCase", () => {
           },
           required: ["name", "email", "message"],
         },
-        lifecycle: "simple",
+        lifecycle: "publishing",
       },
     };
     const h = harness({ schemas: new Map([[schema.metadata.name, schema]]) });
@@ -359,7 +359,7 @@ describe("CreateDraftUseCase", () => {
           },
           required: ["slug", "locale", "title", "body"],
         },
-        lifecycle: "simple",
+        lifecycle: "publishing",
       },
     };
     const h = harness({
@@ -398,7 +398,7 @@ describe("CreateDraftUseCase", () => {
           },
           required: ["slug", "locale", "title", "body"],
         },
-        lifecycle: "simple",
+        lifecycle: "publishing",
       },
     };
     const h = harness({
@@ -560,7 +560,7 @@ describe("UpdateDraftUseCase", () => {
   });
 });
 
-describe("RequestPublishUseCase (simple lifecycle)", () => {
+describe("RequestPublishUseCase (publishing lifecycle)", () => {
   it("flips draft → published with status guard", async () => {
     const h = harness();
     const created = await h.createDraft.execute({
@@ -654,24 +654,6 @@ describe("RequestPublishUseCase (simple lifecycle)", () => {
     );
   });
 
-  it("LIFECYCLE_NOT_IN_V010 if Schema is editorial", async () => {
-    const editorialSchema: SchemaManifest = {
-      ...postsSchema(),
-      spec: { ...postsSchema().spec, lifecycle: "editorial" as const },
-    };
-    const h = harness({
-      schemas: new Map([[editorialSchema.metadata.name, editorialSchema]]),
-    });
-    const created = await h.createDraft.execute({
-      collection: "posts",
-      data: { title: "x" },
-      authorId: null,
-    });
-    await expect(h.requestPublish.execute({ id: created.id })).rejects.toMatchObject({
-      diagnostic: { code: "LIFECYCLE_NOT_IN_V010" },
-    });
-  });
-
   it("rejects publishing a translated child without a published parent", async () => {
     const h = harness({ schemas: translatedSchemas() });
     const child = await h.createDraft.execute({
@@ -750,7 +732,7 @@ function translatedSchemas(): ReadonlyMap<string, SchemaManifest> {
         },
         required: ["slug", "locale", "title", "body"],
       },
-      lifecycle: "simple",
+      lifecycle: "publishing",
     },
   };
   return new Map([
@@ -815,7 +797,7 @@ describe("UnpublishUseCase", () => {
 });
 
 describe("ArchiveUseCase", () => {
-  it("flips draft → archived (simple lifecycle allows direct archive)", async () => {
+  it("flips draft → archived (publishing lifecycle allows direct archive)", async () => {
     const h = harness();
     const created = await h.createDraft.execute({
       collection: "posts",
@@ -945,6 +927,106 @@ describe("GetEntryUseCase / ListEntriesUseCase / DeleteEntryUseCase", () => {
     // Pages should not overlap.
     const allIds = [...first.rows, ...second.rows, ...third.rows].map((r) => r.id);
     expect(new Set(allIds).size).toBe(5);
+  });
+
+  it("sorts indexed fields and walks cursor pages in both directions", async () => {
+    const indexedPosts: SchemaManifest = {
+      ...postsSchema(),
+      spec: { ...postsSchema().spec, indexes: [["title"]] },
+    };
+    const h = harness({ schemas: new Map([["posts", indexedPosts]]) });
+    for (const title of ["C", "A", "B"]) {
+      await h.createDraft.execute({ collection: "posts", data: { title }, authorId: null });
+    }
+    const first = await h.listEntries.executePage({
+      collection: "posts",
+      limit: 2,
+      sort: { field: "title", direction: "asc" },
+    });
+    expect(first.rows.map((row) => row.data.title)).toEqual(["A", "B"]);
+    expect(first.previousCursor).toBeUndefined();
+    expect(first.nextCursor).toBeDefined();
+
+    const second = await h.listEntries.executePage({
+      collection: "posts",
+      limit: 2,
+      cursor: first.nextCursor,
+      sort: { field: "title", direction: "asc" },
+    });
+    expect(second.rows.map((row) => row.data.title)).toEqual(["C"]);
+    expect(second.previousCursor).toBeDefined();
+
+    const back = await h.listEntries.executePage({
+      collection: "posts",
+      limit: 2,
+      cursor: second.previousCursor,
+      cursorDirection: "backward",
+      sort: { field: "title", direction: "asc" },
+    });
+    expect(back.rows.map((row) => row.data.title)).toEqual(["A", "B"]);
+  });
+
+  it("sorts indexed booleans with cursor pagination", async () => {
+    const base = postsSchema();
+    const indexedPosts: SchemaManifest = {
+      ...base,
+      spec: {
+        ...base.spec,
+        indexes: [["active"]],
+        schema: {
+          ...base.spec.schema,
+          properties: { ...base.spec.schema.properties, active: { type: "boolean" } },
+          required: [...(base.spec.schema.required ?? []), "active"],
+        },
+      },
+    };
+    const h = harness({ schemas: new Map([["posts", indexedPosts]]) });
+    for (const [title, active] of [["A", false], ["B", true], ["C", true]] as const) {
+      await h.createDraft.execute({ collection: "posts", data: { title, active }, authorId: null });
+    }
+
+    const first = await h.listEntries.executePage({
+      collection: "posts",
+      limit: 2,
+      sort: { field: "active", direction: "asc" },
+    });
+    expect(first.rows.map((row) => row.data.active)).toEqual([false, true]);
+    expect(first.nextCursor).toBeDefined();
+    const second = await h.listEntries.executePage({
+      collection: "posts",
+      limit: 2,
+      cursor: first.nextCursor,
+      sort: { field: "active", direction: "asc" },
+    });
+    expect(second.rows.map((row) => row.data.active)).toEqual([true]);
+  });
+
+  it("does not sort by a non-left-prefix composite index field", async () => {
+    const base = postsSchema();
+    const indexedPosts: SchemaManifest = {
+      ...base,
+      spec: {
+        ...base.spec,
+        indexes: [["title", "slug"]],
+        schema: {
+          ...base.spec.schema,
+          required: ["title", "slug"],
+        },
+      },
+    };
+    const h = harness({ schemas: new Map([["posts", indexedPosts]]) });
+    await expect(h.listEntries.executePage({
+      collection: "posts",
+      sort: { field: "slug", direction: "asc" },
+    })).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
+  });
+
+  it("rejects sorting on an unindexed data field", async () => {
+    const h = harness();
+    await expect(h.listEntries.executePage({
+      collection: "posts",
+      sort: { field: "title", direction: "asc" },
+    })).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
   });
 
   it("ListEntriesUseCase.execute() only returns the first page (silent cap)", async () => {

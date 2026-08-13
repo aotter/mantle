@@ -499,6 +499,114 @@ describe("declared Schema indexes against real SQLite", () => {
     expect(executions.at(-1)?.sql).toContain("json_extract(data, ?) = ?");
   });
 
+  it("repository sorts an indexed field with reversible keyset cursors", async () => {
+    const executions: RecordedExecution[] = [];
+    const repository = new DatabaseEntryRepository(
+      createSqliteDriver(db, executions),
+      new Map([[schema.metadata.name, schema]]),
+    );
+    const sort = { field: "userId", direction: "asc" } as const;
+    const first = await repository.list({
+      collection: schema.metadata.name,
+      limit: 3,
+      sort,
+    });
+    expect(first.rows).toHaveLength(3);
+    expect(first.nextCursor).toBeDefined();
+    expect(executions.at(-1)?.sql).toContain(
+      `ORDER BY ${schemaIndexedFieldSql(schema, "userId")} ASC, id ASC`,
+    );
+
+    const second = await repository.list({
+      collection: schema.metadata.name,
+      limit: 3,
+      cursor: first.nextCursor,
+      sort,
+    });
+    expect(second.previousCursor).toBeDefined();
+    expect(new Set([...first.rows, ...second.rows].map((row) => row.id)).size).toBe(6);
+
+    const back = await repository.list({
+      collection: schema.metadata.name,
+      limit: 3,
+      cursor: second.previousCursor,
+      cursorDirection: "backward",
+      sort,
+    });
+    expect(back.rows.map((row) => row.id)).toEqual(first.rows.map((row) => row.id));
+  });
+
+  it("repository serializes boolean sort cursors as SQLite integers", async () => {
+    const booleanDb = new DatabaseSync(":memory:");
+    try {
+      createEntriesTable(booleanDb);
+      const booleanSchema = {
+        apiVersion: "cms.mantle.aotter.net/v1",
+        kind: "Schema",
+        metadata: { name: "flags" },
+        spec: {
+          title: "Flags",
+          schema: {
+            type: "object",
+            properties: { active: { type: "boolean" } },
+            required: ["active"],
+          },
+          indexes: [["active"]],
+        },
+      } as SchemaManifest;
+      for (const column of buildDdl(booleanSchema).columns) booleanDb.exec(column.sql);
+      for (const index of buildDdl(booleanSchema).indexes) booleanDb.exec(index.sql);
+      const insert = booleanDb.prepare(
+        `INSERT INTO entries
+         (id, collection, status, version, data, created_at, updated_at, author_id)
+         VALUES (?, 'flags', 'published', 1, ?, 1, 1, NULL)`,
+      );
+      insert.run("f1", JSON.stringify({ active: false }));
+      insert.run("f2", JSON.stringify({ active: true }));
+      insert.run("f3", JSON.stringify({ active: true }));
+      const repository = new DatabaseEntryRepository(
+        createSqliteDriver(booleanDb, []),
+        new Map([[booleanSchema.metadata.name, booleanSchema]]),
+      );
+      const sort = { field: "active", direction: "asc" } as const;
+      const first = await repository.list({ collection: "flags", limit: 2, sort });
+      expect(first.rows.map((row) => row.data.active)).toEqual([false, true]);
+      expect(first.nextCursor).toBeDefined();
+      const second = await repository.list({
+        collection: "flags",
+        limit: 2,
+        cursor: first.nextCursor,
+        sort,
+      });
+      expect(second.rows.map((row) => row.data.active)).toEqual([true]);
+    } finally {
+      booleanDb.close();
+    }
+  });
+
+  it("searches only id and explicitly resolved string fields", async () => {
+    const executions: RecordedExecution[] = [];
+    const repository = new DatabaseEntryRepository(
+      createSqliteDriver(db, executions),
+      new Map([[schema.metadata.name, schema]]),
+    );
+
+    const email = await repository.list({
+      collection: schema.metadata.name,
+      search: "member4999",
+      searchFields: ["email"],
+    });
+    expect(email.rows.map((row) => row.id)).toEqual(["m4999"]);
+
+    const undeclared = await repository.list({
+      collection: schema.metadata.name,
+      search: "disabled",
+      searchFields: ["email"],
+    });
+    expect(undeclared.rows).toEqual([]);
+    expect(executions.at(-1)?.sql).not.toContain("json_tree");
+  });
+
   it("ExecuteViewUseCase resolves the View's Schema from its injected map", async () => {
     const executions: RecordedExecution[] = [];
     const useCase = new ExecuteViewUseCase(
@@ -592,7 +700,7 @@ function entryReadSchema(
     spec: {
       title: name,
       localized: true,
-      lifecycle: "simple",
+      lifecycle: "publishing",
       schema: {
         type: "object",
         properties: {

@@ -10,6 +10,5 @@ export {
 export {
   mountAuthorize,
   type MountAuthorizeOptions,
-  type OAuthApiProps,
 } from "./mountOAuth.js";
 export { applyCachePolicy } from "./cachePolicy.js";

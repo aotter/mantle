@@ -147,6 +147,7 @@ describe("createCmsRuntime + bootInit", () => {
             type: "object",
             properties: { "a.b": { type: "string" } },
           },
+          searchableFields: [],
           uniqueIndexes: [["a.b"]],
         },
       }],
@@ -257,6 +258,9 @@ describe("createCmsRuntime + bootInit", () => {
     await runtime.bootInit();
     // Operator edits the brand directly:
     db.siteConfig.set("brand", "Operator-Edited");
+    const writesBeforeReboot = db.executions.filter(({ sql }) =>
+      sql.startsWith("INSERT INTO site_config")
+    ).length;
     // Subsequent boot with new defaults must NOT overwrite the operator's edit.
     const runtime2 = createCmsRuntime({
       manifests: [],
@@ -266,6 +270,32 @@ describe("createCmsRuntime + bootInit", () => {
     });
     await runtime2.bootInit();
     const site = await new DatabaseSiteConfigRepository(db).load();
+    expect(site.brand).toBe("Operator-Edited");
+    expect(db.executions.filter(({ sql }) => sql.startsWith("INSERT INTO site_config")))
+      .toHaveLength(writesBeforeReboot);
+  });
+
+  it("re-boot syncs a custom-domain origin while preserving operator-owned settings", async () => {
+    const db = new InMemoryDatabase();
+    const first = createCmsRuntime({
+      manifests: [],
+      db,
+      assets: noopAssets,
+      siteDefaults: { brand: "First", origin: "https://site.workers.dev" },
+    });
+    await first.bootInit();
+    db.siteConfig.set("brand", "Operator-Edited");
+
+    const second = createCmsRuntime({
+      manifests: [],
+      db,
+      assets: noopAssets,
+      siteDefaults: { brand: "Second", origin: "https://www.example.com" },
+    });
+    await second.bootInit();
+
+    const site = await new DatabaseSiteConfigRepository(db).load();
+    expect(site.origin).toBe("https://www.example.com");
     expect(site.brand).toBe("Operator-Edited");
   });
 

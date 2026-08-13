@@ -33,10 +33,33 @@ function manifests(): Manifest[] {
           },
           required: ["slug"],
         },
-        lifecycle: "simple",
+        searchableFields: ["title", "slug"],
+        lifecycle: "publishing",
       },
     },
   ];
+}
+
+function filteredManifests(): Manifest[] {
+  return [{
+    apiVersion: "cms.mantle.aotter.net/v1",
+    kind: "Schema",
+    metadata: { name: "orders" },
+    spec: {
+      title: "Orders",
+      lifecycle: "operational",
+      schema: {
+        type: "object",
+        properties: {
+          orderState: { type: "string", enum: ["pending", "paid"] },
+          placedAt: { type: "integer" },
+        },
+        required: ["orderState", "placedAt"],
+      },
+      indexes: [["orderState", "placedAt"]],
+      uiSchema: { list: { filterField: "orderState" } },
+    },
+  }];
 }
 
 function sessionAsStaff() {
@@ -77,6 +100,7 @@ function harness(
   const auth = testAuth(authOverride);
   const ref = createCmsRef({
     manifests: manifestSet,
+    siteDefaults: { locales: ["en", "zh-TW"] },
     bindings: {
       db,
       assets: new StubAssetServer(),
@@ -101,7 +125,7 @@ function relatedManifests(): Manifest[] {
     spec: {
       title: name,
       schema: { type: "object", properties, required },
-      lifecycle: "simple",
+      lifecycle: "publishing",
     },
   });
   return [
@@ -111,6 +135,48 @@ function relatedManifests(): Manifest[] {
     schema("comments", { parentId: { type: "string", "x-mantle-ref": "parents" } }, ["parentId"]),
     schema("reactions", { parentId: { type: "string", "x-mantle-ref": "parents" } }),
     schema("legacy-children", { parentKey: { type: "string" } }),
+  ];
+}
+
+function translatedManifests(): Manifest[] {
+  const apiVersion = "cms.mantle.aotter.net/v1" as const;
+  return [
+    {
+      apiVersion,
+      kind: "Schema",
+      metadata: { name: "articles" },
+      spec: {
+        title: "Articles",
+        schema: {
+          type: "object",
+          properties: { slug: { type: "string" } },
+          required: ["slug"],
+        },
+        uniqueIndexes: [["slug"]],
+        lifecycle: "publishing",
+      },
+    },
+    {
+      apiVersion,
+      kind: "Schema",
+      metadata: { name: "article-translations" },
+      spec: {
+        title: "Article translations",
+        localized: true,
+        translates: { parent: "articles", on: "slug" },
+        schema: {
+          type: "object",
+          properties: {
+            slug: { type: "string" },
+            locale: { type: "string", enum: ["en", "zh-TW"] },
+            title: { type: "string" },
+          },
+          required: ["slug", "locale", "title"],
+        },
+        uniqueIndexes: [["slug", "locale"]],
+        lifecycle: "publishing",
+      },
+    },
   ];
 }
 
@@ -147,7 +213,7 @@ function row(id: string, data: Record<string, unknown>, updatedAt = 1) {
 }
 
 describe("GET /admin/api/entries?search=", () => {
-  it("reuses the role already loaded with the session", async () => {
+  it("loads the authoritative role for the session user", async () => {
     let roleReads = 0;
     const { app } = harness(undefined, {
       getUserRole: async () => {
@@ -157,10 +223,10 @@ describe("GET /admin/api/entries?search=", () => {
     });
     const res = await app.request("/admin/api/entries?collection=posts");
     expect(res.status).toBe(200);
-    expect(roleReads).toBe(0);
+    expect(roleReads).toBe(1);
   });
 
-  it("filters rows whose id or data matches the search term", async () => {
+  it("filters rows whose id or declared searchable data matches the search term", async () => {
     const { app } = harness((db) => {
       db.entries.set("p1", row("p1", { title: "Hello world", slug: "hello" }));
       db.entries.set("p2", row("p2", { title: "Goodbye", slug: "goodbye" }));
@@ -170,6 +236,21 @@ describe("GET /admin/api/entries?search=", () => {
     const body = (await res.json()) as { items: Array<{ id: string }> };
     expect(body.items).toHaveLength(1);
     expect(body.items[0]!.id).toBe("p1");
+  });
+
+  it("does not match undeclared strings, numeric values, or JSON field names", async () => {
+    const { app } = harness((db) => {
+      db.entries.set("p1", row("p1", {
+        title: "No match",
+        placedAt: "2026-08-06T00:00:00Z",
+        sequence86: 1786,
+      }));
+      db.entries.set("p2", row("p2", { title: "Order 86", sequence86: 1 }));
+    });
+    const res = await app.request("/admin/api/entries?collection=posts&search=86");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { items: Array<{ id: string }> };
+    expect(body.items.map((item) => item.id)).toEqual(["p2"]);
   });
 
   it("matches on id even when the term isn't in the data blob", async () => {
@@ -205,6 +286,65 @@ describe("GET /admin/api/entries?search=", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { items: unknown[] };
     expect(body.items).toHaveLength(0);
+  });
+});
+
+describe("GET /admin/api/entries exact list filter", () => {
+  it("projects the filter metadata and filters by its indexed enum value", async () => {
+    const { app, db } = harness(undefined, undefined, filteredManifests());
+    db.entries.set("o1", relatedRow("o1", "orders", "draft", { orderState: "paid", placedAt: 2 }, 2));
+    db.entries.set("o2", relatedRow("o2", "orders", "draft", { orderState: "pending", placedAt: 1 }, 1));
+
+    const collections = await app.request("/admin/api/collections");
+    expect(await collections.json()).toMatchObject({
+      collections: [{
+        filter: { field: "orderState", values: ["pending", "paid"] },
+        sortableFields: ["orderState"],
+      }],
+    });
+
+    const response = await app.request(
+      "/admin/api/entries?collection=orders&filter_field=orderState&filter_value=paid",
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { items: Array<{ id: string }> };
+    expect(body.items.map(({ id }) => id)).toEqual(["o1"]);
+    expect(db.executions.at(-1)?.sql).toContain('"m2c_');
+  });
+
+  it("rejects incomplete filter parameters", async () => {
+    const { app } = harness(undefined, undefined, filteredManifests());
+    const response = await app.request(
+      "/admin/api/entries?collection=orders&filter_field=orderState",
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      diagnostic: { code: "INPUT_VALIDATION_FAILED" },
+    });
+  });
+});
+
+describe("GET /admin/api/entries pagination", () => {
+  it("round-trips sorting and cursor state", async () => {
+    const { app } = harness((db) => {
+      db.entries.set("p2", row("p2", { title: "Second", slug: "second" }));
+      db.entries.set("p1", row("p1", { title: "First", slug: "first" }));
+    });
+    const first = await app.request(
+      "/admin/api/entries?collection=posts&sort=id&direction=asc&limit=1",
+    );
+    const firstPage = (await first.json()) as {
+      items: Array<{ id: string }>;
+      next_cursor: string | null;
+    };
+    expect(firstPage.items.map((item) => item.id)).toEqual(["p1"]);
+    expect(firstPage.next_cursor).toEqual(expect.any(String));
+
+    const second = await app.request(
+      `/admin/api/entries?collection=posts&sort=id&direction=asc&limit=1&cursor=${encodeURIComponent(firstPage.next_cursor!)}`,
+    );
+    const secondPage = (await second.json()) as { items: Array<{ id: string }> };
+    expect(secondPage.items.map((item) => item.id)).toEqual(["p2"]);
   });
 });
 
@@ -267,6 +407,32 @@ describe("GET /admin/api/entries/export", () => {
 });
 
 describe("GET /admin/api/entries/:id related entries", () => {
+  it("projects translation coverage and sibling tabs from explicit translates", async () => {
+    const { app } = harness((database) => {
+      database.entries.set("article", relatedRow("article", "articles", "draft", { slug: "hello" }, 1));
+      database.entries.set("en", relatedRow("en", "article-translations", "draft", {
+        slug: "hello",
+        locale: "en",
+        title: "Hello",
+      }, 2));
+    }, undefined, translatedManifests());
+
+    const list = await app.request("/admin/api/entries?collection=articles");
+    expect(await list.json()).toMatchObject({
+      items: [{ id: "article", translation_locales: ["en"] }],
+    });
+
+    const editor = await app.request("/admin/api/entries/en");
+    expect(await editor.json()).toMatchObject({
+      parentEntryId: "article",
+      related: [{
+        collection: { name: "article-translations" },
+        relationship: { kind: "translation", parentValue: "hello" },
+        entries: [{ id: "en", locale: "en" }],
+      }],
+    });
+  });
+
   it("uses explicit refs, keeps all-status ordering, and caps each section at 50 rows", async () => {
     const { app, db } = harness((database) => {
       database.entries.set(

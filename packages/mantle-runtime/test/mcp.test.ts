@@ -16,6 +16,7 @@ import {
 } from "../src/usecase/content/index.js";
 import { InvokeProcedureUseCase } from "../src/usecase/procedure/InvokeProcedureUseCase.js";
 import { InMemoryHandlerRegistry } from "../src/domain/port/HandlerRegistry.js";
+import type { HandlerContext } from "../src/domain/model/HandlerContext.js";
 import type { Clock } from "../src/domain/port/Clock.js";
 import type { IdGenerator } from "../src/domain/port/IdGenerator.js";
 import type {
@@ -62,7 +63,7 @@ function buildHarness(schemas = [postsSchema()]): Harness {
 
 function operationalPostsSchema() {
   const schema = postsSchema();
-  return { ...schema, spec: { ...schema.spec, lifecycle: "none" as const } };
+  return { ...schema, spec: { ...schema.spec, lifecycle: "operational" as const } };
 }
 
 /**
@@ -96,10 +97,28 @@ function jsonRpcReq(method: string, params?: unknown, id: number | string = 1): 
   });
 }
 
+function mcpContext(
+  userId = "u1",
+  role: NonNullable<HandlerContext["staff"]>["role"] | null = null,
+  auth: Partial<NonNullable<HandlerContext["auth"]>> = {},
+): HandlerContext {
+  return {
+    user: { id: userId },
+    staff: role ? { id: userId, role } : null,
+    auth: {
+      credential: "oauth",
+      credentialId: auth.credentialId ?? null,
+      clientId: auth.clientId ?? "client-1",
+      scopes: auth.scopes ?? ["mcp"],
+    },
+    env: {},
+  };
+}
+
 describe("McpJsonRpcDispatcher", () => {
   it("initialize returns protocol info", async () => {
     const { dispatcher } = buildHarness();
-    const res = await dispatcher.dispatch(jsonRpcReq("initialize"), { userId: "u1" });
+    const res = await dispatcher.dispatch(jsonRpcReq("initialize"), mcpContext());
     const body = (await res.json()) as {
       result: { protocolVersion: string; serverInfo: { name: string; version: string } };
     };
@@ -112,7 +131,7 @@ describe("McpJsonRpcDispatcher", () => {
 
   it("tools/list emits generic + per-collection tools", async () => {
     const { dispatcher } = buildHarness();
-    const res = await dispatcher.dispatch(jsonRpcReq("tools/list"), { userId: "u1" });
+    const res = await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext());
     const body = (await res.json()) as {
       result: { tools: { name: string }[] };
     };
@@ -130,9 +149,43 @@ describe("McpJsonRpcDispatcher", () => {
     expect(names).not.toContain("create_draft");
   });
 
-  it("uses record tools for lifecycle:none collections and creates them live", async () => {
+  it("list_entries shares search, indexed sort, and cursor paging with HTTP admin", async () => {
+    const { dispatcher, store } = buildHarness();
+    await store.create({
+      id: "p2",
+      collection: "posts",
+      status: "draft",
+      data: { title: "Second match", slug: "second" },
+      authorId: null,
+      now: 2,
+    });
+    await store.create({
+      id: "p1",
+      collection: "posts",
+      status: "draft",
+      data: { title: "First match", slug: "first" },
+      authorId: null,
+      now: 1,
+    });
+
+    const res = await dispatcher.dispatch(jsonRpcReq("tools/call", {
+      name: "list_entries",
+      arguments: { collection: "posts", search: "match", sort: "id", direction: "asc", limit: 1 },
+    }), mcpContext());
+    const body = (await res.json()) as {
+      result: { content: Array<{ text: string }> };
+    };
+    const page = JSON.parse(body.result.content[0]!.text) as {
+      rows: Array<{ id: string }>;
+      nextCursor?: string;
+    };
+    expect(page.rows.map((row) => row.id)).toEqual(["p1"]);
+    expect(page.nextCursor).toEqual(expect.any(String));
+  });
+
+  it("uses record tools for lifecycle: operational collections and creates them live", async () => {
     const { dispatcher } = buildHarness([operationalPostsSchema()]);
-    const list = await dispatcher.dispatch(jsonRpcReq("tools/list"), { userId: "u1" });
+    const list = await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext());
     const listBody = (await list.json()) as {
       result: { tools: Array<{ name: string; description: string }> };
     };
@@ -150,7 +203,7 @@ describe("McpJsonRpcDispatcher", () => {
         name: "create_record_posts",
         arguments: { title: "Submission" },
       }),
-      { userId: "u1" },
+      mcpContext(),
     );
     const callBody = (await call.json()) as {
       result: { content: Array<{ text: string }> };
@@ -183,7 +236,7 @@ describe("McpJsonRpcDispatcher", () => {
         views: [recentPostsView()],
       },
     );
-    const res = await dispatcher.dispatch(jsonRpcReq("tools/list"), { userId: "u1", staff: null });
+    const res = await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext());
     const body = (await res.json()) as {
       result: { tools: { name: string }[] };
     };
@@ -193,7 +246,7 @@ describe("McpJsonRpcDispatcher", () => {
 
   it("tools/list preserves media x-mcp-hint metadata for agents", async () => {
     const { dispatcher } = buildHarness();
-    const res = await dispatcher.dispatch(jsonRpcReq("tools/list"), { userId: "u1" });
+    const res = await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext());
     const body = (await res.json()) as {
       result: {
         tools: Array<{
@@ -248,7 +301,7 @@ describe("McpJsonRpcDispatcher", () => {
       },
       [postsSchema()],
     );
-    const res = await dispatcher.dispatch(jsonRpcReq("tools/list"), { userId: "u1" });
+    const res = await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext());
     const body = (await res.json()) as {
       result: {
         tools: Array<{
@@ -301,7 +354,7 @@ describe("McpJsonRpcDispatcher", () => {
         // (no `{ data: ... }` wrapper).
         arguments: { title: "From MCP" },
       }),
-      { userId: "u1" },
+      mcpContext(),
     );
     const body = (await res.json()) as { result: { content: { text: string }[] } };
     const created = JSON.parse(body.result.content[0]!.text) as { id: string };
@@ -392,20 +445,18 @@ describe("McpJsonRpcDispatcher", () => {
       deleteEntry: new DeleteEntryUseCase(entries, schemas),
     };
     const dispatcher = new McpJsonRpcDispatcher(useCases, [schema]);
-    const auth = {
-      userId: "agent-1",
-      staff: { userId: "agent-1", role: "owner" as const },
+    const ctx = mcpContext("agent-1", "owner", {
       credentialId: "credential-1",
       clientId: "client-1",
       scopes: ["content:write"],
-    };
+    });
     const call = async (
       name: string,
       args: Record<string, unknown>,
     ): Promise<Record<string, unknown>> => {
       const response = await dispatcher.dispatch(
         jsonRpcReq("tools/call", { name, arguments: args }),
-        auth,
+        ctx,
       );
       const body = (await response.json()) as {
         result?: { content: Array<{ text: string }> };
@@ -477,7 +528,7 @@ describe("McpJsonRpcDispatcher", () => {
         name: "request_publish",
         arguments: { id: created.id },
       }),
-      { userId: "u1" },
+      mcpContext(),
     );
     const body = (await res.json()) as { result: { content: { text: string }[] } };
     const result = JSON.parse(body.result.content[0]!.text) as { status: string };
@@ -499,7 +550,7 @@ describe("McpJsonRpcDispatcher", () => {
         name: "unpublish_entry",
         arguments: { id: created.id },
       }),
-      { userId: "u1" },
+      mcpContext(),
     );
     const body = (await res.json()) as { result: { content: { text: string }[] } };
     const result = JSON.parse(body.result.content[0]!.text) as { status: string };
@@ -513,7 +564,7 @@ describe("McpJsonRpcDispatcher", () => {
         name: "create_draft_post_translations",
         arguments: { slug: "ghost", locale: "en", title: "Ghost", body: "Missing parent" },
       }),
-      { userId: "u1" },
+      mcpContext(),
     );
     const createdBody = (await createdRes.json()) as { result: { content: { text: string }[] } };
     const created = JSON.parse(createdBody.result.content[0]!.text) as { id: string };
@@ -523,7 +574,7 @@ describe("McpJsonRpcDispatcher", () => {
         name: "request_publish",
         arguments: { id: created.id },
       }),
-      { userId: "u1" },
+      mcpContext(),
     );
     const body = (await publishRes.json()) as {
       error: { code: number; data: { code: string; value: Record<string, unknown> } };
@@ -542,7 +593,7 @@ describe("McpJsonRpcDispatcher", () => {
     const { dispatcher } = buildHarness();
     const res = await dispatcher.dispatch(
       jsonRpcReq("tools/call", { name: "ghost_tool", arguments: {} }),
-      { userId: "u1" },
+      mcpContext(),
     );
     const body = (await res.json()) as { error: { code: number } };
     expect(body.error.code).toBe(-32601);
@@ -555,7 +606,7 @@ describe("McpJsonRpcDispatcher", () => {
         name: "create_draft_ghost",
         arguments: {},
       }),
-      { userId: "u1" },
+      mcpContext(),
     );
     const body = (await res.json()) as { error: { code: number } };
     expect(body.error.code).toBe(-32601);
@@ -576,14 +627,14 @@ describe("McpJsonRpcDispatcher", () => {
       { surface: "staff", procedures: [procedure] },
     );
     const list = (await (
-      await dispatcher.dispatch(jsonRpcReq("tools/list"), { userId: "u1" })
+      await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext())
     ).json()) as { result: { tools: { name: string }[] } };
     const names = list.result.tools.map((t) => t.name);
     expect(names).toContain("restock_sku");
 
     const callRes = await dispatcher.dispatch(
       jsonRpcReq("tools/call", { name: "restock_sku", arguments: { msg: "hi" } }),
-      { userId: "u1", staff: { userId: "u1", role: "owner" } },
+      mcpContext("u1", "owner"),
     );
     const body = (await callRes.json()) as {
       result?: { content: { text: string }[] };
@@ -614,7 +665,7 @@ describe("McpJsonRpcDispatcher", () => {
       },
     );
     const list = (await (
-      await dispatcher.dispatch(jsonRpcReq("tools/list"), { userId: "u1" })
+      await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext())
     ).json()) as { result: { tools: { name: string }[] } };
     const names = list.result.tools.map((t) => t.name);
     expect(names).toContain("lookup_price");
@@ -627,7 +678,7 @@ describe("McpJsonRpcDispatcher", () => {
         name: "create_draft_posts",
         arguments: { title: "Bypass" },
       }),
-      { userId: "u1", staff: null },
+      mcpContext(),
     );
     const guessedBody = (await guessedStaffCall.json()) as { error: { code: number } };
     expect(guessedBody.error.code).toBe(-32601);
@@ -649,7 +700,7 @@ describe("McpJsonRpcDispatcher", () => {
     // diagnostic is surfaced as JSON-RPC error data.
     const res = await dispatcher.dispatch(
       jsonRpcReq("tools/call", { name: "restock_sku", arguments: { msg: "x" } }),
-      { userId: "u1", staff: null },
+      mcpContext(),
     );
     const body = (await res.json()) as {
       error?: { data?: { code?: string } };
@@ -685,7 +736,7 @@ describe("McpJsonRpcDispatcher", () => {
     );
     const res = await dispatcher.dispatch(
       jsonRpcReq("tools/call", { name: "query_view_recent_posts", arguments: {} }),
-      { userId: "u1" },
+      mcpContext(),
     );
     const body = (await res.json()) as {
       result?: { content: { text: string }[] };
@@ -708,7 +759,7 @@ describe("McpJsonRpcDispatcher", () => {
     // can still be invoked by a staff bearer (and is denied for
     // bearer-only callers). This pins the contract that surface
     // discriminates DISCOVERY, not auth — auth always evaluates the
-    // McpAuthContext via the use case.
+    // adapter-normalized HandlerContext via the use case.
     const procedure = makeProcedure({
       name: "lookup-price",
       authPredicates: [{ "ctx.staff": ["owner"] }],
@@ -728,7 +779,7 @@ describe("McpJsonRpcDispatcher", () => {
     // Bearer without staff: denied.
     const deniedRes = await dispatcher.dispatch(
       jsonRpcReq("tools/call", { name: "lookup_price", arguments: { msg: "x" } }),
-      { userId: "u1", staff: null },
+      mcpContext(),
     );
     const denied = (await deniedRes.json()) as {
       error?: { data?: { code?: string } };
@@ -739,7 +790,7 @@ describe("McpJsonRpcDispatcher", () => {
     // Bearer with staff: allowed (handler runs).
     const allowedRes = await dispatcher.dispatch(
       jsonRpcReq("tools/call", { name: "lookup_price", arguments: { msg: "x" } }, 2),
-      { userId: "u1", staff: { userId: "u1", role: "owner" } },
+      mcpContext("u1", "owner"),
     );
     const allowed = (await allowedRes.json()) as { result: { content: { text: string }[] } };
     const allowedInner = JSON.parse(allowed.result.content[0]!.text) as { ok: boolean };
@@ -758,7 +809,7 @@ describe("McpJsonRpcDispatcher", () => {
       { surface: "staff", procedures: [procedure] },
     );
     const list = (await (
-      await dispatcher.dispatch(jsonRpcReq("tools/list"), { userId: "u1" })
+      await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext())
     ).json()) as { result: { tools: { name: string }[] } };
     expect(list.result.tools.map((t) => t.name)).toContain("snapshot_inventory");
   });
@@ -767,7 +818,7 @@ describe("McpJsonRpcDispatcher", () => {
     const { dispatcher } = buildHarness();
     const res = await dispatcher.dispatch(
       new Request("https://example.com/mcp", { method: "PUT" }),
-      { userId: "u1" },
+      mcpContext(),
     );
     expect(res.status).toBe(405);
   });
@@ -795,7 +846,7 @@ function translatedSchemas() {
           },
           required: ["slug", "locale", "title", "body"],
         },
-        lifecycle: "simple" as const,
+        lifecycle: "publishing" as const,
       },
     },
   ];

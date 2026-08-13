@@ -6,7 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu";
 import {
   ADMIN_LANGUAGES,
   usePreferences,
@@ -14,32 +14,39 @@ import {
   type AdminTheme,
 } from "../app/preferences";
 import { t } from "../app/i18n";
-import { Button } from "../ui/button";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "../lib/utils";
 
-export function LanguagePreferenceDropdown(): React.ReactElement {
+export function LanguagePreferenceDropdown({ compact = false }: { compact?: boolean }): React.ReactElement {
   const { language, setLanguage } = usePreferences();
   const current =
     ADMIN_LANGUAGES.find((item) => item.value === language) ?? ADMIN_LANGUAGES[0];
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-8 gap-2 rounded-full border border-border/60 bg-background/30 px-2.5"
-          aria-label={t(language, "preferences.language")}
-        >
-          <Languages className="size-4 text-primary" aria-hidden />
-          <span className="hidden text-xs font-medium sm:inline">
-            {current.nativeLabel}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex">
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size={compact ? "icon-sm" : "sm"}
+                aria-label={t(language, "preferences.language")}
+              >
+                <Languages aria-hidden />
+                <span className={compact ? "sr-only" : "hidden text-xs font-medium sm:inline"}>
+                  {current.nativeLabel}
+                </span>
+              </Button>
+            </DropdownMenuTrigger>
           </span>
-        </Button>
-      </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>{t(language, "preferences.language")}</TooltipContent>
+      </Tooltip>
       <DropdownMenuContent align="end" className="max-h-[min(28rem,80vh)] w-52 overflow-y-auto">
-        <DropdownMenuLabel className="label-eyebrow opacity-70">
+        <DropdownMenuLabel>
           {t(language, "preferences.language")}
         </DropdownMenuLabel>
         {ADMIN_LANGUAGES.map((item) => (
@@ -63,29 +70,35 @@ export function LanguagePreferenceDropdown(): React.ReactElement {
   );
 }
 
-export function ThemePreferenceDropdown(): React.ReactElement {
+export function ThemePreferenceDropdown({ compact = false }: { compact?: boolean }): React.ReactElement {
   const { language, theme, setTheme } = usePreferences();
   const current = themeOptions(language).find((item) => item.value === theme);
   const Icon = current?.icon ?? Monitor;
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-8 gap-2 rounded-full border border-border/60 bg-background/30 px-2.5"
-          aria-label={t(language, "preferences.appearance")}
-        >
-          <Icon className="size-4 text-primary" aria-hidden />
-          <span className="hidden text-xs font-medium sm:inline">
-            {current?.label ?? t(language, "preferences.system")}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex">
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size={compact ? "icon-sm" : "sm"}
+                aria-label={t(language, "preferences.appearance")}
+              >
+                <Icon aria-hidden />
+                <span className={compact ? "sr-only" : "hidden text-xs font-medium sm:inline"}>
+                  {current?.label ?? t(language, "preferences.system")}
+                </span>
+              </Button>
+            </DropdownMenuTrigger>
           </span>
-        </Button>
-      </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>{t(language, "preferences.appearance")}</TooltipContent>
+      </Tooltip>
       <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuLabel className="label-eyebrow opacity-70">
+        <DropdownMenuLabel>
           {t(language, "preferences.appearance")}
         </DropdownMenuLabel>
         {themeOptions(language).map((item) => {

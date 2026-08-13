@@ -4,10 +4,11 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
-  SidebarSeparator,
+  SidebarRail,
   SidebarTrigger,
-} from "../ui/sidebar";
+} from "@/components/ui/sidebar";
 import { usePreferences } from "../app/preferences";
+import { t } from "../app/i18n";
 import { AppTitle } from "./app-title";
 import { NavGroup } from "./nav-group";
 import { NavUser } from "./nav-user";
@@ -18,7 +19,11 @@ interface AppSidebarProps {
   groups: ReadonlyArray<NavGroupData>;
   pathname: string;
   search: string;
-  user: { login: string | null; role: "owner" | "editor" | "contributor" | null };
+  user: {
+    login: string | null;
+    image: string | null;
+    role: "owner" | "editor" | "contributor" | null;
+  };
 }
 
 export function AppSidebar({
@@ -28,16 +33,25 @@ export function AppSidebar({
   search,
   user,
 }: AppSidebarProps): React.ReactElement {
-  const { direction } = usePreferences();
+  const { direction, language } = usePreferences();
   return (
-    <Sidebar side={direction === "rtl" ? "right" : "left"}>
-      <SidebarHeader>
-        <div className="sidebar-chrome-row">
+    <Sidebar
+      side={direction === "rtl" ? "right" : "left"}
+      collapsible="icon"
+      dir={direction}
+      mobileTitle={t(language, "common.mobileSidebar")}
+      mobileDescription={t(language, "common.mobileSidebarDescription")}
+      closeLabel={t(language, "common.close")}
+    >
+      <SidebarHeader className="h-14 justify-center border-b border-sidebar-border px-2 py-0">
+        <div className="flex min-w-0 items-center gap-1">
           <AppTitle brand={brand} />
-          <SidebarTrigger />
+          <SidebarTrigger
+            className="shrink-0 group-data-[collapsible=icon]:mx-auto"
+            aria-label={t(language, "common.toggleSidebar")}
+          />
         </div>
       </SidebarHeader>
-      <SidebarSeparator />
       <SidebarContent>
         {groups.map((group, idx) => (
           <NavGroup
@@ -48,10 +62,10 @@ export function AppSidebar({
           />
         ))}
       </SidebarContent>
-      <SidebarSeparator />
-      <SidebarFooter>
-        <NavUser login={user.login} role={user.role} />
+      <SidebarFooter className="border-t border-sidebar-border">
+        <NavUser login={user.login} image={user.image} role={user.role} />
       </SidebarFooter>
+      <SidebarRail aria-label={t(language, "common.toggleSidebar")} />
     </Sidebar>
   );
 }

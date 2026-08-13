@@ -9,18 +9,14 @@ import { fieldLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { operationsQueryOptions } from "../../lib/queries";
 import type { SiteInfo, StaffOperation } from "../../lib/types";
-import { Button } from "../../ui/button";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorBox, OperationErrorBox, PageHeader, SectionCard } from "../../ui/page";
-import { useToast } from "../../ui/toast";
+import { toast } from "sonner";
 import { SchemaFields } from "../content/entry-edit-view";
 
-/** #426 — staff operations surface. Lists every staff-operable
- *  Procedure (derived server-side from Trigger + auth-predicate
- *  manifests, see `discoverStaffOperations` in
- *  `mountServerEndpoints.ts`) and lets a signed-in staff member
- *  invoke one directly through a schema-driven form. The URL hash
- *  (`/admin/ops#<name>`) expands and scrolls to that operation, so
- *  the sidebar's per-procedure links land on the right card. */
+/** Render staff-operable Procedures as schema-driven forms. */
 export function OperationsView(): React.ReactElement {
   const { language } = usePreferences();
   const operations = useQuery(operationsQueryOptions());
@@ -30,14 +26,13 @@ export function OperationsView(): React.ReactElement {
   });
   const canonical = site.data?.canonicalLocale ?? null;
 
-  if (operations.isLoading) return <div className="glass-card h-64 animate-pulse" />;
+  if (operations.isLoading) return <Skeleton className="h-64 w-full" />;
   if (operations.isError) return <ErrorBox error={operations.error} />;
   const list = operations.data ?? [];
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="AotterMantle"
         title={t(language, "ops.page.title")}
         description={t(language, "ops.page.body")}
       />
@@ -80,11 +75,10 @@ function OperationCard({
   const title = resolveLocalizedText(operation.title, language, canonical) ?? fieldLabel(operation.name);
   const description = resolveLocalizedText(operation.description, language, canonical);
 
-  const { showToast } = useToast();
   const invoke = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api.post<{ ok: true; output: unknown }>(`/operations/${encodeURIComponent(operation.name)}`, body),
-    onSuccess: () => showToast(t(language, "ops.success", { name: title })),
+    onSuccess: () => toast.success(t(language, "ops.success", { name: title })),
   });
 
   return (
@@ -101,9 +95,9 @@ function OperationCard({
         </div>
         <div className="flex shrink-0 gap-1">
           {operation.triggers.map((kind) => (
-            <span key={kind} className="badge-status bg-accent text-accent-foreground">
+            <Badge key={kind} variant="secondary">
               {t(language, kind === "mcp" ? "ops.triggers.mcp" : "ops.triggers.http")}
-            </span>
+            </Badge>
           ))}
         </div>
       </div>
@@ -133,7 +127,7 @@ function OperationCard({
           <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t(language, "ops.result.title")}
           </h3>
-          <pre className="max-h-96 overflow-auto rounded-lg border border-[var(--glass-border)] bg-background/40 p-3 text-xs">
+          <pre className="max-h-96 overflow-auto rounded-lg border bg-muted/30 p-3 text-xs">
             {JSON.stringify(invoke.data.output, null, 2)}
           </pre>
         </div>

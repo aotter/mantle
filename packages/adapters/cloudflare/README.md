@@ -18,6 +18,12 @@ paths. The canonical contract and reserved path list live in the umbrella
 package's [Conventional Cloudflare Worker](../../mantle/README.md#conventional-cloudflare-worker)
 section.
 
+The returned facade also exposes `getRuntime(env)`. Site-owned Queue and
+scheduled handlers use it with generated `bindMantleSite(...)` Procedures so
+they reuse the fetch path's assembled runtime instead of writing directly to
+Mantle tables. Queue handlers still own per-message acknowledgement, retry,
+and idempotency.
+
 When the conventional lifecycle really does not fit, copy the
 [low-level composition fixture](../../../docs/cloudflare-low-level-composition.md).
 It uses the same public bindings, Auth, runtime, OAuth/MCP, cache and error
@@ -55,7 +61,7 @@ participating subdomain. For a customer-owned domain such as
 ## API and MCP Authorization
 
 `createCmsRef()` accepts an optional `credentialResolver` for site-owned API
-keys and personal tokens, plus optional `oauthBearer` JWT verification for
+keys and personal tokens, plus optional `jwtBearer` verification for
 manifest REST routes. The adapter normalizes those callers, cookie sessions,
 and MCP OAuth callers into the same runtime auth context. Manifest
 `ctx.auth`/scope predicates and `guard.procedure` then enforce the target on

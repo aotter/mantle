@@ -106,27 +106,48 @@ function jsonInit(method: string, body: unknown): RequestInit {
 }
 
 describe("GET /admin/api/site", () => {
-  it("returns the Staff MCP endpoint for connector setup", async () => {
+  it("falls back to the request origin for every public URL", async () => {
     const { app } = harness({ getSession: sessionAs("owner") });
     const res = await app.request("https://example.test/admin/api/site");
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
+    const body = await res.json();
+    expect(body).toMatchObject({
+      publicUrl: "https://example.test",
       mcpUrl: "https://example.test/mcp/staff",
     });
+    expect(body).not.toHaveProperty("origin");
+  });
+
+  it("uses the configured custom domain for every public URL", async () => {
+    const db = new InMemoryDatabase();
+    db.siteConfig.set("origin", "https://www.example.com");
+    const { app } = harness({ getSession: sessionAs("owner") }, { db });
+
+    const res = await app.request("https://site.workers.dev/admin/api/site");
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({
+      publicUrl: "https://www.example.com",
+      mcpUrl: "https://www.example.com/mcp/staff",
+    });
+    expect(body).not.toHaveProperty("origin");
   });
 });
 
 describe("/admin/api/site-settings", () => {
   it("loads settings once and keeps missing tracking ids as empty strings", async () => {
-    const { app, db } = harness({ getSession: sessionAs("editor") });
+    const { app, db } = harness({ getSession: sessionAs("owner") });
     db.siteConfig.set("brand", "Mantle");
     db.siteConfig.set("title", "Mantle site");
     db.siteConfig.set("description", "Fast by default");
+    db.siteConfig.set("origin", "https://www.example.com");
 
     const res = await app.request("/admin/api/site-settings");
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
+    const body = await res.json();
+    expect(body).toEqual({
       brand: "Mantle",
       title: "Mantle site",
       description: "Fast by default",
@@ -146,7 +167,7 @@ describe("/admin/api/site-settings", () => {
     db.siteConfig.set("title", "Keep title");
     db.siteConfig.set("description", "Old description");
     db.siteConfig.set("facebookPixelId", "123");
-    const { app } = harness({ getSession: sessionAs("editor") }, { db });
+    const { app } = harness({ getSession: sessionAs("owner") }, { db });
 
     const res = await app.request(
       "/admin/api/site-settings",
@@ -154,7 +175,7 @@ describe("/admin/api/site-settings", () => {
         brand: "New brand",
         title: 42,
         description: "",
-        ga4MeasurementId: "G-NEW",
+        ga4MeasurementId: "g-new1",
       }),
     );
 
@@ -163,20 +184,20 @@ describe("/admin/api/site-settings", () => {
       brand: "New brand",
       title: "Keep title",
       description: "",
-      ga4MeasurementId: "G-NEW",
+      ga4MeasurementId: "G-NEW1",
       facebookPixelId: "123",
     });
     expect(db.siteConfig.get("brand")).toBe("New brand");
     expect(db.siteConfig.get("title")).toBe("Keep title");
     expect(db.siteConfig.get("description")).toBe("");
-    expect(db.siteConfig.get("ga4MeasurementId")).toBe("G-NEW");
+    expect(db.siteConfig.get("ga4MeasurementId")).toBe("G-NEW1");
     expect(events).toEqual(["write", "read"]);
   });
 
   it("reloads when PATCH has no accepted fields", async () => {
     const events: string[] = [];
     const db = new OrderedDatabase(events);
-    const { app } = harness({ getSession: sessionAs("editor") }, { db });
+    const { app } = harness({ getSession: sessionAs("owner") }, { db });
 
     const res = await app.request(
       "/admin/api/site-settings",
@@ -187,12 +208,26 @@ describe("/admin/api/site-settings", () => {
     expect(events).toEqual(["read"]);
   });
 
+  it("rejects tracking IDs that would be silently ignored while rendering", async () => {
+    const { app, db } = harness({ getSession: sessionAs("owner") });
+    const res = await app.request(
+      "/admin/api/site-settings",
+      jsonInit("PATCH", { ga4MeasurementId: "not-a-ga-id" }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      diagnostic: { code: "INPUT_VALIDATION_FAILED" },
+    });
+    expect(db.siteConfig.has("ga4MeasurementId")).toBe(false);
+  });
+
   it("does not report success after a failed write", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       const writeEvents: string[] = [];
       const writeFailure = harness(
-        { getSession: sessionAs("editor") },
+        { getSession: sessionAs("owner") },
         { db: new OrderedDatabase(writeEvents, true) },
       );
       const writeResponse = await writeFailure.app.request(
@@ -205,6 +240,31 @@ describe("/admin/api/site-settings", () => {
     } finally {
       error.mockRestore();
     }
+  });
+
+  it("rejects editors because site settings are owner-only", async () => {
+    const { app } = harness({ getSession: sessionAs("editor") });
+    const res = await app.request("/admin/api/site-settings");
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("built-in admin role boundaries", () => {
+  it("rejects contributor publishing", async () => {
+    const { app } = harness({ getSession: sessionAs("contributor") });
+    const res = await app.request(
+      "/admin/api/entries/entry-1/publish",
+      jsonInit("POST", {}),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects contributor media access but lets editors reach media setup", async () => {
+    const contributor = harness({ getSession: sessionAs("contributor") });
+    expect((await contributor.app.request("/admin/api/media")).status).toBe(403);
+
+    const editor = harness({ getSession: sessionAs("editor") });
+    expect((await editor.app.request("/admin/api/media")).status).toBe(501);
   });
 });
 
@@ -220,7 +280,18 @@ describe("GET /admin/api/staff", () => {
     const res = await app.request("/admin/api/staff");
     expect(res.status).toBe(403);
     const body = (await res.json()) as { diagnostic: { message: string } };
-    expect(body.diagnostic.message).toMatch(/owner-only/i);
+    expect(body.diagnostic.message).toMatch(/owner role/i);
+  });
+
+  it("rejects a revoked live role even when the session still says owner", async () => {
+    const getUserRole = vi.fn(async () => null);
+    const { app } = harness({
+      getSession: sessionAs("owner"),
+      getUserRole,
+    });
+
+    expect((await app.request("/admin/api/staff")).status).toBe(403);
+    expect(getUserRole).toHaveBeenCalledWith("user-1");
   });
 
   it("returns the user list for owner", async () => {
@@ -233,6 +304,46 @@ describe("GET /admin/api/staff", () => {
     const body = (await res.json()) as { users: Array<{ id: string }> };
     expect(body.users).toHaveLength(1);
     expect(body.users[0]!.id).toBe("user-2");
+  });
+});
+
+describe("GET /admin/api/members", () => {
+  it("allows editors and maps the member cursor envelope", async () => {
+    const listMembers = vi.fn(async () => ({
+      items: [{
+        id: "member-1",
+        email: "member@example.com",
+        name: "Member",
+        emailVerified: true,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      }],
+      previousCursor: null,
+      nextCursor: "next",
+    }));
+    const { app } = harness({ getSession: sessionAs("editor"), listMembers });
+
+    const res = await app.request("/admin/api/members?limit=25&search=member");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      items: [{ id: "member-1" }],
+      previous_cursor: null,
+      next_cursor: "next",
+    });
+    expect(listMembers).toHaveBeenCalledWith({
+      limit: 25,
+      search: "member",
+      cursor: undefined,
+      cursorDirection: "forward",
+    });
+  });
+
+  it("rejects contributors and malformed cursors", async () => {
+    const contributor = harness({ getSession: sessionAs("contributor") });
+    expect((await contributor.app.request("/admin/api/members")).status).toBe(403);
+
+    const editor = harness({ getSession: sessionAs("editor") });
+    expect((await editor.app.request("/admin/api/members?cursor=broken")).status).toBe(400);
   });
 });
 
@@ -315,17 +426,38 @@ describe("POST /admin/api/staff/invitations", () => {
     expect(await res.json()).toMatchObject({ ok: true, userId: "new-id" });
   });
 
-  it("409s when the email already has a row, carrying that row's id", async () => {
+  it("assigns the requested staff role when the email already has an end-user row", async () => {
+    const assigned: Array<[string, string | null]> = [];
     const { app } = harness({
       getSession: sessionAs("owner"),
       inviteUser: async () => ({ kind: "exists", id: "old-id" }),
+      setUserRole: async (id, role) => {
+        assigned.push([id, role]);
+        return true;
+      },
     });
     const res = await app.request(
       "/admin/api/staff/invitations",
       jsonInit("POST", { email: "dup@example.com", role: "editor" }),
     );
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ ok: false, userId: "old-id" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, userId: "old-id" });
+    expect(assigned).toEqual([["old-id", "editor"]]);
+  });
+
+  it("does not let an owner change their own role through the invite form", async () => {
+    const setUserRole = vi.fn(async () => true);
+    const { app } = harness({
+      getSession: sessionAs("owner", "self-id"),
+      inviteUser: async () => ({ kind: "exists", id: "self-id" }),
+      setUserRole,
+    });
+    const res = await app.request(
+      "/admin/api/staff/invitations",
+      jsonInit("POST", { email: "self@example.com", role: "contributor" }),
+    );
+    expect(res.status).toBe(403);
+    expect(setUserRole).not.toHaveBeenCalled();
   });
 });
 

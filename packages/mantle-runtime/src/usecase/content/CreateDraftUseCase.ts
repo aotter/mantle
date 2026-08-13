@@ -20,7 +20,7 @@ import { authoringContext } from "./AuthoringContext.js";
 
 /**
  * `CreateDraftUseCase` — create a draft for content lifecycles, or a
- * live row for `lifecycle: none` operational records.
+ * live row for `lifecycle: operational` records.
  */
 export class CreateDraftUseCase {
   constructor(
@@ -52,16 +52,16 @@ export class CreateDraftUseCase {
       data,
       validator: this.validator,
       siteConfig: this.siteConfig,
-      // Real drafts save incomplete; lifecycle:none records are live immediately.
-      partial: lifecycle !== "none",
+      // Real drafts save incomplete; operational records are live immediately.
+      partial: lifecycle !== "operational",
     });
     return withConflictDiagnostic(opPath, () =>
       this.entries.create({
         id,
         collection: request.collection,
-        // Operational records (lifecycle: none) have no publish step —
+        // Operational records have no publish step —
         // they are live the moment they exist.
-        status: lifecycle === "none" ? "published" : "draft",
+        status: lifecycle === "operational" ? "published" : "draft",
         data,
         authorId: request.authorId,
         now,

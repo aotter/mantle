@@ -101,7 +101,7 @@ function printHelp(): void {
 Usage: mantle validate [options]
 
 Options:
-  --manifests <dir>   Manifest root (default: ./manifests)
+  --manifests <dir>   Directory containing site.yaml (default: ./manifests)
   --source <dir>      Handler source root for handlers-map grep
                       (default: ./src)
   --no-source         Skip the handler-source grep entirely

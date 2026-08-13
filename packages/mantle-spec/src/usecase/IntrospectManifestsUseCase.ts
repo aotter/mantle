@@ -24,10 +24,11 @@ export class IntrospectManifestsUseCase {
         name: s.metadata.name,
         title: s.spec.title,
         localized: s.spec.localized ?? false,
-        lifecycle: s.spec.lifecycle ?? "simple",
+        lifecycle: s.spec.lifecycle ?? "publishing",
         translates: s.spec.translates ?? null,
         uniqueIndexes: s.spec.uniqueIndexes ?? [],
         indexes: s.spec.indexes ?? [],
+        searchableFields: s.spec.searchableFields ?? [],
         properties: Object.keys(properties),
       };
     });

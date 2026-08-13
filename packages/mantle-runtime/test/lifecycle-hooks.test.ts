@@ -313,6 +313,51 @@ describe("LifecycleHookingEntryRepository — publish + delete", () => {
     expect(h.calls).toEqual(["slackNotify", "slackNotify"]);
   });
 
+  it("maps unpublish and archive transitions to update hooks", async () => {
+    const h = harness({
+      procedures: [slackProcedure],
+      triggers: [
+        {
+          procedure: "slackNotify",
+          schema: "posts",
+          on: ["before_update", "after_update"],
+        },
+      ],
+      handlers: { slackNotify: () => ({ ok: true }) },
+    });
+    const created = await h.createDraft.execute({
+      collection: "posts",
+      data: { title: "x" },
+      authorId: null,
+    });
+    const published = await h.store.transitionStatus({
+      id: created.id,
+      collection: "posts",
+      to: "published",
+      expectedVersion: created.version,
+      now: clock.now(),
+    });
+
+    const unpublished = await h.hookedRepo.transitionStatus({
+      id: created.id,
+      collection: "posts",
+      to: "draft",
+      expectedVersion: published.version,
+      now: clock.now(),
+    });
+    expect(h.calls).toEqual(["slackNotify", "slackNotify"]);
+
+    h.calls.length = 0;
+    await h.hookedRepo.transitionStatus({
+      id: created.id,
+      collection: "posts",
+      to: "archived",
+      expectedVersion: unpublished.version,
+      now: clock.now(),
+    });
+    expect(h.calls).toEqual(["slackNotify", "slackNotify"]);
+  });
+
   it("delete fires before_delete + after_delete", async () => {
     const h = harness({
       procedures: [slackProcedure],

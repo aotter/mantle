@@ -11,7 +11,7 @@ kind: Schema
 metadata: { name: account-members }
 spec:
   title: Account members
-  lifecycle: none
+  lifecycle: operational
   schema:
     type: object
     properties:

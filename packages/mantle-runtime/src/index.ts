@@ -12,7 +12,7 @@
  * hosting) stay adapter-agnostic and are only wired when enabled.
  *
  * MUST NOT import `D1Database` / `KVNamespace` / any Cloudflare-
- * specific type. The Netlify stub package exists as a public reminder.
+ * specific type.
  */
 
 // Assembly root.
@@ -131,7 +131,6 @@ export {
 // export the whole MCP infrastructure barrel from the root.
 export {
   McpJsonRpcDispatcher,
-  type McpAuthContext,
   type McpUseCases,
 } from "./infrastructure/mcp/McpJsonRpcDispatcher.js";
 

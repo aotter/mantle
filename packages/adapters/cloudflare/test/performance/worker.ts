@@ -37,7 +37,7 @@ const manifests: Manifest[] = [
     spec: {
       title: "Posts",
       localized: true,
-      lifecycle: "simple",
+      lifecycle: "publishing",
       schema: {
         type: "object",
         properties: {
@@ -57,7 +57,7 @@ const manifests: Manifest[] = [
     metadata: { name },
     spec: {
       title: name,
-      lifecycle: "simple",
+      lifecycle: "publishing",
       schema: {
         type: "object",
         properties: {

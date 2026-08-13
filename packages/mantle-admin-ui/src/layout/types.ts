@@ -9,6 +9,7 @@ export interface NavLink {
    *  on collections that have translation children) without
    *  displacing the leading `icon` slot. */
   readonly marker?: ElementType;
+  readonly markerLabel?: string;
   readonly external?: boolean;
 }
 
@@ -17,6 +18,7 @@ export interface NavCollapsible {
   readonly icon?: ElementType;
   /** See `NavLink.marker`. */
   readonly marker?: ElementType;
+  readonly markerLabel?: string;
   readonly items: ReadonlyArray<NavLink>;
 }
 
@@ -33,6 +35,6 @@ export interface NavGroupData {
 
 export interface AdminBrand {
   readonly title: string;
-  readonly subtitle?: string;
+  readonly image?: string;
   readonly href?: string;
 }

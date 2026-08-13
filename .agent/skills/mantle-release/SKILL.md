@@ -8,7 +8,7 @@ release recovery, or an explicit Landing release caused by Core.
 Before changing a version or running the controller, read completely:
 
 - `docs/release-process.md`
-- `CHANGELOG.md`
+- `.github/release.yml`
 - root and workspace `package.json` files
 - all four agent plugin manifests
 - `.agents/plugins/marketplace.json`
@@ -41,7 +41,8 @@ GitHub Release. Starter does not promote `main`, backport, or dispatch Landing.
 
 1. Fetch Core and Starter remotes. Prove the intended version and both tags are
    unused.
-2. Add the dated `CHANGELOG.md` entry from commits since the previous tag.
+2. Preview GitHub's generated notes since the previous tag. Correct PR metadata
+   and apply `skip-release-notes` to the release-only PR.
 3. Align every workspace package, plugin manifest, and marketplace ref to the
    exact version.
 4. Pin the controller and Core CI to the reviewed Starter `develop` commit.

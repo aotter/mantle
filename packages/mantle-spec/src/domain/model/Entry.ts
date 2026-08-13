@@ -17,27 +17,6 @@ export interface Entry {
   readonly updatedAt: number;
 }
 
-export interface Revision {
-  readonly id: string;
-  readonly entryId: string;
-  readonly version: number;
-  readonly data: Record<string, unknown>;
-  readonly createdAt: number;
-  readonly authorId: string | null;
-  readonly note: string | null;
-}
-
-export interface Approval {
-  readonly id: string;
-  readonly entryId: string;
-  readonly requestedBy: string;
-  readonly requestedAt: number;
-  readonly note: string | null;
-  readonly status: "pending" | "approved" | "rejected";
-  readonly resolvedBy: string | null;
-  readonly resolvedAt: number | null;
-}
-
 /**
  * Lifecycle-agnostic state-transition error. Thrown by `mantle-runtime`'s
  * dispatcher / entry-writer when a request would violate the transition

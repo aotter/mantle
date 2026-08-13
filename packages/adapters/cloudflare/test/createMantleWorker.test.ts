@@ -20,15 +20,24 @@ import {
 } from "../src/worker/createMantleWorker.js";
 import { StubAssetServer, stubAuth } from "./fakes/runtime-bindings.js";
 
-const oauthState = vi.hoisted(() => ({ scopes: [] as string[] }));
+const oauthState = vi.hoisted(() => ({
+  scopes: [] as string[],
+  tokenExchangeCallback: undefined as undefined | ((options: {
+    readonly userId: string;
+    readonly clientId: string;
+    readonly requestedScope: string[];
+  }) => unknown),
+}));
 
 vi.mock("@cloudflare/workers-oauth-provider", () => ({
   OAuthProvider: class<Env> {
     constructor(private readonly options: {
       readonly defaultHandler: ExportedHandler<Env>;
       readonly scopesSupported?: string[];
+      readonly tokenExchangeCallback?: typeof oauthState.tokenExchangeCallback;
     }) {
       oauthState.scopes = options.scopesSupported ?? [];
+      oauthState.tokenExchangeCallback = options.tokenExchangeCallback;
     }
     fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
       const pathname = new URL(request.url).pathname;
@@ -82,6 +91,7 @@ describe("createMantleWorker", () => {
       },
     });
     const env = testEnv({ TEST_NAME: "same-stack" });
+    const runtime = await worker.getRuntime(env);
 
     const [first, second] = await Promise.all([
       fetchWorker(worker, "/health", env),
@@ -90,6 +100,7 @@ describe("createMantleWorker", () => {
 
     expect(await first.text()).toBe("same-stack");
     expect(await second.text()).toBe("same-stack");
+    expect(await worker.getRuntime(env)).toBe(runtime);
     expect(assemblies).toBe(1);
   });
 
@@ -190,7 +201,7 @@ describe("createMantleWorker", () => {
       auth: () => ({ ...stubAuth, verifyOAuthAccessToken }),
       bindings: testBindings,
       extend: () => ({
-        oauthBearer: { audience: "https://platform.test/api", scopes: ["platform:read"] },
+        jwtBearer: { audience: "https://platform.test/api", scopes: ["platform:read"] },
       }),
     });
 
@@ -366,6 +377,34 @@ describe("createMantleWorker", () => {
     error.mockRestore();
   });
 
+  it("retries a known transient D1 boot failure within the request", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const db = new FailFirstMigrationDatabase("Network connection lost");
+    const worker = createMantleWorker<TestEnv>({
+      manifest: [],
+      auth: () => stubAuth,
+      bindings: () => ({ db, assets: new StubAssetServer() }),
+      extend: () => ({
+        mount: ({ app, getRuntime }) => {
+          app.get("/probe", async (c) => {
+            await getRuntime();
+            return c.text("ready");
+          });
+        },
+      }),
+    });
+
+    expect((await fetchWorker(worker, "/probe", testEnv())).status).toBe(200);
+    expect(db.migrationAttempts).toBeGreaterThanOrEqual(2);
+    expect(warning).toHaveBeenCalledWith(
+      "[mantle] transient D1 boot failure; retrying",
+      expect.objectContaining({ message: "Network connection lost" }),
+    );
+    warning.mockRestore();
+    error.mockRestore();
+  });
+
   it("keeps mcp once when an extension adds OAuth scopes", async () => {
     const worker = createMantleWorker<TestEnv>({
       manifest: [],
@@ -378,14 +417,39 @@ describe("createMantleWorker", () => {
     expect(oauthState.scopes).toEqual(["mcp", "platform:read"]);
   });
 
+  it("puts the effective access-token scope in API props", async () => {
+    const worker = createMantleWorker<TestEnv>({
+      manifest: [],
+      auth: () => stubAuth,
+      bindings: testBindings,
+    });
+    await fetchWorker(worker, "/favicon.svg", testEnv());
+
+    expect(oauthState.tokenExchangeCallback?.({
+      userId: "user-1",
+      clientId: "client-1",
+      requestedScope: ["sites.read"],
+    })).toEqual({
+      accessTokenProps: {
+        userId: "user-1",
+        clientId: "client-1",
+        scopes: ["sites.read"],
+      },
+    });
+  });
+
 });
 
 class FailFirstMigrationDatabase extends InMemoryDatabase {
+  constructor(private readonly failure = "transient migration failure") {
+    super();
+  }
+
   migrationAttempts = 0;
   override migrations: MigrationRunner = {
     runAll: async (migrations: readonly Migration[]) => {
       this.migrationAttempts += 1;
-      if (this.migrationAttempts === 1) throw new Error("transient migration failure");
+      if (this.migrationAttempts === 1) throw new Error(this.failure);
       for (const migration of migrations) this.appliedMigrations.add(migration.id);
     },
   };
