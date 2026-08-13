@@ -213,7 +213,7 @@ function row(id: string, data: Record<string, unknown>, updatedAt = 1) {
 }
 
 describe("GET /admin/api/entries?search=", () => {
-  it("reuses the role already loaded with the session", async () => {
+  it("loads the authoritative role for the session user", async () => {
     let roleReads = 0;
     const { app } = harness(undefined, {
       getUserRole: async () => {
@@ -223,7 +223,7 @@ describe("GET /admin/api/entries?search=", () => {
     });
     const res = await app.request("/admin/api/entries?collection=posts");
     expect(res.status).toBe(200);
-    expect(roleReads).toBe(0);
+    expect(roleReads).toBe(1);
   });
 
   it("filters rows whose id or declared searchable data matches the search term", async () => {

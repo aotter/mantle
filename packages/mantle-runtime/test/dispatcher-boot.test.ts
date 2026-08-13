@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { InMemoryHandlerRegistry } from "../src/domain/port/HandlerRegistry.js";
+import type { ViewManifest } from "@aotter/mantle-spec";
 import {
   BootValidationError,
   ValidateBootUseCase,
@@ -125,6 +126,74 @@ describe("ValidateBootUseCase", () => {
     if (result.ok) return;
     const codes = result.diagnostics.map((d) => d.code);
     expect(codes).toContain("TRIGGER_PATH_INVALID");
+  });
+
+  it("rejects HTTP Triggers under fixed and adapter-owned route prefixes", () => {
+    const reg = new InMemoryHandlerRegistry();
+    reg.register("echoHandler", () => ({ ok: true }));
+    for (const [path, reservedHttpPathPrefixes] of [
+      ["/api/auth/sign-in", []],
+      ["/api/views/orders", []],
+      ["/api/private-auth/callback", ["/api/private-auth"]],
+    ] as const) {
+      const result = new ValidateBootUseCase().execute({
+        manifests: [makeProcedure(), makeHttpTrigger({ procedure: "echo", path })],
+        registry: reg,
+        reservedHttpPathPrefixes,
+      });
+      expect(result.ok, path).toBe(false);
+      if (result.ok) continue;
+      expect(result.diagnostics, path).toContainEqual(
+        expect.objectContaining({ code: "TRIGGER_PATH_INVALID", phase: "boot" }),
+      );
+    }
+  });
+
+  it("promotes identity-bound View diagnostics into boot", () => {
+    const schema = postsSchema();
+    const schemaWithOwner = {
+      ...schema,
+      spec: {
+        ...schema.spec,
+        schema: {
+          ...schema.spec.schema,
+          properties: {
+            ...schema.spec.schema.properties,
+            userId: { type: "string" as const },
+          },
+        },
+      },
+    };
+    const identityView: ViewManifest = {
+      apiVersion: "cms.mantle.aotter.net/v1",
+      kind: "View",
+      metadata: { name: "my-posts" },
+      spec: {
+        from: "posts",
+        filter: { eq: { field: "userId", value: { "$ctx.user": "id" } } },
+      },
+    };
+    const invalidIdentityView: ViewManifest = {
+      ...identityView,
+      metadata: { name: "invalid-my-posts" },
+      spec: {
+        ...identityView.spec,
+        filter: { eq: { field: "userId", value: { "$ctx.user": "email" } } },
+      },
+    };
+
+    const result = new ValidateBootUseCase().execute({
+      manifests: [schemaWithOwner, identityView, invalidIdentityView],
+      registry: new InMemoryHandlerRegistry(),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const codes = result.diagnostics.map((diagnostic) => diagnostic.code);
+    expect(codes).toContain("VIEW_FILTER_CTX_USER_REF_INVALID");
+    expect(codes).toContain("VIEW_FILTER_CTX_USER_REF_REQUIRES_AUTH");
+    expect(codes).toContain("VIEW_FILTER_CTX_USER_REF_REQUIRES_INDEX");
+    expect(result.diagnostics.every((diagnostic) => diagnostic.phase === "boot")).toBe(true);
   });
 
   it("fails with MCP_TOOL_NAME_COLLISION when a Procedure mangles to a built-in MCP tool (#281)", () => {

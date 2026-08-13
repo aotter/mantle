@@ -283,6 +283,17 @@ describe("GET /admin/api/staff", () => {
     expect(body.diagnostic.message).toMatch(/owner role/i);
   });
 
+  it("rejects a revoked live role even when the session still says owner", async () => {
+    const getUserRole = vi.fn(async () => null);
+    const { app } = harness({
+      getSession: sessionAs("owner"),
+      getUserRole,
+    });
+
+    expect((await app.request("/admin/api/staff")).status).toBe(403);
+    expect(getUserRole).toHaveBeenCalledWith("user-1");
+  });
+
   it("returns the user list for owner", async () => {
     const { app } = harness({
       getSession: sessionAs("owner"),

@@ -1168,9 +1168,9 @@ export interface Auth {
       githubLogin?: string | null;
     };
   } | null>;
-  /** Read `user.role` directly from D1. Bearer-token auth surfaces
-   *  (MCP, HTTP Triggers) need this because OAuth access tokens carry
-   *  userId + scopes but not the user's role. */
+  /** Authoritative `user.role` lookup. Protected Admin, MCP, preview,
+   *  and HTTP Trigger calls use this on every request so custom Auth
+   *  session snapshots cannot retain revoked staff access. */
   readonly getUserRole: (userId: string) => Promise<string | null>;
   /** Read one Better Auth-owned user without coupling consumers to its SQL schema.
    *  Optional so existing custom Auth implementations remain source-compatible. */

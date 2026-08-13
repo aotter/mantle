@@ -157,7 +157,6 @@ export async function resolveCaller(
       },
       options.auth,
       base,
-      session.user.role,
     ),
   };
 }
@@ -190,9 +189,8 @@ export async function contextForVerifiedUser(
   authContext: NonNullable<HandlerContext["auth"]>,
   auth: Auth,
   base: Pick<HandlerContext, "env" | "waitUntil">,
-  knownRole?: string | null,
 ): Promise<HandlerContext> {
-  const role = await resolveUserRole(auth, userId, knownRole);
+  const role = userId ? await auth.getUserRole(userId) : null;
   const staff =
     userId && role && STAFF_ROLE_SET.has(role)
       ? { id: userId, role: role as StaffRole }
@@ -203,16 +201,6 @@ export async function contextForVerifiedUser(
     auth: authContext,
     ...base,
   };
-}
-
-export async function resolveUserRole(
-  auth: Pick<Auth, "getUserRole">,
-  userId: string | null,
-  knownRole?: string | null,
-): Promise<string | null> {
-  return knownRole === undefined && userId
-    ? auth.getUserRole(userId)
-    : knownRole ?? null;
 }
 
 function invalidCredential(status: 401 | 403): CallerResolution {

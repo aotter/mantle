@@ -33,7 +33,7 @@ import {
 } from "@aotter/mantle-runtime";
 import { indexHtml } from "@aotter/mantle-admin-ui";
 import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
-import { resolveCaller, resolveUserRole } from "./resolveCaller.js";
+import { resolveCaller } from "./resolveCaller.js";
 import { runMantleUseCase } from "./runMantleUseCase.js";
 import {
   decodeMemberCursor,
@@ -47,10 +47,9 @@ import { AOTTER_FAVICON_SVG } from "../assets/aotterFavicon.js";
 const [PAGE_PARAM, SHOW_PARAM] = VIEW_PARAMS_RESERVED;
 
 /** Mount HTTP Triggers + Views + the Better Auth admin surface.
- *  HTTP Trigger bearer-token authentication is delegated to the OAuth
- *  provider lib (via `createMcpApiHandler`) — if a Trigger needs
- *  identity, route it under an MCP `apiHandler` instead of a Hono
- *  catch-all. */
+ *  HTTP Triggers resolve configured credentials and sessions through
+ *  `resolveCaller`; the target Procedure's `requires.auth` owns
+ *  authorization. */
 export function mountServerEndpoints<E extends Env>(
   app: Hono<E>,
   ref: CmsRuntimeRef,
@@ -1615,7 +1614,7 @@ function adminHandlerContext(c: Context, gate: Extract<StaffGate, { kind: "ok" }
 async function readStaffGate(c: Context, auth: Auth): Promise<StaffGate> {
   const session = await auth.getSession(c.req.raw);
   if (!session) return { kind: "unauth" };
-  const role = await resolveUserRole(auth, session.user.id, session.user.role);
+  const role = await auth.getUserRole(session.user.id);
   const login = session.user.githubLogin ?? null;
   if (!role || !STAFF_ROLE_SET.has(role)) {
     return { kind: "forbidden", login };
@@ -1669,7 +1668,22 @@ async function handleHttpTrigger(
     if (rejected) return rejected;
   }
 
-  const body = await readBody(req);
+  let body: Record<string, unknown>;
+  try {
+    body = await readBody(req);
+  } catch {
+    const diagnostic = runtimeDiagnostic({
+      code: "INPUT_VALIDATION_FAILED",
+      severity: "error",
+      path: `${triggerPathPrefix}#/body`,
+      expected: "valid JSON",
+      message: "HTTP Trigger request body is not valid JSON.",
+    });
+    return Response.json(
+      { ok: false, diagnostic: redactForWire(diagnostic) },
+      { status: 400 },
+    );
+  }
   // Spread order matters: URL path params are authoritative for the
   // resource identifier (a `DELETE /entries/{id}` body MUST NOT spoof
   // `id`). Body fields fill in non-path inputs only.
@@ -1796,12 +1810,8 @@ async function readBody(req: Request): Promise<Record<string, unknown>> {
   }
   const ct = req.headers.get("content-type") ?? "";
   if (!ct.includes("json")) return {};
-  try {
-    const parsed = await req.json<Record<string, unknown>>();
-    return parsed ?? {};
-  } catch {
-    return {};
-  }
+  const parsed = await req.json<Record<string, unknown> | null>();
+  return parsed ?? {};
 }
 
 function openApiToHono(path: string): string {

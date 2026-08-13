@@ -161,7 +161,17 @@ function compileFilter(
     const value = comparison.node.value;
     let bound: unknown;
     if (isCtxUserRef(value)) {
-      if (!ctxUserId) throw new Error('View filter requires ctx.user.id.');
+      if (!ctxUserId) {
+        throw new DiagnosticError(
+          runtimeDiagnostic({
+            code: "UNAUTHENTICATED",
+            severity: "error",
+            path: "compileView/filter",
+            expected: "ctx.user.id for an identity-bound View filter",
+            message: "View filter requires ctx.user.id.",
+          }),
+        );
+      }
       bound = ctxUserId;
     } else if (isParamRef(value)) {
       const resolved = paramValues[value.$param];

@@ -248,6 +248,20 @@ describe("compileView", () => {
 });
 
 describe("ExecuteViewUseCase", () => {
+  it("returns UNAUTHENTICATED when an identity-bound View reaches runtime without ctx.user", async () => {
+    const result = await new ExecuteViewUseCase(new InMemoryDatabase()).execute({
+      view: view({
+        from: "orders",
+        filter: { eq: { field: "userId", value: { "$ctx.user": "id" } } },
+      }),
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      diagnostic: { code: "UNAUTHENTICATED", phase: "runtime" },
+    });
+  });
+
   it("returns only rows owned by the normalized ctx.user", async () => {
     const db = new InMemoryDatabase();
     for (const [id, userId, status, placedAt] of [

@@ -18,7 +18,7 @@ describe("resolveCaller", () => {
     });
   });
 
-  it("normalizes a cookie session without re-reading its staff role", async () => {
+  it("uses the live role instead of the session role snapshot", async () => {
     let roleCalls = 0;
     const result = await resolveCaller(new Request("https://example.test/api/x", {
       headers: { cookie: "better-auth.session_token=session-1" },
@@ -30,7 +30,7 @@ describe("resolveCaller", () => {
         }),
         getUserRole: async () => {
           roleCalls += 1;
-          return "editor";
+          return "contributor";
         },
       }),
     });
@@ -38,7 +38,7 @@ describe("resolveCaller", () => {
       kind: "authenticated",
       context: {
         user: { id: "user-1" },
-        staff: { id: "user-1", role: "editor" },
+        staff: { id: "user-1", role: "contributor" },
         auth: {
           credential: "session",
           credentialId: "session-1",
@@ -46,7 +46,7 @@ describe("resolveCaller", () => {
         },
       },
     });
-    expect(roleCalls).toBe(0);
+    expect(roleCalls).toBe(1);
   });
 
   it("reads the live role when a custom session omits it", async () => {
