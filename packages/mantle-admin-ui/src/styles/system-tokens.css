@@ -61,7 +61,7 @@
   --card-foreground: #f1f4fb;
   --popover: rgb(9 15 32 / 96%);
   --popover-foreground: #f1f4fb;
-  --primary: var(--mantle-blue-light);
+  --primary: var(--mantle-blue-deep);
   --primary-foreground: #ffffff;
   --secondary: color-mix(in srgb, var(--mantle-blue-deep) 58%, transparent);
   --secondary-foreground: #eef2fb;
@@ -83,7 +83,7 @@
   --chart-5: oklch(0.645 0.246 16.439);
   --sidebar: rgb(5 10 24 / 58%);
   --sidebar-foreground: #eef2fb;
-  --sidebar-primary: var(--mantle-blue-light);
+  --sidebar-primary: var(--mantle-blue-deep);
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: color-mix(in srgb, var(--mantle-blue-mid) 42%, transparent);
   --sidebar-accent-foreground: #f5f7fc;
