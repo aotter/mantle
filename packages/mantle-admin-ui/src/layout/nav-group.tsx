@@ -254,7 +254,7 @@ function NavMarker({ item }: { item: NavLink | NavCollapsible }): React.ReactEle
   if (!item.marker) return null;
   const Marker = item.marker;
   const icon = (
-    <span data-sidebar-label className="inline-flex text-primary">
+    <span data-sidebar-label className="inline-flex text-primary group-data-[active=true]/menu-button:text-sidebar-accent-foreground">
       <Marker aria-hidden className="size-3.5" />
     </span>
   );
