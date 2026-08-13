@@ -784,12 +784,15 @@ spec:
 |---|---|
 | `before_create` | Before INSERT. Throw cancels. |
 | `after_create` | After INSERT. Default best-effort. |
-| `before_update` | Before UPDATE. Throw cancels. |
-| `after_update` | After UPDATE. Default best-effort. |
+| `before_update` | Before UPDATE or a status transition whose target is not `published` (including unpublish and archive). Throw cancels. |
+| `after_update` | After UPDATE or a status transition whose target is not `published` (including unpublish and archive). Default best-effort. |
 | `before_delete` | Before DELETE. Throw cancels. |
 | `after_delete` | After DELETE. Default best-effort. |
 | `before_publish` | Before any supported status transition to `published` (the shipped workflow is `publishing`). |
 | `after_publish` | After any supported status transition to `published` (the shipped workflow is `publishing`). |
+
+v0.1 has no separate unpublish or archive hooks. Do not treat
+`before_update` / `after_update` as edit-only hooks.
 
 **Atomicity defaults by phase**:
 - `before_*`: `errorPolicy: abort`. Handler throw cancels the

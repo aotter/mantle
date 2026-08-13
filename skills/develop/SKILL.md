@@ -85,6 +85,9 @@ the atoms cannot express the behavior.
 - Use `lifecycle: operational` for submissions, inquiries, orders, and other
   Procedure-created operational records that staff inspect or correct. Reserve
   `publishing` for content a person stages and publishes.
+- Lifecycle `before_update` / `after_update` hooks also fire for unpublish,
+  archive, and every other status transition whose target is not `published`;
+  do not use them for edit-only work.
 - When a form's fixed option values change, update the stored Schema and public
   Procedure input `enum` together. Keep translated labels in the page seed;
   Admin and Staff MCP derive their typed controls from the manifest values.
