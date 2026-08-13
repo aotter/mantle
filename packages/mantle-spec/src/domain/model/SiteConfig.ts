@@ -121,11 +121,10 @@ export interface MediaPurposePolicy {
 }
 
 /**
- * First-deploy seed declared by the consumer in `src/mantle/config.ts`. The
- * runtime applies via `INSERT … ON CONFLICT(key) DO NOTHING` — operator
- * edits via the admin Settings page are never overwritten on
- * subsequent deploys. Empty / blank fields skip, preventing a partial
- * seed from clobbering rows the operator already set.
+ * Defaults declared by the consumer in `src/mantle/config.ts`. Operator-owned
+ * fields seed once, while deployment-owned fields (`origin`, `locales`, and
+ * media purposes) sync on every boot. Empty / blank fields skip, preventing a
+ * partial declaration from clobbering stored values.
  *
  * Validated during `bootInit()` by `assertSiteDefaultsCanonical`; a
  * non-canonical locale tag rejects boot rather than corrupting the seed.
@@ -148,8 +147,8 @@ export interface SiteDefaults {
    *  `https://my-blog.com`. The render pipeline uses this to build
    *  absolute URLs in `/llms.txt` and the `.md` mirrors; an empty
    *  origin produces relative URLs that are useless to off-site agent
-   *  consumers. Seed it from `src/mantle/config.ts` so a fresh deploy gets
-   *  correct URLs without an admin-UI round trip. */
+   *  consumers. The runtime syncs it from `src/mantle/config.ts` on every boot
+   *  so a later custom-domain change becomes canonical without a D1 edit. */
   readonly origin?: string;
   /** Absolute or root-relative favicon URL. */
   readonly faviconUrl?: string;

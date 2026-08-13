@@ -10,6 +10,7 @@ import {
   redactForWire,
   runtimeDiagnostic,
   checkSchemaListFilter,
+  schemaSortableFields,
   type ContentState,
   type Diagnostic,
   type Entry,
@@ -414,12 +415,12 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
 
   guarded("get", "/admin/api/site", async (c) => {
     const runtime = await ref.get();
-    const site = await runtime.siteConfig.load();
-    const url = new URL(c.req.url);
+    const { origin, ...site } = await runtime.siteConfig.load();
+    const publicUrl = origin || new URL(c.req.url).origin;
     return Response.json({
       ...site,
-      publicUrl: site.origin || url.origin,
-      mcpUrl: `${url.origin}/mcp/staff`,
+      publicUrl,
+      mcpUrl: `${publicUrl}/mcp/staff`,
     });
   });
 
@@ -496,7 +497,40 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
         direction: sortDirection,
       },
     });
-    const items = result.rows.map((row) => adminListItem(row, schemasByName));
+    const translationLocales = new Map<string, Set<string>>();
+    const translationSchemas = schemas.filter((schema) => schema.spec.translates?.parent === collection);
+    for (const schema of translationSchemas) {
+      const field = schema.spec.translates!.on;
+      const parentValues = new Map<string, string | number | boolean>();
+      for (const row of result.rows) {
+        const value = primitiveJoinValue(row.data[field]);
+        if (value !== null) parentValues.set(joinValueKey(value), value);
+      }
+      const translations = await runtime.entryReader.readByDataFieldIn({
+        collection: schema.metadata.name,
+        field,
+        values: [...parentValues.values()],
+      });
+      const localesByValue = new Map<string, Set<string>>();
+      for (const entry of translations) {
+        const value = primitiveJoinValue(entry.data[field]);
+        if (value === null || !entry.locale) continue;
+        const key = joinValueKey(value);
+        const locales = localesByValue.get(key) ?? new Set<string>();
+        locales.add(entry.locale);
+        localesByValue.set(key, locales);
+      }
+      for (const row of result.rows) {
+        const value = primitiveJoinValue(row.data[field]);
+        if (value === null) continue;
+        const locales = translationLocales.get(row.id) ?? new Set<string>();
+        for (const locale of localesByValue.get(joinValueKey(value)) ?? []) locales.add(locale);
+        translationLocales.set(row.id, locales);
+      }
+    }
+    const items = result.rows.map((row) =>
+      adminListItem(row, schemasByName, [...(translationLocales.get(row.id) ?? [])])
+    );
     return Response.json({
       items,
       previous_cursor: result.previousCursor ?? null,
@@ -1123,6 +1157,7 @@ function isStringTypedSchema(schema: JsonSchema): boolean {
 function adminListItem(
   row: AdminEntryRow,
   schemasByName: ReadonlyMap<string, SchemaManifest>,
+  translationLocales: readonly string[] = [],
 ): {
   id: string;
   collection: string;
@@ -1131,6 +1166,7 @@ function adminListItem(
   version: number;
   title: unknown;
   updated_at: number;
+  translation_locales: readonly string[];
   data_preview?: Record<string, unknown>;
 } {
   const manifest = schemasByName.get(row.collection);
@@ -1142,6 +1178,7 @@ function adminListItem(
     version: row.version,
     title: adminEntryTitle(row.data, manifest?.spec.schema),
     updated_at: row.updatedAt,
+    translation_locales: translationLocales,
     data_preview: adminDataPreview(row.data, manifest),
   };
 }
@@ -1212,6 +1249,7 @@ async function entryEditorPayload(
   return {
     collection: adminEditorCollection(schema, schemas),
     entry: adminEditorEntry(row),
+    parentEntryId: await parentEntryId(runtime, schema, row, schemas),
     related,
   };
 }
@@ -1249,6 +1287,7 @@ type AdminEditorEntry = {
 type AdminEntryEditorPayload = {
   readonly collection: AdminEditorCollection;
   readonly entry: AdminEditorEntry;
+  readonly parentEntryId: string | null;
   readonly related: AdminRelatedEntrySection[];
 };
 
@@ -1258,7 +1297,7 @@ type AdminRelatedEntrySection = {
     readonly kind: "translation" | "field";
     readonly parentField: string;
     readonly childField: string;
-    readonly parentValue: string | number | boolean;
+    readonly parentValue: string | number | boolean | null;
   };
   readonly entries: AdminEditorEntry[];
 };
@@ -1279,10 +1318,7 @@ function adminEditorCollection(
     schema: schema.spec.schema,
     uiSchema: schema.spec.uiSchema ?? null,
     mediaFields: mediaFieldsForCollection(schema, schemas),
-    sortableFields: [...new Set([
-      ...(schema.spec.uniqueIndexes ?? []).flat(),
-      ...(schema.spec.indexes ?? []).flat(),
-    ])].filter((field) => (schema.spec.schema.required ?? []).includes(field)),
+    sortableFields: schemaSortableFields(schema),
     filter: checkSchemaListFilter(schema).filter,
   };
 }
@@ -1310,12 +1346,14 @@ async function relatedEntrySections(
   for (const relationship of relationships) {
     const childSchema = schemas.find((schema) => schema.metadata.name === relationship.collection);
     if (!childSchema) continue;
-    const entries = await entriesByDataValue(
-      runtime,
-      relationship.collection,
-      relationship.childField,
-      relationship.parentValue,
-    );
+    const entries = relationship.parentValue === null
+      ? []
+      : await entriesByDataValue(
+          runtime,
+          relationship.collection,
+          relationship.childField,
+          relationship.parentValue,
+        );
     sections.push({
       collection: adminEditorCollection(childSchema, schemas),
       relationship: {
@@ -1335,7 +1373,7 @@ type DiscoveredRelationship = {
   readonly kind: "translation" | "field";
   readonly parentField: string;
   readonly childField: string;
-  readonly parentValue: string | number | boolean;
+  readonly parentValue: string | number | boolean | null;
 };
 
 function discoverChildRelationships(
@@ -1354,7 +1392,7 @@ function discoverChildRelationships(
     rawParentValue: unknown,
   ): void => {
     const parentValue = primitiveJoinValue(rawParentValue);
-    if (parentValue == null) return;
+    if (parentValue == null && kind !== "translation") return;
     const key = `${childSchema.metadata.name}:${kind}:${parentField}:${childField}:${String(parentValue)}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -1366,6 +1404,17 @@ function discoverChildRelationships(
       parentValue,
     });
   };
+
+  const translates = parentSchema.spec.translates;
+  if (translates) {
+    add(
+      parentSchema,
+      "translation",
+      translates.on,
+      translates.on,
+      parentRow.data[translates.on],
+    );
+  }
 
   for (const childSchema of schemas) {
     if (childSchema.metadata.name === parentName) continue;
@@ -1425,11 +1474,29 @@ function collectionParentFor(
   return null;
 }
 
+async function parentEntryId(
+  runtime: CmsRuntime,
+  childSchema: SchemaManifest,
+  childRow: AdminEntryRow,
+  schemas: SchemaManifest[],
+): Promise<string | null> {
+  const parent = collectionParentFor(childSchema, schemas);
+  if (!parent) return null;
+  const value = primitiveJoinValue(childRow.data[parent.childField]);
+  if (value === null) return null;
+  if (parent.parentField === "id" && typeof value === "string") return value;
+  return (await entriesByDataValue(runtime, parent.collection, parent.parentField, value))[0]?.id ?? null;
+}
+
 function primitiveJoinValue(value: unknown): string | number | boolean | null {
   if (typeof value === "string" && value !== "") return value;
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "boolean") return value;
   return null;
+}
+
+function joinValueKey(value: string | number | boolean): string {
+  return `${typeof value}:${String(value)}`;
 }
 
 async function entriesByDataValue(
@@ -1448,7 +1515,9 @@ async function entriesByDataValue(
 
 function adminSiteSettings(site: SiteConfig) {
   return {
-    ...site,
+    brand: site.brand,
+    title: site.title,
+    description: site.description,
     ga4MeasurementId: site.ga4MeasurementId ?? "",
     facebookPixelId: site.facebookPixelId ?? "",
   };

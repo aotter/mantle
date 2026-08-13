@@ -183,6 +183,7 @@ function entrySortValue(row: EntryRow, field: string): string | number {
   if (field === "status") return row.status;
   if (field === "updatedAt") return row.updatedAt;
   const value = row.data[field];
+  if (typeof value === "boolean") return Number(value);
   if (typeof value !== "string" && typeof value !== "number") {
     throw new Error(`non-scalar sort value for ${field}`);
   }

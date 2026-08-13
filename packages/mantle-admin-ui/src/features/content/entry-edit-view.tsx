@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CalendarIcon, ExternalLink, Images, ImagePlus, LockKeyhole, MoreHorizontal, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarIcon, ExternalLink, Globe, Images, ImagePlus, LockKeyhole, MoreHorizontal, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
@@ -9,6 +9,7 @@ import { resolveLocalizedText } from "../../lib/localized-text";
 import { operationsQueryOptions } from "../../lib/queries";
 import type {
   AdminUser,
+  EntryEditorCollection,
   EntryEditorPayload,
   JsonSchema,
   MediaLibraryItem,
@@ -17,7 +18,7 @@ import type {
   SiteInfo,
   StaffOperation,
 } from "../../lib/types";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CollapsibleDescription, ErrorBox, FormActionBar, OperationErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
 import { RichTextEditor } from "../editor/rich-text-editor";
@@ -52,6 +54,7 @@ import {
   timestampHint,
 } from "./field-render";
 import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
+import { contentLocales, LocaleBadge, localeName } from "./locale-badge";
 
 export function EntryEditView({
   collectionName,
@@ -109,6 +112,19 @@ export function EntryEditView({
     mutationFn: () => api.post<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}/unpublish`, {}),
     onSuccess: syncPayload,
   });
+  const createTranslation = useMutation({
+    mutationFn: ({ section, locale }: { section: RelatedEntrySection; locale: string }) =>
+      api.post<EntryEditorPayload>("/entries", {
+        collection: section.collection.name,
+        data: {
+          [section.relationship.childField]: section.relationship.parentValue,
+          locale,
+        },
+      }),
+    onSuccess: (next) => {
+      window.location.href = `/admin/c/${encodeURIComponent(next.entry.collection)}/${encodeURIComponent(next.entry.id)}`;
+    },
+  });
 
   if (query.isLoading) return <EntryEditSkeleton />;
   if (query.isError) return <ErrorBox error={query.error} />;
@@ -118,6 +134,8 @@ export function EntryEditView({
   const canonical = site.data?.canonicalLocale ?? null;
   const title = entryTitle(data, t(language, "collection.untitled"), payload.collection.schema);
   const collectionTitle = resolveLocalizedText(payload.collection.title, language, canonical) ?? payload.collection.name;
+  const backCollection = payload.collection.translates?.parent ?? collectionName;
+  const backTitle = payload.collection.translates?.parent ?? collectionTitle;
   const collectionDescription = resolveLocalizedText(payload.collection.description, language, canonical);
   const dirty = JSON.stringify(data) !== JSON.stringify(payload.entry.data);
   // Operational records (lifecycle: operational) have no content workflow:
@@ -132,9 +150,12 @@ export function EntryEditView({
   const canSave = canEdit && dirty && (isDraft || isOperational);
   const actionPending = save.isPending || publish.isPending || unpublish.isPending;
   const mediaPurposes = site.data?.media?.purposes ?? [];
-  const parentLink = parentAdminLink(payload.collection, data);
+  const parentLink = parentAdminLink(payload.collection, data, payload.parentEntryId);
+  const translationSections = payload.related.filter((section) => section.relationship.kind === "translation");
   const inlineRelated = payload.related.filter(isPrimaryInlineSection);
-  const sidebarRelated = payload.related.filter((section) => !isPrimaryInlineSection(section));
+  const currentLocale = typeof data.locale === "string" ? data.locale : "";
+  const localeOptions = contentLocales(payload.collection.schema, site.data?.locales, currentLocale);
+  const hiddenFields = editorHiddenFields(payload.collection);
 
   return (
     <div className="flex min-h-full flex-col gap-6">
@@ -142,11 +163,11 @@ export function EntryEditView({
         eyebrow={
           <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
             <a
-              href={`/admin/c/${encodeURIComponent(collectionName)}`}
+              href={`/admin/c/${encodeURIComponent(backCollection)}`}
               className="inline-flex items-center gap-2 hover:underline"
             >
               <ArrowLeft className="size-3.5" aria-hidden />
-              {t(language, "entryEdit.back", { name: collectionTitle })}
+              {t(language, "entryEdit.back", { name: backTitle })}
             </a>
             {parentLink ? (
               <>
@@ -164,6 +185,15 @@ export function EntryEditView({
         })}
         actions={
           <>
+            {payload.collection.localized && !payload.collection.translates ? (
+              <ContentLanguageControl
+                language={language}
+                locale={currentLocale}
+                locales={localeOptions}
+                disabled={!canEdit || payload.entry.locale !== null}
+                onChange={(locale) => setData({ ...data, locale })}
+              />
+            ) : null}
             {!isOperational && <StatusBadge status={payload.entry.status} />}
             <RowOperationsMenu
               row={payload.entry}
@@ -182,6 +212,22 @@ export function EntryEditView({
         }
       />
 
+      {translationSections.map((section) => (
+        <TranslationTabs
+          key={`${section.collection.name}:${section.relationship.childField}`}
+          section={section}
+          currentCollection={payload.collection.name}
+          currentEntryId={payload.entry.id}
+          sharedHref={parentLink?.href}
+          language={language}
+          siteLocales={site.data?.locales}
+          canCreate={Boolean(me.data?.role)}
+          pending={createTranslation.isPending &&
+            createTranslation.variables?.section.collection.name === section.collection.name}
+          onCreate={(locale) => createTranslation.mutate({ section, locale })}
+        />
+      ))}
+
       {isOperational ? (
         <p className="-mt-4 text-sm text-muted-foreground">{t(language, "entryEdit.operationalHint")}</p>
       ) : null}
@@ -189,6 +235,7 @@ export function EntryEditView({
       {save.isError ? <OperationErrorBox error={save.error} /> : null}
       {publish.isError ? <OperationErrorBox error={publish.error} /> : null}
       {unpublish.isError ? <OperationErrorBox error={unpublish.error} /> : null}
+      {createTranslation.isError ? <OperationErrorBox error={createTranslation.error} /> : null}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-5">
@@ -220,6 +267,7 @@ export function EntryEditView({
                 canonical={canonical}
                 collectionName={payload.collection.name}
                 mediaPurposes={mediaPurposes}
+                hiddenRootFields={hiddenFields}
               />
             </fieldset>
           </SectionCard>
@@ -245,19 +293,9 @@ export function EntryEditView({
               {!isOperational && (
                 <MetaRow label={t(language, "collection.table.status")} value={<StatusBadge status={payload.entry.status} />} />
               )}
-              <MetaRow label={t(language, "collection.table.locale")} value={payload.entry.locale ?? "-"} />
               <MetaRow label={t(language, "collection.table.version")} value={`v${payload.entry.version}`} />
             </dl>
           </SectionCard>
-          {sidebarRelated.length > 0 ? (
-            <RelatedSections
-              sections={sidebarRelated}
-              language={language}
-              canonical={canonical}
-              operations={operationsQuery.data}
-              onOperationSuccess={() => void queryClient.invalidateQueries({ queryKey })}
-            />
-          ) : null}
         </div>
       </div>
 
@@ -408,6 +446,7 @@ export function SchemaFields({
   canonical = null,
   collectionName,
   mediaPurposes,
+  hiddenRootFields = [],
 }: {
   schema: JsonSchema;
   value: Record<string, unknown>;
@@ -417,12 +456,15 @@ export function SchemaFields({
   canonical: string | null;
   collectionName: string;
   mediaPurposes: readonly MediaPurposePolicy[];
+  hiddenRootFields?: readonly string[];
 }): React.ReactElement {
   const properties = schema.properties ?? {};
   const required = new Set(schema.required ?? []);
   return (
     <div className="space-y-5">
-      {Object.entries(properties).map(([name, fieldSchema]) => (
+      {Object.entries(properties)
+        .filter(([name]) => path.length > 0 || !hiddenRootFields.includes(name))
+        .map(([name, fieldSchema]) => (
         <SchemaField
           key={[...path, name].join(".")}
           name={name}
@@ -437,9 +479,18 @@ export function SchemaFields({
           collectionName={collectionName}
           mediaPurposes={mediaPurposes}
         />
-      ))}
+        ))}
     </div>
   );
+}
+
+export function editorHiddenFields(
+  collection: Pick<EntryEditorCollection, "localized" | "translates">,
+): readonly string[] {
+  return [
+    ...(collection.localized ? ["locale"] : []),
+    ...(collection.translates ? [collection.translates.on] : []),
+  ];
 }
 
 function SchemaField({
@@ -961,13 +1012,6 @@ function RelatedSections({
   operations: readonly StaffOperation[] | undefined;
   onOperationSuccess: () => void;
 }): React.ReactElement {
-  if (sections.length === 0) {
-    return (
-      <SectionCard>
-        <SectionTitle title={t(language, "entryEdit.related")} body={t(language, "entryEdit.noRelated")} />
-      </SectionCard>
-    );
-  }
   return (
     <>
       {sections.map((section) => {
@@ -998,8 +1042,10 @@ function RelatedSections({
                         <span className="block truncate font-semibold">
                           {entryTitle(entry.data, t(language, "collection.untitled"), section.collection.schema)}
                         </span>
-                        <span className="block text-xs text-muted-foreground">
-                          {entry.collection} / v{entry.version}
+                        <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          {entry.collection}
+                          <StatusBadge status={entry.status} />
+                          <span>v{entry.version}</span>
                         </span>
                       </span>
                       <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -1022,16 +1068,159 @@ function RelatedSections({
   );
 }
 
+function TranslationTabs({
+  section,
+  currentCollection,
+  currentEntryId,
+  sharedHref,
+  language,
+  siteLocales,
+  canCreate,
+  pending,
+  onCreate,
+}: {
+  section: RelatedEntrySection;
+  currentCollection: string;
+  currentEntryId: string;
+  sharedHref: string | undefined;
+  language: AdminLanguage;
+  siteLocales: readonly string[] | undefined;
+  canCreate: boolean;
+  pending: boolean;
+  onCreate: (locale: string) => void;
+}): React.ReactElement {
+  const locales = contentLocales(section.collection.schema, siteLocales);
+  const sharedActive = currentCollection !== section.collection.name;
+  return (
+    <nav aria-label={t(language, "entryEdit.languageTabs")} className="-mt-2 border-b">
+      <div role="tablist" className="flex max-w-full gap-1 overflow-x-auto pb-2">
+        {sharedActive ? (
+          <span
+            role="tab"
+            aria-selected="true"
+            className={buttonVariants({ variant: "secondary", size: "sm" })}
+          >
+            {t(language, "entryEdit.sharedFields")}
+          </span>
+        ) : sharedHref ? (
+          <a
+            role="tab"
+            aria-selected="false"
+            href={sharedHref}
+            className={buttonVariants({ variant: "ghost", size: "sm" })}
+          >
+            {t(language, "entryEdit.sharedFields")}
+          </a>
+        ) : null}
+        {locales.map((locale) => {
+          const entry = section.entries.find((candidate) => candidate.locale === locale);
+          const active = entry?.id === currentEntryId;
+          const label = `${localeName(locale)} · ${locale}`;
+          if (entry) {
+            return (
+              <Tooltip key={locale}>
+                <TooltipTrigger asChild>
+                  <a
+                    role="tab"
+                    aria-selected={active}
+                    aria-current={active ? "page" : undefined}
+                    href={`/admin/c/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}
+                    className={buttonVariants({ variant: active ? "secondary" : "ghost", size: "sm" })}
+                  >
+                    <Globe aria-hidden />
+                    <span className="max-w-40 truncate">{localeName(locale)}</span>
+                    <span className="font-mono text-[0.625rem] text-muted-foreground">{locale}</span>
+                  </a>
+                </TooltipTrigger>
+                <TooltipContent>{label}</TooltipContent>
+              </Tooltip>
+            );
+          }
+          const disabled = !canCreate || pending || section.relationship.parentValue === null;
+          const button = (
+            <Button
+              type="button"
+              role="tab"
+              aria-selected="false"
+              variant="outline"
+              size="sm"
+              className="border-dashed"
+              disabled={disabled}
+              onClick={() => onCreate(locale)}
+            >
+              <Plus aria-hidden />
+              <span className="max-w-40 truncate">{localeName(locale)}</span>
+              <span className="font-mono text-[0.625rem] text-muted-foreground">{locale}</span>
+            </Button>
+          );
+          return section.relationship.parentValue === null ? (
+            <Tooltip key={locale}>
+              <TooltipTrigger asChild><span className="inline-flex">{button}</span></TooltipTrigger>
+              <TooltipContent>{t(language, "entryEdit.saveSharedFirst")}</TooltipContent>
+            </Tooltip>
+          ) : <React.Fragment key={locale}>{button}</React.Fragment>;
+        })}
+      </div>
+    </nav>
+  );
+}
+
+function ContentLanguageControl({
+  language,
+  locale,
+  locales,
+  disabled,
+  onChange,
+}: {
+  language: AdminLanguage;
+  locale: string;
+  locales: readonly string[];
+  disabled: boolean;
+  onChange: (locale: string) => void;
+}): React.ReactElement {
+  if (disabled) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex cursor-default">
+            <LocaleBadge locale={locale || null} />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{t(language, "entryEdit.languageLocked")}</TooltipContent>
+      </Tooltip>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <Globe className="size-4 text-primary" aria-hidden />
+      <span className="sr-only">{t(language, "entryEdit.contentLanguage")}</span>
+      <Select value={locale || undefined} onValueChange={onChange}>
+        <SelectTrigger size="sm" aria-label={t(language, "entryEdit.contentLanguage")}>
+          <SelectValue placeholder={t(language, "entryEdit.selectLanguage")} />
+        </SelectTrigger>
+        <SelectContent>
+          {locales.map((option) => (
+            <SelectItem key={option} value={option}>
+              {localeName(option)} · {option}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 function parentAdminLink(
   collection: EntryEditorPayload["collection"],
   data: Record<string, unknown>,
+  parentEntryId: string | null,
 ): { href: string; label: string } | null {
-  if (!collection.parent) return null;
+  if (!collection.parent || !parentEntryId) return null;
   const parentValue = data[collection.parent.childField];
-  if (typeof parentValue !== "string" || !parentValue) return null;
+  if (typeof parentValue !== "string" && typeof parentValue !== "number" && typeof parentValue !== "boolean") return null;
   return {
-    href: `/admin/c/${encodeURIComponent(collection.parent.collection)}?search=${encodeURIComponent(parentValue)}`,
-    label: `${collection.parent.collection} / ${parentValue}`,
+    href: `/admin/c/${encodeURIComponent(collection.parent.collection)}/${encodeURIComponent(parentEntryId)}`,
+    label: `${collection.parent.collection} / ${String(parentValue)}`,
   };
 }
 

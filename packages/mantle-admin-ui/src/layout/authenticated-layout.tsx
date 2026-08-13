@@ -43,18 +43,8 @@ interface AuthenticatedLayoutProps {
 
 export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): React.ReactElement {
   const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
-  const [hasFormActions, setHasFormActions] = React.useState(false);
   const { pathname, search } = useAdminLocation();
   const { language } = usePreferences();
-
-  React.useLayoutEffect(() => {
-    if (!formActionBarHost) return;
-    const sync = (): void => setHasFormActions(formActionBarHost.childElementCount > 0);
-    const observer = new MutationObserver(sync);
-    observer.observe(formActionBarHost, { childList: true });
-    sync();
-    return () => observer.disconnect();
-  }, [formActionBarHost]);
 
   const me = useQuery<AdminUser>({
     queryKey: ["me"],
@@ -128,21 +118,19 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
               data-slot="status-bar-action-host"
               className="contents"
             />
-            {!hasFormActions ? (
-              <div
-                data-slot="status-bar-meta"
-                className="ms-auto flex items-center justify-end"
+            <div
+              data-slot="status-bar-meta"
+              className="ms-auto flex items-center justify-end"
+            >
+              <a
+                href={`https://www.npmjs.com/package/@aotter/mantle/v/${__MANTLE_VERSION__}`}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md px-2 py-1 font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
               >
-                <a
-                  href={`https://www.npmjs.com/package/@aotter/mantle/v/${__MANTLE_VERSION__}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-md px-2 py-1 font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                >
-                  @aotter/mantle-{__MANTLE_VERSION__}
-                </a>
-              </div>
-            ) : null}
+                @aotter/mantle-{__MANTLE_VERSION__}
+              </a>
+            </div>
           </footer>
         </SidebarInset>
       </SidebarProvider>
@@ -237,14 +225,12 @@ function buildNavGroups(
 }
 
 function collectionNavItem(c: Collection, language: AdminLanguage, canonical: string | null): NavItem {
-  // Leading icon is always Folder so every content row reads the
-  // same. The Globe sits in the trailing `marker` slot to mark
-  // collections that fold a translation-child schema underneath
-  // — POC sidebar contract.
+  const localized = c.localized || c.hasTranslations;
   const base = {
     title: resolveLocalizedText(c.title, language, canonical) ?? fieldLabel(c.name),
     icon: Folder,
-    marker: c.hasTranslations ? Globe : undefined,
+    marker: localized ? Globe : undefined,
+    markerLabel: localized ? t(language, "nav.localizedContent") : undefined,
   };
   if (c.lifecycle === "operational" && c.filter) {
     return {

@@ -8,6 +8,7 @@ import {
   Copy,
   Download,
   FileText,
+  Globe,
   PencilLine,
   Plus,
   Search,
@@ -28,6 +29,7 @@ import type {
   SiteInfo,
   StaffOperation,
 } from "../../lib/types";
+import { EDITORIAL_STATUSES, PUBLISHING_STATUSES } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -36,7 +38,6 @@ import {
   Pagination,
   PaginationContent,
   PaginationItem,
-  PaginationLink,
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
@@ -59,6 +60,7 @@ import { formatTimestampMs, idTail } from "./field-render";
 import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
 import { renderDataValue } from "../../lib/render-data-value";
 import { renderTitleText } from "../../lib/entry-title";
+import { LocaleBadge, LocaleStatusBadges } from "./locale-badge";
 
 const COLLECTION_PAGE_SIZE = 50;
 type SortDirection = "asc" | "desc";
@@ -80,7 +82,6 @@ export function CollectionView({
   const sortDirection: SortDirection = params.get("direction") === "asc" ? "asc" : "desc";
   const cursor = params.get("cursor") || undefined;
   const cursorDirection = params.get("cursor_direction") === "backward" ? "backward" : "forward";
-  const page = Math.max(1, Number.parseInt(params.get("page") ?? "1", 10) || 1);
 
   const collectionsQuery = useQuery<Collection[]>({
     queryKey: ["collections"],
@@ -109,7 +110,6 @@ export function CollectionView({
       "entries",
       collectionName,
       status ?? "all",
-      language,
       searchTerm,
       filterField ?? "no-filter",
       filterValue ?? "no-value",
@@ -122,7 +122,6 @@ export function CollectionView({
       const qs = new URLSearchParams({
         collection: collectionName,
         limit: String(COLLECTION_PAGE_SIZE),
-        locale: language,
         sort: sortField,
         direction: sortDirection,
       });
@@ -186,7 +185,10 @@ export function CollectionView({
   // modal, no pre-fill; the manifest form takes over from there.
   const createMutation = useMutation({
     mutationFn: () =>
-      api.post<EntryEditorPayload>("/entries", { collection: collectionName, data: {} }),
+      api.post<EntryEditorPayload>("/entries", {
+        collection: collectionName,
+        data: {},
+      }),
     onSuccess: (payload) => {
       window.location.href = `/admin/c/${encodeURIComponent(collectionName)}/${encodeURIComponent(payload.entry.id)}`;
     },
@@ -319,6 +321,7 @@ export function CollectionView({
                   ) : null}
                 </TableHead>
                 <SortableTableHead
+                  className="hidden md:table-cell"
                   label={t(language, "collection.table.id")}
                   field="id"
                   activeField={sortField}
@@ -352,17 +355,26 @@ export function CollectionView({
                 ) : (
                   <>
                     <SortableTableHead
+                      className="hidden md:table-cell"
                       label={t(language, "collection.table.status")}
                       field="status"
                       activeField={sortField}
                       direction={sortDirection}
                       href={sortHref(collectionName, status, searchTerm, "status", sortField, sortDirection, filterField, filterValue)}
                     />
-                    <TableHead>{t(language, "collection.table.locale")}</TableHead>
-                    <TableHead>{t(language, "collection.table.version")}</TableHead>
+                    {collection && (collection.localized || collection.hasTranslations) ? (
+                      <TableHead>
+                        <span className="inline-flex items-center gap-1.5">
+                          <Globe className="size-3.5" aria-hidden />
+                          {t(language, "collection.table.locale")}
+                        </span>
+                      </TableHead>
+                    ) : null}
+                    <TableHead className="hidden md:table-cell">{t(language, "collection.table.version")}</TableHead>
                   </>
                 )}
                 <SortableTableHead
+                  className="hidden md:table-cell"
                   label={t(language, "collection.table.updated")}
                   field="updatedAt"
                   activeField={sortField}
@@ -380,6 +392,7 @@ export function CollectionView({
                   language={language}
                   canonical={canonical}
                   collection={collection}
+                  siteLocales={site.data?.locales ?? []}
                   dataColumns={isOperationalCollection ? dataColumns : null}
                   boundOperations={boundOperations}
                   onOperationSuccess={refreshEntries}
@@ -422,7 +435,6 @@ export function CollectionView({
             filterValue={filterValue}
             sortField={sortField}
             sortDirection={sortDirection}
-            page={page}
             previousCursor={displayedEntries.previous_cursor}
             nextCursor={displayedEntries.next_cursor}
             language={language}
@@ -610,7 +622,7 @@ function renderCollectionDescription(
 /** Pick the collection summary from its lifecycle and translation support. */
 export function collectionSummaryKey(collection: Collection | undefined): I18nKey {
   const hasLifecycle = collection ? collection.lifecycle !== "operational" : true;
-  const hasTranslations = collection?.hasTranslations ?? false;
+  const hasTranslations = collection ? collection.localized || collection.hasTranslations : false;
   if (hasLifecycle && hasTranslations) return "collection.schemaSummary.lifecycleAndI18n";
   if (hasLifecycle) return "collection.schemaSummary.lifecycleOnly";
   if (hasTranslations) return "collection.schemaSummary.i18nOnly";
@@ -637,8 +649,8 @@ function CollectionFilterTabs({
   language: AdminLanguage;
 }): React.ReactElement {
   const statuses = collection.lifecycle === "editorial"
-    ? (["draft", "review", "published", "archived"] as const)
-    : (["draft", "published", "archived"] as const);
+    ? EDITORIAL_STATUSES
+    : PUBLISHING_STATUSES;
   const filter = collection.lifecycle === "operational" ? collection.filter : null;
 
   return (
@@ -693,7 +705,6 @@ function collectionHref(
     sortDirection?: SortDirection;
     cursor?: string;
     cursorDirection?: "forward" | "backward";
-    page?: number;
   },
 ): string {
   const params = new URLSearchParams();
@@ -709,7 +720,6 @@ function collectionHref(
   }
   if (state.cursor) params.set("cursor", state.cursor);
   if (state.cursorDirection === "backward") params.set("cursor_direction", "backward");
-  if (state.page && state.page > 1) params.set("page", String(state.page));
   const suffix = params.toString();
   return `/admin/c/${encodeURIComponent(collectionName)}${suffix ? `?${suffix}` : ""}`;
 }
@@ -737,12 +747,14 @@ function sortHref(
 }
 
 function SortableTableHead({
+  className,
   label,
   field,
   activeField,
   direction,
   href,
 }: {
+  className?: string;
   label: React.ReactNode;
   field: string;
   activeField: string;
@@ -751,7 +763,7 @@ function SortableTableHead({
 }): React.ReactElement {
   const Icon = activeField !== field ? ArrowUpDown : direction === "asc" ? ArrowUp : ArrowDown;
   return (
-    <TableHead>
+    <TableHead className={className}>
       <a href={href} className="inline-flex items-center gap-1.5 font-medium hover:text-foreground">
         {label}
         <Icon className={cn("size-3.5", activeField === field ? "opacity-100" : "opacity-35")} aria-hidden />
@@ -768,7 +780,6 @@ function CollectionPagination({
   filterValue,
   sortField,
   sortDirection,
-  page,
   previousCursor,
   nextCursor,
   language,
@@ -780,7 +791,6 @@ function CollectionPagination({
   filterValue: string | undefined;
   sortField: string;
   sortDirection: SortDirection;
-  page: number;
   previousCursor: string | null;
   nextCursor: string | null;
   language: AdminLanguage;
@@ -796,7 +806,6 @@ function CollectionPagination({
               ...base,
               cursor: previousCursor,
               cursorDirection: "backward",
-              page: Math.max(1, page - 1),
             }) : undefined}
             text={t(language, "collection.previousPage")}
             aria-label={t(language, "collection.previousPage")}
@@ -806,17 +815,11 @@ function CollectionPagination({
           />
         </PaginationItem>
         <PaginationItem>
-          <PaginationLink isActive aria-label={t(language, "collection.page", { page: String(page) })}>
-            {page}
-          </PaginationLink>
-        </PaginationItem>
-        <PaginationItem>
           <PaginationNext
             href={nextCursor ? collectionHref(collectionName, {
               ...base,
               cursor: nextCursor,
               cursorDirection: "forward",
-              page: page + 1,
             }) : undefined}
             text={t(language, "collection.nextPage")}
             aria-label={t(language, "collection.nextPage")}
@@ -909,6 +912,7 @@ function EntryRowDisplay({
   language,
   canonical,
   collection,
+  siteLocales,
   dataColumns,
   boundOperations,
   onOperationSuccess,
@@ -924,6 +928,7 @@ function EntryRowDisplay({
   language: AdminLanguage;
   canonical: string | null;
   collection: Collection | undefined;
+  siteLocales: readonly string[];
   /** Non-null (possibly empty) for `lifecycle: "operational"` collections —
    *  swaps the status/locale/version cells for these data columns. */
   dataColumns: string[] | null;
@@ -988,11 +993,11 @@ function EntryRowDisplay({
           />
         ) : null}
       </TableCell>
-      <TableCell className="font-mono text-xs text-muted-foreground">
+      <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
         <CopyIdButton id={String(row.id)} language={language} />
       </TableCell>
       <TableCell className="max-w-[28rem]">
-        <div className="min-w-[16rem]">
+        <div className="min-w-44 md:min-w-64">
           {isOperational ? (
             <a
               href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}
@@ -1055,16 +1060,26 @@ function EntryRowDisplay({
         ))
       ) : (
         <>
-          <TableCell>
+          <TableCell className="hidden md:table-cell">
             <StatusBadge status={row.status} />
           </TableCell>
-          <TableCell className="text-muted-foreground">{row.locale ?? "-"}</TableCell>
-          <TableCell className="font-mono text-xs text-muted-foreground">
+          {collection && (collection.localized || collection.hasTranslations) ? (
+            <TableCell>
+              {collection.hasTranslations ? (
+                <LocaleStatusBadges
+                  locales={siteLocales}
+                  available={row.translation_locales}
+                  language={language}
+                />
+              ) : <LocaleBadge locale={row.locale} />}
+            </TableCell>
+          ) : null}
+          <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
             v{row.version}
           </TableCell>
         </>
       )}
-      <TableCell className="text-muted-foreground">
+      <TableCell className="hidden text-muted-foreground md:table-cell">
         {formatTimestampMs(row.updated_at) ?? "-"}
       </TableCell>
       <TableCell>

@@ -15,14 +15,14 @@ import type {
  * `bootInit`) and treats keys differently depending on who owns them:
  *
  * - **UI-editable, seed-once** (`brand`, `title`, `description`,
- *   `origin`, `faviconUrl`, `ga4MeasurementId`, `facebookPixelId`):
+ *   `faviconUrl`, `ga4MeasurementId`, `facebookPixelId`):
  *   written via INSERT … ON CONFLICT DO NOTHING. The admin settings
  *   UI (`/admin/api/site-settings`) can edit a subset of these
  *   directly, and the rest are conceptually the same "operator can
  *   override" bucket — either way, DB wins once the row exists, so a
  *   later `src/mantle/config.ts` edit never clobbers an operator's change.
  *
- * - **code-canonical, boot-synced** (`mediaPurposes`, `locales`):
+ * - **code-canonical, boot-synced** (`origin`, `mediaPurposes`, `locales`):
  *   these have no admin-UI edit path — `src/mantle/config.ts` is the only
  *   source of truth — so `seed` upserts them on every boot, writing
  *   only when the serialized value actually differs from what's
@@ -112,9 +112,6 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
     if (defaults.description && defaults.description.length > 0) {
       stmts.push(insertOnce(KEYS.description, defaults.description));
     }
-    if (defaults.origin && defaults.origin.length > 0) {
-      stmts.push(insertOnce(KEYS.origin, defaults.origin));
-    }
     if (defaults.faviconUrl && defaults.faviconUrl.length > 0) {
       stmts.push(insertOnce(KEYS.faviconUrl, defaults.faviconUrl));
     }
@@ -134,6 +131,7 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
     // read-compare-write avoids issuing a write on every boot when
     // nothing actually changed (#441).
     const syncedValues: Array<[string, string | undefined]> = [
+      [KEYS.origin, defaults.origin && defaults.origin.length > 0 ? defaults.origin : undefined],
       [KEYS.locales, defaults.locales && defaults.locales.length > 0 ? defaults.locales.join(",") : undefined],
       [
         KEYS.mediaPurposes,

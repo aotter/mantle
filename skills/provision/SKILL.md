@@ -50,6 +50,10 @@ Capture the live URL in `PUBLIC_ORIGIN` and `Public site:` in `AGENTS.md`, then
 commit and push non-secret changes. Reuse any repo or Worker already created
 by landing. Workers Builds is optional after a direct deploy.
 
+When the owner later adopts a custom domain, update `PUBLIC_ORIGIN` and the
+provider's OAuth callback together, then redeploy. Do not patch `site_config`
+directly; boot syncs its canonical origin from `PUBLIC_ORIGIN`.
+
 ## Choose Auth
 
 - **Self-hosted — free:** configure the owner's per-site GitHub OAuth App and

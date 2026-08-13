@@ -1,8 +1,10 @@
 /**
  * OAuth consent UI renderer. Self-contained HTML — no external assets,
- * no framework. Navy-on-cream palette mirrors the admin SPA.
+ * no framework. Uses the same system tokens as the admin SPA.
  * Supports zh-TW and en locales.
  */
+
+import { systemTokensCss } from "@aotter/mantle-admin-ui";
 
 export interface ConsentModel {
   readonly clientName: string;
@@ -54,30 +56,31 @@ function escapeHtml(s: string): string {
 }
 
 const CSS = `
-  :root{--navy:#1a3062;--navy-light:#4d6aac;--bg:#eef1f8;--surface:rgba(255,255,255,.92);--border:rgba(151,158,175,.30);--muted:#6b7280;--fg:#111827}
   *{box-sizing:border-box}
-  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:var(--fg);background:radial-gradient(ellipse at 20% 20%,rgba(77,106,172,.10) 0%,transparent 55%),radial-gradient(ellipse at 80% 80%,rgba(0,183,199,.07) 0%,transparent 55%),var(--bg)}
-  .card{max-width:32rem;width:100%;padding:2rem;border-radius:.75rem;background:var(--surface);border:1px solid var(--border);box-shadow:0 2px 20px rgba(26,48,98,.08),0 1px 4px rgba(26,48,98,.04);backdrop-filter:blur(14px)}
-  .eyebrow{font-size:.7rem;text-transform:uppercase;letter-spacing:.18em;font-weight:500;color:var(--muted);margin:0 0 .5rem}
+  body{margin:0;min-height:100svh;display:flex;align-items:center;justify-content:center;padding:1rem;font-family:ui-sans-serif,system-ui,sans-serif;color:var(--foreground);background:var(--app-background)}
+  .card{max-width:32rem;width:100%;padding:2rem;border-radius:calc(var(--radius) + .125rem);color:var(--card-foreground);background:var(--card);border:1px solid var(--border);box-shadow:0 12px 36px color-mix(in srgb,var(--mantle-blue-deep) 8%,transparent);backdrop-filter:blur(48px) saturate(135%)}
+  .eyebrow{font-size:.7rem;text-transform:uppercase;letter-spacing:.18em;font-weight:500;color:var(--muted-foreground);margin:0 0 .5rem}
   h1{font-size:1.5rem;line-height:1.3;font-weight:500;margin:0 0 .75rem;letter-spacing:-.02em}
   p{margin:0 0 1rem;font-size:.95rem;line-height:1.55}
-  .muted{color:var(--muted);font-size:.875rem}
-  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8rem;padding:.125rem .4rem;border-radius:.25rem;background:rgba(26,48,98,.06)}
+  .muted{color:var(--muted-foreground);font-size:.875rem}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8rem;padding:.125rem .4rem;border-radius:.25rem;background:var(--muted);overflow-wrap:anywhere}
   .scopes{margin:0 0 1.5rem;display:flex;flex-wrap:wrap;gap:.375rem}
-  .scope{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.75rem;padding:.25rem .5rem;border-radius:.25rem;background:rgba(26,48,98,.06)}
+  .scope{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.75rem;padding:.25rem .5rem;border-radius:.25rem;background:var(--muted)}
   form{display:flex;gap:.75rem}
   button{flex:1;padding:.625rem 1rem;border:0;border-radius:.5rem;font:inherit;font-weight:500;cursor:pointer;transition:opacity .15s,background .15s}
-  button[value="approve"]{background:var(--navy);color:#fff}
+  button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+  button[value="approve"]{background:var(--primary);color:var(--primary-foreground)}
   button[value="approve"]:hover{opacity:.9}
-  button[value="deny"]{background:rgba(26,48,98,.08);color:var(--fg)}
-  button[value="deny"]:hover{background:rgba(26,48,98,.14)}
+  button[value="deny"]{background:var(--secondary);color:var(--secondary-foreground)}
+  button[value="deny"]:hover{background:var(--accent)}
+  @media(max-width:30rem){form{flex-direction:column}}
 `.trim();
 
 export function renderConsentHtml(locale: "zh-TW" | "en", model: ConsentModel | null): string {
   const t = STRINGS[locale];
   const lang = locale === "zh-TW" ? "zh-Hant-TW" : "en";
-  const head = `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${t.title}</title><style>${CSS}</style></head><body><div class="card">`;
-  const tail = `</div></body></html>`;
+  const head = `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${t.title}</title><style>${systemTokensCss}\n${CSS}</style></head><body><main class="card">`;
+  const tail = `</main></body></html>`;
 
   if (!model) {
     return `${head}<p class="eyebrow">${t.eyebrow}</p><h1>${t.invalidTitle}</h1><p class="muted">${t.invalidBody}</p>${tail}`;

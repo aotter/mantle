@@ -29,6 +29,8 @@ export interface Collection {
    *  `spec.translates`) are filtered out of `/admin/api/collections`
    *  entirely; they fold into their parent in the sidebar. */
   hasTranslations: boolean;
+  /** The collection's own rows carry a locale. */
+  localized: boolean;
   /** Schema properties carrying `x-mcp-hint: media-*`. Upload hosting
    *  is optional; this only marks which fields are media-shaped. */
   mediaFields?: Array<{ name: string; hint: string }>;
@@ -66,7 +68,6 @@ export interface JsonSchema {
 }
 
 export interface EntryEditorCollection extends Collection {
-  localized: boolean;
   translates: { parent: string; on: string } | null;
   schema: JsonSchema;
   uiSchema: Record<string, unknown> | null;
@@ -88,7 +89,7 @@ export interface RelatedEntrySection {
     kind: "translation" | "field";
     parentField: string;
     childField: string;
-    parentValue: string | number | boolean;
+    parentValue: string | number | boolean | null;
   };
   entries: EntryEditorEntry[];
 }
@@ -96,6 +97,7 @@ export interface RelatedEntrySection {
 export interface EntryEditorPayload {
   collection: EntryEditorCollection;
   entry: EntryEditorEntry;
+  parentEntryId: string | null;
   related: RelatedEntrySection[];
 }
 
@@ -136,6 +138,7 @@ export interface EntryRow {
   version: number;
   title: unknown;
   updated_at: number;
+  translation_locales: string[];
   /** First 3 `required` schema properties (skipping the one used as
    *  the title), present only for `lifecycle: "operational"` collections. */
   data_preview?: Record<string, unknown>;
@@ -150,11 +153,11 @@ export interface ListEntriesResult {
 export interface SiteInfo {
   title: string;
   description: string;
-  origin: string;
   brand: string;
   locales: string[];
   canonicalLocale: string | null;
   faviconUrl?: string;
+  /** Canonical deployment URL projected by the server. Never derive it from the Admin request origin. */
   publicUrl: string;
   mcpUrl: string;
   media?: {

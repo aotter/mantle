@@ -2,7 +2,7 @@ import {
   DiagnosticError,
   checkSchemaListFilter,
   runtimeDiagnostic,
-  schemaIndexedFieldSql,
+  schemaSortableFields,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
 import type { EntryRow } from "../../domain/model/EntryRow.js";
@@ -104,6 +104,5 @@ function filterUnavailableDiagnostic(
 
 function isSortableField(schema: SchemaManifest, field: string): boolean {
   if (field === "id" || field === "status" || field === "updatedAt") return true;
-  return (schema.spec.schema.required ?? []).includes(field) &&
-    schemaIndexedFieldSql(schema, field) !== null;
+  return schemaSortableFields(schema).includes(field);
 }

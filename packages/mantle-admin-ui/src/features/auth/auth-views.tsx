@@ -2,7 +2,13 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePreferences } from "../../app/preferences";
@@ -11,17 +17,33 @@ import { authMethodsQueryOptions } from "../../lib/queries";
 import type { AuthMethodInfo } from "../../lib/types";
 import { signOut } from "../../lib/auth";
 
+function AuthPage({
+  children,
+  wide = false,
+}: {
+  children: React.ReactNode;
+  wide?: boolean;
+}): React.ReactElement {
+  return (
+    <main className="flex min-h-svh items-center justify-center p-6">
+      <Card className={wide ? "w-full max-w-md" : "w-full max-w-sm"}>
+        {children}
+      </Card>
+    </main>
+  );
+}
+
 export function GateLoading(): React.ReactElement {
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <Card className="w-full max-w-sm p-6">
-        <Skeleton className="mb-4 h-4 w-24" />
-        <div className="space-y-2">
-          <Skeleton className="h-3 w-full" />
-          <Skeleton className="h-3 w-2/3" />
-        </div>
-      </Card>
-    </div>
+    <AuthPage>
+      <CardHeader>
+        <Skeleton className="h-4 w-24" />
+      </CardHeader>
+      <CardContent className="space-y-2" aria-busy="true">
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-2/3" />
+      </CardContent>
+    </AuthPage>
   );
 }
 
@@ -29,12 +51,14 @@ export function GateError({ error }: { error: unknown }): React.ReactElement {
   const { language } = usePreferences();
   const message = error instanceof Error ? error.message : t(language, "common.unknownError");
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <Card className="w-full max-w-sm p-8 text-center">
-        <h1 className="mb-2 text-xl">{t(language, "auth.error.title")}</h1>
-        <p className="text-sm text-muted-foreground">{message}</p>
-      </Card>
-    </div>
+    <AuthPage>
+      <CardHeader className="text-center">
+        <CardTitle className="text-xl">
+          <h1>{t(language, "auth.error.title")}</h1>
+        </CardTitle>
+        <CardDescription role="alert">{message}</CardDescription>
+      </CardHeader>
+    </AuthPage>
   );
 }
 
@@ -45,17 +69,21 @@ export function AccessDeniedView({
 }): React.ReactElement {
   const { language } = usePreferences();
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <Card className="w-full max-w-md p-8 text-center">
+    <AuthPage wide>
+      <CardHeader className="text-center">
         <div className="mx-auto mb-3 inline-flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
           <AlertTriangle className="size-5" aria-hidden />
         </div>
-        <h1 className="mb-2 text-xl">{t(language, "auth.accessDenied.title")}</h1>
+        <CardTitle className="text-xl">
+          <h1>{t(language, "auth.accessDenied.title")}</h1>
+        </CardTitle>
         {login ? (
-          <p className="mb-1 text-sm font-medium text-foreground">
+          <CardDescription className="font-medium text-foreground">
             GitHub: {login}
-          </p>
+          </CardDescription>
         ) : null}
+      </CardHeader>
+      <CardContent className="text-center">
         <p className="mb-1 text-sm text-muted-foreground">
           {t(language, "auth.accessDenied.noStaff")}
         </p>
@@ -66,8 +94,8 @@ export function AccessDeniedView({
           <LogOut className="me-2 size-4" aria-hidden />
           {t(language, "common.signOut")}
         </Button>
-      </Card>
-    </div>
+      </CardContent>
+    </AuthPage>
   );
 }
 
@@ -107,20 +135,21 @@ export function SignInView(): React.ReactElement {
   const methods = useQuery<AuthMethodInfo[]>(authMethodsQueryOptions());
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <Card className="w-full max-w-sm p-8">
-        <p className="mb-2 text-sm text-muted-foreground">{t(language, "auth.signIn.eyebrow")}</p>
-        <h1 className="mb-2 text-xl">{t(language, "auth.signIn.title")}</h1>
-
+    <AuthPage>
+      <CardHeader>
+        <CardDescription>{t(language, "auth.signIn.eyebrow")}</CardDescription>
+        <CardTitle className="text-xl">
+          <h1>{t(language, "auth.signIn.title")}</h1>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
         {methods.isError ? (
-          <p className="mb-4 text-sm text-destructive">
+          <p className="mb-4 text-sm text-destructive" role="alert">
             {t(language, "auth.signIn.methodsLoadFailed")}
           </p>
         ) : null}
         {methods.isLoading ? (
-          <div className="space-y-2">
-            <div className="h-9 w-full animate-pulse rounded bg-muted" />
-          </div>
+          <Skeleton className="h-9 w-full" />
         ) : null}
         {methods.data?.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -146,8 +175,8 @@ export function SignInView(): React.ReactElement {
             ))}
           </div>
         ) : null}
-      </Card>
-    </div>
+      </CardContent>
+    </AuthPage>
   );
 }
 
@@ -415,7 +444,7 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
         </form>
       )}
       {error ? (
-        <p className="mt-2 text-xs text-destructive">{error}</p>
+        <p className="mt-2 text-xs text-destructive" role="alert">{error}</p>
       ) : null}
     </div>
   );
@@ -505,7 +534,7 @@ function MagicLinkSection({ returnTo }: { returnTo: string }): React.ReactElemen
         </form>
       )}
       {error ? (
-        <p className="mt-2 text-xs text-destructive">{error}</p>
+        <p className="mt-2 text-xs text-destructive" role="alert">{error}</p>
       ) : null}
     </div>
   );

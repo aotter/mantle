@@ -106,13 +106,32 @@ function jsonInit(method: string, body: unknown): RequestInit {
 }
 
 describe("GET /admin/api/site", () => {
-  it("returns the Staff MCP endpoint for connector setup", async () => {
+  it("falls back to the request origin for every public URL", async () => {
     const { app } = harness({ getSession: sessionAs("owner") });
     const res = await app.request("https://example.test/admin/api/site");
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
+    const body = await res.json();
+    expect(body).toMatchObject({
+      publicUrl: "https://example.test",
       mcpUrl: "https://example.test/mcp/staff",
     });
+    expect(body).not.toHaveProperty("origin");
+  });
+
+  it("uses the configured custom domain for every public URL", async () => {
+    const db = new InMemoryDatabase();
+    db.siteConfig.set("origin", "https://www.example.com");
+    const { app } = harness({ getSession: sessionAs("owner") }, { db });
+
+    const res = await app.request("https://site.workers.dev/admin/api/site");
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({
+      publicUrl: "https://www.example.com",
+      mcpUrl: "https://www.example.com/mcp/staff",
+    });
+    expect(body).not.toHaveProperty("origin");
   });
 });
 
@@ -122,11 +141,13 @@ describe("/admin/api/site-settings", () => {
     db.siteConfig.set("brand", "Mantle");
     db.siteConfig.set("title", "Mantle site");
     db.siteConfig.set("description", "Fast by default");
+    db.siteConfig.set("origin", "https://www.example.com");
 
     const res = await app.request("/admin/api/site-settings");
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
+    const body = await res.json();
+    expect(body).toEqual({
       brand: "Mantle",
       title: "Mantle site",
       description: "Fast by default",

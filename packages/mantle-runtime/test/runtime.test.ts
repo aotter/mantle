@@ -270,6 +270,30 @@ describe("createCmsRuntime + bootInit", () => {
     expect(site.brand).toBe("Operator-Edited");
   });
 
+  it("re-boot syncs a custom-domain origin while preserving operator-owned settings", async () => {
+    const db = new InMemoryDatabase();
+    const first = createCmsRuntime({
+      manifests: [],
+      db,
+      assets: noopAssets,
+      siteDefaults: { brand: "First", origin: "https://site.workers.dev" },
+    });
+    await first.bootInit();
+    db.siteConfig.set("brand", "Operator-Edited");
+
+    const second = createCmsRuntime({
+      manifests: [],
+      db,
+      assets: noopAssets,
+      siteDefaults: { brand: "Second", origin: "https://www.example.com" },
+    });
+    await second.bootInit();
+
+    const site = await new DatabaseSiteConfigRepository(db).load();
+    expect(site.origin).toBe("https://www.example.com");
+    expect(site.brand).toBe("Operator-Edited");
+  });
+
   it("updates only provided editable site settings in one batch", async () => {
     class CountingDatabase extends InMemoryDatabase {
       batches = 0;

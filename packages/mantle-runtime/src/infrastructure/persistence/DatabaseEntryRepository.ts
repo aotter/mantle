@@ -461,7 +461,7 @@ const ENTRY_READ_BATCH_SIZE = 95;
 
 type DataPredicate =
   | { readonly field: string; readonly kind: "equal"; readonly value: unknown }
-  | { readonly field: string; readonly kind: "in"; readonly values: readonly string[] }
+  | { readonly field: string; readonly kind: "in"; readonly values: readonly (string | number | boolean)[] }
   | { readonly field: string; readonly kind: "null" };
 
 function localePredicates(locale: string | null | undefined): DataPredicate[] {
@@ -551,6 +551,7 @@ function entrySortValueFromDb(row: EntryDbRow, field: string): string | number {
   if (field === "status") return row.status;
   if (field === "updatedAt") return row.updated_at;
   const value = (JSON.parse(row.data) as Record<string, unknown>)[field];
+  if (typeof value === "boolean") return Number(value);
   if (typeof value !== "string" && typeof value !== "number") {
     throw new Error(`non-scalar sort value for ${field}`);
   }

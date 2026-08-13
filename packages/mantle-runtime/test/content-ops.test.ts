@@ -984,6 +984,61 @@ describe("GetEntryUseCase / ListEntriesUseCase / DeleteEntryUseCase", () => {
     expect(back.rows.map((row) => row.data.title)).toEqual(["A", "B"]);
   });
 
+  it("sorts indexed booleans with cursor pagination", async () => {
+    const base = postsSchema();
+    const indexedPosts: SchemaManifest = {
+      ...base,
+      spec: {
+        ...base.spec,
+        indexes: [["active"]],
+        schema: {
+          ...base.spec.schema,
+          properties: { ...base.spec.schema.properties, active: { type: "boolean" } },
+          required: [...(base.spec.schema.required ?? []), "active"],
+        },
+      },
+    };
+    const h = harness({ schemas: new Map([["posts", indexedPosts]]) });
+    for (const [title, active] of [["A", false], ["B", true], ["C", true]] as const) {
+      await h.createDraft.execute({ collection: "posts", data: { title, active }, authorId: null });
+    }
+
+    const first = await h.listEntries.executePage({
+      collection: "posts",
+      limit: 2,
+      sort: { field: "active", direction: "asc" },
+    });
+    expect(first.rows.map((row) => row.data.active)).toEqual([false, true]);
+    expect(first.nextCursor).toBeDefined();
+    const second = await h.listEntries.executePage({
+      collection: "posts",
+      limit: 2,
+      cursor: first.nextCursor,
+      sort: { field: "active", direction: "asc" },
+    });
+    expect(second.rows.map((row) => row.data.active)).toEqual([true]);
+  });
+
+  it("does not sort by a non-left-prefix composite index field", async () => {
+    const base = postsSchema();
+    const indexedPosts: SchemaManifest = {
+      ...base,
+      spec: {
+        ...base.spec,
+        indexes: [["title", "slug"]],
+        schema: {
+          ...base.spec.schema,
+          required: ["title", "slug"],
+        },
+      },
+    };
+    const h = harness({ schemas: new Map([["posts", indexedPosts]]) });
+    await expect(h.listEntries.executePage({
+      collection: "posts",
+      sort: { field: "slug", direction: "asc" },
+    })).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
+  });
+
   it("rejects sorting on an unindexed data field", async () => {
     const h = harness();
     await expect(h.listEntries.executePage({

@@ -8,7 +8,7 @@ import type { MediaPurposePolicy, SiteConfig, SiteDefaults } from "@aotter/mantl
  * `siteDefaults`, but treats keys differently depending on ownership:
  * UI-editable keys (brand/title/description/…) seed once (INSERT …
  * ON CONFLICT DO NOTHING) so operator edits are preserved; keys with
- * no admin-UI edit path (`locales`, `mediaPurposes`) are synced from
+ * no admin-UI edit path (`origin`, `locales`, `mediaPurposes`) are synced from
  * config on every boot (upsert when the value differs) since code is
  * their only source of truth. See `DatabaseSiteConfigRepository`'s
  * header comment for the full rationale (#441).
@@ -25,7 +25,7 @@ export interface SiteConfigRepository {
   load(): Promise<SiteConfig>;
   /** Persist the operator-owned subset exposed by the Admin settings UI.
    *  Omitted fields are unchanged; an empty string intentionally clears a
-   *  value. Code-canonical locales and media purposes are never writable
+   *  value. Code-canonical origin, locales, and media purposes are never writable
    *  through this path. Optional during the `CmsRuntime.db` compatibility
    *  window; canonical Mantle runtimes always provide it. */
   updateEditable?(args: UpdateEditableSiteConfigArgs): Promise<void>;

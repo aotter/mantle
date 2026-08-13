@@ -54,6 +54,7 @@ function filteredManifests(): Manifest[] {
           orderState: { type: "string", enum: ["pending", "paid"] },
           placedAt: { type: "integer" },
         },
+        required: ["orderState", "placedAt"],
       },
       indexes: [["orderState", "placedAt"]],
       uiSchema: { list: { filterField: "orderState" } },
@@ -99,6 +100,7 @@ function harness(
   const auth = testAuth(authOverride);
   const ref = createCmsRef({
     manifests: manifestSet,
+    siteDefaults: { locales: ["en", "zh-TW"] },
     bindings: {
       db,
       assets: new StubAssetServer(),
@@ -133,6 +135,48 @@ function relatedManifests(): Manifest[] {
     schema("comments", { parentId: { type: "string", "x-mantle-ref": "parents" } }, ["parentId"]),
     schema("reactions", { parentId: { type: "string", "x-mantle-ref": "parents" } }),
     schema("legacy-children", { parentKey: { type: "string" } }),
+  ];
+}
+
+function translatedManifests(): Manifest[] {
+  const apiVersion = "cms.mantle.aotter.net/v1" as const;
+  return [
+    {
+      apiVersion,
+      kind: "Schema",
+      metadata: { name: "articles" },
+      spec: {
+        title: "Articles",
+        schema: {
+          type: "object",
+          properties: { slug: { type: "string" } },
+          required: ["slug"],
+        },
+        uniqueIndexes: [["slug"]],
+        lifecycle: "publishing",
+      },
+    },
+    {
+      apiVersion,
+      kind: "Schema",
+      metadata: { name: "article-translations" },
+      spec: {
+        title: "Article translations",
+        localized: true,
+        translates: { parent: "articles", on: "slug" },
+        schema: {
+          type: "object",
+          properties: {
+            slug: { type: "string" },
+            locale: { type: "string", enum: ["en", "zh-TW"] },
+            title: { type: "string" },
+          },
+          required: ["slug", "locale", "title"],
+        },
+        uniqueIndexes: [["slug", "locale"]],
+        lifecycle: "publishing",
+      },
+    },
   ];
 }
 
@@ -253,7 +297,10 @@ describe("GET /admin/api/entries exact list filter", () => {
 
     const collections = await app.request("/admin/api/collections");
     expect(await collections.json()).toMatchObject({
-      collections: [{ filter: { field: "orderState", values: ["pending", "paid"] } }],
+      collections: [{
+        filter: { field: "orderState", values: ["pending", "paid"] },
+        sortableFields: ["orderState"],
+      }],
     });
 
     const response = await app.request(
@@ -360,6 +407,32 @@ describe("GET /admin/api/entries/export", () => {
 });
 
 describe("GET /admin/api/entries/:id related entries", () => {
+  it("projects translation coverage and sibling tabs from explicit translates", async () => {
+    const { app } = harness((database) => {
+      database.entries.set("article", relatedRow("article", "articles", "draft", { slug: "hello" }, 1));
+      database.entries.set("en", relatedRow("en", "article-translations", "draft", {
+        slug: "hello",
+        locale: "en",
+        title: "Hello",
+      }, 2));
+    }, undefined, translatedManifests());
+
+    const list = await app.request("/admin/api/entries?collection=articles");
+    expect(await list.json()).toMatchObject({
+      items: [{ id: "article", translation_locales: ["en"] }],
+    });
+
+    const editor = await app.request("/admin/api/entries/en");
+    expect(await editor.json()).toMatchObject({
+      parentEntryId: "article",
+      related: [{
+        collection: { name: "article-translations" },
+        relationship: { kind: "translation", parentValue: "hello" },
+        entries: [{ id: "en", locale: "en" }],
+      }],
+    });
+  });
+
   it("uses explicit refs, keeps all-status ordering, and caps each section at 50 rows", async () => {
     const { app, db } = harness((database) => {
       database.entries.set(

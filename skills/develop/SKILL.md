@@ -104,8 +104,9 @@ the atoms cannot express the behavior.
   besides `locale` and the join field.
 - Parallel locale blocks must keep field names, option values, step IDs, and
   result keys identical; translate display strings only.
-- `siteDefaults.locales` is code-owned and boot-synced. Brand, title,
-  description, and origin are seeded once, then changed through site settings.
+- `siteDefaults.origin` and `siteDefaults.locales` are code-owned and
+  boot-synced. Brand, title, and description seed once, then change through
+  site settings.
 - When changing an existing collection from `[slug]` to `[slug, locale]`,
   boot with a Mantle version that reconciles obsolete unique indexes and test
   the same slug in two locales. Do not patch D1 manually.

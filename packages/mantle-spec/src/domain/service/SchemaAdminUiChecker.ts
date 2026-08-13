@@ -13,6 +13,15 @@ export interface SchemaAdminUiProblem {
   readonly message: string;
 }
 
+export function schemaSortableFields(schema: SchemaManifest): readonly string[] {
+  const required = new Set(schema.spec.schema.required ?? []);
+  return [...new Set(
+    checkSchemaIndexes(schema).declarations
+      .map(({ fields }) => fields[0]?.name)
+      .filter((field): field is string => field !== undefined && required.has(field)),
+  )];
+}
+
 export function checkSchemaListFilter(schema: SchemaManifest): {
   readonly filter: SchemaListFilter | null;
   readonly problems: readonly SchemaAdminUiProblem[];

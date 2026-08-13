@@ -25,6 +25,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "../lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePreferences } from "../app/preferences";
 import {
   isCollapsible,
@@ -121,13 +122,7 @@ function NavLinkItem({
         >
           {item.icon && <item.icon aria-hidden />}
           <span data-sidebar-label className="flex-1 truncate">{item.title}</span>
-          {item.marker && (
-            <item.marker
-              aria-hidden
-              data-sidebar-label
-              className="size-3.5 text-muted-foreground"
-            />
-          )}
+          <NavMarker item={item} />
         </a>
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -155,13 +150,7 @@ function NavCollapsibleExpanded({
           <SidebarMenuButton isActive={groupActive}>
             {item.icon && <item.icon aria-hidden />}
             <span data-sidebar-label className="flex-1 truncate" title={item.title}>{item.title}</span>
-            {item.marker && (
-              <item.marker
-                aria-hidden
-                data-sidebar-label
-                className="size-3.5 text-muted-foreground"
-              />
-            )}
+            <NavMarker item={item} />
             <ChevronRight
               aria-hidden
               data-sidebar-label
@@ -227,7 +216,10 @@ function NavCollapsibleDropdown({
     <SidebarMenuItem>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <SidebarMenuButton isActive={groupActive}>
+          <SidebarMenuButton
+            isActive={groupActive}
+            tooltip={item.markerLabel ? `${item.title} · ${item.markerLabel}` : item.title}
+          >
             {item.icon && <item.icon aria-hidden />}
             <span data-sidebar-label title={item.title}>{item.title}</span>
             <ChevronRight aria-hidden data-sidebar-label className="ms-auto" />
@@ -255,6 +247,23 @@ function NavCollapsibleDropdown({
         </DropdownMenuContent>
       </DropdownMenu>
     </SidebarMenuItem>
+  );
+}
+
+function NavMarker({ item }: { item: NavLink | NavCollapsible }): React.ReactElement | null {
+  if (!item.marker) return null;
+  const Marker = item.marker;
+  const icon = (
+    <span data-sidebar-label className="inline-flex text-primary">
+      <Marker aria-hidden className="size-3.5" />
+    </span>
+  );
+  if (!item.markerLabel) return icon;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{icon}</TooltipTrigger>
+      <TooltipContent side="right">{item.markerLabel}</TooltipContent>
+    </Tooltip>
   );
 }
 

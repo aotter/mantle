@@ -21,7 +21,7 @@ export interface ReadEntryByDataFieldArgs {
 export interface ReadEntriesByDataFieldInArgs {
   readonly collection: string;
   readonly field: string;
-  readonly values: readonly string[];
+  readonly values: readonly EntryDataScalar[];
   readonly locale?: string | null;
   readonly status?: ContentState;
 }

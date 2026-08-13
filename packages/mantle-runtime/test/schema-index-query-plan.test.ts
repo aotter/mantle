@@ -536,6 +536,54 @@ describe("declared Schema indexes against real SQLite", () => {
     expect(back.rows.map((row) => row.id)).toEqual(first.rows.map((row) => row.id));
   });
 
+  it("repository serializes boolean sort cursors as SQLite integers", async () => {
+    const booleanDb = new DatabaseSync(":memory:");
+    try {
+      createEntriesTable(booleanDb);
+      const booleanSchema = {
+        apiVersion: "cms.mantle.aotter.net/v1",
+        kind: "Schema",
+        metadata: { name: "flags" },
+        spec: {
+          title: "Flags",
+          schema: {
+            type: "object",
+            properties: { active: { type: "boolean" } },
+            required: ["active"],
+          },
+          indexes: [["active"]],
+        },
+      } as SchemaManifest;
+      for (const column of buildDdl(booleanSchema).columns) booleanDb.exec(column.sql);
+      for (const index of buildDdl(booleanSchema).indexes) booleanDb.exec(index.sql);
+      const insert = booleanDb.prepare(
+        `INSERT INTO entries
+         (id, collection, status, version, data, created_at, updated_at, author_id)
+         VALUES (?, 'flags', 'published', 1, ?, 1, 1, NULL)`,
+      );
+      insert.run("f1", JSON.stringify({ active: false }));
+      insert.run("f2", JSON.stringify({ active: true }));
+      insert.run("f3", JSON.stringify({ active: true }));
+      const repository = new DatabaseEntryRepository(
+        createSqliteDriver(booleanDb, []),
+        new Map([[booleanSchema.metadata.name, booleanSchema]]),
+      );
+      const sort = { field: "active", direction: "asc" } as const;
+      const first = await repository.list({ collection: "flags", limit: 2, sort });
+      expect(first.rows.map((row) => row.data.active)).toEqual([false, true]);
+      expect(first.nextCursor).toBeDefined();
+      const second = await repository.list({
+        collection: "flags",
+        limit: 2,
+        cursor: first.nextCursor,
+        sort,
+      });
+      expect(second.rows.map((row) => row.data.active)).toEqual([true]);
+    } finally {
+      booleanDb.close();
+    }
+  });
+
   it("searches only id and explicitly resolved string fields", async () => {
     const executions: RecordedExecution[] = [];
     const repository = new DatabaseEntryRepository(
