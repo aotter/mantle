@@ -377,6 +377,34 @@ describe("createMantleWorker", () => {
     error.mockRestore();
   });
 
+  it("retries a known transient D1 boot failure within the request", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const db = new FailFirstMigrationDatabase("Network connection lost");
+    const worker = createMantleWorker<TestEnv>({
+      manifest: [],
+      auth: () => stubAuth,
+      bindings: () => ({ db, assets: new StubAssetServer() }),
+      extend: () => ({
+        mount: ({ app, getRuntime }) => {
+          app.get("/probe", async (c) => {
+            await getRuntime();
+            return c.text("ready");
+          });
+        },
+      }),
+    });
+
+    expect((await fetchWorker(worker, "/probe", testEnv())).status).toBe(200);
+    expect(db.migrationAttempts).toBeGreaterThanOrEqual(2);
+    expect(warning).toHaveBeenCalledWith(
+      "[mantle] transient D1 boot failure; retrying",
+      expect.objectContaining({ message: "Network connection lost" }),
+    );
+    warning.mockRestore();
+    error.mockRestore();
+  });
+
   it("keeps mcp once when an extension adds OAuth scopes", async () => {
     const worker = createMantleWorker<TestEnv>({
       manifest: [],
@@ -413,11 +441,15 @@ describe("createMantleWorker", () => {
 });
 
 class FailFirstMigrationDatabase extends InMemoryDatabase {
+  constructor(private readonly failure = "transient migration failure") {
+    super();
+  }
+
   migrationAttempts = 0;
   override migrations: MigrationRunner = {
     runAll: async (migrations: readonly Migration[]) => {
       this.migrationAttempts += 1;
-      if (this.migrationAttempts === 1) throw new Error("transient migration failure");
+      if (this.migrationAttempts === 1) throw new Error(this.failure);
       for (const migration of migrations) this.appliedMigrations.add(migration.id);
     },
   };

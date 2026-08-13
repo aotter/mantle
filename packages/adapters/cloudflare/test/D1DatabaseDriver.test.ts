@@ -38,6 +38,35 @@ function failingD1(winnerId: string | null) {
 }
 
 describe("D1DatabaseDriver migrations", () => {
+  it("keeps an up-to-date migration ledger read-only during boot", async () => {
+    const writes: string[] = [];
+    const batch = vi.fn();
+    const prepare = (sql: string): D1PreparedStatement => ({
+      bind: () => prepare(sql),
+      run: async () => {
+        writes.push(sql);
+        return { success: true, meta: {} } as D1Result;
+      },
+      all: async <T>() => ({
+        success: true,
+        meta: {},
+        results: (sql.includes("sqlite_master")
+          ? [{ name: "_migrations" }]
+          : [{ id: migration.id }]) as T[],
+      }) as D1Result<T>,
+      first: async () => null,
+    }) as D1PreparedStatement;
+    const driver = new D1DatabaseDriver({
+      prepare: vi.fn(prepare),
+      batch,
+    } as unknown as D1Database);
+
+    await expect(driver.migrations.runAll([migration])).resolves.toBeUndefined();
+
+    expect(writes).toEqual([]);
+    expect(batch).not.toHaveBeenCalled();
+  });
+
   it("accepts a failed batch when a concurrent boot recorded the same migration", async () => {
     const fake = failingD1(migration.id);
     const driver = new D1DatabaseDriver(fake.db);

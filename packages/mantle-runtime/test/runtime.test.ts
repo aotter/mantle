@@ -258,6 +258,9 @@ describe("createCmsRuntime + bootInit", () => {
     await runtime.bootInit();
     // Operator edits the brand directly:
     db.siteConfig.set("brand", "Operator-Edited");
+    const writesBeforeReboot = db.executions.filter(({ sql }) =>
+      sql.startsWith("INSERT INTO site_config")
+    ).length;
     // Subsequent boot with new defaults must NOT overwrite the operator's edit.
     const runtime2 = createCmsRuntime({
       manifests: [],
@@ -268,6 +271,8 @@ describe("createCmsRuntime + bootInit", () => {
     await runtime2.bootInit();
     const site = await new DatabaseSiteConfigRepository(db).load();
     expect(site.brand).toBe("Operator-Edited");
+    expect(db.executions.filter(({ sql }) => sql.startsWith("INSERT INTO site_config")))
+      .toHaveLength(writesBeforeReboot);
   });
 
   it("re-boot syncs a custom-domain origin while preserving operator-owned settings", async () => {

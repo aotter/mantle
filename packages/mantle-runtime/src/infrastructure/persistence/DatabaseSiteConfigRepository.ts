@@ -97,32 +97,31 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
       return;
     }
     assertSiteDefaultsCanonical(defaults);
-    const stmts = [];
+    const seedOnceValues: Array<[string, string | undefined]> = [
+      [KEYS.brand, defaults.brand],
+      [KEYS.title, defaults.title],
+      [KEYS.description, defaults.description],
+      [KEYS.faviconUrl, defaults.faviconUrl],
+      [KEYS.ga4MeasurementId, defaults.ga4MeasurementId],
+      [KEYS.facebookPixelId, defaults.facebookPixelId],
+    ];
     const insertOnce = (key: string, value: string) =>
       this.db
         .prepare(`INSERT INTO site_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING`)
         .bind(key, value);
     // UI-editable, seed-once — DB wins once the row exists.
-    if (defaults.brand && defaults.brand.length > 0) {
-      stmts.push(insertOnce(KEYS.brand, defaults.brand));
-    }
-    if (defaults.title && defaults.title.length > 0) {
-      stmts.push(insertOnce(KEYS.title, defaults.title));
-    }
-    if (defaults.description && defaults.description.length > 0) {
-      stmts.push(insertOnce(KEYS.description, defaults.description));
-    }
-    if (defaults.faviconUrl && defaults.faviconUrl.length > 0) {
-      stmts.push(insertOnce(KEYS.faviconUrl, defaults.faviconUrl));
-    }
-    if (defaults.ga4MeasurementId && defaults.ga4MeasurementId.length > 0) {
-      stmts.push(insertOnce(KEYS.ga4MeasurementId, defaults.ga4MeasurementId));
-    }
-    if (defaults.facebookPixelId && defaults.facebookPixelId.length > 0) {
-      stmts.push(insertOnce(KEYS.facebookPixelId, defaults.facebookPixelId));
-    }
-    if (stmts.length > 0) {
-      await this.db.batch(stmts);
+    const wanted = seedOnceValues.filter(
+      (entry): entry is [string, string] => Boolean(entry[1] && entry[1].length > 0),
+    );
+    if (wanted.length > 0) {
+      const existing = new Set(
+        (await this.db.prepare(`SELECT key, value FROM site_config`).all<{ key: string }>())
+          .map(({ key }) => key),
+      );
+      const missing = wanted
+        .filter(([key]) => !existing.has(key))
+        .map(([key, value]) => insertOnce(key, value));
+      if (missing.length > 0) await this.db.batch(missing);
     }
 
     // Code-canonical, boot-synced — no admin-UI edit path for these
