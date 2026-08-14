@@ -98,6 +98,14 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
       ),
     [collectionsQuery.data, viewsQuery.data, language, canonical, me.data?.role],
   );
+  const collectionName = pathname.match(/^\/admin\/c\/([^/]+)/)?.[1];
+  const viewName = pathname.match(/^\/admin\/views\/([^/]+)/)?.[1];
+  const resource = collectionName
+    ? collectionsQuery.data?.find((collection) => collection.name === decodeURIComponent(collectionName))
+    : viewsQuery.data?.find((view) => view.name === decodeURIComponent(viewName ?? ""));
+  const pageTitle = resource
+    ? resolveLocalizedText(resource.title, language, canonical) ?? fieldLabel(resource.name)
+    : undefined;
   return (
     <FormActionBarHostContext.Provider value={formActionBarHost}>
       <SidebarProvider className="h-svh min-h-0 overflow-hidden">
@@ -118,6 +126,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
             className="absolute inset-x-0 top-0 z-30"
             site={resolvedBrand}
             publicUrl={site.data?.publicUrl}
+            pageTitle={pageTitle}
           />
           <Main className="min-h-0 overflow-y-auto overscroll-contain pt-20 pb-20">{children}</Main>
           <footer

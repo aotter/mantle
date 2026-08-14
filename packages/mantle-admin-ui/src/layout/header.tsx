@@ -27,16 +27,18 @@ interface HeaderProps {
   className?: string;
   site?: AdminBrand;
   publicUrl?: string;
+  pageTitle?: string;
 }
 
 export function Header({
   className,
   site,
   publicUrl,
+  pageTitle,
 }: HeaderProps): React.ReactElement {
   const { pathname } = useAdminLocation();
   const { language } = usePreferences();
-  const current = currentPage(pathname, language);
+  const current = pageTitle ?? currentPage(pathname, language);
 
   return (
     <header

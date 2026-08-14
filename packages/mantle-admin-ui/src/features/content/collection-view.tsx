@@ -212,7 +212,7 @@ export function CollectionView({
               {t(language, "collection.breadcrumb")}
             </a>
             <span className="mx-2 text-foreground/30">/</span>
-            <span className="text-foreground/70">{collectionName}</span>
+            <span className="text-foreground/70">{heading}</span>
           </>
         }
         title={heading}
