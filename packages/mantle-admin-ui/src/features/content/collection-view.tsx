@@ -294,7 +294,6 @@ export function CollectionView({
               canonical={canonical}
               onSuccess={refreshEntries}
             />
-            {status ? <StatusBadge status={status} /> : null}
           </div>
         }
       />
