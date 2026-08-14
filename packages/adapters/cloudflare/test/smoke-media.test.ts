@@ -684,7 +684,10 @@ describe("MCP View surface gating (#438)", () => {
       siteDefaults: {
         brand: "Example Shop",
         origin: "https://shop.example",
-        icons: [{ src: "/site-icon.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
+        icons: [
+          { src: "/site-icon.png", mimeType: "image/png", sizes: ["64x64"] },
+          { src: "/site-icon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
+        ],
         media: { purposes: [postCoverPolicy()] },
       },
       bindings: {
@@ -737,11 +740,18 @@ describe("MCP View surface gating (#438)", () => {
       name: "aotter.mantle.public",
       title: "Example Shop",
       websiteUrl: "https://shop.example",
-      icons: [{
-        src: "https://shop.example/site-icon.svg",
-        mimeType: "image/svg+xml",
-        sizes: ["any"],
-      }],
+      icons: [
+        {
+          src: "https://shop.example/site-icon.png",
+          mimeType: "image/png",
+          sizes: ["64x64"],
+        },
+        {
+          src: "https://shop.example/site-icon.svg",
+          mimeType: "image/svg+xml",
+          sizes: ["any"],
+        },
+      ],
     });
   });
 

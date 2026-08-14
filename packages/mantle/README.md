@@ -126,9 +126,16 @@ the baseline raster formats:
 
 ```ts
 siteDefaults: {
-  icons: [{ src: "/site-icon.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
+  icons: [
+    { src: "/site-icon.png", mimeType: "image/png", sizes: ["64x64"] },
+    { src: "/site-icon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
+  ],
 }
 ```
+
+Keep both files in the project's `public/` directory. They are one site
+identity reused by browser favicons, Admin chrome, and MCP `serverInfo.icons`;
+PNG is the compatibility rendition and SVG remains the editable source.
 
 For an uncommon deployment that must own the top-level assembly, use the
 embedded [`docs/cloudflare-low-level-composition.md`](docs/cloudflare-low-level-composition.md)

@@ -348,11 +348,15 @@ describe("createCmsRuntime + bootInit", () => {
       db,
       assets: noopAssets,
       siteDefaults: {
-        icons: [{ src: "/site-icon.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
+        icons: [
+          { src: "/site-icon.png", mimeType: "image/png", sizes: ["64x64"] },
+          { src: "/site-icon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
+        ],
       },
     });
     await runtime.bootInit();
     expect((await repo.load()).icons).toEqual([
+      { src: "/site-icon.png", mimeType: "image/png", sizes: ["64x64"] },
       { src: "/site-icon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
     ]);
   });
