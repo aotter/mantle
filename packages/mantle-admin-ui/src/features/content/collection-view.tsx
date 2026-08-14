@@ -331,10 +331,13 @@ export function CollectionView({
             searchTerm
               ? t(language, "collection.empty.search", { search: searchTerm })
               : filterValue
-              ? t(language, "collection.empty.withStatus", { status: fieldLabel(filterValue) })
+              ? t(language, "collection.empty.withStatus", {
+                  collection: heading,
+                  status: fieldLabel(filterValue),
+                })
               : status
-              ? t(language, "collection.empty.withStatus", { status })
-              : t(language, "collection.empty.all")
+              ? t(language, "collection.empty.withStatus", { collection: heading, status })
+              : t(language, "collection.empty.all", { collection: heading })
           }
         />
       )}
