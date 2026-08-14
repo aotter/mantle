@@ -57,7 +57,25 @@ function filteredManifests(): Manifest[] {
         required: ["orderState", "placedAt"],
       },
       indexes: [["orderState", "placedAt"]],
-      uiSchema: { list: { filterField: "orderState" } },
+      uiSchema: {
+        list: {
+          filterField: "orderState",
+          primaryField: "orderState",
+          columns: ["placedAt"],
+        },
+      },
+    },
+  }];
+}
+
+function readOnlyManifests(): Manifest[] {
+  const posts = manifests()[0]!;
+  if (posts.kind !== "Schema") throw new Error("posts fixture must be a Schema");
+  return [{
+    ...posts,
+    spec: {
+      ...posts.spec,
+      schema: { ...posts.spec.schema, readOnly: true },
     },
   }];
 }
@@ -212,6 +230,35 @@ function row(id: string, data: Record<string, unknown>, updatedAt = 1) {
   };
 }
 
+function jsonInit(method: string, body: unknown): RequestInit {
+  return {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  };
+}
+
+describe("read-only Admin collections", () => {
+  it("keeps reads available and rejects generic create, update, and delete", async () => {
+    const { app } = harness(
+      (db) => db.entries.set("managed", row("managed", { title: "Managed", slug: "managed" })),
+      undefined,
+      readOnlyManifests(),
+    );
+
+    expect((await app.request("/admin/api/entries/managed")).status).toBe(200);
+    const attempts = await Promise.all([
+      app.request("/admin/api/entries", jsonInit("POST", { collection: "posts", data: {} })),
+      app.request("/admin/api/entries/managed", jsonInit("PATCH", { data: { title: "Bypass" }, expectedVersion: 1 })),
+      app.request("/admin/api/entries/managed", { method: "DELETE" }),
+    ]);
+    expect(attempts.map((response) => response.status)).toEqual([409, 409, 409]);
+    for (const response of attempts) {
+      expect(await response.json()).toMatchObject({ diagnostic: { code: "CONFLICT" } });
+    }
+  });
+});
+
 describe("GET /admin/api/entries?search=", () => {
   it("loads the authoritative role for the session user", async () => {
     let roleReads = 0;
@@ -299,6 +346,7 @@ describe("GET /admin/api/entries exact list filter", () => {
     expect(await collections.json()).toMatchObject({
       collections: [{
         filter: { field: "orderState", values: ["pending", "paid"] },
+        list: { primaryField: "orderState", columns: ["placedAt"] },
         sortableFields: ["orderState"],
       }],
     });
@@ -307,8 +355,12 @@ describe("GET /admin/api/entries exact list filter", () => {
       "/admin/api/entries?collection=orders&filter_field=orderState&filter_value=paid",
     );
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { items: Array<{ id: string }> };
+    const body = (await response.json()) as {
+      items: Array<{ id: string; title: unknown; data_preview?: Record<string, unknown> }>;
+    };
     expect(body.items.map(({ id }) => id)).toEqual(["o1"]);
+    expect(body.items[0]?.title).toBeNull();
+    expect(body.items[0]?.data_preview).toEqual({ orderState: "paid", placedAt: 2 });
     expect(db.executions.at(-1)?.sql).toContain('"m2c_');
   });
 

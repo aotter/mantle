@@ -22,7 +22,7 @@ describe("sidebar collection filters", () => {
 
 describe("member navigation", () => {
   const urlsFor = (role: "owner" | "editor" | "contributor") =>
-    buildNavGroups([], [], [], "en", null, role)
+    buildNavGroups([], [], "en", null, role)
       .flatMap(({ items }) => items)
       .flatMap((item) => "url" in item ? [item.url] : []);
 
@@ -31,5 +31,10 @@ describe("member navigation", () => {
     expect(urlsFor("editor")).not.toContain("/admin/staff");
     expect(urlsFor("owner")).toEqual(expect.arrayContaining(["/admin/members", "/admin/staff"]));
     expect(urlsFor("contributor")).not.toContain("/admin/members");
+  });
+
+  it("does not create a standalone operations destination", () => {
+    const groups = buildNavGroups([], [], "en", null, "owner");
+    expect(JSON.stringify(groups)).not.toContain("/admin/ops");
   });
 });

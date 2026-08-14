@@ -34,7 +34,7 @@ import {
   schemaIndexDiagnosticCode,
 } from "./SchemaIndexChecker.js";
 import { checkSchemaSearchableFields } from "./SchemaSearchChecker.js";
-import { checkSchemaListFilter } from "./SchemaAdminUiChecker.js";
+import { checkFormUiSchema, checkSchemaAdminUi } from "./SchemaAdminUiChecker.js";
 
 /**
  * Shared shape validator for `LocalizedText` fields (`Schema.spec.title`
@@ -433,12 +433,12 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
           : "SCHEMA_SEARCH_INVALID",
     );
   }
-  const listFilterProblem = checkSchemaListFilter(m).problems[0];
-  if (listFilterProblem) {
+  const adminUiProblem = checkSchemaAdminUi(m).problems[0];
+  if (adminUiProblem) {
     throw new ManifestParseError(
-      listFilterProblem.message,
+      adminUiProblem.message,
       idx,
-      listFilterProblem.pointer,
+      adminUiProblem.pointer,
       "SCHEMA_UI_INVALID",
     );
   }
@@ -766,7 +766,7 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
   const s = m.spec as unknown as Record<string, unknown>;
   rejectUnknownKeys(
     s,
-    ["title", "description", "requires", "input", "output", "handler"],
+    ["title", "description", "requires", "input", "uiSchema", "output", "handler"],
     idx,
     "/spec",
   );
@@ -786,6 +786,10 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
   );
   if (typeof s["input"] !== "object" || s["input"] === null) {
     throw new ManifestParseError("Procedure.spec.input is required (JSON Schema)", idx, "/spec/input");
+  }
+  const uiProblem = checkFormUiSchema(s["input"] as JsonSchema, s["uiSchema"], "Procedure")[0];
+  if (uiProblem) {
+    throw new ManifestParseError(uiProblem.message, idx, uiProblem.pointer, "SCHEMA_UI_INVALID");
   }
   if (typeof s["output"] !== "object" || s["output"] === null) {
     throw new ManifestParseError("Procedure.spec.output is required (JSON Schema)", idx, "/spec/output");

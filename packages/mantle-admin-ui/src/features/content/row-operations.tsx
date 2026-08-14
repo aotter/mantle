@@ -1,11 +1,11 @@
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Plus } from "lucide-react";
 import { fieldLabel } from "../../lib/field-label";
 import { api } from "../../lib/api";
 import { asRenderable } from "../../lib/errors";
 import { resolveLocalizedText } from "../../lib/localized-text";
-import type { EntryEditorPayload, StaffOperation } from "../../lib/types";
+import type { EntryEditorPayload, JsonSchema, StaffOperation } from "../../lib/types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorBox, OperationErrorBox } from "../../ui/page";
@@ -40,6 +40,31 @@ export function boundOperationsFor(
   collectionName: string,
 ): StaffOperation[] {
   return (operations ?? []).filter((op) => op.rowBindings.some((b) => b.collection === collectionName));
+}
+
+/** Operations explicitly exposed from a collection header. */
+export function collectionOperationsFor(
+  operations: readonly StaffOperation[] | undefined,
+  collectionName: string,
+): StaffOperation[] {
+  return (operations ?? []).filter((op) => op.uiSchema?.["collectionAction"] === collectionName);
+}
+
+export function automaticOperationInputFields(schema: JsonSchema): string[] {
+  return Object.entries(schema.properties ?? {})
+    .filter(([, property]) => property["x-mcp-hint"] === "idempotency-key")
+    .map(([name]) => name);
+}
+
+export function operationFormSchema(schema: JsonSchema, hiddenFields: readonly string[]): JsonSchema {
+  const hidden = new Set(hiddenFields);
+  const properties = { ...(schema.properties ?? {}) };
+  for (const name of hidden) delete properties[name];
+  return {
+    ...schema,
+    properties,
+    required: (schema.required ?? []).filter((name) => !hidden.has(name)),
+  };
 }
 
 /** Row operation menu shared by lists and entry pages. */
@@ -89,10 +114,49 @@ export function RowOperationsMenu({
         </DropdownMenuContent>
       </DropdownMenu>
       {activeOperation ? (
-        <RowActionDialog
+        <OperationDialog
           operation={activeOperation}
           binding={activeOperation.rowBindings.find((b) => b.collection === row.collection)}
           row={row}
+          language={language}
+          canonical={canonical}
+          onClose={() => setActiveOperation(null)}
+          onSuccess={() => {
+            setActiveOperation(null);
+            onSuccess();
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/** Collection-level operation buttons shared by all collection lists. */
+export function CollectionOperations({
+  operations,
+  language,
+  canonical,
+  onSuccess,
+}: {
+  operations: readonly StaffOperation[];
+  language: AdminLanguage;
+  canonical: string | null;
+  onSuccess: () => void;
+}): React.ReactElement | null {
+  const [activeOperation, setActiveOperation] = React.useState<StaffOperation | null>(null);
+  if (operations.length === 0) return null;
+
+  return (
+    <>
+      {operations.map((operation) => (
+        <Button key={operation.name} type="button" onClick={() => setActiveOperation(operation)}>
+          <Plus className="size-4" aria-hidden />
+          {resolveLocalizedText(operation.title, language, canonical) ?? fieldLabel(operation.name)}
+        </Button>
+      ))}
+      {activeOperation ? (
+        <OperationDialog
+          operation={activeOperation}
           language={language}
           canonical={canonical}
           onClose={() => setActiveOperation(null)}
@@ -110,7 +174,7 @@ export function RowOperationsMenu({
  * Locks the bound reference to this row and renders the remaining
  * operation input as an editable form. The server resolves `rowField`.
  */
-function RowActionDialog({
+function OperationDialog({
   operation,
   binding,
   row,
@@ -120,8 +184,8 @@ function RowActionDialog({
   onSuccess,
 }: {
   operation: StaffOperation;
-  binding: { collection: string; inputField: string; rowField: string } | undefined;
-  row: OperableRow;
+  binding?: { collection: string; inputField: string; rowField: string };
+  row?: OperableRow;
   language: AdminLanguage;
   canonical: string | null;
   onClose: () => void;
@@ -133,28 +197,38 @@ function RowActionDialog({
   const inputField = binding?.inputField;
 
   const entryQuery = useQuery<EntryEditorPayload>({
-    queryKey: ["entry-editor", row.collection, row.id],
-    queryFn: () => api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(row.id)}`),
+    queryKey: ["entry-editor", row?.collection ?? "", row?.id ?? ""],
+    queryFn: () => {
+      if (!row) throw new Error("row operation is missing its row");
+      return api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(row.id)}`);
+    },
+    enabled: Boolean(row),
   });
 
   const prefillValue = React.useMemo(() => {
+    if (!row) return undefined;
     if (rowField === "id") return row.id;
     return entryQuery.data?.entry.data[rowField] ?? undefined;
-  }, [entryQuery.data, rowField, row.id]);
+  }, [entryQuery.data, row, rowField]);
 
-  const [formValue, setFormValue] = React.useState<Record<string, unknown>>({});
+  const automaticInputFields = React.useMemo(
+    () => automaticOperationInputFields(operation.input),
+    [operation.input],
+  );
+  const [formValue, setFormValue] = React.useState<Record<string, unknown>>(() =>
+    Object.fromEntries(automaticInputFields.map((name) => [name, crypto.randomUUID()])),
+  );
   React.useEffect(() => {
     if (prefillValue === undefined || !inputField) return;
     setFormValue((prev) => ({ ...prev, [inputField]: prefillValue }));
   }, [prefillValue, inputField]);
 
   const editableSchema = React.useMemo(() => {
-    if (!inputField) return operation.input;
-    const properties = { ...(operation.input.properties ?? {}) };
-    delete properties[inputField];
-    const required = (operation.input.required ?? []).filter((name) => name !== inputField);
-    return { ...operation.input, properties, required };
-  }, [operation.input, inputField]);
+    return operationFormSchema(operation.input, [
+      ...(inputField ? [inputField] : []),
+      ...automaticInputFields,
+    ]);
+  }, [automaticInputFields, operation.input, inputField]);
 
   // Preserve description-as-label for older manifests without titles.
   const inputFieldSchema = inputField ? operation.input.properties?.[inputField] : undefined;
@@ -183,7 +257,7 @@ function RowActionDialog({
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
 
-        {entryQuery.isLoading ? (
+        {row && entryQuery.isLoading ? (
           <Skeleton className="h-24 w-full" />
         ) : (
           <div className="space-y-5">
@@ -197,6 +271,7 @@ function RowActionDialog({
             ) : null}
             <SchemaFields
               schema={editableSchema}
+              uiSchema={operation.uiSchema}
               value={formValue}
               path={[]}
               onChange={setFormValue}
@@ -208,7 +283,7 @@ function RowActionDialog({
           </div>
         )}
 
-        {entryQuery.isError ? <ErrorBox error={entryQuery.error} /> : null}
+        {row && entryQuery.isError ? <ErrorBox error={entryQuery.error} /> : null}
         {invoke.isError ? <OperationErrorBox error={asRenderable(invoke.error)} /> : null}
 
         <DialogFooter>

@@ -139,6 +139,18 @@ and be the first field of an `indexes` or `uniqueIndexes` tuple. Admin reuses
 the enum for sidebar links and list tabs; Staff MCP uses declared Views for
 richer query capabilities instead of reading UI configuration.
 
+Operational list data is also explicit: `uiSchema.list.primaryField` names the
+linked leading value and `uiSchema.list.columns` names the remaining scalar
+columns. Without them Admin shows only platform metadata. Form-only choices use
+`uiSchema.fields.<field>.widget: textarea`; rich content remains declared with
+`x-mcp-hint: markdown|html|richtext`. Neither setting changes runtime or MCP
+input validation.
+
+A staff-operable Procedure may declare `uiSchema.collectionAction: orders` to
+appear as an action in that collection's Admin header. The target must be an
+existing Schema. This binding is Admin-only; the Procedure input, authorization,
+runtime handler, and MCP exposure remain unchanged.
+
 **`spec.localized: bool`** (default `false`, ADR-0010) — opt-in per
 Schema. Localized Schemas store locale in `data.locale`; non-localized
 Schemas reject `data.locale` writes. Site config must declare the set
@@ -178,6 +190,13 @@ entry's state machine.
 The modes are **per-Schema and mix freely** within a site. There is no
 site-wide lifecycle setting; one Schema can be `publishing` while another
 is `operational`.
+
+**Root `schema.readOnly: true`** — standard JSON Schema annotation for a
+Procedure-managed collection. Admin and Staff MCP keep list/detail access and
+declared row Procedures, but suppress and reject generic create, update,
+status-change, and delete operations. Trusted Procedure handlers may still use
+the runtime write use cases to maintain the projection. Put this on operational
+mirrors and audit rows whose authority lives outside generic authoring.
 
 **Property-level extensions** (JSON Schema vendor keywords, all optional):
 
@@ -238,6 +257,12 @@ Declare a single-field `indexes` entry for the ref field (for example,
 `indexes: [[authorId]]`) when reverse lookups must stay bounded. Mantle adds
 the native entry-order columns to that access path.
 
+On a Procedure input property, the Admin also uses `x-mantle-ref` to expose
+that Procedure in the referenced collection row's three-dot menu. It locks
+the referenced value to the selected row and infers the remaining form from
+the Procedure input schema. The value comes from a same-named Schema property,
+then a lone single-field unique index, and finally the entry `id`.
+
 **Example**:
 ```yaml
 authorId:
@@ -257,7 +282,9 @@ Descriptive hint for AI agents and admin UI widgets. The string is
 accepted as free-form for forward compatibility, but conventional
 values (`markdown`, `richtext`, `code`, `media`, `media-image`,
 `media-video`, `media-file`) tell consumers how to render or generate
-the field's value.
+the field's value. `idempotency-key` asks the Admin to generate and hide a
+stable UUID for one form invocation; other callers must generate one and reuse
+it when retrying the same operation.
 
 **Examples** (from the publication/blog starter manifests):
 ```yaml

@@ -508,6 +508,8 @@ spec:
   uiSchema:
     list:
       filterField: ${filterField}
+      primaryField: orderState
+      columns: [placedAt]
 `;
 
   it("accepts one indexed string-enum field", () => {
@@ -525,6 +527,74 @@ spec:
   it("rejects list filters on publishing collections", () => {
     expect(parseManifests(yaml("orderState").replace("lifecycle: operational", "lifecycle: publishing"))
       .diagnostics[0]?.code).toBe("SCHEMA_UI_INVALID");
+  });
+
+  it.each([
+    ["unknown field", "primaryField: missing\n      columns: [placedAt]"],
+    ["duplicate field", "primaryField: orderState\n      columns: [orderState]"],
+    ["non-scalar field", "primaryField: orderState\n      columns: [details]"],
+  ])("rejects %s in list presentation", (label, listFields) => {
+    let source = yaml("orderState").replace(
+      "primaryField: orderState\n      columns: [placedAt]",
+      listFields,
+    );
+    if (label === "non-scalar field") {
+      source = source.replace(
+        "placedAt: { type: integer }",
+        "placedAt: { type: integer }\n      details: { type: object }",
+      );
+    }
+    expect(parseManifests(source).diagnostics[0]?.code).toBe("SCHEMA_UI_INVALID");
+  });
+});
+
+describe("Procedure uiSchema fields", () => {
+  it("accepts an explicit textarea without changing the input schema", () => {
+    const source = `apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: adjust-inventory }
+spec:
+  input:
+    type: object
+    properties:
+      reason: { type: string, maxLength: 500 }
+  uiSchema:
+    fields:
+      reason: { widget: textarea }
+  output: { type: object }
+  handler: { kind: ref, ref: adjustInventory }
+`;
+    expect(parseManifests(source).diagnostics).toEqual([]);
+  });
+
+  it("accepts a collection action targeting an existing Schema", () => {
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  schema: { type: object }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: create-manual-order }
+spec:
+  input: { type: object }
+  uiSchema: { collectionAction: orders }
+  output: { type: object }
+  handler: { kind: ref, ref: createManualOrder }
+`);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it("rejects a collection action targeting an unknown Schema", () => {
+    const result = ValidateManifestsUseCase.run({
+      manifests: [procedure("create-manual-order", { uiSchema: { collectionAction: "orders" } })],
+    });
+    expect(result.diagnostics[0]).toMatchObject({
+      code: "SCHEMA_UI_INVALID",
+      path: "manifest:Procedure/create-manual-order#/spec/uiSchema/collectionAction",
+    });
   });
 });
 

@@ -22,7 +22,7 @@ import {
   schemaIndexDiagnosticCode,
 } from "../domain/service/SchemaIndexChecker.js";
 import { checkSchemaSearchableFields } from "../domain/service/SchemaSearchChecker.js";
-import { checkSchemaListFilter } from "../domain/service/SchemaAdminUiChecker.js";
+import { checkFormUiSchema, checkSchemaAdminUi } from "../domain/service/SchemaAdminUiChecker.js";
 import {
   bestMatch,
   manifestPath,
@@ -78,6 +78,17 @@ export class ValidateManifestsUseCase {
     for (const p of partitioned.procedures) {
       diags.push(...checkTargetAuth(p, request.filePaths));
       diags.push(...checkBuiltinHandler(p, schemasByName, request.filePaths));
+      diags.push(...checkCollectionActionRef(p, schemasByName, request.filePaths));
+      for (const problem of checkFormUiSchema(p.spec.input, p.spec.uiSchema, "Procedure")) {
+        diags.push(validateDiagnostic({
+          code: "SCHEMA_UI_INVALID",
+          severity: "error",
+          path: manifestPath("Procedure", p.metadata.name, problem.pointer, request.filePaths),
+          value: problem.value,
+          expected: problem.expected,
+          message: problem.message,
+        }));
+      }
       diags.push(
         ...collectInvalidPatterns(p.spec.input, "Procedure", p.metadata.name, "/spec/input", request.filePaths),
         ...collectInvalidPatterns(p.spec.output, "Procedure", p.metadata.name, "/spec/output", request.filePaths),
@@ -111,6 +122,23 @@ export class ValidateManifestsUseCase {
   static run(request: ValidateManifestsRequest): ValidateManifestsResponse {
     return new ValidateManifestsUseCase().execute(request);
   }
+}
+
+function checkCollectionActionRef(
+  procedure: ProcedureManifest,
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+  filePaths?: ManifestFilePaths,
+): Diagnostic[] {
+  const target = procedure.spec.uiSchema?.["collectionAction"];
+  if (typeof target !== "string" || schemasByName.has(target)) return [];
+  return [validateDiagnostic({
+    code: "SCHEMA_UI_INVALID",
+    severity: "error",
+    path: manifestPath("Procedure", procedure.metadata.name, "/spec/uiSchema/collectionAction", filePaths),
+    value: target,
+    expected: "the metadata.name of an existing Schema",
+    message: `Procedure '${procedure.metadata.name}' collection action references unknown Schema '${target}'.`,
+  })];
 }
 
 function byName<M extends { metadata: { name: string } }>(arr: ReadonlyArray<M>): Map<string, M> {
@@ -245,7 +273,7 @@ function checkSchemaInternals(
     );
   }
 
-  for (const problem of checkSchemaListFilter(s).problems) {
+  for (const problem of checkSchemaAdminUi(s).problems) {
     out.push(
       validateDiagnostic({
         code: "SCHEMA_UI_INVALID",

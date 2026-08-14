@@ -67,6 +67,11 @@ function operationalPostsSchema() {
   return { ...schema, spec: { ...schema.spec, lifecycle: "operational" as const } };
 }
 
+function readOnlyOperationalPostsSchema() {
+  const schema = operationalPostsSchema();
+  return { ...schema, spec: { ...schema.spec, schema: { ...schema.spec.schema, readOnly: true } } };
+}
+
 /**
  * Build a stripped-down McpUseCases for tests that only exercise the
  * procedure-dispatch / public-surface paths (#281). The CRUD use cases
@@ -258,6 +263,32 @@ describe("McpJsonRpcDispatcher", () => {
       status: "published",
       data: { title: "Submission" },
     });
+  });
+
+  it("keeps read-only Schemas queryable but removes and rejects generic authoring", async () => {
+    const { dispatcher, store } = buildHarness([readOnlyOperationalPostsSchema()]);
+    await store.create({
+      id: "managed-1",
+      collection: "posts",
+      status: "published",
+      data: { title: "Managed" },
+      authorId: null,
+      now: 1,
+    });
+
+    const list = await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext());
+    const listBody = (await list.json()) as { result: { tools: Array<{ name: string }> } };
+    const names = listBody.result.tools.map((tool) => tool.name);
+    expect(names).toContain("list_entries");
+    expect(names).not.toContain("create_record_posts");
+    expect(names).not.toContain("update_record_posts");
+
+    const deletion = await dispatcher.dispatch(jsonRpcReq("tools/call", {
+      name: "delete_entry",
+      arguments: { id: "managed-1" },
+    }), mcpContext());
+    const deletionBody = (await deletion.json()) as { error: { data: { code: string } } };
+    expect(deletionBody.error.data.code).toBe("CONFLICT");
   });
 
   it("public surface exposes View query tools, not staff authoring tools", async () => {

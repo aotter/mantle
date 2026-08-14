@@ -1,6 +1,7 @@
 import {
   DiagnosticError,
   redactForWire,
+  runtimeDiagnostic,
   type ContentState,
   type MediaPurposePolicy,
   type ProcedureManifest,
@@ -100,6 +101,7 @@ export class McpJsonRpcDispatcher {
    *  segment from the tool name and recovers the canonical
    *  collection name. */
   private readonly schemaBySegment: ReadonlyMap<string, string>;
+  private readonly readOnlyCollections: ReadonlySet<string>;
   private readonly viewBySegment: ReadonlyMap<string, ViewManifest>;
   /** tool-name → Procedure manifest, for MCP triggers (#281). */
   private readonly procedureByToolName: ReadonlyMap<string, ProcedureManifest>;
@@ -126,6 +128,9 @@ export class McpJsonRpcDispatcher {
     });
     this.catalogWireJson = `{"tools":${JSON.stringify(this.catalog)}}`;
     this.catalogToolNames = new Set(this.catalog.map((tool) => tool.name));
+    this.readOnlyCollections = new Set(
+      schemas.filter((schema) => schema.spec.schema.readOnly === true).map((schema) => schema.metadata.name),
+    );
     const map = new Map<string, string>();
     for (const s of schemas) map.set(mcpToolNameSegment(s.metadata.name), s.metadata.name);
     this.schemaBySegment = map;
@@ -308,6 +313,7 @@ export class McpJsonRpcDispatcher {
       case "request_publish": {
         const id = args["id"];
         if (typeof id !== "string") return MISSING_ARG;
+        await this.assertEntryMutable(id, name);
         return this.useCases.requestPublish.execute({
           id,
           ctx,
@@ -317,6 +323,7 @@ export class McpJsonRpcDispatcher {
       case "unpublish_entry": {
         const id = args["id"];
         if (typeof id !== "string") return MISSING_ARG;
+        await this.assertEntryMutable(id, name);
         return this.useCases.unpublish.execute({
           id,
           ctx,
@@ -326,6 +333,7 @@ export class McpJsonRpcDispatcher {
       case "archive_entry": {
         const id = args["id"];
         if (typeof id !== "string") return MISSING_ARG;
+        await this.assertEntryMutable(id, name);
         return this.useCases.archive.execute({
           id,
           ctx,
@@ -335,6 +343,7 @@ export class McpJsonRpcDispatcher {
       case "delete_entry": {
         const id = args["id"];
         if (typeof id !== "string") return MISSING_ARG;
+        await this.assertEntryMutable(id, name);
         return this.useCases.deleteEntry.execute({
           id,
           ctx,
@@ -436,6 +445,19 @@ export class McpJsonRpcDispatcher {
         return UNKNOWN_TOOL;
       }
     }
+  }
+
+  private async assertEntryMutable(id: string, toolName: string): Promise<void> {
+    const entry = await this.useCases.getEntry.execute({ id });
+    if (!this.readOnlyCollections.has(entry.collection)) return;
+    throw new DiagnosticError(runtimeDiagnostic({
+      code: "CONFLICT",
+      severity: "error",
+      path: `MCP ${toolName}`,
+      value: entry.collection,
+      expected: "a Schema without root readOnly: true",
+      message: `Schema '${entry.collection}' is read-only on generic authoring surfaces; use its declared Procedures.`,
+    }));
   }
 }
 

@@ -9,7 +9,7 @@ import {
   meetsRole,
   redactForWire,
   runtimeDiagnostic,
-  checkSchemaListFilter,
+  checkSchemaAdminUi,
   schemaSortableFields,
   type ContentState,
   type Diagnostic,
@@ -159,6 +159,22 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     (m): m is SchemaManifest => m.kind === "Schema",
   );
   const schemasByName = new Map(schemas.map((s) => [s.metadata.name, s]));
+  const assertMutableSchema = (path: string, schema: SchemaManifest | undefined): void => {
+    if (schema?.spec.schema.readOnly !== true) return;
+    throw new DiagnosticError(runtimeDiagnostic({
+      code: "CONFLICT",
+      severity: "error",
+      path,
+      value: schema.metadata.name,
+      expected: "a Schema without root readOnly: true",
+      message: `Schema '${schema.metadata.name}' is read-only on generic authoring surfaces; use its declared Procedures.`,
+    }));
+  };
+  const readMutableEntry = async (runtime: CmsRuntime, id: string, path: string): Promise<Entry> => {
+    const entry = await runtime.getEntry.execute({ id });
+    assertMutableSchema(path, schemasByName.get(entry.collection));
+    return entry;
+  };
   const collections = schemas
     .filter((s) => !s.spec.translates)
     .map((s) => adminEditorCollection(s, schemas));
@@ -402,6 +418,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
         title: op.title,
         description: op.description,
         input: op.input,
+        uiSchema: op.uiSchema,
         triggers: op.triggers,
         rowBindings: op.rowBindings,
       })),
@@ -640,6 +657,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
           }),
         );
       }
+      assertMutableSchema("POST /admin/api/entries", schemasByName.get(body.collection));
       if (
         gate.role === "contributor" &&
         (schemasByName.get(body.collection)?.spec.lifecycle ?? "publishing") === "operational"
@@ -665,8 +683,8 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     runMantleUseCase(`PATCH /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
+      const current = await readMutableEntry(runtime, id, `PATCH /admin/api/entries/${id}`);
       if (gate.role === "contributor") {
-        const current = await runtime.getEntry.execute({ id });
         const lifecycle = schemasByName.get(current.collection)?.spec.lifecycle ?? "publishing";
         if (lifecycle === "operational" || current.status !== "draft") {
           throw new DiagnosticError(adminRoleDiagnostic(
@@ -695,6 +713,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     runMantleUseCase(`POST /admin/api/entries/${c.req.param("id")}/publish`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
+      await readMutableEntry(runtime, id, `POST /admin/api/entries/${id}/publish`);
       const body = await c.req.raw.json().catch(() => ({}));
       const row = await runtime.requestPublish.execute({
         id,
@@ -709,6 +728,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     runMantleUseCase(`POST /admin/api/entries/${c.req.param("id")}/unpublish`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
+      await readMutableEntry(runtime, id, `POST /admin/api/entries/${id}/unpublish`);
       const body = await c.req.raw.json().catch(() => ({}));
       const row = await runtime.unpublish.execute({
         id,
@@ -723,6 +743,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     runMantleUseCase(`DELETE /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
+      await readMutableEntry(runtime, id, `DELETE /admin/api/entries/${id}`);
       const body = await c.req.raw.json().catch(() => ({}));
       return runtime.deleteEntry.execute({
         id,
@@ -951,6 +972,7 @@ type StaffOperation = {
   readonly title: LocalizedText | null;
   readonly description: LocalizedText | null;
   readonly input: JsonSchema;
+  readonly uiSchema: Record<string, unknown> | null;
   readonly triggers: ReadonlyArray<"mcp" | "http">;
   readonly rowBindings: ReadonlyArray<StaffOperationRowBinding>;
   readonly procedure: ProcedureManifest;
@@ -1013,6 +1035,7 @@ function discoverStaffOperations(
       title: procedure.spec.title ?? null,
       description: procedure.spec.description ?? null,
       input: procedure.spec.input,
+      uiSchema: procedure.spec.uiSchema ?? null,
       triggers: [...kinds],
       rowBindings: discoverRowBindings(procedure, schemasByName),
       procedure,
@@ -1106,9 +1129,7 @@ function adminEntryTitle(data: Record<string, unknown>, schema?: JsonSchema): un
   return key ? data[key] : null;
 }
 
-/** Which data key `adminEntryTitle` would read, or `null` if none
- *  matched. Split out from `adminEntryTitle` so `adminDataPreview` can
- *  skip the same property instead of repeating it in a data column. */
+/** Which data key publishing-list `adminEntryTitle` reads. */
 function titleFieldKey(data: Record<string, unknown>, schema?: JsonSchema): string | null {
   if (typeof data.title === "string" && data.title) return "title";
   if (typeof data.name === "string" && data.name) return "name";
@@ -1128,56 +1149,19 @@ function titleFieldKey(data: Record<string, unknown>, schema?: JsonSchema): stri
   return null;
 }
 
-/** Schema property names that collide in MEANING with a system column
- *  the admin list already renders unconditionally (the "updated"
- *  column reads the reserved `updatedAt` storage column, formatted as
- *  `row.updated_at`). A schema-declared `required` property with one
- *  of these exact names would otherwise show up a SECOND time as a
- *  raw data-preview column — same value, no title-cased header — right
- *  next to the system column (#443). NAME-based only, on purpose: no
- *  fuzzy/semantic matching, just these two well-known reserved names. */
-const DATA_PREVIEW_SYSTEM_COLUMN_NAMES = new Set(["updatedAt", "createdAt"]);
-
-/** Operational collections have no title/status
- *  workflow worth a dedicated column — instead the admin list shows up
- *  to 3 raw data columns. Mirrors the client-side column-picking rule
- *  in `collection-view.tsx`: first 3 `required` properties, skipping
- *  the schema-stable title field and the system-column-name collisions
- *  above (#443). Kept small on the wire on purpose — this is a
- *  preview, not the full entry. */
+/** Operational previews contain exactly the manifest-declared list
+ *  fields. Undeclared lists stay metadata-only. */
 function adminDataPreview(
   data: Record<string, unknown>,
   manifest?: SchemaManifest,
 ): Record<string, unknown> | undefined {
   if (!manifest || manifest.spec.lifecycle !== "operational") return undefined;
-  const schema = manifest.spec.schema;
-  // Schema-stable skip (not per-row): rows with a blank title field
-  // must still produce the same columns as every other row, or the
-  // client's fixed headers drift out of sync with the values.
-  const titleKey = schemaTitleKey(schema);
-  const fields = (schema.required ?? [])
-    .filter((key) => key !== titleKey && !DATA_PREVIEW_SYSTEM_COLUMN_NAMES.has(key))
-    .slice(0, 3);
+  const list = checkSchemaAdminUi(manifest).list;
+  const fields = [...(list.primaryField ? [list.primaryField] : []), ...list.columns];
   if (fields.length === 0) return undefined;
   const preview: Record<string, unknown> = {};
   for (const key of fields) preview[key] = data[key];
   return preview;
-}
-
-/** The property a row's title comes from, derived from the SCHEMA
- *  alone (no row data): literal `title`/`name`/`slug` when declared,
- *  else the first required string-typed property. Stable across all
- *  rows of a collection, so preview columns never vary per row. */
-function schemaTitleKey(schema: JsonSchema): string | null {
-  const properties = schema.properties ?? {};
-  for (const key of ["title", "name", "slug"]) {
-    if (key in properties) return key;
-  }
-  for (const key of schema.required ?? []) {
-    const fieldSchema = properties[key];
-    if (fieldSchema && isStringTypedSchema(fieldSchema)) return key;
-  }
-  return null;
 }
 
 function isStringTypedSchema(schema: JsonSchema): boolean {
@@ -1208,7 +1192,9 @@ function adminListItem(
     locale: row.locale ?? null,
     status: row.status,
     version: row.version,
-    title: adminEntryTitle(row.data, manifest?.spec.schema),
+    title: manifest?.spec.lifecycle === "operational"
+      ? null
+      : adminEntryTitle(row.data, manifest?.spec.schema),
     updated_at: row.updatedAt,
     translation_locales: translationLocales,
     data_preview: adminDataPreview(row.data, manifest),
@@ -1304,6 +1290,7 @@ type AdminEditorCollection = {
   readonly mediaFields: Array<{ name: string; hint: string }>;
   readonly sortableFields: readonly string[];
   readonly filter: { readonly field: string; readonly values: readonly string[] } | null;
+  readonly list: { readonly primaryField: string | null; readonly columns: readonly string[] };
 };
 
 type AdminEditorEntry = {
@@ -1338,6 +1325,7 @@ function adminEditorCollection(
   schema: SchemaManifest,
   schemas: SchemaManifest[],
 ): AdminEditorCollection {
+  const adminUi = checkSchemaAdminUi(schema);
   return {
     name: schema.metadata.name,
     title: schema.spec.title,
@@ -1351,7 +1339,8 @@ function adminEditorCollection(
     uiSchema: schema.spec.uiSchema ?? null,
     mediaFields: mediaFieldsForCollection(schema, schemas),
     sortableFields: schemaSortableFields(schema),
-    filter: checkSchemaListFilter(schema).filter,
+    filter: adminUi.filter,
+    list: adminUi.list,
   };
 }
 

@@ -57,7 +57,12 @@ import { statusLabel } from "./status";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t, type I18nKey } from "../../app/i18n";
 import { formatTimestampMs, idTail } from "./field-render";
-import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
+import {
+  boundOperationsFor,
+  CollectionOperations,
+  collectionOperationsFor,
+  RowOperationsMenu,
+} from "./row-operations";
 import { renderDataValue } from "../../lib/render-data-value";
 import { renderTitleText } from "../../lib/entry-title";
 import { LocaleBadge, LocaleStatusBadges } from "./locale-badge";
@@ -103,6 +108,10 @@ export function CollectionView({
   const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
   const boundOperations = React.useMemo(
     () => boundOperationsFor(operationsQuery.data, collectionName),
+    [operationsQuery.data, collectionName],
+  );
+  const collectionOperations = React.useMemo(
+    () => collectionOperationsFor(operationsQuery.data, collectionName),
     [operationsQuery.data, collectionName],
   );
   const entries = useQuery<ListEntriesResult>({
@@ -151,17 +160,16 @@ export function CollectionView({
     ? resolveLocalizedText(collection.title, language, canonical) ?? collection.name
     : collectionName;
   const isOperationalCollection = collection?.lifecycle === "operational";
+  const isReadOnlyCollection = collection?.schema?.readOnly === true;
   const canManageContent = me.data?.role === "owner" || me.data?.role === "editor";
-  const canCreateDraft = Boolean(me.data?.role) && !isOperationalCollection;
-  const dataColumns = React.useMemo(() => dataPreviewColumns(collection), [collection]);
-  const titleField = isOperationalCollection ? collectionTitleField(collection) : null;
-  const titleColumnLabel = isOperationalCollection
-    ? propertyLabel(
-        titleField ?? "title",
-        collection?.schema?.properties?.[titleField ?? ""],
-        language,
-        canonical,
-      )
+  const canCreateDraft = Boolean(me.data?.role) && !isOperationalCollection && !isReadOnlyCollection;
+  const showSelection = canManageContent && !isReadOnlyCollection;
+  const dataColumns = isOperationalCollection ? collection?.list?.columns ?? [] : [];
+  const titleField = isOperationalCollection
+    ? collection?.list?.primaryField ?? null
+    : null;
+  const titleColumnLabel = titleField
+    ? propertyLabel(titleField, collection?.schema?.properties?.[titleField], language, canonical)
     : t(language, "collection.table.title");
   const refreshEntries = React.useCallback(() => {
     clearSelection();
@@ -232,6 +240,12 @@ export function CollectionView({
                   : t(language, "collection.create")}
               </Button>
             ) : null}
+            <CollectionOperations
+              operations={collectionOperations}
+              language={language}
+              canonical={canonical}
+              onSuccess={refreshEntries}
+            />
             {status ? <StatusBadge status={status} /> : null}
           </div>
         }
@@ -284,7 +298,7 @@ export function CollectionView({
       )}
       {displayedEntries && displayedEntries.items.length > 0 && (
         <>
-          {selected.size > 0 && canManageContent ? (
+          {selected.size > 0 && canManageContent && !isReadOnlyCollection ? (
             <BulkActionBar
               language={language}
               collection={collection}
@@ -296,8 +310,8 @@ export function CollectionView({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-10">
-                  {canManageContent ? (
+                {showSelection ? (
+                  <TableHead className="w-10">
                     <Checkbox
                       aria-label={t(language, "collection.table.selectAll")}
                       checked={
@@ -318,8 +332,8 @@ export function CollectionView({
                         });
                       }}
                     />
-                  ) : null}
-                </TableHead>
+                  </TableHead>
+                ) : null}
                 <SortableTableHead
                   className="hidden md:table-cell"
                   label={t(language, "collection.table.id")}
@@ -328,15 +342,17 @@ export function CollectionView({
                   direction={sortDirection}
                   href={sortHref(collectionName, status, searchTerm, "id", sortField, sortDirection, filterField, filterValue)}
                 />
-                {titleField && collection?.sortableFields?.includes(titleField)
-                  ? <SortableTableHead
-                      label={titleColumnLabel}
-                      field={titleField}
-                      activeField={sortField}
-                      direction={sortDirection}
-                      href={sortHref(collectionName, status, searchTerm, titleField, sortField, sortDirection, filterField, filterValue)}
-                    />
-                  : <TableHead>{titleColumnLabel}</TableHead>}
+                {!isOperationalCollection || titleField ? (
+                  titleField && collection?.sortableFields?.includes(titleField)
+                    ? <SortableTableHead
+                        label={titleColumnLabel}
+                        field={titleField}
+                        activeField={sortField}
+                        direction={sortDirection}
+                        href={sortHref(collectionName, status, searchTerm, titleField, sortField, sortDirection, filterField, filterValue)}
+                      />
+                    : <TableHead>{titleColumnLabel}</TableHead>
+                ) : null}
                 {isOperationalCollection ? (
                   dataColumns.map((name) => (
                     collection?.sortableFields?.includes(name)
@@ -394,6 +410,7 @@ export function CollectionView({
                   collection={collection}
                   siteLocales={site.data?.locales ?? []}
                   dataColumns={isOperationalCollection ? dataColumns : null}
+                  primaryField={isOperationalCollection ? titleField : null}
                   boundOperations={boundOperations}
                   onOperationSuccess={refreshEntries}
                   selected={selected.has(row.id)}
@@ -412,12 +429,12 @@ export function CollectionView({
                     (deleteMutation.isPending && deleteMutation.variables === row.id)
                   }
                   canEdit={
-                    canManageContent ||
-                    (me.data?.role === "contributor" &&
-                      !isOperationalCollection &&
-                      row.status === "draft")
+                    !isReadOnlyCollection && (canManageContent ||
+                      (me.data?.role === "contributor" &&
+                        !isOperationalCollection &&
+                        row.status === "draft"))
                   }
-                  canDelete={canManageContent}
+                  canDelete={canManageContent && !isReadOnlyCollection}
                 />
               ))}
             </TableBody>
@@ -912,6 +929,7 @@ function EntryRowDisplay({
   collection,
   siteLocales,
   dataColumns,
+  primaryField,
   boundOperations,
   onOperationSuccess,
   selected,
@@ -930,6 +948,7 @@ function EntryRowDisplay({
   /** Non-null (possibly empty) for `lifecycle: "operational"` collections —
    *  swaps the status/locale/version cells for these data columns. */
   dataColumns: string[] | null;
+  primaryField: string | null;
   /** Operations bound to this collection's rows. */
   boundOperations: StaffOperation[];
   onOperationSuccess: () => void;
@@ -941,8 +960,11 @@ function EntryRowDisplay({
   canEdit: boolean;
   canDelete: boolean;
 }): React.ReactElement {
-  const itemName = renderTitleText(row.title, language);
   const isOperational = dataColumns !== null;
+  const itemName = renderTitleText(
+    isOperational ? (primaryField ? row.data_preview?.[primaryField] : row.id) : row.title,
+    language,
+  );
   const [editing, setEditing] = React.useState(false);
   const [draftTitle, setDraftTitle] = React.useState(itemName);
   const [error, setError] = React.useState<string | null>(null);
@@ -982,19 +1004,19 @@ function EntryRowDisplay({
 
   return (
     <TableRow>
-      <TableCell>
-        {canDelete ? (
+      {canDelete ? (
+        <TableCell>
           <Checkbox
             aria-label={t(language, "collection.table.selectRow", { name: itemName })}
             checked={selected}
             onCheckedChange={(checked) => onToggleSelect(checked === true)}
           />
-        ) : null}
-      </TableCell>
+        </TableCell>
+      ) : null}
       <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
         <CopyIdButton id={String(row.id)} language={language} />
       </TableCell>
-      <TableCell className="max-w-[28rem]">
+      {!isOperational || primaryField ? <TableCell className="max-w-[28rem]">
         <div className="min-w-44 md:min-w-64">
           {isOperational ? (
             <a
@@ -1002,7 +1024,7 @@ function EntryRowDisplay({
               className="block truncate font-medium hover:underline"
               title={itemName}
             >
-              {renderTitle(row.title, language)}
+              {renderDataValue(collection?.schema?.properties?.[primaryField ?? ""], row.data_preview?.[primaryField ?? ""])}
             </a>
           ) : editing ? (
             <div className="flex items-center gap-1">
@@ -1049,7 +1071,7 @@ function EntryRowDisplay({
           )}
           {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
         </div>
-      </TableCell>
+      </TableCell> : null}
       {dataColumns ? (
         dataColumns.map((name) => (
           <TableCell key={name} className="text-muted-foreground">
@@ -1123,33 +1145,4 @@ function renderTitle(
   }
   if (typeof title === "string") return title;
   return <span className="font-mono text-xs">{JSON.stringify(title)}</span>;
-}
-
-/** Must match the reserved columns filtered by the Admin API. */
-const DATA_PREVIEW_SYSTEM_COLUMN_NAMES = new Set(["updatedAt", "createdAt"]);
-
-/** Derive up to three operational preview columns from required fields. */
-function dataPreviewColumns(collection: Collection | undefined): string[] {
-  if (!collection || collection.lifecycle !== "operational") return [];
-  const schema = collection.schema;
-  const required = schema?.required ?? [];
-  const titleKey = collectionTitleField(collection);
-  return required
-    .filter((key) => key !== titleKey && !DATA_PREVIEW_SYSTEM_COLUMN_NAMES.has(key))
-    .slice(0, 3);
-}
-
-function collectionTitleField(collection: Collection | undefined): string | null {
-  const schema = collection?.schema;
-  const properties = schema?.properties ?? {};
-  const required = schema?.required ?? [];
-  return (
-    ["title", "name", "slug"].find((key) => key in properties) ??
-    required.find((key) => {
-      const raw = properties[key]?.type;
-      const types = Array.isArray(raw) ? raw : raw ? [raw] : [];
-      return types.includes("string");
-    }) ??
-    null
-  );
 }

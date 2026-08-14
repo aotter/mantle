@@ -277,6 +277,7 @@ export function buildMcpToolCatalog(
   const out: McpToolDefinition[] = [...GENERIC_TOOLS];
   if (opts.mediaEnabled) out.push(...buildMediaTools(opts.mediaPurposes ?? []));
   for (const s of schemas) {
+    if (s.spec.schema.readOnly === true) continue;
     out.push(buildCreateTool(s));
     out.push(buildUpdateTool(s));
   }

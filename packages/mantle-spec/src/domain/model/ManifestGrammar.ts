@@ -38,7 +38,7 @@ export function isMediaMcpHint(value: unknown): value is MediaMcpHint {
  *  accepts strings; the v0.1 conventional values agents and admin
  *  widgets should understand are `markdown`, `richtext`, `code`,
  *  `media`, `media-image`, `media-video`, `media-file`, `money-minor`,
- *  and `timestamp-ms`. */
+ *  `timestamp-ms`, and `idempotency-key`. */
 export type JsonSchema = {
   readonly type?: string | readonly string[];
   readonly properties?: Readonly<Record<string, JsonSchema>>;
@@ -54,6 +54,10 @@ export type JsonSchema = {
   readonly minItems?: number;
   readonly maxItems?: number;
   readonly nullable?: boolean;
+  /** Standard JSON Schema annotation. At the root of a Schema manifest,
+   *  Mantle keeps generic Admin and Staff MCP authoring read-only while
+   *  allowing trusted Procedure handlers to maintain the projection. */
+  readonly readOnly?: boolean;
   readonly default?: unknown;
   readonly additionalProperties?: boolean | JsonSchema;
   /** Standard JSON Schema keyword: help text for this property, shown
@@ -363,6 +367,9 @@ export interface ProcedureManifestSpec {
   readonly requires?: AuthorizationRequirements;
   /** JSON Schema for the request body. */
   readonly input: JsonSchema;
+  /** Admin-only field widget choices. Does not affect input validation
+   *  or the MCP tool schema. */
+  readonly uiSchema?: Record<string, unknown>;
   /** JSON Schema for the response body. */
   readonly output: JsonSchema;
   /** Handler binding. v0.1.0 ships `kind: "ref"` (consumer supplies

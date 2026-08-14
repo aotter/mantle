@@ -9,13 +9,12 @@ import {
   Settings as SettingsIcon,
   ContactRound,
   Users,
-  Wrench,
 } from "lucide-react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { api } from "../lib/api";
 import { fieldLabel } from "../lib/field-label";
-import { operationsQueryOptions, viewsManifestQueryOptions } from "../lib/queries";
+import { viewsManifestQueryOptions } from "../lib/queries";
 import { resolveLocalizedText } from "../lib/localized-text";
 import {
   PUBLISHING_STATUSES,
@@ -24,7 +23,6 @@ import {
   type SiteInfo,
   type SiteIcon,
   type SidebarStatus,
-  type StaffOperation,
   type ViewManifestInfo,
 } from "../lib/types";
 import { useAdminLocation } from "../app/router";
@@ -63,7 +61,6 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
   });
-  const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
   const viewsQuery = useQuery<ViewManifestInfo[]>(viewsManifestQueryOptions());
 
   React.useEffect(() => {
@@ -94,13 +91,12 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
     () =>
       buildNavGroups(
         collectionsQuery.data ?? [],
-        operationsQuery.data ?? [],
         viewsQuery.data ?? [],
         language,
         canonical,
         me.data?.role ?? null,
       ),
-    [collectionsQuery.data, operationsQuery.data, viewsQuery.data, language, canonical, me.data?.role],
+    [collectionsQuery.data, viewsQuery.data, language, canonical, me.data?.role],
   );
   return (
     <FormActionBarHostContext.Provider value={formActionBarHost}>
@@ -161,7 +157,6 @@ function preferredAdminIcon(icons: readonly SiteIcon[] | undefined): string | un
 
 export function buildNavGroups(
   collections: ReadonlyArray<Collection>,
-  operations: ReadonlyArray<StaffOperation>,
   views: ReadonlyArray<ViewManifestInfo>,
   language: AdminLanguage,
   canonical: string | null,
@@ -190,20 +185,6 @@ export function buildNavGroups(
       ? {
           title: t(language, "nav.operations"),
           items: operationalCollections.map((c) => collectionNavItem(c, language, canonical)),
-        }
-      : null;
-
-  // Bound operations already live in their collection's row menu.
-  const unboundOperations = operations.filter((op) => op.rowBindings.length === 0);
-  const opsGroup: NavGroupData | null =
-    unboundOperations.length > 0
-      ? {
-          title: t(language, "nav.ops"),
-          items: unboundOperations.map((op) => ({
-            title: resolveLocalizedText(op.title, language, canonical) ?? fieldLabel(op.name),
-            icon: Wrench,
-            url: `/admin/ops#${op.name}`,
-          })),
         }
       : null;
 
@@ -242,7 +223,6 @@ export function buildNavGroups(
     homeGroup,
     contentGroup,
     ...(recordsGroup ? [recordsGroup] : []),
-    ...(opsGroup ? [opsGroup] : []),
     ...(reportsGroup ? [reportsGroup] : []),
     ...(moreGroup.items.length > 0 ? [moreGroup] : []),
   ];
