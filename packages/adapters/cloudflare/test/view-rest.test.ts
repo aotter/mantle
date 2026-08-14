@@ -585,6 +585,22 @@ describe("GET /admin/api/views/<name> — staff surface (#433)", () => {
       "p1,green-tea,en",
     ]);
   });
+
+  it("streams View export pages instead of collecting the whole report", async () => {
+    const h = staffHarness((db) => {
+      for (let i = 0; i < 55; i++) {
+        db.entries.set(`p${i}`, row(`p${i}`, { slug: `item-${i}`, locale: "en" }));
+      }
+    });
+    const viewQueries = () => h.db.executions.filter(({ sql }) =>
+      sql.startsWith("SELECT") && sql.includes("FROM entries WHERE collection = ?")
+    ).length;
+    const before = viewQueries();
+    const res = await h.app.request("/admin/api/views/ordersRecent/export");
+    expect(viewQueries() - before).toBe(1);
+    expect((await res.text()).trim().split("\r\n")).toHaveLength(56);
+    expect(viewQueries() - before).toBe(2);
+  });
 });
 
 describe("GET /admin/api/views-manifest — staff-only filter (#433)", () => {

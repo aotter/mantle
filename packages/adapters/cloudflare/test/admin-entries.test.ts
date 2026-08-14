@@ -426,16 +426,21 @@ describe("GET /admin/api/entries/export", () => {
   });
 
   it("streams every row across multiple internal pages", async () => {
-    const { app } = harness((db) => {
-      for (let i = 0; i < 5; i++) {
-        db.entries.set(`p${i}`, row(`p${i}`, { title: `t${i}`, slug: `s${i}` }, i));
+    const { app, db } = harness((database) => {
+      for (let i = 0; i < 101; i++) {
+        database.entries.set(`p${i}`, row(`p${i}`, { title: `t${i}`, slug: `s${i}` }, i));
       }
     });
+    const listQueries = () => db.executions.filter(({ sql }) =>
+      sql.startsWith("SELECT id, collection, status, version, data, author_id, created_at, updated_at FROM entries WHERE collection = ?")
+    ).length;
+    const before = listQueries();
     const res = await app.request("/admin/api/entries/export?collection=posts");
+    expect(listQueries() - before).toBe(1);
     const text = await res.text();
     const lines = text.trim().split("\r\n");
-    // header + 5 data rows
-    expect(lines).toHaveLength(6);
+    expect(lines).toHaveLength(102);
+    expect(listQueries() - before).toBe(2);
   });
 
   it("carries active search, filter, and sort conditions into the download", async () => {

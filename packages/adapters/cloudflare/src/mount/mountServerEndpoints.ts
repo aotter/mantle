@@ -648,27 +648,23 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     };
     const propertyNames = Object.keys(schema.spec.schema.properties ?? {});
     const columns = ["id", "status", "version", "updated_at", ...propertyNames];
-    const lines = [csvRow(columns)];
-    let cursor: string | undefined;
-    do {
-      const page = await runtime.listEntries.executePage({ ...listOptions, cursor });
-      for (const row of page.rows) {
-        lines.push(
-          csvRow(
-            columns.map((column) => csvValue(column, row, propertyNames)),
-          ),
-        );
+    let page = await runtime.listEntries.executePage({ ...listOptions, limit: 100 });
+    async function* chunks(): AsyncGenerator<string> {
+      while (true) {
+        if (page.rows.length > 0) {
+          yield page.rows.map((row) =>
+            csvRow(columns.map((column) => csvValue(column, row, propertyNames)))
+          ).join("\r\n") + "\r\n";
+        }
+        if (!page.nextCursor) return;
+        page = await runtime.listEntries.executePage({
+          ...listOptions,
+          limit: 100,
+          cursor: page.nextCursor,
+        });
       }
-      cursor = page.nextCursor;
-    } while (cursor);
-    const csv = "﻿" + lines.join("\r\n") + "\r\n";
-    return new Response(csv, {
-      status: 200,
-      headers: {
-        "content-type": "text/csv; charset=utf-8",
-        "content-disposition": `attachment; filename="${collection}.csv"`,
-      },
-    });
+    }
+    return csvDownloadResponse(collection, columns, chunks());
   });
 
   guarded("get", "/admin/api/entries/:id", async (c) =>
@@ -1253,6 +1249,35 @@ function csvRow(fields: readonly string[]): string {
   return fields.map(csvField).join(",");
 }
 
+function csvDownloadResponse(
+  filename: string,
+  columns: readonly string[],
+  chunks: AsyncIterable<string>,
+): Response {
+  const encoder = new TextEncoder();
+  const iterator = chunks[Symbol.asyncIterator]();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(`﻿${csvRow(columns)}\r\n`));
+    },
+    async pull(controller) {
+      const next = await iterator.next();
+      if (next.done) controller.close();
+      else controller.enqueue(encoder.encode(next.value));
+    },
+    async cancel() {
+      await iterator.return?.();
+    },
+  });
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="${filename}.csv"`,
+    },
+  });
+}
+
 function viewCsvValue(value: unknown): string {
   if (value === undefined || value === null) return "";
   if (typeof value === "string") return value;
@@ -1823,7 +1848,7 @@ async function handleViewRequest(
     options: {
       params,
       page: requestedPage,
-      show,
+      show: exportCsv ? view.spec.limit : show,
       search: listQuery.search,
       filters: listQuery.filters,
     },
@@ -1831,14 +1856,7 @@ async function handleViewRequest(
   });
 
   if (exportCsv) {
-    const rows: Array<Record<string, unknown>> = [];
-    let exportPage = 1;
-    let result = await execute(exportPage);
-    while (result.ok) {
-      rows.push(...result.result.rows);
-      if (result.result.rows.length < result.result.show) break;
-      result = await execute(++exportPage);
-    }
+    const result = await execute(1);
     if (!result.ok) {
       const status = HTTP_STATUS_BY_CODE[result.diagnostic.code] ?? 500;
       return Response.json(
@@ -1849,18 +1867,25 @@ async function handleViewRequest(
     const declaredColumns = checkViewAdminUi(view).list.columns;
     const columns = declaredColumns.length > 0
       ? [...declaredColumns]
-      : [...new Set(rows.flatMap((row) => Object.keys(row)))];
-    const csv = "﻿" + [
-      csvRow(columns),
-      ...rows.map((row) => csvRow(columns.map((column) => viewCsvValue(row[column])))),
-    ].join("\r\n") + "\r\n";
-    return new Response(csv, {
-      status: 200,
-      headers: {
-        "content-type": "text/csv; charset=utf-8",
-        "content-disposition": `attachment; filename="${viewName}.csv"`,
-      },
-    });
+      : view.spec.fields?.length
+        ? [...view.spec.fields]
+        : [...new Set(result.result.rows.flatMap((row) => Object.keys(row)))];
+    let current = result.result;
+    let exportPage = 1;
+    async function* chunks(): AsyncGenerator<string> {
+      while (true) {
+        if (current.rows.length > 0) {
+          yield current.rows.map((row) =>
+            csvRow(columns.map((column) => viewCsvValue(row[column])))
+          ).join("\r\n") + "\r\n";
+        }
+        if (current.rows.length < current.show) return;
+        const next = await execute(++exportPage);
+        if (!next.ok) throw new DiagnosticError(next.diagnostic);
+        current = next.result;
+      }
+    }
+    return csvDownloadResponse(viewName, columns, chunks());
   }
 
   const result = await execute(page);
