@@ -10,6 +10,7 @@ import {
   redactForWire,
   runtimeDiagnostic,
   checkSchemaAdminUi,
+  checkViewAdminUi,
   schemaSortableFields,
   type ContentState,
   type Diagnostic,
@@ -209,6 +210,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     from: v.spec.from ?? null,
     params: v.spec.params ?? null,
     fields: v.spec.fields ?? null,
+    list: checkViewAdminUi(v).list,
   }));
 
   type StaffGateOk = Extract<StaffGate, { kind: "ok" }>;
@@ -400,6 +402,20 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
         c.env,
         waitUntil,
         "/admin/api/views",
+      );
+    });
+    guarded("get", `/admin/api/views/${viewName}/export`, async (c) => {
+      const runtime = await ref.get();
+      const waitUntil = readWaitUntil(c);
+      return handleViewRequest(
+        c.req.raw,
+        runtime,
+        viewName,
+        ref,
+        c.env,
+        waitUntil,
+        "/admin/api/views",
+        true,
       );
     });
   }
@@ -605,12 +621,37 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
       }, { status: 404 });
     }
     const runtime = await ref.get();
+    const statusQuery = c.req.query("status");
+    const filterField = c.req.query("filter_field");
+    const filterValue = c.req.query("filter_value");
+    if (Boolean(filterField) !== Boolean(filterValue)) {
+      return Response.json({
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "INPUT_VALIDATION_FAILED",
+          severity: "error",
+          path: "GET /admin/api/entries/export",
+          expected: "filter_field and filter_value together",
+          message: "List filters require both `filter_field` and `filter_value`.",
+        }),
+      }, { status: 400 });
+    }
+    const listOptions = {
+      collection,
+      status: statusQuery && statusQuery !== "all" ? statusQuery as ContentState : undefined,
+      search: c.req.query("search") || undefined,
+      filter: filterField && filterValue ? { field: filterField, value: filterValue } : undefined,
+      sort: {
+        field: c.req.query("sort") || "updatedAt",
+        direction: c.req.query("direction") === "asc" ? "asc" as const : "desc" as const,
+      },
+    };
     const propertyNames = Object.keys(schema.spec.schema.properties ?? {});
     const columns = ["id", "status", "version", "updated_at", ...propertyNames];
     const lines = [csvRow(columns)];
     let cursor: string | undefined;
     do {
-      const page = await runtime.listEntries.executePage({ collection, cursor });
+      const page = await runtime.listEntries.executePage({ ...listOptions, cursor });
       for (const row of page.rows) {
         lines.push(
           csvRow(
@@ -1212,6 +1253,13 @@ function csvRow(fields: readonly string[]): string {
   return fields.map(csvField).join(",");
 }
 
+function viewCsvValue(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return JSON.stringify(value);
+}
+
 /** Reads one CSV column's value off an entry row. The four leading
  *  columns are row metadata; everything else is a Schema property
  *  read from `data`. Non-scalar values (objects, arrays) are
@@ -1706,6 +1754,7 @@ async function handleViewRequest(
   // the staff mount (`/admin/api/views`); hardcoding the public prefix
   // here mislabels staff-View diagnostics + pathPrefix (#F7).
   mountPath: string,
+  exportCsv = false,
 ): Promise<Response> {
   const view = runtime.viewsByName.get(viewName);
   if (!view) {
@@ -1737,8 +1786,12 @@ async function handleViewRequest(
   const show = parsePositiveInt(url.searchParams.get(SHOW_PARAM));
 
   let params: Record<string, unknown>;
+  let listQuery: ReturnType<typeof readViewListQuery>;
   try {
     params = coerceViewParams(view, url.searchParams);
+    listQuery = mountPath === "/admin/api/views"
+      ? readViewListQuery(view, url.searchParams)
+      : { filters: [] };
   } catch (err) {
     if (err instanceof ViewParamCoercionError) {
       if (view.spec.requires?.auth) {
@@ -1764,12 +1817,53 @@ async function handleViewRequest(
     throw err;
   }
 
-  const result = await runtime.executeView.execute({
+  const execute = (requestedPage: number | undefined) => runtime.executeView.execute({
     view,
     pathPrefix: viewPath,
-    options: { params, page, show },
+    options: {
+      params,
+      page: requestedPage,
+      show,
+      search: listQuery.search,
+      filters: listQuery.filters,
+    },
     ctx,
   });
+
+  if (exportCsv) {
+    const rows: Array<Record<string, unknown>> = [];
+    let exportPage = 1;
+    let result = await execute(exportPage);
+    while (result.ok) {
+      rows.push(...result.result.rows);
+      if (result.result.rows.length < result.result.show) break;
+      result = await execute(++exportPage);
+    }
+    if (!result.ok) {
+      const status = HTTP_STATUS_BY_CODE[result.diagnostic.code] ?? 500;
+      return Response.json(
+        { ok: false, diagnostic: redactForWire(result.diagnostic) },
+        { status },
+      );
+    }
+    const declaredColumns = checkViewAdminUi(view).list.columns;
+    const columns = declaredColumns.length > 0
+      ? [...declaredColumns]
+      : [...new Set(rows.flatMap((row) => Object.keys(row)))];
+    const csv = "﻿" + [
+      csvRow(columns),
+      ...rows.map((row) => csvRow(columns.map((column) => viewCsvValue(row[column])))),
+    ].join("\r\n") + "\r\n";
+    return new Response(csv, {
+      status: 200,
+      headers: {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename="${viewName}.csv"`,
+      },
+    });
+  }
+
+  const result = await execute(page);
 
   if (result.ok) {
     return Response.json({ ok: true, data: result.result });
@@ -1780,6 +1874,41 @@ async function handleViewRequest(
     { ok: false, diagnostic: redactForWire(result.diagnostic) },
     { status },
   );
+}
+
+function readViewListQuery(
+  view: ViewManifest,
+  query: URLSearchParams,
+): {
+  readonly search?: { readonly term: string; readonly fields: readonly string[] };
+  readonly filters: ReadonlyArray<{ readonly field: string; readonly value: string }>;
+} {
+  const list = checkViewAdminUi(view).list;
+  const rawSearch = query.get("search")?.trim() ?? "";
+  if (rawSearch && list.searchFields.length === 0) {
+    throw new ViewParamCoercionError(`View '${view.metadata.name}' does not declare Admin search fields.`);
+  }
+  if (rawSearch.length > 200) {
+    throw new ViewParamCoercionError("View Admin search must be at most 200 characters.");
+  }
+  const allowedFilters = new Set(list.filterFields);
+  for (const key of query.keys()) {
+    if (key.startsWith("filter.") && !allowedFilters.has(key.slice("filter.".length))) {
+      throw new ViewParamCoercionError(`View '${view.metadata.name}' does not declare Admin filter field '${key.slice("filter.".length)}'.`);
+    }
+  }
+  const filters = list.filterFields.flatMap((field) => {
+    const value = query.get(`filter.${field}`)?.trim() ?? "";
+    if (!value) return [];
+    if (value.length > 200) {
+      throw new ViewParamCoercionError(`View Admin filter '${field}' must be at most 200 characters.`);
+    }
+    return [{ field, value }];
+  });
+  return {
+    search: rawSearch ? { term: rawSearch, fields: list.searchFields } : undefined,
+    filters,
+  };
 }
 
 function parsePositiveInt(raw: string | null): number | undefined {

@@ -242,6 +242,7 @@ export interface ViewManifestInfo {
   from: string | null;
   params: JsonSchema | null;
   fields: string[] | null;
+  list: { columns: string[]; searchFields: string[]; filterFields: string[] };
 }
 
 export const PUBLISHING_STATUSES: SidebarStatus[] = ["draft", "published", "archived"];

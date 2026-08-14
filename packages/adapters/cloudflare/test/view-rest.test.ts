@@ -120,6 +120,14 @@ function staffHarness(
         title: { en: "Recent Orders", "zh-TW": "最新訂單" },
         from: "posts",
         surface: "staff",
+        fields: ["id", "slug", "locale"],
+        uiSchema: {
+          list: {
+            columns: ["id", "slug", "locale"],
+            searchFields: ["slug"],
+            filterFields: ["locale"],
+          },
+        },
       },
     },
     // #443 — untitled staff View, alongside the titled one above, so
@@ -543,6 +551,40 @@ describe("GET /admin/api/views/<name> — staff surface (#433)", () => {
     const res = await h.app.request("/api/views/ordersRecent");
     expect(res.status).toBe(404);
   });
+
+  it("applies declared Admin search and exact filters before pagination", async () => {
+    const h = staffHarness((db) => {
+      db.entries.set("p1", row("p1", { slug: "green-tea", locale: "en" }));
+      db.entries.set("p2", row("p2", { slug: "green-tea", locale: "zh-TW" }));
+      db.entries.set("p3", row("p3", { slug: "cake", locale: "en" }));
+    });
+    const res = await h.app.request(
+      "/admin/api/views/ordersRecent?search=tea&filter.locale=en&show=1",
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { data: { rows: Array<{ id: string }> } };
+    expect(body.data.rows.map((item) => item.id)).toEqual(["p1"]);
+  });
+
+  it("exports every row matching the active View search and filters", async () => {
+    const h = staffHarness((db) => {
+      db.entries.set("p1", row("p1", { slug: "green-tea", locale: "en" }));
+      db.entries.set("p2", row("p2", { slug: "green-tea", locale: "zh-TW" }));
+      db.entries.set("p3", row("p3", { slug: "cake", locale: "en" }));
+    });
+    const res = await h.app.request(
+      "/admin/api/views/ordersRecent/export?search=tea&filter.locale=en",
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-disposition")).toBe(
+      'attachment; filename="ordersRecent.csv"',
+    );
+    const text = await res.text();
+    expect(text.trim().split("\r\n")).toEqual([
+      "id,slug,locale",
+      "p1,green-tea,en",
+    ]);
+  });
 });
 
 describe("GET /admin/api/views-manifest — staff-only filter (#433)", () => {
@@ -564,6 +606,17 @@ describe("GET /admin/api/views-manifest — staff-only filter (#433)", () => {
     const body = (await res.json()) as { views: Array<{ name: string; title: unknown }> };
     const ordersRecent = body.views.find((v) => v.name === "ordersRecent");
     expect(ordersRecent?.title).toEqual({ en: "Recent Orders", "zh-TW": "最新訂單" });
+  });
+
+  it("surfaces the validated Admin list query declaration", async () => {
+    const h = staffHarness();
+    const res = await h.app.request("/admin/api/views-manifest");
+    const body = await res.json() as { views: Array<{ name: string; list: unknown }> };
+    expect(body.views.find((view) => view.name === "ordersRecent")?.list).toEqual({
+      columns: ["id", "slug", "locale"],
+      searchFields: ["slug"],
+      filterFields: ["locale"],
+    });
   });
 
   it("falls back to null when a View has no title (#443)", async () => {

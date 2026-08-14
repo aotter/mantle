@@ -57,6 +57,7 @@ function filteredManifests(): Manifest[] {
         required: ["orderState", "placedAt"],
       },
       indexes: [["orderState", "placedAt"]],
+      searchableFields: ["orderState"],
       uiSchema: {
         list: {
           filterField: "orderState",
@@ -435,6 +436,20 @@ describe("GET /admin/api/entries/export", () => {
     const lines = text.trim().split("\r\n");
     // header + 5 data rows
     expect(lines).toHaveLength(6);
+  });
+
+  it("carries active search, filter, and sort conditions into the download", async () => {
+    const { app, db } = harness(undefined, undefined, filteredManifests());
+    db.entries.set("o2", relatedRow("o2", "orders", "draft", { orderState: "paid", placedAt: 1 }, 1));
+    db.entries.set("o1", relatedRow("o1", "orders", "draft", { orderState: "paid", placedAt: 2 }, 2));
+    db.entries.set("o3", relatedRow("o3", "orders", "draft", { orderState: "pending", placedAt: 0 }, 0));
+
+    const res = await app.request(
+      "/admin/api/entries/export?collection=orders&search=paid&filter_field=orderState&filter_value=paid&sort=id&direction=asc",
+    );
+    expect(res.status).toBe(200);
+    const lines = (await res.text()).trim().split("\r\n");
+    expect(lines.slice(1).map((line) => line.split(",")[0])).toEqual(["o1", "o2"]);
   });
 
   it("404s on an unknown collection", async () => {

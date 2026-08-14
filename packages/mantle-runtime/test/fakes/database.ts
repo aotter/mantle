@@ -737,6 +737,13 @@ function runCompiledViewQuery(
     atom: string,
     ctx: { atomIndex: number },
   ): boolean => {
+    const likeMatch = atom.match(/^(.+?) LIKE '%'\|\|\?\|\|'%' ESCAPE '\\'$/);
+    if (likeMatch) {
+      const actual = readValue(row, likeMatch[1]!.trim());
+      const value = atomParams[ctx.atomIndex++];
+      return actual !== null && actual !== undefined &&
+        String(actual).toLowerCase().includes(unescapeLike(String(value)).toLowerCase());
+    }
     const comparisonMatch = atom.match(/^(.+?)\s*(=|>=|<=|>|<)\s*\?$/);
     if (!comparisonMatch) throw new Error(`fake DB: unsupported atom '${atom}'`);
     const lhs = comparisonMatch[1]!.trim();
@@ -787,6 +794,11 @@ function compareValues(left: unknown, op: string, right: unknown): boolean {
 }
 
 function readValue(row: EntryRecord, ref: string): unknown {
+  const castText = ref.match(/^CAST\((.*) AS TEXT\)$/);
+  if (castText) {
+    const value = readValue(row, castText[1]!.trim());
+    return value === null || value === undefined ? value : String(value);
+  }
   if (ref === "id") return row.id;
   if (ref === "status") return row.status;
   if (ref === "version") return row.version;
@@ -812,7 +824,7 @@ function parseJsonExtractKey(ref: string): string | null {
 }
 
 function projectRow(row: EntryRecord, projection: string): Record<string, unknown> {
-  const parts = projection.split(",").map((s) => s.trim());
+  const parts = splitSqlList(projection);
   const out: Record<string, unknown> = {};
   for (const part of parts) {
     if (part === "id") out["id"] = row.id;
@@ -837,6 +849,24 @@ function projectRow(row: EntryRecord, projection: string): Record<string, unknow
     }
   }
   return out;
+}
+
+function splitSqlList(value: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const char of value) {
+    if (char === "(") depth++;
+    if (char === ")") depth--;
+    if (char === "," && depth === 0) {
+      parts.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  if (current) parts.push(current.trim());
+  return parts;
 }
 
 function collectAtomParams(

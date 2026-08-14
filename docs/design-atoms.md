@@ -363,6 +363,22 @@ names — `page` / `show` / `cursor` — must NOT appear in
 `spec.params.properties` (the parser rejects with
 `VIEW_PARAMS_RESERVED_NAME`).
 
+Staff report lists may opt into the Admin's standard columns, substring
+search, and exact filters without changing the public REST/MCP contract:
+
+```yaml
+uiSchema:
+  list:
+    columns: [orderNumber, customerName, orderStatus]
+    searchFields: [orderNumber, customerName, customerEmail]
+    filterFields: [orderStatus]
+```
+
+These names are SQL output aliases. The Admin applies search and filters
+before pagination and carries them into
+`GET /admin/api/views/<name>/export`; the CSV contains all matching rows,
+not only the visible page.
+
 Views may declare the same `requires.auth.all` predicates and optional
 `requires.guard.procedure` as Procedures. Static auth runs before parameter
 validation; the guard receives validated params and authorizes the whole

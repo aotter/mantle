@@ -34,7 +34,7 @@ import {
   schemaIndexDiagnosticCode,
 } from "./SchemaIndexChecker.js";
 import { checkSchemaSearchableFields } from "./SchemaSearchChecker.js";
-import { checkFormUiSchema, checkSchemaAdminUi } from "./SchemaAdminUiChecker.js";
+import { checkFormUiSchema, checkSchemaAdminUi, checkViewAdminUi } from "./SchemaAdminUiChecker.js";
 
 /**
  * Shared shape validator for `LocalizedText` fields (`Schema.spec.title`
@@ -519,7 +519,7 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   const s = m.spec as unknown as Record<string, unknown>;
   rejectUnknownKeys(
     s,
-    ["title", "from", "sql", "surface", "requires", "filter", "fields", "orderBy", "limit", "params"],
+    ["title", "uiSchema", "from", "sql", "surface", "requires", "filter", "fields", "orderBy", "limit", "params"],
     idx,
     "/spec",
   );
@@ -549,6 +549,15 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   }
   if ("requires" in s && s["requires"] != null) {
     validateRequires(s["requires"], idx, "View");
+  }
+  const adminUiProblem = checkViewAdminUi(m).problems[0];
+  if (adminUiProblem) {
+    throw new ManifestParseError(
+      adminUiProblem.message,
+      idx,
+      adminUiProblem.pointer,
+      "VIEW_UI_INVALID",
+    );
   }
   let paramSchema: JsonSchema | undefined;
   if ("params" in s && s["params"] != null) {

@@ -68,12 +68,15 @@ describe("compileView", () => {
           properties: { status: { type: "string" } },
           required: ["status"],
         },
-      }), { params: { status: "paid" } });
+      }), {
+        params: { status: "paid" },
+        search: { term: "Tea", fields: ["title"] },
+        filters: [{ field: "quantity", value: "2" }],
+      });
       const rows = db.prepare(compiled.sql)
         .all(...compiled.params as SQLInputValue[]);
       expect(rows).toEqual([
         { orderId: "o1", title: "Tea", quantity: 2 },
-        { orderId: "o1", title: "Cake", quantity: 1 },
       ]);
     } finally {
       db.close();

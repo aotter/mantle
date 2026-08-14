@@ -22,7 +22,7 @@ import {
   schemaIndexDiagnosticCode,
 } from "../domain/service/SchemaIndexChecker.js";
 import { checkSchemaSearchableFields } from "../domain/service/SchemaSearchChecker.js";
-import { checkFormUiSchema, checkSchemaAdminUi } from "../domain/service/SchemaAdminUiChecker.js";
+import { checkFormUiSchema, checkSchemaAdminUi, checkViewAdminUi } from "../domain/service/SchemaAdminUiChecker.js";
 import {
   bestMatch,
   manifestPath,
@@ -71,6 +71,16 @@ export class ValidateManifestsUseCase {
     );
 
     for (const v of partitioned.views) {
+      for (const problem of checkViewAdminUi(v).problems) {
+        diags.push(validateDiagnostic({
+          code: "VIEW_UI_INVALID",
+          severity: "error",
+          path: manifestPath("View", v.metadata.name, problem.pointer, request.filePaths),
+          value: problem.value,
+          expected: problem.expected,
+          message: problem.message,
+        }));
+      }
       diags.push(...checkViewRefs(v, schemasByName, request.filePaths));
       diags.push(...checkTargetAuth(v, request.filePaths));
     }
@@ -392,6 +402,27 @@ function checkViewRefs(
 
   const props = (schema.spec.schema as { properties?: Record<string, unknown> }).properties ?? {};
   const validFieldNames = new Set([...Object.keys(props), ...RESERVED_ENTRY_COLUMNS]);
+
+  const list = checkViewAdminUi(v).list;
+  for (const [key, fields] of Object.entries(list) as Array<[
+    keyof typeof list,
+    readonly string[],
+  ]>) {
+    fields.forEach((field, index) => {
+      if (!validFieldNames.has(field)) {
+        out.push(validateDiagnostic({
+          code: "VIEW_UI_INVALID",
+          severity: "error",
+          path: manifestPath("View", v.metadata.name, `/spec/uiSchema/list/${key}/${index}`, filePaths),
+          value: field,
+          expected: `property of Schema '${fromName}' or a reserved metadata field`,
+          candidates: [...validFieldNames].sort(),
+          suggestion: bestMatch(field, [...validFieldNames]),
+          message: `View '${v.metadata.name}' Admin list references unknown field '${field}'.`,
+        }));
+      }
+    });
+  }
 
   if (v.spec.fields) {
     v.spec.fields.forEach((f, i) => {

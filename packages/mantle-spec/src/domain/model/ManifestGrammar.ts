@@ -227,6 +227,10 @@ export interface ViewManifestSpec {
    *  rendering of `metadata.name`, exactly as before this field
    *  existed. */
   readonly title?: LocalizedText;
+  /** Admin-only presentation/query affordances for `surface: staff`
+   *  Views. v0.1 supports `uiSchema.list.columns`, `searchFields`, and
+   *  `filterFields`; public REST and MCP semantics stay unchanged. */
+  readonly uiSchema?: Record<string, unknown>;
   /** Legacy declarative source Schema name (bare; no namespace).
    *  Exactly one of `from` or `sql` is required. */
   readonly from?: string;

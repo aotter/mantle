@@ -223,7 +223,16 @@ export function CollectionView({
               type="button"
               variant="secondary"
               onClick={() => {
-                window.location.href = `/admin/api/entries/export?collection=${encodeURIComponent(collectionName)}`;
+                const exportParams = new URLSearchParams({ collection: collectionName });
+                if (status) exportParams.set("status", status);
+                if (searchTerm) exportParams.set("search", searchTerm);
+                if (filterField && filterValue) {
+                  exportParams.set("filter_field", filterField);
+                  exportParams.set("filter_value", filterValue);
+                }
+                exportParams.set("sort", sortField);
+                exportParams.set("direction", sortDirection);
+                window.location.href = `/admin/api/entries/export?${exportParams.toString()}`;
               }}
             >
               <Download className="size-4" aria-hidden />

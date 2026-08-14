@@ -1126,6 +1126,37 @@ spec:
     expect(view.spec.surface).toBe("staff");
   });
 
+  it("accepts the minimal staff View Admin list uiSchema", () => {
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: staffView }
+spec:
+  from: posts
+  surface: staff
+  uiSchema:
+    list:
+      columns: [id, orderNumber]
+      searchFields: [orderNumber]
+      filterFields: [orderStatus]
+`);
+    expect(result.diagnostics).toEqual([]);
+    expect((result.manifests[0] as ViewManifest).spec.uiSchema).toMatchObject({
+      list: { searchFields: ["orderNumber"], filterFields: ["orderStatus"] },
+    });
+  });
+
+  it("rejects View Admin uiSchema on the public surface", () => {
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: publicView }
+spec:
+  from: posts
+  surface: public
+  uiSchema: { list: { searchFields: [slug] } }
+`);
+    expect(result.diagnostics[0]?.code).toBe("VIEW_UI_INVALID");
+  });
+
   it("rejects an absent surface", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v1
 kind: View
