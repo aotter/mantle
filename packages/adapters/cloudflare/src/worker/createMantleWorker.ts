@@ -34,6 +34,7 @@ import { PUBLIC_CACHE_TAG } from "../oauth/cachePolicy.js";
 /** Fixed namespaces owned by Mantle's standard Worker surfaces. */
 export const MANTLE_RESERVED_PATH_PREFIXES = [
   "/admin",
+  "/_mantle",
   "/api/auth",
   "/api/views",
   "/oauth",
@@ -44,7 +45,7 @@ export const MANTLE_RESERVED_PATH_PREFIXES = [
 export const MANTLE_RESERVED_WELL_KNOWN_PREFIX = "/.well-known/oauth" as const;
 
 /** Exact registrations extensions may not claim. */
-export const MANTLE_RESERVED_EXACT_PATHS = ["/favicon.svg", "*", "/*"] as const;
+export const MANTLE_RESERVED_EXACT_PATHS = ["*", "/*"] as const;
 
 type ReservedPrefix = (typeof MANTLE_RESERVED_PATH_PREFIXES)[number];
 type ReservedExact = (typeof MANTLE_RESERVED_EXACT_PATHS)[number];
@@ -100,7 +101,7 @@ export interface MantleExtensionApp<Bindings extends object> {
 
 export interface MantleCloudflareEnv extends ConventionalAuthEnv {
   readonly OAUTH_KV: KVNamespace;
-  readonly ASSETS?: Fetcher;
+  readonly ASSETS: Fetcher;
 }
 
 export interface MantleWorkerBootstrapContext<Env extends MantleCloudflareEnv> {

@@ -35,6 +35,8 @@ export interface Collection {
   sortableFields?: string[];
   /** Primary Admin list filter declared at uiSchema.list.filterField. */
   filter?: { field: string; values: string[] } | null;
+  /** Operational list data fields resolved from uiSchema.list. */
+  list?: { primaryField: string | null; columns: string[] };
   schema?: JsonSchema;
 }
 
@@ -53,6 +55,7 @@ export interface JsonSchema {
   minItems?: number;
   maxItems?: number;
   nullable?: boolean;
+  readOnly?: boolean;
   default?: unknown;
   additionalProperties?: boolean | JsonSchema;
   /** Optional JSON Schema help text. */
@@ -150,8 +153,7 @@ export interface EntryRow {
   title: unknown;
   updated_at: number;
   translation_locales: string[];
-  /** First 3 `required` schema properties (skipping the one used as
-   *  the title), present only for `lifecycle: "operational"` collections. */
+  /** Explicit uiSchema.list data fields for operational collections. */
   data_preview?: Record<string, unknown>;
 }
 
@@ -167,13 +169,20 @@ export interface SiteInfo {
   brand: string;
   locales: string[];
   canonicalLocale: string | null;
-  faviconUrl?: string;
+  icons: SiteIcon[];
   /** Canonical deployment URL projected by the server. Never derive it from the Admin request origin. */
   publicUrl: string;
   mcpUrl: string;
   media?: {
     purposes?: MediaPurposePolicy[];
   };
+}
+
+export interface SiteIcon {
+  src: string;
+  mimeType?: string;
+  sizes?: string[];
+  theme?: "light" | "dark";
 }
 
 export interface MediaPurposePolicy {
@@ -220,6 +229,7 @@ export interface StaffOperation {
   title: LocalizedText | null;
   description: LocalizedText | null;
   input: JsonSchema;
+  uiSchema: Record<string, unknown> | null;
   triggers: Array<"mcp" | "http">;
   /** References that expose this operation from collection row menus. */
   rowBindings: Array<{ collection: string; inputField: string; rowField: string }>;
@@ -229,9 +239,10 @@ export interface StaffOperation {
 export interface ViewManifestInfo {
   name: string;
   title: LocalizedText | null;
-  from: string;
+  from: string | null;
   params: JsonSchema | null;
   fields: string[] | null;
+  list: { columns: string[]; searchFields: string[]; filterFields: string[] };
 }
 
 export const PUBLISHING_STATUSES: SidebarStatus[] = ["draft", "published", "archived"];

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import packageJson from "../package.json" with { type: "json" };
 import {
   McpJsonRpcDispatcher,
+  MCP_PROTOCOL_VERSION,
   type McpUseCases,
 } from "../src/infrastructure/mcp/McpJsonRpcDispatcher.js";
 import {
@@ -66,6 +67,11 @@ function operationalPostsSchema() {
   return { ...schema, spec: { ...schema.spec, lifecycle: "operational" as const } };
 }
 
+function readOnlyOperationalPostsSchema() {
+  const schema = operationalPostsSchema();
+  return { ...schema, spec: { ...schema.spec, schema: { ...schema.spec.schema, readOnly: true } } };
+}
+
 /**
  * Build a stripped-down McpUseCases for tests that only exercise the
  * procedure-dispatch / public-surface paths (#281). The CRUD use cases
@@ -92,7 +98,10 @@ function minimalUseCases(): McpUseCases {
 function jsonRpcReq(method: string, params?: unknown, id: number | string = 1): Request {
   return new Request("https://example.com/mcp", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "mcp-protocol-version": MCP_PROTOCOL_VERSION,
+    },
     body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
   });
 }
@@ -122,11 +131,53 @@ describe("McpJsonRpcDispatcher", () => {
     const body = (await res.json()) as {
       result: { protocolVersion: string; serverInfo: { name: string; version: string } };
     };
-    expect(body.result.protocolVersion).toBe("2025-03-26");
+    expect(body.result.protocolVersion).toBe(MCP_PROTOCOL_VERSION);
     expect(body.result.serverInfo).toEqual({
-      name: "@aotter/mantle-runtime/mcp",
+      name: "aotter.mantle",
       version: packageJson.version,
     });
+  });
+
+  it("requires the negotiated protocol version after initialize", async () => {
+    const { dispatcher } = buildHarness();
+    const missing = new Request("https://example.com/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    });
+    expect((await dispatcher.dispatch(missing, mcpContext())).status).toBe(400);
+    const get = await dispatcher.dispatch(new Request("https://example.com/mcp"), mcpContext());
+    expect(get.status).toBe(405);
+    expect(get.headers.get("allow")).toBe("POST");
+  });
+
+  it("rejects malformed and batch JSON-RPC envelopes", async () => {
+    const { dispatcher } = buildHarness();
+    for (const body of [{ method: "initialize" }, [{ jsonrpc: "2.0", method: "initialize" }]]) {
+      const response = await dispatcher.dispatch(new Request("https://example.com/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }), mcpContext());
+      expect((await response.json()) as { error: { code: number } }).toMatchObject({
+        error: { code: -32600 },
+      });
+    }
+  });
+
+  it("accepts the initialized notification without a response body", async () => {
+    const { dispatcher } = buildHarness();
+    const request = new Request("https://example.com/mcp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "mcp-protocol-version": MCP_PROTOCOL_VERSION,
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
+    });
+    const response = await dispatcher.dispatch(request, mcpContext());
+    expect(response.status).toBe(202);
+    expect(await response.text()).toBe("");
   });
 
   it("tools/list emits generic + per-collection tools", async () => {
@@ -212,6 +263,32 @@ describe("McpJsonRpcDispatcher", () => {
       status: "published",
       data: { title: "Submission" },
     });
+  });
+
+  it("keeps read-only Schemas queryable but removes and rejects generic authoring", async () => {
+    const { dispatcher, store } = buildHarness([readOnlyOperationalPostsSchema()]);
+    await store.create({
+      id: "managed-1",
+      collection: "posts",
+      status: "published",
+      data: { title: "Managed" },
+      authorId: null,
+      now: 1,
+    });
+
+    const list = await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext());
+    const listBody = (await list.json()) as { result: { tools: Array<{ name: string }> } };
+    const names = listBody.result.tools.map((tool) => tool.name);
+    expect(names).toContain("list_entries");
+    expect(names).not.toContain("create_record_posts");
+    expect(names).not.toContain("update_record_posts");
+
+    const deletion = await dispatcher.dispatch(jsonRpcReq("tools/call", {
+      name: "delete_entry",
+      arguments: { id: "managed-1" },
+    }), mcpContext());
+    const deletionBody = (await deletion.json()) as { error: { data: { code: string } } };
+    expect(deletionBody.error.data.code).toBe("CONFLICT");
   });
 
   it("public surface exposes View query tools, not staff authoring tools", async () => {

@@ -169,6 +169,7 @@ describe("ValidateBootUseCase", () => {
       kind: "View",
       metadata: { name: "my-posts" },
       spec: {
+        surface: "public",
         from: "posts",
         filter: { eq: { field: "userId", value: { "$ctx.user": "id" } } },
       },

@@ -107,9 +107,11 @@ the atoms cannot express the behavior.
   besides `locale` and the join field.
 - Parallel locale blocks must keep field names, option values, step IDs, and
   result keys identical; translate display strings only.
-- `siteDefaults.origin` and `siteDefaults.locales` are code-owned and
-  boot-synced. Brand, title, and description seed once, then change through
-  site settings.
+- `siteDefaults.origin`, `siteDefaults.locales`, and `siteDefaults.icons` are
+  code-owned and boot-synced. The icon list is shared by browser favicons,
+  Admin chrome, and MCP `serverInfo.icons`; keep its static files under
+  `public/`. Brand, title, and description seed once, then change through site
+  settings.
 - When changing an existing collection from `[slug]` to `[slug, locale]`,
   boot with a Mantle version that reconciles obsolete unique indexes and test
   the same slug in two locales. Do not patch D1 manually.
@@ -135,12 +137,13 @@ teaching the project Mantle internals.
 
 ## Auth Composition
 
-When a generated repo contains `src/auth.ts`, the repo owns its auth
-composition. Preserve the explicit mode recorded in its launch state and
-Worker config; do not infer a mode from whichever credentials happen to be
-present or configure competing paths. Keep provider secrets out of source.
-Follow the repo handoff for provider-specific setup rather than adding product
-policy to Core.
+Conventional Cloudflare projects declare `MANTLE_AUTH_MODE=hosted` or
+`self-managed`; Core owns that standard Auth composition and rejects partial
+or mixed bindings. Preserve the explicit mode recorded in launch state and
+Worker config, keep provider secrets out of source, and do not infer a mode
+from whichever credentials happen to be present. A repo with an explicit
+`createMantleWorker({ auth })` override owns that custom composition; follow
+its handoff instead of replacing it with the conventional factory.
 
 ## Performance Loop
 

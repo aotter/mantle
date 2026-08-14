@@ -61,7 +61,7 @@ function procedureDoc(spec: Record<string, unknown>): string {
 }
 
 function viewDoc(spec: Record<string, unknown>): string {
-  return `apiVersion: ${apiVersion}\nkind: View\nmetadata:\n  name: postsRecent\nspec:\n${indent(spec)}`;
+  return `apiVersion: ${apiVersion}\nkind: View\nmetadata:\n  name: postsRecent\nspec:\n${indent({ surface: "public", ...spec })}`;
 }
 
 // Minimal YAML emitter for the flat shapes these tests need — avoids

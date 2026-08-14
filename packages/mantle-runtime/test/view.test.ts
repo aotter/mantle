@@ -1,24 +1,88 @@
 import { describe, expect, it } from "vitest";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { compileView } from "../src/domain/service/ViewSqlCompiler.js";
 import { ExecuteViewUseCase } from "../src/usecase/view/ExecuteViewUseCase.js";
 import { InMemoryDatabase } from "./fakes/database.js";
 import {
   runtimeDiagnostic,
+  buildSchemaSqlView,
   type SchemaManifest,
   type ViewManifest,
 } from "@aotter/mantle-spec";
 import type { DatabaseDriver } from "../src/domain/port/DatabaseDriver.js";
 
-function view(opts: Partial<ViewManifest["spec"]> & { from: string }): ViewManifest {
+function view(
+  opts: Partial<ViewManifest["spec"]> & ({ from: string } | { sql: string }),
+): ViewManifest {
   return {
     apiVersion: "cms.mantle.aotter.net/v1",
     kind: "View",
     metadata: { name: "v" },
-    spec: opts,
+    spec: { surface: "public", ...opts } as ViewManifest["spec"],
   };
 }
 
 describe("compileView", () => {
+  it("queries Schema logical tables, flattens JSON rows, and binds SQL params", () => {
+    const orders: SchemaManifest = {
+      apiVersion: "cms.mantle.aotter.net/v1",
+      kind: "Schema",
+      metadata: { name: "orders" },
+      spec: {
+        title: "Orders",
+        schema: {
+          type: "object",
+          properties: {
+            orderStatus: { type: "string" },
+            items: { type: "array", items: { type: "object" } },
+          },
+        },
+      },
+    };
+    const db = new DatabaseSync(":memory:");
+    try {
+      db.exec(`CREATE TABLE entries (
+        id TEXT, collection TEXT, status TEXT, version INTEGER, data TEXT,
+        author_id TEXT, created_at INTEGER, updated_at INTEGER
+      )`);
+      db.exec(buildSchemaSqlView(orders).createSql);
+      db.prepare("INSERT INTO entries VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
+        "o1", "orders", "published", 1,
+        JSON.stringify({
+          orderStatus: "paid",
+          items: [
+            { title: "Tea", quantity: 2 },
+            { title: "Cake", quantity: 1 },
+          ],
+        }),
+        null, 1, 1,
+      );
+      const compiled = compileView(view({
+        sql: `SELECT o.id AS orderId,
+          json_extract(item.value, '$.title') AS title,
+          json_extract(item.value, '$.quantity') AS quantity
+          FROM orders AS o JOIN json_each(o.items) AS item
+          WHERE o.orderStatus = :status ORDER BY item.key`,
+        params: {
+          type: "object",
+          properties: { status: { type: "string" } },
+          required: ["status"],
+        },
+      }), {
+        params: { status: "paid" },
+        search: { term: "Tea", fields: ["title"] },
+        filters: [{ field: "quantity", value: "2" }],
+      });
+      const rows = db.prepare(compiled.sql)
+        .all(...compiled.params as SQLInputValue[]);
+      expect(rows).toEqual([
+        { orderId: "o1", title: "Tea", quantity: 2 },
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
   it("emits a default-projection SELECT for a bare from-only view", () => {
     const c = compileView(view({ from: "posts" }));
     expect(c.sql).toContain("FROM entries WHERE collection = ?");

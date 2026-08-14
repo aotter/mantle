@@ -3,6 +3,7 @@ import {
   assertSiteDefaultsCanonical,
   InvalidMediaPurposesError,
   InvalidSiteDefaultsError,
+  InvalidSiteIconsError,
 } from "../src/domain/service/SiteDefaultsValidator.js";
 
 describe("assertSiteDefaultsCanonical (boot-time fail-fast)", () => {
@@ -60,6 +61,21 @@ describe("assertSiteDefaultsCanonical (boot-time fail-fast)", () => {
     expect(() =>
       assertSiteDefaultsCanonical({ brand: "X", title: "Y" }),
     ).not.toThrow();
+  });
+
+  it("accepts browser-safe site icons and rejects unsafe or malformed values", () => {
+    expect(() => assertSiteDefaultsCanonical({
+      icons: [
+        { src: "/site-icon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
+        { src: "https://cdn.example/icon.png", mimeType: "image/png", sizes: ["64x64"] },
+      ],
+    })).not.toThrow();
+    for (const src of ["javascript:alert(1)", "data:image/svg+xml,x", "//evil.example/x.png", "/\\evil.example/x.png", "http://example.com/x.png"]) {
+      expect(() => assertSiteDefaultsCanonical({ icons: [{ src }] })).toThrow(InvalidSiteIconsError);
+    }
+    expect(() => assertSiteDefaultsCanonical({ icons: [] })).toThrow(InvalidSiteIconsError);
+    expect(() => assertSiteDefaultsCanonical({ icons: [{ src: "/icon.png", sizes: ["64"] }] }))
+      .toThrow(InvalidSiteIconsError);
   });
 
   describe("media.purposes object-policy validation (#272)", () => {

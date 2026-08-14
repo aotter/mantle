@@ -1,8 +1,9 @@
 /**
  * `AssetServer` — static-asset serving for the admin SPA. The admin
  * SPA itself lives in `@aotter/mantle-admin-ui` as a pre-built
- * `dist/` (commit 5); the adapter binds `AssetServer` to whatever
- * actually serves that `dist/`. The runtime knows nothing about MIME
+ * `dist/`; `mantle generate` copies it into the consumer's static root.
+ * The adapter binds `AssetServer` to whatever serves that directory.
+ * The runtime knows nothing about MIME
  * types, caching headers, or compression — it just asks the port and
  * returns the response.
  *

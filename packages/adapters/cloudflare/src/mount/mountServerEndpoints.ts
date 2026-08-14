@@ -9,7 +9,8 @@ import {
   meetsRole,
   redactForWire,
   runtimeDiagnostic,
-  checkSchemaListFilter,
+  checkSchemaAdminUi,
+  checkViewAdminUi,
   schemaSortableFields,
   type ContentState,
   type Diagnostic,
@@ -31,7 +32,6 @@ import {
   type HandlerContext,
   type MediaAsset,
 } from "@aotter/mantle-runtime";
-import { indexHtml } from "@aotter/mantle-admin-ui";
 import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
 import { resolveCaller } from "./resolveCaller.js";
 import { runMantleUseCase } from "./runMantleUseCase.js";
@@ -42,7 +42,6 @@ import {
   type Auth,
 } from "../auth/createAuth.js";
 import { rejectCrossOriginMutation } from "../auth/rejectCrossOriginMutation.js";
-import { AOTTER_FAVICON_SVG } from "../assets/aotterFavicon.js";
 
 const [PAGE_PARAM, SHOW_PARAM] = VIEW_PARAMS_RESERVED;
 
@@ -83,7 +82,7 @@ export function mountServerEndpoints<E extends Env>(
     // register under the guarded `/admin/api/views/<name>` route
     // inside `mountAdminBetterAuth` (which owns the staff gate).
     // Public (default) Views keep the public REST surface.
-    if (v.spec.surface === "staff") continue;
+    if (v.spec.surface !== "public") continue;
     const viewName = v.metadata.name;
     app.get(`/api/views/${viewName}`, async (c) => {
       const runtime = await ref.get();
@@ -96,19 +95,16 @@ export function mountServerEndpoints<E extends Env>(
 
 function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, auth: Auth): void {
   const authBasePath = auth.basePath;
-  const spa = (): Response =>
-    new Response(indexHtml, {
-      headers: { "content-type": "text/html; charset=utf-8" },
-    });
-
-  app.get("/favicon.svg", () =>
-    new Response(AOTTER_FAVICON_SVG, {
-      headers: {
-        "content-type": "image/svg+xml; charset=utf-8",
-        "cache-control": "public, max-age=86400",
-      },
-    }),
-  );
+  const spa = async (c: Context): Promise<Response> => {
+    const runtime = await ref.get();
+    const asset = await runtime.assets.fetch(
+      new Request(new URL("/_mantle/admin/index.html", c.req.url)),
+    );
+    return asset ?? new Response(
+      "Mantle Admin assets are missing; run `mantle generate` and configure the ASSETS binding.",
+      { status: 503, headers: { "cache-control": "private, no-store" } },
+    );
+  };
 
   // Public read-only manifest of registered sign-in methods. The admin
   // SPA hits this on sign-in-page mount so it can render per-method
@@ -164,6 +160,22 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     (m): m is SchemaManifest => m.kind === "Schema",
   );
   const schemasByName = new Map(schemas.map((s) => [s.metadata.name, s]));
+  const assertMutableSchema = (path: string, schema: SchemaManifest | undefined): void => {
+    if (schema?.spec.schema.readOnly !== true) return;
+    throw new DiagnosticError(runtimeDiagnostic({
+      code: "CONFLICT",
+      severity: "error",
+      path,
+      value: schema.metadata.name,
+      expected: "a Schema without root readOnly: true",
+      message: `Schema '${schema.metadata.name}' is read-only on generic authoring surfaces; use its declared Procedures.`,
+    }));
+  };
+  const readMutableEntry = async (runtime: CmsRuntime, id: string, path: string): Promise<Entry> => {
+    const entry = await runtime.getEntry.execute({ id });
+    assertMutableSchema(path, schemasByName.get(entry.collection));
+    return entry;
+  };
   const collections = schemas
     .filter((s) => !s.spec.translates)
     .map((s) => adminEditorCollection(s, schemas));
@@ -187,7 +199,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
   // "precompute at mount from ref.manifests, list on GET") and needs
   // no changes to the `SiteInfo` type or its query key.
   // Report-sidebar source (#433): ONLY `surface: staff` Views. Public
-  // storefront Views (default surface) auto-mount on the public REST
+  // storefront Views explicitly marked public auto-mount on the public REST
   // path and must not appear in the admin report sidebar — listing
   // them was noise + broke on param-driven storefront Views (see #433).
   const staffViews = ref.manifests
@@ -195,9 +207,10 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
   const viewsManifest = staffViews.map((v) => ({
     name: v.metadata.name,
     title: v.spec.title ?? null,
-    from: v.spec.from,
+    from: v.spec.from ?? null,
     params: v.spec.params ?? null,
     fields: v.spec.fields ?? null,
+    list: checkViewAdminUi(v).list,
   }));
 
   type StaffGateOk = Extract<StaffGate, { kind: "ok" }>;
@@ -391,6 +404,20 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
         "/admin/api/views",
       );
     });
+    guarded("get", `/admin/api/views/${viewName}/export`, async (c) => {
+      const runtime = await ref.get();
+      const waitUntil = readWaitUntil(c);
+      return handleViewRequest(
+        c.req.raw,
+        runtime,
+        viewName,
+        ref,
+        c.env,
+        waitUntil,
+        "/admin/api/views",
+        true,
+      );
+    });
   }
 
   guarded("get", "/admin/api/operations", (c, gate) =>
@@ -407,6 +434,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
         title: op.title,
         description: op.description,
         input: op.input,
+        uiSchema: op.uiSchema,
         triggers: op.triggers,
         rowBindings: op.rowBindings,
       })),
@@ -593,29 +621,50 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
       }, { status: 404 });
     }
     const runtime = await ref.get();
+    const statusQuery = c.req.query("status");
+    const filterField = c.req.query("filter_field");
+    const filterValue = c.req.query("filter_value");
+    if (Boolean(filterField) !== Boolean(filterValue)) {
+      return Response.json({
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "INPUT_VALIDATION_FAILED",
+          severity: "error",
+          path: "GET /admin/api/entries/export",
+          expected: "filter_field and filter_value together",
+          message: "List filters require both `filter_field` and `filter_value`.",
+        }),
+      }, { status: 400 });
+    }
+    const listOptions = {
+      collection,
+      status: statusQuery && statusQuery !== "all" ? statusQuery as ContentState : undefined,
+      search: c.req.query("search") || undefined,
+      filter: filterField && filterValue ? { field: filterField, value: filterValue } : undefined,
+      sort: {
+        field: c.req.query("sort") || "updatedAt",
+        direction: c.req.query("direction") === "asc" ? "asc" as const : "desc" as const,
+      },
+    };
     const propertyNames = Object.keys(schema.spec.schema.properties ?? {});
     const columns = ["id", "status", "version", "updated_at", ...propertyNames];
-    const lines = [csvRow(columns)];
-    let cursor: string | undefined;
-    do {
-      const page = await runtime.listEntries.executePage({ collection, cursor });
-      for (const row of page.rows) {
-        lines.push(
-          csvRow(
-            columns.map((column) => csvValue(column, row, propertyNames)),
-          ),
-        );
+    let page = await runtime.listEntries.executePage({ ...listOptions, limit: 100 });
+    async function* chunks(): AsyncGenerator<string> {
+      while (true) {
+        if (page.rows.length > 0) {
+          yield page.rows.map((row) =>
+            csvRow(columns.map((column) => csvValue(column, row, propertyNames)))
+          ).join("\r\n") + "\r\n";
+        }
+        if (!page.nextCursor) return;
+        page = await runtime.listEntries.executePage({
+          ...listOptions,
+          limit: 100,
+          cursor: page.nextCursor,
+        });
       }
-      cursor = page.nextCursor;
-    } while (cursor);
-    const csv = "﻿" + lines.join("\r\n") + "\r\n";
-    return new Response(csv, {
-      status: 200,
-      headers: {
-        "content-type": "text/csv; charset=utf-8",
-        "content-disposition": `attachment; filename="${collection}.csv"`,
-      },
-    });
+    }
+    return csvDownloadResponse(collection, columns, chunks());
   });
 
   guarded("get", "/admin/api/entries/:id", async (c) =>
@@ -645,6 +694,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
           }),
         );
       }
+      assertMutableSchema("POST /admin/api/entries", schemasByName.get(body.collection));
       if (
         gate.role === "contributor" &&
         (schemasByName.get(body.collection)?.spec.lifecycle ?? "publishing") === "operational"
@@ -670,8 +720,8 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     runMantleUseCase(`PATCH /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
+      const current = await readMutableEntry(runtime, id, `PATCH /admin/api/entries/${id}`);
       if (gate.role === "contributor") {
-        const current = await runtime.getEntry.execute({ id });
         const lifecycle = schemasByName.get(current.collection)?.spec.lifecycle ?? "publishing";
         if (lifecycle === "operational" || current.status !== "draft") {
           throw new DiagnosticError(adminRoleDiagnostic(
@@ -700,6 +750,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     runMantleUseCase(`POST /admin/api/entries/${c.req.param("id")}/publish`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
+      await readMutableEntry(runtime, id, `POST /admin/api/entries/${id}/publish`);
       const body = await c.req.raw.json().catch(() => ({}));
       const row = await runtime.requestPublish.execute({
         id,
@@ -714,6 +765,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     runMantleUseCase(`POST /admin/api/entries/${c.req.param("id")}/unpublish`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
+      await readMutableEntry(runtime, id, `POST /admin/api/entries/${id}/unpublish`);
       const body = await c.req.raw.json().catch(() => ({}));
       const row = await runtime.unpublish.execute({
         id,
@@ -728,6 +780,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
     runMantleUseCase(`DELETE /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
+      await readMutableEntry(runtime, id, `DELETE /admin/api/entries/${id}`);
       const body = await c.req.raw.json().catch(() => ({}));
       return runtime.deleteEntry.execute({
         id,
@@ -956,6 +1009,7 @@ type StaffOperation = {
   readonly title: LocalizedText | null;
   readonly description: LocalizedText | null;
   readonly input: JsonSchema;
+  readonly uiSchema: Record<string, unknown> | null;
   readonly triggers: ReadonlyArray<"mcp" | "http">;
   readonly rowBindings: ReadonlyArray<StaffOperationRowBinding>;
   readonly procedure: ProcedureManifest;
@@ -1018,6 +1072,7 @@ function discoverStaffOperations(
       title: procedure.spec.title ?? null,
       description: procedure.spec.description ?? null,
       input: procedure.spec.input,
+      uiSchema: procedure.spec.uiSchema ?? null,
       triggers: [...kinds],
       rowBindings: discoverRowBindings(procedure, schemasByName),
       procedure,
@@ -1111,9 +1166,7 @@ function adminEntryTitle(data: Record<string, unknown>, schema?: JsonSchema): un
   return key ? data[key] : null;
 }
 
-/** Which data key `adminEntryTitle` would read, or `null` if none
- *  matched. Split out from `adminEntryTitle` so `adminDataPreview` can
- *  skip the same property instead of repeating it in a data column. */
+/** Which data key publishing-list `adminEntryTitle` reads. */
 function titleFieldKey(data: Record<string, unknown>, schema?: JsonSchema): string | null {
   if (typeof data.title === "string" && data.title) return "title";
   if (typeof data.name === "string" && data.name) return "name";
@@ -1133,56 +1186,19 @@ function titleFieldKey(data: Record<string, unknown>, schema?: JsonSchema): stri
   return null;
 }
 
-/** Schema property names that collide in MEANING with a system column
- *  the admin list already renders unconditionally (the "updated"
- *  column reads the reserved `updatedAt` storage column, formatted as
- *  `row.updated_at`). A schema-declared `required` property with one
- *  of these exact names would otherwise show up a SECOND time as a
- *  raw data-preview column — same value, no title-cased header — right
- *  next to the system column (#443). NAME-based only, on purpose: no
- *  fuzzy/semantic matching, just these two well-known reserved names. */
-const DATA_PREVIEW_SYSTEM_COLUMN_NAMES = new Set(["updatedAt", "createdAt"]);
-
-/** Operational collections have no title/status
- *  workflow worth a dedicated column — instead the admin list shows up
- *  to 3 raw data columns. Mirrors the client-side column-picking rule
- *  in `collection-view.tsx`: first 3 `required` properties, skipping
- *  the schema-stable title field and the system-column-name collisions
- *  above (#443). Kept small on the wire on purpose — this is a
- *  preview, not the full entry. */
+/** Operational previews contain exactly the manifest-declared list
+ *  fields. Undeclared lists stay metadata-only. */
 function adminDataPreview(
   data: Record<string, unknown>,
   manifest?: SchemaManifest,
 ): Record<string, unknown> | undefined {
   if (!manifest || manifest.spec.lifecycle !== "operational") return undefined;
-  const schema = manifest.spec.schema;
-  // Schema-stable skip (not per-row): rows with a blank title field
-  // must still produce the same columns as every other row, or the
-  // client's fixed headers drift out of sync with the values.
-  const titleKey = schemaTitleKey(schema);
-  const fields = (schema.required ?? [])
-    .filter((key) => key !== titleKey && !DATA_PREVIEW_SYSTEM_COLUMN_NAMES.has(key))
-    .slice(0, 3);
+  const list = checkSchemaAdminUi(manifest).list;
+  const fields = [...(list.primaryField ? [list.primaryField] : []), ...list.columns];
   if (fields.length === 0) return undefined;
   const preview: Record<string, unknown> = {};
   for (const key of fields) preview[key] = data[key];
   return preview;
-}
-
-/** The property a row's title comes from, derived from the SCHEMA
- *  alone (no row data): literal `title`/`name`/`slug` when declared,
- *  else the first required string-typed property. Stable across all
- *  rows of a collection, so preview columns never vary per row. */
-function schemaTitleKey(schema: JsonSchema): string | null {
-  const properties = schema.properties ?? {};
-  for (const key of ["title", "name", "slug"]) {
-    if (key in properties) return key;
-  }
-  for (const key of schema.required ?? []) {
-    const fieldSchema = properties[key];
-    if (fieldSchema && isStringTypedSchema(fieldSchema)) return key;
-  }
-  return null;
 }
 
 function isStringTypedSchema(schema: JsonSchema): boolean {
@@ -1213,7 +1229,9 @@ function adminListItem(
     locale: row.locale ?? null,
     status: row.status,
     version: row.version,
-    title: adminEntryTitle(row.data, manifest?.spec.schema),
+    title: manifest?.spec.lifecycle === "operational"
+      ? null
+      : adminEntryTitle(row.data, manifest?.spec.schema),
     updated_at: row.updatedAt,
     translation_locales: translationLocales,
     data_preview: adminDataPreview(row.data, manifest),
@@ -1229,6 +1247,42 @@ function csvField(value: string): string {
 
 function csvRow(fields: readonly string[]): string {
   return fields.map(csvField).join(",");
+}
+
+function csvDownloadResponse(
+  filename: string,
+  columns: readonly string[],
+  chunks: AsyncIterable<string>,
+): Response {
+  const encoder = new TextEncoder();
+  const iterator = chunks[Symbol.asyncIterator]();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(`﻿${csvRow(columns)}\r\n`));
+    },
+    async pull(controller) {
+      const next = await iterator.next();
+      if (next.done) controller.close();
+      else controller.enqueue(encoder.encode(next.value));
+    },
+    async cancel() {
+      await iterator.return?.();
+    },
+  });
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="${filename}.csv"`,
+    },
+  });
+}
+
+function viewCsvValue(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return JSON.stringify(value);
 }
 
 /** Reads one CSV column's value off an entry row. The four leading
@@ -1309,6 +1363,7 @@ type AdminEditorCollection = {
   readonly mediaFields: Array<{ name: string; hint: string }>;
   readonly sortableFields: readonly string[];
   readonly filter: { readonly field: string; readonly values: readonly string[] } | null;
+  readonly list: { readonly primaryField: string | null; readonly columns: readonly string[] };
 };
 
 type AdminEditorEntry = {
@@ -1343,6 +1398,7 @@ function adminEditorCollection(
   schema: SchemaManifest,
   schemas: SchemaManifest[],
 ): AdminEditorCollection {
+  const adminUi = checkSchemaAdminUi(schema);
   return {
     name: schema.metadata.name,
     title: schema.spec.title,
@@ -1356,7 +1412,8 @@ function adminEditorCollection(
     uiSchema: schema.spec.uiSchema ?? null,
     mediaFields: mediaFieldsForCollection(schema, schemas),
     sortableFields: schemaSortableFields(schema),
-    filter: checkSchemaListFilter(schema).filter,
+    filter: adminUi.filter,
+    list: adminUi.list,
   };
 }
 
@@ -1722,6 +1779,7 @@ async function handleViewRequest(
   // the staff mount (`/admin/api/views`); hardcoding the public prefix
   // here mislabels staff-View diagnostics + pathPrefix (#F7).
   mountPath: string,
+  exportCsv = false,
 ): Promise<Response> {
   const view = runtime.viewsByName.get(viewName);
   if (!view) {
@@ -1753,8 +1811,12 @@ async function handleViewRequest(
   const show = parsePositiveInt(url.searchParams.get(SHOW_PARAM));
 
   let params: Record<string, unknown>;
+  let listQuery: ReturnType<typeof readViewListQuery>;
   try {
     params = coerceViewParams(view, url.searchParams);
+    listQuery = mountPath === "/admin/api/views"
+      ? readViewListQuery(view, url.searchParams)
+      : { filters: [] };
   } catch (err) {
     if (err instanceof ViewParamCoercionError) {
       if (view.spec.requires?.auth) {
@@ -1780,12 +1842,53 @@ async function handleViewRequest(
     throw err;
   }
 
-  const result = await runtime.executeView.execute({
+  const execute = (requestedPage: number | undefined) => runtime.executeView.execute({
     view,
     pathPrefix: viewPath,
-    options: { params, page, show },
+    options: {
+      params,
+      page: requestedPage,
+      show: exportCsv ? view.spec.limit : show,
+      search: listQuery.search,
+      filters: listQuery.filters,
+    },
     ctx,
   });
+
+  if (exportCsv) {
+    const result = await execute(1);
+    if (!result.ok) {
+      const status = HTTP_STATUS_BY_CODE[result.diagnostic.code] ?? 500;
+      return Response.json(
+        { ok: false, diagnostic: redactForWire(result.diagnostic) },
+        { status },
+      );
+    }
+    const declaredColumns = checkViewAdminUi(view).list.columns;
+    const columns = declaredColumns.length > 0
+      ? [...declaredColumns]
+      : view.spec.fields?.length
+        ? [...view.spec.fields]
+        : [...new Set(result.result.rows.flatMap((row) => Object.keys(row)))];
+    let current = result.result;
+    let exportPage = 1;
+    async function* chunks(): AsyncGenerator<string> {
+      while (true) {
+        if (current.rows.length > 0) {
+          yield current.rows.map((row) =>
+            csvRow(columns.map((column) => viewCsvValue(row[column])))
+          ).join("\r\n") + "\r\n";
+        }
+        if (current.rows.length < current.show) return;
+        const next = await execute(++exportPage);
+        if (!next.ok) throw new DiagnosticError(next.diagnostic);
+        current = next.result;
+      }
+    }
+    return csvDownloadResponse(viewName, columns, chunks());
+  }
+
+  const result = await execute(page);
 
   if (result.ok) {
     return Response.json({ ok: true, data: result.result });
@@ -1796,6 +1899,41 @@ async function handleViewRequest(
     { ok: false, diagnostic: redactForWire(result.diagnostic) },
     { status },
   );
+}
+
+function readViewListQuery(
+  view: ViewManifest,
+  query: URLSearchParams,
+): {
+  readonly search?: { readonly term: string; readonly fields: readonly string[] };
+  readonly filters: ReadonlyArray<{ readonly field: string; readonly value: string }>;
+} {
+  const list = checkViewAdminUi(view).list;
+  const rawSearch = query.get("search")?.trim() ?? "";
+  if (rawSearch && list.searchFields.length === 0) {
+    throw new ViewParamCoercionError(`View '${view.metadata.name}' does not declare Admin search fields.`);
+  }
+  if (rawSearch.length > 200) {
+    throw new ViewParamCoercionError("View Admin search must be at most 200 characters.");
+  }
+  const allowedFilters = new Set(list.filterFields);
+  for (const key of query.keys()) {
+    if (key.startsWith("filter.") && !allowedFilters.has(key.slice("filter.".length))) {
+      throw new ViewParamCoercionError(`View '${view.metadata.name}' does not declare Admin filter field '${key.slice("filter.".length)}'.`);
+    }
+  }
+  const filters = list.filterFields.flatMap((field) => {
+    const value = query.get(`filter.${field}`)?.trim() ?? "";
+    if (!value) return [];
+    if (value.length > 200) {
+      throw new ViewParamCoercionError(`View Admin filter '${field}' must be at most 200 characters.`);
+    }
+    return [{ field, value }];
+  });
+  return {
+    search: rawSearch ? { term: rawSearch, fields: list.searchFields } : undefined,
+    filters,
+  };
 }
 
 function parsePositiveInt(raw: string | null): number | undefined {

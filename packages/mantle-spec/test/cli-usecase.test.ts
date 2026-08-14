@@ -23,6 +23,7 @@ apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: posts-by-locale }
 spec:
+  surface: public
   from: posts
   params:
     type: object
@@ -195,6 +196,7 @@ apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: privatePosts }
 spec:
+  surface: public
   from: posts
   requires:
     auth:
@@ -236,6 +238,7 @@ apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: localPrivate }
 spec:
+  surface: public
   from: posts
   requires: { auth: { all: [ctx.user] } }
 `);
@@ -381,6 +384,7 @@ apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: posts-by-locale }
 spec:
+  surface: public
   from: posts
   params:
     type: object

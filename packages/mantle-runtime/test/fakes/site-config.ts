@@ -1,4 +1,4 @@
-import type { MediaPurposePolicy, SiteConfig, SiteDefaults } from "@aotter/mantle-spec";
+import { DEFAULT_SITE_ICONS, type MediaPurposePolicy, type SiteConfig, type SiteDefaults } from "@aotter/mantle-spec";
 import type {
   SiteConfigRepository,
   UpdateEditableSiteConfigArgs,
@@ -30,6 +30,7 @@ export class InMemorySiteConfigRepository implements SiteConfigRepository {
       locales: [],
       canonicalLocale: null,
       brand: "Test",
+      icons: DEFAULT_SITE_ICONS,
       media: { purposes: this.purposes },
     };
   }

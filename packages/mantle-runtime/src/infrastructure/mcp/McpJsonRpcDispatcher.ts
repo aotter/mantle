@@ -1,10 +1,12 @@
 import {
   DiagnosticError,
   redactForWire,
+  runtimeDiagnostic,
   type ContentState,
   type MediaPurposePolicy,
   type ProcedureManifest,
   type SchemaManifest,
+  type SiteIcon,
   type ViewManifest,
 } from "@aotter/mantle-spec";
 import type { MediaVariantRole } from "../../domain/port/MediaStorage.js";
@@ -43,6 +45,16 @@ import {
   jsonRpcOkRaw,
 } from "./McpResponses.js";
 import packageJson from "../../../package.json" with { type: "json" };
+
+export const MCP_PROTOCOL_VERSION = "2025-11-25";
+
+export interface McpServerInfo {
+  readonly name: string;
+  readonly title?: string;
+  readonly description?: string;
+  readonly websiteUrl?: string;
+  readonly icons?: readonly SiteIcon[];
+}
 
 /** JSON-RPC dispatcher for the MCP transport. Env-agnostic; the
  *  adapter resolves the caller's identity and hands `dispatch` the same
@@ -89,6 +101,7 @@ export class McpJsonRpcDispatcher {
    *  segment from the tool name and recovers the canonical
    *  collection name. */
   private readonly schemaBySegment: ReadonlyMap<string, string>;
+  private readonly readOnlyCollections: ReadonlySet<string>;
   private readonly viewBySegment: ReadonlyMap<string, ViewManifest>;
   /** tool-name → Procedure manifest, for MCP triggers (#281). */
   private readonly procedureByToolName: ReadonlyMap<string, ProcedureManifest>;
@@ -103,6 +116,7 @@ export class McpJsonRpcDispatcher {
        *  `Trigger.source.kind: "mcp"` (#281). Adapter pre-filters
        *  by surface; dispatcher trusts the slice. */
       readonly procedures?: ReadonlyArray<ProcedureManifest>;
+      readonly serverInfo?: McpServerInfo;
     } = {},
   ) {
     this.catalog = buildMcpToolCatalog(schemas, {
@@ -114,6 +128,9 @@ export class McpJsonRpcDispatcher {
     });
     this.catalogWireJson = `{"tools":${JSON.stringify(this.catalog)}}`;
     this.catalogToolNames = new Set(this.catalog.map((tool) => tool.name));
+    this.readOnlyCollections = new Set(
+      schemas.filter((schema) => schema.spec.schema.readOnly === true).map((schema) => schema.metadata.name),
+    );
     const map = new Map<string, string>();
     for (const s of schemas) map.set(mcpToolNameSegment(s.metadata.name), s.metadata.name);
     this.schemaBySegment = map;
@@ -131,28 +148,43 @@ export class McpJsonRpcDispatcher {
     req: Request,
     ctx: HandlerContext,
   ): Promise<Response> {
-    if (req.method === "GET") {
-      return new Response("MCP endpoint — POST JSON-RPC here.", { status: 200 });
-    }
     if (req.method !== "POST") {
-      return new Response("method not allowed", { status: 405 });
+      return new Response("method not allowed", { status: 405, headers: { allow: "POST" } });
     }
 
-    let body: { id?: number | string | null; method?: string; params?: unknown };
+    let body: { jsonrpc?: string; id?: number | string | null; method?: string; params?: unknown };
     try {
       body = (await req.json()) as typeof body;
     } catch {
       return jsonRpcError(null, -32700, "parse error");
     }
+    if (
+      !body
+      || typeof body !== "object"
+      || Array.isArray(body)
+      || body.jsonrpc !== "2.0"
+      || typeof body.method !== "string"
+    ) {
+      return jsonRpcError(null, -32600, "invalid request");
+    }
     const { id = null, method, params } = body;
+
+    if (method !== "initialize" && req.headers.get("mcp-protocol-version") !== MCP_PROTOCOL_VERSION) {
+      return new Response(`MCP-Protocol-Version must be ${MCP_PROTOCOL_VERSION}.`, { status: 400 });
+    }
 
     switch (method) {
       case "initialize":
         return jsonRpcOk(id, {
-          protocolVersion: "2025-03-26",
+          protocolVersion: MCP_PROTOCOL_VERSION,
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "@aotter/mantle-runtime/mcp", version: packageJson.version },
+          serverInfo: {
+            ...(this.options.serverInfo ?? { name: "aotter.mantle" }),
+            version: packageJson.version,
+          },
         });
+      case "notifications/initialized":
+        return new Response(null, { status: 202 });
       case "tools/list":
         return jsonRpcOkRaw(id, this.catalogWireJson);
       case "tools/call":
@@ -281,6 +313,7 @@ export class McpJsonRpcDispatcher {
       case "request_publish": {
         const id = args["id"];
         if (typeof id !== "string") return MISSING_ARG;
+        await this.assertEntryMutable(id, name);
         return this.useCases.requestPublish.execute({
           id,
           ctx,
@@ -290,6 +323,7 @@ export class McpJsonRpcDispatcher {
       case "unpublish_entry": {
         const id = args["id"];
         if (typeof id !== "string") return MISSING_ARG;
+        await this.assertEntryMutable(id, name);
         return this.useCases.unpublish.execute({
           id,
           ctx,
@@ -299,6 +333,7 @@ export class McpJsonRpcDispatcher {
       case "archive_entry": {
         const id = args["id"];
         if (typeof id !== "string") return MISSING_ARG;
+        await this.assertEntryMutable(id, name);
         return this.useCases.archive.execute({
           id,
           ctx,
@@ -308,6 +343,7 @@ export class McpJsonRpcDispatcher {
       case "delete_entry": {
         const id = args["id"];
         if (typeof id !== "string") return MISSING_ARG;
+        await this.assertEntryMutable(id, name);
         return this.useCases.deleteEntry.execute({
           id,
           ctx,
@@ -409,6 +445,19 @@ export class McpJsonRpcDispatcher {
         return UNKNOWN_TOOL;
       }
     }
+  }
+
+  private async assertEntryMutable(id: string, toolName: string): Promise<void> {
+    const entry = await this.useCases.getEntry.execute({ id });
+    if (!this.readOnlyCollections.has(entry.collection)) return;
+    throw new DiagnosticError(runtimeDiagnostic({
+      code: "CONFLICT",
+      severity: "error",
+      path: `MCP ${toolName}`,
+      value: entry.collection,
+      expected: "a Schema without root readOnly: true",
+      message: `Schema '${entry.collection}' is read-only on generic authoring surfaces; use its declared Procedures.`,
+    }));
   }
 }
 

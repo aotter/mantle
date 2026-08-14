@@ -34,7 +34,7 @@ import {
   schemaIndexDiagnosticCode,
 } from "./SchemaIndexChecker.js";
 import { checkSchemaSearchableFields } from "./SchemaSearchChecker.js";
-import { checkSchemaListFilter } from "./SchemaAdminUiChecker.js";
+import { checkFormUiSchema, checkSchemaAdminUi, checkViewAdminUi } from "./SchemaAdminUiChecker.js";
 
 /**
  * Shared shape validator for `LocalizedText` fields (`Schema.spec.title`
@@ -433,12 +433,12 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
           : "SCHEMA_SEARCH_INVALID",
     );
   }
-  const listFilterProblem = checkSchemaListFilter(m).problems[0];
-  if (listFilterProblem) {
+  const adminUiProblem = checkSchemaAdminUi(m).problems[0];
+  if (adminUiProblem) {
     throw new ManifestParseError(
-      listFilterProblem.message,
+      adminUiProblem.message,
       idx,
-      listFilterProblem.pointer,
+      adminUiProblem.pointer,
       "SCHEMA_UI_INVALID",
     );
   }
@@ -519,7 +519,7 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   const s = m.spec as unknown as Record<string, unknown>;
   rejectUnknownKeys(
     s,
-    ["title", "from", "surface", "requires", "filter", "fields", "orderBy", "limit", "params"],
+    ["title", "uiSchema", "from", "sql", "surface", "requires", "filter", "fields", "orderBy", "limit", "params"],
     idx,
     "/spec",
   );
@@ -530,29 +530,50 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
     "View.spec.title",
     false,
   );
-  if (typeof s["from"] !== "string" || (s["from"] as string).length === 0) {
-    throw new ManifestParseError("View.spec.from is required (non-empty string)", idx, "/spec/from");
+  const hasFrom = typeof s["from"] === "string" && (s["from"] as string).length > 0;
+  const hasSql = typeof s["sql"] === "string" && (s["sql"] as string).trim().length > 0;
+  if (hasFrom === hasSql) {
+    throw new ManifestParseError(
+      "View.spec requires exactly one of `from` or `sql`",
+      idx,
+      "/spec",
+    );
   }
-  // `surface` is optional (absent ⇒ public). When present it reuses
-  // the `MCP_TRIGGER_SURFACES` vocabulary (`public` | `staff`) —
-  // `staff` moves the View off the public REST mount to the
-  // staff-gated admin path (#433).
-  if ("surface" in s && s["surface"] != null) {
-    const surface = s["surface"];
-    if (typeof surface !== "string" || !V01_MCP_TRIGGER_SURFACES.has(surface)) {
-      throw new ManifestParseError(
-        `View.spec.surface must be one of ${[...V01_MCP_TRIGGER_SURFACES].join(", ")}; got ${JSON.stringify(surface)}`,
-        idx,
-        "/spec/surface",
-      );
-    }
+  const surface = s["surface"];
+  if (typeof surface !== "string" || !V01_MCP_TRIGGER_SURFACES.has(surface)) {
+    throw new ManifestParseError(
+      `View.spec.surface is required and must be one of ${[...V01_MCP_TRIGGER_SURFACES].join(", ")}; got ${JSON.stringify(surface)}`,
+      idx,
+      "/spec/surface",
+    );
   }
   if ("requires" in s && s["requires"] != null) {
     validateRequires(s["requires"], idx, "View");
   }
+  const adminUiProblem = checkViewAdminUi(m).problems[0];
+  if (adminUiProblem) {
+    throw new ManifestParseError(
+      adminUiProblem.message,
+      idx,
+      adminUiProblem.pointer,
+      "VIEW_UI_INVALID",
+    );
+  }
   let paramSchema: JsonSchema | undefined;
   if ("params" in s && s["params"] != null) {
     paramSchema = validateViewParams(s["params"], idx);
+  }
+  if (hasSql) {
+    validateViewSql(s["sql"] as string, paramSchema, idx);
+    for (const key of ["filter", "fields", "orderBy"] as const) {
+      if (s[key] !== undefined) {
+        throw new ManifestParseError(
+          `View.spec.${key} cannot be combined with View.spec.sql`,
+          idx,
+          `/spec/${key}`,
+        );
+      }
+    }
   }
   if ("filter" in s && s["filter"] != null) {
     validateFilterAst(s["filter"], idx, "View.spec.filter", "/spec/filter", paramSchema);
@@ -561,6 +582,38 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
     validateViewOrderBy(s["orderBy"], idx);
   }
   return m;
+}
+
+function validateViewSql(sql: string, params: JsonSchema | undefined, idx: number): void {
+  const trimmed = sql.trim();
+  if (!/^select\b/i.test(trimmed) || trimmed.includes(";")) {
+    throw new ManifestParseError(
+      "View.spec.sql must be one SELECT statement without a semicolon",
+      idx,
+      "/spec/sql",
+    );
+  }
+  const properties = (params?.properties ?? {}) as Record<string, unknown>;
+  const required = new Set(params?.required ?? []);
+  for (const match of trimmed.matchAll(/:([A-Za-z_][A-Za-z0-9_]*)/g)) {
+    const name = match[1]!;
+    if (!Object.prototype.hasOwnProperty.call(properties, name)) {
+      throw new ManifestParseError(
+        `View.spec.sql references unknown param '${name}'; declare it under View.spec.params.properties.`,
+        idx,
+        "/spec/sql",
+        "VIEW_FILTER_PARAM_REF_UNKNOWN",
+      );
+    }
+    if (!required.has(name)) {
+      throw new ManifestParseError(
+        `View.spec.sql references optional param '${name}'; bound SQL params must appear in View.spec.params.required.`,
+        idx,
+        "/spec/sql",
+        "VIEW_FILTER_PARAM_REF_NOT_REQUIRED",
+      );
+    }
+  }
 }
 
 /**
@@ -766,7 +819,7 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
   const s = m.spec as unknown as Record<string, unknown>;
   rejectUnknownKeys(
     s,
-    ["title", "description", "requires", "input", "output", "handler"],
+    ["title", "description", "requires", "input", "uiSchema", "output", "handler"],
     idx,
     "/spec",
   );
@@ -786,6 +839,10 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
   );
   if (typeof s["input"] !== "object" || s["input"] === null) {
     throw new ManifestParseError("Procedure.spec.input is required (JSON Schema)", idx, "/spec/input");
+  }
+  const uiProblem = checkFormUiSchema(s["input"] as JsonSchema, s["uiSchema"], "Procedure")[0];
+  if (uiProblem) {
+    throw new ManifestParseError(uiProblem.message, idx, uiProblem.pointer, "SCHEMA_UI_INVALID");
   }
   if (typeof s["output"] !== "object" || s["output"] === null) {
     throw new ManifestParseError("Procedure.spec.output is required (JSON Schema)", idx, "/spec/output");

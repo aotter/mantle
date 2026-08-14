@@ -3,6 +3,8 @@ import type { CmsConfig } from "../mount/cmsConfig.js";
 import { AssetsAssetServer } from "./AssetsAssetServer.js";
 import { D1DatabaseDriver } from "./D1DatabaseDriver.js";
 
+// Pre-static-assets starters remain runnable during the alpha migration;
+// their Admin route returns the explicit missing-assets response.
 const NO_ASSETS: AssetServer = { fetch: async () => null };
 
 export interface ConventionalBindingsEnv {

@@ -7,11 +7,11 @@ import {
   Check,
   Copy,
   Download,
+  Eye,
   FileText,
   Globe,
   PencilLine,
   Plus,
-  Search,
   Trash2,
   X,
 } from "lucide-react";
@@ -57,10 +57,16 @@ import { statusLabel } from "./status";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t, type I18nKey } from "../../app/i18n";
 import { formatTimestampMs, idTail } from "./field-render";
-import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
+import {
+  boundOperationsFor,
+  CollectionOperations,
+  collectionOperationsFor,
+  RowOperationsMenu,
+} from "./row-operations";
 import { renderDataValue } from "../../lib/render-data-value";
 import { renderTitleText } from "../../lib/entry-title";
 import { LocaleBadge, LocaleStatusBadges } from "./locale-badge";
+import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 
 const COLLECTION_PAGE_SIZE = 50;
 type SortDirection = "asc" | "desc";
@@ -103,6 +109,10 @@ export function CollectionView({
   const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
   const boundOperations = React.useMemo(
     () => boundOperationsFor(operationsQuery.data, collectionName),
+    [operationsQuery.data, collectionName],
+  );
+  const collectionOperations = React.useMemo(
+    () => collectionOperationsFor(operationsQuery.data, collectionName),
     [operationsQuery.data, collectionName],
   );
   const entries = useQuery<ListEntriesResult>({
@@ -151,17 +161,54 @@ export function CollectionView({
     ? resolveLocalizedText(collection.title, language, canonical) ?? collection.name
     : collectionName;
   const isOperationalCollection = collection?.lifecycle === "operational";
+  const isReadOnlyCollection = collection?.schema?.readOnly === true;
   const canManageContent = me.data?.role === "owner" || me.data?.role === "editor";
-  const canCreateDraft = Boolean(me.data?.role) && !isOperationalCollection;
-  const dataColumns = React.useMemo(() => dataPreviewColumns(collection), [collection]);
-  const titleField = isOperationalCollection ? collectionTitleField(collection) : null;
-  const titleColumnLabel = isOperationalCollection
-    ? propertyLabel(
-        titleField ?? "title",
-        collection?.schema?.properties?.[titleField ?? ""],
-        language,
-        canonical,
-      )
+  const canCreateDraft = Boolean(me.data?.role) && !isOperationalCollection && !isReadOnlyCollection;
+  const showSelection = canManageContent && !isReadOnlyCollection;
+  const dataColumns = isOperationalCollection ? collection?.list?.columns ?? [] : [];
+  const collectionFilter = isOperationalCollection ? collection?.filter ?? null : null;
+  const listQueryFilter = collectionFilter ? {
+    name: collectionFilter.field,
+    label: propertyLabel(
+      collectionFilter.field,
+      collection?.schema?.properties?.[collectionFilter.field],
+      language,
+      canonical,
+    ),
+    value: filterField === collectionFilter.field ? filterValue : "",
+    allHref: collectionHref(collectionName, { searchTerm, sortField, sortDirection }),
+    options: collectionFilter.values.map((value) => ({
+      value,
+      label: fieldLabel(value),
+      href: collectionHref(collectionName, {
+        searchTerm,
+        filterField: collectionFilter.field,
+        filterValue: value,
+        sortField,
+        sortDirection,
+      }),
+    })),
+  } : collection && !isOperationalCollection ? {
+    name: "status",
+    label: t(language, "collection.table.status"),
+    value: status,
+    allHref: collectionHref(collection.name, { searchTerm, sortField, sortDirection }),
+    options: PUBLISHING_STATUSES.map((value) => ({
+      value,
+      label: statusLabel(language, value),
+      href: collectionHref(collection.name, {
+        status: value,
+        searchTerm,
+        sortField,
+        sortDirection,
+      }),
+    })),
+  } : null;
+  const titleField = isOperationalCollection
+    ? collection?.list?.primaryField ?? null
+    : null;
+  const titleColumnLabel = titleField
+    ? propertyLabel(titleField, collection?.schema?.properties?.[titleField], language, canonical)
     : t(language, "collection.table.title");
   const refreshEntries = React.useCallback(() => {
     clearSelection();
@@ -203,7 +250,7 @@ export function CollectionView({
               {t(language, "collection.breadcrumb")}
             </a>
             <span className="mx-2 text-foreground/30">/</span>
-            <span className="text-foreground/70">{collectionName}</span>
+            <span className="text-foreground/70">{heading}</span>
           </>
         }
         title={heading}
@@ -214,7 +261,16 @@ export function CollectionView({
               type="button"
               variant="secondary"
               onClick={() => {
-                window.location.href = `/admin/api/entries/export?collection=${encodeURIComponent(collectionName)}`;
+                const exportParams = new URLSearchParams({ collection: collectionName });
+                if (status) exportParams.set("status", status);
+                if (searchTerm) exportParams.set("search", searchTerm);
+                if (filterField && filterValue) {
+                  exportParams.set("filter_field", filterField);
+                  exportParams.set("filter_value", filterValue);
+                }
+                exportParams.set("sort", sortField);
+                exportParams.set("direction", sortDirection);
+                window.location.href = `/admin/api/entries/export?${exportParams.toString()}`;
               }}
             >
               <Download className="size-4" aria-hidden />
@@ -232,7 +288,12 @@ export function CollectionView({
                   : t(language, "collection.create")}
               </Button>
             ) : null}
-            {status ? <StatusBadge status={status} /> : null}
+            <CollectionOperations
+              operations={collectionOperations}
+              language={language}
+              canonical={canonical}
+              onSuccess={refreshEntries}
+            />
           </div>
         }
       />
@@ -240,28 +301,22 @@ export function CollectionView({
       {createMutation.isError ? <ErrorBox error={createMutation.error} /> : null}
 
       {collection ? (
-        <CollectionSearch
-          collectionName={collection.name}
-          status={status}
-          searchTerm={searchTerm}
-          filterField={filterField}
-          filterValue={filterValue}
-          sortField={sortField}
-          sortDirection={sortDirection}
+        <ListQueryToolbar
+          key={location.search}
           language={language}
-        />
-      ) : null}
-
-      {collection && (collection.lifecycle !== "operational" || collection.filter) ? (
-        <CollectionFilterTabs
-          collection={collection}
-          activeStatus={status}
-          activeFilterField={filterField}
-          activeFilterValue={filterValue}
-          searchTerm={searchTerm}
-          sortField={sortField}
-          sortDirection={sortDirection}
-          language={language}
+          searchValue={searchTerm}
+          filters={listQueryFilter ? [listQueryFilter] : []}
+          onSubmit={({ search, filters }) => {
+            const nextFilter = collectionFilter ? filters[collectionFilter.field] : undefined;
+            window.location.href = collectionHref(collection.name, {
+              status: isOperationalCollection ? status : filters.status || undefined,
+              searchTerm: search,
+              filterField: nextFilter ? collectionFilter?.field : undefined,
+              filterValue: nextFilter || undefined,
+              sortField,
+              sortDirection,
+            });
+          }}
         />
       ) : null}
 
@@ -275,16 +330,19 @@ export function CollectionView({
             searchTerm
               ? t(language, "collection.empty.search", { search: searchTerm })
               : filterValue
-              ? t(language, "collection.empty.withStatus", { status: fieldLabel(filterValue) })
+              ? t(language, "collection.empty.withStatus", {
+                  collection: heading,
+                  status: fieldLabel(filterValue),
+                })
               : status
-              ? t(language, "collection.empty.withStatus", { status })
-              : t(language, "collection.empty.all")
+              ? t(language, "collection.empty.withStatus", { collection: heading, status })
+              : t(language, "collection.empty.all", { collection: heading })
           }
         />
       )}
       {displayedEntries && displayedEntries.items.length > 0 && (
         <>
-          {selected.size > 0 && canManageContent ? (
+          {selected.size > 0 && canManageContent && !isReadOnlyCollection ? (
             <BulkActionBar
               language={language}
               collection={collection}
@@ -296,8 +354,8 @@ export function CollectionView({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-10">
-                  {canManageContent ? (
+                {showSelection ? (
+                  <TableHead className="w-10">
                     <Checkbox
                       aria-label={t(language, "collection.table.selectAll")}
                       checked={
@@ -318,8 +376,8 @@ export function CollectionView({
                         });
                       }}
                     />
-                  ) : null}
-                </TableHead>
+                  </TableHead>
+                ) : null}
                 <SortableTableHead
                   className="hidden md:table-cell"
                   label={t(language, "collection.table.id")}
@@ -328,15 +386,17 @@ export function CollectionView({
                   direction={sortDirection}
                   href={sortHref(collectionName, status, searchTerm, "id", sortField, sortDirection, filterField, filterValue)}
                 />
-                {titleField && collection?.sortableFields?.includes(titleField)
-                  ? <SortableTableHead
-                      label={titleColumnLabel}
-                      field={titleField}
-                      activeField={sortField}
-                      direction={sortDirection}
-                      href={sortHref(collectionName, status, searchTerm, titleField, sortField, sortDirection, filterField, filterValue)}
-                    />
-                  : <TableHead>{titleColumnLabel}</TableHead>}
+                {!isOperationalCollection || titleField ? (
+                  titleField && collection?.sortableFields?.includes(titleField)
+                    ? <SortableTableHead
+                        label={titleColumnLabel}
+                        field={titleField}
+                        activeField={sortField}
+                        direction={sortDirection}
+                        href={sortHref(collectionName, status, searchTerm, titleField, sortField, sortDirection, filterField, filterValue)}
+                      />
+                    : <TableHead>{titleColumnLabel}</TableHead>
+                ) : null}
                 {isOperationalCollection ? (
                   dataColumns.map((name) => (
                     collection?.sortableFields?.includes(name)
@@ -394,6 +454,7 @@ export function CollectionView({
                   collection={collection}
                   siteLocales={site.data?.locales ?? []}
                   dataColumns={isOperationalCollection ? dataColumns : null}
+                  primaryField={isOperationalCollection ? titleField : null}
                   boundOperations={boundOperations}
                   onOperationSuccess={refreshEntries}
                   selected={selected.has(row.id)}
@@ -412,12 +473,12 @@ export function CollectionView({
                     (deleteMutation.isPending && deleteMutation.variables === row.id)
                   }
                   canEdit={
-                    canManageContent ||
-                    (me.data?.role === "contributor" &&
-                      !isOperationalCollection &&
-                      row.status === "draft")
+                    !isReadOnlyCollection && (canManageContent ||
+                      (me.data?.role === "contributor" &&
+                        !isOperationalCollection &&
+                        row.status === "draft"))
                   }
-                  canDelete={canManageContent}
+                  canDelete={canManageContent && !isReadOnlyCollection}
                 />
               ))}
             </TableBody>
@@ -543,61 +604,6 @@ function BulkActionBar({
   );
 }
 
-function CollectionSearch({
-  collectionName,
-  status,
-  searchTerm,
-  filterField,
-  filterValue,
-  sortField,
-  sortDirection,
-  language,
-}: {
-  collectionName: string;
-  status: string | undefined;
-  searchTerm: string;
-  filterField: string | undefined;
-  filterValue: string | undefined;
-  sortField: string;
-  sortDirection: SortDirection;
-  language: AdminLanguage;
-}): React.ReactElement {
-  const [draft, setDraft] = React.useState(searchTerm);
-  React.useEffect(() => setDraft(searchTerm), [searchTerm]);
-  return (
-    <form
-      className="mb-3 flex max-w-xl gap-2"
-      role="search"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const next = draft.trim();
-        window.location.href = collectionHref(collectionName, {
-          status,
-          searchTerm: next,
-          filterField,
-          filterValue,
-          sortField,
-          sortDirection,
-        });
-      }}
-    >
-      <label className="relative block flex-1" aria-label={t(language, "collection.searchPlaceholder")}>
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <Input
-          className="h-9 ps-9"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder={t(language, "collection.searchPlaceholder")}
-        />
-      </label>
-      <Button type="submit" variant="secondary" size="sm" className="h-9">
-        <Search className="size-4" aria-hidden />
-        {t(language, "collection.search")}
-      </Button>
-    </form>
-  );
-}
-
 function renderCollectionDescription(
   collection: Collection | undefined,
   language: AdminLanguage,
@@ -627,69 +633,6 @@ export function collectionSummaryKey(collection: Collection | undefined): I18nKe
   if (hasLifecycle) return "collection.schemaSummary.lifecycleOnly";
   if (hasTranslations) return "collection.schemaSummary.i18nOnly";
   return "collection.schemaSummary.plain";
-}
-
-function CollectionFilterTabs({
-  collection,
-  activeStatus,
-  activeFilterField,
-  activeFilterValue,
-  searchTerm,
-  sortField,
-  sortDirection,
-  language,
-}: {
-  collection: Collection;
-  activeStatus: string | undefined;
-  activeFilterField: string | undefined;
-  activeFilterValue: string | undefined;
-  searchTerm: string;
-  sortField: string;
-  sortDirection: SortDirection;
-  language: AdminLanguage;
-}): React.ReactElement {
-  const statuses = PUBLISHING_STATUSES;
-  const filter = collection.lifecycle === "operational" ? collection.filter : null;
-
-  return (
-    <div className="mb-5 flex gap-2 overflow-x-auto pb-1">
-      <StatusFilterLink
-        href={collectionHref(collection.name, { searchTerm, sortField, sortDirection })}
-        active={!activeStatus && !activeFilterValue}
-      >
-        {t(language, "collection.filter.all")}
-      </StatusFilterLink>
-      {filter?.values.map((value) => (
-        <StatusFilterLink
-          key={value}
-          href={collectionHref(collection.name, {
-            searchTerm,
-            filterField: filter.field,
-            filterValue: value,
-            sortField,
-            sortDirection,
-          })}
-          active={activeFilterField === filter.field && activeFilterValue === value}
-        >
-          {fieldLabel(value)}
-        </StatusFilterLink>
-      ))}
-      {!filter && statuses.map((s) => (
-        <StatusFilterLink
-          key={s}
-          href={collectionHref(collection.name, {
-            status: s,
-            searchTerm,
-            sortField,
-            sortDirection,
-          })}
-          active={activeStatus === s}
-        >
-          {statusLabel(language, s)}
-        </StatusFilterLink>
-      ))}
-    </div>
-  );
 }
 
 function collectionHref(
@@ -831,32 +774,6 @@ function CollectionPagination({
   );
 }
 
-function StatusFilterLink({
-  href,
-  active,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  children: React.ReactNode;
-}): React.ReactElement {
-  return (
-    <a
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "inline-flex h-8 shrink-0 items-center justify-center rounded-lg border px-3 text-xs font-medium",
-        "transition-colors duration-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-        active
-          ? "border-border bg-secondary text-secondary-foreground"
-          : "border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-      )}
-    >
-      {children}
-    </a>
-  );
-}
-
 function EntriesSkeleton(): React.ReactElement {
   return (
     <div className="overflow-hidden rounded-lg border">
@@ -912,6 +829,7 @@ function EntryRowDisplay({
   collection,
   siteLocales,
   dataColumns,
+  primaryField,
   boundOperations,
   onOperationSuccess,
   selected,
@@ -930,6 +848,7 @@ function EntryRowDisplay({
   /** Non-null (possibly empty) for `lifecycle: "operational"` collections —
    *  swaps the status/locale/version cells for these data columns. */
   dataColumns: string[] | null;
+  primaryField: string | null;
   /** Operations bound to this collection's rows. */
   boundOperations: StaffOperation[];
   onOperationSuccess: () => void;
@@ -941,8 +860,11 @@ function EntryRowDisplay({
   canEdit: boolean;
   canDelete: boolean;
 }): React.ReactElement {
-  const itemName = renderTitleText(row.title, language);
   const isOperational = dataColumns !== null;
+  const itemName = renderTitleText(
+    isOperational ? (primaryField ? row.data_preview?.[primaryField] : row.id) : row.title,
+    language,
+  );
   const [editing, setEditing] = React.useState(false);
   const [draftTitle, setDraftTitle] = React.useState(itemName);
   const [error, setError] = React.useState<string | null>(null);
@@ -982,19 +904,19 @@ function EntryRowDisplay({
 
   return (
     <TableRow>
-      <TableCell>
-        {canDelete ? (
+      {canDelete ? (
+        <TableCell>
           <Checkbox
             aria-label={t(language, "collection.table.selectRow", { name: itemName })}
             checked={selected}
             onCheckedChange={(checked) => onToggleSelect(checked === true)}
           />
-        ) : null}
-      </TableCell>
+        </TableCell>
+      ) : null}
       <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
         <CopyIdButton id={String(row.id)} language={language} />
       </TableCell>
-      <TableCell className="max-w-[28rem]">
+      {!isOperational || primaryField ? <TableCell className="max-w-[28rem]">
         <div className="min-w-44 md:min-w-64">
           {isOperational ? (
             <a
@@ -1002,7 +924,7 @@ function EntryRowDisplay({
               className="block truncate font-medium hover:underline"
               title={itemName}
             >
-              {renderTitle(row.title, language)}
+              {renderDataValue(collection?.schema?.properties?.[primaryField ?? ""], row.data_preview?.[primaryField ?? ""])}
             </a>
           ) : editing ? (
             <div className="flex items-center gap-1">
@@ -1049,7 +971,7 @@ function EntryRowDisplay({
           )}
           {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
         </div>
-      </TableCell>
+      </TableCell> : null}
       {dataColumns ? (
         dataColumns.map((name) => (
           <TableCell key={name} className="text-muted-foreground">
@@ -1084,11 +1006,25 @@ function EntryRowDisplay({
         <div className="flex items-center gap-1">
           {canEdit ? (
             <Button asChild variant="ghost" size="icon-sm">
-              <a title={t(language, "crud.editTooltip", { name: itemName })} href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}>
+              <a
+                title={t(language, "crud.editTooltip", { name: itemName })}
+                aria-label={t(language, "crud.editTooltip", { name: itemName })}
+                href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}
+              >
                 <PencilLine className="size-3.5" aria-hidden />
               </a>
             </Button>
-          ) : null}
+          ) : (
+            <Button asChild variant="ghost" size="icon-sm">
+              <a
+                title={t(language, "crud.viewTooltip", { name: itemName })}
+                aria-label={t(language, "crud.viewTooltip", { name: itemName })}
+                href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}
+              >
+                <Eye className="size-3.5" aria-hidden />
+              </a>
+            </Button>
+          )}
           {canDelete ? (
             <Button type="button" variant="ghost" size="icon-sm" title={t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy} onClick={() => void remove()}>
               <Trash2 className="size-3.5" aria-hidden />
@@ -1123,33 +1059,4 @@ function renderTitle(
   }
   if (typeof title === "string") return title;
   return <span className="font-mono text-xs">{JSON.stringify(title)}</span>;
-}
-
-/** Must match the reserved columns filtered by the Admin API. */
-const DATA_PREVIEW_SYSTEM_COLUMN_NAMES = new Set(["updatedAt", "createdAt"]);
-
-/** Derive up to three operational preview columns from required fields. */
-function dataPreviewColumns(collection: Collection | undefined): string[] {
-  if (!collection || collection.lifecycle !== "operational") return [];
-  const schema = collection.schema;
-  const required = schema?.required ?? [];
-  const titleKey = collectionTitleField(collection);
-  return required
-    .filter((key) => key !== titleKey && !DATA_PREVIEW_SYSTEM_COLUMN_NAMES.has(key))
-    .slice(0, 3);
-}
-
-function collectionTitleField(collection: Collection | undefined): string | null {
-  const schema = collection?.schema;
-  const properties = schema?.properties ?? {};
-  const required = schema?.required ?? [];
-  return (
-    ["title", "name", "slug"].find((key) => key in properties) ??
-    required.find((key) => {
-      const raw = properties[key]?.type;
-      const types = Array.isArray(raw) ? raw : raw ? [raw] : [];
-      return types.includes("string");
-    }) ??
-    null
-  );
 }

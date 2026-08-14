@@ -38,9 +38,9 @@ export interface SiteConfig {
    *  sign-in card). Distinct from `title` so single-tenant operators
    *  can ship one and agencies can override the other. */
   readonly brand: string;
-  /** Absolute or root-relative favicon URL. Omit to use the SDK's
-   *  default AotterMantle mark at `/favicon.svg`. */
-  readonly faviconUrl?: string;
+  /** One site identity shared by browser favicons, Admin chrome, and
+   *  MCP `serverInfo.icons`. Always contains at least the SDK default. */
+  readonly icons: readonly SiteIcon[];
   /** GA4 Measurement ID (for example `G-XXXXXXXXXX`). When present,
    *  the runtime injects the standard gtag snippet into rendered
    *  storefront HTML. */
@@ -122,8 +122,8 @@ export interface MediaPurposePolicy {
 
 /**
  * Defaults declared by the consumer in `src/mantle/config.ts`. Operator-owned
- * fields seed once, while deployment-owned fields (`origin`, `locales`, and
- * media purposes) sync on every boot. Empty / blank fields skip, preventing a
+ * fields seed once, while deployment-owned fields (`origin`, `icons`, `locales`,
+ * and media purposes) sync on every boot. Empty / blank fields skip, preventing a
  * partial declaration from clobbering stored values.
  *
  * Validated during `bootInit()` by `assertSiteDefaultsCanonical`; a
@@ -150,8 +150,8 @@ export interface SiteDefaults {
    *  consumers. The runtime syncs it from `src/mantle/config.ts` on every boot
    *  so a later custom-domain change becomes canonical without a D1 edit. */
   readonly origin?: string;
-  /** Absolute or root-relative favicon URL. */
-  readonly faviconUrl?: string;
+  /** Browser / Admin / MCP icon renditions. Root-relative or absolute HTTPS. */
+  readonly icons?: ReadonlyArray<SiteIcon>;
   /** Optional first-deploy GA4 Measurement ID seed. */
   readonly ga4MeasurementId?: string;
   /** Optional first-deploy Facebook/Meta Pixel ID seed. */
@@ -169,6 +169,20 @@ export interface SiteDefaults {
 export interface SiteMediaDefaults {
   readonly purposes?: ReadonlyArray<MediaPurposePolicy>;
 }
+
+/** MCP-compatible icon metadata, reused directly by every site surface. */
+export interface SiteIcon {
+  readonly src: string;
+  readonly mimeType?: "image/png" | "image/jpeg" | "image/svg+xml" | "image/webp";
+  readonly sizes?: ReadonlyArray<string>;
+  readonly theme?: "light" | "dark";
+}
+
+export const DEFAULT_SITE_ICONS: readonly SiteIcon[] = [{
+  src: "/_mantle/admin/favicon.svg",
+  mimeType: "image/svg+xml",
+  sizes: ["any"],
+}];
 
 /** Slug regex for `media.purposes[].name`. Matches a lowercase
  *  alphanumeric word, optionally followed by dash-separated

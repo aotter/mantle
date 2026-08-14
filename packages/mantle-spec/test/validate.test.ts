@@ -53,7 +53,7 @@ function view(
     apiVersion,
     kind: "View",
     metadata: { name },
-    spec: { from, ...overrides },
+    spec: { surface: "public", from, ...overrides },
   };
 }
 
@@ -508,6 +508,8 @@ spec:
   uiSchema:
     list:
       filterField: ${filterField}
+      primaryField: orderState
+      columns: [placedAt]
 `;
 
   it("accepts one indexed string-enum field", () => {
@@ -525,6 +527,74 @@ spec:
   it("rejects list filters on publishing collections", () => {
     expect(parseManifests(yaml("orderState").replace("lifecycle: operational", "lifecycle: publishing"))
       .diagnostics[0]?.code).toBe("SCHEMA_UI_INVALID");
+  });
+
+  it.each([
+    ["unknown field", "primaryField: missing\n      columns: [placedAt]"],
+    ["duplicate field", "primaryField: orderState\n      columns: [orderState]"],
+    ["non-scalar field", "primaryField: orderState\n      columns: [details]"],
+  ])("rejects %s in list presentation", (label, listFields) => {
+    let source = yaml("orderState").replace(
+      "primaryField: orderState\n      columns: [placedAt]",
+      listFields,
+    );
+    if (label === "non-scalar field") {
+      source = source.replace(
+        "placedAt: { type: integer }",
+        "placedAt: { type: integer }\n      details: { type: object }",
+      );
+    }
+    expect(parseManifests(source).diagnostics[0]?.code).toBe("SCHEMA_UI_INVALID");
+  });
+});
+
+describe("Procedure uiSchema fields", () => {
+  it("accepts an explicit textarea without changing the input schema", () => {
+    const source = `apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: adjust-inventory }
+spec:
+  input:
+    type: object
+    properties:
+      reason: { type: string, maxLength: 500 }
+  uiSchema:
+    fields:
+      reason: { widget: textarea }
+  output: { type: object }
+  handler: { kind: ref, ref: adjustInventory }
+`;
+    expect(parseManifests(source).diagnostics).toEqual([]);
+  });
+
+  it("accepts a collection action targeting an existing Schema", () => {
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  schema: { type: object }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: create-manual-order }
+spec:
+  input: { type: object }
+  uiSchema: { collectionAction: orders }
+  output: { type: object }
+  handler: { kind: ref, ref: createManualOrder }
+`);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it("rejects a collection action targeting an unknown Schema", () => {
+    const result = ValidateManifestsUseCase.run({
+      manifests: [procedure("create-manual-order", { uiSchema: { collectionAction: "orders" } })],
+    });
+    expect(result.diagnostics[0]).toMatchObject({
+      code: "SCHEMA_UI_INVALID",
+      path: "manifest:Procedure/create-manual-order#/spec/uiSchema/collectionAction",
+    });
   });
 });
 
@@ -772,6 +842,7 @@ describe("parseManifests() — View.requires.auth", () => {
 kind: View
 metadata: { name: privatePosts }
 spec:
+  surface: public
   from: posts
   requires:
     auth:
@@ -786,6 +857,7 @@ spec:
 kind: View
 metadata: { name: scopedPosts }
 spec:
+  surface: public
   from: posts
   requires:
     auth:
@@ -807,6 +879,7 @@ spec:
 kind: View
 metadata: { name: scopedPosts }
 spec:
+  surface: public
   from: posts
   requires:
     auth:
@@ -821,6 +894,7 @@ spec:
 kind: View
 metadata: { name: secretView }
 spec:
+  surface: public
   from: posts
   requires:
     auth:
@@ -835,6 +909,7 @@ spec:
 kind: View
 metadata: { name: vAny }
 spec:
+  surface: public
   from: posts
   requires:
     auth:
@@ -849,6 +924,7 @@ spec:
 kind: View
 metadata: { name: mixedPredicate }
 spec:
+  surface: public
   from: posts
   requires:
     auth:
@@ -866,6 +942,7 @@ spec:
 kind: View
 metadata: { name: vStaff }
 spec:
+  surface: public
   from: posts
   requires:
     auth:
@@ -882,6 +959,7 @@ describe("View $ctx.user filter", () => {
 kind: View
 metadata: { name: myOrders }
 spec:
+  surface: public
   from: orders
   requires: { auth: { all: [ctx.user] } }
   filter: { eq: { field: userId, value: { "$ctx.user": id } } }
@@ -897,6 +975,7 @@ spec:
 kind: View
 metadata: { name: myOrders }
 spec:
+  surface: public
   from: orders
   filter: ${filter}
 `);
@@ -956,6 +1035,7 @@ apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: guardedRead }
 spec:
+  surface: public
   from: posts
   requires: { guard: { procedure: requirePaid } }
 `;
@@ -968,6 +1048,7 @@ spec:
 kind: View
 metadata: { name: guardedRead }
 spec:
+  surface: public
   from: posts
   requires: { guard: { procedure: requirePaid, cache: true } }
 `;
@@ -1045,7 +1126,38 @@ spec:
     expect(view.spec.surface).toBe("staff");
   });
 
-  it("accepts an absent surface (defaults to public semantics)", () => {
+  it("accepts the minimal staff View Admin list uiSchema", () => {
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: staffView }
+spec:
+  from: posts
+  surface: staff
+  uiSchema:
+    list:
+      columns: [id, orderNumber]
+      searchFields: [orderNumber]
+      filterFields: [orderStatus]
+`);
+    expect(result.diagnostics).toEqual([]);
+    expect((result.manifests[0] as ViewManifest).spec.uiSchema).toMatchObject({
+      list: { searchFields: ["orderNumber"], filterFields: ["orderStatus"] },
+    });
+  });
+
+  it("rejects View Admin uiSchema on the public surface", () => {
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: publicView }
+spec:
+  from: posts
+  surface: public
+  uiSchema: { list: { searchFields: [slug] } }
+`);
+    expect(result.diagnostics[0]?.code).toBe("VIEW_UI_INVALID");
+  });
+
+  it("rejects an absent surface", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: defaultView }
@@ -1053,9 +1165,7 @@ spec:
   from: posts
 `;
     const result = parseManifests(yaml);
-    expect(result.diagnostics).toEqual([]);
-    const view = result.manifests[0] as ViewManifest;
-    expect(view.spec.surface).toBeUndefined();
+    expect(result.diagnostics[0]?.message).toMatch(/surface is required/);
   });
 
   it("rejects an unknown surface string", () => {
@@ -1068,8 +1178,32 @@ spec:
 `;
     const result = parseManifests(yaml);
     expect(result.diagnostics.map((d) => d.message)).toContainEqual(
-      expect.stringMatching(/View\.spec\.surface must be one of/),
+      expect.stringMatching(/View\.spec\.surface.*must be one of/),
     );
+  });
+
+  it("accepts one bound SELECT and rejects non-read SQL", () => {
+    const valid = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: paidOrders }
+spec:
+  surface: staff
+  sql: SELECT * FROM orders WHERE orderStatus = :status
+  params:
+    type: object
+    properties: { status: { type: string } }
+    required: [status]
+`);
+    expect(valid.diagnostics).toEqual([]);
+
+    const invalid = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: bad }
+spec:
+  surface: staff
+  sql: DELETE FROM orders
+`);
+    expect(invalid.diagnostics[0]?.message).toMatch(/one SELECT/);
   });
 });
 
@@ -1114,6 +1248,7 @@ describe("parseManifests() — View.params + filter param-ref grammar (v0.1.0)",
 kind: View
 metadata: { name: postsPublished }
 spec:
+  surface: public
   from: posts
   filter:
     eq: { field: status, value: published }
@@ -1125,6 +1260,7 @@ spec:
 kind: View
 metadata: { name: postsByLocale }
 spec:
+  surface: public
   from: posts
   params:
     type: object
@@ -1145,6 +1281,7 @@ spec:
 kind: View
 metadata: { name: stockMovementsInRange }
 spec:
+  surface: public
   from: stock-movements
   params:
     type: object
@@ -1165,6 +1302,7 @@ spec:
 kind: View
 metadata: { name: bad }
 spec:
+  surface: public
   from: posts
   params:
     type: string
@@ -1177,6 +1315,7 @@ spec:
 kind: View
 metadata: { name: bad }
 spec:
+  surface: public
   from: posts
   params:
     type: object
@@ -1192,6 +1331,7 @@ spec:
 kind: View
 metadata: { name: bad }
 spec:
+  surface: public
   from: posts
   params:
     type: object
@@ -1207,6 +1347,7 @@ spec:
 kind: View
 metadata: { name: bad }
 spec:
+  surface: public
   from: posts
   filter:
     eq: { field: locale, value: { $param: locale } }
@@ -1219,6 +1360,7 @@ spec:
 kind: View
 metadata: { name: bad }
 spec:
+  surface: public
   from: posts
   params:
     type: object
@@ -1237,6 +1379,7 @@ spec:
 kind: View
 metadata: { name: bad }
 spec:
+  surface: public
   from: posts
   params:
     type: object
@@ -1254,6 +1397,7 @@ spec:
 kind: View
 metadata: { name: bad }
 spec:
+  surface: public
   from: posts
   params:
     type: object
@@ -1420,6 +1564,7 @@ describe("View orderBy direction (#392)", () => {
 kind: View
 metadata: { name: posts-sorted }
 spec:
+  surface: public
   from: posts
   orderBy:
     - { field: id, direction: "DESC LIMIT 0 --" }
@@ -1434,6 +1579,7 @@ spec:
 kind: View
 metadata: { name: posts-sorted }
 spec:
+  surface: public
   from: posts
   orderBy:
     - { field: createdAt, direction: desc }

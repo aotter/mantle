@@ -9,21 +9,20 @@ import {
   Settings as SettingsIcon,
   ContactRound,
   Users,
-  Wrench,
 } from "lucide-react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { api } from "../lib/api";
 import { fieldLabel } from "../lib/field-label";
-import { operationsQueryOptions, viewsManifestQueryOptions } from "../lib/queries";
+import { viewsManifestQueryOptions } from "../lib/queries";
 import { resolveLocalizedText } from "../lib/localized-text";
 import {
   PUBLISHING_STATUSES,
   type AdminUser,
   type Collection,
   type SiteInfo,
+  type SiteIcon,
   type SidebarStatus,
-  type StaffOperation,
   type ViewManifestInfo,
 } from "../lib/types";
 import { useAdminLocation } from "../app/router";
@@ -62,14 +61,27 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
   });
-  const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
   const viewsQuery = useQuery<ViewManifestInfo[]>(viewsManifestQueryOptions());
+
+  React.useEffect(() => {
+    if (!site.data?.icons.length) return;
+    document.querySelectorAll("link[rel~='icon']").forEach((link) => link.remove());
+    for (const icon of site.data.icons) {
+      const link = document.createElement("link");
+      link.rel = "icon";
+      link.href = icon.src;
+      if (icon.mimeType) link.type = icon.mimeType;
+      if (icon.sizes) link.sizes.add(...icon.sizes);
+      if (icon.theme) link.media = `(prefers-color-scheme: ${icon.theme})`;
+      document.head.append(link);
+    }
+  }, [site.data?.icons]);
 
   const resolvedBrand = React.useMemo<AdminBrand>(
     () => ({
       title: site.data?.brand ?? t(language, "admin.consoleTitle"),
       href: "/admin",
-      image: site.data?.faviconUrl,
+      image: preferredAdminIcon(site.data?.icons),
     }),
     [language, site.data],
   );
@@ -79,14 +91,21 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
     () =>
       buildNavGroups(
         collectionsQuery.data ?? [],
-        operationsQuery.data ?? [],
         viewsQuery.data ?? [],
         language,
         canonical,
         me.data?.role ?? null,
       ),
-    [collectionsQuery.data, operationsQuery.data, viewsQuery.data, language, canonical, me.data?.role],
+    [collectionsQuery.data, viewsQuery.data, language, canonical, me.data?.role],
   );
+  const collectionName = pathname.match(/^\/admin\/c\/([^/]+)/)?.[1];
+  const viewName = pathname.match(/^\/admin\/views\/([^/]+)/)?.[1];
+  const resource = collectionName
+    ? collectionsQuery.data?.find((collection) => collection.name === decodeURIComponent(collectionName))
+    : viewsQuery.data?.find((view) => view.name === decodeURIComponent(viewName ?? ""));
+  const pageTitle = resource
+    ? resolveLocalizedText(resource.title, language, canonical) ?? fieldLabel(resource.name)
+    : undefined;
   return (
     <FormActionBarHostContext.Provider value={formActionBarHost}>
       <SidebarProvider className="h-svh min-h-0 overflow-hidden">
@@ -107,6 +126,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
             className="absolute inset-x-0 top-0 z-30"
             site={resolvedBrand}
             publicUrl={site.data?.publicUrl}
+            pageTitle={pageTitle}
           />
           <Main className="min-h-0 overflow-y-auto overscroll-contain pt-20 pb-20">{children}</Main>
           <footer
@@ -138,9 +158,14 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
   );
 }
 
+function preferredAdminIcon(icons: readonly SiteIcon[] | undefined): string | undefined {
+  return icons?.find((icon) => icon.sizes?.includes("64x64") && !icon.theme)?.src
+    ?? icons?.find((icon) => !icon.theme)?.src
+    ?? icons?.[0]?.src;
+}
+
 export function buildNavGroups(
   collections: ReadonlyArray<Collection>,
-  operations: ReadonlyArray<StaffOperation>,
   views: ReadonlyArray<ViewManifestInfo>,
   language: AdminLanguage,
   canonical: string | null,
@@ -169,20 +194,6 @@ export function buildNavGroups(
       ? {
           title: t(language, "nav.operations"),
           items: operationalCollections.map((c) => collectionNavItem(c, language, canonical)),
-        }
-      : null;
-
-  // Bound operations already live in their collection's row menu.
-  const unboundOperations = operations.filter((op) => op.rowBindings.length === 0);
-  const opsGroup: NavGroupData | null =
-    unboundOperations.length > 0
-      ? {
-          title: t(language, "nav.ops"),
-          items: unboundOperations.map((op) => ({
-            title: resolveLocalizedText(op.title, language, canonical) ?? fieldLabel(op.name),
-            icon: Wrench,
-            url: `/admin/ops#${op.name}`,
-          })),
         }
       : null;
 
@@ -221,7 +232,6 @@ export function buildNavGroups(
     homeGroup,
     contentGroup,
     ...(recordsGroup ? [recordsGroup] : []),
-    ...(opsGroup ? [opsGroup] : []),
     ...(reportsGroup ? [reportsGroup] : []),
     ...(moreGroup.items.length > 0 ? [moreGroup] : []),
   ];

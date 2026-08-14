@@ -61,6 +61,7 @@ export class InMemoryDatabase implements DatabaseDriver {
   }>();
   appliedMigrations = new Set<string>();
   legacyIndexColumns = new Map<string, readonly string[]>();
+  schemaSqlViews = new Set<string>();
 
   prepare(sql: string): PreparedStatement {
     return new InMemoryStatement(this, normalize(sql), []);
@@ -133,6 +134,27 @@ class InMemoryStatement implements PreparedStatement {
           .map((id) => ({ id })),
         changes: 0,
       };
+    }
+    if (sql === "SELECT name FROM _mantle_schema_views") {
+      return { rows: [...this.db.schemaSqlViews].map((name) => ({ name })), changes: 0 };
+    }
+    const dropSchemaView = /^DROP VIEW IF EXISTS "([^"]+)"$/.exec(sql);
+    if (dropSchemaView) {
+      this.db.schemaSqlViews.delete(dropSchemaView[1]!);
+      return { rows: [], changes: 0 };
+    }
+    if (/^CREATE VIEW "[^"]+" AS SELECT /.test(sql)) {
+      return { rows: [], changes: 0 };
+    }
+    if (sql === "DELETE FROM _mantle_schema_views WHERE name = ?") {
+      const deleted = this.db.schemaSqlViews.delete(p[0] as string);
+      return { rows: [], changes: deleted ? 1 : 0 };
+    }
+    if (sql === "INSERT OR IGNORE INTO _mantle_schema_views(name) VALUES (?)") {
+      const name = p[0] as string;
+      const existed = this.db.schemaSqlViews.has(name);
+      this.db.schemaSqlViews.add(name);
+      return { rows: [], changes: existed ? 0 : 1 };
     }
     const legacyInfo = /^PRAGMA index_info\("([^"]+)"\)$/.exec(sql);
     if (legacyInfo) {
@@ -715,6 +737,13 @@ function runCompiledViewQuery(
     atom: string,
     ctx: { atomIndex: number },
   ): boolean => {
+    const likeMatch = atom.match(/^(.+?) LIKE '%'\|\|\?\|\|'%' ESCAPE '\\'$/);
+    if (likeMatch) {
+      const actual = readValue(row, likeMatch[1]!.trim());
+      const value = atomParams[ctx.atomIndex++];
+      return actual !== null && actual !== undefined &&
+        String(actual).toLowerCase().includes(unescapeLike(String(value)).toLowerCase());
+    }
     const comparisonMatch = atom.match(/^(.+?)\s*(=|>=|<=|>|<)\s*\?$/);
     if (!comparisonMatch) throw new Error(`fake DB: unsupported atom '${atom}'`);
     const lhs = comparisonMatch[1]!.trim();
@@ -765,6 +794,11 @@ function compareValues(left: unknown, op: string, right: unknown): boolean {
 }
 
 function readValue(row: EntryRecord, ref: string): unknown {
+  const castText = ref.match(/^CAST\((.*) AS TEXT\)$/);
+  if (castText) {
+    const value = readValue(row, castText[1]!.trim());
+    return value === null || value === undefined ? value : String(value);
+  }
   if (ref === "id") return row.id;
   if (ref === "status") return row.status;
   if (ref === "version") return row.version;
@@ -790,7 +824,7 @@ function parseJsonExtractKey(ref: string): string | null {
 }
 
 function projectRow(row: EntryRecord, projection: string): Record<string, unknown> {
-  const parts = projection.split(",").map((s) => s.trim());
+  const parts = splitSqlList(projection);
   const out: Record<string, unknown> = {};
   for (const part of parts) {
     if (part === "id") out["id"] = row.id;
@@ -815,6 +849,24 @@ function projectRow(row: EntryRecord, projection: string): Record<string, unknow
     }
   }
   return out;
+}
+
+function splitSqlList(value: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const char of value) {
+    if (char === "(") depth++;
+    if (char === ")") depth--;
+    if (char === "," && depth === 0) {
+      parts.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  if (current) parts.push(current.trim());
+  return parts;
 }
 
 function collectAtomParams(

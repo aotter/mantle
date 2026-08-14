@@ -38,7 +38,7 @@ jobs:
     # Single source of truth for the five public packages, in dependency order.
     # Names are read from these package.json files during packing.
     env:
-      STARTER_SHA: b191751e2517cb7de87bcea5d30f01d8a5f8b6d8
+      STARTER_SHA: 437a52f24896a1150a0d6922b375f50f8b24efca
       PKG_DIRS: >-
         packages/mantle-spec
         packages/mantle-admin-ui
@@ -177,6 +177,7 @@ jobs:
           node scripts/check-packed-consumer.mjs
           --project .packed-consumer/mantle-starters --
           sh -euc 'pnpm --dir blank exec mantle skills;
+          pnpm --dir blank generate;
           pnpm build:provision-bundle;
           pnpm check:packed'
 

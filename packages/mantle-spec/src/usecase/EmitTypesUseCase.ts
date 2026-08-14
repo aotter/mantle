@@ -56,7 +56,7 @@ export class EmitTypesUseCase {
     }
 
     for (const v of views) {
-      const parent = schemaByName.get(v.spec.from);
+      const parent = v.spec.from ? schemaByName.get(v.spec.from) : undefined;
       if (v.spec.params) {
         out.push(`  /** Parameters accepted by View '${v.metadata.name}' */`);
         out.push(

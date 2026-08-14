@@ -79,6 +79,7 @@ import {
   CANONICAL_MIGRATIONS,
   reconcileSchemaIndexes,
   schemaIndexMigrations,
+  reconcileSchemaSqlViews,
 } from "./infrastructure/boot/index.js";
 
 /**
@@ -437,6 +438,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
       const indexMigrations = schemaIndexMigrations(schemas);
       await args.db.migrations.runAll(indexMigrations);
       await reconcileSchemaIndexes(args.db, indexMigrations, schemas);
+      await reconcileSchemaSqlViews(args.db, schemas);
     },
   };
 }

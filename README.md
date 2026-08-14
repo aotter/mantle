@@ -38,8 +38,9 @@ operations.
 Generated projects include the `mantle` authoring CLI from
 `@aotter/mantle`: `generate`, `skills`, `update`, `validate`, `introspect`,
 `emit-openapi`, and `emit-types`. `generate` compiles YAML into
-`.mantle/generated/site.ts` and `types.d.ts`; `--check` verifies freshness
-without writing. The umbrella package also ships `mantle-harness` for crowded
+`.mantle/generated/site.ts` and `types.d.ts`, plus the version-matched Admin SPA
+under `public/_mantle/admin/`; `--check` verifies both without writing. The
+umbrella package also ships `mantle-harness` for crowded
 SQLite index coverage and live Worker/API/page sampling; see
 [`docs/performance-harness.md`](docs/performance-harness.md).
 

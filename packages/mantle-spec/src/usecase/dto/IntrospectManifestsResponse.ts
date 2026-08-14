@@ -24,7 +24,9 @@ export interface IntrospectedSchema {
 
 export interface IntrospectedView {
   readonly name: string;
-  readonly from: string;
+  readonly from: string | null;
+  readonly sql: string | null;
+  readonly surface: "public" | "staff";
   readonly params: JsonSchema | null;
   readonly filter: FilterAst | null;
   readonly orderBy: ReadonlyArray<{ readonly field: string; readonly direction?: "asc" | "desc" }>;

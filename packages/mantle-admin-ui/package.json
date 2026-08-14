@@ -1,7 +1,7 @@
 {
   "name": "@aotter/mantle-admin-ui",
   "version": "0.1.0-alpha.3",
-  "description": "Admin SPA for mantle — React 19 + Vite + Tailwind v4 + shadcn. Platform-agnostic: ships a single self-contained HTML string consumed by adapter mount layers.",
+  "description": "Admin SPA for mantle — React 19 + Vite + Tailwind v4 + shadcn, shipped as static assets.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
   "repository": {
@@ -16,12 +16,12 @@
     "tag": "alpha",
     "registry": "https://registry.npmjs.org"
   },
-  "main": "./dist/index-html.js",
-  "types": "./dist/index-html.d.ts",
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index-html.d.ts",
-      "import": "./dist/index-html.js"
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
     },
     "./index.html": "./dist/index.html"
   },
@@ -57,7 +57,6 @@
     "tw-animate-css": "^1.4.0",
     "typescript": "catalog:",
     "vite": "^8.1.5",
-    "vite-plugin-singlefile": "^2.0.3",
     "vitest": "catalog:"
   }
 }

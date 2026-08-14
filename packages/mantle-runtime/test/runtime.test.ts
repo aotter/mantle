@@ -337,6 +337,30 @@ describe("createCmsRuntime + bootInit", () => {
     expect(site.brand).toBe("Operator-Edited");
   });
 
+  it("uses one code-canonical icon set and reads legacy favicon rows", async () => {
+    const db = new InMemoryDatabase();
+    db.siteConfig.set("faviconUrl", "/legacy.svg");
+    const repo = new DatabaseSiteConfigRepository(db);
+    expect((await repo.load()).icons).toEqual([{ src: "/legacy.svg" }]);
+
+    const runtime = createCmsRuntime({
+      manifests: [],
+      db,
+      assets: noopAssets,
+      siteDefaults: {
+        icons: [
+          { src: "/site-icon.png", mimeType: "image/png", sizes: ["64x64"] },
+          { src: "/site-icon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
+        ],
+      },
+    });
+    await runtime.bootInit();
+    expect((await repo.load()).icons).toEqual([
+      { src: "/site-icon.png", mimeType: "image/png", sizes: ["64x64"] },
+      { src: "/site-icon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
+    ]);
+  });
+
   it("updates only provided editable site settings in one batch", async () => {
     class CountingDatabase extends InMemoryDatabase {
       batches = 0;

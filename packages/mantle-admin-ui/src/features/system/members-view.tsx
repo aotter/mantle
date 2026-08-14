@@ -1,16 +1,23 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ContactRound, Search } from "lucide-react";
 import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
-import type { MemberListResult } from "../../lib/types";
+import type { AdminUser, MemberListResult, StaffRole } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { formatTimestampMs } from "../content/field-render";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Pagination,
   PaginationContent,
@@ -30,9 +37,11 @@ import {
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 
 const MEMBER_PAGE_SIZE = 50;
+const STAFF_ROLES: readonly StaffRole[] = ["owner", "editor", "contributor"];
 
 export function MembersView(): React.ReactElement {
   const { language } = usePreferences();
+  const queryClient = useQueryClient();
   const { search: locationSearch } = useAdminLocation();
   const params = new URLSearchParams(locationSearch);
   const search = params.get("search")?.trim() ?? "";
@@ -48,6 +57,20 @@ export function MembersView(): React.ReactElement {
       return api.get<MemberListResult>(`/members?${query.toString()}`);
     },
   });
+  const me = useQuery<AdminUser>({
+    queryKey: ["me"],
+    queryFn: () => api.get<AdminUser>("/me"),
+    retry: false,
+  });
+  const promote = useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: StaffRole }) =>
+      api.patch(`/staff/${encodeURIComponent(userId)}/role`, { role }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["members"] });
+      void queryClient.invalidateQueries({ queryKey: ["staff"] });
+    },
+  });
+  const canPromote = me.data?.role === "owner";
 
   return (
     <div>
@@ -56,6 +79,7 @@ export function MembersView(): React.ReactElement {
         description={t(language, "members.page.body")}
       />
       <MemberSearch search={search} />
+      {promote.isError ? <ErrorBox error={promote.error} /> : null}
       {members.isLoading ? <Skeleton className="h-64 w-full" /> : null}
       {members.isError ? <ErrorBox error={members.error} /> : null}
       {members.data?.items.length === 0 ? (
@@ -75,6 +99,7 @@ export function MembersView(): React.ReactElement {
                   <TableHead>{t(language, "members.table.email")}</TableHead>
                   <TableHead>{t(language, "members.table.status")}</TableHead>
                   <TableHead>{t(language, "members.table.joined")}</TableHead>
+                  {canPromote ? <TableHead>{t(language, "members.table.teamAccess")}</TableHead> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -90,6 +115,31 @@ export function MembersView(): React.ReactElement {
                     <TableCell className="text-muted-foreground">
                       {formatTimestampMs(Date.parse(member.createdAt)) ?? "-"}
                     </TableCell>
+                    {canPromote ? (
+                      <TableCell>
+                        <Select
+                          disabled={promote.isPending}
+                          onValueChange={(value) => {
+                            const role = STAFF_ROLES.find((candidate) => candidate === value);
+                            if (role) promote.mutate({ userId: member.id, role });
+                          }}
+                        >
+                          <SelectTrigger
+                            className="w-44"
+                            aria-label={`${t(language, "members.promote")}: ${member.name}`}
+                          >
+                            <SelectValue placeholder={t(language, "members.promote")} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {STAFF_ROLES.map((role) => (
+                              <SelectItem key={role} value={role}>
+                                {t(language, `staff.role.${role}`)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
               </TableBody>

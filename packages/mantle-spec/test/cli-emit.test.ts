@@ -33,6 +33,7 @@ const VIEW_YAML = `apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: posts-by-locale }
 spec:
+  surface: public
   from: posts
   params:
     type: object

@@ -58,7 +58,7 @@ jobs:
         uses: actions/checkout@v7.0.1
         with:
           repository: aotter/mantle-starters
-          ref: b191751e2517cb7de87bcea5d30f01d8a5f8b6d8
+          ref: 437a52f24896a1150a0d6922b375f50f8b24efca
           path: .packed-consumer/mantle-starters
           persist-credentials: false
 
@@ -69,5 +69,6 @@ jobs:
           node scripts/check-packed-consumer.mjs
           --project .packed-consumer/mantle-starters --
           sh -euc 'pnpm --dir blank exec mantle skills;
+          pnpm --dir blank generate;
           pnpm build:provision-bundle;
           pnpm check:packed'

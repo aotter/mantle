@@ -10,7 +10,7 @@ function view(params: JsonSchema | undefined): ViewManifest {
     apiVersion: "cms.mantle.aotter.net/v1",
     kind: "View",
     metadata: { name: "v" },
-    spec: { from: "posts", ...(params ? { params } : {}) },
+    spec: { surface: "public", from: "posts", ...(params ? { params } : {}) },
   };
 }
 

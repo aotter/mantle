@@ -44,6 +44,7 @@ function manifests(): Manifest[] {
           properties: { sku: { type: "string" } },
           required: ["sku"],
         },
+        uiSchema: { fields: { sku: { widget: "textarea" } } },
         output: { type: "object" },
         handler: { kind: "ref", ref: "recomputeInventory" },
       },
@@ -164,6 +165,7 @@ describe("GET /admin/api/operations", () => {
         name: string;
         title: string | null;
         description: string | null;
+        uiSchema: Record<string, unknown> | null;
         triggers: string[];
         rowBindings: Array<{ collection: string; inputField: string; rowField: string }>;
       }>;
@@ -177,6 +179,7 @@ describe("GET /admin/api/operations", () => {
     // would fail against the pre-#430 behavior.
     expect(recompute.title).toBe("Recompute Inventory");
     expect(recompute.description).toBe("Recompute cached inventory aggregates.");
+    expect(recompute.uiSchema).toEqual({ fields: { sku: { widget: "textarea" } } });
     expect(recompute.triggers).toEqual(["mcp"]);
     expect(recompute.rowBindings).toEqual([]);
 

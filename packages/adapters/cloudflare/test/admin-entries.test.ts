@@ -57,7 +57,26 @@ function filteredManifests(): Manifest[] {
         required: ["orderState", "placedAt"],
       },
       indexes: [["orderState", "placedAt"]],
-      uiSchema: { list: { filterField: "orderState" } },
+      searchableFields: ["orderState"],
+      uiSchema: {
+        list: {
+          filterField: "orderState",
+          primaryField: "orderState",
+          columns: ["placedAt"],
+        },
+      },
+    },
+  }];
+}
+
+function readOnlyManifests(): Manifest[] {
+  const posts = manifests()[0]!;
+  if (posts.kind !== "Schema") throw new Error("posts fixture must be a Schema");
+  return [{
+    ...posts,
+    spec: {
+      ...posts.spec,
+      schema: { ...posts.spec.schema, readOnly: true },
     },
   }];
 }
@@ -212,6 +231,35 @@ function row(id: string, data: Record<string, unknown>, updatedAt = 1) {
   };
 }
 
+function jsonInit(method: string, body: unknown): RequestInit {
+  return {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  };
+}
+
+describe("read-only Admin collections", () => {
+  it("keeps reads available and rejects generic create, update, and delete", async () => {
+    const { app } = harness(
+      (db) => db.entries.set("managed", row("managed", { title: "Managed", slug: "managed" })),
+      undefined,
+      readOnlyManifests(),
+    );
+
+    expect((await app.request("/admin/api/entries/managed")).status).toBe(200);
+    const attempts = await Promise.all([
+      app.request("/admin/api/entries", jsonInit("POST", { collection: "posts", data: {} })),
+      app.request("/admin/api/entries/managed", jsonInit("PATCH", { data: { title: "Bypass" }, expectedVersion: 1 })),
+      app.request("/admin/api/entries/managed", { method: "DELETE" }),
+    ]);
+    expect(attempts.map((response) => response.status)).toEqual([409, 409, 409]);
+    for (const response of attempts) {
+      expect(await response.json()).toMatchObject({ diagnostic: { code: "CONFLICT" } });
+    }
+  });
+});
+
 describe("GET /admin/api/entries?search=", () => {
   it("loads the authoritative role for the session user", async () => {
     let roleReads = 0;
@@ -299,6 +347,7 @@ describe("GET /admin/api/entries exact list filter", () => {
     expect(await collections.json()).toMatchObject({
       collections: [{
         filter: { field: "orderState", values: ["pending", "paid"] },
+        list: { primaryField: "orderState", columns: ["placedAt"] },
         sortableFields: ["orderState"],
       }],
     });
@@ -307,8 +356,12 @@ describe("GET /admin/api/entries exact list filter", () => {
       "/admin/api/entries?collection=orders&filter_field=orderState&filter_value=paid",
     );
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { items: Array<{ id: string }> };
+    const body = (await response.json()) as {
+      items: Array<{ id: string; title: unknown; data_preview?: Record<string, unknown> }>;
+    };
     expect(body.items.map(({ id }) => id)).toEqual(["o1"]);
+    expect(body.items[0]?.title).toBeNull();
+    expect(body.items[0]?.data_preview).toEqual({ orderState: "paid", placedAt: 2 });
     expect(db.executions.at(-1)?.sql).toContain('"m2c_');
   });
 
@@ -373,16 +426,35 @@ describe("GET /admin/api/entries/export", () => {
   });
 
   it("streams every row across multiple internal pages", async () => {
-    const { app } = harness((db) => {
-      for (let i = 0; i < 5; i++) {
-        db.entries.set(`p${i}`, row(`p${i}`, { title: `t${i}`, slug: `s${i}` }, i));
+    const { app, db } = harness((database) => {
+      for (let i = 0; i < 101; i++) {
+        database.entries.set(`p${i}`, row(`p${i}`, { title: `t${i}`, slug: `s${i}` }, i));
       }
     });
+    const listQueries = () => db.executions.filter(({ sql }) =>
+      sql.startsWith("SELECT id, collection, status, version, data, author_id, created_at, updated_at FROM entries WHERE collection = ?")
+    ).length;
+    const before = listQueries();
     const res = await app.request("/admin/api/entries/export?collection=posts");
+    expect(listQueries() - before).toBe(1);
     const text = await res.text();
     const lines = text.trim().split("\r\n");
-    // header + 5 data rows
-    expect(lines).toHaveLength(6);
+    expect(lines).toHaveLength(102);
+    expect(listQueries() - before).toBe(2);
+  });
+
+  it("carries active search, filter, and sort conditions into the download", async () => {
+    const { app, db } = harness(undefined, undefined, filteredManifests());
+    db.entries.set("o2", relatedRow("o2", "orders", "draft", { orderState: "paid", placedAt: 1 }, 1));
+    db.entries.set("o1", relatedRow("o1", "orders", "draft", { orderState: "paid", placedAt: 2 }, 2));
+    db.entries.set("o3", relatedRow("o3", "orders", "draft", { orderState: "pending", placedAt: 0 }, 0));
+
+    const res = await app.request(
+      "/admin/api/entries/export?collection=orders&search=paid&filter_field=orderState&filter_value=paid&sort=id&direction=asc",
+    );
+    expect(res.status).toBe(200);
+    const lines = (await res.text()).trim().split("\r\n");
+    expect(lines.slice(1).map((line) => line.split(",")[0])).toEqual(["o1", "o2"]);
   });
 
   it("404s on an unknown collection", async () => {

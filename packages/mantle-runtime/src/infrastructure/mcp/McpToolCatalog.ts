@@ -277,6 +277,7 @@ export function buildMcpToolCatalog(
   const out: McpToolDefinition[] = [...GENERIC_TOOLS];
   if (opts.mediaEnabled) out.push(...buildMediaTools(opts.mediaPurposes ?? []));
   for (const s of schemas) {
+    if (s.spec.schema.readOnly === true) continue;
     out.push(buildCreateTool(s));
     out.push(buildUpdateTool(s));
   }
@@ -380,7 +381,7 @@ function buildQueryViewTool(view: ViewManifest): McpToolDefinition {
   if (params?.required?.length) inputSchema["required"] = params.required;
   return {
     name: `${QUERY_VIEW_PREFIX}${mcpToolNameSegment(view.metadata.name)}`,
-    description: `Query ${(view.spec.surface ?? "public")} View '${view.metadata.name}'.${authorizationSummary(view.spec.requires)}`,
+    description: `Query ${view.spec.surface} View '${view.metadata.name}'.${authorizationSummary(view.spec.requires)}`,
     inputSchema,
   };
 }

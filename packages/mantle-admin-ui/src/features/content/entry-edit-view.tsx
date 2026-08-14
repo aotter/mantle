@@ -132,7 +132,12 @@ export function EntryEditView({
 
   const payload = query.data;
   const canonical = site.data?.canonicalLocale ?? null;
-  const title = entryTitle(data, t(language, "collection.untitled"), payload.collection.schema);
+  const title = entryTitle(
+    data,
+    t(language, "collection.untitled"),
+    payload.collection,
+    payload.entry.id,
+  );
   const collectionTitle = resolveLocalizedText(payload.collection.title, language, canonical) ?? payload.collection.name;
   const backCollection = payload.collection.translates?.parent ?? collectionName;
   const backTitle = payload.collection.translates?.parent ?? collectionTitle;
@@ -142,11 +147,13 @@ export function EntryEditView({
   // no publish/unpublish controls, and they save in place regardless
   // of the stored status.
   const isOperational = payload.collection.lifecycle === "operational";
+  const isReadOnly = payload.collection.schema.readOnly === true;
   const isDraft = payload.entry.status === "draft";
   const missingRequired = hasMissingRequired(data, payload.collection.schema);
   const canManageContent = me.data?.role === "owner" || me.data?.role === "editor";
-  const canEdit = canManageContent ||
-    (me.data?.role === "contributor" && !isOperational && isDraft);
+  const canEdit = !isReadOnly && (
+    canManageContent || (me.data?.role === "contributor" && !isOperational && isDraft)
+  );
   const canSave = canEdit && dirty && (isDraft || isOperational);
   const actionPending = save.isPending || publish.isPending || unpublish.isPending;
   const mediaPurposes = site.data?.media?.purposes ?? [];
@@ -228,8 +235,10 @@ export function EntryEditView({
         />
       ))}
 
-      {isOperational ? (
-        <p className="-mt-4 text-sm text-muted-foreground">{t(language, "entryEdit.operationalHint")}</p>
+      {isReadOnly || isOperational ? (
+        <p className="-mt-4 text-sm text-muted-foreground">
+          {t(language, isReadOnly ? "entryEdit.readOnlyHint" : "entryEdit.operationalHint")}
+        </p>
       ) : null}
 
       {save.isError ? <OperationErrorBox error={save.error} /> : null}
@@ -260,6 +269,7 @@ export function EntryEditView({
             >
               <SchemaFields
                 schema={payload.collection.schema}
+                uiSchema={payload.collection.uiSchema}
                 value={data}
                 path={[]}
                 onChange={setData}
@@ -439,6 +449,7 @@ function MetaRow({
 
 export function SchemaFields({
   schema,
+  uiSchema = null,
   value,
   path,
   onChange,
@@ -449,6 +460,7 @@ export function SchemaFields({
   hiddenRootFields = [],
 }: {
   schema: JsonSchema;
+  uiSchema?: Record<string, unknown> | null;
   value: Record<string, unknown>;
   path: string[];
   onChange: (data: Record<string, unknown>) => void;
@@ -469,6 +481,7 @@ export function SchemaFields({
           key={[...path, name].join(".")}
           name={name}
           schema={fieldSchema}
+          widget={path.length === 0 ? fieldWidget(uiSchema, name) : null}
           required={required.has(name)}
           value={readPath(value, [...path, name])}
           path={[...path, name]}
@@ -496,6 +509,7 @@ export function editorHiddenFields(
 function SchemaField({
   name,
   schema,
+  widget,
   required,
   value,
   path,
@@ -508,6 +522,7 @@ function SchemaField({
 }: {
   name: string;
   schema: JsonSchema;
+  widget: "textarea" | null;
   required: boolean;
   value: unknown;
   path: string[];
@@ -628,11 +643,19 @@ function SchemaField({
           collectionName={collectionName}
           mediaPurposes={mediaPurposes}
         />
-      ) : multilineField(schema, name) ? (
+      ) : stringFieldWidget(schema, widget) === "richtext" ? (
         <RichTextEditor
           compact
           value={stringForInput(value)}
           onChange={setValue}
+        />
+      ) : stringFieldWidget(schema, widget) === "textarea" ? (
+        <Textarea
+          aria-label={label}
+          className="min-h-24"
+          value={stringForInput(value)}
+          maxLength={schema.maxLength}
+          onChange={(event) => setValue(event.target.value)}
         />
       ) : (
         schema.format === "date-time" ? (
@@ -1040,7 +1063,12 @@ function RelatedSections({
                     >
                       <span className="min-w-0">
                         <span className="block truncate font-semibold">
-                          {entryTitle(entry.data, t(language, "collection.untitled"), section.collection.schema)}
+                          {entryTitle(
+                            entry.data,
+                            t(language, "collection.untitled"),
+                            section.collection,
+                            entry.id,
+                          )}
                         </span>
                         <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           {entry.collection}
@@ -1228,7 +1256,19 @@ function isPrimaryInlineSection(section: RelatedEntrySection): boolean {
   return section.relationship.kind === "field";
 }
 
-function entryTitle(data: Record<string, unknown>, fallback: string, schema?: JsonSchema): string {
+export function entryTitle(
+  data: Record<string, unknown>,
+  fallback: string,
+  collection?: Pick<EntryEditorCollection, "lifecycle" | "list" | "schema">,
+  entryId?: string,
+): string {
+  if (collection?.lifecycle === "operational") {
+    const primaryField = collection.list?.primaryField;
+    const value = primaryField ? data[primaryField] : undefined;
+    if (typeof value === "string" && value.trim()) return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    return entryId || fallback;
+  }
   for (const key of ["title", "name", "slug", "id"]) {
     const value = data[key];
     if (typeof value === "string" && value.trim()) return value;
@@ -1238,9 +1278,9 @@ function entryTitle(data: Record<string, unknown>, fallback: string, schema?: Js
   // non-empty value — this is how a collection with no `title`/`name`/
   // `slug` (e.g. one keyed by a domain-specific field) still gets a
   // readable label.
-  if (schema) {
-    const properties = schema.properties ?? {};
-    for (const key of schema.required ?? []) {
+  if (collection?.schema) {
+    const properties = collection.schema.properties ?? {};
+    for (const key of collection.schema.required ?? []) {
       const fieldSchema = properties[key];
       if (!fieldSchema || schemaType(fieldSchema) !== "string") continue;
       const value = data[key];
@@ -1266,14 +1306,24 @@ function schemaType(schema: JsonSchema): string {
   return "string";
 }
 
-function multilineField(schema: JsonSchema, name: string): boolean {
+export function stringFieldWidget(
+  schema: JsonSchema,
+  widget: "textarea" | null,
+): "input" | "textarea" | "richtext" {
   const hint = typeof schema["x-mcp-hint"] === "string" ? schema["x-mcp-hint"] : "";
-  return (
-    hint.includes("markdown") ||
-    hint.includes("html") ||
-    /body|description|content|intro|notes|summary/i.test(name) ||
-    (typeof schema.maxLength === "number" && schema.maxLength > 160)
-  );
+  if (hint === "markdown" || hint === "html" || hint === "richtext") return "richtext";
+  return widget ?? "input";
+}
+
+function fieldWidget(
+  uiSchema: Record<string, unknown> | null,
+  name: string,
+): "textarea" | null {
+  const fields = uiSchema?.["fields"];
+  if (!fields || typeof fields !== "object" || Array.isArray(fields)) return null;
+  const config = (fields as Record<string, unknown>)[name];
+  if (!config || typeof config !== "object" || Array.isArray(config)) return null;
+  return (config as Record<string, unknown>)["widget"] === "textarea" ? "textarea" : null;
 }
 
 function isMediaAssetRef(schema: JsonSchema): boolean {

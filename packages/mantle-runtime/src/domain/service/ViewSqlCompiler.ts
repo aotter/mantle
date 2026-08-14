@@ -42,6 +42,10 @@ export interface CompileViewOptions {
   readonly show?: number;
   /** Site-local Better Auth user id for identity-bound filters. */
   readonly ctxUserId?: string;
+  /** Admin-only substring search over manifest-allowlisted output fields. */
+  readonly search?: { readonly term: string; readonly fields: readonly string[] };
+  /** Admin-only exact filters over manifest-allowlisted output fields. */
+  readonly filters?: ReadonlyArray<{ readonly field: string; readonly value: string }>;
 }
 
 // alias → SQL column. Aliases mirror RESERVED_ENTRY_COLUMNS from
@@ -83,6 +87,11 @@ export function compileView(
   options: CompileViewOptions = {},
   schema?: SchemaManifest,
 ): CompiledView {
+  if (view.spec.sql) return compileSqlView(view, options);
+  const from = view.spec.from;
+  if (!from) {
+    throw new Error(`View '${view.metadata.name}' requires either spec.from or spec.sql.`);
+  }
   if (schema && schema.metadata.name !== view.spec.from) {
     throw new DiagnosticError(
       runtimeDiagnostic({
@@ -95,7 +104,7 @@ export function compileView(
       }),
     );
   }
-  const sqlParams: unknown[] = [view.spec.from];
+  const sqlParams: unknown[] = [from];
   const selectExpr = buildSelect(view.spec.fields, schema);
   const whereParts: string[] = ["collection = ?"];
   if (view.spec.filter) {
@@ -108,6 +117,9 @@ export function compileView(
     whereParts.push(`(${compiled.sql})`);
     sqlParams.push(...compiled.params);
   }
+  const listQuery = compileListQuery(options, (field) => fieldRefExpr(field, schema));
+  whereParts.push(...listQuery.conditions);
+  sqlParams.push(...listQuery.params);
   const where = `WHERE ${whereParts.join(" AND ")}`;
   const orderBy = buildOrderBy(view.spec.orderBy, schema);
   const effectiveShow = clampShow(options.show, view.spec.limit);
@@ -120,6 +132,65 @@ export function compileView(
   const offset = Math.min((effectivePage - 1) * effectiveShow, Number.MAX_SAFE_INTEGER);
   const sql = `SELECT ${selectExpr} FROM entries ${where}${orderBy} LIMIT ${effectiveShow} OFFSET ${offset}`;
   return { sql, params: sqlParams, effectivePage, effectiveShow };
+}
+
+function compileSqlView(
+  view: ViewManifest,
+  options: CompileViewOptions,
+): CompiledView {
+  const params: unknown[] = [];
+  // ponytail: token regex is enough for agent-authored SQL; add a lexer if
+  // quoted SQL literals containing `:name` become a real manifest use case.
+  const statement = view.spec.sql!.trim().replace(
+    /:([A-Za-z_][A-Za-z0-9_]*)/g,
+    (_token, name: string) => {
+      const value = options.params?.[name];
+      if (value === undefined) throw new Error(`View SQL requires param '${name}'.`);
+      params.push(value);
+      return "?";
+    },
+  );
+  const effectiveShow = clampShow(options.show, view.spec.limit);
+  const effectivePage = clampPage(options.page);
+  const offset = Math.min((effectivePage - 1) * effectiveShow, Number.MAX_SAFE_INTEGER);
+  const listQuery = compileListQuery(
+    options,
+    (field) => `"_mantle_view".${quoteIdent(field)}`,
+  );
+  const where = listQuery.conditions.length > 0
+    ? ` WHERE ${listQuery.conditions.join(" AND ")}`
+    : "";
+  return {
+    sql: `SELECT * FROM (${statement}) AS "_mantle_view"${where} LIMIT ${effectiveShow} OFFSET ${offset}`,
+    params: [...params, ...listQuery.params],
+    effectivePage,
+    effectiveShow,
+  };
+}
+
+function compileListQuery(
+  options: CompileViewOptions,
+  fieldRef: (field: string) => string,
+): { readonly conditions: readonly string[]; readonly params: readonly unknown[] } {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  const term = options.search?.term.trim();
+  if (term && options.search?.fields.length) {
+    const escaped = escapeLikeTerm(term);
+    conditions.push(`(${options.search.fields
+      .map((field) => `${fieldRef(field)} LIKE '%'||?||'%' ESCAPE '\\'`)
+      .join(" OR ")})`);
+    params.push(...options.search.fields.map(() => escaped));
+  }
+  for (const filter of options.filters ?? []) {
+    conditions.push(`CAST(${fieldRef(filter.field)} AS TEXT) = ?`);
+    params.push(filter.value);
+  }
+  return { conditions, params };
+}
+
+function escapeLikeTerm(term: string): string {
+  return term.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
 function buildSelect(

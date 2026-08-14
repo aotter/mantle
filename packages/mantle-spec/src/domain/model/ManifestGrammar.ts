@@ -38,7 +38,7 @@ export function isMediaMcpHint(value: unknown): value is MediaMcpHint {
  *  accepts strings; the v0.1 conventional values agents and admin
  *  widgets should understand are `markdown`, `richtext`, `code`,
  *  `media`, `media-image`, `media-video`, `media-file`, `money-minor`,
- *  and `timestamp-ms`. */
+ *  `timestamp-ms`, and `idempotency-key`. */
 export type JsonSchema = {
   readonly type?: string | readonly string[];
   readonly properties?: Readonly<Record<string, JsonSchema>>;
@@ -54,6 +54,10 @@ export type JsonSchema = {
   readonly minItems?: number;
   readonly maxItems?: number;
   readonly nullable?: boolean;
+  /** Standard JSON Schema annotation. At the root of a Schema manifest,
+   *  Mantle keeps generic Admin and Staff MCP authoring read-only while
+   *  allowing trusted Procedure handlers to maintain the projection. */
+  readonly readOnly?: boolean;
   readonly default?: unknown;
   readonly additionalProperties?: boolean | JsonSchema;
   /** Standard JSON Schema keyword: help text for this property, shown
@@ -223,18 +227,26 @@ export interface ViewManifestSpec {
    *  rendering of `metadata.name`, exactly as before this field
    *  existed. */
   readonly title?: LocalizedText;
-  /** Source Schema name (bare; no namespace). */
-  readonly from: string;
+  /** Admin-only presentation/query affordances for `surface: staff`
+   *  Views. v0.1 supports `uiSchema.list.columns`, `searchFields`, and
+   *  `filterFields`; public REST and MCP semantics stay unchanged. */
+  readonly uiSchema?: Record<string, unknown>;
+  /** Legacy declarative source Schema name (bare; no namespace).
+   *  Exactly one of `from` or `sql` is required. */
+  readonly from?: string;
+  /** A single read-only SQLite SELECT over Schema logical tables.
+   *  Named `:params` are declared by `params` and bound by the runtime. */
+  readonly sql?: string;
   /** REST-surface visibility. Reuses the `"public" | "staff"`
    *  vocabulary of `McpTriggerSurface` (see `MCP_TRIGGER_SURFACES`).
-   *  When absent or `"public"` the View auto-mounts at the public
+   *  `"public"` auto-mounts at the public
    *  `GET /api/views/<name>` (v0.1 default; `requires` may still gate
    *  the call). When `"staff"` the View is
    *  NOT mounted on the public path — it mounts at
    *  `GET /admin/api/views/<name>` behind the staff gate and becomes
    *  the report-sidebar source. Guards data behind a staff session; use
    *  it for any View over sensitive rows. */
-  readonly surface?: McpTriggerSurface;
+  readonly surface: McpTriggerSurface;
   /** Auth gate. Identical shape to `ProcedureManifestSpec.requires.auth`.
    *  When absent the View is public — `ExecuteViewUseCase` skips the
    *  predicate check. When present, ALL predicates must hold; the
@@ -363,6 +375,9 @@ export interface ProcedureManifestSpec {
   readonly requires?: AuthorizationRequirements;
   /** JSON Schema for the request body. */
   readonly input: JsonSchema;
+  /** Admin-only field widget choices. Does not affect input validation
+   *  or the MCP tool schema. */
+  readonly uiSchema?: Record<string, unknown>;
   /** JSON Schema for the response body. */
   readonly output: JsonSchema;
   /** Handler binding. v0.1.0 ships `kind: "ref"` (consumer supplies

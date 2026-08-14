@@ -22,7 +22,7 @@ import {
   schemaIndexDiagnosticCode,
 } from "../domain/service/SchemaIndexChecker.js";
 import { checkSchemaSearchableFields } from "../domain/service/SchemaSearchChecker.js";
-import { checkSchemaListFilter } from "../domain/service/SchemaAdminUiChecker.js";
+import { checkFormUiSchema, checkSchemaAdminUi, checkViewAdminUi } from "../domain/service/SchemaAdminUiChecker.js";
 import {
   bestMatch,
   manifestPath,
@@ -71,6 +71,16 @@ export class ValidateManifestsUseCase {
     );
 
     for (const v of partitioned.views) {
+      for (const problem of checkViewAdminUi(v).problems) {
+        diags.push(validateDiagnostic({
+          code: "VIEW_UI_INVALID",
+          severity: "error",
+          path: manifestPath("View", v.metadata.name, problem.pointer, request.filePaths),
+          value: problem.value,
+          expected: problem.expected,
+          message: problem.message,
+        }));
+      }
       diags.push(...checkViewRefs(v, schemasByName, request.filePaths));
       diags.push(...checkTargetAuth(v, request.filePaths));
     }
@@ -78,6 +88,17 @@ export class ValidateManifestsUseCase {
     for (const p of partitioned.procedures) {
       diags.push(...checkTargetAuth(p, request.filePaths));
       diags.push(...checkBuiltinHandler(p, schemasByName, request.filePaths));
+      diags.push(...checkCollectionActionRef(p, schemasByName, request.filePaths));
+      for (const problem of checkFormUiSchema(p.spec.input, p.spec.uiSchema, "Procedure")) {
+        diags.push(validateDiagnostic({
+          code: "SCHEMA_UI_INVALID",
+          severity: "error",
+          path: manifestPath("Procedure", p.metadata.name, problem.pointer, request.filePaths),
+          value: problem.value,
+          expected: problem.expected,
+          message: problem.message,
+        }));
+      }
       diags.push(
         ...collectInvalidPatterns(p.spec.input, "Procedure", p.metadata.name, "/spec/input", request.filePaths),
         ...collectInvalidPatterns(p.spec.output, "Procedure", p.metadata.name, "/spec/output", request.filePaths),
@@ -111,6 +132,23 @@ export class ValidateManifestsUseCase {
   static run(request: ValidateManifestsRequest): ValidateManifestsResponse {
     return new ValidateManifestsUseCase().execute(request);
   }
+}
+
+function checkCollectionActionRef(
+  procedure: ProcedureManifest,
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+  filePaths?: ManifestFilePaths,
+): Diagnostic[] {
+  const target = procedure.spec.uiSchema?.["collectionAction"];
+  if (typeof target !== "string" || schemasByName.has(target)) return [];
+  return [validateDiagnostic({
+    code: "SCHEMA_UI_INVALID",
+    severity: "error",
+    path: manifestPath("Procedure", procedure.metadata.name, "/spec/uiSchema/collectionAction", filePaths),
+    value: target,
+    expected: "the metadata.name of an existing Schema",
+    message: `Procedure '${procedure.metadata.name}' collection action references unknown Schema '${target}'.`,
+  })];
 }
 
 function byName<M extends { metadata: { name: string } }>(arr: ReadonlyArray<M>): Map<string, M> {
@@ -245,7 +283,7 @@ function checkSchemaInternals(
     );
   }
 
-  for (const problem of checkSchemaListFilter(s).problems) {
+  for (const problem of checkSchemaAdminUi(s).problems) {
     out.push(
       validateDiagnostic({
         code: "SCHEMA_UI_INVALID",
@@ -341,8 +379,10 @@ function checkViewRefs(
   schemasByName: ReadonlyMap<string, SchemaManifest>,
   filePaths?: ManifestFilePaths,
 ): Diagnostic[] {
+  if (v.spec.sql) return [];
   const out: Diagnostic[] = [];
   const fromName = v.spec.from;
+  if (!fromName) return out;
   const schema = schemasByName.get(fromName);
   if (!schema) {
     out.push(
@@ -362,6 +402,27 @@ function checkViewRefs(
 
   const props = (schema.spec.schema as { properties?: Record<string, unknown> }).properties ?? {};
   const validFieldNames = new Set([...Object.keys(props), ...RESERVED_ENTRY_COLUMNS]);
+
+  const list = checkViewAdminUi(v).list;
+  for (const [key, fields] of Object.entries(list) as Array<[
+    keyof typeof list,
+    readonly string[],
+  ]>) {
+    fields.forEach((field, index) => {
+      if (!validFieldNames.has(field)) {
+        out.push(validateDiagnostic({
+          code: "VIEW_UI_INVALID",
+          severity: "error",
+          path: manifestPath("View", v.metadata.name, `/spec/uiSchema/list/${key}/${index}`, filePaths),
+          value: field,
+          expected: `property of Schema '${fromName}' or a reserved metadata field`,
+          candidates: [...validFieldNames].sort(),
+          suggestion: bestMatch(field, [...validFieldNames]),
+          message: `View '${v.metadata.name}' Admin list references unknown field '${field}'.`,
+        }));
+      }
+    });
+  }
 
   if (v.spec.fields) {
     v.spec.fields.forEach((f, i) => {

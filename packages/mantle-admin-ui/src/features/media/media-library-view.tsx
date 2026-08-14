@@ -22,7 +22,7 @@ import { useCursorPagination } from "../../lib/use-cursor-pagination";
 import { formatTimestampMs } from "../content/field-render";
 
 const MEDIA_SETUP_GUIDE_URL =
-  "https://github.com/aotter/mantle/blob/main/docs/media-uploads.md";
+  "https://developers.cloudflare.com/r2/get-started/workers-api/";
 const MEDIA_SETUP_PROMPT = `Enable Mantle media storage for this site using the runtime's supported storage adapter. If this is a Cloudflare deployment, follow node_modules/@aotter/mantle/docs/media-uploads.md: create and bind an R2 bucket, configure its S3 credentials and public URL, wire mediaStorage, validate, deploy, and verify /admin/media.`;
 
 /** Full-page media library for committed assets. */

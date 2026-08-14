@@ -1,4 +1,9 @@
-import { buildDdl, type SchemaManifest } from "@aotter/mantle-spec";
+import {
+  buildDdl,
+  buildSchemaSqlView,
+  dropSchemaSqlViewSql,
+  type SchemaManifest,
+} from "@aotter/mantle-spec";
 import type {
   DatabaseDriver,
   Migration,
@@ -254,7 +259,41 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
       DROP INDEX IF EXISTS entries_published_collection_updated;
     `,
   },
+  {
+    id: "0006-schema-sql-views",
+    description: "Track Schema logical SQL views",
+    sql: `
+      CREATE TABLE IF NOT EXISTS _mantle_schema_views (
+        name TEXT PRIMARY KEY NOT NULL
+      );
+    `,
+  },
 ];
+
+/** Keep Schema logical tables exact across manifest additions, edits, and removals. */
+export async function reconcileSchemaSqlViews(
+  db: DatabaseDriver,
+  schemas: Iterable<SchemaManifest>,
+): Promise<void> {
+  const views = [...schemas]
+    .sort((a, b) => a.metadata.name.localeCompare(b.metadata.name))
+    .map(buildSchemaSqlView);
+  const desired = new Set(views.map((view) => view.name));
+  const tracked = await db.prepare("SELECT name FROM _mantle_schema_views").all<{ name: string }>();
+
+  for (const { name } of tracked) {
+    if (desired.has(name)) continue;
+    await db.prepare(dropSchemaSqlViewSql(name)).run();
+    await db.prepare("DELETE FROM _mantle_schema_views WHERE name = ?").bind(name).run();
+  }
+  for (const view of views) {
+    await db.prepare(view.dropSql).run();
+    await db.prepare(view.createSql).run();
+    await db.prepare("INSERT OR IGNORE INTO _mantle_schema_views(name) VALUES (?)")
+      .bind(view.name)
+      .run();
+  }
+}
 
 export function schemaIndexMigrations(
   schemas: Iterable<SchemaManifest>,

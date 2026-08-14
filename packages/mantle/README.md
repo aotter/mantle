@@ -43,8 +43,10 @@ pnpm exec mantle-harness indexes --require-public
 pnpm exec mantle-harness http --base-url http://127.0.0.1:8787 --route page=/en/example
 ```
 
-`mantle generate` validates `./manifests/site.yaml`, then writes the
-parsed manifest module and handler declarations to `.mantle/generated/`.
+`mantle generate` validates `./manifests/site.yaml`, writes the
+parsed manifest module and handler declarations to `.mantle/generated/`, and
+copies the version-matched Admin SPA to `public/_mantle/admin/` for the
+platform's static asset service. `--check` verifies both outputs.
 It does not sync skills, update packages, style, provision, or deploy.
 When manifests declare Views or Procedures, the generated `site.ts` also exports
 `bindMantleSite(runtime)`: its `views` and `procedures` keys, inputs, and outputs
@@ -91,16 +93,25 @@ per-isolate boot. Use its single `extend` seam for application handlers and
 new Hono routes; use the public low-level exports when the deployment does not
 fit the conventional binding or lifecycle contract.
 
+Conventional Auth requires an explicit `MANTLE_AUTH_MODE`: `self-managed`
+uses the site's GitHub OAuth credentials, while `hosted` uses a same-origin
+Mantle Hosted Auth PKCE client. Missing, invalid, partial, or mixed-mode
+configuration keeps public routes available but returns `503 setup_incomplete`
+from Auth-owned private routes. Pass `auth: (env) => Auth` only when the site
+needs to replace this conventional factory; Core still owns the Auth routes.
+The exact bindings and validation rules are in the
+[Cloudflare adapter README](../adapters/cloudflare/README.md#conventional-auth).
+
 Extensions may add routes but may not replace Core surfaces. These paths are
 reserved:
 
 - `/admin` and `/admin/*`
+- `/_mantle` and `/_mantle/*`
 - `/api/auth` and `/api/auth/*`
 - `/api/views` and `/api/views/*`
 - `/oauth` and `/oauth/*`
 - `/mcp` and `/mcp/*`
 - `/.well-known/oauth*`
-- `/favicon.svg`
 - global `*` and `/*` handlers
 
 A custom Auth factory's `basePath` and exact manifest-owned method/path pairs
@@ -108,6 +119,32 @@ are also reserved at assembly. Static literal conflicts fail TypeScript during
 the consumer build. Computed paths cannot be proven statically, so the facade
 checks Hono's assembled route table and fails closed before serving requests.
 There is no standard-route override option.
+
+Cloudflare projects expose that generated Admin bundle and the site's own
+frontend assets through one native binding:
+
+```toml
+[assets]
+directory = "./public"
+binding = "ASSETS"
+```
+
+Declare browser, Admin, and MCP identity once. Multiple renditions are allowed;
+keep SVG as the source and add PNG renditions when a target MCP client requires
+the baseline raster formats:
+
+```ts
+siteDefaults: {
+  icons: [
+    { src: "/site-icon.png", mimeType: "image/png", sizes: ["64x64"] },
+    { src: "/site-icon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
+  ],
+}
+```
+
+Keep both files in the project's `public/` directory. They are one site
+identity reused by browser favicons, Admin chrome, and MCP `serverInfo.icons`;
+PNG is the compatibility rendition and SVG remains the editable source.
 
 For an uncommon deployment that must own the top-level assembly, use the
 embedded [`docs/cloudflare-low-level-composition.md`](docs/cloudflare-low-level-composition.md)
