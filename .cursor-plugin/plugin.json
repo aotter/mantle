@@ -2,7 +2,7 @@
   "name": "mantle",
   "displayName": "Mantle",
   "description": "Create and develop Mantle sites from deterministic starters, then ship them to Cloudflare.",
-  "version": "0.1.0-alpha.3",
+  "version": "0.1.0-alpha.4",
   "author": {
     "name": "Aotter"
   },
