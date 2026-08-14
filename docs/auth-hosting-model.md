@@ -5,8 +5,10 @@ basic login. The split is:
 
 - **Mantle SDK** gives every generated site the primitives needed to
   run its own auth.
-- **Mantle starters** decide whether a generated site is wired for
-  self-hosted auth or as a client of Mantle Platform hosted auth.
+- **Mantle's conventional Cloudflare adapter** runs the generated site's
+  selected self-hosted or Mantle Platform hosted client configuration.
+- **Mantle starters** declare the mode and provider placeholders that landing
+  or the site owner completes.
 - **Mantle Platform** can sell hosted identity, provider setup, email,
   and billing convenience for site owners who do not want to operate
   those pieces.
@@ -117,10 +119,12 @@ Landing can probe Platform staff/session state, but provisioning's
 GitHub OAuth token is still Landing-owned unless a separate token
 handoff design is introduced.
 
-The generated site's hosted-auth client code belongs in the starter or
-a starter overlay. Core owns only the auth contract, normalized
-manifest/runtime credential vocabulary (`ctx.user`, `ctx.staff`, `ctx.auth`),
-guard orchestration, and curated Better Auth server primitives.
+The conventional hosted-auth client wiring belongs in Core's Cloudflare
+adapter. Starters declare its environment bindings; landing supplies an
+allocated client. A site can still replace Auth construction through
+`createMantleWorker({ auth })` when it needs a different curated identity
+design. Core continues to own the normalized manifest/runtime credential
+vocabulary (`ctx.user`, `ctx.staff`, `ctx.auth`) and guard orchestration.
 
 ## API and MCP Authorization
 

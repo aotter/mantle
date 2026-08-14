@@ -93,6 +93,15 @@ per-isolate boot. Use its single `extend` seam for application handlers and
 new Hono routes; use the public low-level exports when the deployment does not
 fit the conventional binding or lifecycle contract.
 
+Conventional Auth requires an explicit `MANTLE_AUTH_MODE`: `self-managed`
+uses the site's GitHub OAuth credentials, while `hosted` uses a same-origin
+Mantle Hosted Auth PKCE client. Missing, invalid, partial, or mixed-mode
+configuration keeps public routes available but returns `503 setup_incomplete`
+from Auth-owned private routes. Pass `auth: (env) => Auth` only when the site
+needs to replace this conventional factory; Core still owns the Auth routes.
+The exact bindings and validation rules are in the
+[Cloudflare adapter README](../adapters/cloudflare/README.md#conventional-auth).
+
 Extensions may add routes but may not replace Core surfaces. These paths are
 reserved:
 

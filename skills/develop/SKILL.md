@@ -137,12 +137,13 @@ teaching the project Mantle internals.
 
 ## Auth Composition
 
-When a generated repo contains `src/auth.ts`, the repo owns its auth
-composition. Preserve the explicit mode recorded in its launch state and
-Worker config; do not infer a mode from whichever credentials happen to be
-present or configure competing paths. Keep provider secrets out of source.
-Follow the repo handoff for provider-specific setup rather than adding product
-policy to Core.
+Conventional Cloudflare projects declare `MANTLE_AUTH_MODE=hosted` or
+`self-managed`; Core owns that standard Auth composition and rejects partial
+or mixed bindings. Preserve the explicit mode recorded in launch state and
+Worker config, keep provider secrets out of source, and do not infer a mode
+from whichever credentials happen to be present. A repo with an explicit
+`createMantleWorker({ auth })` override owns that custom composition; follow
+its handoff instead of replacing it with the conventional factory.
 
 ## Performance Loop
 

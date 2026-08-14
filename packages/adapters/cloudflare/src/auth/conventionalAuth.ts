@@ -3,7 +3,6 @@ import {
   createSetupIncompleteAuth,
   isSetupIncompleteAuth,
   type Auth,
-  type AuthMethodConfig,
 } from "./createAuth.js";
 import {
   OAUTH_AUTHORIZE_PATH,
@@ -12,47 +11,78 @@ import {
 } from "../oauth/oauthConstants.js";
 import { applyCachePolicy } from "../oauth/cachePolicy.js";
 
-const AUTH_NOT_CONFIGURED =
-  "Admin auth is not configured yet. Configure self-managed GitHub OAuth or provide an explicit Auth factory.";
-
 export interface ConventionalAuthEnv {
   readonly DB: D1Database;
   readonly PUBLIC_ORIGIN?: string;
   readonly BETTER_AUTH_SECRET?: string;
+  readonly MANTLE_AUTH_MODE?: string;
+  readonly MANTLE_HOSTED_AUTH_ISSUER?: string;
+  readonly MANTLE_HOSTED_AUTH_CLIENT_ID?: string;
   readonly GITHUB_CLIENT_ID?: string;
   readonly GITHUB_CLIENT_SECRET?: string;
   readonly ADMIN_GITHUB_LOGIN?: string;
 }
 
-/** Choose self-managed GitHub OAuth or a fail-closed facade. */
+/** Choose hosted or self-managed GitHub Auth, otherwise fail closed. */
 export function createConventionalAuth(env: ConventionalAuthEnv): Auth {
-  const baseURL = value(env.PUBLIC_ORIGIN)?.replace(/\/+$/, "") ?? "http://localhost:8787";
+  const mode = value(env.MANTLE_AUTH_MODE);
   const secret = value(env.BETTER_AUTH_SECRET);
+  const owner = githubLogin(env.ADMIN_GITHUB_LOGIN);
+  const hostedIssuerRaw = value(env.MANTLE_HOSTED_AUTH_ISSUER);
+  const hostedClientIdRaw = value(env.MANTLE_HOSTED_AUTH_CLIENT_ID);
+  const hostedIssuer = hostedOrigin(hostedIssuerRaw);
+  const hostedClientId = hostedClient(hostedClientIdRaw, hostedIssuer);
   const githubClientId = value(env.GITHUB_CLIENT_ID);
   const githubClientSecret = value(env.GITHUB_CLIENT_SECRET);
-  const adminGithubLogin = value(env.ADMIN_GITHUB_LOGIN);
-  const githubReady = Boolean(
-    secret && githubClientId && githubClientSecret && adminGithubLogin,
-  );
+  const baseURL = value(env.PUBLIC_ORIGIN)?.replace(/\/+$/, "") ?? "http://localhost:8787";
 
-  if (!githubReady) {
-    return createSetupIncompleteAuth({ message: AUTH_NOT_CONFIGURED });
+  if (mode === "hosted") {
+    if (!secret || !owner || !hostedIssuer || !hostedClientId || githubClientId || githubClientSecret) {
+      return incomplete("Hosted Auth is incomplete or conflicts with self-managed GitHub credentials.");
+    }
+    return createAuth({
+      database: env.DB,
+      baseURL,
+      secret,
+      methods: [{
+        kind: "oauth",
+        providerId: "github",
+        displayName: "GitHub",
+        clientId: hostedClientId,
+        authorizationUrl: `${hostedIssuer}/authorize`,
+        tokenUrl: `${hostedIssuer}/token`,
+        userInfoUrl: `${hostedIssuer}/userinfo`,
+        scopes: ["profile", "email"],
+        redirectURI: `${baseURL}/api/auth/oauth2/callback/github`,
+        pkce: true,
+        mapProfileToUser: (profile) => {
+          const login = githubLogin(profile.github_login);
+          return login ? { githubLogin: login } : {};
+        },
+      }],
+      bootstrapOwner: { match: "github-login", value: owner },
+    });
   }
 
-  const methods: AuthMethodConfig[] = [{
-    kind: "social",
-    provider: "github",
-    clientId: githubClientId!,
-    clientSecret: githubClientSecret!,
-  }];
+  if (mode === "self-managed") {
+    if (!secret || !owner || !githubClientId || !githubClientSecret || hostedIssuerRaw || hostedClientIdRaw) {
+      return incomplete("Self-managed Auth is incomplete or conflicts with Hosted Auth configuration.");
+    }
+    return createAuth({
+      database: env.DB,
+      baseURL,
+      secret,
+      methods: [{
+        kind: "social",
+        provider: "github",
+        clientId: githubClientId,
+        clientSecret: githubClientSecret,
+      }],
+      bootstrapOwner: { match: "github-login", value: owner },
+    });
+  }
 
-  return createAuth({
-    database: env.DB,
-    baseURL,
-    secret: secret!,
-    methods,
-    bootstrapOwner: { match: "github-login", value: adminGithubLogin! },
-  });
+  return incomplete("MANTLE_AUTH_MODE must be hosted or self-managed.");
 }
 
 /** Return the setup response only for Auth-owned private surfaces. */
@@ -78,6 +108,44 @@ function isAuthProtectedPath(request: Request, auth: Auth): boolean {
     || pathname.startsWith("/mcp/");
 }
 
-function value(raw: string | undefined): string | null {
+function incomplete(message: string): Auth {
+  return createSetupIncompleteAuth({ message });
+}
+
+function hostedOrigin(raw: string | null): string | null {
+  try {
+    const url = new URL(value(raw) ?? "");
+    if (!secureOrLoopback(url) || url.pathname !== "/" || url.search || url.hash) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+function hostedClient(raw: string | null, issuer: string | null): string | null {
+  try {
+    const url = new URL(value(raw) ?? "");
+    return issuer && secureOrLoopback(url) && url.origin === issuer && /^\/clients\/[A-Za-z0-9_-]{1,128}$/u.test(url.pathname) && !url.search && !url.hash
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function secureOrLoopback(url: URL): boolean {
+  return !url.username && !url.password && (url.protocol === "https:" || (
+    url.protocol === "http:" &&
+    (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]")
+  ));
+}
+
+function githubLogin(raw: unknown): string | null {
+  return typeof raw === "string" && /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u.test(raw.trim())
+    ? raw.trim()
+    : null;
+}
+
+function value(raw: string | null | undefined): string | null {
   return raw?.trim() || null;
 }

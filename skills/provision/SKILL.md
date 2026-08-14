@@ -62,6 +62,9 @@ directly; boot syncs its canonical origin from `PUBLIC_ORIGIN`.
   hosted allocation and client configuration. Mantle Platform operates the
   identity provider; do not ask the user for a per-site GitHub OAuth App.
 
+Configure only the selected mode. Core deliberately rejects partial or mixed
+hosted/self-managed bindings with `503 setup_incomplete`.
+
 Do not claim that hosted auth can attach to an arbitrary local repo unless the
 current Mantle landing flow explicitly supplies that handoff.
 
@@ -78,10 +81,14 @@ For the exact boundary, read
 
 2. Put non-secret values in `wrangler.toml`:
 
+- `MANTLE_AUTH_MODE = "self-managed"`
 - `PUBLIC_ORIGIN`
 - `GITHUB_CLIENT_ID`
 - `ADMIN_GITHUB_LOGIN`
 - correct Worker `name`
+
+Remove `MANTLE_HOSTED_AUTH_ISSUER` and `MANTLE_HOSTED_AUTH_CLIENT_ID` if they
+were present for a hosted allocation.
 
 3. Keep the Client Secret out of chat. Prefer a Cloudflare connector for
    secrets; otherwise use hidden shell input:
@@ -108,8 +115,17 @@ pnpm deploy
 ## Hosted Auth
 
 Follow the landing handoff and generated client configuration. Hosted
-configuration remains in landing-managed Cloudflare Worker bindings; do not
-write client secrets into `wrangler.toml`.
+configuration remains in landing-managed Cloudflare Worker bindings. Verify:
+
+- `MANTLE_AUTH_MODE = "hosted"`;
+- `MANTLE_HOSTED_AUTH_ISSUER` is the HTTPS root issuer;
+- `MANTLE_HOSTED_AUTH_CLIENT_ID` is the same-origin `/clients/<id>` URL;
+- `PUBLIC_ORIGIN` and `ADMIN_GITHUB_LOGIN` are set;
+- `BETTER_AUTH_SECRET` exists as a Worker secret;
+- `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are absent.
+
+Hosted clients use PKCE and have no client secret. Do not write secrets into
+`wrangler.toml`.
 
 Verify that admin sign-in redirects to Mantle Hosted Auth and Staff MCP
 authenticates, then skip the self-hosted flow.

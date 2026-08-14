@@ -24,6 +24,32 @@ they reuse the fetch path's assembled runtime instead of writing directly to
 Mantle tables. Queue handlers still own per-message acknowledgement, retry,
 and idempotency.
 
+### Conventional Auth
+
+Without an `auth` option, `createMantleWorker` requires one explicit mode:
+
+| Mode | Non-secret bindings | Worker secrets | Must be absent |
+|---|---|---|---|
+| `self-managed` | `MANTLE_AUTH_MODE=self-managed`, `PUBLIC_ORIGIN`, `GITHUB_CLIENT_ID`, `ADMIN_GITHUB_LOGIN` | `GITHUB_CLIENT_SECRET`, `BETTER_AUTH_SECRET` | `MANTLE_HOSTED_AUTH_ISSUER`, `MANTLE_HOSTED_AUTH_CLIENT_ID` |
+| `hosted` | `MANTLE_AUTH_MODE=hosted`, `PUBLIC_ORIGIN`, `MANTLE_HOSTED_AUTH_ISSUER`, `MANTLE_HOSTED_AUTH_CLIENT_ID`, `ADMIN_GITHUB_LOGIN` | `BETTER_AUTH_SECRET` | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` |
+
+Hosted Auth is a public PKCE client with no client secret. Its issuer must be
+an HTTPS root origin (HTTP is accepted only for loopback development), and the
+client id must be a URL at the same origin with the shape `/clients/<id>`.
+Invalid, partial, or mixed-mode configuration fails closed: public site routes
+remain available, while Admin, Auth, OAuth, and MCP routes return
+`503 setup_incomplete`.
+
+Sites with a different identity design may preserve Core's route ownership
+while replacing only construction:
+
+```ts
+createMantleWorker({
+  manifest,
+  auth: (env) => createAuth({ /* curated site-specific methods */ }),
+});
+```
+
 When the conventional lifecycle really does not fit, copy the
 [low-level composition fixture](../../../docs/cloudflare-low-level-composition.md).
 It uses the same public bindings, Auth, runtime, OAuth/MCP, cache and error
