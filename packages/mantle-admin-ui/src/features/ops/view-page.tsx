@@ -18,7 +18,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { Button } from "@/components/ui/button";
 import { SchemaFields } from "../content/entry-edit-view";
@@ -31,6 +30,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 
 const VIEW_PAGE_SIZE = 50;
 
@@ -167,13 +167,26 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
       ) : null}
 
       {(view.list.searchFields.length > 0 || view.list.filterFields.length > 0) ? (
-        <ViewSearch
+        <ListQueryToolbar
           key={location.search}
-          name={name}
-          query={urlParams}
-          searchFields={view.list.searchFields}
-          filterFields={view.list.filterFields}
           language={language}
+          searchable={view.list.searchFields.length > 0}
+          searchValue={urlParams.get("search") ?? ""}
+          filters={view.list.filterFields.map((field) => ({
+            name: field,
+            label: fieldLabel(field),
+            value: urlParams.get(`filter.${field}`) ?? "",
+          }))}
+          onSubmit={({ search, filters }) => {
+            const next = new URLSearchParams(urlParams);
+            setOrDelete(next, "search", search);
+            for (const field of view.list.filterFields) {
+              setOrDelete(next, `filter.${field}`, filters[field] ?? "");
+            }
+            next.delete("page");
+            next.delete("show");
+            window.location.href = viewHref(name, next);
+          }}
         />
       ) : null}
 
@@ -218,77 +231,6 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
         />
       ) : null}
     </div>
-  );
-}
-
-function ViewSearch({
-  name,
-  query,
-  searchFields,
-  filterFields,
-  language,
-}: {
-  name: string;
-  query: URLSearchParams;
-  searchFields: readonly string[];
-  filterFields: readonly string[];
-  language: AdminLanguage;
-}): React.ReactElement {
-  return (
-    <form
-      className="mb-3 space-y-3"
-      role="search"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const next = new URLSearchParams(query);
-        const form = new FormData(event.currentTarget);
-        setOrDelete(next, "search", String(form.get("search") ?? "").trim());
-        for (const field of filterFields) {
-          setOrDelete(next, `filter.${field}`, String(form.get(`filter.${field}`) ?? "").trim());
-        }
-        next.delete("page");
-        next.delete("show");
-        window.location.href = viewHref(name, next);
-      }}
-    >
-      {searchFields.length > 0 ? (
-        <div className="flex max-w-xl gap-2">
-          <label className="relative block flex-1" aria-label={t(language, "collection.searchPlaceholder")}>
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-            <Input
-              name="search"
-              className="h-9 ps-9"
-              defaultValue={query.get("search") ?? ""}
-              placeholder={t(language, "collection.searchPlaceholder")}
-            />
-          </label>
-          <Button type="submit" variant="secondary" size="sm" className="h-9">
-            <Search className="size-4" aria-hidden />
-            {t(language, "collection.search")}
-          </Button>
-        </div>
-      ) : null}
-      {filterFields.length > 0 ? (
-        <div className="flex flex-wrap items-end gap-3">
-          {filterFields.map((field) => (
-            <label key={field} className="grid gap-1.5 text-sm font-medium">
-              <span>{fieldLabel(field)}</span>
-              <Input
-                name={`filter.${field}`}
-                className="h-9 w-48"
-                defaultValue={query.get(`filter.${field}`) ?? ""}
-              />
-            </label>
-          ))}
-          {searchFields.length === 0 ? (
-            <Button type="submit" variant="secondary" size="sm" className="h-9">
-              <Search className="size-4" aria-hidden />
-              {t(language, "collection.search")}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-    </form>
   );
 }
 

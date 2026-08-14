@@ -12,7 +12,6 @@ import {
   Globe,
   PencilLine,
   Plus,
-  Search,
   Trash2,
   X,
 } from "lucide-react";
@@ -67,6 +66,7 @@ import {
 import { renderDataValue } from "../../lib/render-data-value";
 import { renderTitleText } from "../../lib/entry-title";
 import { LocaleBadge, LocaleStatusBadges } from "./locale-badge";
+import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 
 const COLLECTION_PAGE_SIZE = 50;
 type SortDirection = "asc" | "desc";
@@ -166,6 +166,7 @@ export function CollectionView({
   const canCreateDraft = Boolean(me.data?.role) && !isOperationalCollection && !isReadOnlyCollection;
   const showSelection = canManageContent && !isReadOnlyCollection;
   const dataColumns = isOperationalCollection ? collection?.list?.columns ?? [] : [];
+  const collectionFilter = isOperationalCollection ? collection?.filter ?? null : null;
   const titleField = isOperationalCollection
     ? collection?.list?.primaryField ?? null
     : null;
@@ -264,24 +265,39 @@ export function CollectionView({
       {createMutation.isError ? <ErrorBox error={createMutation.error} /> : null}
 
       {collection ? (
-        <CollectionSearch
-          collectionName={collection.name}
-          status={status}
-          searchTerm={searchTerm}
-          filterField={filterField}
-          filterValue={filterValue}
-          sortField={sortField}
-          sortDirection={sortDirection}
+        <ListQueryToolbar
+          key={location.search}
           language={language}
+          searchValue={searchTerm}
+          filters={collectionFilter ? [{
+            name: collectionFilter.field,
+            label: propertyLabel(
+              collectionFilter.field,
+              collection.schema?.properties?.[collectionFilter.field],
+              language,
+              canonical,
+            ),
+            value: filterField === collectionFilter.field ? filterValue : "",
+            options: collectionFilter.values.map((value) => ({ value, label: fieldLabel(value) })),
+          }] : []}
+          onSubmit={({ search, filters }) => {
+            const nextFilter = collectionFilter ? filters[collectionFilter.field] : undefined;
+            window.location.href = collectionHref(collection.name, {
+              status,
+              searchTerm: search,
+              filterField: nextFilter ? collectionFilter?.field : undefined,
+              filterValue: nextFilter || undefined,
+              sortField,
+              sortDirection,
+            });
+          }}
         />
       ) : null}
 
-      {collection && (collection.lifecycle !== "operational" || collection.filter) ? (
-        <CollectionFilterTabs
+      {collection && !isOperationalCollection ? (
+        <CollectionStatusTabs
           collection={collection}
           activeStatus={status}
-          activeFilterField={filterField}
-          activeFilterValue={filterValue}
           searchTerm={searchTerm}
           sortField={sortField}
           sortDirection={sortDirection}
@@ -570,61 +586,6 @@ function BulkActionBar({
   );
 }
 
-function CollectionSearch({
-  collectionName,
-  status,
-  searchTerm,
-  filterField,
-  filterValue,
-  sortField,
-  sortDirection,
-  language,
-}: {
-  collectionName: string;
-  status: string | undefined;
-  searchTerm: string;
-  filterField: string | undefined;
-  filterValue: string | undefined;
-  sortField: string;
-  sortDirection: SortDirection;
-  language: AdminLanguage;
-}): React.ReactElement {
-  const [draft, setDraft] = React.useState(searchTerm);
-  React.useEffect(() => setDraft(searchTerm), [searchTerm]);
-  return (
-    <form
-      className="mb-3 flex max-w-xl gap-2"
-      role="search"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const next = draft.trim();
-        window.location.href = collectionHref(collectionName, {
-          status,
-          searchTerm: next,
-          filterField,
-          filterValue,
-          sortField,
-          sortDirection,
-        });
-      }}
-    >
-      <label className="relative block flex-1" aria-label={t(language, "collection.searchPlaceholder")}>
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <Input
-          className="h-9 ps-9"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder={t(language, "collection.searchPlaceholder")}
-        />
-      </label>
-      <Button type="submit" variant="secondary" size="sm" className="h-9">
-        <Search className="size-4" aria-hidden />
-        {t(language, "collection.search")}
-      </Button>
-    </form>
-  );
-}
-
 function renderCollectionDescription(
   collection: Collection | undefined,
   language: AdminLanguage,
@@ -656,11 +617,9 @@ export function collectionSummaryKey(collection: Collection | undefined): I18nKe
   return "collection.schemaSummary.plain";
 }
 
-function CollectionFilterTabs({
+function CollectionStatusTabs({
   collection,
   activeStatus,
-  activeFilterField,
-  activeFilterValue,
   searchTerm,
   sortField,
   sortDirection,
@@ -668,40 +627,22 @@ function CollectionFilterTabs({
 }: {
   collection: Collection;
   activeStatus: string | undefined;
-  activeFilterField: string | undefined;
-  activeFilterValue: string | undefined;
   searchTerm: string;
   sortField: string;
   sortDirection: SortDirection;
   language: AdminLanguage;
 }): React.ReactElement {
   const statuses = PUBLISHING_STATUSES;
-  const filter = collection.lifecycle === "operational" ? collection.filter : null;
 
   return (
     <div className="mb-5 flex gap-2 overflow-x-auto pb-1">
       <StatusFilterLink
         href={collectionHref(collection.name, { searchTerm, sortField, sortDirection })}
-        active={!activeStatus && !activeFilterValue}
+        active={!activeStatus}
       >
         {t(language, "collection.filter.all")}
       </StatusFilterLink>
-      {filter?.values.map((value) => (
-        <StatusFilterLink
-          key={value}
-          href={collectionHref(collection.name, {
-            searchTerm,
-            filterField: filter.field,
-            filterValue: value,
-            sortField,
-            sortDirection,
-          })}
-          active={activeFilterField === filter.field && activeFilterValue === value}
-        >
-          {fieldLabel(value)}
-        </StatusFilterLink>
-      ))}
-      {!filter && statuses.map((s) => (
+      {statuses.map((s) => (
         <StatusFilterLink
           key={s}
           href={collectionHref(collection.name, {
