@@ -2,6 +2,7 @@ import * as React from "react";
 import { Search } from "lucide-react";
 import { t } from "../app/i18n";
 import type { AdminLanguage } from "../app/preferences";
+import { cn } from "../lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -9,7 +10,8 @@ export interface ListQueryFilter {
   name: string;
   label: string;
   value?: string;
-  options?: ReadonlyArray<{ value: string; label: string }>;
+  allHref?: string;
+  options?: ReadonlyArray<{ value: string; label: string; href: string }>;
 }
 
 export function ListQueryToolbar({
@@ -25,9 +27,11 @@ export function ListQueryToolbar({
   filters?: readonly ListQueryFilter[];
   onSubmit: (query: { search: string; filters: Record<string, string> }) => void;
 }): React.ReactElement {
+  const optionFilters = filters.filter((filter) => filter.options);
+  const fieldFilters = filters.filter((filter) => !filter.options);
   return (
     <form
-      className="mb-3 space-y-3"
+      className={cn("space-y-3", optionFilters.length > 0 ? "mb-5" : "mb-3")}
       role="search"
       onSubmit={(event) => {
         event.preventDefault();
@@ -54,37 +58,61 @@ export function ListQueryToolbar({
           <SubmitButton language={language} />
         </div>
       ) : null}
-      {filters.length > 0 ? (
+      {fieldFilters.length > 0 ? (
         <div className="flex flex-wrap items-end gap-3">
-          {filters.map((filter) => (
+          {fieldFilters.map((filter) => (
             <label key={filter.name} className="grid gap-1.5 text-sm font-medium">
               <span>{filter.label}</span>
-              {filter.options ? (
-                <select
-                  name={`filter.${filter.name}`}
-                  className="h-9 w-48 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                  defaultValue={filter.value ?? ""}
-                >
-                  <option value="">{t(language, "collection.filter.all")}</option>
-                  {filter.options.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <Input
-                  name={`filter.${filter.name}`}
-                  className="h-9 w-48"
-                  defaultValue={filter.value ?? ""}
-                />
-              )}
+              <Input
+                name={`filter.${filter.name}`}
+                className="h-9 w-48"
+                defaultValue={filter.value ?? ""}
+              />
             </label>
           ))}
           {!searchable ? <SubmitButton language={language} /> : null}
         </div>
       ) : null}
+      {optionFilters.map((filter) => (
+        <div key={filter.name} className="flex gap-2 overflow-x-auto pb-1" aria-label={filter.label}>
+          <input type="hidden" name={`filter.${filter.name}`} value={filter.value ?? ""} />
+          <FilterTab href={filter.allHref ?? "#"} active={!filter.value}>
+            {t(language, "collection.filter.all")}
+          </FilterTab>
+          {filter.options?.map((option) => (
+            <FilterTab key={option.value} href={option.href} active={filter.value === option.value}>
+              {option.label}
+            </FilterTab>
+          ))}
+        </div>
+      ))}
     </form>
+  );
+}
+
+function FilterTab({
+  href,
+  active,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <a
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "inline-flex h-8 shrink-0 items-center justify-center rounded-lg border px-3 text-xs font-medium",
+        "transition-colors duration-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        active
+          ? "border-border bg-secondary text-secondary-foreground"
+          : "border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+      )}
+    >
+      {children}
+    </a>
   );
 }
 

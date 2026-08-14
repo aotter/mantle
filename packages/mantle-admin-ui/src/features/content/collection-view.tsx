@@ -167,6 +167,43 @@ export function CollectionView({
   const showSelection = canManageContent && !isReadOnlyCollection;
   const dataColumns = isOperationalCollection ? collection?.list?.columns ?? [] : [];
   const collectionFilter = isOperationalCollection ? collection?.filter ?? null : null;
+  const listQueryFilter = collectionFilter ? {
+    name: collectionFilter.field,
+    label: propertyLabel(
+      collectionFilter.field,
+      collection?.schema?.properties?.[collectionFilter.field],
+      language,
+      canonical,
+    ),
+    value: filterField === collectionFilter.field ? filterValue : "",
+    allHref: collectionHref(collectionName, { searchTerm, sortField, sortDirection }),
+    options: collectionFilter.values.map((value) => ({
+      value,
+      label: fieldLabel(value),
+      href: collectionHref(collectionName, {
+        searchTerm,
+        filterField: collectionFilter.field,
+        filterValue: value,
+        sortField,
+        sortDirection,
+      }),
+    })),
+  } : collection && !isOperationalCollection ? {
+    name: "status",
+    label: t(language, "collection.table.status"),
+    value: status,
+    allHref: collectionHref(collection.name, { searchTerm, sortField, sortDirection }),
+    options: PUBLISHING_STATUSES.map((value) => ({
+      value,
+      label: statusLabel(language, value),
+      href: collectionHref(collection.name, {
+        status: value,
+        searchTerm,
+        sortField,
+        sortDirection,
+      }),
+    })),
+  } : null;
   const titleField = isOperationalCollection
     ? collection?.list?.primaryField ?? null
     : null;
@@ -269,21 +306,11 @@ export function CollectionView({
           key={location.search}
           language={language}
           searchValue={searchTerm}
-          filters={collectionFilter ? [{
-            name: collectionFilter.field,
-            label: propertyLabel(
-              collectionFilter.field,
-              collection.schema?.properties?.[collectionFilter.field],
-              language,
-              canonical,
-            ),
-            value: filterField === collectionFilter.field ? filterValue : "",
-            options: collectionFilter.values.map((value) => ({ value, label: fieldLabel(value) })),
-          }] : []}
+          filters={listQueryFilter ? [listQueryFilter] : []}
           onSubmit={({ search, filters }) => {
             const nextFilter = collectionFilter ? filters[collectionFilter.field] : undefined;
             window.location.href = collectionHref(collection.name, {
-              status,
+              status: isOperationalCollection ? status : filters.status || undefined,
               searchTerm: search,
               filterField: nextFilter ? collectionFilter?.field : undefined,
               filterValue: nextFilter || undefined,
@@ -291,17 +318,6 @@ export function CollectionView({
               sortDirection,
             });
           }}
-        />
-      ) : null}
-
-      {collection && !isOperationalCollection ? (
-        <CollectionStatusTabs
-          collection={collection}
-          activeStatus={status}
-          searchTerm={searchTerm}
-          sortField={sortField}
-          sortDirection={sortDirection}
-          language={language}
         />
       ) : null}
 
@@ -617,49 +633,6 @@ export function collectionSummaryKey(collection: Collection | undefined): I18nKe
   return "collection.schemaSummary.plain";
 }
 
-function CollectionStatusTabs({
-  collection,
-  activeStatus,
-  searchTerm,
-  sortField,
-  sortDirection,
-  language,
-}: {
-  collection: Collection;
-  activeStatus: string | undefined;
-  searchTerm: string;
-  sortField: string;
-  sortDirection: SortDirection;
-  language: AdminLanguage;
-}): React.ReactElement {
-  const statuses = PUBLISHING_STATUSES;
-
-  return (
-    <div className="mb-5 flex gap-2 overflow-x-auto pb-1">
-      <StatusFilterLink
-        href={collectionHref(collection.name, { searchTerm, sortField, sortDirection })}
-        active={!activeStatus}
-      >
-        {t(language, "collection.filter.all")}
-      </StatusFilterLink>
-      {statuses.map((s) => (
-        <StatusFilterLink
-          key={s}
-          href={collectionHref(collection.name, {
-            status: s,
-            searchTerm,
-            sortField,
-            sortDirection,
-          })}
-          active={activeStatus === s}
-        >
-          {statusLabel(language, s)}
-        </StatusFilterLink>
-      ))}
-    </div>
-  );
-}
-
 function collectionHref(
   collectionName: string,
   state: {
@@ -796,32 +769,6 @@ function CollectionPagination({
         </PaginationItem>
       </PaginationContent>
     </Pagination>
-  );
-}
-
-function StatusFilterLink({
-  href,
-  active,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  children: React.ReactNode;
-}): React.ReactElement {
-  return (
-    <a
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "inline-flex h-8 shrink-0 items-center justify-center rounded-lg border px-3 text-xs font-medium",
-        "transition-colors duration-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-        active
-          ? "border-border bg-secondary text-secondary-foreground"
-          : "border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-      )}
-    >
-      {children}
-    </a>
   );
 }
 
