@@ -369,8 +369,10 @@ function checkViewRefs(
   schemasByName: ReadonlyMap<string, SchemaManifest>,
   filePaths?: ManifestFilePaths,
 ): Diagnostic[] {
+  if (v.spec.sql) return [];
   const out: Diagnostic[] = [];
   const fromName = v.spec.from;
+  if (!fromName) return out;
   const schema = schemasByName.get(fromName);
   if (!schema) {
     out.push(

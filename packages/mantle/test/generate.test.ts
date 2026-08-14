@@ -62,6 +62,7 @@ apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: products-by-sku }
 spec:
+  surface: public
   from: products
   params:
     type: object
@@ -75,6 +76,7 @@ apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: published-products }
 spec:
+  surface: public
   from: products
   fields: [id, title]
   filter: { eq: { field: status, value: published } }

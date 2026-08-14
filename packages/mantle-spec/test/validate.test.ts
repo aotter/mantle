@@ -53,7 +53,7 @@ function view(
     apiVersion,
     kind: "View",
     metadata: { name },
-    spec: { from, ...overrides },
+    spec: { surface: "public", from, ...overrides },
   };
 }
 
@@ -842,6 +842,7 @@ describe("parseManifests() — View.requires.auth", () => {
 kind: View
 metadata: { name: privatePosts }
 spec:
+  surface: public
   from: posts
   requires:
     auth:
@@ -856,6 +857,7 @@ spec:
 kind: View
 metadata: { name: scopedPosts }
 spec:
+  surface: public
   from: posts
   requires:
     auth:
@@ -877,6 +879,7 @@ spec:
 kind: View
 metadata: { name: scopedPosts }
 spec:
+  surface: public
   from: posts
   requires:
     auth:
@@ -891,6 +894,7 @@ spec:
 kind: View
 metadata: { name: secretView }
 spec:
+  surface: public
   from: posts
   requires:
     auth:
@@ -905,6 +909,7 @@ spec:
 kind: View
 metadata: { name: vAny }
 spec:
+  surface: public
   from: posts
   requires:
     auth:
@@ -919,6 +924,7 @@ spec:
 kind: View
 metadata: { name: mixedPredicate }
 spec:
+  surface: public
   from: posts
   requires:
     auth:
@@ -936,6 +942,7 @@ spec:
 kind: View
 metadata: { name: vStaff }
 spec:
+  surface: public
   from: posts
   requires:
     auth:
@@ -952,6 +959,7 @@ describe("View $ctx.user filter", () => {
 kind: View
 metadata: { name: myOrders }
 spec:
+  surface: public
   from: orders
   requires: { auth: { all: [ctx.user] } }
   filter: { eq: { field: userId, value: { "$ctx.user": id } } }
@@ -967,6 +975,7 @@ spec:
 kind: View
 metadata: { name: myOrders }
 spec:
+  surface: public
   from: orders
   filter: ${filter}
 `);
@@ -1026,6 +1035,7 @@ apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: guardedRead }
 spec:
+  surface: public
   from: posts
   requires: { guard: { procedure: requirePaid } }
 `;
@@ -1038,6 +1048,7 @@ spec:
 kind: View
 metadata: { name: guardedRead }
 spec:
+  surface: public
   from: posts
   requires: { guard: { procedure: requirePaid, cache: true } }
 `;
@@ -1115,7 +1126,7 @@ spec:
     expect(view.spec.surface).toBe("staff");
   });
 
-  it("accepts an absent surface (defaults to public semantics)", () => {
+  it("rejects an absent surface", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: defaultView }
@@ -1123,9 +1134,7 @@ spec:
   from: posts
 `;
     const result = parseManifests(yaml);
-    expect(result.diagnostics).toEqual([]);
-    const view = result.manifests[0] as ViewManifest;
-    expect(view.spec.surface).toBeUndefined();
+    expect(result.diagnostics[0]?.message).toMatch(/surface is required/);
   });
 
   it("rejects an unknown surface string", () => {
@@ -1138,8 +1147,32 @@ spec:
 `;
     const result = parseManifests(yaml);
     expect(result.diagnostics.map((d) => d.message)).toContainEqual(
-      expect.stringMatching(/View\.spec\.surface must be one of/),
+      expect.stringMatching(/View\.spec\.surface.*must be one of/),
     );
+  });
+
+  it("accepts one bound SELECT and rejects non-read SQL", () => {
+    const valid = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: paidOrders }
+spec:
+  surface: staff
+  sql: SELECT * FROM orders WHERE orderStatus = :status
+  params:
+    type: object
+    properties: { status: { type: string } }
+    required: [status]
+`);
+    expect(valid.diagnostics).toEqual([]);
+
+    const invalid = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: bad }
+spec:
+  surface: staff
+  sql: DELETE FROM orders
+`);
+    expect(invalid.diagnostics[0]?.message).toMatch(/one SELECT/);
   });
 });
 
@@ -1184,6 +1217,7 @@ describe("parseManifests() — View.params + filter param-ref grammar (v0.1.0)",
 kind: View
 metadata: { name: postsPublished }
 spec:
+  surface: public
   from: posts
   filter:
     eq: { field: status, value: published }
@@ -1195,6 +1229,7 @@ spec:
 kind: View
 metadata: { name: postsByLocale }
 spec:
+  surface: public
   from: posts
   params:
     type: object
@@ -1215,6 +1250,7 @@ spec:
 kind: View
 metadata: { name: stockMovementsInRange }
 spec:
+  surface: public
   from: stock-movements
   params:
     type: object
@@ -1235,6 +1271,7 @@ spec:
 kind: View
 metadata: { name: bad }
 spec:
+  surface: public
   from: posts
   params:
     type: string
@@ -1247,6 +1284,7 @@ spec:
 kind: View
 metadata: { name: bad }
 spec:
+  surface: public
   from: posts
   params:
     type: object
@@ -1262,6 +1300,7 @@ spec:
 kind: View
 metadata: { name: bad }
 spec:
+  surface: public
   from: posts
   params:
     type: object
@@ -1277,6 +1316,7 @@ spec:
 kind: View
 metadata: { name: bad }
 spec:
+  surface: public
   from: posts
   filter:
     eq: { field: locale, value: { $param: locale } }
@@ -1289,6 +1329,7 @@ spec:
 kind: View
 metadata: { name: bad }
 spec:
+  surface: public
   from: posts
   params:
     type: object
@@ -1307,6 +1348,7 @@ spec:
 kind: View
 metadata: { name: bad }
 spec:
+  surface: public
   from: posts
   params:
     type: object
@@ -1324,6 +1366,7 @@ spec:
 kind: View
 metadata: { name: bad }
 spec:
+  surface: public
   from: posts
   params:
     type: object
@@ -1490,6 +1533,7 @@ describe("View orderBy direction (#392)", () => {
 kind: View
 metadata: { name: posts-sorted }
 spec:
+  surface: public
   from: posts
   orderBy:
     - { field: id, direction: "DESC LIMIT 0 --" }
@@ -1504,6 +1548,7 @@ spec:
 kind: View
 metadata: { name: posts-sorted }
 spec:
+  surface: public
   from: posts
   orderBy:
     - { field: createdAt, direction: desc }

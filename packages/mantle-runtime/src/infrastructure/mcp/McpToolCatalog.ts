@@ -381,7 +381,7 @@ function buildQueryViewTool(view: ViewManifest): McpToolDefinition {
   if (params?.required?.length) inputSchema["required"] = params.required;
   return {
     name: `${QUERY_VIEW_PREFIX}${mcpToolNameSegment(view.metadata.name)}`,
-    description: `Query ${(view.spec.surface ?? "public")} View '${view.metadata.name}'.${authorizationSummary(view.spec.requires)}`,
+    description: `Query ${view.spec.surface} View '${view.metadata.name}'.${authorizationSummary(view.spec.requires)}`,
     inputSchema,
   };
 }

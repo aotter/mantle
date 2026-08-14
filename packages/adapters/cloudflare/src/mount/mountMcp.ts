@@ -127,7 +127,7 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
             // into the public `/mcp` tools/list + tools/call.
             views: ref.manifests.filter(
               (m): m is ViewManifest =>
-                m.kind === "View" && (m.spec.surface ?? "public") === surface,
+                m.kind === "View" && m.spec.surface === surface,
             ),
             procedures: collectMcpProcedures(runtime.triggers, runtime.proceduresByName, surface),
             serverInfo,

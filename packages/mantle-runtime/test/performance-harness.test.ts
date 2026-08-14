@@ -29,6 +29,7 @@ function publicView(name: string, filter: ViewManifest["spec"]["filter"]): ViewM
     kind: "View",
     metadata: { name },
     spec: {
+      surface: "public",
       from: "orders",
       fields: ["id", "note"],
       filter,

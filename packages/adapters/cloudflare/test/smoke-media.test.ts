@@ -655,7 +655,7 @@ function jsonRpcReq(method: string, params?: unknown): Request {
 /**
  * F1 (#438): the public MCP surface must NOT expose Views declared
  * `surface: "staff"`. `mountMcp.ts` filters `ref.manifests` by
- * `(m.spec.surface ?? "public") === surface` before handing them to the
+ * `m.spec.surface === surface` before handing them to the
  * dispatcher; without that filter a staff View leaked into the public
  * `/mcp` tools/list AND became callable via `tools/call query_view_*`.
  */
@@ -667,7 +667,7 @@ describe("MCP View surface gating (#438)", () => {
         apiVersion: "cms.mantle.aotter.net/v1",
         kind: "View",
         metadata: { name: "public-posts" },
-        spec: { from: "posts", limit: 10 },
+        spec: { from: "posts", surface: "public", limit: 10 },
       },
       {
         apiVersion: "cms.mantle.aotter.net/v1",

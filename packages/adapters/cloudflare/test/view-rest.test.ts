@@ -42,6 +42,7 @@ function manifests(): Manifest[] {
       kind: "View",
       metadata: { name: "postsPublished" },
       spec: {
+        surface: "public",
         from: "posts",
         filter: { eq: { field: "status", value: "published" } },
       },
@@ -51,6 +52,7 @@ function manifests(): Manifest[] {
       kind: "View",
       metadata: { name: "postsByLocale" },
       spec: {
+        surface: "public",
         from: "posts",
         params: {
           type: "object",
@@ -261,6 +263,7 @@ describe("GET /api/views/<name>", () => {
         kind: "View",
         metadata: { name: "staffOnly" },
         spec: {
+          surface: "public",
           from: "posts",
           requires: { auth: { all: [{ "ctx.staff": ["owner"] }] } },
         },
@@ -288,6 +291,7 @@ describe("GET /api/views/<name>", () => {
         kind: "View",
         metadata: { name: "staffOnly2" },
         spec: {
+          surface: "public",
           from: "posts",
           requires: { auth: { all: [{ "ctx.staff": ["owner"] }] } },
         },
@@ -325,6 +329,7 @@ describe("GET /api/views/<name>", () => {
         kind: "View",
         metadata: { name: "staffOnly3" },
         spec: {
+          surface: "public",
           from: "posts",
           requires: { auth: { all: [{ "ctx.staff": ["owner"] }] } },
         },
@@ -368,6 +373,7 @@ describe("GET /api/views/<name>", () => {
         kind: "View",
         metadata: { name: "scopedReport" },
         spec: {
+          surface: "public",
           from: "posts",
           requires: {
             auth: {
@@ -412,6 +418,7 @@ describe("GET /api/views/<name>", () => {
         kind: "View",
         metadata: { name: "staffOnlyWithParams" },
         spec: {
+          surface: "public",
           from: "posts",
           requires: { auth: { all: ["ctx.user"] } },
           params: {
@@ -480,6 +487,7 @@ describe("GET /api/views/<name>", () => {
         kind: "View",
         metadata: { name: "staffParamsLeak" },
         spec: {
+          surface: "public",
           from: "posts",
           requires: { auth: { all: [{ "ctx.staff": ["owner"] }] } },
           params: {

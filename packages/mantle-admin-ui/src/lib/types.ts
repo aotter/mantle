@@ -239,7 +239,7 @@ export interface StaffOperation {
 export interface ViewManifestInfo {
   name: string;
   title: LocalizedText | null;
-  from: string;
+  from: string | null;
   params: JsonSchema | null;
   fields: string[] | null;
 }

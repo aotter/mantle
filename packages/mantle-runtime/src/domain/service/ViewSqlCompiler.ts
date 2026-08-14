@@ -83,6 +83,11 @@ export function compileView(
   options: CompileViewOptions = {},
   schema?: SchemaManifest,
 ): CompiledView {
+  if (view.spec.sql) return compileSqlView(view, options);
+  const from = view.spec.from;
+  if (!from) {
+    throw new Error(`View '${view.metadata.name}' requires either spec.from or spec.sql.`);
+  }
   if (schema && schema.metadata.name !== view.spec.from) {
     throw new DiagnosticError(
       runtimeDiagnostic({
@@ -95,7 +100,7 @@ export function compileView(
       }),
     );
   }
-  const sqlParams: unknown[] = [view.spec.from];
+  const sqlParams: unknown[] = [from];
   const selectExpr = buildSelect(view.spec.fields, schema);
   const whereParts: string[] = ["collection = ?"];
   if (view.spec.filter) {
@@ -120,6 +125,33 @@ export function compileView(
   const offset = Math.min((effectivePage - 1) * effectiveShow, Number.MAX_SAFE_INTEGER);
   const sql = `SELECT ${selectExpr} FROM entries ${where}${orderBy} LIMIT ${effectiveShow} OFFSET ${offset}`;
   return { sql, params: sqlParams, effectivePage, effectiveShow };
+}
+
+function compileSqlView(
+  view: ViewManifest,
+  options: CompileViewOptions,
+): CompiledView {
+  const params: unknown[] = [];
+  // ponytail: token regex is enough for agent-authored SQL; add a lexer if
+  // quoted SQL literals containing `:name` become a real manifest use case.
+  const statement = view.spec.sql!.trim().replace(
+    /:([A-Za-z_][A-Za-z0-9_]*)/g,
+    (_token, name: string) => {
+      const value = options.params?.[name];
+      if (value === undefined) throw new Error(`View SQL requires param '${name}'.`);
+      params.push(value);
+      return "?";
+    },
+  );
+  const effectiveShow = clampShow(options.show, view.spec.limit);
+  const effectivePage = clampPage(options.page);
+  const offset = Math.min((effectivePage - 1) * effectiveShow, Number.MAX_SAFE_INTEGER);
+  return {
+    sql: `SELECT * FROM (${statement}) AS "_mantle_view" LIMIT ${effectiveShow} OFFSET ${offset}`,
+    params,
+    effectivePage,
+    effectiveShow,
+  };
 }
 
 function buildSelect(

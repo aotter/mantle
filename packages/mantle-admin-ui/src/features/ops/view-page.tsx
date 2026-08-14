@@ -118,7 +118,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
     <div className="space-y-6">
       <PageHeader
         title={viewTitle}
-        description={t(language, "views.page.body", { schema: view.from })}
+        description={t(language, "views.page.body", { schema: view.from ?? view.name })}
       />
 
       <SectionCard className="space-y-4">

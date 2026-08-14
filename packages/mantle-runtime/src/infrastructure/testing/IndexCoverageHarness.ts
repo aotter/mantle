@@ -2,6 +2,7 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import {
   RESERVED_ENTRY_COLUMNS,
   buildDdl,
+  buildSchemaSqlView,
   type FilterAst,
   type Manifest,
   type SchemaManifest,
@@ -73,6 +74,7 @@ export function inspectIndexCoverage(
       const ddl = buildDdl(schema);
       for (const column of ddl.columns) db.exec(column.sql);
       for (const index of ddl.indexes) db.exec(index.sql);
+      db.exec(buildSchemaSqlView(schema).createSql);
     }
     seedSchemas(db, schemas, rowsPerSchema);
     db.exec("ANALYZE");
@@ -80,7 +82,7 @@ export function inspectIndexCoverage(
     const paths = views.map((view) => inspectView(
       db,
       view,
-      schemasByName.get(view.spec.from),
+      view.spec.from ? schemasByName.get(view.spec.from) : undefined,
       (options.requirePublic === true && view.spec.surface !== "staff") ||
         requiredNames.has(view.metadata.name),
     ));
@@ -158,8 +160,8 @@ function inspectView(
   }
   return {
     view: view.metadata.name,
-    schema: view.spec.from,
-    surface: view.spec.surface ?? "public",
+    schema: view.spec.from ?? "(sql)",
+    surface: view.spec.surface,
     required: explicitlyRequired,
     sql: compiled.sql,
     params: compiled.params,

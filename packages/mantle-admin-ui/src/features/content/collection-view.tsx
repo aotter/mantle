@@ -7,6 +7,7 @@ import {
   Check,
   Copy,
   Download,
+  Eye,
   FileText,
   Globe,
   PencilLine,
@@ -1106,11 +1107,25 @@ function EntryRowDisplay({
         <div className="flex items-center gap-1">
           {canEdit ? (
             <Button asChild variant="ghost" size="icon-sm">
-              <a title={t(language, "crud.editTooltip", { name: itemName })} href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}>
+              <a
+                title={t(language, "crud.editTooltip", { name: itemName })}
+                aria-label={t(language, "crud.editTooltip", { name: itemName })}
+                href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}
+              >
                 <PencilLine className="size-3.5" aria-hidden />
               </a>
             </Button>
-          ) : null}
+          ) : (
+            <Button asChild variant="ghost" size="icon-sm">
+              <a
+                title={t(language, "crud.viewTooltip", { name: itemName })}
+                aria-label={t(language, "crud.viewTooltip", { name: itemName })}
+                href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}
+              >
+                <Eye className="size-3.5" aria-hidden />
+              </a>
+            </Button>
+          )}
           {canDelete ? (
             <Button type="button" variant="ghost" size="icon-sm" title={t(language, "crud.deleteTooltip", { name: itemName })} disabled={busy} onClick={() => void remove()}>
               <Trash2 className="size-3.5" aria-hidden />

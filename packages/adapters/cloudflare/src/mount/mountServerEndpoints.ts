@@ -81,7 +81,7 @@ export function mountServerEndpoints<E extends Env>(
     // register under the guarded `/admin/api/views/<name>` route
     // inside `mountAdminBetterAuth` (which owns the staff gate).
     // Public (default) Views keep the public REST surface.
-    if (v.spec.surface === "staff") continue;
+    if (v.spec.surface !== "public") continue;
     const viewName = v.metadata.name;
     app.get(`/api/views/${viewName}`, async (c) => {
       const runtime = await ref.get();
@@ -198,7 +198,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
   // "precompute at mount from ref.manifests, list on GET") and needs
   // no changes to the `SiteInfo` type or its query key.
   // Report-sidebar source (#433): ONLY `surface: staff` Views. Public
-  // storefront Views (default surface) auto-mount on the public REST
+  // storefront Views explicitly marked public auto-mount on the public REST
   // path and must not appear in the admin report sidebar — listing
   // them was noise + broke on param-driven storefront Views (see #433).
   const staffViews = ref.manifests
@@ -206,7 +206,7 @@ function mountAdminBetterAuth<E extends Env>(app: Hono<E>, ref: CmsRuntimeRef, a
   const viewsManifest = staffViews.map((v) => ({
     name: v.metadata.name,
     title: v.spec.title ?? null,
-    from: v.spec.from,
+    from: v.spec.from ?? null,
     params: v.spec.params ?? null,
     fields: v.spec.fields ?? null,
   }));

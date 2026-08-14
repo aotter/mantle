@@ -82,7 +82,7 @@ function view(spec: Partial<ViewManifest["spec"]>): ViewManifest {
     apiVersion: "cms.mantle.aotter.net/v1",
     kind: "View",
     metadata: { name: "account-member-query" },
-    spec: { from: schema.metadata.name, ...spec },
+    spec: { surface: "public", from: schema.metadata.name, ...spec },
   };
 }
 

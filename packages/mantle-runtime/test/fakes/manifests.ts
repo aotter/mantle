@@ -40,6 +40,7 @@ export function recentPostsView(): ViewManifest {
     kind: "View",
     metadata: { name: "recent-posts" },
     spec: {
+      surface: "public",
       from: "posts",
       filter: { eq: { field: "status", value: "published" } },
       orderBy: [{ field: "updatedAt", direction: "desc" }],

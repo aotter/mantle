@@ -34,7 +34,9 @@ export class IntrospectManifestsUseCase {
     });
     const views: IntrospectedView[] = partitioned.views.map((v) => ({
       name: v.metadata.name,
-      from: v.spec.from,
+      from: v.spec.from ?? null,
+      sql: v.spec.sql ?? null,
+      surface: v.spec.surface,
       params: v.spec.params ?? null,
       filter: v.spec.filter ?? null,
       orderBy: v.spec.orderBy ?? [],

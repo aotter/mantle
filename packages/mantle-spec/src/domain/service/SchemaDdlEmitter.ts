@@ -1,5 +1,7 @@
 import {
   MANTLE_REF_KEYWORD,
+  RESERVED_ENTRY_COLUMNS,
+  type ReservedEntryColumn,
   type SchemaManifest,
 } from "../model/ManifestGrammar.js";
 import {
@@ -17,6 +19,48 @@ export interface DdlStatements {
     readonly name: string;
     readonly sql: string;
   }[];
+}
+
+export interface SchemaSqlViewDdl {
+  readonly name: string;
+  readonly createSql: string;
+  readonly dropSql: string;
+}
+
+const ENTRY_COLUMN: Readonly<Record<ReservedEntryColumn, string>> = {
+  id: "id",
+  status: "status",
+  version: "version",
+  createdAt: "created_at",
+  updatedAt: "updated_at",
+  authorId: "author_id",
+};
+
+/** Expose a Schema as a read-only SQLite table for SQL-first Views. */
+export function buildSchemaSqlView(manifest: SchemaManifest): SchemaSqlViewDdl {
+  const propertyNames = Object.keys(manifest.spec.schema.properties ?? {});
+  const propertySet = new Set(propertyNames);
+  const platformColumns = RESERVED_ENTRY_COLUMNS
+    .filter((name) => !propertySet.has(name))
+    .map((name) => `${quoteIdent(ENTRY_COLUMN[name])} AS ${quoteIdent(name)}`);
+  const dataColumns = propertyNames.map((name) => {
+    if (/["\\\0]/.test(name)) {
+      throw new Error(`Schema '${manifest.metadata.name}' field '${name}' cannot be represented as a SQLite JSON path.`);
+    }
+    return `json_extract(data, ${quoteText(jsonPath(name))}) AS ${quoteIdent(name)}`;
+  });
+  const name = manifest.metadata.name;
+  return {
+    name,
+    createSql:
+      `CREATE VIEW ${quoteIdent(name)} AS SELECT ${[...platformColumns, ...dataColumns].join(", ")} ` +
+      `FROM entries WHERE collection = ${quoteText(name)}`,
+    dropSql: dropSchemaSqlViewSql(name),
+  };
+}
+
+export function dropSchemaSqlViewSql(name: string): string {
+  return `DROP VIEW IF EXISTS ${quoteIdent(name)}`;
 }
 
 /**

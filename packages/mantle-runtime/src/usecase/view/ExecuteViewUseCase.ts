@@ -143,7 +143,9 @@ export class ExecuteViewUseCase {
       if (!guarded.ok) return guarded;
     }
 
-    const schema = this.schemasByName.get(request.view.spec.from);
+    const schema = request.view.spec.from
+      ? this.schemasByName.get(request.view.spec.from)
+      : undefined;
     let compiled;
     try {
       compiled = compileView(

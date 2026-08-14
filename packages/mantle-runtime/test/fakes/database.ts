@@ -61,6 +61,7 @@ export class InMemoryDatabase implements DatabaseDriver {
   }>();
   appliedMigrations = new Set<string>();
   legacyIndexColumns = new Map<string, readonly string[]>();
+  schemaSqlViews = new Set<string>();
 
   prepare(sql: string): PreparedStatement {
     return new InMemoryStatement(this, normalize(sql), []);
@@ -133,6 +134,27 @@ class InMemoryStatement implements PreparedStatement {
           .map((id) => ({ id })),
         changes: 0,
       };
+    }
+    if (sql === "SELECT name FROM _mantle_schema_views") {
+      return { rows: [...this.db.schemaSqlViews].map((name) => ({ name })), changes: 0 };
+    }
+    const dropSchemaView = /^DROP VIEW IF EXISTS "([^"]+)"$/.exec(sql);
+    if (dropSchemaView) {
+      this.db.schemaSqlViews.delete(dropSchemaView[1]!);
+      return { rows: [], changes: 0 };
+    }
+    if (/^CREATE VIEW "[^"]+" AS SELECT /.test(sql)) {
+      return { rows: [], changes: 0 };
+    }
+    if (sql === "DELETE FROM _mantle_schema_views WHERE name = ?") {
+      const deleted = this.db.schemaSqlViews.delete(p[0] as string);
+      return { rows: [], changes: deleted ? 1 : 0 };
+    }
+    if (sql === "INSERT OR IGNORE INTO _mantle_schema_views(name) VALUES (?)") {
+      const name = p[0] as string;
+      const existed = this.db.schemaSqlViews.has(name);
+      this.db.schemaSqlViews.add(name);
+      return { rows: [], changes: existed ? 0 : 1 };
     }
     const legacyInfo = /^PRAGMA index_info\("([^"]+)"\)$/.exec(sql);
     if (legacyInfo) {

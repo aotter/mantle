@@ -312,10 +312,11 @@ UNIQUE (slug, locale));`
 
 ### 2. `View` — the read surface (auto-exposed by surface)
 
-A named, declarative read over Schemas. No Trigger is required. A View with
-no `spec.surface` (or `surface: public`) mounts at
-`GET /api/views/<name>` and becomes `query_view_<name>` on `/mcp`.
-`surface: staff` instead mounts at `GET /admin/api/views/<name>` behind the
+A named, read-only SQL query over Schemas. Every Schema is available to SQL as
+a logical table named after `Schema.metadata.name`; storage internals stay
+hidden. No Trigger is required. `surface` is required: `surface: public` mounts
+at `GET /api/views/<name>` and becomes `query_view_<name>` on `/mcp`, while
+`surface: staff` mounts at `GET /admin/api/views/<name>` behind the
 staff gate and appears only on `/mcp/staff`. See ADR-0012 for the full design
 rationale.
 
@@ -324,34 +325,35 @@ apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: recent-published }
 spec:
-  from: posts
-  fields: [id, title, slug, locale, publishedAt, updatedAt]
-  filter:
-    eq: { field: status, value: published }
-  orderBy:
-    - { field: updatedAt, direction: desc }
+  surface: public
+  sql: |
+    SELECT id, title, slug, locale, publishedAt, updatedAt
+    FROM posts
+    WHERE status = 'published'
+    ORDER BY updatedAt DESC
   limit: 20
 ```
 
 **Param-driven Views** declare `spec.params` (a JSON Schema with
-`type: object`); filter values reference them via the
-`{ $param: <name> }` sentinel:
+`type: object`); SQL references required properties as named `:params`. The
+runtime validates and binds them; it never interpolates caller values:
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: posts-by-locale }
 spec:
-  from: post-translations
+  surface: public
+  sql: |
+    SELECT id, slug, locale, title, updatedAt
+    FROM post-translations
+    WHERE status = 'published' AND locale = :locale
+    ORDER BY slug ASC
   params:
     type: object
     properties:
       locale: { type: string }
     required: [locale]
-  filter:
-    and:
-      - eq: { field: status, value: published }
-      - eq: { field: locale, value: { $param: locale } }
   limit: 100
 ```
 
@@ -376,10 +378,10 @@ Response envelope:
 `hasMore` is the lazy form: `rows.length === show` ⇒ `true`. No COUNT
 query, no `LIMIT n+1` probe.
 
-**v0.1 filter AST**: comparison operators (`eq`, `gt`, `gte`, `lt`,
-`lte`) plus `and` / `or`. Comparison `value` may be a literal or a
-`{ $param: <name> }` sentinel. Param refs must be required. Field-to-field
-comparisons are not supported; compare a field to a literal or param.
+The previous `from` / `fields` / `filter` / `orderBy` declarative form remains
+accepted for existing manifests. New Views should use one `SELECT`; writes,
+multiple statements, semicolons, and combining SQL with the legacy clauses are
+rejected.
 
 **Postgres analogue**: `CREATE VIEW recent_published AS SELECT ...
 FROM posts WHERE status = 'published' ORDER BY updated_at DESC LIMIT
