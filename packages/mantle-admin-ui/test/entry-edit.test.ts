@@ -1,9 +1,32 @@
 import { describe, expect, it } from "vitest";
 import {
   editorHiddenFields,
+  entryTitle,
   hasMissingRequired,
   stringFieldWidget,
 } from "../src/features/content/entry-edit-view";
+
+describe("entryTitle", () => {
+  it("uses the explicit operational list primary field", () => {
+    const collection = {
+      lifecycle: "operational" as const,
+      list: { primaryField: "orderNumber", columns: [] },
+      schema: {
+        type: "object",
+        required: ["orderToken", "orderNumber"],
+        properties: { orderToken: { type: "string" }, orderNumber: { type: "string" } },
+      },
+    };
+    expect(entryTitle(
+      { orderToken: "internal-token", orderNumber: "MNT-20260814-0001" },
+      "Untitled",
+      collection,
+      "entry-id",
+    )).toBe("MNT-20260814-0001");
+    expect(entryTitle({ orderToken: "internal-token" }, "Untitled", collection, "entry-id"))
+      .toBe("entry-id");
+  });
+});
 
 describe("hasMissingRequired", () => {
   const schema = { required: ["title", "count", "enabled"] };

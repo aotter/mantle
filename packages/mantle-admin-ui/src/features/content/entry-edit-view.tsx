@@ -132,7 +132,12 @@ export function EntryEditView({
 
   const payload = query.data;
   const canonical = site.data?.canonicalLocale ?? null;
-  const title = entryTitle(data, t(language, "collection.untitled"), payload.collection.schema);
+  const title = entryTitle(
+    data,
+    t(language, "collection.untitled"),
+    payload.collection,
+    payload.entry.id,
+  );
   const collectionTitle = resolveLocalizedText(payload.collection.title, language, canonical) ?? payload.collection.name;
   const backCollection = payload.collection.translates?.parent ?? collectionName;
   const backTitle = payload.collection.translates?.parent ?? collectionTitle;
@@ -1058,7 +1063,12 @@ function RelatedSections({
                     >
                       <span className="min-w-0">
                         <span className="block truncate font-semibold">
-                          {entryTitle(entry.data, t(language, "collection.untitled"), section.collection.schema)}
+                          {entryTitle(
+                            entry.data,
+                            t(language, "collection.untitled"),
+                            section.collection,
+                            entry.id,
+                          )}
                         </span>
                         <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           {entry.collection}
@@ -1246,7 +1256,19 @@ function isPrimaryInlineSection(section: RelatedEntrySection): boolean {
   return section.relationship.kind === "field";
 }
 
-function entryTitle(data: Record<string, unknown>, fallback: string, schema?: JsonSchema): string {
+export function entryTitle(
+  data: Record<string, unknown>,
+  fallback: string,
+  collection?: Pick<EntryEditorCollection, "lifecycle" | "list" | "schema">,
+  entryId?: string,
+): string {
+  if (collection?.lifecycle === "operational") {
+    const primaryField = collection.list?.primaryField;
+    const value = primaryField ? data[primaryField] : undefined;
+    if (typeof value === "string" && value.trim()) return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    return entryId || fallback;
+  }
   for (const key of ["title", "name", "slug", "id"]) {
     const value = data[key];
     if (typeof value === "string" && value.trim()) return value;
@@ -1256,9 +1278,9 @@ function entryTitle(data: Record<string, unknown>, fallback: string, schema?: Js
   // non-empty value — this is how a collection with no `title`/`name`/
   // `slug` (e.g. one keyed by a domain-specific field) still gets a
   // readable label.
-  if (schema) {
-    const properties = schema.properties ?? {};
-    for (const key of schema.required ?? []) {
+  if (collection?.schema) {
+    const properties = collection.schema.properties ?? {};
+    for (const key of collection.schema.required ?? []) {
       const fieldSchema = properties[key];
       if (!fieldSchema || schemaType(fieldSchema) !== "string") continue;
       const value = data[key];
