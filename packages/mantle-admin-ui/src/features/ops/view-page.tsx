@@ -236,7 +236,7 @@ function ViewSearch({
 }): React.ReactElement {
   return (
     <form
-      className="flex flex-wrap items-end gap-3"
+      className="mb-3 space-y-3"
       role="search"
       onSubmit={(event) => {
         event.preventDefault();
@@ -252,30 +252,42 @@ function ViewSearch({
       }}
     >
       {searchFields.length > 0 ? (
-        <label className="relative block min-w-64 flex-1" aria-label={t(language, "collection.search")}>
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <Input
-            name="search"
-            className="h-9 ps-9"
-            defaultValue={query.get("search") ?? ""}
-            placeholder={searchFields.map(fieldLabel).join(", ")}
-          />
-        </label>
+        <div className="flex max-w-xl gap-2">
+          <label className="relative block flex-1" aria-label={t(language, "collection.searchPlaceholder")}>
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <Input
+              name="search"
+              className="h-9 ps-9"
+              defaultValue={query.get("search") ?? ""}
+              placeholder={t(language, "collection.searchPlaceholder")}
+            />
+          </label>
+          <Button type="submit" variant="secondary" size="sm" className="h-9">
+            <Search className="size-4" aria-hidden />
+            {t(language, "collection.search")}
+          </Button>
+        </div>
       ) : null}
-      {filterFields.map((field) => (
-        <label key={field} className="grid gap-1.5 text-sm font-medium">
-          <span>{fieldLabel(field)}</span>
-          <Input
-            name={`filter.${field}`}
-            className="h-9 w-48"
-            defaultValue={query.get(`filter.${field}`) ?? ""}
-          />
-        </label>
-      ))}
-      <Button type="submit" variant="secondary" size="sm" className="h-9">
-        <Search className="size-4" aria-hidden />
-        {t(language, "collection.search")}
-      </Button>
+      {filterFields.length > 0 ? (
+        <div className="flex flex-wrap items-end gap-3">
+          {filterFields.map((field) => (
+            <label key={field} className="grid gap-1.5 text-sm font-medium">
+              <span>{fieldLabel(field)}</span>
+              <Input
+                name={`filter.${field}`}
+                className="h-9 w-48"
+                defaultValue={query.get(`filter.${field}`) ?? ""}
+              />
+            </label>
+          ))}
+          {searchFields.length === 0 ? (
+            <Button type="submit" variant="secondary" size="sm" className="h-9">
+              <Search className="size-4" aria-hidden />
+              {t(language, "collection.search")}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </form>
   );
 }
