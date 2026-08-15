@@ -62,6 +62,7 @@ export class InMemoryDatabase implements DatabaseDriver {
   appliedMigrations = new Set<string>();
   legacyIndexColumns = new Map<string, readonly string[]>();
   schemaSqlViews = new Set<string>();
+  bootStates = new Map<string, string>();
 
   prepare(sql: string): PreparedStatement {
     return new InMemoryStatement(this, normalize(sql), []);
@@ -120,6 +121,15 @@ class InMemoryStatement implements PreparedStatement {
     const sql = this.sql;
     const p = this.params;
     this.db.executions.push({ sql, params: p });
+
+    if (sql === "SELECT fingerprint FROM _mantle_boot_state WHERE id = ? LIMIT 1") {
+      const fingerprint = this.db.bootStates.get(p[0] as string);
+      return { rows: fingerprint ? [{ fingerprint }] : [], changes: 0 };
+    }
+    if (sql.startsWith("INSERT INTO _mantle_boot_state (id, fingerprint) VALUES (?, ?)")) {
+      this.db.bootStates.set(p[0] as string, p[1] as string);
+      return { rows: [], changes: 1 };
+    }
 
     if (
       sql === "SELECT id FROM _migrations WHERE id LIKE 'schema-unique-index:%'" ||

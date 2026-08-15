@@ -85,7 +85,7 @@ function harness(
     ),
     notFoundRenderer: async () => new Response("missing", { status: 404 }),
   });
-  return { app, db };
+  return { app, db, ref };
 }
 
 function seedPublishedPost(db: InMemoryDatabase, locale = "en"): void {
@@ -115,6 +115,16 @@ describe("mountPublicRoutes response-cache contract", () => {
     await expect(list.text()).resolves.toContain("Hello");
     await expect(entry.text()).resolves.toContain("<h1>Hello</h1>");
     await expect(markdown.text()).resolves.toContain("# Hello");
+  });
+
+  it("queries list content once for an uncached HTML response", async () => {
+    const h = harness();
+    await h.ref.get();
+    seedPublishedPost(h.db);
+    h.db.executions.splice(0);
+
+    expect((await h.app.request("/en/posts")).status).toBe(200);
+    expect(h.db.executions.filter(({ sql }) => sql.includes("FROM entries"))).toHaveLength(1);
   });
 
   it("composes home/list/single discovery surfaces from one public path map", async () => {

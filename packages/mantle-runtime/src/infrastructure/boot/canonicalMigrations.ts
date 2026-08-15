@@ -268,6 +268,16 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
       );
     `,
   },
+  {
+    id: "0007-boot-state",
+    description: "Skip unchanged boot reconciliation on cold Worker isolates",
+    sql: `
+      CREATE TABLE IF NOT EXISTS _mantle_boot_state (
+        id          TEXT PRIMARY KEY NOT NULL,
+        fingerprint TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 /** Keep Schema logical tables exact across manifest additions, edits, and removals. */

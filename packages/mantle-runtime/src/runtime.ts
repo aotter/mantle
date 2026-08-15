@@ -76,7 +76,10 @@ import { DatabasePendingUploadRepository } from "./infrastructure/persistence/Da
 import { DatabaseSiteConfigRepository } from "./infrastructure/persistence/DatabaseSiteConfigRepository.js";
 import { LifecycleHookingEntryRepository } from "./infrastructure/persistence/LifecycleHookingEntryRepository.js";
 import {
+  bootFingerprint,
   CANONICAL_MIGRATIONS,
+  isBootCurrent,
+  markBootCurrent,
   reconcileSchemaIndexes,
   schemaIndexMigrations,
   reconcileSchemaSqlViews,
@@ -426,6 +429,13 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
 
     async bootInit(): Promise<void> {
       const schemas = partitioned.schemas;
+      const fingerprint = await bootFingerprint({
+        manifests: args.manifests,
+        siteDefaults: args.siteDefaults,
+        handlers: [...registry.list()].sort(),
+        reservedHttpPathPrefixes: args.reservedHttpPathPrefixes,
+      });
+      if (await isBootCurrent(args.db, fingerprint)) return;
       await args.db.migrations.runAll(CANONICAL_MIGRATIONS);
       await siteConfig.seed(args.siteDefaults);
       const siteLocales = await siteConfig.readLocales();
@@ -439,6 +449,9 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
       await args.db.migrations.runAll(indexMigrations);
       await reconcileSchemaIndexes(args.db, indexMigrations, schemas);
       await reconcileSchemaSqlViews(args.db, schemas);
+      // ponytail: the marker trusts Mantle-owned writes; repair manual D1
+      // schema edits by deleting this row or changing the manifest.
+      await markBootCurrent(args.db, fingerprint);
     },
   };
 }
