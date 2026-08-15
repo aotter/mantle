@@ -85,6 +85,8 @@ export function EntryEditView({
     [operationsQuery.data, collectionName],
   );
   const [data, setData] = React.useState<Record<string, unknown> | null>(null);
+  const [operationalEditUnlocked, setOperationalEditUnlocked] = React.useState(false);
+  React.useEffect(() => setOperationalEditUnlocked(false), [collectionName, entryId]);
   React.useEffect(() => {
     if (query.data) setData(query.data.entry.data);
   }, [query.data]);
@@ -151,9 +153,13 @@ export function EntryEditView({
   const isDraft = payload.entry.status === "draft";
   const missingRequired = hasMissingRequired(data, payload.collection.schema);
   const canManageContent = me.data?.role === "owner" || me.data?.role === "editor";
-  const canEdit = !isReadOnly && (
-    canManageContent || (me.data?.role === "contributor" && !isOperational && isDraft)
-  );
+  const canEdit = canEditEntry({
+    role: me.data?.role,
+    isReadOnly,
+    isOperational,
+    isDraft,
+    operationalEditUnlocked,
+  });
   const canSave = canEdit && dirty && (isDraft || isOperational);
   const actionPending = save.isPending || publish.isPending || unpublish.isPending;
   const mediaPurposes = site.data?.media?.purposes ?? [];
@@ -235,10 +241,25 @@ export function EntryEditView({
         />
       ))}
 
-      {isReadOnly || isOperational ? (
+      {isReadOnly ? (
         <p className="-mt-4 text-sm text-muted-foreground">
-          {t(language, isReadOnly ? "entryEdit.readOnlyHint" : "entryEdit.operationalHint")}
+          {t(language, "entryEdit.readOnlyHint")}
         </p>
+      ) : isOperational ? (
+        <div className="-mt-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+          <p>{t(language, "entryEdit.operationalHint")}</p>
+          {canManageContent && !operationalEditUnlocked ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setOperationalEditUnlocked(true)}
+            >
+              <LockKeyhole className="size-4" aria-hidden />
+              {t(language, "entryEdit.unlockOperational")}
+            </Button>
+          ) : null}
+        </div>
       ) : null}
 
       {save.isError ? <OperationErrorBox error={save.error} /> : null}
@@ -504,6 +525,24 @@ export function editorHiddenFields(
     ...(collection.localized ? ["locale"] : []),
     ...(collection.translates ? [collection.translates.on] : []),
   ];
+}
+
+export function canEditEntry({
+  role,
+  isReadOnly,
+  isOperational,
+  isDraft,
+  operationalEditUnlocked,
+}: {
+  role: AdminUser["role"] | undefined;
+  isReadOnly: boolean;
+  isOperational: boolean;
+  isDraft: boolean;
+  operationalEditUnlocked: boolean;
+}): boolean {
+  if (isReadOnly) return false;
+  if (role === "owner" || role === "editor") return !isOperational || operationalEditUnlocked;
+  return role === "contributor" && !isOperational && isDraft;
 }
 
 function SchemaField({
