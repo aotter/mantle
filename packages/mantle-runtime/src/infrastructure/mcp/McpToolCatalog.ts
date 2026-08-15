@@ -272,7 +272,10 @@ export function buildMcpToolCatalog(
   const surface = opts.surface ?? "staff";
   const procedureTools = (opts.procedures ?? []).map(buildProcedureTool);
   if (surface === "public") {
-    return [...(opts.views ?? []).map(buildQueryViewTool), ...procedureTools];
+    return collapseToolSchemaAnnotations([
+      ...(opts.views ?? []).map(buildQueryViewTool),
+      ...procedureTools,
+    ]);
   }
   const out: McpToolDefinition[] = [...GENERIC_TOOLS];
   if (opts.mediaEnabled) out.push(...buildMediaTools(opts.mediaPurposes ?? []));
@@ -283,7 +286,70 @@ export function buildMcpToolCatalog(
   }
   out.push(...(opts.views ?? []).map(buildQueryViewTool));
   out.push(...procedureTools);
+  return collapseToolSchemaAnnotations(out);
+}
+
+function collapseToolSchemaAnnotations(
+  tools: readonly McpToolDefinition[],
+): readonly McpToolDefinition[] {
+  return tools.map((tool) => ({
+    ...tool,
+    inputSchema: collapseSchemaAnnotations(tool.inputSchema),
+  }));
+}
+
+function collapseSchemaAnnotations(
+  schema: Record<string, unknown>,
+): Record<string, unknown> {
+  const out = { ...schema };
+  for (const keyword of ["title", "description"] as const) {
+    const value = schema[keyword] as JsonSchema[typeof keyword];
+    if (value !== undefined) out[keyword] = resolveLocalizedText(value, "en");
+  }
+  for (const keyword of [
+    "properties",
+    "patternProperties",
+    "dependentSchemas",
+    "$defs",
+    "definitions",
+  ]) {
+    const children = schema[keyword];
+    if (!isRecord(children)) continue;
+    out[keyword] = Object.fromEntries(
+      Object.entries(children).map(([name, child]) => [
+        name,
+        isRecord(child) ? collapseSchemaAnnotations(child) : child,
+      ]),
+    );
+  }
+  for (const keyword of [
+    "additionalProperties",
+    "unevaluatedProperties",
+    "unevaluatedItems",
+    "propertyNames",
+    "items",
+    "contains",
+    "not",
+    "if",
+    "then",
+    "else",
+    "contentSchema",
+  ]) {
+    const child = schema[keyword];
+    if (isRecord(child)) out[keyword] = collapseSchemaAnnotations(child);
+  }
+  for (const keyword of ["prefixItems", "allOf", "anyOf", "oneOf"]) {
+    const children = schema[keyword];
+    if (!Array.isArray(children)) continue;
+    out[keyword] = children.map((child) =>
+      isRecord(child) ? collapseSchemaAnnotations(child) : child,
+    );
+  }
   return out;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Re-export the naming util from `domain/service/` so existing
@@ -337,7 +403,8 @@ function buildUpdateTool(schema: SchemaManifest): McpToolDefinition {
 
 /**
  * Per-Procedure MCP tool factory (#281). The Procedure's `input`
- * JSON Schema becomes the tool's `inputSchema` verbatim; the
+ * JSON Schema becomes the tool's `inputSchema`; localized schema
+ * annotations are collapsed at the catalog boundary. The
  * description comes from `input.description` when set, otherwise a
  * generic stub naming the Procedure. `output` is not surfaced — MCP
  * clients infer the response shape from the `tools/call` result.

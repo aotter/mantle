@@ -97,7 +97,7 @@ describe("conventional Auth", () => {
       MANTLE_HOSTED_AUTH_CLIENT_ID: "https://auth.mantle.tools/clients/shop_1",
       GITHUB_CLIENT_ID: "conflict",
       ADMIN_GITHUB_LOGIN: "owner",
-    }, "Hosted Auth is incomplete or conflicts with self-managed GitHub credentials.");
+    }, "Hosted Auth configuration errors: GITHUB_CLIENT_ID is set.");
 
     await expectSetupIncomplete({
       MANTLE_AUTH_MODE: "self-managed",
@@ -106,23 +106,36 @@ describe("conventional Auth", () => {
       GITHUB_CLIENT_ID: "github-client",
       GITHUB_CLIENT_SECRET: "github-secret",
       ADMIN_GITHUB_LOGIN: "owner",
-    }, "Self-managed Auth is incomplete or conflicts with Hosted Auth configuration.");
+    }, "Self-managed Auth configuration errors: MANTLE_HOSTED_AUTH_ISSUER is set.");
+  });
+
+  it("reports every missing and conflicting Auth variable", async () => {
+    await expectSetupIncomplete({
+      MANTLE_AUTH_MODE: "self-managed",
+      MANTLE_HOSTED_AUTH_CLIENT_ID: "https://auth.mantle.tools/clients/shop_1",
+    }, [
+      "Self-managed Auth configuration errors: BETTER_AUTH_SECRET is not set",
+      "ADMIN_GITHUB_LOGIN is not set or invalid",
+      "GITHUB_CLIENT_ID is not set",
+      "GITHUB_CLIENT_SECRET is not set",
+      "MANTLE_HOSTED_AUTH_CLIENT_ID is set.",
+    ].join("; "));
   });
 
   it.each([
-    ["an insecure remote issuer", "http://auth.example.com", "http://auth.example.com/clients/shop"],
-    ["an issuer path", "https://auth.example.com/nested", "https://auth.example.com/clients/shop"],
-    ["a cross-origin client", "https://auth.example.com", "https://other.example.com/clients/shop"],
-    ["a client outside /clients/<id>", "https://auth.example.com", "https://auth.example.com/client/shop"],
-    ["client query parameters", "https://auth.example.com", "https://auth.example.com/clients/shop?x=1"],
-  ])("rejects hosted Auth with %s", async (_case, issuer, clientId) => {
+    ["an insecure remote issuer", "http://auth.example.com", "http://auth.example.com/clients/shop", "MANTLE_HOSTED_AUTH_ISSUER is invalid; MANTLE_HOSTED_AUTH_CLIENT_ID is invalid"],
+    ["an issuer path", "https://auth.example.com/nested", "https://auth.example.com/clients/shop", "MANTLE_HOSTED_AUTH_ISSUER is invalid; MANTLE_HOSTED_AUTH_CLIENT_ID is invalid"],
+    ["a cross-origin client", "https://auth.example.com", "https://other.example.com/clients/shop", "MANTLE_HOSTED_AUTH_CLIENT_ID is invalid"],
+    ["a client outside /clients/<id>", "https://auth.example.com", "https://auth.example.com/client/shop", "MANTLE_HOSTED_AUTH_CLIENT_ID is invalid"],
+    ["client query parameters", "https://auth.example.com", "https://auth.example.com/clients/shop?x=1", "MANTLE_HOSTED_AUTH_CLIENT_ID is invalid"],
+  ])("rejects hosted Auth with %s", async (_case, issuer, clientId, problem) => {
     await expectSetupIncomplete({
       MANTLE_AUTH_MODE: "hosted",
       BETTER_AUTH_SECRET: "x".repeat(40),
       MANTLE_HOSTED_AUTH_ISSUER: issuer,
       MANTLE_HOSTED_AUTH_CLIENT_ID: clientId,
       ADMIN_GITHUB_LOGIN: "owner",
-    }, "Hosted Auth is incomplete or conflicts with self-managed GitHub credentials.");
+    }, `Hosted Auth configuration errors: ${problem}.`);
   });
 
   it("rejects an invalid bootstrap GitHub login", async () => {
@@ -132,7 +145,7 @@ describe("conventional Auth", () => {
       GITHUB_CLIENT_ID: "github-client",
       GITHUB_CLIENT_SECRET: "github-secret",
       ADMIN_GITHUB_LOGIN: "-owner",
-    }, "Self-managed Auth is incomplete or conflicts with Hosted Auth configuration.");
+    }, "Self-managed Auth configuration errors: ADMIN_GITHUB_LOGIN is not set or invalid.");
   });
 
   it("removes CDN overrides from custom setup responses", async () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import packageJson from "../package.json" with { type: "json" };
+import { buildMcpToolCatalog } from "../src/infrastructure/mcp/McpToolCatalog.js";
 import {
   McpJsonRpcDispatcher,
   MCP_PROTOCOL_VERSION,
@@ -198,6 +199,69 @@ describe("McpJsonRpcDispatcher", () => {
     expect(names).toContain("update_draft_posts");
     // Old generic create_draft is gone.
     expect(names).not.toContain("create_draft");
+  });
+
+  it("collapses localized JSON Schema annotations at the MCP catalog boundary", () => {
+    const baseSchema = postsSchema();
+    const schema = {
+      ...baseSchema,
+      spec: {
+        ...baseSchema.spec,
+        schema: {
+          ...baseSchema.spec.schema,
+          properties: {
+            ...baseSchema.spec.schema.properties,
+            title: {
+              type: "string",
+              title: { "zh-TW": "標題" },
+              description: { en: "Post title", "zh-TW": "文章標題" },
+            },
+            tags: {
+              type: "array",
+              items: { type: "string", title: { en: "Tag" } },
+            },
+          },
+        },
+      },
+    };
+    const procedure = makeProcedure({
+      name: "restock-sku",
+      input: {
+        type: "object",
+        title: { "zh-TW": "補貨" },
+        $defs: {
+          sku: { type: "string", description: { en: "Stock keeping unit" } },
+        },
+        allOf: [
+          {
+            properties: {
+              quantity: { type: "number", title: { en: "Quantity" } },
+            },
+          },
+        ],
+      },
+    });
+
+    const tools = buildMcpToolCatalog([schema], { procedures: [procedure] });
+    const createInput = tools.find((tool) => tool.name === "create_draft_posts")!
+      .inputSchema;
+    expect(createInput).toMatchObject({
+      properties: {
+        title: { title: "標題", description: "Post title" },
+        tags: { items: { title: "Tag" } },
+      },
+    });
+
+    const procedureInput = tools.find((tool) => tool.name === "restock_sku")!
+      .inputSchema;
+    expect(procedureInput).toMatchObject({
+      title: "補貨",
+      $defs: { sku: { description: "Stock keeping unit" } },
+      allOf: [{ properties: { quantity: { title: "Quantity" } } }],
+    });
+
+    expect(schema.spec.schema.properties.title.title).toEqual({ "zh-TW": "標題" });
+    expect(procedure.spec.input.title).toEqual({ "zh-TW": "補貨" });
   });
 
   it("list_entries shares search, indexed sort, and cursor paging with HTTP admin", async () => {
