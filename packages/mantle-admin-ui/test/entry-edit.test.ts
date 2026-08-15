@@ -1,10 +1,34 @@
 import { describe, expect, it } from "vitest";
 import {
+  canEditEntry,
   editorHiddenFields,
   entryTitle,
   hasMissingRequired,
   stringFieldWidget,
 } from "../src/features/content/entry-edit-view";
+
+describe("canEditEntry", () => {
+  const access = (overrides: Partial<Parameters<typeof canEditEntry>[0]> = {}) => canEditEntry({
+    role: "owner",
+    isReadOnly: false,
+    isOperational: true,
+    isDraft: false,
+    operationalEditUnlocked: false,
+    ...overrides,
+  });
+
+  it("requires an owner or editor to explicitly unlock operational records", () => {
+    expect(access()).toBe(false);
+    expect(access({ operationalEditUnlocked: true })).toBe(true);
+    expect(access({ role: "contributor", operationalEditUnlocked: true })).toBe(false);
+    expect(access({ isReadOnly: true, operationalEditUnlocked: true })).toBe(false);
+  });
+
+  it("keeps publishing collection permissions unchanged", () => {
+    expect(access({ isOperational: false })).toBe(true);
+    expect(access({ role: "contributor", isOperational: false, isDraft: true })).toBe(true);
+  });
+});
 
 describe("entryTitle", () => {
   it("uses the explicit operational list primary field", () => {
