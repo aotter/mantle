@@ -4,3 +4,4 @@ export {
   reconcileSchemaSqlViews,
   schemaIndexMigrations,
 } from "./canonicalMigrations.js";
+export { bootFingerprint, isBootCurrent, markBootCurrent } from "./bootState.js";

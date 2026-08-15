@@ -274,31 +274,15 @@ function mountCollection(
     }
     app.get(`/:locale${segPath}`, async (c) => {
       const runtime = await ref.get();
-      const locale = canonicalLocaleParam(
-        c.req.param("locale"),
-        await runtime.siteConfig.readLocales(),
-      );
-      const loadSite = lazySite(runtime);
-      const notFound = async (): Promise<Response> => {
-        const site = await loadSite();
+      const site = await runtime.siteConfig.load();
+      const locale = canonicalLocaleParam(c.req.param("locale"), site.locales);
+      const notFound = (): Promise<Response> => {
+        const fallbackLocale = locale ?? inferLocaleFromPath(c.req.path, site);
         return options.notFoundRenderer(
-          buildCtx(
-            c,
-            runtime,
-            site,
-            locale ?? inferLocaleFromPath(c.req.path, site),
-            homeSeo(site, locale ?? inferLocaleFromPath(c.req.path, site), false),
-          ),
+          buildCtx(c, runtime, site, fallbackLocale, homeSeo(site, fallbackLocale, false)),
         );
       };
       if (locale === null) return notFound();
-      const site = await loadSite();
-      const markdown = route.markdownMirror === false ? null : await runtime.composeLlmsTxt.execute({
-        site,
-        locale: contentLocale(runtime, route.collection, locale),
-        collection: route.collection,
-        pathFor: (entry) => entryPathForLocale(runtime, options.collectionRoutes, entry, locale),
-      });
       const publicPath = localizedPath(locale, route.segment);
       const schemaTitle = runtime.schemasByName.get(route.collection)?.spec.title;
       const seo = composePageSeoMeta({
@@ -306,7 +290,7 @@ function mountCollection(
         locale,
         publicPath,
         title: schemaTitle ? `${schemaTitle} · ${site.brand}` : site.title,
-        markdown: markdown !== null,
+        markdown: route.markdownMirror !== false,
         pathForLocale: (candidate) => localizedPath(candidate, route.segment),
       });
       const html = await runtime.renderListLive.execute({

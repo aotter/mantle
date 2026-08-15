@@ -48,6 +48,24 @@ describe("createCmsRuntime + bootInit", () => {
     expect(site.origin).toBe("https://example.com");
   });
 
+  it("skips unchanged boot reconciliation across Worker isolates", async () => {
+    const db = new InMemoryDatabase();
+    const options = {
+      manifests: [postsSchema()],
+      db,
+      assets: noopAssets,
+      siteDefaults: { brand: "Blog", locales: ["en"] },
+    } as const;
+
+    await createCmsRuntime(options).bootInit();
+    const firstBootQueries = db.executions.length;
+    await createCmsRuntime(options).bootInit();
+
+    expect(db.executions.slice(firstBootQueries).map(({ sql }) => sql)).toEqual([
+      "SELECT fingerprint FROM _mantle_boot_state WHERE id = ? LIMIT 1",
+    ]);
+  });
+
   it("invalidates once after every successful content and site mutation", async () => {
     const calls: string[] = [];
     const operational = {
