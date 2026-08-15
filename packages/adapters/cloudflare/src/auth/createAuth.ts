@@ -262,6 +262,8 @@ export interface CreateAuthConfig {
    *  multiple auth instances live in one Worker, e.g. hosted platform
    *  provider + site staff auth + launch GitHub auth. */
   readonly basePath?: string;
+  /** Same-origin destination for auth failures. Defaults to `/`. */
+  readonly errorURL?: string;
   readonly secret: string;
   /** Registered auth methods. Boot fails fast if empty. */
   readonly methods: ReadonlyArray<AuthMethodConfig>;
@@ -300,6 +302,15 @@ function normalizeAuthBasePath(basePath: string | undefined): string {
     return trimmed.replace(/\/+$/, "");
   }
   return trimmed;
+}
+
+function normalizeAuthErrorURL(errorURL: string | undefined, baseURL: string): string {
+  const base = new URL(baseURL);
+  const resolved = new URL(errorURL ?? "/", base);
+  if (resolved.origin !== base.origin) {
+    throw new Error("createAuth: errorURL must be same-origin with baseURL.");
+  }
+  return `${resolved.pathname}${resolved.search}`;
 }
 
 /** @internal Exported for regression tests. */
@@ -1018,6 +1029,7 @@ function buildAuth(config: CreateAuthConfig) {
     secret: config.secret,
     baseURL: config.baseURL,
     basePath: normalizeAuthBasePath(config.basePath),
+    onAPIError: { errorURL: normalizeAuthErrorURL(config.errorURL, config.baseURL) },
     socialProviders,
     user: userConfig,
     ...(rateLimit ? { rateLimit } : {}),

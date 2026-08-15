@@ -996,6 +996,30 @@ describe("createAuth — boot invariants", () => {
     ).toThrow(/basePath.*not be/i);
   });
 
+  it("redirects auth errors to a deterministic same-origin destination", async () => {
+    const fallback = await createAuth(baseConfig()).handler(
+      new Request("https://example.test/api/auth/error?error=access_denied"),
+    );
+    expect(fallback.status).toBe(302);
+    expect(fallback.headers.get("location")).toBe("/?error=access_denied");
+
+    const configuredAuth = createAuth(baseConfig({ errorURL: "/auth/error?source=oauth" }));
+    const configured = await configuredAuth.handler(
+      new Request("https://example.test/api/auth/error?error=invalid_scope"),
+    );
+    expect(configured.headers.get("location")).toBe(
+      "/auth/error?source=oauth&error=invalid_scope",
+    );
+
+    const callback = await configuredAuth.handler(
+      new Request("https://example.test/api/auth/callback/github?error=access_denied"),
+    );
+    expect(callback.headers.get("location")).toMatch(/^\/auth\/error\?source=oauth&error=/u);
+
+    expect(() => createAuth(baseConfig({ errorURL: "https://evil.example/auth/error" })))
+      .toThrow(/errorURL.*same-origin/i);
+  });
+
   it("constructs an OAuth/OIDC provider when oauthProvider is configured", () => {
     const auth = createAuth(
       baseConfig({
