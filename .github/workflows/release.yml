@@ -184,6 +184,7 @@ jobs:
       - name: Pack release tarballs
         run: |
           set -euo pipefail
+          node scripts/verify-release-artifact.mjs --self-test
           VERSION="${{ steps.ver.outputs.version }}"
           mkdir -p .release-tarballs
           PKG_NAMES=""
@@ -368,17 +369,13 @@ jobs:
           for pkg in $PKG_NAMES; do
             base="${pkg#@}"
             tgz=".release-tarballs/${base//\//-}-$VERSION.tgz"
-            LOCAL_INTEGRITY=$(node --input-type=module -e "
-              import { createHash } from 'node:crypto';
-              import { readFileSync } from 'node:fs';
-              console.log('sha512-' + createHash('sha512').update(readFileSync(process.argv[1])).digest('base64'));
-            " "$tgz")
-            REMOTE_INTEGRITY=$(npm view "$pkg@$VERSION" dist.integrity --json \
-              --registry https://registry.npmjs.org | node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>console.log(JSON.parse(s)))")
-            [ "$LOCAL_INTEGRITY" = "$REMOTE_INTEGRITY" ] || {
-              echo "::error::$pkg@$VERSION integrity differs from the packed release tarball"
-              exit 1
-            }
+            remote_dir=$(mktemp -d)
+            npm pack "$pkg@$VERSION" --ignore-scripts --silent \
+              --pack-destination "$remote_dir" \
+              --registry https://registry.npmjs.org >/dev/null
+            node scripts/verify-release-artifact.mjs \
+              "$tgz" "$remote_dir/$(basename "$tgz")"
+            rm -rf "$remote_dir"
             npm view "$pkg@$VERSION" dependencies --json --registry https://registry.npmjs.org | \
               node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{const deps=s.trim()?JSON.parse(s):{};if(Object.values(deps).some(v=>String(v).startsWith('workspace:')))process.exit(1)})" || {
                 echo "::error::$pkg@$VERSION leaked a workspace dependency"
@@ -467,17 +464,12 @@ jobs:
               gpr_npm publish "$gpr_tgz" --tag mantle-release \
                 --access public
             fi
-            LOCAL_INTEGRITY=$(node --input-type=module -e "
-              import { createHash } from 'node:crypto';
-              import { readFileSync } from 'node:fs';
-              console.log('sha512-' + createHash('sha512').update(readFileSync(process.argv[1])).digest('base64'));
-            " "$gpr_tgz")
-            REMOTE_INTEGRITY=$(gpr_npm view "$pkg@$VERSION" dist.integrity --json | \
-              node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>console.log(JSON.parse(s)))")
-            [ "$LOCAL_INTEGRITY" = "$REMOTE_INTEGRITY" ] || {
-              echo "::error::$pkg@$VERSION integrity differs from the GitHub Packages tarball"
-              exit 1
-            }
+            remote_work=$(mktemp -d)
+            gpr_npm pack "$pkg@$VERSION" --ignore-scripts --silent \
+              --pack-destination "$remote_work" >/dev/null
+            node scripts/verify-release-artifact.mjs \
+              "$gpr_tgz" "$remote_work/$(basename "$gpr_tgz")"
+            rm -rf "$remote_work"
           done
 
       - name: Promote GitHub Packages channel tags
