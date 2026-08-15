@@ -38,7 +38,18 @@ export function createConventionalAuth(env: ConventionalAuthEnv): Auth {
 
   if (mode === "hosted") {
     if (!secret || !owner || !hostedIssuer || !hostedClientId || githubClientId || githubClientSecret) {
-      return incomplete("Hosted Auth is incomplete or conflicts with self-managed GitHub credentials.");
+      return authConfigurationError("Hosted", [
+        !secret ? "BETTER_AUTH_SECRET is not set" : null,
+        !owner ? "ADMIN_GITHUB_LOGIN is not set or invalid" : null,
+        !hostedIssuer
+          ? `MANTLE_HOSTED_AUTH_ISSUER is ${hostedIssuerRaw ? "invalid" : "not set"}`
+          : null,
+        !hostedClientId
+          ? `MANTLE_HOSTED_AUTH_CLIENT_ID is ${hostedClientIdRaw ? "invalid" : "not set"}`
+          : null,
+        githubClientId ? "GITHUB_CLIENT_ID is set" : null,
+        githubClientSecret ? "GITHUB_CLIENT_SECRET is set" : null,
+      ]);
     }
     return createAuth({
       database: env.DB,
@@ -66,7 +77,14 @@ export function createConventionalAuth(env: ConventionalAuthEnv): Auth {
 
   if (mode === "self-managed") {
     if (!secret || !owner || !githubClientId || !githubClientSecret || hostedIssuerRaw || hostedClientIdRaw) {
-      return incomplete("Self-managed Auth is incomplete or conflicts with Hosted Auth configuration.");
+      return authConfigurationError("Self-managed", [
+        !secret ? "BETTER_AUTH_SECRET is not set" : null,
+        !owner ? "ADMIN_GITHUB_LOGIN is not set or invalid" : null,
+        !githubClientId ? "GITHUB_CLIENT_ID is not set" : null,
+        !githubClientSecret ? "GITHUB_CLIENT_SECRET is not set" : null,
+        hostedIssuerRaw ? "MANTLE_HOSTED_AUTH_ISSUER is set" : null,
+        hostedClientIdRaw ? "MANTLE_HOSTED_AUTH_CLIENT_ID is set" : null,
+      ]);
     }
     return createAuth({
       database: env.DB,
@@ -110,6 +128,14 @@ function isAuthProtectedPath(request: Request, auth: Auth): boolean {
 
 function incomplete(message: string): Auth {
   return createSetupIncompleteAuth({ message });
+}
+
+function authConfigurationError(
+  mode: string,
+  problems: readonly (string | null)[],
+): Auth {
+  const errors = problems.filter((problem): problem is string => problem !== null);
+  return incomplete(`${mode} Auth configuration errors: ${errors.join("; ")}.`);
 }
 
 function hostedOrigin(raw: string | null): string | null {
