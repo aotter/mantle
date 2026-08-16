@@ -105,7 +105,7 @@ export interface MantleExtensionApp<Bindings extends object> {
 
 export interface MantleCloudflareEnv extends ConventionalAuthEnv {
   readonly OAUTH_KV: KVNamespace;
-  readonly ASSETS: Fetcher;
+  readonly ASSETS?: Fetcher;
 }
 
 export interface MantleWorkerBootstrapContext<Env extends MantleCloudflareEnv> {
