@@ -1,4 +1,13 @@
-import { LineCounter, parseAllDocuments, type Document } from "yaml";
+import {
+  LineCounter,
+  isMap,
+  isNode,
+  isScalar,
+  isSeq,
+  parseAllDocuments,
+  type Document,
+  type Node,
+} from "yaml";
 import {
   type Diagnostic,
   type DiagnosticCode,
@@ -9,6 +18,7 @@ import {
 import {
   API_VERSION,
   BUILTIN_OPS,
+  MANTLE_BIND_VALUES,
   LIFECYCLE_HOOKS,
   MCP_TRIGGER_SURFACES,
   STAFF_ROLES,
@@ -144,6 +154,10 @@ export class ManifestParseError extends Error {
     /** JSON Pointer into the manifest (e.g. `/spec/output`). */
     public readonly pointer?: string,
     public readonly code: DiagnosticCode = "INVALID_MANIFEST_ENVELOPE",
+    public readonly details?: Pick<
+      Diagnostic,
+      "value" | "expected" | "candidates" | "suggestion"
+    >,
   ) {
     super(docIndex != null ? `[doc ${docIndex}] ${message}` : message);
     this.name = "ManifestParseError";
@@ -243,6 +257,8 @@ export type ParsedManifest =
 export interface ParsedManifestEntry {
   readonly manifest: ParsedManifest;
   readonly source: SourceLocation;
+  /** YAML-node spans keyed by JSON Pointer; source identity lives in `source`. */
+  readonly sourceSpans: Readonly<Record<string, SourceSpan>>;
 }
 
 declare const parsedManifestSetBrand: unique symbol;
@@ -450,6 +466,7 @@ function parseOneStream(
       entries.push({
         manifest: normalizeManifest(validateEnvelope(value, docIndex)),
         source: sourceLocationForNode(source.sourceId, docIndex, "/", doc, lineCounter),
+        sourceSpans: collectSourceSpans(doc.contents, lineCounter),
       });
     } catch (e) {
       if (e instanceof ManifestParseError) {
@@ -460,6 +477,7 @@ function parseOneStream(
             severity: "error",
             path,
             source: sourceLocationForNode(source.sourceId, docIndex, path, doc, lineCounter),
+            ...e.details,
             message: e.message,
           }),
         );
@@ -479,6 +497,51 @@ function parseOneStream(
       }
     }
   }
+}
+
+/** Resolve the narrowest retained authored span for a parsed semantic path. */
+export function sourceLocationAt(
+  entry: ParsedManifestEntry,
+  path: string,
+): SourceLocation {
+  let candidate = path;
+  let span = entry.sourceSpans[candidate];
+  while (!span && candidate !== "/") {
+    const slash = candidate.lastIndexOf("/");
+    candidate = slash <= 0 ? "/" : candidate.slice(0, slash);
+    span = entry.sourceSpans[candidate];
+  }
+  return {
+    sourceId: entry.source.sourceId,
+    documentIndex: entry.source.documentIndex,
+    path,
+    ...(span ? { span } : {}),
+  };
+}
+
+function collectSourceSpans(
+  root: Node | null,
+  lineCounter: LineCounter,
+): Readonly<Record<string, SourceSpan>> {
+  const spans: Record<string, SourceSpan> = {};
+  const visit = (node: Node | null, path: string): void => {
+    if (!node) return;
+    const span = sourceSpan(lineCounter, node.range);
+    if (span) spans[path] = span;
+    if (isMap(node)) {
+      for (const pair of node.items) {
+        if (!isScalar(pair.key)) continue;
+        const key = String(pair.key.value).replace(/~/g, "~0").replace(/\//g, "~1");
+        visit(isNode(pair.value) ? pair.value : null, path === "/" ? `/${key}` : `${path}/${key}`);
+      }
+    } else if (isSeq(node)) {
+      node.items.forEach((item, index) =>
+        visit(isNode(item) ? item : null, path === "/" ? `/${index}` : `${path}/${index}`)
+      );
+    }
+  };
+  visit(root, "/");
+  return Object.freeze(spans);
 }
 
 function sourceLocationForNode(
@@ -701,6 +764,46 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
       "/spec/schema/properties/locale",
     );
   }
+  const required = schema["required"];
+  if (Array.isArray(required)) {
+    const unknownIndex = required.findIndex((field) =>
+      typeof field === "string" && !propertyNames.includes(field)
+    );
+    if (unknownIndex >= 0) {
+      const field = required[unknownIndex];
+      throw new ManifestParseError(
+        `Schema '${m.metadata.name}' lists '${String(field)}' in required but never declares it under properties — the constraint is silently unenforced.`,
+        idx,
+        `/spec/schema/required/${unknownIndex}`,
+        "REQUIRED_FIELD_UNKNOWN",
+        {
+          value: field,
+          expected: "name of a property declared in spec.schema.properties",
+          candidates: propertyNames,
+        },
+      );
+    }
+  }
+  validateJsonSchemaPatterns(s["schema"], idx, "Schema", m.metadata.name, "/spec/schema");
+  if (properties && typeof properties === "object" && !Array.isArray(properties)) {
+    for (const [propertyName, property] of Object.entries(properties)) {
+      if (!property || typeof property !== "object" || Array.isArray(property)) continue;
+      const bind = (property as Record<string, unknown>)["x-mantle-bind"];
+      if (typeof bind === "string" && !(MANTLE_BIND_VALUES as readonly string[]).includes(bind)) {
+        throw new ManifestParseError(
+          `Schema '${m.metadata.name}' property '${propertyName}' has illegal x-mantle-bind value.`,
+          idx,
+          `/spec/schema/properties/${propertyName}/x-mantle-bind`,
+          "BIND_VALUE_NOT_IN_ENUM",
+          {
+            value: bind,
+            expected: `one of ${MANTLE_BIND_VALUES.join(", ")}`,
+            candidates: [...MANTLE_BIND_VALUES],
+          },
+        );
+      }
+    }
+  }
   if ("lifecycle" in s) {
     const lc = s["lifecycle"];
     if (typeof lc !== "string" || !V01_LIFECYCLE_MODES.has(lc)) {
@@ -741,6 +844,7 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
         "Schema.spec.translates requires Schema.spec.localized: true (a non-localized translation table is meaningless)",
         idx,
         "/spec/translates",
+        "TRANSLATES_REQUIRES_LOCALIZED",
       );
     }
     if (!propertyNames.some((name) => name !== "locale" && name !== tr["on"])) {
@@ -749,6 +853,19 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
         idx,
         "/spec/schema/properties",
         "TRANSLATES_REQUIRES_CONTENT_FIELD",
+      );
+    }
+    if (!propertyNames.includes(tr["on"] as string)) {
+      throw new ManifestParseError(
+        `Schema '${m.metadata.name}' translates.on field '${String(tr["on"])}' is not declared on this Schema's own properties.`,
+        idx,
+        "/spec/translates/on",
+        "TRANSLATES_FIELD_NOT_IN_CHILD",
+        {
+          value: tr["on"],
+          expected: `field declared in Schema '${m.metadata.name}' spec.schema.properties`,
+          candidates: propertyNames,
+        },
       );
     }
   }
@@ -1080,6 +1197,7 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
   if (typeof s["input"] !== "object" || s["input"] === null) {
     throw new ManifestParseError("Procedure.spec.input is required (JSON Schema)", idx, "/spec/input");
   }
+  validateJsonSchemaPatterns(s["input"], idx, "Procedure", m.metadata.name, "/spec/input");
   const uiProblem = checkFormUiSchema(s["input"] as JsonSchema, s["uiSchema"], "Procedure")[0];
   if (uiProblem) {
     throw new ManifestParseError(uiProblem.message, idx, uiProblem.pointer, "SCHEMA_UI_INVALID");
@@ -1087,6 +1205,7 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
   if (typeof s["output"] !== "object" || s["output"] === null) {
     throw new ManifestParseError("Procedure.spec.output is required (JSON Schema)", idx, "/spec/output");
   }
+  validateJsonSchemaPatterns(s["output"], idx, "Procedure", m.metadata.name, "/spec/output");
   const handler = s["handler"] as Record<string, unknown> | undefined;
   if (!handler) {
     throw new ManifestParseError("Procedure.spec.handler is required", idx, "/spec/handler");
@@ -1096,6 +1215,43 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
     validateRequires(s["requires"], idx, "Procedure");
   }
   return m;
+}
+
+function validateJsonSchemaPatterns(
+  root: unknown,
+  idx: number,
+  kind: "Schema" | "Procedure",
+  name: string,
+  basePointer: string,
+): void {
+  const visit = (node: unknown, pointer: string): void => {
+    if (!node || typeof node !== "object" || Array.isArray(node)) return;
+    const value = node as Record<string, unknown>;
+    if (typeof value["pattern"] === "string") {
+      try {
+        new RegExp(value["pattern"]);
+      } catch (error) {
+        throw new ManifestParseError(
+          `${kind} '${name}' has an uncompilable regex pattern at ${pointer}: ${error instanceof Error ? error.message : String(error)}`,
+          idx,
+          `${pointer}/pattern`,
+          "INVALID_PATTERN",
+          {
+            value: value["pattern"],
+            expected: "a valid JavaScript regular expression",
+          },
+        );
+      }
+    }
+    const properties = value["properties"];
+    if (properties && typeof properties === "object" && !Array.isArray(properties)) {
+      for (const [property, child] of Object.entries(properties)) {
+        visit(child, `${pointer}/properties/${property}`);
+      }
+    }
+    visit(value["items"], `${pointer}/items`);
+  };
+  visit(root, basePointer);
 }
 
 function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {

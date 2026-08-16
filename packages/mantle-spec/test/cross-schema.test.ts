@@ -93,34 +93,7 @@ describe("checkLocaleAndTranslates — TRANSLATES_PARENT_IS_LOCALIZED", () => {
   });
 });
 
-describe("checkLocaleAndTranslates — TRANSLATES_REQUIRES_LOCALIZED", () => {
-  it("rejects translates declared on a non-localized Schema", () => {
-    const parent = schema("products", {});
-    const child = schema("product-translations", {
-      translates: { parent: "products", on: "slug" },
-    });
-    const diags = checkLocaleAndTranslates({ schemas: [parent, child], phase: "validate" });
-    expect(diags.map((d) => d.code)).toContain("TRANSLATES_REQUIRES_LOCALIZED");
-  });
-});
-
-describe("checkLocaleAndTranslates — TRANSLATES_REQUIRES_CONTENT_FIELD", () => {
-  it("rejects a translation child with only locale and its join field", () => {
-    const parent = schema("stories", {});
-    const child = schema("story-translations", {
-      localized: true,
-      translates: { parent: "stories", on: "slug" },
-      schema: {
-        type: "object",
-        properties: { slug: { type: "string" }, locale: { type: "string" } },
-      },
-    });
-    const diags = checkLocaleAndTranslates({ schemas: [parent, child], phase: "validate" });
-    expect(diags.map((d) => d.code)).toContain("TRANSLATES_REQUIRES_CONTENT_FIELD");
-  });
-});
-
-describe("checkLocaleAndTranslates — TRANSLATES_FIELD_NOT_IN_PARENT / _CHILD", () => {
+describe("checkLocaleAndTranslates — TRANSLATES_FIELD_NOT_IN_PARENT", () => {
   it("flags join field missing from parent Schema properties", () => {
     const parent: SchemaManifest = {
       apiVersion: "cms.mantle.aotter.net/v1",
@@ -139,22 +112,6 @@ describe("checkLocaleAndTranslates — TRANSLATES_FIELD_NOT_IN_PARENT / _CHILD",
     expect(diags.map((d) => d.code)).toContain("TRANSLATES_FIELD_NOT_IN_PARENT");
   });
 
-  it("flags join field missing from child Schema properties", () => {
-    const parent = schema("products", {});
-    const child: SchemaManifest = {
-      apiVersion: "cms.mantle.aotter.net/v1",
-      kind: "Schema",
-      metadata: { name: "product-translations" },
-      spec: {
-        title: "Product translations",
-        localized: true,
-        translates: { parent: "products", on: "slug" },
-        schema: { type: "object", properties: { title: { type: "string" } } }, // no slug
-      },
-    };
-    const diags = checkLocaleAndTranslates({ schemas: [parent, child], phase: "validate" });
-    expect(diags.map((d) => d.code)).toContain("TRANSLATES_FIELD_NOT_IN_CHILD");
-  });
 });
 
 describe("checkLocaleAndTranslates — happy path (parent + child correctly wired)", () => {

@@ -37,12 +37,18 @@ export interface CrossSchemaCheckInput {
   readonly filePaths?: ManifestFilePaths;
 }
 
+/** Compatibility composition; production stages call their single owned check. */
 export function checkLocaleAndTranslates(input: CrossSchemaCheckInput): Diagnostic[] {
+  return [
+    ...checkSiteLocales(input),
+    ...checkTranslatesReferences(input.schemas, input.phase, input.filePaths),
+  ];
+}
+
+/** Deployment-dependent locale availability; parse/link never call this. */
+export function checkSiteLocales(input: CrossSchemaCheckInput): Diagnostic[] {
   const { schemas, phase, siteLocales, filePaths } = input;
   const out: Diagnostic[] = [];
-  const schemasByName = new Map<string, SchemaManifest>();
-  for (const s of schemas) schemasByName.set(s.metadata.name, s);
-
   const siteLocalesGiven = siteLocales !== undefined;
 
   // Canonicalize the site locales the caller passed before any
@@ -67,12 +73,10 @@ export function checkLocaleAndTranslates(input: CrossSchemaCheckInput): Diagnost
   const siteLocalesEmpty = siteLocalesGiven && validSiteLocalesCount === 0;
 
   for (const s of schemas) {
-    const localized = s.spec.localized === true;
-    const translates = s.spec.translates;
     const path = (jsonPointer: string) =>
       manifestPath("Schema", s.metadata.name, jsonPointer, filePaths);
 
-    if (localized && siteLocalesGiven && siteLocalesEmpty) {
+    if (s.spec.localized === true && siteLocalesGiven && siteLocalesEmpty) {
       out.push(
         emit(phase, {
           code: "SCHEMA_LOCALIZED_REQUIRES_SITE_LOCALES",
@@ -84,92 +88,68 @@ export function checkLocaleAndTranslates(input: CrossSchemaCheckInput): Diagnost
         }),
       );
     }
-
-    if (translates) {
-      if (!localized) {
-        out.push(
-          emit(phase, {
-            code: "TRANSLATES_REQUIRES_LOCALIZED",
-            severity: "error",
-            path: path("/spec/translates"),
-            expected: "Schema.spec.localized: true (a non-localized translation table is meaningless)",
-            message: `Schema '${s.metadata.name}' declares translates but is not localized: true.`,
-          }),
-        );
-        continue;
-      }
-      const parent = schemasByName.get(translates.parent);
-      if (!parent) {
-        out.push(
-          emit(phase, {
-            code: "TRANSLATES_PARENT_UNKNOWN",
-            severity: "error",
-            path: path("/spec/translates/parent"),
-            value: translates.parent,
-            expected: "name of a declared Schema",
-            candidates: [...schemasByName.keys()],
-            suggestion: bestMatch(translates.parent, [...schemasByName.keys()]),
-            message: `Schema '${s.metadata.name}' translates.parent references unknown Schema '${translates.parent}'.`,
-          }),
-        );
-        continue;
-      }
-      if (parent.spec.localized === true) {
-        out.push(
-          emit(phase, {
-            code: "TRANSLATES_PARENT_IS_LOCALIZED",
-            severity: "error",
-            path: path("/spec/translates/parent"),
-            value: translates.parent,
-            expected: "parent Schema must NOT be localized (it carries the non-translatable facts; translation rows are this Schema)",
-            message: `Schema '${s.metadata.name}' translates.parent '${translates.parent}' is itself localized. The parent should hold non-translatable facts (e.g. sku, price); the localized child holds the translatable fields.`,
-          }),
-        );
-      }
-      const parentProps = propertyKeys(parent);
-      if (!parentProps.has(translates.on)) {
-        out.push(
-          emit(phase, {
-            code: "TRANSLATES_FIELD_NOT_IN_PARENT",
-            severity: "error",
-            path: path("/spec/translates/on"),
-            value: translates.on,
-            expected: `field declared in Schema '${parent.metadata.name}' spec.schema.properties`,
-            candidates: [...parentProps].sort(),
-            suggestion: bestMatch(translates.on, [...parentProps]),
-            message: `Schema '${s.metadata.name}' translates.on field '${translates.on}' is not declared on parent Schema '${parent.metadata.name}'.`,
-          }),
-        );
-      }
-      const childProps = propertyKeys(s);
-      if (![...childProps].some((name) => name !== "locale" && name !== translates.on)) {
-        out.push(
-          emit(phase, {
-            code: "TRANSLATES_REQUIRES_CONTENT_FIELD",
-            severity: "error",
-            path: path("/spec/schema/properties"),
-            expected: "at least one locale-specific field besides 'locale' and the join field",
-            message: `Schema '${s.metadata.name}' declares translates but has no locale-specific payload field.`,
-          }),
-        );
-      }
-      if (!childProps.has(translates.on)) {
-        out.push(
-          emit(phase, {
-            code: "TRANSLATES_FIELD_NOT_IN_CHILD",
-            severity: "error",
-            path: path("/spec/translates/on"),
-            value: translates.on,
-            expected: `field declared in Schema '${s.metadata.name}' spec.schema.properties`,
-            candidates: [...childProps].sort(),
-            suggestion: bestMatch(translates.on, [...childProps]),
-            message: `Schema '${s.metadata.name}' translates.on field '${translates.on}' is not declared on this Schema's own properties. Both parent and child must declare the join field.`,
-          }),
-        );
-      }
-    }
   }
 
+  return out;
+}
+
+/** Cross-Schema translation references. Atom-local translation shape lives in the parser. */
+export function checkTranslatesReferences(
+  schemas: readonly SchemaManifest[],
+  phase: Extract<Phase, "validate" | "boot">,
+  filePaths?: ManifestFilePaths,
+): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  const schemasByName = new Map(schemas.map((schema) => [schema.metadata.name, schema]));
+  for (const s of schemas) {
+    const translates = s.spec.translates;
+    if (!translates) continue;
+    const path = (jsonPointer: string) =>
+      manifestPath("Schema", s.metadata.name, jsonPointer, filePaths);
+    const parent = schemasByName.get(translates.parent);
+    if (!parent) {
+      out.push(
+        emit(phase, {
+          code: "TRANSLATES_PARENT_UNKNOWN",
+          severity: "error",
+          path: path("/spec/translates/parent"),
+          value: translates.parent,
+          expected: "name of a declared Schema",
+          candidates: [...schemasByName.keys()],
+          suggestion: bestMatch(translates.parent, [...schemasByName.keys()]),
+          message: `Schema '${s.metadata.name}' translates.parent references unknown Schema '${translates.parent}'.`,
+        }),
+      );
+      continue;
+    }
+    if (parent.spec.localized === true) {
+      out.push(
+        emit(phase, {
+          code: "TRANSLATES_PARENT_IS_LOCALIZED",
+          severity: "error",
+          path: path("/spec/translates/parent"),
+          value: translates.parent,
+          expected: "parent Schema must NOT be localized (it carries the non-translatable facts; translation rows are this Schema)",
+          message: `Schema '${s.metadata.name}' translates.parent '${translates.parent}' is itself localized. The parent should hold non-translatable facts (e.g. sku, price); the localized child holds the translatable fields.`,
+        }),
+      );
+    }
+    const parentProps = propertyKeys(parent);
+    if (!parentProps.has(translates.on)) {
+      out.push(
+        emit(phase, {
+          code: "TRANSLATES_FIELD_NOT_IN_PARENT",
+          severity: "error",
+          path: path("/spec/translates/on"),
+          value: translates.on,
+          expected: `field declared in Schema '${parent.metadata.name}' spec.schema.properties`,
+          candidates: [...parentProps].sort(),
+          suggestion: bestMatch(translates.on, [...parentProps]),
+          message: `Schema '${s.metadata.name}' translates.on field '${translates.on}' is not declared on parent Schema '${parent.metadata.name}'.`,
+        }),
+      );
+    }
+  }
   return out;
 }
 

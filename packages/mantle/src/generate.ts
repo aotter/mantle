@@ -35,6 +35,7 @@ export async function runGenerate(rawArgs: readonly string[]): Promise<number> {
 
   const loaded = await loadManifestsFromRoot(options.manifests);
   const validation = ValidateManifestsUseCase.run({
+    parsed: loaded.parsed,
     manifests: loaded.manifests,
     filePaths: loaded.filePaths,
   });

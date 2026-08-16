@@ -52,6 +52,7 @@ async function runIndexes(rawArgs: readonly string[]): Promise<number> {
   const format = outputFormat(values.format);
   const loaded = await loadManifestsFromRoot(values.manifests ?? "./manifests");
   const validation = ValidateManifestsUseCase.run({
+    parsed: loaded.parsed,
     manifests: loaded.manifests,
     filePaths: loaded.filePaths,
   });

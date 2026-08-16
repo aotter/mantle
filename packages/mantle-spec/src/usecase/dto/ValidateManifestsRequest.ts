@@ -1,5 +1,6 @@
 import type { Manifest } from "../../domain/model/ManifestGrammar.js";
 import type { ManifestFilePaths } from "../../domain/service/ManifestPathDiagnoser.js";
+import type { ParsedManifestSet } from "../../domain/service/ManifestParser.js";
 
 /**
  * Input to the manifest validation use case (Loop 1 of the SDK
@@ -7,7 +8,10 @@ import type { ManifestFilePaths } from "../../domain/service/ManifestPathDiagnos
  * clean-arch DTO rule; everything the use case needs is named here.
  */
 export interface ValidateManifestsRequest {
-  readonly manifests: ReadonlyArray<Manifest>;
+  /** Canonical input for new callers. */
+  readonly parsed?: ParsedManifestSet;
+  /** Temporary alpha.7 bridge; delete in #673. */
+  readonly manifests?: ReadonlyArray<Manifest>;
   /** Optional concatenated handler source — when provided, the use
    *  case greps for each `Procedure.handler.ref` literal and emits a
    *  warning when not found. */
