@@ -42,7 +42,7 @@ try {
   }, `
     await import("@aotter/mantle-runtime");
   `);
-  for (const optional of ["mantle-web", "mantle-admin", "mantle-admin-ui"]) {
+  for (const optional of ["mantle-web", "mantle-admin", "mantle-admin-ui", "mantle-bun"]) {
     if (existsSync(join(temp, `core-only/node_modules/@aotter/${optional}`))) {
       throw new Error(`core-only consumer installed @aotter/${optional}`);
     }

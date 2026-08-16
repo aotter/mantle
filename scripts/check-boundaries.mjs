@@ -291,6 +291,58 @@ function checkAdminPackageBoundary() {
   }
 }
 
+function checkBunPackageBoundary() {
+  const runtimePath = join(ROOT, "packages/mantle-runtime/package.json");
+  const bunPath = join(ROOT, "packages/adapters/bun/package.json");
+  const runtime = JSON.parse(readFileSync(runtimePath, "utf8"));
+  const bun = JSON.parse(readFileSync(bunPath, "utf8"));
+  const runtimeDeps = { ...runtime.dependencies, ...runtime.optionalDependencies };
+  if (runtimeDeps["@aotter/mantle-bun"] || runtimeDeps["@types/bun"]) {
+    fail(runtimePath, "runtime must stay installable without Bun");
+  }
+  if (!bun.dependencies?.["@aotter/mantle-runtime"] ||
+      !bun.dependencies?.["@aotter/mantle-spec"]) {
+    fail(bunPath, "Bun must compose downstream from Runtime and Spec");
+  }
+  for (const dependency of [
+    "@aotter/mantle-admin",
+    "@aotter/mantle-admin-ui",
+    "@aotter/mantle-cloudflare",
+    "@aotter/mantle-vercel",
+    "@aotter/mantle-web",
+    "hono",
+  ]) {
+    if (bun.dependencies?.[dependency]) {
+      fail(bunPath, `Bun must not depend on optional or platform package '${dependency}'`);
+    }
+  }
+  for (const dependency of Object.keys(bun.dependencies ?? {})) {
+    if (dependency.startsWith("@cloudflare/") || dependency.startsWith("@vercel/")) {
+      fail(bunPath, `Bun must not depend on platform package '${dependency}'`);
+    }
+  }
+
+  const runtimeSource = listFiles(
+    join(ROOT, "packages/mantle-runtime/src"),
+    (path) => path.endsWith(".ts"),
+  ).map((path) => stripComments(readFileSync(path, "utf8"))).join("\n");
+  if (runtimeSource.includes("bun:sqlite") || /\bBun\./.test(runtimeSource)) {
+    fail(runtimePath, "runtime source cannot import or call Bun primitives");
+  }
+
+  const bunSource = listFiles(
+    join(ROOT, "packages/adapters/bun/src"),
+    (path) => path.endsWith(".ts"),
+  ).map((path) => stripComments(readFileSync(path, "utf8"))).join("\n");
+  if (/from\s+["'][^"']*mantle-(?:admin|cloudflare|vercel|web)[^"']*["']/.test(bunSource) ||
+      /\b(?:D1Database|ExecutionContext)\b/.test(bunSource)) {
+    fail(bunPath, "Bun cannot import optional products or another platform adapter");
+  }
+  if (/\bBun\.serve\s*\(|\.close\s*\(/.test(bunSource)) {
+    fail(bunPath, "Bun adapter must not own the host server or database lifecycle");
+  }
+}
+
 function checkViewExecutionBoundary() {
   const file = join(
     ROOT,
@@ -374,6 +426,7 @@ checkPackageDirection();
 checkEntryReadOwnership();
 checkWebPackageBoundary();
 checkAdminPackageBoundary();
+checkBunPackageBoundary();
 checkViewExecutionBoundary();
 checkMantleRuntimeBoundary();
 checkCodegenBoundary();

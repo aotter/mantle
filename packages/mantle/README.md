@@ -1,6 +1,8 @@
 # @aotter/mantle
 
-Umbrella entry for the Mantle SDK — a manifest-driven CMS for Cloudflare Workers, built around a 4-atom YAML model (Schema / View / Procedure / Trigger) where agents write config and the runtime carries the complexity.
+Umbrella entry for the embeddable Mantle SDK — a manifest-driven CMS built
+around a 4-atom YAML model (Schema / View / Procedure / Trigger) where agents
+write config and the runtime carries the complexity.
 
 > Mantle is prerelease software. Use this package's `package.json` as the exact
 > installed version; APIs may change between prereleases until v0.1.0.
@@ -25,6 +27,7 @@ Adopters install this one package and import from subpaths. Sub-packages remain 
 | `@aotter/mantle/codegen` | Pure linked manifests → typed `bindMantle` module emitter (no IO) |
 | `@aotter/mantle/web` | Optional HTML, Markdown, `llms.txt`, sitemap, SEO, and preview composition (no routes or platform deps) |
 | `@aotter/mantle/admin` | Optional Admin API, auth routes, and static-asset composition |
+| `@aotter/mantle/bun` | Bun adapter — caller-owned `bun:sqlite` and Web-standard View/Trigger transport |
 | `@aotter/mantle/cloudflare` | Cloudflare Workers adapter — D1, Workers Cache, R2, Better Auth, MCP via `@cloudflare/workers-oauth-provider` |
 | `@aotter/mantle/admin-ui` | Pre-built React 19 admin SPA bundle |
 
@@ -212,6 +215,7 @@ Core-owned `mantle:plugin` skill and records it in `.mantle/plugins.json` plus
 
 | Adapter | Status |
 |---|---|
+| Bun | ✅ shipping |
 | Cloudflare Workers | ✅ shipping |
 
 The `mantle-runtime` package never imports Cloudflare-specific types — adapters bind concrete drivers (D1 / R2) to the runtime's `domain/port/*` interfaces, so adding a new adapter is a port-implementation exercise, not a refactor.

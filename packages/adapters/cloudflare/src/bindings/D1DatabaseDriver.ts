@@ -1,10 +1,10 @@
-import type {
-  BatchResult,
-  DatabaseDriver,
-  Migration,
-  MigrationRunner,
-  PreparedStatement,
-  RunResult,
+import {
+  SqliteMigrationRunner,
+  type BatchResult,
+  type DatabaseDriver,
+  type MigrationRunner,
+  type PreparedStatement,
+  type RunResult,
 } from "@aotter/mantle-runtime";
 
 /**
@@ -12,9 +12,8 @@ import type {
  *
  * The runtime port shape is intentionally close to D1's API (which is
  * itself close to the SQLite C API), so this wrapper is mostly a
- * type-narrowing pass-through. The notable behaviour is the
- * `D1Migrations` runner: it records applied migrations in a
- * `_mantle_migrations` table so subsequent boots are idempotent.
+ * type-narrowing pass-through. The shared SQLite runner records applied
+ * migrations so subsequent boots are idempotent.
  *
  * Per ADR-0011 the runtime never imports `D1Database` itself — this
  * file is the only place in the codebase that does.
@@ -26,7 +25,7 @@ export class D1DatabaseDriver implements DatabaseDriver {
     private readonly db: D1Database,
     private readonly observe?: D1QueryObserver,
   ) {
-    this.migrations = new D1Migrations(db);
+    this.migrations = new SqliteMigrationRunner(this);
   }
 
   prepare(sql: string): PreparedStatement {
@@ -121,98 +120,4 @@ function notify(
   } catch {
     // Diagnostics must never turn a successful database operation into a failure.
   }
-}
-
-/**
- * Migration runner. Each migration runs in its own batch — the batch
- * includes the migration's SQL plus the `_mantle_migrations` row insert,
- * so a single migration is all-or-nothing. Migrations across boots are
- * NOT transactional: a worker restart between migration N and N+1
- * leaves N applied, N+1 retried on the next boot. Authors must keep
- * each migration's SQL idempotent on retry (use `IF NOT EXISTS`,
- * `INSERT … ON CONFLICT DO NOTHING`, etc.).
- */
-class D1Migrations implements MigrationRunner {
-  constructor(private readonly db: D1Database) {}
-
-  async runAll(migrations: ReadonlyArray<Migration>): Promise<void> {
-    const existingTables = await this.db
-      .prepare(
-        `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('_migrations', '_mantle_migrations')`,
-      )
-      .all<{ name: string }>();
-    const tables = new Set((existingTables.results ?? []).map(({ name }) => name));
-    if (!tables.has("_migrations")) {
-      await this.db
-        .prepare(
-          `CREATE TABLE IF NOT EXISTS _migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)`,
-        )
-        .run();
-    }
-    // One-time copy from pre-rename `_mantle_migrations`: compare the
-    // ledgers first so a fully migrated database keeps boot read-only.
-    // We deliberately
-    // DON'T drop the legacy table — codex CX1 showed that any
-    // copy-then-drop ordering races between concurrent boots
-    // (Worker B's INSERT runs after Worker A's DROP succeeds and
-    // crashes with `no such table`). Leaving the legacy table
-    // around costs a few KB; eliminating it isn't worth the race
-    // class. A standalone op (`mantle migrate drop-legacy`) can
-    // remove it later under operator control if desired.
-    if (tables.has("_mantle_migrations")) {
-      const uncopied = await this.db
-        .prepare(
-          `SELECT legacy.id FROM _mantle_migrations legacy LEFT JOIN _migrations current ON current.id = legacy.id WHERE current.id IS NULL LIMIT 1`,
-        )
-        .first<{ id: string }>();
-      if (uncopied) {
-        await this.db
-          .prepare(
-            `INSERT OR IGNORE INTO _migrations (id, applied_at) SELECT id, applied_at FROM _mantle_migrations`,
-          )
-          .run();
-      }
-    }
-    const applied = await this.db
-      .prepare(`SELECT id FROM _migrations`)
-      .all<{ id: string }>();
-    const seen = new Set((applied.results ?? []).map((r) => r.id));
-    for (const m of migrations) {
-      if (seen.has(m.id)) continue;
-      const statements = splitSql(m.sql);
-      const ops: D1PreparedStatement[] = statements.map((s) => this.db.prepare(s));
-      ops.push(
-        this.db
-          .prepare(`INSERT INTO _migrations (id, applied_at) VALUES (?, ?)`)
-          .bind(m.id, Date.now()),
-      );
-      try {
-        await this.db.batch(ops);
-      } catch (error) {
-        // Two cold starts can read the same stale `seen` snapshot. The
-        // losing batch rolls back atomically; accept it only when the
-        // winner has recorded this exact migration in the meantime.
-        const winner = await this.db
-          .prepare(`SELECT id FROM _migrations WHERE id = ?`)
-          .bind(m.id)
-          .first<{ id: string }>();
-        if (winner?.id !== m.id) throw error;
-      }
-      seen.add(m.id);
-    }
-  }
-}
-
-/**
- * D1 / SQLite accept multi-statement SQL on the wire, but `.batch`
- * expects each statement separately. Splitting on `;` is correct for
- * our migration corpus (DDL + INSERT seeds, no string literals
- * containing `;`). When that ever stops being true, switch to a
- * lexer-aware split.
- */
-function splitSql(sql: string): string[] {
-  return sql
-    .split(";")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
 }

@@ -1,0 +1,49 @@
+{
+  "name": "@aotter/mantle-bun",
+  "version": "0.1.0-alpha.7",
+  "description": "Embedded Bun adapter for Mantle Core with caller-owned bun:sqlite storage and Web-standard HTTP transport.",
+  "license": "Apache-2.0",
+  "homepage": "https://mantle.tools/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aotter/mantle.git",
+    "directory": "packages/adapters/bun"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha",
+    "registry": "https://registry.npmjs.org"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "prebuild": "rm -rf dist .tsbuildinfo",
+    "build": "tsc -b tsconfig.lib.json",
+    "typecheck": "tsc --noEmit -p tsconfig.lib.json",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@aotter/mantle-runtime": "workspace:*",
+    "@aotter/mantle-spec": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "typescript": "catalog:",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "zod": "catalog:peer"
+  }
+}

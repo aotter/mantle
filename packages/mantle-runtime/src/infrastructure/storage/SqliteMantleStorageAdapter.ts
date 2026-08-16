@@ -45,7 +45,7 @@ export class SqliteMantleStorageAdapter implements MantleStorageAdapter {
   ) {}
 
   async prepare(plan: RuntimePlan): Promise<PreparedMantleStorage> {
-    const prepared = sqliteStoragePorts(this.db, plan);
+    const prepared = sqliteStoragePorts(this.db, plan, this.siteConfig);
     const fingerprint = await bootFingerprint({
       semanticFingerprint: plan.semanticFingerprint,
       siteDefaults: this.siteDefaults,
@@ -110,6 +110,7 @@ export class SqliteViewQueryExecutor implements ViewQueryExecutor {
 function sqliteStoragePorts(
   db: DatabaseDriver,
   plan: RuntimePlan,
+  localePolicy: SiteConfigRepository,
 ): PreparedMantleStorage {
   const schemas = new Map<string, SchemaManifest>(
     Object.values(plan.schemas).map((schema) => [schema.name, schema.manifest]),
@@ -117,5 +118,6 @@ function sqliteStoragePorts(
   return {
     entries: new DatabaseEntryRepository(db, schemas),
     views: new SqliteViewQueryExecutor(db, plan),
+    localePolicy,
   };
 }

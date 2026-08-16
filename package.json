@@ -2,7 +2,7 @@
   "name": "mantle-monorepo",
   "private": true,
   "version": "0.1.0-alpha.7",
-  "description": "MCP-native headless CMS for Cloudflare Workers.",
+  "description": "Embeddable, manifest-driven headless CMS runtime.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
   "repository": {
@@ -21,8 +21,9 @@
     "bench:wrangler": "pnpm --filter @aotter/mantle-cloudflare bench:wrangler",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "check:optional-packages": "node scripts/check-optional-packages.mjs",
+    "check:bun-package": "node scripts/check-bun-package.mjs",
     "check:release": "node scripts/release-tag-order.mjs --self-test",
-    "check": "pnpm run check:boundaries && pnpm run check:release && pnpm build && pnpm run check:optional-packages && pnpm typecheck && pnpm test"
+    "check": "pnpm run check:boundaries && pnpm run check:release && pnpm build && pnpm run check:optional-packages && pnpm run check:bun-package && pnpm typecheck && pnpm test"
   },
   "devDependencies": {
     "typescript": "catalog:"

@@ -31,6 +31,8 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      - uses: oven-sh/setup-bun@v2
+
       - run: pnpm install --frozen-lockfile
 
       - name: Build dist
@@ -43,6 +45,9 @@ jobs:
 
       - name: Check packed Core and optional product consumers
         run: pnpm run check:optional-packages
+
+      - name: Check packed Bun adapter
+        run: pnpm run check:bun-package
 
       - name: Typecheck workspace
         # Starter typecheck/validate moved out with PR #108 (blank
@@ -61,16 +66,13 @@ jobs:
         uses: actions/checkout@v7.0.1
         with:
           repository: aotter/mantle-starters
-          ref: d0e3162444908627dedc30be62fcce7506af95be
+          ref: 558058301416992a3b624f8b901b78a1f3accd9b
           path: .packed-consumer/mantle-starters
           persist-credentials: false
 
       - name: Test packed Core in the exact Starter consumer
         # Mirror the downstream bump controller: project skills from the new
         # package before rebuilding and checking the immutable Starter source.
-        # The pinned Starter's smoke:blank still asserts that `mantle generate`
-        # installs Admin assets. #668 removes that ownership; #670 will restore
-        # the smoke against the explicit Admin installer.
         run: >-
           node scripts/check-packed-consumer.mjs
           --project .packed-consumer/mantle-starters --

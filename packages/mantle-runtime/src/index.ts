@@ -90,6 +90,7 @@ export type {
   MantleStorageAdapter,
   PreparedMantleStorage,
 } from "./domain/port/MantleStorageAdapter.js";
+export { SqliteMigrationRunner } from "./infrastructure/boot/SqliteMigrationRunner.js";
 export type { Clock } from "./domain/port/Clock.js";
 export type {
   SiteConfigRepository,
