@@ -2,19 +2,19 @@ import type { MediaPurposePolicy, SiteConfig, SiteDefaults } from "@aotter/mantl
 
 /**
  * `SiteConfigRepository` — the `site_config` row read/write surface
- * the runtime exposes to render paths and `bootInit`.
+ * optional modules and Core locale policy consume semantically.
  *
- * `seed` runs on every `bootInit` with the config-supplied
+ * `seed` runs during selected storage preparation with the config-supplied
  * `siteDefaults`, but treats keys differently depending on ownership:
  * UI-editable keys (brand/title/description/…) seed once (INSERT …
  * ON CONFLICT DO NOTHING) so operator edits are preserved; keys with
  * no admin-UI edit path (`origin`, `locales`, `mediaPurposes`) are synced from
- * config on every boot (upsert when the value differs) since code is
+ * config on every changed revision (upsert when the value differs) since code is
  * their only source of truth. See `DatabaseSiteConfigRepository`'s
  * header comment for the full rationale (#441).
  *
  * `load` returns the merged view template authors and adapters see.
- * `readLocales` exists separately because boot-time validation needs
+ * `readLocales` exists separately because preparation validation needs
  * the locales list before the rest of the row is meaningful.
  *
  * The DB-backed implementation is in

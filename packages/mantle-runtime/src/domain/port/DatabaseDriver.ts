@@ -20,9 +20,7 @@ export interface DatabaseDriver {
    *  all-or-nothing semantics — a child-row delete + parent delete
    *  can't half-land. */
   batch(stmts: ReadonlyArray<PreparedStatement>): Promise<readonly BatchResult[]>;
-  /** Migration runner — the runtime's `bootInit` invokes
-   *  `migrations.runAll()` once per isolate. Adapters supply the
-   *  storage; the runtime supplies the canonical migration list. */
+  /** Migration runner used by SQLite storage preparation. */
   readonly migrations: MigrationRunner;
 }
 
@@ -62,8 +60,8 @@ export interface BatchResult {
 
 /**
  * Migration runner contract. The adapter implements this against its
- * driver; the runtime calls `runAll(migrations)` once per isolate at
- * boot. Migration order is the array index — runtime supplies the
+ * driver; selected SQLite preparation calls `runAll(migrations)`.
+ * Migration order is the array index — Core supplies the
  * canonical list (see `infrastructure/boot/canonicalMigrations.ts`);
  * adapter just executes.
  *

@@ -1,6 +1,4 @@
 import {
-  EntryDataValidator,
-  runtimeDiagnostic,
   ValidateManifestsUseCase,
   type Manifest,
   type ProcedureManifest,
@@ -15,18 +13,11 @@ import type { AssetServer } from "./domain/port/AssetServer.js";
 import type { DatabaseDriver } from "./domain/port/DatabaseDriver.js";
 import type { DeferredHookDispatcher } from "./domain/port/DeferredHookDispatcher.js";
 import type { EntryReader } from "./domain/port/EntryReader.js";
-import type { EntryRepository } from "./domain/port/EntryRepository.js";
 import type { MediaStorage } from "./domain/port/MediaStorage.js";
 import type { SiteConfigRepository } from "./domain/port/SiteConfigRepository.js";
-import { SystemClock, type Clock } from "./domain/port/Clock.js";
-import {
-  RandomUuidGenerator,
-  type IdGenerator,
-} from "./domain/port/IdGenerator.js";
-import {
-  buildHandlerRegistry,
-  type HandlerRegistry,
-} from "./domain/port/HandlerRegistry.js";
+import type { Clock } from "./domain/port/Clock.js";
+import type { IdGenerator } from "./domain/port/IdGenerator.js";
+import type { HandlerRegistry } from "./domain/port/HandlerRegistry.js";
 
 import {
   ArchiveUseCase,
@@ -38,20 +29,14 @@ import {
   UnpublishUseCase,
   UpdateDraftUseCase,
 } from "./usecase/content/index.js";
-import {
-  InvokeBuiltinUseCase,
-  InvokeProcedureUseCase,
-} from "./usecase/procedure/index.js";
+import { InvokeProcedureUseCase } from "./usecase/procedure/index.js";
 import { ExecuteViewUseCase } from "./usecase/view/index.js";
 import {
   BootValidationError,
   prepareDeployment,
   ValidateBootUseCase,
 } from "./usecase/boot/index.js";
-import {
-  RunDeferredHookUseCase,
-  RunLifecycleHooksUseCase,
-} from "./usecase/lifecycle/index.js";
+import { RunDeferredHookUseCase } from "./usecase/lifecycle/index.js";
 import {
   ComposeEntrySeoMetaUseCase,
   ComposeLlmsTxtUseCase,
@@ -73,37 +58,23 @@ import type { PublicPathResolver } from "./domain/service/PublicPathResolver.js"
 
 import type { MediaAsset } from "./domain/port/MediaStorage.js";
 import { TemplateRegistry as TemplateRegistryImpl } from "./domain/model/TemplateRegistry.js";
-import { TriggerIndex } from "./domain/service/TriggerIndex.js";
 import {
   compileRuntimePlan,
   type RuntimePlan,
 } from "./domain/service/RuntimePlanCompiler.js";
-import { DatabaseEntryRepository } from "./infrastructure/persistence/DatabaseEntryRepository.js";
 import { DatabaseMediaAssetRepository } from "./infrastructure/persistence/DatabaseMediaAssetRepository.js";
 import { DatabasePendingUploadRepository } from "./infrastructure/persistence/DatabasePendingUploadRepository.js";
 import { DatabaseSiteConfigRepository } from "./infrastructure/persistence/DatabaseSiteConfigRepository.js";
 import {
   SqliteMantleStorageAdapter,
-  SqliteViewQueryExecutor,
 } from "./infrastructure/storage/SqliteMantleStorageAdapter.js";
-import { LifecycleHookingEntryRepository } from "./infrastructure/persistence/LifecycleHookingEntryRepository.js";
+import { bindMantleRuntime } from "./MantleRuntime.js";
 
 /**
- * `createCmsRuntime` — assembly root. Per the clean-architecture
- * convention, this file is the only place that wires concrete
- * adapters (`infrastructure/persistence/*`, `infrastructure/render/*`)
- * to use cases (`usecase/content/*`, etc.) via ports
- * (`domain/port/*`).
- *
- * Adapters call this once at boot, pass the required ADR-0011 ports +
- * the consumer's manifests + handlers + templates + siteDefaults, and
- * receive a `CmsRuntime` they expose to their HTTP framework's
- * routing layer.
- *
- * `bootInit()` runs migrations, seeds `siteDefaults`, and validates
- * the manifest set against the registry. Throws `BootValidationError`
- * on any boot diagnostic — adapters surface the error in their init
- * logs.
+ * Alpha.7 full-product compatibility composition. It delegates forward
+ * through parse/link/compile, storage preparation, and `bindMantleRuntime`,
+ * then adds the still-combined Web/Admin/media surfaces. New headless code
+ * calls `createMantleRuntime` with an already prepared revision.
  */
 export interface CreateCmsRuntimeArgs {
   readonly manifests: readonly Manifest[];
@@ -112,7 +83,7 @@ export interface CreateCmsRuntimeArgs {
   readonly siteDefaults?: SiteDefaults;
   /** Adapter-owned HTTP namespaces that manifest Triggers must not claim. */
   readonly reservedHttpPathPrefixes?: readonly string[];
-  /** Required adapter ports. */
+  /** Alpha.7 full-facade ports. Core binding does not accept either. */
   readonly db: DatabaseDriver;
   readonly assets: AssetServer;
   /** Optional public-path resolver for sitemap and SEO sibling URLs. */
@@ -210,13 +181,10 @@ export interface CmsRuntime {
   readonly triggersByName: ReadonlyMap<string, TriggerManifest>;
   readonly clock: Clock;
   readonly idgen: IdGenerator;
-
-  /** Run migrations, seed siteDefaults, and validate boot. Adapters
-   *  call this once per isolate before routing requests. */
-  bootInit(): Promise<void>;
 }
 
-export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
+/** Alpha.7 full-product facade. New headless consumers use createMantleRuntime. */
+export async function createCmsRuntime(args: CreateCmsRuntimeArgs): Promise<CmsRuntime> {
   const validation = ValidateManifestsUseCase.run({ manifests: args.manifests });
   if (!validation.linked) {
     throw new BootValidationError(validation.diagnostics.map((diagnostic) => ({
@@ -232,82 +200,44 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     })));
   }
   const plan = compilation.value;
-  // Temporary compatibility maps for pre-plan use cases; issues #666–#667
-  // replace their constructors with plan/semantic-port inputs.
-  const schemasByName = new Map<string, SchemaManifest>(
-    Object.values(plan.schemas).map((schema) => [schema.name, schema.manifest]),
-  );
-  const proceduresByName = new Map<string, ProcedureManifest>(
-    Object.values(plan.procedures).map((procedure) => [procedure.name, procedure.manifest]),
-  );
-  const viewsByName = new Map<string, ViewManifest>(
-    Object.values(plan.views).map((view) => [view.name, view.manifest]),
-  );
-  const triggersByName = new Map<string, TriggerManifest>(
-    Object.values(plan.triggers).map((trigger) => [trigger.name, trigger.manifest]),
-  );
-  const triggers = [...triggersByName.values()];
-
-  const registry = buildHandlerRegistry(args.handlers ?? {});
-  const templates = args.templates ?? new TemplateRegistryImpl();
-  const clock = args.clock ?? SystemClock;
-  const idgen = args.idgen ?? RandomUuidGenerator;
-  const entryDataValidator = new EntryDataValidator();
-
-  // Repositories: DB-backed inner + lifecycle-hook decorator. Every
-  // mutation through `entries` (create / update / delete /
-  // transitionStatus) fires the matching Triggers via
-  // `RunLifecycleHooksUseCase`. Symmetric chokepoint per POC ADR-0014:
-  // MCP, admin, and builtin paths all hit the same wrapped repository.
-  const innerEntries = new DatabaseEntryRepository(args.db, schemasByName);
-  const entryReader: EntryReader = innerEntries;
-  const triggerIndex = TriggerIndex.fromPlan(plan.lifecycleHooks, plan.triggers);
   const siteConfig = new DatabaseSiteConfigRepository(args.db);
   const storageAdapter = new SqliteMantleStorageAdapter(
     args.db,
     args.siteDefaults,
     siteConfig,
   );
-  // `entries` is filled below — assigned via `let` so the lifecycle
-  // hooks (which run procedures, which can themselves write entries
-  // via builtin handlers) close over the wrapped repo, not the bare
-  // DB-backed one. Without this every builtin write inside a hook
-  // would skip the decorator and silently bypass downstream hooks.
-  let entries: EntryRepository;
-  const entriesProxy: EntryRepository = {
-    create: (a) => entries.create(a),
-    get: (id) => entries.get(id),
-    update: (a) => entries.update(a),
-    delete: (a) => entries.delete(a),
-    transitionStatus: (a) => entries.transitionStatus(a),
-    list: (a) => entries.list(a),
-    findByDataField: (a) => entries.findByDataField(a),
-    findByDataFields: (a) => entries.findByDataFields(a),
-  };
-  const invokeBuiltin = new InvokeBuiltinUseCase(
-    entriesProxy,
-    schemasByName,
+  const prepared = await prepareDeployment(plan, storageAdapter, {
+    handlerNames: Object.keys(args.handlers ?? {}),
+    reservedHttpPathPrefixes: args.reservedHttpPathPrefixes,
+  });
+  const bound = bindMantleRuntime({
+    plan,
+    prepared,
+    handlers: args.handlers,
+    ports: {
+      siteConfig,
+      deferredHookDispatcher: args.deferredHookDispatcher,
+      clock: args.clock,
+      idgen: args.idgen,
+      onPublishingContentChange: args.onPublicChange,
+    },
+  });
+  const {
+    runtime: core,
+    registry,
     clock,
     idgen,
-    siteConfig,
-    entryDataValidator,
-  );
-  const invokeProcedure = new InvokeProcedureUseCase(registry, invokeBuiltin, proceduresByName);
-  const lifecycleHooks = new RunLifecycleHooksUseCase(
-    triggerIndex,
+    invokeProcedure,
+    executeView,
+    runDeferredHook,
+    schemasByName,
     proceduresByName,
-    (req) => invokeProcedure.execute(req),
-  );
-  entries = invalidateAfterWrites(new LifecycleHookingEntryRepository(
-    innerEntries,
-    triggerIndex,
-    lifecycleHooks,
-    idgen,
-    args.deferredHookDispatcher,
-  ), args.onPublicChange, (collection) =>
-    (schemasByName.get(collection)?.spec.lifecycle ?? "publishing") === "publishing"
-  );
-  const runDeferredHook = new RunDeferredHookUseCase(lifecycleHooks);
+    viewsByName,
+    triggersByName,
+  } = bound;
+  const triggers = [...triggersByName.values()];
+  const templates = args.templates ?? new TemplateRegistryImpl();
+  const entryReader = core.entries;
   const publicPathResolver = args.publicPathResolver ?? null;
   const composeEntrySeoMeta = new ComposeEntrySeoMetaUseCase(entryReader);
   const composeLlmsTxt = new ComposeLlmsTxtUseCase(entryReader, publicPathResolver);
@@ -315,60 +245,6 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
   const pendingUploads = new DatabasePendingUploadRepository(args.db);
   const updateSiteSettings = new UpdateSiteSettingsUseCase(siteConfig, args.onPublicChange);
 
-  // Content / view / boot use cases. They see `entries` only as the
-  // chokepoint port — hook firing is invisible to them.
-  const createDraft = new CreateDraftUseCase(
-    entries,
-    schemasByName,
-    clock,
-    idgen,
-    siteConfig,
-    entryDataValidator,
-  );
-  const updateDraft = new UpdateDraftUseCase(
-    entries,
-    schemasByName,
-    clock,
-    siteConfig,
-    entryDataValidator,
-  );
-  const getEntry = new GetEntryUseCase(entries);
-  const listEntries = new ListEntriesUseCase(entries, schemasByName);
-  const requestPublish = new RequestPublishUseCase(
-    entries,
-    schemasByName,
-    clock,
-    siteConfig,
-    entryDataValidator,
-  );
-  const unpublish = new UnpublishUseCase(entries, schemasByName, clock);
-  const archive = new ArchiveUseCase(entries, schemasByName, clock);
-  const deleteEntry = new DeleteEntryUseCase(entries, schemasByName);
-  const executeView = new ExecuteViewUseCase(
-    new SqliteViewQueryExecutor(args.db, plan),
-    async (request) => {
-      const procedure = proceduresByName.get(request.procedure);
-      if (!procedure) {
-        return {
-          ok: false as const,
-          diagnostic: runtimeDiagnostic({
-            code: "GUARD_PROCEDURE_UNKNOWN",
-            severity: "error",
-            path: request.pathPrefix,
-            value: request.procedure,
-            expected: "name of a declared Procedure",
-          }),
-        };
-      }
-      return invokeProcedure.execute({
-        procedure,
-        input: request.input,
-        ctx: request.ctx,
-        pathPrefix: request.pathPrefix,
-      });
-    },
-    plan.views,
-  );
   const composeSitemap = new ComposeSitemapUseCase(entryReader);
   const renderEntryLive = new RenderEntryLiveUseCase(
     entryReader,
@@ -426,14 +302,14 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     assets: args.assets,
     entryReader,
 
-    createDraft,
-    updateDraft,
-    getEntry,
-    listEntries,
-    requestPublish,
-    unpublish,
-    archive,
-    deleteEntry,
+    createDraft: core.createDraft,
+    updateDraft: core.updateDraft,
+    getEntry: core.getEntry,
+    listEntries: core.listEntries,
+    requestPublish: core.requestPublish,
+    unpublish: core.unpublish,
+    archive: core.archive,
+    deleteEntry: core.deleteEntry,
     invokeProcedure,
     executeView,
     composeLlmsTxt,
@@ -458,46 +334,5 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     triggersByName,
     clock,
     idgen,
-
-    async bootInit(): Promise<void> {
-      await prepareDeployment(plan, storageAdapter, {
-        handlerNames: registry.list(),
-        reservedHttpPathPrefixes: args.reservedHttpPathPrefixes,
-      });
-    },
-  };
-}
-
-function invalidateAfterWrites(
-  inner: EntryRepository,
-  invalidate: (() => Promise<void>) | undefined,
-  affectsPublicOutput: (collection: string) => boolean,
-): EntryRepository {
-  if (!invalidate) return inner;
-  return {
-    async create(args) {
-      const row = await inner.create(args);
-      if (affectsPublicOutput(args.collection)) await invalidate();
-      return row;
-    },
-    get: (id) => inner.get(id),
-    async update(args) {
-      const row = await inner.update(args);
-      if (affectsPublicOutput(args.collection)) await invalidate();
-      return row;
-    },
-    async delete(args) {
-      const result = await inner.delete(args);
-      if (result.removed && affectsPublicOutput(args.collection)) await invalidate();
-      return result;
-    },
-    async transitionStatus(args) {
-      const row = await inner.transitionStatus(args);
-      if (affectsPublicOutput(args.collection)) await invalidate();
-      return row;
-    },
-    list: (args) => inner.list(args),
-    findByDataField: (args) => inner.findByDataField(args),
-    findByDataFields: (args) => inner.findByDataFields(args),
   };
 }

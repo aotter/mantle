@@ -26,7 +26,7 @@ import {
  *
  * Lives in spec (not runtime) because it's pure validation against
  * the `SiteConfig` contract — no env, no DB. Runtime calls this during
- * `bootInit()` so a typo in `src/mantle/config.ts > siteDefaults` rejects boot
+ * storage preparation so a typo in `siteDefaults` rejects deployment
  * before the runtime accepts traffic.
  */
 export class InvalidSiteDefaultsError extends Error {

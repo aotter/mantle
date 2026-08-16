@@ -22,21 +22,6 @@ export interface CmsRuntimeRef {
 }
 
 export function createCmsRef(config: CmsConfig): CmsRuntimeRef {
-  const runtime = createCmsRuntime({
-    manifests: config.manifests,
-    handlers: config.handlers,
-    templates: config.templates,
-    siteDefaults: config.siteDefaults,
-    reservedHttpPathPrefixes: config.reservedHttpPathPrefixes,
-    publicPathResolver: config.publicPathResolver,
-    mediaAllowSvg: config.mediaAllowSvg,
-    db: config.bindings.db,
-    assets: config.bindings.assets,
-    mediaStorage: config.bindings.mediaStorage,
-    deferredHookDispatcher: config.bindings.deferredHookDispatcher,
-    onPublicChange: config.onPublicChange,
-  });
-
   let booted: Promise<CmsRuntime> | null = null;
   return {
     manifests: config.manifests,
@@ -45,7 +30,20 @@ export function createCmsRef(config: CmsConfig): CmsRuntimeRef {
     jwtBearer: config.jwtBearer,
     get(): Promise<CmsRuntime> {
       if (booted) return booted;
-      booted = bootWithD1Retry(runtime)
+      booted = bootWithD1Retry(() => createCmsRuntime({
+        manifests: config.manifests,
+        handlers: config.handlers,
+        templates: config.templates,
+        siteDefaults: config.siteDefaults,
+        reservedHttpPathPrefixes: config.reservedHttpPathPrefixes,
+        publicPathResolver: config.publicPathResolver,
+        mediaAllowSvg: config.mediaAllowSvg,
+        db: config.bindings.db,
+        assets: config.bindings.assets,
+        mediaStorage: config.bindings.mediaStorage,
+        deferredHookDispatcher: config.bindings.deferredHookDispatcher,
+        onPublicChange: config.onPublicChange,
+      }))
         .catch((err) => {
           booted = null;
           console.error("[mantle] runtime boot failed", errorDetails(err));
@@ -63,11 +61,10 @@ const RETRYABLE_D1_ERRORS = [
   "reset because its code was updated",
 ] as const;
 
-async function bootWithD1Retry(runtime: CmsRuntime): Promise<CmsRuntime> {
+async function bootWithD1Retry(create: () => Promise<CmsRuntime>): Promise<CmsRuntime> {
   for (let attempt = 1; ; attempt += 1) {
     try {
-      await runtime.bootInit();
-      return runtime;
+      return await create();
     } catch (error) {
       if (attempt >= MAX_BOOT_ATTEMPTS || !isRetryableD1Error(error)) throw error;
       console.warn("[mantle] transient D1 boot failure; retrying", {

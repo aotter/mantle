@@ -13,9 +13,9 @@ const noopAssets: AssetServer = {
   },
 };
 
-describe("createCmsRuntime + bootInit", () => {
+describe("createCmsRuntime compatibility composition", () => {
   it("constructs with empty manifests + required ports", async () => {
-    const runtime = createCmsRuntime({
+    const runtime = await createCmsRuntime({
       manifests: [],
       db: new InMemoryDatabase(),
       assets: noopAssets,
@@ -25,9 +25,9 @@ describe("createCmsRuntime + bootInit", () => {
     expect(runtime.viewsByName.size).toBe(0);
   });
 
-  it("bootInit runs migrations + seeds siteDefaults + validates", async () => {
+  it("prepares storage, seeds siteDefaults, and validates before returning", async () => {
     const db = new InMemoryDatabase();
-    const runtime = createCmsRuntime({
+    await createCmsRuntime({
       manifests: [makeProcedure()],
       handlers: { echoHandler: () => ({ ok: true }) },
       db,
@@ -39,7 +39,6 @@ describe("createCmsRuntime + bootInit", () => {
         origin: "https://example.com",
       },
     });
-    await runtime.bootInit();
     expect(db.appliedMigrations.has("0001-init")).toBe(true);
     const site = await new DatabaseSiteConfigRepository(db).load();
     expect(site.brand).toBe("Blog");
@@ -57,9 +56,9 @@ describe("createCmsRuntime + bootInit", () => {
       siteDefaults: { brand: "Blog", locales: ["en"] },
     } as const;
 
-    await createCmsRuntime(options).bootInit();
+    await createCmsRuntime(options);
     const firstBootQueries = db.executions.length;
-    await createCmsRuntime(options).bootInit();
+    await createCmsRuntime(options);
 
     expect(db.executions.slice(firstBootQueries).map(({ sql }) => sql)).toEqual([
       "SELECT fingerprint FROM _mantle_boot_state WHERE id = ? LIMIT 1",
@@ -73,14 +72,13 @@ describe("createCmsRuntime + bootInit", () => {
       metadata: { name: "events" },
       spec: { ...postsSchema().spec, lifecycle: "operational" as const },
     };
-    const runtime = createCmsRuntime({
+    const runtime = await createCmsRuntime({
       manifests: [postsSchema(), operational],
       db: new InMemoryDatabase(),
       assets: noopAssets,
       siteDefaults: { brand: "Blog", title: "Blog" },
       onPublicChange: async () => { calls.push("purge"); },
     });
-    await runtime.bootInit();
     const created = await runtime.createDraft.execute({
       collection: "posts",
       data: { title: "Hello", slug: "hello", content: "Body" },
@@ -104,7 +102,7 @@ describe("createCmsRuntime + bootInit", () => {
     expect(calls).toHaveLength(6);
   });
 
-  it("bootInit installs manifest Schema indexes", async () => {
+  it("installs manifest Schema indexes", async () => {
     const db = new InMemoryDatabase();
     const schema = postsSchema();
     const indexedSchema = {
@@ -115,13 +113,11 @@ describe("createCmsRuntime + bootInit", () => {
         uniqueIndexes: [["slug"]],
       },
     } as const;
-    const runtime = createCmsRuntime({
+    await createCmsRuntime({
       manifests: [indexedSchema],
       db,
       assets: noopAssets,
     });
-
-    await runtime.bootInit();
 
     const ids = schemaIndexMigrations([indexedSchema]).map(({ id }) => id);
     expect(ids).toHaveLength(4);
@@ -133,7 +129,7 @@ describe("createCmsRuntime + bootInit", () => {
     );
   });
 
-  it("bootInit replaces stale v2 indexes but keeps generated columns", async () => {
+  it("replaces stale v2 indexes but keeps generated columns", async () => {
     const db = new InMemoryDatabase();
     const schema = postsSchema();
     const manifest = (indexes: readonly (readonly string[])[]) => ({
@@ -147,9 +143,9 @@ describe("createCmsRuntime + bootInit", () => {
         assets: noopAssets,
       });
 
-    await runtime([["slug"]]).bootInit();
+    await runtime([["slug"]]);
     const first = schemaIndexMigrations([manifest([["slug"]])]);
-    await runtime([["slug", "title"]]).bootInit();
+    await runtime([["slug", "title"]]);
     const second = schemaIndexMigrations([manifest([["slug", "title"]])]);
 
     expect(db.appliedMigrations.has(first.find(({ id }) =>
@@ -161,7 +157,7 @@ describe("createCmsRuntime + bootInit", () => {
       expect(db.appliedMigrations.has(id)).toBe(true);
     }
 
-    await runtime([["slug"]]).bootInit();
+    await runtime([["slug"]]);
     expect(db.appliedMigrations.has(first.find(({ id }) =>
       id.startsWith("schema-index-v2:index:"))!.id)).toBe(true);
     expect(db.appliedMigrations.has(second.find(({ id }) =>
@@ -181,10 +177,10 @@ describe("createCmsRuntime + bootInit", () => {
         assets: noopAssets,
       });
 
-    await runtime([["slug"]]).bootInit();
+    await runtime([["slug"]]);
     expect(db.appliedMigrations.has(legacyId)).toBe(true);
 
-    await runtime([]).bootInit();
+    await runtime([]);
     expect(db.appliedMigrations.has(legacyId)).toBe(false);
   });
 
@@ -194,7 +190,7 @@ describe("createCmsRuntime + bootInit", () => {
     db.appliedMigrations.add(legacyId);
     db.legacyIndexColumns.set("uq_posts__a_b", ["posts__a_b"]);
     const schema = postsSchema();
-    const runtime = createCmsRuntime({
+    await createCmsRuntime({
       manifests: [{
         ...schema,
         spec: {
@@ -211,23 +207,20 @@ describe("createCmsRuntime + bootInit", () => {
       assets: noopAssets,
     });
 
-    await runtime.bootInit();
-
     expect(db.appliedMigrations.has(legacyId)).toBe(false);
     expect(db.legacyIndexColumns.has("uq_posts__a_b")).toBe(false);
   });
 
-  it("bootInit throws BootValidationError when handler ref is missing", async () => {
+  it("rejects creation with BootValidationError when a handler ref is missing", async () => {
     const db = new InMemoryDatabase();
-    const runtime = createCmsRuntime({
+    await expect(createCmsRuntime({
       manifests: [makeProcedure({ handlerRef: "missing" })],
       db,
       assets: noopAssets,
-    });
-    await expect(runtime.bootInit()).rejects.toBeInstanceOf(BootValidationError);
+    })).rejects.toBeInstanceOf(BootValidationError);
   });
 
-  it("bootInit seeds media.purposes and readMediaPurposes returns them (#272 policy shape)", async () => {
+  it("seeds media.purposes and readMediaPurposes returns them (#272 policy shape)", async () => {
     const db = new InMemoryDatabase();
     const seeded = [
       {
@@ -249,13 +242,12 @@ describe("createCmsRuntime + bootInit", () => {
         },
       },
     ] as const;
-    const runtime = createCmsRuntime({
+    await createCmsRuntime({
       manifests: [],
       db,
       assets: noopAssets,
       siteDefaults: { media: { purposes: seeded } },
     });
-    await runtime.bootInit();
     const repo = new DatabaseSiteConfigRepository(db);
     const purposes = await repo.readMediaPurposes();
     expect(purposes.map((p) => p.name).sort()).toEqual(["post-cover", "product-gallery"]);
@@ -269,39 +261,36 @@ describe("createCmsRuntime + bootInit", () => {
 
   it("readMediaPurposes returns empty when siteDefaults declares none", async () => {
     const db = new InMemoryDatabase();
-    const runtime = createCmsRuntime({
+    await createCmsRuntime({
       manifests: [],
       db,
       assets: noopAssets,
       siteDefaults: { brand: "No-media starter" },
     });
-    await runtime.bootInit();
     const purposes = await new DatabaseSiteConfigRepository(db).readMediaPurposes();
     expect(purposes).toEqual([]);
   });
 
   it("seedSiteDefaults respects ON CONFLICT DO NOTHING semantics", async () => {
     const db = new InMemoryDatabase();
-    const runtime = createCmsRuntime({
+    await createCmsRuntime({
       manifests: [],
       db,
       assets: noopAssets,
       siteDefaults: { brand: "First" },
     });
-    await runtime.bootInit();
     // Operator edits the brand directly:
     db.siteConfig.set("brand", "Operator-Edited");
     const writesBeforeReboot = db.executions.filter(({ sql }) =>
       sql.startsWith("INSERT INTO site_config")
     ).length;
     // Subsequent boot with new defaults must NOT overwrite the operator's edit.
-    const runtime2 = createCmsRuntime({
+    await createCmsRuntime({
       manifests: [],
       db,
       assets: noopAssets,
       siteDefaults: { brand: "Second" },
     });
-    await runtime2.bootInit();
     const site = await new DatabaseSiteConfigRepository(db).load();
     expect(site.brand).toBe("Operator-Edited");
     expect(db.executions.filter(({ sql }) => sql.startsWith("INSERT INTO site_config")))
@@ -310,22 +299,20 @@ describe("createCmsRuntime + bootInit", () => {
 
   it("re-boot syncs a custom-domain origin while preserving operator-owned settings", async () => {
     const db = new InMemoryDatabase();
-    const first = createCmsRuntime({
+    await createCmsRuntime({
       manifests: [],
       db,
       assets: noopAssets,
       siteDefaults: { brand: "First", origin: "https://site.workers.dev" },
     });
-    await first.bootInit();
     db.siteConfig.set("brand", "Operator-Edited");
 
-    const second = createCmsRuntime({
+    await createCmsRuntime({
       manifests: [],
       db,
       assets: noopAssets,
       siteDefaults: { brand: "Second", origin: "https://www.example.com" },
     });
-    await second.bootInit();
 
     const site = await new DatabaseSiteConfigRepository(db).load();
     expect(site.origin).toBe("https://www.example.com");
@@ -338,7 +325,7 @@ describe("createCmsRuntime + bootInit", () => {
     const repo = new DatabaseSiteConfigRepository(db);
     expect((await repo.load()).icons).toEqual([{ src: "/legacy.svg" }]);
 
-    const runtime = createCmsRuntime({
+    await createCmsRuntime({
       manifests: [],
       db,
       assets: noopAssets,
@@ -349,7 +336,6 @@ describe("createCmsRuntime + bootInit", () => {
         ],
       },
     });
-    await runtime.bootInit();
     expect((await repo.load()).icons).toEqual([
       { src: "/site-icon.png", mimeType: "image/png", sizes: ["64x64"] },
       { src: "/site-icon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
@@ -402,13 +388,12 @@ describe("createCmsRuntime + bootInit", () => {
         maxBytes: { "image/jpeg": 500_000 },
       },
     ] as const;
-    const runtime = createCmsRuntime({
+    await createCmsRuntime({
       manifests: [],
       db,
       assets: noopAssets,
       siteDefaults: { media: { purposes: first } },
     });
-    await runtime.bootInit();
     const repo = new DatabaseSiteConfigRepository(db);
     expect((await repo.readMediaPurposes()).map((p) => p.name)).toEqual(["post-cover"]);
 
@@ -427,13 +412,12 @@ describe("createCmsRuntime + bootInit", () => {
         maxBytes: { "image/avif": 250_000, "image/webp": 400_000, "image/jpeg": 600_000 },
       },
     ] as const;
-    const runtime2 = createCmsRuntime({
+    await createCmsRuntime({
       manifests: [],
       db,
       assets: noopAssets,
       siteDefaults: { media: { purposes: second } },
     });
-    await runtime2.bootInit();
 
     const purposes = await repo.readMediaPurposes();
     expect(purposes.map((p) => p.name).sort()).toEqual(["post-cover", "product-gallery"]);
@@ -447,13 +431,12 @@ describe("createCmsRuntime + bootInit", () => {
 
   it("#441 re-boot syncs locales from config (no admin-UI edit path) while brand (UI-editable) stays operator-owned", async () => {
     const db = new InMemoryDatabase();
-    const runtime = createCmsRuntime({
+    await createCmsRuntime({
       manifests: [],
       db,
       assets: noopAssets,
       siteDefaults: { brand: "First", locales: ["en"] },
     });
-    await runtime.bootInit();
     const repo = new DatabaseSiteConfigRepository(db);
     expect(await repo.readLocales()).toEqual(["en"]);
 
@@ -461,13 +444,12 @@ describe("createCmsRuntime + bootInit", () => {
     db.siteConfig.set("brand", "Operator-Edited");
 
     // Developer adds a locale in `src/mantle/config.ts` and redeploys.
-    const runtime2 = createCmsRuntime({
+    await createCmsRuntime({
       manifests: [],
       db,
       assets: noopAssets,
       siteDefaults: { brand: "Second", locales: ["en", "ja"] },
     });
-    await runtime2.bootInit();
 
     expect(await repo.readLocales()).toEqual(["en", "ja"]);
     const site = await repo.load();
