@@ -64,6 +64,11 @@ const runtime = createMantleRuntime({
 });
 ```
 
+`handlerNames` selects Procedure dispatch readiness. Omit it only for a
+read-only embedding that never dispatches Procedures; pass the selected names
+(including `[]`) whenever the host exposes Procedure or Trigger execution.
+Official HTTP adapters always pass it.
+
 The official SQLite adapter runs canonical migrations, defaults, indexes, and
 schema-View reconciliation, and skips mutation for an unchanged revision. A
 custom adapter owns its own preparation and returns application-owned semantic

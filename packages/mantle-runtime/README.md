@@ -15,6 +15,9 @@ await runtime.invokeProcedure({ procedure: "recompute", input, ctx });
 await runtime.executeView({ view: "open-orders", options: { params }, ctx });
 ```
 
+Pass `handlerNames` during preparation when the embedding dispatches
+Procedures. A projection-only embedding may omit it.
+
 Binding is synchronous and performs no migrations, parsing, linking, or hidden
 preparation. Request identity is supplied to each invocation.
 

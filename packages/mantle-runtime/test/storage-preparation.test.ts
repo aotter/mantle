@@ -120,6 +120,7 @@ describe("prepareDeployment", () => {
     };
 
     await expect(prepareDeployment(compilePlan(handlerManifest), storage, {
+      handlerNames: [],
       reservedHttpPathPrefixes: ["/api/app"],
     }))
       .rejects.toMatchObject({
@@ -129,6 +130,15 @@ describe("prepareDeployment", () => {
         ],
       });
     expect(called).toBe(false);
+  });
+
+  it("lets a read-only embedding omit unrelated Procedure handlers", async () => {
+    const prepared = await prepareDeployment(
+      compilePlan(handlerManifest),
+      new SqliteMantleStorageAdapter(new InMemoryDatabase()),
+    );
+
+    expect(prepared.views).toBeDefined();
   });
 });
 
