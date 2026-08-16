@@ -59,15 +59,17 @@ auth/guard references, all Trigger surfaces, multi-document YAML, empty
 documents, aliases, unknown keys, malformed YAML, and deterministic
 diagnostics.
 
-Exact downstream sources are pinned here and exercised as packed consumers at
-the #673 release gate:
+Exact downstream sources and their gate authorities are pinned here. The public
+Starter runs in Core CI and release preflight. Private consumers run the same
+exact-tarball checker in their own repositories, so public Core PRs never
+receive cross-repository credentials:
 
-| Consumer | Revision | Manifest paths |
-|---|---|---|
-| `aotter/mantle-starters` | `c2d7e1fcfe51b6e74bffdaf5c86a4de04b47127d` | `blank/manifests/site.yaml`; `overlays/{community,intake,presence,publication,reservation,transaction}/manifests/site.yaml`; `recipes/typed-web/manifests/site.yaml` |
-| `aotter/mantle-landing` | `8dab7985baf0416e6760974a5ea78a166ab2ce61` | `manifests/site.yaml` |
-| `aotter/mantle-platform` (Remote Mantle/control plane) | `a54fb3423cb51796bea336f16501a9ec507a6c54` | `manifests/platform.yaml` |
-| Core i18n fixture | this repository | `packages/mantle-spec/test/fixtures/i18n-parent-child/manifests/site.yaml` |
+| Consumer | Revision | Gate authority | Manifest paths |
+|---|---|---|---|
+| `aotter/mantle-starters` | `c2d7e1fcfe51b6e74bffdaf5c86a4de04b47127d` | Core CI + release | `blank/manifests/site.yaml`; `overlays/{community,intake,presence,publication,reservation,transaction}/manifests/site.yaml`; `recipes/typed-web/manifests/site.yaml` |
+| `aotter/mantle-landing` | `81551aecbb088afa9a5c8a6de18892e8438ebc35` | Landing `Check` | `manifests/site.yaml` |
+| `aotter/mantle-platform` (Remote Mantle/control plane) | `4fabfd434f8843fcd14e553260c94f39b1633a91` | Platform `exact-packed-core` | `manifests/platform.yaml` |
+| Core i18n fixture | this repository | Core CI | `packages/mantle-spec/test/fixtures/i18n-parent-child/manifests/site.yaml` |
 
 ## Baseline gates
 
