@@ -1,0 +1,322 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`v0.1 sealed-pipeline characterization > freezes parse and semantic diagnostic order 1`] = `
+{
+  "parseDiagnostics": [
+    {
+      "candidates": undefined,
+      "code": "INVALID_MANIFEST_ENVELOPE",
+      "expected": undefined,
+      "message": "[doc 0] unexpected is not supported",
+      "path": "manifest:doc/0#/unexpected",
+      "phase": "validate",
+      "severity": "error",
+      "suggestion": undefined,
+      "value": undefined,
+    },
+    {
+      "candidates": undefined,
+      "code": "INVALID_MANIFEST_ENVELOPE",
+      "expected": undefined,
+      "message": "[doc 4] YAML parse error: Flow sequence in block collection must be sufficiently indented and end with a ] at line 40, column 1:
+
+  title: [unterminated
+
+^
+",
+      "path": "manifest:doc/4#/",
+      "phase": "validate",
+      "severity": "error",
+      "suggestion": undefined,
+      "value": undefined,
+    },
+  ],
+  "validateDiagnostics": [
+    {
+      "candidates": [
+        "present",
+      ],
+      "code": "REQUIRED_FIELD_UNKNOWN",
+      "expected": "name of a property declared in spec.schema.properties",
+      "message": "Schema 'broken-required' lists 'missing' in required but never declares it under properties — the constraint is silently unenforced.",
+      "path": "manifest:Schema/broken-required#/spec/schema/required/0",
+      "phase": "validate",
+      "severity": "error",
+      "suggestion": undefined,
+      "value": "missing",
+    },
+    {
+      "candidates": [
+        "broken-required",
+      ],
+      "code": "VIEW_FROM_UNKNOWN_SCHEMA",
+      "expected": "name of a declared Schema",
+      "message": "View 'missing-source' references unknown Schema 'unknown-schema'.",
+      "path": "manifest:View/missing-source#/spec/from",
+      "phase": "validate",
+      "severity": "error",
+      "suggestion": undefined,
+      "value": "unknown-schema",
+    },
+    {
+      "candidates": [],
+      "code": "TRIGGER_TARGET_PROCEDURE_UNKNOWN",
+      "expected": "name of a declared Procedure",
+      "message": "Trigger 'missing-target' targets unknown Procedure 'unknown-procedure'.",
+      "path": "manifest:Trigger/missing-target#/spec/target/procedure",
+      "phase": "validate",
+      "severity": "error",
+      "suggestion": undefined,
+      "value": "unknown-procedure",
+    },
+    {
+      "candidates": undefined,
+      "code": "TRIGGER_PATH_INVALID",
+      "expected": "path starting with '/api/'",
+      "message": "Trigger 'missing-target' has path '/outside-core' — http Trigger paths MUST start with '/api/' so adapters can route public pages and Procedure endpoints without ambiguity.",
+      "path": "manifest:Trigger/missing-target#/spec/source/path",
+      "phase": "validate",
+      "severity": "error",
+      "suggestion": undefined,
+      "value": "/outside-core",
+    },
+  ],
+}
+`;
+
+exports[`v0.1 sealed-pipeline characterization > freezes successful parse and semantic validation 1`] = `
+{
+  "parsed": {
+    "diagnostics": [],
+    "manifests": [
+      {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Schema",
+        "metadata": {
+          "name": "orders",
+        },
+        "spec": {
+          "indexes": [
+            [
+              "customerId",
+            ],
+          ],
+          "schema": {
+            "properties": {
+              "createdAt": {
+                "type": "number",
+                "x-mantle-bind": "now",
+              },
+              "customerId": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "externalId": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "status": {
+                "enum": [
+                  "open",
+                  "closed",
+                ],
+                "type": "string",
+              },
+            },
+            "required": [
+              "customerId",
+              "status",
+            ],
+            "type": "object",
+          },
+          "title": "Orders",
+        },
+      },
+      {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "View",
+        "metadata": {
+          "name": "open-orders",
+        },
+        "spec": {
+          "fields": [
+            "id",
+            "customerId",
+            "status",
+            "createdAt",
+          ],
+          "filter": {
+            "and": [
+              {
+                "eq": {
+                  "field": "customerId",
+                  "value": {
+                    "$param": "customerId",
+                  },
+                },
+              },
+              {
+                "eq": {
+                  "field": "status",
+                  "value": "open",
+                },
+              },
+            ],
+          },
+          "from": "orders",
+          "limit": 20,
+          "orderBy": [
+            {
+              "direction": "desc",
+              "field": "createdAt",
+            },
+          ],
+          "params": {
+            "properties": {
+              "customerId": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "customerId",
+            ],
+            "type": "object",
+          },
+          "requires": {
+            "auth": {
+              "all": [
+                "ctx.auth",
+                "ctx.user",
+              ],
+            },
+            "guard": {
+              "procedure": "authorize-order",
+            },
+          },
+          "surface": "public",
+        },
+      },
+      {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Procedure",
+        "metadata": {
+          "name": "authorize-order",
+        },
+        "spec": {
+          "handler": {
+            "kind": "ref",
+            "ref": "authorizeOrder",
+          },
+          "input": {
+            "properties": {
+              "customerId": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "customerId",
+            ],
+            "type": "object",
+          },
+          "output": {
+            "type": "object",
+          },
+        },
+      },
+      {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Procedure",
+        "metadata": {
+          "name": "place-order",
+        },
+        "spec": {
+          "handler": {
+            "kind": "ref",
+            "ref": "placeOrder",
+          },
+          "input": {
+            "properties": {
+              "customerId": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "customerId",
+            ],
+            "type": "object",
+          },
+          "output": {
+            "type": "object",
+          },
+          "requires": {
+            "auth": {
+              "all": [
+                "ctx.auth",
+                "ctx.user",
+              ],
+            },
+          },
+        },
+      },
+      {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Trigger",
+        "metadata": {
+          "name": "place-order-http",
+        },
+        "spec": {
+          "source": {
+            "kind": "http",
+            "method": "POST",
+            "path": "/api/orders",
+          },
+          "target": {
+            "procedure": "place-order",
+          },
+        },
+      },
+      {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Trigger",
+        "metadata": {
+          "name": "place-order-mcp",
+        },
+        "spec": {
+          "source": {
+            "kind": "mcp",
+            "surface": "public",
+          },
+          "target": {
+            "procedure": "place-order",
+          },
+        },
+      },
+      {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Trigger",
+        "metadata": {
+          "name": "order-created",
+        },
+        "spec": {
+          "source": {
+            "errorPolicy": "continue",
+            "kind": "lifecycle",
+            "on": [
+              "after_create",
+            ],
+            "schema": "orders",
+          },
+          "target": {
+            "procedure": "place-order",
+          },
+        },
+      },
+    ],
+  },
+  "validated": {
+    "diagnostics": [],
+    "errorCount": 0,
+    "warningCount": 0,
+  },
+}
+`;

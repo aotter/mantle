@@ -19,6 +19,7 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0016](0016-site-semantic-layer.md) | Site semantic layer: `AGENTS.md` (cross-tool entry) + `.mantle/launch-state.json` (deterministic install context). The older `mantle/site.md` letter surface is suspended from first-run scaffolds. | Accepted (slimmed) |
 | [0017](0017-media-multi-variant-agent-side-optimization.md) | Multi-variant media assets with agent-side optimization and asset-id entry references. | Accepted |
 | [0018](0018-core-starters-repository-boundary.md) | Core produces published SDK artifacts; the separate starters repository validates them as an external consumer. Revisit after release-contract simplification. | Accepted for now |
+| [0019](0019-sealed-manifest-runtime-pipeline.md) | One sealed source-to-runtime pipeline, semantic storage seam, and optional Web/Admin/platform dependency direction. | Accepted |
 
 ## Reading order
 
@@ -26,11 +27,12 @@ If you're new to the codebase:
 
 1. **0001** — what the 4 atoms are.
 2. **0009** — how consumers wire them in.
-3. **0007** — what running the SDK feels like as an AI author (and as the operator agent).
-4. **0011** — the boundary between the runtime and the adapter (most load-bearing for the rebuild).
-5. **0010** — how locale flows through the system.
-6. **0013** — historical install-session context; current first launch is landing provision bundles plus repo-local handoff.
-7. **0002, 0008** — the two ADRs that touch every diagnostic and every binding.
+3. **0019** — the sealed source-to-runtime pipeline and optional product boundaries.
+4. **0007** — what running the SDK feels like as an AI author (and as the operator agent).
+5. **0011** — the boundary between the runtime and the adapter.
+6. **0010** — how locale flows through the system.
+7. **0013** — historical install-session context; current first launch is landing provision bundles plus repo-local handoff.
+8. **0002, 0008** — the two ADRs that touch every diagnostic and every binding.
 
 ## What's NOT here (and why)
 
@@ -52,7 +54,7 @@ The rebuild's ADR-0011 (new) is the most load-bearing addition — the POC accum
 
 ## Contributing a new ADR
 
-1. Pick the next number (currently 0019).
+1. Pick the next number (currently 0020).
 2. File: `docs/adr/<NNNN>-<kebab-title>.md`.
 3. Sections: Status, Date, Context, Decision, Consequences, Alternatives, How to apply, Implementation status.
 4. Link from this README's table.
