@@ -96,6 +96,18 @@ describe("loadManifestsFromRoot + partition", () => {
     });
   });
 
+  it("keeps YAML document indexes instead of rebuilding them from successful manifests", async () => {
+    const root = join(await mkdtemp(join(tmpdir(), "mantle-source-index-")), "manifests");
+    await mkdir(root, { recursive: true });
+    await writeFile(join(root, "site.yaml"), `${SCHEMA_YAML}---\n---\n${VIEW_YAML}`);
+
+    const { filePaths, parseErrors } = await loadManifestsFromRoot(root);
+
+    expect(parseErrors).toEqual([]);
+    expect(filePaths.get("Schema/posts")?.[0]?.docIndex).toBe(0);
+    expect(filePaths.get("View/posts-by-locale")?.[0]?.docIndex).toBe(2);
+  });
+
   it("returns MANIFEST_ROOT_NOT_FOUND when path is missing", async () => {
     const { manifests, parseErrors } = await loadManifestsFromRoot("/nonexistent/path/mantle");
     expect(manifests).toHaveLength(0);

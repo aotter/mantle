@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
-  parseManifests,
+  parseManifestSources,
   ValidateManifestsUseCase,
 } from "../src/index.js";
 
@@ -14,21 +14,39 @@ const fixture = (name: string): string =>
 
 describe("v0.1 sealed-pipeline characterization", () => {
   it("freezes successful parse and semantic validation", () => {
-    const parsed = parseManifests(fixture("valid.yaml"));
-    const validated = ValidateManifestsUseCase.run({ manifests: parsed.manifests });
+    const parsed = parseManifestSources({
+      sources: [{ sourceId: "fixture:valid.yaml", text: fixture("valid.yaml") }],
+    });
 
+    expect(parsed.ok).toBe(true);
     expect(parsed.diagnostics).toEqual([]);
+    if (!parsed.ok) throw new Error("expected valid characterization fixture");
+    const validated = ValidateManifestsUseCase.run({
+      manifests: parsed.value.entries.map((entry) => entry.manifest),
+    });
     expect(validated.diagnostics).toEqual([]);
     expect({ parsed, validated }).toMatchSnapshot();
   });
 
-  it("freezes parse and semantic diagnostic order", () => {
-    const parsed = parseManifests(fixture("invalid.yaml"));
-    const validated = ValidateManifestsUseCase.run({ manifests: parsed.manifests });
+  it("freezes source-aware parse diagnostic order and withholds partial values", () => {
+    const parsed = parseManifestSources({
+      sources: [{ sourceId: "fixture:parse-invalid.yaml", text: fixture("parse-invalid.yaml") }],
+    });
 
-    expect({
-      parseDiagnostics: parsed.diagnostics,
-      validateDiagnostics: validated.diagnostics,
-    }).toMatchSnapshot();
+    expect(parsed.ok).toBe(false);
+    expect("value" in parsed).toBe(false);
+    expect(parsed).toMatchSnapshot();
+  });
+
+  it("keeps the pre-link semantic diagnostic order characterized", () => {
+    const parsed = parseManifestSources({
+      sources: [{ sourceId: "fixture:link-invalid.yaml", text: fixture("link-invalid.yaml") }],
+    });
+
+    if (!parsed.ok) throw new Error("expected structurally valid link fixture");
+    const validated = ValidateManifestsUseCase.run({
+      manifests: parsed.value.entries.map((entry) => entry.manifest),
+    });
+    expect(validated.diagnostics).toMatchSnapshot();
   });
 });

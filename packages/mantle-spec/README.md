@@ -9,3 +9,28 @@ adopter projects use `mantle` from `@aotter/mantle`.
 
 This package is prerelease software. Its `package.json` is the exact version
 authority; the API surface may change until `v0.1.0`.
+
+## Embed the parser
+
+Core accepts caller-owned source values; it does not require a project root or
+a file named `site.yaml`:
+
+```ts
+import { parseManifestSources } from "@aotter/mantle-spec";
+
+const parsed = parseManifestSources({
+  sources: [{ sourceId: "database:tenant-42", text: manifestYaml }],
+});
+
+if (!parsed.ok) {
+  throw new Error(JSON.stringify(parsed.diagnostics));
+}
+
+for (const { manifest, source } of parsed.value.entries) {
+  console.log(manifest.kind, manifest.metadata.name, source);
+}
+```
+
+`sourceId` is an opaque identity chosen by the caller. Successful values are
+canonical and sealed; a failed parse returns diagnostics without a partial
+`ParsedManifestSet`.
