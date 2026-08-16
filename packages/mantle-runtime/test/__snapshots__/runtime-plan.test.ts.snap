@@ -1,0 +1,369 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
+{
+  "httpRoutes": [
+    {
+      "method": "POST",
+      "path": "/api/orders",
+      "procedure": "place-order",
+      "trigger": "place-order-http",
+    },
+  ],
+  "lifecycleHooks": [
+    {
+      "hook": "after_create",
+      "schema": "orders",
+      "triggerNames": [
+        "order-created",
+      ],
+    },
+  ],
+  "mcpTools": [
+    {
+      "name": "place_order",
+      "ownerKind": "Procedure",
+      "ownerName": "place-order",
+      "surface": "public",
+    },
+    {
+      "name": "query_view_open_orders",
+      "ownerKind": "View",
+      "ownerName": "open-orders",
+      "surface": "public",
+    },
+    {
+      "name": "create_draft_orders",
+      "ownerKind": "Schema",
+      "ownerName": "orders",
+      "surface": "staff",
+    },
+    {
+      "name": "update_draft_orders",
+      "ownerKind": "Schema",
+      "ownerName": "orders",
+      "surface": "staff",
+    },
+  ],
+  "procedures": {
+    "authorize-order": {
+      "manifest": {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Procedure",
+        "metadata": {
+          "name": "authorize-order",
+        },
+        "spec": {
+          "handler": {
+            "kind": "ref",
+            "ref": "authorizeOrder",
+          },
+          "input": {
+            "properties": {
+              "customerId": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "customerId",
+            ],
+            "type": "object",
+          },
+          "output": {
+            "type": "object",
+          },
+        },
+      },
+      "name": "authorize-order",
+    },
+    "place-order": {
+      "authorization": {
+        "all": [
+          "ctx.auth",
+          "ctx.user",
+        ],
+      },
+      "manifest": {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Procedure",
+        "metadata": {
+          "name": "place-order",
+        },
+        "spec": {
+          "handler": {
+            "kind": "ref",
+            "ref": "placeOrder",
+          },
+          "input": {
+            "properties": {
+              "customerId": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "customerId",
+            ],
+            "type": "object",
+          },
+          "output": {
+            "type": "object",
+          },
+          "requires": {
+            "auth": {
+              "all": [
+                "ctx.auth",
+                "ctx.user",
+              ],
+            },
+          },
+        },
+      },
+      "name": "place-order",
+    },
+  },
+  "schemas": {
+    "orders": {
+      "manifest": {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Schema",
+        "metadata": {
+          "name": "orders",
+        },
+        "spec": {
+          "indexes": [
+            [
+              "customerId",
+            ],
+          ],
+          "lifecycle": "publishing",
+          "localized": false,
+          "schema": {
+            "properties": {
+              "createdAt": {
+                "type": "number",
+                "x-mantle-bind": "now",
+              },
+              "customerId": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "externalId": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "status": {
+                "enum": [
+                  "open",
+                  "closed",
+                ],
+                "type": "string",
+              },
+            },
+            "required": [
+              "customerId",
+              "status",
+            ],
+            "type": "object",
+          },
+          "searchableFields": [],
+          "title": "Orders",
+          "uniqueIndexes": [],
+        },
+      },
+      "name": "orders",
+    },
+  },
+  "semanticFingerprint": "fnv1a64:1bececc8251e8b45",
+  "triggers": {
+    "order-created": {
+      "lifecycleSchema": "orders",
+      "manifest": {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Trigger",
+        "metadata": {
+          "name": "order-created",
+        },
+        "spec": {
+          "source": {
+            "errorPolicy": "continue",
+            "kind": "lifecycle",
+            "on": [
+              "after_create",
+            ],
+            "schema": "orders",
+          },
+          "target": {
+            "procedure": "place-order",
+          },
+        },
+      },
+      "name": "order-created",
+      "target": "place-order",
+    },
+    "place-order-http": {
+      "manifest": {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Trigger",
+        "metadata": {
+          "name": "place-order-http",
+        },
+        "spec": {
+          "source": {
+            "kind": "http",
+            "method": "POST",
+            "path": "/api/orders",
+          },
+          "target": {
+            "procedure": "place-order",
+          },
+        },
+      },
+      "name": "place-order-http",
+      "target": "place-order",
+    },
+    "place-order-mcp": {
+      "manifest": {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Trigger",
+        "metadata": {
+          "name": "place-order-mcp",
+        },
+        "spec": {
+          "source": {
+            "kind": "mcp",
+            "surface": "public",
+          },
+          "target": {
+            "procedure": "place-order",
+          },
+        },
+      },
+      "name": "place-order-mcp",
+      "target": "place-order",
+    },
+  },
+  "version": 1,
+  "views": {
+    "open-orders": {
+      "authorization": {
+        "all": [
+          "ctx.auth",
+          "ctx.user",
+        ],
+      },
+      "guard": "authorize-order",
+      "manifest": {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "View",
+        "metadata": {
+          "name": "open-orders",
+        },
+        "spec": {
+          "fields": [
+            "id",
+            "customerId",
+            "status",
+            "createdAt",
+          ],
+          "filter": {
+            "and": [
+              {
+                "eq": {
+                  "field": "customerId",
+                  "value": {
+                    "$param": "customerId",
+                  },
+                },
+              },
+              {
+                "eq": {
+                  "field": "status",
+                  "value": "open",
+                },
+              },
+            ],
+          },
+          "from": "orders",
+          "limit": 20,
+          "orderBy": [
+            {
+              "direction": "desc",
+              "field": "createdAt",
+            },
+          ],
+          "params": {
+            "properties": {
+              "customerId": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "customerId",
+            ],
+            "type": "object",
+          },
+          "requires": {
+            "auth": {
+              "all": [
+                "ctx.auth",
+                "ctx.user",
+              ],
+            },
+            "guard": {
+              "procedure": "authorize-order",
+            },
+          },
+          "surface": "public",
+        },
+      },
+      "name": "open-orders",
+      "query": {
+        "fields": [
+          "id",
+          "customerId",
+          "status",
+          "createdAt",
+        ],
+        "filter": {
+          "and": [
+            {
+              "eq": {
+                "field": "customerId",
+                "value": {
+                  "$param": "customerId",
+                },
+              },
+            },
+            {
+              "eq": {
+                "field": "status",
+                "value": "open",
+              },
+            },
+          ],
+        },
+        "from": "orders",
+        "kind": "declarative",
+        "limit": 20,
+        "orderBy": [
+          {
+            "direction": "desc",
+            "field": "createdAt",
+          },
+        ],
+        "params": {
+          "properties": {
+            "customerId": {
+              "type": "string",
+            },
+          },
+          "required": [
+            "customerId",
+          ],
+          "type": "object",
+        },
+      },
+    },
+  },
+}
+`;

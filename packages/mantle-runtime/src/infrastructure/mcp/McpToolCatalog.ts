@@ -1,5 +1,10 @@
 import {
   MANTLE_BIND_KEYWORD,
+  MCP_CREATE_DRAFT_PREFIX,
+  MCP_CREATE_RECORD_PREFIX,
+  MCP_QUERY_VIEW_PREFIX,
+  MCP_UPDATE_DRAFT_PREFIX,
+  MCP_UPDATE_RECORD_PREFIX,
   mcpToolNameSegment,
   expandPolicyRequired,
   resolveLifecycle,
@@ -229,11 +234,11 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
 ];
 
-export const CREATE_DRAFT_PREFIX = "create_draft_";
-export const UPDATE_DRAFT_PREFIX = "update_draft_";
-export const CREATE_RECORD_PREFIX = "create_record_";
-export const UPDATE_RECORD_PREFIX = "update_record_";
-export const QUERY_VIEW_PREFIX = "query_view_";
+export const CREATE_DRAFT_PREFIX = MCP_CREATE_DRAFT_PREFIX;
+export const UPDATE_DRAFT_PREFIX = MCP_UPDATE_DRAFT_PREFIX;
+export const CREATE_RECORD_PREFIX = MCP_CREATE_RECORD_PREFIX;
+export const UPDATE_RECORD_PREFIX = MCP_UPDATE_RECORD_PREFIX;
+export const QUERY_VIEW_PREFIX = MCP_QUERY_VIEW_PREFIX;
 
 export type McpToolSurface = "staff" | "public";
 

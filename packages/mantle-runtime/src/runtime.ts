@@ -1,6 +1,7 @@
 import {
   EntryDataValidator,
   runtimeDiagnostic,
+  ValidateManifestsUseCase,
   type Manifest,
   type ProcedureManifest,
   type SchemaManifest,
@@ -8,7 +9,6 @@ import {
   type TriggerManifest,
   type ViewManifest,
 } from "@aotter/mantle-spec";
-import { partitionManifests } from "@aotter/mantle-spec/partition";
 import type { AnyHandler } from "./domain/model/HandlerContext.js";
 import type { TemplateRegistry } from "./domain/model/TemplateRegistry.js";
 import type { AssetServer } from "./domain/port/AssetServer.js";
@@ -43,7 +43,10 @@ import {
   InvokeProcedureUseCase,
 } from "./usecase/procedure/index.js";
 import { ExecuteViewUseCase } from "./usecase/view/index.js";
-import { ValidateBootUseCase } from "./usecase/boot/index.js";
+import {
+  BootValidationError,
+  ValidateBootUseCase,
+} from "./usecase/boot/index.js";
 import {
   RunDeferredHookUseCase,
   RunLifecycleHooksUseCase,
@@ -70,6 +73,10 @@ import type { PublicPathResolver } from "./domain/service/PublicPathResolver.js"
 import type { MediaAsset } from "./domain/port/MediaStorage.js";
 import { TemplateRegistry as TemplateRegistryImpl } from "./domain/model/TemplateRegistry.js";
 import { TriggerIndex } from "./domain/service/TriggerIndex.js";
+import {
+  compileRuntimePlan,
+  type RuntimePlan,
+} from "./domain/service/RuntimePlanCompiler.js";
 import { DatabaseEntryRepository } from "./infrastructure/persistence/DatabaseEntryRepository.js";
 import { DatabaseMediaAssetRepository } from "./infrastructure/persistence/DatabaseMediaAssetRepository.js";
 import { DatabasePendingUploadRepository } from "./infrastructure/persistence/DatabasePendingUploadRepository.js";
@@ -137,6 +144,8 @@ export interface CreateCmsRuntimeArgs {
 }
 
 export interface CmsRuntime {
+  /** Canonical, immutable semantics shared with preparation and adapters. */
+  readonly plan: RuntimePlan;
   /** Raw database driver, retained for adapter compatibility.
    *  @deprecated Use purpose-shaped surfaces such as `entryReader` and
    *  `siteConfig`; adapters should retain their injected driver for tables
@@ -212,15 +221,37 @@ export interface CmsRuntime {
 }
 
 export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
-  const partitioned = partitionManifests([...args.manifests]);
-  const schemasByName = new Map<string, SchemaManifest>();
-  for (const s of partitioned.schemas) schemasByName.set(s.metadata.name, s);
-  const proceduresByName = new Map<string, ProcedureManifest>();
-  for (const p of partitioned.procedures) proceduresByName.set(p.metadata.name, p);
-  const viewsByName = new Map<string, ViewManifest>();
-  for (const v of partitioned.views) viewsByName.set(v.metadata.name, v);
-  const triggersByName = new Map<string, TriggerManifest>();
-  for (const t of partitioned.triggers) triggersByName.set(t.metadata.name, t);
+  const validation = ValidateManifestsUseCase.run({ manifests: args.manifests });
+  if (!validation.linked) {
+    throw new BootValidationError(validation.diagnostics.map((diagnostic) => ({
+      ...diagnostic,
+      phase: "boot",
+    })));
+  }
+  const compilation = compileRuntimePlan(validation.linked);
+  if (!compilation.ok) {
+    throw new BootValidationError(compilation.diagnostics.map((diagnostic) => ({
+      ...diagnostic,
+      phase: "boot",
+    })));
+  }
+  const plan = compilation.value;
+  // Temporary compatibility maps for pre-plan use cases; issues #666–#667
+  // replace their constructors with plan/semantic-port inputs.
+  const schemasByName = new Map<string, SchemaManifest>(
+    Object.values(plan.schemas).map((schema) => [schema.name, schema.manifest]),
+  );
+  const proceduresByName = new Map<string, ProcedureManifest>(
+    Object.values(plan.procedures).map((procedure) => [procedure.name, procedure.manifest]),
+  );
+  const viewsByName = new Map<string, ViewManifest>(
+    Object.values(plan.views).map((view) => [view.name, view.manifest]),
+  );
+  const triggersByName = new Map<string, TriggerManifest>(
+    Object.values(plan.triggers).map((trigger) => [trigger.name, trigger.manifest]),
+  );
+  const schemas = [...schemasByName.values()];
+  const triggers = [...triggersByName.values()];
 
   const registry = buildHandlerRegistry(args.handlers ?? {});
   const templates = args.templates ?? new TemplateRegistryImpl();
@@ -235,7 +266,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
   // MCP, admin, and builtin paths all hit the same wrapped repository.
   const innerEntries = new DatabaseEntryRepository(args.db, schemasByName);
   const entryReader: EntryReader = innerEntries;
-  const triggerIndex = new TriggerIndex(partitioned.triggers);
+  const triggerIndex = TriggerIndex.fromPlan(plan.lifecycleHooks, plan.triggers);
   const siteConfig = new DatabaseSiteConfigRepository(args.db);
   // `entries` is filled below — assigned via `let` so the lifecycle
   // hooks (which run procedures, which can themselves write entries
@@ -337,6 +368,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
       });
     },
     schemasByName,
+    plan.views,
   );
   const composeSitemap = new ComposeSitemapUseCase(entryReader);
   const renderEntryLive = new RenderEntryLiveUseCase(
@@ -390,6 +422,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     : null;
 
   return {
+    plan,
     db: args.db,
     assets: args.assets,
     entryReader,
@@ -422,15 +455,14 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     schemasByName,
     proceduresByName,
     viewsByName,
-    triggers: partitioned.triggers,
+    triggers,
     triggersByName,
     clock,
     idgen,
 
     async bootInit(): Promise<void> {
-      const schemas = partitioned.schemas;
       const fingerprint = await bootFingerprint({
-        manifests: args.manifests,
+        semanticFingerprint: plan.semanticFingerprint,
         siteDefaults: args.siteDefaults,
         handlers: [...registry.list()].sort(),
         reservedHttpPathPrefixes: args.reservedHttpPathPrefixes,
@@ -440,7 +472,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
       await siteConfig.seed(args.siteDefaults);
       const siteLocales = await siteConfig.readLocales();
       validateBoot.assert({
-        manifests: args.manifests,
+        linked: validation.linked,
         registry,
         siteLocales,
         reservedHttpPathPrefixes: args.reservedHttpPathPrefixes,

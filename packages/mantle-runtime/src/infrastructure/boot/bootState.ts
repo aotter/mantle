@@ -1,11 +1,11 @@
-import type { Manifest, SiteDefaults } from "@aotter/mantle-spec";
+import type { SiteDefaults } from "@aotter/mantle-spec";
 import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
 import { CANONICAL_MIGRATIONS } from "./canonicalMigrations.js";
 
 const BOOT_STATE_ID = "runtime";
 
 export async function bootFingerprint(input: {
-  readonly manifests: readonly Manifest[];
+  readonly semanticFingerprint: string;
   readonly siteDefaults?: SiteDefaults;
   readonly handlers: readonly string[];
   readonly reservedHttpPathPrefixes?: readonly string[];

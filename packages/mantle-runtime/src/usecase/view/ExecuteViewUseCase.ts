@@ -11,7 +11,11 @@ import {
 import type { ZodType } from "zod";
 import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
 import { evaluateAuthAll } from "../../domain/service/AuthPredicateEvaluator.js";
-import { compileView } from "../../domain/service/ViewSqlCompiler.js";
+import {
+  compileView,
+  lowerView,
+} from "../../domain/service/ViewSqlCompiler.js";
+import type { RuntimeViewPlan } from "../../domain/service/RuntimePlanCompiler.js";
 import type { ExecuteViewRequest } from "../dto/view/ExecuteViewRequest.js";
 import type { InvokeProcedureResponse } from "../dto/procedure/index.js";
 import type { HandlerContext } from "../../domain/model/HandlerContext.js";
@@ -51,16 +55,19 @@ export class ExecuteViewUseCase {
     private readonly db: DatabaseDriver,
     private readonly invokeGuard?: InvokeViewGuard,
     private readonly schemasByName: ReadonlyMap<string, SchemaManifest> = new Map(),
+    private readonly views: Readonly<Record<string, RuntimeViewPlan>> = Object.create(null),
   ) {}
 
   async execute<R = Record<string, unknown>>(
     request: ExecuteViewRequest,
   ): Promise<ExecuteViewResponse<R>> {
-    const viewPath = request.pathPrefix ?? `manifest:View/${request.view.metadata.name}`;
+    const planned = this.views[request.view.metadata.name];
+    const view = planned?.manifest ?? request.view;
+    const viewPath = request.pathPrefix ?? `manifest:View/${view.metadata.name}`;
 
     // Auth — closed predicate vocabulary same as Procedure. When the
     // View has no `requires.auth.all`, evaluateAuthAll returns null.
-    const requires = request.view.spec.requires;
+    const requires = view.spec.requires;
     if (requires?.auth?.all && requires.auth.all.length > 0) {
       if (!request.ctx) {
         return {
@@ -83,11 +90,11 @@ export class ExecuteViewUseCase {
     // callers. MCP sends already-typed JSON; REST passes coerced query
     // values. Both converge here before the dynamic guard.
     let validatedParams = request.options?.params ?? {};
-    if (request.view.spec.params) {
-      let validator = this.paramsCache.get(request.view.metadata.name);
+    if (view.spec.params) {
+      let validator = this.paramsCache.get(view.metadata.name);
       if (!validator) {
-        validator = jsonSchemaToZod(request.view.spec.params);
-        this.paramsCache.set(request.view.metadata.name, validator);
+        validator = jsonSchemaToZod(view.spec.params);
+        this.paramsCache.set(view.metadata.name, validator);
       }
       const parsed = validator.safeParse(validatedParams);
       if (!parsed.success) {
@@ -143,20 +150,22 @@ export class ExecuteViewUseCase {
       if (!guarded.ok) return guarded;
     }
 
-    const schema = request.view.spec.from
-      ? this.schemasByName.get(request.view.spec.from)
+    const schemaName = planned?.query.kind === "declarative"
+      ? planned.query.from
+      : view.spec.from;
+    const schema = schemaName
+      ? this.schemasByName.get(schemaName)
       : undefined;
     let compiled;
     try {
-      compiled = compileView(
-        request.view,
-        {
-          ...request.options,
-          params: validatedParams,
-          ctxUserId: request.ctx?.user?.id,
-        },
-        schema,
-      );
+      const options = {
+        ...request.options,
+        params: validatedParams,
+        ctxUserId: request.ctx?.user?.id,
+      };
+      compiled = planned
+        ? lowerView(planned.query, planned.name, options, schema)
+        : compileView(view, options, schema);
     } catch (err) {
       if (err instanceof DiagnosticError) {
         return { ok: false, diagnostic: err.diagnostic };
@@ -179,7 +188,7 @@ export class ExecuteViewUseCase {
         .prepare(compiled.sql)
         .bind(...compiled.params)
         .all<R>();
-      const normalizedRows = normalizeProjectedFields(rows, request.view.spec.fields, schema);
+      const normalizedRows = normalizeProjectedFields(rows, view.spec.fields, schema);
       return {
         ok: true,
         result: {

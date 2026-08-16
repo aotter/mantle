@@ -40,10 +40,16 @@ export const RESERVED_MCP_GENERIC_TOOL_NAMES: ReadonlySet<string> = new Set([
  * query tool, so boot rejects the manifest set with
  * `MCP_TOOL_NAME_COLLISION`.
  */
+export const MCP_CREATE_DRAFT_PREFIX = "create_draft_";
+export const MCP_UPDATE_DRAFT_PREFIX = "update_draft_";
+export const MCP_CREATE_RECORD_PREFIX = "create_record_";
+export const MCP_UPDATE_RECORD_PREFIX = "update_record_";
+export const MCP_QUERY_VIEW_PREFIX = "query_view_";
+
 export const RESERVED_MCP_TOOL_PREFIXES: readonly string[] = [
-  "create_draft_",
-  "update_draft_",
-  "create_record_",
-  "update_record_",
-  "query_view_",
+  MCP_CREATE_DRAFT_PREFIX,
+  MCP_UPDATE_DRAFT_PREFIX,
+  MCP_CREATE_RECORD_PREFIX,
+  MCP_UPDATE_RECORD_PREFIX,
+  MCP_QUERY_VIEW_PREFIX,
 ];
