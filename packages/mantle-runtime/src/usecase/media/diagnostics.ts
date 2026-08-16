@@ -10,7 +10,7 @@ export function mediaNotConfiguredDiagnostic(opPath: string): Diagnostic {
     path: opPath,
     expected: "media storage adapter bound at runtime",
     message:
-      "Media uploads are not enabled on this deployment. Bind a `mediaStorage` adapter in `createCmsRuntime` to enable.",
+      "Media uploads are not enabled on this deployment. Bind a `mediaStorage` port in `createMantleRuntime` to enable.",
   });
 }
 

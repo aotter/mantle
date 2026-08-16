@@ -1,10 +1,8 @@
 /**
  * OAuth consent UI renderer. Self-contained HTML — no external assets,
- * no framework. Uses the same system tokens as the admin SPA.
+ * no framework and no Admin UI dependency.
  * Supports zh-TW and en locales.
  */
-
-import { systemTokensCss } from "@aotter/mantle-admin";
 
 export interface ConsentModel {
   readonly clientName: string;
@@ -56,6 +54,7 @@ function escapeHtml(s: string): string {
 }
 
 const CSS = `
+  :root{--mantle-blue-deep:#1a3062;--app-background:#f6f8fc;--foreground:#172033;--card:#fff;--card-foreground:#172033;--border:#d7dce7;--muted:#f1f3f8;--muted-foreground:#596579;--primary:#1a3062;--primary-foreground:#fff;--secondary:#edf1fa;--secondary-foreground:#1a3062;--accent:#e2e8f5;--ring:#4d6aac;--radius:.625rem}
   *{box-sizing:border-box}
   body{margin:0;min-height:100svh;display:flex;align-items:center;justify-content:center;padding:1rem;font-family:ui-sans-serif,system-ui,sans-serif;color:var(--foreground);background:var(--app-background)}
   .card{max-width:32rem;width:100%;padding:2rem;border-radius:calc(var(--radius) + .125rem);color:var(--card-foreground);background:var(--card);border:1px solid var(--border);box-shadow:0 12px 36px color-mix(in srgb,var(--mantle-blue-deep) 8%,transparent);backdrop-filter:blur(48px) saturate(135%)}
@@ -79,7 +78,7 @@ const CSS = `
 export function renderConsentHtml(locale: "zh-TW" | "en", model: ConsentModel | null): string {
   const t = STRINGS[locale];
   const lang = locale === "zh-TW" ? "zh-Hant-TW" : "en";
-  const head = `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${t.title}</title><style>${systemTokensCss}\n${CSS}</style></head><body><main class="card">`;
+  const head = `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${t.title}</title><style>${CSS}</style></head><body><main class="card">`;
   const tail = `</main></body></html>`;
 
   if (!model) {

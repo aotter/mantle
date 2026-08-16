@@ -35,7 +35,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@aotter/mantle-admin-ui": "workspace:*",
     "@aotter/mantle-runtime": "workspace:*",
     "@aotter/mantle-spec": "workspace:*"
   },

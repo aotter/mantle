@@ -98,7 +98,7 @@ export interface McpToolPlan {
 
 declare const runtimePlanBrand: unique symbol;
 
-export interface RuntimePlan {
+export interface RuntimePlanData {
   readonly version: typeof RUNTIME_PLAN_VERSION;
   readonly semanticFingerprint: string;
   readonly schemas: Readonly<Record<string, RuntimeSchemaPlan>>;
@@ -108,6 +108,9 @@ export interface RuntimePlan {
   readonly lifecycleHooks: readonly LifecycleHookPlan[];
   readonly httpRoutes: readonly HttpRoutePlan[];
   readonly mcpTools: readonly McpToolPlan[];
+}
+
+export interface RuntimePlan extends RuntimePlanData {
   readonly [runtimePlanBrand]: true;
 }
 
@@ -185,11 +188,24 @@ export function compileRuntimePlan(
     httpRoutes,
     mcpTools,
   };
-  const plan = {
-    ...semantics,
-    semanticFingerprint: semanticFingerprint(semantics),
+  return {
+    ok: true,
+    value: sealRuntimePlan({
+      ...semantics,
+      semanticFingerprint: semanticFingerprint(semantics),
+    }),
+    diagnostics: [],
   };
-  return { ok: true, value: deepFreeze(plan) as unknown as RuntimePlan, diagnostics: [] };
+}
+
+/** Restore the brand and immutability of a generated, JSON-safe plan. */
+export function sealRuntimePlan(data: RuntimePlanData): RuntimePlan {
+  const copy = canonicalClone(data);
+  const { semanticFingerprint: declared, ...semantics } = copy;
+  if (copy.version !== RUNTIME_PLAN_VERSION || semanticFingerprint(semantics) !== declared) {
+    throw new Error("Generated RuntimePlan fingerprint is invalid; run `mantle generate` again.");
+  }
+  return deepFreeze(copy) as RuntimePlan;
 }
 
 export function compileLogicalView(view: ViewManifest): LogicalViewPlan {

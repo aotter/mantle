@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import ts from "typescript";
 
@@ -135,6 +135,7 @@ function checkPackageDirection() {
       dir: "packages/mantle-runtime/src",
       forbidden: [
         "@aotter/mantle-cloudflare",
+        "@aotter/mantle-admin-ui",
         "@aotter/mantle-netlify",
         "@aotter/mantle-web",
         "@aotter/mantle-admin",
@@ -264,9 +265,11 @@ function checkAdminPackageBoundary() {
   if (runtimeDeps["@aotter/mantle-admin"] || runtimeDeps["@aotter/mantle-admin-ui"]) {
     fail(runtimePath, "runtime must stay installable without Mantle Admin or its UI");
   }
-  if (!admin.dependencies?.["@aotter/mantle-runtime"] ||
-      !admin.dependencies?.["@aotter/mantle-admin-ui"]) {
-    fail(adminPath, "Mantle Admin must compose downstream from Runtime and Admin UI");
+  if (!admin.dependencies?.["@aotter/mantle-runtime"]) {
+    fail(adminPath, "Mantle Admin must compose downstream from Runtime");
+  }
+  if (admin.dependencies?.["@aotter/mantle-admin-ui"]) {
+    fail(adminPath, "Mantle Admin API must stay installable without the Admin UI");
   }
   if (!cloudflare.dependencies?.["@aotter/mantle-admin"]) {
     fail(cloudflarePath, "Cloudflare must select Mantle Admin explicitly");
@@ -288,6 +291,70 @@ function checkAdminPackageBoundary() {
   if (/from\s+["'][^"']*mantle-(?:cloudflare|bun|vercel)[^"']*["']/.test(adminSource) ||
       /\b(?:D1Database|ExecutionContext)\b/.test(adminSource)) {
     fail(adminPath, "Mantle Admin cannot import platform packages or types");
+  }
+}
+
+function checkUmbrellaPackageBoundary() {
+  const path = join(ROOT, "packages/mantle/package.json");
+  const manifest = JSON.parse(readFileSync(path, "utf8"));
+  const direct = Object.keys(manifest.dependencies ?? {}).sort();
+  const expected = ["@aotter/mantle-runtime", "@aotter/mantle-spec"];
+  if (JSON.stringify(direct) !== JSON.stringify(expected)) {
+    fail(path, `umbrella direct dependencies must be Core-only: ${expected.join(", ")}`);
+  }
+  for (const name of [
+    "@aotter/mantle-admin",
+    "@aotter/mantle-admin-ui",
+    "@aotter/mantle-bun",
+    "@aotter/mantle-cloudflare",
+    "@aotter/mantle-vercel",
+    "@aotter/mantle-web",
+  ]) {
+    if (!manifest.peerDependenciesMeta?.[name]?.optional) {
+      fail(path, `${name} must be an optional umbrella peer`);
+    }
+  }
+}
+
+function checkLegacyStackDeleted() {
+  const roots = [
+    "packages/mantle-runtime/src",
+    "packages/mantle/src",
+    "packages/mantle-admin/src",
+    "packages/mantle-web/src",
+    "packages/adapters/bun/src",
+    "packages/adapters/vercel/src",
+    "packages/adapters/cloudflare/src",
+  ];
+  const forbidden = [
+    "createCmsRuntime",
+    "CmsRuntime",
+    "bindMantleSite",
+    "MantleSite",
+    "mountServerEndpoints",
+    "createCmsRef",
+    "CmsConfig",
+  ];
+  for (const root of roots) {
+    for (const file of listFiles(join(ROOT, root), (path) => path.endsWith(".ts"))) {
+      const source = stripComments(readFileSync(file, "utf8"));
+      for (const token of forbidden) {
+        if (new RegExp(`\\b${token}\\b`).test(source)) {
+          fail(file, `legacy runtime stack token remains: '${token}'`);
+        }
+      }
+    }
+  }
+  const parser = readFileSync(
+    join(ROOT, "packages/mantle-spec/src/domain/service/ManifestParser.ts"),
+    "utf8",
+  );
+  if (/export function parseManifests(?:OrThrow)?\b/.test(parser)) {
+    fail(join(ROOT, "packages/mantle-spec/src/domain/service/ManifestParser.ts"),
+      "raw parser compatibility export remains");
+  }
+  if (existsSync(join(ROOT, "packages/mantle-runtime/src/runtime.ts"))) {
+    fail(join(ROOT, "packages/mantle-runtime/src/runtime.ts"), "legacy facade file remains");
   }
 }
 
@@ -491,6 +558,7 @@ checkPackageDirection();
 checkEntryReadOwnership();
 checkWebPackageBoundary();
 checkAdminPackageBoundary();
+checkUmbrellaPackageBoundary();
 checkBunPackageBoundary();
 checkVercelPackageBoundary();
 checkViewExecutionBoundary();
@@ -498,6 +566,7 @@ checkMantleRuntimeBoundary();
 checkCodegenBoundary();
 checkNodeTestingBoundary();
 checkSkillDocsVersioned();
+checkLegacyStackDeleted();
 
 if (failures.length > 0) {
   console.error("Boundary check failed:");

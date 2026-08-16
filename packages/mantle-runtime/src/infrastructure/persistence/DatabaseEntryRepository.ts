@@ -560,7 +560,7 @@ function jsonPathForTopLevelField(field: string): string {
 }
 
 /** Public compatibility helper. Without a Schema map it intentionally uses
- * the safe JSON fallback; in-repo callers use `CmsRuntime.entryReader`. */
+ * the safe JSON fallback; in-repo callers use `MantleRuntime.entries`. */
 export async function readEntryBySlug(
   db: DatabaseDriver,
   args: ReadEntryBySlugArgs,

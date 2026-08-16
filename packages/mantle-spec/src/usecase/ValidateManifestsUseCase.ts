@@ -9,16 +9,11 @@ import {
 } from "../domain/service/ManifestLinker.js";
 import type { ValidateManifestsRequest } from "./dto/ValidateManifestsRequest.js";
 import type { ValidateManifestsResponse } from "./dto/ValidateManifestsResponse.js";
-import { legacyParsedManifestSet } from "./internal/LegacyParsedManifestSet.js";
 
-/** Temporary compatibility facade. New callers parse then link directly. */
+/** Link one parser-owned value and apply optional authoring checks. */
 export class ValidateManifestsUseCase {
   execute(request: ValidateManifestsRequest): ValidateManifestsResponse {
-    const parsed = request.parsed ?? legacyParsedManifestSet(
-      request.manifests ?? [],
-      request.filePaths,
-    );
-    const linked = linkManifestSet(parsed);
+    const linked = linkManifestSet(request.parsed);
     const diagnostics: Diagnostic[] = [...linked.diagnostics];
     if (linked.ok && request.siteLocales !== undefined) {
       diagnostics.push(...checkSiteLocales({

@@ -30,8 +30,8 @@ export interface SiteConfigRepository extends LocalePolicyReader {
   /** Persist the operator-owned subset exposed by the Admin settings UI.
    *  Omitted fields are unchanged; an empty string intentionally clears a
    *  value. Code-canonical origin, locales, and media purposes are never writable
-   *  through this path. Optional during the `CmsRuntime.db` compatibility
-   *  window; canonical Mantle runtimes always provide it. */
+   *  through this path. Optional when the selected storage adapter does not
+   *  expose operator settings. */
   updateEditable?(args: UpdateEditableSiteConfigArgs): Promise<void>;
   /** Declared media purpose taxonomy (`SiteConfig.media.purposes`).
    *  Empty array when the deployment didn't declare any — symmetric

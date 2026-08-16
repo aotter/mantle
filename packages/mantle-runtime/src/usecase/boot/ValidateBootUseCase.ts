@@ -1,31 +1,21 @@
 import {
   bootDiagnostic,
   checkSiteLocales,
-  ValidateManifestsUseCase,
   type Diagnostic,
-  type LinkedManifestSet,
-  type Manifest,
 } from "@aotter/mantle-spec";
 import type {
   MantleStorageAdapter,
   PreparedMantleStorage,
 } from "../../domain/port/MantleStorageAdapter.js";
 import type { HandlerRegistry } from "../../domain/port/HandlerRegistry.js";
-import {
-  compileRuntimePlan,
-  type RuntimePlan,
-} from "../../domain/service/RuntimePlanCompiler.js";
+import type { RuntimePlan } from "../../domain/service/RuntimePlanCompiler.js";
 
 export type ValidateBootResponse =
   | { readonly ok: true }
   | { readonly ok: false; readonly diagnostics: readonly Diagnostic[] };
 
 export interface ValidateBootRequest {
-  readonly plan?: RuntimePlan;
-  /** Canonical input for new callers. */
-  readonly linked?: LinkedManifestSet;
-  /** Temporary alpha.7 bridge; delete in #673. */
-  readonly manifests?: readonly Manifest[];
+  readonly plan: RuntimePlan;
   readonly registry: HandlerRegistry;
   /** Selected adapter/module route prefixes checked during deployment readiness. */
   readonly reservedHttpPathPrefixes?: readonly string[];
@@ -63,30 +53,7 @@ export function assertDeploymentPlan(
 /** Deployment checks only; all pure graph rules belong to `linkManifestSet`. */
 export class ValidateBootUseCase {
   execute(request: ValidateBootRequest): ValidateBootResponse {
-    let plan = request.plan;
-    if (!plan) {
-      let linked = request.linked;
-      if (!linked) {
-        const validation = ValidateManifestsUseCase.run({
-          manifests: request.manifests ?? [],
-        });
-        if (validation.errorCount > 0 || !validation.linked) {
-          return {
-            ok: false,
-            diagnostics: validation.diagnostics.map((diagnostic) => ({
-              ...diagnostic,
-              phase: "boot",
-            })),
-          };
-        }
-        linked = validation.linked;
-      }
-      const compilation = compileRuntimePlan(linked);
-      if (!compilation.ok) return { ok: false, diagnostics: compilation.diagnostics };
-      plan = compilation.value;
-    }
-
-    const diagnostics = deploymentDiagnostics(plan, {
+    const diagnostics = deploymentDiagnostics(request.plan, {
       handlerNames: request.registry.list(),
       reservedHttpPathPrefixes: request.reservedHttpPathPrefixes,
       siteLocales: request.siteLocales,

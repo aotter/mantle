@@ -174,6 +174,13 @@ importers:
 
   packages/mantle:
     dependencies:
+      '@aotter/mantle-runtime':
+        specifier: workspace:*
+        version: link:../mantle-runtime
+      '@aotter/mantle-spec':
+        specifier: workspace:*
+        version: link:../mantle-spec
+    devDependencies:
       '@aotter/mantle-admin':
         specifier: workspace:*
         version: link:../mantle-admin
@@ -186,19 +193,12 @@ importers:
       '@aotter/mantle-cloudflare':
         specifier: workspace:*
         version: link:../adapters/cloudflare
-      '@aotter/mantle-runtime':
-        specifier: workspace:*
-        version: link:../mantle-runtime
-      '@aotter/mantle-spec':
-        specifier: workspace:*
-        version: link:../mantle-spec
       '@aotter/mantle-vercel':
         specifier: workspace:*
         version: link:../adapters/vercel
       '@aotter/mantle-web':
         specifier: workspace:*
         version: link:../mantle-web
-    devDependencies:
       '@cloudflare/workers-oauth-provider':
         specifier: 'catalog:'
         version: 0.8.3
@@ -229,9 +229,6 @@ importers:
 
   packages/mantle-admin:
     dependencies:
-      '@aotter/mantle-admin-ui':
-        specifier: workspace:*
-        version: link:../mantle-admin-ui
       '@aotter/mantle-runtime':
         specifier: workspace:*
         version: link:../mantle-runtime

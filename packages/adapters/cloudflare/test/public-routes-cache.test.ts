@@ -1,3 +1,4 @@
+import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { Manifest } from "@aotter/mantle-spec";
@@ -7,7 +8,7 @@ import {
   TemplateRegistry,
 } from "@aotter/mantle-web";
 import type { Auth } from "../src/auth/createAuth.js";
-import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
+import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountPublicRoutes } from "../src/mount/mountPublicRoutes.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import { StubAssetServer, stubAuth } from "./fakes/runtime-bindings.js";
@@ -61,8 +62,8 @@ function harness(
     "posts",
     ({ entries, site, seo }) => `<html><head>${seo ? renderSeoTagsHtml(seo) : ""}</head><body><section data-brand="${site.brand}">${entries.map((e) => e.data["title"]).join(",")}</section></body></html>`,
   );
-  const ref = createCmsRef({
-    manifests: manifests(),
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan(manifests()),
     templates,
     siteDefaults: {
       title: "Blog",

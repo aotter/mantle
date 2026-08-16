@@ -1,8 +1,9 @@
+import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { Manifest } from "@aotter/mantle-spec";
-import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
-import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
+import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
+import { mountTestEndpoints } from "./mountTestEndpoints.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
   StubAssetServer,
@@ -131,8 +132,8 @@ function harness(opts: { captchaPasses: boolean }): Harness {
   const db = new InMemoryDatabase();
   const captchaCalls: Array<unknown> = [];
   const slackCalls: Array<unknown> = [];
-  const ref = createCmsRef({
-    manifests: manifests(),
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan(manifests()),
     handlers: {
       captchaCheck: (input) => {
         captchaCalls.push(input);
@@ -151,7 +152,7 @@ function harness(opts: { captchaPasses: boolean }): Harness {
     auth: stubAuth,
   });
   const app = new Hono();
-  mountServerEndpoints(app, ref);
+  mountTestEndpoints(app, ref);
   return { app, db, captchaCalls, slackCalls };
 }
 

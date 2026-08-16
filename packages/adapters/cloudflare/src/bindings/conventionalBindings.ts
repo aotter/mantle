@@ -1,5 +1,5 @@
 import type { AdminAssetServer } from "@aotter/mantle-admin";
-import type { CmsConfig } from "../mount/cmsConfig.js";
+import type { MantleCloudflareConfig } from "../mount/cmsConfig.js";
 import { AssetsAssetServer } from "./AssetsAssetServer.js";
 import { D1DatabaseDriver } from "./D1DatabaseDriver.js";
 
@@ -13,7 +13,7 @@ export interface ConventionalBindingsEnv {
   readonly ASSETS?: Fetcher;
 }
 
-export type MantleWorkerBindings = CmsConfig["bindings"];
+export type MantleWorkerBindings = MantleCloudflareConfig["bindings"];
 
 /** Bind the conventional Cloudflare names to Mantle's existing runtime adapters. */
 export function createConventionalBindings(

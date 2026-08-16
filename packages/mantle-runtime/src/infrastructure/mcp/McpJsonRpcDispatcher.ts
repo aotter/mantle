@@ -74,12 +74,12 @@ export interface McpUseCases {
   readonly unpublish: UnpublishUseCase;
   readonly archive: ArchiveUseCase;
   readonly deleteEntry: DeleteEntryUseCase;
-  readonly executeView?: ExecuteViewUseCase;
+  readonly executeView?: Pick<ExecuteViewUseCase, "execute">;
   /** Optional. When set together with `options.procedures`, MCP
    *  Triggers (#281) route through here. The dispatcher evaluates the
    *  Procedure's `requires.auth` against the HandlerContext before
    *  invoking. */
-  readonly invokeProcedure?: InvokeProcedureUseCase;
+  readonly invokeProcedure?: Pick<InvokeProcedureUseCase, "execute">;
   /** Optional. When set, `create_media_upload` and
    *  `commit_media_upload` appear in the catalog and route here.
    *  `purposes` is the declared taxonomy (#272 shape — name +

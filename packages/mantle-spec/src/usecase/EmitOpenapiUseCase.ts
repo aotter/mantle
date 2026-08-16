@@ -1,4 +1,3 @@
-import { partitionManifests } from "../domain/service/ManifestParser.js";
 import { resolveLocalizedText } from "../domain/model/ManifestGrammar.js";
 import type {
   AuthorizationRequirements,
@@ -21,7 +20,9 @@ const DEFAULT_SESSION_COOKIE_NAME = "__Secure-better-auth.session_token";
 
 export class EmitOpenapiUseCase {
   execute(request: EmitOpenapiRequest): EmitOpenapiResponse {
-    const { views, procedures, triggers } = partitionManifests(request.manifests);
+    const views = request.linked.views.map((entry) => entry.manifest);
+    const procedures = request.linked.procedures.map((entry) => entry.manifest);
+    const triggers = request.linked.triggers.map((entry) => entry.manifest);
     const procByName = new Map(procedures.map((p) => [p.metadata.name, p]));
     const paths: Record<string, Record<string, unknown>> = {};
 

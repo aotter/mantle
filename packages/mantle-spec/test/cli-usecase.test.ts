@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseManifests } from "../src/domain/service/ManifestParser.js";
+import { parseManifests } from "./parse.js";
 import { IntrospectManifestsUseCase } from "../src/usecase/IntrospectManifestsUseCase.js";
 import { EmitOpenapiUseCase } from "../src/usecase/EmitOpenapiUseCase.js";
 import { EmitTypesUseCase } from "../src/usecase/EmitTypesUseCase.js";
@@ -16,7 +16,8 @@ spec:
       slug: { type: string }
       title: { type: string }
       body: { type: string }
-  indexes: [[title, slug]]
+      language: { type: string }
+  indexes: [[title, slug], [language]]
   uniqueIndexes: [[slug]]
 ---
 apiVersion: cms.mantle.aotter.net/v1
@@ -31,7 +32,7 @@ spec:
       locale: { type: string }
     required: [locale]
   filter:
-    eq: { field: locale, value: { $param: locale } }
+    eq: { field: language, value: { $param: locale } }
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure
@@ -59,21 +60,23 @@ spec:
 function fixture() {
   const r = parseManifests(FIXTURE);
   expect(r.diagnostics).toEqual([]);
-  return r.manifests;
+  if (!r.linked) throw new Error("expected linked fixture");
+  return r.linked;
 }
 
 describe("IntrospectManifestsUseCase", () => {
   it("partitions and surfaces derived shape", () => {
-    const out = IntrospectManifestsUseCase.run({ manifests: fixture(), parseErrors: [] });
+    const parsed = parseManifests(FIXTURE).parsed;
+    const out = IntrospectManifestsUseCase.run({ parsed, parseErrors: [] });
     expect(out.schemas).toHaveLength(1);
     expect(out.schemas[0]!).toMatchObject({
       name: "posts",
       localized: false,
       lifecycle: "publishing",
-      indexes: [["title", "slug"]],
+      indexes: [["title", "slug"], ["language"]],
       uniqueIndexes: [["slug"]],
     });
-    expect(out.schemas[0]!.properties).toEqual(["slug", "title", "body"]);
+    expect(out.schemas[0]!.properties).toEqual(["slug", "title", "body", "language"]);
     expect(out.views).toHaveLength(1);
     expect(out.views[0]!).toMatchObject({
       name: "posts-by-locale",
@@ -90,7 +93,7 @@ describe("IntrospectManifestsUseCase", () => {
 describe("EmitOpenapiUseCase", () => {
   it("emits one operation per HTTP Trigger and one per View", () => {
     const { document } = EmitOpenapiUseCase.run({
-      manifests: fixture(),
+      linked: fixture(),
       title: "Test",
       version: "0.1.0",
     });
@@ -128,7 +131,7 @@ spec:
     const originalInput = structuredClone(procedure.spec.input);
 
     const { document } = EmitOpenapiUseCase.run({
-      manifests: parsed.manifests,
+      linked: parsed.linked!,
       title: "Test",
       version: "0.1.0",
     });
@@ -163,7 +166,7 @@ spec:
 
   it("attaches the default session-cookie scheme when Procedure requires auth", () => {
     const { document } = EmitOpenapiUseCase.run({
-      manifests: fixture(),
+      linked: fixture(),
       title: "Test",
       version: "0.1.0",
     });
@@ -173,7 +176,7 @@ spec:
 
   it("View operation includes reserved page/show + declared params as query parameters", () => {
     const { document } = EmitOpenapiUseCase.run({
-      manifests: fixture(),
+      linked: fixture(),
       title: "Test",
       version: "0.1.0",
     });
@@ -204,7 +207,7 @@ spec:
 `);
     expect(gated.diagnostics).toEqual([]);
     const { document } = EmitOpenapiUseCase.run({
-      manifests: gated.manifests,
+      linked: gated.linked!,
       title: "Test",
       version: "0.1.0",
     });
@@ -243,7 +246,7 @@ spec:
   requires: { auth: { all: [ctx.user] } }
 `);
     const { document } = EmitOpenapiUseCase.run({
-      manifests: gated.manifests,
+      linked: gated.linked!,
       title: "Test",
       version: "0.1.0",
       sessionCookieName: "better-auth.session_token",
@@ -287,7 +290,7 @@ spec:
 `);
     expect(parsed.diagnostics).toEqual([]);
     const { document } = EmitOpenapiUseCase.run({
-      manifests: parsed.manifests,
+      linked: parsed.linked!,
       title: "Test",
       version: "0.1.0",
       security: {
@@ -324,7 +327,7 @@ spec:
 
   it("public View emits no security + no 401/403 (no auth declared)", () => {
     const { document } = EmitOpenapiUseCase.run({
-      manifests: fixture(),
+      linked: fixture(),
       title: "Test",
       version: "0.1.0",
     });
@@ -358,7 +361,7 @@ spec:
 `);
     expect(localized.diagnostics).toEqual([]);
     const { document } = EmitOpenapiUseCase.run({
-      manifests: localized.manifests,
+      linked: localized.linked!,
       title: "Test",
       version: "0.1.0",
     });
@@ -378,7 +381,8 @@ kind: Schema
 metadata: { name: posts }
 spec:
   title: Posts
-  schema: { type: object, properties: { slug: { type: string } } }
+  schema: { type: object, properties: { slug: { type: string }, language: { type: string } } }
+  indexes: [[language]]
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: View
@@ -392,11 +396,11 @@ spec:
       locale: { type: string, description: { en: "Locale filter.", "zh-TW": "語系篩選。" } }
     required: [locale]
   filter:
-    eq: { field: locale, value: { $param: locale } }
+    eq: { field: language, value: { $param: locale } }
 `);
     expect(localized.diagnostics).toEqual([]);
     const { document } = EmitOpenapiUseCase.run({
-      manifests: localized.manifests,
+      linked: localized.linked!,
       title: "Test",
       version: "0.1.0",
     });
@@ -411,7 +415,7 @@ spec:
 
 describe("EmitTypesUseCase", () => {
   it("emits Entry / ProcInput / ProcOutput / ViewParams / ViewRow interfaces", () => {
-    const { source } = EmitTypesUseCase.run({ manifests: fixture(), namespace: "Test" });
+    const { source } = EmitTypesUseCase.run({ linked: fixture(), namespace: "Test" });
     expect(source).toContain("export namespace Test {");
     expect(source).toContain("export interface Entry_posts");
     expect(source).toContain("export interface ProcInput_submitContact");
@@ -434,8 +438,8 @@ spec:
   output: { type: object }
   handler: { kind: ref, ref: ping }
 `;
-    const { manifests } = parseManifests(yaml);
-    const { source } = EmitTypesUseCase.run({ manifests, namespace: "Test" });
+    const parsed = parseManifests(yaml);
+    const { source } = EmitTypesUseCase.run({ linked: parsed.linked!, namespace: "Test" });
     // `export interface ProcInput_ping string` would be a TS syntax error.
     expect(source).toContain("export type ProcInput_ping = string;");
     expect(source).not.toMatch(/export interface ProcInput_ping\s+string/);
@@ -450,8 +454,8 @@ spec:
   output: { type: object }
   handler: { kind: ref, ref: safe }
 `;
-    const { manifests } = parseManifests(yaml);
-    const { source } = EmitTypesUseCase.run({ manifests, namespace: "Test" });
+    const parsed = parseManifests(yaml);
+    const { source } = EmitTypesUseCase.run({ linked: parsed.linked!, namespace: "Test" });
     expect(source).not.toContain("unsafe */ export type Injected");
     expect(source).toContain("unsafe *\\/ export type Injected");
   });

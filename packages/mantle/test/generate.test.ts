@@ -39,6 +39,7 @@ describe("mantle generate", () => {
       const typesPath = join(root, ".mantle", "generated", "types.d.ts");
       const firstMantle = await readFile(mantlePath, "utf8");
       expect(firstMantle).toContain("export function bindMantle(runtime: CoreMantleRuntime)");
+      expect(firstMantle).toContain("export const plan = sealRuntimePlan(");
       expect(firstMantle).toContain("productsBySku: (request:");
       expect(firstMantle).toContain('view: "products-by-sku"');
       expect(firstMantle).toContain("importProduct: (input:");
@@ -47,22 +48,15 @@ describe("mantle generate", () => {
       expect(firstMantle).toContain('collection: "products"');
       expect(firstMantle.match(/readonly "syncCatalog":/g)).toHaveLength(1);
       expect(firstMantle).toContain("ProcInput_import_product | Mantle.ProcInput_remove_product");
-      expect(await readFile(sitePath, "utf8")).toBe(
-        "// Generated compatibility bridge; delete with the alpha.7 facade in #673.\n"
-        + 'export { bindMantleSite, manifest } from "./mantle.js";\n',
-      );
-      expect(await readFile(typesPath, "utf8")).toContain(
-        'export { Mantle as MantleSite } from "./mantle.js";',
-      );
+      await expect(readFile(sitePath, "utf8")).rejects.toThrow();
+      await expect(readFile(typesPath, "utf8")).rejects.toThrow();
       await expect(readFile(join(root, "public", "_mantle", "admin", "index.html")))
         .rejects.toThrow();
 
       const consumerPath = join(root, "consumer.ts");
       await writeFile(consumerPath, `
 import { bindMantle } from "./.mantle/generated/mantle.js";
-import { bindMantleSite } from "./.mantle/generated/site.js";
-import type { MantleSite } from "./.mantle/generated/types.js";
-import type { CmsRuntime, MantleRuntime } from "@aotter/mantle/runtime";
+import type { MantleRuntime } from "@aotter/mantle/runtime";
 
 const calls: string[] = [];
 const runtime = {
@@ -101,13 +95,6 @@ if (false) {
   mantle.views.productsBySku();
   // @ts-expect-error Schema payload is generated from the manifest.
   await mantle.entries.products.createDraft({ data: { title: "missing sku" }, authorId: null });
-  const legacy = null as unknown as CmsRuntime;
-  const site = bindMantleSite(legacy);
-  const row: MantleSite.ViewRow_products_by_sku | undefined =
-    (await site.views["products-by-sku"]({ params: { sku: "sku-1" } })).ok
-      ? undefined
-      : undefined;
-  void row;
 }
 `);
       const compiled = join(root, "compiled");
@@ -124,8 +111,6 @@ if (false) {
           "--outDir", compiled,
           consumerPath,
           mantlePath,
-          sitePath,
-          typesPath,
         ], { cwd: root });
         await execFileAsync(process.execPath, [join(compiled, "consumer.js")], { cwd: root });
       } catch (error) {
@@ -136,6 +121,15 @@ if (false) {
       expect(await runGenerate([])).toBe(0);
       expect(await readFile(mantlePath, "utf8")).toBe(firstMantle);
       expect(await runGenerate(["--check"])).toBe(0);
+
+      await writeFile(sitePath, "obsolete\n");
+      await writeFile(typesPath, "obsolete\n");
+      const legacyStderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      expect(await runGenerate(["--check"])).toBe(1);
+      legacyStderr.mockRestore();
+      expect(await runGenerate([])).toBe(0);
+      await expect(readFile(sitePath, "utf8")).rejects.toThrow();
+      await expect(readFile(typesPath, "utf8")).rejects.toThrow();
 
       const adminIndexPath = join(root, "public", "_mantle", "admin", "index.html");
       await mkdir(join(root, "public", "_mantle", "admin"), { recursive: true });

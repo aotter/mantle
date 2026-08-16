@@ -22,6 +22,7 @@ const hono = `file:${realpathSync(join(root, "packages/adapters/cloudflare/node_
 try {
   mkdirSync(artifacts);
   const tarballs = Object.fromEntries([
+    ["@aotter/mantle", "packages/mantle"],
     ["@aotter/mantle-spec", "packages/mantle-spec"],
     ["@aotter/mantle-runtime", "packages/mantle-runtime"],
     ["@aotter/mantle-web", "packages/mantle-web"],
@@ -35,12 +36,38 @@ try {
     return [name, join(artifacts, `${name.replace("@", "").replace("/", "-")}-${version}.tgz`)];
   }));
 
+  installConsumer("spec-only", {
+    "@aotter/mantle-spec": `file:${tarballs["@aotter/mantle-spec"]}`,
+    zod,
+  }, `
+    const spec = await import("@aotter/mantle-spec");
+    const parsed = spec.parseManifestSources({ sources: [] });
+    if (!parsed.ok) throw new Error("empty source set did not parse");
+  `);
+  if (existsSync(join(temp, "spec-only/node_modules/@aotter/mantle-runtime"))) {
+    throw new Error("spec-only consumer installed @aotter/mantle-runtime");
+  }
+
   installConsumer("core-only", {
     "@aotter/mantle-spec": `file:${tarballs["@aotter/mantle-spec"]}`,
     "@aotter/mantle-runtime": `file:${tarballs["@aotter/mantle-runtime"]}`,
     zod,
   }, `
-    await import("@aotter/mantle-runtime");
+    const spec = await import("@aotter/mantle-spec");
+    const core = await import("@aotter/mantle-runtime");
+    const parsed = spec.parseManifestSources({ sources: [] });
+    if (!parsed.ok) throw new Error("empty source set did not parse");
+    const linked = spec.linkManifestSet(parsed.value);
+    if (!linked.ok) throw new Error("empty source set did not link");
+    const compiled = core.compileRuntimePlan(linked.value);
+    if (!compiled.ok) throw new Error("empty source set did not compile");
+    const runtime = core.createMantleRuntime({
+      plan: compiled.value,
+      prepared: { entries: {}, views: {}, localePolicy: {} },
+    });
+    if (runtime.revision !== compiled.value.semanticFingerprint) {
+      throw new Error("headless runtime did not bind application-owned ports");
+    }
   `);
   for (const optional of [
     "mantle-web",
@@ -51,6 +78,34 @@ try {
   ]) {
     if (existsSync(join(temp, `core-only/node_modules/@aotter/${optional}`))) {
       throw new Error(`core-only consumer installed @aotter/${optional}`);
+    }
+  }
+
+  installConsumer("umbrella-core", {
+    "@aotter/mantle": `file:${tarballs["@aotter/mantle"]}`,
+    zod,
+  }, `
+    const core = await import("@aotter/mantle/runtime");
+    const spec = await import("@aotter/mantle/spec");
+    if (typeof core.createMantleRuntime !== "function" ||
+        typeof spec.parseManifestSources !== "function") {
+      throw new Error("umbrella Core exports are incomplete");
+    }
+  `, {
+    "@aotter/mantle": `file:${tarballs["@aotter/mantle"]}`,
+    "@aotter/mantle-spec": `file:${tarballs["@aotter/mantle-spec"]}`,
+    "@aotter/mantle-runtime": `file:${tarballs["@aotter/mantle-runtime"]}`,
+  });
+  for (const optional of [
+    "mantle-web",
+    "mantle-admin",
+    "mantle-admin-ui",
+    "mantle-bun",
+    "mantle-cloudflare",
+    "mantle-vercel",
+  ]) {
+    if (existsSync(join(temp, `umbrella-core/node_modules/@aotter/${optional}`))) {
+      throw new Error(`umbrella Core consumer installed optional @aotter/${optional}`);
     }
   }
 
@@ -68,19 +123,25 @@ try {
   installConsumer("core-with-admin", {
     "@aotter/mantle-spec": `file:${tarballs["@aotter/mantle-spec"]}`,
     "@aotter/mantle-runtime": `file:${tarballs["@aotter/mantle-runtime"]}`,
-    "@aotter/mantle-admin-ui": `file:${tarballs["@aotter/mantle-admin-ui"]}`,
     "@aotter/mantle-admin": `file:${tarballs["@aotter/mantle-admin"]}`,
     hono,
     zod,
   }, `
-    await import("@aotter/mantle-runtime");
+    const spec = await import("@aotter/mantle-spec");
+    const core = await import("@aotter/mantle-runtime");
     const admin = await import("@aotter/mantle-admin");
     if (typeof admin.mountMantleAdmin !== "function") throw new Error("missing mountMantleAdmin");
     const { Hono } = await import("hono");
     const app = new Hono();
+    const parsed = spec.parseManifestSources({ sources: [] });
+    if (!parsed.ok) throw new Error("empty source set did not parse");
+    const linked = spec.linkManifestSet(parsed.value);
+    if (!linked.ok) throw new Error("empty source set did not link");
+    const compiled = core.compileRuntimePlan(linked.value);
+    if (!compiled.ok) throw new Error("empty source set did not compile");
     let role = "owner";
     admin.mountMantleAdmin(app, {
-      manifests: [],
+      plan: compiled.value,
       assets: { fetch: async () => new Response("admin shell") },
       auth: {
         basePath: "/api/auth",
@@ -109,12 +170,16 @@ try {
     }
   `);
 
-  console.log("Packed Core-only, Core+Web, and Core+Admin consumers passed.");
+  if (existsSync(join(temp, "core-with-admin/node_modules/@aotter/mantle-admin-ui"))) {
+    throw new Error("Admin API consumer installed the optional Admin UI");
+  }
+
+  console.log("Packed spec-only, Core-only, umbrella Core, Core+Web, and Core+Admin consumers passed.");
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }
 
-function installConsumer(name, dependencies, check) {
+function installConsumer(name, dependencies, check, overrides = dependencies) {
   const directory = join(temp, name);
   mkdirSync(directory);
   writeFileSync(join(directory, "package.json"), `${JSON.stringify({
@@ -123,7 +188,7 @@ function installConsumer(name, dependencies, check) {
     dependencies,
     pnpm: {
       overrides: Object.fromEntries(
-        Object.entries(dependencies).filter(([name]) => name.startsWith("@aotter/")),
+        Object.entries(overrides).filter(([name]) => name.startsWith("@aotter/")),
       ),
     },
   }, null, 2)}\n`);

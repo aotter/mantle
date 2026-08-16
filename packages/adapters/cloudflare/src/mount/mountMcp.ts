@@ -1,11 +1,11 @@
 import { McpJsonRpcDispatcher } from "@aotter/mantle-runtime";
-import type { ProcedureManifest, TriggerManifest, ViewManifest } from "@aotter/mantle-spec";
-import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
+import type { ProcedureManifest } from "@aotter/mantle-spec";
+import type { MantleRuntimeRef } from "./bootRuntimeOnce.js";
 import { contextForVerifiedUser } from "./resolveCaller.js";
 import { rejectCrossOriginMutation } from "../auth/rejectCrossOriginMutation.js";
 
 export interface CreateMcpApiHandlerOptions {
-  readonly ref: CmsRuntimeRef;
+  readonly ref: MantleRuntimeRef;
   readonly surface: "staff" | "public";
   /** OAuth scopes required to enter this MCP resource. Defaults to
    *  the existing compatibility scope `mcp`. Target-specific scopes
@@ -108,8 +108,18 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
             unpublish: runtime.unpublish,
             archive: runtime.archive,
             deleteEntry: runtime.deleteEntry,
-            executeView: runtime.executeView,
-            invokeProcedure: runtime.invokeProcedure,
+            executeView: {
+              execute: (request) => runtime.executeView({
+                ...request,
+                view: request.view.metadata.name,
+              }),
+            },
+            invokeProcedure: {
+              execute: (request) => runtime.invokeProcedure({
+                ...request,
+                procedure: request.procedure.metadata.name,
+              }),
+            },
             media: mediaEnabled && runtime.media
               ? {
                   createUpload: runtime.media.createUpload,
@@ -118,18 +128,17 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
                 }
               : undefined,
           },
-          [...runtime.schemasByName.values()],
+          [...runtime.schemas.values()],
           {
             surface,
             // A View belongs on surface S iff its declared surface
             // (default "public") matches — mirrors how procedures are
             // gated (#438). Without this, `surface: "staff"` Views leaked
             // into the public `/mcp` tools/list + tools/call.
-            views: ref.manifests.filter(
-              (m): m is ViewManifest =>
-                m.kind === "View" && m.spec.surface === surface,
-            ),
-            procedures: collectMcpProcedures(runtime.triggers, runtime.proceduresByName, surface),
+            views: Object.values(ref.plan.views)
+              .map(({ manifest }) => manifest)
+              .filter((view) => view.spec.surface === surface),
+            procedures: collectMcpProcedures(ref.plan, surface),
             serverInfo,
           },
         );
@@ -185,15 +194,14 @@ function forbidden(requiredScopes: readonly string[]): Response {
  * with TRIGGER_TARGET_PROCEDURE_UNKNOWN before we get this far.
  */
 function collectMcpProcedures(
-  triggers: readonly TriggerManifest[],
-  proceduresByName: ReadonlyMap<string, ProcedureManifest>,
+  plan: MantleRuntimeRef["plan"],
   surface: "staff" | "public",
 ): readonly ProcedureManifest[] {
   const out: ProcedureManifest[] = [];
-  for (const t of triggers) {
+  for (const { manifest: t } of Object.values(plan.triggers)) {
     if (t.spec.source.kind !== "mcp") continue;
     if (t.spec.source.surface !== surface) continue;
-    const p = proceduresByName.get(t.spec.target.procedure);
+    const p = plan.procedures[t.spec.target.procedure]?.manifest;
     if (p) out.push(p);
   }
   return out;

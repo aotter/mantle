@@ -1,7 +1,6 @@
 import {
   linkManifestSet,
   parseManifestSources,
-  type LinkedManifestSet,
 } from "@aotter/mantle-spec";
 import { describe, expect, it } from "vitest";
 import { InMemoryHandlerRegistry } from "../src/domain/port/HandlerRegistry.js";
@@ -9,6 +8,10 @@ import {
   BootValidationError,
   ValidateBootUseCase,
 } from "../src/usecase/boot/ValidateBootUseCase.js";
+import {
+  compileRuntimePlan,
+  type RuntimePlan,
+} from "../src/domain/service/RuntimePlanCompiler.js";
 
 describe("ValidateBootUseCase", () => {
   it("accepts linked semantics when every handler ref is registered", () => {
@@ -16,14 +19,14 @@ describe("ValidateBootUseCase", () => {
     registry.register("echoHandler", () => ({ ok: true }));
 
     expect(new ValidateBootUseCase().execute({
-      linked: linkedProcedure(),
+      plan: compilePlan(procedure()),
       registry,
     })).toEqual({ ok: true });
   });
 
   it("checks handler availability without relinking", () => {
     const result = new ValidateBootUseCase().execute({
-      linked: linkedProcedure("missing"),
+      plan: compilePlan(procedure("missing")),
       registry: new InMemoryHandlerRegistry(),
     });
 
@@ -45,7 +48,7 @@ describe("ValidateBootUseCase", () => {
       const registry = new InMemoryHandlerRegistry();
       registry.register("echoHandler", () => ({ ok: true }));
       const result = new ValidateBootUseCase().execute({
-        linked: linkedProcedure("echoHandler", path),
+        plan: compilePlan(procedure("echoHandler", path)),
         registry,
         reservedHttpPathPrefixes,
       });
@@ -64,7 +67,7 @@ describe("ValidateBootUseCase", () => {
     registry.register("echoHandler", () => ({ ok: true }));
 
     expect(new ValidateBootUseCase().execute({
-      linked: linkedProcedure("echoHandler", "/api/views/orders"),
+      plan: compilePlan(procedure("echoHandler", "/api/views/orders")),
       registry,
       reservedHttpPathPrefixes: [],
     })).toEqual({ ok: true });
@@ -72,7 +75,7 @@ describe("ValidateBootUseCase", () => {
 
   it("checks selected deployment locales", () => {
     const result = new ValidateBootUseCase().execute({
-      linked: linkedLocalizedSchema(),
+      plan: compilePlan(localizedSchema),
       registry: new InMemoryHandlerRegistry(),
       siteLocales: [],
     });
@@ -87,14 +90,14 @@ describe("ValidateBootUseCase", () => {
 
   it("assert throws BootValidationError on deployment failure", () => {
     expect(() => new ValidateBootUseCase().assert({
-      linked: linkedProcedure("missing"),
+      plan: compilePlan(procedure("missing")),
       registry: new InMemoryHandlerRegistry(),
     })).toThrow(BootValidationError);
   });
 });
 
-function linkedProcedure(handlerRef = "echoHandler", httpPath?: string): LinkedManifestSet {
-  return linked(`apiVersion: cms.mantle.aotter.net/v1
+function procedure(handlerRef = "echoHandler", httpPath?: string): string {
+  return `apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure
 metadata: { name: echo }
 spec:
@@ -108,26 +111,26 @@ metadata: { name: echo-http }
 spec:
   source: { kind: http, method: POST, path: ${httpPath} }
   target: { procedure: echo }
-`}`);
+`}`;
 }
 
-function linkedLocalizedSchema(): LinkedManifestSet {
-  return linked(`apiVersion: cms.mantle.aotter.net/v1
+const localizedSchema = `apiVersion: cms.mantle.aotter.net/v1
 kind: Schema
 metadata: { name: posts }
 spec:
   title: Posts
   localized: true
   schema: { type: object, properties: { locale: { type: string } } }
-`);
-}
+`;
 
-function linked(text: string): LinkedManifestSet {
+function compilePlan(text: string): RuntimePlan {
   const parsed = parseManifestSources({
     sources: [{ sourceId: "memory:boot", text }],
   });
   if (!parsed.ok) throw new Error("expected valid boot fixture");
   const result = linkManifestSet(parsed.value);
   if (!result.ok) throw new Error("expected linked boot fixture");
-  return result.value;
+  const compiled = compileRuntimePlan(result.value);
+  if (!compiled.ok) throw new Error("expected compiled boot fixture");
+  return compiled.value;
 }

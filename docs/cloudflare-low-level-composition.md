@@ -8,7 +8,7 @@ while adding one application-owned post-response Queue audit across every route.
 ```ts
 import { Hono } from "hono";
 import {
-  createCmsRef,
+  createMantleRuntimeRef,
   createConventionalAuth,
   createConventionalBindings,
   createMcpApiHandler,
@@ -20,7 +20,7 @@ import {
   setupIncompleteAuthResponse,
   type MantleCloudflareEnv,
 } from "@aotter/mantle/cloudflare";
-import { manifest } from "../.mantle/generated/mantle.js";
+import { plan } from "../.mantle/generated/mantle.js";
 
 interface Env extends MantleCloudflareEnv {
   readonly AUDIT_QUEUE: Queue<{
@@ -51,7 +51,7 @@ export default {
 function assemble(env: Env) {
   const bindings = createConventionalBindings(env);
   const auth = createConventionalAuth(env);
-  const ref = createCmsRef({ manifests: manifest, bindings, auth });
+  const ref = createMantleRuntimeRef({ plan, bindings, auth });
   const app = new Hono<{ Bindings: Env }>();
 
   mountRuntimeEndpoints(app, ref);

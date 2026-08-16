@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ValidateManifestsUseCase } from "../src/usecase/ValidateManifestsUseCase.js";
-import {
-  parseManifests,
-  parseManifestsOrThrow,
-} from "../src/domain/service/ManifestParser.js";
+import { validateManifests } from "./parse.js";
+import { parseManifests } from "./parse.js";
 import type {
   Manifest,
   ProcedureManifest,
@@ -84,7 +81,7 @@ function trigger(name: string, procedureName: string): TriggerManifest {
   };
 }
 
-describe("ValidateManifestsUseCase.run()", () => {
+describe("validateManifests()", () => {
   it("returns no error diagnostics for a valid manifest set", () => {
     const manifests: Manifest[] = [
       schema("posts"),
@@ -92,13 +89,13 @@ describe("ValidateManifestsUseCase.run()", () => {
       procedure("createPost"),
       trigger("createPostHttp", "createPost"),
     ];
-    const result = ValidateManifestsUseCase.run({ manifests });
+    const result = validateManifests({ manifests });
     expect(result.errorCount).toBe(0);
     expect(result.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
   });
 
   it("validates comparison filter field references against the source Schema", () => {
-    const result = ValidateManifestsUseCase.run({
+    const result = validateManifests({
       manifests: [
         schema("products", {
           schema: {
@@ -136,7 +133,7 @@ describe("ValidateManifestsUseCase.run()", () => {
       procedure("restockProduct"),
       t,
     ];
-    const result = ValidateManifestsUseCase.run({ manifests });
+    const result = validateManifests({ manifests });
     const codes = result.diagnostics.map((d) => d.code);
     expect(codes).toContain("TRIGGER_PATH_INVALID");
     expect(result.errorCount).toBeGreaterThan(0);
@@ -167,7 +164,7 @@ describe("ValidateManifestsUseCase.run()", () => {
       tA,
       tB,
     ];
-    const result = ValidateManifestsUseCase.run({ manifests });
+    const result = validateManifests({ manifests });
     const codes = result.diagnostics.map((d) => d.code);
     // Both triggers should report TRIGGER_PATH_INVALID — collision is
     // secondary to the bad prefix and would misdescribe the root cause.
@@ -181,7 +178,7 @@ describe("ValidateManifestsUseCase.run()", () => {
       // Note: no Procedure "createPost" declared.
       trigger("createPostHttp", "createPost"),
     ];
-    const result = ValidateManifestsUseCase.run({ manifests });
+    const result = validateManifests({ manifests });
     const codes = result.diagnostics.map((d) => d.code);
     expect(codes).toContain("TRIGGER_TARGET_PROCEDURE_UNKNOWN");
     expect(result.errorCount).toBeGreaterThan(0);
@@ -192,7 +189,7 @@ describe("ValidateManifestsUseCase.run()", () => {
       // No Schema "posts".
       view("postList", "posts"),
     ];
-    const result = ValidateManifestsUseCase.run({ manifests });
+    const result = validateManifests({ manifests });
     const codes = result.diagnostics.map((d) => d.code);
     expect(codes).toContain("VIEW_FROM_UNKNOWN_SCHEMA");
     expect(result.errorCount).toBeGreaterThan(0);
@@ -209,13 +206,13 @@ describe("ValidateManifestsUseCase.run()", () => {
         title: "Post content",
         schema: {
           type: "object",
-          properties: { slug: { type: "string" } },
+          properties: { slug: { type: "string" }, content: { type: "string" } },
         },
         localized: true,
         translates: { parent: "ghost", on: "slug" },
       },
     };
-    const result = ValidateManifestsUseCase.run({ manifests: [child] });
+    const result = validateManifests({ manifests: [child] });
     const codes = result.diagnostics.map((d) => d.code);
     expect(codes).toContain("TRANSLATES_PARENT_UNKNOWN");
   });
@@ -234,7 +231,7 @@ describe("ValidateManifestsUseCase.run()", () => {
       schema("posts"),
       procedure("createPost"),
     ];
-    const result = ValidateManifestsUseCase.run({ manifests });
+    const result = validateManifests({ manifests });
     const dups = result.diagnostics.filter((d) => d.code === "DUPLICATE_NAME");
     expect(dups).toHaveLength(4); // every copy including the original
     // First-occurrence diagnostic mentions ordinal 1, last mentions 4/4.
@@ -520,7 +517,7 @@ spec:
   output: { type: object }
   handler: { kind: ref, ref: createManualOrder }
 `);
-    const result = ValidateManifestsUseCase.run({ manifests: parsed.manifests });
+    const result = validateManifests({ manifests: parsed.manifests });
     expect(result.diagnostics[0]).toMatchObject({
       code: "SCHEMA_UI_INVALID",
       path: "/spec/uiSchema/collectionAction",
@@ -939,13 +936,13 @@ spec:
     const myOrders = view("myOrders", "orders", {
       filter: { eq: { field: "userId", value: { "$ctx.user": "id" } } },
     });
-    const missing = ValidateManifestsUseCase.run({ manifests: [orders, myOrders] });
+    const missing = validateManifests({ manifests: [orders, myOrders] });
     expect(missing.diagnostics.map((d) => d.code)).toEqual(expect.arrayContaining([
       "VIEW_FILTER_CTX_USER_REF_REQUIRES_AUTH",
       "VIEW_FILTER_CTX_USER_REF_REQUIRES_INDEX",
     ]));
 
-    const valid = ValidateManifestsUseCase.run({
+    const valid = validateManifests({
       manifests: [
         { ...orders, spec: { ...orders.spec, indexes: [["userId", "placedAt"]] } },
         {
@@ -1018,7 +1015,7 @@ spec:
       requires: { guard: { procedure: "chainedGuard" } },
     });
 
-    const result = ValidateManifestsUseCase.run({
+    const result = validateManifests({
       manifests: [
         schema("posts"),
         missing,
@@ -1353,47 +1350,6 @@ spec:
   });
 });
 
-describe("parseManifestsOrThrow", () => {
-  const okYaml = `apiVersion: cms.mantle.aotter.net/v1
-kind: Schema
-metadata: { name: posts }
-spec:
-  title: Posts
-  schema: { type: object, properties: { slug: { type: string } } }
-  uniqueIndexes: [[slug]]
-  lifecycle: publishing
-`;
-
-  it("returns the parsed manifests when no diagnostics fire", () => {
-    const out = parseManifestsOrThrow(okYaml);
-    expect(out).toHaveLength(1);
-    expect(out[0]?.kind).toBe("Schema");
-  });
-
-  it("throws with diagnostics formatted as `[CODE] path: msg`", () => {
-    const bad = `apiVersion: cms.mantle.aotter.net/v1
-kind: Schema
-metadata: { name: posts }
-spec:
-  schema: { type: object }
-  uniqueIndexes: [[ "slug" ]]
-  lifecycle: unknown
-`;
-    expect(() => parseManifestsOrThrow(bad)).toThrow(/Manifest parse failed:/);
-    try {
-      parseManifestsOrThrow(bad);
-    } catch (e) {
-      expect(String(e)).toMatch(/\[[A-Z_]+\] /);
-    }
-  });
-
-  it("includes the context label in the error envelope when supplied", () => {
-    expect(() =>
-      parseManifestsOrThrow("not even yaml: : :", { context: "starters/publication" }),
-    ).toThrow(/Manifest parse failed in starters\/publication/);
-  });
-});
-
 describe("parseManifests() — ctx.staff role-enum enforcement", () => {
   it("rejects ctx.staff with a role that is not in STAFF_ROLES", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v1
@@ -1447,7 +1403,7 @@ describe("checkHandlerRefsInSource — HANDLER_NOT_REGISTERED", () => {
       import { register } from "./registry";
       register('captchaCheck', () => true);
     `;
-    const result = ValidateManifestsUseCase.run({ manifests: [captchaProcedure], handlerSource: source });
+    const result = validateManifests({ manifests: [captchaProcedure], handlerSource: source });
     expect(result.diagnostics.filter((d) => d.code === "HANDLER_NOT_REGISTERED")).toEqual([]);
   });
 
@@ -1460,7 +1416,7 @@ describe("checkHandlerRefsInSource — HANDLER_NOT_REGISTERED", () => {
         };
       }
     `;
-    const result = ValidateManifestsUseCase.run({
+    const result = validateManifests({
       manifests: [captchaProcedure, procedure("slackNotify")],
       handlerSource: source,
     });
@@ -1469,7 +1425,7 @@ describe("checkHandlerRefsInSource — HANDLER_NOT_REGISTERED", () => {
 
   it("emits HANDLER_NOT_REGISTERED when the ref is absent from source entirely", () => {
     const source = `export function buildHandlers() { return {}; }`;
-    const result = ValidateManifestsUseCase.run({ manifests: [captchaProcedure], handlerSource: source });
+    const result = validateManifests({ manifests: [captchaProcedure], handlerSource: source });
     const diag = result.diagnostics.find((d) => d.code === "HANDLER_NOT_REGISTERED");
     expect(diag?.severity).toBe("warning");
     expect(diag?.value).toBe("captchaCheck");
@@ -1477,7 +1433,7 @@ describe("checkHandlerRefsInSource — HANDLER_NOT_REGISTERED", () => {
 
   it("does not false-positive on a substring match — `captchaCheckHelper` is not `captchaCheck`", () => {
     const source = `const captchaCheckHelper = () => true;`;
-    const result = ValidateManifestsUseCase.run({ manifests: [captchaProcedure], handlerSource: source });
+    const result = validateManifests({ manifests: [captchaProcedure], handlerSource: source });
     // Substring match would falsely accept this; the property-key regex
     // requires the identifier followed by `:` (an object key) so the
     // bare assignment above does NOT count as registration evidence.
@@ -1491,7 +1447,7 @@ describe("checkHandlerRefsInSource — HANDLER_NOT_REGISTERED", () => {
       // captchaCheck lives in handlers.ts — see buildHandlers().
       export function buildHandlers() { return {}; }
     `;
-    const result = ValidateManifestsUseCase.run({ manifests: [captchaProcedure], handlerSource: source });
+    const result = validateManifests({ manifests: [captchaProcedure], handlerSource: source });
     // Comment is not a property key (no \`:\` follows the word) and not
     // a quoted string. Expect the warning to fire.
     const diag = result.diagnostics.find((d) => d.code === "HANDLER_NOT_REGISTERED");

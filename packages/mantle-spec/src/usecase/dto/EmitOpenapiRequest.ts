@@ -1,7 +1,7 @@
-import type { Manifest } from "../../domain/model/ManifestGrammar.js";
+import type { LinkedManifestSet } from "../../domain/service/ManifestLinker.js";
 
 export interface EmitOpenapiRequest {
-  readonly manifests: ReadonlyArray<Manifest>;
+  readonly linked: LinkedManifestSet;
   readonly title: string;
   readonly version: string;
   /**

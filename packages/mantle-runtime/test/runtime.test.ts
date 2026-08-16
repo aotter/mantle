@@ -1,25 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { createCmsRuntime } from "../src/runtime.js";
+import {
+  linkManifestSet,
+  parseManifestSources,
+  type Manifest,
+  type SiteDefaults,
+} from "@aotter/mantle-spec";
+import {
+  compileRuntimePlan,
+  createMantleRuntime,
+  prepareDeployment,
+  SqliteMantleStorageAdapter,
+  type DatabaseDriver,
+  type MantleRuntime,
+} from "../src/index.js";
+import type { AnyHandler } from "../src/domain/model/HandlerContext.js";
 import { BootValidationError } from "../src/usecase/boot/index.js";
 import { DatabaseSiteConfigRepository } from "../src/infrastructure/persistence/DatabaseSiteConfigRepository.js";
 import { schemaIndexMigrations } from "../src/infrastructure/boot/index.js";
 import { InMemoryDatabase } from "./fakes/database.js";
 import { makeProcedure, postsSchema } from "./fakes/manifests.js";
 
-describe("createCmsRuntime compatibility composition", () => {
-  it("constructs with empty manifests and no asset server", async () => {
-    const runtime = await createCmsRuntime({
-      manifests: [],
-      db: new InMemoryDatabase(),
-    });
-    expect(runtime.schemasByName.size).toBe(0);
-    expect(runtime.proceduresByName.size).toBe(0);
-    expect(runtime.viewsByName.size).toBe(0);
-  });
-
+describe("SQLite runtime composition", () => {
   it("prepares storage, seeds siteDefaults, and validates before returning", async () => {
     const db = new InMemoryDatabase();
-    await createCmsRuntime({
+    await createTestRuntime({
       manifests: [makeProcedure()],
       handlers: { echoHandler: () => ({ ok: true }) },
       db,
@@ -46,9 +50,9 @@ describe("createCmsRuntime compatibility composition", () => {
       siteDefaults: { brand: "Blog", locales: ["en"] },
     } as const;
 
-    await createCmsRuntime(options);
+    await createTestRuntime(options);
     const firstBootQueries = db.executions.length;
-    await createCmsRuntime(options);
+    await createTestRuntime(options);
 
     expect(db.executions.slice(firstBootQueries).map(({ sql }) => sql)).toEqual([
       "SELECT fingerprint FROM _mantle_boot_state WHERE id = ? LIMIT 1",
@@ -62,7 +66,7 @@ describe("createCmsRuntime compatibility composition", () => {
       metadata: { name: "events" },
       spec: { ...postsSchema().spec, lifecycle: "operational" as const },
     };
-    const runtime = await createCmsRuntime({
+    const runtime = await createTestRuntime({
       manifests: [postsSchema(), operational],
       db: new InMemoryDatabase(),
       siteDefaults: { brand: "Blog", title: "Blog" },
@@ -81,7 +85,7 @@ describe("createCmsRuntime compatibility composition", () => {
     const published = await runtime.requestPublish.execute({ id: updated.id });
     const draft = await runtime.unpublish.execute({ id: published.id });
     await runtime.deleteEntry.execute({ id: draft.id });
-    await runtime.updateSiteSettings.execute({ title: "New title" });
+    await runtime.updateSiteSettings!.execute({ title: "New title" });
     await runtime.createDraft.execute({
       collection: "events",
       data: { title: "Private event", slug: "private-event", content: "Operational" },
@@ -102,7 +106,7 @@ describe("createCmsRuntime compatibility composition", () => {
         uniqueIndexes: [["slug"]],
       },
     } as const;
-    await createCmsRuntime({
+    await createTestRuntime({
       manifests: [indexedSchema],
       db,
     });
@@ -125,7 +129,7 @@ describe("createCmsRuntime compatibility composition", () => {
       spec: { ...schema.spec, indexes },
     } as const);
     const runtime = (indexes: readonly (readonly string[])[]) =>
-      createCmsRuntime({
+      createTestRuntime({
         manifests: [manifest(indexes)],
         db,
       });
@@ -158,7 +162,7 @@ describe("createCmsRuntime compatibility composition", () => {
     db.legacyIndexColumns.set("uq_posts__slug", ["posts__slug"]);
     const schema = postsSchema();
     const runtime = (uniqueIndexes: readonly (readonly string[])[]) =>
-      createCmsRuntime({
+      createTestRuntime({
         manifests: [{ ...schema, spec: { ...schema.spec, uniqueIndexes } }],
         db,
       });
@@ -176,7 +180,7 @@ describe("createCmsRuntime compatibility composition", () => {
     db.appliedMigrations.add(legacyId);
     db.legacyIndexColumns.set("uq_posts__a_b", ["posts__a_b"]);
     const schema = postsSchema();
-    await createCmsRuntime({
+    await createTestRuntime({
       manifests: [{
         ...schema,
         spec: {
@@ -198,7 +202,7 @@ describe("createCmsRuntime compatibility composition", () => {
 
   it("rejects creation with BootValidationError when a handler ref is missing", async () => {
     const db = new InMemoryDatabase();
-    await expect(createCmsRuntime({
+    await expect(createTestRuntime({
       manifests: [makeProcedure({ handlerRef: "missing" })],
       db,
     })).rejects.toBeInstanceOf(BootValidationError);
@@ -226,7 +230,7 @@ describe("createCmsRuntime compatibility composition", () => {
         },
       },
     ] as const;
-    await createCmsRuntime({
+    await createTestRuntime({
       manifests: [],
       db,
       siteDefaults: { media: { purposes: seeded } },
@@ -244,7 +248,7 @@ describe("createCmsRuntime compatibility composition", () => {
 
   it("readMediaPurposes returns empty when siteDefaults declares none", async () => {
     const db = new InMemoryDatabase();
-    await createCmsRuntime({
+    await createTestRuntime({
       manifests: [],
       db,
       siteDefaults: { brand: "No-media starter" },
@@ -255,7 +259,7 @@ describe("createCmsRuntime compatibility composition", () => {
 
   it("seedSiteDefaults respects ON CONFLICT DO NOTHING semantics", async () => {
     const db = new InMemoryDatabase();
-    await createCmsRuntime({
+    await createTestRuntime({
       manifests: [],
       db,
       siteDefaults: { brand: "First" },
@@ -266,7 +270,7 @@ describe("createCmsRuntime compatibility composition", () => {
       sql.startsWith("INSERT INTO site_config")
     ).length;
     // Subsequent boot with new defaults must NOT overwrite the operator's edit.
-    await createCmsRuntime({
+    await createTestRuntime({
       manifests: [],
       db,
       siteDefaults: { brand: "Second" },
@@ -279,14 +283,14 @@ describe("createCmsRuntime compatibility composition", () => {
 
   it("re-boot syncs a custom-domain origin while preserving operator-owned settings", async () => {
     const db = new InMemoryDatabase();
-    await createCmsRuntime({
+    await createTestRuntime({
       manifests: [],
       db,
       siteDefaults: { brand: "First", origin: "https://site.workers.dev" },
     });
     db.siteConfig.set("brand", "Operator-Edited");
 
-    await createCmsRuntime({
+    await createTestRuntime({
       manifests: [],
       db,
       siteDefaults: { brand: "Second", origin: "https://www.example.com" },
@@ -303,7 +307,7 @@ describe("createCmsRuntime compatibility composition", () => {
     const repo = new DatabaseSiteConfigRepository(db);
     expect((await repo.load()).icons).toEqual([{ src: "/legacy.svg" }]);
 
-    await createCmsRuntime({
+    await createTestRuntime({
       manifests: [],
       db,
       siteDefaults: {
@@ -365,7 +369,7 @@ describe("createCmsRuntime compatibility composition", () => {
         maxBytes: { "image/jpeg": 500_000 },
       },
     ] as const;
-    await createCmsRuntime({
+    await createTestRuntime({
       manifests: [],
       db,
       siteDefaults: { media: { purposes: first } },
@@ -388,7 +392,7 @@ describe("createCmsRuntime compatibility composition", () => {
         maxBytes: { "image/avif": 250_000, "image/webp": 400_000, "image/jpeg": 600_000 },
       },
     ] as const;
-    await createCmsRuntime({
+    await createTestRuntime({
       manifests: [],
       db,
       siteDefaults: { media: { purposes: second } },
@@ -406,7 +410,7 @@ describe("createCmsRuntime compatibility composition", () => {
 
   it("#441 re-boot syncs locales from config (no admin-UI edit path) while brand (UI-editable) stays operator-owned", async () => {
     const db = new InMemoryDatabase();
-    await createCmsRuntime({
+    await createTestRuntime({
       manifests: [],
       db,
       siteDefaults: { brand: "First", locales: ["en"] },
@@ -418,7 +422,7 @@ describe("createCmsRuntime compatibility composition", () => {
     db.siteConfig.set("brand", "Operator-Edited");
 
     // Developer adds a locale in `src/mantle/config.ts` and redeploys.
-    await createCmsRuntime({
+    await createTestRuntime({
       manifests: [],
       db,
       siteDefaults: { brand: "Second", locales: ["en", "ja"] },
@@ -429,3 +433,33 @@ describe("createCmsRuntime compatibility composition", () => {
     expect(site.brand).toBe("Operator-Edited");
   });
 });
+
+async function createTestRuntime(args: {
+  readonly manifests: readonly Manifest[];
+  readonly db: DatabaseDriver;
+  readonly handlers?: Readonly<Record<string, AnyHandler>>;
+  readonly siteDefaults?: SiteDefaults;
+  readonly onPublicChange?: () => Promise<void>;
+}): Promise<MantleRuntime> {
+  const parsed = parseManifestSources({
+    sources: args.manifests.map((manifest, index) => ({
+      sourceId: `test:${index}`,
+      text: JSON.stringify(manifest),
+    })),
+  });
+  if (!parsed.ok) throw new BootValidationError(parsed.diagnostics);
+  const linked = linkManifestSet(parsed.value);
+  if (!linked.ok) throw new BootValidationError(linked.diagnostics);
+  const compiled = compileRuntimePlan(linked.value);
+  if (!compiled.ok) throw new BootValidationError(compiled.diagnostics);
+  const storage = new SqliteMantleStorageAdapter(args.db, args.siteDefaults);
+  const prepared = await prepareDeployment(compiled.value, storage, {
+    handlerNames: Object.keys(args.handlers ?? {}),
+  });
+  return createMantleRuntime({
+    plan: compiled.value,
+    prepared,
+    handlers: args.handlers,
+    ports: { onPublishingContentChange: args.onPublicChange },
+  });
+}

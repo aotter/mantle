@@ -1,3 +1,4 @@
+import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
@@ -8,9 +9,9 @@ import {
 } from "@aotter/mantle-spec";
 import type { HandlerFn } from "@aotter/mantle-runtime";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
-import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
+import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
 import { createMcpApiHandler } from "../src/mount/mountMcp.js";
-import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
+import { mountTestEndpoints } from "./mountTestEndpoints.js";
 import {
   StubAssetServer,
   stubAuth,
@@ -146,8 +147,8 @@ describe("authorization integration: one target across REST and MCP", () => {
       ctx.waitUntil?.(Promise.resolve());
       return input;
     };
-    const ref = createCmsRef({
-      manifests: manifests(),
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(manifests()),
       handlers: {
         requireActiveMembership: (_input, ctx) => {
           guardCalls++;
@@ -188,7 +189,7 @@ describe("authorization integration: one target across REST and MCP", () => {
       },
     });
     const app = new Hono<{ Bindings: typeof workerEnv }>();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
     const publicMcp = createMcpApiHandler<typeof workerEnv>({ ref, surface: "public" });
     const staffMcp = createMcpApiHandler<typeof workerEnv>({ ref, surface: "staff" });
     const mcpContext = {

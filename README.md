@@ -38,8 +38,9 @@ operations.
 Generated projects include the `mantle` authoring CLI from
 `@aotter/mantle`: `generate`, `skills`, `update`, `validate`, `introspect`,
 `emit-openapi`, and `emit-types`. `generate` compiles YAML into
-`.mantle/generated/site.ts` and `types.d.ts`, plus the version-matched Admin SPA
-under `public/_mantle/admin/`; `--check` verifies both without writing. The
+one `.mantle/generated/mantle.ts` module containing a sealed runtime plan and
+typed bindings; `--check` verifies it without writing. Admin UI installation is
+an explicit, separate choice. The
 umbrella package also ships `mantle-harness` for crowded
 SQLite index coverage and live Worker/API/page sampling; see
 [`docs/performance-harness.md`](docs/performance-harness.md).
@@ -69,7 +70,8 @@ Before working:
   `node_modules/@aotter/mantle/docs/`; do not guess from the latest branch.
 - For "let's try it" requests, materialize the closest starter bundle before
   proposing custom code.
-- Cloudflare deployment is the primary production path.
+- Choose the Cloudflare, Bun, or Vercel adapter that matches the host; Core is
+  also directly embeddable behind application-owned storage ports.
 - Free self-hosted auth requires the site owner to configure the GitHub OAuth
   App, provider secrets, and related operations.
 - [Mantle landing](https://mantle.tools) also offers paid hosted auth for

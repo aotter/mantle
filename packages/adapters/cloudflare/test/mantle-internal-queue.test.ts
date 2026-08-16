@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
+  AnyHandler,
   DeferredHookEnvelope,
-  CmsRuntime,
+  MantleRuntime,
+  MantleRuntimePorts,
 } from "@aotter/mantle-runtime";
-import { createCmsRuntime } from "@aotter/mantle-runtime";
+import {
+  SqliteMantleStorageAdapter,
+  createMantleRuntime,
+  prepareDeployment,
+} from "@aotter/mantle-runtime";
 import type { LifecycleHook } from "@aotter/mantle-spec";
 import {
   WorkersQueueHookDispatcher,
@@ -15,7 +21,7 @@ import {
   makeProcedure,
   postsSchema,
 } from "../../../mantle-runtime/test/fakes/manifests.js";
-import { StubAssetServer } from "./fakes/runtime-bindings.js";
+import { compileTestPlan } from "./compileTestPlan.js";
 
 interface CapturedSend<T> {
   body: T;
@@ -101,6 +107,19 @@ function lifecycleTrigger(name: string, procedure: string, on: LifecycleHook) {
   return makeLifecycleTrigger({ name, procedure, on: [on] });
 }
 
+async function testRuntime(options: {
+  readonly atoms: readonly unknown[];
+  readonly handlers: Readonly<Record<string, AnyHandler>>;
+  readonly ports?: MantleRuntimePorts;
+}): Promise<MantleRuntime> {
+  const plan = compileTestPlan(options.atoms);
+  const storage = new SqliteMantleStorageAdapter(new InMemoryDatabase());
+  const prepared = await prepareDeployment(plan, storage, {
+    handlerNames: Object.keys(options.handlers),
+  });
+  return createMantleRuntime({ plan, prepared, handlers: options.handlers, ports: options.ports });
+}
+
 describe("WorkersQueueHookDispatcher#enqueue", () => {
   it("forwards the envelope through queue.send", async () => {
     const queue = fakeQueue<DeferredHookEnvelope>();
@@ -125,14 +144,12 @@ describe("createQueueHandler", () => {
   it("ack()s each message after runDeferredHook.execute resolves", async () => {
     const consumed: { envelope: DeferredHookEnvelope; env: unknown }[] = [];
     const cmsRef = {
-      get: async (): Promise<CmsRuntime> =>
+      get: async (): Promise<MantleRuntime> =>
         ({
-          runDeferredHook: {
-            execute: async (request: { envelope: DeferredHookEnvelope; env: unknown }) => {
-              consumed.push({ envelope: request.envelope, env: request.env });
-            },
+          runDeferredHook: async (request: { envelope: DeferredHookEnvelope; env: unknown }) => {
+            consumed.push({ envelope: request.envelope, env: request.env });
           },
-        }) as unknown as CmsRuntime,
+        }) as unknown as MantleRuntime,
     };
     const handler = createQueueHandler<{ tag: string }>(cmsRef);
     const { batch, messages } = fakeBatch<DeferredHookEnvelope>([sampleEnvelope, sampleEnvelope]);
@@ -148,7 +165,7 @@ describe("createQueueHandler", () => {
   it("retryAll()s without invoking per-message ack/retry when runtime boot fails", async () => {
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const cmsRef = {
-      get: async (): Promise<CmsRuntime> => {
+      get: async (): Promise<MantleRuntime> => {
         throw new Error("d1 unreachable");
       },
     };
@@ -168,15 +185,13 @@ describe("createQueueHandler", () => {
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     let callCount = 0;
     const cmsRef = {
-      get: async (): Promise<CmsRuntime> =>
+      get: async (): Promise<MantleRuntime> =>
         ({
-          runDeferredHook: {
-            execute: async () => {
-              callCount++;
-              if (callCount === 1) throw new Error("hook blew up");
-            },
+          runDeferredHook: async () => {
+            callCount++;
+            if (callCount === 1) throw new Error("hook blew up");
           },
-        }) as unknown as CmsRuntime,
+        }) as unknown as MantleRuntime,
     };
     const handler = createQueueHandler<unknown>(cmsRef);
     const { batch, messages } = fakeBatch<DeferredHookEnvelope>([sampleEnvelope, sampleEnvelope]);
@@ -192,16 +207,14 @@ describe("createQueueHandler", () => {
     let active = 0;
     let maxActive = 0;
     const cmsRef = {
-      get: async (): Promise<CmsRuntime> => ({
-        runDeferredHook: {
-          execute: async () => {
-            active++;
-            maxActive = Math.max(maxActive, active);
-            await Promise.resolve();
-            active--;
-          },
+      get: async (): Promise<MantleRuntime> => ({
+        runDeferredHook: async () => {
+          active++;
+          maxActive = Math.max(maxActive, active);
+          await Promise.resolve();
+          active--;
         },
-      }) as unknown as CmsRuntime,
+      }) as unknown as MantleRuntime,
     };
     const handler = createQueueHandler<unknown>(cmsRef);
     const { batch, messages } = fakeBatch(Array.from({ length: 11 }, () => sampleEnvelope));
@@ -215,8 +228,8 @@ describe("createQueueHandler", () => {
     let failMiddle = true;
     const seen: string[] = [];
     const names = ["010-first", "020-middle", "030-last"] as const;
-    const runtime = await createCmsRuntime({
-      manifests: [
+    const runtime = await testRuntime({
+      atoms: [
         postsSchema(),
         hookProcedure("first"),
         hookProcedure("middle"),
@@ -240,8 +253,6 @@ describe("createQueueHandler", () => {
           return {};
         },
       },
-      db: new InMemoryDatabase(),
-      adminAssets: new StubAssetServer(),
     });
     const handler = createQueueHandler<unknown>({ get: async () => runtime });
     const envelope = { ...sampleEnvelope, eventId: "event-stable", triggerNames: names };
@@ -285,8 +296,8 @@ describe("createQueueHandler", () => {
     const deferredHookDispatcher = new WorkersQueueHookDispatcher(rejectingQueue);
     const seen: string[] = [];
     let nextId = 1;
-    const runtime = await createCmsRuntime({
-      manifests: [
+    const runtime = await testRuntime({
+      atoms: [
         postsSchema(),
         hookProcedure("create-audit"),
         lifecycleTrigger("create-audit-trigger", "create-audit", "after_create"),
@@ -297,11 +308,11 @@ describe("createQueueHandler", () => {
           return {};
         },
       },
-      db: new InMemoryDatabase(),
-      adminAssets: new StubAssetServer(),
-      deferredHookDispatcher,
-      clock: { now: () => 1 },
-      idgen: { next: () => `id-${nextId++}` },
+      ports: {
+        deferredHookDispatcher,
+        clock: { now: () => 1 },
+        idgen: { next: () => `id-${nextId++}` },
+      },
     });
 
     await runtime.createDraft.execute({
@@ -317,7 +328,7 @@ describe("createQueueHandler", () => {
 
     expect(captured).toHaveLength(1);
     expect(seen).toHaveLength(1);
-    await runtime.runDeferredHook.execute({ envelope: captured[0], env: {} });
+    await runtime.runDeferredHook({ envelope: captured[0], env: {} });
     expect(seen).toEqual([seen[0], seen[0]]);
     errSpy.mockRestore();
   });

@@ -26,10 +26,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./partition": {
-      "types": "./dist/partition.d.ts",
-      "import": "./dist/partition.js"
-    },
     "./cli": {
       "types": "./dist/infrastructure/cli/index.d.ts",
       "import": "./dist/infrastructure/cli/index.js"

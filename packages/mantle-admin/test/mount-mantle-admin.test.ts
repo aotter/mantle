@@ -1,6 +1,15 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
+import { linkManifestSet, parseManifestSources } from "@aotter/mantle-spec";
+import { compileRuntimePlan } from "@aotter/mantle-runtime";
 import { mountMantleAdmin, type AdminAuth } from "../src/index.js";
+
+const parsed = parseManifestSources({ sources: [] });
+if (!parsed.ok) throw new Error("expected empty Admin fixture to parse");
+const linked = linkManifestSet(parsed.value);
+if (!linked.ok) throw new Error("expected empty Admin fixture to link");
+const compiled = compileRuntimePlan(linked.value);
+if (!compiled.ok) throw new Error("expected empty Admin fixture to compile");
 
 const auth: AdminAuth = {
   basePath: "/api/auth",
@@ -50,7 +59,7 @@ describe("mountMantleAdmin", () => {
 function mounted(overrides: Partial<AdminAuth> = {}): Hono {
   const app = new Hono();
   mountMantleAdmin(app, {
-    manifests: [],
+    plan: compiled.value,
     auth: { ...auth, ...overrides },
     assets: { fetch: async () => new Response("admin shell") },
     get: async () => {

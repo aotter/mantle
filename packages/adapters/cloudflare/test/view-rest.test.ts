@@ -1,8 +1,9 @@
+import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { Manifest } from "@aotter/mantle-spec";
-import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
-import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
+import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
+import { mountTestEndpoints } from "./mountTestEndpoints.js";
 import type { Auth } from "../src/auth/createAuth.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
@@ -74,8 +75,8 @@ function manifests(): Manifest[] {
 function harness(seed?: (db: InMemoryDatabase) => void) {
   const db = new InMemoryDatabase();
   if (seed) seed(db);
-  const ref = createCmsRef({
-    manifests: manifests(),
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan(manifests()),
     siteDefaults: { locales: ["en", "zh-TW"] },
     bindings: {
       db,
@@ -84,7 +85,7 @@ function harness(seed?: (db: InMemoryDatabase) => void) {
     auth: stubAuth,
   });
   const app = new Hono();
-  mountServerEndpoints(app, ref);
+  mountTestEndpoints(app, ref);
   return { app, db };
 }
 
@@ -143,14 +144,14 @@ function staffHarness(
       },
     },
   ];
-  const ref = createCmsRef({
-    manifests: staffViewManifests,
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan(staffViewManifests),
     siteDefaults: { locales: ["en", "zh-TW"] },
     bindings: { db, adminAssets: new StubAssetServer() },
     auth,
   });
   const app = new Hono();
-  mountServerEndpoints(app, ref);
+  mountTestEndpoints(app, ref);
   return { app, db };
 }
 
@@ -279,14 +280,14 @@ describe("GET /api/views/<name>", () => {
     ];
     const db = new InMemoryDatabase();
     db.entries.set("p1", row("p1", { slug: "hi", locale: "en" }));
-    const ref = createCmsRef({
-      manifests: gatedManifests,
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(gatedManifests),
       siteDefaults: { locales: ["en"] },
       bindings: { db, adminAssets: new StubAssetServer() },
       auth: ownerAuth,
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
     const res = await app.request("/api/views/staffOnly");
     expect(res.status).toBe(200);
   });
@@ -306,14 +307,14 @@ describe("GET /api/views/<name>", () => {
       },
     ];
     const db = new InMemoryDatabase();
-    const ref = createCmsRef({
-      manifests: gatedManifests,
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(gatedManifests),
       siteDefaults: { locales: ["en"] },
       bindings: { db, adminAssets: new StubAssetServer() },
       auth: stubAuth,
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
     const res = await app.request("/api/views/staffOnly2");
     expect(res.status).toBe(401);
     const body = await res.json() as { ok: boolean; diagnostic?: { code: string } };
@@ -344,14 +345,14 @@ describe("GET /api/views/<name>", () => {
       },
     ];
     const db = new InMemoryDatabase();
-    const ref = createCmsRef({
-      manifests: gatedManifests,
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(gatedManifests),
       siteDefaults: { locales: ["en"] },
       bindings: { db, adminAssets: new StubAssetServer() },
       auth: customerAuth,
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
     const res = await app.request("/api/views/staffOnly3");
     expect(res.status).toBe(403);
     const body = await res.json() as { diagnostic?: { code: string } };
@@ -391,8 +392,8 @@ describe("GET /api/views/<name>", () => {
         },
       },
     ];
-    const ref = createCmsRef({
-      manifests: gatedManifests,
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(gatedManifests),
       siteDefaults: { locales: ["en"] },
       bindings: {
         db: new InMemoryDatabase(),
@@ -402,7 +403,7 @@ describe("GET /api/views/<name>", () => {
       jwtBearer: { audience: "https://api.example.test" },
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
     const request = () =>
       app.request("/api/views/scopedReport", {
         headers: { authorization: "Bearer header.payload.signature" },
@@ -439,14 +440,14 @@ describe("GET /api/views/<name>", () => {
       },
     ];
     const db = new InMemoryDatabase();
-    const ref = createCmsRef({
-      manifests: gatedManifests,
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(gatedManifests),
       siteDefaults: { locales: ["en"] },
       bindings: { db, adminAssets: new StubAssetServer() },
       auth: stubAuth,
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
     // Anonymous probe with NO query params — would have 400'd on
     // missing `secretKey` before the fix.
     const res = await app.request("/api/views/staffOnlyWithParams");
@@ -508,14 +509,14 @@ describe("GET /api/views/<name>", () => {
       },
     ];
     const db = new InMemoryDatabase();
-    const ref = createCmsRef({
-      manifests: gatedManifests,
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(gatedManifests),
       siteDefaults: { locales: ["en"] },
       bindings: { db, adminAssets: new StubAssetServer() },
       auth: customerAuth,
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
     const res = await app.request("/api/views/staffParamsLeak");
     expect(res.status).toBe(403);
     const body = await res.json() as { diagnostic?: { code: string; message?: string } };

@@ -1,26 +1,28 @@
 import {
   EntryDataValidator,
   runtimeDiagnostic,
-  type ProcedureManifest,
   type SchemaManifest,
-  type TriggerManifest,
-  type ViewManifest,
 } from "@aotter/mantle-spec";
 import type { AnyHandler, HandlerContext } from "./domain/model/HandlerContext.js";
 import { SystemClock, type Clock } from "./domain/port/Clock.js";
 import type { DeferredHookDispatcher } from "./domain/port/DeferredHookDispatcher.js";
 import type { EntryReader } from "./domain/port/EntryReader.js";
 import type { EntryRepository } from "./domain/port/EntryRepository.js";
+import type { MediaAssetRepository } from "./domain/port/MediaAssetRepository.js";
+import type { MediaAsset, MediaStorage } from "./domain/port/MediaStorage.js";
+import type { PendingUploadRepository } from "./domain/port/PendingUploadRepository.js";
 import {
   buildHandlerRegistry,
-  type HandlerRegistry,
 } from "./domain/port/HandlerRegistry.js";
 import {
   RandomUuidGenerator,
   type IdGenerator,
 } from "./domain/port/IdGenerator.js";
 import type { PreparedMantleStorage } from "./domain/port/MantleStorageAdapter.js";
-import type { LocalePolicyReader } from "./domain/port/SiteConfigRepository.js";
+import type {
+  LocalePolicyReader,
+  SiteConfigRepository,
+} from "./domain/port/SiteConfigRepository.js";
 import type { ViewQueryOptions } from "./domain/port/ViewQueryExecutor.js";
 import type { RuntimePlan } from "./domain/service/RuntimePlanCompiler.js";
 import { TriggerIndex } from "./domain/service/TriggerIndex.js";
@@ -42,6 +44,14 @@ import {
   RunLifecycleHooksUseCase,
 } from "./usecase/lifecycle/index.js";
 import {
+  CommitMediaUploadUseCase,
+  CreateMediaUploadUseCase,
+  DeleteMediaAssetUseCase,
+  GetMediaAssetUseCase,
+  ListMediaAssetsUseCase,
+  UpdateMediaAssetUseCase,
+} from "./usecase/media/index.js";
+import {
   InvokeBuiltinUseCase,
   InvokeProcedureUseCase,
 } from "./usecase/procedure/index.js";
@@ -49,6 +59,7 @@ import {
   ExecuteViewUseCase,
   type ExecuteViewResponse,
 } from "./usecase/view/index.js";
+import { UpdateSiteSettingsUseCase } from "./usecase/site/index.js";
 
 export interface MantleRuntimePorts {
   readonly localePolicy?: LocalePolicyReader;
@@ -57,6 +68,8 @@ export interface MantleRuntimePorts {
   readonly idgen?: IdGenerator;
   /** Host callback after a successful publishing-content mutation. */
   readonly onPublishingContentChange?: () => Promise<void>;
+  readonly mediaStorage?: MediaStorage;
+  readonly mediaAllowSvg?: boolean;
 }
 
 export interface CreateMantleRuntimeArgs {
@@ -93,6 +106,9 @@ export interface MantleRuntime {
   /** Linked schemas needed by optional projections such as Mantle Web. */
   readonly schemas: ReadonlyMap<string, SchemaManifest>;
   readonly entries: EntryReader;
+  readonly siteConfig: SiteConfigRepository | null;
+  readonly updateSiteSettings: UpdateSiteSettingsUseCase | null;
+  readonly media: MantleMedia | null;
   readonly createDraft: CreateDraftUseCase;
   readonly updateDraft: UpdateDraftUseCase;
   readonly getEntry: GetEntryUseCase;
@@ -113,26 +129,19 @@ export interface MantleRuntime {
   runDeferredHook(request: RunDeferredHookRequest): Promise<void>;
 }
 
-/** Internal bridge used only by the alpha.7 full-facade compatibility path. */
-export interface MantleRuntimeBinding {
-  readonly runtime: MantleRuntime;
-  readonly registry: HandlerRegistry;
-  readonly clock: Clock;
-  readonly idgen: IdGenerator;
-  readonly invokeProcedure: InvokeProcedureUseCase;
-  readonly executeView: ExecuteViewUseCase;
-  readonly runDeferredHook: RunDeferredHookUseCase;
-  readonly schemasByName: ReadonlyMap<string, SchemaManifest>;
-  readonly proceduresByName: ReadonlyMap<string, ProcedureManifest>;
-  readonly viewsByName: ReadonlyMap<string, ViewManifest>;
-  readonly triggersByName: ReadonlyMap<string, TriggerManifest>;
+export interface MantleMedia {
+  readonly storage: MediaStorage;
+  readonly createUpload: CreateMediaUploadUseCase;
+  readonly commitUpload: CommitMediaUploadUseCase;
+  readonly listAssets: ListMediaAssetsUseCase;
+  readonly getAsset: GetMediaAssetUseCase;
+  readonly updateAsset: UpdateMediaAssetUseCase;
+  readonly deleteAsset: DeleteMediaAssetUseCase;
+  resolve(id: string): Promise<MediaAsset | null>;
+  resolveMany(ids: readonly string[]): Promise<ReadonlyMap<string, MediaAsset>>;
 }
 
 export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntime {
-  return bindMantleRuntime(args).runtime;
-}
-
-export function bindMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntimeBinding {
   const { plan, prepared } = args;
   const ports = args.ports ?? {};
   const schemasByName = manifestMap(plan.schemas);
@@ -230,11 +239,26 @@ export function bindMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntimeB
     plan.views,
   );
   const runDeferredHook = new RunDeferredHookUseCase(lifecycleHooks);
+  const siteConfig = prepared.siteConfig ?? null;
+  const updateSiteSettings = siteConfig
+    ? new UpdateSiteSettingsUseCase(siteConfig, ports.onPublishingContentChange)
+    : null;
+  const media = ports.mediaStorage
+    ? createMedia(ports.mediaStorage, prepared.mediaAssets, prepared.pendingUploads, {
+        clock,
+        idgen,
+        siteConfig,
+        allowSvg: ports.mediaAllowSvg ?? false,
+      })
+    : null;
 
-  const runtime: MantleRuntime = {
+  return {
     revision: plan.semanticFingerprint,
     schemas: schemasByName,
     entries: prepared.entries,
+    siteConfig,
+    updateSiteSettings,
+    media,
     createDraft,
     updateDraft,
     getEntry,
@@ -271,19 +295,44 @@ export function bindMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntimeB
     },
     runDeferredHook: (request) => runDeferredHook.execute(request),
   };
+}
 
+function createMedia(
+  storage: MediaStorage,
+  assets: MediaAssetRepository | undefined,
+  pending: PendingUploadRepository | undefined,
+  options: {
+    readonly clock: Clock;
+    readonly idgen: IdGenerator;
+    readonly siteConfig: SiteConfigRepository | null;
+    readonly allowSvg: boolean;
+  },
+): MantleMedia {
+  if (!assets || !pending || !options.siteConfig) {
+    throw new Error("mediaStorage requires prepared media and site-config repositories");
+  }
   return {
-    runtime,
-    registry,
-    clock,
-    idgen,
-    invokeProcedure,
-    executeView,
-    runDeferredHook,
-    schemasByName,
-    proceduresByName,
-    viewsByName,
-    triggersByName,
+    storage,
+    createUpload: new CreateMediaUploadUseCase(
+      storage,
+      pending,
+      options.clock,
+      options.idgen,
+      options.siteConfig,
+      { allowSvg: options.allowSvg },
+    ),
+    commitUpload: new CommitMediaUploadUseCase(
+      storage,
+      pending,
+      options.clock,
+      assets,
+    ),
+    listAssets: new ListMediaAssetsUseCase(assets),
+    getAsset: new GetMediaAssetUseCase(assets),
+    updateAsset: new UpdateMediaAssetUseCase(assets),
+    deleteAsset: new DeleteMediaAssetUseCase(storage, assets),
+    resolve: (id) => assets.findById(id),
+    resolveMany: (ids) => assets.findManyByIds(ids),
   };
 }
 

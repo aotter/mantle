@@ -6,7 +6,7 @@ import type {
 /**
  * Handler registry keyed by `Procedure.handler.ref`. Consumers call
  * `register` at boot — typically via the `handlers` option of
- * `createCmsRuntime` — and the dispatcher resolves per request via
+ * `createMantleRuntime` — and the dispatcher resolves per request via
  * `get`.
  *
  * The registry is a usecase-level port: use cases (specifically

@@ -3,7 +3,6 @@ import type { Entry, SiteConfig } from "@aotter/mantle-spec";
 import {
   inferLocaleFromPath,
   toUrlLocale,
-  type CmsRuntime,
 } from "@aotter/mantle-runtime";
 import {
   absoluteUrl,
@@ -12,7 +11,10 @@ import {
   type MantleWeb,
   type SeoMeta,
 } from "@aotter/mantle-web";
-import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
+import type {
+  CloudflareMantleRuntime,
+  MantleRuntimeRef,
+} from "./bootRuntimeOnce.js";
 import { STAFF_ROLE_SET } from "../auth/createAuth.js";
 import { PUBLIC_CACHE_TAG } from "../oauth/cachePolicy.js";
 
@@ -63,7 +65,7 @@ export interface CollectionRouteConfig {
 }
 
 export interface PublicContentContext {
-  readonly runtime: CmsRuntime;
+  readonly runtime: CloudflareMantleRuntime;
   readonly site: SiteConfig;
   readonly locale: string;
 }
@@ -134,7 +136,7 @@ const SITEMAP_HEADERS = {
 
 export function mountPublicRoutes(
   app: Hono,
-  ref: CmsRuntimeRef,
+  ref: MantleRuntimeRef,
   options: MountPublicRoutesOptions,
 ): void {
   const liveDev = options.liveDev === true;
@@ -251,7 +253,7 @@ export function mountPublicRoutes(
 
 function mountCollection(
   app: Hono,
-  ref: CmsRuntimeRef,
+  ref: MantleRuntimeRef,
   options: MountPublicRoutesOptions,
   route: CollectionRouteConfig,
   liveDev: boolean,
@@ -292,7 +294,7 @@ function mountCollection(
       };
       if (locale === null) return notFound();
       const publicPath = localizedPath(locale, route.segment);
-      const schemaTitle = runtime.core.schemas.get(route.collection)?.spec.title;
+      const schemaTitle = runtime.schemas.get(route.collection)?.spec.title;
       const seo = composePageSeoMeta({
         site,
         locale,
@@ -333,7 +335,7 @@ function mountCollection(
       const slug = slugParam.endsWith(".md") ? slugParam.slice(0, -3) : slugParam;
       const notFound = (): Response => textNotFound();
       if (locale === null) return notFound();
-      const entry = await runtime.entryReader.readBySlug({
+      const entry = await runtime.entries.readBySlug({
         collection: route.collection,
         slug,
         locale: contentLocale(runtime, route.collection, locale),
@@ -444,7 +446,7 @@ function mountCollection(
  * proceed.
  */
 async function assertStaffSession(
-  ref: CmsRuntimeRef,
+  ref: MantleRuntimeRef,
   req: Request,
 ): Promise<Response | null> {
   const session = await ref.auth.getSession(req);
@@ -472,7 +474,7 @@ async function assertStaffSession(
  * custom delimiter.
  */
 async function composeRootLlmsTxt(
-  runtime: CmsRuntime,
+  runtime: CloudflareMantleRuntime,
   web: MantleWeb,
   site: SiteConfig,
   options: MountPublicRoutesOptions,
@@ -489,7 +491,7 @@ async function composeRootLlmsTxt(
 }
 
 async function composeLocaleLlmsTxt(
-  runtime: CmsRuntime,
+  runtime: CloudflareMantleRuntime,
   web: MantleWeb,
   site: SiteConfig,
   locale: string,
@@ -518,14 +520,14 @@ async function composeLocaleLlmsTxt(
   return parts.length > 0 ? parts.join("\n---\n\n") : null;
 }
 
-function lazySite(runtime: CmsRuntime): () => Promise<SiteConfig> {
+function lazySite(runtime: CloudflareMantleRuntime): () => Promise<SiteConfig> {
   let pending: Promise<SiteConfig> | undefined;
   return () => pending ??= runtime.siteConfig.load();
 }
 
 function buildCtx(
   c: Context,
-  runtime: CmsRuntime,
+  runtime: CloudflareMantleRuntime,
   site: SiteConfig,
   locale: string,
   seo: SeoMeta,
@@ -572,8 +574,8 @@ function entrySeoRoute(
   };
 }
 
-function contentLocale(runtime: CmsRuntime, collection: string, locale: string): string | null {
-  return runtime.core.schemas.get(collection)?.spec.localized ? locale : null;
+function contentLocale(runtime: CloudflareMantleRuntime, collection: string, locale: string): string | null {
+  return runtime.schemas.get(collection)?.spec.localized ? locale : null;
 }
 
 function entryPathForLocale(
@@ -592,13 +594,13 @@ function entryPathForLocale(
 }
 
 async function readHomeMarkdown(
-  runtime: CmsRuntime,
+  runtime: CloudflareMantleRuntime,
   routes: ReadonlyArray<CollectionRouteConfig>,
   locale: string,
 ): Promise<string | null> {
   const route = routes.find((candidate) => candidate.homeSlug && candidate.markdownMirror !== false);
   if (!route?.homeSlug) return null;
-  const entry = await runtime.entryReader.readBySlug({
+  const entry = await runtime.entries.readBySlug({
     collection: route.collection,
     slug: route.homeSlug,
     locale: contentLocale(runtime, route.collection, locale),

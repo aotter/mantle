@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { checkLocaleAndTranslates } from "../src/domain/service/CrossSchemaChecker.js";
-import { parseManifests } from "../src/domain/service/ManifestParser.js";
-import { ValidateManifestsUseCase } from "../src/usecase/ValidateManifestsUseCase.js";
+import { parseManifests } from "./parse.js";
+import { validateManifests } from "./parse.js";
 import type { SchemaManifest } from "../src/domain/model/ManifestGrammar.js";
 
 // Cross-Schema validation from ADR-0010. Runs in the validate phase
@@ -136,7 +136,7 @@ describe("checkLocaleAndTranslates — happy path (parent + child correctly wire
     );
     const parsed = parseManifests(yaml);
     expect(parsed.diagnostics).toEqual([]);
-    expect(ValidateManifestsUseCase.run({
+    expect(validateManifests({
       manifests: parsed.manifests,
       siteLocales: ["en", "zh-TW"],
     }).diagnostics).toEqual([]);

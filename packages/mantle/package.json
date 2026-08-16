@@ -79,16 +79,16 @@
     "README.md"
   ],
   "dependencies": {
+    "@aotter/mantle-runtime": "workspace:*",
+    "@aotter/mantle-spec": "workspace:*"
+  },
+  "peerDependencies": {
     "@aotter/mantle-admin": "workspace:*",
     "@aotter/mantle-admin-ui": "workspace:*",
     "@aotter/mantle-bun": "workspace:*",
     "@aotter/mantle-cloudflare": "workspace:*",
-    "@aotter/mantle-runtime": "workspace:*",
-    "@aotter/mantle-spec": "workspace:*",
     "@aotter/mantle-vercel": "workspace:*",
-    "@aotter/mantle-web": "workspace:*"
-  },
-  "peerDependencies": {
+    "@aotter/mantle-web": "workspace:*",
     "@cloudflare/workers-oauth-provider": "catalog:peer",
     "aws4fetch": "catalog:peer",
     "better-auth": "catalog:peer",
@@ -97,6 +97,36 @@
     "zod": "catalog:peer"
   },
   "peerDependenciesMeta": {
+    "@aotter/mantle-admin": {
+      "optional": true
+    },
+    "@aotter/mantle-admin-ui": {
+      "optional": true
+    },
+    "@aotter/mantle-bun": {
+      "optional": true
+    },
+    "@aotter/mantle-cloudflare": {
+      "optional": true
+    },
+    "@aotter/mantle-vercel": {
+      "optional": true
+    },
+    "@aotter/mantle-web": {
+      "optional": true
+    },
+    "@cloudflare/workers-oauth-provider": {
+      "optional": true
+    },
+    "aws4fetch": {
+      "optional": true
+    },
+    "better-auth": {
+      "optional": true
+    },
+    "hono": {
+      "optional": true
+    },
     "@libsql/client": {
       "optional": true
     }
@@ -110,6 +140,12 @@
     "postpack": "node ../../scripts/sync-package-docs.mjs . --clean"
   },
   "devDependencies": {
+    "@aotter/mantle-admin": "workspace:*",
+    "@aotter/mantle-admin-ui": "workspace:*",
+    "@aotter/mantle-bun": "workspace:*",
+    "@aotter/mantle-cloudflare": "workspace:*",
+    "@aotter/mantle-vercel": "workspace:*",
+    "@aotter/mantle-web": "workspace:*",
     "@cloudflare/workers-oauth-provider": "catalog:",
     "@types/node": "catalog:",
     "aws4fetch": "catalog:",

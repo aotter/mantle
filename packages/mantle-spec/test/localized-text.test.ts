@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolveLocalizedText } from "../src/domain/model/ManifestGrammar.js";
-import { parseManifests } from "../src/domain/service/ManifestParser.js";
+import { parseManifests } from "./parse.js";
 import type {
   ProcedureManifest,
   SchemaManifest,

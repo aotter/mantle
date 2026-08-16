@@ -1,3 +1,4 @@
+import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
@@ -5,8 +6,8 @@ import {
   runtimeDiagnostic,
   type Manifest,
 } from "@aotter/mantle-spec";
-import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
-import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
+import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
+import { mountTestEndpoints } from "./mountTestEndpoints.js";
 import type { Auth } from "../src/auth/createAuth.js";
 import { rejectCrossOriginMutation } from "../src/auth/rejectCrossOriginMutation.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
@@ -82,8 +83,8 @@ function authFake(opts: AuthFakeOpts | null): Auth {
 
 function buildApp(auth: Auth): Hono {
   const opCalls: Array<unknown> = [];
-  const ref = createCmsRef({
-    manifests: staffGatedManifests(),
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan(staffGatedManifests()),
     handlers: {
       staffOnlyOp: (input) => {
         opCalls.push(input);
@@ -97,11 +98,11 @@ function buildApp(auth: Auth): Hono {
     auth,
   });
   const app = new Hono();
-  mountServerEndpoints(app, ref);
+  mountTestEndpoints(app, ref);
   return app;
 }
 
-describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
+describe("mountTestEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
   it("binds decoded path params once, keeps them authoritative, and still validates the full Procedure input (#530, #531)", async () => {
     let resolverCalls = 0;
     const inputs: unknown[] = [];
@@ -134,8 +135,8 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
         },
       },
     ];
-    const ref = createCmsRef({
-      manifests,
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(manifests),
       handlers: {
         reserveSite: (input) => {
           inputs.push(input);
@@ -161,7 +162,7 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
       },
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
 
     const granted = await app.request("/api/sites/site%20one/reserve", {
       method: "POST",
@@ -189,7 +190,7 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ operationId: "op-2" }),
     });
-    expect(malformedPath.status).toBe(400);
+    expect(malformedPath.status).toBe(404);
     expect(inputs).toHaveLength(1);
     expect(resolverCalls).toBe(3);
   });
@@ -261,8 +262,8 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
         },
       },
     ];
-    const ref = createCmsRef({
-      manifests: userOnlyManifests,
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(userOnlyManifests),
       handlers: { userOnlyOp: () => ({ ok: true }) },
       bindings: {
         db: new InMemoryDatabase(),
@@ -271,7 +272,7 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
       auth: authFake({ role: null }),
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
     const res = await app.request("/api/user-only", { method: "POST" });
     expect(res.status).toBe(200);
   });
@@ -345,8 +346,8 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
         scopes,
       }),
     };
-    const ref = createCmsRef({
-      manifests: scoped,
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(scoped),
       handlers: { scopedOp: () => ({ ok: true }) },
       bindings: {
         db: new InMemoryDatabase(),
@@ -356,7 +357,7 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
       jwtBearer: { audience: "https://api.example.test" },
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
     const request = () =>
       app.request("/api/scoped", {
         method: "POST",
@@ -424,8 +425,8 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
         },
       },
     ];
-    const ref = createCmsRef({
-      manifests,
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(manifests),
       handlers: {
         requireActiveAccess: (_input, ctx) => {
           expect(ctx.auth?.credentialId).toBe("api-key-row-1");
@@ -467,7 +468,7 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
       },
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
 
     const request = () =>
       app.request("/api/orders/read", {
@@ -513,8 +514,8 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
         },
       },
     ];
-    const ref = createCmsRef({
-      manifests: openManifests,
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(openManifests),
       handlers: { openOp: () => ({ ok: true }) },
       bindings: {
         db: new InMemoryDatabase(),
@@ -523,7 +524,7 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
       auth: authFake(null),
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
     const res = await app.request("/api/open", { method: "POST" });
     expect(res.status).toBe(200);
   });

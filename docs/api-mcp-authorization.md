@@ -137,7 +137,7 @@ enforced before the Procedure or View runs.
 
 ## Cloudflare consumer wiring
 
-Pass one site-owned resolver to `createCmsRef`. Return `not-handled` when the
+Pass one site-owned resolver to `createMantleRuntimeRef`. Return `not-handled` when the
 request is not one of the site's credential formats, `invalid` when it is a
 recognized but bad/revoked credential, and `verified` only after checking the
 authoritative site record.
@@ -226,15 +226,16 @@ enables JWT bearer verification for manifest REST routes:
 ```ts
 import {
   AssetsAssetServer,
-  createCmsRef,
+  createMantleRuntimeRef,
   createMcpApiHandler,
   createOAuthProvider,
   D1DatabaseDriver,
-  mountServerEndpoints,
+  mountAdmin,
+  mountRuntimeEndpoints,
 } from "@aotter/mantle/cloudflare";
 
-const runtimeRef = createCmsRef({
-  manifests,
+const runtimeRef = createMantleRuntimeRef({
+  plan,
   handlers,
   bindings: {
     db: new D1DatabaseDriver(env.DB),
@@ -251,7 +252,8 @@ const runtimeRef = createCmsRef({
   },
 });
 
-mountServerEndpoints(app, runtimeRef);
+mountRuntimeEndpoints(app, runtimeRef);
+if (runtimeRef.adminAssets) mountAdmin(app, runtimeRef, runtimeRef.adminAssets);
 
 const oauthProvider = createOAuthProvider({
   defaultHandler: {

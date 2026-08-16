@@ -3,7 +3,6 @@ import { mkdtemp, writeFile, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadManifestsFromRoot } from "../src/infrastructure/cli/loadManifests.js";
-import { partitionManifests } from "../src/domain/service/ManifestParser.js";
 import {
   parseArgs as parseOpenapiArgs,
   run as runEmitOpenapi,
@@ -27,6 +26,7 @@ spec:
       title: { type: string }
       body: { type: string }
       locale: { type: string }
+  indexes: [[locale]]
 `;
 
 const VIEW_YAML = `apiVersion: cms.mantle.aotter.net/v1
@@ -79,9 +79,13 @@ async function fixtureRoot(): Promise<string> {
 describe("loadManifestsFromRoot + partition", () => {
   it("parses manifests/site.yaml into all 4 atom buckets", async () => {
     const root = await fixtureRoot();
-    const { manifests, parseErrors } = await loadManifestsFromRoot(root);
+    const { parsed, parseErrors } = await loadManifestsFromRoot(root);
     expect(parseErrors).toEqual([]);
-    const { schemas, views, procedures, triggers } = partitionManifests(manifests);
+    const manifests = parsed?.entries.map((entry) => entry.manifest) ?? [];
+    const schemas = manifests.filter((manifest) => manifest.kind === "Schema");
+    const views = manifests.filter((manifest) => manifest.kind === "View");
+    const procedures = manifests.filter((manifest) => manifest.kind === "Procedure");
+    const triggers = manifests.filter((manifest) => manifest.kind === "Trigger");
     expect(schemas).toHaveLength(1);
     expect(views).toHaveLength(1);
     expect(procedures).toHaveLength(1);
@@ -101,16 +105,18 @@ describe("loadManifestsFromRoot + partition", () => {
     await mkdir(root, { recursive: true });
     await writeFile(join(root, "site.yaml"), `${SCHEMA_YAML}---\n---\n${VIEW_YAML}`);
 
-    const { filePaths, parseErrors } = await loadManifestsFromRoot(root);
+    const { parsed, parseErrors } = await loadManifestsFromRoot(root);
 
     expect(parseErrors).toEqual([]);
-    expect(filePaths.get("Schema/posts")?.[0]?.docIndex).toBe(0);
-    expect(filePaths.get("View/posts-by-locale")?.[0]?.docIndex).toBe(2);
+    expect(parsed?.entries.find(({ manifest }) => manifest.kind === "Schema")?.source.documentIndex)
+      .toBe(0);
+    expect(parsed?.entries.find(({ manifest }) => manifest.kind === "View")?.source.documentIndex)
+      .toBe(2);
   });
 
   it("returns MANIFEST_ROOT_NOT_FOUND when path is missing", async () => {
-    const { manifests, parseErrors } = await loadManifestsFromRoot("/nonexistent/path/mantle");
-    expect(manifests).toHaveLength(0);
+    const { parsed, parseErrors } = await loadManifestsFromRoot("/nonexistent/path/mantle");
+    expect(parsed).toBeUndefined();
     expect(parseErrors[0]?.code).toBe("MANIFEST_ROOT_NOT_FOUND");
   });
 
@@ -118,8 +124,8 @@ describe("loadManifestsFromRoot + partition", () => {
     const root = join(await mkdtemp(join(tmpdir(), "mantle-wrong-manifest-name-")), "manifests");
     await mkdir(root);
     await writeFile(join(root, "stories.yaml"), SCHEMA_YAML);
-    const { manifests, parseErrors } = await loadManifestsFromRoot(root);
-    expect(manifests).toEqual([]);
+    const { parsed, parseErrors } = await loadManifestsFromRoot(root);
+    expect(parsed).toBeUndefined();
     expect(parseErrors[0]).toMatchObject({
       code: "MANIFEST_ROOT_NOT_FOUND",
       path: join(root, "site.yaml"),

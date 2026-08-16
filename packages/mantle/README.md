@@ -34,11 +34,15 @@ Adopters install this one package and import from subpaths. Sub-packages remain 
 | `@aotter/mantle/admin-ui` | Pre-built React 19 admin SPA bundle |
 
 ```ts
-import { parseManifestsOrThrow } from "@aotter/mantle/spec";
-import { createCmsRuntime } from "@aotter/mantle/runtime";
+import { linkManifestSet, parseManifestSources } from "@aotter/mantle/spec";
+import { compileRuntimePlan, createMantleRuntime } from "@aotter/mantle/runtime";
 import { createMantleWeb } from "@aotter/mantle/web";
-import { mountServerEndpoints } from "@aotter/mantle/cloudflare";
+import { mountRuntimeEndpoints } from "@aotter/mantle/cloudflare";
 ```
+
+The umbrella installs only Spec and Runtime. Web, Admin, Admin UI, Bun,
+Vercel, and Cloudflare are optional peers; install only the subpaths selected
+by the application.
 
 The package also installs `mantle` and `mantle-harness`:
 
@@ -54,8 +58,8 @@ pnpm exec mantle-harness http --base-url http://127.0.0.1:8787 --route page=/en/
 
 `mantle generate` validates and compiles `./manifests/`, then writes one typed
 `.mantle/generated/mantle.ts` module. It performs no Admin asset installation,
-skill sync, package update, styling, provisioning, or deployment. `site.ts` and
-`types.d.ts` are temporary one-way compatibility bridges for alpha.7 consumers.
+skill sync, package update, styling, provisioning, or deployment. Obsolete
+`site.ts` and `types.d.ts` files are removed during generation.
 The same pure emitter is available from `@aotter/mantle/codegen` when a host
 wants to own parsing and filesystem IO.
 
@@ -94,9 +98,9 @@ The normal Worker entry delegates Core-owned assembly to the SDK:
 
 ```ts
 import { createMantleWorker } from "@aotter/mantle/cloudflare";
-import { manifest } from "../.mantle/generated/mantle.js";
+import { plan } from "../.mantle/generated/mantle.js";
 
-export default createMantleWorker({ manifest });
+export default createMantleWorker({ plan });
 ```
 
 `createMantleWorker` owns conventional D1/assets bindings, Auth, Admin,

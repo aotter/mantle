@@ -4,11 +4,10 @@ import {
   buildDdl,
   buildSchemaSqlView,
   type FilterAst,
-  type Manifest,
   type SchemaManifest,
   type ViewManifest,
 } from "@aotter/mantle-spec";
-import { partitionManifests } from "@aotter/mantle-spec/partition";
+import type { RuntimePlan } from "../../domain/service/RuntimePlanCompiler.js";
 import { compileView } from "../storage/SqliteViewCompiler.js";
 import { CANONICAL_MIGRATIONS } from "../boot/canonicalMigrations.js";
 
@@ -59,12 +58,13 @@ interface QueryPlanRow {
 
 /** Execute real compiled Views against the real schema in crowded SQLite. */
 export function inspectIndexCoverage(
-  manifests: readonly Manifest[],
+  runtimePlan: RuntimePlan,
   options: IndexCoverageOptions = {},
 ): IndexCoverageReport {
   const rowsPerSchema = clampRows(options.rowsPerSchema);
   const requiredNames = new Set(options.requiredViews ?? []);
-  const { schemas, views } = partitionManifests([...manifests]);
+  const schemas = Object.values(runtimePlan.schemas).map((entry) => entry.manifest);
+  const views = Object.values(runtimePlan.views).map((entry) => entry.manifest);
   const schemasByName = new Map(schemas.map((schema) => [schema.metadata.name, schema]));
   const db = new DatabaseSync(":memory:");
 

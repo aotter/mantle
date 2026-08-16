@@ -10,7 +10,7 @@ export {
   type AdminMemberList,
   type AdminStaffUser,
   type MantleAdminRef,
+  type MantleAdminRuntime,
   runMantleUseCase,
   type StaffRole,
 } from "./mountMantleAdmin.js";
-export { systemTokensCss } from "@aotter/mantle-admin-ui";
