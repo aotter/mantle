@@ -31,7 +31,15 @@ const RESERVED_COLUMN_TYPES: Record<ReservedEntryColumn, string> = {
 
 export class EmitTypesUseCase {
   execute(request: EmitTypesRequest): EmitTypesResponse {
-    const { schemas, procedures, views } = partitionManifests(request.manifests);
+    const manifests = request.linked
+      ? [
+          ...request.linked.schemas,
+          ...request.linked.views,
+          ...request.linked.procedures,
+          ...request.linked.triggers,
+        ].map((entry) => entry.manifest)
+      : request.manifests;
+    const { schemas, procedures, views } = partitionManifests(manifests);
     const schemaByName = new Map(schemas.map((s) => [s.metadata.name, s]));
 
     const out: string[] = [];
@@ -41,32 +49,32 @@ export class EmitTypesUseCase {
     out.push("");
 
     for (const s of schemas) {
-      out.push(`  /** Entry data for Schema '${s.metadata.name}' */`);
-      out.push(declLine(`Entry_${tsId(s.metadata.name)}`, s.spec.schema));
+      out.push(`  /** Entry data for Schema '${docText(s.metadata.name)}' */`);
+      out.push(declLine(`Entry_${manifestTypeIdentifier(s.metadata.name)}`, s.spec.schema));
       out.push("");
     }
 
     for (const p of procedures) {
-      out.push(`  /** Procedure '${p.metadata.name}' input */`);
-      out.push(declLine(`ProcInput_${tsId(p.metadata.name)}`, p.spec.input));
+      out.push(`  /** Procedure '${docText(p.metadata.name)}' input */`);
+      out.push(declLine(`ProcInput_${manifestTypeIdentifier(p.metadata.name)}`, p.spec.input));
       out.push("");
-      out.push(`  /** Procedure '${p.metadata.name}' output */`);
-      out.push(declLine(`ProcOutput_${tsId(p.metadata.name)}`, p.spec.output));
+      out.push(`  /** Procedure '${docText(p.metadata.name)}' output */`);
+      out.push(declLine(`ProcOutput_${manifestTypeIdentifier(p.metadata.name)}`, p.spec.output));
       out.push("");
     }
 
     for (const v of views) {
       const parent = v.spec.from ? schemaByName.get(v.spec.from) : undefined;
       if (v.spec.params) {
-        out.push(`  /** Parameters accepted by View '${v.metadata.name}' */`);
+        out.push(`  /** Parameters accepted by View '${docText(v.metadata.name)}' */`);
         out.push(
-          `  export type ViewParams_${tsId(v.metadata.name)} = ${renderType(v.spec.params, "  ")};`,
+          `  export type ViewParams_${manifestTypeIdentifier(v.metadata.name)} = ${renderType(v.spec.params, "  ")};`,
         );
         out.push("");
       }
-      out.push(`  /** Row shape returned by GET /api/views/${v.metadata.name} */`);
+      out.push(`  /** Row shape returned by View '${docText(v.metadata.name)}' */`);
       if (!parent) {
-        out.push(`  export type ViewRow_${tsId(v.metadata.name)} = unknown;`);
+        out.push(`  export type ViewRow_${manifestTypeIdentifier(v.metadata.name)} = unknown;`);
       } else {
         const props = (parent.spec.schema.properties ?? {}) as Record<string, JsonSchema>;
         const fields = v.spec.fields ?? [...RESERVED_ENTRY_COLUMNS, ...Object.keys(props)];
@@ -81,7 +89,7 @@ export class EmitTypesUseCase {
             rendered.push(`    ${f}?: unknown;`);
           }
         }
-        out.push(`  export interface ViewRow_${tsId(v.metadata.name)} {`);
+        out.push(`  export interface ViewRow_${manifestTypeIdentifier(v.metadata.name)} {`);
         out.push(...rendered);
         out.push(`  }`);
       }
@@ -97,8 +105,13 @@ export class EmitTypesUseCase {
   }
 }
 
-function tsId(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_$]+/g, "_");
+export function manifestTypeIdentifier(name: string): string {
+  const identifier = name.replace(/[^a-zA-Z0-9_$]+/g, "_");
+  return /^[A-Za-z_$]/.test(identifier) ? identifier : `_${identifier}`;
+}
+
+function docText(value: string): string {
+  return value.replaceAll("*/", "*\\/").replace(/[\r\n]+/g, " ");
 }
 
 /**

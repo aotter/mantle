@@ -39,6 +39,10 @@
       "types": "./dist/runtime-testing.d.ts",
       "import": "./dist/runtime-testing.js"
     },
+    "./codegen": {
+      "types": "./dist/codegen.d.ts",
+      "import": "./dist/codegen.js"
+    },
     "./cloudflare": {
       "types": "./dist/cloudflare.d.ts",
       "import": "./dist/cloudflare.js"

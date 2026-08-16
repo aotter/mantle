@@ -19,7 +19,7 @@ import {
   setupIncompleteAuthResponse,
   type MantleCloudflareEnv,
 } from "@aotter/mantle/cloudflare";
-import { manifest } from "../.mantle/generated/site.js";
+import { manifest } from "../.mantle/generated/mantle.js";
 
 interface Env extends MantleCloudflareEnv {
   readonly AUDIT_QUEUE: Queue<{

@@ -22,6 +22,7 @@ Adopters install this one package and import from subpaths. Sub-packages remain 
 | `@aotter/mantle/spec` (or root) | Manifest grammar, validators, JSON-Schema→Zod, diagnostic catalog (no env / no IO) |
 | `@aotter/mantle/runtime` | Hexagonal runtime: domain ports, use cases, infrastructure helpers (no adapter deps) |
 | `@aotter/mantle/runtime/testing` | Node-only crowded SQLite planner and HTTP sampling helpers |
+| `@aotter/mantle/codegen` | Pure linked manifests → typed `bindMantle` module emitter (no IO) |
 | `@aotter/mantle/cloudflare` | Cloudflare Workers adapter — D1, Workers Cache, R2, Better Auth, MCP via `@cloudflare/workers-oauth-provider` |
 | `@aotter/mantle/admin-ui` | Pre-built React 19 admin SPA bundle |
 
@@ -43,25 +44,28 @@ pnpm exec mantle-harness indexes --require-public
 pnpm exec mantle-harness http --base-url http://127.0.0.1:8787 --route page=/en/example
 ```
 
-`mantle generate` validates `./manifests/site.yaml`, writes the
-parsed manifest module and handler declarations to `.mantle/generated/`, and
-copies the version-matched Admin SPA to `public/_mantle/admin/` for the
-platform's static asset service. `--check` verifies both outputs.
-It does not sync skills, update packages, style, provision, or deploy.
-When manifests declare Views or Procedures, the generated `site.ts` also exports
-`bindMantleSite(runtime)`: its `views` and `procedures` keys, inputs, and outputs
-come from those manifests, while diagnostics still come from the runtime use
-cases.
-Dynamic `runtime.viewsByName` access remains available for low-level code.
+`mantle generate` validates and compiles `./manifests/`, then writes one typed
+`.mantle/generated/mantle.ts` module. It performs no Admin asset installation,
+skill sync, package update, styling, provisioning, or deployment. `site.ts` and
+`types.d.ts` are temporary one-way compatibility bridges for alpha.7 consumers.
+The same pure emitter is available from `@aotter/mantle/codegen` when a host
+wants to own parsing and filesystem IO.
 
 ```ts
-const site = bindMantleSite(runtime);
-const notes = await site.views["published-notes"]();
-const result = await site.procedures["expire-order"](
+import { bindMantle } from "../.mantle/generated/mantle.js";
+
+const mantle = bindMantle(runtime);
+const notes = await mantle.views.publishedNotes();
+const result = await mantle.procedures.expireOrder(
   { orderId },
   { user: null, staff: null, env },
 );
+await mantle.entries.orders.createDraft({ data, authorId: user.id });
 ```
+
+Generated property names are deterministic lower-camel identifiers; calls keep
+the authored wire names internally. Dynamic hosts can skip code generation and
+call `runtime.executeView({ view: "published-notes" })` directly.
 
 `mantle skills` explicitly copies the installed package's `develop`, `plugin`,
 `theme`, and `update` skills to matching `.agent/skills/mantle-*` and
@@ -82,7 +86,7 @@ The normal Worker entry delegates Core-owned assembly to the SDK:
 
 ```ts
 import { createMantleWorker } from "@aotter/mantle/cloudflare";
-import { manifest } from "../.mantle/generated/site.js";
+import { manifest } from "../.mantle/generated/mantle.js";
 
 export default createMantleWorker({ manifest });
 ```
@@ -120,8 +124,8 @@ the consumer build. Computed paths cannot be proven statically, so the facade
 checks Hono's assembled route table and fails closed before serving requests.
 There is no standard-route override option.
 
-Cloudflare projects expose that generated Admin bundle and the site's own
-frontend assets through one native binding:
+Cloudflare projects may expose an independently installed Admin bundle and the
+application's own frontend assets through one native binding:
 
 ```toml
 [assets]

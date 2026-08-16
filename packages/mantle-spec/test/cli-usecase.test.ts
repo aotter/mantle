@@ -440,4 +440,19 @@ spec:
     expect(source).toContain("export type ProcInput_ping = string;");
     expect(source).not.toMatch(/export interface ProcInput_ping\s+string/);
   });
+
+  it("keeps authored names inside generated documentation comments", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: "unsafe */\\nexport type Injected = true" }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: safe }
+`;
+    const { manifests } = parseManifests(yaml);
+    const { source } = EmitTypesUseCase.run({ manifests, namespace: "Test" });
+    expect(source).not.toContain("unsafe */ export type Injected");
+    expect(source).toContain("unsafe *\\/ export type Injected");
+  });
 });

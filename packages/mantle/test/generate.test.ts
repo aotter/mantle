@@ -21,20 +21,209 @@ describe("mantle generate", () => {
     const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     expect(await runGenerate(["--namespace", "not-valid"])).toBe(2);
     expect(stderr).toHaveBeenCalledWith(
-      '--namespace must be a TypeScript identifier; got "not-valid"\n',
+      '--namespace must be a non-reserved TypeScript identifier; got "not-valid"\n',
     );
+    expect(await runGenerate(["--namespace", "MantleHandlers"])).toBe(2);
   });
 
-  it("deterministically emits manifests and typed handlers, with a non-mutating check", async () => {
+  it("emits and runs one deterministic typed Mantle module", async () => {
     const root = await mkdtemp(join(originalCwd, ".mantle-generate-"));
+    try {
+      await mkdir(join(root, "manifests"));
+      await writeFile(join(root, "manifests", "site.yaml"), fixture);
+      process.chdir(root);
+
+      expect(await runGenerate([])).toBe(0);
+      const mantlePath = join(root, ".mantle", "generated", "mantle.ts");
+      const sitePath = join(root, ".mantle", "generated", "site.ts");
+      const typesPath = join(root, ".mantle", "generated", "types.d.ts");
+      const firstMantle = await readFile(mantlePath, "utf8");
+      expect(firstMantle).toContain("export function bindMantle(runtime: CoreMantleRuntime)");
+      expect(firstMantle).toContain("productsBySku: (request:");
+      expect(firstMantle).toContain('view: "products-by-sku"');
+      expect(firstMantle).toContain("importProduct: (input:");
+      expect(firstMantle).toContain('procedure: "import-product"');
+      expect(firstMantle).toContain("products: {");
+      expect(firstMantle).toContain('collection: "products"');
+      expect(firstMantle.match(/readonly "syncCatalog":/g)).toHaveLength(1);
+      expect(firstMantle).toContain("ProcInput_import_product | Mantle.ProcInput_remove_product");
+      expect(await readFile(sitePath, "utf8")).toBe(
+        "// Generated compatibility bridge; delete with the alpha.7 facade in #673.\n"
+        + 'export { bindMantleSite, manifest } from "./mantle.js";\n',
+      );
+      expect(await readFile(typesPath, "utf8")).toContain(
+        'export { Mantle as MantleSite } from "./mantle.js";',
+      );
+      await expect(readFile(join(root, "public", "_mantle", "admin", "index.html")))
+        .rejects.toThrow();
+
+      const consumerPath = join(root, "consumer.ts");
+      await writeFile(consumerPath, `
+import { bindMantle } from "./.mantle/generated/mantle.js";
+import { bindMantleSite } from "./.mantle/generated/site.js";
+import type { MantleSite } from "./.mantle/generated/types.js";
+import type { CmsRuntime, MantleRuntime } from "@aotter/mantle/runtime";
+
+const calls: string[] = [];
+const runtime = {
+  revision: "test",
+  createDraft: { execute: async (request: { collection: string; data: unknown }) => {
+    calls.push("entry:" + request.collection);
+    return request;
+  } },
+  executeView: async (request: { view: string }) => {
+    calls.push("view:" + request.view);
+    return { ok: true as const, result: { rows: [{ id: "1", title: "Typed" }], page: 1, show: 20, hasMore: false } };
+  },
+  invokeProcedure: async (request: { procedure: string }) => {
+    calls.push("procedure:" + request.procedure);
+    return { ok: true as const, data: { imported: true } };
+  },
+} as unknown as MantleRuntime;
+
+const mantle = bindMantle(runtime);
+await mantle.entries.products.createDraft({ data: { sku: "sku-1" }, authorId: null });
+const view = await mantle.views.productsBySku({ params: { sku: "sku-1" } });
+const procedure = await mantle.procedures.importProduct(
+  { sku: "sku-1" },
+  { user: null, staff: null, env: {} },
+);
+if (!view.ok || view.result.rows[0]?.title !== "Typed") throw new Error("typed View failed");
+if (!procedure.ok || procedure.data.imported !== true) throw new Error("typed Procedure failed");
+if (calls.join(",") !== "entry:products,view:products-by-sku,procedure:import-product") {
+  throw new Error("wire names changed: " + calls.join(","));
+}
+
+if (false) {
+  // @ts-expect-error Unknown Views are absent from the generated surface.
+  mantle.views.missing();
+  // @ts-expect-error Required View params cannot be omitted.
+  mantle.views.productsBySku();
+  // @ts-expect-error Schema payload is generated from the manifest.
+  await mantle.entries.products.createDraft({ data: { title: "missing sku" }, authorId: null });
+  const legacy = null as unknown as CmsRuntime;
+  const site = bindMantleSite(legacy);
+  const row: MantleSite.ViewRow_products_by_sku | undefined =
+    (await site.views["products-by-sku"]({ params: { sku: "sku-1" } })).ok
+      ? undefined
+      : undefined;
+  void row;
+}
+`);
+      const compiled = join(root, "compiled");
+      try {
+        await execFileAsync(process.execPath, [
+          tscPath,
+          "--ignoreConfig",
+          "--strict",
+          "--target", "ES2022",
+          "--module", "NodeNext",
+          "--moduleResolution", "NodeNext",
+          "--skipLibCheck",
+          "--rootDir", root,
+          "--outDir", compiled,
+          consumerPath,
+          mantlePath,
+          sitePath,
+          typesPath,
+        ], { cwd: root });
+        await execFileAsync(process.execPath, [join(compiled, "consumer.js")], { cwd: root });
+      } catch (error) {
+        const output = error as { stdout?: string; stderr?: string };
+        throw new Error(output.stderr || output.stdout || String(error));
+      }
+
+      expect(await runGenerate([])).toBe(0);
+      expect(await readFile(mantlePath, "utf8")).toBe(firstMantle);
+      expect(await runGenerate(["--check"])).toBe(0);
+
+      const adminIndexPath = join(root, "public", "_mantle", "admin", "index.html");
+      await mkdir(join(root, "public", "_mantle", "admin"), { recursive: true });
+      await writeFile(adminIndexPath, "owned by the host\n");
+      expect(await runGenerate(["--check"])).toBe(0);
+      expect(await readFile(adminIndexPath, "utf8")).toBe("owned by the host\n");
+
+      await writeFile(mantlePath, "stale\n");
+      const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      expect(await runGenerate(["--check"])).toBe(1);
+      expect(stderr).toHaveBeenCalledWith("Mantle generated files are stale; run `mantle generate`.\n");
+      expect(await readFile(mantlePath, "utf8")).toBe("stale\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails normalized identifier collisions at the authored source", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mantle-generate-collision-"));
     try {
       await mkdir(join(root, "manifests"));
       await writeFile(join(root, "manifests", "site.yaml"), `
 apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: products }
+spec: { title: Products, schema: { type: object } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: open-orders }
+spec: { surface: public, from: products }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: open.orders }
+spec: { surface: public, from: products }
+`);
+      process.chdir(root);
+      let error = "";
+      vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+        error += String(chunk);
+        return true;
+      });
+
+      expect(await runGenerate([])).toBe(1);
+      expect(error).toContain("CODEGEN_IDENTIFIER_COLLISION");
+      expect(error).toContain("site.yaml#/2/metadata/name");
+      expect(error).toContain("'open-orders' and 'open.orders' both generate 'openOrders'");
+      await expect(readFile(join(root, ".mantle", "generated", "mantle.ts"))).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports the source file and writes nothing for invalid manifests", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mantle-generate-invalid-"));
+    try {
+      await mkdir(join(root, "manifests"));
+      const manifestPath = join(root, "manifests", "site.yaml");
+      await writeFile(manifestPath, `
+apiVersion: wrong
+kind: Schema
+metadata: { name: broken }
+spec: {}
+`);
+      process.chdir(root);
+      let error = "";
+      vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+        error += String(chunk);
+        return true;
+      });
+
+      expect(await runGenerate([])).toBe(1);
+      expect(error).toContain("INVALID_MANIFEST_ENVELOPE");
+      expect(error).toContain("site.yaml#/0/apiVersion");
+      await expect(readFile(join(root, ".mantle", "generated", "mantle.ts"))).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+const fixture = `
+apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure
 metadata: { name: import-product }
 spec:
-  input: { type: object, properties: { sku: { type: string } } }
+  input: { type: object, required: [sku], properties: { sku: { type: string } } }
   output: { type: object, properties: { imported: { type: boolean } } }
   handler: { kind: ref, ref: syncCatalog }
 ---
@@ -80,118 +269,4 @@ spec:
   from: products
   fields: [id, title]
   filter: { eq: { field: status, value: published } }
-`);
-      process.chdir(root);
-
-      const generateArgs = ["--namespace", "CmsRuntime"];
-      expect(await runGenerate(generateArgs)).toBe(0);
-      const sitePath = join(root, ".mantle", "generated", "site.ts");
-      const typesPath = join(root, ".mantle", "generated", "types.d.ts");
-      await expect(readFile(join(root, ".agent", "skills", "mantle-develop", "SKILL.md"))).rejects.toThrow();
-      const firstSite = await readFile(sitePath, "utf8");
-      const firstTypes = await readFile(typesPath, "utf8");
-      const adminIndexPath = join(root, "public", "_mantle", "admin", "index.html");
-      expect(await readFile(adminIndexPath, "utf8")).toContain("/_mantle/admin/");
-      expect(firstSite).toContain("as const satisfies readonly Manifest[]");
-      expect(firstSite).toContain("export function bindMantleSite(runtime: CmsRuntime)");
-      expect(firstSite).toContain('procedures: {');
-      expect(firstTypes.match(/readonly "syncCatalog":/g)).toHaveLength(1);
-      expect(firstTypes).toContain("ProcInput_import_product | CmsRuntime.ProcInput_remove_product");
-      expect(firstTypes).toContain("ProcOutput_import_product | CmsRuntime.ProcOutput_remove_product");
-      expect(firstTypes).toContain("export type ViewParams_products_by_sku");
-      expect(firstTypes).toContain("export interface ViewRow_products_by_sku");
-
-      const consumerPath = join(root, "consumer.ts");
-      await writeFile(consumerPath, `
-import { bindMantleSite } from "./.mantle/generated/site.js";
-import type { CmsRuntime } from "@aotter/mantle/runtime";
-
-declare const runtime: CmsRuntime;
-const site = bindMantleSite(runtime);
-const ctx = { user: null, staff: null, env: {} };
-const imported = await site.procedures["import-product"]({ sku: "sku-1" }, ctx);
-if (imported.ok) {
-  const ok: boolean | undefined = imported.data.imported;
-  void ok;
-}
-// @ts-expect-error Unknown Procedures are absent from the generated surface.
-site.procedures["missing"]({}, ctx);
-// @ts-expect-error Procedure input is generated from its manifest.
-site.procedures["import-product"]({ id: "wrong" }, ctx);
-const result = await site.views["products-by-sku"]({ params: { sku: "sku-1" } });
-if (result.ok) {
-  const title: string | undefined = result.result.rows[0]?.title;
-  void title;
-}
-site.views["published-products"]();
-// @ts-expect-error Unknown Views are absent from the generated surface.
-site.views["missing"]();
-// @ts-expect-error Required View params cannot be omitted.
-site.views["products-by-sku"]();
-`);
-      try {
-        await execFileAsync(process.execPath, [
-          tscPath,
-          "--ignoreConfig",
-          "--noEmit",
-          "--strict",
-          "--target", "ES2022",
-          "--module", "NodeNext",
-          "--moduleResolution", "NodeNext",
-          "--skipLibCheck",
-          consumerPath,
-          sitePath,
-          typesPath,
-        ], { cwd: root });
-      } catch (error) {
-        const output = error as { stdout?: string; stderr?: string };
-        throw new Error(output.stderr || output.stdout || String(error));
-      }
-
-      expect(await runGenerate(generateArgs)).toBe(0);
-      expect(await readFile(sitePath, "utf8")).toBe(firstSite);
-      expect(await readFile(typesPath, "utf8")).toBe(firstTypes);
-      expect(await runGenerate([...generateArgs, "--check"])).toBe(0);
-
-      await writeFile(adminIndexPath, "stale\n");
-      expect(await runGenerate([...generateArgs, "--check"])).toBe(1);
-      expect(await readFile(adminIndexPath, "utf8")).toBe("stale\n");
-      expect(await runGenerate(generateArgs)).toBe(0);
-
-      await writeFile(sitePath, "stale\n");
-      const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-      expect(await runGenerate([...generateArgs, "--check"])).toBe(1);
-      expect(stderr).toHaveBeenCalledWith("Mantle generated files are stale; run `mantle generate`.\n");
-      expect(await readFile(sitePath, "utf8")).toBe("stale\n");
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("reports the source file and writes nothing for invalid manifests", async () => {
-    const root = await mkdtemp(join(tmpdir(), "mantle-generate-invalid-"));
-    try {
-      await mkdir(join(root, "manifests"));
-      const manifestPath = join(root, "manifests", "site.yaml");
-      await writeFile(manifestPath, `
-apiVersion: wrong
-kind: Schema
-metadata: { name: broken }
-spec: {}
-`);
-      process.chdir(root);
-      let error = "";
-      vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
-        error += String(chunk);
-        return true;
-      });
-
-      expect(await runGenerate([])).toBe(1);
-      expect(error).toContain("INVALID_MANIFEST_ENVELOPE");
-      expect(error).toContain("site.yaml#/0/apiVersion");
-      await expect(readFile(join(root, ".mantle", "generated", "site.ts"))).rejects.toThrow();
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-});
+`;

@@ -129,7 +129,7 @@ export interface MantleWorkerExtension<Env extends MantleCloudflareEnv> {
 }
 
 export interface CreateMantleWorkerOptions<Env extends MantleCloudflareEnv> {
-  /** Parsed manifests, normally imported from `.mantle/generated/site.js`. */
+  /** Parsed manifests, normally imported from `.mantle/generated/mantle.js`. */
   readonly manifest: readonly Manifest[];
   readonly handlers?: Readonly<Record<string, AnyHandler>>;
   readonly siteDefaults?: SiteDefaults | ((env: Env) => SiteDefaults);
