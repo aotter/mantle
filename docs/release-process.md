@@ -1,8 +1,9 @@
 # Release process
 
-Mantle is in `0.0.x-alpha` until the v0.1.0 gate closes. Published package
-versions, Git tags, GitHub releases, and Starter tags are immutable: repair a
-bad release with the next version, never by replacing public state.
+Mantle remains prerelease software until the stable v0.1.0 gate closes.
+Published package versions, Git tags, GitHub releases, and Starter tags are
+immutable: repair a bad release with the next version, never by replacing
+public state.
 
 ## Authority
 
@@ -152,7 +153,7 @@ Core repository secrets:
 
 | Secret | Minimum purpose |
 |---|---|
-| `NPM_TOKEN` | Publish the five `@aotter/*` packages on npmjs. |
+| `NPM_TOKEN` | Publish the nine `@aotter/*` packages on npmjs. |
 | `RELEASE_FANOUT_TOKEN` | Read and dispatch `aotter/mantle-starters`; also read and dispatch `aotter/mantle-landing` only when Landing is enabled. |
 
 Core's job-scoped `GITHUB_TOKEN` creates the Core tag and release and mirrors

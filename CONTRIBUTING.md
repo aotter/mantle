@@ -1,132 +1,134 @@
-# Contributing to mantle
+# Contributing to Mantle
 
-mantle is built for AI agents to be primary authors of consumer projects. Human maintainers still own review and release decisions, but the contributor workflow must be clear enough that a fresh AI agent can file a good issue or open a good PR by reading only this repo.
+This file and accepted ADRs are the tool-neutral authority for human and agent
+contributors. Historical issue plans explain migrations; the checked-out
+source, tests, package READMEs, and accepted ADRs define the current contract.
 
-Start here before changing code or docs. For deeper engineering rules, read [`CLAUDE.md`](CLAUDE.md) and the ADR index in [`docs/adr/README.md`](docs/adr/README.md).
+## Product and architecture contract
 
-## Project shape
+Mantle Core is an embeddable manifest engine, not a site framework. A consumer
+may use only the parser and linker, bind Runtime to application-owned storage,
+add generated TypeScript bindings, or compose optional Web, Admin, UI, and
+platform adapters. The official Starter is an example and project bootstrap;
+it does not own Core's application shape.
 
-- `develop` is the integration branch.
-- `main` is release-only and moves through `develop -> main` release merges.
-- PRs target `develop`, not `main`.
-- Merge completed PRs with `gh pr merge --merge --delete-branch`. Do not squash; the project preserves reviewable commits.
-- Feature work should normally start from an issue unless it is a tiny docs or hygiene fix.
-
-## Local setup
-
-Requirements:
-
-- Node.js >= 22
-- pnpm >= 9
-
-Install and check the repo:
-
-```bash
-pnpm install
-pnpm build
-pnpm typecheck
-pnpm test
-```
-
-The full local gate is:
-
-```bash
-pnpm run check
-```
-
-Use the narrowest command that proves your change while developing. Run the full gate before a release-sensitive or broad PR.
-
-## Branches
-
-Cut branches from `develop`:
-
-```bash
-git fetch origin
-git checkout -b feat/issue-81-short-topic origin/develop
-```
-
-Use these prefixes:
-
-- `feat/issue-NN-topic` for user-visible features or new docs/process surfaces.
-- `fix/issue-NN-topic` for bug fixes.
-- `docs/issue-NN-topic` for documentation-only changes.
-- `chore/issue-NN-topic` for tooling, metadata, dependency, or maintenance work.
-
-If no issue exists, create one first unless the change is obviously trivial. For trivial no-issue work, omit the `issue-NN` segment and keep the branch descriptive, for example `docs/spec-readme-typo` or `chore/update-ci-comment`.
-
-## Commits
-
-Use conventional commits:
-
-- `feat(scope): short summary`
-- `fix(scope): short summary`
-- `docs(scope): short summary`
-- `chore(scope): short summary`
-- `test(scope): short summary`
-- `refactor(scope): short summary`
-
-When an AI agent authored or substantially rewrote a commit, add a co-author trailer when the agent identity is known:
+The sealed pipeline is:
 
 ```text
-Co-Authored-By: Claude <noreply@anthropic.com>
+ManifestSourceSet -> parse -> ParsedManifestSet -> link -> LinkedManifestSet
+  -> compile -> RuntimePlan -> prepare storage -> bind MantleRuntime
 ```
 
-Keep commits reviewable. A PR may have multiple commits if each one is coherent and independently understandable.
+Each rule has one owner. Runtime and adapters consume the sealed output of the
+previous stage rather than interpreting raw manifests again. Generated
+bindings project typed lower-camel properties over the same plan; they are a DX
+option, not a prerequisite for embedding Core. Public APIs must remain usable
+and understandable by human engineers without a generated Starter.
 
-## Issues
+The package topology is:
 
-Use the GitHub issue templates:
+| Package | Responsibility |
+|---|---|
+| `@aotter/mantle-spec` | Pure manifest grammar, parse, link, diagnostics, and authoring CLI. |
+| `@aotter/mantle-runtime` | Adapter-neutral plan compilation, semantic storage ports, preparation, and runtime invocation. |
+| `@aotter/mantle` | Core umbrella, code generation, and authoring CLI; optional packages are peers. |
+| `@aotter/mantle-web` | Optional HTML, Markdown, `llms.txt`, sitemap, SEO, and preview composition. |
+| `@aotter/mantle-admin` | Optional Admin API, auth, and static-asset composition. |
+| `@aotter/mantle-admin-ui` | Optional pre-built Admin SPA. |
+| `@aotter/mantle-bun` | Bun adapter over caller-owned `bun:sqlite`. |
+| `@aotter/mantle-vercel` | Vercel Functions adapter over injected durable storage; optional libSQL subpath. |
+| `@aotter/mantle-cloudflare` | Cloudflare Workers adapter over D1 and selected platform services. |
 
-- **Bug report**: broken or surprising behavior.
-- **Feature request**: a concrete capability with user value.
-- **Discussion**: convergence work where the right answer is not known yet.
-- **Proposal**: ADR-lite decision record for process, architecture, or product shape.
+`skills/*` are versioned consumer product artifacts. Maintainer instructions
+live at the repository root and in `.agent/skills`; do not merge the two
+audiences or copy maintainer policy into shipped skills.
 
-Apply labels using [`docs/labels.md`](docs/labels.md). In particular:
+## Hard invariants
 
-- Use `needs-discussion` when a ticket is not ready for implementation.
-- Use `needs-adr` when the change affects architecture, package boundaries, trust boundaries, or long-lived product decisions.
-- Use `needs-grammar-revise` for manifest grammar or closed-enum changes.
-- Use an `area:*` label for the affected package or surface.
+- `@aotter/mantle-spec` stays environment- and adapter-free and retains
+  `sideEffects: false`.
+- `@aotter/mantle-runtime` must not import Cloudflare, Bun, Vercel, SQL-client,
+  or other platform-specific types. Concrete adapters bind Core ports.
+- Storage is semantic at the Core boundary. SQLite/D1 is an official adapter,
+  not the Runtime contract; Postgres, MongoDB, or application-owned tables may
+  implement the same semantic ports directly.
+- Web, Admin, Admin UI, and every platform adapter remain optional. Core must
+  not require routes, HTML, static assets, auth, or an Admin surface.
+- Runtime input is a sealed `RuntimePlan`, never raw manifests. Deployment
+  preparation owns migrations, indexes, native query lowering, and readiness.
+- Manifest grammar is locked for v0.1. New keys and closed-enum members require
+  grammar-revise work before implementation. Atom names remain Schema, View,
+  Procedure, and Trigger.
+- Trust-boundary input fails with structured diagnostics or stable transport
+  errors. Never simplify away validation, authorization, data-loss protection,
+  or accessibility basics.
+- Auth is a selected product/platform contract, not a Runtime port. Better Auth
+  is the Cloudflare default implementation, not an option pass-through API;
+  see [ADR-0014](docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md).
 
-## Pull requests
+### Clean architecture
 
-Open PRs against `develop`. A useful PR body includes:
+`mantle-spec` and `mantle-runtime` follow:
 
-- Summary of the change.
-- Why the change is needed.
-- Scope and non-goals.
-- Test plan with commands actually run.
-- Any standard checks that were not run, marked as not applicable with a short reason.
-- Follow-ups that should not block this PR.
-- Related issues, ADRs, and docs.
+```text
+kernel <- domain (model + port + service) <- usecase <- infrastructure
+```
 
-Use `.github/pull_request_template.md`. Link issues with `Closes #NN` only when the PR fully resolves the issue. Use `Refs #NN` when it is partial.
+- `kernel/` imports only external libraries and other kernel files.
+- `domain/` does not import `usecase/`, `infrastructure/`, or assembly code.
+- `usecase/` does not import `infrastructure/`.
+- Port interfaces live in `domain/port/`; concrete implementations live in
+  infrastructure or downstream adapters.
+- Use cases accept request DTOs and explicit dependencies. Infrastructure is
+  thin envelope handling and delegation.
+- `MantleRuntime.ts` assembles prepared ports and use cases. It must not regain
+  database, Web, Admin, or platform ownership.
+- A new top-level folder under `domain/`, `usecase/`, or `infrastructure/`
+  needs an ADR-lite rationale in the PR description.
 
-## Architecture and grammar gates
+Spec owns authored and validated data types. Runtime owns execution facts and
+rows supplied by dispatchers. If a Spec function accepts, returns, or validates
+a type, that type belongs to Spec.
 
-Read the relevant ADRs before touching architecture. The most common gates are:
+## Local setup and checks
 
-- Runtime must stay adapter-agnostic. `@aotter/mantle-runtime` must not import Cloudflare-specific types.
-- Manifest grammar is locked at v0.1. New grammar keys or closed-enum entries need grammar-revise work before implementation.
-- New top-level `domain/`, `usecase/`, or `infrastructure/` folders need an ADR-lite paragraph in the PR body.
-- Trust-boundary changes, auth changes, MCP surface changes, persistence boundaries, and public HTTP semantics need `needs-adr` unless an existing ADR clearly covers the decision.
-- **Auth surface — no Better Auth pass-through.** Better Auth is the default `createAuth` implementation, not the SDK's contract; the `Auth` interface is the contract (see ADR-0014 § "Auth as contract, Better Auth as default", as amended 2026-05-15 by the OAuth carve-out). PRs that only rename a Better Auth option into `CreateAuthConfig` and forward it verbatim must be refused. **Picking a different literal default for an existing Better Auth field does not justify a new field by itself** — that's pass-through dressed up. When a Better Auth knob is genuinely missing from the SDK contract, the answer is a curated first-class field with a concrete justification: Workers-aware behavior Better Auth doesn't supply, a cross-adapter port the runtime needs, a safety net Better Auth doesn't provide, a new abstraction that fuses multiple Better Auth surfaces, or a DX helper that removes a Workers-hostile dep. The un-curated `CreateAuthConfig.betterAuthOptions` escape hatch (from PR #175) was retracted by PR #193's carve-out — the carved-out OAuth surface plus the curated `methods[]` / `rateLimit` / `bootstrapOwner` fields cover the adopter contract without needing a passthrough.
+Requirements: Node.js 22 or newer and pnpm 9 or newer.
 
-## Release notes
+```bash
+pnpm install --frozen-lockfile
+pnpm check
+```
 
-GitHub Releases is the canonical public change history. Keep PR titles,
-descriptions, and labels accurate because GitHub generates each release from
-that metadata using `.github/release.yml`. Add `skip-release-notes` only to
-release bookkeeping that should not appear in user-facing notes.
+`pnpm check` runs package-boundary and release self-checks, builds exact packed
+consumer fixtures, typechecks, and tests the workspace. Use package filters
+while iterating. Changes to Cloudflare request/storage performance must also run
+`pnpm bench:wrangler`.
 
-Do not add version entries to `CHANGELOG.md`; it is a stable entry point to
-GitHub Releases and the archived pre-migration history.
+## Branches, commits, and pull requests
 
-## Release process
+- `develop` is the integration branch. `main` moves only through deliberate
+  release promotion.
+- Branch from `origin/develop` with `feat/issue-N-topic`,
+  `fix/issue-N-topic`, `docs/issue-N-topic`, or `chore/issue-N-topic`.
+- Use conventional commit subjects. Keep each commit and PR coherent and
+  reviewable.
+- Open PRs against `develop` and merge with a merge commit, not squash.
+- Start non-trivial work from an issue. Use the templates and labels described
+  in [`docs/labels.md`](docs/labels.md).
+- A PR body states outcome, scope/non-goals, commands actually run, omitted
+  checks, and related issues/ADRs. Use `Closes #N` only when complete.
+- Architecture, grammar, persistence, trust-boundary, auth, MCP, and public
+  transport changes need an existing accepted decision or an ADR-lite/ADR as
+  appropriate.
 
-See [`docs/release-process.md`](docs/release-process.md). Until v0.1.0, the repo is alpha and the public API may still move. Release mechanics must still be documented in PRs that affect packages, tags, or publish behavior.
+The canonical public change history is GitHub Releases, generated from PR
+metadata through `.github/release.yml`. Do not add version entries to
+`CHANGELOG.md`.
 
-## Security
+## Release and security
 
-Do not file public issues for vulnerabilities. Follow [`SECURITY.md`](SECURITY.md).
+Release mechanics are governed by [`docs/release-process.md`](docs/release-process.md)
+and the canonical [maintainer release skill](.agent/skills/mantle-release/SKILL.md).
+No task implies permission to publish.
+
+Do not file public vulnerability issues. Follow [`SECURITY.md`](SECURITY.md).

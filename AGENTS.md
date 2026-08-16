@@ -1,21 +1,21 @@
-# AGENTS.md
+# Mantle contributor router
 
-Route by user intent before reading deeper:
+- To create or continue a Mantle application, use the version-matched consumer
+  skills under [`skills/`](skills/) and materialize a project outside this SDK
+  checkout.
+- To change or review this SDK, read [`CONTRIBUTING.md`](CONTRIBUTING.md) and
+  the relevant accepted ADRs before editing.
+- To version, publish, tag, or fan out a release, additionally read the
+  canonical [release skill](.agent/skills/mantle-release/SKILL.md). Do not
+  release unless the user explicitly asks.
 
-- If the user supplied this repository to **try Mantle, create a site, or build
-  an application**, do not treat this SDK checkout as the application. Read
-  [`skills/install/SKILL.md`](./skills/install/SKILL.md) and materialize a
-  starter project outside this repository.
-- If the user explicitly wants to **change, review, or release the Mantle
-  SDK**, read [CLAUDE.md](./CLAUDE.md) first.
+Repository safety gates:
 
-Generated consumer projects get their own Mantle-aware `AGENTS.md` from
-[`mantle-starters`](https://github.com/aotter/mantle-starters).
+- Branch from and open PRs against `develop`; preserve merge commits.
+- Keep Runtime adapter-neutral and the v0.1 manifest grammar closed.
+- Use the narrowest relevant check while editing; run `pnpm check` for broad
+  changes.
 
-## Quick links for contributing agents
-
-- Contribution contract → [CONTRIBUTING.md](./CONTRIBUTING.md)
-- Architecture rules / clean-arch layout → [CLAUDE.md](./CLAUDE.md)
-- Decision history (irreversible choices) → [`docs/adr/`](./docs/adr/)
-- Release / fanout guardrail → [`.agent/skills/mantle-release/SKILL.md`](./.agent/skills/mantle-release/SKILL.md)
-- Skills for end-user flows → [`skills/`](./skills/)
+`CLAUDE.md` is a compatibility pointer, not a second instruction authority.
+Generated applications receive their own version-matched instructions from
+[`aotter/mantle-starters`](https://github.com/aotter/mantle-starters).

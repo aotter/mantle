@@ -1,245 +1,112 @@
-# mantle
+# Mantle
 
 [![CI](https://github.com/aotter/mantle/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/aotter/mantle/actions/workflows/ci.yml)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
-[![Status: Experimental](https://img.shields.io/badge/status-experimental-orange.svg)](#status)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-> ⚠️ **Experimental — co-built with AI**
->
-> mantle is co-developed with AI coding agents (Claude Code) and is
-> currently in **0.0.x / pre-1.0**. Treat everything here as experimental:
-> APIs, manifests, schema shapes, and runtime behavior **can break between
-> any two commits** without notice or migration path. Do not deploy this
-> for anything you cannot afford to rebuild from scratch.
->
-> Review the code, run your own tests, and verify generated content before
-> trusting it. Pull requests welcome; bug reports especially welcome.
+Mantle is an embeddable, manifest-driven application engine. It turns four
+authored atoms—Schema, View, Procedure, and Trigger—into a validated runtime
+plan, typed application bindings, and optional delivery surfaces.
 
-**Build your content model by prompting, not configuring.**
+> Mantle is prerelease software. APIs and manifests may change between alpha
+> releases. Use the installed package's version-matched docs as the contract
+> and review generated code before production use.
 
-Agent-native headless CMS where AI agents are first-class authors — locked-grammar manifests, structured JSON diagnostics, and static `.md` mirrors every agent can crawl without auth. Most CMSes treat AI as a content editor; mantle treats it as the developer.
+## Compose only what the application needs
 
-## Try it cold
-
-If a user hands you this repo and says "let's try Mantle" or "what can we
-build?", read [`skills/install/SKILL.md`](skills/install/SKILL.md). Pick the
-closest `blank`, `presence`, `intake`, `publication`, `transaction`,
-`reservation`, or `community` bundle from
-[`aotter/mantle-starters`](https://github.com/aotter/mantle-starters),
-materialize it into a new local project, then install, validate, typecheck, and
-start the preview. Do not use this SDK checkout as the application.
-
-[Mantle landing](https://mantle.tools) runs the same starter-bundle flow and
-continues through private GitHub repo creation, Cloudflare deployment, and
-optional paid hosted auth. Local cold start stops before those provider
-operations.
-
-Generated projects include the `mantle` authoring CLI from
-`@aotter/mantle`: `generate`, `skills`, `update`, `validate`, `introspect`,
-`emit-openapi`, and `emit-types`. `generate` compiles YAML into
-one `.mantle/generated/mantle.ts` module containing a sealed runtime plan and
-typed bindings; `--check` verifies it without writing. Admin UI installation is
-an explicit, separate choice. The
-umbrella package also ships `mantle-harness` for crowded
-SQLite index coverage and live Worker/API/page sampling; see
-[`docs/performance-harness.md`](docs/performance-harness.md).
-
-> **Prerelease.** This repo is a clean rebuild of the v0.0.x POC. Until v0.1.0 tags, the API surface is in flux — alpha and beta releases may introduce breaking changes. Current published versions and channel policy are documented in [`docs/release-process.md`](docs/release-process.md). Track the rebuild plan at [#1](https://github.com/aotter/mantle/issues/1).
-
-## Part of Mantle
-
-**Mantle** (**C**onfig **L**anguage for **A**pps & **M**odeling) is Aotter's family of agent-native config languages. Two halves, one thesis:
-
-- **Apps (OLTP)** — `mantle` (this repo) and future apps. Build a content-driven web service by declaring atoms in YAML; the runtime ships dispatcher + auth + render + MCP for free.
-- **Modeling (OLAP)** — [`aotter-mantle`](https://github.com/aotter/aotter-mantle) (sibling project). Turn enterprise Excel/CSV files into Kimball-modeled DuckLake warehouses by declaring star-schema configs in YAML.
-
-> Note: the two halves intentionally live as separate repos under the `aotter` org — different release cadences, different licensing posture.
-
-The shared spirit: **agents write config, runtime carries the complexity**. Hard problems — schema validation, cache invalidation, OAuth, locale canonicalization, JSON Schema → zod conversion, transactional state — live in the runtime, where they're written once by people who understand them. The authoring surface is YAML the agent fills in, where mistakes are caught by structured diagnostics before they become production failures. Non-coders get AI leverage safely; the runtime is the load-bearing part.
-
-This repo is the OLTP side of that thesis applied to web content.
-
-## For AI agents
-
-You're an agent helping a (likely non-technical) user install or extend a mantle project.
-
-Before working:
-
-- Match the installed Mantle version and use its embedded docs under
-  `node_modules/@aotter/mantle/docs/`; do not guess from the latest branch.
-- For "let's try it" requests, materialize the closest starter bundle before
-  proposing custom code.
-- Choose the Cloudflare, Bun, or Vercel adapter that matches the host; Core is
-  also directly embeddable behind application-owned storage ports.
-- Free self-hosted auth requires the site owner to configure the GitHub OAuth
-  App, provider secrets, and related operations.
-- [Mantle landing](https://mantle.tools) also offers paid hosted auth for
-  owners who do not want to operate provider configuration and auth
-  infrastructure.
-
-→ **Install a fresh publication/site** — start at [`skills/install/SKILL.md`](skills/install/SKILL.md).
-→ **Work inside an existing project** — start at [`skills/develop/SKILL.md`](skills/develop/SKILL.md).
-→ **Install a repeatable marketplace capability** — start at [`skills/plugin/SKILL.md`](skills/plugin/SKILL.md).
-→ **Adjust brand and visual direction** — start at [`skills/theme/SKILL.md`](skills/theme/SKILL.md).
-→ **Check SDK / starter / plugin drift** — start at [`skills/update/SKILL.md`](skills/update/SKILL.md).
-→ **Finish production deploy** (GitHub repo, Cloudflare dashboard first deploy, OAuth App, Wrangler secrets, smoke) — start at [`skills/provision/SKILL.md`](skills/provision/SKILL.md).
-
-The `mantle:*` namespace is owned by `@aotter/mantle`. `mantle skills`
-projects the installed package's Core workflow skills to repo-local `.agent`
-and `.claude` paths; `mantle skills --check` fails on drift without writing.
-The installed package version and its embedded docs remain the runtime/API
-contract.
-`.mantle/*` launch files and plugin recipes are project context, not another
-contract.
-
-### Install Mantle Core skills
-
-Install the Mantle agent plugin to create or continue sites. Generated starter
-repos project the same version-matched Core workflow skills locally; use those
-for project workflow and the installed package docs for SDK behavior.
-
-Resolve the current published prerelease once, then substitute that exact value
-below. In an existing project, use its installed `@aotter/mantle` version
-instead of the npm dist-tag.
-
-```bash
-npm view @aotter/mantle@alpha version
+```text
+YAML sources -> parse -> link -> compile -> RuntimePlan
+                                      |
+                    application storage -> prepare -> MantleRuntime
+                                                        |
+                       typed bindings / Web / Admin / platform adapters
 ```
 
-**Claude Code**
+- Use Spec alone for parsing, linking, diagnostics, or your own tooling.
+- Embed Runtime behind semantic ports backed by SQLite, Postgres, MongoDB, or
+  existing application repositories.
+- Run `mantle generate` when compile-time property names are useful; dynamic
+  applications can call Runtime with authored wire names directly.
+- Add Web, Admin, or Admin UI independently.
+- Use the Bun, Vercel, or Cloudflare adapter when its host contract matches.
+- Start from [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters)
+  when an official example/bootstrap is useful. A Starter is not required by
+  Core and does not define where Mantle lives in an application.
 
-```bash
-/plugin marketplace add aotter/mantle@v<version-from-above>
-/plugin install mantle@mantle
+A generated plan can be embedded without handing server or database lifecycle
+to Mantle:
+
+```ts
+import { createMantleRuntime, prepareDeployment } from "@aotter/mantle/runtime";
+import { plan, bindMantle } from "./.mantle/generated/mantle.js";
+
+const prepared = await prepareDeployment(plan, applicationStorage);
+const runtime = createMantleRuntime({ plan, prepared, handlers });
+const mantle = bindMantle(runtime);
+
+const orders = await mantle.views.openOrders();
 ```
 
-**Codex**
-
-```bash
-codex plugin marketplace add aotter/mantle --ref v<version-from-above>
-codex plugin add mantle@mantle
-```
-
-**Cursor**
-
-Cursor can auto-discover this repo through `.cursor-plugin/plugin.json` after
-the repo is cloned. If auto-discovery does not pick it up, open Cursor
-Settings -> Plugins, paste `https://github.com/aotter/mantle`, and add Mantle.
-
-**VS Code + GitHub Copilot**
-
-Copilot can auto-discover this repo through `.copilot-plugin/plugin.json` after
-the repo is cloned or opened.
-
-| Agent | Status | Install method |
-|---|---|---|
-| Claude Code | supported | `/plugin marketplace add aotter/mantle@v<version>` then `/plugin install mantle@mantle` |
-| Codex | supported | `codex plugin marketplace add aotter/mantle --ref v<version>` then `codex plugin add mantle@mantle` |
-| Cursor | supported | Auto-discovery via `.cursor-plugin/plugin.json` |
-| VS Code + GitHub Copilot | supported | Auto-discovery via `.copilot-plugin/plugin.json` |
-
-### Marketplace capability installs
-
-Tell your coding agent:
-
-```txt
-Use repo-local mantle:plugin to install <plugin slug or recipe URL> in this repo.
-```
-
-Update or remove an installed capability the same way:
-
-```txt
-Use repo-local mantle:plugin to update <plugin id> in this repo.
-Use repo-local mantle:plugin to remove <plugin id> from this repo.
-```
-
-A Mantle marketplace entry must be agent-installable: it names the plugin,
-Mantle version range, source package or recipe URL, files/atoms/routes/tools it
-will add, adapter capabilities, required secrets, and checks. The agent reads
-that entry, plans the diff, applies the declared files, updates
-`.mantle/plugins.json` and `.mantle/plugins.lock.json`, then runs
-`pnpm validate` and `pnpm typecheck`.
-
-There is no `mantle plugin add` CLI yet. The current install surface is the
-Core-owned `mantle:plugin` skill plus deterministic plugin recipes.
-
-## For humans
-
-Core surfaces on a Cloudflare Worker at
-`https://<your-site>.<your-account>.workers.dev`:
-
-- `/admin` — React admin SPA, role-gated after sign-in (GitHub / Google / Apple / 30+ social providers, email-OTP, magic-link — adopter picks the methods)
-- `/mcp/staff` — staff MCP endpoint, owner/editor agents connect here to edit content
-- `/mcp` — public MCP endpoint for public View tools and explicitly public MCP Triggers
-- public surface in your taste (the v0.1.0 starter ships Hono + hono/jsx + Tailwind)
-
-Public render routes are opt-in consumer wiring. When a project registers
-`mountPublicRoutes`, matching templates, and a `publicPathResolver`, the SDK
-can expose localized home, list, and entry HTML; non-empty `.md` mirrors;
-root and locale `llms.txt`; and `/sitemap.xml`. Canonical, hreflang/x-default,
-Open Graph, Twitter, and JSON-LD metadata use the same public path mapping.
-Generated projects document the
-routes they actually mount; Mantle does not publish every Schema by default.
-
-For a guided install, follow the steps in [`skills/install/SKILL.md`](skills/install/SKILL.md).
+The host owns `applicationStorage`, `handlers`, routing, process lifecycle, and
+any sibling application code.
 
 ## Packages
 
 | Package | Role |
 |---|---|
-| `@aotter/mantle-spec` | Spec engine — types + parse + validate + diagnostics + JSON-Schema → zod converter + CLI. Zero env deps. |
-| `@aotter/mantle-runtime` | Headless runtime — entry operations, procedures, views, triggers, lifecycle, and adapter-agnostic ports. |
-| `@aotter/mantle-web` | Optional public document composition — templates, HTML, Markdown, `llms.txt`, sitemap, SEO, and preview. Owns no routes or platform types. |
-| `@aotter/mantle-admin` | Optional Admin routes, APIs, staff gates, and static-asset composition. |
-| `@aotter/mantle-admin-ui` | Admin SPA — React 19 + Vite + Tailwind v4. In development; ships in v0.1.0. |
-| `@aotter/mantle-bun` | Bun adapter. Embeds Core over an application-owned `bun:sqlite` handle and exposes Web-standard public View/HTTP Trigger handling without owning the server lifecycle. |
-| `@aotter/mantle-vercel` | Vercel Node.js Functions adapter. Binds injected durable storage to the shared Web-standard transport and platform `waitUntil`; optional `/libsql` support never owns the client. |
-| `@aotter/mantle-cloudflare` | Cloudflare Workers adapter. Implements Core storage against D1 and optional Admin assets against ASSETS; uses version-local Workers Cache for public responses. Ships `createAuth()` — the Better Auth-backed *default* implementation of the SDK's `Auth` contract (see [ADR-0014](docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md)); the conventional Worker accepts a replacement factory `(env) => Auth`. |
-| `@aotter/mantle-netlify` | **Stub.** Coming v0.2. Engineering forcing function: keeps `mantle-runtime` adapter-agnostic. |
+| `@aotter/mantle-spec` | Pure grammar, parser, linker, diagnostics, and authoring CLI. |
+| `@aotter/mantle-runtime` | Plan compiler, storage preparation, semantic ports, and runtime invocation. |
+| `@aotter/mantle` | Core umbrella, typed code generation, and the `mantle` CLI. |
+| `@aotter/mantle-web` | Optional HTML, Markdown, `llms.txt`, sitemap, SEO, and preview composition. |
+| `@aotter/mantle-admin` | Optional Admin API, auth, and asset composition. |
+| `@aotter/mantle-admin-ui` | Optional pre-built Admin SPA. |
+| `@aotter/mantle-bun` | Bun adapter over caller-owned `bun:sqlite`. |
+| `@aotter/mantle-vercel` | Vercel Functions adapter over injected storage; optional libSQL subpath. |
+| `@aotter/mantle-cloudflare` | Cloudflare Workers adapter over D1 and selected platform services. |
 
-Auth and hosted-identity boundaries are documented in
-[`docs/auth-hosting-model.md`](docs/auth-hosting-model.md). Free Mantle
-sites can self-host supported login methods; Mantle Platform can offer
-hosted identity, email, and entitlement-backed convenience without
-owning a generated site's local grants or member records.
+The umbrella installs Spec and Runtime. Web, Admin, Admin UI, Bun, Vercel, and
+Cloudflare are optional peers and remain directly installable. Installed API
+and CLI examples live in the [umbrella package README](packages/mantle/README.md);
+adapter authors start with the [adapter guide](docs/adapter-guide.md).
 
-## Starters
+## Authoring CLI
 
-Starter taxonomy. Mantle landing fetches `provision-bundles/<type>.json` from a
-version-matched tag in
-[`aotter/mantle-starters`](https://github.com/aotter/mantle-starters),
-substitutes launch facts, commits the repo, and connects Cloudflare Workers CI
-when possible.
+The umbrella provides the `mantle` command set:
 
-The starter repo owns blank source, a shared typed-web layer, small type
-overlays, and deterministic provision bundles. A Starter revision may also
-ship a replaceable, vendored UI reference palette; that implementation is not
-part of Mantle Core's contract. Theme selection is not a first-run path;
-agents continue from the generated repo and the after-launch handoff shown by
-landing.
+```bash
+pnpm exec mantle generate
+pnpm exec mantle generate --check
+pnpm exec mantle validate
+pnpm exec mantle introspect
+pnpm exec mantle emit-openapi
+pnpm exec mantle emit-types
+pnpm exec mantle skills
+pnpm exec mantle update --ref <immutable-starter-ref>
+```
 
-Generated repos carry projected copies of Core-owned `mantle:*` skills from
-their installed `@aotter/mantle`, including `mantle:plugin` for marketplace
-capability work.
+`generate` writes one `.mantle/generated/mantle.ts` module containing the
+sealed plan, generated types, and `bindMantle`. It does not install Admin,
+change styling, provision providers, or deploy the application.
 
-| Starter | Family | Status | What |
-|---|---|---|---|
-| `blank/` | blank | available | Headless API + MCP only. Drop-in backend for consumers bringing their own frontend. |
-| `overlays/presence/` | presence | available | Small public presence and contact intent. |
-| `overlays/intake/` | intake | available | Structured submission and intake workflow intent. |
-| `overlays/publication/` | publication | available | Pages, posts, docs-lite, project updates, and contact flow atoms. |
-| `overlays/transaction/` | transaction | available | Small catalog/order workflow intent; payment/provider details remain post-launch work. |
-| `overlays/reservation/` | reservation | available | Booking/request intent; provider-specific fulfillment remains post-launch work. |
-| `overlays/community/` | community | available | Member/community intent with moderation and participation atoms. |
+## Consumer skills and official examples
 
-## Repo conventions
+The versioned [`skills/`](skills/) directory is shipped for agents working on
+consumer applications. `mantle skills` projects the installed versions into a
+consumer repository and `mantle skills --check` detects drift. These product
+artifacts are intentionally separate from this repository's maintainer rules.
 
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — workflow contract for AI + human contributors (branch prefixes, commit shape, PR template, architecture gates).
-- [`CLAUDE.md`](CLAUDE.md) — in-repo conventions for agents writing code (PR base branch, manifest grammar lock, ADR discipline, clean-architecture rules).
-- [`docs/release-process.md`](docs/release-process.md) — release + publish discipline (channels, dist-tags, deprecation policy, pre-publish checks).
-- [GitHub Releases](https://github.com/aotter/mantle/releases) — canonical versioned release notes.
+For a new example application, use [`skills/install/SKILL.md`](skills/install/SKILL.md)
+to select and materialize a deterministic Starter bundle. Provisioning is a
+separate, explicit workflow; Cloudflare-specific setup lives in
+[`skills/provision/SKILL.md`](skills/provision/SKILL.md).
 
-## License
+## Contributing
+
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) is the contributor and architecture
+  authority for humans and agents.
+- [`docs/adr/`](docs/adr/) records accepted, path-dependent decisions.
+- [`docs/release-process.md`](docs/release-process.md) governs releases.
+- [GitHub Releases](https://github.com/aotter/mantle/releases) is the canonical
+  public change history.
 
 Apache 2.0. See [`LICENSE`](LICENSE).

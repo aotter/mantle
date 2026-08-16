@@ -3,12 +3,12 @@
   "owner": {
     "name": "Aotter"
   },
-  "description": "Create and ship Mantle sites with deterministic starters and Core agent skills.",
+  "description": "Build and embed Mantle applications with deterministic examples and Core agent skills.",
   "plugins": [
     {
       "name": "mantle",
       "source": "./",
-      "description": "Create and develop Mantle sites from deterministic starters, then ship them to Cloudflare."
+      "description": "Build and embed Mantle applications with version-matched Core skills and deterministic examples."
     }
   ]
 }

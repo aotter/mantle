@@ -38,9 +38,9 @@ duplicated into the npm package:
 ## Audience
 
 These are written for **AI agents acting on behalf of consumers of mantle**,
-not for agents maintaining the Mantle SDK itself. SDK maintainers use the
-repo-root `CLAUDE.md` from a source checkout; it is intentionally not shipped
-inside the npm package. Two audiences, two artifacts.
+not for contributors maintaining the Mantle SDK itself. SDK contributors use
+the repo-root `CONTRIBUTING.md`; it is intentionally not shipped inside the npm
+package. Two audiences, two artifacts.
 
 ## Discoverability
 

@@ -35,8 +35,6 @@ describe("mantle generate", () => {
 
       expect(await runGenerate([])).toBe(0);
       const mantlePath = join(root, ".mantle", "generated", "mantle.ts");
-      const sitePath = join(root, ".mantle", "generated", "site.ts");
-      const typesPath = join(root, ".mantle", "generated", "types.d.ts");
       const firstMantle = await readFile(mantlePath, "utf8");
       expect(firstMantle).toContain("export function bindMantle(runtime: CoreMantleRuntime)");
       expect(firstMantle).toContain("export const plan = sealRuntimePlan(");
@@ -48,8 +46,6 @@ describe("mantle generate", () => {
       expect(firstMantle).toContain('collection: "products"');
       expect(firstMantle.match(/readonly "syncCatalog":/g)).toHaveLength(1);
       expect(firstMantle).toContain("ProcInput_import_product | Mantle.ProcInput_remove_product");
-      await expect(readFile(sitePath, "utf8")).rejects.toThrow();
-      await expect(readFile(typesPath, "utf8")).rejects.toThrow();
       await expect(readFile(join(root, "public", "_mantle", "admin", "index.html")))
         .rejects.toThrow();
 
@@ -121,15 +117,6 @@ if (false) {
       expect(await runGenerate([])).toBe(0);
       expect(await readFile(mantlePath, "utf8")).toBe(firstMantle);
       expect(await runGenerate(["--check"])).toBe(0);
-
-      await writeFile(sitePath, "obsolete\n");
-      await writeFile(typesPath, "obsolete\n");
-      const legacyStderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-      expect(await runGenerate(["--check"])).toBe(1);
-      legacyStderr.mockRestore();
-      expect(await runGenerate([])).toBe(0);
-      await expect(readFile(sitePath, "utf8")).rejects.toThrow();
-      await expect(readFile(typesPath, "utf8")).rejects.toThrow();
 
       const adminIndexPath = join(root, "public", "_mantle", "admin", "index.html");
       await mkdir(join(root, "public", "_mantle", "admin"), { recursive: true });

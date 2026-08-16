@@ -15,9 +15,9 @@ Admin UI, Bun, Vercel, and Cloudflare are selected separately.
 | `createCmsRef` / `CmsConfig` | `createMantleRuntimeRef` / `MantleCloudflareConfig` |
 | `mountServerEndpoints` | explicitly compose `mountRuntimeEndpoints` and optional `mountAdmin` |
 
-`mantle generate` deletes stale generated `site.ts` and `types.d.ts`. Install
-only the optional package used by the host; installing the umbrella alone now
-pulls only Spec and Runtime.
+Delete stale generated `site.ts` and `types.d.ts` files once, then run
+`mantle generate`. Install only the optional package used by the host;
+installing the umbrella alone now pulls only Spec and Runtime.
 
 Intentional behavior changes:
 
