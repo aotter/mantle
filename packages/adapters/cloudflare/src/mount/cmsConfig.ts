@@ -19,6 +19,8 @@ export interface CmsConfig {
   readonly templates?: TemplateRegistry;
   readonly siteDefaults?: SiteDefaults;
   readonly publicPathResolver?: PublicPathResolver;
+  /** Routes owned by the capabilities this composition actually mounts. */
+  readonly reservedHttpPathPrefixes?: readonly string[];
   readonly bindings: Pick<CreateCmsRuntimeArgs, "db" | "assets"> & {
     /** Optional media storage adapter. When set, media MCP tools and
      *  `/admin/api/media/*` endpoints are registered. Forwarded to the

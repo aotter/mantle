@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
-import { compileView } from "../src/domain/service/ViewSqlCompiler.js";
-import { ExecuteViewUseCase } from "../src/usecase/view/ExecuteViewUseCase.js";
+import { compileView } from "../src/infrastructure/storage/SqliteViewCompiler.js";
+import {
+  compileLogicalView,
+  type RuntimePlan,
+  type RuntimeViewPlan,
+} from "../src/domain/service/RuntimePlanCompiler.js";
+import { SqliteViewQueryExecutor } from "../src/infrastructure/storage/SqliteMantleStorageAdapter.js";
+import {
+  ExecuteViewUseCase,
+  type InvokeViewGuard,
+} from "../src/usecase/view/ExecuteViewUseCase.js";
 import { InMemoryDatabase } from "./fakes/database.js";
 import {
   runtimeDiagnostic,
@@ -20,6 +29,31 @@ function view(
     metadata: { name: "v" },
     spec: { surface: "public", ...opts } as ViewManifest["spec"],
   };
+}
+
+function sqliteUseCase(
+  db: DatabaseDriver,
+  manifest: ViewManifest,
+  guard?: InvokeViewGuard,
+  schemas: readonly SchemaManifest[] = [],
+): ExecuteViewUseCase {
+  const planned: RuntimeViewPlan = {
+    name: manifest.metadata.name,
+    manifest,
+    query: compileLogicalView(manifest),
+  };
+  const plan = {
+    views: { [planned.name]: planned },
+    schemas: Object.fromEntries(schemas.map((schema) => [
+      schema.metadata.name,
+      { name: schema.metadata.name, manifest: schema },
+    ])),
+  } as unknown as RuntimePlan;
+  return new ExecuteViewUseCase(
+    new SqliteViewQueryExecutor(db, plan),
+    guard,
+    plan.views,
+  );
 }
 
 describe("compileView", () => {
@@ -313,11 +347,12 @@ describe("compileView", () => {
 
 describe("ExecuteViewUseCase", () => {
   it("returns UNAUTHENTICATED when an identity-bound View reaches runtime without ctx.user", async () => {
-    const result = await new ExecuteViewUseCase(new InMemoryDatabase()).execute({
-      view: view({
-        from: "orders",
-        filter: { eq: { field: "userId", value: { "$ctx.user": "id" } } },
-      }),
+    const manifest = view({
+      from: "orders",
+      filter: { eq: { field: "userId", value: { "$ctx.user": "id" } } },
+    });
+    const result = await sqliteUseCase(new InMemoryDatabase(), manifest).execute({
+      view: manifest,
     });
 
     expect(result).toMatchObject({
@@ -344,19 +379,20 @@ describe("ExecuteViewUseCase", () => {
         updated_at: placedAt,
       });
     }
-    const useCase = new ExecuteViewUseCase(db);
+    const manifest = view({
+      from: "orders",
+      fields: ["id"],
+      requires: { auth: { all: ["ctx.user"] } },
+      filter: {
+        and: [
+          { eq: { field: "status", value: "published" } },
+          { eq: { field: "userId", value: { "$ctx.user": "id" } } },
+        ],
+      },
+    });
+    const useCase = sqliteUseCase(db, manifest);
     const result = await useCase.execute({
-      view: view({
-        from: "orders",
-        fields: ["id"],
-        requires: { auth: { all: ["ctx.user"] } },
-        filter: {
-          and: [
-            { eq: { field: "status", value: "published" } },
-            { eq: { field: "userId", value: { "$ctx.user": "id" } } },
-          ],
-        },
-      }),
+      view: manifest,
       ctx: {
         user: { id: "user-a" },
         staff: null,
@@ -405,13 +441,13 @@ describe("ExecuteViewUseCase", () => {
         lifecycle: "operational",
       },
     };
-    const useCase = new ExecuteViewUseCase(db, undefined, new Map([["settings", schema]]));
-
+    const manifest = view({
+      from: "settings",
+      fields: ["enabled", "disabled", "optional", "config", "tags", "count"],
+    });
+    const useCase = sqliteUseCase(db, manifest, undefined, [schema]);
     const result = await useCase.execute({
-      view: view({
-        from: "settings",
-        fields: ["enabled", "disabled", "optional", "config", "tags", "count"],
-      }),
+      view: manifest,
     });
 
     expect(result.ok).toBe(true);
@@ -450,12 +486,13 @@ describe("ExecuteViewUseCase", () => {
       created_at: 1,
       updated_at: 3,
     });
-    const useCase = new ExecuteViewUseCase(db);
+    const manifest = view({
+      from: "posts",
+      filter: { eq: { field: "status", value: "published" } },
+    });
+    const useCase = sqliteUseCase(db, manifest);
     const result = await useCase.execute({
-      view: view({
-        from: "posts",
-        filter: { eq: { field: "status", value: "published" } },
-      }),
+      view: manifest,
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -498,18 +535,19 @@ describe("ExecuteViewUseCase", () => {
       updated_at: 3,
     });
 
-    const useCase = new ExecuteViewUseCase(db);
+    const manifest = view({
+      from: "stock-movements",
+      filter: {
+        and: [
+          { gte: { field: "occurredAt", value: "2026-06-01T00:00:00Z" } },
+          { lt: { field: "occurredAt", value: "2026-07-01T00:00:00Z" } },
+          { gt: { field: "quantity", value: 0 } },
+        ],
+      },
+    });
+    const useCase = sqliteUseCase(db, manifest);
     const result = await useCase.execute({
-      view: view({
-        from: "stock-movements",
-        filter: {
-          and: [
-            { gte: { field: "occurredAt", value: "2026-06-01T00:00:00Z" } },
-            { lt: { field: "occurredAt", value: "2026-07-01T00:00:00Z" } },
-            { gt: { field: "quantity", value: 0 } },
-          ],
-        },
-      }),
+      view: manifest,
     });
 
     expect(result.ok).toBe(true);
@@ -519,12 +557,13 @@ describe("ExecuteViewUseCase", () => {
 
   it("rejects an auth-gated View when ctx is missing (UNAUTHENTICATED)", async () => {
     const db = new InMemoryDatabase();
-    const useCase = new ExecuteViewUseCase(db);
+    const manifest = view({
+      from: "posts",
+      requires: { auth: { all: ["ctx.user"] } },
+    });
+    const useCase = sqliteUseCase(db, manifest);
     const result = await useCase.execute({
-      view: view({
-        from: "posts",
-        requires: { auth: { all: ["ctx.user"] } },
-      }),
+      view: manifest,
     });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -533,12 +572,13 @@ describe("ExecuteViewUseCase", () => {
 
   it("denies an auth-gated View when the predicate fails (AUTH_DENIED)", async () => {
     const db = new InMemoryDatabase();
-    const useCase = new ExecuteViewUseCase(db);
+    const manifest = view({
+      from: "posts",
+      requires: { auth: { all: [{ "ctx.staff": ["owner"] }] } },
+    });
+    const useCase = sqliteUseCase(db, manifest);
     const result = await useCase.execute({
-      view: view({
-        from: "posts",
-        requires: { auth: { all: [{ "ctx.staff": ["owner"] }] } },
-      }),
+      view: manifest,
       ctx: {
         user: { id: "u1" },
         staff: null,
@@ -564,12 +604,13 @@ describe("ExecuteViewUseCase", () => {
       created_at: 1,
       updated_at: 2,
     });
-    const useCase = new ExecuteViewUseCase(db);
+    const manifest = view({
+      from: "posts",
+      requires: { auth: { all: [{ "ctx.staff": ["owner"] }] } },
+    });
+    const useCase = sqliteUseCase(db, manifest);
     const result = await useCase.execute({
-      view: view({
-        from: "posts",
-        requires: { auth: { all: [{ "ctx.staff": ["owner"] }] } },
-      }),
+      view: manifest,
       ctx: {
         user: { id: "u1" },
         staff: { id: "u1", role: "owner" },
@@ -584,18 +625,6 @@ describe("ExecuteViewUseCase", () => {
   it("authenticates, validates params, then invokes the dynamic guard before querying", async () => {
     const db = new InMemoryDatabase();
     const calls: string[] = [];
-    const useCase = new ExecuteViewUseCase(db, async (request) => {
-      calls.push(`guard:${String(request.input["accountId"])}`);
-      return {
-        ok: false,
-        diagnostic: runtimeDiagnostic({
-          code: "ENTITLEMENT_REQUIRED",
-          severity: "error",
-          path: "site:entitlement",
-          message: "payment required",
-        }),
-      };
-    });
     const guardedView = view({
       from: "posts",
       params: {
@@ -607,6 +636,18 @@ describe("ExecuteViewUseCase", () => {
         auth: { all: ["ctx.auth"] },
         guard: { procedure: "requirePaid" },
       },
+    });
+    const useCase = sqliteUseCase(db, guardedView, async (request) => {
+      calls.push(`guard:${String(request.input["accountId"])}`);
+      return {
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "ENTITLEMENT_REQUIRED",
+          severity: "error",
+          path: "site:entitlement",
+          message: "payment required",
+        }),
+      };
     });
 
     const anonymous = await useCase.execute({
@@ -662,9 +703,10 @@ describe("ExecuteViewUseCase", () => {
         updated_at: i,
       });
     }
-    const useCase = new ExecuteViewUseCase(db);
+    const manifest = view({ from: "posts" });
+    const useCase = sqliteUseCase(db, manifest);
     const result = await useCase.execute({
-      view: view({ from: "posts" }),
+      view: manifest,
       options: { show: 2 },
     });
     expect(result.ok).toBe(true);

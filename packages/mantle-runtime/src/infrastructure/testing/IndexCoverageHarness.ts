@@ -9,7 +9,7 @@ import {
   type ViewManifest,
 } from "@aotter/mantle-spec";
 import { partitionManifests } from "@aotter/mantle-spec/partition";
-import { compileView } from "../../domain/service/ViewSqlCompiler.js";
+import { compileView } from "../storage/SqliteViewCompiler.js";
 import { CANONICAL_MIGRATIONS } from "../boot/canonicalMigrations.js";
 
 export interface IndexCoverageOptions {

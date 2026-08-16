@@ -1,10 +1,19 @@
-import type { ContentState } from "@aotter/mantle-spec";
+import type { ContentState, Entry } from "@aotter/mantle-spec";
 import {
   EntryStatusConflict,
   EntryVersionConflict,
   liftLocale,
+  projectPublicEntry,
   type EntryRow,
 } from "../../src/domain/model/EntryRow.js";
+import type {
+  EntryReader,
+  FindManyEntriesByDataFieldArgs,
+  ReadEntriesByDataFieldInArgs,
+  ReadEntryByDataFieldArgs,
+  ReadEntryBySlugArgs,
+  ReadPublishedEntriesArgs,
+} from "../../src/domain/port/EntryReader.js";
 import type {
   CreateEntryArgs,
   DeleteEntryArgs,
@@ -29,7 +38,7 @@ import {
  * Lifts `data.locale` to `EntryRow.locale` at every write so the row
  * shape matches the production `DatabaseEntryRepository` impl.
  */
-export class InMemoryEntryRepository implements EntryRepository {
+export class InMemoryEntryRepository implements EntryRepository, EntryReader {
   private rows = new Map<string, EntryRow>();
 
   async create(args: CreateEntryArgs): Promise<EntryRow> {
@@ -169,6 +178,61 @@ export class InMemoryEntryRepository implements EntryRepository {
       .filter((row) => fields.every(([field, value]) => row.data[field] === value))
       .sort((a, b) => b.updatedAt - a.updatedAt);
     return matches[0] ?? null;
+  }
+
+  async readById(id: string): Promise<Entry | null> {
+    const row = await this.get(id);
+    return row ? projectPublicEntry(row) : null;
+  }
+
+  async readBySlug(args: ReadEntryBySlugArgs): Promise<Entry | null> {
+    return this.readByDataField({ ...args, field: "slug", value: args.slug });
+  }
+
+  async readByDataField(args: ReadEntryByDataFieldArgs): Promise<Entry | null> {
+    const row = [...this.rows.values()]
+      .filter((item) => item.collection === args.collection)
+      .filter((item) => args.status === undefined || item.status === args.status)
+      .filter((item) => args.locale === undefined || item.locale === args.locale)
+      .filter((item) => item.data[args.field] === args.value)
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    return row ? projectPublicEntry(row) : null;
+  }
+
+  async readByDataFieldIn(args: ReadEntriesByDataFieldInArgs): Promise<readonly Entry[]> {
+    const values = new Set(args.values);
+    return [...this.rows.values()]
+      .filter((item) => item.collection === args.collection)
+      .filter((item) => args.status === undefined || item.status === args.status)
+      .filter((item) => args.locale === undefined || item.locale === args.locale)
+      .filter((item) => {
+        const value = item.data[args.field];
+        return (typeof value === "string" || typeof value === "number" || typeof value === "boolean") &&
+          values.has(value);
+      })
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map(projectPublicEntry);
+  }
+
+  async readPublished(args: ReadPublishedEntriesArgs = {}): Promise<readonly Entry[]> {
+    return [...this.rows.values()]
+      .filter((item) => item.status === "published")
+      .filter((item) => args.collection === undefined || item.collection === args.collection)
+      .filter((item) => args.locale === undefined || item.locale === args.locale)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, args.limit ?? this.rows.size)
+      .map(projectPublicEntry);
+  }
+
+  async findManyByDataField(
+    args: FindManyEntriesByDataFieldArgs,
+  ): Promise<readonly Entry[]> {
+    return [...this.rows.values()]
+      .filter((item) => item.collection === args.collection)
+      .filter((item) => item.data[args.field] === args.value)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, args.limit)
+      .map(projectPublicEntry);
   }
 
   /** Test helper — directly insert/replace rows without going through

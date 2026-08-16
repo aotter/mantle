@@ -3,7 +3,9 @@
  * Concrete implementations live in `infrastructure/` (or in adapter
  * packages like `@aotter/mantle-cloudflare`).
  *
- * Required adapter ports — `DatabaseDriver`, `AssetServer`.
+ * Portable storage boundary — `MantleStorageAdapter`, which prepares existing
+ * `EntryRepository` / `EntryReader` and `ViewQueryExecutor` semantic ports.
+ * `DatabaseDriver` is the SQLite/D1 implementation seam, not a universal DB API.
  * Optional feature ports — `MediaStorage` (public-bucket media
  * uploads), `EmailSender` (transactional email — passwordless auth,
  * receipts). Dispatcher-internal seams — `Clock`, `IdGenerator`,
@@ -43,6 +45,16 @@ export type {
   ReadPublishedEntriesArgs,
   FindManyEntriesByDataFieldArgs,
 } from "./EntryReader.js";
+export type {
+  ViewQueryExecutor,
+  ViewQueryOptions,
+  ViewQueryRequest,
+  ViewQueryResult,
+} from "./ViewQueryExecutor.js";
+export type {
+  MantleStorageAdapter,
+  PreparedMantleStorage,
+} from "./MantleStorageAdapter.js";
 export type {
   SiteConfigRepository,
   UpdateEditableSiteConfigArgs,

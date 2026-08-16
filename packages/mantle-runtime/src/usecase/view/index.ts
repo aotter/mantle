@@ -1,5 +1,5 @@
 export {
   ExecuteViewUseCase,
   type ExecuteViewResponse,
-  type ViewQueryResult,
 } from "./ExecuteViewUseCase.js";
+export type { ViewQueryResult } from "../../domain/port/ViewQueryExecutor.js";

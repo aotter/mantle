@@ -19,7 +19,12 @@ import type {
   PreparedStatement,
   RunResult,
 } from "../src/domain/port/DatabaseDriver.js";
-import { compileView } from "../src/domain/service/ViewSqlCompiler.js";
+import { compileView } from "../src/infrastructure/storage/SqliteViewCompiler.js";
+import {
+  compileLogicalView,
+  type RuntimePlan,
+  type RuntimeViewPlan,
+} from "../src/domain/service/RuntimePlanCompiler.js";
 import {
   reconcileSchemaIndexes,
   schemaIndexMigrations,
@@ -28,6 +33,7 @@ import {
 import { joinParentForList } from "../src/domain/service/io/JoinedEntryReader.js";
 import { DatabaseEntryRepository } from "../src/infrastructure/persistence/DatabaseEntryRepository.js";
 import { ExecuteViewUseCase } from "../src/usecase/view/ExecuteViewUseCase.js";
+import { SqliteViewQueryExecutor } from "../src/infrastructure/storage/SqliteMantleStorageAdapter.js";
 import { readEntryBySlug, type CmsRuntime } from "../src/index.js";
 
 const schema = {
@@ -609,16 +615,28 @@ describe("declared Schema indexes against real SQLite", () => {
 
   it("ExecuteViewUseCase resolves the View's Schema from its injected map", async () => {
     const executions: RecordedExecution[] = [];
+    const manifest = view({
+      fields: ["userId"],
+      filter: { eq: { field: "userId", value: "u1" } },
+    });
+    const planned: RuntimeViewPlan = {
+      name: manifest.metadata.name,
+      manifest,
+      query: compileLogicalView(manifest),
+    };
+    const plan = {
+      views: { [planned.name]: planned },
+      schemas: {
+        [schema.metadata.name]: { name: schema.metadata.name, manifest: schema },
+      },
+    } as unknown as RuntimePlan;
     const useCase = new ExecuteViewUseCase(
-      createSqliteDriver(db, executions),
+      new SqliteViewQueryExecutor(createSqliteDriver(db, executions), plan),
       undefined,
-      new Map([[schema.metadata.name, schema]]),
+      plan.views,
     );
     const result = await useCase.execute({
-      view: view({
-        fields: ["userId"],
-        filter: { eq: { field: "userId", value: "u1" } },
-      }),
+      view: manifest,
     });
 
     expect(result.ok).toBe(true);

@@ -198,6 +198,19 @@ function checkEntryReadOwnership() {
   }
 }
 
+function checkViewExecutionBoundary() {
+  const file = join(
+    ROOT,
+    "packages/mantle-runtime/src/usecase/view/ExecuteViewUseCase.ts",
+  );
+  const source = stripComments(readFileSync(file, "utf8"));
+  for (const token of ["DatabaseDriver", "ViewSqlCompiler", "compileView", "lowerView"]) {
+    if (source.includes(token)) {
+      fail(file, `View invocation must depend on ViewQueryExecutor, not '${token}'`);
+    }
+  }
+}
+
 function checkNodeTestingBoundary() {
   const root = join(ROOT, "packages/mantle-runtime/src");
   const files = listFiles(root, (path) => path.endsWith(".ts"));
@@ -240,6 +253,7 @@ checkDatabasePropertyDetector();
 checkRuntimeCloudflareFree();
 checkPackageDirection();
 checkEntryReadOwnership();
+checkViewExecutionBoundary();
 checkNodeTestingBoundary();
 checkSkillDocsVersioned();
 

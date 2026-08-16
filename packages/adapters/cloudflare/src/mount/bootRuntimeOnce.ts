@@ -27,7 +27,7 @@ export function createCmsRef(config: CmsConfig): CmsRuntimeRef {
     handlers: config.handlers,
     templates: config.templates,
     siteDefaults: config.siteDefaults,
-    reservedHttpPathPrefixes: [config.auth.basePath],
+    reservedHttpPathPrefixes: config.reservedHttpPathPrefixes,
     publicPathResolver: config.publicPathResolver,
     mediaAllowSvg: config.mediaAllowSvg,
     db: config.bindings.db,

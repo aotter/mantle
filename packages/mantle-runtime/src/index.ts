@@ -49,6 +49,17 @@ export type {
 } from "./domain/port/DatabaseDriver.js";
 export type { AssetServer } from "./domain/port/AssetServer.js";
 export type {
+  EntryRepository,
+  CreateEntryArgs,
+  UpdateEntryArgs,
+  DeleteEntryArgs,
+  TransitionStatusArgs,
+  ListEntriesArgs,
+  ListEntriesResult,
+  FindEntryByDataFieldArgs,
+  FindEntryByDataFieldsArgs,
+} from "./domain/port/EntryRepository.js";
+export type {
   EntryReader,
   EntryDataScalar,
   ReadEntryBySlugArgs,
@@ -57,6 +68,21 @@ export type {
   ReadPublishedEntriesArgs,
   FindManyEntriesByDataFieldArgs,
 } from "./domain/port/EntryReader.js";
+export type {
+  ViewQueryExecutor,
+  ViewQueryOptions,
+  ViewQueryRequest,
+  ViewQueryResult,
+} from "./domain/port/ViewQueryExecutor.js";
+export type {
+  MantleStorageAdapter,
+  PreparedMantleStorage,
+} from "./domain/port/MantleStorageAdapter.js";
+export { SqliteMantleStorageAdapter } from "./infrastructure/storage/SqliteMantleStorageAdapter.js";
+export {
+  prepareDeployment,
+  type DeploymentPreparationOptions,
+} from "./usecase/boot/ValidateBootUseCase.js";
 export type {
   MediaStorage,
   CreateUploadArgs,

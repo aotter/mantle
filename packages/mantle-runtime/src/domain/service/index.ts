@@ -14,7 +14,6 @@ export * from "./PublicPathResolver.js";
 export * from "./LocaleNegotiator.js";
 export * from "./AbsoluteUrl.js";
 export * from "./SeoMetaComposer.js";
-export * from "./ViewSqlCompiler.js";
 export * from "./Pagination.js";
 export * from "./ViewParamCoercer.js";
 export * from "./PathMatcher.js";

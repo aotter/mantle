@@ -2,9 +2,10 @@
 
 Runtime engine for mantle.
 
-This package owns the adapter-agnostic CMS core: dispatcher, content operations,
-render pipeline, auth/session abstractions, MCP JSON-RPC dispatch, and the
-runtime ports implemented by platform adapters.
+This package owns the adapter-neutral Core pipeline after semantic compilation.
+Storage adapters prepare `RuntimePlan` into existing content repositories/readers
+and a `ViewQueryExecutor`; SQL-shaped drivers remain SQLite/D1 implementation
+details rather than a universal database contract.
 
 Node-based tooling may import `@aotter/mantle-runtime/testing` for the real
 SQLite access-path and HTTP sampling helpers. That subpath is intentionally
@@ -12,7 +13,7 @@ separate from the Worker-safe package entry.
 
 For a fresh adapter implementation, start with
 [`docs/adapter-guide.md`](../../docs/adapter-guide.md) and
-[`docs/adr/0011-adapter-port-spec.md`](../../docs/adr/0011-adapter-port-spec.md).
+[`docs/adr/0019-sealed-manifest-runtime-pipeline.md`](../../docs/adr/0019-sealed-manifest-runtime-pipeline.md).
 
 Queue-backed `after_*` lifecycle delivery is optional and at-least-once. See
 [`docs/deferred-lifecycle-queues.md`](../../docs/deferred-lifecycle-queues.md)

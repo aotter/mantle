@@ -2,20 +2,24 @@
 
 This guide is the fresh-developer entry point for implementing a new mantle platform adapter.
 
-Read this with [ADR-0011](adr/0011-adapter-port-spec.md). The source of truth for TypeScript shapes is `packages/mantle-runtime/src/domain/port/`.
+Read this with [ADR-0019](adr/0019-sealed-manifest-runtime-pipeline.md). The source of truth for TypeScript shapes is `packages/mantle-runtime/src/domain/port/`.
 
 Adapter packages live under `packages/adapters/<platform>/` using a plural `adapters` bucket. The npm package names stay unchanged, for example `@aotter/mantle-cloudflare`. Keep adapters in this monorepo until the runtime/spec API is stable enough that coordinated releases across separate repositories would not create version skew for starters.
 
-## Required runtime ports
+## Required storage boundary
 
-A first-run adapter must implement exactly these two runtime ports:
+A storage adapter prepares one `RuntimePlan` into semantic ports:
 
 | Contract | Source | Cloudflare example |
 |---|---|---|
-| `DatabaseDriver` plus `PreparedStatement` and `MigrationRunner` | `packages/mantle-runtime/src/domain/port/DatabaseDriver.ts` | `packages/adapters/cloudflare/src/bindings/D1DatabaseDriver.ts` |
-| `AssetServer` | `packages/mantle-runtime/src/domain/port/AssetServer.ts` | `packages/adapters/cloudflare/src/bindings/AssetsAssetServer.ts` |
+| `MantleStorageAdapter` / `PreparedMantleStorage` | `packages/mantle-runtime/src/domain/port/MantleStorageAdapter.ts` | `SqliteMantleStorageAdapter` over `D1DatabaseDriver` |
+| `EntryRepository & EntryReader` | Existing semantic content ports | `DatabaseEntryRepository` supplied by the SQLite adapter |
+| `ViewQueryExecutor` | `packages/mantle-runtime/src/domain/port/ViewQueryExecutor.ts` | `SqliteViewQueryExecutor` |
 
-The runtime must not import platform types such as `D1Database`, `KVNamespace`, Cloudflare `Fetcher`, Postgres pools, or adapter SDK types. Those live in adapter packages.
+`DatabaseDriver` is only the reusable SQLite/D1 implementation seam. A
+PostgreSQL, MongoDB, or application-owned-table adapter implements the semantic
+ports directly; it does not emulate D1 and needs no mapping DSL. Platform types
+such as `D1Database`, Postgres pools, and Mongo clients remain in adapter code.
 
 ## Optional capabilities
 
@@ -35,37 +39,33 @@ to their retry mechanism, and document poison-message/DLQ behavior. See
 [Deferred lifecycle hooks on Cloudflare Queues](deferred-lifecycle-queues.md)
 for the reference implementation and exact guarantees.
 
-## Runtime boot
+## Storage preparation
 
-Adapters compose the runtime through `createCmsRuntime`:
+Compile before deployment preparation, then pass only the sealed plan:
 
 ```ts
-import { createCmsRuntime } from "@aotter/mantle-runtime";
+import {
+  prepareDeployment,
+  SqliteMantleStorageAdapter,
+} from "@aotter/mantle-runtime";
 
-const runtime = createCmsRuntime({
-  manifests,
-  handlers,
-  templates,
-  siteDefaults,
-  db,
-  assets,
-  publicPathResolver,
-  mediaStorage,
-  deferredHookDispatcher,
+const storage = new SqliteMantleStorageAdapter(db, siteDefaults);
+const prepared = await prepareDeployment(plan, storage, {
+  handlerNames: Object.keys(handlers ?? {}),
+  reservedHttpPathPrefixes: selectedCapabilities.flatMap(
+    (capability) => capability.reservedHttpPathPrefixes,
+  ),
 });
-
-await runtime.bootInit();
 ```
 
-`bootInit()` runs canonical migrations, seeds `siteDefaults`, and validates the manifest set. Call it once before serving CMS traffic. The Cloudflare adapter's reference pattern is `packages/adapters/cloudflare/src/mount/bootRuntimeOnce.ts`.
+The official SQLite adapter runs canonical migrations, defaults, indexes, and
+schema-View reconciliation, and skips mutation for an unchanged revision. A
+custom adapter owns its own preparation and returns application-owned semantic
+ports. Unsupported native View dialects fail before the adapter mutates state.
 
-Use purpose-shaped runtime surfaces for canonical data: `runtime.entryReader`
-applies Schema index declarations, locale semantics, and the public `Entry`
-projection; `runtime.siteConfig` owns site settings. `runtime.db` remains only
-for source compatibility and is deprecated. An adapter that owns additional
-tables should retain the `DatabaseDriver` it injected instead of reaching back
-through the assembled runtime. Authoring continues through the pre-wired
-content use cases.
+The alpha.7 `createCmsRuntime({ manifests, db, assets })` / `bootInit()` API is
+a one-way compatibility facade over this preparation path until #673. New
+adapter code should not treat it as the portable contract.
 
 ## HTTP and MCP surfaces
 
@@ -146,14 +146,14 @@ Minimum auth/MCP behavior:
 
 ## Static assets
 
-`AssetServer` is required because every adapter must have a strategy for serving the prebuilt admin UI from `@aotter/mantle-admin-ui`. The adapter may serve those files from platform assets, a static publish directory, object storage plus CDN, or a filesystem bundle. Return `null` from `AssetServer.fetch()` when a specific asset is not found so the adapter can fall back to the admin SPA catchall.
+`AssetServer` belongs to the alpha.7 full-facade compatibility path. A selected
+Admin module must have an asset strategy, but headless Core storage preparation
+does not require assets. Admin extraction is completed in issue #670.
 
 ## Implementation checklist
 
-- [ ] Implement `DatabaseDriver`, including canonical migration tracking.
-- [ ] Implement `AssetServer` for the admin UI assets.
-- [ ] Compose `createCmsRuntime` with manifests, handlers, templates, site defaults, and required ports.
-- [ ] Call `bootInit()` before serving CMS traffic.
+- [ ] Implement `MantleStorageAdapter` returning existing semantic ports, or reuse `SqliteMantleStorageAdapter` with an already-owned handle.
+- [ ] Call `prepareDeployment()` once per semantic revision before binding runtime.
 - [ ] Mount HTTP Trigger and View REST surfaces.
 - [ ] Mount admin/public render routes and admin SPA assets.
 - [ ] Provide adapter-owned Better Auth wiring and session helpers.
@@ -174,4 +174,4 @@ Minimum auth/MCP behavior:
 - Do not add API-key, personal-token, transaction, billing, or entitlement
   repositories to Core. They are consumer state behind the adapter resolver
   and guard Procedure.
-- Do not add a second canonical migration chain for a new adapter. The runtime owns canonical migrations; adapters execute them through `DatabaseDriver.migrations`.
+- Do not generalize `DatabaseDriver` for PostgreSQL/MongoDB or add a mapping DSL. Implement semantic ports; SQLite/D1 alone reuse the canonical SQL chain.

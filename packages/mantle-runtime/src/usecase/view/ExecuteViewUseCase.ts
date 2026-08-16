@@ -6,36 +6,24 @@ import {
   readJsonPointer,
   runtimeDiagnostic,
   type Diagnostic,
-  type SchemaManifest,
 } from "@aotter/mantle-spec";
 import type { ZodType } from "zod";
-import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
+import type {
+  ViewQueryExecutor,
+  ViewQueryResult,
+} from "../../domain/port/ViewQueryExecutor.js";
 import { evaluateAuthAll } from "../../domain/service/AuthPredicateEvaluator.js";
-import {
-  compileView,
-  lowerView,
-} from "../../domain/service/ViewSqlCompiler.js";
 import type { RuntimeViewPlan } from "../../domain/service/RuntimePlanCompiler.js";
 import type { ExecuteViewRequest } from "../dto/view/ExecuteViewRequest.js";
 import type { InvokeProcedureResponse } from "../dto/procedure/index.js";
 import type { HandlerContext } from "../../domain/model/HandlerContext.js";
 
 /**
- * Compile a View manifest and run it against `DatabaseDriver`. The
- * REST adapters coerce query strings and MCP passes typed JSON; this use
+ * Authorize and bind request values to a prepared View query. REST
+ * adapters coerce query strings and MCP passes typed JSON; this use
  * case validates the converged param map against `View.spec.params` after
  * static auth and before an optional guard.
  */
-
-export interface ViewQueryResult<R = Record<string, unknown>> {
-  readonly rows: readonly R[];
-  readonly page: number;
-  readonly show: number;
-  /** True when `rows.length === show` — there *might* be more on the
-   *  next page. False guarantees no more. v0.1.0 takes the cheap
-   *  path: no count query, no limit+1 probe. ADR-0012. */
-  readonly hasMore: boolean;
-}
 
 export type ExecuteViewResponse<R = Record<string, unknown>> =
   | { readonly ok: true; readonly result: ViewQueryResult<R> }
@@ -52,9 +40,8 @@ export class ExecuteViewUseCase {
   private readonly paramsCache = new Map<string, ZodType>();
 
   constructor(
-    private readonly db: DatabaseDriver,
+    private readonly queries: ViewQueryExecutor,
     private readonly invokeGuard?: InvokeViewGuard,
-    private readonly schemasByName: ReadonlyMap<string, SchemaManifest> = new Map(),
     private readonly views: Readonly<Record<string, RuntimeViewPlan>> = Object.create(null),
   ) {}
 
@@ -150,22 +137,14 @@ export class ExecuteViewUseCase {
       if (!guarded.ok) return guarded;
     }
 
-    const schemaName = planned?.query.kind === "declarative"
-      ? planned.query.from
-      : view.spec.from;
-    const schema = schemaName
-      ? this.schemasByName.get(schemaName)
-      : undefined;
-    let compiled;
     try {
-      const options = {
+      const result = await this.queries.execute<R>({
+        view: view.metadata.name,
         ...request.options,
         params: validatedParams,
         ctxUserId: request.ctx?.user?.id,
-      };
-      compiled = planned
-        ? lowerView(planned.query, planned.name, options, schema)
-        : compileView(view, options, schema);
+      });
+      return { ok: true, result };
     } catch (err) {
       if (err instanceof DiagnosticError) {
         return { ok: false, diagnostic: err.diagnostic };
@@ -177,92 +156,10 @@ export class ExecuteViewUseCase {
           code: "INTERNAL_ERROR",
           severity: "error",
           path: viewPath,
-          expected: "View compiles to valid SQL",
-          message: `View compile failed: ${msg}`,
-        }),
-      };
-    }
-
-    try {
-      const rows = await this.db
-        .prepare(compiled.sql)
-        .bind(...compiled.params)
-        .all<R>();
-      const normalizedRows = normalizeProjectedFields(rows, view.spec.fields, schema);
-      return {
-        ok: true,
-        result: {
-          rows: normalizedRows,
-          page: compiled.effectivePage,
-          show: compiled.effectiveShow,
-          hasMore: normalizedRows.length === compiled.effectiveShow,
-        },
-      };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return {
-        ok: false,
-        diagnostic: runtimeDiagnostic({
-          code: "INTERNAL_ERROR",
-          severity: "error",
-          path: viewPath,
-          expected: "SQL executes without error",
-          message: `View SQL execution failed: ${msg}`,
+          expected: "prepared View query executes successfully",
+          message: `View query failed: ${msg}`,
         }),
       };
     }
   }
-}
-
-function normalizeProjectedFields<R>(
-  rows: readonly R[],
-  fields: readonly string[] | undefined,
-  schema: SchemaManifest | undefined,
-): readonly R[] {
-  const properties = schema?.spec.schema.properties;
-  const projectedFields = fields?.flatMap((field) => {
-    const property = properties?.[field];
-    return property && isSqliteNormalizedProperty(property) ? [[field, property] as const] : [];
-  }) ?? [];
-  if (projectedFields.length === 0) return rows;
-
-  return rows.map((row) => {
-    if (!row || typeof row !== "object" || Array.isArray(row)) return row;
-    const normalized = { ...row } as Record<string, unknown>;
-    for (const [field, property] of projectedFields) {
-      normalized[field] = normalizeProjectedValue(normalized[field], property);
-    }
-    return normalized as R;
-  });
-}
-
-function isSqliteNormalizedProperty(
-  property: SchemaManifest["spec"]["schema"],
-): boolean {
-  const types = Array.isArray(property.type) ? property.type : [property.type];
-  return types.some((type) => type === "boolean" || type === "object" || type === "array");
-}
-
-function normalizeProjectedValue(
-  value: unknown,
-  property: SchemaManifest["spec"]["schema"],
-): unknown {
-  const types = Array.isArray(property.type) ? property.type : [property.type];
-  if (types.includes("boolean")) {
-    if (value === 0) return false;
-    if (value === 1) return true;
-  }
-  if (typeof value !== "string" || (!types.includes("object") && !types.includes("array"))) {
-    return value;
-  }
-  try {
-    const parsed: unknown = JSON.parse(value);
-    if (types.includes("array") && Array.isArray(parsed)) return parsed;
-    if (types.includes("object") && parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed;
-    }
-  } catch {
-    // Preserve malformed legacy values so callers can fail their own schema checks.
-  }
-  return value;
 }

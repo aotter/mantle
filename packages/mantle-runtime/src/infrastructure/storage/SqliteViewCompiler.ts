@@ -9,11 +9,12 @@ import {
   type SchemaManifest,
   type ViewManifest,
 } from "@aotter/mantle-spec";
-import { clampPage, clampShow } from "./Pagination.js";
+import { clampPage, clampShow } from "../../domain/service/Pagination.js";
+import type { ViewQueryOptions } from "../../domain/port/ViewQueryExecutor.js";
 import {
   compileLogicalView,
   type LogicalViewPlan,
-} from "./RuntimePlanCompiler.js";
+} from "../../domain/service/RuntimePlanCompiler.js";
 
 /**
  * View → SQL compilation. Targets SQLite + JSON1 (D1's dialect).
@@ -37,19 +38,11 @@ export interface CompiledView {
   readonly effectiveShow: number;
 }
 
-export interface CompileViewOptions {
-  /** Resolved query-string params, post-coercion. */
-  readonly params?: Record<string, unknown>;
-  /** 1-indexed; non-positive / non-finite falls back to 1. */
-  readonly page?: number;
-  /** Caller's requested page size; clamped to View.spec.limit. */
-  readonly show?: number;
-  /** Site-local Better Auth user id for identity-bound filters. */
-  readonly ctxUserId?: string;
-  /** Admin-only substring search over manifest-allowlisted output fields. */
-  readonly search?: { readonly term: string; readonly fields: readonly string[] };
-  /** Admin-only exact filters over manifest-allowlisted output fields. */
-  readonly filters?: ReadonlyArray<{ readonly field: string; readonly value: string }>;
+export type CompileViewOptions = ViewQueryOptions;
+
+export interface PreparedSqliteView {
+  bind(options?: CompileViewOptions): CompiledView;
+  normalizeRows<R>(rows: readonly R[]): readonly R[];
 }
 
 // alias → SQL column. Aliases mirror RESERVED_ENTRY_COLUMNS from
@@ -91,17 +84,21 @@ export function compileView(
   options: CompileViewOptions = {},
   schema?: SchemaManifest,
 ): CompiledView {
-  return lowerView(compileLogicalView(view), view.metadata.name, options, schema);
+  return prepareSqliteView(compileLogicalView(view), view.metadata.name, schema).bind(options);
 }
 
-/** SQLite lowering of the compiler-owned logical View descriptor. */
-export function lowerView(
+/** Lower one logical View into a reusable SQLite query binder. */
+export function prepareSqliteView(
   view: LogicalViewPlan,
   viewName: string,
-  options: CompileViewOptions = {},
   schema?: SchemaManifest,
-): CompiledView {
-  if (view.kind === "native") return compileSqlView(view, options);
+): PreparedSqliteView {
+  if (view.kind === "native") {
+    return {
+      bind: prepareSqlView(view),
+      normalizeRows: (rows) => rows,
+    };
+  }
   if (schema && schema.metadata.name !== view.from) {
     throw new DiagnosticError(
       runtimeDiagnostic({
@@ -114,68 +111,128 @@ export function lowerView(
       }),
     );
   }
-  const sqlParams: unknown[] = [view.from];
   const selectExpr = buildSelect(view.fields, schema);
-  const whereParts: string[] = ["collection = ?"];
-  if (view.filter) {
-    const compiled = compileFilter(
-      view.filter,
-      options.params ?? {},
-      options.ctxUserId,
-      schema,
-    );
-    whereParts.push(`(${compiled.sql})`);
-    sqlParams.push(...compiled.params);
-  }
-  const listQuery = compileListQuery(options, (field) => fieldRefExpr(field, schema));
-  whereParts.push(...listQuery.conditions);
-  sqlParams.push(...listQuery.params);
-  const where = `WHERE ${whereParts.join(" AND ")}`;
   const orderBy = buildOrderBy(view.orderBy, schema);
-  const effectiveShow = clampShow(options.show, view.limit);
-  const effectivePage = clampPage(options.page);
-  // Cap the offset so a huge `?page=` can't render in exponential
-  // notation (`5e+21`) or exceed SQLite's INT64 range — either makes
-  // D1 reject the literal and surfaces as a 500 instead of an empty
-  // page. MAX_SAFE_INTEGER (~9e15) stringifies as plain digits and is
-  // well under INT64 max; any page past the data just returns no rows.
-  const offset = Math.min((effectivePage - 1) * effectiveShow, Number.MAX_SAFE_INTEGER);
-  const sql = `SELECT ${selectExpr} FROM entries ${where}${orderBy} LIMIT ${effectiveShow} OFFSET ${offset}`;
-  return { sql, params: sqlParams, effectivePage, effectiveShow };
+  const filter = view.filter ? prepareFilter(view.filter, schema) : undefined;
+  return {
+    bind(options = {}) {
+      const sqlParams: unknown[] = [view.from];
+      const whereParts: string[] = ["collection = ?"];
+      if (filter) {
+        whereParts.push(`(${filter.sql})`);
+        sqlParams.push(...filter.bind(options.params ?? {}, options.ctxUserId));
+      }
+      const listQuery = compileListQuery(options, (field) => fieldRefExpr(field, schema));
+      whereParts.push(...listQuery.conditions);
+      sqlParams.push(...listQuery.params);
+      const effectiveShow = clampShow(options.show, view.limit);
+      const effectivePage = clampPage(options.page);
+      return {
+        sql: `SELECT ${selectExpr} FROM entries WHERE ${whereParts.join(" AND ")}${orderBy} LIMIT ${effectiveShow} OFFSET ${pageOffset(effectivePage, effectiveShow)}`,
+        params: sqlParams,
+        effectivePage,
+        effectiveShow,
+      };
+    },
+    normalizeRows: prepareRowNormalizer(view.fields, schema),
+  };
 }
 
-function compileSqlView(
+function prepareSqlView(
   view: Extract<LogicalViewPlan, { readonly kind: "native" }>,
-  options: CompileViewOptions,
-): CompiledView {
-  const params: unknown[] = [];
+): (options?: CompileViewOptions) => CompiledView {
+  const paramNames: string[] = [];
   // ponytail: token regex is enough for agent-authored SQL; add a lexer if
   // quoted SQL literals containing `:name` become a real manifest use case.
   const statement = view.statement.trim().replace(
     /:([A-Za-z_][A-Za-z0-9_]*)/g,
     (_token, name: string) => {
-      const value = options.params?.[name];
-      if (value === undefined) throw new Error(`View SQL requires param '${name}'.`);
-      params.push(value);
+      paramNames.push(name);
       return "?";
     },
   );
-  const effectiveShow = clampShow(options.show, view.limit);
-  const effectivePage = clampPage(options.page);
-  const offset = Math.min((effectivePage - 1) * effectiveShow, Number.MAX_SAFE_INTEGER);
-  const listQuery = compileListQuery(
-    options,
-    (field) => `"_mantle_view".${quoteIdent(field)}`,
-  );
-  const where = listQuery.conditions.length > 0
-    ? ` WHERE ${listQuery.conditions.join(" AND ")}`
-    : "";
-  return {
-    sql: `SELECT * FROM (${statement}) AS "_mantle_view"${where} LIMIT ${effectiveShow} OFFSET ${offset}`,
-    params: [...params, ...listQuery.params],
-    effectivePage,
-    effectiveShow,
+  return (options = {}) => {
+    const params = paramNames.map((name) => {
+      const value = options.params?.[name];
+      if (value === undefined) throw new Error(`View SQL requires param '${name}'.`);
+      return value;
+    });
+    const effectiveShow = clampShow(options.show, view.limit);
+    const effectivePage = clampPage(options.page);
+    const listQuery = compileListQuery(
+      options,
+      (field) => `"_mantle_view".${quoteIdent(field)}`,
+    );
+    const where = listQuery.conditions.length > 0
+      ? ` WHERE ${listQuery.conditions.join(" AND ")}`
+      : "";
+    return {
+      sql: `SELECT * FROM (${statement}) AS "_mantle_view"${where} LIMIT ${effectiveShow} OFFSET ${pageOffset(effectivePage, effectiveShow)}`,
+      params: [...params, ...listQuery.params],
+      effectivePage,
+      effectiveShow,
+    };
   };
+}
+
+function pageOffset(page: number, show: number): number {
+  // Prevent exponential notation and stay below SQLite's INT64 ceiling.
+  return Math.min((page - 1) * show, Number.MAX_SAFE_INTEGER);
+}
+
+function prepareRowNormalizer(
+  fields: readonly string[] | undefined,
+  schema: SchemaManifest | undefined,
+): <R>(rows: readonly R[]) => readonly R[] {
+  const properties = schema?.spec.schema.properties;
+  const projectedFields = fields?.flatMap((field) => {
+    const property = properties?.[field];
+    return property && isSqliteNormalizedProperty(property) ? [[field, property] as const] : [];
+  }) ?? [];
+  if (projectedFields.length === 0) return function identity<R>(rows: readonly R[]) {
+    return rows;
+  };
+  return function normalize<R>(rows: readonly R[]): readonly R[] {
+    return rows.map((row) => {
+      if (!row || typeof row !== "object" || Array.isArray(row)) return row;
+      const normalized = { ...row } as Record<string, unknown>;
+      for (const [field, property] of projectedFields) {
+        normalized[field] = normalizeProjectedValue(normalized[field], property);
+      }
+      return normalized as R;
+    });
+  };
+}
+
+function isSqliteNormalizedProperty(
+  property: SchemaManifest["spec"]["schema"],
+): boolean {
+  const types = Array.isArray(property.type) ? property.type : [property.type];
+  return types.some((type) => type === "boolean" || type === "object" || type === "array");
+}
+
+function normalizeProjectedValue(
+  value: unknown,
+  property: SchemaManifest["spec"]["schema"],
+): unknown {
+  const types = Array.isArray(property.type) ? property.type : [property.type];
+  if (types.includes("boolean")) {
+    if (value === 0) return false;
+    if (value === 1) return true;
+  }
+  if (typeof value !== "string" || (!types.includes("object") && !types.includes("array"))) {
+    return value;
+  }
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (types.includes("array") && Array.isArray(parsed)) return parsed;
+    if (types.includes("object") && parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch {
+    return value;
+  }
+  return value;
 }
 
 function compileListQuery(
@@ -226,55 +283,55 @@ function fieldRefExpr(field: string, schema?: SchemaManifest): string {
   return `json_extract(data, ${quotedJsonPath(field)})`;
 }
 
-interface CompiledFragment {
+interface PreparedFilter {
   readonly sql: string;
-  readonly params: readonly unknown[];
+  bind(
+    paramValues: Readonly<Record<string, unknown>>,
+    ctxUserId?: string,
+  ): readonly unknown[];
 }
 
-function compileFilter(
+function prepareFilter(
   node: FilterAst,
-  paramValues: Record<string, unknown>,
-  ctxUserId?: string,
   schema?: SchemaManifest,
-): CompiledFragment {
+): PreparedFilter {
   const comparison = getFilterComparison(node);
   if (comparison) {
     const value = comparison.node.value;
-    let bound: unknown;
-    if (isCtxUserRef(value)) {
-      if (!ctxUserId) {
-        throw new DiagnosticError(
-          runtimeDiagnostic({
-            code: "UNAUTHENTICATED",
-            severity: "error",
-            path: "compileView/filter",
-            expected: "ctx.user.id for an identity-bound View filter",
-            message: "View filter requires ctx.user.id.",
-          }),
-        );
-      }
-      bound = ctxUserId;
-    } else if (isParamRef(value)) {
-      const resolved = paramValues[value.$param];
-      if (resolved === undefined) {
-        throw new Error(`View filter requires param '${value.$param}'.`);
-      }
-      bound = resolved;
-    } else {
-      bound = value;
-    }
+    const bind = isCtxUserRef(value)
+      ? (_params: Readonly<Record<string, unknown>>, ctxUserId?: string) => {
+          if (!ctxUserId) {
+            throw new DiagnosticError(runtimeDiagnostic({
+              code: "UNAUTHENTICATED",
+              severity: "error",
+              path: "compileView/filter",
+              expected: "ctx.user.id for an identity-bound View filter",
+              message: "View filter requires ctx.user.id.",
+            }));
+          }
+          return [ctxUserId];
+        }
+      : isParamRef(value)
+        ? (params: Readonly<Record<string, unknown>>) => {
+            const resolved = params[value.$param];
+            if (resolved === undefined) {
+              throw new Error(`View filter requires param '${value.$param}'.`);
+            }
+            return [resolved];
+          }
+        : () => [value];
     return {
       sql: `${fieldRefExpr(comparison.node.field, schema)} ${SQL_COMPARISON_OP[comparison.op]} ?`,
-      params: [bound],
+      bind,
     };
   }
   const op = "and" in node ? "AND" : "OR";
   const children = "and" in node ? node.and : "or" in node ? node.or : [];
-  const compiled = children
-    .map((c) => compileFilter(c, paramValues, ctxUserId, schema));
+  const prepared = children.map((child) => prepareFilter(child, schema));
   return {
-    sql: compiled.map((c) => `(${c.sql})`).join(` ${op} `),
-    params: compiled.flatMap((c) => c.params),
+    sql: prepared.map((child) => `(${child.sql})`).join(` ${op} `),
+    bind: (params, ctxUserId) =>
+      prepared.flatMap((child) => child.bind(params, ctxUserId)),
   };
 }
 

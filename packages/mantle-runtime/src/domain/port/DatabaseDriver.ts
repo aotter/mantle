@@ -1,24 +1,17 @@
 /**
- * `DatabaseDriver` — runtime's adapter-agnostic interface to
- * persistent relational state. Entries, site config,
- * auth support, and media tables declared by the canonical migrations live
- * behind this surface; the runtime never sees `D1Database`, `Pool` (postgres),
- * or any concrete driver.
+ * SQLite-shaped implementation detail used by the official SQLite/D1
+ * storage preparation path. Portable runtime use cases depend on semantic
+ * repositories and `ViewQueryExecutor`, never this SQL surface.
  *
- * The shape is intentionally close to D1's API (which is itself close
- * to the SQLite C API) — that's the smallest common denominator
- * across the adapters we expect to ship. Adapters wrap their native
- * driver to this shape:
+ * The shape stays intentionally close to D1's API. Adapters that reuse the
+ * shipped SQLite implementation wrap their native driver to this shape:
  *
  *   - `mantle-cloudflare` wraps `env.DB` (D1) directly (1:1 surface).
- *   - A future Postgres adapter wraps `pg` to the same shape.
  *   - Core tests supply in-memory implementations under `test/fakes/`.
  *
- * See ADR-0011 § DatabaseDriver for the rationale (and the alternatives
- * — mega-port, function-injection, plugin packages — that were
- * rejected). Renamed from `DatabasePort` per the clean-architecture
- * naming convention (no `Port` suffix; ports are discoverable by
- * package alone).
+ * PostgreSQL, MongoDB, and application-owned tables implement
+ * `MantleStorageAdapter` with semantic ports instead of emulating SQLite.
+ * See ADR-0019.
  */
 export interface DatabaseDriver {
   /** Build a parameterised statement. Bind values then execute. */

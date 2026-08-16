@@ -190,6 +190,11 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
       siteDefaults: resolve(options.siteDefaults, env),
       templates: options.templates,
       publicPathResolver: options.publicPathResolver,
+      reservedHttpPathPrefixes: [
+        ...MANTLE_RESERVED_PATH_PREFIXES,
+        MANTLE_RESERVED_WELL_KNOWN_PREFIX,
+        auth.basePath,
+      ],
       mediaAllowSvg: resolve(options.mediaAllowSvg, env),
       bindings,
       auth,
