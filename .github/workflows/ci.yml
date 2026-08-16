@@ -61,7 +61,7 @@ jobs:
         uses: actions/checkout@v7.0.1
         with:
           repository: aotter/mantle-starters
-          ref: 1ead25afa280eac0069b8d8ffc1c125a6a307d89
+          ref: 36ca4eac5f0e58df49377bf8274621cfaff85e9f
           path: .packed-consumer/mantle-starters
           persist-credentials: false
 
