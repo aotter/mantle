@@ -1,13 +1,18 @@
 # ADR-0009: Consumer-supplied manifests at SDK boot
 
-**Status:** Carried over from POC v0.0.x; amended for the parser-free v0.1
-consumer boundary.
+**Status:** Superseded by ADR-0019.
 
-**Date:** 2026-05-01 (POC); last amended 2026-08-03
+**Date:** 2026-05-01 (POC); superseded 2026-08-16
 
 **Related:** [ADR-0001](0001-four-atom-manifest-model.md),
 [ADR-0007](0007-ai-as-primary-author.md),
-[ADR-0018](0018-core-starters-repository-boundary.md)
+[ADR-0018](0018-core-starters-repository-boundary.md),
+[ADR-0019](0019-sealed-manifest-runtime-pipeline.md)
+
+> **Supersession note:** consumer ownership remains durable, but the exact
+> `site.yaml`, generated `site.ts`, and parser-free array workflow below is
+> historical. The sealed source → parse → link → compile pipeline in ADR-0019
+> is current; source names and generated code are optional caller concerns.
 
 ## Context
 

@@ -46,7 +46,7 @@ function printHelp(): void {
 Usage: mantle emit-types [options]
 
 Options:
-  --manifests <dir>   Directory containing site.yaml (default: ./manifests)
+  --manifests <dir>   Directory containing YAML manifests (default: ./manifests)
   --namespace <name>  Top-level namespace (default: Mantle)
   -o, --output <file> Write UTF-8 declarations to a file. Prefer this
                       over shell redirection on Windows.

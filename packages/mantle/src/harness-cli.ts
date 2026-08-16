@@ -205,7 +205,7 @@ function printHelp(): void {
 
 function printIndexesHelp(): void {
   stdout.write(`Usage: mantle-harness indexes [options]\n\n` +
-    `  --manifests <dir>  Directory containing site.yaml (default: ./manifests)\n` +
+    `  --manifests <dir>  Directory containing YAML manifests (default: ./manifests)\n` +
     `  --rows <n>         Deterministic rows per Schema (default: 2000)\n` +
     `  --require <view>   Fail when this View lacks its access path; repeatable\n` +
     `  --require-public   Apply the gate to public Views\n` +

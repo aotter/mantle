@@ -136,8 +136,8 @@ function validateLocalizedText(
  * `{ manifests, diagnostics }` adapter below therefore returns no manifests
  * on failure rather than exposing a partial graph.
  *
- * Multi-doc YAML support per ADR-0001 § "Authoring shape" — all site atoms
- * in manifests/site.yaml, separated by `---`.
+ * Each caller-owned source may contain multiple YAML documents separated by
+ * `---`; source identities and document indexes remain intact.
  */
 
 /**
