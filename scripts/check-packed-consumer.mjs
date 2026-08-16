@@ -14,7 +14,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, relative, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const packages = JSON.parse(execFileSync(
@@ -37,27 +37,45 @@ if (args.length === 1 && args[0] === "--self-test" && command.length === 0) {
     rejected = error.message.includes("exact tarball");
   }
   if (!rejected) throw new Error("packed-consumer provenance self-test accepted a registry install");
+  const source = join(tmpdir(), "source");
+  if (!isWithin(source, join(source, "output")) || isWithin(source, join(tmpdir(), "output"))) {
+    throw new Error("packed-consumer output boundary self-test failed");
+  }
   console.log("packed-consumer provenance self-test passed");
   process.exit(0);
 }
 if (help) {
-  console.log("Usage: node scripts/check-packed-consumer.mjs --project <path> -- <command> [args...]");
+  console.log("Usage: node scripts/check-packed-consumer.mjs --project <path> [--output <path>] -- <command> [args...]");
   process.exit(0);
 }
-if (args.length !== 2 || args[0] !== "--project" || !args[1] || command.length === 0) {
-  throw new Error("Usage: node scripts/check-packed-consumer.mjs --project <path> -- <command> [args...]");
+const output = args.length === 4 && args[2] === "--output" && args[3]
+  ? resolve(root, args[3])
+  : null;
+if (
+  (args.length !== 2 && !output)
+  || args[0] !== "--project"
+  || !args[1]
+  || command.length === 0
+) {
+  throw new Error("Usage: node scripts/check-packed-consumer.mjs --project <path> [--output <path>] -- <command> [args...]");
 }
 const project = resolve(root, args[1]);
 if (!statSync(project, { throwIfNoEntry: false })?.isDirectory()) {
   throw new Error(`consumer project does not exist: ${project}`);
 }
+if (output && (isWithin(root, output) || isWithin(project, output))) {
+  throw new Error("output must be outside the Core and consumer checkouts");
+}
+if (output && existsSync(output)) throw new Error(`output already exists: ${output}`);
 const coreSha = gitSha(root);
 const consumerSha = gitSha(project);
 
-const temp = mkdtempSync(join(tmpdir(), "mantle-packed-consumer-"));
+const temp = output ?? mkdtempSync(join(tmpdir(), "mantle-packed-consumer-"));
 const artifacts = join(temp, "artifacts");
 const consumer = join(temp, "consumer");
+let complete = false;
 try {
+  if (output) mkdirSync(temp);
   mkdirSync(artifacts);
   const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
   const tarballs = new Map();
@@ -97,6 +115,7 @@ try {
   if (installedCount === 0) throw new Error("consumer did not install any Mantle package");
 
   run(command[0], command.slice(1), consumer);
+  complete = true;
   console.log(JSON.stringify({
     core_sha: coreSha,
     consumer_sha: consumerSha,
@@ -107,7 +126,7 @@ try {
     ),
   }, null, 2));
 } finally {
-  rmSync(temp, { recursive: true, force: true });
+  if (!output || !complete) rmSync(temp, { recursive: true, force: true });
 }
 
 function addOverrides(path, tarballs) {
@@ -188,4 +207,9 @@ function gitSha(directory) {
 
 function sha256(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function isWithin(parent, child) {
+  const path = relative(parent, child);
+  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
