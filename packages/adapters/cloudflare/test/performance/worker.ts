@@ -7,6 +7,7 @@ import {
   mountPublicRoutes,
   type D1QueryMetric,
 } from "../../src/index.js";
+import { compileTestPlan } from "../compileTestPlan.js";
 import { mountTestEndpoints } from "../mountTestEndpoints.js";
 import { StubAssetServer, stubAuth } from "../fakes/runtime-bindings.js";
 

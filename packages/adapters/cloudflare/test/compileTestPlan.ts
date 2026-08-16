@@ -1,4 +1,3 @@
-import { compileTestPlan } from "./compileTestPlan.js";
 import { compileRuntimePlan, type RuntimePlan } from "@aotter/mantle-runtime";
 import { linkManifestSet, parseManifestSources } from "@aotter/mantle-spec";
 
