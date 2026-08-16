@@ -1,13 +1,17 @@
 import { Hono } from "hono";
 import type {
+  CreateMantleWorkerOptions,
   MantleCloudflareEnv,
   MantleExtensionApp,
 } from "../src/worker/createMantleWorker.js";
-import { runMantleWorkerRequest } from "../src/worker/index.js";
+import { createMantleWorker, runMantleWorkerRequest } from "../src/worker/index.js";
 
 declare const app: MantleExtensionApp<MantleCloudflareEnv>;
+type NoAssetsEnv = Omit<MantleCloudflareEnv, "ASSETS">;
+declare const noAssetsOptions: CreateMantleWorkerOptions<NoAssetsEnv>;
 
 if (false) {
+  void createMantleWorker<NoAssetsEnv>(noAssetsOptions);
   void runMantleWorkerRequest(() => new Response("ok"));
   app.get("/custom", (c) => c.text("ok"));
   app.route("/tools", new Hono<{ Bindings: MantleCloudflareEnv }>());
