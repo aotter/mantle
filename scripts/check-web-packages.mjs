@@ -72,7 +72,7 @@ function installConsumer(name, dependencies, check) {
       ),
     },
   }, null, 2)}\n`);
-  execFileSync("pnpm", ["install", "--offline", "--ignore-scripts"], {
+  execFileSync("pnpm", ["install", "--ignore-scripts"], {
     cwd: directory,
     stdio: "inherit",
   });
