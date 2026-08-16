@@ -73,6 +73,15 @@ The alpha.7 `await createCmsRuntime({ manifests, db })` API is a
 one-way full-product compatibility facade over these stages until #673. New
 adapter code should use the sealed inputs above.
 
+### Bun embedding
+
+`@aotter/mantle-bun` is the minimal SQLite reference: pass an application-owned
+`bun:sqlite` `Database` and a compiled `RuntimePlan` to `createBunMantle()`.
+Its `handle()` returns `null` for sibling routes and a Web-standard `Response`
+for manifest-declared public Views and HTTP Triggers. The host owns
+`Bun.serve`, database shutdown, authentication, and CSRF policy; the adapter
+prepares the semantic revision once and retries only after failed preparation.
+
 ## HTTP and MCP surfaces
 
 The runtime is a library, not an HTTP server. A new adapter must mount equivalent framework routes:

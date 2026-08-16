@@ -59,8 +59,9 @@ export interface BatchResult {
 }
 
 /**
- * Migration runner contract. The adapter implements this against its
- * driver; selected SQLite preparation calls `runAll(migrations)`.
+ * Migration runner contract. The adapter supplies this against its driver;
+ * SQLite adapters can reuse `SqliteMigrationRunner`. Selected SQLite
+ * preparation calls `runAll(migrations)`.
  * Migration order is the array index — Core supplies the
  * canonical list (see `infrastructure/boot/canonicalMigrations.ts`);
  * adapter just executes.

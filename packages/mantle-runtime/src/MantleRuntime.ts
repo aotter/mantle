@@ -142,6 +142,7 @@ export function bindMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntimeB
   const registry = buildHandlerRegistry(args.handlers ?? {});
   const clock = ports.clock ?? SystemClock;
   const idgen = ports.idgen ?? RandomUuidGenerator;
+  const localePolicy = ports.localePolicy ?? prepared.localePolicy;
   const validator = new EntryDataValidator();
   const triggerIndex = TriggerIndex.fromPlan(plan.lifecycleHooks, plan.triggers);
 
@@ -161,7 +162,7 @@ export function bindMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntimeB
     schemasByName,
     clock,
     idgen,
-    ports.localePolicy,
+    localePolicy,
     validator,
   );
   const invokeProcedure = new InvokeProcedureUseCase(
@@ -192,14 +193,14 @@ export function bindMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntimeB
     schemasByName,
     clock,
     idgen,
-    ports.localePolicy,
+    localePolicy,
     validator,
   );
   const updateDraft = new UpdateDraftUseCase(
     entries,
     schemasByName,
     clock,
-    ports.localePolicy,
+    localePolicy,
     validator,
   );
   const getEntry = new GetEntryUseCase(entries);
@@ -208,7 +209,7 @@ export function bindMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntimeB
     entries,
     schemasByName,
     clock,
-    ports.localePolicy,
+    localePolicy,
     validator,
   );
   const unpublish = new UnpublishUseCase(entries, schemasByName, clock);

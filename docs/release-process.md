@@ -88,15 +88,16 @@ gh api --method POST repos/aotter/mantle/releases/generate-notes \
   --jq .body
 ```
 
-The seven public packages publish in dependency order:
+The eight public packages publish in dependency order:
 
 1. `@aotter/mantle-spec`
 2. `@aotter/mantle-admin-ui`
 3. `@aotter/mantle-runtime`
 4. `@aotter/mantle-web`
 5. `@aotter/mantle-admin`
-6. `@aotter/mantle-cloudflare`
-7. `@aotter/mantle`
+6. `@aotter/mantle-bun`
+7. `@aotter/mantle-cloudflare`
+8. `@aotter/mantle`
 
 The umbrella package must contain its version-matched `docs/` and `skills/`
 payload. No tarball may contain `workspace:*` dependencies, secrets, local
@@ -116,7 +117,7 @@ Before creating the Core tag, the controller proves:
 - the requested version matches every package, plugin, and marketplace ref;
 - `pnpm check` passes;
 - packed Core passes in the exact pinned Starter source;
-- all five release tarballs exist;
+- all eight release tarballs exist;
 - npm and cross-repository credentials are present and readable;
 - a fresh version is unused across npmjs, GitHub Packages, and Starter tags;
 - the pinned Starter commit is still the remote `develop` tip.
@@ -175,6 +176,7 @@ for p in \
   @aotter/mantle-runtime \
   @aotter/mantle-web \
   @aotter/mantle-admin \
+  @aotter/mantle-bun \
   @aotter/mantle-cloudflare \
   @aotter/mantle; do
   npm view "$p@X.Y.Z" version dist.integrity dependencies --json

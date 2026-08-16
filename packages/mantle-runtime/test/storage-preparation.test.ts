@@ -25,8 +25,10 @@ describe("prepareDeployment", () => {
   it("prepares an official adapter over an existing database handle once", async () => {
     const db = new InMemoryDatabase();
     const plan = compilePlan(declarativeManifest);
-    const adapter = new SqliteMantleStorageAdapter(db);
+    const adapter = new SqliteMantleStorageAdapter(db, { locales: ["en"] });
     const prepared = await prepareDeployment(plan, adapter);
+
+    expect(await prepared.localePolicy?.readLocales()).toEqual(["en"]);
 
     await prepared.entries.create({
       id: "post-1",

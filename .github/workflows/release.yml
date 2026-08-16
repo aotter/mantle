@@ -35,7 +35,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Single source of truth for the seven public packages, in dependency order.
+    # Single source of truth for the eight public packages, in dependency order.
     # Names are read from these package.json files during packing.
     env:
       STARTER_SHA: d0e3162444908627dedc30be62fcce7506af95be
@@ -45,6 +45,7 @@ jobs:
         packages/mantle-runtime
         packages/mantle-web
         packages/mantle-admin
+        packages/adapters/bun
         packages/adapters/cloudflare
         packages/mantle
     steps:
@@ -60,6 +61,8 @@ jobs:
           node-version: 22
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
+
+      - uses: oven-sh/setup-bun@v2
 
       - name: Resolve release state
         id: ver

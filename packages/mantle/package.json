@@ -1,7 +1,7 @@
 {
   "name": "@aotter/mantle",
   "version": "0.1.0-alpha.7",
-  "description": "Umbrella entry for @aotter/mantle. Adopters install this one package and import from subpaths: /spec, /runtime, /web, /admin, /cloudflare, /admin-ui. Sub-packages remain individually installable on npm.",
+  "description": "Umbrella entry for @aotter/mantle. Adopters install this one package and import from subpaths: /spec, /runtime, /web, /admin, /bun, /cloudflare, /admin-ui. Sub-packages remain individually installable on npm.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
   "repository": {
@@ -51,6 +51,10 @@
       "types": "./dist/admin.d.ts",
       "import": "./dist/admin.js"
     },
+    "./bun": {
+      "types": "./dist/bun.d.ts",
+      "import": "./dist/bun.js"
+    },
     "./cloudflare": {
       "types": "./dist/cloudflare.d.ts",
       "import": "./dist/cloudflare.js"
@@ -69,6 +73,7 @@
   "dependencies": {
     "@aotter/mantle-admin": "workspace:*",
     "@aotter/mantle-admin-ui": "workspace:*",
+    "@aotter/mantle-bun": "workspace:*",
     "@aotter/mantle-cloudflare": "workspace:*",
     "@aotter/mantle-runtime": "workspace:*",
     "@aotter/mantle-spec": "workspace:*",
