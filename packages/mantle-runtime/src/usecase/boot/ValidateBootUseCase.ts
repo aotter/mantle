@@ -23,6 +23,7 @@ export interface ValidateBootRequest {
 }
 
 export interface DeploymentPreparationOptions {
+  /** Registered handlers to validate. Omit when this embedding never dispatches Procedures. */
   readonly handlerNames?: readonly string[];
   readonly reservedHttpPathPrefixes?: readonly string[];
   readonly siteLocales?: readonly string[];
@@ -35,7 +36,6 @@ export async function prepareDeployment(
 ): Promise<PreparedMantleStorage> {
   const diagnostics = deploymentDiagnostics(plan, {
     ...options,
-    handlerNames: options.handlerNames ?? [],
     nativeViewDialects: storage.nativeViewDialects ?? [],
   });
   if (diagnostics.length > 0) throw new BootValidationError(diagnostics);
