@@ -25,7 +25,7 @@ import {
   CommitMediaUploadUseCase,
   CreateMediaUploadUseCase,
 } from "../../usecase/media/index.js";
-import { mcpToolNameSegment } from "../../domain/service/McpToolNaming.js";
+import { mcpToolNameSegment } from "@aotter/mantle-spec";
 import { ExecuteViewUseCase } from "../../usecase/view/index.js";
 import { InvokeProcedureUseCase } from "../../usecase/procedure/InvokeProcedureUseCase.js";
 import {

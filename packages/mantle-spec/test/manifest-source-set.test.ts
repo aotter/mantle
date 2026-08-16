@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseManifestSources } from "../src/domain/service/ManifestParser.js";
+import {
+  parseManifestSources,
+  sourceLocationAt,
+} from "../src/domain/service/ManifestParser.js";
 
 const schema = (name: string): string => `apiVersion: cms.mantle.aotter.net/v1
 kind: Schema
@@ -59,6 +62,20 @@ spec:
     expect(result.value.entries[1]?.manifest).toMatchObject({
       kind: "View",
       spec: { orderBy: [{ field: "createdAt", direction: "asc" }] },
+    });
+  });
+
+  it("retains narrow authored spans for later semantic diagnostics", () => {
+    const result = parseManifestSources({
+      sources: [{ sourceId: "memory:span", text: schema("articles") }],
+    });
+
+    if (!result.ok) throw new Error("expected valid span fixture");
+    expect(sourceLocationAt(result.value.entries[0]!, "/metadata/name")).toMatchObject({
+      sourceId: "memory:span",
+      documentIndex: 0,
+      path: "/metadata/name",
+      span: { start: { line: 3, column: 19 } },
     });
   });
 

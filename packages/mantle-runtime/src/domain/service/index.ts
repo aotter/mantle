@@ -20,5 +20,4 @@ export * from "./ViewParamCoercer.js";
 export * from "./PathMatcher.js";
 export * from "./TriggerIndex.js";
 export * from "./BuiltinProjector.js";
-export * from "./McpToolNaming.js";
 export * from "./AuthPredicateEvaluator.js";

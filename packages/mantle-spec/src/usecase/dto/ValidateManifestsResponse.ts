@@ -1,4 +1,5 @@
 import type { Diagnostic } from "../../kernel/diagnostic.js";
+import type { LinkedManifestSet } from "../../domain/service/ManifestLinker.js";
 
 /**
  * Output of the manifest validation use case. `errorCount` and
@@ -9,4 +10,5 @@ export interface ValidateManifestsResponse {
   readonly diagnostics: ReadonlyArray<Diagnostic>;
   readonly errorCount: number;
   readonly warningCount: number;
+  readonly linked?: LinkedManifestSet;
 }

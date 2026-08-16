@@ -1,15 +1,4 @@
 apiVersion: cms.mantle.aotter.net/v1
-kind: Schema
-metadata: { name: broken-required }
-spec:
-  title: Broken required
-  schema:
-    type: object
-    required: [missing]
-    properties:
-      present: { type: string }
----
-apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: missing-source }
 spec:

@@ -217,29 +217,6 @@ describe("createCmsRuntime + bootInit", () => {
     expect(db.legacyIndexColumns.has("uq_posts__a_b")).toBe(false);
   });
 
-  it("rejects invalid Schema indexes before running dynamic index migrations", async () => {
-    const db = new InMemoryDatabase();
-    const schema = postsSchema();
-    const runtime = createCmsRuntime({
-      manifests: [{
-        ...schema,
-        spec: { ...schema.spec, indexes: [["missing"]] },
-      }],
-      db,
-      assets: noopAssets,
-    });
-
-    const error = await runtime.bootInit().catch((cause: unknown) => cause);
-    expect(error).toBeInstanceOf(BootValidationError);
-    expect((error as BootValidationError).diagnostics[0]?.code).toBe(
-      "SCHEMA_INDEX_FIELD_UNKNOWN",
-    );
-    expect(db.appliedMigrations.has("0001-init")).toBe(true);
-    expect([...db.appliedMigrations]).not.toContainEqual(
-      expect.stringMatching(/^schema-index-v2:/),
-    );
-  });
-
   it("bootInit throws BootValidationError when handler ref is missing", async () => {
     const db = new InMemoryDatabase();
     const runtime = createCmsRuntime({

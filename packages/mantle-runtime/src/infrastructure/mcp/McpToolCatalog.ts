@@ -1,5 +1,6 @@
 import {
   MANTLE_BIND_KEYWORD,
+  mcpToolNameSegment,
   expandPolicyRequired,
   resolveLifecycle,
   resolveLocalizedText,
@@ -9,7 +10,6 @@ import {
   type SchemaManifest,
   type ViewManifest,
 } from "@aotter/mantle-spec";
-import { mcpToolNameSegment } from "../../domain/service/McpToolNaming.js";
 
 /**
  * MCP tool catalog. Mix of generic tools (read paths, status flips

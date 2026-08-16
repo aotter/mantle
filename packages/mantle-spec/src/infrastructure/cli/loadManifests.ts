@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { cwd } from "node:process";
-import { parseManifestSources } from "../../domain/service/ManifestParser.js";
+import {
+  parseManifestSources,
+  type ParsedManifestSet,
+} from "../../domain/service/ManifestParser.js";
 import type { Manifest } from "../../domain/model/ManifestGrammar.js";
 import {
   validateDiagnostic,
@@ -16,6 +19,7 @@ import {
  */
 export interface LoadManifestsResult {
   readonly manifests: Manifest[];
+  readonly parsed?: ParsedManifestSet;
   readonly parseErrors: Diagnostic[];
   /** `kind/name` → ordered list of source locations. Length > 1 when
    *  the same name appears in multiple YAML docs / files (itself a
@@ -33,6 +37,7 @@ export async function loadManifestsFromRoot(rootArg: string): Promise<LoadManife
   const manifests: Manifest[] = [];
   const parseErrors: Diagnostic[] = [];
   const filePaths = new Map<string, { file: string; docIndex: number }[]>();
+  let parsedSet: ParsedManifestSet | undefined;
   const file = join(root, "site.yaml");
 
   let text: string;
@@ -60,6 +65,7 @@ export async function loadManifestsFromRoot(rootArg: string): Promise<LoadManife
         : diagnostic.path,
     })));
     if (!parsed.ok) return { manifests, parseErrors, filePaths, root };
+    parsedSet = parsed.value;
     parsed.value.entries.forEach(({ manifest: m, source }) => {
       manifests.push(m);
       const key = `${m.kind}/${m.metadata.name}`;
@@ -82,5 +88,5 @@ export async function loadManifestsFromRoot(rootArg: string): Promise<LoadManife
     );
   }
 
-  return { manifests, parseErrors, filePaths, root };
+  return { manifests, parseErrors, filePaths, root, ...(parsedSet ? { parsed: parsedSet } : {}) };
 }

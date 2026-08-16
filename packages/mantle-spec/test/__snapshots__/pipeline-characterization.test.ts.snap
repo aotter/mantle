@@ -71,406 +71,443 @@ exports[`v0.1 sealed-pipeline characterization > freezes source-aware parse diag
 
 exports[`v0.1 sealed-pipeline characterization > freezes successful parse and semantic validation 1`] = `
 {
-  "parsed": {
-    "diagnostics": [],
-    "ok": true,
-    "value": {
-      "entries": [
-        {
-          "manifest": {
-            "apiVersion": "cms.mantle.aotter.net/v1",
-            "kind": "Schema",
-            "metadata": {
-              "name": "orders",
-            },
-            "spec": {
-              "indexes": [
-                [
-                  "customerId",
-                ],
-              ],
-              "lifecycle": "publishing",
-              "localized": false,
-              "schema": {
-                "properties": {
-                  "createdAt": {
-                    "type": "number",
-                    "x-mantle-bind": "now",
-                  },
-                  "customerId": {
-                    "minLength": 1,
-                    "type": "string",
-                  },
-                  "externalId": {
-                    "minLength": 1,
-                    "type": "string",
-                  },
-                  "status": {
-                    "enum": [
-                      "open",
-                      "closed",
-                    ],
-                    "type": "string",
-                  },
-                },
-                "required": [
-                  "customerId",
-                  "status",
-                ],
-                "type": "object",
+  "linked": {
+    "procedures": [
+      {
+        "builtinSchema": undefined,
+        "collectionActionSchema": undefined,
+        "guard": undefined,
+        "name": "authorize-order",
+      },
+      {
+        "builtinSchema": undefined,
+        "collectionActionSchema": undefined,
+        "guard": undefined,
+        "name": "place-order",
+      },
+    ],
+    "schemas": [
+      {
+        "name": "orders",
+        "translationParent": undefined,
+      },
+    ],
+    "triggers": [
+      {
+        "lifecycleSchema": undefined,
+        "name": "place-order-http",
+        "target": "place-order",
+      },
+      {
+        "lifecycleSchema": undefined,
+        "name": "place-order-mcp",
+        "target": "place-order",
+      },
+      {
+        "lifecycleSchema": "orders",
+        "name": "order-created",
+        "target": "place-order",
+      },
+    ],
+    "views": [
+      {
+        "from": "orders",
+        "guard": "authorize-order",
+        "name": "open-orders",
+      },
+    ],
+  },
+  "parsed": [
+    {
+      "manifest": {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Schema",
+        "metadata": {
+          "name": "orders",
+        },
+        "spec": {
+          "indexes": [
+            [
+              "customerId",
+            ],
+          ],
+          "lifecycle": "publishing",
+          "localized": false,
+          "schema": {
+            "properties": {
+              "createdAt": {
+                "type": "number",
+                "x-mantle-bind": "now",
               },
-              "searchableFields": [],
-              "title": "Orders",
-              "uniqueIndexes": [],
+              "customerId": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "externalId": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "status": {
+                "enum": [
+                  "open",
+                  "closed",
+                ],
+                "type": "string",
+              },
             },
+            "required": [
+              "customerId",
+              "status",
+            ],
+            "type": "object",
           },
-          "source": {
-            "documentIndex": 0,
-            "path": "/",
-            "sourceId": "fixture:valid.yaml",
-            "span": {
-              "end": {
-                "column": 1,
-                "line": 18,
-                "offset": 550,
-              },
-              "start": {
-                "column": 1,
-                "line": 3,
-                "offset": 151,
-              },
-            },
+          "searchableFields": [],
+          "title": "Orders",
+          "uniqueIndexes": [],
+        },
+      },
+      "source": {
+        "documentIndex": 0,
+        "path": "/",
+        "sourceId": "fixture:valid.yaml",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 18,
+            "offset": 550,
+          },
+          "start": {
+            "column": 1,
+            "line": 3,
+            "offset": 151,
           },
         },
-        {
-          "manifest": {
-            "apiVersion": "cms.mantle.aotter.net/v1",
-            "kind": "View",
-            "metadata": {
-              "name": "open-orders",
-            },
-            "spec": {
-              "fields": [
-                "id",
-                "customerId",
-                "status",
-                "createdAt",
-              ],
-              "filter": {
-                "and": [
-                  {
-                    "eq": {
-                      "field": "customerId",
-                      "value": {
-                        "$param": "customerId",
-                      },
-                    },
-                  },
-                  {
-                    "eq": {
-                      "field": "status",
-                      "value": "open",
-                    },
-                  },
-                ],
-              },
-              "from": "orders",
-              "limit": 20,
-              "orderBy": [
-                {
-                  "direction": "desc",
-                  "field": "createdAt",
-                },
-              ],
-              "params": {
-                "properties": {
-                  "customerId": {
-                    "type": "string",
-                  },
-                },
-                "required": [
-                  "customerId",
-                ],
-                "type": "object",
-              },
-              "requires": {
-                "auth": {
-                  "all": [
-                    "ctx.auth",
-                    "ctx.user",
-                  ],
-                },
-                "guard": {
-                  "procedure": "authorize-order",
-                },
-              },
-              "surface": "public",
-            },
-          },
-          "source": {
-            "documentIndex": 2,
-            "path": "/",
-            "sourceId": "fixture:valid.yaml",
-            "span": {
-              "end": {
-                "column": 1,
-                "line": 44,
-                "offset": 1188,
-              },
-              "start": {
-                "column": 1,
-                "line": 21,
-                "offset": 634,
-              },
-            },
-          },
-        },
-        {
-          "manifest": {
-            "apiVersion": "cms.mantle.aotter.net/v1",
-            "kind": "Procedure",
-            "metadata": {
-              "name": "authorize-order",
-            },
-            "spec": {
-              "handler": {
-                "kind": "ref",
-                "ref": "authorizeOrder",
-              },
-              "input": {
-                "properties": {
-                  "customerId": {
-                    "type": "string",
-                  },
-                },
-                "required": [
-                  "customerId",
-                ],
-                "type": "object",
-              },
-              "output": {
-                "type": "object",
-              },
-            },
-          },
-          "source": {
-            "documentIndex": 3,
-            "path": "/",
-            "sourceId": "fixture:valid.yaml",
-            "span": {
-              "end": {
-                "column": 1,
-                "line": 57,
-                "offset": 1462,
-              },
-              "start": {
-                "column": 1,
-                "line": 45,
-                "offset": 1192,
-              },
-            },
-          },
-        },
-        {
-          "manifest": {
-            "apiVersion": "cms.mantle.aotter.net/v1",
-            "kind": "Procedure",
-            "metadata": {
-              "name": "place-order",
-            },
-            "spec": {
-              "handler": {
-                "kind": "ref",
-                "ref": "placeOrder",
-              },
-              "input": {
-                "properties": {
-                  "customerId": {
-                    "type": "string",
-                  },
-                },
-                "required": [
-                  "customerId",
-                ],
-                "type": "object",
-              },
-              "output": {
-                "type": "object",
-              },
-              "requires": {
-                "auth": {
-                  "all": [
-                    "ctx.auth",
-                    "ctx.user",
-                  ],
-                },
-              },
-            },
-          },
-          "source": {
-            "documentIndex": 4,
-            "path": "/",
-            "sourceId": "fixture:valid.yaml",
-            "span": {
-              "end": {
-                "column": 1,
-                "line": 73,
-                "offset": 1782,
-              },
-              "start": {
-                "column": 1,
-                "line": 58,
-                "offset": 1466,
-              },
-            },
-          },
-        },
-        {
-          "manifest": {
-            "apiVersion": "cms.mantle.aotter.net/v1",
-            "kind": "Trigger",
-            "metadata": {
-              "name": "place-order-http",
-            },
-            "spec": {
-              "source": {
-                "kind": "http",
-                "method": "POST",
-                "path": "/api/orders",
-              },
-              "target": {
-                "procedure": "place-order",
-              },
-            },
-          },
-          "source": {
-            "documentIndex": 5,
-            "path": "/",
-            "sourceId": "fixture:valid.yaml",
-            "span": {
-              "end": {
-                "column": 1,
-                "line": 81,
-                "offset": 1973,
-              },
-              "start": {
-                "column": 1,
-                "line": 74,
-                "offset": 1786,
-              },
-            },
-          },
-        },
-        {
-          "manifest": {
-            "apiVersion": "cms.mantle.aotter.net/v1",
-            "kind": "Trigger",
-            "metadata": {
-              "name": "place-order-mcp",
-            },
-            "spec": {
-              "source": {
-                "kind": "mcp",
-                "surface": "public",
-              },
-              "target": {
-                "procedure": "place-order",
-              },
-            },
-          },
-          "source": {
-            "documentIndex": 6,
-            "path": "/",
-            "sourceId": "fixture:valid.yaml",
-            "span": {
-              "end": {
-                "column": 1,
-                "line": 89,
-                "offset": 2146,
-              },
-              "start": {
-                "column": 1,
-                "line": 82,
-                "offset": 1977,
-              },
-            },
-          },
-        },
-        {
-          "manifest": {
-            "apiVersion": "cms.mantle.aotter.net/v1",
-            "kind": "Trigger",
-            "metadata": {
-              "name": "order-created",
-            },
-            "spec": {
-              "source": {
-                "errorPolicy": "continue",
-                "kind": "lifecycle",
-                "on": [
-                  "after_create",
-                ],
-                "schema": "orders",
-              },
-              "target": {
-                "procedure": "place-order",
-              },
-            },
-          },
-          "source": {
-            "documentIndex": 7,
-            "path": "/",
-            "sourceId": "fixture:valid.yaml",
-            "span": {
-              "end": {
-                "column": 1,
-                "line": 101,
-                "offset": 2374,
-              },
-              "start": {
-                "column": 1,
-                "line": 90,
-                "offset": 2150,
-              },
-            },
-          },
-        },
-      ],
+      },
     },
-  },
-  "validated": {
-    "diagnostics": [],
-    "errorCount": 0,
-    "warningCount": 0,
-  },
+    {
+      "manifest": {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "View",
+        "metadata": {
+          "name": "open-orders",
+        },
+        "spec": {
+          "fields": [
+            "id",
+            "customerId",
+            "status",
+            "createdAt",
+          ],
+          "filter": {
+            "and": [
+              {
+                "eq": {
+                  "field": "customerId",
+                  "value": {
+                    "$param": "customerId",
+                  },
+                },
+              },
+              {
+                "eq": {
+                  "field": "status",
+                  "value": "open",
+                },
+              },
+            ],
+          },
+          "from": "orders",
+          "limit": 20,
+          "orderBy": [
+            {
+              "direction": "desc",
+              "field": "createdAt",
+            },
+          ],
+          "params": {
+            "properties": {
+              "customerId": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "customerId",
+            ],
+            "type": "object",
+          },
+          "requires": {
+            "auth": {
+              "all": [
+                "ctx.auth",
+                "ctx.user",
+              ],
+            },
+            "guard": {
+              "procedure": "authorize-order",
+            },
+          },
+          "surface": "public",
+        },
+      },
+      "source": {
+        "documentIndex": 2,
+        "path": "/",
+        "sourceId": "fixture:valid.yaml",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 44,
+            "offset": 1188,
+          },
+          "start": {
+            "column": 1,
+            "line": 21,
+            "offset": 634,
+          },
+        },
+      },
+    },
+    {
+      "manifest": {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Procedure",
+        "metadata": {
+          "name": "authorize-order",
+        },
+        "spec": {
+          "handler": {
+            "kind": "ref",
+            "ref": "authorizeOrder",
+          },
+          "input": {
+            "properties": {
+              "customerId": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "customerId",
+            ],
+            "type": "object",
+          },
+          "output": {
+            "type": "object",
+          },
+        },
+      },
+      "source": {
+        "documentIndex": 3,
+        "path": "/",
+        "sourceId": "fixture:valid.yaml",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 57,
+            "offset": 1462,
+          },
+          "start": {
+            "column": 1,
+            "line": 45,
+            "offset": 1192,
+          },
+        },
+      },
+    },
+    {
+      "manifest": {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Procedure",
+        "metadata": {
+          "name": "place-order",
+        },
+        "spec": {
+          "handler": {
+            "kind": "ref",
+            "ref": "placeOrder",
+          },
+          "input": {
+            "properties": {
+              "customerId": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "customerId",
+            ],
+            "type": "object",
+          },
+          "output": {
+            "type": "object",
+          },
+          "requires": {
+            "auth": {
+              "all": [
+                "ctx.auth",
+                "ctx.user",
+              ],
+            },
+          },
+        },
+      },
+      "source": {
+        "documentIndex": 4,
+        "path": "/",
+        "sourceId": "fixture:valid.yaml",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 73,
+            "offset": 1782,
+          },
+          "start": {
+            "column": 1,
+            "line": 58,
+            "offset": 1466,
+          },
+        },
+      },
+    },
+    {
+      "manifest": {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Trigger",
+        "metadata": {
+          "name": "place-order-http",
+        },
+        "spec": {
+          "source": {
+            "kind": "http",
+            "method": "POST",
+            "path": "/api/orders",
+          },
+          "target": {
+            "procedure": "place-order",
+          },
+        },
+      },
+      "source": {
+        "documentIndex": 5,
+        "path": "/",
+        "sourceId": "fixture:valid.yaml",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 81,
+            "offset": 1973,
+          },
+          "start": {
+            "column": 1,
+            "line": 74,
+            "offset": 1786,
+          },
+        },
+      },
+    },
+    {
+      "manifest": {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Trigger",
+        "metadata": {
+          "name": "place-order-mcp",
+        },
+        "spec": {
+          "source": {
+            "kind": "mcp",
+            "surface": "public",
+          },
+          "target": {
+            "procedure": "place-order",
+          },
+        },
+      },
+      "source": {
+        "documentIndex": 6,
+        "path": "/",
+        "sourceId": "fixture:valid.yaml",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 89,
+            "offset": 2146,
+          },
+          "start": {
+            "column": 1,
+            "line": 82,
+            "offset": 1977,
+          },
+        },
+      },
+    },
+    {
+      "manifest": {
+        "apiVersion": "cms.mantle.aotter.net/v1",
+        "kind": "Trigger",
+        "metadata": {
+          "name": "order-created",
+        },
+        "spec": {
+          "source": {
+            "errorPolicy": "continue",
+            "kind": "lifecycle",
+            "on": [
+              "after_create",
+            ],
+            "schema": "orders",
+          },
+          "target": {
+            "procedure": "place-order",
+          },
+        },
+      },
+      "source": {
+        "documentIndex": 7,
+        "path": "/",
+        "sourceId": "fixture:valid.yaml",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 101,
+            "offset": 2374,
+          },
+          "start": {
+            "column": 1,
+            "line": 90,
+            "offset": 2150,
+          },
+        },
+      },
+    },
+  ],
 }
 `;
 
 exports[`v0.1 sealed-pipeline characterization > keeps the pre-link semantic diagnostic order characterized 1`] = `
 [
   {
-    "candidates": [
-      "present",
-    ],
-    "code": "REQUIRED_FIELD_UNKNOWN",
-    "expected": "name of a property declared in spec.schema.properties",
-    "message": "Schema 'broken-required' lists 'missing' in required but never declares it under properties — the constraint is silently unenforced.",
-    "path": "manifest:Schema/broken-required#/spec/schema/required/0",
-    "phase": "validate",
-    "severity": "error",
-    "suggestion": undefined,
-    "value": "missing",
-  },
-  {
-    "candidates": [
-      "broken-required",
-    ],
+    "candidates": [],
     "code": "VIEW_FROM_UNKNOWN_SCHEMA",
     "expected": "name of a declared Schema",
     "message": "View 'missing-source' references unknown Schema 'unknown-schema'.",
-    "path": "manifest:View/missing-source#/spec/from",
+    "path": "/spec/from",
     "phase": "validate",
     "severity": "error",
+    "source": {
+      "documentIndex": 0,
+      "path": "/spec/from",
+      "sourceId": "fixture:link-invalid.yaml",
+      "span": {
+        "end": {
+          "column": 1,
+          "line": 7,
+          "offset": 130,
+        },
+        "start": {
+          "column": 9,
+          "line": 6,
+          "offset": 115,
+        },
+      },
+    },
     "suggestion": undefined,
     "value": "unknown-schema",
   },
@@ -479,9 +516,26 @@ exports[`v0.1 sealed-pipeline characterization > keeps the pre-link semantic dia
     "code": "TRIGGER_TARGET_PROCEDURE_UNKNOWN",
     "expected": "name of a declared Procedure",
     "message": "Trigger 'missing-target' targets unknown Procedure 'unknown-procedure'.",
-    "path": "manifest:Trigger/missing-target#/spec/target/procedure",
+    "path": "/spec/target/procedure",
     "phase": "validate",
     "severity": "error",
+    "source": {
+      "documentIndex": 1,
+      "path": "/spec/target/procedure",
+      "sourceId": "fixture:link-invalid.yaml",
+      "span": {
+        "end": {
+          "column": 42,
+          "line": 14,
+          "offset": 347,
+        },
+        "start": {
+          "column": 24,
+          "line": 14,
+          "offset": 329,
+        },
+      },
+    },
     "suggestion": undefined,
     "value": "unknown-procedure",
   },
@@ -490,9 +544,26 @@ exports[`v0.1 sealed-pipeline characterization > keeps the pre-link semantic dia
     "code": "TRIGGER_PATH_INVALID",
     "expected": "path starting with '/api/'",
     "message": "Trigger 'missing-target' has path '/outside-core' — http Trigger paths MUST start with '/api/' so adapters can route public pages and Procedure endpoints without ambiguity.",
-    "path": "manifest:Trigger/missing-target#/spec/source/path",
+    "path": "/spec/source/path",
     "phase": "validate",
     "severity": "error",
+    "source": {
+      "documentIndex": 1,
+      "path": "/spec/source/path",
+      "sourceId": "fixture:link-invalid.yaml",
+      "span": {
+        "end": {
+          "column": 59,
+          "line": 13,
+          "offset": 304,
+        },
+        "start": {
+          "column": 45,
+          "line": 13,
+          "offset": 290,
+        },
+      },
+    },
     "suggestion": undefined,
     "value": "/outside-core",
   },

@@ -135,7 +135,7 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
 
   // 1. Load manifests. Loader returns the resolved `root` so we don't
   // re-resolve here and risk drift between the two `cwd()` calls.
-  const { manifests, parseErrors, filePaths, root: manifestsRoot } =
+  const { manifests, parsed, parseErrors, filePaths, root: manifestsRoot } =
     await loadManifestsFromRoot(args.manifests);
 
   // 2. Concatenate handler source (if any).
@@ -150,7 +150,7 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
   }
 
   // 3. Execute the use case.
-  const result = ValidateManifestsUseCase.run({ manifests, handlerSource, filePaths });
+  const result = ValidateManifestsUseCase.run({ parsed, manifests, handlerSource, filePaths });
   const cliWarnings: Diagnostic[] = [];
 
   // The CLI can't reach the runtime DB to read site_config, so it

@@ -4,9 +4,7 @@ import {
   parseManifests,
   parseManifestsOrThrow,
 } from "../src/domain/service/ManifestParser.js";
-import { buildDdl } from "../src/domain/service/SchemaDdlEmitter.js";
 import type {
-  JsonSchema,
   Manifest,
   ProcedureManifest,
   SchemaManifest,
@@ -372,74 +370,6 @@ ${indexYaml}
   });
 });
 
-describe("ValidateManifestsUseCase — Schema index semantics", () => {
-  it("accepts every resolved scalar affinity and nullable form", () => {
-    const manifest = schema("typed", {
-      schema: {
-        type: "object",
-        properties: {
-          text: { type: ["null", "string"] },
-          count: { type: "integer", nullable: true },
-          ratio: { type: "number" },
-          enabled: { type: "boolean" },
-        },
-      },
-      indexes: [["text", "count", "ratio", "enabled"]],
-    });
-    expect(ValidateManifestsUseCase.run({ manifests: [manifest] }).errorCount).toBe(0);
-  });
-
-  it.each([
-    ["object", { type: "object" }],
-    ["array", { type: "array" }],
-    ["enum-only", { enum: ["a", "b"] }],
-    ["mixed union", { type: ["string", "number"] }],
-    ["null-only", { type: "null" }],
-    ["invalid nullable", { type: "string", nullable: "yes" }],
-  ])("rejects non-indexable property shape: %s", (_label, property) => {
-    const manifest = schema("typed", {
-      schema: {
-        type: "object",
-        properties: { value: property as unknown as JsonSchema },
-      },
-      indexes: [["value"]],
-    });
-    const result = ValidateManifestsUseCase.run({ manifests: [manifest] });
-    expect(result.diagnostics.map((diagnostic) => diagnostic.code))
-      .toContain("SCHEMA_INDEX_INVALID");
-  });
-
-  it("uses own top-level properties rather than the prototype chain", () => {
-    const manifest = schema("posts", { indexes: [["toString"]] });
-    const result = ValidateManifestsUseCase.run({ manifests: [manifest] });
-    expect(result.diagnostics[0]).toMatchObject({
-      code: "SCHEMA_INDEX_FIELD_UNKNOWN",
-      value: "toString",
-    });
-  });
-
-  it("catches invalid runtime matrix shapes without silently dropping them", () => {
-    const manifest = schema("posts", {
-      indexes: "slug" as unknown as SchemaManifest["spec"]["indexes"],
-    });
-    const result = ValidateManifestsUseCase.run({ manifests: [manifest] });
-    expect(result.diagnostics[0]).toMatchObject({ code: "SCHEMA_INDEX_INVALID" });
-  });
-
-  it.each([
-    ["outer", new Array(1)],
-    ["inner", [new Array(1)]],
-  ])("rejects a sparse %s index array", (_label, indexes) => {
-    const manifest = schema("posts", {
-      indexes: indexes as SchemaManifest["spec"]["indexes"],
-    });
-    const result = ValidateManifestsUseCase.run({ manifests: [manifest] });
-
-    expect(result.diagnostics[0]).toMatchObject({ code: "SCHEMA_INDEX_INVALID" });
-    expect(() => buildDdl(manifest)).toThrow(/invalid Schema index declaration/);
-  });
-});
-
 describe("Schema searchableFields", () => {
   it("accepts top-level string fields and preserves their order", () => {
     const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
@@ -483,13 +413,6 @@ spec:
     expect(result.diagnostics[0]?.code).toBe(code);
   });
 
-  it("validates programmatically constructed manifests", () => {
-    const result = ValidateManifestsUseCase.run({
-      manifests: [schema("orders", { searchableFields: ["missing"] })],
-    });
-
-    expect(result.diagnostics[0]?.code).toBe("SCHEMA_SEARCH_FIELD_UNKNOWN");
-  });
 });
 
 describe("Schema uiSchema list filter", () => {
@@ -588,12 +511,19 @@ spec:
   });
 
   it("rejects a collection action targeting an unknown Schema", () => {
-    const result = ValidateManifestsUseCase.run({
-      manifests: [procedure("create-manual-order", { uiSchema: { collectionAction: "orders" } })],
-    });
+    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: create-manual-order }
+spec:
+  input: { type: object }
+  uiSchema: { collectionAction: orders }
+  output: { type: object }
+  handler: { kind: ref, ref: createManualOrder }
+`);
+    const result = ValidateManifestsUseCase.run({ manifests: parsed.manifests });
     expect(result.diagnostics[0]).toMatchObject({
       code: "SCHEMA_UI_INVALID",
-      path: "manifest:Procedure/create-manual-order#/spec/uiSchema/collectionAction",
+      path: "/spec/uiSchema/collectionAction",
     });
   });
 });
@@ -614,14 +544,6 @@ spec:
       code: "INVALID_MANIFEST_ENVELOPE",
       path: "manifest:doc/0#/spec/schema/properties/locale",
     });
-    expect(ValidateManifestsUseCase.run({
-      manifests: [schema("orders", {
-        schema: { type: "object", properties: { locale: { type: "string" } } },
-      })],
-    }).diagnostics[0]).toMatchObject({
-      code: "INVALID_MANIFEST_ENVELOPE",
-      path: "manifest:Schema/orders#/spec/schema/properties/locale",
-    });
   });
 
   it("rejects a translation child with no locale-specific payload field", () => {
@@ -639,6 +561,25 @@ spec:
       locale: { type: string }
 `);
     expect(result.diagnostics[0]?.code).toBe("TRANSLATES_REQUIRES_CONTENT_FIELD");
+  });
+
+  it("rejects translation ownership rules at parse time", () => {
+    const source = (localized: string, properties: string) => `apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: story-translations }
+spec:
+  title: Story translations
+  ${localized}
+  translates: { parent: stories, on: slug }
+  schema:
+    type: object
+    properties: { ${properties} }
+`;
+
+    expect(parseManifests(source("localized: false", "slug: { type: string }, title: { type: string }"))
+      .diagnostics[0]?.code).toBe("TRANSLATES_REQUIRES_LOCALIZED");
+    expect(parseManifests(source("localized: true", "title: { type: string }"))
+      .diagnostics[0]?.code).toBe("TRANSLATES_FIELD_NOT_IN_CHILD");
   });
 
   it("accepts Procedure.handler.kind: 'builtin' with op + schema", () => {
@@ -1591,17 +1532,16 @@ spec:
 
 describe("required field absent from properties (#399)", () => {
   it("flags a required entry not declared in properties", () => {
-    const result = ValidateManifestsUseCase.run({
-      manifests: [
-        schema("posts", {
-          schema: {
-            type: "object",
-            properties: { title: { type: "string" } },
-            required: ["title", "slug"],
-          },
-        }),
-      ],
-    });
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: posts }
+spec:
+  title: Posts
+  schema:
+    type: object
+    properties: { title: { type: string } }
+    required: [title, slug]
+`);
     const diag = result.diagnostics.find((d) => d.code === "REQUIRED_FIELD_UNKNOWN");
     expect(diag).toBeDefined();
     expect(diag?.value).toBe("slug");
@@ -1610,16 +1550,16 @@ describe("required field absent from properties (#399)", () => {
 
 describe("uncompilable regex pattern (#395)", () => {
   it("flags a malformed `pattern` at validate time instead of crashing at runtime", () => {
-    const result = ValidateManifestsUseCase.run({
-      manifests: [
-        schema("posts", {
-          schema: {
-            type: "object",
-            properties: { slug: { type: "string", pattern: "(unterminated" } },
-          },
-        }),
-      ],
-    });
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: posts }
+spec:
+  title: Posts
+  schema:
+    type: object
+    properties:
+      slug: { type: string, pattern: "(unterminated" }
+`);
     const diag = result.diagnostics.find((d) => d.code === "INVALID_PATTERN");
     expect(diag).toBeDefined();
   });
