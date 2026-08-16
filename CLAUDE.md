@@ -40,6 +40,7 @@ This is the lens for every architectural decision in this codebase.
 | `packages/mantle-admin-ui/` | React 19 + Vite admin SPA. Pre-built `dist/` consumed via workspace dep by adapters. |
 | `packages/adapters/bun/` | Embeddable Bun adapter. Binds caller-owned SQLite and returns a composable `Request` → `Response | null` handler. |
 | `packages/adapters/cloudflare/` | Cloudflare Workers adapter. Hono-based; binds D1, KV, ASSETS, Better Auth, and optional R2 media. |
+| `packages/adapters/vercel/` | Vercel Node.js Functions adapter. Binds injected durable storage and platform `waitUntil`; optional libSQL is a separate subpath. |
 | `packages/adapters/netlify/` | **README stub.** Coming v0.2. The stub is an engineering forcing function. |
 | [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters) | End-user starter source repo. Contains `blank/`, small `overlays/<type>/`, vendored Kiwa source, repo-local skills, and generated `provision-bundles/<type>.json` artifacts consumed by local cold starts and Mantle landing. |
 | `starters/blank/` | **README stub.** Migrated to `mantle-starters/blank/` (#99). The stub is the same engineering forcing function as `packages/adapters/netlify/`. |

@@ -27,10 +27,9 @@ export interface HandlerContext<Env = unknown> {
   /** Adapter-specific bindings. The default stays portable; consumers may
    *  supply their Worker Env type through `HandlerFn`/generated handlers. */
   readonly env: Env;
-  /** Cloudflare `ExecutionContext.waitUntil`-style fire-and-forget
-   *  bridge. Adapter populates when running in a Worker; runtime uses
-   *  it for deferred lifecycle-hook fallback. Optional so non-Worker
-   *  adapters can leave it out. */
+  /** Platform `waitUntil`-style fire-and-forget bridge. An adapter may
+   *  populate it from Cloudflare `ExecutionContext` or Vercel Functions;
+   *  runtime uses it for deferred lifecycle-hook fallback. */
   readonly waitUntil?: (p: Promise<unknown>) => void;
   /** Lifecycle event metadata. Populated by `RunLifecycleHooksUseCase`
    *  when this ctx is passed to a Procedure invoked AS a lifecycle hook

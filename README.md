@@ -192,6 +192,7 @@ For a guided install, follow the steps in [`skills/install/SKILL.md`](skills/ins
 | `@aotter/mantle-admin` | Optional Admin routes, APIs, staff gates, and static-asset composition. |
 | `@aotter/mantle-admin-ui` | Admin SPA — React 19 + Vite + Tailwind v4. In development; ships in v0.1.0. |
 | `@aotter/mantle-bun` | Bun adapter. Embeds Core over an application-owned `bun:sqlite` handle and exposes Web-standard public View/HTTP Trigger handling without owning the server lifecycle. |
+| `@aotter/mantle-vercel` | Vercel Node.js Functions adapter. Binds injected durable storage to the shared Web-standard transport and platform `waitUntil`; optional `/libsql` support never owns the client. |
 | `@aotter/mantle-cloudflare` | Cloudflare Workers adapter. Implements Core storage against D1 and optional Admin assets against ASSETS; uses version-local Workers Cache for public responses. Ships `createAuth()` — the Better Auth-backed *default* implementation of the SDK's `Auth` contract (see [ADR-0014](docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md)); the conventional Worker accepts a replacement factory `(env) => Auth`. |
 | `@aotter/mantle-netlify` | **Stub.** Coming v0.2. Engineering forcing function: keeps `mantle-runtime` adapter-agnostic. |
 

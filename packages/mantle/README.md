@@ -28,6 +28,8 @@ Adopters install this one package and import from subpaths. Sub-packages remain 
 | `@aotter/mantle/web` | Optional HTML, Markdown, `llms.txt`, sitemap, SEO, and preview composition (no routes or platform deps) |
 | `@aotter/mantle/admin` | Optional Admin API, auth routes, and static-asset composition |
 | `@aotter/mantle/bun` | Bun adapter — caller-owned `bun:sqlite` and Web-standard View/Trigger transport |
+| `@aotter/mantle/vercel` | Vercel Functions adapter — injected durable storage and platform `waitUntil` |
+| `@aotter/mantle/vercel/libsql` | Optional application-owned Turso/libSQL driver |
 | `@aotter/mantle/cloudflare` | Cloudflare Workers adapter — D1, Workers Cache, R2, Better Auth, MCP via `@cloudflare/workers-oauth-provider` |
 | `@aotter/mantle/admin-ui` | Pre-built React 19 admin SPA bundle |
 
@@ -216,9 +218,12 @@ Core-owned `mantle:plugin` skill and records it in `.mantle/plugins.json` plus
 | Adapter | Status |
 |---|---|
 | Bun | ✅ shipping |
+| Vercel Functions (Node.js) | ✅ shipping |
 | Cloudflare Workers | ✅ shipping |
 
-The `mantle-runtime` package never imports Cloudflare-specific types — adapters bind concrete drivers (D1 / R2) to the runtime's `domain/port/*` interfaces, so adding a new adapter is a port-implementation exercise, not a refactor.
+The `mantle-runtime` package never imports platform-specific types — adapters
+bind concrete storage and lifecycle primitives to Core ports, so adding a new
+adapter is a port-implementation exercise, not a runtime refactor.
 
 ## Documentation
 
