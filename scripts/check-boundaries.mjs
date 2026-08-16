@@ -227,6 +227,16 @@ function checkMantleRuntimeBoundary() {
   }
 }
 
+function checkCodegenBoundary() {
+  const file = join(ROOT, "packages/mantle/src/emitMantleModule.ts");
+  const source = stripComments(readFileSync(file, "utf8"));
+  for (const token of ["node:", "mantle-admin", "mantle-cloudflare", "mantle-web"]) {
+    if (source.includes(token)) {
+      fail(file, `the pure codegen emitter cannot reference '${token}'`);
+    }
+  }
+}
+
 function checkNodeTestingBoundary() {
   const root = join(ROOT, "packages/mantle-runtime/src");
   const files = listFiles(root, (path) => path.endsWith(".ts"));
@@ -271,6 +281,7 @@ checkPackageDirection();
 checkEntryReadOwnership();
 checkViewExecutionBoundary();
 checkMantleRuntimeBoundary();
+checkCodegenBoundary();
 checkNodeTestingBoundary();
 checkSkillDocsVersioned();
 

@@ -59,6 +59,7 @@ export const DIAGNOSTIC_CODES = [
   "HANDLER_BUILTIN_NOT_IN_V010",
   "MANIFEST_ROOT_NOT_FOUND",
   "MANIFEST_READ_FAILED",
+  "CODEGEN_IDENTIFIER_COLLISION",
   // Reserved for consumer-authored test diagnostics.
   "FIXTURE_SCHEMA_VIOLATION",
   // Cross-phase (validate / boot / runtime as applicable).

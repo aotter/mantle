@@ -65,10 +65,18 @@ jobs:
       - name: Test packed Core in the exact Starter consumer
         # Mirror the downstream bump controller: project skills from the new
         # package before rebuilding and checking the immutable Starter source.
+        # The pinned Starter's smoke:blank still asserts that `mantle generate`
+        # installs Admin assets. #668 removes that ownership; #670 will restore
+        # the smoke against the explicit Admin installer.
         run: >-
           node scripts/check-packed-consumer.mjs
           --project .packed-consumer/mantle-starters --
           sh -euc 'pnpm --dir blank exec mantle skills;
           pnpm --dir blank generate;
           pnpm build:provision-bundle;
-          pnpm check:packed'
+          pnpm check:release-worker;
+          pnpm --dir blank check;
+          pnpm smoke:provision-bundle;
+          pnpm check:repo-local-skills;
+          pnpm check:core-skills;
+          pnpm --dir recipes/typed-web typecheck'
