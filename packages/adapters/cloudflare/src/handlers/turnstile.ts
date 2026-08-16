@@ -53,11 +53,13 @@ export interface CloudflareTurnstileCheckOptions {
 export function cloudflareTurnstileCheck(options: CloudflareTurnstileCheckOptions) {
   const { secret, tokenField = "turnstileToken" } = options;
   return async function turnstileCheck(
-    input: Record<string, unknown>,
+    input: unknown,
     ctx: HandlerContext,
   ): Promise<{ ok: true }> {
     if (ctx.user) return { ok: true };
-    const tokenRaw = input[tokenField];
+    const tokenRaw = typeof input === "object" && input !== null
+      ? Reflect.get(input, tokenField)
+      : undefined;
     const token = typeof tokenRaw === "string" ? tokenRaw : "";
     if (!token) reject("missing turnstile token");
     if (secret === "dev-stub") {

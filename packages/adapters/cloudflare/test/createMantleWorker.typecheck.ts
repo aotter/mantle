@@ -1,16 +1,21 @@
 import { Hono } from "hono";
+import type { HandlerFn } from "@aotter/mantle-runtime";
 import type {
   CreateMantleWorkerOptions,
   MantleCloudflareEnv,
   MantleExtensionApp,
 } from "../src/worker/createMantleWorker.js";
+import { cloudflareTurnstileCheck } from "../src/handlers/turnstile.js";
 import { createMantleWorker, runMantleWorkerRequest } from "../src/worker/index.js";
 
 declare const app: MantleExtensionApp<MantleCloudflareEnv>;
 type NoAssetsEnv = Omit<MantleCloudflareEnv, "ASSETS">;
 declare const noAssetsOptions: CreateMantleWorkerOptions<NoAssetsEnv>;
+const captchaCheck: HandlerFn<{ readonly turnstileToken?: string }, object, NoAssetsEnv> =
+  cloudflareTurnstileCheck({ secret: "dev-stub" });
 
 if (false) {
+  void captchaCheck;
   void createMantleWorker<NoAssetsEnv>(noAssetsOptions);
   void runMantleWorkerRequest(() => new Response("ok"));
   app.get("/custom", (c) => c.text("ok"));
