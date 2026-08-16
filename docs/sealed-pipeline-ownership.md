@@ -67,8 +67,8 @@ receive cross-repository credentials:
 | Consumer | Revision | Gate authority | Manifest paths |
 |---|---|---|---|
 | `aotter/mantle-starters` | `c2d7e1fcfe51b6e74bffdaf5c86a4de04b47127d` | Core CI + release | `blank/manifests/site.yaml`; `overlays/{community,intake,presence,publication,reservation,transaction}/manifests/site.yaml`; `recipes/typed-web/manifests/site.yaml` |
-| `aotter/mantle-landing` | `81551aecbb088afa9a5c8a6de18892e8438ebc35` | Landing `Check` | `manifests/site.yaml` |
-| `aotter/mantle-platform` (Remote Mantle/control plane) | `4fabfd434f8843fcd14e553260c94f39b1633a91` | Platform `exact-packed-core` | `manifests/platform.yaml` |
+| `aotter/mantle-landing` | `8c29fcf965dfcc132fde81c9d214ed5748a7947a` | Landing `Check` | `manifests/site.yaml` |
+| `aotter/mantle-platform` (Remote Mantle/control plane) | `3cc0d9ad6ee47b15f06c915c12f56fc4b9143f32` | Platform `exact-packed-core` | `manifests/platform.yaml` |
 | Core i18n fixture | this repository | Core CI | `packages/mantle-spec/test/fixtures/i18n-parent-child/manifests/site.yaml` |
 
 ## Baseline gates
