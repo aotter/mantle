@@ -256,7 +256,6 @@ function rowBindingManifests(): Manifest[] {
       metadata: { name: "posts" },
       spec: {
         title: "Posts",
-        localized: true,
         schema: { type: "object", properties: { slug: { type: "string" } } },
       },
     },
@@ -268,7 +267,14 @@ function rowBindingManifests(): Manifest[] {
         title: "Posts (translations)",
         localized: true,
         translates: { parent: "posts", on: "slug" },
-        schema: { type: "object", properties: { slug: { type: "string" } } },
+        schema: {
+          type: "object",
+          properties: {
+            slug: { type: "string" },
+            locale: { type: "string" },
+            title: { type: "string" },
+          },
+        },
       },
     },
     {

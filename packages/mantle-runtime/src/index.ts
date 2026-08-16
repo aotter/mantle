@@ -21,6 +21,20 @@ export {
   type CreateCmsRuntimeArgs,
   type CmsRuntime,
 } from "./runtime.js";
+export {
+  RUNTIME_PLAN_VERSION,
+  compileRuntimePlan,
+  type CompileResult,
+  type RuntimePlan,
+  type RuntimeSchemaPlan,
+  type RuntimeViewPlan,
+  type RuntimeProcedurePlan,
+  type RuntimeTriggerPlan,
+  type LogicalViewPlan,
+  type LifecycleHookPlan,
+  type HttpRoutePlan,
+  type McpToolPlan,
+} from "./domain/service/RuntimePlanCompiler.js";
 
 // Adapter-facing ports. These are the stable boundary platform
 // adapters implement; runtime-internal seams remain off the root

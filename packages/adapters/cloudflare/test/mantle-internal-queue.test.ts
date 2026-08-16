@@ -219,6 +219,7 @@ describe("createQueueHandler", () => {
     const names = ["010-first", "020-middle", "030-last"] as const;
     const runtime = createCmsRuntime({
       manifests: [
+        postsSchema(),
         hookProcedure("first"),
         hookProcedure("middle"),
         hookProcedure("last"),

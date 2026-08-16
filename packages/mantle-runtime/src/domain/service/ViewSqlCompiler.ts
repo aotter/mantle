@@ -10,6 +10,10 @@ import {
   type ViewManifest,
 } from "@aotter/mantle-spec";
 import { clampPage, clampShow } from "./Pagination.js";
+import {
+  compileLogicalView,
+  type LogicalViewPlan,
+} from "./RuntimePlanCompiler.js";
 
 /**
  * View → SQL compilation. Targets SQLite + JSON1 (D1's dialect).
@@ -87,29 +91,35 @@ export function compileView(
   options: CompileViewOptions = {},
   schema?: SchemaManifest,
 ): CompiledView {
-  if (view.spec.sql) return compileSqlView(view, options);
-  const from = view.spec.from;
-  if (!from) {
-    throw new Error(`View '${view.metadata.name}' requires either spec.from or spec.sql.`);
-  }
-  if (schema && schema.metadata.name !== view.spec.from) {
+  return lowerView(compileLogicalView(view), view.metadata.name, options, schema);
+}
+
+/** SQLite lowering of the compiler-owned logical View descriptor. */
+export function lowerView(
+  view: LogicalViewPlan,
+  viewName: string,
+  options: CompileViewOptions = {},
+  schema?: SchemaManifest,
+): CompiledView {
+  if (view.kind === "native") return compileSqlView(view, options);
+  if (schema && schema.metadata.name !== view.from) {
     throw new DiagnosticError(
       runtimeDiagnostic({
         code: "INTERNAL_ERROR",
         severity: "error",
         path: "compileView/schema",
         value: schema.metadata.name,
-        expected: `Schema '${view.spec.from}' referenced by View.spec.from`,
-        message: `View '${view.metadata.name}' cannot compile against Schema '${schema.metadata.name}'.`,
+        expected: `Schema '${view.from}' referenced by View.spec.from`,
+        message: `View '${viewName}' cannot compile against Schema '${schema.metadata.name}'.`,
       }),
     );
   }
-  const sqlParams: unknown[] = [from];
-  const selectExpr = buildSelect(view.spec.fields, schema);
+  const sqlParams: unknown[] = [view.from];
+  const selectExpr = buildSelect(view.fields, schema);
   const whereParts: string[] = ["collection = ?"];
-  if (view.spec.filter) {
+  if (view.filter) {
     const compiled = compileFilter(
-      view.spec.filter,
+      view.filter,
       options.params ?? {},
       options.ctxUserId,
       schema,
@@ -121,8 +131,8 @@ export function compileView(
   whereParts.push(...listQuery.conditions);
   sqlParams.push(...listQuery.params);
   const where = `WHERE ${whereParts.join(" AND ")}`;
-  const orderBy = buildOrderBy(view.spec.orderBy, schema);
-  const effectiveShow = clampShow(options.show, view.spec.limit);
+  const orderBy = buildOrderBy(view.orderBy, schema);
+  const effectiveShow = clampShow(options.show, view.limit);
   const effectivePage = clampPage(options.page);
   // Cap the offset so a huge `?page=` can't render in exponential
   // notation (`5e+21`) or exceed SQLite's INT64 range — either makes
@@ -135,13 +145,13 @@ export function compileView(
 }
 
 function compileSqlView(
-  view: ViewManifest,
+  view: Extract<LogicalViewPlan, { readonly kind: "native" }>,
   options: CompileViewOptions,
 ): CompiledView {
   const params: unknown[] = [];
   // ponytail: token regex is enough for agent-authored SQL; add a lexer if
   // quoted SQL literals containing `:name` become a real manifest use case.
-  const statement = view.spec.sql!.trim().replace(
+  const statement = view.statement.trim().replace(
     /:([A-Za-z_][A-Za-z0-9_]*)/g,
     (_token, name: string) => {
       const value = options.params?.[name];
@@ -150,7 +160,7 @@ function compileSqlView(
       return "?";
     },
   );
-  const effectiveShow = clampShow(options.show, view.spec.limit);
+  const effectiveShow = clampShow(options.show, view.limit);
   const effectivePage = clampPage(options.page);
   const offset = Math.min((effectivePage - 1) * effectiveShow, Number.MAX_SAFE_INTEGER);
   const listQuery = compileListQuery(
