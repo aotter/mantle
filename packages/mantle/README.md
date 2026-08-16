@@ -17,7 +17,9 @@ pnpm add @aotter/mantle@alpha
 
 ## What's inside
 
-Adopters install this one package and import from subpaths. Sub-packages remain individually installable for tooling / alt-adapter authors.
+The umbrella provides Spec and Runtime by default. Install an optional package
+before importing its matching Web, Admin, Bun, Vercel, Cloudflare, or Admin UI
+subpath. Every sub-package also remains directly installable.
 
 | Subpath | Re-exports |
 |---|---|

@@ -1,7 +1,7 @@
 {
   "name": "@aotter/mantle",
   "version": "0.1.0-alpha.7",
-  "description": "Umbrella entry for @aotter/mantle. Adopters install this one package and import from subpaths: /spec, /runtime, /web, /admin, /bun, /vercel, /cloudflare, /admin-ui. Sub-packages remain individually installable on npm.",
+  "description": "Embeddable Mantle Core umbrella with Spec and Runtime; Web, Admin, Bun, Vercel, Cloudflare, and Admin UI are optional peer packages.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
   "repository": {
