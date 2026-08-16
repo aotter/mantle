@@ -1,9 +1,8 @@
 import type {
   AnyHandler,
   CreateCmsRuntimeArgs,
-  PublicPathResolver,
-  TemplateRegistry,
 } from "@aotter/mantle-runtime";
+import type { PublicPathResolver, TemplateRegistry } from "@aotter/mantle-web";
 import type { Manifest, SiteDefaults } from "@aotter/mantle-spec";
 import type { Auth } from "../auth/createAuth.js";
 import type { ConsumerCredentialResolver } from "./resolveCaller.js";

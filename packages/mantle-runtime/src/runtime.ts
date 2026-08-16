@@ -8,7 +8,6 @@ import {
   type ViewManifest,
 } from "@aotter/mantle-spec";
 import type { AnyHandler } from "./domain/model/HandlerContext.js";
-import type { TemplateRegistry } from "./domain/model/TemplateRegistry.js";
 import type { AssetServer } from "./domain/port/AssetServer.js";
 import type { DatabaseDriver } from "./domain/port/DatabaseDriver.js";
 import type { DeferredHookDispatcher } from "./domain/port/DeferredHookDispatcher.js";
@@ -38,14 +37,6 @@ import {
 } from "./usecase/boot/index.js";
 import { RunDeferredHookUseCase } from "./usecase/lifecycle/index.js";
 import {
-  ComposeEntrySeoMetaUseCase,
-  ComposeLlmsTxtUseCase,
-  ComposeSitemapUseCase,
-  PreviewEntryUseCase,
-  RenderEntryLiveUseCase,
-  RenderListLiveUseCase,
-} from "./usecase/render/index.js";
-import {
   CommitMediaUploadUseCase,
   CreateMediaUploadUseCase,
   ListMediaAssetsUseCase,
@@ -54,10 +45,7 @@ import {
   DeleteMediaAssetUseCase,
 } from "./usecase/media/index.js";
 import { UpdateSiteSettingsUseCase } from "./usecase/site/index.js";
-import type { PublicPathResolver } from "./domain/service/PublicPathResolver.js";
-
 import type { MediaAsset } from "./domain/port/MediaStorage.js";
-import { TemplateRegistry as TemplateRegistryImpl } from "./domain/model/TemplateRegistry.js";
 import {
   compileRuntimePlan,
   type RuntimePlan,
@@ -68,26 +56,23 @@ import { DatabaseSiteConfigRepository } from "./infrastructure/persistence/Datab
 import {
   SqliteMantleStorageAdapter,
 } from "./infrastructure/storage/SqliteMantleStorageAdapter.js";
-import { bindMantleRuntime } from "./MantleRuntime.js";
+import { bindMantleRuntime, type MantleRuntime } from "./MantleRuntime.js";
 
 /**
  * Alpha.7 full-product compatibility composition. It delegates forward
  * through parse/link/compile, storage preparation, and `bindMantleRuntime`,
- * then adds the still-combined Web/Admin/media surfaces. New headless code
+ * then adds the still-combined Admin/media surfaces. New headless code
  * calls `createMantleRuntime` with an already prepared revision.
  */
 export interface CreateCmsRuntimeArgs {
   readonly manifests: readonly Manifest[];
   readonly handlers?: Readonly<Record<string, AnyHandler>>;
-  readonly templates?: TemplateRegistry;
   readonly siteDefaults?: SiteDefaults;
   /** Adapter-owned HTTP namespaces that manifest Triggers must not claim. */
   readonly reservedHttpPathPrefixes?: readonly string[];
   /** Alpha.7 full-facade ports. Core binding does not accept either. */
   readonly db: DatabaseDriver;
   readonly assets: AssetServer;
-  /** Optional public-path resolver for sitemap and SEO sibling URLs. */
-  readonly publicPathResolver?: PublicPathResolver;
   /** Optional media storage adapter. When unset, media MCP tools and
    *  admin upload endpoints are not registered — uploads return 404 /
    *  `MEDIA_NOT_CONFIGURED`. When set, the runtime wires
@@ -111,6 +96,8 @@ export interface CreateCmsRuntimeArgs {
 }
 
 export interface CmsRuntime {
+  /** Headless runtime consumed by optional downstream packages. */
+  readonly core: MantleRuntime;
   /** Canonical, immutable semantics shared with preparation and adapters. */
   readonly plan: RuntimePlan;
   /** Raw database driver, retained for adapter compatibility.
@@ -133,19 +120,9 @@ export interface CmsRuntime {
   readonly deleteEntry: DeleteEntryUseCase;
   readonly invokeProcedure: InvokeProcedureUseCase;
   readonly executeView: ExecuteViewUseCase;
-  readonly composeLlmsTxt: ComposeLlmsTxtUseCase;
-  readonly composeSitemap: ComposeSitemapUseCase;
-  readonly composeEntrySeoMeta: ComposeEntrySeoMetaUseCase;
-  readonly renderEntryLive: RenderEntryLiveUseCase;
-  readonly renderListLive: RenderListLiveUseCase;
-  readonly previewEntry: PreviewEntryUseCase;
   readonly validateBoot: ValidateBootUseCase;
   readonly siteConfig: SiteConfigRepository;
   readonly updateSiteSettings: UpdateSiteSettingsUseCase;
-  /** The resolver passed at boot, or `null` when the consumer didn't
-   *  supply one. Adapters use this to derive URLs (sitemap, SEO
-   *  hreflangs) without rebuilding the mapping. */
-  readonly publicPathResolver: PublicPathResolver | null;
   /** Pre-wired media use cases when `mediaStorage` was supplied; null
    *  otherwise. Adapters route admin endpoints + MCP tools off this.
    *
@@ -173,7 +150,6 @@ export interface CmsRuntime {
 
   /** Adapter-helper bag. */
   readonly registry: HandlerRegistry;
-  readonly templates: TemplateRegistry;
   readonly schemasByName: ReadonlyMap<string, SchemaManifest>;
   readonly proceduresByName: ReadonlyMap<string, ProcedureManifest>;
   readonly viewsByName: ReadonlyMap<string, ViewManifest>;
@@ -215,7 +191,7 @@ export async function createCmsRuntime(args: CreateCmsRuntimeArgs): Promise<CmsR
     prepared,
     handlers: args.handlers,
     ports: {
-      siteConfig,
+      localePolicy: siteConfig,
       deferredHookDispatcher: args.deferredHookDispatcher,
       clock: args.clock,
       idgen: args.idgen,
@@ -236,38 +212,11 @@ export async function createCmsRuntime(args: CreateCmsRuntimeArgs): Promise<CmsR
     triggersByName,
   } = bound;
   const triggers = [...triggersByName.values()];
-  const templates = args.templates ?? new TemplateRegistryImpl();
   const entryReader = core.entries;
-  const publicPathResolver = args.publicPathResolver ?? null;
-  const composeEntrySeoMeta = new ComposeEntrySeoMetaUseCase(entryReader);
-  const composeLlmsTxt = new ComposeLlmsTxtUseCase(entryReader, publicPathResolver);
   const mediaAssets = new DatabaseMediaAssetRepository(args.db);
   const pendingUploads = new DatabasePendingUploadRepository(args.db);
   const updateSiteSettings = new UpdateSiteSettingsUseCase(siteConfig, args.onPublicChange);
 
-  const composeSitemap = new ComposeSitemapUseCase(entryReader);
-  const renderEntryLive = new RenderEntryLiveUseCase(
-    entryReader,
-    templates,
-    publicPathResolver,
-    composeEntrySeoMeta,
-    schemasByName,
-    mediaAssets,
-  );
-  const renderListLive = new RenderListLiveUseCase(
-    entryReader,
-    templates,
-    schemasByName,
-    mediaAssets,
-  );
-  const previewEntry = new PreviewEntryUseCase(
-    entryReader,
-    templates,
-    publicPathResolver,
-    composeEntrySeoMeta,
-    schemasByName,
-    mediaAssets,
-  );
   const validateBoot = new ValidateBootUseCase();
 
   const media = args.mediaStorage
@@ -297,6 +246,7 @@ export async function createCmsRuntime(args: CreateCmsRuntimeArgs): Promise<CmsR
     : null;
 
   return {
+    core,
     plan,
     db: args.db,
     assets: args.assets,
@@ -312,21 +262,13 @@ export async function createCmsRuntime(args: CreateCmsRuntimeArgs): Promise<CmsR
     deleteEntry: core.deleteEntry,
     invokeProcedure,
     executeView,
-    composeLlmsTxt,
-    composeSitemap,
-    composeEntrySeoMeta,
-    renderEntryLive,
-    renderListLive,
-    previewEntry,
     validateBoot,
     siteConfig,
     updateSiteSettings,
-    publicPathResolver,
     media,
     runDeferredHook,
 
     registry,
-    templates,
     schemasByName,
     proceduresByName,
     viewsByName,

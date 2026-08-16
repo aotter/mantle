@@ -5,7 +5,7 @@ import {
   createPublicPathResolver,
   renderSeoTagsHtml,
   TemplateRegistry,
-} from "@aotter/mantle-runtime";
+} from "@aotter/mantle-web";
 import type { Auth } from "../src/auth/createAuth.js";
 import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountPublicRoutes } from "../src/mount/mountPublicRoutes.js";

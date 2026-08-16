@@ -187,7 +187,8 @@ For a guided install, follow the steps in [`skills/install/SKILL.md`](skills/ins
 | Package | Role |
 |---|---|
 | `@aotter/mantle-spec` | Spec engine — types + parse + validate + diagnostics + JSON-Schema → zod converter + CLI. Zero env deps. |
-| `@aotter/mantle-runtime` | Runtime engine — dispatcher + entry-writer + view executor + content-ops + render + MCP. Defines required adapter ports plus optional feature ports. |
+| `@aotter/mantle-runtime` | Headless runtime — entry operations, procedures, views, triggers, lifecycle, and adapter-agnostic ports. |
+| `@aotter/mantle-web` | Optional public document composition — templates, HTML, Markdown, `llms.txt`, sitemap, SEO, and preview. Owns no routes or platform types. |
 | `@aotter/mantle-admin-ui` | Admin SPA — React 19 + Vite + Tailwind v4. In development; ships in v0.1.0. |
 | `@aotter/mantle-cloudflare` | Cloudflare Workers adapter. Implements ports against D1 / ASSETS and uses version-local Workers Cache for public responses. Ships `createAuth()` — the Better Auth-backed *default* implementation of the SDK's `Auth` contract (see [ADR-0014](docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md)); the conventional Worker accepts a replacement factory `(env) => Auth`. |
 | `@aotter/mantle-netlify` | **Stub.** Coming v0.2. Engineering forcing function: keeps `mantle-runtime` adapter-agnostic. |

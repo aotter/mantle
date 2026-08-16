@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Manifest } from "@aotter/mantle-spec";
-import { TemplateRegistry } from "@aotter/mantle-runtime";
+import { TemplateRegistry } from "@aotter/mantle-web";
 import {
   D1DatabaseDriver,
   createCmsRef,

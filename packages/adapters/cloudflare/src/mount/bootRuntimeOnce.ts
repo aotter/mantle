@@ -2,6 +2,7 @@ import {
   createCmsRuntime,
   type CmsRuntime,
 } from "@aotter/mantle-runtime";
+import { createMantleWeb, type MantleWeb } from "@aotter/mantle-web";
 import type { Manifest } from "@aotter/mantle-spec";
 import type { Auth } from "../auth/createAuth.js";
 import type { CmsConfig } from "./cmsConfig.js";
@@ -15,6 +16,7 @@ import type { ConsumerCredentialResolver } from "./resolveCaller.js";
  */
 export interface CmsRuntimeRef {
   get(): Promise<CmsRuntime>;
+  web(runtime: CmsRuntime): MantleWeb;
   readonly manifests: readonly Manifest[];
   readonly auth: Auth;
   readonly credentialResolver?: ConsumerCredentialResolver;
@@ -23,20 +25,26 @@ export interface CmsRuntimeRef {
 
 export function createCmsRef(config: CmsConfig): CmsRuntimeRef {
   let booted: Promise<CmsRuntime> | null = null;
+  let web: MantleWeb | null = null;
   return {
     manifests: config.manifests,
     auth: config.auth,
     credentialResolver: config.credentialResolver,
     jwtBearer: config.jwtBearer,
+    web(runtime): MantleWeb {
+      return web ??= createMantleWeb(runtime.core, {
+        templates: config.templates,
+        paths: config.publicPathResolver,
+        mediaAssets: runtime.media ?? undefined,
+      });
+    },
     get(): Promise<CmsRuntime> {
       if (booted) return booted;
       booted = bootWithD1Retry(() => createCmsRuntime({
         manifests: config.manifests,
         handlers: config.handlers,
-        templates: config.templates,
         siteDefaults: config.siteDefaults,
         reservedHttpPathPrefixes: config.reservedHttpPathPrefixes,
-        publicPathResolver: config.publicPathResolver,
         mediaAllowSvg: config.mediaAllowSvg,
         db: config.bindings.db,
         assets: config.bindings.assets,

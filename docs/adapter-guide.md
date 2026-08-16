@@ -112,6 +112,10 @@ passed through `CmsConfig.templates`, and a `publicPathResolver` passed through
 consumer; mounting every Schema automatically is not, because some collections
 are private even when they contain a slug.
 
+`TemplateRegistry` and `createPublicPathResolver` come from
+`@aotter/mantle-web`. Other adapters can call `createMantleWeb(runtime)` and map
+its document operations into their own routing and cache conventions.
+
 ### HTTP cache contract
 
 The Cloudflare adapter is private by default. Consumers must export

@@ -7,9 +7,8 @@ import {
 import type {
   AnyHandler,
   CmsRuntime,
-  PublicPathResolver,
-  TemplateRegistry,
 } from "@aotter/mantle-runtime";
+import type { PublicPathResolver, TemplateRegistry } from "@aotter/mantle-web";
 import type { Manifest, SiteDefaults } from "@aotter/mantle-spec";
 import {
   createConventionalAuth,

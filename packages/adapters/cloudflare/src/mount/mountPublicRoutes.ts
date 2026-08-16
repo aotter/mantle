@@ -1,14 +1,17 @@
 import type { Context, Hono } from "hono";
 import type { Entry, SiteConfig } from "@aotter/mantle-spec";
 import {
-  absoluteUrl,
-  composePageSeoMeta,
   inferLocaleFromPath,
-  serializeEntryAsMarkdown,
   toUrlLocale,
   type CmsRuntime,
-  type SeoMeta,
 } from "@aotter/mantle-runtime";
+import {
+  absoluteUrl,
+  composePageSeoMeta,
+  serializeEntryAsMarkdown,
+  type MantleWeb,
+  type SeoMeta,
+} from "@aotter/mantle-web";
 import type { CmsRuntimeRef } from "./bootRuntimeOnce.js";
 import { STAFF_ROLE_SET } from "../auth/createAuth.js";
 import { PUBLIC_CACHE_TAG } from "../oauth/cachePolicy.js";
@@ -142,23 +145,25 @@ export function mountPublicRoutes(
   // `:locale = "llms.txt"` if the literal route registers later.
   app.get("/llms.txt", async () => {
     const runtime = await ref.get();
-    const body = await composeRootLlmsTxt(runtime, await runtime.siteConfig.load(), options);
+    const web = ref.web(runtime);
+    const body = await composeRootLlmsTxt(runtime, web, await runtime.siteConfig.load(), options);
     if (!body) return textNotFound();
     return new Response(body, { status: 200, headers: TEXT_PUBLIC });
   });
 
   app.get("/sitemap.xml", async (c) => {
     const runtime = await ref.get();
+    const web = ref.web(runtime);
     const site = await runtime.siteConfig.load();
-    if (!runtime.publicPathResolver) {
+    if (!web.paths) {
       return new Response("sitemap unavailable: no publicPathResolver configured", {
         status: 500,
       });
     }
-    const xml = await runtime.composeSitemap.execute({
+    const xml = await web.composeSitemap.execute({
       site,
       pathFor: (entry) => {
-        const resolved = runtime.publicPathResolver!.forEntry(entry);
+        const resolved = web.paths!.forEntry(entry);
         if (entry.locale || !resolved) return resolved;
         const route = options.collectionRoutes.find((candidate) => candidate.collection === entry.collection);
         if (!route) return resolved;
@@ -220,13 +225,14 @@ export function mountPublicRoutes(
 
   app.get("/:locale/llms.txt", async (c) => {
     const runtime = await ref.get();
+    const web = ref.web(runtime);
     const locale = canonicalLocaleParam(
       c.req.param("locale"),
       await runtime.siteConfig.readLocales(),
     );
     if (locale === null) return textNotFound();
     const site = await runtime.siteConfig.load();
-    const body = await composeLocaleLlmsTxt(runtime, site, locale, options);
+    const body = await composeLocaleLlmsTxt(runtime, web, site, locale, options);
     if (!body) return textNotFound();
     return new Response(body, { status: 200, headers: TEXT_PUBLIC });
   });
@@ -257,23 +263,25 @@ function mountCollection(
     if (route.markdownMirror !== false && route.segment) {
       app.get(`/:locale${segPath}.md`, async (c) => {
         const runtime = await ref.get();
+        const web = ref.web(runtime);
         const locale = canonicalLocaleParam(
           c.req.param("locale") ?? "",
           await runtime.siteConfig.readLocales(),
         );
         if (locale === null) return textNotFound();
         const site = await runtime.siteConfig.load();
-        const body = await runtime.composeLlmsTxt.execute({
+        const body = await web.composeLlmsTxt.execute({
           site,
           locale: contentLocale(runtime, route.collection, locale),
           collection: route.collection,
-          pathFor: (entry) => entryPathForLocale(runtime, options.collectionRoutes, entry, locale),
+          pathFor: (entry) => entryPathForLocale(web, options.collectionRoutes, entry, locale),
         });
         return body ? new Response(body, { status: 200, headers: MD_PUBLIC }) : textNotFound();
       });
     }
     app.get(`/:locale${segPath}`, async (c) => {
       const runtime = await ref.get();
+      const web = ref.web(runtime);
       const site = await runtime.siteConfig.load();
       const locale = canonicalLocaleParam(c.req.param("locale"), site.locales);
       const notFound = (): Promise<Response> => {
@@ -284,7 +292,7 @@ function mountCollection(
       };
       if (locale === null) return notFound();
       const publicPath = localizedPath(locale, route.segment);
-      const schemaTitle = runtime.schemasByName.get(route.collection)?.spec.title;
+      const schemaTitle = runtime.core.schemas.get(route.collection)?.spec.title;
       const seo = composePageSeoMeta({
         site,
         locale,
@@ -293,7 +301,7 @@ function mountCollection(
         markdown: route.markdownMirror !== false,
         pathForLocale: (candidate) => localizedPath(candidate, route.segment),
       });
-      const html = await runtime.renderListLive.execute({
+      const html = await web.renderListLive.execute({
         collection: route.collection,
         locale,
         contentLocale: contentLocale(runtime, route.collection, locale),
@@ -343,6 +351,7 @@ function mountCollection(
 
   app.get(`/:locale${segPath}/:slug`, async (c) => {
     const runtime = await ref.get();
+    const web = ref.web(runtime);
     const locale = canonicalLocaleParam(
       c.req.param("locale"),
       await runtime.siteConfig.readLocales(),
@@ -383,7 +392,7 @@ function mountCollection(
         slug,
         contentLocale(runtime, route.collection, locale) === null,
       );
-      const html = await runtime.previewEntry.execute({
+      const html = await web.previewEntry.execute({
         collection: route.collection,
         slug,
         locale,
@@ -396,7 +405,7 @@ function mountCollection(
     }
 
     const site = await loadSite();
-    const html = await runtime.renderEntryLive.execute({
+    const html = await web.renderEntryLive.execute({
       collection: route.collection,
       slug,
       locale,
@@ -464,15 +473,16 @@ async function assertStaffSession(
  */
 async function composeRootLlmsTxt(
   runtime: CmsRuntime,
+  web: MantleWeb,
   site: SiteConfig,
   options: MountPublicRoutesOptions,
 ): Promise<string | null> {
   const parts: string[] = [];
   if (site.locales.length === 0) {
-    return runtime.composeLlmsTxt.execute({ site, locale: null });
+    return web.composeLlmsTxt.execute({ site, locale: null });
   }
   for (const locale of site.locales) {
-    const body = await composeLocaleLlmsTxt(runtime, site, locale, options);
+    const body = await composeLocaleLlmsTxt(runtime, web, site, locale, options);
     if (body) parts.push(body);
   }
   return parts.length > 0 ? parts.join("\n---\n\n") : null;
@@ -480,6 +490,7 @@ async function composeRootLlmsTxt(
 
 async function composeLocaleLlmsTxt(
   runtime: CmsRuntime,
+  web: MantleWeb,
   site: SiteConfig,
   locale: string,
   options: MountPublicRoutesOptions,
@@ -492,7 +503,7 @@ async function composeLocaleLlmsTxt(
       );
     }
   }
-  const entries = await runtime.composeLlmsTxt.execute({
+  const entries = await web.composeLlmsTxt.execute({
     site,
     locale,
     includeUnlocalized: true,
@@ -500,7 +511,7 @@ async function composeLocaleLlmsTxt(
       const route = options.collectionRoutes.find((candidate) => candidate.collection === entry.collection);
       const slug = typeof entry.data["slug"] === "string" ? entry.data["slug"] : entry.id;
       if (options.homeMarkdown && route?.homeSlug === slug) return null;
-      return entryPathForLocale(runtime, options.collectionRoutes, entry, locale);
+      return entryPathForLocale(web, options.collectionRoutes, entry, locale);
     },
   });
   if (entries) parts.push(entries);
@@ -562,18 +573,18 @@ function entrySeoRoute(
 }
 
 function contentLocale(runtime: CmsRuntime, collection: string, locale: string): string | null {
-  return runtime.schemasByName.get(collection)?.spec.localized ? locale : null;
+  return runtime.core.schemas.get(collection)?.spec.localized ? locale : null;
 }
 
 function entryPathForLocale(
-  runtime: CmsRuntime,
+  web: MantleWeb,
   routes: ReadonlyArray<CollectionRouteConfig>,
   entry: Entry,
   locale: string,
 ): string | null {
-  if (entry.locale) return runtime.publicPathResolver?.forEntry(entry) ?? null;
+  if (entry.locale) return web.paths?.forEntry(entry) ?? null;
   const route = routes.find((candidate) => candidate.collection === entry.collection);
-  if (!route) return runtime.publicPathResolver?.forEntry(entry) ?? null;
+  if (!route) return web.paths?.forEntry(entry) ?? null;
   const slug = typeof entry.data["slug"] === "string" ? entry.data["slug"] : entry.id;
   return localizedPath(locale, route.homeSlug === slug
     ? ""

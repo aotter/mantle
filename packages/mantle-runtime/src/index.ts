@@ -77,6 +77,10 @@ export type {
   ReadPublishedEntriesArgs,
   FindManyEntriesByDataFieldArgs,
 } from "./domain/port/EntryReader.js";
+export {
+  joinParentIfTranslation,
+  joinParentForList,
+} from "./domain/service/io/JoinedEntryReader.js";
 export type {
   ViewQueryExecutor,
   ViewQueryOptions,
@@ -90,6 +94,7 @@ export type {
 export type { Clock } from "./domain/port/Clock.js";
 export type {
   SiteConfigRepository,
+  LocalePolicyReader,
   UpdateEditableSiteConfigArgs,
 } from "./domain/port/SiteConfigRepository.js";
 export { SqliteMantleStorageAdapter } from "./infrastructure/storage/SqliteMantleStorageAdapter.js";
@@ -135,7 +140,7 @@ export { DEFERRED_HOOK_ENVELOPE_VERSION } from "./domain/port/DeferredHookDispat
 // can be swapped in tests with a deterministic counter.
 export { type IdGenerator, RandomUuidGenerator } from "./domain/port/IdGenerator.js";
 
-// Consumer/starter handler and render contracts.
+// Consumer handler contracts.
 export type {
   AnyHandler,
   HandlerFn,
@@ -143,37 +148,6 @@ export type {
   HandlerAuthContext,
   HandlerLifecycleEvent,
 } from "./domain/model/HandlerContext.js";
-export type { SeoMeta } from "./domain/model/SeoMeta.js";
-export {
-  TemplateRegistry,
-  type EntryContext,
-  type ListContext,
-  type EntryTemplate,
-  type ListTemplate,
-} from "./domain/model/TemplateRegistry.js";
-export {
-  createPublicPathResolver,
-  type PublicPathResolver,
-  type PublicPathResolverConfig,
-  type CollectionRoute,
-} from "./domain/service/PublicPathResolver.js";
-export {
-  composeEntrySeoMeta,
-  composePageSeoMeta,
-  renderSeoTagsHtml,
-  type ComposeEntrySeoMetaArgs,
-  type ComposePageSeoMetaArgs,
-  type SiblingTranslation,
-} from "./domain/service/SeoMetaComposer.js";
-
-// Public route / starter fixture helpers. These are intentionally
-// exported one-by-one instead of exposing the whole service barrel.
-export {
-  getEntryDescription,
-  getMarkdownBody,
-  serializeEntryAsMarkdown,
-} from "./domain/service/MarkdownSerializer.js";
-export { absoluteUrl } from "./domain/service/AbsoluteUrl.js";
 export { readEntryBySlug } from "./infrastructure/persistence/DatabaseEntryRepository.js";
 export {
   inferLocaleFromPath,

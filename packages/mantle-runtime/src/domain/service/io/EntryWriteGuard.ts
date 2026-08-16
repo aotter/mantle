@@ -6,7 +6,7 @@ import {
   type SchemaManifest,
 } from "@aotter/mantle-spec";
 import type { EntryRepository } from "../../port/EntryRepository.js";
-import type { SiteConfigRepository } from "../../port/SiteConfigRepository.js";
+import type { LocalePolicyReader } from "../../port/SiteConfigRepository.js";
 
 export interface AssertEntryWritableArgs {
   readonly opPath: string;
@@ -15,7 +15,7 @@ export interface AssertEntryWritableArgs {
   readonly data: Record<string, unknown>;
   readonly validator: EntryDataValidator;
   readonly excludeId?: string;
-  readonly siteConfig?: SiteConfigRepository;
+  readonly siteConfig?: LocalePolicyReader;
   /** Draft mode: skip required-field + locale-presence checks so a
    *  work-in-progress entry can be saved incomplete. Publish paths
    *  omit this, so completeness is enforced before an entry goes live. */
