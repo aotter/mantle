@@ -177,3 +177,10 @@ Preserve source semantics:
 - animated GIFs must stay animated;
 - do not silently flatten, resize, or recompress user assets without
   asking.
+
+## Cleanup
+
+Run the version-matched `media-gc` skill when an upload reached R2 but was
+never committed. It audits first and removes only stale objects without
+`committedAt` metadata after explicit operator confirmation. Do not use an R2
+lifecycle rule: committed and uncommitted media share the same purpose prefix.

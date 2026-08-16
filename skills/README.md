@@ -5,6 +5,7 @@ Agent-readable skill briefs for consumers of `@aotter/mantle-*`. Discoverable by
 | Skill | When to invoke |
 |---|---|
 | [`develop`](develop/SKILL.md) | `mantle:develop`: Core-owned workflow for manifest, runtime, handler, adapter, validation, and MCP work in any Mantle project. |
+| [`media-gc`](media-gc/SKILL.md) | `mantle:media-gc`: audit or remove stale uncommitted public media objects with the connected Cloudflare API. |
 | [`plugin`](plugin/SKILL.md) | `mantle:plugin`: Core-owned marketplace workflow for plan-first capability installs across starters and adapters. |
 | [`theme`](theme/SKILL.md) | `mantle:theme`: Core-owned visual workflow. Reads project context but does not depend on starter-owned skill semantics. |
 | [`update`](update/SKILL.md) | `mantle:update`: Core-owned drift check workflow for SDK, starter snapshots, and plugin lockfiles. |
