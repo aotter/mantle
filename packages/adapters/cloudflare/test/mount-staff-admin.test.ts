@@ -1,7 +1,8 @@
+import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
-import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
-import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
+import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
+import { mountTestEndpoints } from "./mountTestEndpoints.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
   StubAssetServer,
@@ -49,8 +50,8 @@ function harness(
       }),
   };
   const db = bindings.db ?? new InMemoryDatabase();
-  const ref = createCmsRef({
-    manifests: [],
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan([]),
     handlers: {},
     bindings: {
       db,
@@ -59,7 +60,7 @@ function harness(
     auth,
   });
   const app = new Hono();
-  mountServerEndpoints(app, ref);
+  mountTestEndpoints(app, ref);
   return { app, db };
 }
 

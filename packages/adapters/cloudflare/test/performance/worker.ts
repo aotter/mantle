@@ -3,11 +3,12 @@ import type { Manifest } from "@aotter/mantle-spec";
 import { TemplateRegistry } from "@aotter/mantle-web";
 import {
   D1DatabaseDriver,
-  createCmsRef,
+  createMantleRuntimeRef,
   mountPublicRoutes,
-  mountServerEndpoints,
   type D1QueryMetric,
 } from "../../src/index.js";
+import { compileTestPlan } from "../compileTestPlan.js";
+import { mountTestEndpoints } from "../mountTestEndpoints.js";
 import { StubAssetServer, stubAuth } from "../fakes/runtime-bindings.js";
 
 interface Env {
@@ -120,8 +121,8 @@ function createState(env: Env) {
     `<article><h1>${entry.data["title"]}</h1><p>${entry.data["body"]}</p></article>`);
   templates.registerListTemplate("posts", ({ entries }) =>
     `<main>${entries.map((entry) => `<h2>${entry.data["title"]}</h2>`).join("")}</main>`);
-  const ref = createCmsRef({
-    manifests,
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan(manifests),
     templates,
     siteDefaults: {
       title: "Mantle performance fixture",
@@ -136,7 +137,7 @@ function createState(env: Env) {
     auth: staffAuth,
   });
   const app = new Hono();
-  mountServerEndpoints(app, ref);
+  mountTestEndpoints(app, ref);
   mountPublicRoutes(app, ref, {
     collectionRoutes: [{ collection: "posts", segment: "posts", listRoute: true }],
     notFoundRenderer: async () => new Response("not found", { status: 404 }),

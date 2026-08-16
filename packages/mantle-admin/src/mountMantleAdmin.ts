@@ -19,7 +19,6 @@ import {
   type Entry,
   type JsonSchema,
   type LocalizedText,
-  type Manifest,
   type ProcedureManifest,
   type SchemaManifest,
   type SiteConfig,
@@ -29,10 +28,16 @@ import {
   ViewParamCoercionError,
   coerceViewParams,
   evaluateAuthAll,
-  type CmsRuntime,
   type HandlerContext,
+  type MantleRuntime,
   type MediaAsset,
+  type RuntimePlan,
 } from "@aotter/mantle-runtime";
+
+export type MantleAdminRuntime = MantleRuntime & {
+  readonly siteConfig: NonNullable<MantleRuntime["siteConfig"]>;
+  readonly updateSiteSettings: NonNullable<MantleRuntime["updateSiteSettings"]>;
+};
 
 export type StaffRole = (typeof STAFF_ROLES)[number];
 const STAFF_ROLE_SET: ReadonlySet<string> = new Set(STAFF_ROLES);
@@ -95,8 +100,8 @@ export interface AdminAuth {
 }
 
 export interface MantleAdminRef {
-  get(): Promise<CmsRuntime>;
-  readonly manifests: readonly Manifest[];
+  get(): Promise<MantleAdminRuntime>;
+  readonly plan: RuntimePlan;
   readonly auth: AdminAuth;
   readonly assets: AdminAssetServer;
   readonly requestContext?: (context: Context) => {
@@ -190,12 +195,10 @@ export function mountMantleAdmin<E extends Env>(
     app.get(path, spa);
   }
 
-  // Pre-derive the collections projection — `ref.manifests` is
+  // Pre-derive the collections projection — `ref.plan` is
   // immutable post-boot, so the filter / Set / mediaFields work doesn't
   // need to repeat per request.
-  const schemas = ref.manifests.filter(
-    (m): m is SchemaManifest => m.kind === "Schema",
-  );
+  const schemas = Object.values(ref.plan.schemas).map(({ manifest }) => manifest);
   const schemasByName = new Map(schemas.map((s) => [s.metadata.name, s]));
   const assertMutableSchema = (path: string, schema: SchemaManifest | undefined): void => {
     if (schema?.spec.schema.readOnly !== true) return;
@@ -208,7 +211,7 @@ export function mountMantleAdmin<E extends Env>(
       message: `Schema '${schema.metadata.name}' is read-only on generic authoring surfaces; use its declared Procedures.`,
     }));
   };
-  const readMutableEntry = async (runtime: CmsRuntime, id: string, path: string): Promise<Entry> => {
+  const readMutableEntry = async (runtime: MantleAdminRuntime, id: string, path: string): Promise<Entry> => {
     const entry = await runtime.getEntry.execute({ id });
     assertMutableSchema(path, schemasByName.get(entry.collection));
     return entry;
@@ -218,9 +221,9 @@ export function mountMantleAdmin<E extends Env>(
     .map((s) => adminEditorCollection(s, schemas));
 
   // Staff-operable Procedures (#426, extended #430 with rowBindings):
-  // precompute at mount, same as `collections` above — `ref.manifests`
+  // precompute at mount, same as `collections` above — `ref.plan`
   // is immutable post-boot.
-  const operations = discoverStaffOperations(ref.manifests, schemasByName);
+  const operations = discoverStaffOperations(ref.plan, schemasByName);
   const operationsByName = new Map(operations.map((op) => [op.name, op]));
 
   // Views projection (#426) — least-code option: a dedicated
@@ -233,14 +236,15 @@ export function mountMantleAdmin<E extends Env>(
   // type and would invalidate/refetch on unrelated site-settings
   // changes. A dedicated guarded route mirrors the existing
   // `/admin/api/collections` precedent exactly (same shape of
-  // "precompute at mount from ref.manifests, list on GET") and needs
+  // "precompute at mount from ref.plan, list on GET") and needs
   // no changes to the `SiteInfo` type or its query key.
   // Report-sidebar source (#433): ONLY `surface: staff` Views. Public
   // storefront Views explicitly marked public auto-mount on the public REST
   // path and must not appear in the admin report sidebar — listing
   // them was noise + broke on param-driven storefront Views (see #433).
-  const staffViews = ref.manifests
-    .filter((m): m is ViewManifest => m.kind === "View" && m.spec.surface === "staff");
+  const staffViews = Object.values(ref.plan.views)
+    .map(({ manifest }) => manifest)
+    .filter((view) => view.spec.surface === "staff");
   const viewsManifest = staffViews.map((v) => ({
     name: v.metadata.name,
     title: v.spec.title ?? null,
@@ -433,7 +437,7 @@ export function mountMantleAdmin<E extends Env>(
       return handleViewRequest(
         c.req.raw,
         runtime,
-        viewName,
+        v,
         adminHandlerContext(c, gate, ref),
       );
     });
@@ -442,7 +446,7 @@ export function mountMantleAdmin<E extends Env>(
       return handleViewRequest(
         c.req.raw,
         runtime,
-        viewName,
+        v,
         adminHandlerContext(c, gate, ref),
         true,
       );
@@ -490,12 +494,12 @@ export function mountMantleAdmin<E extends Env>(
       const input = (await c.req.raw.json().catch(() => ({}))) as unknown;
       // Reuse the exact use case the staff MCP surface invokes
       // Procedures through (`McpJsonRpcDispatcher.dispatchToolByName`
-      // → `runtime.invokeProcedure.execute`) — same auth evaluation,
+      // → `runtime.invokeProcedure`) — same auth evaluation,
       // same input/output validation, same handler dispatch. The
       // staff HandlerContext below mirrors the MCP dispatcher's
       // `procCtx` construction 1:1.
-      const result = await runtime.invokeProcedure.execute({
-        procedure: op.procedure,
+      const result = await runtime.invokeProcedure({
+        procedure: op.procedure.metadata.name,
         input: objectField(input),
         ctx: adminHandlerContext(c, gate, ref),
         pathPrefix: `POST /admin/api/operations/${name}`,
@@ -600,7 +604,7 @@ export function mountMantleAdmin<E extends Env>(
         const value = primitiveJoinValue(row.data[field]);
         if (value !== null) parentValues.set(joinValueKey(value), value);
       }
-      const translations = await runtime.entryReader.readByDataFieldIn({
+      const translations = await runtime.entries.readByDataFieldIn({
         collection: schema.metadata.name,
         field,
         values: [...parentValues.values()],
@@ -1067,16 +1071,13 @@ type StaffOperation = {
  * locale-map values client-side.
  */
 function discoverStaffOperations(
-  manifests: readonly Manifest[],
+  plan: RuntimePlan,
   schemasByName: ReadonlyMap<string, SchemaManifest>,
 ): readonly StaffOperation[] {
-  const procedures = new Map<string, ProcedureManifest>();
-  for (const m of manifests) {
-    if (m.kind === "Procedure") procedures.set(m.metadata.name, m);
-  }
+  const procedures = new Map(Object.values(plan.procedures)
+    .map(({ manifest }) => [manifest.metadata.name, manifest] as const));
   const triggerKindsByProcedure = new Map<string, Set<"mcp" | "http">>();
-  for (const m of manifests) {
-    if (m.kind !== "Trigger") continue;
+  for (const { manifest: m } of Object.values(plan.triggers)) {
     const source = m.spec.source;
     const procedureName = m.spec.target.procedure;
     const procedure = procedures.get(procedureName);
@@ -1348,7 +1349,7 @@ type AdminEntryRow = {
 };
 
 async function entryEditorPayload(
-  runtime: CmsRuntime,
+  runtime: MantleAdminRuntime,
   row: AdminEntryRow,
   schemas: SchemaManifest[],
 ): Promise<AdminEntryEditorPayload> {
@@ -1459,7 +1460,7 @@ function adminEditorEntry(row: Entry): AdminEditorEntry {
 }
 
 async function relatedEntrySections(
-  runtime: CmsRuntime,
+  runtime: MantleAdminRuntime,
   parentSchema: SchemaManifest,
   parentRow: AdminEntryRow,
   schemas: SchemaManifest[],
@@ -1598,7 +1599,7 @@ function collectionParentFor(
 }
 
 async function parentEntryId(
-  runtime: CmsRuntime,
+  runtime: MantleAdminRuntime,
   childSchema: SchemaManifest,
   childRow: AdminEntryRow,
   schemas: SchemaManifest[],
@@ -1623,12 +1624,12 @@ function joinValueKey(value: string | number | boolean): string {
 }
 
 async function entriesByDataValue(
-  runtime: CmsRuntime,
+  runtime: MantleAdminRuntime,
   collection: string,
   field: string,
   value: string | number | boolean,
 ): Promise<readonly Entry[]> {
-  return runtime.entryReader.findManyByDataField({
+  return runtime.entries.findManyByDataField({
     collection,
     field,
     value,
@@ -1721,16 +1722,12 @@ async function readStaffGate(c: Context, auth: AdminAuth): Promise<StaffGate> {
 
 async function handleViewRequest(
   req: Request,
-  runtime: CmsRuntime,
-  viewName: string,
+  runtime: MantleAdminRuntime,
+  view: ViewManifest,
   ctx: HandlerContext,
   exportCsv = false,
 ): Promise<Response> {
-  const view = runtime.viewsByName.get(viewName);
-  if (!view) {
-    return jsonError({ status: 500, code: "INTERNAL_ERROR", message: `View '${viewName}' missing post-boot.` });
-  }
-
+  const viewName = view.metadata.name;
   const viewPath = `GET /admin/api/views/${viewName}`;
 
   const url = new URL(req.url);
@@ -1767,8 +1764,8 @@ async function handleViewRequest(
     throw err;
   }
 
-  const execute = (requestedPage: number | undefined) => runtime.executeView.execute({
-    view,
+  const execute = (requestedPage: number | undefined) => runtime.executeView({
+    view: view.metadata.name,
     pathPrefix: viewPath,
     options: {
       params,
@@ -2025,7 +2022,7 @@ function mediaNotConfiguredResponse(path: string): Response {
       severity: "error",
       path,
       message:
-        "Media uploads are not enabled on this deployment. Bind a `mediaStorage` adapter in `createCmsRuntime` to enable.",
+        "Media uploads are not enabled on this deployment. Bind a `mediaStorage` port in `createMantleRuntime` to enable.",
     }),
   }, { status: 501 });
 }

@@ -1,12 +1,15 @@
 import {
-  createCmsRuntime,
-  type CmsRuntime,
+  SqliteMantleStorageAdapter,
+  createMantleRuntime,
+  prepareDeployment,
+  type MantleRuntime,
+  type RuntimePlan,
+  type SiteConfigRepository,
 } from "@aotter/mantle-runtime";
 import { createMantleWeb, type MantleWeb } from "@aotter/mantle-web";
 import type { AdminAssetServer } from "@aotter/mantle-admin";
-import type { Manifest } from "@aotter/mantle-spec";
 import type { Auth } from "../auth/createAuth.js";
-import type { CmsConfig } from "./cmsConfig.js";
+import type { MantleCloudflareConfig } from "./cmsConfig.js";
 import type { ConsumerCredentialResolver } from "./resolveCaller.js";
 
 /**
@@ -15,45 +18,61 @@ import type { ConsumerCredentialResolver } from "./resolveCaller.js";
  * during boot poisons the isolate permanently and every subsequent
  * request re-throws the same rejected promise.
  */
-export interface CmsRuntimeRef {
-  get(): Promise<CmsRuntime>;
-  web(runtime: CmsRuntime): MantleWeb;
-  readonly manifests: readonly Manifest[];
+export interface MantleRuntimeRef {
+  get(): Promise<CloudflareMantleRuntime>;
+  web(runtime: CloudflareMantleRuntime): MantleWeb;
+  readonly plan: RuntimePlan;
   readonly auth: Auth;
   readonly adminAssets?: AdminAssetServer;
   readonly credentialResolver?: ConsumerCredentialResolver;
-  readonly jwtBearer?: CmsConfig["jwtBearer"];
+  readonly jwtBearer?: MantleCloudflareConfig["jwtBearer"];
 }
 
-export function createCmsRef(config: CmsConfig): CmsRuntimeRef {
-  let booted: Promise<CmsRuntime> | null = null;
+export type CloudflareMantleRuntime = MantleRuntime & {
+  readonly siteConfig: SiteConfigRepository;
+  readonly updateSiteSettings: NonNullable<MantleRuntime["updateSiteSettings"]>;
+};
+
+export function createMantleRuntimeRef(config: MantleCloudflareConfig): MantleRuntimeRef {
+  let booted: Promise<CloudflareMantleRuntime> | null = null;
   let web: MantleWeb | null = null;
+  const storage = new SqliteMantleStorageAdapter(config.bindings.db, config.siteDefaults);
   return {
-    manifests: config.manifests,
+    plan: config.plan,
     auth: config.auth,
     adminAssets: config.bindings.adminAssets,
     credentialResolver: config.credentialResolver,
     jwtBearer: config.jwtBearer,
     web(runtime): MantleWeb {
-      return web ??= createMantleWeb(runtime.core, {
+      return web ??= createMantleWeb(runtime, {
         templates: config.templates,
         paths: config.publicPathResolver,
         mediaAssets: runtime.media ?? undefined,
       });
     },
-    get(): Promise<CmsRuntime> {
+    get(): Promise<CloudflareMantleRuntime> {
       if (booted) return booted;
-      booted = bootWithD1Retry(() => createCmsRuntime({
-        manifests: config.manifests,
-        handlers: config.handlers,
-        siteDefaults: config.siteDefaults,
-        reservedHttpPathPrefixes: config.reservedHttpPathPrefixes,
-        mediaAllowSvg: config.mediaAllowSvg,
-        db: config.bindings.db,
-        mediaStorage: config.bindings.mediaStorage,
-        deferredHookDispatcher: config.bindings.deferredHookDispatcher,
-        onPublicChange: config.onPublicChange,
-      }))
+      booted = bootWithD1Retry(async () => {
+        const prepared = await prepareDeployment(config.plan, storage, {
+          handlerNames: Object.keys(config.handlers ?? {}),
+          reservedHttpPathPrefixes: config.reservedHttpPathPrefixes,
+        });
+        const runtime = createMantleRuntime({
+          plan: config.plan,
+          prepared,
+          handlers: config.handlers,
+          ports: {
+            deferredHookDispatcher: config.bindings.deferredHookDispatcher,
+            mediaStorage: config.bindings.mediaStorage,
+            mediaAllowSvg: config.mediaAllowSvg,
+            onPublishingContentChange: config.onPublicChange,
+          },
+        });
+        if (!runtime.siteConfig || !runtime.updateSiteSettings) {
+          throw new Error("Cloudflare SQLite storage did not prepare site configuration.");
+        }
+        return runtime as CloudflareMantleRuntime;
+      })
         .catch((err) => {
           booted = null;
           console.error("[mantle] runtime boot failed", errorDetails(err));
@@ -71,7 +90,9 @@ const RETRYABLE_D1_ERRORS = [
   "reset because its code was updated",
 ] as const;
 
-async function bootWithD1Retry(create: () => Promise<CmsRuntime>): Promise<CmsRuntime> {
+async function bootWithD1Retry(
+  create: () => Promise<CloudflareMantleRuntime>,
+): Promise<CloudflareMantleRuntime> {
   for (let attempt = 1; ; attempt += 1) {
     try {
       return await create();

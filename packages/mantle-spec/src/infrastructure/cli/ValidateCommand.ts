@@ -135,7 +135,7 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
 
   // 1. Load manifests. Loader returns the resolved `root` so we don't
   // re-resolve here and risk drift between the two `cwd()` calls.
-  const { manifests, parsed, parseErrors, filePaths, root: manifestsRoot } =
+  const { parsed, parseErrors, root: manifestsRoot } =
     await loadManifestsFromRoot(args.manifests);
 
   // 2. Concatenate handler source (if any).
@@ -150,16 +150,18 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
   }
 
   // 3. Execute the use case.
-  const result = ValidateManifestsUseCase.run({ parsed, manifests, handlerSource, filePaths });
+  const result = parsed
+    ? ValidateManifestsUseCase.run({ parsed, handlerSource })
+    : { diagnostics: [], errorCount: 0, warningCount: 0 };
   const cliWarnings: Diagnostic[] = [];
 
   // The CLI can't reach the runtime DB to read site_config, so it
   // can't run the SCHEMA_LOCALIZED_REQUIRES_SITE_LOCALES check —
   // boot does that. Per ADR-0007's leftward-shift principle, surface
   // a warning so the AI author isn't surprised when boot rejects.
-  const hasLocalized = manifests.some(
-    (m) => m.kind === "Schema" && m.spec.localized === true,
-  );
+  const hasLocalized = parsed?.entries.some(
+    ({ manifest }) => manifest.kind === "Schema" && manifest.spec.localized === true,
+  ) ?? false;
   if (hasLocalized) {
     cliWarnings.push(
       validateDiagnostic({
@@ -169,7 +171,7 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
         expected:
           "site_config.locales to declare at least one BCP 47 locale (boot validator will check)",
         message:
-          "One or more Schemas declare localized: true. The CLI cannot read site_config; boot will reject if locales are not configured. Verify your CmsConfig.siteDefaults.locales is set.",
+          "One or more Schemas declare localized: true. The CLI cannot read site_config; deployment will reject if locales are not configured. Verify your adapter siteDefaults.locales is set.",
       }),
     );
   }

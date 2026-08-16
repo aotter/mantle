@@ -6,10 +6,10 @@ import {
 } from "hono";
 import type {
   AnyHandler,
-  CmsRuntime,
+  RuntimePlan,
 } from "@aotter/mantle-runtime";
 import type { PublicPathResolver, TemplateRegistry } from "@aotter/mantle-web";
-import type { Manifest, SiteDefaults } from "@aotter/mantle-spec";
+import type { SiteDefaults } from "@aotter/mantle-spec";
 import {
   createConventionalAuth,
   setupIncompleteAuthResponse,
@@ -20,8 +20,12 @@ import {
   createConventionalBindings,
   type MantleWorkerBindings,
 } from "../bindings/conventionalBindings.js";
-import { createCmsRef, type CmsRuntimeRef } from "../mount/bootRuntimeOnce.js";
-import type { CmsConfig } from "../mount/cmsConfig.js";
+import {
+  createMantleRuntimeRef,
+  type CloudflareMantleRuntime,
+  type MantleRuntimeRef,
+} from "../mount/bootRuntimeOnce.js";
+import type { MantleCloudflareConfig } from "../mount/cmsConfig.js";
 import { createMcpApiHandler } from "../mount/mountMcp.js";
 import { mountAdmin } from "../mount/mountAdmin.js";
 import { mountRuntimeEndpoints } from "../mount/mountRuntimeEndpoints.js";
@@ -109,28 +113,28 @@ export interface MantleWorkerBootstrapContext<Env extends MantleCloudflareEnv> {
   readonly auth: Auth;
   readonly bindings: MantleWorkerBindings;
   /** Safe to retain and call later; do not call synchronously inside `extend`. */
-  readonly getRuntime: () => Promise<CmsRuntime>;
+  readonly getRuntime: () => Promise<CloudflareMantleRuntime>;
 }
 
 export interface MantleWorkerMountContext<Env extends MantleCloudflareEnv>
   extends MantleWorkerBootstrapContext<Env> {
   readonly app: MantleExtensionApp<Env>;
-  readonly ref: CmsRuntimeRef;
+  readonly ref: MantleRuntimeRef;
 }
 
 /** The one opt-in seam for application handlers, auth inputs and routes. */
 export interface MantleWorkerExtension<Env extends MantleCloudflareEnv> {
   readonly handlers?: Readonly<Record<string, AnyHandler>>;
   readonly credentialResolver?: ConsumerCredentialResolver;
-  readonly jwtBearer?: CmsConfig["jwtBearer"];
+  readonly jwtBearer?: MantleCloudflareConfig["jwtBearer"];
   readonly scopesSupported?: readonly string[];
   /** Standard routes mount first; extension routes may only add new paths. */
   readonly mount?: (context: MantleWorkerMountContext<Env>) => void;
 }
 
 export interface CreateMantleWorkerOptions<Env extends MantleCloudflareEnv> {
-  /** Parsed manifests, normally imported from `.mantle/generated/mantle.js`. */
-  readonly manifest: readonly Manifest[];
+  /** Sealed generated plan imported from `.mantle/generated/mantle.js`. */
+  readonly plan: RuntimePlan;
   readonly handlers?: Readonly<Record<string, AnyHandler>>;
   readonly siteDefaults?: SiteDefaults | ((env: Env) => SiteDefaults);
   readonly templates?: TemplateRegistry;
@@ -151,13 +155,13 @@ export interface CreateMantleWorkerOptions<Env extends MantleCloudflareEnv> {
 export interface MantleWorkerHandler<Env extends MantleCloudflareEnv> {
   /** Boot and return the same runtime used by fetch. Queue/scheduled handlers
    *  use this instead of constructing a second runtime or bypassing it. */
-  getRuntime(env: Env): Promise<CmsRuntime>;
+  getRuntime(env: Env): Promise<CloudflareMantleRuntime>;
   fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response>;
 }
 
 interface AssembledWorker<Env extends MantleCloudflareEnv> {
   readonly auth: Auth;
-  readonly getRuntime: () => Promise<CmsRuntime>;
+  readonly getRuntime: () => Promise<CloudflareMantleRuntime>;
   readonly fetch: (
     request: Request,
     env: Env,
@@ -177,15 +181,15 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
     const conventional = createConventionalBindings(env);
     const bindings = options.bindings?.(env, conventional) ?? conventional;
     const auth = options.auth?.(env) ?? createConventionalAuth(env);
-    let ref: CmsRuntimeRef | null = null;
-    const getRuntime = (): Promise<CmsRuntime> => ref
+    let ref: MantleRuntimeRef | null = null;
+    const getRuntime = (): Promise<CloudflareMantleRuntime> => ref
       ? ref.get()
       : Promise.reject(new Error("Mantle runtime is unavailable until `extend` returns."));
     const bootstrap = { env, auth, bindings, getRuntime };
     const extension = options.extend?.(bootstrap) ?? {};
 
-    ref = createCmsRef({
-      manifests: options.manifest,
+    ref = createMantleRuntimeRef({
+      plan: options.plan,
       handlers: mergeHandlers(options.handlers, extension.handlers),
       siteDefaults: resolve(options.siteDefaults, env),
       templates: options.templates,

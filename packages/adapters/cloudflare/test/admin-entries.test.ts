@@ -1,8 +1,9 @@
+import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { Manifest } from "@aotter/mantle-spec";
-import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
-import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
+import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
+import { mountTestEndpoints } from "./mountTestEndpoints.js";
 import type { Auth } from "../src/auth/createAuth.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
@@ -117,8 +118,8 @@ function harness(
   const db = new InMemoryDatabase();
   if (seed) seed(db);
   const auth = testAuth(authOverride);
-  const ref = createCmsRef({
-    manifests: manifestSet,
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan(manifestSet),
     siteDefaults: { locales: ["en", "zh-TW"] },
     bindings: {
       db,
@@ -127,7 +128,7 @@ function harness(
     auth,
   });
   const app = new Hono();
-  mountServerEndpoints(app, ref);
+  mountTestEndpoints(app, ref);
   return { app, db };
 }
 
@@ -421,8 +422,8 @@ describe("GET /admin/api/entries/export", () => {
     expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
     const text = new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes);
     const lines = text.trim().split("\r\n");
-    expect(lines[0]).toBe("id,status,version,updated_at,title,slug");
-    expect(lines[1]).toBe("p1,draft,1,100,Hello world,hello");
+    expect(lines[0]).toBe("id,status,version,updated_at,slug,title");
+    expect(lines[1]).toBe("p1,draft,1,100,hello,Hello world");
   });
 
   it("streams every row across multiple internal pages", async () => {

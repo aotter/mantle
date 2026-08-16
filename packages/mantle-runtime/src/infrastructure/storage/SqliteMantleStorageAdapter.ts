@@ -31,18 +31,21 @@ import {
   schemaIndexMigrations,
 } from "../boot/index.js";
 import { DatabaseEntryRepository } from "../persistence/DatabaseEntryRepository.js";
+import { DatabaseMediaAssetRepository } from "../persistence/DatabaseMediaAssetRepository.js";
+import { DatabasePendingUploadRepository } from "../persistence/DatabasePendingUploadRepository.js";
 import { DatabaseSiteConfigRepository } from "../persistence/DatabaseSiteConfigRepository.js";
 
 /** Existing SQLite/D1 implementation behind the semantic preparation seam. */
 export class SqliteMantleStorageAdapter implements MantleStorageAdapter {
   readonly nativeViewDialects = ["sqlite"] as const;
+  readonly siteConfig: SiteConfigRepository;
 
   constructor(
     private readonly db: DatabaseDriver,
     private readonly siteDefaults?: SiteDefaults,
-    /** ponytail: alpha.7 facade state sharing; delete with the #667 binder. */
-    private readonly siteConfig: SiteConfigRepository = new DatabaseSiteConfigRepository(db),
-  ) {}
+  ) {
+    this.siteConfig = new DatabaseSiteConfigRepository(db);
+  }
 
   async prepare(plan: RuntimePlan): Promise<PreparedMantleStorage> {
     const prepared = sqliteStoragePorts(this.db, plan, this.siteConfig);
@@ -119,5 +122,8 @@ function sqliteStoragePorts(
     entries: new DatabaseEntryRepository(db, schemas),
     views: new SqliteViewQueryExecutor(db, plan),
     localePolicy,
+    siteConfig: localePolicy,
+    mediaAssets: new DatabaseMediaAssetRepository(db),
+    pendingUploads: new DatabasePendingUploadRepository(db),
   };
 }

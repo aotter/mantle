@@ -5,6 +5,7 @@ import {
   ValidateManifestsUseCase,
   type Diagnostic,
 } from "@aotter/mantle-spec";
+import { compileRuntimePlan } from "@aotter/mantle-runtime";
 import { loadManifestsFromRoot } from "@aotter/mantle-spec/cli";
 import {
   benchmarkHttpRoutes,
@@ -51,27 +52,30 @@ async function runIndexes(rawArgs: readonly string[]): Promise<number> {
   }
   const format = outputFormat(values.format);
   const loaded = await loadManifestsFromRoot(values.manifests ?? "./manifests");
-  const validation = ValidateManifestsUseCase.run({
-    parsed: loaded.parsed,
-    manifests: loaded.manifests,
-    filePaths: loaded.filePaths,
-  });
+  const validation = loaded.parsed
+    ? ValidateManifestsUseCase.run({ parsed: loaded.parsed })
+    : { diagnostics: [], errorCount: 0, warningCount: 0 };
   const errors = [...loaded.parseErrors, ...validation.diagnostics]
     .filter((diagnostic) => diagnostic.severity === "error");
   if (errors.length > 0) {
     emitErrors(errors, format);
     return 1;
   }
-  if (loaded.manifests.length === 0) {
+  if (!validation.linked || validation.linked.schemas.length === 0) {
     stderr.write(`No manifests found under ${values.manifests ?? "./manifests"}\n`);
     return 2;
+  }
+  const compiled = compileRuntimePlan(validation.linked);
+  if (!compiled.ok) {
+    emitErrors(compiled.diagnostics, format);
+    return 1;
   }
   const rows = values.rows === undefined ? undefined : Number(values.rows);
   if (rows !== undefined && (!Number.isFinite(rows) || rows <= 0)) {
     stderr.write("--rows must be a positive number\n");
     return 2;
   }
-  const report = await inspectIndexCoverage(loaded.manifests, {
+  const report = await inspectIndexCoverage(compiled.value, {
     rowsPerSchema: rows,
     requirePublic: values["require-public"] === true,
     requiredViews: values.require ?? [],

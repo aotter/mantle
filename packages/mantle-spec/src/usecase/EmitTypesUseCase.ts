@@ -1,4 +1,3 @@
-import { partitionManifests } from "../domain/service/ManifestParser.js";
 import {
   RESERVED_ENTRY_COLUMNS,
   type JsonSchema,
@@ -31,15 +30,9 @@ const RESERVED_COLUMN_TYPES: Record<ReservedEntryColumn, string> = {
 
 export class EmitTypesUseCase {
   execute(request: EmitTypesRequest): EmitTypesResponse {
-    const manifests = request.linked
-      ? [
-          ...request.linked.schemas,
-          ...request.linked.views,
-          ...request.linked.procedures,
-          ...request.linked.triggers,
-        ].map((entry) => entry.manifest)
-      : request.manifests;
-    const { schemas, procedures, views } = partitionManifests(manifests);
+    const schemas = request.linked.schemas.map((entry) => entry.manifest);
+    const procedures = request.linked.procedures.map((entry) => entry.manifest);
+    const views = request.linked.views.map((entry) => entry.manifest);
     const schemaByName = new Map(schemas.map((s) => [s.metadata.name, s]));
 
     const out: string[] = [];

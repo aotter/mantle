@@ -34,7 +34,7 @@ import { joinParentForList } from "../src/domain/service/io/JoinedEntryReader.js
 import { DatabaseEntryRepository } from "../src/infrastructure/persistence/DatabaseEntryRepository.js";
 import { ExecuteViewUseCase } from "../src/usecase/view/ExecuteViewUseCase.js";
 import { SqliteViewQueryExecutor } from "../src/infrastructure/storage/SqliteMantleStorageAdapter.js";
-import { readEntryBySlug, type CmsRuntime } from "../src/index.js";
+import { readEntryBySlug } from "../src/index.js";
 
 const schema = {
   apiVersion: "cms.mantle.aotter.net/v1",
@@ -947,7 +947,7 @@ describe("EntryReader against crowded real SQLite", () => {
     ]);
 
     executions.length = 0;
-    const publicDb: CmsRuntime["db"] = driver;
+    const publicDb: DatabaseDriver = driver;
     const compatible = await readEntryBySlug(publicDb, {
       collection: slugLocale.metadata.name,
       slug: "needle",

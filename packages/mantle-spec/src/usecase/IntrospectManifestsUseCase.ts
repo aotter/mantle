@@ -1,4 +1,3 @@
-import { partitionManifests } from "../domain/service/ManifestParser.js";
 import type {
   IntrospectManifestsRequest,
 } from "./dto/IntrospectManifestsRequest.js";
@@ -17,8 +16,8 @@ import type {
  */
 export class IntrospectManifestsUseCase {
   execute(request: IntrospectManifestsRequest): IntrospectManifestsResponse {
-    const partitioned = partitionManifests(request.manifests);
-    const schemas: IntrospectedSchema[] = partitioned.schemas.map((s) => {
+    const manifests = request.parsed?.entries.map((entry) => entry.manifest) ?? [];
+    const schemas: IntrospectedSchema[] = manifests.filter((manifest) => manifest.kind === "Schema").map((s) => {
       const properties = (s.spec.schema as { properties?: Record<string, unknown> }).properties ?? {};
       return {
         name: s.metadata.name,
@@ -32,7 +31,7 @@ export class IntrospectManifestsUseCase {
         properties: Object.keys(properties),
       };
     });
-    const views: IntrospectedView[] = partitioned.views.map((v) => ({
+    const views: IntrospectedView[] = manifests.filter((manifest) => manifest.kind === "View").map((v) => ({
       name: v.metadata.name,
       from: v.spec.from ?? null,
       sql: v.spec.sql ?? null,
@@ -46,7 +45,7 @@ export class IntrospectManifestsUseCase {
       auth: v.spec.requires?.auth ?? null,
       guard: v.spec.requires?.guard ?? null,
     }));
-    const procedures: IntrospectedProcedure[] = partitioned.procedures.map((p) => ({
+    const procedures: IntrospectedProcedure[] = manifests.filter((manifest) => manifest.kind === "Procedure").map((p) => ({
       name: p.metadata.name,
       handler: p.spec.handler,
       auth: p.spec.requires?.auth ?? null,
@@ -54,7 +53,7 @@ export class IntrospectManifestsUseCase {
       input: p.spec.input,
       output: p.spec.output,
     }));
-    const triggers: IntrospectedTrigger[] = partitioned.triggers.map((t) => ({
+    const triggers: IntrospectedTrigger[] = manifests.filter((manifest) => manifest.kind === "Trigger").map((t) => ({
       name: t.metadata.name,
       source: t.spec.source,
       target: t.spec.target,

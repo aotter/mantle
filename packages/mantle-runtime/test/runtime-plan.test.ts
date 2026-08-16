@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   compileRuntimePlan,
+  sealRuntimePlan,
   type RuntimePlan,
 } from "../src/domain/service/RuntimePlanCompiler.js";
 
@@ -111,6 +112,14 @@ spec:
 
     visit(plan);
     expect(() => JSON.stringify(plan)).not.toThrow();
+  });
+
+  it("rejects a generated plan whose semantics no longer match its fingerprint", () => {
+    const plan = compile(parse(richManifest));
+    expect(() => sealRuntimePlan({
+      ...plan,
+      httpRoutes: [],
+    })).toThrow(/fingerprint is invalid/);
   });
 });
 

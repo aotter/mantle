@@ -19,22 +19,19 @@ export {
   createMantleRuntime,
   type CreateMantleRuntimeArgs,
   type MantleRuntime,
+  type MantleMedia,
   type MantleRuntimePorts,
   type InvokeMantleProcedureRequest,
   type ExecuteMantleViewRequest,
   type InvokeMantleTriggerRequest,
 } from "./MantleRuntime.js";
-// Alpha.7 full-product compatibility facade; delete in #673.
-export {
-  createCmsRuntime,
-  type CreateCmsRuntimeArgs,
-  type CmsRuntime,
-} from "./runtime.js";
 export {
   RUNTIME_PLAN_VERSION,
   compileRuntimePlan,
+  sealRuntimePlan,
   type CompileResult,
   type RuntimePlan,
+  type RuntimePlanData,
   type RuntimeSchemaPlan,
   type RuntimeViewPlan,
   type RuntimeProcedurePlan,

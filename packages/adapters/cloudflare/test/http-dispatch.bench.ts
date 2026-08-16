@@ -1,9 +1,10 @@
+import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
 import { beforeAll, bench, describe } from "vitest";
 import type { Manifest } from "@aotter/mantle-spec";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
-import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
-import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
+import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
+import { mountTestEndpoints } from "./mountTestEndpoints.js";
 import {
   StubAssetServer,
   stubAuth,
@@ -115,8 +116,8 @@ function manifests(): Manifest[] {
 }
 
 function harness(): Hono {
-  const ref = createCmsRef({
-    manifests: manifests(),
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan(manifests()),
     handlers: {
       requireAccount: () => ({}),
       reserveSite: () => ({ reserved: true }),
@@ -137,7 +138,7 @@ function harness(): Hono {
     }),
   });
   const app = new Hono();
-  mountServerEndpoints(app, ref);
+  mountTestEndpoints(app, ref);
   return app;
 }
 

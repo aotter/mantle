@@ -1,3 +1,4 @@
+import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type {
@@ -10,9 +11,9 @@ import type {
   UploadCapability,
 } from "@aotter/mantle-runtime";
 import type { MediaPurposePolicy } from "@aotter/mantle-spec";
-import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
+import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
 import { createMcpApiHandler } from "../src/mount/mountMcp.js";
-import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
+import { mountTestEndpoints } from "./mountTestEndpoints.js";
 import type { Auth } from "../src/auth/createAuth.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
@@ -156,8 +157,8 @@ function harness(opts: {
   mediaPurposes?: readonly MediaPurposePolicy[];
 }): Harness {
   const storage = opts.withMedia ? new FakeMediaStorage() : null;
-  const ref = createCmsRef({
-    manifests: manifests(),
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan(manifests()),
     siteDefaults: {
       media: { purposes: opts.mediaPurposes ?? [postCoverPolicy()] },
     },
@@ -169,7 +170,7 @@ function harness(opts: {
     auth: opts.auth,
   });
   const app = new Hono();
-  mountServerEndpoints(app, ref);
+  mountTestEndpoints(app, ref);
   return { app, storage };
 }
 
@@ -348,8 +349,8 @@ describe("smoke: MCP media tool catalog", () => {
     const db = new InMemoryDatabase();
     const storage = new FakeMediaStorage();
     const initialPolicies: MediaPurposePolicy[] = [postCoverPolicy()];
-    const ref = createCmsRef({
-      manifests: manifests(),
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(manifests()),
       siteDefaults: { media: { purposes: initialPolicies } },
       bindings: {
         db,
@@ -679,8 +680,8 @@ describe("MCP View surface gating (#438)", () => {
   }
 
   function viewRef(auth: Auth = staffAuth()) {
-    return createCmsRef({
-      manifests: viewManifests(),
+    return createMantleRuntimeRef({
+      plan: compileTestPlan(viewManifests()),
       siteDefaults: {
         brand: "Example Shop",
         origin: "https://shop.example",

@@ -30,7 +30,7 @@ Optional ports are enabled only when a feature needs them:
 | `MediaStorage` | `packages/mantle-runtime/src/domain/port/MediaStorage.ts` | The adapter exposes admin/MCP media upload flows. |
 | `DeferredHookDispatcher` | `packages/mantle-runtime/src/domain/port/DeferredHookDispatcher.ts` | The adapter wants at-least-once queue delivery for `after_*` lifecycle hooks. |
 
-Test seams such as `Clock` and `IdGenerator` are injectable through `createCmsRuntime`, but normal adapters do not need custom implementations.
+Test seams such as `Clock` and `IdGenerator` are injectable through `createMantleRuntime`, but normal adapters do not need custom implementations.
 
 Deferred delivery is an optional, versioned wire contract. Queue acceptance is
 not atomic with the entry write; adapters must preserve the supplied event id,
@@ -69,9 +69,8 @@ schema-View reconciliation, and skips mutation for an unchanged revision. A
 custom adapter owns its own preparation and returns application-owned semantic
 ports. Unsupported native View dialects fail before the adapter mutates state.
 
-The alpha.7 `await createCmsRuntime({ manifests, db })` API is a
-one-way full-product compatibility facade over these stages until #673. New
-adapter code should use the sealed inputs above.
+The removed alpha.7 `createCmsRuntime({ manifests, db })` facade is replaced by
+the explicit compile, prepare, and bind stages above.
 
 ### Bun embedding
 
@@ -127,8 +126,8 @@ Minimum HTTP behavior for a full adapter:
 
 For the Cloudflare adapter, public rendering requires three matching consumer
 inputs: `mountPublicRoutes(...)` route declarations, a `TemplateRegistry`
-passed through `CmsConfig.templates`, and a `publicPathResolver` passed through
-`CmsConfig.publicPathResolver`. Omitting public routes is valid for a headless
+passed through `MantleCloudflareConfig.templates`, and a `publicPathResolver`
+passed through `MantleCloudflareConfig.publicPathResolver`. Omitting public routes is valid for a headless
 consumer; mounting every Schema automatically is not, because some collections
 are private even when they contain a slug.
 

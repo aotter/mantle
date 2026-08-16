@@ -1,5 +1,5 @@
 import type {
-  CmsRuntime,
+  MantleRuntime,
   DeferredHookDispatcher,
   DeferredHookEnvelope,
 } from "@aotter/mantle-runtime";
@@ -78,10 +78,10 @@ export class WorkersQueueHookDispatcher implements DeferredHookDispatcher {
  * retry delay, max_retries, and DLQ configuration.
  */
 export function createQueueHandler<Env>(
-  cmsRef: { get(): Promise<CmsRuntime> },
+  cmsRef: { get(): Promise<MantleRuntime> },
 ): (batch: MessageBatch<unknown>, env: Env) => Promise<void> {
   return async (batch, env) => {
-    let cms: CmsRuntime;
+    let cms: MantleRuntime;
     try {
       cms = await cmsRef.get();
     } catch (err) {
@@ -99,7 +99,7 @@ export function createQueueHandler<Env>(
       await Promise.all(
         chunk.map(async (message) => {
           try {
-            await cms.runDeferredHook.execute({ envelope: message.body, env });
+            await cms.runDeferredHook({ envelope: message.body, env });
             message.ack();
           } catch (err) {
             message.retry();

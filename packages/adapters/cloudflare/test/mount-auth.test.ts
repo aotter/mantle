@@ -1,7 +1,8 @@
+import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
-import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
+import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
+import { mountTestEndpoints } from "./mountTestEndpoints.js";
 import { renderConsentHtml } from "../src/oauth/consentHtml.js";
 import { mountAuthorize } from "../src/oauth/mountOAuth.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
@@ -13,8 +14,8 @@ import type { Auth } from "../src/auth/createAuth.js";
 
 function harness(authOverride?: Partial<Auth>) {
   const auth: Auth = { ...stubAuth, ...authOverride };
-  const ref = createCmsRef({
-    manifests: [],
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan([]),
     handlers: {},
     bindings: {
       db: new InMemoryDatabase(),
@@ -23,19 +24,19 @@ function harness(authOverride?: Partial<Auth>) {
     auth,
   });
   const app = new Hono();
-  mountServerEndpoints(app, ref);
+  mountTestEndpoints(app, ref);
   return { app, auth };
 }
 
-describe("mountServerEndpoints: /api/auth/* surface", () => {
+describe("mountTestEndpoints: /api/auth/* surface", () => {
   it("mounts no Admin or Auth namespace when Admin assets are omitted", async () => {
-    const ref = createCmsRef({
-      manifests: [],
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan([]),
       bindings: { db: new InMemoryDatabase() },
       auth: stubAuth,
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
 
     expect((await app.request("/admin")).status).toBe(404);
     expect((await app.request("/admin/api/me")).status).toBe(404);

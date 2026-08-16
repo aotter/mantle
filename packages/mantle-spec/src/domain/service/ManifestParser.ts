@@ -144,7 +144,7 @@ function validateLocalizedText(
  * Throwable carrier used by the envelope-shape validators below
  * (`validateEnvelope`, kind-specific `validate*Spec`). Each throw
  * carries a JSON Pointer + diagnostic code; the top-level
- * `parseManifests` catches the throw and converts it to a Diagnostic
+ * The source parser catches the throw and converts it to a Diagnostic
  * for the public `{ manifests, diagnostics }` return shape.
  */
 export class ManifestParseError extends Error {
@@ -207,12 +207,6 @@ function rejectUnknownKeys(
       unknownPointer,
     );
   }
-}
-
-/** Result of `parseManifests`. */
-export interface ParseManifestsResult {
-  readonly manifests: Manifest[];
-  readonly diagnostics: Diagnostic[];
 }
 
 /** One caller-owned manifest source. Core never resolves this ID as a path. */
@@ -296,63 +290,6 @@ export function parseManifestSources(
     }) as ParsedManifestSet,
     diagnostics: parsed.diagnostics,
   };
-}
-
-/**
- * Temporary compatibility adapter over `parseManifestSources`. Per ADR-0001
- * multi-doc YAML support, `---` separators inside one string yield one
- * manifest per doc. Delete with the legacy path in #673.
- */
-export function parseManifests(input: string | readonly string[]): ParseManifestsResult {
-  const inputs = typeof input === "string" ? [input] : input;
-  const result = parseManifestSources({
-    sources: inputs.map((text, index) => ({
-      sourceId: `manifest:input/${index}`,
-      text,
-    })),
-  });
-  return {
-    manifests: result.ok ? result.value.entries.map((entry) => entry.manifest) : [],
-    diagnostics: result.diagnostics.map((diagnostic) => diagnostic.source
-      ? {
-          ...diagnostic,
-          path: pointerFor(diagnostic.source.documentIndex, diagnostic.source.path),
-        }
-      : diagnostic),
-  };
-}
-
-export interface ParseManifestsOrThrowOptions {
-  /** Optional context label woven into the thrown error message
-   *  (e.g. `"starter manifests"`). Helps multi-source consumers
-   *  identify which call site produced the failure. */
-  readonly context?: string;
-}
-
-/**
- * Convenience wrapper around `parseManifests` for the common case
- * where any diagnostic is fatal (worker module-init, CLI tools).
- * Throws an `Error` with one diagnostic per line —
- * `[CODE] path: message` — when `result.diagnostics.length > 0`.
- *
- * Adapters and starters should prefer this over hand-rolling the
- * "format diagnostics → throw" three-liner so the error envelope
- * stays consistent across consumers (matters for AI authors reading
- * boot failures in `wrangler tail`).
- */
-export function parseManifestsOrThrow(
-  input: string | readonly string[],
-  options?: ParseManifestsOrThrowOptions,
-): readonly Manifest[] {
-  const result = parseManifests(input);
-  if (result.diagnostics.length > 0) {
-    const summary = result.diagnostics
-      .map((d) => `  - [${d.code}] ${d.path}: ${d.message}`)
-      .join("\n");
-    const ctx = options?.context ? ` in ${options.context}` : "";
-    throw new Error(`Manifest parse failed${ctx}:\n${summary}`);
-  }
-  return result.manifests;
 }
 
 function parseManifestSourcesInternal(sourceSet: ManifestSourceSet): InternalParseResult {
@@ -1525,6 +1462,5 @@ function validateTriggerSpec(m: TriggerManifest, idx: number): TriggerManifest {
   return m;
 }
 
-export { partitionManifests } from "./ManifestPartition.js";
 
 export type { FilterAst };

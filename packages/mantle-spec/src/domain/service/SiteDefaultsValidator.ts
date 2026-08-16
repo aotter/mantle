@@ -33,7 +33,7 @@ export class InvalidSiteDefaultsError extends Error {
   constructor(public readonly invalidLocales: ReadonlyArray<string>) {
     const hasScriptSubtag = containsScriptSubtagLocale(invalidLocales);
     super(
-      `Invalid Mantle locale tag(s) in CmsConfig.siteDefaults.locales: ` +
+      `Invalid Mantle locale tag(s) in adapter siteDefaults.locales: ` +
         invalidLocales.map((s) => `'${s}'`).join(", ") +
         `. Use Mantle v0.1 locale form like 'en' or 'zh-TW' — the canonicalizer ` +
         `accepts mixed case ('zh-tw' / 'ZH_TW'), but the structure must ` +
@@ -62,7 +62,7 @@ export interface MediaPurposeIssue {
 export class InvalidMediaPurposesError extends Error {
   constructor(public readonly issues: ReadonlyArray<MediaPurposeIssue>) {
     super(
-      `Invalid media purpose declaration(s) in CmsConfig.siteDefaults.media.purposes: ` +
+      `Invalid media purpose declaration(s) in adapter siteDefaults.media.purposes: ` +
         issues
           .map((i) => {
             const tag = `'${i.name || "(unnamed)"}'`;
@@ -96,7 +96,7 @@ export class InvalidMediaPurposesError extends Error {
 export class InvalidSiteIconsError extends Error {
   constructor(public readonly invalidIcons: ReadonlyArray<SiteIcon>) {
     super(
-      "Invalid CmsConfig.siteDefaults.icons: each icon needs a root-relative or absolute HTTPS src, " +
+      "Invalid adapter siteDefaults.icons: each icon needs a root-relative or absolute HTTPS src, " +
         "an optional supported image mimeType, and sizes such as '64x64' or 'any'.",
     );
     this.name = "InvalidSiteIconsError";

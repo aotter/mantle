@@ -1,3 +1,4 @@
+import { compileTestPlan } from "./compileTestPlan.js";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
@@ -75,7 +76,7 @@ describe("createMantleWorker", () => {
   it("assembles once, boots a no-handler manifest, and exposes real Worker context", async () => {
     let assemblies = 0;
     const worker = createMantleWorker<TestEnv>({
-      manifest: [],
+      plan: compileTestPlan([]),
       auth: () => stubAuth,
       bindings: testBindings,
       extend: ({ env }) => {
@@ -107,7 +108,7 @@ describe("createMantleWorker", () => {
   it("boots migrations before the first Auth request", async () => {
     const db = new InMemoryDatabase();
     const worker = createMantleWorker<TestEnv>({
-      manifest: [],
+      plan: compileTestPlan([]),
       auth: () => stubAuth,
       bindings: () => ({ db, adminAssets: new StubAssetServer() }),
     });
@@ -120,7 +121,7 @@ describe("createMantleWorker", () => {
   it("does not boot the CMS runtime for OAuth transport-only requests", async () => {
     const db = new InMemoryDatabase();
     const worker = createMantleWorker<TestEnv>({
-      manifest: [],
+      plan: compileTestPlan([]),
       auth: () => stubAuth,
       bindings: () => ({ db, adminAssets: new StubAssetServer() }),
     });
@@ -146,7 +147,7 @@ describe("createMantleWorker", () => {
       return { name: `${ctx.env.TEST_NAME}:${ctx.auth?.credential}` };
     };
     const worker = createMantleWorker<TestEnv>({
-      manifest: envProbeManifests(),
+      plan: compileTestPlan(envProbeManifests()),
       handlers: { envProbe: handler },
       auth: () => stubAuth,
       bindings: testBindings,
@@ -196,7 +197,7 @@ describe("createMantleWorker", () => {
       name: ctx.auth?.credential ?? "anonymous",
     });
     const worker = createMantleWorker<TestEnv>({
-      manifest: envProbeManifests(),
+      plan: compileTestPlan(envProbeManifests()),
       handlers: { envProbe: handler },
       auth: () => ({ ...stubAuth, verifyOAuthAccessToken }),
       bindings: testBindings,
@@ -224,7 +225,7 @@ describe("createMantleWorker", () => {
 
   it("applies the public cache contract once after extension dispatch", async () => {
     const worker = createMantleWorker<TestEnv>({
-      manifest: [],
+      plan: compileTestPlan([]),
       auth: () => stubAuth,
       bindings: testBindings,
       extend: () => ({
@@ -248,7 +249,7 @@ describe("createMantleWorker", () => {
   it("exposes the conventional binding stack before an override", async () => {
     const mediaStorage = {} as MediaStorage;
     const worker = createMantleWorker<TestEnv>({
-      manifest: [],
+      plan: compileTestPlan([]),
       auth: () => stubAuth,
       bindings: (_env, conventional) => {
         expect(conventional.db).toBeInstanceOf(D1DatabaseDriver);
@@ -266,7 +267,7 @@ describe("createMantleWorker", () => {
 
   it("keeps public routes available while incomplete Auth blocks private surfaces", async () => {
     const worker = createMantleWorker<TestEnv>({
-      manifest: [],
+      plan: compileTestPlan([]),
       bindings: testBindings,
       extend: () => ({ mount: ({ app }) => void app.get("/health", (c) => c.text("ok")) }),
     });
@@ -297,7 +298,7 @@ describe("createMantleWorker", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     for (const path of ["/admin/custom", "/admin*", "/private-auth/callback", "*"]) {
       const worker = createMantleWorker<TestEnv>({
-        manifest: [],
+        plan: compileTestPlan([]),
         auth: () => ({ ...stubAuth, basePath: "/private-auth" }),
         bindings: testBindings,
         extend: () => ({
@@ -333,18 +334,18 @@ describe("createMantleWorker", () => {
         kind: "Trigger",
         metadata: { name: "hook-http" },
         spec: {
-          source: { kind: "http", method: "POST", path: "/hooks/probe" },
+          source: { kind: "http", method: "POST", path: "/api/hooks/probe" },
           target: { procedure: "hook" },
         },
       },
     ];
     const worker = createMantleWorker<TestEnv>({
-      manifest,
+      plan: compileTestPlan(manifest),
       auth: () => stubAuth,
       bindings: testBindings,
       extend: () => ({
         mount: ({ app }) => {
-          const path: string = "/hooks/probe";
+          const path: string = "/api/hooks/probe";
           app.post(path, (c) => c.text("duplicate"));
         },
       }),
@@ -358,7 +359,7 @@ describe("createMantleWorker", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const db = new FailFirstMigrationDatabase();
     const worker = createMantleWorker<TestEnv>({
-      manifest: [],
+      plan: compileTestPlan([]),
       auth: () => stubAuth,
       bindings: () => ({ db, adminAssets: new StubAssetServer() }),
       extend: () => ({
@@ -382,7 +383,7 @@ describe("createMantleWorker", () => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const db = new FailFirstMigrationDatabase("Network connection lost");
     const worker = createMantleWorker<TestEnv>({
-      manifest: [],
+      plan: compileTestPlan([]),
       auth: () => stubAuth,
       bindings: () => ({ db, adminAssets: new StubAssetServer() }),
       extend: () => ({
@@ -407,7 +408,7 @@ describe("createMantleWorker", () => {
 
   it("keeps mcp once when an extension adds OAuth scopes", async () => {
     const worker = createMantleWorker<TestEnv>({
-      manifest: [],
+      plan: compileTestPlan([]),
       auth: () => stubAuth,
       bindings: testBindings,
       extend: () => ({ scopesSupported: ["platform:read", "mcp"] }),
@@ -419,7 +420,7 @@ describe("createMantleWorker", () => {
 
   it("puts the effective access-token scope in API props", async () => {
     const worker = createMantleWorker<TestEnv>({
-      manifest: [],
+      plan: compileTestPlan([]),
       auth: () => stubAuth,
       bindings: testBindings,
     });

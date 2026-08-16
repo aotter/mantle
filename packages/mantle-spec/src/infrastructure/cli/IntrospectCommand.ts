@@ -55,8 +55,8 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
     printHelp();
     return 0;
   }
-  const { manifests, parseErrors } = await loadManifestsFromRoot(parsed.args.manifests);
-  const result = IntrospectManifestsUseCase.run({ manifests, parseErrors });
+  const { parsed: manifestSet, parseErrors } = await loadManifestsFromRoot(parsed.args.manifests);
+  const result = IntrospectManifestsUseCase.run({ parsed: manifestSet, parseErrors });
   stdout.write(JSON.stringify(result, null, 2) + "\n");
   return parseErrors.some((d) => d.severity === "error") ? 1 : 0;
 }

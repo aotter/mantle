@@ -41,31 +41,14 @@ issue that must delete or delegate the old path.
 | Legacy overloads, aliases, combined mounts, duplicate tests | Current public API plus temporary migration delegates | Deleted | #673 |
 | Contributor/agent/release guidance | `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, two release skill copies | One tool-neutral authority and one release skill | #674 |
 
-## Raw-manifest caller inventory
+## Deletion evidence
 
-Production callers at the baseline:
-
-- `packages/mantle/src/generate.ts`
-- `packages/mantle-runtime/src/runtime.ts`
-- `packages/mantle-runtime/src/infrastructure/boot/bootState.ts`
-- `packages/mantle-runtime/src/infrastructure/testing/IndexCoverageHarness.ts`
-- `packages/adapters/cloudflare/src/worker/createMantleWorker.ts`
-- `packages/adapters/cloudflare/src/mount/cmsConfig.ts`
-- `packages/adapters/cloudflare/src/mount/bootRuntimeOnce.ts`
-- `packages/adapters/cloudflare/src/mount/mountServerEndpoints.ts`
-
-Tests construct raw manifests in `mantle-spec/test/{validate,cli-emit}.test.ts`,
-`mantle-runtime/test/{fakes/manifests,performance-harness,runtime}.test.ts`, and
-the Cloudflare adapter's Admin, authorization, facade, performance, public
-routes, smoke, Trigger, and View REST tests. These tests migrate with their
-owner. Tests that only assert a removed API are deleted rather than retained as
-compatibility requirements.
-
-The repeatable inventory command is:
-
-```bash
-rg -n '\bManifest\[\]|readonly Manifest\[\]|partitionManifests\(|parseManifests\(' packages scripts
-```
+All baseline production callers now consume `ParsedManifestSet`,
+`LinkedManifestSet`, or `RuntimePlan` according to their pipeline stage.
+`scripts/check-boundaries.mjs` fails if the removed runtime facade, generated
+site API, raw parser facade, or combined Cloudflare route owner returns.
+Parser-focused tests may inspect parser output, but runtime and platform tests
+must compile and prepare the same sealed plan used by production.
 
 ## Consumer manifest corpus
 
@@ -81,7 +64,7 @@ the #673 release gate:
 
 | Consumer | Revision | Manifest paths |
 |---|---|---|
-| `aotter/mantle-starters` | `530040e840d583a5d0d9ce4cc02f65ad236ff247` | `blank/manifests/site.yaml`; `overlays/{community,intake,presence,publication,reservation,transaction}/manifests/site.yaml`; `recipes/typed-web/manifests/site.yaml` |
+| `aotter/mantle-starters` | `c2d7e1fcfe51b6e74bffdaf5c86a4de04b47127d` | `blank/manifests/site.yaml`; `overlays/{community,intake,presence,publication,reservation,transaction}/manifests/site.yaml`; `recipes/typed-web/manifests/site.yaml` |
 | `aotter/mantle-landing` | `8dab7985baf0416e6760974a5ea78a166ab2ce61` | `manifests/site.yaml` |
 | `aotter/mantle-platform` (Remote Mantle/control plane) | `a54fb3423cb51796bea336f16501a9ec507a6c54` | `manifests/platform.yaml` |
 | Core i18n fixture | this repository | `packages/mantle-spec/test/fixtures/i18n-parent-child/manifests/site.yaml` |

@@ -1,8 +1,9 @@
+import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { Manifest } from "@aotter/mantle-spec";
-import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
-import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
+import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
+import { mountTestEndpoints } from "./mountTestEndpoints.js";
 import type { Auth } from "../src/auth/createAuth.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
@@ -134,8 +135,8 @@ function testAuth(authOverride?: Partial<Auth>): Auth {
 function harness(authOverride?: Partial<Auth>) {
   const calls: Array<{ input: unknown; env: unknown }> = [];
   const auth = testAuth(authOverride);
-  const ref = createCmsRef({
-    manifests: manifests(),
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan(manifests()),
     handlers: {
       recomputeInventory: (input, ctx) => {
         calls.push({ input, env: ctx.env });
@@ -151,7 +152,7 @@ function harness(authOverride?: Partial<Auth>) {
     auth,
   });
   const app = new Hono();
-  mountServerEndpoints(app, ref);
+  mountTestEndpoints(app, ref);
   return { app, calls };
 }
 
@@ -402,8 +403,8 @@ function rowBindingManifests(): Manifest[] {
 
 function rowBindingHarness() {
   const auth = testAuth();
-  const ref = createCmsRef({
-    manifests: rowBindingManifests(),
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan(rowBindingManifests()),
     handlers: {
       resendReceipt: () => ({ ok: true }),
       restockSku: () => ({ ok: true }),
@@ -418,7 +419,7 @@ function rowBindingHarness() {
     auth,
   });
   const app = new Hono();
-  mountServerEndpoints(app, ref);
+  mountTestEndpoints(app, ref);
   return { app };
 }
 

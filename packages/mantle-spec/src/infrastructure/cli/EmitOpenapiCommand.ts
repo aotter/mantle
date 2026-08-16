@@ -86,8 +86,8 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
     return 0;
   }
   const args = parsed.args;
-  const { manifests, parsed: manifestSet, parseErrors } = await loadManifestsFromRoot(args.manifests);
-  if (parseErrors.some((d) => d.severity === "error")) {
+  const { parsed: manifestSet, parseErrors } = await loadManifestsFromRoot(args.manifests);
+  if (!manifestSet || parseErrors.some((d) => d.severity === "error")) {
     stderr.write(`Manifest parse errors — run \`mantle validate\` to inspect.\n`);
     return 1;
   }
@@ -95,15 +95,15 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
   // between two HTTP Triggers (only caught by ValidateManifests, not
   // the parser) would silently overwrite one operation and emit a
   // document missing a real route. (#398)
-  const { errorCount } = ValidateManifestsUseCase.run({ parsed: manifestSet, manifests });
-  if (errorCount > 0) {
+  const validation = ValidateManifestsUseCase.run({ parsed: manifestSet });
+  if (validation.errorCount > 0 || !validation.linked) {
     stderr.write(
       `Manifest validation errors (e.g. duplicate route) — run \`mantle validate\` to inspect.\n`,
     );
     return 1;
   }
   const { document } = EmitOpenapiUseCase.run({
-    manifests,
+    linked: validation.linked,
     title: args.title,
     version: args.version,
     sessionCookieName: args.sessionCookieName,

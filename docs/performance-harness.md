@@ -16,10 +16,10 @@ make a normal content/API/page change.
 | Rendered HTML, Markdown, and `llms.txt` | Request-time render use cases plus the Cloudflare public-route cache policy | D1 is canonical; version-local Workers Cache stores anonymous HTTP responses. |
 | D1 transport and optional query metrics | Cloudflare bindings | Bindings stay thin. Query/cache policy does not belong in a generic provider `BaseRepository`. |
 
-`CmsRuntime.db` remains deprecated compatibility surface. New site code uses
-Manifests, runtime use cases, `entryReader`, and `siteConfig`. A site may own
+The runtime exposes no raw database handle. Application and adapter code uses
+the sealed plan, runtime use cases, `entries`, and `siteConfig`. An application may own
 additional tables behind its own repository at the composition root, but it
-must not query Mantle-owned tables through `runtime.db`.
+must not query Mantle-owned tables outside the selected storage adapter.
 
 ## Cache contract
 

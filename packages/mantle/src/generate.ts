@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { cwd, stderr, stdout } from "node:process";
 import { parseArgs } from "node:util";
@@ -28,11 +28,9 @@ export async function runGenerate(rawArgs: readonly string[]): Promise<number> {
   }
 
   const loaded = await loadManifestsFromRoot(options.manifests);
-  const validation = ValidateManifestsUseCase.run({
-    parsed: loaded.parsed,
-    manifests: loaded.manifests,
-    filePaths: loaded.filePaths,
-  });
+  const validation = loaded.parsed
+    ? ValidateManifestsUseCase.run({ parsed: loaded.parsed })
+    : { diagnostics: [], errorCount: 0, warningCount: 0 };
   const validationErrors = [...loaded.parseErrors, ...validation.diagnostics]
     .filter((diagnostic) => diagnostic.severity === "error");
   if (validationErrors.length > 0 || !validation.linked) {
@@ -50,14 +48,12 @@ export async function runGenerate(rawArgs: readonly string[]): Promise<number> {
   }
 
   const output = resolve(cwd(), options.output);
-  const files = new Map([
-    [join(output, "mantle.ts"), emitted.source],
-    [join(output, "site.ts"), legacySiteModule()],
-    [join(output, "types.d.ts"), legacyTypesModule(options.namespace)],
-  ]);
-  let stale = false;
-  for (const [path, source] of files) {
-    stale = !(await syncText(path, source, options.check)) || stale;
+  let stale = !(await syncText(join(output, "mantle.ts"), emitted.source, options.check));
+  for (const path of [join(output, "site.ts"), join(output, "types.d.ts")]) {
+    if (await readFile(path).then(() => true).catch(() => false)) {
+      if (options.check) stale = true;
+      else await unlink(path);
+    }
   }
   if (stale && options.check) {
     stderr.write("Mantle generated files are stale; run `mantle generate`.\n");
@@ -100,25 +96,6 @@ Options:
   --check             Fail without writing when generated code is stale
   -h, --help          This help
 `);
-}
-
-function legacySiteModule(): string {
-  return [
-    "// Generated compatibility bridge; delete with the alpha.7 facade in #673.",
-    'export { bindMantleSite, manifest } from "./mantle.js";',
-    "",
-  ].join("\n");
-}
-
-function legacyTypesModule(namespace: string): string {
-  return [
-    "// Generated compatibility bridge; import from ./mantle.js in new code.",
-    'export * from "./mantle.js";',
-    ...(namespace === "Mantle"
-      ? ['export { Mantle as MantleSite } from "./mantle.js";']
-      : []),
-    "",
-  ].join("\n");
 }
 
 function printDiagnostics(diagnostics: readonly Diagnostic[]): void {

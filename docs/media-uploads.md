@@ -78,7 +78,7 @@ wrangler secret put R2_SECRET_ACCESS_KEY
 ## `src/mantle/config.ts`
 
 ```ts
-import { R2MediaStorage, type CmsConfig } from "@aotter/mantle/cloudflare";
+import { R2MediaStorage, type MantleCloudflareConfig } from "@aotter/mantle/cloudflare";
 import { AwsClient } from "aws4fetch";
 
 export interface Env {
@@ -89,7 +89,7 @@ export interface Env {
   readonly MEDIA_PUBLIC_URL_BASE?: string;
 }
 
-function buildMediaStorage(env: Env): CmsConfig["bindings"]["mediaStorage"] {
+function buildMediaStorage(env: Env): MantleCloudflareConfig["bindings"]["mediaStorage"] {
   if (
     !env.MEDIA_BUCKET ||
     !env.R2_ACCOUNT_ID ||

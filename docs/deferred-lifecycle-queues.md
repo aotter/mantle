@@ -94,7 +94,7 @@ retry_delay = 60
 dead_letter_queue = "mantle-internal-dlq"
 ```
 
-Wire the producer into `CmsConfig.bindings` and export the consumer alongside
+Wire the producer into `MantleCloudflareConfig.bindings` and export the consumer alongside
 the existing HTTP/OAuth handler. The same Worker may be both producer and
 consumer:
 
@@ -104,7 +104,7 @@ import {
   AssetsAssetServer,
   D1DatabaseDriver,
   WorkersQueueHookDispatcher,
-  createCmsRef,
+  createMantleRuntimeRef,
   createQueueHandler,
   createOAuthProvider,
 } from "@aotter/mantle/cloudflare";
@@ -116,8 +116,8 @@ interface Env {
 }
 
 function buildWorker(env: Env) {
-  const cms = createCmsRef({
-    manifests,
+  const cms = createMantleRuntimeRef({
+    plan,
     handlers,
     auth: createSiteAuth(env),
     bindings: {

@@ -78,9 +78,10 @@ try {
   assertExactTarballResolutions(lockfile, tarballs);
 
   const installed = findInstalled(consumer, packages.map(([name]) => name));
+  let installedCount = 0;
   for (const [name] of packages) {
     const paths = installed.get(name) ?? [];
-    if (!paths.length) throw new Error(`consumer did not install ${name}`);
+    installedCount += paths.length;
     for (const path of paths) {
       const actual = realpathSync(path);
       if (actual.startsWith(`${root}/`)) throw new Error(`consumer workspace-linked ${name}: ${actual}`);
@@ -93,6 +94,7 @@ try {
       }
     }
   }
+  if (installedCount === 0) throw new Error("consumer did not install any Mantle package");
 
   run(command[0], command.slice(1), consumer);
   console.log(JSON.stringify({

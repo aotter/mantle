@@ -1,4 +1,3 @@
-export { mountServerEndpoints } from "./mountServerEndpoints.js";
 export { mountRuntimeEndpoints } from "./mountRuntimeEndpoints.js";
 export { mountAdmin } from "./mountAdmin.js";
 export {
@@ -8,7 +7,11 @@ export {
   type ConsumerCredentialResolver,
   type ResolveCallerOptions,
 } from "./resolveCaller.js";
-export { type CmsRuntimeRef, createCmsRef } from "./bootRuntimeOnce.js";
+export {
+  type CloudflareMantleRuntime,
+  type MantleRuntimeRef,
+  createMantleRuntimeRef,
+} from "./bootRuntimeOnce.js";
 export {
   createMcpApiHandler,
   type CreateMcpApiHandlerOptions,
@@ -21,4 +24,4 @@ export {
   type PublicRouteContext,
   type SlugOverride,
 } from "./mountPublicRoutes.js";
-export type { CmsConfig } from "./cmsConfig.js";
+export type { MantleCloudflareConfig } from "./cmsConfig.js";

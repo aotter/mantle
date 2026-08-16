@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { Manifest, SchemaManifest, ViewManifest } from "@aotter/mantle-spec";
+import {
+  linkManifestSet,
+  parseManifestSources,
+  type Manifest,
+  type SchemaManifest,
+  type ViewManifest,
+} from "@aotter/mantle-spec";
+import {
+  compileRuntimePlan,
+  type RuntimePlan,
+} from "../src/domain/service/RuntimePlanCompiler.js";
 import {
   benchmarkHttpRoutes,
   inspectIndexCoverage,
@@ -59,7 +69,7 @@ describe("performance harness", () => {
       }),
     ];
 
-    const report = await inspectIndexCoverage(manifests, {
+    const report = await inspectIndexCoverage(compilePlan(manifests), {
       requirePublic: true,
       rowsPerSchema: 1_000,
     });
@@ -77,7 +87,7 @@ describe("performance harness", () => {
         dataAccessFields: ["note", "tenantId"],
       });
 
-    const typo = await inspectIndexCoverage(manifests, {
+    const typo = await inspectIndexCoverage(compilePlan(manifests), {
       requiredViews: ["missing-view"],
       rowsPerSchema: 100,
     });
@@ -110,7 +120,7 @@ describe("performance harness", () => {
       },
     };
 
-    const report = await inspectIndexCoverage([orderedSchema, orderedView], {
+    const report = await inspectIndexCoverage(compilePlan([orderedSchema, orderedView]), {
       requirePublic: true,
       rowsPerSchema: 1_000,
     });
@@ -154,3 +164,18 @@ describe("performance harness", () => {
     });
   });
 });
+
+function compilePlan(manifests: readonly Manifest[]): RuntimePlan {
+  const parsed = parseManifestSources({
+    sources: manifests.map((manifest, index) => ({
+      sourceId: `test:${index}`,
+      text: JSON.stringify(manifest),
+    })),
+  });
+  if (!parsed.ok) throw new Error("expected valid performance fixture");
+  const linked = linkManifestSet(parsed.value);
+  if (!linked.ok) throw new Error("expected linked performance fixture");
+  const compiled = compileRuntimePlan(linked.value);
+  if (!compiled.ok) throw new Error("expected compiled performance fixture");
+  return compiled.value;
+}
