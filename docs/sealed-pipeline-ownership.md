@@ -91,3 +91,8 @@ Existing full-facade behavior is covered by Cloudflare authorization, Admin,
 public-route/cache, View REST, HTTP Trigger, media, form, and facade tests.
 Issues #669–#673 move those assertions to selected modules and exact packed
 consumers; they do not duplicate the suite under new names.
+
+Issue #674 leaves `CONTRIBUTING.md` plus accepted ADRs as the contributor
+authority. `AGENTS.md`, `CLAUDE.md`, and the Claude release-skill entry are
+small routers; `.agent/skills/mantle-release/SKILL.md` is the only maintainer
+release procedure. Shipped `skills/*` remain separate consumer artifacts.

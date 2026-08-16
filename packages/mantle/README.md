@@ -1,8 +1,8 @@
 # @aotter/mantle
 
-Umbrella entry for the embeddable Mantle SDK — a manifest-driven CMS built
-around a 4-atom YAML model (Schema / View / Procedure / Trigger) where agents
-write config and the runtime carries the complexity.
+Umbrella entry for the embeddable Mantle SDK — a manifest-driven application
+engine built around a 4-atom YAML model (Schema / View / Procedure / Trigger)
+where agents write config and the runtime carries the complexity.
 
 > Mantle is prerelease software. Use this package's `package.json` as the exact
 > installed version; APIs may change between prereleases until v0.1.0.
@@ -60,8 +60,7 @@ pnpm exec mantle-harness http --base-url http://127.0.0.1:8787 --route page=/en/
 
 `mantle generate` validates and compiles `./manifests/`, then writes one typed
 `.mantle/generated/mantle.ts` module. It performs no Admin asset installation,
-skill sync, package update, styling, provisioning, or deployment. Obsolete
-`site.ts` and `types.d.ts` files are removed during generation.
+skill sync, package update, styling, provisioning, or deployment.
 The same pure emitter is available from `@aotter/mantle/codegen` when a host
 wants to own parsing and filesystem IO.
 

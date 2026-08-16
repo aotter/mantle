@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import ts from "typescript";
 
 const ROOT = process.cwd();
@@ -136,7 +136,6 @@ function checkPackageDirection() {
       forbidden: [
         "@aotter/mantle-cloudflare",
         "@aotter/mantle-admin-ui",
-        "@aotter/mantle-netlify",
         "@aotter/mantle-web",
         "@aotter/mantle-admin",
         "@aotter/mantle-admin-ui",
@@ -552,6 +551,130 @@ function checkSkillDocsVersioned() {
   }
 }
 
+function checkRepositoryGuidance() {
+  const agentsPath = join(ROOT, "AGENTS.md");
+  const claudePath = join(ROOT, "CLAUDE.md");
+  const contributingPath = join(ROOT, "CONTRIBUTING.md");
+  const releaseSkillPath = join(ROOT, ".agent/skills/mantle-release/SKILL.md");
+  const claudeReleasePath = join(ROOT, ".claude/skills/mantle-release/SKILL.md");
+  const agents = readFileSync(agentsPath, "utf8");
+  const claude = readFileSync(claudePath, "utf8");
+  const contributing = readFileSync(contributingPath, "utf8");
+  const releaseSkill = readFileSync(releaseSkillPath, "utf8");
+  const claudeRelease = readFileSync(claudeReleasePath, "utf8");
+
+  if (!agents.includes("CONTRIBUTING.md") || agents.split("\n").length > 30) {
+    fail(agentsPath, "AGENTS.md must remain a small router to CONTRIBUTING.md");
+  }
+  if (!claude.includes("CONTRIBUTING.md") || claude.split("\n").length > 12) {
+    fail(claudePath, "CLAUDE.md must remain a small compatibility pointer");
+  }
+  for (const heading of ["Mantle thesis", "Hard invariants", "Clean architecture", "Build / test"]) {
+    if (claude.includes(heading)) {
+      fail(claudePath, `duplicate contributor guidance returned: '${heading}'`);
+    }
+  }
+  for (const text of [
+    "Mantle Core is an embeddable manifest engine",
+    "ManifestSourceSet -> parse",
+    "human engineers",
+    "skills/*",
+  ]) {
+    if (!contributing.includes(text)) {
+      fail(contributingPath, `contributor authority is missing '${text}'`);
+    }
+  }
+  if (!releaseSkill.includes("All nine npmjs artifacts")) {
+    fail(releaseSkillPath, "canonical release skill must match the nine-package topology");
+  }
+  if (!claudeRelease.includes("../../../.agent/skills/mantle-release/SKILL.md") ||
+      claudeRelease.split("\n").length > 8 ||
+      /^## (?:Contract|Prepare|Run|Recovery)/m.test(claudeRelease)) {
+    fail(claudeReleasePath, "Claude release entry must only point to the canonical skill");
+  }
+
+  for (const stalePath of [
+    "starters/blank/README.md",
+    "packages/adapters/netlify/README.md",
+    "packages/adapters/netlify/package.json",
+  ]) {
+    const path = join(ROOT, stalePath);
+    if (existsSync(path)) fail(path, "obsolete repository stub remains");
+  }
+
+  const activeDocs = [
+    agentsPath,
+    claudePath,
+    contributingPath,
+    join(ROOT, "README.md"),
+    join(ROOT, "skills/README.md"),
+    ...listFiles(join(ROOT, "packages"), (path) => path.endsWith("README.md")),
+    ...listFiles(join(ROOT, "docs"), (path) =>
+      path.endsWith(".md") &&
+      !path.includes(`${sep}adr${sep}`) &&
+      !path.endsWith("migration-0.1.2.md") &&
+      !path.endsWith("sealed-pipeline-ownership.md")
+    ),
+  ];
+  for (const path of activeDocs) {
+    const source = readFileSync(path, "utf8");
+    for (const token of [
+      "CmsRuntime",
+      "bindMantleSite",
+      "MantleSite",
+      "createCmsRuntime",
+      "site.ts",
+      "@aotter/mantle-netlify",
+      "packages/adapters/netlify",
+      "starters/blank",
+    ]) {
+      if (source.includes(token)) fail(path, `obsolete active-doc reference remains: '${token}'`);
+    }
+  }
+
+  const rootReadmePath = join(ROOT, "README.md");
+  const rootReadme = readFileSync(rootReadmePath, "utf8");
+  const releaseWorkflowPath = join(ROOT, ".github/workflows/release.yml");
+  const releaseWorkflow = readFileSync(releaseWorkflowPath, "utf8");
+  const codeownersPath = join(ROOT, ".github/CODEOWNERS");
+  const codeowners = readFileSync(codeownersPath, "utf8");
+  const publicPackages = listFiles(join(ROOT, "packages"), (path) =>
+    path.endsWith("package.json"),
+  ).map((path) => ({
+    path,
+    dir: rel(dirname(path)),
+    manifest: JSON.parse(readFileSync(path, "utf8")),
+  })).filter(({ manifest }) => !manifest.private);
+  for (const { path, dir, manifest } of publicPackages) {
+    if (!rootReadme.includes(`\`${manifest.name}\``)) {
+      fail(rootReadmePath, `package map is missing '${manifest.name}'`);
+    }
+    if (!releaseWorkflow.includes(`        ${dir}`)) {
+      fail(releaseWorkflowPath, `release package order is missing '${dir}'`);
+    }
+    if (!codeowners.includes(`/${dir}/`)) {
+      fail(codeownersPath, `package ownership is missing '/${dir}/'`);
+    }
+    if (!existsSync(join(dirname(path), "README.md"))) {
+      fail(path, "public package is missing its installed-consumer README");
+    }
+  }
+
+  for (const relativePath of [
+    ".codex-plugin/plugin.json",
+    ".claude-plugin/plugin.json",
+    ".claude-plugin/marketplace.json",
+    ".copilot-plugin/plugin.json",
+    ".cursor-plugin/plugin.json",
+  ]) {
+    const path = join(ROOT, relativePath);
+    const source = readFileSync(path, "utf8");
+    if (/Mantle sites|ship[^\n"]*Cloudflare/i.test(source)) {
+      fail(path, "plugin metadata must describe embeddable, multi-runtime Mantle");
+    }
+  }
+}
+
 checkDatabasePropertyDetector();
 checkRuntimeCloudflareFree();
 checkPackageDirection();
@@ -566,6 +689,7 @@ checkMantleRuntimeBoundary();
 checkCodegenBoundary();
 checkNodeTestingBoundary();
 checkSkillDocsVersioned();
+checkRepositoryGuidance();
 checkLegacyStackDeleted();
 
 if (failures.length > 0) {

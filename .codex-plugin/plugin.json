@@ -1,7 +1,7 @@
 {
   "name": "mantle",
   "version": "0.1.0-alpha.7",
-  "description": "Create and develop Mantle sites from deterministic starters, then ship them to Cloudflare.",
+  "description": "Build and embed Mantle applications with version-matched Core skills and deterministic examples.",
   "author": {
     "name": "Aotter",
     "url": "https://mantle.tools/"
@@ -19,8 +19,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Mantle",
-    "shortDescription": "Create and ship Mantle sites",
-    "longDescription": "Create a local Mantle site from deterministic starter bundles, develop it with version-matched Core skills, and optionally ship it to Cloudflare. Mantle landing offers hosted GitHub, Cloudflare, and paid auth setup.",
+    "shortDescription": "Build and embed Mantle apps",
+    "longDescription": "Embed Mantle Core in an existing application or start from a deterministic example, then compose only the Web, Admin, Bun, Vercel, or Cloudflare modules the host needs.",
     "developerName": "Aotter",
     "category": "Developer Tools",
     "capabilities": [
@@ -29,9 +29,9 @@
     ],
     "websiteURL": "https://mantle.tools/",
     "defaultPrompt": [
-      "Create a new Mantle site locally from a starter",
-      "Continue this generated Mantle site",
-      "Ship this Mantle site to Cloudflare"
+      "Embed Mantle Core in this application",
+      "Create a Mantle example from a deterministic Starter",
+      "Compose Mantle modules for this host"
     ],
     "brandColor": "#0F766E",
     "screenshots": []

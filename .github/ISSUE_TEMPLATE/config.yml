@@ -3,9 +3,9 @@ contact_links:
   - name: General question / discussion
     url: https://github.com/aotter/mantle/discussions
     about: For open Q&A, ideas, and show-and-tell. Issues are for actionable bugs / features only.
-  - name: AI contributor contract
-    url: https://github.com/aotter/mantle/blob/develop/CLAUDE.md
-    about: Read this before asking an AI agent to contribute to mantle.
+  - name: Contributor contract
+    url: https://github.com/aotter/mantle/blob/develop/CONTRIBUTING.md
+    about: Read this before contributing to Mantle as a human or agent.
   - name: ADR index
     url: https://github.com/aotter/mantle/blob/develop/docs/adr/README.md
     about: Architecture decisions and rules that may already answer your question.

@@ -69,9 +69,6 @@ schema-View reconciliation, and skips mutation for an unchanged revision. A
 custom adapter owns its own preparation and returns application-owned semantic
 ports. Unsupported native View dialects fail before the adapter mutates state.
 
-The removed alpha.7 `createCmsRuntime({ manifests, db })` facade is replaced by
-the explicit compile, prepare, and bind stages above.
-
 ### Bun embedding
 
 `@aotter/mantle-bun` is the minimal SQLite reference: pass an application-owned

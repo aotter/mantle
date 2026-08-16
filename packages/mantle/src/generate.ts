@@ -1,4 +1,4 @@
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { cwd, stderr, stdout } from "node:process";
 import { parseArgs } from "node:util";
@@ -48,13 +48,7 @@ export async function runGenerate(rawArgs: readonly string[]): Promise<number> {
   }
 
   const output = resolve(cwd(), options.output);
-  let stale = !(await syncText(join(output, "mantle.ts"), emitted.source, options.check));
-  for (const path of [join(output, "site.ts"), join(output, "types.d.ts")]) {
-    if (await readFile(path).then(() => true).catch(() => false)) {
-      if (options.check) stale = true;
-      else await unlink(path);
-    }
-  }
+  const stale = !(await syncText(join(output, "mantle.ts"), emitted.source, options.check));
   if (stale && options.check) {
     stderr.write("Mantle generated files are stale; run `mantle generate`.\n");
     return 1;
