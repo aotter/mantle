@@ -75,7 +75,7 @@ kernel ← domain (model + port + service) ← usecase ← infrastructure
 
 - `*Repository` for data access (CRUD): `EntryRepository`, `SessionRepository`
 - `*Driver` for raw drivers under repositories: `DatabaseDriver`
-- `*Server` for transport-shaped surfaces: `AssetServer`
+- `*Server` for transport-shaped surfaces: `AdminAssetServer`
 - `*Verifier`, `*Reader`, `*Generator`, `*Resolver`, `*Assembler`, `*Orchestrator`, `*Dispatcher`, `*Compiler`, `*Serializer` for narrowly-shaped roles
 - `*UseCase` for application services: `CreateDraftUseCase`, `InvokeProcedureUseCase`
 - `*Request` / `*Response` suffix for use-case DTOs
@@ -85,7 +85,7 @@ kernel ← domain (model + port + service) ← usecase ← infrastructure
 
 - One barrel `index.ts` per folder.
 - Adding a new top-level folder under `domain/` / `usecase/` / `infrastructure/` requires an ADR-lite paragraph in the PR description.
-- Required adapter ports — `DatabaseDriver`, `AssetServer` — live in `mantle-runtime/src/domain/port/`. Auth is owned by adapters via Better Auth mount wiring (ADR-0014), not by runtime ports. Optional feature ports such as `MediaStorage` / `DeferredHookDispatcher` also live in `domain/port/` but must not become mandatory first-run bindings. Concrete impls live in `mantle-runtime/src/infrastructure/persistence/` (those backed by `DatabaseDriver`) or in adapter packages (`packages/adapters/cloudflare`, future `packages/adapters/netlify`).
+- Runtime ports such as required `DatabaseDriver` and optional `MediaStorage` / `DeferredHookDispatcher` live in `mantle-runtime/src/domain/port/`; optional features must not become mandatory first-run bindings. Auth and `AdminAssetServer` belong to the selected Admin/platform composition, not Runtime. Concrete implementations live in `mantle-runtime/src/infrastructure/persistence/` (when backed by `DatabaseDriver`) or adapter packages.
 
 ### Spec/runtime type boundary (separate from layer rules)
 

@@ -8,7 +8,7 @@ import {
   stubAuth,
 } from "./fakes/runtime-bindings.js";
 import type { Auth, StaffUserInfo } from "../src/auth/createAuth.js";
-import type { AssetServer } from "@aotter/mantle-runtime";
+import type { AdminAssetServer } from "@aotter/mantle-admin";
 
 /** /admin/api/staff* endpoint contract: owner-only gating, the
  *  self-role-change guard, input validation, and the conflict shapes
@@ -33,7 +33,7 @@ function harness(
   authOverride?: Partial<Auth>,
   bindings: {
     readonly db?: InMemoryDatabase;
-    readonly assets?: AssetServer;
+    readonly assets?: AdminAssetServer;
   } = {},
 ) {
   const getSession = authOverride?.getSession ?? stubAuth.getSession;
@@ -54,7 +54,7 @@ function harness(
     handlers: {},
     bindings: {
       db,
-      assets: bindings.assets ?? new StubAssetServer(),
+      adminAssets: bindings.assets ?? new StubAssetServer(),
     },
     auth,
   });
@@ -66,7 +66,7 @@ function harness(
 describe("Admin static shell", () => {
   it("loads SPA deep links through the configured static asset binding", async () => {
     const requested: string[] = [];
-    const assets: AssetServer = {
+    const assets: AdminAssetServer = {
       async fetch(request) {
         requested.push(new URL(request.url).pathname);
         return new Response("<main>Mantle Admin</main>", {

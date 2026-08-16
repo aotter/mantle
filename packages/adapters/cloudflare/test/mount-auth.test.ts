@@ -18,7 +18,7 @@ function harness(authOverride?: Partial<Auth>) {
     handlers: {},
     bindings: {
       db: new InMemoryDatabase(),
-      assets: new StubAssetServer(),
+      adminAssets: new StubAssetServer(),
     },
     auth,
   });
@@ -28,6 +28,20 @@ function harness(authOverride?: Partial<Auth>) {
 }
 
 describe("mountServerEndpoints: /api/auth/* surface", () => {
+  it("mounts no Admin or Auth namespace when Admin assets are omitted", async () => {
+    const ref = createCmsRef({
+      manifests: [],
+      bindings: { db: new InMemoryDatabase() },
+      auth: stubAuth,
+    });
+    const app = new Hono();
+    mountServerEndpoints(app, ref);
+
+    expect((await app.request("/admin")).status).toBe(404);
+    expect((await app.request("/admin/api/me")).status).toBe(404);
+    expect((await app.request("/api/auth/methods")).status).toBe(404);
+  });
+
   it("GET /api/auth/methods returns the registered methods, not the catch-all", async () => {
     const handlerCalls: Request[] = [];
     const { app } = harness({

@@ -88,14 +88,15 @@ gh api --method POST repos/aotter/mantle/releases/generate-notes \
   --jq .body
 ```
 
-The six public packages publish in dependency order:
+The seven public packages publish in dependency order:
 
 1. `@aotter/mantle-spec`
 2. `@aotter/mantle-admin-ui`
 3. `@aotter/mantle-runtime`
 4. `@aotter/mantle-web`
-5. `@aotter/mantle-cloudflare`
-6. `@aotter/mantle`
+5. `@aotter/mantle-admin`
+6. `@aotter/mantle-cloudflare`
+7. `@aotter/mantle`
 
 The umbrella package must contain its version-matched `docs/` and `skills/`
 payload. No tarball may contain `workspace:*` dependencies, secrets, local
@@ -173,6 +174,7 @@ for p in \
   @aotter/mantle-admin-ui \
   @aotter/mantle-runtime \
   @aotter/mantle-web \
+  @aotter/mantle-admin \
   @aotter/mantle-cloudflare \
   @aotter/mantle; do
   npm view "$p@X.Y.Z" version dist.integrity dependencies --json

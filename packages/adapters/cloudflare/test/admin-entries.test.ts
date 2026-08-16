@@ -122,7 +122,7 @@ function harness(
     siteDefaults: { locales: ["en", "zh-TW"] },
     bindings: {
       db,
-      assets: new StubAssetServer(),
+      adminAssets: new StubAssetServer(),
     },
     auth,
   });

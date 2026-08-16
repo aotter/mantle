@@ -38,7 +38,7 @@
     "bench:wrangler": "pnpm --filter @aotter/mantle-spec build && pnpm --filter @aotter/mantle-runtime build && node ../../../scripts/run-wrangler-performance.mjs"
   },
   "dependencies": {
-    "@aotter/mantle-admin-ui": "workspace:*",
+    "@aotter/mantle-admin": "workspace:*",
     "@aotter/mantle-runtime": "workspace:*",
     "@aotter/mantle-spec": "workspace:*",
     "@aotter/mantle-web": "workspace:*",

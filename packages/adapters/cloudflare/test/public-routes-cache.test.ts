@@ -70,7 +70,7 @@ function harness(
       origin: "https://example.com",
       locales,
     },
-    bindings: { db, assets: new StubAssetServer() },
+    bindings: { db, adminAssets: new StubAssetServer() },
     auth: sessionAuth,
     publicPathResolver: createPublicPathResolver({
       collectionRoutes: { posts: { segment: "posts", homeSlug: "home" } },

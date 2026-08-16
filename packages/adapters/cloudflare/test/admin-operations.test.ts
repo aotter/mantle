@@ -146,7 +146,7 @@ function harness(authOverride?: Partial<Auth>) {
     },
     bindings: {
       db: new InMemoryDatabase(),
-      assets: new StubAssetServer(),
+      adminAssets: new StubAssetServer(),
     },
     auth,
   });
@@ -413,7 +413,7 @@ function rowBindingHarness() {
     },
     bindings: {
       db: new InMemoryDatabase(),
-      assets: new StubAssetServer(),
+      adminAssets: new StubAssetServer(),
     },
     auth,
   });

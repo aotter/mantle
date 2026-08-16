@@ -56,7 +56,6 @@ export type {
   MigrationRunner,
   Migration,
 } from "./domain/port/DatabaseDriver.js";
-export type { AssetServer } from "./domain/port/AssetServer.js";
 export type {
   EntryRepository,
   CreateEntryArgs,

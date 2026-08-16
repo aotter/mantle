@@ -123,7 +123,7 @@ function harness(): Hono {
     },
     bindings: {
       db: new InMemoryDatabase(),
-      assets: new StubAssetServer(),
+      adminAssets: new StubAssetServer(),
     },
     auth: stubAuth,
     credentialResolver: (request) => ({

@@ -14,7 +14,8 @@ import {
   createMcpApiHandler,
   createOAuthProvider,
   mountAuthorize,
-  mountServerEndpoints,
+  mountAdmin,
+  mountRuntimeEndpoints,
   runMantleWorkerRequest,
   setupIncompleteAuthResponse,
   type MantleCloudflareEnv,
@@ -53,7 +54,8 @@ function assemble(env: Env) {
   const ref = createCmsRef({ manifests: manifest, bindings, auth });
   const app = new Hono<{ Bindings: Env }>();
 
-  mountServerEndpoints(app, ref);
+  mountRuntimeEndpoints(app, ref);
+  if (bindings.adminAssets) mountAdmin(app, ref, bindings.adminAssets);
   mountAuthorize(app, { auth, loginPath: "/admin/sign-in" });
   app.get("/cache-probe", () => new Response("public", {
     headers: { "cache-control": "public, s-maxage=60" },

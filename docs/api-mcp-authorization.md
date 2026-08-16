@@ -238,7 +238,7 @@ const runtimeRef = createCmsRef({
   handlers,
   bindings: {
     db: new D1DatabaseDriver(env.DB),
-    assets: env.ASSETS
+    adminAssets: env.ASSETS
       ? new AssetsAssetServer(env.ASSETS)
       : { fetch: async () => null },
   },

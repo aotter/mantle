@@ -8,7 +8,6 @@ import {
   type ViewManifest,
 } from "@aotter/mantle-spec";
 import type { AnyHandler } from "./domain/model/HandlerContext.js";
-import type { AssetServer } from "./domain/port/AssetServer.js";
 import type { DatabaseDriver } from "./domain/port/DatabaseDriver.js";
 import type { DeferredHookDispatcher } from "./domain/port/DeferredHookDispatcher.js";
 import type { EntryReader } from "./domain/port/EntryReader.js";
@@ -72,7 +71,6 @@ export interface CreateCmsRuntimeArgs {
   readonly reservedHttpPathPrefixes?: readonly string[];
   /** Alpha.7 full-facade ports. Core binding does not accept either. */
   readonly db: DatabaseDriver;
-  readonly assets: AssetServer;
   /** Optional media storage adapter. When unset, media MCP tools and
    *  admin upload endpoints are not registered — uploads return 404 /
    *  `MEDIA_NOT_CONFIGURED`. When set, the runtime wires
@@ -105,7 +103,6 @@ export interface CmsRuntime {
    *  `siteConfig`; adapters should retain their injected driver for tables
    *  they own. */
   readonly db: DatabaseDriver;
-  readonly assets: AssetServer;
   /** Schema-aware, lifecycle-neutral entry reads for adapter-owned routes. */
   readonly entryReader: EntryReader;
 
@@ -249,7 +246,6 @@ export async function createCmsRuntime(args: CreateCmsRuntimeArgs): Promise<CmsR
     core,
     plan,
     db: args.db,
-    assets: args.assets,
     entryReader,
 
     createDraft: core.createDraft,

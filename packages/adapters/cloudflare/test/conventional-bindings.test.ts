@@ -15,7 +15,7 @@ describe("createConventionalBindings", () => {
     const bindings = createConventionalBindings({ DB, OAUTH_KV, ASSETS });
 
     expect(bindings.db).toBeInstanceOf(D1DatabaseDriver);
-    expect(bindings.assets).toBeInstanceOf(AssetsAssetServer);
+    expect(bindings.adminAssets).toBeInstanceOf(AssetsAssetServer);
   });
 
   it.each(["DB", "OAUTH_KV"] as const)("names a missing %s binding", (name) => {
@@ -31,7 +31,7 @@ describe("createConventionalBindings", () => {
 
   it("keeps pre-static-assets starters runnable without serving fake assets", async () => {
     const bindings = createConventionalBindings({ DB, OAUTH_KV });
-    await expect(bindings.assets.fetch(new Request("https://site.test/missing"))).resolves.toBeNull();
+    await expect(bindings.adminAssets?.fetch(new Request("https://site.test/missing"))).resolves.toBeNull();
   });
 
 });

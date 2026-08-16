@@ -146,7 +146,7 @@ function harness(opts: { captchaPasses: boolean }): Harness {
     },
     bindings: {
       db,
-      assets: new StubAssetServer(),
+      adminAssets: new StubAssetServer(),
     },
     auth: stubAuth,
   });

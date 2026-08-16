@@ -35,7 +35,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Single source of truth for the six public packages, in dependency order.
+    # Single source of truth for the seven public packages, in dependency order.
     # Names are read from these package.json files during packing.
     env:
       STARTER_SHA: 36ca4eac5f0e58df49377bf8274621cfaff85e9f
@@ -44,6 +44,7 @@ jobs:
         packages/mantle-admin-ui
         packages/mantle-runtime
         packages/mantle-web
+        packages/mantle-admin
         packages/adapters/cloudflare
         packages/mantle
     steps:

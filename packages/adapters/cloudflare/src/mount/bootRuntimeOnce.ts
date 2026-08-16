@@ -3,6 +3,7 @@ import {
   type CmsRuntime,
 } from "@aotter/mantle-runtime";
 import { createMantleWeb, type MantleWeb } from "@aotter/mantle-web";
+import type { AdminAssetServer } from "@aotter/mantle-admin";
 import type { Manifest } from "@aotter/mantle-spec";
 import type { Auth } from "../auth/createAuth.js";
 import type { CmsConfig } from "./cmsConfig.js";
@@ -19,6 +20,7 @@ export interface CmsRuntimeRef {
   web(runtime: CmsRuntime): MantleWeb;
   readonly manifests: readonly Manifest[];
   readonly auth: Auth;
+  readonly adminAssets?: AdminAssetServer;
   readonly credentialResolver?: ConsumerCredentialResolver;
   readonly jwtBearer?: CmsConfig["jwtBearer"];
 }
@@ -29,6 +31,7 @@ export function createCmsRef(config: CmsConfig): CmsRuntimeRef {
   return {
     manifests: config.manifests,
     auth: config.auth,
+    adminAssets: config.bindings.adminAssets,
     credentialResolver: config.credentialResolver,
     jwtBearer: config.jwtBearer,
     web(runtime): MantleWeb {
@@ -47,7 +50,6 @@ export function createCmsRef(config: CmsConfig): CmsRuntimeRef {
         reservedHttpPathPrefixes: config.reservedHttpPathPrefixes,
         mediaAllowSvg: config.mediaAllowSvg,
         db: config.bindings.db,
-        assets: config.bindings.assets,
         mediaStorage: config.bindings.mediaStorage,
         deferredHookDispatcher: config.bindings.deferredHookDispatcher,
         onPublicChange: config.onPublicChange,

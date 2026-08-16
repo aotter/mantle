@@ -15,9 +15,11 @@ import {
 } from "better-auth/plugins/generic-oauth";
 import { splitSetCookieHeader } from "better-auth/cookies";
 import { oauthProvider, type Scope } from "@better-auth/oauth-provider";
+import { decodeMemberCursor, encodeMemberCursor } from "@aotter/mantle-admin";
 import type { EmailSender } from "@aotter/mantle-runtime";
 import { STAFF_ROLES, type StaffRole } from "@aotter/mantle-spec";
 
+export { decodeMemberCursor, encodeMemberCursor };
 export { STAFF_ROLES, type StaffRole };
 /**
  * Set lookup for "is this role string a staff role?" — handlers/MCP
@@ -1105,28 +1107,6 @@ export interface ListMembersArgs {
   readonly cursor?: string;
   readonly cursorDirection?: "forward" | "backward";
   readonly limit: number;
-}
-
-const MEMBER_CURSOR_PREFIX = "m:";
-
-/** @internal Exported for endpoint and regression-test validation. */
-export function encodeMemberCursor(createdAt: string, id: string): string {
-  return `${MEMBER_CURSOR_PREFIX}${encodeURIComponent(JSON.stringify([createdAt, id]))}`;
-}
-
-/** @internal Exported for endpoint and regression-test validation. */
-export function decodeMemberCursor(cursor: string): readonly [string, string] | null {
-  if (!cursor.startsWith(MEMBER_CURSOR_PREFIX)) return null;
-  try {
-    const value = JSON.parse(decodeURIComponent(cursor.slice(MEMBER_CURSOR_PREFIX.length))) as unknown;
-    return Array.isArray(value) && value.length === 2 &&
-        typeof value[0] === "string" && !Number.isNaN(Date.parse(value[0])) &&
-        typeof value[1] === "string" && value[1]
-      ? [value[0], value[1]]
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 /** Stable, secret-free user projection for consumer-owned services. */
