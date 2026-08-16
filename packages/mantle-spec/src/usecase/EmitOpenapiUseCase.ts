@@ -326,10 +326,39 @@ function diagnosticSchema(): Record<string, unknown> {
       phase: { type: "string", enum: ["validate", "test", "boot", "runtime"] },
       severity: { type: "string", enum: ["error", "warning"] },
       path: { type: "string" },
+      source: {
+        type: "object",
+        required: ["sourceId", "documentIndex", "path"],
+        properties: {
+          sourceId: { type: "string" },
+          documentIndex: { type: "integer", minimum: 0 },
+          path: { type: "string" },
+          span: {
+            type: "object",
+            required: ["start", "end"],
+            properties: {
+              start: sourcePositionSchema(),
+              end: sourcePositionSchema(),
+            },
+          },
+        },
+      },
       message: { type: "string" },
       value: {},
       expected: { type: "string" },
       suggestion: { type: "string" },
+    },
+  };
+}
+
+function sourcePositionSchema(): Record<string, unknown> {
+  return {
+    type: "object",
+    required: ["line", "column", "offset"],
+    properties: {
+      line: { type: "integer", minimum: 1 },
+      column: { type: "integer", minimum: 1 },
+      offset: { type: "integer", minimum: 0 },
     },
   };
 }

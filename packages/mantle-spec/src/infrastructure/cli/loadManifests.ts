@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { cwd } from "node:process";
-import { parseManifests } from "../../domain/service/ManifestParser.js";
+import { parseManifestSources } from "../../domain/service/ManifestParser.js";
 import type { Manifest } from "../../domain/model/ManifestGrammar.js";
 import {
   validateDiagnostic,
@@ -52,23 +52,24 @@ export async function loadManifestsFromRoot(rootArg: string): Promise<LoadManife
   }
 
   try {
-    const parsed = parseManifests(text);
+    const parsed = parseManifestSources({ sources: [{ sourceId: file, text }] });
     parseErrors.push(...parsed.diagnostics.map((diagnostic) => ({
       ...diagnostic,
-      path: diagnostic.path.replace(
-        /^manifest:doc\/(\d+)#/,
-        (_match, docIndex: string) => `${file}#/${docIndex}`,
-      ),
+      path: diagnostic.source
+        ? `${diagnostic.source.sourceId}#/${diagnostic.source.documentIndex}${diagnostic.source.path}`
+        : diagnostic.path,
     })));
-    parsed.manifests.forEach((m, i) => {
+    if (!parsed.ok) return { manifests, parseErrors, filePaths, root };
+    parsed.value.entries.forEach(({ manifest: m, source }) => {
       manifests.push(m);
       const key = `${m.kind}/${m.metadata.name}`;
       const list = filePaths.get(key);
-      if (list) list.push({ file, docIndex: i });
-      else filePaths.set(key, [{ file, docIndex: i }]);
+      const location = { file: source.sourceId, docIndex: source.documentIndex };
+      if (list) list.push(location);
+      else filePaths.set(key, [location]);
     });
   } catch (err) {
-    // parseManifests converts every ManifestParseError into a
+    // parseManifestSources converts every ManifestParseError into a
     // diagnostic internally; anything that escapes is unexpected
     // (e.g. a YAML-library throw), so surface it generically.
     parseErrors.push(

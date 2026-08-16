@@ -1,13 +1,5 @@
 apiVersion: cms.mantle.aotter.net/v1
 kind: Schema
-metadata: { name: bad-envelope }
-unexpected: true
-spec:
-  title: Bad envelope
-  schema: { type: object, properties: {} }
----
-apiVersion: cms.mantle.aotter.net/v1
-kind: Schema
 metadata: { name: broken-required }
 spec:
   title: Broken required
@@ -31,9 +23,3 @@ metadata: { name: missing-target }
 spec:
   source: { kind: http, method: POST, path: /outside-core }
   target: { procedure: unknown-procedure }
----
-apiVersion: cms.mantle.aotter.net/v1
-kind: Schema
-metadata: { name: malformed }
-spec:
-  title: [unterminated

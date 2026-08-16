@@ -111,11 +111,32 @@ export const DIAGNOSTIC_CODES = [
 
 export type DiagnosticCode = (typeof DIAGNOSTIC_CODES)[number];
 
+export interface SourcePosition {
+  readonly line: number;
+  readonly column: number;
+  readonly offset: number;
+}
+
+export interface SourceSpan {
+  readonly start: SourcePosition;
+  readonly end: SourcePosition;
+}
+
+/** Authored location retained independently from a rendered diagnostic path. */
+export interface SourceLocation {
+  readonly sourceId: string;
+  readonly documentIndex: number;
+  /** JSON Pointer inside the YAML document. */
+  readonly path: string;
+  readonly span?: SourceSpan;
+}
+
 export interface Diagnostic {
   readonly code: DiagnosticCode;
   readonly phase: Phase;
   readonly severity: "error" | "warning";
   readonly path: string;
+  readonly source?: SourceLocation;
   readonly value?: unknown;
   readonly expected?: string;
   readonly candidates?: readonly string[];
@@ -181,7 +202,7 @@ export function httpStatusFor(d: Diagnostic): RuntimeHttpStatus {
 export function makeDiagnostic(
   input: Omit<Diagnostic, "message"> & { message?: string },
 ): Diagnostic {
-  const { code, phase, severity, path, value, expected, candidates, suggestion } = input;
+  const { code, phase, severity, path, source, value, expected, candidates, suggestion } = input;
   let msg = input.message;
   if (!msg) {
     const parts: string[] = [`[${phase}/${code}] at ${path}`];
@@ -190,7 +211,18 @@ export function makeDiagnostic(
     if (suggestion) parts.push(`(did you mean ${suggestion}?)`);
     msg = parts.join("; ");
   }
-  return { code, phase, severity, path, value, expected, candidates, suggestion, message: msg };
+  return {
+    code,
+    phase,
+    severity,
+    path,
+    ...(source ? { source } : {}),
+    value,
+    expected,
+    candidates,
+    suggestion,
+    message: msg,
+  };
 }
 
 /** Phase-stamping helpers — equivalent to `makeDiagnostic({...input, phase})`

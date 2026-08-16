@@ -1,7 +1,9 @@
-import { parseAllDocuments } from "yaml";
+import { LineCounter, parseAllDocuments, type Document } from "yaml";
 import {
   type Diagnostic,
   type DiagnosticCode,
+  type SourceLocation,
+  type SourceSpan,
   validateDiagnostic,
 } from "../../kernel/diagnostic.js";
 import {
@@ -22,6 +24,7 @@ import {
   type HttpMethod,
   type JsonSchema,
   type LifecycleHook,
+  type LifecycleMode,
   type Manifest,
   type ManifestKind,
   type ProcedureManifest,
@@ -119,10 +122,9 @@ function validateLocalizedText(
  * Diagnostics emitted here are intentionally narrow: bad envelope or
  * structurally malformed shipped grammar.
  *
- * Return shape is `{ manifests, diagnostics }`: parse-fatal docs are
- * skipped (manifest absent from `manifests`) and reported via a
- * `severity: "error"` diagnostic. Per ADR-0008 the caller (the CLI / boot
- * validator / consumer) routes diagnostics; we don't throw.
+ * The canonical API withholds its value when any document fails. The legacy
+ * `{ manifests, diagnostics }` adapter below therefore returns no manifests
+ * on failure rather than exposing a partial graph.
  *
  * Multi-doc YAML support per ADR-0001 § "Authoring shape" — all site atoms
  * in manifests/site.yaml, separated by `---`.
@@ -199,21 +201,109 @@ export interface ParseManifestsResult {
   readonly diagnostics: Diagnostic[];
 }
 
+/** One caller-owned manifest source. Core never resolves this ID as a path. */
+export interface ManifestSource {
+  readonly sourceId: string;
+  readonly text: string;
+}
+
+export interface ManifestSourceSet {
+  readonly sources: readonly ManifestSource[];
+}
+
+type ParsedSchemaManifest = Omit<SchemaManifest, "spec"> & {
+  readonly spec: Omit<
+    SchemaManifest["spec"],
+    "uniqueIndexes" | "indexes" | "searchableFields" | "localized" | "lifecycle"
+  > & {
+    readonly uniqueIndexes: ReadonlyArray<ReadonlyArray<string>>;
+    readonly indexes: ReadonlyArray<ReadonlyArray<string>>;
+    readonly searchableFields: readonly string[];
+    readonly localized: boolean;
+    readonly lifecycle: LifecycleMode;
+  };
+};
+
+type ParsedViewManifest = Omit<ViewManifest, "spec"> & {
+  readonly spec: Omit<ViewManifest["spec"], "orderBy"> & {
+    readonly orderBy: ReadonlyArray<{
+      readonly field: string;
+      readonly direction: "asc" | "desc";
+    }>;
+  };
+};
+
+/** Canonical atom value after all static authoring defaults are materialized. */
+export type ParsedManifest =
+  | ParsedSchemaManifest
+  | ParsedViewManifest
+  | ProcedureManifest
+  | TriggerManifest;
+
+export interface ParsedManifestEntry {
+  readonly manifest: ParsedManifest;
+  readonly source: SourceLocation;
+}
+
+declare const parsedManifestSetBrand: unique symbol;
+
+/** Parser-owned value. Consumers cannot construct it as an ordinary object literal. */
+export interface ParsedManifestSet {
+  readonly entries: readonly ParsedManifestEntry[];
+  readonly [parsedManifestSetBrand]: true;
+}
+
+export type ParseResult<T> =
+  | { readonly ok: true; readonly value: T; readonly diagnostics: readonly Diagnostic[] }
+  | { readonly ok: false; readonly diagnostics: readonly Diagnostic[] };
+
+interface InternalParseResult {
+  readonly entries: ParsedManifestEntry[];
+  readonly diagnostics: Diagnostic[];
+}
+
 /**
- * Parse YAML text (single doc, multi-doc, or a list of either) into
- * typed manifests + diagnostics. Per ADR-0001 multi-doc YAML support,
- * `---` separators inside one string yield one manifest per doc.
+ * Pure, source-aware parse boundary. Any error withholds the sealed value so a
+ * later stage cannot consume a partial manifest graph.
+ */
+export function parseManifestSources(
+  sourceSet: ManifestSourceSet,
+): ParseResult<ParsedManifestSet> {
+  const parsed = parseManifestSourcesInternal(sourceSet);
+  if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
+    return { ok: false, diagnostics: parsed.diagnostics };
+  }
+  return {
+    ok: true,
+    value: Object.freeze({
+      entries: Object.freeze(parsed.entries),
+    }) as ParsedManifestSet,
+    diagnostics: parsed.diagnostics,
+  };
+}
+
+/**
+ * Temporary compatibility adapter over `parseManifestSources`. Per ADR-0001
+ * multi-doc YAML support, `---` separators inside one string yield one
+ * manifest per doc. Delete with the legacy path in #673.
  */
 export function parseManifests(input: string | readonly string[]): ParseManifestsResult {
   const inputs = typeof input === "string" ? [input] : input;
-  const manifests: Manifest[] = [];
-  const diagnostics: Diagnostic[] = [];
-  let globalDocIndex = 0;
-  for (const yamlText of inputs) {
-    const docCount = parseOneStream(yamlText, globalDocIndex, manifests, diagnostics);
-    globalDocIndex += docCount;
-  }
-  return { manifests, diagnostics };
+  const result = parseManifestSources({
+    sources: inputs.map((text, index) => ({
+      sourceId: `manifest:input/${index}`,
+      text,
+    })),
+  });
+  return {
+    manifests: result.ok ? result.value.entries.map((entry) => entry.manifest) : [],
+    diagnostics: result.diagnostics.map((diagnostic) => diagnostic.source
+      ? {
+          ...diagnostic,
+          path: pointerFor(diagnostic.source.documentIndex, diagnostic.source.path),
+        }
+      : diagnostic),
+  };
 }
 
 export interface ParseManifestsOrThrowOptions {
@@ -249,22 +339,87 @@ export function parseManifestsOrThrow(
   return result.manifests;
 }
 
+function parseManifestSourcesInternal(sourceSet: ManifestSourceSet): InternalParseResult {
+  const entries: ParsedManifestEntry[] = [];
+  const diagnostics: Diagnostic[] = [];
+  const sources = sourceSet?.sources;
+  if (!Array.isArray(sources)) {
+    diagnostics.push(invalidSourceDiagnostic("/sources", "ManifestSourceSet.sources must be an array"));
+    return { entries, diagnostics };
+  }
+  const seenIds = new Set<string>();
+  for (let index = 0; index < sources.length; index++) {
+    const source = sources[index];
+    if (!source || typeof source !== "object") {
+      diagnostics.push(invalidSourceDiagnostic(`/sources/${index}`, "manifest source must be an object"));
+      continue;
+    }
+    if (typeof source.sourceId !== "string" || source.sourceId.length === 0) {
+      diagnostics.push(invalidSourceDiagnostic(
+        `/sources/${index}/sourceId`,
+        "manifest sourceId must be a non-empty string",
+      ));
+      continue;
+    }
+    if (seenIds.has(source.sourceId)) {
+      diagnostics.push(invalidSourceDiagnostic(
+        `/sources/${index}/sourceId`,
+        `manifest sourceId '${source.sourceId}' is duplicated`,
+        source.sourceId,
+      ));
+      continue;
+    }
+    seenIds.add(source.sourceId);
+    if (typeof source.text !== "string") {
+      diagnostics.push(invalidSourceDiagnostic(
+        `/sources/${index}/text`,
+        `manifest source '${source.sourceId}' text must be a string`,
+        source.sourceId,
+      ));
+      continue;
+    }
+    parseOneStream(source, entries, diagnostics);
+  }
+  return { entries, diagnostics };
+}
+
+function invalidSourceDiagnostic(path: string, message: string, sourceId?: string): Diagnostic {
+  return validateDiagnostic({
+    code: "INVALID_MANIFEST_ENVELOPE",
+    severity: "error",
+    path,
+    ...(sourceId
+      ? { source: { sourceId, documentIndex: 0, path } }
+      : {}),
+    message,
+  });
+}
+
 function parseOneStream(
-  yamlText: string,
-  baseDocIndex: number,
-  manifests: Manifest[],
+  source: ManifestSource,
+  entries: ParsedManifestEntry[],
   diagnostics: Diagnostic[],
-): number {
-  const docs = parseAllDocuments(yamlText, { merge: false });
+): void {
+  const lineCounter = new LineCounter();
+  const docs = parseAllDocuments(source.text, { merge: false, lineCounter });
   for (let i = 0; i < docs.length; i++) {
     const doc = docs[i]!;
-    const docIndex = baseDocIndex + i;
+    const docIndex = i;
     if (doc.errors.length > 0) {
+      const error = doc.errors[0];
+      const location = sourceLocation(
+        source.sourceId,
+        docIndex,
+        "/",
+        lineCounter,
+        error?.pos ?? doc.range,
+      );
       diagnostics.push(
         validateDiagnostic({
           code: "INVALID_MANIFEST_ENVELOPE",
           severity: "error",
-          path: pointerFor(docIndex, "/"),
+          path: "/",
+          source: location,
           message: `[doc ${docIndex}] YAML parse error: ${doc.errors.map((e) => e.message).join("; ")}`,
         }),
       );
@@ -283,7 +438,8 @@ function parseOneStream(
         validateDiagnostic({
           code: "INVALID_MANIFEST_ENVELOPE",
           severity: "error",
-          path: pointerFor(docIndex, "/"),
+          path: "/",
+          source: sourceLocationForNode(source.sourceId, docIndex, "/", doc, lineCounter),
           message: `[doc ${docIndex}] YAML alias-expansion limit exceeded: ${e instanceof Error ? e.message : String(e)}`,
         }),
       );
@@ -291,14 +447,19 @@ function parseOneStream(
     }
     if (value == null) continue;
     try {
-      manifests.push(validateEnvelope(value, docIndex));
+      entries.push({
+        manifest: normalizeManifest(validateEnvelope(value, docIndex)),
+        source: sourceLocationForNode(source.sourceId, docIndex, "/", doc, lineCounter),
+      });
     } catch (e) {
       if (e instanceof ManifestParseError) {
+        const path = e.pointer ?? "/";
         diagnostics.push(
           validateDiagnostic({
             code: e.code,
             severity: "error",
-            path: pointerFor(docIndex, e.pointer ?? "/"),
+            path,
+            source: sourceLocationForNode(source.sourceId, docIndex, path, doc, lineCounter),
             message: e.message,
           }),
         );
@@ -307,7 +468,8 @@ function parseOneStream(
           validateDiagnostic({
             code: "INVALID_MANIFEST_ENVELOPE",
             severity: "error",
-            path: pointerFor(docIndex, "/"),
+            path: "/",
+            source: sourceLocationForNode(source.sourceId, docIndex, "/", doc, lineCounter),
             message:
               e instanceof Error
                 ? `[doc ${docIndex}] ${e.message}`
@@ -317,7 +479,85 @@ function parseOneStream(
       }
     }
   }
-  return docs.length;
+}
+
+function sourceLocationForNode(
+  sourceId: string,
+  documentIndex: number,
+  path: string,
+  doc: Document.Parsed,
+  lineCounter: LineCounter,
+): SourceLocation {
+  const parts = path === "/"
+    ? []
+    : path.slice(1).split("/").map((part) => {
+        const decoded = part.replace(/~1/g, "/").replace(/~0/g, "~");
+        return /^\d+$/.test(decoded) ? Number(decoded) : decoded;
+      });
+  let range: readonly number[] | null | undefined;
+  for (let length = parts.length; length >= 0 && !range; length--) {
+    const node = length === 0 ? doc.contents : doc.getIn(parts.slice(0, length), true);
+    if (node && typeof node === "object" && "range" in node) {
+      range = (node as { readonly range?: readonly number[] | null }).range;
+    }
+  }
+  return sourceLocation(sourceId, documentIndex, path, lineCounter, range ?? doc.range);
+}
+
+function sourceLocation(
+  sourceId: string,
+  documentIndex: number,
+  path: string,
+  lineCounter: LineCounter,
+  range?: readonly number[] | null,
+): SourceLocation {
+  const span = sourceSpan(lineCounter, range);
+  return { sourceId, documentIndex, path, ...(span ? { span } : {}) };
+}
+
+function sourceSpan(
+  lineCounter: LineCounter,
+  range?: readonly number[] | null,
+): SourceSpan | undefined {
+  if (!range || range.length < 2) return undefined;
+  const startOffset = range[0];
+  const endOffset = range.length > 2 ? range[2] : range[1];
+  if (startOffset === undefined || endOffset === undefined) return undefined;
+  const start = lineCounter.linePos(startOffset);
+  const end = lineCounter.linePos(endOffset);
+  return {
+    start: { line: start.line, column: start.col, offset: startOffset },
+    end: { line: end.line, column: end.col, offset: endOffset },
+  };
+}
+
+function normalizeManifest(manifest: Manifest): ParsedManifest {
+  if (manifest.kind === "Schema") {
+    return {
+      ...manifest,
+      spec: {
+        ...manifest.spec,
+        uniqueIndexes: manifest.spec.uniqueIndexes ?? [],
+        indexes: manifest.spec.indexes ?? [],
+        searchableFields: manifest.spec.searchableFields ?? [],
+        localized: manifest.spec.localized ?? false,
+        lifecycle: manifest.spec.lifecycle ?? "publishing",
+      },
+    };
+  }
+  if (manifest.kind === "View") {
+    return {
+      ...manifest,
+      spec: {
+        ...manifest.spec,
+        orderBy: (manifest.spec.orderBy ?? []).map((order) => ({
+          ...order,
+          direction: order.direction ?? "asc",
+        })),
+      },
+    };
+  }
+  return manifest;
 }
 
 function pointerFor(docIndex: number, jsonPointer: string): string {
