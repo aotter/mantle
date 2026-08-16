@@ -10,7 +10,7 @@ make a normal content/API/page change.
 | Read or state | Owner | Notes |
 |---|---|---|
 | Entry get/list and public slug/data-field/published reads | `DatabaseEntryRepository` through `EntryRepository` / `EntryReader` | Schema-aware field resolution is shared here. |
-| Manifest View execution | `ExecuteViewUseCase` + `ViewSqlCompiler` | The deliberate compiled-query exception; it still resolves declared Schema indexes. |
+| Manifest View execution | `ExecuteViewUseCase` + prepared `ViewQueryExecutor` | Core owns authorization and request validation; selected storage lowers queries once and resolves declared Schema indexes. |
 | Editable settings and code-owned locale/media policy | `DatabaseSiteConfigRepository` | Editable values and dynamic media tool policy are read fresh; boot-seeded locale policy may be memoized within the runtime instance. |
 | Pending media uploads | `DatabasePendingUploadRepository` | Canonical, read-after-write D1 state; never publish-cache state. |
 | Rendered HTML, Markdown, and `llms.txt` | Request-time render use cases plus the Cloudflare public-route cache policy | D1 is canonical; version-local Workers Cache stores anonymous HTTP responses. |

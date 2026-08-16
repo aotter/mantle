@@ -215,7 +215,13 @@ describe("mountPublicRoutes response-cache contract", () => {
     seedPublishedPost(h.db, "zh-TW");
 
     expect((await h.app.request("/zh-tw/posts/hello")).status).toBe(200);
+    await h.ref.get();
+    h.db.executions.splice(0);
     expect((await h.app.request("/zh-tw/posts/missing")).status).toBe(404);
+    expect(h.db.executions.map(({ sql }) => sql)).toEqual([
+      "SELECT key, value FROM site_config",
+      expect.stringContaining("FROM entries WHERE collection = ?"),
+    ]);
   });
 
   it("keeps preview staff-only and prefers the draft", async () => {

@@ -45,6 +45,7 @@ import {
 import { ExecuteViewUseCase } from "./usecase/view/index.js";
 import {
   BootValidationError,
+  prepareDeployment,
   ValidateBootUseCase,
 } from "./usecase/boot/index.js";
 import {
@@ -81,16 +82,11 @@ import { DatabaseEntryRepository } from "./infrastructure/persistence/DatabaseEn
 import { DatabaseMediaAssetRepository } from "./infrastructure/persistence/DatabaseMediaAssetRepository.js";
 import { DatabasePendingUploadRepository } from "./infrastructure/persistence/DatabasePendingUploadRepository.js";
 import { DatabaseSiteConfigRepository } from "./infrastructure/persistence/DatabaseSiteConfigRepository.js";
-import { LifecycleHookingEntryRepository } from "./infrastructure/persistence/LifecycleHookingEntryRepository.js";
 import {
-  bootFingerprint,
-  CANONICAL_MIGRATIONS,
-  isBootCurrent,
-  markBootCurrent,
-  reconcileSchemaIndexes,
-  schemaIndexMigrations,
-  reconcileSchemaSqlViews,
-} from "./infrastructure/boot/index.js";
+  SqliteMantleStorageAdapter,
+  SqliteViewQueryExecutor,
+} from "./infrastructure/storage/SqliteMantleStorageAdapter.js";
+import { LifecycleHookingEntryRepository } from "./infrastructure/persistence/LifecycleHookingEntryRepository.js";
 
 /**
  * `createCmsRuntime` — assembly root. Per the clean-architecture
@@ -250,7 +246,6 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
   const triggersByName = new Map<string, TriggerManifest>(
     Object.values(plan.triggers).map((trigger) => [trigger.name, trigger.manifest]),
   );
-  const schemas = [...schemasByName.values()];
   const triggers = [...triggersByName.values()];
 
   const registry = buildHandlerRegistry(args.handlers ?? {});
@@ -268,6 +263,11 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
   const entryReader: EntryReader = innerEntries;
   const triggerIndex = TriggerIndex.fromPlan(plan.lifecycleHooks, plan.triggers);
   const siteConfig = new DatabaseSiteConfigRepository(args.db);
+  const storageAdapter = new SqliteMantleStorageAdapter(
+    args.db,
+    args.siteDefaults,
+    siteConfig,
+  );
   // `entries` is filled below — assigned via `let` so the lifecycle
   // hooks (which run procedures, which can themselves write entries
   // via builtin handlers) close over the wrapped repo, not the bare
@@ -345,7 +345,7 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
   const archive = new ArchiveUseCase(entries, schemasByName, clock);
   const deleteEntry = new DeleteEntryUseCase(entries, schemasByName);
   const executeView = new ExecuteViewUseCase(
-    args.db,
+    new SqliteViewQueryExecutor(args.db, plan),
     async (request) => {
       const procedure = proceduresByName.get(request.procedure);
       if (!procedure) {
@@ -367,7 +367,6 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
         pathPrefix: request.pathPrefix,
       });
     },
-    schemasByName,
     plan.views,
   );
   const composeSitemap = new ComposeSitemapUseCase(entryReader);
@@ -461,29 +460,10 @@ export function createCmsRuntime(args: CreateCmsRuntimeArgs): CmsRuntime {
     idgen,
 
     async bootInit(): Promise<void> {
-      const fingerprint = await bootFingerprint({
-        semanticFingerprint: plan.semanticFingerprint,
-        siteDefaults: args.siteDefaults,
-        handlers: [...registry.list()].sort(),
+      await prepareDeployment(plan, storageAdapter, {
+        handlerNames: registry.list(),
         reservedHttpPathPrefixes: args.reservedHttpPathPrefixes,
       });
-      if (await isBootCurrent(args.db, fingerprint)) return;
-      await args.db.migrations.runAll(CANONICAL_MIGRATIONS);
-      await siteConfig.seed(args.siteDefaults);
-      const siteLocales = await siteConfig.readLocales();
-      validateBoot.assert({
-        linked: validation.linked,
-        registry,
-        siteLocales,
-        reservedHttpPathPrefixes: args.reservedHttpPathPrefixes,
-      });
-      const indexMigrations = schemaIndexMigrations(schemas);
-      await args.db.migrations.runAll(indexMigrations);
-      await reconcileSchemaIndexes(args.db, indexMigrations, schemas);
-      await reconcileSchemaSqlViews(args.db, schemas);
-      // ponytail: the marker trusts Mantle-owned writes; repair manual D1
-      // schema edits by deleting this row or changing the manifest.
-      await markBootCurrent(args.db, fingerprint);
     },
   };
 }

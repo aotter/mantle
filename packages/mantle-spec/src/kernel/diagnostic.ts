@@ -70,6 +70,7 @@ export const DIAGNOSTIC_CODES = [
   "PROCEDURE_NOT_FOUND",
   "NOT_FOUND",
   "METHOD_NOT_ALLOWED",
+  "VIEW_DIALECT_UNSUPPORTED",
   // Builtin handlers + lifecycle hooks: validate / boot.
   "BUILTIN_HANDLER_SCHEMA_UNKNOWN",
   "LIFECYCLE_SCHEMA_UNKNOWN",

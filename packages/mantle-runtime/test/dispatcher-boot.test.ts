@@ -32,14 +32,14 @@ describe("ValidateBootUseCase", () => {
     expect(result.diagnostics[0]).toMatchObject({
       code: "HANDLER_NOT_REGISTERED",
       phase: "boot",
-      source: { sourceId: "memory:boot", path: "/spec/handler/ref" },
+      path: "manifest:Procedure/echo#/spec/handler/ref",
     });
   });
 
   it("rejects HTTP Triggers under selected reserved route prefixes", () => {
     for (const [path, reservedHttpPathPrefixes] of [
-      ["/api/auth/sign-in", []],
-      ["/api/views/orders", []],
+      ["/api/auth/sign-in", ["/api/auth"]],
+      ["/api/views/orders", ["/api/views"]],
       ["/api/private-auth/callback", ["/api/private-auth"]],
     ] as const) {
       const registry = new InMemoryHandlerRegistry();
@@ -57,6 +57,17 @@ describe("ValidateBootUseCase", () => {
         phase: "boot",
       }));
     }
+  });
+
+  it("does not reserve an omitted capability route", () => {
+    const registry = new InMemoryHandlerRegistry();
+    registry.register("echoHandler", () => ({ ok: true }));
+
+    expect(new ValidateBootUseCase().execute({
+      linked: linkedProcedure("echoHandler", "/api/views/orders"),
+      registry,
+      reservedHttpPathPrefixes: [],
+    })).toEqual({ ok: true });
   });
 
   it("checks selected deployment locales", () => {

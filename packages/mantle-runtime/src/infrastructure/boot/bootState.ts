@@ -7,11 +7,9 @@ const BOOT_STATE_ID = "runtime";
 export async function bootFingerprint(input: {
   readonly semanticFingerprint: string;
   readonly siteDefaults?: SiteDefaults;
-  readonly handlers: readonly string[];
-  readonly reservedHttpPathPrefixes?: readonly string[];
 }): Promise<string> {
   const bytes = new TextEncoder().encode(JSON.stringify({
-    version: 1,
+    version: 2,
     migrations: CANONICAL_MIGRATIONS.map(({ id, sql }) => [id, sql]),
     ...input,
   }));

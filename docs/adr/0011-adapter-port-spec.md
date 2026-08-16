@@ -1,6 +1,8 @@
 # ADR-0011: Adapter port spec
 
-**Status:** Accepted for v0.1.0. Amended 2026-08-13 to remove the unimplemented adapter stub.
+**Status:** Superseded for Core storage by ADR-0019. Retained as the alpha.7
+Cloudflare adapter record; `DatabaseDriver` is now an implementation detail of
+the SQLite/D1 `MantleStorageAdapter`, not the portable runtime contract.
 
 **Date:** 2026-05-04 (revised 2026-05-09, 2026-05-10, 2026-08-11, and 2026-08-13).
 
@@ -18,6 +20,13 @@ This ADR fixes the contract so:
 The POC accumulated multiple half-decisions about this seam (POC ADR-0015 documented an aspirational `cms-astro`-internal discipline; POC ADR-0029 retired Astro and dissolved the seam; the rebuild closes it properly).
 
 ## Decision
+
+> 0.1.2 amendment: the portable storage input is
+> `PreparedMantleStorage` (`EntryRepository & EntryReader` plus
+> `ViewQueryExecutor`). Hosts either use an official storage adapter with an
+> already-owned client/handle or implement those semantic ports over their own
+> tables. The two-port alpha.7 contract below documents the compatibility
+> facade until #673 removes it.
 
 **Two required adapter ports**, defined as TypeScript interfaces in `@aotter/mantle-runtime/src/domain/port/`. Concrete adapters provide implementations and inject them into `createCmsRuntime`.
 
