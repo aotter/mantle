@@ -1,0 +1,100 @@
+# Characterization source for ADR-0019. It deliberately uses an alias,
+# an empty document, every v0.1 atom, every Trigger surface, auth, and a guard.
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata:
+  name: orders
+spec:
+  title: Orders
+  schema:
+    type: object
+    required: [customerId, status]
+    properties:
+      customerId: &identifier { type: string, minLength: 1 }
+      externalId: *identifier
+      status: { type: string, enum: [open, closed] }
+      createdAt: { type: number, x-mantle-bind: now }
+  indexes: [[customerId]]
+---
+# Empty documents are ignored but count toward diagnostic document indexes.
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata:
+  name: open-orders
+spec:
+  surface: public
+  from: orders
+  fields: [id, customerId, status, createdAt]
+  params:
+    type: object
+    required: [customerId]
+    properties:
+      customerId: { type: string }
+  filter:
+    and:
+      - eq: { field: customerId, value: { $param: customerId } }
+      - eq: { field: status, value: open }
+  orderBy: [{ field: createdAt, direction: desc }]
+  limit: 20
+  requires:
+    auth:
+      all: [ctx.auth, ctx.user]
+    guard: { procedure: authorize-order }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata:
+  name: authorize-order
+spec:
+  input:
+    type: object
+    required: [customerId]
+    properties:
+      customerId: { type: string }
+  output: { type: object }
+  handler: { kind: ref, ref: authorizeOrder }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata:
+  name: place-order
+spec:
+  input:
+    type: object
+    required: [customerId]
+    properties:
+      customerId: { type: string }
+  output: { type: object }
+  handler: { kind: ref, ref: placeOrder }
+  requires:
+    auth:
+      all: [ctx.auth, ctx.user]
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata:
+  name: place-order-http
+spec:
+  source: { kind: http, method: POST, path: /api/orders }
+  target: { procedure: place-order }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata:
+  name: place-order-mcp
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: place-order }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata:
+  name: order-created
+spec:
+  source:
+    kind: lifecycle
+    schema: orders
+    on: [after_create]
+    errorPolicy: continue
+  target: { procedure: place-order }

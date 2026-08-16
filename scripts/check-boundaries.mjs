@@ -123,16 +123,26 @@ function checkPackageDirection() {
       forbidden: [
         "@aotter/mantle-runtime",
         "@aotter/mantle-cloudflare",
+        "@aotter/mantle-web",
+        "@aotter/mantle-admin",
+        "@aotter/mantle-admin-ui",
+        "@aotter/mantle-bun",
+        "@aotter/mantle-vercel",
       ],
-      message: "spec must not import runtime/cloudflare packages",
+      message: "spec must not import runtime, optional product, or adapter packages",
     },
     {
       dir: "packages/mantle-runtime/src",
       forbidden: [
         "@aotter/mantle-cloudflare",
         "@aotter/mantle-netlify",
+        "@aotter/mantle-web",
+        "@aotter/mantle-admin",
+        "@aotter/mantle-admin-ui",
+        "@aotter/mantle-bun",
+        "@aotter/mantle-vercel",
       ],
-      message: "runtime must not import adapter packages",
+      message: "runtime must not import optional product or adapter packages",
     },
   ];
 
