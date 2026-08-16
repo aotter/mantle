@@ -194,7 +194,6 @@ export function mountPublicRoutes(
     });
     app.get("/:locale{[^/]+\\.md}", async (c) => {
       const runtime = await ref.get();
-      const web = ref.web(runtime);
       const site = await runtime.siteConfig.load();
       const raw = c.req.param("locale");
       const locale = canonicalLocaleParam(raw.endsWith(".md") ? raw.slice(0, -3) : raw, site.locales);
@@ -207,7 +206,6 @@ export function mountPublicRoutes(
     });
     app.get("/:locale", async (c) => {
       const runtime = await ref.get();
-      const web = ref.web(runtime);
       const site = await runtime.siteConfig.load();
       const locale = canonicalLocaleParam(c.req.param("locale"), site.locales);
       const fallbackLocale = locale ?? inferLocaleFromPath(c.req.path, site);
@@ -245,7 +243,6 @@ export function mountPublicRoutes(
 
   app.notFound(async (c) => {
     const runtime = await ref.get();
-    const web = ref.web(runtime);
     const site = await runtime.siteConfig.load();
     const locale = inferLocaleFromPath(c.req.path, site);
     return options.notFoundRenderer(buildCtx(c, runtime, site, locale, homeSeo(site, locale, false)));
