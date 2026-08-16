@@ -158,6 +158,18 @@ function checkPackageDirection() {
       ],
       message: "web must not import platform or admin packages and types",
     },
+    {
+      dir: "packages/mantle-admin/src",
+      forbidden: [
+        "@aotter/mantle-cloudflare",
+        "@aotter/mantle-bun",
+        "@aotter/mantle-vercel",
+        "D1Database",
+        "KVNamespace",
+        "ExecutionContext",
+      ],
+      message: "admin must not import platform packages and types",
+    },
   ];
 
   for (const rule of rules) {
@@ -238,6 +250,44 @@ function checkWebPackageBoundary() {
     if (runtimeSource.includes(token)) {
       fail(runtimePath, `Web-owned surface leaked back into runtime: '${token}'`);
     }
+  }
+}
+
+function checkAdminPackageBoundary() {
+  const runtimePath = join(ROOT, "packages/mantle-runtime/package.json");
+  const adminPath = join(ROOT, "packages/mantle-admin/package.json");
+  const cloudflarePath = join(ROOT, "packages/adapters/cloudflare/package.json");
+  const runtime = JSON.parse(readFileSync(runtimePath, "utf8"));
+  const admin = JSON.parse(readFileSync(adminPath, "utf8"));
+  const cloudflare = JSON.parse(readFileSync(cloudflarePath, "utf8"));
+  const runtimeDeps = { ...runtime.dependencies, ...runtime.optionalDependencies };
+  if (runtimeDeps["@aotter/mantle-admin"] || runtimeDeps["@aotter/mantle-admin-ui"]) {
+    fail(runtimePath, "runtime must stay installable without Mantle Admin or its UI");
+  }
+  if (!admin.dependencies?.["@aotter/mantle-runtime"] ||
+      !admin.dependencies?.["@aotter/mantle-admin-ui"]) {
+    fail(adminPath, "Mantle Admin must compose downstream from Runtime and Admin UI");
+  }
+  if (!cloudflare.dependencies?.["@aotter/mantle-admin"]) {
+    fail(cloudflarePath, "Cloudflare must select Mantle Admin explicitly");
+  }
+  if (cloudflare.dependencies?.["@aotter/mantle-admin-ui"]) {
+    fail(cloudflarePath, "Cloudflare must select Mantle Admin, not depend on its UI directly");
+  }
+  const runtimeSource = listFiles(
+    join(ROOT, "packages/mantle-runtime/src"),
+    (path) => path.endsWith(".ts"),
+  ).map((path) => stripComments(readFileSync(path, "utf8"))).join("\n");
+  if (/from\s+["'][^"']*mantle-admin(?:-ui)?[^"']*["']/.test(runtimeSource)) {
+    fail(runtimePath, "runtime source cannot import Mantle Admin or its UI");
+  }
+  const adminSource = listFiles(
+    join(ROOT, "packages/mantle-admin/src"),
+    (path) => path.endsWith(".ts"),
+  ).map((path) => stripComments(readFileSync(path, "utf8"))).join("\n");
+  if (/from\s+["'][^"']*mantle-(?:cloudflare|bun|vercel)[^"']*["']/.test(adminSource) ||
+      /\b(?:D1Database|ExecutionContext)\b/.test(adminSource)) {
+    fail(adminPath, "Mantle Admin cannot import platform packages or types");
   }
 }
 
@@ -323,6 +373,7 @@ checkRuntimeCloudflareFree();
 checkPackageDirection();
 checkEntryReadOwnership();
 checkWebPackageBoundary();
+checkAdminPackageBoundary();
 checkViewExecutionBoundary();
 checkMantleRuntimeBoundary();
 checkCodegenBoundary();

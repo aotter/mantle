@@ -241,7 +241,7 @@ describe("createQueueHandler", () => {
         },
       },
       db: new InMemoryDatabase(),
-      assets: new StubAssetServer(),
+      adminAssets: new StubAssetServer(),
     });
     const handler = createQueueHandler<unknown>({ get: async () => runtime });
     const envelope = { ...sampleEnvelope, eventId: "event-stable", triggerNames: names };
@@ -298,7 +298,7 @@ describe("createQueueHandler", () => {
         },
       },
       db: new InMemoryDatabase(),
-      assets: new StubAssetServer(),
+      adminAssets: new StubAssetServer(),
       deferredHookDispatcher,
       clock: { now: () => 1 },
       idgen: { next: () => `id-${nextId++}` },

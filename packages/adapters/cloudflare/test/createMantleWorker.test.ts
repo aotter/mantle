@@ -109,7 +109,7 @@ describe("createMantleWorker", () => {
     const worker = createMantleWorker<TestEnv>({
       manifest: [],
       auth: () => stubAuth,
-      bindings: () => ({ db, assets: new StubAssetServer() }),
+      bindings: () => ({ db, adminAssets: new StubAssetServer() }),
     });
 
     await fetchWorker(worker, "/api/auth/probe", testEnv());
@@ -122,7 +122,7 @@ describe("createMantleWorker", () => {
     const worker = createMantleWorker<TestEnv>({
       manifest: [],
       auth: () => stubAuth,
-      bindings: () => ({ db, assets: new StubAssetServer() }),
+      bindings: () => ({ db, adminAssets: new StubAssetServer() }),
     });
 
     for (const path of [
@@ -360,7 +360,7 @@ describe("createMantleWorker", () => {
     const worker = createMantleWorker<TestEnv>({
       manifest: [],
       auth: () => stubAuth,
-      bindings: () => ({ db, assets: new StubAssetServer() }),
+      bindings: () => ({ db, adminAssets: new StubAssetServer() }),
       extend: () => ({
         mount: ({ app, getRuntime }) => {
           app.get("/probe", async (c) => {
@@ -384,7 +384,7 @@ describe("createMantleWorker", () => {
     const worker = createMantleWorker<TestEnv>({
       manifest: [],
       auth: () => stubAuth,
-      bindings: () => ({ db, assets: new StubAssetServer() }),
+      bindings: () => ({ db, adminAssets: new StubAssetServer() }),
       extend: () => ({
         mount: ({ app, getRuntime }) => {
           app.get("/probe", async (c) => {
@@ -486,7 +486,7 @@ function envProbeManifests(): Manifest[] {
 function testBindings() {
   return {
     db: new InMemoryDatabase(),
-    assets: new StubAssetServer(),
+    adminAssets: new StubAssetServer(),
   };
 }
 

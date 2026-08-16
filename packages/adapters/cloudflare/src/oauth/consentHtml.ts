@@ -4,7 +4,7 @@
  * Supports zh-TW and en locales.
  */
 
-import { systemTokensCss } from "@aotter/mantle-admin-ui";
+import { systemTokensCss } from "@aotter/mantle-admin";
 
 export interface ConsentModel {
   readonly clientName: string;

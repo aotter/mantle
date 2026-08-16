@@ -1,8 +1,9 @@
 # ADR-0011: Adapter port spec
 
-**Status:** Superseded for Core storage by ADR-0019. Retained as the alpha.7
-Cloudflare adapter record; `DatabaseDriver` is now an implementation detail of
-the SQLite/D1 `MantleStorageAdapter`, not the portable runtime contract.
+**Status:** Superseded for Core storage and Admin composition by ADR-0019.
+Retained as the alpha.7 Cloudflare adapter record; `DatabaseDriver` is now an
+implementation detail of the SQLite/D1 `MantleStorageAdapter`, while the asset
+contract belongs to optional `@aotter/mantle-admin`.
 
 **Date:** 2026-05-04 (revised 2026-05-09, 2026-05-10, 2026-08-11, and 2026-08-13).
 
@@ -25,10 +26,10 @@ The POC accumulated multiple half-decisions about this seam (POC ADR-0015 docume
 > `PreparedMantleStorage` (`EntryRepository & EntryReader` plus
 > `ViewQueryExecutor`). Hosts either use an official storage adapter with an
 > already-owned client/handle or implement those semantic ports over their own
-> tables. The two-port alpha.7 contract below documents the compatibility
-> facade until #673 removes it.
+> tables. `AssetServer` moved out of Runtime to optional Mantle Admin. The
+> two-port contract below is the historical alpha.7 shape.
 
-**Two required adapter ports**, defined as TypeScript interfaces in `@aotter/mantle-runtime/src/domain/port/`. Concrete adapters provide implementations and inject them into `createCmsRuntime`.
+Alpha.7 had **two required adapter ports**, defined as TypeScript interfaces in `@aotter/mantle-runtime/src/domain/port/`. Concrete adapters provided implementations and injected them into `createCmsRuntime`.
 
 | Port | Surface |
 |---|---|

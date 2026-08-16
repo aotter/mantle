@@ -2,6 +2,7 @@ import type {
   AnyHandler,
   CreateCmsRuntimeArgs,
 } from "@aotter/mantle-runtime";
+import type { AdminAssetServer } from "@aotter/mantle-admin";
 import type { PublicPathResolver, TemplateRegistry } from "@aotter/mantle-web";
 import type { Manifest, SiteDefaults } from "@aotter/mantle-spec";
 import type { Auth } from "../auth/createAuth.js";
@@ -10,7 +11,7 @@ import type { ConsumerCredentialResolver } from "./resolveCaller.js";
 /**
  * Consumer-supplied config for the Cloudflare adapter mounts. `auth`
  * (Better Auth) gates `/admin/api/*` + MCP bearers. `bindings` carries
- * the runtime-port adapters (db / assets).
+ * runtime and selected capability adapters.
  */
 export interface CmsConfig {
   readonly manifests: readonly Manifest[];
@@ -20,7 +21,9 @@ export interface CmsConfig {
   readonly publicPathResolver?: PublicPathResolver;
   /** Routes owned by the capabilities this composition actually mounts. */
   readonly reservedHttpPathPrefixes?: readonly string[];
-  readonly bindings: Pick<CreateCmsRuntimeArgs, "db" | "assets"> & {
+  readonly bindings: Pick<CreateCmsRuntimeArgs, "db"> & {
+    /** Optional Admin SPA assets. Omitting this mounts no Admin surface. */
+    readonly adminAssets?: AdminAssetServer;
     /** Optional media storage adapter. When set, media MCP tools and
      *  `/admin/api/media/*` endpoints are registered. Forwarded to the
      *  runtime as `mediaStorage`. */

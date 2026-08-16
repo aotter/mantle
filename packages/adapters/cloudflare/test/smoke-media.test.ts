@@ -163,7 +163,7 @@ function harness(opts: {
     },
     bindings: {
       db: new InMemoryDatabase(),
-      assets: new StubAssetServer(),
+      adminAssets: new StubAssetServer(),
       ...(storage ? { mediaStorage: storage } : {}),
     },
     auth: opts.auth,
@@ -353,7 +353,7 @@ describe("smoke: MCP media tool catalog", () => {
       siteDefaults: { media: { purposes: initialPolicies } },
       bindings: {
         db,
-        assets: new StubAssetServer(),
+        adminAssets: new StubAssetServer(),
         mediaStorage: storage,
       },
       auth: staffAuth(),
@@ -692,7 +692,7 @@ describe("MCP View surface gating (#438)", () => {
       },
       bindings: {
         db: new InMemoryDatabase(),
-        assets: new StubAssetServer(),
+        adminAssets: new StubAssetServer(),
       },
       auth,
     });

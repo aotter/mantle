@@ -122,7 +122,7 @@ function buildWorker(env: Env) {
     auth: createSiteAuth(env),
     bindings: {
       db: new D1DatabaseDriver(env.DB),
-      assets: new AssetsAssetServer(env.ASSETS),
+      adminAssets: new AssetsAssetServer(env.ASSETS),
       deferredHookDispatcher: new WorkersQueueHookDispatcher(
         env.MANTLE_INTERNAL_QUEUE,
       ),

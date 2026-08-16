@@ -23,7 +23,8 @@ import {
 import { createCmsRef, type CmsRuntimeRef } from "../mount/bootRuntimeOnce.js";
 import type { CmsConfig } from "../mount/cmsConfig.js";
 import { createMcpApiHandler } from "../mount/mountMcp.js";
-import { mountServerEndpoints } from "../mount/mountServerEndpoints.js";
+import { mountAdmin } from "../mount/mountAdmin.js";
+import { mountRuntimeEndpoints } from "../mount/mountRuntimeEndpoints.js";
 import type { ConsumerCredentialResolver } from "../mount/resolveCaller.js";
 import { mountAuthorize } from "../oauth/mountOAuth.js";
 import { OAUTH_REGISTER_PATH, OAUTH_TOKEN_PATH } from "../oauth/oauthConstants.js";
@@ -203,7 +204,8 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
     });
 
     const app = new Hono<WorkerHonoEnv<Env>>();
-    mountServerEndpoints(app, ref);
+    mountRuntimeEndpoints(app, ref);
+    if (bindings.adminAssets) mountAdmin(app, ref, bindings.adminAssets);
     mountAuthorize(app, { auth, loginPath: "/admin/sign-in" });
     const standardRouteCount = app.routes.length;
     extension.mount?.({

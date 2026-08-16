@@ -131,7 +131,7 @@ function createState(env: Env) {
     },
     bindings: {
       db: new D1DatabaseDriver(env.DB, (metric) => activeMetrics?.push(metric)),
-      assets: new StubAssetServer(),
+      adminAssets: new StubAssetServer(),
     },
     auth: staffAuth,
   });

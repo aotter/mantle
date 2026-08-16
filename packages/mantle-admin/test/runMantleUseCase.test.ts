@@ -3,7 +3,7 @@ import {
   DiagnosticError,
   runtimeDiagnostic,
 } from "@aotter/mantle-spec";
-import { runMantleUseCase } from "../src/mount/index.js";
+import { runMantleUseCase } from "../src/index.js";
 
 describe("runMantleUseCase", () => {
   it("returns successful values as JSON", async () => {

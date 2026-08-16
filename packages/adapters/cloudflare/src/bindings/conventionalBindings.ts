@@ -1,11 +1,11 @@
-import type { AssetServer } from "@aotter/mantle-runtime";
+import type { AdminAssetServer } from "@aotter/mantle-admin";
 import type { CmsConfig } from "../mount/cmsConfig.js";
 import { AssetsAssetServer } from "./AssetsAssetServer.js";
 import { D1DatabaseDriver } from "./D1DatabaseDriver.js";
 
 // Pre-static-assets starters remain runnable during the alpha migration;
 // their Admin route returns the explicit missing-assets response.
-const NO_ASSETS: AssetServer = { fetch: async () => null };
+const NO_ASSETS: AdminAssetServer = { fetch: async () => null };
 
 export interface ConventionalBindingsEnv {
   readonly DB?: D1Database;
@@ -23,6 +23,6 @@ export function createConventionalBindings(
   if (!env.OAUTH_KV) throw new Error("Mantle requires the conventional OAUTH_KV binding.");
   return {
     db: new D1DatabaseDriver(env.DB),
-    assets: env.ASSETS ? new AssetsAssetServer(env.ASSETS) : NO_ASSETS,
+    adminAssets: env.ASSETS ? new AssetsAssetServer(env.ASSETS) : NO_ASSETS,
   };
 }

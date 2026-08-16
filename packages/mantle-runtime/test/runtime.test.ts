@@ -5,20 +5,12 @@ import { DatabaseSiteConfigRepository } from "../src/infrastructure/persistence/
 import { schemaIndexMigrations } from "../src/infrastructure/boot/index.js";
 import { InMemoryDatabase } from "./fakes/database.js";
 import { makeProcedure, postsSchema } from "./fakes/manifests.js";
-import type { AssetServer } from "../src/domain/port/index.js";
-
-const noopAssets: AssetServer = {
-  async fetch() {
-    return null;
-  },
-};
 
 describe("createCmsRuntime compatibility composition", () => {
-  it("constructs with empty manifests + required ports", async () => {
+  it("constructs with empty manifests and no asset server", async () => {
     const runtime = await createCmsRuntime({
       manifests: [],
       db: new InMemoryDatabase(),
-      assets: noopAssets,
     });
     expect(runtime.schemasByName.size).toBe(0);
     expect(runtime.proceduresByName.size).toBe(0);
@@ -31,7 +23,6 @@ describe("createCmsRuntime compatibility composition", () => {
       manifests: [makeProcedure()],
       handlers: { echoHandler: () => ({ ok: true }) },
       db,
-      assets: noopAssets,
       siteDefaults: {
         brand: "Blog",
         title: "Blog Site",
@@ -52,7 +43,6 @@ describe("createCmsRuntime compatibility composition", () => {
     const options = {
       manifests: [postsSchema()],
       db,
-      assets: noopAssets,
       siteDefaults: { brand: "Blog", locales: ["en"] },
     } as const;
 
@@ -75,7 +65,6 @@ describe("createCmsRuntime compatibility composition", () => {
     const runtime = await createCmsRuntime({
       manifests: [postsSchema(), operational],
       db: new InMemoryDatabase(),
-      assets: noopAssets,
       siteDefaults: { brand: "Blog", title: "Blog" },
       onPublicChange: async () => { calls.push("purge"); },
     });
@@ -116,7 +105,6 @@ describe("createCmsRuntime compatibility composition", () => {
     await createCmsRuntime({
       manifests: [indexedSchema],
       db,
-      assets: noopAssets,
     });
 
     const ids = schemaIndexMigrations([indexedSchema]).map(({ id }) => id);
@@ -140,7 +128,6 @@ describe("createCmsRuntime compatibility composition", () => {
       createCmsRuntime({
         manifests: [manifest(indexes)],
         db,
-        assets: noopAssets,
       });
 
     await runtime([["slug"]]);
@@ -174,7 +161,6 @@ describe("createCmsRuntime compatibility composition", () => {
       createCmsRuntime({
         manifests: [{ ...schema, spec: { ...schema.spec, uniqueIndexes } }],
         db,
-        assets: noopAssets,
       });
 
     await runtime([["slug"]]);
@@ -204,7 +190,6 @@ describe("createCmsRuntime compatibility composition", () => {
         },
       }],
       db,
-      assets: noopAssets,
     });
 
     expect(db.appliedMigrations.has(legacyId)).toBe(false);
@@ -216,7 +201,6 @@ describe("createCmsRuntime compatibility composition", () => {
     await expect(createCmsRuntime({
       manifests: [makeProcedure({ handlerRef: "missing" })],
       db,
-      assets: noopAssets,
     })).rejects.toBeInstanceOf(BootValidationError);
   });
 
@@ -245,7 +229,6 @@ describe("createCmsRuntime compatibility composition", () => {
     await createCmsRuntime({
       manifests: [],
       db,
-      assets: noopAssets,
       siteDefaults: { media: { purposes: seeded } },
     });
     const repo = new DatabaseSiteConfigRepository(db);
@@ -264,7 +247,6 @@ describe("createCmsRuntime compatibility composition", () => {
     await createCmsRuntime({
       manifests: [],
       db,
-      assets: noopAssets,
       siteDefaults: { brand: "No-media starter" },
     });
     const purposes = await new DatabaseSiteConfigRepository(db).readMediaPurposes();
@@ -276,7 +258,6 @@ describe("createCmsRuntime compatibility composition", () => {
     await createCmsRuntime({
       manifests: [],
       db,
-      assets: noopAssets,
       siteDefaults: { brand: "First" },
     });
     // Operator edits the brand directly:
@@ -288,7 +269,6 @@ describe("createCmsRuntime compatibility composition", () => {
     await createCmsRuntime({
       manifests: [],
       db,
-      assets: noopAssets,
       siteDefaults: { brand: "Second" },
     });
     const site = await new DatabaseSiteConfigRepository(db).load();
@@ -302,7 +282,6 @@ describe("createCmsRuntime compatibility composition", () => {
     await createCmsRuntime({
       manifests: [],
       db,
-      assets: noopAssets,
       siteDefaults: { brand: "First", origin: "https://site.workers.dev" },
     });
     db.siteConfig.set("brand", "Operator-Edited");
@@ -310,7 +289,6 @@ describe("createCmsRuntime compatibility composition", () => {
     await createCmsRuntime({
       manifests: [],
       db,
-      assets: noopAssets,
       siteDefaults: { brand: "Second", origin: "https://www.example.com" },
     });
 
@@ -328,7 +306,6 @@ describe("createCmsRuntime compatibility composition", () => {
     await createCmsRuntime({
       manifests: [],
       db,
-      assets: noopAssets,
       siteDefaults: {
         icons: [
           { src: "/site-icon.png", mimeType: "image/png", sizes: ["64x64"] },
@@ -391,7 +368,6 @@ describe("createCmsRuntime compatibility composition", () => {
     await createCmsRuntime({
       manifests: [],
       db,
-      assets: noopAssets,
       siteDefaults: { media: { purposes: first } },
     });
     const repo = new DatabaseSiteConfigRepository(db);
@@ -415,7 +391,6 @@ describe("createCmsRuntime compatibility composition", () => {
     await createCmsRuntime({
       manifests: [],
       db,
-      assets: noopAssets,
       siteDefaults: { media: { purposes: second } },
     });
 
@@ -434,7 +409,6 @@ describe("createCmsRuntime compatibility composition", () => {
     await createCmsRuntime({
       manifests: [],
       db,
-      assets: noopAssets,
       siteDefaults: { brand: "First", locales: ["en"] },
     });
     const repo = new DatabaseSiteConfigRepository(db);
@@ -447,7 +421,6 @@ describe("createCmsRuntime compatibility composition", () => {
     await createCmsRuntime({
       manifests: [],
       db,
-      assets: noopAssets,
       siteDefaults: { brand: "Second", locales: ["en", "ja"] },
     });
 

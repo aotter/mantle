@@ -1,7 +1,7 @@
-import type { AssetServer } from "@aotter/mantle-runtime";
+import type { AdminAssetServer } from "@aotter/mantle-admin";
 import type { Auth } from "../../src/auth/createAuth.js";
 
-export class StubAssetServer implements AssetServer {
+export class StubAssetServer implements AdminAssetServer {
   async fetch(_req: Request): Promise<Response | null> {
     return null;
   }

@@ -44,9 +44,9 @@ importers:
 
   packages/adapters/cloudflare:
     dependencies:
-      '@aotter/mantle-admin-ui':
+      '@aotter/mantle-admin':
         specifier: workspace:*
-        version: link:../../mantle-admin-ui
+        version: link:../../mantle-admin
       '@aotter/mantle-runtime':
         specifier: workspace:*
         version: link:../../mantle-runtime
@@ -93,6 +93,9 @@ importers:
 
   packages/mantle:
     dependencies:
+      '@aotter/mantle-admin':
+        specifier: workspace:*
+        version: link:../mantle-admin
       '@aotter/mantle-admin-ui':
         specifier: workspace:*
         version: link:../mantle-admin-ui
@@ -133,6 +136,31 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.4.3
+
+  packages/mantle-admin:
+    dependencies:
+      '@aotter/mantle-admin-ui':
+        specifier: workspace:*
+        version: link:../mantle-admin-ui
+      '@aotter/mantle-runtime':
+        specifier: workspace:*
+        version: link:../mantle-runtime
+      '@aotter/mantle-spec':
+        specifier: workspace:*
+        version: link:../mantle-spec
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.1.1
+      hono:
+        specifier: 'catalog:'
+        version: 4.13.0
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@types/node@26.1.1)(vite@8.1.5(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))
 
   packages/mantle-admin-ui:
     dependencies:

@@ -169,7 +169,7 @@ describe("authorization integration: one target across REST and MCP", () => {
       },
       bindings: {
         db: new InMemoryDatabase(),
-        assets: new StubAssetServer(),
+        adminAssets: new StubAssetServer(),
       },
       auth: { ...stubAuth, getUserRole: async () => "owner" },
       credentialResolver: (request) => {

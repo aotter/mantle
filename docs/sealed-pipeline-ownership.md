@@ -34,7 +34,7 @@ issue that must delete or delegate the old path.
 | Admin asset copy during generation | `packages/mantle/src/generate.ts` | Removed; Admin install/composition owns assets | #668, #670 |
 | HTML/templates/public paths/Markdown/SEO/preview/`llms.txt`/sitemap | Runtime render services plus Cloudflare public routes | Optional `mantle-web` | #669 |
 | Public request mapping and cache policy | `mountPublicRoutes` | Platform adapter using selected Web projection | #669 |
-| Admin API/application/static assets | Runtime helpers plus `mountServerEndpoints` and `AssetsAssetServer` | Optional `mantle-admin` + existing UI artifact | #670 |
+| Admin API/application/static assets | Optional `mantle-admin`; Cloudflare only binds auth/request context/assets | Optional `mantle-admin` + existing UI artifact | #670 |
 | View/HTTP Trigger route transport | Combined Cloudflare mounts | Platform adapters over the same Core descriptors | #669–#672 |
 | Bun SQLite/process lifecycle | Not implemented | `mantle-bun`; host owns server/database | #671 |
 | Vercel function/durable-storage lifecycle | Not implemented | `mantle-vercel`; host owns handler/client | #672 |

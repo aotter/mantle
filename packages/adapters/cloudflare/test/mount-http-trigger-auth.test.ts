@@ -92,7 +92,7 @@ function buildApp(auth: Auth): Hono {
     },
     bindings: {
       db: new InMemoryDatabase(),
-      assets: new StubAssetServer(),
+      adminAssets: new StubAssetServer(),
     },
     auth,
   });
@@ -144,7 +144,7 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
       },
       bindings: {
         db: new InMemoryDatabase(),
-        assets: new StubAssetServer(),
+        adminAssets: new StubAssetServer(),
       },
       auth: stubAuth,
       credentialResolver: () => {
@@ -266,7 +266,7 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
       handlers: { userOnlyOp: () => ({ ok: true }) },
       bindings: {
         db: new InMemoryDatabase(),
-        assets: new StubAssetServer(),
+        adminAssets: new StubAssetServer(),
       },
       auth: authFake({ role: null }),
     });
@@ -350,7 +350,7 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
       handlers: { scopedOp: () => ({ ok: true }) },
       bindings: {
         db: new InMemoryDatabase(),
-        assets: new StubAssetServer(),
+        adminAssets: new StubAssetServer(),
       },
       auth,
       jwtBearer: { audience: "https://api.example.test" },
@@ -448,7 +448,7 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
       },
       bindings: {
         db: new InMemoryDatabase(),
-        assets: new StubAssetServer(),
+        adminAssets: new StubAssetServer(),
       },
       auth: authFake(null),
       credentialResolver: (request) => {
@@ -518,7 +518,7 @@ describe("mountServerEndpoints: HTTP Trigger ctx plumbing (#299)", () => {
       handlers: { openOp: () => ({ ok: true }) },
       bindings: {
         db: new InMemoryDatabase(),
-        assets: new StubAssetServer(),
+        adminAssets: new StubAssetServer(),
       },
       auth: authFake(null),
     });

@@ -69,7 +69,7 @@ schema-View reconciliation, and skips mutation for an unchanged revision. A
 custom adapter owns its own preparation and returns application-owned semantic
 ports. Unsupported native View dialects fail before the adapter mutates state.
 
-The alpha.7 `await createCmsRuntime({ manifests, db, assets })` API is a
+The alpha.7 `await createCmsRuntime({ manifests, db })` API is a
 one-way full-product compatibility facade over these stages until #673. New
 adapter code should use the sealed inputs above.
 
@@ -79,8 +79,9 @@ The runtime is a library, not an HTTP server. A new adapter must mount equivalen
 
 | Surface | Adapter responsibility | Cloudflare reference |
 |---|---|---|
-| Public/admin HTTP endpoints | Route HTTP Triggers, View REST endpoints, admin SPA assets, and public render routes into runtime use cases. | `packages/adapters/cloudflare/src/mount/mountServerEndpoints.ts`, `mountPublicRoutes.ts` |
-| Auth endpoints | Own sign-in/session/OAuth metadata routes through the adapter's Better Auth integration. | `packages/adapters/cloudflare/src/auth/createAuth.ts`, `mountServerEndpoints.ts` |
+| Runtime HTTP endpoints | Route HTTP Triggers and public View REST endpoints into runtime use cases. | `packages/adapters/cloudflare/src/mount/mountRuntimeEndpoints.ts` |
+| Optional Admin | Supply session/request context and assets to `mantle-admin`; mount only when selected. | `packages/adapters/cloudflare/src/mount/mountAdmin.ts` |
+| Auth endpoints | Own sign-in/session/OAuth metadata through the adapter's Better Auth implementation selected by Admin/OAuth surfaces. | `packages/adapters/cloudflare/src/auth/createAuth.ts` |
 | MCP endpoints | Mount `/mcp/staff` and `/mcp` via `createOAuthProvider({ apiHandlers })`; the OAuth lib verifies bearer tokens against its KV grant store, then calls the matching apiHandler with `ctx.props` set. The adapter enforces the staff D1 role inside the apiHandler, then dispatches JSON-RPC. | `packages/adapters/cloudflare/src/mount/mountMcp.ts`, `oauth/oauthSingleton.ts`, `oauth/mountOAuth.ts` |
 
 Auth is not a runtime port. Per [ADR-0014](adr/0014-auth-better-auth-and-multi-tenant-mcp.md), the adapter owns Better Auth wiring and passes authenticated user/staff context into runtime dispatchers. Procedure handlers receive that data through `HandlerContext` in `packages/mantle-runtime/src/domain/model/HandlerContext.ts`.
@@ -99,7 +100,7 @@ Minimum HTTP behavior for a full adapter:
 - Route manifest HTTP Triggers to `runtime.invokeProcedure`.
 - Route `GET /api/views/<name>` to `runtime.executeView`.
 - Mount admin content APIs with session/role checks before calling runtime content use cases.
-- Serve admin SPA assets through `AssetServer`, with an SPA catchall for admin client-side routes.
+- Serve selected Admin SPA assets through `AdminAssetServer`, with an SPA catchall for client-side routes.
 - Mount public render routes and markdown mirrors when the starter exposes public pages.
 - Translate runtime diagnostics and validation failures into stable HTTP JSON responses instead of throwing raw errors.
 - Evaluate target auth and dynamic guards through the runtime use cases; do
@@ -156,9 +157,8 @@ Minimum auth/MCP behavior:
 
 ## Static assets
 
-`AssetServer` belongs to the alpha.7 full-facade compatibility path. A selected
-Admin module must have an asset strategy, but headless Core storage preparation
-does not require assets. Admin extraction is completed in issue #670.
+`AdminAssetServer` belongs to optional `@aotter/mantle-admin`. Headless Core
+storage preparation and binding do not accept or require a static asset port.
 
 ## Implementation checklist
 
