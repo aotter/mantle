@@ -23,12 +23,14 @@ Adopters install this one package and import from subpaths. Sub-packages remain 
 | `@aotter/mantle/runtime` | Hexagonal runtime: domain ports, use cases, infrastructure helpers (no adapter deps) |
 | `@aotter/mantle/runtime/testing` | Node-only crowded SQLite planner and HTTP sampling helpers |
 | `@aotter/mantle/codegen` | Pure linked manifests → typed `bindMantle` module emitter (no IO) |
+| `@aotter/mantle/web` | Optional HTML, Markdown, `llms.txt`, sitemap, SEO, and preview composition (no routes or platform deps) |
 | `@aotter/mantle/cloudflare` | Cloudflare Workers adapter — D1, Workers Cache, R2, Better Auth, MCP via `@cloudflare/workers-oauth-provider` |
 | `@aotter/mantle/admin-ui` | Pre-built React 19 admin SPA bundle |
 
 ```ts
 import { parseManifestsOrThrow } from "@aotter/mantle/spec";
 import { createCmsRuntime } from "@aotter/mantle/runtime";
+import { createMantleWeb } from "@aotter/mantle/web";
 import { mountServerEndpoints } from "@aotter/mantle/cloudflare";
 ```
 

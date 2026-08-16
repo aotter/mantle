@@ -41,6 +41,9 @@ jobs:
       - name: Check package boundaries
         run: pnpm run check:boundaries
 
+      - name: Check packed Core-only and Core+Web consumers
+        run: pnpm run check:web-packages
+
       - name: Typecheck workspace
         # Starter typecheck/validate moved out with PR #108 (blank
         # migrated to aotter/mantle-starters); run there now.

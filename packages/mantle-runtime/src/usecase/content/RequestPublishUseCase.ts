@@ -8,7 +8,7 @@ import {
 import type { EntryRow } from "../../domain/model/EntryRow.js";
 import type { Clock } from "../../domain/port/Clock.js";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
-import type { SiteConfigRepository } from "../../domain/port/SiteConfigRepository.js";
+import type { LocalePolicyReader } from "../../domain/port/SiteConfigRepository.js";
 import type { RequestPublishRequest } from "../dto/content/index.js";
 import {
   illegalTransitionDiagnostic,
@@ -26,7 +26,7 @@ export class RequestPublishUseCase {
     private readonly entries: EntryRepository,
     private readonly schemas: ReadonlyMap<string, SchemaManifest>,
     private readonly clock: Clock,
-    private readonly siteConfig?: SiteConfigRepository,
+    private readonly siteConfig?: LocalePolicyReader,
     private readonly validator = new EntryDataValidator(),
   ) {}
 

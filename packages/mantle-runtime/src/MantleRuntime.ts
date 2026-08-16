@@ -20,7 +20,7 @@ import {
   type IdGenerator,
 } from "./domain/port/IdGenerator.js";
 import type { PreparedMantleStorage } from "./domain/port/MantleStorageAdapter.js";
-import type { SiteConfigRepository } from "./domain/port/SiteConfigRepository.js";
+import type { LocalePolicyReader } from "./domain/port/SiteConfigRepository.js";
 import type { ViewQueryOptions } from "./domain/port/ViewQueryExecutor.js";
 import type { RuntimePlan } from "./domain/service/RuntimePlanCompiler.js";
 import { TriggerIndex } from "./domain/service/TriggerIndex.js";
@@ -51,7 +51,7 @@ import {
 } from "./usecase/view/index.js";
 
 export interface MantleRuntimePorts {
-  readonly siteConfig?: SiteConfigRepository;
+  readonly localePolicy?: LocalePolicyReader;
   readonly deferredHookDispatcher?: DeferredHookDispatcher;
   readonly clock?: Clock;
   readonly idgen?: IdGenerator;
@@ -90,6 +90,8 @@ export interface InvokeMantleTriggerRequest {
 /** Programmatic Core bound to one prepared semantic revision. */
 export interface MantleRuntime {
   readonly revision: string;
+  /** Linked schemas needed by optional projections such as Mantle Web. */
+  readonly schemas: ReadonlyMap<string, SchemaManifest>;
   readonly entries: EntryReader;
   readonly createDraft: CreateDraftUseCase;
   readonly updateDraft: UpdateDraftUseCase;
@@ -159,7 +161,7 @@ export function bindMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntimeB
     schemasByName,
     clock,
     idgen,
-    ports.siteConfig,
+    ports.localePolicy,
     validator,
   );
   const invokeProcedure = new InvokeProcedureUseCase(
@@ -190,14 +192,14 @@ export function bindMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntimeB
     schemasByName,
     clock,
     idgen,
-    ports.siteConfig,
+    ports.localePolicy,
     validator,
   );
   const updateDraft = new UpdateDraftUseCase(
     entries,
     schemasByName,
     clock,
-    ports.siteConfig,
+    ports.localePolicy,
     validator,
   );
   const getEntry = new GetEntryUseCase(entries);
@@ -206,7 +208,7 @@ export function bindMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntimeB
     entries,
     schemasByName,
     clock,
-    ports.siteConfig,
+    ports.localePolicy,
     validator,
   );
   const unpublish = new UnpublishUseCase(entries, schemasByName, clock);
@@ -230,6 +232,7 @@ export function bindMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntimeB
 
   const runtime: MantleRuntime = {
     revision: plan.semanticFingerprint,
+    schemas: schemasByName,
     entries: prepared.entries,
     createDraft,
     updateDraft,

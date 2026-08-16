@@ -20,7 +20,11 @@ import type { MediaPurposePolicy, SiteConfig, SiteDefaults } from "@aotter/mantl
  * The DB-backed implementation is in
  * `infrastructure/persistence/DatabaseSiteConfigRepository`.
  */
-export interface SiteConfigRepository {
+export interface LocalePolicyReader {
+  readLocales(): Promise<readonly string[]>;
+}
+
+export interface SiteConfigRepository extends LocalePolicyReader {
   seed(defaults: SiteDefaults | undefined): Promise<void>;
   load(): Promise<SiteConfig>;
   /** Persist the operator-owned subset exposed by the Admin settings UI.
@@ -29,7 +33,6 @@ export interface SiteConfigRepository {
    *  through this path. Optional during the `CmsRuntime.db` compatibility
    *  window; canonical Mantle runtimes always provide it. */
   updateEditable?(args: UpdateEditableSiteConfigArgs): Promise<void>;
-  readLocales(): Promise<readonly string[]>;
   /** Declared media purpose taxonomy (`SiteConfig.media.purposes`).
    *  Empty array when the deployment didn't declare any — symmetric
    *  with "no `MediaStorage` configured" and used by the MCP tool

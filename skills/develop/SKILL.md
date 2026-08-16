@@ -41,6 +41,8 @@ Public rendering is opt-in consumer wiring: `mountPublicRoutes`, a
 `TemplateRegistry`, and a matching `publicPathResolver` must agree on the
 exposed collections. Do not auto-publish every Schema. Generated projects list
 their mounted URL surface in their own README.
+Import the registry and resolver from `@aotter/mantle/web`; Core runtime does
+not install public rendering by itself.
 
 ## Authoring CLI
 

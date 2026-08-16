@@ -7,7 +7,6 @@
 export * from "./content/index.js";
 export * from "./procedure/index.js";
 export * from "./view/index.js";
-export * from "./render/index.js";
 export * from "./media/index.js";
 export * from "./lifecycle/index.js";
 export * from "./site/index.js";

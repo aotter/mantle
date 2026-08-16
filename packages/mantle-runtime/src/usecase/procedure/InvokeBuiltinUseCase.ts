@@ -11,7 +11,7 @@ import type { HandlerContext } from "../../domain/model/HandlerContext.js";
 import type { Clock } from "../../domain/port/Clock.js";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
 import type { IdGenerator } from "../../domain/port/IdGenerator.js";
-import type { SiteConfigRepository } from "../../domain/port/SiteConfigRepository.js";
+import type { LocalePolicyReader } from "../../domain/port/SiteConfigRepository.js";
 import {
   projectAndStamp,
   projectUpdateAndStamp,
@@ -53,7 +53,7 @@ export class InvokeBuiltinUseCase {
     private readonly schemasByName: ReadonlyMap<string, SchemaManifest>,
     private readonly clock: Clock,
     private readonly idgen: IdGenerator,
-    private readonly siteConfig?: SiteConfigRepository,
+    private readonly siteConfig?: LocalePolicyReader,
     private readonly validator = new EntryDataValidator(),
   ) {}
 

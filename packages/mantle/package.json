@@ -1,7 +1,7 @@
 {
   "name": "@aotter/mantle",
   "version": "0.1.0-alpha.7",
-  "description": "Umbrella entry for @aotter/mantle. Adopters install this one package and import from subpaths: /spec, /runtime, /cloudflare, /admin-ui. Sub-packages remain individually installable on npm for tooling and adapter authors.",
+  "description": "Umbrella entry for @aotter/mantle. Adopters install this one package and import from subpaths: /spec, /runtime, /web, /cloudflare, /admin-ui. Sub-packages remain individually installable on npm.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
   "repository": {
@@ -43,6 +43,10 @@
       "types": "./dist/codegen.d.ts",
       "import": "./dist/codegen.js"
     },
+    "./web": {
+      "types": "./dist/web.d.ts",
+      "import": "./dist/web.js"
+    },
     "./cloudflare": {
       "types": "./dist/cloudflare.d.ts",
       "import": "./dist/cloudflare.js"
@@ -62,7 +66,8 @@
     "@aotter/mantle-admin-ui": "workspace:*",
     "@aotter/mantle-cloudflare": "workspace:*",
     "@aotter/mantle-runtime": "workspace:*",
-    "@aotter/mantle-spec": "workspace:*"
+    "@aotter/mantle-spec": "workspace:*",
+    "@aotter/mantle-web": "workspace:*"
   },
   "peerDependencies": {
     "@cloudflare/workers-oauth-provider": "catalog:peer",

@@ -50,6 +50,7 @@ describe("createMantleRuntime", () => {
     expect(runtime).not.toHaveProperty("plan");
     expect(runtime).not.toHaveProperty("schemasByName");
     expect(runtime).not.toHaveProperty("bootInit");
+    expect(runtime.schemas.get("posts")?.metadata.name).toBe("posts");
     await runtime.createDraft.execute({
       collection: "posts",
       data: { title: "Embedded" },

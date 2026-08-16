@@ -1,9 +1,5 @@
 import { DiagnosticError, runtimeDiagnostic, type SiteConfig } from "@aotter/mantle-spec";
 import type { SiteConfigRepository } from "../../domain/port/SiteConfigRepository.js";
-import {
-  normalizeFacebookPixelId,
-  normalizeGa4MeasurementId,
-} from "../../domain/service/HtmlRenderer.js";
 import type { UpdateSiteSettingsRequest } from "../dto/site/index.js";
 
 /** Persist editable site settings. */
@@ -35,6 +31,16 @@ export class UpdateSiteSettingsUseCase {
     await this.onPublicChange?.();
     return this.siteConfig.load();
   }
+}
+
+function normalizeGa4MeasurementId(value: string | undefined): string | null {
+  const trimmed = value?.trim().toUpperCase() ?? "";
+  return /^G-[A-Z0-9]{4,32}$/.test(trimmed) ? trimmed : null;
+}
+
+function normalizeFacebookPixelId(value: string | undefined): string | null {
+  const trimmed = value?.trim() ?? "";
+  return /^[0-9]{5,32}$/.test(trimmed) ? trimmed : null;
 }
 
 function normalizeOptionalId(

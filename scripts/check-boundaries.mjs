@@ -144,6 +144,20 @@ function checkPackageDirection() {
       ],
       message: "runtime must not import optional product or adapter packages",
     },
+    {
+      dir: "packages/mantle-web/src",
+      forbidden: [
+        "@aotter/mantle-cloudflare",
+        "@aotter/mantle-admin",
+        "@aotter/mantle-admin-ui",
+        "@aotter/mantle-bun",
+        "@aotter/mantle-vercel",
+        "D1Database",
+        "KVNamespace",
+        "ExecutionContext",
+      ],
+      message: "web must not import platform or admin packages and types",
+    },
   ];
 
   for (const rule of rules) {
@@ -162,7 +176,7 @@ function checkPackageDirection() {
 function checkEntryReadOwnership() {
   const runtimeReadDirs = [
     "packages/mantle-runtime/src/domain/service/io",
-    "packages/mantle-runtime/src/usecase/render",
+    "packages/mantle-web/src/usecase",
   ];
   for (const dir of runtimeReadDirs) {
     const files = listFiles(join(ROOT, dir), (path) => path.endsWith(".ts"));
@@ -194,6 +208,35 @@ function checkEntryReadOwnership() {
   for (const file of mountFiles) {
     if (hasDatabasePropertyAccess(readFileSync(file, "utf8"), file)) {
       fail(file, "Cloudflare route mounts must not access a raw database property");
+    }
+  }
+}
+
+function checkWebPackageBoundary() {
+  const runtimePath = join(ROOT, "packages/mantle-runtime/package.json");
+  const webPath = join(ROOT, "packages/mantle-web/package.json");
+  const runtime = JSON.parse(readFileSync(runtimePath, "utf8"));
+  const web = JSON.parse(readFileSync(webPath, "utf8"));
+  const runtimeDeps = { ...runtime.dependencies, ...runtime.optionalDependencies };
+  if (runtimeDeps["@aotter/mantle-web"]) {
+    fail(runtimePath, "runtime must stay installable without Mantle Web");
+  }
+  if (!web.dependencies?.["@aotter/mantle-runtime"]) {
+    fail(webPath, "Mantle Web must depend downstream on Mantle Runtime");
+  }
+  const runtimeSource = listFiles(
+    join(ROOT, "packages/mantle-runtime/src"),
+    (path) => path.endsWith(".ts"),
+  ).map((path) => stripComments(readFileSync(path, "utf8"))).join("\n");
+  for (const token of [
+    "TemplateRegistry",
+    "PublicPathResolver",
+    "renderEntryHtml",
+    "serializeEntryAsMarkdown",
+    "composePageSeoMeta",
+  ]) {
+    if (runtimeSource.includes(token)) {
+      fail(runtimePath, `Web-owned surface leaked back into runtime: '${token}'`);
     }
   }
 }
@@ -279,6 +322,7 @@ checkDatabasePropertyDetector();
 checkRuntimeCloudflareFree();
 checkPackageDirection();
 checkEntryReadOwnership();
+checkWebPackageBoundary();
 checkViewExecutionBoundary();
 checkMantleRuntimeBoundary();
 checkCodegenBoundary();

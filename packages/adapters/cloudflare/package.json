@@ -41,6 +41,7 @@
     "@aotter/mantle-admin-ui": "workspace:*",
     "@aotter/mantle-runtime": "workspace:*",
     "@aotter/mantle-spec": "workspace:*",
+    "@aotter/mantle-web": "workspace:*",
     "@better-auth/oauth-provider": "catalog:"
   },
   "peerDependencies": {

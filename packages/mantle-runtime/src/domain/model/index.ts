@@ -6,11 +6,3 @@ export type {
   PendingUploadRecord,
   PendingUploadVariant,
 } from "./PendingUploadRecord.js";
-export type { SeoMeta } from "./SeoMeta.js";
-export {
-  TemplateRegistry,
-  type EntryContext,
-  type ListContext,
-  type EntryTemplate,
-  type ListTemplate,
-} from "./TemplateRegistry.js";
