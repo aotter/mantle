@@ -211,6 +211,22 @@ function checkViewExecutionBoundary() {
   }
 }
 
+function checkMantleRuntimeBoundary() {
+  const file = join(ROOT, "packages/mantle-runtime/src/MantleRuntime.ts");
+  const source = stripComments(readFileSync(file, "utf8"));
+  for (const token of ["DatabaseDriver", "AssetServer", "TemplateRegistry", "bootInit"]) {
+    if (source.includes(token)) {
+      fail(file, `MantleRuntime must bind prepared Core ports, not '${token}'`);
+    }
+  }
+  if (/\b(?:manifests?|sources?)\s*:\s*readonly\b/.test(source)) {
+    fail(file, "MantleRuntime cannot accept raw manifests or authored sources");
+  }
+  if (/from\s+["'][^"']*(?:mantle-web|mantle-admin|mantle-cloudflare)[^"']*["']/.test(source)) {
+    fail(file, "MantleRuntime cannot import Web, Admin, or platform packages");
+  }
+}
+
 function checkNodeTestingBoundary() {
   const root = join(ROOT, "packages/mantle-runtime/src");
   const files = listFiles(root, (path) => path.endsWith(".ts"));
@@ -254,6 +270,7 @@ checkRuntimeCloudflareFree();
 checkPackageDirection();
 checkEntryReadOwnership();
 checkViewExecutionBoundary();
+checkMantleRuntimeBoundary();
 checkNodeTestingBoundary();
 checkSkillDocsVersioned();
 

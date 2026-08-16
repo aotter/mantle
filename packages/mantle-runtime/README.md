@@ -7,6 +7,17 @@ Storage adapters prepare `RuntimePlan` into existing content repositories/reader
 and a `ViewQueryExecutor`; SQL-shaped drivers remain SQLite/D1 implementation
 details rather than a universal database contract.
 
+```ts
+const prepared = await prepareDeployment(plan, storage, deploymentOptions);
+const runtime = createMantleRuntime({ plan, prepared, handlers, ports });
+
+await runtime.invokeProcedure({ procedure: "recompute", input, ctx });
+await runtime.executeView({ view: "open-orders", options: { params }, ctx });
+```
+
+Binding is synchronous and performs no migrations, parsing, linking, or hidden
+preparation. Request identity is supplied to each invocation.
+
 Node-based tooling may import `@aotter/mantle-runtime/testing` for the real
 SQLite access-path and HTTP sampling helpers. That subpath is intentionally
 separate from the Worker-safe package entry.

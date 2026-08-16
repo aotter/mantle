@@ -7,15 +7,24 @@
  *   domain ← usecase ← infrastructure ← runtime.ts (assembly root)
  *
  * Adapters (e.g. `@aotter/mantle-cloudflare`) implement the
- * required port interfaces in `domain/port/` and call `createCmsRuntime`
- * to compose everything. Optional feature ports (for example media
- * hosting) stay adapter-agnostic and are only wired when enabled.
+ * storage and optional port interfaces in `domain/port/`, then call
+ * `createMantleRuntime` with a prepared semantic revision.
  *
  * MUST NOT import `D1Database` / `KVNamespace` / any Cloudflare-
  * specific type.
  */
 
 // Assembly root.
+export {
+  createMantleRuntime,
+  type CreateMantleRuntimeArgs,
+  type MantleRuntime,
+  type MantleRuntimePorts,
+  type InvokeMantleProcedureRequest,
+  type ExecuteMantleViewRequest,
+  type InvokeMantleTriggerRequest,
+} from "./MantleRuntime.js";
+// Alpha.7 full-product compatibility facade; delete in #673.
 export {
   createCmsRuntime,
   type CreateCmsRuntimeArgs,
@@ -78,6 +87,11 @@ export type {
   MantleStorageAdapter,
   PreparedMantleStorage,
 } from "./domain/port/MantleStorageAdapter.js";
+export type { Clock } from "./domain/port/Clock.js";
+export type {
+  SiteConfigRepository,
+  UpdateEditableSiteConfigArgs,
+} from "./domain/port/SiteConfigRepository.js";
 export { SqliteMantleStorageAdapter } from "./infrastructure/storage/SqliteMantleStorageAdapter.js";
 export {
   prepareDeployment,

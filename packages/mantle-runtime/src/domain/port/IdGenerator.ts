@@ -16,8 +16,7 @@
  *
  * The default `RandomUuidGenerator` (UUID v4 via Web Crypto) satisfies
  * this. Counter-based / sortable / "debuggable" alternatives MUST be
- * confined to test code — never wired into a `createCmsRuntime` /
- * adapter ctor at runtime.
+ * confined to test code — never wired into a production runtime or adapter.
  */
 export interface IdGenerator {
   next(): string;

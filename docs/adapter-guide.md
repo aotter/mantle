@@ -45,6 +45,7 @@ Compile before deployment preparation, then pass only the sealed plan:
 
 ```ts
 import {
+  createMantleRuntime,
   prepareDeployment,
   SqliteMantleStorageAdapter,
 } from "@aotter/mantle-runtime";
@@ -56,6 +57,11 @@ const prepared = await prepareDeployment(plan, storage, {
     (capability) => capability.reservedHttpPathPrefixes,
   ),
 });
+const runtime = createMantleRuntime({
+  plan,
+  prepared,
+  handlers,
+});
 ```
 
 The official SQLite adapter runs canonical migrations, defaults, indexes, and
@@ -63,9 +69,9 @@ schema-View reconciliation, and skips mutation for an unchanged revision. A
 custom adapter owns its own preparation and returns application-owned semantic
 ports. Unsupported native View dialects fail before the adapter mutates state.
 
-The alpha.7 `createCmsRuntime({ manifests, db, assets })` / `bootInit()` API is
-a one-way compatibility facade over this preparation path until #673. New
-adapter code should not treat it as the portable contract.
+The alpha.7 `await createCmsRuntime({ manifests, db, assets })` API is a
+one-way full-product compatibility facade over these stages until #673. New
+adapter code should use the sealed inputs above.
 
 ## HTTP and MCP surfaces
 

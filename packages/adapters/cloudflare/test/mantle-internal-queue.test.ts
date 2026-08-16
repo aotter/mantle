@@ -1,7 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
-  AssetServer,
-  DatabaseDriver,
   DeferredHookEnvelope,
   CmsRuntime,
 } from "@aotter/mantle-runtime";
@@ -217,7 +215,7 @@ describe("createQueueHandler", () => {
     let failMiddle = true;
     const seen: string[] = [];
     const names = ["010-first", "020-middle", "030-last"] as const;
-    const runtime = createCmsRuntime({
+    const runtime = await createCmsRuntime({
       manifests: [
         postsSchema(),
         hookProcedure("first"),
@@ -242,8 +240,8 @@ describe("createQueueHandler", () => {
           return {};
         },
       },
-      db: {} as DatabaseDriver,
-      assets: {} as AssetServer,
+      db: new InMemoryDatabase(),
+      assets: new StubAssetServer(),
     });
     const handler = createQueueHandler<unknown>({ get: async () => runtime });
     const envelope = { ...sampleEnvelope, eventId: "event-stable", triggerNames: names };
@@ -287,7 +285,7 @@ describe("createQueueHandler", () => {
     const deferredHookDispatcher = new WorkersQueueHookDispatcher(rejectingQueue);
     const seen: string[] = [];
     let nextId = 1;
-    const runtime = createCmsRuntime({
+    const runtime = await createCmsRuntime({
       manifests: [
         postsSchema(),
         hookProcedure("create-audit"),

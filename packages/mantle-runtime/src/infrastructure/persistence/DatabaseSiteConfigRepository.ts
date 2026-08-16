@@ -13,8 +13,8 @@ import type {
 } from "../../domain/port/SiteConfigRepository.js";
 
 /**
- * `site_config` row read/write. `seed` runs once per boot (called from
- * `bootInit`) and treats keys differently depending on who owns them:
+ * `site_config` row read/write. SQLite preparation calls `seed` once per
+ * changed revision and treats keys differently depending on who owns them:
  *
  * - **UI-editable, seed-once** (`brand`, `title`, `description`,
  *   `ga4MeasurementId`, `facebookPixelId`):
@@ -34,7 +34,7 @@ import type {
  *   purpose, adjusted `maxBytes`) silently never reached a
  *   already-deployed site's D1 row.
  *
- * The runtime calls `seed` once during bootInit; the result of `load`
+ * SQLite preparation calls `seed`; the result of `load`
  * is what every render path and template sees.
  *
  * `mediaPurposes` is JSON-encoded (an array of `MediaPurposePolicy`

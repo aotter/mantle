@@ -126,7 +126,7 @@ export interface MediaPurposePolicy {
  * and media purposes) sync on every boot. Empty / blank fields skip, preventing a
  * partial declaration from clobbering stored values.
  *
- * Validated during `bootInit()` by `assertSiteDefaultsCanonical`; a
+ * Validated during storage preparation by `assertSiteDefaultsCanonical`; a
  * non-canonical locale tag rejects boot rather than corrupting the seed.
  *
  * `SiteDefaults` is the **author-time** declaration (what the consumer

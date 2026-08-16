@@ -70,9 +70,7 @@ async function assertLocale(args: AssertEntryWritableArgs): Promise<void> {
   }
   if (!args.siteConfig) return;
   const locales = await args.siteConfig.readLocales();
-  // ADR-0010: empty `site_config.locales` means the locale subsystem
-  // is off site-wide. Pass through so a fresh deploy whose `bootInit`
-  // hasn't seeded locales yet can still accept localized writes.
+  // ADR-0010: empty site locales means the locale subsystem is off.
   if (locales.length === 0) return;
   if (locales.includes(value)) return;
   throw new DiagnosticError(
