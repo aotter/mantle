@@ -64,7 +64,7 @@ the #673 release gate:
 
 | Consumer | Revision | Manifest paths |
 |---|---|---|
-| `aotter/mantle-starters` | `530040e840d583a5d0d9ce4cc02f65ad236ff247` | `blank/manifests/site.yaml`; `overlays/{community,intake,presence,publication,reservation,transaction}/manifests/site.yaml`; `recipes/typed-web/manifests/site.yaml` |
+| `aotter/mantle-starters` | `c2d7e1fcfe51b6e74bffdaf5c86a4de04b47127d` | `blank/manifests/site.yaml`; `overlays/{community,intake,presence,publication,reservation,transaction}/manifests/site.yaml`; `recipes/typed-web/manifests/site.yaml` |
 | `aotter/mantle-landing` | `8dab7985baf0416e6760974a5ea78a166ab2ce61` | `manifests/site.yaml` |
 | `aotter/mantle-platform` (Remote Mantle/control plane) | `a54fb3423cb51796bea336f16501a9ec507a6c54` | `manifests/platform.yaml` |
 | Core i18n fixture | this repository | `packages/mantle-spec/test/fixtures/i18n-parent-child/manifests/site.yaml` |
