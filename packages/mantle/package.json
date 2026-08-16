@@ -1,7 +1,7 @@
 {
   "name": "@aotter/mantle",
   "version": "0.1.0-alpha.7",
-  "description": "Umbrella entry for @aotter/mantle. Adopters install this one package and import from subpaths: /spec, /runtime, /web, /admin, /bun, /cloudflare, /admin-ui. Sub-packages remain individually installable on npm.",
+  "description": "Umbrella entry for @aotter/mantle. Adopters install this one package and import from subpaths: /spec, /runtime, /web, /admin, /bun, /vercel, /cloudflare, /admin-ui. Sub-packages remain individually installable on npm.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
   "repository": {
@@ -55,6 +55,14 @@
       "types": "./dist/bun.d.ts",
       "import": "./dist/bun.js"
     },
+    "./vercel": {
+      "types": "./dist/vercel.d.ts",
+      "import": "./dist/vercel.js"
+    },
+    "./vercel/libsql": {
+      "types": "./dist/vercel-libsql.d.ts",
+      "import": "./dist/vercel-libsql.js"
+    },
     "./cloudflare": {
       "types": "./dist/cloudflare.d.ts",
       "import": "./dist/cloudflare.js"
@@ -77,6 +85,7 @@
     "@aotter/mantle-cloudflare": "workspace:*",
     "@aotter/mantle-runtime": "workspace:*",
     "@aotter/mantle-spec": "workspace:*",
+    "@aotter/mantle-vercel": "workspace:*",
     "@aotter/mantle-web": "workspace:*"
   },
   "peerDependencies": {
@@ -84,7 +93,13 @@
     "aws4fetch": "catalog:peer",
     "better-auth": "catalog:peer",
     "hono": "catalog:peer",
+    "@libsql/client": "catalog:peer",
     "zod": "catalog:peer"
+  },
+  "peerDependenciesMeta": {
+    "@libsql/client": {
+      "optional": true
+    }
   },
   "scripts": {
     "prebuild": "rm -rf dist .tsbuildinfo",
@@ -100,6 +115,7 @@
     "aws4fetch": "catalog:",
     "better-auth": "catalog:",
     "hono": "catalog:",
+    "@libsql/client": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"

@@ -82,6 +82,16 @@ for manifest-declared public Views and HTTP Triggers. The host owns
 `Bun.serve`, database shutdown, authentication, and CSRF policy; the adapter
 prepares the semantic revision once and retries only after failed preparation.
 
+### Vercel Functions embedding
+
+`@aotter/mantle-vercel` accepts a compiled plan plus any application-owned
+`MantleStorageAdapter` and reuses the same public View/HTTP Trigger transport as
+Bun. It maps deferred work to Vercel Functions `waitUntil` and otherwise leaves
+the Web Handler, auth/CSRF, and route composition to the application. The
+optional `/libsql` subpath adapts a caller-owned remote Turso/libSQL client to
+the canonical SQLite chain; the default entry has no database-vendor policy.
+Vercel's read-only filesystem and writable `/tmp` are never durable state.
+
 ## HTTP and MCP surfaces
 
 The runtime is a library, not an HTTP server. A new adapter must mount equivalent framework routes:

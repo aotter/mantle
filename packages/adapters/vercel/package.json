@@ -1,0 +1,62 @@
+{
+  "name": "@aotter/mantle-vercel",
+  "version": "0.1.0-alpha.7",
+  "description": "Embedded Vercel Functions adapter for Mantle Core with injected durable storage and Web-standard transport.",
+  "license": "Apache-2.0",
+  "homepage": "https://mantle.tools/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aotter/mantle.git",
+    "directory": "packages/adapters/vercel"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha",
+    "registry": "https://registry.npmjs.org"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./libsql": {
+      "types": "./dist/libsql.d.ts",
+      "import": "./dist/libsql.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "prebuild": "rm -rf dist .tsbuildinfo",
+    "build": "tsc -b tsconfig.lib.json",
+    "typecheck": "tsc --noEmit -p tsconfig.lib.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aotter/mantle-runtime": "workspace:*",
+    "@vercel/functions": "catalog:"
+  },
+  "peerDependencies": {
+    "@libsql/client": "catalog:peer",
+    "zod": "catalog:peer"
+  },
+  "peerDependenciesMeta": {
+    "@libsql/client": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@aotter/mantle-spec": "workspace:*",
+    "@libsql/client": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
+  }
+}

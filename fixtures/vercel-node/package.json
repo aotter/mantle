@@ -1,0 +1,21 @@
+{
+  "name": "mantle-vercel-fixture",
+  "private": true,
+  "version": "0.1.0-alpha.7",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "smoke:live": "node smoke-live.mjs"
+  },
+  "dependencies": {
+    "@aotter/mantle-runtime": "workspace:*",
+    "@aotter/mantle-spec": "workspace:*",
+    "@aotter/mantle-vercel": "workspace:*",
+    "@libsql/client": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -49,6 +49,9 @@ jobs:
       - name: Check packed Bun adapter
         run: pnpm run check:bun-package
 
+      - name: Check packed Vercel adapter
+        run: pnpm run check:vercel-package
+
       - name: Typecheck workspace
         # Starter typecheck/validate moved out with PR #108 (blank
         # migrated to aotter/mantle-starters); run there now.

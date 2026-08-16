@@ -343,6 +343,71 @@ function checkBunPackageBoundary() {
   }
 }
 
+function checkVercelPackageBoundary() {
+  const runtimePath = join(ROOT, "packages/mantle-runtime/package.json");
+  const vercelPath = join(ROOT, "packages/adapters/vercel/package.json");
+  const runtime = JSON.parse(readFileSync(runtimePath, "utf8"));
+  const vercel = JSON.parse(readFileSync(vercelPath, "utf8"));
+  const runtimeDeps = { ...runtime.dependencies, ...runtime.optionalDependencies };
+  if (runtimeDeps["@aotter/mantle-vercel"] || runtimeDeps["@vercel/functions"]) {
+    fail(runtimePath, "runtime must stay installable without Vercel");
+  }
+  if (!vercel.dependencies?.["@aotter/mantle-runtime"] ||
+      !vercel.dependencies?.["@vercel/functions"]) {
+    fail(vercelPath, "Vercel must compose downstream from Runtime and its lifecycle API");
+  }
+  for (const dependency of [
+    "@aotter/mantle-admin",
+    "@aotter/mantle-admin-ui",
+    "@aotter/mantle-bun",
+    "@aotter/mantle-cloudflare",
+    "@aotter/mantle-web",
+    "hono",
+  ]) {
+    if (vercel.dependencies?.[dependency]) {
+      fail(vercelPath, `Vercel must not depend on optional or platform package '${dependency}'`);
+    }
+  }
+
+  const runtimeSource = listFiles(
+    join(ROOT, "packages/mantle-runtime/src"),
+    (path) => path.endsWith(".ts"),
+  ).map((path) => stripComments(readFileSync(path, "utf8"))).join("\n");
+  if (runtimeSource.includes("@vercel/") || /\bVERCEL_/.test(runtimeSource)) {
+    fail(runtimePath, "runtime source cannot import or assume Vercel primitives");
+  }
+
+  const vercelSource = listFiles(
+    join(ROOT, "packages/adapters/vercel/src"),
+    (path) => path.endsWith(".ts"),
+  ).map((path) => stripComments(readFileSync(path, "utf8"))).join("\n");
+  if (/from\s+["'][^"']*mantle-(?:admin|bun|cloudflare|web)[^"']*["']/.test(vercelSource) ||
+      /\b(?:D1Database|ExecutionContext|Bun\.serve)\b/.test(vercelSource)) {
+    fail(vercelPath, "Vercel cannot import optional products or another platform adapter");
+  }
+  if (/from\s+["']node:fs["']|["']\/tmp(?:\/|["'])|\bcreateClient\s*\(|\.close\s*\(/.test(vercelSource)) {
+    fail(vercelPath, "Vercel adapter cannot own local durable state or client lifecycle");
+  }
+  const main = stripComments(readFileSync(
+    join(ROOT, "packages/adapters/vercel/src/index.ts"),
+    "utf8",
+  ));
+  if (main.includes("libsql")) {
+    fail(vercelPath, "the default Vercel entry must not select optional libSQL");
+  }
+
+  const fixtureFiles = listFiles(
+    join(ROOT, "fixtures/vercel-node/api"),
+    (path) => path.endsWith(".ts"),
+  );
+  for (const file of fixtureFiles) {
+    const source = stripComments(readFileSync(file, "utf8"));
+    if (/["']file:|["']\/tmp(?:\/|["'])/.test(source)) {
+      fail(file, "Vercel live fixture cannot select function-local canonical storage");
+    }
+  }
+}
+
 function checkViewExecutionBoundary() {
   const file = join(
     ROOT,
@@ -367,7 +432,7 @@ function checkMantleRuntimeBoundary() {
   if (/\b(?:manifests?|sources?)\s*:\s*readonly\b/.test(source)) {
     fail(file, "MantleRuntime cannot accept raw manifests or authored sources");
   }
-  if (/from\s+["'][^"']*(?:mantle-web|mantle-admin|mantle-cloudflare)[^"']*["']/.test(source)) {
+  if (/from\s+["'][^"']*(?:mantle-web|mantle-admin|mantle-bun|mantle-cloudflare|mantle-vercel)[^"']*["']/.test(source)) {
     fail(file, "MantleRuntime cannot import Web, Admin, or platform packages");
   }
 }
@@ -427,6 +492,7 @@ checkEntryReadOwnership();
 checkWebPackageBoundary();
 checkAdminPackageBoundary();
 checkBunPackageBoundary();
+checkVercelPackageBoundary();
 checkViewExecutionBoundary();
 checkMantleRuntimeBoundary();
 checkCodegenBoundary();

@@ -1,43 +1,40 @@
-import type { Database } from "bun:sqlite";
+import { waitUntil as vercelWaitUntil } from "@vercel/functions";
 import {
   MANTLE_VIEW_ROUTE_PREFIX,
-  createMantleRuntime,
   createMantleRequestHandler,
+  createMantleRuntime,
   prepareDeployment,
-  SqliteMantleStorageAdapter,
   type AnyHandler,
+  type MantleRequestHandler,
   type MantleRuntime,
   type MantleRuntimePorts,
-  type MantleRequestHandler,
+  type MantleStorageAdapter,
   type RuntimePlan,
 } from "@aotter/mantle-runtime";
-import type { SiteDefaults } from "@aotter/mantle-spec";
-import { BunDatabaseDriver } from "./BunDatabaseDriver.js";
 
-export interface CreateBunMantleOptions {
+export interface CreateVercelMantleOptions {
   readonly plan: RuntimePlan;
-  readonly database: Database;
+  readonly storage: MantleStorageAdapter;
   readonly handlers?: Readonly<Record<string, AnyHandler>>;
-  readonly siteDefaults?: SiteDefaults;
   readonly ports?: MantleRuntimePorts;
   readonly reservedHttpPathPrefixes?: readonly string[];
+  /** Override only for another host lifecycle (for example Next.js `after`) or tests. */
+  readonly waitUntil?: (promise: Promise<unknown>) => void;
 }
 
-export interface BunMantle {
+export interface VercelMantle {
   getRuntime(): Promise<MantleRuntime>;
-  /** Return `null` when the host should continue through its own router. */
+  /** Return `null` when the application should continue through its own routes. */
   readonly handle: MantleRequestHandler;
 }
 
-/** Embed one prepared Mantle revision in an application-owned Bun process. */
-export function createBunMantle(options: CreateBunMantleOptions): BunMantle {
-  const driver = new BunDatabaseDriver(options.database);
-  const storage = new SqliteMantleStorageAdapter(driver, options.siteDefaults);
+/** Bind one plan to application-owned durable storage in a Vercel instance. */
+export function createVercelMantle(options: CreateVercelMantleOptions): VercelMantle {
   let initialization: Promise<MantleRuntime> | null = null;
 
   const getRuntime = (): Promise<MantleRuntime> => {
     if (initialization) return initialization;
-    initialization = prepareDeployment(options.plan, storage, {
+    initialization = prepareDeployment(options.plan, options.storage, {
       handlerNames: Object.keys(options.handlers ?? {}),
       reservedHttpPathPrefixes: [
         MANTLE_VIEW_ROUTE_PREFIX,
@@ -55,7 +52,12 @@ export function createBunMantle(options: CreateBunMantleOptions): BunMantle {
     return initialization;
   };
 
-  const handle = createMantleRequestHandler({ plan: options.plan, getRuntime });
+  const route = createMantleRequestHandler({ plan: options.plan, getRuntime });
+  const schedule = options.waitUntil ?? vercelWaitUntil;
+  const handle: MantleRequestHandler = (request, context) => route(request, {
+    ...(context ?? { user: null, staff: null, env: {} }),
+    waitUntil: context?.waitUntil ?? schedule,
+  });
 
   return { getRuntime, handle };
 }

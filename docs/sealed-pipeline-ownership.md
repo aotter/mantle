@@ -37,7 +37,7 @@ issue that must delete or delegate the old path.
 | Admin API/application/static assets | Optional `mantle-admin`; Cloudflare only binds auth/request context/assets | Optional `mantle-admin` + existing UI artifact | #670 |
 | View/HTTP Trigger route transport | Combined Cloudflare mounts | Platform adapters over the same Core descriptors | #669–#672 |
 | Bun SQLite/process lifecycle | `mantle-bun`; host owns server/database | `mantle-bun`; host owns server/database | #671 |
-| Vercel function/durable-storage lifecycle | Not implemented | `mantle-vercel`; host owns handler/client | #672 |
+| Vercel function/durable-storage lifecycle | `mantle-vercel`; host owns handler/client | `mantle-vercel`; host owns handler/client | #672 |
 | Legacy overloads, aliases, combined mounts, duplicate tests | Current public API plus temporary migration delegates | Deleted | #673 |
 | Contributor/agent/release guidance | `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, two release skill copies | One tool-neutral authority and one release skill | #674 |
 

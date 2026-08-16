@@ -91,6 +91,12 @@ export type {
   PreparedMantleStorage,
 } from "./domain/port/MantleStorageAdapter.js";
 export { SqliteMigrationRunner } from "./infrastructure/boot/SqliteMigrationRunner.js";
+export {
+  MANTLE_VIEW_ROUTE_PREFIX,
+  createMantleRequestHandler,
+  type MantleRequestHandler,
+  type MantleRequestHandlerOptions,
+} from "./infrastructure/http/createMantleRequestHandler.js";
 export type { Clock } from "./domain/port/Clock.js";
 export type {
   SiteConfigRepository,
