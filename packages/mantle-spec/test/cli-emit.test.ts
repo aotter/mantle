@@ -68,17 +68,17 @@ spec:
   target: { procedure: submitContact }
 `;
 
-async function fixtureRoot(): Promise<string> {
+async function fixtureRoot(fileName = "site.yaml"): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "mantle-cli-"));
   const m = join(dir, "manifests");
   await mkdir(m, { recursive: true });
-  await writeFile(join(m, "site.yaml"), [SCHEMA_YAML, VIEW_YAML, PROC_YAML, TRIGGER_YAML].join("---\n"));
+  await writeFile(join(m, fileName), [SCHEMA_YAML, VIEW_YAML, PROC_YAML, TRIGGER_YAML].join("---\n"));
   return m;
 }
 
 describe("loadManifestsFromRoot + partition", () => {
-  it("parses manifests/site.yaml into all 4 atom buckets", async () => {
-    const root = await fixtureRoot();
+  it("parses a caller-named YAML manifest into all 4 atom buckets", async () => {
+    const root = await fixtureRoot("platform.yml");
     const { parsed, parseErrors } = await loadManifestsFromRoot(root);
     expect(parseErrors).toEqual([]);
     const manifests = parsed?.entries.map((entry) => entry.manifest) ?? [];
@@ -100,18 +100,23 @@ describe("loadManifestsFromRoot + partition", () => {
     });
   });
 
-  it("keeps YAML document indexes instead of rebuilding them from successful manifests", async () => {
+  it("sorts files and keeps document indexes local to each source", async () => {
     const root = join(await mkdtemp(join(tmpdir(), "mantle-source-index-")), "manifests");
     await mkdir(root, { recursive: true });
-    await writeFile(join(root, "site.yaml"), `${SCHEMA_YAML}---\n---\n${VIEW_YAML}`);
+    await writeFile(join(root, "z-views.yml"), `---\n---\n${VIEW_YAML}`);
+    await writeFile(join(root, "a-schema.yaml"), SCHEMA_YAML);
 
     const { parsed, parseErrors } = await loadManifestsFromRoot(root);
 
     expect(parseErrors).toEqual([]);
-    expect(parsed?.entries.find(({ manifest }) => manifest.kind === "Schema")?.source.documentIndex)
-      .toBe(0);
-    expect(parsed?.entries.find(({ manifest }) => manifest.kind === "View")?.source.documentIndex)
-      .toBe(2);
+    expect(parsed?.entries.map(({ manifest, source }) => [
+      manifest.kind,
+      source.sourceId,
+      source.documentIndex,
+    ])).toEqual([
+      ["Schema", join(root, "a-schema.yaml"), 0],
+      ["View", join(root, "z-views.yml"), 1],
+    ]);
   });
 
   it("returns MANIFEST_ROOT_NOT_FOUND when path is missing", async () => {
@@ -120,15 +125,14 @@ describe("loadManifestsFromRoot + partition", () => {
     expect(parseErrors[0]?.code).toBe("MANIFEST_ROOT_NOT_FOUND");
   });
 
-  it("rejects a manifest root whose file is not named site.yaml", async () => {
-    const root = join(await mkdtemp(join(tmpdir(), "mantle-wrong-manifest-name-")), "manifests");
+  it("returns MANIFEST_ROOT_NOT_FOUND when the directory has no YAML files", async () => {
+    const root = join(await mkdtemp(join(tmpdir(), "mantle-empty-manifest-root-")), "manifests");
     await mkdir(root);
-    await writeFile(join(root, "stories.yaml"), SCHEMA_YAML);
     const { parsed, parseErrors } = await loadManifestsFromRoot(root);
     expect(parsed).toBeUndefined();
     expect(parseErrors[0]).toMatchObject({
       code: "MANIFEST_ROOT_NOT_FOUND",
-      path: join(root, "site.yaml"),
+      path: root,
     });
   });
 });

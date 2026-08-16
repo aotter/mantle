@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { cwd } from "node:process";
 import {
@@ -11,10 +11,9 @@ import {
 } from "../../kernel/diagnostic.js";
 
 /**
- * Read `<manifest root>/site.yaml`, parse every YAML document, return the flat
- * sealed parser value + any parse-level diagnostics. Used by every CLI
- * subcommand that consumes manifests (validate, introspect,
- * emit-openapi, emit-types).
+ * Read every immediate YAML file in a caller-owned manifest directory, parse
+ * every document, and return the sealed parser value + parse diagnostics. Used
+ * by every CLI subcommand that consumes manifests.
  */
 export interface LoadManifestsResult {
   readonly parsed?: ParsedManifestSet;
@@ -28,26 +27,59 @@ export async function loadManifestsFromRoot(rootArg: string): Promise<LoadManife
   const root = resolve(cwd(), rootArg);
   const parseErrors: Diagnostic[] = [];
   let parsedSet: ParsedManifestSet | undefined;
-  const file = join(root, "site.yaml");
 
-  let text: string;
+  let files: string[];
   try {
-    text = await readFile(file, "utf8");
+    files = (await readdir(root))
+      .filter((name) => /\.ya?ml$/i.test(name))
+      .map((name) => join(root, name))
+      .sort();
   } catch (err) {
     parseErrors.push(
       validateDiagnostic({
         code: "MANIFEST_ROOT_NOT_FOUND",
         severity: "error",
-        path: file,
-        expected: "a manifest file named manifests/site.yaml",
-        message: `Could not read manifest file ${file}: ${err instanceof Error ? err.message : String(err)}`,
+        path: root,
+        expected: "a readable directory containing one or more .yaml or .yml files",
+        message: `Could not read manifest directory ${root}: ${err instanceof Error ? err.message : String(err)}`,
       }),
     );
     return { parseErrors, root };
   }
 
+  if (files.length === 0) {
+    parseErrors.push(
+      validateDiagnostic({
+        code: "MANIFEST_ROOT_NOT_FOUND",
+        severity: "error",
+        path: root,
+        expected: "one or more .yaml or .yml files",
+        message: `No YAML manifest files found in ${root}`,
+      }),
+    );
+    return { parseErrors, root };
+  }
+
+  const sources = [];
+  for (const file of files) {
+    try {
+      sources.push({ sourceId: file, text: await readFile(file, "utf8") });
+    } catch (err) {
+      parseErrors.push(
+        validateDiagnostic({
+          code: "MANIFEST_ROOT_NOT_FOUND",
+          severity: "error",
+          path: file,
+          expected: "a readable YAML manifest file",
+          message: `Could not read manifest file ${file}: ${err instanceof Error ? err.message : String(err)}`,
+        }),
+      );
+      return { parseErrors, root };
+    }
+  }
+
   try {
-    const parsed = parseManifestSources({ sources: [{ sourceId: file, text }] });
+    const parsed = parseManifestSources({ sources });
     parseErrors.push(...parsed.diagnostics.map((diagnostic) => ({
       ...diagnostic,
       path: diagnostic.source
@@ -64,7 +96,7 @@ export async function loadManifestsFromRoot(rootArg: string): Promise<LoadManife
       validateDiagnostic({
         code: "INVALID_MANIFEST_ENVELOPE",
         severity: "error",
-        path: file,
+        path: root,
         message: err instanceof Error ? err.message : String(err),
       }),
     );

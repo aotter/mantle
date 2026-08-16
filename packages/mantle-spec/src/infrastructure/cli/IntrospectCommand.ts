@@ -33,7 +33,7 @@ function printHelp(): void {
 Usage: mantle introspect [--manifests <dir>]
 
 Options:
-  --manifests <dir>   Directory containing site.yaml (default: ./manifests)
+  --manifests <dir>   Directory containing YAML manifests (default: ./manifests)
   -h, --help          This help
 
 Output: JSON object with keys { schemas, views, procedures, triggers,

@@ -34,3 +34,7 @@ for (const { manifest, source } of parsed.value.entries) {
 `sourceId` is an opaque identity chosen by the caller. Successful values are
 canonical and sealed; a failed parse returns diagnostics without a partial
 `ParsedManifestSet`.
+
+The CLI `--manifests` directory reads its immediate `.yaml` and `.yml` files
+in lexicographic order. File names belong to the caller; discovery is not
+recursive.

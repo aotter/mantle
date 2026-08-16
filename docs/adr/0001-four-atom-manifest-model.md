@@ -1,12 +1,20 @@
 # ADR-0001: 4-atom YAML manifest model under `cms.mantle.aotter.net/v1`
 
-**Status:** Carried over from POC v0.0.x; refreshed and folded for v0.1.0 (incorporates POC ADRs 0005 + 0006).
+**Status:** Accepted for the four-atom grammar and multi-document YAML;
+the fixed `site.yaml` file contract is superseded by ADR-0019.
 
-**Date**: 2026-04-30 (POC origin), refreshed 2026-05-03 for v0.1.0 rebuild
+**Date**: 2026-04-30 (POC origin); last amended 2026-08-16
 
 **Deciders**: phsu
 
-**Related**: ADR-0002 (closed enums for bindings)
+**Related**: ADR-0002 (closed enums for bindings),
+[ADR-0019](0019-sealed-manifest-runtime-pipeline.md) (caller-owned source boundary)
+
+> **2026-08-16 amendment:** the four atoms and multi-document YAML remain
+> normative. Core no longer assigns source file names: its parser accepts
+> caller-owned source IDs, and its CLI reads immediate `.yaml` / `.yml` files
+> in lexicographic order. `manifests/site.yaml` remains only a starter
+> convention. Fixed-file statements below are retained as decision history.
 
 ---
 
