@@ -33,8 +33,9 @@ const liveConfig = JSON.parse(readFileSync(
 
 try {
   if (liveConfig.framework !== null ||
+      liveConfig.outputDirectory !== "public" ||
       liveConfig.rewrites?.[0]?.destination !== "/api/index") {
-    throw new Error("Vercel live fixture must remain a framework-free catch-all Web Handler");
+    throw new Error("Vercel live fixture must remain a deployable framework-free catch-all Web Handler");
   }
   mkdirSync(artifacts);
   const tarballs = Object.fromEntries([
