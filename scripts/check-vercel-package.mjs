@@ -26,14 +26,16 @@ const executionFixture = readFileSync(
   join(root, "packages/adapters/bun/test/fixtures/embedded.yaml"),
   "utf8",
 );
+const liveFixture = join(root, "packages/adapters/vercel/test/fixtures/live-node");
 const liveConfig = JSON.parse(readFileSync(
-  join(root, "fixtures/vercel-node/vercel.json"),
+  join(liveFixture, "vercel.json"),
   "utf8",
 ));
 
 try {
   if (liveConfig.framework !== null ||
       liveConfig.outputDirectory !== "public" ||
+      !existsSync(join(liveFixture, "public/robots.txt")) ||
       liveConfig.rewrites?.[0]?.destination !== "/api/index") {
     throw new Error("Vercel live fixture must remain a deployable framework-free catch-all Web Handler");
   }
