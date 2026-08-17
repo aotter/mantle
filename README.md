@@ -35,16 +35,11 @@
 
 ---
 
-Vibe coding carves an application corridor by corridor. Mantle begins with the
-laws that bring the dungeon to life.
-
 <p align="center">
-  <strong><em>Schema &middot; View &middot; Procedure &middot; Trigger</em></strong><br>
-  <sub>Name the four atoms, and the application awakens.</sub>
+  <strong><em>Schema. View. Procedure. Trigger.</em></strong><br>
+  That is the whole incantation.<br>
+  Speak it in plain YAML, and the dungeon wakes — whole, lit from within, and yours to command.
 </p>
-
-Speak them in YAML. Mantle seals the incantation into a runtime plan and typed
-bindings; the database, server, routes, and UI remain yours to command.
 
 > **Prerelease:** APIs and manifests may change between alpha releases. Treat
 > the installed package's version-matched docs as the contract and review
@@ -52,9 +47,9 @@ bindings; the database, server, routes, and UI remain yours to command.
 
 ## One manifest, one contract
 
-Define application intent in ordinary YAML. Related atoms can share a file;
-Core discovers immediate `.yaml` and `.yml` files under `manifests/` without
-assigning a special filename.
+Each atom is an ordinary YAML document. Keep related atoms together with `---`,
+or split them across `.yaml` and `.yml` files under `manifests/`. Core assigns
+no sacred filename.
 
 ```yaml
 # manifests/orders.yaml
@@ -84,13 +79,13 @@ spec:
     eq: { field: status, value: open }
 ```
 
-Generate the sealed plan and typed application bindings:
+One command seals the manifest set into a plan and generates typed bindings:
 
 ```bash
 pnpm exec mantle generate
 ```
 
-Embed them behind storage owned by the application:
+The generated facade is a typed door into your own runtime:
 
 ```ts
 import { createMantleRuntime, prepareDeployment } from "@aotter/mantle/runtime";
@@ -103,12 +98,16 @@ const mantle = bindMantle(runtime);
 const orders = await mantle.views.openOrders();
 ```
 
-Generated properties use deterministic lower-camel names while preserving the
-authored wire names internally. Dynamic applications can skip code generation
-and call Runtime with authored names directly. The host keeps ownership of
-storage, handlers, routing, process lifecycle, and sibling application code.
+`open-orders` becomes `openOrders` in TypeScript while its wire name stays
+unchanged. Code generation is optional; dynamic applications can call Runtime
+with authored names directly.
+
+Nothing else is surrendered. The host owns storage, handlers, routing, process
+lifecycle, and sibling application code.
 
 ## How it works
+
+The incantation follows one sealed path. Everything around it stays composable.
 
 ```text
 YAML sources -> parse -> link -> compile -> RuntimePlan
@@ -118,37 +117,44 @@ YAML sources -> parse -> link -> compile -> RuntimePlan
                        typed bindings / Web / Admin / platform adapters
 ```
 
-- Use Spec alone for parsing, linking, diagnostics, or custom tooling.
-- Embed Runtime behind semantic ports backed by SQLite, Postgres, MongoDB, or
-  existing application repositories.
-- Add generated bindings when compile-time property names are useful.
-- Add Web, Admin, or Admin UI independently.
-- Use the Bun, Vercel, or Cloudflare adapter when its host contract matches.
-- Start from [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters)
-  when an official example or bootstrap is useful. A Starter is not required
-  by Core and does not define where Mantle lives in an application.
+- **Spec** parses, links, and diagnoses manifests without a runtime or adapter.
+- **Runtime** executes the sealed plan through semantic ports backed by SQLite,
+  Postgres, MongoDB, or existing application repositories.
+- **Codegen** adds typed property names when they help; Runtime does not require
+  it.
+- **Web, Admin, and Admin UI** compose independently around Core.
+- **Bun, Vercel, and Cloudflare adapters** bind only the host contracts they
+  own.
+- **Starters** are examples and bootstraps, not the shape of Core. Browse them
+  at [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters).
 
 ### Why “Mantle”?
 
-A mollusk's mantle is the living tissue that secretes its shell. Mantle follows
-the same idea: it does not hand you a prefabricated application shell and ask
-you to move in. It grows useful structure around the application you already
-own.
+A mollusk's mantle is the living tissue that grows its shell. This Mantle works
+the same way: it grows useful structure around the application you already
+own. It never asks you to move into a prefabricated shell.
 
 ## Develop with Mantle
 
-### For human engineers
+### Human engineers
 
-Every layer is an ordinary TypeScript API. Human engineers can author and
-review manifests directly, use Spec without Runtime, implement semantic ports
-over existing storage, or compose generated bindings and optional packages.
-The [umbrella package README](packages/mantle/README.md) is the installed API
-guide; adapter authors start with the [adapter guide](docs/adapter-guide.md).
+Human engineers get the same direct path: ordinary YAML in, ordinary
+TypeScript APIs out.
 
-### With a coding agent
+```bash
+pnpm add @aotter/mantle@alpha
+```
 
-This source repository is also an installable agent plugin bundle for Claude
-Code, Codex, Cursor, and GitHub Copilot. The plugin gives coding agents
+Author and review manifests directly, use Spec without Runtime, implement
+semantic ports over existing storage, or compose generated bindings and
+optional packages. The [umbrella package README](packages/mantle/README.md) is
+the installed API guide; adapter authors start with the
+[adapter guide](docs/adapter-guide.md).
+
+### Coding agents
+
+This repository has a second entrance: it is an installable agent plugin bundle
+for Claude Code, Codex, Cursor, and GitHub Copilot. The plugin carries
 version-matched Mantle workflows; it is an authoring aid, not a Runtime
 dependency.
 
@@ -165,15 +171,17 @@ codex plugin add mantle@mantle
 ```
 
 Cursor and GitHub Copilot discover their plugin manifests when this repository
-is cloned or opened. See [`skills/README.md`](skills/README.md) for host details
-and the shipped consumer workflows.
+is cloned or opened. See [`skills/README.md`](skills/README.md) for host details.
 
-Installing the source-repository plugin helps an agent create and maintain
-Mantle projects. Inside a consumer project, `mantle skills` instead projects
-the installed package's exact version of the `develop`, `plugin`, `theme`, and
-`update` skills into repo-local agent paths.
+- **Repository plugin:** teaches an agent to create and maintain Mantle
+  projects.
+- **`mantle skills`:** projects the installed package's exact `develop`,
+  `plugin`, `theme`, and `update` workflows into a consumer repository.
 
 ## Packages
+
+The center is small: Spec defines meaning and Runtime executes it. Everything
+else composes around them.
 
 | Package | Role |
 |---|---|
@@ -194,16 +202,19 @@ Cloudflare are optional peers and remain directly installable.
 
 The umbrella provides one `mantle` command set:
 
-```bash
-pnpm exec mantle generate
-pnpm exec mantle generate --check
-pnpm exec mantle validate
-pnpm exec mantle introspect
-pnpm exec mantle emit-openapi
-pnpm exec mantle emit-types
-pnpm exec mantle skills
-pnpm exec mantle update --ref <immutable-starter-ref>
-```
+| Command | Purpose |
+|---|---|
+| `mantle generate` | Compile manifests into the sealed plan and typed `bindMantle` module. |
+| `mantle generate --check` | Fail without writing when generated code is stale. |
+| `mantle validate` | Validate manifests and handler-source references. |
+| `mantle introspect` | Print the parsed manifest tree as JSON. |
+| `mantle emit-openapi` | Emit OpenAPI 3.1 from HTTP Triggers and View routes. |
+| `mantle emit-types` | Emit TypeScript declarations from Schemas, Procedures, and Views. |
+| `mantle skills` | Project version-matched Core skills into the consumer repository. |
+| `mantle update --ref <ref>` | Compare local work with an immutable provision bundle; apply nothing. |
+
+Run commands through the project's package manager, for example
+`pnpm exec mantle generate`.
 
 `generate` writes one `.mantle/generated/mantle.ts` module containing the
 sealed plan, generated types, and `bindMantle`. It does not install Admin,
