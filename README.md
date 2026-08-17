@@ -35,16 +35,16 @@
 
 ---
 
-Vibe coding digs one corridor at a time. Mantle declares the laws of the
-dungeon.
+Vibe coding carves an application corridor by corridor. Mantle begins with the
+laws that bring the dungeon to life.
 
 <p align="center">
   <strong><em>Schema &middot; View &middot; Procedure &middot; Trigger</em></strong><br>
-  <sub>Four atoms. That's all you need to make an application move.</sub>
+  <sub>Name the four atoms, and the application awakens.</sub>
 </p>
 
-Mantle compiles the spell into a runtime plan and typed bindings. Your
-database, server, routes, and UI remain yours.
+Speak them in YAML. Mantle seals the incantation into a runtime plan and typed
+bindings; the database, server, routes, and UI remain yours to command.
 
 > **Prerelease:** APIs and manifests may change between alpha releases. Treat
 > the installed package's version-matched docs as the contract and review
