@@ -34,6 +34,7 @@ const liveConfig = JSON.parse(readFileSync(
 try {
   if (liveConfig.framework !== null ||
       liveConfig.outputDirectory !== "public" ||
+      !existsSync(join(root, "fixtures/vercel-node/public/robots.txt")) ||
       liveConfig.rewrites?.[0]?.destination !== "/api/index") {
     throw new Error("Vercel live fixture must remain a deployable framework-free catch-all Web Handler");
   }
