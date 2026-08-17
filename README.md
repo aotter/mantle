@@ -9,19 +9,34 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/aotter/mantle/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/aotter/mantle/actions/workflows/ci.yml/badge.svg?branch=develop"></a>
-  <a href="https://www.npmjs.com/package/@aotter/mantle"><img alt="npm alpha" src="https://img.shields.io/npm/v/@aotter/mantle/alpha?label=npm&color=cb3837"></a>
-  <a href="https://github.com/aotter/mantle/releases"><img alt="GitHub prerelease" src="https://img.shields.io/github/v/release/aotter/mantle?include_prereleases&sort=semver&label=release"></a>
-  <a href="https://nodejs.org/"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/node-%3E%3D22-339933?logo=nodedotjs&logoColor=white"></a>
-  <a href="LICENSE"><img alt="Apache-2.0 license" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
+  <a href="https://github.com/aotter/mantle/actions/workflows/ci.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/aotter/mantle/ci.yml?branch=develop&style=flat-square&label=build"></a>
+  <a href="https://github.com/aotter/mantle/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/aotter/mantle?style=flat-square&color=0b7285&label=stars"></a>
+  <a href="https://www.npmjs.com/package/@aotter/mantle"><img alt="npm alpha" src="https://img.shields.io/npm/v/@aotter/mantle/alpha?style=flat-square&label=npm&color=0b7285"></a>
+  <a href="https://github.com/aotter/mantle/releases"><img alt="GitHub prerelease" src="https://img.shields.io/github/v/release/aotter/mantle?include_prereleases&sort=semver&style=flat-square&label=release&color=0b7285"></a>
+  <a href="https://nodejs.org/"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/node-%3E%3D22-0b7285?style=flat-square&logo=nodedotjs&logoColor=white"></a>
+  <a href="LICENSE"><img alt="Apache-2.0 license" src="https://img.shields.io/badge/license-Apache--2.0-0b7285?style=flat-square"></a>
 </p>
 
 <p align="center">
-  <img src="docs/assets/mantle-hero.jpg" width="100%" alt="A dungeon master invokes four runes while a living shell labyrinth assembles itself; an unused pickaxe lies nearby.">
+  <a href="#one-manifest-one-contract">Quick start</a>
+  &middot;
+  <a href="#how-it-works">How it works</a>
+  &middot;
+  <a href="#develop-with-mantle">Develop</a>
+  &middot;
+  <a href="#packages">Packages</a>
+  &middot;
+  <a href="#cli-reference">CLI</a>
 </p>
 
-Most vibe coding builds an application one tunnel at a time: a data model, a
-route, a page, an admin action, a background job. The first version is fast;
+<p align="center">
+  <img src="docs/assets/mantle-hero.jpg" width="900" alt="A dungeon master invokes four runes while a living shell labyrinth assembles itself; an unused pickaxe lies nearby.">
+</p>
+
+---
+
+**Most vibe coding builds an application one tunnel at a time.** A data model,
+a route, a page, an admin action, a background job. The first version is fast;
 the next prompt has to remember how every tunnel connects.
 
 Mantle gives the application a small grammar: Schema, View, Procedure, and
