@@ -1,12 +1,18 @@
+<p align="center">
+  <img src="docs/assets/mantle-hero.jpg" width="900" alt="A dungeon master invokes four runes while a living shell labyrinth assembles itself; an unused pickaxe lies nearby.">
+</p>
+
 <h1 align="center">Mantle</h1>
 
-<p align="center">
-  <em>“Be the dungeon master. Don’t code every corridor.”</em>
-</p>
+---
 
 <p align="center">
-  <strong>Declare four atoms. Mantle makes the dungeon move.</strong>
+  <em>Be the dungeon master. Don’t code every corridor.</em>
 </p>
+
+> **Schema. View. Procedure. Trigger. Four atoms from which your world takes shape.**
+>
+> Speak it in plain YAML, and the dungeon wakes—whole, lit from within, and yours to command.
 
 <p align="center">
   <a href="https://github.com/aotter/mantle/actions/workflows/ci.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/aotter/mantle/ci.yml?branch=develop&style=flat-square&label=build"></a>
@@ -27,18 +33,6 @@
   <a href="#packages">Packages</a>
   &middot;
   <a href="#cli-reference">CLI</a>
-</p>
-
-<p align="center">
-  <img src="docs/assets/mantle-hero.jpg" width="900" alt="A dungeon master invokes four runes while a living shell labyrinth assembles itself; an unused pickaxe lies nearby.">
-</p>
-
----
-
-<p align="center">
-  <strong><em>Schema. View. Procedure. Trigger.</em></strong><br>
-  That is the whole incantation.<br>
-  Speak it in plain YAML, and the dungeon wakes — whole, lit from within, and yours to command.
 </p>
 
 > **Prerelease:** APIs and manifests may change between alpha releases. Treat
