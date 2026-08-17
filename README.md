@@ -34,9 +34,9 @@
   <a href="#cli-reference">CLI</a>
 </p>
 
-> **Prerelease:** APIs and manifests may change between alpha releases. Treat
-> the installed package's version-matched docs as the contract and review
-> generated code before production use.
+<p align="center">
+  <sub><strong>Prerelease:</strong> APIs and manifests may change between alpha releases. Treat the installed package's version-matched docs as the contract and review generated code before production use.</sub>
+</p>
 
 # Describe it. Run it.
 
