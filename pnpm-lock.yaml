@@ -51,31 +51,6 @@ importers:
         specifier: 'catalog:'
         version: 6.0.3
 
-  fixtures/vercel-node:
-    dependencies:
-      '@aotter/mantle-runtime':
-        specifier: workspace:*
-        version: link:../../packages/mantle-runtime
-      '@aotter/mantle-spec':
-        specifier: workspace:*
-        version: link:../../packages/mantle-spec
-      '@aotter/mantle-vercel':
-        specifier: workspace:*
-        version: link:../../packages/adapters/vercel
-      '@libsql/client':
-        specifier: 'catalog:'
-        version: 0.17.4
-      zod:
-        specifier: 'catalog:'
-        version: 4.4.3
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.1.1
-      typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
-
   packages/adapters/bun:
     dependencies:
       '@aotter/mantle-runtime':
@@ -171,6 +146,31 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.4.3
+
+  packages/adapters/vercel/test/fixtures/live-node:
+    dependencies:
+      '@aotter/mantle-runtime':
+        specifier: workspace:*
+        version: link:../../../../../mantle-runtime
+      '@aotter/mantle-spec':
+        specifier: workspace:*
+        version: link:../../../../../mantle-spec
+      '@aotter/mantle-vercel':
+        specifier: workspace:*
+        version: link:../../..
+      '@libsql/client':
+        specifier: 'catalog:'
+        version: 0.17.4
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.1.1
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
 
   packages/mantle:
     dependencies:

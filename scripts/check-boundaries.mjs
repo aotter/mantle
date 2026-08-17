@@ -8,16 +8,14 @@ const ROOT = process.cwd();
 const failures = [];
 
 function listFiles(dir, predicate) {
-  return readdirSync(dir, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => join(entry.parentPath, entry.name))
-    .filter(
-      (path) =>
-        !relative(dir, path)
-          .split(sep)
-          .some((seg) => seg === "node_modules" || seg === "dist") &&
-        predicate(path),
-    );
+  const files = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === "node_modules" || entry.name === "dist") continue;
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) files.push(...listFiles(path, predicate));
+    else if (entry.isFile() && predicate(path)) files.push(path);
+  }
+  return files;
 }
 
 function stripComments(source) {
@@ -463,7 +461,7 @@ function checkVercelPackageBoundary() {
   }
 
   const fixtureFiles = listFiles(
-    join(ROOT, "fixtures/vercel-node/api"),
+    join(ROOT, "packages/adapters/vercel/test/fixtures/live-node/api"),
     (path) => path.endsWith(".ts"),
   );
   for (const file of fixtureFiles) {

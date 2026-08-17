@@ -16,3 +16,6 @@ pnpm smoke:live
 The smoke writes and publishes one unique order, then reads it in a later View
 invocation and exercises the manifest HTTP Trigger plus the sibling health
 route. Delete the preview project and its test database when no longer needed.
+
+Keep this local live fixture until a maintained downstream Vercel consumer
+provides the same deployment proof.
