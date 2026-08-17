@@ -35,14 +35,16 @@
 
 ---
 
-**Most vibe coding builds an application one tunnel at a time.** A data model,
-a route, a page, an admin action, a background job. The first version is fast;
-the next prompt has to remember how every tunnel connects.
+Vibe coding digs one corridor at a time. Mantle declares the laws of the
+dungeon.
 
-Mantle gives the application a small grammar: Schema, View, Procedure, and
-Trigger. Author only the atoms you need, validate them into one runtime plan,
-and generate typed bindings from the same contract. Bring your own database,
-server, routes, and UI.
+<p align="center">
+  <strong><em>Schema &middot; View &middot; Procedure &middot; Trigger</em></strong><br>
+  <sub>Four atoms. That's all you need to make an application move.</sub>
+</p>
+
+Mantle compiles the spell into a runtime plan and typed bindings. Your
+database, server, routes, and UI remain yours.
 
 > **Prerelease:** APIs and manifests may change between alpha releases. Treat
 > the installed package's version-matched docs as the contract and review
