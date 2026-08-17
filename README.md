@@ -1,14 +1,24 @@
-# Mantle
+<h1 align="center">Mantle</h1>
 
-[![CI](https://github.com/aotter/mantle/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/aotter/mantle/actions/workflows/ci.yml)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+<p align="center">
+  <em>“Be the dungeon master. Don’t code every corridor.”</em>
+</p>
 
-![A dungeon master invokes four runes while a living shell labyrinth assembles itself; an unused pickaxe lies nearby.](docs/assets/mantle-hero.jpg)
+<p align="center">
+  <strong>Declare four atoms. Mantle makes the dungeon move.</strong>
+</p>
 
-**Be the dungeon master. Don't code every corridor.**
+<p align="center">
+  <a href="https://github.com/aotter/mantle/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/aotter/mantle/actions/workflows/ci.yml/badge.svg?branch=develop"></a>
+  <a href="https://www.npmjs.com/package/@aotter/mantle"><img alt="npm alpha" src="https://img.shields.io/npm/v/@aotter/mantle/alpha?label=npm&color=cb3837"></a>
+  <a href="https://github.com/aotter/mantle/releases"><img alt="GitHub prerelease" src="https://img.shields.io/github/v/release/aotter/mantle?include_prereleases&sort=semver&label=release"></a>
+  <a href="https://nodejs.org/"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/node-%3E%3D22-339933?logo=nodedotjs&logoColor=white"></a>
+  <a href="LICENSE"><img alt="Apache-2.0 license" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
+</p>
 
-Declare four atoms. Mantle makes the dungeon move.
+<p align="center">
+  <img src="docs/assets/mantle-hero.jpg" width="100%" alt="A dungeon master invokes four runes while a living shell labyrinth assembles itself; an unused pickaxe lies nearby.">
+</p>
 
 Most vibe coding builds an application one tunnel at a time: a data model, a
 route, a page, an admin action, a background job. The first version is fast;
