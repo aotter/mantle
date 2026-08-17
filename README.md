@@ -38,6 +38,22 @@
 > the installed package's version-matched docs as the contract and review
 > generated code before production use.
 
+# Describe it. Run it.
+
+You write a prompt and watch the AI agent start building the whole project, one
+file at a time. Mantle takes a different path: describe the project in plain
+YAML, and let that description become a validated, typed, running service.
+
+Schema, View, Procedure, and Trigger express what exists, how it is read, what
+can change, and what happens next. Mantle compiles that intent into a runtime
+plan and connects it to the stack you already own.
+
+The goal isn’t to help an agent write the whole codebase faster. It’s to make
+the description itself executable.
+
+> Don’t ask the agent to write the whole project. Ask it to describe the
+> project in YAML—and let Mantle make it work.
+
 ## One manifest, one contract
 
 Each atom is an ordinary YAML document. Keep related atoms together with `---`,
