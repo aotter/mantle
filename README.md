@@ -1,7 +1,5 @@
 <h1 align="center">Mantle</h1>
 
----
-
 <p align="center">
   <em>Be the dungeon master. Don’t code every corridor.</em>
 </p>
