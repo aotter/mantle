@@ -8,14 +8,32 @@ and a `ViewQueryExecutor`; SQL-shaped drivers remain SQLite/D1 implementation
 details rather than a universal database contract.
 
 ```ts
-const prepared = await prepareDeployment(plan, storage, deploymentOptions);
-const runtime = createMantleRuntime({ plan, prepared, handlers, ports });
+const runtime = await bootMantleRuntime({
+  plan,
+  storage,
+  handlers,
+  ports,
+  deployment: deploymentOptions,
+});
 
 await runtime.invokeProcedure({ procedure: "recompute", input, ctx });
 await runtime.executeView({ view: "open-orders", options: { params }, ctx });
 ```
 
-Pass `handlerNames` during preparation when the embedding dispatches
+`bootMantleRuntime` makes one preparation attempt and derives handler readiness
+from `handlers`; hosts still own lazy initialization, caching, retries, and
+resource shutdown.
+
+Advanced hosts may keep the stages explicit. `prepareDeployment()` returns the
+exact plan together with its prepared semantic storage, so binding cannot
+accidentally pair storage from one revision with another plan:
+
+```ts
+const prepared = await prepareDeployment(plan, storage, deploymentOptions);
+const runtime = createMantleRuntime({ prepared, handlers, ports });
+```
+
+Pass `handlerNames` during explicit preparation when the embedding dispatches
 Procedures. A projection-only embedding may omit it.
 
 Binding is synchronous and performs no migrations, parsing, linking, or hidden

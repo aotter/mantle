@@ -4,6 +4,7 @@ import {
   type SchemaManifest,
 } from "@aotter/mantle-spec";
 import type { AnyHandler, HandlerContext } from "./domain/model/HandlerContext.js";
+import type { PreparedMantleRevision } from "./domain/model/PreparedMantleRevision.js";
 import { SystemClock, type Clock } from "./domain/port/Clock.js";
 import type { DeferredHookDispatcher } from "./domain/port/DeferredHookDispatcher.js";
 import type { EntryReader } from "./domain/port/EntryReader.js";
@@ -18,7 +19,7 @@ import {
   RandomUuidGenerator,
   type IdGenerator,
 } from "./domain/port/IdGenerator.js";
-import type { PreparedMantleStorage } from "./domain/port/MantleStorageAdapter.js";
+import type { MantleStorageAdapter } from "./domain/port/MantleStorageAdapter.js";
 import type {
   LocalePolicyReader,
   SiteConfigRepository,
@@ -60,6 +61,11 @@ import {
   type ExecuteViewResponse,
 } from "./usecase/view/index.js";
 import { UpdateSiteSettingsUseCase } from "./usecase/site/index.js";
+import {
+  assertDeploymentPlan,
+  prepareDeployment,
+  type DeploymentPreparationOptions,
+} from "./usecase/boot/ValidateBootUseCase.js";
 
 export interface MantleRuntimePorts {
   readonly localePolicy?: LocalePolicyReader;
@@ -73,10 +79,17 @@ export interface MantleRuntimePorts {
 }
 
 export interface CreateMantleRuntimeArgs {
-  readonly plan: RuntimePlan;
-  readonly prepared: PreparedMantleStorage;
+  readonly prepared: PreparedMantleRevision;
   readonly ports?: MantleRuntimePorts;
   readonly handlers?: Readonly<Record<string, AnyHandler>>;
+}
+
+export interface BootMantleRuntimeArgs {
+  readonly plan: RuntimePlan;
+  readonly storage: MantleStorageAdapter;
+  readonly ports?: MantleRuntimePorts;
+  readonly handlers?: Readonly<Record<string, AnyHandler>>;
+  readonly deployment?: Omit<DeploymentPreparationOptions, "handlerNames">;
 }
 
 export interface InvokeMantleProcedureRequest {
@@ -141,9 +154,22 @@ export interface MantleMedia {
   resolveMany(ids: readonly string[]): Promise<ReadonlyMap<string, MediaAsset>>;
 }
 
+/** Prepare and bind once. Hosts remain responsible for caching and retry policy. */
+export async function bootMantleRuntime(args: BootMantleRuntimeArgs): Promise<MantleRuntime> {
+  const handlers = { ...(args.handlers ?? {}) };
+  const prepared = await prepareDeployment(args.plan, args.storage, {
+    ...args.deployment,
+    handlerNames: Object.keys(handlers),
+  });
+  return createMantleRuntime({ prepared, handlers, ports: args.ports });
+}
+
 export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntime {
-  const { plan, prepared } = args;
+  const { plan, storage: prepared } = args.prepared;
   const ports = args.ports ?? {};
+  if (args.prepared.handlerNames) {
+    assertDeploymentPlan(plan, { handlerNames: Object.keys(args.handlers ?? {}) });
+  }
   const schemasByName = manifestMap(plan.schemas);
   const proceduresByName = manifestMap(plan.procedures);
   const viewsByName = manifestMap(plan.views);

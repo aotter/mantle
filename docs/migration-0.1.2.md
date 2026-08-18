@@ -8,9 +8,9 @@ Admin UI, Bun, Vercel, and Cloudflare are selected separately.
 |---|---|
 | `parseManifests*` | `parseManifestSources({ sources })` |
 | raw `Manifest[]` validation/runtime input | `ParsedManifestSet` → `LinkedManifestSet` → `RuntimePlan` |
-| `createCmsRuntime({ manifests, db })` | `prepareDeployment(plan, storage)` then `createMantleRuntime({ plan, prepared })` |
+| `createCmsRuntime({ manifests, db })` | `bootMantleRuntime({ plan, storage })`, or explicit prepare then `createMantleRuntime({ prepared })` |
 | `CmsRuntime.db` / `entryReader` | keep the application DB handle; use `runtime.entries` for Mantle reads |
-| generated `manifest`, `site.ts`, `types.d.ts` | generated `plan`, `bindMantle`, and types in `mantle.ts` |
+| generated `manifest`, `site.ts`, `types.d.ts` | generated `plan`, `createMantle`, `bindMantle`, and types in `mantle.ts` |
 | `bindMantleSite` / string-keyed Views | `bindMantle(runtime)` and generated lower-camel properties |
 | `createCmsRef` / `CmsConfig` | `createMantleRuntimeRef` / `MantleCloudflareConfig` |
 | `mountServerEndpoints` | explicitly compose `mountRuntimeEndpoints` and optional `mountAdmin` |

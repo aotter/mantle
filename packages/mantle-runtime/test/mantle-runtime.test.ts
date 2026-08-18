@@ -4,7 +4,7 @@ import {
   type LinkedManifestSet,
 } from "@aotter/mantle-spec";
 import { describe, expect, it } from "vitest";
-import { createMantleRuntime } from "../src/index.js";
+import { createMantleRuntime, prepareDeployment } from "../src/index.js";
 import {
   compileRuntimePlan,
   type RuntimePlan,
@@ -18,22 +18,27 @@ describe("createMantleRuntime", () => {
     const entries = new InMemoryEntryRepository();
     const seenViewUsers: Array<string | undefined> = [];
     const lifecycleEvents: string[] = [];
-    const runtime = createMantleRuntime({
-      plan: compilePlan(manifests),
-      prepared: {
-        entries,
-        views: {
-          async execute(request) {
-            seenViewUsers.push(request.ctxUserId);
-            return {
-              rows: [{ userId: request.ctxUserId }],
-              page: request.page ?? 1,
-              show: request.show ?? 50,
-              hasMore: false,
-            };
+    const plan = compilePlan(manifests);
+    const prepared = await prepareDeployment(plan, {
+      async prepare() {
+        return {
+          entries,
+          views: {
+            async execute(request) {
+              seenViewUsers.push(request.ctxUserId);
+              return {
+                rows: [{ userId: request.ctxUserId }],
+                page: request.page ?? 1,
+                show: request.show ?? 50,
+                hasMore: false,
+              };
+            },
           },
-        },
+        };
       },
+    });
+    const runtime = createMantleRuntime({
+      prepared,
       handlers: {
         echo: (_input, ctx) => ({ userId: ctx.user?.id }),
         audit: (_input, ctx) => {

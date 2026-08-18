@@ -1,9 +1,8 @@
 import { waitUntil as vercelWaitUntil } from "@vercel/functions";
 import {
   MANTLE_VIEW_ROUTE_PREFIX,
+  bootMantleRuntime,
   createMantleRequestHandler,
-  createMantleRuntime,
-  prepareDeployment,
   type AnyHandler,
   type MantleRequestHandler,
   type MantleRuntime,
@@ -34,18 +33,18 @@ export function createVercelMantle(options: CreateVercelMantleOptions): VercelMa
 
   const getRuntime = (): Promise<MantleRuntime> => {
     if (initialization) return initialization;
-    initialization = prepareDeployment(options.plan, options.storage, {
-      handlerNames: Object.keys(options.handlers ?? {}),
-      reservedHttpPathPrefixes: [
-        MANTLE_VIEW_ROUTE_PREFIX,
-        ...(options.reservedHttpPathPrefixes ?? []),
-      ],
-    }).then((prepared) => createMantleRuntime({
+    initialization = bootMantleRuntime({
       plan: options.plan,
-      prepared,
+      storage: options.storage,
       handlers: options.handlers,
       ports: options.ports,
-    })).catch((error) => {
+      deployment: {
+        reservedHttpPathPrefixes: [
+          MANTLE_VIEW_ROUTE_PREFIX,
+          ...(options.reservedHttpPathPrefixes ?? []),
+        ],
+      },
+    }).catch((error) => {
       initialization = null;
       throw error;
     });

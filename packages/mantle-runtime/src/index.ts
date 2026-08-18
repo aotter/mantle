@@ -16,7 +16,9 @@
 
 // Assembly root.
 export {
+  bootMantleRuntime,
   createMantleRuntime,
+  type BootMantleRuntimeArgs,
   type CreateMantleRuntimeArgs,
   type MantleRuntime,
   type MantleMedia,
@@ -87,6 +89,7 @@ export type {
   MantleStorageAdapter,
   PreparedMantleStorage,
 } from "./domain/port/MantleStorageAdapter.js";
+export type { PreparedMantleRevision } from "./domain/model/PreparedMantleRevision.js";
 export { SqliteMigrationRunner } from "./infrastructure/boot/SqliteMigrationRunner.js";
 export {
   MANTLE_VIEW_ROUTE_PREFIX,

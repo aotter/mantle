@@ -1,7 +1,6 @@
 import {
   SqliteMantleStorageAdapter,
-  createMantleRuntime,
-  prepareDeployment,
+  bootMantleRuntime,
   type MantleRuntime,
   type RuntimePlan,
   type SiteConfigRepository,
@@ -53,14 +52,13 @@ export function createMantleRuntimeRef(config: MantleCloudflareConfig): MantleRu
     get(): Promise<CloudflareMantleRuntime> {
       if (booted) return booted;
       booted = bootWithD1Retry(async () => {
-        const prepared = await prepareDeployment(config.plan, storage, {
-          handlerNames: Object.keys(config.handlers ?? {}),
-          reservedHttpPathPrefixes: config.reservedHttpPathPrefixes,
-        });
-        const runtime = createMantleRuntime({
+        const runtime = await bootMantleRuntime({
           plan: config.plan,
-          prepared,
+          storage,
           handlers: config.handlers,
+          deployment: {
+            reservedHttpPathPrefixes: config.reservedHttpPathPrefixes,
+          },
           ports: {
             deferredHookDispatcher: config.bindings.deferredHookDispatcher,
             mediaStorage: config.bindings.mediaStorage,

@@ -1,9 +1,8 @@
 import type { Database } from "bun:sqlite";
 import {
   MANTLE_VIEW_ROUTE_PREFIX,
-  createMantleRuntime,
+  bootMantleRuntime,
   createMantleRequestHandler,
-  prepareDeployment,
   SqliteMantleStorageAdapter,
   type AnyHandler,
   type MantleRuntime,
@@ -37,18 +36,18 @@ export function createBunMantle(options: CreateBunMantleOptions): BunMantle {
 
   const getRuntime = (): Promise<MantleRuntime> => {
     if (initialization) return initialization;
-    initialization = prepareDeployment(options.plan, storage, {
-      handlerNames: Object.keys(options.handlers ?? {}),
-      reservedHttpPathPrefixes: [
-        MANTLE_VIEW_ROUTE_PREFIX,
-        ...(options.reservedHttpPathPrefixes ?? []),
-      ],
-    }).then((prepared) => createMantleRuntime({
+    initialization = bootMantleRuntime({
       plan: options.plan,
-      prepared,
+      storage,
       handlers: options.handlers,
       ports: options.ports,
-    })).catch((error) => {
+      deployment: {
+        reservedHttpPathPrefixes: [
+          MANTLE_VIEW_ROUTE_PREFIX,
+          ...(options.reservedHttpPathPrefixes ?? []),
+        ],
+      },
+    }).catch((error) => {
       initialization = null;
       throw error;
     });
