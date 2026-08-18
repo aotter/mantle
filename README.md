@@ -155,23 +155,19 @@ action tools when exposed by MCP Triggers. At `/mcp/staff`, authorized teammates
 can operate queues, Slack, email, ERP, CRM, or anything else your handler can
 reach—without maintaining a second MCP server or schema.
 
-## Agent-readable and i18n-ready, built in
+## Agent-discoverable and i18n-ready, built in
 
-Enable the optional Web surface and every public page gets a predictable
-Markdown mirror, in every locale:
+Enable the optional Web surface and every public page gets a predictable path
+and Markdown mirror in every locale:
 
 ```text
 /en/posts/hello
 /en/posts/hello.md
-/zh-tw/posts/ni-hao
-/zh-tw/posts/ni-hao.md
-/en/llms.txt
-/llms.txt
-/sitemap.xml
+/zh-tw/posts/hello
 ```
 
-Mantle also emits canonical links, hreflang, JSON-LD, and social metadata from
-the same published state.
+Mantle also emits `llms.txt`, sitemap, canonical links, hreflang, JSON-LD, and
+social metadata from the same published state.
 
 ## Publishing and operations in one Admin
 
