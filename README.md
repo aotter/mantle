@@ -189,31 +189,39 @@ Community are coming soon. Small Cloudflare sites can fit within its
 
 ## Architecture
 
-Manifests compile once into a sealed RuntimePlan. Packages compose outward
-from the portable Core; Core never depends on optional products or host
-adapters.
+Dependencies point upward. Runtime depends only on Spec; optional products and
+host adapters compose around Core.
 
 ```mermaid
-block
-  columns 5
+flowchart BT
+    U["@aotter/mantle<br/>umbrella · CLI · codegen"]
 
-  entry["Entry"]:1
-  mantle["@aotter/mantle<br/>umbrella · CLI · codegen"]:4
+    subgraph PRODUCTS["Optional products"]
+        W["@aotter/mantle-web"]
+        A["@aotter/mantle-admin"]
+        UI["@aotter/mantle-admin-ui<br/>prebuilt SPA"]
+    end
 
-  core["Portable Core"]:1
-  spec["@aotter/mantle-spec<br/>manifest semantics"]:2
-  runtime["@aotter/mantle-runtime<br/>RuntimePlan · ports · invocation"]:2
+    subgraph HOSTS["Host adapters"]
+        B["@aotter/mantle-bun"]
+        C["@aotter/mantle-cloudflare"]
+        V["@aotter/mantle-vercel"]
+        X["Your adapter"]
+    end
 
-  optional["Optional products"]:1
-  web["@aotter/mantle-web"]:1
-  admin["@aotter/mantle-admin"]:1
-  adminui["@aotter/mantle-admin-ui"]:2
+    subgraph CORE["Portable Core"]
+        R["@aotter/mantle-runtime"]
+        S["@aotter/mantle-spec"]
+    end
 
-  hosts["Host adapters"]:1
-  bun["@aotter/mantle-bun"]:1
-  cloudflare["@aotter/mantle-cloudflare"]:1
-  vercel["@aotter/mantle-vercel"]:1
-  custom["Your adapter"]:1
+    U --> R
+    R --> S
+    W --> R
+    A --> R
+    B --> R
+    C --> R
+    V --> R
+    X --> R
 ```
 
 Mantle is named for the living tissue that grows a mollusk's shell: it adds
