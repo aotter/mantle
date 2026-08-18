@@ -61,9 +61,11 @@ try {
     if (!linked.ok) throw new Error("empty source set did not link");
     const compiled = core.compileRuntimePlan(linked.value);
     if (!compiled.ok) throw new Error("empty source set did not compile");
-    const runtime = core.createMantleRuntime({
+    const runtime = await core.bootMantleRuntime({
       plan: compiled.value,
-      prepared: { entries: {}, views: {}, localePolicy: {} },
+      storage: {
+        prepare: async () => ({ entries: {}, views: {}, localePolicy: {} }),
+      },
     });
     if (runtime.revision !== compiled.value.semanticFingerprint) {
       throw new Error("headless runtime did not bind application-owned ports");
@@ -87,7 +89,8 @@ try {
   }, `
     const core = await import("@aotter/mantle/runtime");
     const spec = await import("@aotter/mantle/spec");
-    if (typeof core.createMantleRuntime !== "function" ||
+    if (typeof core.bootMantleRuntime !== "function" ||
+        typeof core.createMantleRuntime !== "function" ||
         typeof spec.parseManifestSources !== "function") {
       throw new Error("umbrella Core exports are incomplete");
     }

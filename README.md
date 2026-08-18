@@ -87,23 +87,23 @@ the description itself executable.
    pnpm exec mantle generate
    ```
 
-3. Bind the generated plan to your
-   [storage adapter](docs/adapter-guide.md) and application:
+3. Give the generated binding your
+   [storage adapter](docs/adapter-guide.md):
 
    ```ts
-   import { createMantleRuntime, prepareDeployment } from "@aotter/mantle/runtime";
-   import { bindMantle, plan } from "./.mantle/generated/mantle.js";
+   import { createMantle } from "./.mantle/generated/mantle.js";
 
-   const prepared = await prepareDeployment(plan, storage);
-   const runtime = createMantleRuntime({ plan, prepared });
-   const mantle = bindMantle(runtime);
+   const mantle = await createMantle({ storage });
 
    // The `published-posts` View becomes a typed lower-camel property.
    const posts = await mantle.views.publishedPosts();
    ```
 
 4. That's it: you have a validated runtime plan and a typed API. Your
-   application still owns its storage, routing, and lifecycle.
+   application still owns its storage, routing, and lifecycle. The direct
+   helper prepares once without hidden caching or retries; platform adapters
+   keep those policies, and `mantle.runtime` exposes the same raw Runtime when
+   the host needs lower-level capabilities.
 
 ## How it works
 

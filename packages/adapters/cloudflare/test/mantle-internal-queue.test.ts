@@ -117,7 +117,7 @@ async function testRuntime(options: {
   const prepared = await prepareDeployment(plan, storage, {
     handlerNames: Object.keys(options.handlers),
   });
-  return createMantleRuntime({ plan, prepared, handlers: options.handlers, ports: options.ports });
+  return createMantleRuntime({ prepared, handlers: options.handlers, ports: options.ports });
 }
 
 describe("WorkersQueueHookDispatcher#enqueue", () => {

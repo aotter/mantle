@@ -36,6 +36,7 @@ describe("mantle generate", () => {
       expect(await runGenerate([])).toBe(0);
       const mantlePath = join(root, ".mantle", "generated", "mantle.ts");
       const firstMantle = await readFile(mantlePath, "utf8");
+      expect(firstMantle).toContain("export async function createMantle<Env = unknown>");
       expect(firstMantle).toContain("export function bindMantle(runtime: CoreMantleRuntime)");
       expect(firstMantle).toContain("export const plan = sealRuntimePlan(");
       expect(firstMantle).toContain("productsBySku: (request:");
@@ -51,12 +52,12 @@ describe("mantle generate", () => {
 
       const consumerPath = join(root, "consumer.ts");
       await writeFile(consumerPath, `
-import { bindMantle } from "./.mantle/generated/mantle.js";
-import type { MantleRuntime } from "@aotter/mantle/runtime";
+import { bindMantle, createMantle, plan } from "./.mantle/generated/mantle.js";
+import type { MantleRuntime, MantleStorageAdapter } from "@aotter/mantle/runtime";
 
 const calls: string[] = [];
 const runtime = {
-  revision: "test",
+  revision: plan.semanticFingerprint,
   createDraft: { execute: async (request: { collection: string; data: unknown }) => {
     calls.push("entry:" + request.collection);
     return request;
@@ -72,6 +73,7 @@ const runtime = {
 } as unknown as MantleRuntime;
 
 const mantle = bindMantle(runtime);
+if (mantle.runtime !== runtime) throw new Error("raw runtime escape hatch changed");
 await mantle.entries.products.createDraft({ data: { sku: "sku-1" }, authorId: null });
 const view = await mantle.views.productsBySku({ params: { sku: "sku-1" } });
 const procedure = await mantle.procedures.importProduct(
@@ -83,6 +85,36 @@ if (!procedure.ok || procedure.data.imported !== true) throw new Error("typed Pr
 if (calls.join(",") !== "entry:products,view:products-by-sku,procedure:import-product") {
   throw new Error("wire names changed: " + calls.join(","));
 }
+
+const storage = {
+  async prepare() {
+    return {
+      entries: {},
+      views: {
+        async execute() {
+          return { rows: [{ id: "2", title: "Created" }], page: 1, show: 20, hasMore: false };
+        },
+      },
+    };
+  },
+} as unknown as MantleStorageAdapter;
+const created = await createMantle({
+  storage,
+  handlers: { syncCatalog: () => ({ imported: true }) },
+});
+const createdView = await created.views.productsBySku({ params: { sku: "sku-2" } });
+if (!createdView.ok || createdView.result.rows[0]?.title !== "Created") {
+  throw new Error("one-step Mantle creation failed");
+}
+if (created.runtime.revision !== plan.semanticFingerprint) throw new Error("created runtime revision changed");
+
+let rejectedMismatch = false;
+try {
+  bindMantle({ ...runtime, revision: "wrong-revision" });
+} catch {
+  rejectedMismatch = true;
+}
+if (!rejectedMismatch) throw new Error("generated binding accepted another revision");
 
 if (false) {
   // @ts-expect-error Unknown Views are absent from the generated surface.

@@ -3,11 +3,12 @@ import {
   checkSiteLocales,
   type Diagnostic,
 } from "@aotter/mantle-spec";
-import type {
-  MantleStorageAdapter,
-  PreparedMantleStorage,
-} from "../../domain/port/MantleStorageAdapter.js";
+import {
+  sealPreparedMantleRevision,
+  type PreparedMantleRevision,
+} from "../../domain/model/PreparedMantleRevision.js";
 import type { HandlerRegistry } from "../../domain/port/HandlerRegistry.js";
+import type { MantleStorageAdapter } from "../../domain/port/MantleStorageAdapter.js";
 import type { RuntimePlan } from "../../domain/service/RuntimePlanCompiler.js";
 
 export type ValidateBootResponse =
@@ -33,13 +34,14 @@ export async function prepareDeployment(
   plan: RuntimePlan,
   storage: MantleStorageAdapter,
   options: DeploymentPreparationOptions = {},
-): Promise<PreparedMantleStorage> {
+): Promise<PreparedMantleRevision> {
   const diagnostics = deploymentDiagnostics(plan, {
     ...options,
     nativeViewDialects: storage.nativeViewDialects ?? [],
   });
   if (diagnostics.length > 0) throw new BootValidationError(diagnostics);
-  return storage.prepare(plan);
+  const prepared = await storage.prepare(plan);
+  return sealPreparedMantleRevision(plan, prepared, options.handlerNames);
 }
 
 export function assertDeploymentPlan(

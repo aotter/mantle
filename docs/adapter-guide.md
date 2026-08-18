@@ -45,29 +45,42 @@ Compile before deployment preparation, then pass only the sealed plan:
 
 ```ts
 import {
-  createMantleRuntime,
-  prepareDeployment,
+  bootMantleRuntime,
   SqliteMantleStorageAdapter,
 } from "@aotter/mantle-runtime";
 
 const storage = new SqliteMantleStorageAdapter(db, siteDefaults);
-const prepared = await prepareDeployment(plan, storage, {
-  handlerNames: Object.keys(handlers ?? {}),
-  reservedHttpPathPrefixes: selectedCapabilities.flatMap(
-    (capability) => capability.reservedHttpPathPrefixes,
-  ),
-});
-const runtime = createMantleRuntime({
+const runtime = await bootMantleRuntime({
   plan,
-  prepared,
+  storage,
   handlers,
+  ports,
+  deployment: {
+    reservedHttpPathPrefixes: selectedCapabilities.flatMap(
+      (capability) => capability.reservedHttpPathPrefixes,
+    ),
+  },
 });
 ```
 
-`handlerNames` selects Procedure dispatch readiness. Omit it only for a
-read-only embedding that never dispatches Procedures; pass the selected names
-(including `[]`) whenever the host exposes Procedure or Trigger execution.
-Official HTTP adapters always pass it.
+`bootMantleRuntime` performs one attempt and derives Procedure readiness from
+the supplied handlers. The platform adapter remains responsible for lazy boot,
+promise caching, retry policy, and teardown.
+
+Hosts that need work between preparation and binding may keep the same stages
+public and explicit:
+
+```ts
+const prepared = await prepareDeployment(plan, storage, {
+  handlerNames: Object.keys(handlers ?? {}),
+});
+const runtime = createMantleRuntime({ prepared, handlers, ports });
+```
+
+The prepared revision carries its exact plan, but exposes both `plan` and
+`storage`; it seals the pairing invariant rather than hiding low-level host
+capabilities. Omit `handlerNames` only for a read-only embedding that never
+dispatches Procedures.
 
 The official SQLite adapter runs canonical migrations, defaults, indexes, and
 schema-View reconciliation, and skips mutation for an unchanged revision. A
@@ -183,7 +196,7 @@ storage preparation and binding do not accept or require a static asset port.
 ## Implementation checklist
 
 - [ ] Implement `MantleStorageAdapter` returning existing semantic ports, or reuse `SqliteMantleStorageAdapter` with an already-owned handle.
-- [ ] Call `prepareDeployment()` once per semantic revision before binding runtime.
+- [ ] Call `bootMantleRuntime()` once per semantic revision, or explicitly prepare before binding.
 - [ ] Mount HTTP Trigger and View REST surfaces.
 - [ ] Mount admin/public render routes and admin SPA assets.
 - [ ] Provide adapter-owned Better Auth wiring and session helpers.

@@ -37,7 +37,7 @@ subpath. Every sub-package also remains directly installable.
 
 ```ts
 import { linkManifestSet, parseManifestSources } from "@aotter/mantle/spec";
-import { compileRuntimePlan, createMantleRuntime } from "@aotter/mantle/runtime";
+import { bootMantleRuntime, compileRuntimePlan } from "@aotter/mantle/runtime";
 import { createMantleWeb } from "@aotter/mantle/web";
 import { mountRuntimeEndpoints } from "@aotter/mantle/cloudflare";
 ```
@@ -65,20 +65,25 @@ The same pure emitter is available from `@aotter/mantle/codegen` when a host
 wants to own parsing and filesystem IO.
 
 ```ts
-import { bindMantle } from "../.mantle/generated/mantle.js";
+import { createMantle } from "../.mantle/generated/mantle.js";
 
-const mantle = bindMantle(runtime);
+const mantle = await createMantle({ storage, handlers, ports });
 const notes = await mantle.views.publishedNotes();
 const result = await mantle.procedures.expireOrder(
   { orderId },
   { user: null, staff: null, env },
 );
 await mantle.entries.orders.createDraft({ data, authorId: user.id });
+
+// The typed projection never hides the underlying Core runtime.
+await mantle.runtime.archive.execute({ id: noteId, ctx });
 ```
 
 Generated property names are deterministic lower-camel identifiers; calls keep
-the authored wire names internally. Dynamic hosts can skip code generation and
-call `runtime.executeView({ view: "published-notes" })` directly.
+the authored wire names internally. `createMantle()` eagerly prepares once and
+does not cache or retry. Dynamic and platform hosts can keep their own lifecycle,
+use generated `bindMantle(runtime)`, or skip code generation and call
+`runtime.executeView({ view: "published-notes" })` directly.
 
 `mantle skills` explicitly copies the installed package's `develop`, `plugin`,
 `theme`, and `update` skills to matching `.agent/skills/mantle-*` and

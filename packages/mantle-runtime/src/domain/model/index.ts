@@ -2,6 +2,7 @@
  *  `@aotter/mantle-spec`. */
 export * from "./EntryRow.js";
 export * from "./HandlerContext.js";
+export type { PreparedMantleRevision } from "./PreparedMantleRevision.js";
 export type {
   PendingUploadRecord,
   PendingUploadVariant,

@@ -14,6 +14,7 @@ import {
   type RuntimePlan,
 } from "../src/domain/service/RuntimePlanCompiler.js";
 import { SqliteMantleStorageAdapter } from "../src/infrastructure/storage/SqliteMantleStorageAdapter.js";
+import { createMantleRuntime } from "../src/MantleRuntime.js";
 import {
   BootValidationError,
   prepareDeployment,
@@ -28,9 +29,10 @@ describe("prepareDeployment", () => {
     const adapter = new SqliteMantleStorageAdapter(db, { locales: ["en"] });
     const prepared = await prepareDeployment(plan, adapter);
 
-    expect(await prepared.localePolicy?.readLocales()).toEqual(["en"]);
+    expect(prepared.plan).toBe(plan);
+    expect(await prepared.storage.localePolicy?.readLocales()).toEqual(["en"]);
 
-    await prepared.entries.create({
+    await prepared.storage.entries.create({
       id: "post-1",
       collection: "posts",
       status: "published",
@@ -38,7 +40,7 @@ describe("prepareDeployment", () => {
       authorId: null,
       now: 1,
     });
-    const result = await prepared.views.execute<{ id: string; title: string }>({
+    const result = await prepared.storage.views.execute<{ id: string; title: string }>({
       view: "published-posts",
     });
     expect(result.rows).toEqual([{ id: "post-1", title: "Hello" }]);
@@ -74,7 +76,7 @@ describe("prepareDeployment", () => {
     };
     const prepared = await prepareDeployment(compilePlan(declarativeManifest), storage);
 
-    await prepared.entries.create({
+    await prepared.storage.entries.create({
       id: "app-post",
       collection: "posts",
       status: "published",
@@ -82,10 +84,10 @@ describe("prepareDeployment", () => {
       authorId: "app-user",
       now: 2,
     });
-    expect((await prepared.views.execute({ view: "published-posts" })).rows).toEqual([
+    expect((await prepared.storage.views.execute({ view: "published-posts" })).rows).toEqual([
       { id: "app-post", title: "Application table" },
     ]);
-    expect(await prepared.entries.readPublished()).toEqual([
+    expect(await prepared.storage.entries.readPublished()).toEqual([
       expect.objectContaining({ id: "app-post", data: { title: "Application table" } }),
     ]);
   });
@@ -138,7 +140,19 @@ describe("prepareDeployment", () => {
       new SqliteMantleStorageAdapter(new InMemoryDatabase()),
     );
 
-    expect(prepared.views).toBeDefined();
+    expect(prepared.storage.views).toBeDefined();
+  });
+
+  it("does not bind fewer handlers than the prepared revision validated", async () => {
+    const plan = compilePlan(handlerManifest);
+    const prepared = await prepareDeployment(
+      plan,
+      new SqliteMantleStorageAdapter(new InMemoryDatabase()),
+      { handlerNames: ["appHandler"] },
+    );
+
+    expect(() => createMantleRuntime({ prepared, handlers: {} }))
+      .toThrow("HANDLER_NOT_REGISTERED");
   });
 });
 

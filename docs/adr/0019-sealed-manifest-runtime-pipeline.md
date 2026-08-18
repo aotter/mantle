@@ -114,9 +114,13 @@ does not guess a translation and does not add a universal query driver.
 ### Naming and code generation
 
 The Core execution unit is `MantleRuntime`, not a site. Optional TypeScript
-generation is a pure projection of linked/compiled semantics and exposes
-`bindMantle(runtime)`. It emits deterministic lower-camel identifiers while
-preserving manifest wire names internally. Identifier collisions are errors.
+generation is a pure projection of linked/compiled semantics. It exposes
+`bindMantle(runtime)` plus an eager `createMantle()` convenience that delegates
+one preparation attempt to Runtime. Generated code never caches, retries,
+mounts routes, or owns host lifecycle. The bound API retains its raw `runtime`
+so typed projection does not hide lower-level Core capabilities. It emits
+deterministic lower-camel identifiers while preserving manifest wire names
+internally. Identifier collisions are errors.
 
 Code generation is never required by the runtime and never copies Web or Admin
 assets. Dynamic/string-based calls remain the escape hatch for JavaScript and

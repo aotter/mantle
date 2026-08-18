@@ -457,7 +457,6 @@ async function createTestRuntime(args: {
     handlerNames: Object.keys(args.handlers ?? {}),
   });
   return createMantleRuntime({
-    plan: compiled.value,
     prepared,
     handlers: args.handlers,
     ports: { onPublishingContentChange: args.onPublicChange },
