@@ -216,6 +216,9 @@ block
   custom["Your adapter"]:1
 ```
 
+Mantle is named for the living tissue that grows a mollusk's shell: it adds
+structure around the application you already own.
+
 ## Develop with Mantle
 
 ### Human engineers
