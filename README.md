@@ -168,6 +168,22 @@ and Markdown mirror in every locale:
 Mantle also emits `llms.txt`, sitemap, canonical links, hreflang, JSON-LD, and
 social metadata from the same published state.
 
+## Ready-to-use starters
+
+Start from a working product shape, then replace its model, copy, and handlers.
+
+| Starter | Pre-made logic | Good for |
+|---|---|---|
+| Blank | Headless Worker and Mantle wiring, with no product assumptions. | Existing apps and fully custom systems. |
+| Presence | Homepage, contact capture, optional Turnstile, and notification hook. | Company sites, portfolios, and landing pages. |
+| Intake | Branching multi-step intake, saved submissions, optional Turnstile, and notification hook. | RSVP, applications, onboarding, and lead qualification. |
+| Publication | Localized posts, publishing workflow, seeded homepage, and published-post View. | Blogs, newsrooms, magazines, and changelogs. |
+| Transaction | Localized catalog, cart, inventory reservation, order expiry, staff restocking, and simulated payment. | Small storefronts and commerce prototypes. |
+| Reservation | Public request capture and a recent-requests staff View, with manual confirmation. | Restaurants, appointments, tours, and events. |
+
+[Browse the starters](https://github.com/aotter/mantle-starters). Membership and
+Community are coming soon.
+
 ## Publishing and operations in one Admin
 
 Publishing content gets draft, publish, unpublish, and archive. Operational
@@ -181,12 +197,9 @@ need the same controls; editorial review and approval are coming soon.
 
 Apache-2.0 Core runs inside your process, with the raw Runtime and handler
 context available for transactions, queues, media, and platform capabilities.
-Use Bun, Vercel, Cloudflare, or your own adapter; start from
-[Blank, Presence, Intake, Publication, Transaction, or
-Reservation](https://github.com/aotter/mantle-starters). Membership and
-Community are coming soon. Small Cloudflare sites can fit within its
-[Workers](https://developers.cloudflare.com/workers/platform/pricing/) and
-[D1](https://developers.cloudflare.com/d1/platform/pricing/) free limits.
+Use Bun, Vercel, Cloudflare, or your own adapter. Small Cloudflare sites can fit
+within its [Workers](https://developers.cloudflare.com/workers/platform/pricing/)
+and [D1](https://developers.cloudflare.com/d1/platform/pricing/) free limits.
 
 ## Packages
 
