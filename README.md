@@ -27,7 +27,7 @@
   &middot;
   <a href="#a-custom-mcp-server-without-building-the-server">Why Mantle</a>
   &middot;
-  <a href="#architecture">Architecture</a>
+  <a href="#packages">Packages</a>
   &middot;
   <a href="#develop-with-mantle">Develop</a>
   &middot;
@@ -142,9 +142,10 @@ lifecycle.
    const slots = await mantle.views.availableSlots();
    ```
 
-4. That's it: the View is a typed query, the Procedure is your typed handler,
-   and the Trigger exposes it as an MCP tool. Platform adapters own lifecycle
-   policy, while `mantle.runtime` keeps lower-level capabilities within reach.
+4. That's it: the View is a typed query and the Procedure is your typed
+   handler. The Trigger becomes an MCP tool when mounted by an MCP-capable
+   adapter. Platform adapters own lifecycle policy, while `mantle.runtime`
+   keeps lower-level capabilities within reach.
 
 ## A custom MCP server, without building the server
 
@@ -187,42 +188,22 @@ Community are coming soon. Small Cloudflare sites can fit within its
 [Workers](https://developers.cloudflare.com/workers/platform/pricing/) and
 [D1](https://developers.cloudflare.com/d1/platform/pricing/) free limits.
 
-## Architecture
+## Packages
 
-Dependencies point upward. Runtime depends only on Spec; optional products and
-host adapters compose around Core.
+Start with `@aotter/mantle`. Spec and Runtime form the portable Core;
+everything else is opt-in.
 
-```mermaid
-flowchart BT
-    U["@aotter/mantle<br/>umbrella · CLI · codegen"]
-
-    subgraph PRODUCTS["Optional products"]
-        W["@aotter/mantle-web"]
-        A["@aotter/mantle-admin"]
-        UI["@aotter/mantle-admin-ui<br/>prebuilt SPA"]
-    end
-
-    subgraph HOSTS["Host adapters"]
-        B["@aotter/mantle-bun"]
-        C["@aotter/mantle-cloudflare"]
-        V["@aotter/mantle-vercel"]
-        X["Your adapter"]
-    end
-
-    subgraph CORE["Portable Core"]
-        R["@aotter/mantle-runtime"]
-        S["@aotter/mantle-spec"]
-    end
-
-    U --> R
-    R --> S
-    W --> R
-    A --> R
-    B --> R
-    C --> R
-    V --> R
-    X --> R
-```
+| Package | Adds |
+|---|---|
+| `@aotter/mantle` | CLI, codegen, and default exports. |
+| `@aotter/mantle-spec` | Standalone validation and introspection. |
+| `@aotter/mantle-runtime` | Custom runtime and storage integration. |
+| `@aotter/mantle-web` | HTML, Markdown, `llms.txt`, and sitemap. |
+| `@aotter/mantle-admin` | Admin API. |
+| `@aotter/mantle-admin-ui` | Prebuilt React Admin SPA. |
+| `@aotter/mantle-bun` | Bun and `bun:sqlite`. |
+| `@aotter/mantle-vercel` | Vercel Functions. |
+| `@aotter/mantle-cloudflare` | Workers, D1, Auth, MCP, Web, and Admin. |
 
 Mantle is named for the living tissue that grows a mollusk's shell: it adds
 structure around the application you already own.
