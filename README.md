@@ -25,7 +25,7 @@
 <p align="center">
   <a href="#one-manifest-one-contract">Quick start</a>
   &middot;
-  <a href="#from-coding-agent-to-operation-agent">Why Mantle</a>
+  <a href="#a-custom-mcp-server-without-building-the-server">Why Mantle</a>
   &middot;
   <a href="#how-it-works">How it works</a>
   &middot;
@@ -46,17 +46,10 @@ AI can build a convincing interface. The harder problem is the contract under
 it—and the operating surface left after launch.
 
 Describe Schema, View, Procedure, and Trigger once. Mantle links and validates
-them before boot, then carries the same RuntimePlan into typed TypeScript,
-REST and OpenAPI, MCP tools, optional Web and Admin, and platform adapters.
-There is no second schema to keep in sync.
-
-Coding agents get a small, fixed language for building the system. After
-launch, operation agents get the same contract through governed MCP tools.
-Mantle runs inside the application you own, so the host keeps its storage,
-routing, auth, queues, cache policy, and lifecycle.
-
-> Build with one contract. Hand the same contract to the people and agents who
-> run it.
+them into one RuntimePlan for typed TypeScript, REST, OpenAPI, MCP, Web, and
+Admin. Coding agents build with it; operation agents run it through governed
+tools. It stays inside your application, with your storage, auth, queues, and
+lifecycle.
 
 ## One manifest, one contract
 
@@ -152,77 +145,53 @@ routing, auth, queues, cache policy, and lifecycle.
    ```
 
 4. That's it: the View is a typed query, the Procedure is your typed handler,
-   and the Trigger exposes it as a public MCP tool. Your application still
-   owns its storage, queue, routing, and lifecycle. The direct helper prepares
-   once without hidden caching or retries; platform adapters keep those
-   policies, and `mantle.runtime` exposes the same raw Runtime when the host
-   needs lower-level capabilities.
+   and the Trigger exposes it as an MCP tool. Platform adapters own lifecycle
+   policy, while `mantle.runtime` keeps lower-level capabilities within reach.
 
-## From coding agent to operation agent
+## A custom MCP server, without building the server
 
-`createMantle()` is only the shortest entry point. Mantle's difference is what
-the same contract unlocks before and after launch.
+Views become read tools. Procedures backed by your own handlers become typed
+action tools when exposed by MCP Triggers. At `/mcp/staff`, authorized teammates
+can operate queues, Slack, email, ERP, CRM, or anything else your handler can
+reach—without maintaining a second MCP server or schema.
 
-### A custom MCP server, without building the server
+## Agent-readable and i18n-ready, built in
 
-- Views compile into query tools. Procedures plus MCP Triggers compile into
-  typed action tools.
-- Input and output schemas, public and staff tool catalogs, and target
-  authorization come from the same RuntimePlan; the selected adapter owns the
-  MCP transport and identity boundary.
-- Built-in content and media operations can join your custom tools without a
-  second server or schema.
+Enable the optional Web surface and every public page gets a predictable
+Markdown mirror, in every locale:
 
-### `/mcp/staff`: where your team operates with agents
+```text
+/en/posts/hello
+/en/posts/hello.md
+/zh-tw/posts/ni-hao
+/zh-tw/posts/ni-hao.md
+/en/llms.txt
+/llms.txt
+/sitemap.xml
+```
 
-- An operation agent can observe through Views, act through Procedures, and
-  react to Triggers inside the same staff identity and authorization boundary.
-- Custom handlers can bridge queues, Slack, email, ERP, CRM, or existing
-  services. Mantle supplies the shared language, not another integration silo.
-- Staff role and target authorization are checked on every call, so discovery
-  is never the enforcement boundary.
+Mantle also emits canonical links, hreflang, JSON-LD, and social metadata from
+the same published state.
 
-### GEO/AEO, built in
+## Publishing and operations in one Admin
 
-- Select the optional Web surface and public content ships as HTML plus
-  predictable Markdown mirrors for agents and answer engines.
-- `llms.txt`, sitemap, JSON-LD, canonical links, hreflang, and social metadata
-  are composed from the same published Runtime state.
-- There is no separate SEO/AEO plugin or second publishing pipeline to keep in
-  sync.
-
-### i18n-ready, end to end
-
-- Site locale policy, localized Schemas, and parent/translation joins live in
-  the contract instead of a late UI toggle.
-- Localized content flows through typed APIs, MCP, Admin authoring, public
-  paths, Markdown mirrors, hreflang, and sitemap.
-- Optimistic versions prevent stale operators from silently overwriting newer
-  content.
-
-### Publishing and operations, side by side
-
-- **Publishing flow:** draft, publish, unpublish, and archive content.
-- **Operational flow:** run live orders, inventory, reservations, and other
-  business records without forcing them through a publishing state machine.
-- **Editorial flow:** review and approval are coming soon.
-- Add the Admin API, staff gates, and prebuilt React SPA together, or omit them
-  for a headless service.
+Publishing content gets draft, publish, unpublish, and archive. Operational
+records such as orders, inventory, and reservations stay live without a fake
+publishing state machine. Add the optional Admin API and React SPA when humans
+need the same controls; editorial review and approval are coming soon.
 
 ![Mantle Admin connects staff agents through MCP while keeping publishing content, live records, reports, and human operators in one console.](docs/assets/mantle-admin-operations.png)
 
-### Open source, host-owned, ready to ship
+## Open source, host-owned, ready to ship
 
-- Apache-2.0 Core runs inside your process. The raw Runtime and handler context
-  stay available for transactions, queues, media, and platform capabilities.
-- Use Bun, Vercel, Cloudflare, or a custom semantic storage adapter. Start from
-  [Blank, Presence, Intake, Publication, Transaction, or
-  Reservation](https://github.com/aotter/mantle-starters); Membership and
-  Community are coming soon.
-- Small Cloudflare deployments can fit within the current
-  [Workers](https://developers.cloudflare.com/workers/platform/pricing/) and
-  [D1](https://developers.cloudflare.com/d1/platform/pricing/) free limits.
-  Domain registration and usage beyond provider limits are separate.
+Apache-2.0 Core runs inside your process, with the raw Runtime and handler
+context available for transactions, queues, media, and platform capabilities.
+Use Bun, Vercel, Cloudflare, or your own adapter; start from
+[Blank, Presence, Intake, Publication, Transaction, or
+Reservation](https://github.com/aotter/mantle-starters). Membership and
+Community are coming soon. Small Cloudflare sites can fit within its
+[Workers](https://developers.cloudflare.com/workers/platform/pricing/) and
+[D1](https://developers.cloudflare.com/d1/platform/pricing/) free limits.
 
 ## How it works
 
