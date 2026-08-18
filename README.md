@@ -56,100 +56,54 @@ the description itself executable.
 
 ## One manifest, one contract
 
-Create `manifests/blog.yml`:
+1. Describe your project in `manifests/blog.yml`:
 
-```yaml
-# manifests/blog.yml
-apiVersion: cms.mantle.aotter.net/v1
-kind: Schema
-metadata: { name: posts }
-spec:
-  title: Posts
-  schema:
-    type: object
-    required: [title, body]
-    properties:
-      title: { type: string }
-      body: { type: string, x-mcp-hint: markdown }
----
-apiVersion: cms.mantle.aotter.net/v1
-kind: View
-metadata: { name: published-posts }
-spec:
-  surface: public
-  from: posts
-  fields: [id, title, body]
-  filter: { eq: { field: status, value: published } }
----
-apiVersion: cms.mantle.aotter.net/v1
-kind: Procedure
-metadata: { name: submit-post }
-spec:
-  input:
-    type: object
-    required: [title, body]
-    properties:
-      title: { type: string }
-      body: { type: string, x-mcp-hint: markdown }
-  output: { type: object }
-  handler: { kind: builtin, op: create, schema: posts }
----
-apiVersion: cms.mantle.aotter.net/v1
-kind: Trigger
-metadata: { name: submit-post-http }
-spec:
-  source: { kind: http, method: POST, path: /api/posts }
-  target: { procedure: submit-post }
----
-apiVersion: cms.mantle.aotter.net/v1
-kind: Trigger
-metadata: { name: submit-post-mcp }
-spec:
-  source: { kind: mcp, surface: public }
-  target: { procedure: submit-post }
-```
+   ```yaml
+   # excerpt — see the complete manifest reference below
+   apiVersion: cms.mantle.aotter.net/v1
+   kind: Schema
+   metadata:
+     name: posts
+   spec:
+     # ...
+   ---
+   apiVersion: cms.mantle.aotter.net/v1
+   kind: View
+   metadata:
+     name: published-posts
+   spec:
+     from: posts
+     filter:
+       eq: { field: status, value: published }
+     # ...
+   ```
 
-The selected adapters turn `published-posts` into both
-`GET /api/views/published-posts` and the public MCP tool
-`query_view_published_posts`. Two tiny Triggers expose the same builtin
-Procedure as `POST /api/posts` and the public MCP tool `submit_post`; there is
-no second handler to keep in sync. Mantle Admin reads the same Schema and
-`x-mcp-hint` to render the collection with a Markdown editor.
+   See the [complete manifest reference](docs/design-atoms.md) for the full syntax.
 
-Run from the project root:
+2. Install Mantle and generate the typed runtime binding:
 
-```bash
-pnpm exec mantle generate
-```
+   ```bash
+   pnpm add @aotter/mantle@alpha
+   pnpm exec mantle generate
+   ```
 
-By default, `generate` reads the immediate `.yaml` and `.yml` files in
-`./manifests` and writes `.mantle/generated/mantle.ts`. Both paths are
-configurable:
+3. Bind the generated plan to your
+   [storage adapter](docs/adapter-guide.md) and application:
 
-```bash
-pnpm exec mantle generate --manifests ./content --output ./src/generated
-```
+   ```ts
+   import { createMantleRuntime, prepareDeployment } from "@aotter/mantle/runtime";
+   import { bindMantle, plan } from "./.mantle/generated/mantle.js";
 
-The generated module contains the sealed plan, generated types, and
-`bindMantle`. Import it only after generation:
+   const prepared = await prepareDeployment(plan, storage);
+   const runtime = createMantleRuntime({ plan, prepared });
+   const mantle = bindMantle(runtime);
 
-```ts
-import { createMantleRuntime, prepareDeployment } from "@aotter/mantle/runtime";
-import { bindMantle, plan } from "./.mantle/generated/mantle.js";
+   // The `published-posts` View becomes a typed lower-camel property.
+   const posts = await mantle.views.publishedPosts();
+   ```
 
-const prepared = await prepareDeployment(plan, applicationStorage);
-const runtime = createMantleRuntime({ plan, prepared });
-const mantle = bindMantle(runtime);
-
-const posts = await mantle.views.publishedPosts();
-```
-
-`published-posts` becomes `publishedPosts` in TypeScript while its wire name stays
-unchanged. Code generation is optional; dynamic applications can call Runtime
-with authored names directly.
-
-Nothing else is surrendered. The host owns storage, handlers, routing, process
-lifecycle, and sibling application code.
+4. That's it: you have a validated runtime plan and a typed API. Your
+   application still owns its storage, routing, and lifecycle.
 
 ## How it works
 

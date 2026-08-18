@@ -25,7 +25,7 @@ primitives Postgres has shipped for 30 years.
 |---|---|---|---|
 | **`Schema`** | `CREATE TABLE` | no (manipulated via View / Procedure) | no |
 | **`View`** | `CREATE VIEW` | **yes** (auto-mounted on its declared public/staff REST and MCP surface; see ADR-0012) | no |
-| **`Procedure`** | `CREATE FUNCTION ... LANGUAGE plpgsql` | **no** (transport-agnostic; needs a `Trigger` to bind it) | **yes — handler ref to consumer's TS file** |
+| **`Procedure`** | `CREATE FUNCTION ... LANGUAGE plpgsql` | **no** (transport-agnostic; needs a `Trigger` to bind it) | **yes — handler ref to the consumer's registry** |
 | **`Trigger`** | `CREATE TRIGGER` + route/tool binding | yes (the binding atom — turns Procedures into HTTP endpoints, MCP tools, and lifecycle hooks) | no |
 
 The **read/write asymmetry is by design** and matches HTTP safe-vs-unsafe
@@ -45,15 +45,14 @@ these four plus your own TypeScript.
 apiVersion: cms.mantle.aotter.net/v1
 kind: Schema | View | Procedure | Trigger
 metadata:
-  name: posts                # required, kebab-case, unique within deployment
+  name: posts                # required, non-empty, unique within its kind
 spec:
   ...                        # kind-specific
 ```
 
-There is **no `namespace` field**. Resource names are unique within the
-deployment. K8s-style namespaces are a "premature scale" abstraction for
-our scope; SaaS multi-tenancy belongs in the consumer's app layer with a
-`tenant_id` column gated by RBAC, not in the SDK metadata layer.
+There is **no manifest `namespace` field**. Resource names are unique within
+their kind, so a Schema and View may share a name. SaaS multi-tenancy belongs
+in the consumer's app layer, not in manifest metadata.
 
 ### Multi-doc YAML — keeping file count down
 
@@ -85,8 +84,9 @@ spec:
   target: { procedure: send-contact-message }
 ```
 
-One fixed file, two documents. Add every atom to `manifests/site.yaml` with
-`---`; the loader rejects other manifest filenames.
+Use one file or split features across files. Mantle reads every immediate
+`.yaml` and `.yml` file in `./manifests` by default; `---` separates multiple
+documents in one file.
 
 ## What each atom is for (v0.1 minimum essential grammar)
 
@@ -127,6 +127,10 @@ spec:
 **`spec.title`** — admin UI label. Required. AI authors must populate
 in the user's primary language (the install-time chosen locale); the
 SPA shows this everywhere instead of `metadata.name`.
+
+Schema titles and optional descriptions accept either a string or a locale
+map such as `{ en: Products, "zh-TW": 商品 }`. Procedure titles and
+descriptions and View titles use the same shape; all are optional.
 
 **`spec.searchableFields`** — optional allowlist of top-level string
 properties used by Admin and Staff MCP substring search. Entry id is always
@@ -208,9 +212,9 @@ extensions. Three are part of `cms.mantle.aotter.net/v1`:
 > See ADR-0002 for rationale — why this is a closed enum and not an
 > open expression language.
 
-Marks a property as **server-controlled**. The SDK fills the value at
-write time; the caller MUST NOT supply it (callers who try to set a
-bound field get `INPUT_VALIDATION_FAILED`). Eliminates the entire
+Marks a property as **server-controlled**. On create, the SDK overwrites any
+caller value with the bound value; updates preserve the existing stamp. This
+eliminates the entire
 class of handler-side `userId: ctx.user.id` boilerplate, and gives
 the dispatcher an authoritative "who/when" tag without trusting the
 wire.
@@ -221,13 +225,11 @@ wire.
 |---|---|---|
 | `ctx.user` | UUID of the signed-in end-user (from session cookie); `null` if anonymous | row ownership: `authorId`, `submittedBy`, `creatorId` |
 | `ctx.staff` | UUID of the staff member acting (when a staff session is active); `null` for end-user-only paths | audit trail: `approvedBy`, `moderatedBy`, `grantedBy` |
-| `now` | Server timestamp at write (ISO-8601 string with timezone) | `createdAt`, `submittedAt`, `grantedAt` |
+| `now` | Server timestamp at write (Unix epoch milliseconds) | `createdAt`, `submittedAt`, `grantedAt` |
 
 **v0.1 stamping behavior**:
 - Stamped on `INSERT` only.
-- Caller-supplied value: rejected at input validation. The Procedure's
-  effective input schema strips bound fields before checking caller
-  input, so callers can't accidentally send them.
+- Caller-supplied create value: ignored and replaced by the server stamp.
 - Visible in View output: yes, as ordinary columns. No special masking.
 
 **Why a closed enum** (highest-leverage discipline in the spec): bind
@@ -241,9 +243,9 @@ named bounds the semantic surface forever.
 properties:
   title:     { type: string, minLength: 1, maxLength: 200 }
   authorId:  { type: string, format: uuid, x-mantle-bind: ctx.user }
-  createdAt: { type: string, format: date-time, x-mantle-bind: now }
+  createdAt: { type: integer, x-mcp-hint: timestamp-ms, x-mantle-bind: now }
   # caller sends only: { title }
-  # SDK stamps: { title, authorId: <session UUID>, createdAt: <now ISO> }
+  # SDK stamps: { title, authorId: <session UUID>, createdAt: <epoch ms> }
 ```
 
 #### `x-mantle-ref: <other-schema-name>` — cross-Schema reference
@@ -582,9 +584,8 @@ That split is intentional and load-bearing.
   draft-2020-12 JSON Schema documents. This is what AI authors and
   human authors write, what the admin UI feeds JSON Forms, and what
   the OpenAPI emitter relays unchanged.
-- **Runtime engine** = zod (v3). The `@aotter/mantle-spec`
-  package ships a JSON-Schema → zod converter
-  (`src/json-schema-zod.ts`); the runtime calls the converted zod
+- **Runtime engine** = zod 4. The `@aotter/mantle-spec`
+  package ships a JSON-Schema → zod converter; the runtime calls the converted zod
   schema on every Procedure invocation, View parameter parse, and
   manifest boot check.
 
@@ -657,119 +658,16 @@ thing as a composition of the four; almost always it works.
 > fold into JSON Schema inside `Schema` rather than becoming new
 > kinds.
 
-Postgres exposes ~25 object kinds total; an application developer
-typically only writes 4–6 of them. The rest are engine internals that
-Cloudflare D1 / KV abstract away.
+Postgres exposes ~25 object kinds total; an application developer typically
+only writes 4–6 of them. The rest belong behind the selected storage adapter.
 
-## Storage backend — D1 today, Postgres-via-Hyperdrive tomorrow
+## Storage adapters
 
-> See the `mantle-cloudflare` README for rationale — why D1 for
-> v0.1 (no-CC OSS onboarding, platform-native), and the documented
-> PG path.
-
-### How `Schema` data is stored on D1 today
-
-All collections share one `entries` table (defined by the
-Cloudflare adapter's storage migrations in
-`@aotter/mantle-cloudflare`):
-
-```sql
-CREATE TABLE entries (
-  id          TEXT PRIMARY KEY,
-  collection  TEXT NOT NULL,        -- discriminator: 'posts', 'comments', ...
-  status      TEXT NOT NULL,        -- 'draft' / 'published' / ...
-  version     INTEGER NOT NULL,
-  data        TEXT NOT NULL,        -- JSON blob: every Schema property (incl. locale, per ADR-0010)
-  created_at  INTEGER NOT NULL,
-  updated_at  INTEGER NOT NULL,
-  author_id   TEXT REFERENCES users(id)
-);
-```
-
-Reserved metadata are native columns; **everything in your Schema's
-`spec.schema.properties` lives inside the `data` JSON blob**. Locale
-on localized Schemas lives at `data.locale` (per ADR-0010); for
-indexing it surfaces as a JSON-extracted virtual generated column
-(`json_extract(data, '$.locale')`) with a partial unique index, not as
-a top-level column.
-
-`uniqueIndexes` and ordered, non-unique `indexes` declarations compile
-into affinity-correct virtual generated columns plus partial B-tree
-indexes via the spec engine's DDL emitter (`@aotter/mantle-spec`).
-Different collections coexist on the same table without colliding
-because each generated-column expression is gated by `WHEN collection
-= '<name>'`. See [Schema indexes on D1](schema-indexes.md) for the
-grammar, leftmost-prefix rules, SQL helper, and query-plan examples.
-
-### What works well on D1
-
-- D1's SQLite has the **JSON1 extension built in**: `json_extract`,
-  `json_each`, `json_object`, `json_array`, `json_set`, `json_valid`,
-  plus `->` / `->>` operators.
-- Reserved-column queries (`status = 'published'`, `ORDER BY
-  updated_at`) use native indexes — fast.
-- `uniqueIndexes`- and `indexes`-declared paths use virtual columns +
-  partial indexes. Core-compiled Views and repository lookups reference
-  those columns instead of repeating `json_extract`.
-
-### Where D1's JSON support has limits (vs Postgres)
-
-| Concern | D1 / SQLite | Postgres |
-|---|---|---|
-| JSON storage | TEXT — re-parsed on every `json_extract` | JSONB — stored as compact binary; faster repeated extraction |
-| Index any JSON path | must declare each path explicitly via virtual column + index | GIN index on JSONB indexes all paths automatically |
-| Array containment | `EXISTS (SELECT 1 FROM json_each(...) WHERE value = ?)` — full scan unless indexed | `data @> ARRAY[x]` with GIN — native operator |
-| Path operators | `->`, `->>` only | `->`, `->>`, `#>`, `#>>`, `@>`, `?`, `?|`, `?&` |
-| `DEFAULT now()` | not at column level — SDK-stamped via `x-mantle-bind: now` | native column default |
-| Foreign key on JSON path | not supported on `VIRTUAL` columns; needs `STORED` (extra space) | not natively, but B-tree on expression OK |
-| Row-level security | none — SDK-side filter rewriting | native RLS policies |
-| Multi-statement transactions | session API serializes; not true ACID across statements | full ACID transactions |
-
-### Practical scale envelope on D1
-
-- **Blog-scale (< 10k entries / collection)**: today's design is
-  comfortable. Anonymous public responses can hit version-local Workers
-  Cache before the Worker; origin misses use indexed D1 reads.
-- **Mid-scale (10k – 100k entries)**: declare measured list/filter
-  access paths with ordered `indexes`.
-- **Hard D1 limits**: 1 MB max row size; 5,000 rows per query result;
-  single-writer per database (concurrent writes serialize).
-- **Cross-region read**: D1 is region-pinned; first origin hit from a
-  far region may pay replica latency. Eligible anonymous responses are
-  then served by version-local Workers Cache.
-
-### Scale-up path: D1 → Postgres via Cloudflare Hyperdrive
-
-Cloudflare does not run a first-party Postgres service. The supported
-path when D1 limits bind is **Cloudflare Hyperdrive** (a connection
-pooler + query-cache that lets a Worker connect to any external
-Postgres at near-edge latency):
-
-- **Neon** (serverless Postgres with scale-to-zero) — closest
-  ergonomic match; tightest CF integration.
-- **Supabase** (PG + auth + storage) — works out of the box.
-- **AWS RDS / Google Cloud SQL / Azure DB / self-hosted PG** — also
-  supported via Hyperdrive.
-
-When this path is taken (post-v0.1; not implemented yet), the
-**author-facing YAML stays unchanged**. The SDK's compile target swaps:
-
-| What changes (SDK runtime) | Author impact |
-|---|---|
-| `data TEXT` → `data JSONB` | none |
-| Virtual generated columns → optional (PG can use GIN) | author may stop declaring `indexes` if defaults suffice; the same YAML remains valid |
-| `json_each` → array operators (`@>`, `&&`) | none — predicates stay declarative |
-| SDK-stamped `now` → `DEFAULT now()` (optional) | none |
-| SDK-side policy rewriting → native RLS (optional) | none |
-
-Migration shape: `entries` table dumped from D1, restored to PG. Stay
-single-table-with-discriminator (drop-in) or split into
-table-per-collection (more PG-idiomatic, longer migration). Both shapes
-remain valid `cms.mantle.aotter.net/v1` deployments.
-
-**v0.1 commitment**: D1 only via the Cloudflare adapter. Hyperdrive +
-PG is an upgrade route, not an implemented adapter. SDKs and starters target
-D1 exclusively.
+Manifests compile to semantic storage ports; they do not select a database.
+Use the shared SQLite adapter for SQLite-compatible hosts, or implement the
+same ports over PostgreSQL, MongoDB, or existing application repositories.
+See the [adapter guide](adapter-guide.md); SQLite index lowering is documented
+separately in [Schema indexes](schema-indexes.md).
 
 ## Detailed shipped grammar
 
