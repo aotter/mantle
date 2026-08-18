@@ -27,11 +27,9 @@
   &middot;
   <a href="#a-custom-mcp-server-without-building-the-server">Why Mantle</a>
   &middot;
-  <a href="#how-it-works">How it works</a>
+  <a href="#architecture">Architecture</a>
   &middot;
   <a href="#develop-with-mantle">Develop</a>
-  &middot;
-  <a href="#packages">Packages</a>
   &middot;
   <a href="#cli-reference">CLI</a>
 </p>
@@ -189,33 +187,34 @@ Community are coming soon. Small Cloudflare sites can fit within its
 [Workers](https://developers.cloudflare.com/workers/platform/pricing/) and
 [D1](https://developers.cloudflare.com/d1/platform/pricing/) free limits.
 
-## How it works
+## Architecture
 
-Everything consumes the same sealed plan. Optional packages project it into
-new surfaces; none becomes another source of truth.
+Manifests compile once into a sealed RuntimePlan. Packages compose outward
+from the portable Core; Core never depends on optional products or host
+adapters.
 
-```text
-Schema + View + Procedure + Trigger
-                 |
-        parse -> link -> compile
-                 |
-          sealed RuntimePlan
-                 |
-  application ports -> MantleRuntime
-                 |
-  typed API / REST / OpenAPI / MCP / Web / Admin
+```mermaid
+block
+  columns 5
+
+  entry["Entry"]:1
+  mantle["@aotter/mantle<br/>umbrella · CLI · codegen"]:4
+
+  core["Portable Core"]:1
+  spec["@aotter/mantle-spec<br/>manifest semantics"]:2
+  runtime["@aotter/mantle-runtime<br/>RuntimePlan · ports · invocation"]:2
+
+  optional["Optional products"]:1
+  web["@aotter/mantle-web"]:1
+  admin["@aotter/mantle-admin"]:1
+  adminui["@aotter/mantle-admin-ui"]:2
+
+  hosts["Host adapters"]:1
+  bun["@aotter/mantle-bun"]:1
+  cloudflare["@aotter/mantle-cloudflare"]:1
+  vercel["@aotter/mantle-vercel"]:1
+  custom["Your adapter"]:1
 ```
-
-Spec can parse and diagnose manifests without Runtime. Runtime executes the
-plan through semantic ports; generated bindings and host adapters stay thin.
-`createMantle` is the shortest direct composition path, not a boundary around
-the lower-level Runtime.
-
-### Why “Mantle”?
-
-A mollusk's mantle is the living tissue that grows its shell. This Mantle works
-the same way: it grows useful structure around the application you already
-own. It never asks you to move into a prefabricated shell.
 
 ## Develop with Mantle
 
@@ -260,26 +259,6 @@ is cloned or opened. See [`skills/README.md`](skills/README.md) for host details
   projects.
 - **`mantle skills`:** projects the installed package's exact `develop`,
   `plugin`, `theme`, and `update` workflows into a consumer repository.
-
-## Packages
-
-The center is small: Spec defines meaning and Runtime executes it. Everything
-else composes around them.
-
-| Package | Role |
-|---|---|
-| `@aotter/mantle-spec` | Pure grammar, parser, linker, diagnostics, and authoring CLI. |
-| `@aotter/mantle-runtime` | Plan compiler, storage preparation, semantic ports, and runtime invocation. |
-| `@aotter/mantle` | Core umbrella, typed code generation, and the `mantle` CLI. |
-| `@aotter/mantle-web` | Optional HTML, Markdown, `llms.txt`, sitemap, SEO, and preview composition. |
-| `@aotter/mantle-admin` | Optional Admin API, auth, and asset composition. |
-| `@aotter/mantle-admin-ui` | Optional pre-built Admin SPA. |
-| `@aotter/mantle-bun` | Bun adapter over caller-owned `bun:sqlite`. |
-| `@aotter/mantle-vercel` | Vercel Functions adapter over injected storage; optional libSQL subpath. |
-| `@aotter/mantle-cloudflare` | Cloudflare Workers adapter over D1 and selected platform services. |
-
-The umbrella installs Spec and Runtime. Web, Admin, Admin UI, Bun, Vercel, and
-Cloudflare are optional peers and remain directly installable.
 
 ## CLI reference
 
