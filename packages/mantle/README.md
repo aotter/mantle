@@ -26,7 +26,7 @@ subpath. Every sub-package also remains directly installable.
 | `@aotter/mantle/spec` (or root) | Manifest grammar, validators, JSON-Schema→Zod, diagnostic catalog (no env / no IO) |
 | `@aotter/mantle/runtime` | Hexagonal runtime: domain ports, use cases, infrastructure helpers (no adapter deps) |
 | `@aotter/mantle/runtime/testing` | Node-only crowded SQLite planner and HTTP sampling helpers |
-| `@aotter/mantle/codegen` | Pure linked manifests → typed `bindMantle` module emitter (no IO) |
+| `@aotter/mantle/codegen` | Pure linked manifests → typed runtime module emitter (no IO) |
 | `@aotter/mantle/web` | Optional HTML, Markdown, `llms.txt`, sitemap, SEO, and preview composition (no routes or platform deps) |
 | `@aotter/mantle/admin` | Optional Admin API, auth routes, and static-asset composition |
 | `@aotter/mantle/bun` | Bun adapter — caller-owned `bun:sqlite` and Web-standard View/Trigger transport |

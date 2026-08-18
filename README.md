@@ -204,7 +204,7 @@ The umbrella provides one `mantle` command set:
 
 | Command | Purpose |
 |---|---|
-| `mantle generate` | Compile manifests into the sealed plan and typed `bindMantle` module. |
+| `mantle generate` | Compile manifests into a sealed plan and typed runtime module. |
 | `mantle generate --check` | Fail without writing when generated code is stale. |
 | `mantle validate` | Validate manifests and handler-source references. |
 | `mantle introspect` | Print the parsed manifest tree as JSON. |
@@ -217,8 +217,9 @@ Run commands through the project's package manager, for example
 `pnpm exec mantle generate`.
 
 `generate` writes one `.mantle/generated/mantle.ts` module containing the
-sealed plan, generated types, and `bindMantle`. It does not install Admin,
-change styling, project skills, provision providers, or deploy the application.
+sealed plan, generated types, `createMantle`, and `bindMantle`. It does not
+install Admin, change styling, project skills, provision providers, or deploy
+the application.
 
 ## Contributing
 

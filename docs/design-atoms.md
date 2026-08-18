@@ -64,7 +64,7 @@ A logical feature commonly bundles a Procedure + a Trigger (and often a
 Schema and a View). Put related atoms in one file separated by `---`:
 
 ```yaml
-# manifests/site.yaml
+# manifests/contact.yml
 apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure
 metadata: { name: send-contact-message }
