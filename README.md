@@ -56,45 +56,82 @@ the description itself executable.
 
 ## One manifest, one contract
 
-Each atom is an ordinary YAML document. Keep related atoms together with `---`,
-or split them across `.yaml` and `.yml` files under `manifests/`. Core assigns
-no sacred filename.
+Create `manifests/blog.yml`:
 
 ```yaml
-# manifests/orders.yaml
+# manifests/blog.yml
 apiVersion: cms.mantle.aotter.net/v1
 kind: Schema
-metadata:
-  name: orders
+metadata: { name: posts }
 spec:
-  title: Orders
+  title: Posts
   schema:
     type: object
-    required: [status, total]
+    required: [title, body]
     properties:
-      status: { type: string, enum: [open, closed] }
-      total: { type: number, minimum: 0 }
-
+      title: { type: string }
+      body: { type: string, x-mcp-hint: markdown }
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: View
-metadata:
-  name: open-orders
+metadata: { name: published-posts }
 spec:
   surface: public
-  from: orders
-  fields: [id, status, total]
-  filter:
-    eq: { field: status, value: open }
+  from: posts
+  fields: [id, title, body]
+  filter: { eq: { field: status, value: published } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: submit-post }
+spec:
+  input:
+    type: object
+    required: [title, body]
+    properties:
+      title: { type: string }
+      body: { type: string, x-mcp-hint: markdown }
+  output: { type: object }
+  handler: { kind: builtin, op: create, schema: posts }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: submit-post-http }
+spec:
+  source: { kind: http, method: POST, path: /api/posts }
+  target: { procedure: submit-post }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: submit-post-mcp }
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: submit-post }
 ```
 
-One command seals the manifest set into a plan and generates typed bindings:
+The selected adapters turn `published-posts` into both
+`GET /api/views/published-posts` and the public MCP tool
+`query_view_published_posts`. Two tiny Triggers expose the same builtin
+Procedure as `POST /api/posts` and the public MCP tool `submit_post`; there is
+no second handler to keep in sync. Mantle Admin reads the same Schema and
+`x-mcp-hint` to render the collection with a Markdown editor.
+
+Run from the project root:
 
 ```bash
 pnpm exec mantle generate
 ```
 
-The generated facade is a typed door into your own runtime:
+By default, `generate` reads the immediate `.yaml` and `.yml` files in
+`./manifests` and writes `.mantle/generated/mantle.ts`. Both paths are
+configurable:
+
+```bash
+pnpm exec mantle generate --manifests ./content --output ./src/generated
+```
+
+The generated module contains the sealed plan, generated types, and
+`bindMantle`. Import it only after generation:
 
 ```ts
 import { createMantleRuntime, prepareDeployment } from "@aotter/mantle/runtime";
@@ -104,10 +141,10 @@ const prepared = await prepareDeployment(plan, applicationStorage);
 const runtime = createMantleRuntime({ plan, prepared });
 const mantle = bindMantle(runtime);
 
-const orders = await mantle.views.openOrders();
+const posts = await mantle.views.publishedPosts();
 ```
 
-`open-orders` becomes `openOrders` in TypeScript while its wire name stays
+`published-posts` becomes `publishedPosts` in TypeScript while its wire name stays
 unchanged. Code generation is optional; dynamic applications can call Runtime
 with authored names directly.
 
