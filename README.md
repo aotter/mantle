@@ -25,7 +25,7 @@
 <p align="center">
   <a href="#one-manifest-one-contract">Quick start</a>
   &middot;
-  <a href="#features">Features</a>
+  <a href="#from-coding-agent-to-operation-agent">Why Mantle</a>
   &middot;
   <a href="#how-it-works">How it works</a>
   &middot;
@@ -40,22 +40,23 @@
   <sub><strong>Prerelease:</strong> APIs and manifests may change between alpha releases. Treat the installed package's version-matched docs as the contract and review generated code before production use.</sub>
 </p>
 
-# Describe it. Run it.
+# Agent-built. Agent-operated.
 
-AI builders usually turn a prompt into source files. Mantle turns four small
-YAML atoms into one sealed, executable contract.
+AI can build a convincing interface. The harder problem is the contract under
+it—and the operating surface left after launch.
 
 Describe Schema, View, Procedure, and Trigger once. Mantle links and validates
 them before boot, then carries the same RuntimePlan into typed TypeScript,
 REST and OpenAPI, MCP tools, optional Web and Admin, and platform adapters.
 There is no second schema to keep in sync.
 
-Mantle runs inside the application you own. Your host keeps its storage,
-routing, auth, queues, cache policy, and lifecycle; Mantle supplies the
-semantic runtime and only the optional surfaces you select.
+Coding agents get a small, fixed language for building the system. After
+launch, operation agents get the same contract through governed MCP tools.
+Mantle runs inside the application you own, so the host keeps its storage,
+routing, auth, queues, cache policy, and lifecycle.
 
-> Describe the system once. Run the same contract through code, HTTP, MCP,
-> Web, and Admin.
+> Build with one contract. Hand the same contract to the people and agents who
+> run it.
 
 ## One manifest, one contract
 
@@ -71,9 +72,7 @@ semantic runtime and only the optional surfaces you select.
      lifecycle: operational
      schema:
        type: object
-       required: [startsAt, state]
        properties:
-         startsAt: { type: string, format: date-time }
          state: { type: string, enum: [available, reserved] }
          # ...
    ---
@@ -99,9 +98,9 @@ semantic runtime and only the optional surfaces you select.
        properties:
          slotId: { type: string }
          email: { type: string, format: email }
+       # ...
      output:
        type: object
-       required: [queued]
        properties:
          queued: { type: boolean }
      handler: { kind: ref, ref: queue-reservation-request }
@@ -159,40 +158,70 @@ semantic runtime and only the optional surfaces you select.
    policies, and `mantle.runtime` exposes the same raw Runtime when the host
    needs lower-level capabilities.
 
-## Features
+## From coding agent to operation agent
 
 `createMantle()` is only the shortest entry point. Mantle's difference is what
-the same contract unlocks around it.
+the same contract unlocks before and after launch.
 
-- **One contract across every surface.** The same sealed RuntimePlan powers
-  generated types, Runtime execution, transport adapters, Web, and Admin.
-- **Typed and standard APIs.** Schemas and Views become typed TypeScript;
-  declared Views and HTTP Triggers become REST routes and OpenAPI 3.1 without
-  another API schema.
-- **MCP servers and tools.** Views, guarded content operations, media
-  operations, and MCP Triggers compile into public or staff tool catalogs;
-  the Cloudflare adapter can mount them behind OAuth.
-- **Version-safe, multilingual content.** Optimistic versions protect against
-  stale writes; publishing and operational lifecycles, site locale policy,
-  localized Schemas, and parent/translation joins are built in.
-- **Web for search engines and LLMs.** The optional Web package composes HTML,
-  previews, canonical and social metadata, JSON-LD, hreflang, sitemap,
-  `llms.txt`, and predictable `.md` mirrors for serializable public content.
-- **A complete Admin, only when selected.** Add the Admin API, staff gates,
-  and prebuilt React UI for publishing content and live operational records;
-  editorial approval flows are coming next. Omit it for a headless service.
-- **Starter families for common product shapes.** Start from
+### A custom MCP server, without building the server
+
+- Views compile into query tools. Procedures plus MCP Triggers compile into
+  typed action tools.
+- Input and output schemas, public and staff tool catalogs, and target
+  authorization come from the same RuntimePlan; the selected adapter owns the
+  MCP transport and identity boundary.
+- Built-in content and media operations can join your custom tools without a
+  second server or schema.
+
+### `/mcp/staff`: where your team operates with agents
+
+- An operation agent can observe through Views, act through Procedures, and
+  react to Triggers inside the same staff identity and authorization boundary.
+- Custom handlers can bridge queues, Slack, email, ERP, CRM, or existing
+  services. Mantle supplies the shared language, not another integration silo.
+- Staff role and target authorization are checked on every call, so discovery
+  is never the enforcement boundary.
+
+### GEO/AEO, built in
+
+- Select the optional Web surface and public content ships as HTML plus
+  predictable Markdown mirrors for agents and answer engines.
+- `llms.txt`, sitemap, JSON-LD, canonical links, hreflang, and social metadata
+  are composed from the same published Runtime state.
+- There is no separate SEO/AEO plugin or second publishing pipeline to keep in
+  sync.
+
+### i18n-ready, end to end
+
+- Site locale policy, localized Schemas, and parent/translation joins live in
+  the contract instead of a late UI toggle.
+- Localized content flows through typed APIs, MCP, Admin authoring, public
+  paths, Markdown mirrors, hreflang, and sitemap.
+- Optimistic versions prevent stale operators from silently overwriting newer
+  content.
+
+### Publishing and operations, side by side
+
+- **Publishing flow:** draft, publish, unpublish, and archive content.
+- **Operational flow:** run live orders, inventory, reservations, and other
+  business records without forcing them through a publishing state machine.
+- **Editorial flow:** review and approval are coming soon.
+- Add the Admin API, staff gates, and prebuilt React SPA together, or omit them
+  for a headless service.
+
+![Mantle Admin connects staff agents through MCP while keeping publishing content, live records, reports, and human operators in one console.](docs/assets/mantle-admin-operations.png)
+
+### Open source, host-owned, ready to ship
+
+- Apache-2.0 Core runs inside your process. The raw Runtime and handler context
+  stay available for transactions, queues, media, and platform capabilities.
+- Use Bun, Vercel, Cloudflare, or a custom semantic storage adapter. Start from
   [Blank, Presence, Intake, Publication, Transaction, or
   Reservation](https://github.com/aotter/mantle-starters); Membership and
-  Community are coming soon. Shared recipes and overlays keep them from
-  becoming separate framework forks.
-- **Open source and host-owned.** Apache-2.0 Core runs inside your process, and
-  hosts retain the raw Runtime and handler context for transactions, queues,
-  media, or other platform capabilities. Use Bun, Vercel, Cloudflare, or a
-  custom semantic storage adapter.
-- **A $0-friendly Cloudflare path.** Small deployments can fit within the
-  current [Workers](https://developers.cloudflare.com/workers/platform/pricing/)
-  and [D1](https://developers.cloudflare.com/d1/platform/pricing/) free limits.
+  Community are coming soon.
+- Small Cloudflare deployments can fit within the current
+  [Workers](https://developers.cloudflare.com/workers/platform/pricing/) and
+  [D1](https://developers.cloudflare.com/d1/platform/pricing/) free limits.
   Domain registration and usage beyond provider limits are separate.
 
 ## How it works
