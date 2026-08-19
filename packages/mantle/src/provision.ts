@@ -325,7 +325,12 @@ function placeholderValues(launch: LaunchValues): Map<string, string> {
 }
 
 function shouldSubstitute(path: string): boolean {
-  const basename = path.split("/").pop() ?? path;
+  let basename = path.split("/").pop() ?? path;
+  // A sample file is text by definition (`.dev.vars.example`, `.env.example`).
+  if (basename.endsWith(".example")) return true;
+  // A leading dot names the file, it does not start an extension: `.gitignore`
+  // and `.npmrc` are extensionless text, not files of type `.gitignore`.
+  if (basename.startsWith(".")) basename = basename.slice(1);
   const dot = basename.lastIndexOf(".");
   return TEXT_SUBSTITUTION_EXTENSIONS.has(dot === -1 ? "" : basename.slice(dot));
 }

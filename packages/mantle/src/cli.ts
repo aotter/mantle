@@ -6,6 +6,7 @@ import {
   runIntrospect,
   runValidate,
 } from "@aotter/mantle-spec/cli";
+import { runCreate } from "./create.js";
 import { runGenerate } from "./generate.js";
 import { runSkills } from "./skills.js";
 import { runUpdate } from "./update.js";
@@ -18,6 +19,7 @@ async function main(): Promise<number> {
 Usage: mantle <subcommand> [options]
 
 Subcommands:
+  create         Materialize a version-matched starter into a new directory
   generate       Compile manifests and handler types
   skills         Project version-matched Core skills
   update         Compare local work with provision bundles
@@ -30,6 +32,8 @@ Subcommands:
   }
   const rest = argv.slice(3);
   switch (command) {
+    case "create":
+      return runCreate(rest);
     case "generate":
       return runGenerate(rest);
     case "skills":
