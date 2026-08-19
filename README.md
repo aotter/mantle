@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <a href="#one-manifest-one-contract">Quick start</a>
+  <a href="#start-in-one-command">Quick start</a>
   &middot;
   <a href="#a-custom-mcp-server-without-building-the-server">Why Mantle</a>
   &middot;
@@ -48,6 +48,31 @@ them into one RuntimePlan for typed TypeScript, REST, OpenAPI, MCP, Web, and
 Admin. Coding agents build with it; operation agents run it through governed
 tools. It stays inside your application, with your storage, auth, queues, and
 lifecycle.
+
+## Start in one command
+
+```bash
+npx -y @aotter/mantle@alpha create transaction ./my-shop \
+  --brand "My Shop" \
+  --locales en,zh-TW
+```
+
+That resolves the starter tag matching the CLI version, writes the project, and
+stops — nothing is installed, committed, or deployed. Open the generated
+`AGENTS.md`; it carries the install and first-run steps for that exact version.
+
+Or hand the whole job to your coding agent. Point it at the version-matched
+skill rather than a moving branch:
+
+```text
+Use https://github.com/aotter/mantle/blob/v0.1.0-alpha.7/skills/install/SKILL.md
+to create a Mantle transaction site in ./my-shop for a small tea storefront in
+English and Traditional Chinese, then get it running locally.
+```
+
+Types: `blank`, `presence`, `intake`, `publication`, `transaction`,
+`reservation` — see [the table below](#ready-to-use-starters). Prefer embedding
+Mantle in an application you already have? The manifest contract is next.
 
 ## One manifest, one contract
 
@@ -181,24 +206,8 @@ Start from a working product shape, then replace its model, copy, and handlers.
 | Transaction | Localized catalog, cart, inventory reservation, order expiry, staff restocking, and simulated payment. | Small storefronts and commerce prototypes. |
 | Reservation | Public request capture and a recent-requests staff View, with manual confirmation. | Restaurants, appointments, tours, and events. |
 
-Create one locally — this resolves the starter tag matching the CLI version,
-writes the project, and stops. Nothing is installed, committed, or deployed:
-
-```bash
-npx -y @aotter/mantle@alpha create transaction ./my-shop \
-  --brand "My Shop" \
-  --locales en,zh-TW
-```
-
-Or hand the whole job to your coding agent:
-
-```text
-Use https://github.com/aotter/mantle/blob/main/skills/install/SKILL.md to
-create a Mantle transaction site in ./my-shop for a small tea storefront in
-English and Traditional Chinese, then get it running locally.
-```
-
-[Browse the starters](https://github.com/aotter/mantle-starters). Membership and
+Create any of them with [`mantle create`](#start-in-one-command), or
+[browse the sources](https://github.com/aotter/mantle-starters). Membership and
 Community are coming soon and are not offered by `create`.
 
 ## Publishing and operations in one Admin

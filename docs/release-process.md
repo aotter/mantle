@@ -68,7 +68,9 @@ decision instead of starting another local redesign loop.
    in `CHANGELOG.md`. Label the release-only PR `skip-release-notes`.
 3. Set that exact version in every workspace package and in all four agent
    plugin manifests. Set `.agents/plugins/marketplace.json` to the immutable
-   `v<version>` ref.
+   `v<version>` ref. Point the root `README.md` quickstart prompt at the same
+   `v<version>` skill URL; a moving branch would hand an agent instructions
+   that do not match the released CLI.
 4. Pin both the controller and Core CI to the exact reviewed
    `mantle-starters/develop` commit intended for this release. Do not use a
    branch, latest tag, or inferred fallback.
