@@ -29,7 +29,7 @@ enforces the columns below.
 | `plugin` | user wants an installable capability | plan before apply; lock entry is the removal manifest; delete only plugin-owned files and atoms | apply; remove | project, plugin | — |
 | `theme` | brand or visual direction in a generated project | repo-owned theme and UI contracts | — | project, plugin | — |
 | `update` | drift check against SDK, starter, or plugin locks | never blindly overwrite user-owned code | — | project, plugin | — |
-| `install` | new site, or opening an existing generated one | do not use the SDK checkout as the application; no push/deploy/provider config during cold start | create local project; continue existing project | plugin | Creates a project; nothing to project into an existing one. |
+| `install` | new site, or opening an existing generated one | do not use the SDK checkout as the application; no push/deploy/provider config during cold start | create local project; continue existing project | plugin | Creates a new project; nothing to project into an existing one. |
 | `provision` | ship to Cloudflare and finish production auth | secrets never enter source or logs; explicit auth mode | hosted auth; self-managed auth | plugin | Platform-specific deploy that handles production secrets; opt-in only. |
 | `media-gc` | audit or remove stale uncommitted media objects | audit by default; confirm exact account, bucket, cutoff, and candidate digest; re-audit before applying; never prefix-delete; never print keys | apply | plugin | Destructive remote object deletion and Cloudflare-specific; opt-in only. |
 
