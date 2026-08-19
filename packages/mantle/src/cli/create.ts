@@ -17,14 +17,14 @@ import { mkdir, mkdtemp, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { cwd, stderr, stdout } from "node:process";
 import { parseArgs } from "node:util";
-import packageJson from "../package.json" with { type: "json" };
+import packageJson from "../../package.json" with { type: "json" };
 import {
   DEFAULT_PROVISION_LIMITS,
   ProvisionRenderError,
   renderProvisionBundle,
   type LaunchValues,
   type ProvisionBundle,
-} from "./provision.js";
+} from "../provision.js";
 
 const STARTERS_OWNER = "aotter";
 const STARTERS_REPO = "mantle-starters";

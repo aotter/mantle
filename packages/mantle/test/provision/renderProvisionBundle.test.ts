@@ -9,7 +9,7 @@ import {
   type ProvisionBundle,
   type ProvisionErrorCode,
   type ProvisionLimits,
-} from "../src/provision.js";
+} from "../../src/provision.js";
 
 // One golden bundle exercising text, template, binary, localized, manifest,
 // and wrangler paths. Failure cases mutate a copy of it.

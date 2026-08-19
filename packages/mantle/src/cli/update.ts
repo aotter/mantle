@@ -9,7 +9,7 @@ import {
 import { join, posix, resolve } from "node:path";
 import { cwd, stderr, stdout } from "node:process";
 import { parseArgs } from "node:util";
-import { safeTarget } from "./provision.js";
+import { safeTarget } from "../provision.js";
 
 const REPORT_PATH = ".mantle/update-report.json";
 const IGNORE_DIRS = new Set([".git", "node_modules", ".wrangler", ".wrangler-test", "dist"]);

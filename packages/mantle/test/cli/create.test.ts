@@ -2,9 +2,9 @@ import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import packageJson from "../package.json" with { type: "json" };
-import { PROVISION_BUNDLE_KIND } from "../src/provision.js";
-import { runCreate } from "../src/create.js";
+import packageJson from "../../package.json" with { type: "json" };
+import { PROVISION_BUNDLE_KIND } from "../../src/provision.js";
+import { runCreate } from "../../src/cli/create.js";
 
 const PACKAGE_VERSION = packageJson.version;
 

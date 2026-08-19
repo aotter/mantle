@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runUpdate } from "../src/update.js";
+import { runUpdate } from "../../src/cli/update.js";
 
 const originalCwd = process.cwd();
 

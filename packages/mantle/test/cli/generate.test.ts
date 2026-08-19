@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runGenerate } from "../src/generate.js";
+import { runGenerate } from "../../src/cli/generate.js";
 
 const originalCwd = process.cwd();
 const execFileAsync = promisify(execFile);

@@ -4,7 +4,7 @@ import { cwd, stderr, stdout } from "node:process";
 import { parseArgs } from "node:util";
 import { ValidateManifestsUseCase, type Diagnostic } from "@aotter/mantle-spec";
 import { loadManifestsFromRoot } from "@aotter/mantle-spec/cli";
-import { assertMantleNamespace, emitMantleModule } from "./emitMantleModule.js";
+import { assertMantleNamespace, emitMantleModule } from "../codegen/emitMantleModule.js";
 
 interface GenerateOptions {
   readonly manifests: string;

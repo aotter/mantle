@@ -68,7 +68,7 @@ Options:
 }
 
 async function skillSourceRoot(): Promise<string> {
-  const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
   for (const candidate of [join(packageRoot, "skills"), resolve(packageRoot, "../../skills")]) {
     if ((await stat(candidate).catch(() => null))?.isDirectory()) return candidate;
   }
