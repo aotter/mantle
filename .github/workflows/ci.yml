@@ -46,6 +46,9 @@ jobs:
       - name: Check skill disclosure audit
         run: pnpm run check:skills
 
+      - name: Check generated plugin manifests
+        run: pnpm run check:plugin-manifests
+
       - name: Check packed Core and optional product consumers
         run: pnpm run check:optional-packages
 

@@ -1,33 +1,17 @@
 {
-  "name": "mantle",
-  "description": "Build and embed Mantle applications with version-matched Core skills and deterministic examples.",
-  "version": "0.1.0-alpha.7",
-  "author": {
-    "name": "Aotter",
-    "url": "https://mantle.tools/"
-  },
-  "homepage": "https://mantle.tools/",
-  "repository": "https://github.com/aotter/mantle",
-  "license": "Apache-2.0",
-  "keywords": [
-    "mantle",
-    "cms",
-    "agent-skills",
-    "marketplace",
-    "sdk"
-  ],
-  "skills": "./skills/",
+  "//": "Agent-facing plugin presentation. Identity that must never be hand-bumped per host (version, homepage, repository, license, author, keywords) comes from packages/mantle/package.json instead. Regenerate with `node scripts/sync-plugin-manifests.mjs`.",
+  "displayName": "Mantle",
+  "pluginDescription": "Build and embed Mantle applications with version-matched Core skills and deterministic examples.",
+  "marketplaceDescription": "Build and embed Mantle applications with deterministic examples and Core agent skills.",
+  "category": "Developer Tools",
   "interface": {
-    "displayName": "Mantle",
     "shortDescription": "Build and embed Mantle apps",
     "longDescription": "Embed Mantle Core in an existing application or start from a deterministic example, then compose only the Web, Admin, Bun, Vercel, or Cloudflare modules the host needs.",
     "developerName": "Aotter",
-    "category": "Developer Tools",
     "capabilities": [
       "Interactive",
       "Write"
     ],
-    "websiteURL": "https://mantle.tools/",
     "defaultPrompt": [
       "Embed Mantle Core in this application",
       "Create a Mantle example from a deterministic Starter",
