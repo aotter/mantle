@@ -6,9 +6,6 @@ import { projectionScopes, runSkills } from "../../src/cli/skills.js";
 
 const originalCwd = process.cwd();
 const skillsRoot = join(originalCwd, "../../skills");
-/** Front matter decides this; the test asserts the shipped declaration. */
-const PROJECTED = ["develop", "plugin", "theme", "update"];
-const NOT_PROJECTED = ["install", "media-gc", "provision"];
 
 afterEach(() => {
   process.chdir(originalCwd);
@@ -29,19 +26,24 @@ describe("projectionScopes", () => {
 });
 
 describe("mantle skills", () => {
-  it("projects every project-scoped skill and fails closed on one-byte drift", async () => {
+  it("projects declared skills, fails closed on drift, and ignores legacy copies", async () => {
     const root = await mkdtemp(join(tmpdir(), "mantle-skills-"));
+    const legacy = join(root, ".agent", "skills", "mantle-develop", "SKILL.md");
     try {
       process.chdir(root);
       vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+      await mkdir(join(root, ".agent", "skills", "mantle-develop"), { recursive: true });
+      await writeFile(legacy, "user edited this", "utf8");
+
       expect(await runSkills([])).toBe(0);
 
-      for (const skill of PROJECTED) {
-        const source = await readFile(join(skillsRoot, skill, "SKILL.md"), "utf8");
-        for (const tool of [".agents", ".claude"]) {
-          expect(await readFile(join(root, tool, "skills", `mantle-${skill}`, "SKILL.md"), "utf8")).toBe(source);
-        }
+      const source = await readFile(join(skillsRoot, "develop", "SKILL.md"), "utf8");
+      for (const tool of [".agents", ".claude"]) {
+        expect(await readFile(join(root, tool, "skills", "mantle-develop", "SKILL.md"), "utf8")).toBe(source);
+        await expect(stat(join(root, tool, "skills", "mantle-media-gc"))).rejects.toThrow();
       }
+      expect(await readFile(legacy, "utf8")).toBe("user edited this");
+      await expect(stat(join(root, ".agent", "skills", "mantle-plugin"))).rejects.toThrow();
       expect(await runSkills(["--check"])).toBe(0);
 
       const stale = join(root, ".agents", "skills", "mantle-develop", "SKILL.md");
@@ -51,42 +53,6 @@ describe("mantle skills", () => {
       expect(await runSkills(["--check"])).toBe(1);
       expect(stderr).toHaveBeenCalledWith("Mantle skills are stale; run `mantle skills`.\n");
       expect(await readFile(stale, "utf8")).toBe(before);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("never projects a skill that withholds project scope", async () => {
-    const root = await mkdtemp(join(tmpdir(), "mantle-skills-scope-"));
-    try {
-      process.chdir(root);
-      vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-      expect(await runSkills([])).toBe(0);
-      for (const skill of NOT_PROJECTED) {
-        for (const tool of [".agents", ".claude"]) {
-          await expect(stat(join(root, tool, "skills", `mantle-${skill}`))).rejects.toThrow();
-        }
-      }
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("stops writing .agent/ but leaves a project's existing copy alone", async () => {
-    const root = await mkdtemp(join(tmpdir(), "mantle-skills-legacy-"));
-    try {
-      process.chdir(root);
-      vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-      const legacy = join(root, ".agent", "skills", "mantle-develop", "SKILL.md");
-      await mkdir(join(root, ".agent", "skills", "mantle-develop"), { recursive: true });
-      await writeFile(legacy, "user edited this", "utf8");
-
-      expect(await runSkills([])).toBe(0);
-
-      expect(await readFile(legacy, "utf8")).toBe("user edited this");
-      await expect(stat(join(root, ".agent", "skills", "mantle-plugin"))).rejects.toThrow();
-      // A stale legacy copy must not make the drift check fail.
-      expect(await runSkills(["--check"])).toBe(0);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

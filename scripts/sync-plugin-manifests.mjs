@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-// Generates every host plugin manifest from two sources: the shared fields in
-// packages/mantle/package.json and the agent-only presentation metadata in
-// scripts/plugin-metadata.json. Nothing here is hand-bumped per host.
+// Generates every host plugin manifest from package identity and the richest
+// host manifest. Nothing shared is hand-bumped per host.
 //
 //   node scripts/sync-plugin-manifests.mjs          write
 //   node scripts/sync-plugin-manifests.mjs --check  fail when stale
@@ -14,11 +13,11 @@ const check = process.argv.includes("--check");
 const read = (path) => JSON.parse(readFileSync(join(repoRoot, path), "utf8"));
 
 const pkg = read("packages/mantle/package.json");
-const meta = read("scripts/plugin-metadata.json");
+const presentation = read(".codex-plugin/plugin.json");
 
 const shared = {
   name: "mantle",
-  description: meta.pluginDescription,
+  description: presentation.description,
   version: pkg.version,
   author: { name: "Aotter" },
   homepage: pkg.homepage,
@@ -33,7 +32,7 @@ const manifests = {
   ".claude-plugin/marketplace.json": {
     name: shared.name,
     owner: shared.author,
-    description: meta.marketplaceDescription,
+    description: shared.description,
     plugins: [{ name: shared.name, source: "./", description: shared.description }],
   },
   ".codex-plugin/plugin.json": {
@@ -41,30 +40,22 @@ const manifests = {
     author: { ...shared.author, url: shared.homepage },
     skills: "./skills/",
     interface: {
-      displayName: meta.displayName,
-      shortDescription: meta.interface.shortDescription,
-      longDescription: meta.interface.longDescription,
-      developerName: meta.interface.developerName,
-      category: meta.category,
-      capabilities: meta.interface.capabilities,
+      ...presentation.interface,
       websiteURL: shared.homepage,
-      defaultPrompt: meta.interface.defaultPrompt,
-      brandColor: meta.interface.brandColor,
-      screenshots: meta.interface.screenshots,
     },
   },
-  ".cursor-plugin/plugin.json": { ...shared, displayName: meta.displayName, skills: "./skills/" },
+  ".cursor-plugin/plugin.json": { ...shared, displayName: presentation.interface.displayName, skills: "./skills/" },
   ".copilot-plugin/plugin.json": { ...shared, skills: "./skills/" },
   // The marketplace ref is derived from the package version: this is the file
   // that used to need a hand-edit on every release.
   ".agents/plugins/marketplace.json": {
     name: shared.name,
-    interface: { displayName: meta.displayName },
+    interface: { displayName: presentation.interface.displayName },
     plugins: [{
       name: shared.name,
       source: { source: "url", url: `${shared.repository}.git`, ref: `v${version}` },
       policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
-      category: meta.category,
+      category: presentation.interface.category,
     }],
   },
 };
