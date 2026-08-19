@@ -27,6 +27,10 @@
       "types": "./dist/spec.d.ts",
       "import": "./dist/spec.js"
     },
+    "./provision": {
+      "types": "./dist/provision.d.ts",
+      "import": "./dist/provision.js"
+    },
     "./spec": {
       "types": "./dist/spec.d.ts",
       "import": "./dist/spec.js"
@@ -80,7 +84,8 @@
   ],
   "dependencies": {
     "@aotter/mantle-runtime": "workspace:*",
-    "@aotter/mantle-spec": "workspace:*"
+    "@aotter/mantle-spec": "workspace:*",
+    "yaml": "^2.9.0"
   },
   "peerDependencies": {
     "@aotter/mantle-admin": "workspace:*",
