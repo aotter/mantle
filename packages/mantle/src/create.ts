@@ -13,7 +13,7 @@
  * write, and the write lands in an exclusively-owned temporary directory that
  * is renamed into place. There is no --force.
  */
-import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, stat, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -86,6 +86,12 @@ export async function runCreate(rawArgs: readonly string[]): Promise<number> {
   }
   if (await exists(target)) {
     stderr.write(`Refusing to write into an existing path: ${target}\n`);
+    return 1;
+  }
+  // Creating the parent chain would be state a failure could not undo. Ask for
+  // an existing parent instead, so an aborted run leaves the disk untouched.
+  if (!(await exists(dirname(target)))) {
+    stderr.write(`Parent directory does not exist: ${dirname(target)}\n`);
     return 1;
   }
 
@@ -164,15 +170,37 @@ async function fetchOfficialBundle(starterRef: string, archetype: string): Promi
   if (!response.ok) {
     throw new Error(`could not fetch the ${archetype} starter for ${starterRef} (HTTP ${response.status}).`);
   }
-  const declared = Number(response.headers.get("content-length") ?? "0");
-  if (declared > MAX_BUNDLE_BYTES) throw new Error(`starter bundle exceeds ${MAX_BUNDLE_BYTES} bytes.`);
-  const text = await response.text();
-  if (text.length > MAX_BUNDLE_BYTES) throw new Error(`starter bundle exceeds ${MAX_BUNDLE_BYTES} bytes.`);
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_BUNDLE_BYTES) {
+    throw new Error(`starter bundle exceeds ${MAX_BUNDLE_BYTES} bytes.`);
+  }
+  const text = await readBounded(response, MAX_BUNDLE_BYTES);
   try {
     return JSON.parse(text) as ProvisionBundle;
   } catch {
     throw new Error("starter bundle is not valid JSON.");
   }
+}
+
+/** Stops reading at the limit; a chunked response never gets to allocate past it. */
+async function readBounded(response: Response, max: number): Promise<string> {
+  const body = response.body;
+  if (!body) return response.text();
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value === undefined) continue;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel();
+      throw new Error(`starter bundle exceeds ${max} bytes.`);
+    }
+    chunks.push(value);
+  }
+  return new TextDecoder("utf-8", { fatal: false }).decode(Buffer.concat(chunks));
 }
 
 /**
@@ -183,9 +211,7 @@ async function writeAtomically(
   target: string,
   rendered: { files: ReadonlyMap<string, string>; binaryFiles: ReadonlyMap<string, string> },
 ): Promise<void> {
-  const parent = dirname(target);
-  await mkdir(parent, { recursive: true, mode: DIRECTORY_MODE });
-  const staging = await mkdtemp(join(parent, ".mantle-create-"));
+  const staging = await mkdtemp(join(dirname(target), ".mantle-create-"));
   try {
     for (const [path, content] of rendered.files) {
       await writeFileAt(staging, path, Buffer.from(content, "utf8"));
@@ -224,7 +250,6 @@ function titleCase(slug: string): string {
 }
 
 async function exists(path: string): Promise<boolean> {
-  const { stat } = await import("node:fs/promises");
   return stat(path).then(() => true, () => false);
 }
 

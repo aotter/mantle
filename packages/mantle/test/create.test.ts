@@ -32,14 +32,26 @@ afterEach(async () => {
   await rm(workspace, { recursive: true, force: true });
 });
 
-function stubFetch(body: unknown, ok = true): void {
+function stubFetch(body: unknown, ok = true, streamed = false): void {
+  const payload = typeof body === "string" ? body : JSON.stringify(body);
   vi.stubGlobal("fetch", async (url: string) => {
     requested.push(String(url));
     return {
       ok,
       status: ok ? 200 : 404,
       headers: new Headers(),
-      text: async () => (typeof body === "string" ? body : JSON.stringify(body)),
+      // The real fetch always exposes a stream; exercise that path too.
+      body: streamed
+        ? new ReadableStream<Uint8Array>({
+          start(controller) {
+            const bytes = new TextEncoder().encode(payload);
+            controller.enqueue(bytes.slice(0, 5));
+            controller.enqueue(bytes.slice(5));
+            controller.close();
+          },
+        })
+        : null,
+      text: async () => payload,
     } as unknown as Response;
   });
 }
@@ -94,6 +106,20 @@ describe("mantle create", () => {
     expect(await readFile(join(target, "README.md"), "utf8")).toBe("# Aotter Shop\n");
     expect(JSON.parse(await readFile(join(target, ".mantle/launch-state.json"), "utf8")).locales)
       .toEqual(["en", "ja"]);
+  });
+
+  it("reads a streamed response body", async () => {
+    stubFetch(BUNDLE, true, true);
+    const target = join(workspace, "streamed");
+    expect(await runCreate(["blank", target])).toBe(0);
+    expect(await readFile(join(target, "README.md"), "utf8")).toBe("# Streamed\n");
+  });
+
+  it("refuses a missing parent rather than inventing directories", async () => {
+    stubFetch(BUNDLE);
+    expect(await runCreate(["blank", join(workspace, "a", "b", "site")])).toBe(1);
+    expect(await readdir(workspace)).toEqual([]);
+    expect(requested).toEqual([]);
   });
 
   it("refuses an existing target and leaves it untouched", async () => {

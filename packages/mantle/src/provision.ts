@@ -11,7 +11,11 @@
  * takes values and returns values, and reports failures as stable neutral
  * codes the hosts map to their own error shapes.
  */
-import { parseAllDocuments, isMap, isSeq } from "yaml";
+import {
+  canonicalizeLocaleList,
+  ManifestLocaleTrimError,
+  trimManifestLocales as trimLocales,
+} from "@aotter/mantle-spec";
 
 export const PROVISION_BUNDLE_KIND = "mantle-provision-bundle";
 
@@ -127,7 +131,6 @@ const TEXT_SUBSTITUTION_EXTENSIONS = new Set([
 /** Values embedded inside JSON/TS string literals must not break the literal. */
 const JSON_ESCAPED_PLACEHOLDERS = new Set(["BRAND", "DESCRIPTION", "INSTALL_SUMMARY"]);
 const MANIFEST_PATH = "manifests/site.yaml";
-const LOCALE_PATTERN = /^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|\d{3}))?$/;
 const PROJECT_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 const PLACEHOLDER_PATTERN = /\{\{([A-Z0-9_]+)\}\}/g;
@@ -159,7 +162,7 @@ export function renderProvisionBundle(input: RenderProvisionBundleInput): Render
   for (const [path, content] of Object.entries(bundle.files)) files.set(claim(path), content);
   for (const [path, content] of Object.entries(bundle.binaryFiles)) binaryFiles.set(claim(path), content);
 
-  substitute(files, launch);
+  substitute(files, launch, limits);
   assertLocalesSupported(bundle, launch);
   selectLocaleCatalogs(files, bundle.localizedFiles, launch);
   trimManifestLocales(files, launch.locales);
@@ -175,26 +178,56 @@ function validateLaunchValues(launch: LaunchValues): LaunchValues {
     fail("launch_value_invalid", "projectName must be lowercase letters, digits, and dashes (max 63 characters).");
   }
   if (!/^[a-z][a-z0-9-]*$/.test(launch.archetype)) fail("launch_value_invalid", "archetype must be a lowercase slug.");
+  if (!/^[a-z][a-z0-9-]*$/.test(launch.authMode)) fail("launch_value_invalid", "authMode must be a lowercase slug.");
   if (launch.locales.length === 0) fail("launch_value_invalid", "at least one locale is required.");
-  for (const locale of launch.locales) {
-    if (!LOCALE_PATTERN.test(locale)) fail("launch_value_invalid", `unsupported locale: ${locale}`);
-  }
-  if (new Set(launch.locales).size !== launch.locales.length) fail("launch_value_invalid", "locales contain a duplicate.");
-  if (!launch.locales.includes(launch.canonicalLocale)) {
-    fail("launch_value_invalid", "canonicalLocale is absent from locales.");
-  }
+  // Spec owns the locale grammar; do not grow a second one here.
+  const { valid: locales, invalid } = canonicalizeLocaleList(launch.locales);
+  if (invalid.length > 0) fail("launch_value_invalid", `unsupported locale: ${invalid.join(", ")}`);
+  if (locales.length !== launch.locales.length) fail("launch_value_invalid", "locales contain a duplicate.");
+  const canonicalLocale = canonicalOrFail(launch.canonicalLocale);
+  if (!locales.includes(canonicalLocale)) fail("launch_value_invalid", "canonicalLocale is absent from locales.");
   if (!Number.isFinite(Date.parse(launch.installTimestamp))) {
     fail("launch_value_invalid", "installTimestamp must be an ISO-8601 timestamp.");
   }
-  for (const [name, value] of [["brand", launch.brand], ["description", launch.description]] as const) {
-    if (value.length === 0 || value.length > 500) fail("launch_value_invalid", `${name} must be 1-500 characters.`);
+  // Every value below is substituted into project files verbatim, so all of
+  // them are checked — not only the ones with an obvious grammar. A newline
+  // here becomes a new line of agent instructions or of wrangler config.
+  for (const [name, value] of Object.entries(placeholderInputs(launch))) {
+    if (value.length > 500) fail("launch_value_invalid", `${name} must be at most 500 characters.`);
     if (CONTROL_CHARACTERS.test(value)) fail("launch_value_invalid", `${name} contains control characters.`);
+  }
+  for (const [name, value] of [["brand", launch.brand], ["description", launch.description]] as const) {
+    if (value.length === 0) fail("launch_value_invalid", `${name} must not be empty.`);
   }
   for (const [name, value] of Object.entries(launch.wranglerVars ?? {})) {
     if (!/^[A-Z][A-Z0-9_]*$/.test(name)) fail("launch_value_invalid", `wrangler var ${name} must be SCREAMING_SNAKE_CASE.`);
+    if (value.length > 500) fail("launch_value_invalid", `wrangler var ${name} must be at most 500 characters.`);
     if (CONTROL_CHARACTERS.test(value)) fail("launch_value_invalid", `wrangler var ${name} must be a single line.`);
+    if (value.includes('"')) fail("launch_value_invalid", `wrangler var ${name} must not contain a quote.`);
   }
-  return launch;
+  return { ...launch, locales, canonicalLocale };
+}
+
+/** The caller-supplied strings that reach substitution, by placeholder name. */
+function placeholderInputs(launch: LaunchValues): Record<string, string> {
+  return {
+    ADMIN_GITHUB_LOGIN: launch.adminGithubLogin ?? "",
+    AFTER_LAUNCH_SKILL_URL: launch.afterLaunchSkillUrl ?? "",
+    AUTH_MODE: launch.authMode,
+    BRAND: launch.brand,
+    DESCRIPTION: launch.description,
+    GITHUB_OWNER: launch.githubOwner ?? "",
+    INSTALL_SUMMARY: launch.installSummary ?? launch.description,
+    SITE_URL: launch.siteUrl ?? "",
+    STARTER_REF: launch.starterRef,
+    TURNSTILE_SITE_KEY: launch.turnstileSiteKey ?? "",
+  };
+}
+
+function canonicalOrFail(locale: string): string {
+  const { valid, invalid } = canonicalizeLocaleList([locale]);
+  if (invalid.length > 0 || valid[0] === undefined) fail("launch_value_invalid", `unsupported locale: ${locale}`);
+  return valid[0] as string;
 }
 
 function validateBundle(
@@ -254,28 +287,35 @@ function validateBundle(
   return { ...bundle, files, binaryFiles };
 }
 
-/** Normalizes both slash styles and rejects anything that could escape the target. */
+/**
+ * Normalizes both slash styles and rejects anything that could escape the
+ * target. Returns the path a host will join onto its destination, so every
+ * rule below runs on that final string — never on the raw bundle key.
+ */
 export function safeTarget(rawPath: string): string {
   if (typeof rawPath !== "string" || rawPath.length === 0) fail("path_unsafe", "bundle path is empty.");
   if (CONTROL_CHARACTERS.test(rawPath)) fail("path_unsafe", `bundle path contains control characters: ${JSON.stringify(rawPath)}`);
   if (/^[a-zA-Z]:/.test(rawPath)) fail("path_unsafe", `bundle path is a drive path: ${rawPath}`);
   if (rawPath.startsWith("\\\\")) fail("path_unsafe", `bundle path is a UNC path: ${rawPath}`);
   const normalized = rawPath.replace(/\\/g, "/");
-  if (normalized.startsWith("/")) fail("path_unsafe", `bundle path is absolute: ${rawPath}`);
-  const segments = normalized.split("/");
+  // `.template` marks a file the bundle renders through substitution. Strip it
+  // BEFORE validating: `...template` would pass a segment check run on the raw
+  // key and only then become `..`.
+  const target = normalized.endsWith(".template") ? normalized.slice(0, -".template".length) : normalized;
+  if (target.length === 0) fail("path_unsafe", `bundle path resolves to no file: ${rawPath}`);
+  if (target.startsWith("/")) fail("path_unsafe", `bundle path is absolute: ${rawPath}`);
+  const segments = target.split("/");
   if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
     fail("path_unsafe", `bundle path has an empty, dot, or parent segment: ${rawPath}`);
   }
-  // `.template` marks a file the bundle renders through substitution.
-  const target = normalized.endsWith(".template") ? normalized.slice(0, -".template".length) : normalized;
-  if (target.length === 0 || target.endsWith("/")) fail("path_unsafe", `bundle path resolves to no file: ${rawPath}`);
   return target;
 }
 
 // --- substitution ----------------------------------------------------------
 
-function substitute(files: Map<string, string>, launch: LaunchValues): void {
+function substitute(files: Map<string, string>, launch: LaunchValues, limits: ProvisionLimits): void {
   const values = placeholderValues(launch);
+  let rendered = 0;
   for (const [path, content] of [...files]) {
     if (!shouldSubstitute(path)) {
       // A non-substituted file keeping a placeholder would ship a literal
@@ -292,8 +332,19 @@ function substitute(files: Map<string, string>, launch: LaunchValues): void {
       if (value === undefined) fail("placeholder_unknown", `${path} references unknown placeholder {{${key}}}.`);
       return jsonLike && JSON_ESCAPED_PLACEHOLDERS.has(key) ? JSON.stringify(value).slice(1, -1) : (value as string);
     });
-    if (new RegExp(PLACEHOLDER_PATTERN.source).test(next)) {
-      fail("placeholder_unresolved", `${path} still contains an unresolved placeholder.`);
+    // No post-check here: every bundle-side token already went through the
+    // callback above, so anything left can only have come from a launch value
+    // (a brand may legitimately contain "{{...}}").
+    // Limits are declared over what gets written, so they are re-checked
+    // here: substitution expands, and the input measurement in validateBundle
+    // cannot see that.
+    const bytes = utf8Length(next);
+    if (bytes > limits.maxTextBytes) {
+      fail("bundle_too_large", `${path} renders to more than ${limits.maxTextBytes} bytes.`);
+    }
+    rendered += bytes;
+    if (rendered > limits.maxTotalBytes) {
+      fail("bundle_too_large", `rendered output exceeds ${limits.maxTotalBytes} bytes.`);
     }
     files.set(path, next);
   }
@@ -376,60 +427,15 @@ function selectLocaleCatalogs(
 function trimManifestLocales(files: Map<string, string>, locales: readonly string[]): void {
   const text = files.get(MANIFEST_PATH);
   if (text === undefined) return;
-  const documents = parseAllDocuments(text);
-  if (documents.some((document) => document.errors.length > 0)) {
-    fail("manifest_invalid", `${MANIFEST_PATH} is not valid YAML.`);
+  try {
+    files.set(MANIFEST_PATH, trimLocales(text, locales));
+  } catch (error) {
+    if (!(error instanceof ManifestLocaleTrimError)) throw error;
+    fail(
+      error.reason === "invalid_yaml" ? "manifest_invalid" : "locale_unsupported",
+      `${MANIFEST_PATH}: ${error.message}`,
+    );
   }
-  let changed = false;
-  for (const document of documents) changed = trimLocalizedText(document.contents, locales) || changed;
-  if (changed) files.set(MANIFEST_PATH, documents.map(String).join("---\n"));
-}
-
-function trimLocalizedText(node: unknown, locales: readonly string[]): boolean {
-  if (isSeq(node)) {
-    let changed = false;
-    for (const item of node.items) changed = trimLocalizedText(item, locales) || changed;
-    return changed;
-  }
-  if (!isMap(node)) return false;
-  let changed = false;
-  for (const pair of node.items) {
-    const key = scalarValue(pair.key);
-    const localized = (key === "title" || key === "description") ? localeMap(pair.value) : null;
-    if (!localized) {
-      changed = trimLocalizedText(pair.value, locales) || changed;
-      continue;
-    }
-    const available = new Set(localized.items.map((item) => scalarValue(item.key)));
-    const missing = locales.filter((locale) => !available.has(locale));
-    if (missing.length > 0) {
-      fail("locale_unsupported", `${MANIFEST_PATH} does not support manifest locales: ${missing.join(", ")}`);
-    }
-    const before = localized.items.length;
-    localized.items = localized.items.filter((item) => locales.includes(scalarValue(item.key)));
-    changed ||= localized.items.length !== before;
-  }
-  return changed;
-}
-
-interface LocaleMapNode {
-  items: { key: unknown; value: unknown }[];
-}
-
-/** A localized-text node is a map whose keys are locales and values strings. */
-function localeMap(node: unknown): LocaleMapNode | null {
-  if (!isMap(node)) return null;
-  const map = node as unknown as LocaleMapNode;
-  if (map.items.length === 0) return null;
-  for (const item of map.items) {
-    if (typeof (item.value as { value?: unknown } | null)?.value !== "string") return null;
-    if (!LOCALE_PATTERN.test(scalarValue(item.key))) return null;
-  }
-  return map;
-}
-
-function scalarValue(node: unknown): string {
-  return String((node as { value?: unknown } | null)?.value ?? "");
 }
 
 // --- wrangler --------------------------------------------------------------
@@ -457,7 +463,8 @@ function applyWrangler(files: Map<string, string>, launch: LaunchValues): void {
 export function upsertWranglerVar(text: string, name: string, value: string): string {
   const line = `${name} = ${JSON.stringify(value)}`;
   const existing = new RegExp(`^\\s*#?\\s*${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=.*$`, "m");
-  if (existing.test(text)) return text.replace(existing, line);
+  // Replacer function, not a string: a `$&` in the value must stay literal.
+  if (existing.test(text)) return text.replace(existing, () => line);
   const vars = /^\[vars\]\s*$/m.exec(text);
   if (!vars || vars.index === undefined) return `${text.trimEnd()}\n\n[vars]\n${line}\n`;
   const insertAt = vars.index + vars[0].length;

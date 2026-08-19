@@ -180,9 +180,6 @@ importers:
       '@aotter/mantle-spec':
         specifier: workspace:*
         version: link:../mantle-spec
-      yaml:
-        specifier: ^2.9.0
-        version: 2.9.0
     devDependencies:
       '@aotter/mantle-admin':
         specifier: workspace:*

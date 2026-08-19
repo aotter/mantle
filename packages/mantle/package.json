@@ -84,8 +84,7 @@
   ],
   "dependencies": {
     "@aotter/mantle-runtime": "workspace:*",
-    "@aotter/mantle-spec": "workspace:*",
-    "yaml": "^2.9.0"
+    "@aotter/mantle-spec": "workspace:*"
   },
   "peerDependencies": {
     "@aotter/mantle-admin": "workspace:*",
