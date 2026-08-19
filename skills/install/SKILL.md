@@ -5,6 +5,8 @@ metadata:
   source: "@aotter/mantle"
   sourcePath: skills/install/SKILL.md
   applies_to: mantle grammar v0.1
+  projection: plugin
+  projectionReason: Creates a new project; nothing to project into an existing one.
 ---
 
 # Mantle Install
@@ -125,14 +127,12 @@ pnpm typecheck
 ```
 
 Inspect the already composed manifest, page, and seed files before changing
-them. Use the project's scripts first; generated projects expose:
+them. Use the project's scripts first; ask the installed CLI for its command
+list rather than trusting one copied into prose:
 
 ```bash
 pnpm exec mantle --help
 pnpm validate
-pnpm introspect
-pnpm emit-openapi
-pnpm emit-types
 ```
 
 ## Production
