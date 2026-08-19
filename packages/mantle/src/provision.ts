@@ -1,15 +1,21 @@
 /**
- * Environment-neutral provision-bundle renderer.
+ * Shared provision-bundle renderer.
  *
  * validated provision bundle + explicit launch values
  *   -> deterministic text files + validated base64 binary files
  *
  * Its three callers are `mantle create` (writes a local directory),
  * `mantle-starters` (contributor preview and smoke tests), and
- * `mantle-landing` (commits a GitHub tree). This module must stay free of
- * filesystem, process, git, GitHub, Cloudflare, auth, and deploy code: it
- * takes values and returns values, and reports failures as stable neutral
- * codes the hosts map to their own error shapes.
+ * `mantle-landing` (commits a GitHub tree). It takes values and returns
+ * values, reporting failures as stable neutral codes the hosts map to their
+ * own error shapes, and holds no filesystem, process, git, GitHub, auth, or
+ * deploy code.
+ *
+ * One exception is outstanding: `applyWrangler` rewrites a Cloudflare project
+ * and D1 database name, because the shipped bundles hard-code those instead of
+ * templating them. Removing it before the bundles change would only move the
+ * same rewrite into all three hosts. It leaves once the starter templates those
+ * fields — see aotter/mantle#705. Do not add a second host-shaped exception.
  */
 import {
   canonicalizeLocaleList,
