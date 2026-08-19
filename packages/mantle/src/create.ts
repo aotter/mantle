@@ -118,7 +118,7 @@ export async function runCreate(rawArgs: readonly string[]): Promise<number> {
 
   let rendered;
   try {
-    const bundle = await fetchOfficialBundle(starterRef, archetype);
+    const bundle = await fetchOfficialBundle(starterRef, archetype, version);
     rendered = renderProvisionBundle({ bundle, launch, limits: DEFAULT_PROVISION_LIMITS });
   } catch (error) {
     stderr.write(`mantle create: ${error instanceof ProvisionRenderError ? `${error.code}: ${error.message}` : message(error)}\n`);
@@ -164,7 +164,7 @@ deployed. The generated AGENTS.md carries the next steps.
  * Only the official immutable tag for this exact package version. A bundle
  * URL or ref is never taken from user input in this path.
  */
-async function fetchOfficialBundle(starterRef: string, archetype: string): Promise<ProvisionBundle> {
+async function fetchOfficialBundle(starterRef: string, archetype: string, version: string): Promise<ProvisionBundle> {
   const url = `https://raw.githubusercontent.com/${STARTERS_OWNER}/${STARTERS_REPO}/${encodeURIComponent(starterRef)}/provision-bundles/${encodeURIComponent(archetype)}.json`;
   const response = await fetch(url, { headers: { accept: "application/json" }, redirect: "error" });
   if (!response.ok) {
@@ -175,11 +175,18 @@ async function fetchOfficialBundle(starterRef: string, archetype: string): Promi
     throw new Error(`starter bundle exceeds ${MAX_BUNDLE_BYTES} bytes.`);
   }
   const text = await readBounded(response, MAX_BUNDLE_BYTES);
+  let bundle: ProvisionBundle;
   try {
-    return JSON.parse(text) as ProvisionBundle;
+    bundle = JSON.parse(text) as ProvisionBundle;
   } catch {
     throw new Error("starter bundle is not valid JSON.");
   }
+  // The URL is version-pinned, but a mis-built bundle published under that tag
+  // would still render. Refuse a version the tag does not promise.
+  if (bundle.version !== version) {
+    throw new Error(`starter bundle at ${starterRef} declares version ${String(bundle.version)}, expected ${version}.`);
+  }
+  return bundle;
 }
 
 /** Stops reading at the limit; a chunked response never gets to allocate past it. */

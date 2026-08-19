@@ -421,3 +421,43 @@ describe("renderProvisionBundle — injection through launch values", () => {
     expect(launchState.locales).toEqual(["en", "zh-TW"]);
   });
 });
+
+describe("renderProvisionBundle — findings from the second review round", () => {
+  it("escapes every value inside a JSON string literal, not only three of them", () => {
+    const bundle = clone(GOLDEN);
+    (bundle.files as Record<string, string>)[".mantle/launch-state.json.template"] =
+      '{"site_url":"{{SITE_URL}}","owner":"{{GITHUB_OWNER}}","ref":"{{STARTER_REF}}","locales":{{LOCALES}}}\n';
+    const rendered = renderProvisionBundle({
+      bundle,
+      launch: { ...LAUNCH, siteUrl: 'https://x/"evil":"1', githubOwner: 'a\\b', starterRef: 'v1"x' },
+    });
+    // Parsing is the assertion: an unescaped quote would make this throw.
+    const state = JSON.parse(rendered.files.get(".mantle/launch-state.json") as string);
+    expect(state.site_url).toBe('https://x/"evil":"1');
+    expect(state.owner).toBe("a\\b");
+    expect(state.ref).toBe('v1"x');
+    expect(state.locales).toEqual(["en", "ja"]);
+  });
+
+  it("measures the finished tree, including binary, against the total limit", () => {
+    const bundle: ProvisionBundle = {
+      kind: PROVISION_BUNDLE_KIND,
+      version: "0.1.0-alpha.7",
+      archetype: "blank",
+      files: { "a.md": "{{BRAND}}" },
+      binaryFiles: { "b.png": "aGVsbG8gd29ybGQgeHl6" },
+    };
+    try {
+      renderProvisionBundle({
+        bundle,
+        // input is 9 + 15 = 24 bytes; output is 20 + 15 = 35
+        launch: { ...LAUNCH, archetype: "blank", brand: "B".repeat(20), locales: ["en"], canonicalLocale: "en" },
+        limits: { ...DEFAULT_PROVISION_LIMITS, maxTotalBytes: 30 },
+      });
+    } catch (error) {
+      expect((error as ProvisionRenderError).code).toBe("bundle_too_large");
+      return;
+    }
+    throw new Error("expected bundle_too_large");
+  });
+});

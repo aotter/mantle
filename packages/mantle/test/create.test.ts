@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -5,9 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PROVISION_BUNDLE_KIND } from "../src/provision.js";
 import { runCreate } from "../src/create.js";
 
+const { version: PACKAGE_VERSION } = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+) as { version: string };
+
 const BUNDLE = {
   kind: PROVISION_BUNDLE_KIND,
-  version: "0.1.0-alpha.7",
+  version: PACKAGE_VERSION,
   archetype: "blank",
   files: {
     "README.md": "# {{BRAND}}\n",
@@ -139,6 +144,12 @@ describe("mantle create", () => {
 
   it("leaves nothing behind when the bundle fails to render", async () => {
     stubFetch({ ...BUNDLE, archetype: "presence" });
+    expect(await runCreate(["blank", join(workspace, "site")])).toBe(1);
+    expect(await readdir(workspace)).toEqual([]);
+  });
+
+  it("refuses a bundle whose declared version is not the pinned one", async () => {
+    stubFetch({ ...BUNDLE, version: "0.1.0-alpha.6" });
     expect(await runCreate(["blank", join(workspace, "site")])).toBe(1);
     expect(await readdir(workspace)).toEqual([]);
   });

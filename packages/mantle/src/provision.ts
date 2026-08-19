@@ -128,8 +128,13 @@ export interface RenderedProject {
 const TEXT_SUBSTITUTION_EXTENSIONS = new Set([
   "", ".css", ".html", ".json", ".md", ".mjs", ".sql", ".toml", ".ts", ".tsx", ".txt", ".yaml", ".yml",
 ]);
-/** Values embedded inside JSON/TS string literals must not break the literal. */
-const JSON_ESCAPED_PLACEHOLDERS = new Set(["BRAND", "DESCRIPTION", "INSTALL_SUMMARY"]);
+/**
+ * In JSON and TS sources a placeholder sits inside a string literal, so its
+ * value is escaped by default. Only the placeholders a bundle substitutes as
+ * raw JSON are exempt — an allowlist, so a new placeholder is escaped unless
+ * someone deliberately says otherwise.
+ */
+const RAW_JSON_PLACEHOLDERS = new Set(["LOCALES"]);
 const MANIFEST_PATH = "manifests/site.yaml";
 const PROJECT_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
@@ -162,13 +167,42 @@ export function renderProvisionBundle(input: RenderProvisionBundleInput): Render
   for (const [path, content] of Object.entries(bundle.files)) files.set(claim(path), content);
   for (const [path, content] of Object.entries(bundle.binaryFiles)) binaryFiles.set(claim(path), content);
 
-  substitute(files, launch, limits);
+  substitute(files, launch);
   assertLocalesSupported(bundle, launch);
   selectLocaleCatalogs(files, bundle.localizedFiles, launch);
   trimManifestLocales(files, launch.locales);
   applyWrangler(files, launch);
+  // Limits are declared over what gets written. Measure the finished tree:
+  // substitution expands, and locale, manifest, and wrangler transforms all
+  // run after the input measurement in validateBundle.
+  assertRenderedSize(files, binaryFiles, limits);
 
   return { files, binaryFiles };
+}
+
+function assertRenderedSize(
+  files: ReadonlyMap<string, string>,
+  binaryFiles: ReadonlyMap<string, string>,
+  limits: ProvisionLimits,
+): void {
+  let total = 0;
+  for (const [path, content] of files) {
+    const bytes = utf8Length(content);
+    if (bytes > limits.maxTextBytes) {
+      fail("bundle_too_large", `${path} renders to more than ${limits.maxTextBytes} bytes.`);
+    }
+    total += bytes;
+  }
+  for (const [path, content] of binaryFiles) {
+    const bytes = decodedBase64Length(content);
+    if (bytes > limits.maxDecodedBinaryBytes) {
+      fail("bundle_too_large", `${path} decodes to more than ${limits.maxDecodedBinaryBytes} bytes.`);
+    }
+    total += bytes;
+  }
+  if (total > limits.maxTotalBytes) {
+    fail("bundle_too_large", `the rendered project is ${total} bytes; the limit is ${limits.maxTotalBytes}.`);
+  }
 }
 
 // --- validation ------------------------------------------------------------
@@ -313,9 +347,8 @@ export function safeTarget(rawPath: string): string {
 
 // --- substitution ----------------------------------------------------------
 
-function substitute(files: Map<string, string>, launch: LaunchValues, limits: ProvisionLimits): void {
+function substitute(files: Map<string, string>, launch: LaunchValues): void {
   const values = placeholderValues(launch);
-  let rendered = 0;
   for (const [path, content] of [...files]) {
     if (!shouldSubstitute(path)) {
       // A non-substituted file keeping a placeholder would ship a literal
@@ -330,22 +363,13 @@ function substitute(files: Map<string, string>, launch: LaunchValues, limits: Pr
     const next = content.replace(new RegExp(PLACEHOLDER_PATTERN.source, "g"), (_match, key: string) => {
       const value = values.get(key);
       if (value === undefined) fail("placeholder_unknown", `${path} references unknown placeholder {{${key}}}.`);
-      return jsonLike && JSON_ESCAPED_PLACEHOLDERS.has(key) ? JSON.stringify(value).slice(1, -1) : (value as string);
+      return jsonLike && !RAW_JSON_PLACEHOLDERS.has(key)
+        ? JSON.stringify(value).slice(1, -1)
+        : (value as string);
     });
     // No post-check here: every bundle-side token already went through the
     // callback above, so anything left can only have come from a launch value
     // (a brand may legitimately contain "{{...}}").
-    // Limits are declared over what gets written, so they are re-checked
-    // here: substitution expands, and the input measurement in validateBundle
-    // cannot see that.
-    const bytes = utf8Length(next);
-    if (bytes > limits.maxTextBytes) {
-      fail("bundle_too_large", `${path} renders to more than ${limits.maxTextBytes} bytes.`);
-    }
-    rendered += bytes;
-    if (rendered > limits.maxTotalBytes) {
-      fail("bundle_too_large", `rendered output exceeds ${limits.maxTotalBytes} bytes.`);
-    }
     files.set(path, next);
   }
 }
