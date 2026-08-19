@@ -68,9 +68,7 @@ decision instead of starting another local redesign loop.
    in `CHANGELOG.md`. Label the release-only PR `skip-release-notes`.
 3. Set that exact version in every workspace package and in all four agent
    plugin manifests. Set `.agents/plugins/marketplace.json` to the immutable
-   `v<version>` ref. Point the root `README.md` quickstart prompt at the same
-   `v<version>` skill URL; a moving branch would hand an agent instructions
-   that do not match the released CLI.
+   `v<version>` ref.
 4. Pin both the controller and Core CI to the exact reviewed
    `mantle-starters/develop` commit intended for this release. Do not use a
    branch, latest tag, or inferred fallback.
@@ -109,7 +107,7 @@ state, or workspace-only files. Starter content is still authored and released
 from the versioned `mantle-starters` repository — Core owns no starter source.
 Core's umbrella CLI is the canonical consumer of that release: `mantle create`
 resolves the official immutable `v${packageVersion}` starter tag and renders it
-through Core's environment-neutral provision module. A published Core version
+through Core's shared provision module. A published Core version
 therefore requires the matching starter tag to exist; see
 [ADR-0018](adr/0018-core-starters-repository-boundary.md).
 

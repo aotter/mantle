@@ -61,13 +61,14 @@ That resolves the starter tag matching the CLI version, writes the project, and
 stops — nothing is installed, committed, or deployed. Open the generated
 `AGENTS.md`; it carries the install and first-run steps for that exact version.
 
-Or hand the whole job to your coding agent. Point it at the version-matched
-skill rather than a moving branch:
+Or hand the whole job to your coding agent — the CLI selects the matching
+bundle and instructions, so nothing here names a version:
 
 ```text
-Use https://github.com/aotter/mantle/blob/v0.1.0-alpha.7/skills/install/SKILL.md
-to create a Mantle transaction site in ./my-shop for a small tea storefront in
-English and Traditional Chinese, then get it running locally.
+Create a Mantle transaction site in ./my-shop for a small tea storefront in
+English and Traditional Chinese. Run
+npx -y @aotter/mantle@alpha create transaction ./my-shop --brand "My Shop" --locales en,zh-TW
+then follow the generated AGENTS.md to install it and get it running locally.
 ```
 
 Types: `blank`, `presence`, `intake`, `publication`, `transaction`,
