@@ -43,7 +43,7 @@ catalog:
   '@libsql/client': ^0.17.4
   '@vercel/functions': ^3.9.3
   # Shared toolchain — every package's devDeps.
-  typescript: ^6.0.3
+  typescript: ^7.0.2
   '@types/node': ^26
   vitest: ^4.1.10
 
