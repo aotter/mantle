@@ -49,6 +49,7 @@ by the application.
 The package also installs `mantle` and `mantle-harness`:
 
 ```bash
+npx -y @aotter/mantle@alpha create <type> <directory>
 pnpm exec mantle generate
 pnpm exec mantle generate --check
 pnpm exec mantle skills
@@ -85,11 +86,19 @@ does not cache or retry. Dynamic and platform hosts can keep their own lifecycle
 use generated `bindMantle(runtime)`, or skip code generation and call
 `runtime.executeView({ view: "published-notes" })` directly.
 
-`mantle skills` explicitly copies the installed package's `develop`, `plugin`,
-`theme`, and `update` skills to matching `.agent/skills/mantle-*` and
-`.claude/skills/mantle-*` paths. Both tool layouts receive identical bytes;
-`--check` detects drift without writing. Manifest generation never rewrites
-agent instructions.
+`mantle create` materializes one version-matched starter bundle into a new
+directory and stops: it installs nothing, initializes no repository, configures
+no auth, and deploys nothing. It resolves only the official immutable starter
+tag for the CLI's own version, and refuses to write into an existing path.
+
+`mantle skills` copies every skill the installed package marks
+`projection: project` in its front matter into matching
+`.agents/skills/mantle-*` and `.claude/skills/mantle-*` paths — no list of
+skill names is maintained anywhere else. Skills that act destructively or
+target one platform stay out of that set and are opt-in. Both tool layouts
+receive identical bytes; `--check` detects drift without writing. An older
+project may also carry `.agent/skills/`, which is left untouched. Manifest
+generation never rewrites agent instructions.
 
 `mantle update` compares the recorded source bundle, a target bundle, and the
 local project, then writes `.mantle/update-report.json`. It never applies the

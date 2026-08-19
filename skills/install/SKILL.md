@@ -35,7 +35,9 @@ hosted provider flow.
 | Blog, docs, posts, or editorial site | `publication` |
 | Catalog or order intent | `transaction` |
 | Booking or request intent | `reservation` |
-| Member or participation intent | `community` |
+
+Community and membership types are not released; `create` refuses them. Build
+those on `blank` or the closest released type.
 
 2. Choose a target directory outside both Mantle repositories; its name
    becomes the project slug. Derive a brand, one-sentence description, and
