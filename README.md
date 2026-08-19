@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <a href="#one-manifest-one-contract">Quick start</a>
+  <a href="#start-in-one-command">Quick start</a>
   &middot;
   <a href="#a-custom-mcp-server-without-building-the-server">Why Mantle</a>
   &middot;
@@ -48,6 +48,32 @@ them into one RuntimePlan for typed TypeScript, REST, OpenAPI, MCP, Web, and
 Admin. Coding agents build with it; operation agents run it through governed
 tools. It stays inside your application, with your storage, auth, queues, and
 lifecycle.
+
+## Start in one command
+
+```bash
+npx -y @aotter/mantle@alpha create transaction ./my-shop \
+  --brand "My Shop" \
+  --locales en,zh-TW
+```
+
+That resolves the starter tag matching the CLI version, writes the project, and
+stops — nothing is installed, committed, or deployed. Open the generated
+`AGENTS.md`; it carries the install and first-run steps for that exact version.
+
+Or hand the whole job to your coding agent — the CLI selects the matching
+bundle and instructions, so nothing here names a version:
+
+```text
+Create a Mantle transaction site in ./my-shop for a small tea storefront in
+English and Traditional Chinese. Run
+npx -y @aotter/mantle@alpha create transaction ./my-shop --brand "My Shop" --locales en,zh-TW
+then follow the generated AGENTS.md to install it and get it running locally.
+```
+
+Types: `blank`, `presence`, `intake`, `publication`, `transaction`,
+`reservation` — see [the table below](#ready-to-use-starters). Prefer embedding
+Mantle in an application you already have? The manifest contract is next.
 
 ## One manifest, one contract
 
@@ -181,8 +207,9 @@ Start from a working product shape, then replace its model, copy, and handlers.
 | Transaction | Localized catalog, cart, inventory reservation, order expiry, staff restocking, and simulated payment. | Small storefronts and commerce prototypes. |
 | Reservation | Public request capture and a recent-requests staff View, with manual confirmation. | Restaurants, appointments, tours, and events. |
 
-[Browse the starters](https://github.com/aotter/mantle-starters). Membership and
-Community are coming soon.
+Create any of them with [`mantle create`](#start-in-one-command), or
+[browse the sources](https://github.com/aotter/mantle-starters). Membership and
+Community are coming soon and are not offered by `create`.
 
 ## Publishing and operations in one Admin
 
@@ -262,8 +289,9 @@ is cloned or opened. See [`skills/README.md`](skills/README.md) for host details
 
 - **Repository plugin:** teaches an agent to create and maintain Mantle
   projects.
-- **`mantle skills`:** projects the installed package's exact `develop`,
-  `plugin`, `theme`, and `update` workflows into a consumer repository.
+- **`mantle skills`:** projects the installed package's exact project-scoped
+  workflows into a consumer repository. Each skill declares its own scope, so
+  destructive and platform-specific ones stay opt-in.
 
 ## CLI reference
 
@@ -271,6 +299,7 @@ The umbrella provides one `mantle` command set:
 
 | Command | Purpose |
 |---|---|
+| `mantle create <type> <dir>` | Materialize a version-matched starter into a new directory. |
 | `mantle generate` | Compile manifests into a sealed plan and typed runtime module. |
 | `mantle generate --check` | Fail without writing when generated code is stale. |
 | `mantle validate` | Validate manifests and handler-source references. |

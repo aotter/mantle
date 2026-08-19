@@ -35,35 +35,34 @@ hosted provider flow.
 | Blog, docs, posts, or editorial site | `publication` |
 | Catalog or order intent | `transaction` |
 | Booking or request intent | `reservation` |
-| Member or participation intent | `community` |
 
-2. Choose absolute paths for a temporary starters checkout and a target
-   directory outside both Mantle repositories. Derive a short project slug,
-   brand, one-sentence description, and locales from the user's prompt.
-   Require Node 22+ and pnpm 9+; check `node --version` and `pnpm --version`
-   before materializing.
+Community and membership types are not released; `create` refuses them. Build
+those on `blank` or the closest released type.
 
-3. Clone [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters)
-   into a temporary directory and run its materializer. Use a starters ref
-   supplied by the user for branch testing. Otherwise use a tag matching the
-   requested Mantle version; use `develop` only for unreleased work. When the
-   user supplies a Mantle branch URL for a cold test, use the same branch name
-   in `mantle-starters` when that branch exists.
+2. Choose a target directory outside both Mantle repositories; its name
+   becomes the project slug. Derive a brand, one-sentence description, and
+   locales from the user's prompt. Require Node 22+ and pnpm 9+; check
+   `node --version` and `pnpm --version` before creating.
+
+3. Create the project with the Core CLI. It resolves the official immutable
+   starter tag for its own version, so no starters checkout is involved:
 
 ```bash
-git clone --depth 1 --branch <starters-ref> \
-  https://github.com/aotter/mantle-starters.git <temporary-starters-dir>
-pnpm --dir <temporary-starters-dir> materialize <type> \
-  --out <target-dir> \
-  --project-name <slug> \
+npx -y @aotter/mantle@alpha create <type> <target-dir> \
   --brand "<brand>" \
   --description "<one sentence>" \
   --locales <comma-separated-locales>
 ```
 
-The materializer writes the same precomposed `provision-bundles/<type>.json`
-used by Mantle landing. Do not manually copy `blank/`, merge overlays, or edit
-the generated bundle JSON.
+Pin an exact version (`@aotter/mantle@<version>`) when the user asked for one.
+`create` writes files and stops: it installs nothing, initializes no
+repository, configures no auth, and deploys nothing. It refuses to write into
+a path that already exists, and there is no force flag — choose a new
+directory instead.
+
+Do not clone the starters repository, copy `blank/`, merge overlays, or edit a
+provision bundle by hand. The CLI renders the same immutable bundle Mantle
+landing uses.
 
 4. For a typed launch, read `.mantle/handoff.md`, the selected overlay's
    `layout.md`, `seed-prompt.md`, and `seed.json`. Shape the first local page by
@@ -109,7 +108,9 @@ pnpm exec mantle skills --check
 
 Then read:
 
-3. Repo-local Mantle skills under `.agent/skills/` or `.claude/skills/`.
+3. Repo-local Mantle skills under `.agents/skills/` or `.claude/skills/`. A
+   project created before this layout may also carry `.agent/skills/`; read it
+   if present, but never write there and never delete it.
 4. Matching embedded docs under `node_modules/@aotter/mantle/docs/`.
 
 Use remote docs only when embedded docs are unavailable, and use a tag matching

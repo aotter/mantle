@@ -1,7 +1,7 @@
 {
   "name": "mantle",
-  "version": "0.1.0-alpha.7",
   "description": "Build and embed Mantle applications with version-matched Core skills and deterministic examples.",
+  "version": "0.1.0-alpha.7",
   "author": {
     "name": "Aotter",
     "url": "https://mantle.tools/"

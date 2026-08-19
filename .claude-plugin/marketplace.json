@@ -3,7 +3,7 @@
   "owner": {
     "name": "Aotter"
   },
-  "description": "Build and embed Mantle applications with deterministic examples and Core agent skills.",
+  "description": "Build and embed Mantle applications with version-matched Core skills and deterministic examples.",
   "plugins": [
     {
       "name": "mantle",

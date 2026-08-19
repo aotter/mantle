@@ -21,11 +21,12 @@
     "bench:wrangler": "pnpm --filter @aotter/mantle-cloudflare bench:wrangler",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "check:skills": "node scripts/check-skills.mjs",
+    "check:plugin-manifests": "node scripts/sync-plugin-manifests.mjs --check",
     "check:optional-packages": "node scripts/check-optional-packages.mjs",
     "check:bun-package": "node scripts/check-bun-package.mjs",
     "check:vercel-package": "pnpm --dir packages/adapters/vercel/test/fixtures/live-node typecheck && node scripts/check-vercel-package.mjs",
     "check:release": "node scripts/release-tag-order.mjs --self-test",
-    "check": "pnpm run check:boundaries && pnpm run check:skills && pnpm run check:release && pnpm build && pnpm run check:optional-packages && pnpm run check:bun-package && pnpm run check:vercel-package && pnpm typecheck && pnpm test"
+    "check": "pnpm run check:boundaries && pnpm run check:skills && pnpm run check:plugin-manifests && pnpm run check:release && pnpm build && pnpm run check:optional-packages && pnpm run check:bun-package && pnpm run check:vercel-package && pnpm typecheck && pnpm test"
   },
   "devDependencies": {
     "typescript": "catalog:"
