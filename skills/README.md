@@ -44,11 +44,14 @@ Deliberately monolithic:
 
 ## Skill authority
 
-The `mantle:*` namespace is owned by `@aotter/mantle`. Run `mantle skills` to
-project every skill whose front-matter declares `metadata.projection: project`
-into the project's skill directories; use `mantle skills --check` to fail
-closed on drift. Front-matter is the only scope authority — no list of skill
-names is maintained in prose or in code. The installed package and
+The `mantle:*` namespace is owned by `@aotter/mantle`. Every skill declares its
+own distribution scope in front matter: `metadata.projection: project` marks a
+skill `mantle skills` should place in a generated project, and a skill that
+withholds `project` must say why. `scripts/check-skills.mjs` holds that
+declaration and the audit table below to each other.
+
+Run `mantle skills` to project the installed package's skills into a project;
+use `mantle skills --check` to fail closed on drift. The installed package and
 `node_modules/@aotter/mantle/docs/` are the single version-matched authority.
 Starter launch files and plugin recipes are project context, not competing
 contracts.
