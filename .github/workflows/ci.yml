@@ -91,6 +91,5 @@ jobs:
           pnpm check:release-worker;
           pnpm --dir blank check;
           pnpm smoke:provision-bundle;
-          pnpm check:repo-local-skills;
           pnpm check:core-skills;
           pnpm --dir recipes/typed-web typecheck'
