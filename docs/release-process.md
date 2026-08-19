@@ -103,8 +103,13 @@ The nine public packages publish in dependency order:
 
 The umbrella package must contain its version-matched `docs/` and `skills/`
 payload. No tarball may contain `workspace:*` dependencies, secrets, local
-state, or workspace-only files. Starter projects are released from the
-versioned `mantle-starters` repository; Core does not publish a scaffolder.
+state, or workspace-only files. Starter content is still authored and released
+from the versioned `mantle-starters` repository — Core owns no starter source.
+Core's umbrella CLI is the canonical consumer of that release: `mantle create`
+resolves the official immutable `v${packageVersion}` starter tag and renders it
+through Core's environment-neutral provision module. A published Core version
+therefore requires the matching starter tag to exist; see
+[ADR-0018](adr/0018-core-starters-repository-boundary.md).
 
 ## Run the controller
 

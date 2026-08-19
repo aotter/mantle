@@ -19,8 +19,29 @@ Core (SDK producer)
   -> published npm contract
 mantle-starters (external consumer and bundle producer)
   -> immutable provision bundle
-mantle-landing (provisioner)
+mantle-landing (provisioner)   Core CLI (`mantle create`)
 ```
+
+> **Amended 2026-08-19 (#699).** The chain above is no longer linear. Core's
+> umbrella CLI is now also a consumer of the immutable bundle: `mantle create`
+> resolves the official `v${packageVersion}` starter tag, renders it through
+> the environment-neutral module Core owns, and writes a local project. Core
+> is therefore both the upstream producer of the npm contract and a downstream
+> consumer of the release train it starts.
+>
+> This does not move starter content into Core, so the decision below stands:
+> starters still author the bundles and still validate the published SDK as an
+> external consumer. What changed is the supporting argument. Two consequences
+> are worth stating rather than rediscovering:
+>
+> - **The published-consumer guarantee is now proven twice.** `mantle create`
+>   materializes a project that installs the published package, so a break in
+>   the npm contract fails in Core's own release smoke as well as in starter CI.
+> - **Reconsideration input 1 is being answered.** #699 replaces the release
+>   order so a candidate is published under a temporary dist-tag, validated
+>   against the exact packed artifacts, and only then promoted. That was listed
+>   below as an unresolved prerequisite for any future merge; when it lands,
+>   this ADR should record it as resolved rather than pending.
 
 The repositories were originally split because premium starters needed a
 private ACL. That reason does not determine where public starters must live,
