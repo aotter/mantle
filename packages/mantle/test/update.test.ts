@@ -127,7 +127,7 @@ describe("mantle update", () => {
       });
       for (const [ref, message] of [
         ["unknown", "unknown provision placeholder"],
-        ["escape", "bundle path escapes project root"],
+        ["escape", "bundle path has an empty, dot, or parent segment"],
         ["missing", "HTTP 404"],
       ]) {
         await setRefs(root, ref);

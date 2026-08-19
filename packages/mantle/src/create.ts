@@ -168,7 +168,12 @@ async function fetchOfficialBundle(starterRef: string, archetype: string, versio
   const url = `https://raw.githubusercontent.com/${STARTERS_OWNER}/${STARTERS_REPO}/${encodeURIComponent(starterRef)}/provision-bundles/${encodeURIComponent(archetype)}.json`;
   const response = await fetch(url, { headers: { accept: "application/json" }, redirect: "error" });
   if (!response.ok) {
-    throw new Error(`could not fetch the ${archetype} starter for ${starterRef} (HTTP ${response.status}).`);
+    // A 404 on a version-pinned tag has one common cause worth naming: the
+    // package was published before its matching starter tag exists.
+    const hint = response.status === 404
+      ? ` The ${starterRef} starter tag does not exist yet — if this version was just published, wait for its starter release, or pin an earlier version.`
+      : "";
+    throw new Error(`could not fetch the ${archetype} starter for ${starterRef} (HTTP ${response.status}).${hint}`);
   }
   const declared = Number(response.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > MAX_BUNDLE_BYTES) {
