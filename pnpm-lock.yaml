@@ -10,8 +10,8 @@ catalogs:
       specifier: ^1.6.27
       version: 1.6.27
     '@cloudflare/workers-oauth-provider':
-      specifier: ^0.8.2
-      version: 0.8.3
+      specifier: ^0.10.0
+      version: 0.10.3
     '@libsql/client':
       specifier: ^0.17.4
       version: 0.17.4
@@ -90,7 +90,7 @@ importers:
     devDependencies:
       '@cloudflare/workers-oauth-provider':
         specifier: 'catalog:'
-        version: 0.8.3
+        version: 0.10.3
       '@cloudflare/workers-types':
         specifier: ^5.20260729.1
         version: 5.20260813.1
@@ -201,7 +201,7 @@ importers:
         version: link:../mantle-web
       '@cloudflare/workers-oauth-provider':
         specifier: 'catalog:'
-        version: 0.8.3
+        version: 0.10.3
       '@libsql/client':
         specifier: 'catalog:'
         version: 0.17.4
@@ -638,8 +638,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@cloudflare/workers-oauth-provider@0.8.3':
-    resolution: {integrity: sha512-5dIeQlJTDKAQvy3GcrtWBhPvTb9lHeRp/m8MoostTkcrbrGImH8zKSdJhogQ5YSTFUCg+b7FBg38b7KCM/x3VQ==}
+  '@cloudflare/workers-oauth-provider@0.10.3':
+    resolution: {integrity: sha512-25ufMONJir9PllqVpK4GwOOoSFgpYm3+bM6NBedj7ufMCIfNf5jk4OI0LPuTJBaJgLl2lGCLqFqEPJXcSuPopQ==}
 
   '@cloudflare/workers-types@5.20260813.1':
     resolution: {integrity: sha512-RQNfm7xD10hNHEQZFxQPmyGMJ9+aDGPcdFZ0x1LtmjRoLFcgZkGvfaqJAbOMQBAUFSESO3bYJS4p9mOLv28Ihg==}
@@ -2826,8 +2826,8 @@ packages:
     resolution: {integrity: sha512-kVCxPF3vQM/N0B1PmoqVUqgHP+EeVjmZSQn+1oCRPxd2P21P2F19lIgbR3HBosbB1PUhOAoctJnfEn2GbN2eZA==}
     engines: {node: '>=18'}
 
-  get-tsconfig@4.14.1:
-    resolution: {integrity: sha512-Dz/6HxkrxgNehhxLVeyv8sad9UzF2xBVeaKBQNDfJ5XiSXmp2gTR0eO0RWiT2NCKS5aGP9jjkOMggTN90qU50A==}
+  get-tsconfig@4.14.3:
+    resolution: {integrity: sha512-++QEw4DIY7WGoukz+/+A/8dGYPT9l9yIadnmSgZ8Rjr3YVSVDipQSO9CdnJo9ePqFqUUqh+wk9uIaoiAwsiPkA==}
 
   glob-parent@5.1.2:
     resolution: {integrity: sha512-AOIgSQCepiJYwP3ARnGx+5VnTu2HBYdzbGP45eLw1vr3zB3vZLeyed1sC9hnbcOc9/SrMyM5RPQrkGz4aS9Zow==}
@@ -4278,7 +4278,7 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20260811.1':
     optional: true
 
-  '@cloudflare/workers-oauth-provider@0.8.3': {}
+  '@cloudflare/workers-oauth-provider@0.10.3': {}
 
   '@cloudflare/workers-types@5.20260813.1': {}
 
@@ -6286,7 +6286,7 @@ snapshots:
       '@sec-ant/readable-stream': 0.4.1
       is-stream: 4.0.1
 
-  get-tsconfig@4.14.1:
+  get-tsconfig@4.14.3:
     dependencies:
       resolve-pkg-maps: 1.0.0
     optional: true
@@ -7191,7 +7191,7 @@ snapshots:
   tsx@4.21.0:
     dependencies:
       esbuild: 0.27.7
-      get-tsconfig: 4.14.1
+      get-tsconfig: 4.14.3
     optionalDependencies:
       fsevents: 2.3.3
     optional: true
