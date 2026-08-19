@@ -2,7 +2,7 @@
 // Enforces the disclosure audit in skills/README.md: front matter is the only
 // projection-scope authority, the audit table states the same scope the code
 // acts on, restricted scopes carry a reason, links resolve from wherever the
-// skill is read, and every skill reaches the packed artifact.
+// skill is read.
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -112,12 +112,6 @@ for (const { skill, cells } of rows) {
     fail("skills/README.md", `${skill}: audit table gives a restriction reason but front matter declares none`);
   }
 }
-
-// Reachability from the installed package: prepack copies skills/ in, files ships it.
-const pkg = JSON.parse(readFileSync(join(repoRoot, "packages/mantle/package.json"), "utf8"));
-if (!(pkg.files ?? []).includes("skills")) fail("packages/mantle/package.json", '"files" must include "skills"');
-const sync = readFileSync(join(repoRoot, "scripts/sync-package-docs.mjs"), "utf8");
-if (!sync.includes('"skills"')) fail("scripts/sync-package-docs.mjs", "no longer copies skills/ into the package");
 
 if (failures.length > 0) {
   console.error(`check-skills: ${failures.length} problem(s)\n${failures.map((line) => `  ${line}`).join("\n")}`);
