@@ -5,6 +5,8 @@ metadata:
   source: "@aotter/mantle"
   sourcePath: skills/provision/SKILL.md
   applies_to: mantle grammar v0.1
+  projection: plugin
+  projectionReason: Platform-specific deploy that handles production secrets; opt-in only.
 ---
 
 # Provision a Mantle Project

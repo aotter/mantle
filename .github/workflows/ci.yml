@@ -43,6 +43,9 @@ jobs:
       - name: Check package boundaries
         run: pnpm run check:boundaries
 
+      - name: Check skill disclosure audit
+        run: pnpm run check:skills
+
       - name: Check packed Core and optional product consumers
         run: pnpm run check:optional-packages
 

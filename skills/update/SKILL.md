@@ -5,6 +5,7 @@ metadata:
   source: "@aotter/mantle"
   sourcePath: skills/update/SKILL.md
   applies_to: mantle grammar v0.1
+  projection: project, plugin
 ---
 
 # Mantle Update

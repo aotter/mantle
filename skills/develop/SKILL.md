@@ -5,6 +5,7 @@ metadata:
   source: "@aotter/mantle"
   sourcePath: skills/develop/SKILL.md
   applies_to: mantle grammar v0.1
+  projection: project, plugin
 ---
 
 # Mantle Develop
@@ -46,15 +47,14 @@ not install public rendering by itself.
 
 ## Authoring CLI
 
-Use the project's scripts first; generated starters expose the shipping
-`mantle` authoring CLI from `@aotter/mantle-spec`:
+Use the project's scripts first; generated projects expose the shipping
+`mantle` authoring CLI from `@aotter/mantle`. Ask the installed CLI for its
+command list instead of trusting one copied into prose — the surface is
+version-matched and changes between releases:
 
 ```bash
 pnpm exec mantle --help
 pnpm validate
-pnpm introspect
-pnpm emit-openapi
-pnpm emit-types
 ```
 
 This CLI validates and derives artifacts from an existing materialized

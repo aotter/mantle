@@ -15,12 +15,43 @@ Agent-readable skill briefs for consumers of `@aotter/mantle-*`. Discoverable by
 The skills target Mantle's v0.1 grammar. The installed package version, not
 duplicated skill prose, selects the exact runtime and embedded docs.
 
+## Disclosure audit
+
+Every skill ships as one `SKILL.md` with no reference files, scripts, or
+assets, so nothing is deferred behind a second load. Progressive disclosure
+here is section routing inside one file: the agent reads the entry constraints,
+then only the section its selected path names. `scripts/check-skills.mjs`
+enforces the columns below.
+
+| Skill | Routes on | Entry-path constraints (read before acting) | Path-gated sections | Projection | Restricted because |
+|---|---|---|---|---|---|
+| `develop` | existing project; manifest, runtime, handler, adapter, or MCP work | four-atom model; adapter neutrality; no direct D1/KV/Postgres writes; no committed secrets | performance harness; local MCP client; locale rules | project, plugin | — |
+| `plugin` | user wants an installable capability | plan before apply; lock entry is the removal manifest; delete only plugin-owned files and atoms | apply; remove | project, plugin | — |
+| `theme` | brand or visual direction in a generated project | repo-owned theme and UI contracts | — | project, plugin | — |
+| `update` | drift check against SDK, starter, or plugin locks | never blindly overwrite user-owned code | — | project, plugin | — |
+| `install` | new site, or opening an existing generated one | do not use the SDK checkout as the application; no push/deploy/provider config during cold start | create local project; continue existing project | plugin | Creates a new project; nothing to project into an existing one. |
+| `provision` | ship to Cloudflare and finish production auth | secrets never enter source or logs; explicit auth mode | hosted auth; self-managed auth | plugin | Platform-specific deploy that handles production secrets; opt-in only. |
+| `media-gc` | audit or remove stale uncommitted media objects | audit by default; confirm exact account, bucket, cutoff, and candidate digest; re-audit before applying; never prefix-delete; never print keys | apply | plugin | Destructive remote object deletion and Cloudflare-specific; opt-in only. |
+
+Deliberately monolithic:
+
+- `develop` is the widest file, but its adapter, auth, and data-ownership rules
+  constrain every path through it. Splitting them behind routing would let an
+  agent reach a write path without them, which is the failure this audit
+  exists to prevent.
+- `media-gc` keeps its full audit-confirm-reapply sequence inline for the same
+  reason: each safeguard is a precondition of the delete that follows it.
+
 ## Skill authority
 
-The `mantle:*` namespace is owned by `@aotter/mantle`. Run `mantle skills` to
-project the installed package's `develop`, `plugin`, `theme`, and `update`
-skills to identical `.agent` and `.claude` paths; use `mantle skills --check`
-to fail closed on drift. The installed package and
+The `mantle:*` namespace is owned by `@aotter/mantle`. Every skill declares its
+own distribution scope in front matter: `metadata.projection: project` marks a
+skill `mantle skills` should place in a generated project, and a skill that
+withholds `project` must say why. `scripts/check-skills.mjs` holds that
+declaration and the audit table below to each other.
+
+Run `mantle skills` to project the installed package's skills into a project;
+use `mantle skills --check` to fail closed on drift. The installed package and
 `node_modules/@aotter/mantle/docs/` are the single version-matched authority.
 Starter launch files and plugin recipes are project context, not competing
 contracts.

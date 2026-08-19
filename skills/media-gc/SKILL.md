@@ -1,6 +1,12 @@
 ---
 name: media-gc
 description: Audit and safely remove stale, uncommitted public media uploads from a Mantle Cloudflare R2 bucket. Use when a Mantle operator asks to inspect or clean orphan media objects left after create_media_upload without commit_media_upload.
+metadata:
+  source: "@aotter/mantle"
+  sourcePath: skills/media-gc/SKILL.md
+  applies_to: mantle grammar v0.1
+  projection: plugin
+  projectionReason: Destructive remote object deletion and Cloudflare-specific; opt-in only.
 ---
 
 # Mantle Media GC
