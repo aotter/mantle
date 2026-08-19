@@ -30,8 +30,8 @@ issue that must delete or delegate the old path.
 | Entry/media/site repositories | Runtime constructs `Database*Repository` from `DatabaseDriver` | Prepared semantic storage ports; media/config move with final owner | #666, #669, #670 |
 | Content, View, Procedure, Trigger, lifecycle invocation | Runtime use cases over raw maps/driver | `MantleRuntime` over plan + semantic ports | #667 |
 | Target authorization/admin bypass | Runtime plus adapter entry points | One Core invocation policy; adapter resolves caller only | #667 |
-| Generated manifest module and TypeScript names | `packages/mantle/src/generate.ts` + `EmitTypesUseCase` | Pure linked/plan projection and `bindMantle` | #668 |
-| Admin asset copy during generation | `packages/mantle/src/generate.ts` | Removed; Admin install/composition owns assets | #668, #670 |
+| Generated manifest module and TypeScript names | `packages/mantle/src/cli/generate.ts` + `EmitTypesUseCase` | Pure linked/plan projection and `bindMantle` | #668 |
+| Admin asset copy during generation | `packages/mantle/src/cli/generate.ts` | Removed; Admin install/composition owns assets | #668, #670 |
 | HTML/templates/public paths/Markdown/SEO/preview/`llms.txt`/sitemap | Runtime render services plus Cloudflare public routes | Optional `mantle-web` | #669 |
 | Public request mapping and cache policy | `mountPublicRoutes` | Platform adapter using selected Web projection | #669 |
 | Admin API/application/static assets | Optional `mantle-admin`; Cloudflare only binds auth/request context/assets | Optional `mantle-admin` + existing UI artifact | #670 |

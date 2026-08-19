@@ -502,7 +502,7 @@ function checkMantleRuntimeBoundary() {
 }
 
 function checkCodegenBoundary() {
-  const file = join(ROOT, "packages/mantle/src/emitMantleModule.ts");
+  const file = join(ROOT, "packages/mantle/src/codegen/emitMantleModule.ts");
   const source = stripComments(readFileSync(file, "utf8"));
   for (const token of ["node:", "mantle-admin", "mantle-cloudflare", "mantle-web"]) {
     if (source.includes(token)) {

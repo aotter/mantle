@@ -14,8 +14,8 @@
   "main": "./dist/spec.js",
   "types": "./dist/spec.d.ts",
   "bin": {
-    "mantle": "./dist/cli.js",
-    "mantle-harness": "./dist/harness-cli.js"
+    "mantle": "./dist/cli/main.js",
+    "mantle-harness": "./dist/cli/harness.js"
   },
   "publishConfig": {
     "access": "public",
@@ -26,6 +26,10 @@
     ".": {
       "types": "./dist/spec.d.ts",
       "import": "./dist/spec.js"
+    },
+    "./provision": {
+      "types": "./dist/provision.d.ts",
+      "import": "./dist/provision.js"
     },
     "./spec": {
       "types": "./dist/spec.d.ts",

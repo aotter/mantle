@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runSkills } from "../src/skills.js";
+import { runSkills } from "../../src/cli/skills.js";
 
 const originalCwd = process.cwd();
 

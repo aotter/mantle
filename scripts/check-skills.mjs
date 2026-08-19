@@ -16,7 +16,7 @@ const fail = (where, message) => failures.push(`${where}: ${message}`);
 
 // ponytail: front matter here is a fixed flat shape, so one regex beats a YAML
 // dependency in a repo-root script. `projectionScopes` in
-// packages/mantle/src/skills.ts reads the same field the same way — keep the
+// packages/mantle/src/cli/skills.ts reads the same field the same way — keep the
 // two expressions identical if either changes.
 function frontMatter(text) {
   const match = /^---\n([\s\S]*?)\n---\n/.exec(text);

@@ -9,6 +9,7 @@ import {
 import { join, posix, resolve } from "node:path";
 import { cwd, stderr, stdout } from "node:process";
 import { parseArgs } from "node:util";
+import { safeTarget } from "../provision.js";
 
 const REPORT_PATH = ".mantle/update-report.json";
 const IGNORE_DIRS = new Set([".git", "node_modules", ".wrangler", ".wrangler-test", "dist"]);
@@ -161,25 +162,13 @@ function materializeBundle(
 ): Snapshot {
   const files = new Map<string, string>();
   for (const [sourcePath, source] of Object.entries(bundle.files).sort(([a], [b]) => a.localeCompare(b))) {
-    const path = safeBundlePath(sourcePath);
+    const path = safeTarget(sourcePath);
     if (files.has(path)) throw new Error(`duplicate provision bundle path: ${path}`);
     let text = substitute(source, values);
     if (path === "wrangler.toml") text = materializeLegacyWranglerToml(text, values);
     files.set(path, text);
   }
   return files;
-}
-
-function safeBundlePath(source: string): string {
-  const slashPath = source.replaceAll("\\", "/");
-  if (/^(?:\/|[A-Za-z]:\/)/.test(slashPath) || slashPath.split("/").includes("..")) {
-    throw new Error(`bundle path escapes project root: ${source}`);
-  }
-  const path = posix.normalize(slashPath.replace(/\.template$/, ""));
-  if (path === "." || path.startsWith("../")) {
-    throw new Error(`bundle path escapes project root: ${source}`);
-  }
-  return path;
 }
 
 function substitute(source: string, values: Readonly<Record<string, string>>): string {

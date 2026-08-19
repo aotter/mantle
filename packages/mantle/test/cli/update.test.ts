@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runUpdate } from "../src/update.js";
+import { runUpdate } from "../../src/cli/update.js";
 
 const originalCwd = process.cwd();
 
@@ -127,7 +127,7 @@ describe("mantle update", () => {
       });
       for (const [ref, message] of [
         ["unknown", "unknown provision placeholder"],
-        ["escape", "bundle path escapes project root"],
+        ["escape", "bundle path has an empty, dot, or parent segment"],
         ["missing", "HTTP 404"],
       ]) {
         await setRefs(root, ref);

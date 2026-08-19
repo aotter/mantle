@@ -2,4 +2,4 @@ export {
   emitMantleModule,
   type EmitMantleModuleRequest,
   type EmitMantleModuleResult,
-} from "./emitMantleModule.js";
+} from "./codegen/emitMantleModule.js";
