@@ -40,7 +40,7 @@ catalogs:
       specifier: ^4.1.10
       version: 4.1.10
     zod:
-      specifier: ^4.4.2
+      specifier: ^4.4.3
       version: 4.4.3
 
 importers:
