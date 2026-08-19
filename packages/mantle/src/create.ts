@@ -14,11 +14,10 @@
  * is renamed into place. There is no --force.
  */
 import { mkdir, mkdtemp, rename, rm, stat, writeFile } from "node:fs/promises";
-import { readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { basename, dirname, join, resolve } from "node:path";
 import { cwd, stderr, stdout } from "node:process";
 import { parseArgs } from "node:util";
+import packageJson from "../package.json" with { type: "json" };
 import {
   DEFAULT_PROVISION_LIMITS,
   ProvisionRenderError,
@@ -79,7 +78,7 @@ export async function runCreate(rawArgs: readonly string[]): Promise<number> {
   }
 
   const target = resolve(cwd(), directory);
-  const projectName = slugify(target.split(/[\\/]/).pop() ?? "");
+  const projectName = slugify(basename(target));
   if (projectName.length === 0) {
     stderr.write("The target directory name must contain a letter or digit.\n");
     return 2;
@@ -95,7 +94,7 @@ export async function runCreate(rawArgs: readonly string[]): Promise<number> {
     return 1;
   }
 
-  const version = packageVersion();
+  const version = packageJson.version;
   const starterRef = `v${version}`;
   const resolvedBrand = brand ?? titleCase(projectName);
   const launch: LaunchValues = {
@@ -244,13 +243,6 @@ async function writeFileAt(root: string, relativePath: string, data: Buffer): Pr
   // Regular file, fixed mode: a bundle cannot create a symlink or an
   // executable.
   await writeFile(destination, data, { mode: FILE_MODE, flag: "wx" });
-}
-
-function packageVersion(): string {
-  const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-  const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as { version?: string };
-  if (typeof manifest.version !== "string") throw new Error("installed package has no version");
-  return manifest.version;
 }
 
 function slugify(value: string): string {

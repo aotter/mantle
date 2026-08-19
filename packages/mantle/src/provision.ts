@@ -181,21 +181,21 @@ export function renderProvisionBundle(input: RenderProvisionBundleInput): Render
   // Limits are declared over what gets written. Measure the finished tree:
   // substitution expands, and locale, manifest, and wrangler transforms all
   // run after the input measurement in validateBundle.
-  assertRenderedSize(files, binaryFiles, limits);
+  assertProjectSize(files, binaryFiles, limits);
 
   return { files, binaryFiles };
 }
 
-function assertRenderedSize(
-  files: ReadonlyMap<string, string>,
-  binaryFiles: ReadonlyMap<string, string>,
+function assertProjectSize(
+  files: Iterable<readonly [string, string]>,
+  binaryFiles: Iterable<readonly [string, string]>,
   limits: ProvisionLimits,
 ): void {
   let total = 0;
   for (const [path, content] of files) {
     const bytes = utf8Length(content);
     if (bytes > limits.maxTextBytes) {
-      fail("bundle_too_large", `${path} renders to more than ${limits.maxTextBytes} bytes.`);
+      fail("bundle_too_large", `${path} exceeds ${limits.maxTextBytes} bytes.`);
     }
     total += bytes;
   }
@@ -207,7 +207,7 @@ function assertRenderedSize(
     total += bytes;
   }
   if (total > limits.maxTotalBytes) {
-    fail("bundle_too_large", `the rendered project is ${total} bytes; the limit is ${limits.maxTotalBytes}.`);
+    fail("bundle_too_large", `the project is ${total} bytes; the limit is ${limits.maxTotalBytes}.`);
   }
 }
 
@@ -224,7 +224,9 @@ function validateLaunchValues(launch: LaunchValues): LaunchValues {
   const { valid: locales, invalid } = canonicalizeLocaleList(launch.locales);
   if (invalid.length > 0) fail("launch_value_invalid", `unsupported locale: ${invalid.join(", ")}`);
   if (locales.length !== launch.locales.length) fail("launch_value_invalid", "locales contain a duplicate.");
-  const canonicalLocale = canonicalOrFail(launch.canonicalLocale);
+  const canonical = canonicalizeLocaleList([launch.canonicalLocale]);
+  if (canonical.invalid.length > 0) fail("launch_value_invalid", `unsupported locale: ${launch.canonicalLocale}`);
+  const canonicalLocale = canonical.valid[0] ?? fail("launch_value_invalid", `unsupported locale: ${launch.canonicalLocale}`);
   if (!locales.includes(canonicalLocale)) fail("launch_value_invalid", "canonicalLocale is absent from locales.");
   if (!Number.isFinite(Date.parse(launch.installTimestamp))) {
     fail("launch_value_invalid", "installTimestamp must be an ISO-8601 timestamp.");
@@ -232,7 +234,7 @@ function validateLaunchValues(launch: LaunchValues): LaunchValues {
   // Every value below is substituted into project files verbatim, so all of
   // them are checked — not only the ones with an obvious grammar. A newline
   // here becomes a new line of agent instructions or of wrangler config.
-  for (const [name, value] of Object.entries(placeholderInputs(launch))) {
+  for (const [name, value] of Object.entries(placeholderValues(launch))) {
     if (value.length > 500) fail("launch_value_invalid", `${name} must be at most 500 characters.`);
     if (CONTROL_CHARACTERS.test(value)) fail("launch_value_invalid", `${name} contains control characters.`);
   }
@@ -246,28 +248,6 @@ function validateLaunchValues(launch: LaunchValues): LaunchValues {
     if (value.includes('"')) fail("launch_value_invalid", `wrangler var ${name} must not contain a quote.`);
   }
   return { ...launch, locales, canonicalLocale };
-}
-
-/** The caller-supplied strings that reach substitution, by placeholder name. */
-function placeholderInputs(launch: LaunchValues): Record<string, string> {
-  return {
-    ADMIN_GITHUB_LOGIN: launch.adminGithubLogin ?? "",
-    AFTER_LAUNCH_SKILL_URL: launch.afterLaunchSkillUrl ?? "",
-    AUTH_MODE: launch.authMode,
-    BRAND: launch.brand,
-    DESCRIPTION: launch.description,
-    GITHUB_OWNER: launch.githubOwner ?? "",
-    INSTALL_SUMMARY: launch.installSummary ?? launch.description,
-    SITE_URL: launch.siteUrl ?? "",
-    STARTER_REF: launch.starterRef,
-    TURNSTILE_SITE_KEY: launch.turnstileSiteKey ?? "",
-  };
-}
-
-function canonicalOrFail(locale: string): string {
-  const { valid, invalid } = canonicalizeLocaleList([locale]);
-  if (invalid.length > 0 || valid[0] === undefined) fail("launch_value_invalid", `unsupported locale: ${locale}`);
-  return valid[0] as string;
 }
 
 function validateBundle(
@@ -295,26 +275,17 @@ function validateBundle(
   const count = Object.keys(files).length + Object.keys(binaryFiles).length;
   if (count > limits.maxFiles) fail("bundle_too_large", `bundle has ${count} files; the limit is ${limits.maxFiles}.`);
 
-  let total = 0;
-  for (const [path, content] of Object.entries(files)) {
+  const fileEntries = Object.entries(files);
+  const binaryEntries = Object.entries(binaryFiles);
+  for (const [path, content] of fileEntries) {
     if (typeof content !== "string") fail("bundle_invalid", `bundle file ${path} is not text.`);
-    const bytes = utf8Length(content);
-    if (bytes > limits.maxTextBytes) fail("bundle_too_large", `bundle file ${path} exceeds ${limits.maxTextBytes} bytes.`);
-    total += bytes;
   }
-  for (const [path, content] of Object.entries(binaryFiles)) {
+  for (const [path, content] of binaryEntries) {
     if (typeof content !== "string" || !isCanonicalBase64(content)) {
       fail("binary_invalid", `bundle binary file ${path} is not canonical base64.`);
     }
-    const bytes = decodedBase64Length(content);
-    if (bytes > limits.maxDecodedBinaryBytes) {
-      fail("bundle_too_large", `bundle binary file ${path} decodes to more than ${limits.maxDecodedBinaryBytes} bytes.`);
-    }
-    total += bytes;
   }
-  if (total > limits.maxTotalBytes) {
-    fail("bundle_too_large", `bundle decodes to ${total} bytes; the limit is ${limits.maxTotalBytes}.`);
-  }
+  assertProjectSize(fileEntries, binaryEntries, limits);
 
   if (bundle.localizedFiles !== undefined) {
     if (!Array.isArray(bundle.localizedFiles)) fail("bundle_invalid", "localizedFiles must be an array.");
@@ -367,11 +338,11 @@ function substitute(files: Map<string, string>, launch: LaunchValues): void {
     }
     const jsonLike = /\.(?:json|[cm]?[jt]sx?)$/.test(path);
     const next = content.replace(new RegExp(PLACEHOLDER_PATTERN.source, "g"), (_match, key: string) => {
-      const value = values.get(key);
-      if (value === undefined) fail("placeholder_unknown", `${path} references unknown placeholder {{${key}}}.`);
+      if (!Object.hasOwn(values, key)) fail("placeholder_unknown", `${path} references unknown placeholder {{${key}}}.`);
+      const value = values[key as ProvisionPlaceholder];
       return jsonLike && !RAW_JSON_PLACEHOLDERS.has(key)
         ? JSON.stringify(value).slice(1, -1)
-        : (value as string);
+        : value;
     });
     // No post-check here: every bundle-side token already went through the
     // callback above, so anything left can only have come from a launch value
@@ -380,29 +351,24 @@ function substitute(files: Map<string, string>, launch: LaunchValues): void {
   }
 }
 
-function placeholderValues(launch: LaunchValues): Map<string, string> {
-  const values = new Map<string, string>([
-    ["ADMIN_GITHUB_LOGIN", launch.adminGithubLogin ?? ""],
-    ["AFTER_LAUNCH_SKILL_URL", launch.afterLaunchSkillUrl ?? ""],
-    ["ARCHETYPE", launch.archetype],
-    ["AUTH_MODE", launch.authMode],
-    ["BRAND", launch.brand],
-    ["CANONICAL_LOCALE", launch.canonicalLocale],
-    ["DESCRIPTION", launch.description],
-    ["GITHUB_OWNER", launch.githubOwner ?? ""],
-    ["INSTALL_SUMMARY", launch.installSummary ?? launch.description],
-    ["INSTALL_TIMESTAMP", launch.installTimestamp],
-    ["LOCALES", JSON.stringify(launch.locales)],
-    ["PROJECT_NAME", launch.projectName],
-    ["SITE_URL", launch.siteUrl ?? ""],
-    ["STARTER_REF", launch.starterRef],
-    ["TURNSTILE_SITE_KEY", launch.turnstileSiteKey ?? ""],
-  ]);
-  // Keeps the exported allowlist and the value map from drifting apart.
-  for (const name of PROVISION_PLACEHOLDERS) {
-    if (!values.has(name)) fail("placeholder_unresolved", `no value supplied for {{${name}}}.`);
-  }
-  return values;
+function placeholderValues(launch: LaunchValues): Record<ProvisionPlaceholder, string> {
+  return {
+    ADMIN_GITHUB_LOGIN: launch.adminGithubLogin ?? "",
+    AFTER_LAUNCH_SKILL_URL: launch.afterLaunchSkillUrl ?? "",
+    ARCHETYPE: launch.archetype,
+    AUTH_MODE: launch.authMode,
+    BRAND: launch.brand,
+    CANONICAL_LOCALE: launch.canonicalLocale,
+    DESCRIPTION: launch.description,
+    GITHUB_OWNER: launch.githubOwner ?? "",
+    INSTALL_SUMMARY: launch.installSummary ?? launch.description,
+    INSTALL_TIMESTAMP: launch.installTimestamp,
+    LOCALES: JSON.stringify(launch.locales),
+    PROJECT_NAME: launch.projectName,
+    SITE_URL: launch.siteUrl ?? "",
+    STARTER_REF: launch.starterRef,
+    TURNSTILE_SITE_KEY: launch.turnstileSiteKey ?? "",
+  };
 }
 
 function shouldSubstitute(path: string): boolean {

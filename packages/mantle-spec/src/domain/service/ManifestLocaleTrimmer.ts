@@ -1,4 +1,5 @@
-import { isMap, isSeq, parseAllDocuments } from "yaml";
+import { isMap, parseAllDocuments, visit } from "yaml";
+import { toCanonicalLocale } from "./LocaleCanonicalizer.js";
 
 /**
  * Drops every locale a project did not select from a manifest's localized
@@ -19,8 +20,6 @@ export class ManifestLocaleTrimError extends Error {
   }
 }
 
-const LOCALE_KEY = /^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|\d{3}))?$/;
-
 /** Returns the manifest text unchanged when nothing needed trimming. */
 export function trimManifestLocales(text: string, locales: readonly string[]): string {
   const documents = parseAllDocuments(text);
@@ -28,38 +27,28 @@ export function trimManifestLocales(text: string, locales: readonly string[]): s
     throw new ManifestLocaleTrimError("invalid_yaml", "manifest is not valid YAML.");
   }
   let changed = false;
-  for (const document of documents) changed = trimNode(document.contents, locales) || changed;
+  for (const document of documents) {
+    visit(document, {
+      Pair(_key, pair) {
+        const key = scalarValue(pair.key);
+        const localized = key === "title" || key === "description" ? localeMap(pair.value) : null;
+        if (!localized) return;
+        const entries = localized.items.map((item) => ({ item, locale: canonicalLocale(item.key) as string }));
+        const available = new Set(entries.map(({ locale }) => locale));
+        const missing = locales.filter((locale) => !available.has(locale));
+        if (missing.length > 0) {
+          throw new ManifestLocaleTrimError(
+            "unsupported_locale",
+            `manifest does not support locales: ${missing.join(", ")}`,
+          );
+        }
+        localized.items = entries.filter(({ locale }) => locales.includes(locale)).map(({ item }) => item);
+        changed ||= localized.items.length !== entries.length;
+        return visit.SKIP;
+      },
+    });
+  }
   return changed ? documents.map(String).join("---\n") : text;
-}
-
-function trimNode(node: unknown, locales: readonly string[]): boolean {
-  if (isSeq(node)) {
-    let changed = false;
-    for (const item of node.items) changed = trimNode(item, locales) || changed;
-    return changed;
-  }
-  if (!isMap(node)) return false;
-  let changed = false;
-  for (const pair of node.items) {
-    const key = scalarValue(pair.key);
-    const localized = key === "title" || key === "description" ? localeMap(pair.value) : null;
-    if (!localized) {
-      changed = trimNode(pair.value, locales) || changed;
-      continue;
-    }
-    const available = new Set(localized.items.map((item) => scalarValue(item.key)));
-    const missing = locales.filter((locale) => !available.has(locale));
-    if (missing.length > 0) {
-      throw new ManifestLocaleTrimError(
-        "unsupported_locale",
-        `manifest does not support locales: ${missing.join(", ")}`,
-      );
-    }
-    const before = localized.items.length;
-    localized.items = localized.items.filter((item) => locales.includes(scalarValue(item.key)));
-    changed ||= localized.items.length !== before;
-  }
-  return changed;
 }
 
 interface LocaleMapNode {
@@ -73,9 +62,17 @@ function localeMap(node: unknown): LocaleMapNode | null {
   if (map.items.length === 0) return null;
   for (const item of map.items) {
     if (typeof (item.value as { value?: unknown } | null)?.value !== "string") return null;
-    if (!LOCALE_KEY.test(scalarValue(item.key))) return null;
+    if (!canonicalLocale(item.key)) return null;
   }
   return map;
+}
+
+function canonicalLocale(node: unknown): string | null {
+  try {
+    return toCanonicalLocale(scalarValue(node));
+  } catch {
+    return null;
+  }
 }
 
 function scalarValue(node: unknown): string {

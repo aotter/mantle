@@ -1,14 +1,12 @@
-import { readFileSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import packageJson from "../package.json" with { type: "json" };
 import { PROVISION_BUNDLE_KIND } from "../src/provision.js";
 import { runCreate } from "../src/create.js";
 
-const { version: PACKAGE_VERSION } = JSON.parse(
-  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-) as { version: string };
+const PACKAGE_VERSION = packageJson.version;
 
 const BUNDLE = {
   kind: PROVISION_BUNDLE_KIND,
@@ -37,26 +35,22 @@ afterEach(async () => {
   await rm(workspace, { recursive: true, force: true });
 });
 
-function stubFetch(body: unknown, ok = true, streamed = false): void {
+function stubFetch(body: unknown, ok = true): void {
   const payload = typeof body === "string" ? body : JSON.stringify(body);
   vi.stubGlobal("fetch", async (url: string) => {
     requested.push(String(url));
+    const bytes = new TextEncoder().encode(payload);
     return {
       ok,
       status: ok ? 200 : 404,
       headers: new Headers(),
-      // The real fetch always exposes a stream; exercise that path too.
-      body: streamed
-        ? new ReadableStream<Uint8Array>({
-          start(controller) {
-            const bytes = new TextEncoder().encode(payload);
-            controller.enqueue(bytes.slice(0, 5));
-            controller.enqueue(bytes.slice(5));
-            controller.close();
-          },
-        })
-        : null,
-      text: async () => payload,
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(bytes.slice(0, 5));
+          controller.enqueue(bytes.slice(5));
+          controller.close();
+        },
+      }),
     } as unknown as Response;
   });
 }
@@ -74,22 +68,14 @@ describe("mantle create", () => {
     expect(await runCreate([])).toBe(2);
   });
 
-  it("resolves only the official immutable tag for this package version", async () => {
-    stubFetch(BUNDLE);
-    const { version } = JSON.parse(
-      await readFile(new URL("../package.json", import.meta.url), "utf8"),
-    ) as { version: string };
-    expect(await runCreate(["blank", join(workspace, "site")])).toBe(0);
-    expect(requested).toEqual([
-      `https://raw.githubusercontent.com/aotter/mantle-starters/v${version}/provision-bundles/blank.json`,
-    ]);
-  });
-
-  it("materializes text and binary files with fixed modes", async () => {
+  it("fetches the version-matched bundle and materializes it with fixed modes", async () => {
     stubFetch(BUNDLE);
     const target = join(workspace, "morning-lab");
     expect(await runCreate(["blank", target])).toBe(0);
 
+    expect(requested).toEqual([
+      `https://raw.githubusercontent.com/aotter/mantle-starters/v${PACKAGE_VERSION}/provision-bundles/blank.json`,
+    ]);
     expect(await readFile(join(target, "README.md"), "utf8")).toBe("# Morning Lab\n");
     expect(await readFile(join(target, "public/icon.png"), "utf8")).toBe("hello");
     expect(JSON.parse(await readFile(join(target, ".mantle/launch-state.json"), "utf8"))).toEqual({
@@ -113,13 +99,6 @@ describe("mantle create", () => {
       .toEqual(["en", "ja"]);
   });
 
-  it("reads a streamed response body", async () => {
-    stubFetch(BUNDLE, true, true);
-    const target = join(workspace, "streamed");
-    expect(await runCreate(["blank", target])).toBe(0);
-    expect(await readFile(join(target, "README.md"), "utf8")).toBe("# Streamed\n");
-  });
-
   it("refuses a missing parent rather than inventing directories", async () => {
     stubFetch(BUNDLE);
     expect(await runCreate(["blank", join(workspace, "a", "b", "site")])).toBe(1);
@@ -136,26 +115,13 @@ describe("mantle create", () => {
     expect(requested).toEqual([]);
   });
 
-  it("leaves nothing behind when the bundle cannot be fetched", async () => {
-    stubFetch("nope", false);
-    expect(await runCreate(["blank", join(workspace, "site")])).toBe(1);
-    expect(await readdir(workspace)).toEqual([]);
-  });
-
-  it("leaves nothing behind when the bundle fails to render", async () => {
-    stubFetch({ ...BUNDLE, archetype: "presence" });
-    expect(await runCreate(["blank", join(workspace, "site")])).toBe(1);
-    expect(await readdir(workspace)).toEqual([]);
-  });
-
-  it("refuses a bundle whose declared version is not the pinned one", async () => {
-    stubFetch({ ...BUNDLE, version: "0.1.0-alpha.6" });
-    expect(await runCreate(["blank", join(workspace, "site")])).toBe(1);
-    expect(await readdir(workspace)).toEqual([]);
-  });
-
-  it("leaves nothing behind when the bundle is not JSON", async () => {
-    stubFetch("<html>404</html>");
+  it.each([
+    ["cannot be fetched", "nope", false],
+    ["has the wrong archetype", { ...BUNDLE, archetype: "presence" }, true],
+    ["declares the wrong version", { ...BUNDLE, version: "0.1.0-alpha.6" }, true],
+    ["is not JSON", "<html>404</html>", true],
+  ])("leaves nothing behind when the bundle %s", async (_case, body, ok) => {
+    stubFetch(body, ok);
     expect(await runCreate(["blank", join(workspace, "site")])).toBe(1);
     expect(await readdir(workspace)).toEqual([]);
   });
