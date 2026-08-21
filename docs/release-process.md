@@ -52,11 +52,13 @@ state table:
 
 | Durable state | Permitted next mutation | Re-run behavior | Public channel |
 |---|---|---|---|
-| Source gated; version unused | Create the immutable Core tag, then publish and verify exact packages under `mantle-release` | Existing state must match or the run fails | Unchanged |
+| Source gated; version unused | Create the immutable Core tag | Existing tag must match or the run fails | Unchanged |
+| Core tag exists; candidate packages incomplete | Publish and verify missing exact versions under `mantle-release` through each registry's sole publish step | Existing versions are verified and skipped | Unchanged |
 | Candidate packages verified; Starter tag absent | Dispatch the pinned Starter release and wait | The Starter worker resumes or reports its matching no-op | Unchanged |
 | Matching Starter tag exists | Validate its Core/base provenance and run the frozen public-registry gates | Validation and gates repeat without mutation | Unchanged |
-| Released Starter passes | Promote npmjs and GitHub Packages channel tags monotonically | Same version is a no-op; an older run preserves a newer tag | Candidate version |
-| Channels promoted | Create the Core GitHub Release; optionally dispatch Landing | Existing matching release is a no-op | Candidate version |
+| Released Starter passes | Promote npmjs and GitHub Packages channel tags monotonically | Same version is a no-op; an older run preserves a newer tag | Candidate or newer version |
+| Channels promoted or preserved newer | Create the Core GitHub Release | Existing matching release is a no-op | Candidate or newer version |
+| Core GitHub Release exists | Dispatch Landing only when explicitly enabled | Landing remains untouched by default | Candidate or newer version |
 
 Invariants:
 
