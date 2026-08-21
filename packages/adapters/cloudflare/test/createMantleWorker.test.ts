@@ -21,41 +21,6 @@ import {
 } from "../src/worker/createMantleWorker.js";
 import { StubAssetServer, stubAuth } from "./fakes/runtime-bindings.js";
 
-const oauthState = vi.hoisted(() => ({
-  scopes: [] as string[],
-  tokenExchangeCallback: undefined as undefined | ((options: {
-    readonly userId: string;
-    readonly clientId: string;
-    readonly requestedScope: string[];
-  }) => unknown),
-}));
-
-vi.mock("@cloudflare/workers-oauth-provider", () => ({
-  OAuthProvider: class<Env> {
-    constructor(private readonly options: {
-      readonly defaultHandler: ExportedHandler<Env>;
-      readonly scopesSupported?: string[];
-      readonly tokenExchangeCallback?: typeof oauthState.tokenExchangeCallback;
-    }) {
-      oauthState.scopes = options.scopesSupported ?? [];
-      oauthState.tokenExchangeCallback = options.tokenExchangeCallback;
-    }
-    fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-      const pathname = new URL(request.url).pathname;
-      if (
-        pathname === "/oauth/token" ||
-        pathname === "/oauth/register" ||
-        pathname.startsWith("/.well-known/oauth") ||
-        ((pathname === "/mcp" || pathname.startsWith("/mcp/")) &&
-          !request.headers.has("authorization"))
-      ) return Promise.resolve(new Response("oauth transport"));
-      const fetch = this.options.defaultHandler.fetch;
-      if (!fetch) throw new Error("default handler fetch is missing");
-      return fetch(request, env, ctx);
-    }
-  },
-}));
-
 type TestEnv = MantleCloudflareEnv & { readonly TEST_NAME?: string };
 
 describe("createMantleWorker", () => {
@@ -120,24 +85,25 @@ describe("createMantleWorker", () => {
 
   it("does not boot the CMS runtime for OAuth transport-only requests", async () => {
     const db = new InMemoryDatabase();
+    const auth = {
+      ...stubAuth,
+      handler: async () => new Response("auth transport"),
+    };
     const worker = createMantleWorker<TestEnv>({
       plan: compileTestPlan([]),
-      auth: () => stubAuth,
+      auth: () => auth,
       bindings: () => ({ db, adminAssets: new StubAssetServer() }),
     });
 
     for (const path of [
-      "/.well-known/oauth-authorization-server",
-      "/.well-known/oauth-protected-resource/mcp/staff",
-      "/oauth/register",
-      "/oauth/token",
-      "/mcp/staff",
+      "/.well-known/oauth-authorization-server/api/auth",
     ]) {
       expect((await fetchWorker(worker, path, testEnv())).status, path).toBe(200);
     }
+    expect((await fetchWorker(worker, "/mcp/staff", testEnv())).status).toBe(401);
 
     expect(db.appliedMigrations.size).toBe(0);
-    await fetchWorker(worker, "/oauth/authorize", testEnv());
+    await fetchWorker(worker, "/api/auth/oauth2/register", testEnv());
     expect(db.appliedMigrations.size).toBeGreaterThan(0);
   });
 
@@ -284,13 +250,13 @@ describe("createMantleWorker", () => {
     const response = await fetchWorker(
       worker,
       "/",
-      { ...testEnv(), OAUTH_KV: undefined as never },
+      { ...testEnv(), DB: undefined as never },
     );
 
     expect(response.status).toBe(500);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     await expect(response.json()).resolves.toEqual({ ok: false, error: "internal_error" });
-    expect(error.mock.calls.flat().join(" ")).toContain("OAUTH_KV");
+    expect(error.mock.calls.flat().join(" ")).toContain("DB");
     error.mockRestore();
   });
 
@@ -406,39 +372,6 @@ describe("createMantleWorker", () => {
     error.mockRestore();
   });
 
-  it("keeps mcp once when an extension adds OAuth scopes", async () => {
-    const worker = createMantleWorker<TestEnv>({
-      plan: compileTestPlan([]),
-      auth: () => stubAuth,
-      bindings: testBindings,
-      extend: () => ({ scopesSupported: ["platform:read", "mcp"] }),
-    });
-
-    await fetchWorker(worker, "/favicon.svg", testEnv());
-    expect(oauthState.scopes).toEqual(["mcp", "platform:read"]);
-  });
-
-  it("puts the effective access-token scope in API props", async () => {
-    const worker = createMantleWorker<TestEnv>({
-      plan: compileTestPlan([]),
-      auth: () => stubAuth,
-      bindings: testBindings,
-    });
-    await fetchWorker(worker, "/favicon.svg", testEnv());
-
-    expect(oauthState.tokenExchangeCallback?.({
-      userId: "user-1",
-      clientId: "client-1",
-      requestedScope: ["sites.read"],
-    })).toEqual({
-      accessTokenProps: {
-        userId: "user-1",
-        clientId: "client-1",
-        scopes: ["sites.read"],
-      },
-    });
-  });
-
 });
 
 class FailFirstMigrationDatabase extends InMemoryDatabase {
@@ -494,7 +427,6 @@ function testBindings() {
 function testEnv(extra: Partial<TestEnv> = {}): TestEnv {
   return {
     DB: {} as D1Database,
-    OAUTH_KV: {} as KVNamespace,
     ASSETS: { fetch: async () => new Response(null, { status: 404 }) } as Fetcher,
     ...extra,
   };

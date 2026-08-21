@@ -8,7 +8,7 @@ export interface ConsentModel {
   readonly clientName: string;
   readonly redirectUri: string;
   readonly scopes: readonly string[];
-  readonly oauthRequestJson: string;
+  readonly oauthQuery: string;
 }
 
 /** Detect consent UI locale from Accept-Language header. */
@@ -96,8 +96,8 @@ export function renderConsentHtml(locale: "zh-TW" | "en", model: ConsentModel | 
     `<h1>${t.heading(escapeHtml(model.clientName))}</h1>` +
     `<p class="muted">${t.redirectLabel} <code>${escapeHtml(model.redirectUri)}</code></p>` +
     `${scopesBlock}` +
-    `<form method="post" action="/oauth/authorize">` +
-    `<input type="hidden" name="oauth_request" value="${escapeHtml(model.oauthRequestJson)}"/>` +
+    `<form method="post" action="/oauth/consent">` +
+    `<input type="hidden" name="oauth_query" value="${escapeHtml(model.oauthQuery)}"/>` +
     `<button type="submit" name="decision" value="approve">${t.approve}</button>` +
     `<button type="submit" name="decision" value="deny">${t.deny}</button>` +
     `</form>` +

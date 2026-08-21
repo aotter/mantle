@@ -116,25 +116,26 @@ describe("mountAuthorize", () => {
     expect(html).not.toContain("--navy:");
   });
 
-  it("redirects anonymous OAuth clients to the admin sign-in return parameter", async () => {
+  it("renders the secret-free Better Auth consent projection", async () => {
     const app = new Hono();
-    mountAuthorize(app, { auth: stubAuth });
+    mountAuthorize(app, {
+      auth: {
+        ...stubAuth,
+        getOAuthConsentRequest: async () => ({
+          clientName: "Claude",
+          redirectUri: "https://client.example/callback",
+          scopes: ["mcp"],
+          oauthQuery: "signed=query",
+        }),
+      },
+    });
 
     const res = await app.request(
-      "https://example.test/oauth/authorize?client_id=claude&redirect_uri=claude%3A%2F%2Fcallback&response_type=code&state=s&code_challenge=c&code_challenge_method=S256&scope=mcp",
-      {},
-      { OAUTH_PROVIDER: {} },
+      "https://example.test/oauth/consent?client_id=claude&scope=mcp",
     );
 
-    expect(res.status).toBe(302);
-    const location = res.headers.get("location");
-    expect(location).toContain("/admin/sign-in?return=");
-    expect(location).not.toContain("return_to=");
-
-    const redirected = new URL(location!, "https://example.test");
-    expect(redirected.searchParams.get("return")).toBe(
-      "/oauth/authorize?client_id=claude&redirect_uri=claude%3A%2F%2Fcallback&response_type=code&state=s&code_challenge=c&code_challenge_method=S256&scope=mcp",
-    );
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("Claude");
   });
 
   describe("consent POST CSRF defense (#389)", () => {
@@ -144,6 +145,9 @@ describe("mountAuthorize", () => {
         session: { id: "s1", userId: "u1", expiresAt: new Date(Date.now() + 60_000) },
         user: { id: "u1", email: "u1@example.test", name: "U", role: "owner" },
       }),
+      completeOAuthConsent: async () => {
+        throw new Error("invalid authorization request");
+      },
     } as Auth;
 
     function consentApp() {
@@ -154,9 +158,8 @@ describe("mountAuthorize", () => {
 
     async function post(headers: Record<string, string>): Promise<Response> {
       return consentApp().request(
-        "https://example.test/oauth/authorize",
+        "https://example.test/oauth/consent",
         { method: "POST", headers, body: new URLSearchParams({ decision: "approve" }) },
-        { OAUTH_PROVIDER: {} },
       );
     }
 
@@ -171,11 +174,9 @@ describe("mountAuthorize", () => {
     });
 
     it("lets a same-origin POST past the CSRF guard", async () => {
-      // No oauth_request in the body → it should reach the 400 "missing
-      // oauth_request" branch, proving the CSRF guard did not block it.
       const res = await post({ "sec-fetch-site": "same-origin" });
       expect(res.status).toBe(400);
-      expect(await res.text()).toContain("missing oauth_request");
+      expect(await res.text()).toContain("invalid authorization request");
     });
   });
 });

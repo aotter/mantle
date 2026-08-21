@@ -123,6 +123,23 @@ export function safeReturnPath(raw: string | null | undefined): string {
   }
 }
 
+/** Preserve only the Better Auth-signed OAuth fields while the login UI adds
+ * its own query parameters. Mirrors oauthProviderClient without coupling the
+ * static Admin SPA to a second auth client. */
+export function signedOAuthQuery(search: string): string | undefined {
+  const params = new URLSearchParams(search);
+  if (!params.has("sig")) return undefined;
+  const signedNames = new Set(params.getAll("ba_param"));
+  if (signedNames.size === 0) return undefined;
+  const signed = new URLSearchParams();
+  for (const [key, value] of params) {
+    if (key === "sig" || key === "ba_param" || signedNames.has(key)) {
+      signed.append(key, value);
+    }
+  }
+  return signed.toString();
+}
+
 export function SignInButton({
   busy,
   children,
@@ -151,6 +168,7 @@ export function SignInView(): React.ReactElement {
   const { language } = usePreferences();
   const params = new URLSearchParams(window.location.search);
   const ret = safeReturnPath(params.get("return"));
+  const oauthQuery = signedOAuthQuery(window.location.search);
 
   const methods = useQuery<AuthMethodInfo[]>(authMethodsQueryOptions());
 
@@ -191,6 +209,7 @@ export function SignInView(): React.ReactElement {
                 }
                 method={m}
                 returnTo={ret}
+                oauthQuery={oauthQuery}
               />
             ))}
           </div>
@@ -203,9 +222,11 @@ export function SignInView(): React.ReactElement {
 function MethodSection({
   method,
   returnTo,
+  oauthQuery,
 }: {
   method: AuthMethodInfo;
   returnTo: string;
+  oauthQuery?: string;
 }): React.ReactElement {
   // Exhaustive switch — adding a kind to AuthMethodInfo without
   // adding a case here is a TS error. `social` covers all OAuth
@@ -216,7 +237,11 @@ function MethodSection({
       return (
         <RedirectSignInSection
           endpoint="/api/auth/sign-in/social"
-          body={{ provider: method.provider, callbackURL: returnTo }}
+          body={{
+            provider: method.provider,
+            callbackURL: returnTo,
+            ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
+          }}
           buttonKey="auth.signIn.method.social.button"
           displayName={SOCIAL_PROVIDER_DISPLAY_NAME[method.provider] ?? method.provider}
         />
@@ -224,16 +249,20 @@ function MethodSection({
     case "oauth":
       return (
         <RedirectSignInSection
-          endpoint="/api/auth/sign-in/oauth2"
-          body={{ providerId: method.providerId, callbackURL: returnTo }}
+          endpoint="/api/auth/sign-in/social"
+          body={{
+            provider: method.providerId,
+            callbackURL: returnTo,
+            ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
+          }}
           buttonKey="auth.signIn.method.oauth.button"
           displayName={method.displayName ?? method.providerId}
         />
       );
     case "email-otp":
-      return <EmailOtpSection returnTo={returnTo} />;
+      return <EmailOtpSection returnTo={returnTo} oauthQuery={oauthQuery} />;
     case "magic-link":
-      return <MagicLinkSection returnTo={returnTo} />;
+      return <MagicLinkSection returnTo={returnTo} oauthQuery={oauthQuery} />;
     default: {
       const _exhaustive: never = method;
       return <UnknownMethodSection kind={(_exhaustive as { kind: string }).kind} />;
@@ -340,7 +369,13 @@ function RedirectSignInSection({
   );
 }
 
-function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement {
+function EmailOtpSection({
+  returnTo,
+  oauthQuery,
+}: {
+  returnTo: string;
+  oauthQuery?: string;
+}): React.ReactElement {
   const { language } = usePreferences();
   const [step, setStep] = React.useState<"email" | "otp">("email");
   const [email, setEmail] = React.useState("");
@@ -372,7 +407,11 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, type: "sign-in" }),
+        body: JSON.stringify({
+          email,
+          type: "sign-in",
+          ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
+        }),
       });
       if (!res.ok) {
         setError(t(language, "auth.signIn.method.email-otp.sendFailed"));
@@ -390,7 +429,11 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp }),
+        body: JSON.stringify({
+          email,
+          otp,
+          ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
+        }),
       });
       if (!res.ok) {
         setError(t(language, "auth.signIn.method.email-otp.verifyFailed"));
@@ -402,7 +445,8 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
       // Plain reload() would land back on /admin/sign-in — the
       // pathname is unchanged, the gate sees us on the sign-in page
       // and renders SignInView again instead of routing through.
-      window.location.assign(returnTo);
+      const data = (await res.json()) as { url?: string };
+      window.location.assign(data.url ?? returnTo);
     });
   };
 
@@ -466,7 +510,13 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
   );
 }
 
-function MagicLinkSection({ returnTo }: { returnTo: string }): React.ReactElement {
+function MagicLinkSection({
+  returnTo,
+  oauthQuery,
+}: {
+  returnTo: string;
+  oauthQuery?: string;
+}): React.ReactElement {
   const { language } = usePreferences();
   const [email, setEmail] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -498,7 +548,11 @@ function MagicLinkSection({ returnTo }: { returnTo: string }): React.ReactElemen
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, callbackURL: returnTo }),
+        body: JSON.stringify({
+          email,
+          callbackURL: returnTo,
+          ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
+        }),
       });
       if (!res.ok) {
         setError(t(language, "auth.signIn.method.magic-link.sendFailed"));

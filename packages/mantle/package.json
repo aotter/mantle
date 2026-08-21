@@ -93,7 +93,6 @@
     "@aotter/mantle-cloudflare": "workspace:*",
     "@aotter/mantle-vercel": "workspace:*",
     "@aotter/mantle-web": "workspace:*",
-    "@cloudflare/workers-oauth-provider": "catalog:peer",
     "aws4fetch": "catalog:peer",
     "better-auth": "catalog:peer",
     "hono": "catalog:peer",
@@ -117,9 +116,6 @@
       "optional": true
     },
     "@aotter/mantle-web": {
-      "optional": true
-    },
-    "@cloudflare/workers-oauth-provider": {
       "optional": true
     },
     "aws4fetch": {
@@ -150,7 +146,6 @@
     "@aotter/mantle-cloudflare": "workspace:*",
     "@aotter/mantle-vercel": "workspace:*",
     "@aotter/mantle-web": "workspace:*",
-    "@cloudflare/workers-oauth-provider": "catalog:",
     "@types/node": "catalog:",
     "aws4fetch": "catalog:",
     "better-auth": "catalog:",

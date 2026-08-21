@@ -115,7 +115,7 @@ The runtime is a library, not an HTTP server. A new adapter must mount equivalen
 | Runtime HTTP endpoints | Route HTTP Triggers and public View REST endpoints into runtime use cases. | `packages/adapters/cloudflare/src/mount/mountRuntimeEndpoints.ts` |
 | Optional Admin | Supply session/request context and assets to `mantle-admin`; mount only when selected. | `packages/adapters/cloudflare/src/mount/mountAdmin.ts` |
 | Auth endpoints | Own sign-in/session/OAuth metadata through the adapter's Better Auth implementation selected by Admin/OAuth surfaces. | `packages/adapters/cloudflare/src/auth/createAuth.ts` |
-| MCP endpoints | Mount `/mcp/staff` and `/mcp` via `createOAuthProvider({ apiHandlers })`; the OAuth lib verifies bearer tokens against its KV grant store, then calls the matching apiHandler with `ctx.props` set. The adapter enforces the staff D1 role inside the apiHandler, then dispatches JSON-RPC. | `packages/adapters/cloudflare/src/mount/mountMcp.ts`, `oauth/oauthSingleton.ts`, `oauth/mountOAuth.ts` |
+| MCP endpoints | Mount `/mcp/staff` and `/mcp` behind one canonical protected resource. The adapter verifies Better Auth JWTs, normalizes the caller, re-reads the staff D1 role, then dispatches JSON-RPC. | `packages/adapters/cloudflare/src/mount/mountMcp.ts`, `auth/createAuth.ts` |
 
 Auth is not a runtime port. Per [ADR-0014](adr/0014-auth-better-auth-and-multi-tenant-mcp.md), the adapter owns Better Auth wiring and passes authenticated user/staff context into runtime dispatchers. Procedure handlers receive that data through `HandlerContext` in `packages/mantle-runtime/src/domain/model/HandlerContext.ts`.
 
@@ -152,9 +152,9 @@ its document operations into their own routing and cache conventions.
 
 ### HTTP cache contract
 
-The Cloudflare adapter is private by default. Consumers must export
-`createOAuthProvider(...)` as the Worker's top-level handler so its final
-response policy covers admin, auth, API, OAuth, MCP, redirects, and errors.
+The Cloudflare adapter is private by default. Consumers must apply its final
+cache policy after admin, auth, API, OAuth, MCP, application routes, redirects,
+and errors.
 Those responses receive `Cache-Control: private, no-store`; Cloudflare-specific
 CDN cache overrides are removed.
 
@@ -202,7 +202,7 @@ storage preparation and binding do not accept or require a static asset port.
 - [ ] Provide adapter-owned Better Auth wiring and session helpers.
 - [ ] Normalize session/OAuth and any consumer credential seam into
       `HandlerContext.auth`; never put raw credentials in runtime context.
-- [ ] Mount `/mcp/staff` and `/mcp` via the platform's OAuth provider lib (Cloudflare adapter uses `@cloudflare/workers-oauth-provider` at top level). Enforce staff D1 role inside the apiHandler.
+- [ ] Mount `/mcp/staff` and `/mcp` behind one resource-bound token verifier. Enforce the live staff role inside the apiHandler.
 - [ ] Preserve the HTTP cache contract: private by default; explicit anonymous 200 `GET`/`HEAD` public opt-in only.
 - [ ] Prove one guarded target has identical REST/MCP outcomes, including
       mutable revocation on the next call.

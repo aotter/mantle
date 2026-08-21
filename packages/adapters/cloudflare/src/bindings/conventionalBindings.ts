@@ -9,7 +9,6 @@ const NO_ASSETS: AdminAssetServer = { fetch: async () => null };
 
 export interface ConventionalBindingsEnv {
   readonly DB?: D1Database;
-  readonly OAUTH_KV?: KVNamespace;
   readonly ASSETS?: Fetcher;
 }
 
@@ -20,7 +19,6 @@ export function createConventionalBindings(
   env: ConventionalBindingsEnv,
 ): MantleWorkerBindings {
   if (!env.DB) throw new Error("Mantle requires the conventional DB binding.");
-  if (!env.OAUTH_KV) throw new Error("Mantle requires the conventional OAUTH_KV binding.");
   return {
     db: new D1DatabaseDriver(env.DB),
     adminAssets: env.ASSETS ? new AssetsAssetServer(env.ASSETS) : NO_ASSETS,

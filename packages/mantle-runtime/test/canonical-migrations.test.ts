@@ -31,14 +31,19 @@ describe("CANONICAL_MIGRATIONS", () => {
     for (const table of [
       "jwks",
       "oauthClient",
+      "oauthResource",
+      "oauthClientResource",
       "oauthRefreshToken",
       "oauthAccessToken",
       "oauthConsent",
+      "oauthClientAssertion",
     ]) {
       expect(init).toContain(`CREATE TABLE IF NOT EXISTS ${table}`);
     }
 
     const jwks = tableSql(init, "jwks");
+    const account = tableSql(init, "account");
+    const client = tableSql(init, "oauthClient");
     const accessToken = tableSql(init, "oauthAccessToken");
     const refreshToken = tableSql(init, "oauthRefreshToken");
     const consent = tableSql(init, "oauthConsent");
@@ -46,6 +51,11 @@ describe("CANONICAL_MIGRATIONS", () => {
     expect(jwks).toMatch(
       /CREATE TABLE IF NOT EXISTS jwks\s*\([\s\S]*\bprivateKey\s+TEXT NOT NULL/,
     );
+    expect(account).toMatch(/\bissuer\s+TEXT NOT NULL/);
+    expect(account).toMatch(/UNIQUE \(issuer, accountId\)/);
+    expect(client).toMatch(/\bclientDiscoveryId\s+TEXT/);
+    expect(client).toMatch(/\bapplicationType\s+TEXT/);
+    expect(client).not.toMatch(/\b(public|type)\s+(INTEGER|TEXT)/);
     expect(accessToken).toMatch(
       /CREATE TABLE IF NOT EXISTS oauthAccessToken\s*\([\s\S]*\btoken\s+TEXT NOT NULL UNIQUE/,
     );

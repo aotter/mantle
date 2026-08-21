@@ -32,7 +32,7 @@ subpath. Every sub-package also remains directly installable.
 | `@aotter/mantle/bun` | Bun adapter — caller-owned `bun:sqlite` and Web-standard View/Trigger transport |
 | `@aotter/mantle/vercel` | Vercel Functions adapter — injected durable storage and platform `waitUntil` |
 | `@aotter/mantle/vercel/libsql` | Optional application-owned Turso/libSQL driver |
-| `@aotter/mantle/cloudflare` | Cloudflare Workers adapter — D1, Workers Cache, R2, Better Auth, MCP via `@cloudflare/workers-oauth-provider` |
+| `@aotter/mantle/cloudflare` | Cloudflare Workers adapter — D1, Workers Cache, R2, and Better Auth 1.7 MCP/CIMD |
 | `@aotter/mantle/admin-ui` | Pre-built React 19 admin SPA bundle |
 
 ```ts

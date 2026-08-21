@@ -33,7 +33,7 @@ if (false) {
   // @ts-expect-error Mantle owns manifest View REST routes.
   app.get("/api/views/products", (c) => c.text("no"));
   // @ts-expect-error Mantle owns OAuth endpoints.
-  app.get("/oauth/token", (c) => c.text("no"));
+  app.get("/oauth/consent", (c) => c.text("no"));
   // @ts-expect-error Mantle owns MCP endpoints.
   app.get("/mcp/staff", (c) => c.text("no"));
   // @ts-expect-error Mantle owns OAuth discovery endpoints.

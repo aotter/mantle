@@ -94,7 +94,7 @@ customer-owned domain, hosted auth must use OAuth/OIDC:
 
 ```text
 customer.com/login
-  -> platform.mantle.tools/oauth/authorize
+  -> platform.mantle.tools/api/auth/oauth2/authorize
   -> user signs in with Platform-supported methods
   -> customer.com/api/auth/callback/mantle
   -> customer.com verifies the authorization response
@@ -158,10 +158,10 @@ The cross-site API use case additionally justifies these curated fields and
 facades:
 
 - generic OAuth method `resource`
-- OAuth provider `validAudiences`
+- OAuth provider `resources` and the curated `mcpResource`
 - `Auth.getProviderAccessToken(request, providerId)`
 - `Auth.verifyOAuthAccessToken(tokenOrRequest, { audience, scopes })`
 
-All are additive. Existing generated sites that do not pass them keep their
-previous cookie, session, and REST behavior. These are not a raw Better Auth
-options passthrough.
+Generic OAuth providers use Better Auth 1.7's standard social sign-in and
+`/api/auth/callback/:id` path. These are not a raw Better Auth options
+passthrough.

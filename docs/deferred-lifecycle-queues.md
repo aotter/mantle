@@ -101,58 +101,40 @@ consumer:
 ```ts
 import type { DeferredHookEnvelope } from "@aotter/mantle/runtime";
 import {
-  AssetsAssetServer,
-  D1DatabaseDriver,
   WorkersQueueHookDispatcher,
-  createMantleRuntimeRef,
+  createMantleWorker,
   createQueueHandler,
-  createOAuthProvider,
+  type MantleCloudflareEnv,
 } from "@aotter/mantle/cloudflare";
 
-interface Env {
+interface Env extends MantleCloudflareEnv {
   DB: D1Database;
-  ASSETS: Fetcher;
   MANTLE_INTERNAL_QUEUE: Queue<DeferredHookEnvelope>;
 }
 
-function buildWorker(env: Env) {
-  const cms = createMantleRuntimeRef({
-    plan,
-    handlers,
-    auth: createSiteAuth(env),
-    bindings: {
-      db: new D1DatabaseDriver(env.DB),
-      adminAssets: new AssetsAssetServer(env.ASSETS),
-      deferredHookDispatcher: new WorkersQueueHookDispatcher(
-        env.MANTLE_INTERNAL_QUEUE,
-      ),
-    },
-  });
-
-  const http = createOAuthProvider<Env>({
-    defaultHandler: createSiteHttpHandler(cms),
-    apiHandlers: createSiteMcpHandlers(cms),
-  });
-
-  return { http, consumeMantle: createQueueHandler<Env>(cms) };
-}
-
-let built: ReturnType<typeof buildWorker> | undefined;
-const worker = (env: Env) => built ??= buildWorker(env);
+const worker = createMantleWorker<Env>({
+  plan,
+  handlers,
+  bindings: (env, conventional) => ({
+    ...conventional,
+    deferredHookDispatcher: new WorkersQueueHookDispatcher(
+      env.MANTLE_INTERNAL_QUEUE,
+    ),
+  }),
+});
 
 export default {
-  fetch(request, env, ctx) {
-    return worker(env).http.fetch(request, env, ctx);
-  },
+  fetch: worker.fetch,
   queue(batch, env) {
-    return worker(env).consumeMantle(batch, env);
+    return createQueueHandler<Env>({
+      get: () => worker.getRuntime(env),
+    })(batch, env);
   },
 } satisfies ExportedHandler<Env>;
 ```
 
-`createSiteAuth`, `createSiteHttpHandler`, and `createSiteMcpHandlers` above
-stand for the site's existing adapter assembly; Queue opt-in adds only the
-dispatcher binding and `queue` export.
+Queue opt-in adds only the dispatcher binding and `queue` export; the facade
+keeps Auth, MCP, cache, and runtime assembly on the standard path.
 
 ## Idempotent handlers
 

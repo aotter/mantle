@@ -11,6 +11,7 @@ import type {
 import type { PublicPathResolver, TemplateRegistry } from "@aotter/mantle-web";
 import type { SiteDefaults } from "@aotter/mantle-spec";
 import {
+  conventionalMcpResource,
   createConventionalAuth,
   setupIncompleteAuthResponse,
   type ConventionalAuthEnv,
@@ -31,9 +32,7 @@ import { mountAdmin } from "../mount/mountAdmin.js";
 import { mountRuntimeEndpoints } from "../mount/mountRuntimeEndpoints.js";
 import type { ConsumerCredentialResolver } from "../mount/resolveCaller.js";
 import { mountAuthorize } from "../oauth/mountOAuth.js";
-import { OAUTH_REGISTER_PATH, OAUTH_TOKEN_PATH } from "../oauth/oauthConstants.js";
-import { createOAuthProvider } from "../oauth/oauthSingleton.js";
-import { PUBLIC_CACHE_TAG } from "../oauth/cachePolicy.js";
+import { applyCachePolicy, PUBLIC_CACHE_TAG } from "../oauth/cachePolicy.js";
 
 /** Fixed namespaces owned by Mantle's standard Worker surfaces. */
 export const MANTLE_RESERVED_PATH_PREFIXES = [
@@ -104,7 +103,6 @@ export interface MantleExtensionApp<Bindings extends object> {
 }
 
 export interface MantleCloudflareEnv extends ConventionalAuthEnv {
-  readonly OAUTH_KV: KVNamespace;
   readonly ASSETS?: Fetcher;
 }
 
@@ -127,7 +125,6 @@ export interface MantleWorkerExtension<Env extends MantleCloudflareEnv> {
   readonly handlers?: Readonly<Record<string, AnyHandler>>;
   readonly credentialResolver?: ConsumerCredentialResolver;
   readonly jwtBearer?: MantleCloudflareConfig["jwtBearer"];
-  readonly scopesSupported?: readonly string[];
   /** Standard routes mount first; extension routes may only add new paths. */
   readonly mount?: (context: MantleWorkerMountContext<Env>) => void;
 }
@@ -210,7 +207,28 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
     const app = new Hono<WorkerHonoEnv<Env>>();
     mountRuntimeEndpoints(app, ref);
     if (bindings.adminAssets) mountAdmin(app, ref, bindings.adminAssets);
-    mountAuthorize(app, { auth, loginPath: "/admin/sign-in" });
+    mountAuthorize(app, { auth });
+    const mcpResource = auth.mcpResource ?? conventionalMcpResource(env);
+    const publicMcp = createMcpApiHandler<Env>({
+      ref,
+      surface: "public",
+      resource: mcpResource,
+    });
+    const staffMcp = createMcpApiHandler<Env>({
+      ref,
+      surface: "staff",
+      resource: mcpResource,
+    });
+    app.all("/mcp", (c) => publicMcp.fetch!(
+      c.req.raw as Parameters<NonNullable<typeof publicMcp.fetch>>[0],
+      c.env,
+      c.executionCtx as Parameters<NonNullable<typeof publicMcp.fetch>>[2],
+    ));
+    app.all("/mcp/staff", (c) => staffMcp.fetch!(
+      c.req.raw as Parameters<NonNullable<typeof staffMcp.fetch>>[0],
+      c.env,
+      c.executionCtx as Parameters<NonNullable<typeof staffMcp.fetch>>[2],
+    ));
     const standardRouteCount = app.routes.length;
     extension.mount?.({
       ...bootstrap,
@@ -219,20 +237,11 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
     });
     assertExtensionRoutes(app, standardRouteCount, auth.basePath);
 
-    const provider = createOAuthProvider<Env>({
-      defaultHandler: {
-        fetch: (request, workerEnv, ctx) => app.fetch(request, workerEnv, ctx),
-      },
-      apiHandlers: {
-        "/mcp/staff": createMcpApiHandler<Env>({ ref, surface: "staff" }),
-        "/mcp": createMcpApiHandler<Env>({ ref, surface: "public" }),
-      },
-      scopesSupported: [...new Set(["mcp", ...(extension.scopesSupported ?? [])])],
-    });
     const next: AssembledWorker<Env> = {
       auth,
       getRuntime,
-      fetch: (request, workerEnv, ctx) => provider.fetch(request, workerEnv, ctx),
+      fetch: async (request, workerEnv, ctx) =>
+        applyCachePolicy(request, await app.fetch(request, workerEnv, ctx)),
     };
     assembled = next;
     return next;
@@ -266,11 +275,7 @@ async function purgePublicCache(): Promise<void> {
 
 function isRuntimeIndependentOAuthRequest(request: Request): boolean {
   const pathname = new URL(request.url).pathname;
-  if (
-    pathname === OAUTH_TOKEN_PATH ||
-    pathname === OAUTH_REGISTER_PATH ||
-    pathname.startsWith(MANTLE_RESERVED_WELL_KNOWN_PREFIX)
-  ) return true;
+  if (pathname.startsWith(MANTLE_RESERVED_WELL_KNOWN_PREFIX)) return true;
   return (pathname === "/mcp" || pathname.startsWith("/mcp/")) &&
     !request.headers.has("authorization");
 }

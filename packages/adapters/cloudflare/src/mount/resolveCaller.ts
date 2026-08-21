@@ -1,8 +1,4 @@
 import type { HandlerContext } from "@aotter/mantle-runtime";
-import type {
-  OAuthHelpers,
-  TokenSummary,
-} from "@cloudflare/workers-oauth-provider";
 import {
   runtimeDiagnostic,
   type Diagnostic,
@@ -95,27 +91,6 @@ export async function resolveCaller(
     if (!token) {
       return invalidCredential(401);
     }
-    if (token.split(":").length === 3) {
-      const helpers = (options.env as OAuthProviderEnv | undefined)?.OAUTH_PROVIDER;
-      const verified = await helpers?.unwrapToken(token);
-      if (!verified || !audienceAllows(request.url, verified.audience)) {
-        return invalidCredential(401);
-      }
-      return {
-        kind: "authenticated",
-        context: await contextForVerifiedUser(
-          verified.userId,
-          {
-            credential: "oauth",
-            credentialId: verified.id,
-            clientId: verified.grant.clientId,
-            scopes: verified.scope,
-          },
-          options.auth,
-          base,
-        ),
-      };
-    }
     if (!options.jwtBearer) return invalidCredential(401);
     const verified = await options.auth.verifyOAuthAccessToken(request, {
       audience: options.jwtBearer.audience,
@@ -159,29 +134,6 @@ export async function resolveCaller(
       base,
     ),
   };
-}
-
-interface OAuthProviderEnv {
-  readonly OAUTH_PROVIDER?: Pick<OAuthHelpers, "unwrapToken">;
-}
-
-function audienceAllows(
-  requestUrl: string,
-  audience: TokenSummary["audience"],
-): boolean {
-  if (!audience) return true;
-  const request = new URL(requestUrl);
-  return (Array.isArray(audience) ? audience : [audience]).some((value) => {
-    try {
-      const allowed = new URL(value);
-      return request.origin === allowed.origin &&
-        (allowed.pathname === "/" ||
-          request.pathname === allowed.pathname ||
-          request.pathname.startsWith(`${allowed.pathname}/`));
-    } catch {
-      return false;
-    }
-  });
 }
 
 export async function contextForVerifiedUser(

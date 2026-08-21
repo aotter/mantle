@@ -170,13 +170,15 @@ export function mountMantleAdmin<E extends Env>(
   // them. Hono matches in registration order; this catch-all sits last.
   app.all(`${authBasePath}/*`, (c) => auth.handler(c.req.raw));
 
-  // Well-known OAuth endpoints (RFC 8414 + RFC 9728) used to be
-  // forwarded to Better Auth's mcp() plugin here. With the carve-out
-  // to @cloudflare/workers-oauth-provider (PR #193), the top-level
-  // `OAuthProvider` serves AS metadata and per-resource PRM
-  // automatically — adopters wire it via `createOAuthProvider` +
-  // `createMcpApiHandler` from the package index. No SDK-level
-  // forwarder needed in this mount.
+  // Better Auth's provider serves discovery outside its base path. Keep these
+  // explicit so a consumer catch-all cannot swallow RFC 8414/9728 metadata.
+  for (const path of [
+    "/.well-known/oauth-authorization-server/*",
+    "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/*",
+  ]) {
+    app.all(path, (c) => auth.handler(c.req.raw));
+  }
 
   for (const path of [
     "/admin",

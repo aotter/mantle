@@ -1,5 +1,6 @@
 import { McpJsonRpcDispatcher } from "@aotter/mantle-runtime";
 import type { ProcedureManifest } from "@aotter/mantle-spec";
+import { DPOP_SIGNING_ALGORITHMS } from "better-auth/oauth2";
 import type { MantleRuntimeRef } from "./bootRuntimeOnce.js";
 import { contextForVerifiedUser } from "./resolveCaller.js";
 import { rejectCrossOriginMutation } from "../auth/rejectCrossOriginMutation.js";
@@ -7,6 +8,8 @@ import { rejectCrossOriginMutation } from "../auth/rejectCrossOriginMutation.js"
 export interface CreateMcpApiHandlerOptions {
   readonly ref: MantleRuntimeRef;
   readonly surface: "staff" | "public";
+  /** Canonical RFC 8707/9728 protected resource bound into access-token aud. */
+  readonly resource: string;
   /** OAuth scopes required to enter this MCP resource. Defaults to
    *  the existing compatibility scope `mcp`. Target-specific scopes
    *  remain manifest predicates enforced on tools/call. */
@@ -14,14 +17,9 @@ export interface CreateMcpApiHandlerOptions {
 }
 
 /**
- * Build a Cloudflare Worker `ExportedHandler` that serves one MCP
- * resource path. Plug into `createOAuthProvider({ apiHandlers })`
- * keyed by the resource path (e.g. `/mcp/staff` or `/mcp`).
- *
- * The OAuthProvider lib verifies the bearer token and sets its
- * token-specific identity and scopes on `ctx.props` BEFORE calling
- * this handler. We re-read the caller's mutable staff role from D1
- * on every invocation.
+ * Build a Cloudflare Worker `ExportedHandler` that serves one MCP path.
+ * Better Auth issues resource-bound JWTs; this adapter verifies the token then
+ * re-reads the caller's mutable staff role from D1 on every invocation.
  *
  * Note: OAuth scope distinction (`mcp:read` vs `mcp:staff`) used to
  * differentiate surfaces here. Removed because claude.ai's MCP client
@@ -32,7 +30,7 @@ export interface CreateMcpApiHandlerOptions {
 export function createMcpApiHandler<Env = Record<string, unknown>>(
   options: CreateMcpApiHandlerOptions,
 ): ExportedHandler<Env> {
-  const { ref, surface } = options;
+  const { ref, surface, resource } = options;
   const requiredScopes = options.requiredScopes ?? ["mcp"];
   // Key the cached dispatcher to the runtime identity. Without this,
   // if `ref.get()` rejects + resets and the next call returns a new
@@ -48,26 +46,29 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
     async fetch(request, env, ctx) {
       const rejected = rejectCrossOriginMutation(request);
       if (rejected) return rejected;
-      const props = readOAuthApiProps((ctx as unknown as { props?: unknown }).props);
-      if (!props) return forbidden(requiredScopes);
-      const grantedScopes = props.scopes;
-      if (requiredScopes.some((scope) => !grantedScopes.includes(scope))) {
-        return forbidden(requiredScopes);
-      }
+      const verified = await ref.auth.verifyOAuthAccessToken(request, {
+        audience: resource,
+        scopes: requiredScopes,
+      });
+      if (!verified.ok) return oauthDenied(resource, requiredScopes, verified);
+      const grantedScopes = verified.scopes;
       const waitUntil = typeof ctx.waitUntil === "function" ? ctx.waitUntil.bind(ctx) : undefined;
       const handlerContext = await contextForVerifiedUser(
-        props.userId,
+        verified.userId,
         {
           credential: "oauth",
-          credentialId: null,
-          clientId: props.clientId,
+          credentialId: verified.credentialId,
+          clientId: verified.clientId,
           scopes: grantedScopes,
         },
         ref.auth,
         { env, ...(waitUntil ? { waitUntil } : {}) },
       );
       if (surface === "staff" && !handlerContext.staff) {
-        return forbidden(requiredScopes);
+        return oauthDenied(resource, requiredScopes, {
+          status: 403,
+          reason: "insufficient-scope",
+        });
       }
       const runtime = await ref.get();
       // Media tools require BOTH a storage adapter AND a declared
@@ -150,36 +151,34 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
   };
 }
 
-interface OAuthApiProps {
-  readonly userId: string;
-  readonly clientId: string;
-  readonly scopes: readonly string[];
-}
-
-function readOAuthApiProps(value: unknown): OAuthApiProps | null {
-  if (!value || typeof value !== "object") return null;
-  const props = value as Record<string, unknown>;
-  if (
-    typeof props["userId"] !== "string" ||
-    props["userId"].length === 0 ||
-    typeof props["clientId"] !== "string" ||
-    props["clientId"].length === 0 ||
-    !Array.isArray(props["scopes"]) ||
-    !props["scopes"].every((scope) => typeof scope === "string")
-  ) return null;
-  return {
-    userId: props["userId"],
-    clientId: props["clientId"],
-    scopes: props["scopes"],
-  };
-}
-
-function forbidden(requiredScopes: readonly string[]): Response {
+function oauthDenied(
+  resource: string,
+  requiredScopes: readonly string[],
+  denied: { readonly status: 401 | 403; readonly reason: string },
+): Response {
   const scope = requiredScopes.join(" ");
-  return new Response("forbidden", {
-    status: 403,
+  const resourceUrl = new URL(resource);
+  const resourcePath = resourceUrl.pathname.replace(/\/$/u, "");
+  const metadata = new URL(
+    `/.well-known/oauth-protected-resource${resourcePath}`,
+    resourceUrl.origin,
+  ).href;
+  const error = denied.status === 403 ? "insufficient_scope" : "invalid_token";
+  const challenge = denied.reason === "invalid-dpop-proof"
+    ? `DPoP error="invalid_dpop_proof", algs="${DPOP_SIGNING_ALGORITHMS.join(" ")}"`
+    : `Bearer realm="mcp", error="${error}", scope="${scope}", resource_metadata="${metadata}"`;
+  return Response.json({
+    jsonrpc: "2.0",
+    error: {
+      code: -32000,
+      message: denied.status === 403 ? "insufficient scope" : "unauthorized",
+    },
+    id: null,
+  }, {
+    status: denied.status,
     headers: {
-      "www-authenticate": `Bearer realm="mcp", error="insufficient_scope", scope="${scope}"`,
+      "www-authenticate":
+        challenge,
       "access-control-expose-headers": "WWW-Authenticate",
     },
   });

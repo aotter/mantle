@@ -7,30 +7,28 @@ import {
 } from "../src/bindings/index.js";
 
 const DB = {} as D1Database;
-const OAUTH_KV = {} as KVNamespace;
 
 describe("createConventionalBindings", () => {
   it("reuses the existing adapters for conventional bindings", () => {
     const ASSETS = { fetch: async () => new Response("asset") } as Fetcher;
-    const bindings = createConventionalBindings({ DB, OAUTH_KV, ASSETS });
+    const bindings = createConventionalBindings({ DB, ASSETS });
 
     expect(bindings.db).toBeInstanceOf(D1DatabaseDriver);
     expect(bindings.adminAssets).toBeInstanceOf(AssetsAssetServer);
   });
 
-  it.each(["DB", "OAUTH_KV"] as const)("names a missing %s binding", (name) => {
+  it("names a missing DB binding", () => {
     const env: ConventionalBindingsEnv = {
       DB,
-      OAUTH_KV,
       ASSETS: { fetch: async () => new Response("asset") } as Fetcher,
     };
-    const missing = { ...env, [name]: undefined };
+    const missing = { ...env, DB: undefined };
 
-    expect(() => createConventionalBindings(missing)).toThrow(name);
+    expect(() => createConventionalBindings(missing)).toThrow("DB");
   });
 
   it("keeps pre-static-assets starters runnable without serving fake assets", async () => {
-    const bindings = createConventionalBindings({ DB, OAUTH_KV });
+    const bindings = createConventionalBindings({ DB });
     await expect(bindings.adminAssets?.fetch(new Request("https://site.test/missing"))).resolves.toBeNull();
   });
 

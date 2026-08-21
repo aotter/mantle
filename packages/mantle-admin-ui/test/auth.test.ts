@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { safeReturnPath, SignInButton } from "../src/features/auth/auth-views";
+import {
+  safeReturnPath,
+  signedOAuthQuery,
+  SignInButton,
+} from "../src/features/auth/auth-views";
 import { signOut } from "../src/lib/auth";
 
 afterEach(() => {
@@ -34,6 +38,23 @@ describe("sign-in", () => {
     expect(safeReturnPath("//evil.test/admin")).toBe("/admin");
     expect(safeReturnPath("/\\evil.test/admin")).toBe("/admin");
     expect(safeReturnPath("https://evil.test/admin")).toBe("/admin");
+  });
+
+  it("forwards only fields covered by Better Auth's signed OAuth query", () => {
+    const search = new URLSearchParams([
+      ["client_id", "https://client.test/metadata.json"],
+      ["scope", "mcp"],
+      ["sig", "signed"],
+      ["ba_param", "client_id"],
+      ["ba_param", "scope"],
+      ["ba_param", "ba_param"],
+      ["return", "/admin"],
+    ]).toString();
+
+    expect(signedOAuthQuery(`?${search}`)).toBe(
+      "client_id=https%3A%2F%2Fclient.test%2Fmetadata.json&scope=mcp&sig=signed&ba_param=client_id&ba_param=scope&ba_param=ba_param",
+    );
+    expect(signedOAuthQuery("?return=%2Fadmin")).toBeUndefined();
   });
 
   it("disables a pending sign-in action and shows its indicator", () => {
