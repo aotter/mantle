@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runUpdate } from "../../src/cli/update.js";
+import {
+  PROVISION_BUNDLE_FORMAT_VERSION,
+  PROVISION_BUNDLE_KIND,
+} from "../../src/provision.js";
 
 const originalCwd = process.cwd();
 
@@ -60,7 +64,11 @@ describe("mantle update", () => {
       archetype: "blank",
       files: {
         "src/index.ts": "old\n",
-        ".dev.vars.example": "ADMIN_GITHUB_LOGIN={{ADMIN_GITHUB_LOGIN}}\n",
+        ".dev.vars.example": [
+          "ADMIN_GITHUB_LOGIN={{ADMIN_GITHUB_LOGIN}}",
+          "MANTLE_SITE_OWNER_EMAIL={{SITE_OWNER_EMAIL}}",
+          "",
+        ].join("\n"),
         "wrangler.toml": legacyWrangler("mantle-blank", "mantle-blank-local"),
       },
     });
@@ -76,7 +84,10 @@ describe("mantle update", () => {
     try {
       await mkdir(join(root, "src"));
       await writeFile(join(root, "src", "index.ts"), "old\n");
-      await writeFile(join(root, ".dev.vars.example"), "ADMIN_GITHUB_LOGIN=\n");
+      await writeFile(
+        join(root, ".dev.vars.example"),
+        "ADMIN_GITHUB_LOGIN=\nMANTLE_SITE_OWNER_EMAIL=\n",
+      );
       await writeFile(
         join(root, "wrangler.toml"),
         legacyWrangler("update-test", "update-test-db", "https://update.example", "0xpublic"),
@@ -111,10 +122,44 @@ describe("mantle update", () => {
     }
   });
 
+  it("routes format-versioned bundles through the shared renderer", async () => {
+    const server = await serve(() => JSON.stringify({
+      formatVersion: PROVISION_BUNDLE_FORMAT_VERSION,
+      kind: PROVISION_BUNDLE_KIND,
+      version: "current",
+      archetype: "blank",
+      files: { "README.md": "# {{BRAND}}\n" },
+      binaryFiles: { "public/icon.png": "aGVsbG8=" },
+    }));
+    const root = await project({ sourceRef: "current", targetRef: "current", baseUrl: `${server.url}/{ref}` });
+    try {
+      await mkdir(join(root, "public"));
+      await writeFile(join(root, "README.md"), "# update-test\n");
+      await writeFile(join(root, "public", "icon.png"), Buffer.from("hello"));
+      process.chdir(root);
+      vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+      expect(await runUpdate([])).toBe(0);
+
+      const report = JSON.parse(await readFile(join(root, ".mantle", "update-report.json"), "utf8"));
+      expect(report.upstream.counts).toEqual({ differing: 0, missing_current: 0, removed_upstream: 0 });
+      expect(report.local.counts).toEqual({ differing: 0, missing_current: 0, removed_upstream: 0 });
+    } finally {
+      server.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("fails clearly on unknown placeholders, path escapes, and missing refs", async () => {
     const server = await serve((path) => {
       if (path.startsWith("/unknown/")) return JSON.stringify({ files: { "src/index.ts": "{{UNKNOWN}}" } });
       if (path.startsWith("/escape/")) return JSON.stringify({ files: { "../escape": "bad" } });
+      if (path.startsWith("/current-invalid/")) return JSON.stringify({
+        formatVersion: PROVISION_BUNDLE_FORMAT_VERSION,
+        kind: PROVISION_BUNDLE_KIND,
+        version: "current-invalid",
+        archetype: "blank",
+      });
       return null;
     });
     const root = await project({ sourceRef: "unknown", targetRef: "unknown", baseUrl: `${server.url}/{ref}` });
@@ -128,6 +173,7 @@ describe("mantle update", () => {
       for (const [ref, message] of [
         ["unknown", "unknown provision placeholder"],
         ["escape", "bundle path has an empty, dot, or parent segment"],
+        ["current-invalid", "bundle files are missing"],
         ["missing", "HTTP 404"],
       ]) {
         await setRefs(root, ref);
@@ -201,6 +247,7 @@ async function setRefs(root: string, ref: string): Promise<void> {
 
 function bundle(value: string, extra: Readonly<Record<string, string>> = {}): string {
   return JSON.stringify({
+    kind: PROVISION_BUNDLE_KIND,
     archetype: "blank",
     version: value,
     files: {

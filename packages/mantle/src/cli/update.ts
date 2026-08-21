@@ -6,22 +6,24 @@ import {
   readdirSync,
   writeFileSync,
 } from "node:fs";
-import { join, posix, resolve } from "node:path";
+import { join } from "node:path";
 import { cwd, stderr, stdout } from "node:process";
 import { parseArgs } from "node:util";
-import { safeTarget } from "../provision.js";
+import {
+  renderProvisionBundle,
+  safeTarget,
+  type LaunchValues,
+  type ProvisionBundle,
+} from "../provision.js";
 
 const REPORT_PATH = ".mantle/update-report.json";
 const IGNORE_DIRS = new Set([".git", "node_modules", ".wrangler", ".wrangler-test", "dist"]);
 const IGNORE_FILES = new Set([".mantle/features.json", ".mantle/launch-state.json", REPORT_PATH]);
 
 type JsonRecord = Record<string, unknown>;
-type Snapshot = ReadonlyMap<string, string>;
-
-interface ProvisionBundle {
-  readonly version?: string;
-  readonly files: Readonly<Record<string, string>>;
-}
+type SnapshotValue = string | Buffer;
+type Snapshot = ReadonlyMap<string, SnapshotValue>;
+type FetchedProvisionBundle = ProvisionBundle & { readonly files: Record<string, string> };
 
 export async function runUpdate(rawArgs: readonly string[]): Promise<number> {
   let values;
@@ -69,14 +71,10 @@ export async function runUpdate(rawArgs: readonly string[]): Promise<number> {
     const turnstileSiteKey = optionalStringField(launchState, "turnstile_site_key")
       ?? readWranglerStringVar(root, "TURNSTILE_SITE_KEY")
       ?? "";
-    const source = materializeBundle(
-      sourceBundle,
-      placeholders(launchState, archetype, sourceRef, timestamp, turnstileSiteKey),
-    );
-    const target = materializeBundle(
-      targetBundle,
-      placeholders(launchState, archetype, targetRef, timestamp, turnstileSiteKey),
-    );
+    const sourceLaunch = updateLaunchValues(launchState, archetype, sourceRef, timestamp, turnstileSiteKey);
+    const targetLaunch = updateLaunchValues(launchState, archetype, targetRef, timestamp, turnstileSiteKey);
+    const source = materializeBundle(sourceBundle, sourceLaunch);
+    const target = materializeBundle(targetBundle, targetLaunch);
     const upstream = compareSnapshots(source, target);
     const local = compareProject(root, source);
     const report = {
@@ -85,7 +83,7 @@ export async function runUpdate(rawArgs: readonly string[]): Promise<number> {
       source_ref: sourceRef,
       target_ref: targetRef,
       bundle_base_url: bundleBaseUrl,
-      bundle_version: targetBundle.version ?? null,
+      bundle_version: typeof targetBundle.version === "string" ? targetBundle.version : null,
       upstream,
       local,
       metadata_migration: metadataMigration(sourceRef, targetRef, bundleBaseUrl, registry),
@@ -123,7 +121,7 @@ async function fetchBundle(
   baseTemplate: string,
   ref: string,
   archetype: string,
-): Promise<ProvisionBundle> {
+): Promise<FetchedProvisionBundle> {
   let lastUrl = "";
   let lastStatus = 404;
   for (const candidate of bundleRefCandidates(ref)) {
@@ -138,16 +136,16 @@ async function fetchBundle(
     if (!response.ok && response.status === 404) continue;
     if (!response.ok) throw new Error(`failed to fetch ${url}: HTTP ${response.status}`);
     const value: unknown = await response.json();
-    if (!isRecord(value) || !isStringRecord(value.files)) {
+    if (!isRecord(value)) {
       throw new Error(`invalid provision bundle at ${url}`);
     }
-    if (typeof value.archetype === "string" && value.archetype !== archetype) {
-      throw new Error(`provision bundle at ${url} is ${value.archetype}, expected ${archetype}`);
+    if (value.formatVersion === undefined) {
+      if (!isStringRecord(value.files)) throw new Error(`invalid provision bundle at ${url}`);
+      if (typeof value.archetype === "string" && value.archetype !== archetype) {
+        throw new Error(`provision bundle at ${url} is ${value.archetype}, expected ${archetype}`);
+      }
     }
-    return {
-      version: typeof value.version === "string" ? value.version : undefined,
-      files: value.files,
-    };
+    return value as unknown as FetchedProvisionBundle;
   }
   throw new Error(`failed to fetch ${lastUrl}: HTTP ${lastStatus}`);
 }
@@ -157,21 +155,35 @@ function bundleRefCandidates(ref: string): readonly string[] {
 }
 
 function materializeBundle(
-  bundle: ProvisionBundle,
+  bundle: FetchedProvisionBundle,
+  updateLaunch: UpdateLaunchValues,
+): Snapshot {
+  if (bundle.formatVersion !== undefined) {
+    const rendered = renderProvisionBundle({ bundle, launch: updateLaunch.launch });
+    return new Map<string, SnapshotValue>([
+      ...rendered.files,
+      ...[...rendered.binaryFiles].map(([path, base64]) => [path, Buffer.from(base64, "base64")] as const),
+    ]);
+  }
+  return materializeLegacyBundle(bundle, legacyPlaceholders(updateLaunch));
+}
+
+function materializeLegacyBundle(
+  bundle: FetchedProvisionBundle,
   values: Readonly<Record<string, string>>,
 ): Snapshot {
-  const files = new Map<string, string>();
+  const files = new Map<string, SnapshotValue>();
   for (const [sourcePath, source] of Object.entries(bundle.files).sort(([a], [b]) => a.localeCompare(b))) {
     const path = safeTarget(sourcePath);
     if (files.has(path)) throw new Error(`duplicate provision bundle path: ${path}`);
-    let text = substitute(source, values);
+    let text = substituteLegacy(source, values);
     if (path === "wrangler.toml") text = materializeLegacyWranglerToml(text, values);
     files.set(path, text);
   }
   return files;
 }
 
-function substitute(source: string, values: Readonly<Record<string, string>>): string {
+function substituteLegacy(source: string, values: Readonly<Record<string, string>>): string {
   return source.replace(/\{\{([A-Z_][A-Z0-9_]*)\}\}/g, (token, key: string) => {
     const value = values[key];
     if (value === undefined) throw new Error(`unknown provision placeholder ${token}`);
@@ -228,13 +240,18 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function placeholders(
+interface UpdateLaunchValues {
+  readonly launch: LaunchValues;
+  readonly siteOwnerEmail: string;
+}
+
+function updateLaunchValues(
   launchState: JsonRecord,
   archetype: string,
   targetRef: string,
   timestamp: string,
   turnstileSiteKey: string,
-): Readonly<Record<string, string>> {
+): UpdateLaunchValues {
   const github = recordField(launchState, "github");
   const repo = recordField(launchState, "repo");
   const siteOwner = recordField(launchState, "site_owner");
@@ -250,25 +267,49 @@ function placeholders(
   const description = stringField(launchState, "description")
     ?? stringField(launchState, "purpose")
     ?? `${projectName} site.`;
+  const adminGithubLogin = optionalStringField(github, "admin_login")
+    ?? optionalStringField(siteOwner, "github_login")
+    ?? owner;
   return {
-    PROJECT_NAME: projectName,
-    ARCHETYPE: archetype,
-    BRAND: stringField(launchState, "brand") ?? projectName,
-    DESCRIPTION: description,
-    INSTALL_SUMMARY: stringField(launchState, "summary") ?? description,
-    LOCALES: JSON.stringify(locales.length ? locales : ["en"]),
-    CANONICAL_LOCALE: locale,
-    STARTER_REF: targetRef,
-    GITHUB_OWNER: owner,
-    ADMIN_GITHUB_LOGIN: optionalStringField(github, "admin_login")
-      ?? optionalStringField(siteOwner, "github_login")
-      ?? owner,
-    SITE_OWNER_EMAIL: optionalStringField(siteOwner, "email") ?? "",
-    AUTH_MODE: stringField(launchState, "authMode") ?? "self-managed",
-    SITE_URL: siteUrl,
-    TURNSTILE_SITE_KEY: turnstileSiteKey,
-    AFTER_LAUNCH_SKILL_URL: stringField(launchState, "after_launch_skill_url") ?? "",
-    INSTALL_TIMESTAMP: timestamp,
+    launch: {
+      projectName,
+      archetype,
+      brand: stringField(launchState, "brand") ?? projectName,
+      description,
+      installSummary: stringField(launchState, "summary") ?? description,
+      locales: locales.length ? locales : ["en"],
+      canonicalLocale: locale,
+      starterRef: targetRef,
+      githubOwner: owner,
+      adminGithubLogin,
+      authMode: stringField(launchState, "authMode") ?? "self-managed",
+      siteUrl,
+      turnstileSiteKey,
+      afterLaunchSkillUrl: stringField(launchState, "after_launch_skill_url") ?? "",
+      installTimestamp: timestamp,
+    },
+    siteOwnerEmail: optionalStringField(siteOwner, "email") ?? "",
+  };
+}
+
+function legacyPlaceholders({ launch, siteOwnerEmail }: UpdateLaunchValues): Readonly<Record<string, string>> {
+  return {
+    PROJECT_NAME: launch.projectName,
+    ARCHETYPE: launch.archetype,
+    BRAND: launch.brand,
+    DESCRIPTION: launch.description,
+    INSTALL_SUMMARY: launch.installSummary ?? launch.description,
+    LOCALES: JSON.stringify(launch.locales),
+    CANONICAL_LOCALE: launch.canonicalLocale,
+    STARTER_REF: launch.starterRef,
+    GITHUB_OWNER: launch.githubOwner ?? "",
+    ADMIN_GITHUB_LOGIN: launch.adminGithubLogin ?? "",
+    SITE_OWNER_EMAIL: siteOwnerEmail,
+    AUTH_MODE: launch.authMode,
+    SITE_URL: launch.siteUrl ?? "",
+    TURNSTILE_SITE_KEY: launch.turnstileSiteKey ?? "",
+    AFTER_LAUNCH_SKILL_URL: launch.afterLaunchSkillUrl ?? "",
+    INSTALL_TIMESTAMP: launch.installTimestamp,
   };
 }
 
@@ -290,7 +331,7 @@ function compareSnapshots(current: Snapshot, upstream: Snapshot): DiffReport {
     if (IGNORE_FILES.has(path)) continue;
     const existing = current.get(path);
     if (existing === undefined) missingCurrent.push({ path, upstream_sha256: sha256(source) });
-    else if (existing !== source) {
+    else if (sha256(existing) !== sha256(source)) {
       differing.push({ path, current_sha256: sha256(existing), upstream_sha256: sha256(source) });
     }
   }
@@ -389,7 +430,7 @@ function writeReport(root: string, source: string): void {
   writeFileSync(path, source, "utf8");
 }
 
-function sha256(value: string | Buffer): string {
+function sha256(value: SnapshotValue): string {
   return createHash("sha256").update(value).digest("hex");
 }
 

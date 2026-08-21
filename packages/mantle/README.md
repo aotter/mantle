@@ -105,7 +105,10 @@ local project, then writes `.mantle/update-report.json`. It never applies the
 diff. Configure `.mantle/features.json` `registry.bundleBaseUrl` with a URL
 containing `{ref}`, or pass `--bundle-base-url` for the alpha.63 bridge. The
 report carries the only supported metadata migration; review and apply it
-after porting selected upstream changes.
+after porting selected upstream changes. Format-versioned bundles use the same
+strict renderer as `mantle create`; an invalid current launch state fails
+instead of producing a guessed diff. Older bundles without `formatVersion`
+retain a read-only compatibility renderer.
 
 ## Conventional Cloudflare Worker
 

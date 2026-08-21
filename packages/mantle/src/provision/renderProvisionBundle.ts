@@ -24,6 +24,7 @@ import {
 } from "@aotter/mantle-spec";
 
 export const PROVISION_BUNDLE_KIND = "mantle-provision-bundle";
+export const PROVISION_BUNDLE_FORMAT_VERSION = 1;
 
 /** Stable across releases: hosts map these to their own error surfaces. */
 export type ProvisionErrorCode =
@@ -66,6 +67,7 @@ export const DEFAULT_PROVISION_LIMITS: ProvisionLimits = {
 export interface ProvisionBundle {
   readonly kind?: string;
   readonly version?: string;
+  readonly formatVersion?: number;
   readonly archetype?: string;
   readonly files?: Record<string, string>;
   readonly binaryFiles?: Record<string, string>;
@@ -260,6 +262,9 @@ function validateBundle(
   }
   if (typeof bundle.version !== "string" || bundle.version.length === 0) {
     fail("bundle_invalid", "bundle version is missing.");
+  }
+  if (bundle.formatVersion !== undefined && bundle.formatVersion !== PROVISION_BUNDLE_FORMAT_VERSION) {
+    fail("bundle_invalid", `unsupported bundle format version: ${String(bundle.formatVersion)}.`);
   }
   if (bundle.archetype !== archetype) {
     fail("bundle_archetype_mismatch", `bundle is ${String(bundle.archetype)}, expected ${archetype}.`);
