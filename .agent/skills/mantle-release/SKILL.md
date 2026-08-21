@@ -8,14 +8,14 @@ release recovery, or an explicit Landing release caused by Core.
 Before changing a version or running the controller, read completely:
 
 - `docs/release-process.md`
-- `.github/release.yml`
 - root and workspace `package.json` files
 - all four agent plugin manifests
 - `.agents/plugins/marketplace.json`
 - `.github/workflows/release.yml`
 
-Inspect the exact `mantle-starters` commit intended for the release. Inspect
-Landing only when `deploy_landing=true` is explicitly in scope.
+Inspect the exact `mantle-starters` and `mantle-landing` commits pinned by the
+controller. Inspect Landing deployment configuration only when
+`deploy_landing=true` is explicitly in scope.
 
 When changing release automation, follow `docs/release-process.md` section
 "Changing release automation" before editing workflow code.
@@ -34,8 +34,9 @@ For the current pre-v0.1 alpha cadence:
 
 The controller gates source and exact-packed Starter before tagging Core,
 publishes and verifies the registries, waits for the Starter's exact tagged
-merge, tests that tag against the public registry, then creates the Core
-GitHub Release. Starter does not promote `main`, backport, or dispatch Landing.
+merge, then tests the Starter, clean-created projects, and reviewed Landing
+consumer before public channel promotion and the Core GitHub Release. Starter
+does not promote `main`, backport, or dispatch Landing.
 
 ## Prepare the release PR
 
@@ -69,11 +70,14 @@ are proven:
 4. Starter's canonical release PR passes the named gates, merges into
    `develop`, and its tag resolves to that recorded merge.
 5. The frozen Starter tag passes the public-registry bundle gate.
-6. The Core GitHub Release exists.
-7. Landing was dispatched only when the input was explicitly true.
+6. Clean Blank and multilingual Transaction projects install and pass checks.
+7. The reviewed Landing consumer passes against the exact candidate.
+8. The Core GitHub Release exists.
+9. Landing was dispatched only when the input was explicitly true.
 
-Then clone the Starter tag fresh, run its checks, and materialize a typed
-project. Verify repo-local Mantle skills and the intended runtime surface.
+Then give a coding agent with no Mantle checkout only the generated instructions
+and confirm one project reaches a running Worker with the version-matched
+repo-local skills and intended runtime surface.
 
 ## Recovery
 
