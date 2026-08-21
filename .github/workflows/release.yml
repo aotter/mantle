@@ -2,8 +2,8 @@
 #
 # Manually dispatched from the merged release commit. It owns the order:
 #
-#   source gates -> exact packed Starter -> Core tag -> registries ->
-#   Starter tag -> published-registry Starter gate -> GitHub release
+#   source gates -> exact packed Starter -> Core tag -> candidate registries ->
+#   Starter tag -> published-registry Starter gate -> public channels -> release
 #
 # Duplicate dispatches verify the same immutable state and skip existing
 # registry/tag/release mutations. Landing stays untouched by default.
@@ -389,49 +389,6 @@ jobs:
               }
           done
 
-      - name: Promote npmjs channel tags
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          CORE_SHA: ${{ steps.ver.outputs.core_sha }}
-          VERSION: ${{ steps.ver.outputs.version }}
-          CHANNEL: ${{ steps.ver.outputs.npm_tag }}
-        run: |
-          set -euo pipefail
-          NPMRC="$RUNNER_TEMP/npmjs-promote.npmrc"
-          trap 'rm -f "$NPMRC"' EXIT
-          {
-            echo "registry=https://registry.npmjs.org/"
-            echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}"
-            echo "always-auth=true"
-          } > "$NPMRC"
-
-          promote() {
-            pkg="$1"
-            tag="$2"
-            current=$(npm view "$pkg" "dist-tags.$tag" --userconfig "$NPMRC" \
-              --registry https://registry.npmjs.org)
-            if [ "$current" = "$VERSION" ]; then
-              echo "$pkg@$VERSION already owns npmjs dist-tag $tag; no-op."
-              return
-            fi
-            if [ -n "$current" ]; then
-              decision=$(node scripts/release-tag-order.mjs "$CORE_SHA" "$current")
-              [ "$decision" != preserve ] || {
-                echo "Preserving newer npmjs dist-tag $pkg@$tag at $current."
-                return
-              }
-            fi
-            npm dist-tag add "$pkg@$VERSION" "$tag" --userconfig "$NPMRC" \
-              --registry https://registry.npmjs.org
-          }
-
-          for pkg in $PKG_NAMES; do
-            promote "$pkg" "$CHANNEL"
-            if [[ "$VERSION" == 0.0.* && "$CHANNEL" != latest ]]; then
-              promote "$pkg" latest
-            fi
-          done
-
       - name: Mirror to GitHub Packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -476,52 +433,6 @@ jobs:
             node scripts/verify-release-artifact.mjs \
               "$gpr_tgz" "$remote_work/$(basename "$gpr_tgz")"
             rm -rf "$remote_work"
-          done
-
-      - name: Promote GitHub Packages channel tags
-        env:
-          NODE_AUTH_TOKEN: ${{ github.token }}
-          CORE_SHA: ${{ steps.ver.outputs.core_sha }}
-          VERSION: ${{ steps.ver.outputs.version }}
-          CHANNEL: ${{ steps.ver.outputs.npm_tag }}
-        run: |
-          set -euo pipefail
-          NPMRC="$RUNNER_TEMP/github-packages-promote.npmrc"
-          trap 'rm -f "$NPMRC"' EXIT
-          {
-            echo "@aotter:registry=https://npm.pkg.github.com"
-            echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}"
-            echo "always-auth=true"
-          } > "$NPMRC"
-          gpr_npm() {
-            npm --userconfig "$NPMRC" \
-              --registry https://npm.pkg.github.com \
-              --@aotter:registry=https://npm.pkg.github.com "$@"
-          }
-
-          promote() {
-            pkg="$1"
-            tag="$2"
-            current=$(gpr_npm view "$pkg" "dist-tags.$tag")
-            if [ "$current" = "$VERSION" ]; then
-              echo "$pkg@$VERSION already owns GitHub Packages dist-tag $tag; no-op."
-              return
-            fi
-            if [ -n "$current" ]; then
-              decision=$(node scripts/release-tag-order.mjs "$CORE_SHA" "$current")
-              [ "$decision" != preserve ] || {
-                echo "Preserving newer GitHub Packages dist-tag $pkg@$tag at $current."
-                return
-              }
-            fi
-            gpr_npm dist-tag add "$pkg@$VERSION" "$tag"
-          }
-
-          for pkg in $PKG_NAMES; do
-            promote "$pkg" "$CHANNEL"
-            if [[ "$VERSION" == 0.0.* && "$CHANNEL" != latest ]]; then
-              promote "$pkg" latest
-            fi
           done
 
       - name: Dispatch Starter release worker
@@ -582,6 +493,95 @@ jobs:
           pnpm check:starter-locks
           pnpm check:provision-bundle
           pnpm check:packed
+
+      - name: Promote npmjs channel tags
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          CORE_SHA: ${{ steps.ver.outputs.core_sha }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          CHANNEL: ${{ steps.ver.outputs.npm_tag }}
+        run: |
+          set -euo pipefail
+          NPMRC="$RUNNER_TEMP/npmjs-promote.npmrc"
+          trap 'rm -f "$NPMRC"' EXIT
+          {
+            echo "registry=https://registry.npmjs.org/"
+            echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}"
+            echo "always-auth=true"
+          } > "$NPMRC"
+
+          promote() {
+            pkg="$1"
+            tag="$2"
+            current=$(npm view "$pkg" "dist-tags.$tag" --userconfig "$NPMRC" \
+              --registry https://registry.npmjs.org)
+            if [ "$current" = "$VERSION" ]; then
+              echo "$pkg@$VERSION already owns npmjs dist-tag $tag; no-op."
+              return
+            fi
+            if [ -n "$current" ]; then
+              decision=$(node scripts/release-tag-order.mjs "$CORE_SHA" "$current")
+              [ "$decision" != preserve ] || {
+                echo "Preserving newer npmjs dist-tag $pkg@$tag at $current."
+                return
+              }
+            fi
+            npm dist-tag add "$pkg@$VERSION" "$tag" --userconfig "$NPMRC" \
+              --registry https://registry.npmjs.org
+          }
+
+          for pkg in $PKG_NAMES; do
+            promote "$pkg" "$CHANNEL"
+            if [[ "$VERSION" == 0.0.* && "$CHANNEL" != latest ]]; then
+              promote "$pkg" latest
+            fi
+          done
+
+      - name: Promote GitHub Packages channel tags
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+          CORE_SHA: ${{ steps.ver.outputs.core_sha }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          CHANNEL: ${{ steps.ver.outputs.npm_tag }}
+        run: |
+          set -euo pipefail
+          NPMRC="$RUNNER_TEMP/github-packages-promote.npmrc"
+          trap 'rm -f "$NPMRC"' EXIT
+          {
+            echo "@aotter:registry=https://npm.pkg.github.com"
+            echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}"
+            echo "always-auth=true"
+          } > "$NPMRC"
+          gpr_npm() {
+            npm --userconfig "$NPMRC" \
+              --registry https://npm.pkg.github.com \
+              --@aotter:registry=https://npm.pkg.github.com "$@"
+          }
+
+          promote() {
+            pkg="$1"
+            tag="$2"
+            current=$(gpr_npm view "$pkg" "dist-tags.$tag")
+            if [ "$current" = "$VERSION" ]; then
+              echo "$pkg@$VERSION already owns GitHub Packages dist-tag $tag; no-op."
+              return
+            fi
+            if [ -n "$current" ]; then
+              decision=$(node scripts/release-tag-order.mjs "$CORE_SHA" "$current")
+              [ "$decision" != preserve ] || {
+                echo "Preserving newer GitHub Packages dist-tag $pkg@$tag at $current."
+                return
+              }
+            fi
+            gpr_npm dist-tag add "$pkg@$VERSION" "$tag"
+          }
+
+          for pkg in $PKG_NAMES; do
+            promote "$pkg" "$CHANNEL"
+            if [[ "$VERSION" == 0.0.* && "$CHANNEL" != latest ]]; then
+              promote "$pkg" latest
+            fi
+          done
 
       - name: Create GitHub release
         env:

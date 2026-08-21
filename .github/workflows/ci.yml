@@ -49,6 +49,9 @@ jobs:
       - name: Check generated plugin manifests
         run: pnpm run check:plugin-manifests
 
+      - name: Check release controller
+        run: pnpm run check:release
+
       - name: Check packed Core and optional product consumers
         run: pnpm run check:optional-packages
 

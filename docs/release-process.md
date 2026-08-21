@@ -16,10 +16,11 @@ The controller owns this order:
 ```text
 Core source + exact-packed Starter gates
   -> Core tag
-  -> npmjs + GitHub Packages
+  -> npmjs + GitHub Packages candidate packages (`mantle-release`)
   -> Starter release worker
   -> immutable Starter tag
   -> public-registry Starter gate
+  -> npmjs + GitHub Packages public channel promotion
   -> Core GitHub Release
   -> optional Landing worker
 ```
@@ -155,11 +156,12 @@ Before creating the Core tag, the controller proves:
 - a fresh version is unused across npmjs, GitHub Packages, and Starter tags;
 - the pinned Starter commit is still the remote `develop` tip.
 
-After npm publication, it compares each public registry integrity value with
-the locally packed tarball, rejects leaked `workspace:*` dependencies, waits
-for the Starter tag, checks that tag's exact Core/base provenance, installs its
-frozen locks from the public registry, and reruns the Starter bundle gates.
-Only then does it create the Core GitHub Release.
+After candidate publication under `mantle-release`, it compares each public
+registry integrity value with the locally packed tarball, rejects leaked
+`workspace:*` dependencies, waits for the Starter tag, checks that tag's exact
+Core/base provenance, installs its frozen locks from the public registry, and
+reruns the Starter bundle gates. Only then does it promote the public npmjs and
+GitHub Packages channel tags and create the Core GitHub Release.
 
 ## Idempotency and recovery
 

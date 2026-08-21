@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync, spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 if (process.argv[2] === "--self-test") {
   const ancestor = (left, right) => left === "old" && right === "new";
@@ -8,7 +9,29 @@ if (process.argv[2] === "--self-test") {
   assert.equal(decide("new", "old", ancestor), "advance");
   assert.equal(decide("old", "new", ancestor), "preserve");
   assert.throws(() => decide("left", "right", ancestor), /not comparable/);
-  console.log("release tag order self-test passed");
+
+  const workflow = readFileSync(
+    new URL("../.github/workflows/release.yml", import.meta.url),
+    "utf8",
+  );
+  let previous = -1;
+  for (const step of [
+    "Publish to npmjs",
+    "Mirror to GitHub Packages",
+    "Dispatch Starter release worker",
+    "Wait for immutable Starter tag",
+    "Validate released Starter provenance",
+    "Test released Starter against the public registry",
+    "Promote npmjs channel tags",
+    "Promote GitHub Packages channel tags",
+    "Create GitHub release",
+  ]) {
+    const current = workflow.indexOf(`- name: ${step}`);
+    assert.ok(current > previous, `${step} is missing or out of order`);
+    previous = current;
+  }
+
+  console.log("release self-test passed");
   process.exit(0);
 }
 
