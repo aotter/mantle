@@ -25,7 +25,9 @@
 <p align="center">
   <a href="#start-in-one-command">Quick start</a>
   &middot;
-  <a href="#a-custom-mcp-server-without-building-the-server">Why Mantle</a>
+  <a href="#a-custom-mcp-server-without-building-the-server">Features</a>
+  &middot;
+  <a href="#one-manifest-one-contract">Manifest</a>
   &middot;
   <a href="#packages">Packages</a>
   &middot;
@@ -57,12 +59,10 @@ npx -y @aotter/mantle@alpha create transaction ./my-shop \
   --locales en,zh-TW
 ```
 
-That resolves the starter tag matching the CLI version, writes the project, and
-stops — nothing is installed, committed, or deployed. Open the generated
-`AGENTS.md`; it carries the install and first-run steps for that exact version.
+From there, your coding agent can take over by following the generated
+`AGENTS.md`.
 
-Or hand the whole job to your coding agent — the CLI selects the matching
-bundle and instructions, so nothing here names a version:
+Or, send your agent this prompt:
 
 ```text
 Create a Mantle transaction site in ./my-shop for a small tea storefront in
@@ -73,7 +73,63 @@ then follow the generated AGENTS.md to install it and get it running locally.
 
 Types: `blank`, `presence`, `intake`, `publication`, `transaction`,
 `reservation` — see [the table below](#ready-to-use-starters). Prefer embedding
-Mantle in an application you already have? The manifest contract is next.
+Mantle in an application you already have? See the
+[manifest contract](#one-manifest-one-contract).
+
+## A custom MCP server, without building the server
+
+Views become read tools. Procedures backed by your own handlers become typed
+action tools when exposed by MCP Triggers. At `/mcp/staff`, authorized teammates
+can operate queues, Slack, email, ERP, CRM, or anything else your handler can
+reach—without maintaining a second MCP server or schema.
+
+## Agent-discoverable and i18n-ready, built in
+
+Enable the optional Web surface and every public page gets a predictable path
+and Markdown mirror in every locale:
+
+```text
+/en/posts/hello
+/en/posts/hello.md
+/zh-tw/posts/hello
+```
+
+Mantle also emits `llms.txt`, sitemap, canonical links, hreflang, JSON-LD, and
+social metadata from the same published state.
+
+## Ready-to-use starters
+
+Start from a working product shape, then replace its model, copy, and handlers.
+
+| Starter | Pre-made logic | Good for |
+|---|---|---|
+| Blank | Headless Worker and Mantle wiring, with no product assumptions. | Existing apps and fully custom systems. |
+| Presence | Homepage, contact capture, optional Turnstile, and notification hook. | Company sites, portfolios, and landing pages. |
+| Intake | Branching multi-step intake, saved submissions, optional Turnstile, and notification hook. | RSVP, applications, onboarding, and lead qualification. |
+| Publication | Localized posts, publishing workflow, seeded homepage, and published-post View. | Blogs, newsrooms, magazines, and changelogs. |
+| Transaction | Localized catalog, cart, inventory reservation, order expiry, staff restocking, and simulated payment. | Small storefronts and commerce prototypes. |
+| Reservation | Public request capture and a recent-requests staff View, with manual confirmation. | Restaurants, appointments, tours, and events. |
+
+Create any of them with [`mantle create`](#start-in-one-command), or
+[browse the sources](https://github.com/aotter/mantle-starters). Membership and
+Community are coming soon and are not offered by `create`.
+
+## Publishing and operations in one Admin
+
+Publishing content gets draft, publish, unpublish, and archive. Operational
+records such as orders, inventory, and reservations stay live without a fake
+publishing state machine. Add the optional Admin API and React SPA when humans
+need the same controls; editorial review and approval are coming soon.
+
+![Mantle Admin connects staff agents through MCP while keeping publishing content, live records, reports, and human operators in one console.](docs/assets/mantle-admin-operations.png)
+
+## Open source, host-owned, ready to ship
+
+Apache-2.0 Core runs inside your process, with the raw Runtime and handler
+context available for transactions, queues, media, and platform capabilities.
+Use Bun, Vercel, Cloudflare, or your own adapter. Small Cloudflare sites can fit
+within its [Workers](https://developers.cloudflare.com/workers/platform/pricing/)
+and [D1](https://developers.cloudflare.com/d1/platform/pricing/) free limits.
 
 ## One manifest, one contract
 
@@ -86,6 +142,7 @@ Mantle in an application you already have? The manifest contract is next.
    metadata:
      name: slots
    spec:
+     title: Slots
      lifecycle: operational
      schema:
        type: object
@@ -172,61 +229,6 @@ Mantle in an application you already have? The manifest contract is next.
    handler. The Trigger becomes an MCP tool when mounted by an MCP-capable
    adapter. Platform adapters own lifecycle policy, while `mantle.runtime`
    keeps lower-level capabilities within reach.
-
-## A custom MCP server, without building the server
-
-Views become read tools. Procedures backed by your own handlers become typed
-action tools when exposed by MCP Triggers. At `/mcp/staff`, authorized teammates
-can operate queues, Slack, email, ERP, CRM, or anything else your handler can
-reach—without maintaining a second MCP server or schema.
-
-## Agent-discoverable and i18n-ready, built in
-
-Enable the optional Web surface and every public page gets a predictable path
-and Markdown mirror in every locale:
-
-```text
-/en/posts/hello
-/en/posts/hello.md
-/zh-tw/posts/hello
-```
-
-Mantle also emits `llms.txt`, sitemap, canonical links, hreflang, JSON-LD, and
-social metadata from the same published state.
-
-## Ready-to-use starters
-
-Start from a working product shape, then replace its model, copy, and handlers.
-
-| Starter | Pre-made logic | Good for |
-|---|---|---|
-| Blank | Headless Worker and Mantle wiring, with no product assumptions. | Existing apps and fully custom systems. |
-| Presence | Homepage, contact capture, optional Turnstile, and notification hook. | Company sites, portfolios, and landing pages. |
-| Intake | Branching multi-step intake, saved submissions, optional Turnstile, and notification hook. | RSVP, applications, onboarding, and lead qualification. |
-| Publication | Localized posts, publishing workflow, seeded homepage, and published-post View. | Blogs, newsrooms, magazines, and changelogs. |
-| Transaction | Localized catalog, cart, inventory reservation, order expiry, staff restocking, and simulated payment. | Small storefronts and commerce prototypes. |
-| Reservation | Public request capture and a recent-requests staff View, with manual confirmation. | Restaurants, appointments, tours, and events. |
-
-Create any of them with [`mantle create`](#start-in-one-command), or
-[browse the sources](https://github.com/aotter/mantle-starters). Membership and
-Community are coming soon and are not offered by `create`.
-
-## Publishing and operations in one Admin
-
-Publishing content gets draft, publish, unpublish, and archive. Operational
-records such as orders, inventory, and reservations stay live without a fake
-publishing state machine. Add the optional Admin API and React SPA when humans
-need the same controls; editorial review and approval are coming soon.
-
-![Mantle Admin connects staff agents through MCP while keeping publishing content, live records, reports, and human operators in one console.](docs/assets/mantle-admin-operations.png)
-
-## Open source, host-owned, ready to ship
-
-Apache-2.0 Core runs inside your process, with the raw Runtime and handler
-context available for transactions, queues, media, and platform capabilities.
-Use Bun, Vercel, Cloudflare, or your own adapter. Small Cloudflare sites can fit
-within its [Workers](https://developers.cloudflare.com/workers/platform/pricing/)
-and [D1](https://developers.cloudflare.com/d1/platform/pricing/) free limits.
 
 ## Packages
 
