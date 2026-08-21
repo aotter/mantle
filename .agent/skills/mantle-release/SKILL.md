@@ -8,6 +8,7 @@ release recovery, or an explicit Landing release caused by Core.
 Before changing a version or running the controller, read completely:
 
 - `docs/release-process.md`
+- `.github/release.yml`
 - root and workspace `package.json` files
 - all four agent plugin manifests
 - `.agents/plugins/marketplace.json`
