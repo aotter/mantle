@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `mantle` CLI dispatcher. Subcommands route to their implementing
+ * `mantle-spec` CLI dispatcher. Subcommands route to their implementing
  * module under `infrastructure/cli/`.
  */
 import { argv, exit, stderr, stdout } from "node:process";
@@ -12,9 +12,9 @@ import { run as runEmitTypes } from "./EmitTypesCommand.js";
 async function main(): Promise<number> {
   const sub = argv[2];
   if (!sub || sub === "--help" || sub === "-h") {
-    stdout.write(`mantle - SDK authoring CLI
+    stdout.write(`mantle-spec - manifest authoring CLI
 
-Usage: mantle <subcommand> [options]
+Usage: mantle-spec <subcommand> [options]
 
 Subcommands:
   validate       Static manifest + handler-source validation (Loop 1)
@@ -22,7 +22,7 @@ Subcommands:
   emit-openapi   Emit OpenAPI 3.1 from HTTP Triggers + View REST routes
   emit-types     Emit TypeScript .d.ts from Schemas / Procedures / Views
 
-Run \`mantle <subcommand> --help\` for subcommand details.
+Run \`mantle-spec <subcommand> --help\` for subcommand details.
 `);
     return sub ? 0 : 2;
   }

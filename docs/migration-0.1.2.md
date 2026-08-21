@@ -11,6 +11,9 @@ Admin UI, Bun, Vercel, and Cloudflare are selected separately.
 | `createCmsRuntime({ manifests, db })` | `bootMantleRuntime({ plan, storage })`, or explicit prepare then `createMantleRuntime({ prepared })` |
 | `CmsRuntime.db` / `entryReader` | keep the application DB handle; use `runtime.entries` for Mantle reads |
 | generated `manifest`, `site.ts`, `types.d.ts` | generated `plan`, `createMantle`, `bindMantle`, and types in `mantle.ts` |
+| `mantle introspect` | install `@aotter/mantle-spec` directly and run `mantle-spec introspect` |
+| `mantle emit-types` | use `mantle generate`; for raw declarations, run `mantle-spec emit-types` |
+| generated `.agent/skills/` | generated `.agents/skills/`; legacy user files are left untouched |
 | `bindMantleSite` / string-keyed Views | `bindMantle(runtime)` and generated lower-camel properties |
 | `createCmsRef` / `CmsConfig` | `createMantleRuntimeRef` / `MantleCloudflareConfig` |
 | `mountServerEndpoints` | explicitly compose `mountRuntimeEndpoints` and optional `mountAdmin` |

@@ -303,14 +303,15 @@ The umbrella provides one `mantle` command set:
 | `mantle generate` | Compile manifests into a sealed plan and typed runtime module. |
 | `mantle generate --check` | Fail without writing when generated code is stale. |
 | `mantle validate` | Validate manifests and handler-source references. |
-| `mantle introspect` | Print the parsed manifest tree as JSON. |
 | `mantle emit-openapi` | Emit OpenAPI 3.1 from HTTP Triggers and View routes. |
-| `mantle emit-types` | Emit TypeScript declarations from Schemas, Procedures, and Views. |
 | `mantle skills` | Project version-matched Core skills into the consumer repository. |
 | `mantle update --ref <ref>` | Compare local work with an immutable provision bundle; apply nothing. |
 
 Run commands through the project's package manager, for example
 `pnpm exec mantle generate`.
+
+Advanced manifest primitives remain in the direct `@aotter/mantle-spec`
+package: `mantle-spec introspect` and `mantle-spec emit-types`.
 
 `generate` writes one `.mantle/generated/mantle.ts` module containing the
 sealed plan, generated types, `createMantle`, and `bindMantle`. It does not
