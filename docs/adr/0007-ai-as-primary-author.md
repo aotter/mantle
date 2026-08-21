@@ -252,9 +252,9 @@ Concrete artifacts today:
 - Version-matched Core skills ship inside `@aotter/mantle`, through the Mantle
   agent plugin, and through exact-byte repo-local projections written by
   `mantle skills`.
-- The umbrella `mantle` CLI exposes `validate`, `generate`, `skills`, `update`,
-  `introspect`, `emit-openapi`, and `emit-types`; direct spec installs expose
-  the authoring subset through `mantle-spec`.
+- The umbrella `mantle` CLI exposes `create`, `generate`, `validate`,
+  `emit-openapi`, `update`, and `skills`; direct spec installs expose advanced
+  `introspect` and `emit-types` primitives through `mantle-spec`.
 - `@aotter/mantle/runtime/testing` and `mantle-harness` expose the measured
   SQLite/index and live-HTTP checks described in Loop 2.
 

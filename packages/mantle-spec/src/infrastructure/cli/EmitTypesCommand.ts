@@ -41,9 +41,9 @@ export function parseArgs(rawArgs: ReadonlyArray<string>): ParseResult {
 }
 
 function printHelp(): void {
-  stdout.write(`mantle emit-types — emit TypeScript .d.ts from manifests
+  stdout.write(`mantle-spec emit-types — emit TypeScript .d.ts from manifests
 
-Usage: mantle emit-types [options]
+Usage: mantle-spec emit-types [options]
 
 Options:
   --manifests <dir>   Directory containing YAML manifests (default: ./manifests)

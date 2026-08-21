@@ -28,9 +28,9 @@ export function parseArgs(rawArgs: ReadonlyArray<string>): ParseResult {
 }
 
 function printHelp(): void {
-  stdout.write(`mantle introspect — dump parsed manifest tree as JSON
+  stdout.write(`mantle-spec introspect — dump parsed manifest tree as JSON
 
-Usage: mantle introspect [--manifests <dir>]
+Usage: mantle-spec introspect [--manifests <dir>]
 
 Options:
   --manifests <dir>   Directory containing YAML manifests (default: ./manifests)

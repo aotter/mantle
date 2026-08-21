@@ -2,8 +2,6 @@
 import { argv, stderr, stdout } from "node:process";
 import {
   runEmitOpenapi,
-  runEmitTypes,
-  runIntrospect,
   runValidate,
 } from "@aotter/mantle-spec/cli";
 import { runCreate } from "./create.js";
@@ -24,9 +22,7 @@ Subcommands:
   skills         Project version-matched Core skills
   update         Compare local work with provision bundles
   validate       Static manifest + handler-source validation
-  introspect     Dump parsed manifest tree as JSON
   emit-openapi   Emit OpenAPI 3.1 from Triggers + Views
-  emit-types     Emit TypeScript declarations from manifests
 `);
     return command ? 0 : 2;
   }
@@ -42,12 +38,8 @@ Subcommands:
       return runUpdate(rest);
     case "validate":
       return runValidate(rest);
-    case "introspect":
-      return runIntrospect(rest);
     case "emit-openapi":
       return runEmitOpenapi(rest);
-    case "emit-types":
-      return runEmitTypes(rest);
     default:
       stderr.write(`Unknown subcommand: ${command}\n`);
       return 2;
