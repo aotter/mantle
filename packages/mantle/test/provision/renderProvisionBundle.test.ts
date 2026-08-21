@@ -144,6 +144,10 @@ describe("renderProvisionBundle — bundle failures", () => {
     expectFailure("bundle_archetype_mismatch", { ...clone(GOLDEN), archetype: "presence" });
   });
 
+  it("rejects an unsupported explicit bundle format", () => {
+    expectFailure("bundle_invalid", { ...clone(GOLDEN), formatVersion: 2 });
+  });
+
   it("rejects non-canonical base64", () => {
     const bundle = clone(GOLDEN);
     (bundle.binaryFiles as Record<string, string>)["public/site-icon.png"] = "aGVsbG8";
