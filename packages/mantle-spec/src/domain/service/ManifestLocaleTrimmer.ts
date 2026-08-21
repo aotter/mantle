@@ -61,6 +61,7 @@ function localeMap(node: unknown): LocaleMapNode | null {
   const map = node as unknown as LocaleMapNode;
   if (map.items.length === 0) return null;
   for (const item of map.items) {
+    if (scalarValue(item.key) === "type") return null;
     if (typeof (item.value as { value?: unknown } | null)?.value !== "string") return null;
     if (!canonicalLocale(item.key)) return null;
   }
