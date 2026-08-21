@@ -802,6 +802,14 @@ describe("getProviderAccessTokenForRequest", () => {
 });
 
 describe("buildOAuthProviderOptions", () => {
+  it("rejects multiple audiences on the vulnerable Better Auth 1.6 line", () => {
+    expect(() => buildOAuthProviderOptions({
+      loginPage: "/sign-in",
+      consentPage: "/consent",
+      validAudiences: ["https://api.example.test", "https://admin.example.test"],
+    })).toThrow(/at most one audience/u);
+  });
+
   it("maps and defensively copies explicit valid JWT audiences", () => {
     const validAudiences = ["https://api.example.test"];
     const options = buildOAuthProviderOptions({
