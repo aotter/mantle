@@ -162,8 +162,11 @@ After candidate publication under `mantle-release`, it compares each public
 registry integrity value with the locally packed tarball, rejects leaked
 `workspace:*` dependencies, waits for the Starter tag, checks that tag's exact
 Core/base provenance, installs its frozen locks from the public registry, and
-reruns the Starter bundle gates. Only then does it promote the public npmjs and
-GitHub Packages channel tags and create the Core GitHub Release.
+reruns the Starter bundle gates. It then creates clean Blank and multilingual
+Transaction projects through the registry candidate, frozen-installs and checks
+both, and runs the reviewed Landing consumer against the exact packed candidate.
+Only then does it promote the public npmjs and GitHub Packages channel tags and
+create the Core GitHub Release.
 
 ## Idempotency and recovery
 
@@ -221,12 +224,14 @@ for p in \
 done
 ```
 
-Clone the exact Starter tag into a fresh directory, install with frozen locks,
-run its bundle gates, and materialize at least one typed project. Confirm the
-generated project contains version-matched repo-local Mantle skills and the
-expected typed runtime surface. `blank` remains headless and contains no Kiwa;
-a typed Starter revision may retain its replaceable offline UI palette, but
-runtime code must not import it.
+The controller already creates and checks clean Blank and multilingual
+Transaction projects. For 0.1.2 release acceptance, give a coding agent with no
+Mantle checkout or repository knowledge only the generated instructions and
+confirm it reaches a running Worker. This is one manual clean-room acceptance,
+not a nondeterministic CI framework. Confirm the generated project contains
+version-matched repo-local Mantle skills and the expected typed runtime surface.
+`blank` remains headless and contains no Kiwa; a typed Starter revision may
+retain its replaceable offline UI palette, but runtime code must not import it.
 
 If `deploy_landing=false`, also verify that no Landing release dispatch or
 deployment was started.

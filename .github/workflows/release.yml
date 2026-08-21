@@ -3,7 +3,7 @@
 # Manually dispatched from the merged release commit. It owns the order:
 #
 #   source gates -> exact packed Starter -> Core tag -> candidate registries ->
-#   Starter tag -> published-registry Starter gate -> public channels -> release
+#   Starter tag -> clean-room create + Starter/Landing gates -> public channels -> release
 #
 # Duplicate dispatches verify the same immutable state and skip existing
 # registry/tag/release mutations. Landing stays untouched by default.
@@ -38,6 +38,7 @@ jobs:
     # Single source of truth for the nine public packages, in dependency order.
     # Names are read from these package.json files during packing.
     env:
+      LANDING_SHA: 4381354dd25d5d94f4096cf3e55a4cb9eecbf3ad
       STARTER_SHA: 51a15eca7f5fe6d2ef4eec27f15a6e2eb5cd745b
       PKG_DIRS: >-
         packages/mantle-spec
@@ -493,6 +494,34 @@ jobs:
           pnpm check:starter-locks
           pnpm check:provision-bundle
           pnpm check:packed
+
+      - name: Create clean projects with the registry candidate
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          ROOT=$(mktemp -d)
+          npx -y "@aotter/mantle@$VERSION" create blank "$ROOT/blank" --brand "Release Smoke"
+          npx -y "@aotter/mantle@$VERSION" create transaction "$ROOT/transaction" \
+            --brand "Release Smoke" --locales en,zh-TW
+          for PROJECT in blank transaction; do
+            corepack pnpm@9.15.0 --dir "$ROOT/$PROJECT" install --frozen-lockfile
+            corepack pnpm@9.15.0 --dir "$ROOT/$PROJECT" check
+          done
+
+      - name: Check out the reviewed Landing consumer
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: aotter/mantle-landing
+          ref: ${{ env.LANDING_SHA }}
+          path: .published-consumer/mantle-landing
+          persist-credentials: false
+
+      - name: Test the exact candidate in Landing
+        run: >-
+          node scripts/check-packed-consumer.mjs
+          --project .published-consumer/mantle-landing --
+          pnpm check
 
       - name: Promote npmjs channel tags
         env:
