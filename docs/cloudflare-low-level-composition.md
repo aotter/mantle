@@ -8,11 +8,12 @@ while adding one application-owned post-response Queue audit across every route.
 ```ts
 import { Hono } from "hono";
 import {
+  applyCachePolicy,
+  conventionalMcpResource,
   createMantleRuntimeRef,
   createConventionalAuth,
   createConventionalBindings,
   createMcpApiHandler,
-  createOAuthProvider,
   mountAuthorize,
   mountAdmin,
   mountRuntimeEndpoints,
@@ -56,26 +57,35 @@ function assemble(env: Env) {
 
   mountRuntimeEndpoints(app, ref);
   if (bindings.adminAssets) mountAdmin(app, ref, bindings.adminAssets);
-  mountAuthorize(app, { auth, loginPath: "/admin/sign-in" });
+  mountAuthorize(app, { auth });
   app.get("/cache-probe", () => new Response("public", {
     headers: { "cache-control": "public, s-maxage=60" },
   }));
 
-  const provider = createOAuthProvider<Env>({
-    defaultHandler: {
-      fetch: (request, workerEnv, ctx) => app.fetch(request, workerEnv, ctx),
+  const resource = conventionalMcpResource(env);
+  const mcp = new Map([
+    ["/mcp/staff", createMcpApiHandler<Env>({ ref, surface: "staff", resource })],
+    ["/mcp", createMcpApiHandler<Env>({ ref, surface: "public", resource })],
+  ]);
+  return {
+    auth,
+    async fetch(request: Request, workerEnv: Env, ctx: ExecutionContext) {
+      // Low-level owners must prepare the canonical D1 schema before Better
+      // Auth handles a token, client, consent, or CIMD request.
+      await ref.get();
+      const handler = mcp.get(new URL(request.url).pathname);
+      const response = handler?.fetch
+        ? await handler.fetch(request, workerEnv, ctx)
+        : await app.fetch(request, workerEnv, ctx);
+      return applyCachePolicy(request, response);
     },
-    apiHandlers: {
-      "/mcp/staff": createMcpApiHandler<Env>({ ref, surface: "staff" }),
-      "/mcp": createMcpApiHandler<Env>({ ref, surface: "public" }),
-    },
-  });
-  return { auth, fetch: provider.fetch.bind(provider) };
+  };
 }
 ```
 
-Keep the conventional `DB` and `OAUTH_KV` bindings and
-`nodejs_compat`; add the Queue producer in `wrangler.jsonc`:
+Keep the conventional `DB` binding and `nodejs_compat`. CIMD metadata fetches
+also require `global_fetch_strictly_public`; add the Queue producer in
+`wrangler.jsonc`:
 
 ```jsonc
 {

@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { EmailSender } from "@aotter/mantle-runtime";
 import {
   buildGenericOAuthProviders,
-  buildOAuthResourceLifecyclePlugin,
   buildOAuthProviderOptions,
   buildSocialProviders,
   buildTrustedOriginsFor,
@@ -459,7 +458,7 @@ describe("guardGithubLoginProfile", () => {
 
     expect(guardGithubLoginProfile(
       { githubLogin: "owner" },
-      { path: "/oauth2/callback/:providerId", params: { providerId: "github" } },
+      { path: "/callback/:id", params: { id: "github" } },
       [hosted],
     )).toBeUndefined();
     expect(guardGithubLoginProfile(
@@ -469,7 +468,7 @@ describe("guardGithubLoginProfile", () => {
     )).toEqual({ data: { githubLogin: null } });
     expect(guardGithubLoginProfile(
       { githubLogin: "owner" },
-      { path: "/oauth2/callback/:providerId", params: { providerId: "other" } },
+      { path: "/callback/:id", params: { id: "other" } },
       [hosted],
     )).toEqual({ data: { githubLogin: null } });
   });
@@ -484,7 +483,7 @@ describe("guardGithubLoginProfile", () => {
 });
 
 describe("buildGenericOAuthProviders", () => {
-  it("emits Better Auth generic OAuth config and keeps displayName for the public method descriptor", () => {
+  it("emits only Better Auth generic OAuth config fields", () => {
     const out = buildGenericOAuthProviders([
       {
         kind: "oauth",
@@ -493,8 +492,6 @@ describe("buildGenericOAuthProviders", () => {
         clientId: "client",
         clientSecret: "secret",
         discoveryUrl: "https://platform.mantle.tools/.well-known/openid-configuration",
-        issuer: "https://platform.mantle.tools",
-        requireIssuerValidation: true,
         scopes: ["openid", "profile", "email"],
         pkce: true,
       },
@@ -503,12 +500,9 @@ describe("buildGenericOAuthProviders", () => {
     expect(out).toEqual([
       {
         providerId: "mantle-platform",
-        displayName: "Mantle Platform",
         clientId: "client",
         clientSecret: "secret",
         discoveryUrl: "https://platform.mantle.tools/.well-known/openid-configuration",
-        issuer: "https://platform.mantle.tools",
-        requireIssuerValidation: true,
         scopes: ["openid", "profile", "email"],
         pkce: true,
       },
@@ -572,92 +566,8 @@ describe("buildGenericOAuthProviders", () => {
       resource: "https://api.platform.test",
       authorizationUrlParams: { resource: "https://api.platform.test" },
       tokenUrlParams: { resource: "https://api.platform.test" },
+      refreshTokenParams: { resource: "https://api.platform.test" },
     });
-  });
-
-  it("carries resource through authorization, code exchange, and refresh exchange", async () => {
-    const bodies: URLSearchParams[] = [];
-    vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
-      let resource = "";
-      if (init?.body instanceof URLSearchParams) {
-        const body = new URLSearchParams(init.body);
-        bodies.push(body);
-        resource = body.get("resource") ?? "";
-      }
-      const payload = Buffer.from(JSON.stringify({ aud: resource })).toString(
-        "base64url",
-      );
-      return Response.json({
-        access_token: `header.${payload}.signature`,
-        refresh_token: "refresh-2",
-        token_type: "Bearer",
-        expires_in: 3600,
-      });
-    });
-    try {
-      const plugin = buildOAuthResourceLifecyclePlugin([
-        {
-          kind: "oauth",
-          providerId: "platform",
-          clientId: "client",
-          authorizationUrl: "https://platform.test/authorize",
-          tokenUrl: "https://platform.test/token",
-          resource: "https://api.platform.test",
-        },
-      ]);
-      expect(plugin).not.toBeNull();
-      const initialized = await plugin!.init!({
-        socialProviders: [
-          {
-            id: "platform",
-            name: "platform",
-            createAuthorizationURL: async () =>
-              new URL("https://platform.test/authorize?client_id=client"),
-            validateAuthorizationCode: async () => null,
-            refreshAccessToken: async () => ({}),
-            getUserInfo: async () => null,
-          },
-        ],
-      } as never);
-      const providers = (initialized as {
-        context?: { socialProviders?: Array<Record<string, unknown>> };
-      }).context?.socialProviders;
-      const provider = providers?.[0] as {
-        createAuthorizationURL(data: Record<string, unknown>): Promise<URL>;
-        validateAuthorizationCode(data: {
-          code: string;
-          redirectURI: string;
-          codeVerifier?: string;
-        }): Promise<{ accessToken?: string } | null>;
-        refreshAccessToken(token: string): Promise<{ accessToken?: string }>;
-      };
-
-      const authorization = await provider.createAuthorizationURL({});
-      expect(authorization.searchParams.get("resource")).toBe(
-        "https://api.platform.test",
-      );
-      const exchanged = await provider.validateAuthorizationCode({
-        code: "code-1",
-        redirectURI: "https://site.test/callback",
-      });
-      const refreshed = await provider.refreshAccessToken("refresh-1");
-      expect(exchanged?.accessToken).toBeTruthy();
-      expect(refreshed.accessToken).toBeTruthy();
-      expect(bodies).toHaveLength(2);
-      expect(bodies[0]?.get("grant_type")).toBe("authorization_code");
-      expect(bodies[0]?.get("resource")).toBe("https://api.platform.test");
-      expect(bodies[1]?.get("grant_type")).toBe("refresh_token");
-      expect(bodies[1]?.get("resource")).toBe("https://api.platform.test");
-      for (const token of [exchanged?.accessToken, refreshed.accessToken]) {
-        expect(token?.split(".")).toHaveLength(3);
-        const claims = JSON.parse(
-          Buffer.from(token!.split(".")[1]!, "base64url").toString("utf8"),
-        ) as { aud?: string };
-        expect(claims.aud).toBe("https://api.platform.test");
-      }
-    } finally {
-      vi.unstubAllGlobals();
-    }
   });
 
   it("throws when the same oauth providerId is registered twice", () => {
@@ -769,6 +679,15 @@ describe("verifyOAuthJwt facade", () => {
     );
     expect(result).toEqual({ ok: false, status: 401, reason: "invalid-token" });
   });
+
+  it("does not accept a DPoP-bound token without its request proof", async () => {
+    const result = await verifyOAuthJwt(
+      "header.payload.signature",
+      { audience: "https://api.test" },
+      async () => ({ sub: "user-1", scope: "mcp", cnf: { jkt: "thumbprint" } }),
+    );
+    expect(result).toEqual({ ok: false, status: 401, reason: "invalid-dpop-proof" });
+  });
 });
 
 describe("getProviderAccessTokenForRequest", () => {
@@ -786,11 +705,12 @@ describe("getProviderAccessTokenForRequest", () => {
     const value = await getProviderAccessTokenForRequest(
       { getAccessToken },
       request,
+      "account-row-1",
       "platform",
     );
     expect(getAccessToken).toHaveBeenCalledWith({
       headers: request.headers,
-      body: { providerId: "platform" },
+      body: { accountId: "account-row-1" },
     });
     expect(value).toEqual({
       accessToken: "access-1",
@@ -802,24 +722,19 @@ describe("getProviderAccessTokenForRequest", () => {
 });
 
 describe("buildOAuthProviderOptions", () => {
-  it("rejects multiple audiences on the vulnerable Better Auth 1.6 line", () => {
-    expect(() => buildOAuthProviderOptions({
-      loginPage: "/sign-in",
-      consentPage: "/consent",
-      validAudiences: ["https://api.example.test", "https://admin.example.test"],
-    })).toThrow(/at most one audience/u);
-  });
-
-  it("maps and defensively copies explicit valid JWT audiences", () => {
-    const validAudiences = ["https://api.example.test"];
+  it("maps and defensively copies Better Auth 1.7 protected resources", () => {
+    const resources = ["https://api.example.test", "https://admin.example.test"];
     const options = buildOAuthProviderOptions({
       loginPage: "/sign-in",
       consentPage: "/consent",
       scopes: ["openid", "orders:read"],
-      validAudiences,
+      resources,
     });
-    validAudiences.push("https://mutated.example.test");
-    expect(options.validAudiences).toEqual(["https://api.example.test"]);
+    resources.push("https://mutated.example.test");
+    expect(options.resources).toEqual([
+      "https://api.example.test",
+      "https://admin.example.test",
+    ]);
     expect(options.scopes).toEqual(["openid", "orders:read"]);
   });
 });
@@ -831,10 +746,10 @@ describe("registered OAuth client mapping", () => {
       client_secret: "must-not-escape",
       redirect_uris: ["https://site.test/callback"],
       token_endpoint_auth_method: "none",
-      public: true,
+      application_type: "native",
     });
     expect(client).not.toHaveProperty("clientSecret");
-    expect(client).toMatchObject({ clientId: "public-client", public: true });
+    expect(client).toMatchObject({ clientId: "public-client", applicationType: "native" });
   });
 });
 

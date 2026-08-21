@@ -4,11 +4,6 @@ import {
   isSetupIncompleteAuth,
   type Auth,
 } from "./createAuth.js";
-import {
-  OAUTH_AUTHORIZE_PATH,
-  OAUTH_REGISTER_PATH,
-  OAUTH_TOKEN_PATH,
-} from "../oauth/oauthConstants.js";
 import { applyCachePolicy } from "../oauth/cachePolicy.js";
 
 export interface ConventionalAuthEnv {
@@ -34,7 +29,17 @@ export function createConventionalAuth(env: ConventionalAuthEnv): Auth {
   const hostedClientId = hostedClient(hostedClientIdRaw, hostedIssuer);
   const githubClientId = value(env.GITHUB_CLIENT_ID);
   const githubClientSecret = value(env.GITHUB_CLIENT_SECRET);
-  const baseURL = value(env.PUBLIC_ORIGIN)?.replace(/\/+$/, "") ?? "http://localhost:8787";
+  const baseURL = conventionalAuthBaseURL(env);
+  const oauthProvider = {
+    loginPage: "/admin/sign-in",
+    consentPage: "/oauth/consent",
+    scopes: ["mcp"],
+    allowDynamicClientRegistration: true,
+    allowUnauthenticatedClientRegistration: true,
+    clientRegistrationDefaultScopes: ["mcp"],
+    clientRegistrationAllowedScopes: ["mcp"],
+    mcpResource: conventionalMcpResource(env),
+  } as const;
 
   if (mode === "hosted") {
     if (!secret || !owner || !hostedIssuer || !hostedClientId || githubClientId || githubClientSecret) {
@@ -64,7 +69,7 @@ export function createConventionalAuth(env: ConventionalAuthEnv): Auth {
         tokenUrl: `${hostedIssuer}/token`,
         userInfoUrl: `${hostedIssuer}/userinfo`,
         scopes: ["profile", "email"],
-        redirectURI: `${baseURL}/api/auth/oauth2/callback/github`,
+        redirectURI: `${baseURL}/api/auth/callback/github`,
         pkce: true,
         mapProfileToUser: (profile) => {
           const login = githubLogin(profile.github_login);
@@ -72,6 +77,7 @@ export function createConventionalAuth(env: ConventionalAuthEnv): Auth {
         },
       }],
       bootstrapOwner: { match: "github-login", value: owner },
+      oauthProvider,
     });
   }
 
@@ -97,10 +103,20 @@ export function createConventionalAuth(env: ConventionalAuthEnv): Auth {
         clientSecret: githubClientSecret,
       }],
       bootstrapOwner: { match: "github-login", value: owner },
+      oauthProvider,
     });
   }
 
   return incomplete("MANTLE_AUTH_MODE must be hosted or self-managed.");
+}
+
+/** Canonical origin shared by Better Auth and the MCP resource verifier. */
+export function conventionalAuthBaseURL(env: ConventionalAuthEnv): string {
+  return value(env.PUBLIC_ORIGIN)?.replace(/\/+$/, "") ?? "http://localhost:8787";
+}
+
+export function conventionalMcpResource(env: ConventionalAuthEnv): string {
+  return `${conventionalAuthBaseURL(env)}/mcp`;
 }
 
 /** Return the setup response only for Auth-owned private surfaces. */
@@ -118,9 +134,8 @@ function isAuthProtectedPath(request: Request, auth: Auth): boolean {
     || pathname.startsWith("/admin/")
     || pathname === auth.basePath
     || pathname.startsWith(`${auth.basePath}/`)
-    || pathname === OAUTH_AUTHORIZE_PATH
-    || pathname === OAUTH_TOKEN_PATH
-    || pathname === OAUTH_REGISTER_PATH
+    || pathname === "/oauth"
+    || pathname.startsWith("/oauth/")
     || pathname.startsWith("/.well-known/oauth")
     || pathname === "/mcp"
     || pathname.startsWith("/mcp/");

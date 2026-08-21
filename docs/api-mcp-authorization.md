@@ -220,55 +220,31 @@ function parseScopes(json: string): string[] | null {
 }
 ```
 
-Wire it alongside the existing Auth facade. `oauthBearer` is optional and
+Wire it alongside the existing Auth facade. `jwtBearer` is optional and
 enables JWT bearer verification for manifest REST routes:
 
 ```ts
 import {
-  AssetsAssetServer,
-  createMantleRuntimeRef,
-  createMcpApiHandler,
-  createOAuthProvider,
-  D1DatabaseDriver,
-  mountAdmin,
-  mountRuntimeEndpoints,
+  createMantleWorker,
 } from "@aotter/mantle/cloudflare";
 
-const runtimeRef = createMantleRuntimeRef({
+export default createMantleWorker({
   plan,
   handlers,
-  bindings: {
-    db: new D1DatabaseDriver(env.DB),
-    adminAssets: env.ASSETS
-      ? new AssetsAssetServer(env.ASSETS)
-      : { fetch: async () => null },
-  },
-  auth,
-  credentialResolver: siteCredentialResolver(env.DB),
-  oauthBearer: {
-    audience: "https://api.example.com",
-    // Optional server-wide floor. Manifest scopes still run per target.
-    scopes: ["api"],
-  },
-});
-
-mountRuntimeEndpoints(app, runtimeRef);
-if (runtimeRef.adminAssets) mountAdmin(app, runtimeRef, runtimeRef.adminAssets);
-
-const oauthProvider = createOAuthProvider({
-  defaultHandler: {
-    fetch: (request, workerEnv, ctx) => app.fetch(request, workerEnv, ctx),
-  },
-  apiHandlers: {
-    "/mcp/staff": createMcpApiHandler({ ref: runtimeRef, surface: "staff" }),
-    "/mcp": createMcpApiHandler({ ref: runtimeRef, surface: "public" }),
-  },
-  scopesSupported: ["mcp"],
+  extend: ({ env }) => ({
+    credentialResolver: siteCredentialResolver(env.DB),
+    jwtBearer: {
+      audience: "https://api.example.com",
+      // Optional server-wide floor. Manifest scopes still run per target.
+      scopes: ["api"],
+    },
+  }),
 });
 ```
 
-Export or delegate to `oauthProvider` as the Worker's top-level handler so the
-OAuth provider can verify MCP bearers before dispatching to either MCP surface.
+The facade mounts both MCP surfaces behind the same Better Auth 1.7 resource.
+Low-level composition must pass that canonical resource to each
+`createMcpApiHandler` explicitly.
 
 Resolution precedence is site resolver, configured OAuth bearer, then cookie
 session. A recognized invalid credential never falls back to a valid cookie.
@@ -620,7 +596,7 @@ const providerAuth = createAuth({
     loginPage: "/sign-in",
     consentPage: "/consent",
     scopes: ["openid", "offline_access", "accounts:read"],
-    validAudiences: ["https://api.example.com"],
+    resources: ["https://api.example.com"],
   },
 });
 
@@ -631,9 +607,10 @@ const verification = await providerAuth.verifyOAuthAccessToken(request, {
 ```
 
 The verifier accepts JWT access tokens only and checks the configured issuer,
-JWKS/signature, audience, time claims, and required scopes. It returns only
-`userId`, `clientId`, `credentialId`, and scopes. Opaque tokens are rejected;
-there is no introspection fallback.
+JWKS/signature, audience, time claims, required scopes, and—when passed the
+request—DPoP proof binding with database-backed replay protection. It returns
+only `userId`, `clientId`, `credentialId`, and scopes. Opaque tokens are
+rejected; there is no introspection fallback.
 
 ## OpenAPI reflection
 

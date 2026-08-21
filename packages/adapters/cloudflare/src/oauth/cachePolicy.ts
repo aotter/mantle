@@ -1,9 +1,3 @@
-import {
-  OAUTH_AUTHORIZE_PATH,
-  OAUTH_REGISTER_PATH,
-  OAUTH_TOKEN_PATH,
-} from "./oauthConstants.js";
-
 export const PUBLIC_CACHE_TAG = "mantle-public";
 
 /** Apply the Worker's final cache decision after OAuth/default dispatch. */
@@ -49,9 +43,8 @@ function isPrivateSurfacePath(pathname: string): boolean {
     || pathname.startsWith("/admin/")
     || pathname === "/api/auth"
     || pathname.startsWith("/api/auth/")
-    || pathname === OAUTH_AUTHORIZE_PATH
-    || pathname === OAUTH_TOKEN_PATH
-    || pathname === OAUTH_REGISTER_PATH
+    || pathname === "/oauth"
+    || pathname.startsWith("/oauth/")
     || pathname.startsWith("/.well-known/oauth")
     || pathname === "/mcp"
     || pathname.startsWith("/mcp/");

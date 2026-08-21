@@ -18,6 +18,7 @@ import {
 } from "./fakes/runtime-bindings.js";
 
 const apiVersion = "cms.mantle.aotter.net/v1" as const;
+const MCP_RESOURCE = "https://example.test/mcp";
 const guide = readFileSync(
   new URL("../../../../docs/api-mcp-authorization.md", import.meta.url),
   "utf8",
@@ -121,7 +122,8 @@ describe("authorization integration: one target across REST and MCP", () => {
       "## 4. Personal token with user scope, shared by REST and MCP semantics",
       "ConsumerCredentialResolver",
       "credentialResolver: siteCredentialResolver(env.DB)",
-      "createMcpApiHandler({ ref: runtimeRef, surface: \"public\" })",
+      "createMantleWorker({",
+      "jwtBearer: {",
       "getProviderAccessToken(request, \"mantle-platform\")",
       "verifyOAuthAccessToken(request",
       "x-mantle-guard-procedure",
@@ -135,6 +137,7 @@ describe("authorization integration: one target across REST and MCP", () => {
     let entitled = true;
     let targetCalls = 0;
     let guardCalls = 0;
+    let mcpScopes = ["mcp", "accounts:read"];
     const mcpWaitUntil = vi.fn<(promise: Promise<unknown>) => void>();
     const workerEnv = { ENTITLEMENT_SOURCE: "worker-env" };
     const readAccount: HandlerFn<
@@ -172,7 +175,17 @@ describe("authorization integration: one target across REST and MCP", () => {
         db: new InMemoryDatabase(),
         adminAssets: new StubAssetServer(),
       },
-      auth: { ...stubAuth, getUserRole: async () => "owner" },
+      auth: {
+        ...stubAuth,
+        getUserRole: async () => "owner",
+        verifyOAuthAccessToken: async () => ({
+          ok: true,
+          userId: "user-1",
+          clientId: "personal-client",
+          credentialId: "token-1",
+          scopes: mcpScopes,
+        }),
+      },
       credentialResolver: (request) => {
         const header = request.headers.get("authorization");
         if (header === null) return { kind: "not-handled" };
@@ -190,8 +203,16 @@ describe("authorization integration: one target across REST and MCP", () => {
     });
     const app = new Hono<{ Bindings: typeof workerEnv }>();
     mountTestEndpoints(app, ref);
-    const publicMcp = createMcpApiHandler<typeof workerEnv>({ ref, surface: "public" });
-    const staffMcp = createMcpApiHandler<typeof workerEnv>({ ref, surface: "staff" });
+    const publicMcp = createMcpApiHandler<typeof workerEnv>({
+      ref,
+      surface: "public",
+      resource: MCP_RESOURCE,
+    });
+    const staffMcp = createMcpApiHandler<typeof workerEnv>({
+      ref,
+      surface: "staff",
+      resource: MCP_RESOURCE,
+    });
     const mcpContext = {
       props: {
         userId: "user-1",
@@ -226,14 +247,14 @@ describe("authorization integration: one target across REST and MCP", () => {
     expect(mcpWaitUntil).toHaveBeenCalledTimes(2);
     expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 3, targetCalls: 3 });
 
-    mcpContext.props.scopes = ["mcp"];
+    mcpScopes = ["mcp"];
     const downscoped = await publicMcp.fetch!(mcpCall(), workerEnv, mcpContext);
     const downscopedBody = (await downscoped.json()) as {
       error?: { data?: { code?: string } };
     };
     expect(downscopedBody.error?.data?.code).toBe("AUTH_DENIED");
     expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 3, targetCalls: 3 });
-    mcpContext.props.scopes = ["mcp", "accounts:read"];
+    mcpScopes = ["mcp", "accounts:read"];
 
     entitled = false;
     const restDenied = await app.request(

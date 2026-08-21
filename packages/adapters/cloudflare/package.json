@@ -42,17 +42,17 @@
     "@aotter/mantle-runtime": "workspace:*",
     "@aotter/mantle-spec": "workspace:*",
     "@aotter/mantle-web": "workspace:*",
+    "@better-auth/cimd": "catalog:",
+    "@better-auth/mcp": "catalog:",
     "@better-auth/oauth-provider": "catalog:"
   },
   "peerDependencies": {
-    "@cloudflare/workers-oauth-provider": "catalog:peer",
     "aws4fetch": "catalog:peer",
     "better-auth": "catalog:peer",
     "hono": "catalog:peer",
     "zod": "catalog:peer"
   },
   "devDependencies": {
-    "@cloudflare/workers-oauth-provider": "catalog:",
     "@cloudflare/workers-types": "^5.20260729.1",
     "@types/node": "catalog:",
     "aws4fetch": "catalog:",

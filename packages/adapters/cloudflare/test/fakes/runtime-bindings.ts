@@ -22,6 +22,10 @@ export const stubAuth: Auth = {
     status: 401,
     reason: "invalid-token",
   }),
+  getOAuthConsentRequest: async () => null,
+  completeOAuthConsent: async () => {
+    throw new Error("stub auth has no OAuth consent flow");
+  },
   methods: [],
   listLinkedAccounts: async () => [],
   unlinkAccount: async () => false,

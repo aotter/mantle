@@ -4,7 +4,7 @@ Cloudflare Workers adapter for mantle.
 
 This package mounts the runtime on Hono, implements the runtime ports against
 Cloudflare D1 / Workers assets, and owns curated identity/session wiring
-plus MCP OAuth/DCR.
+plus MCP OAuth/CIMD. Legacy DCR remains a bounded compatibility path.
 
 This package is prerelease software. Its `package.json` is the exact version
 authority; the API surface may change until `v0.1.0`.
@@ -39,6 +39,13 @@ client id must be a URL at the same origin with the shape `/clients/<id>`.
 Invalid, partial, or mixed-mode configuration fails closed: public site routes
 remain available, while Admin, Auth, OAuth, and MCP routes return
 `503 setup_incomplete`.
+
+MCP client metadata is fetched through the public Internet boundary. Keep both
+flags in `wrangler.jsonc`:
+
+```jsonc
+"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"]
+```
 
 Sites with a different identity design may preserve Core's route ownership
 while replacing only construction:
@@ -117,9 +124,9 @@ usually dominate the total request time.
 
 ## HTTP Cache Boundary
 
-The conventional facade owns the top-level OAuth provider. In low-level
-composition, export `createOAuthProvider(...)` as the Worker's top-level
-handler. It marks
+The conventional facade applies the final cache policy after Better Auth,
+MCP, Admin, manifest, and application routing. Low-level composition must call
+the exported `applyCachePolicy(...)` at the same final boundary. It marks
 admin, auth, API, OAuth, MCP, redirects, and errors `private, no-store` and
 removes Cloudflare CDN cache overrides. Only anonymous 200 `GET`/`HEAD`
 responses that explicitly declare `public` plus shared freshness remain

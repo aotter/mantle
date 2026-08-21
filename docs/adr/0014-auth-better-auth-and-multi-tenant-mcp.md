@@ -2,17 +2,18 @@
 
 ## Status
 
-Accepted. Amended 2026-05-14, 2026-05-15, 2026-06-30, 2026-07-15, and
-2026-08-03.
+Accepted. Amended 2026-05-14, 2026-05-15, 2026-06-30, 2026-07-15,
+2026-08-03, and 2026-08-22.
 
 ## Date
 
-2026-05-09 (last amended 2026-08-03)
+2026-05-09 (last amended 2026-08-22)
 
 > **Current authority:** the original decision below records the rejected
-> Better-Auth-for-MCP design. The 2026-05-15 carve-out and 2026-07-15 unified
-> authorization amendment are authoritative where they conflict. Operational
-> guidance in "How to apply" is maintained against the current adapter/runtime.
+> Better-Auth-for-MCP design. The 2026-08-22 Better Auth 1.7 amendment is
+> authoritative where it conflicts with the 2026-05-15 carve-out; the
+> 2026-07-15 normalized authorization boundary still applies. Operational
+> guidance is maintained against the current adapter/runtime.
 
 ## Context
 
@@ -520,3 +521,107 @@ Dynamic membership, billing, and entitlement state remains consumer-owned.
 does not introduce a Policy atom or an entitlement service. See
 [`API and MCP authorization`](../api-mcp-authorization.md) for the public API
 and end-to-end examples.
+
+## Amendment — 2026-08-22: Better Auth 1.7 MCP and CIMD convergence
+
+Issue #734 revisits the 2026-05-15 compatibility carve-out after Better Auth
+1.7 shipped a dedicated `@better-auth/mcp` package, resource-bound JWT grants,
+and the MCP 2026-07-28 Client ID Metadata Document profile. These are the
+missing capabilities that originally forced Mantle to keep a second OAuth
+authority.
+
+The Cloudflare adapter now uses one Better Auth instance for staff identity,
+OAuth authorization, consent, client registration/discovery, token issuance,
+and MCP resource verification. `@cloudflare/workers-oauth-provider` and Core's
+`OAUTH_KV` requirement are removed. This amendment supersedes only the
+2026-05-15 transport carve-out; adapter ownership, the curated `Auth` facade,
+fresh D1 staff-role checks, the single `mcp` compatibility scope, and normalized
+`HandlerContext.auth` remain unchanged.
+
+### Provider and resource boundary
+
+`createAuth` keeps its general OAuth-provider capability and adds MCP as an
+explicit curated mode, implemented by composing `jwt()` and
+`@better-auth/mcp`. It is not replaced by an MCP-only factory and no Better
+Auth passthrough is exposed. Standard Workers bind one canonical protected
+resource, `${PUBLIC_ORIGIN}/mcp`. Both `/mcp` and `/mcp/staff` accept tokens for
+that resource; `/mcp/staff` remains a stricter server-side role projection, not
+a second OAuth audience.
+
+The adapter continues to verify and normalize credentials before calling the
+portable runtime. Better Auth imports remain confined to the default
+implementation. A host app may still implement the `Auth` facade or mount its
+own low-level routes; the generated convenience path does not make Better Auth
+a runtime dependency.
+
+MCP request verification reuses Better Auth's DPoP binding primitive and its
+database-backed replay store. Bearer JWTs remain valid; a DPoP-bound JWT is
+accepted only with a matching request proof, method, URL, token hash, and
+single-use proof id. Raw-token callers cannot bypass that request boundary.
+
+### CIMD is primary; DCR is bounded compatibility
+
+The MCP mode composes:
+
+```ts
+mcp({ resource, loginPage, consentPage, scopes: ["mcp"], ... })
+cimd({
+  fetchClientMetadataResource,
+  metadataProfile: "mcp-2026-07-28",
+})
+```
+
+Cloudflare's native `fetch` is the metadata transport only when the Worker has
+`global_fetch_strictly_public` enabled. The runtime flag makes the subrequest
+use Cloudflare's public-Internet routing boundary; Better Auth owns URL
+validation, timeout, response limits, redirect refusal, revalidation, and the
+bounded fetch governor. Mantle does not add a DNS resolver, socket HTTP client,
+or generic transport abstraction.
+
+Unauthenticated DCR remains enabled only for older MCP clients. Its lifetime
+stays at the removed provider's 90-day default. Better Auth expires confidential
+registration secrets; Mantle additionally prunes only expired ownerless DCR
+rows (`clientDiscoveryId`, user owner, and reference owner all absent) on
+OAuth traffic. CIMD-owned and operator-managed clients are never cleanup
+candidates. Cleanup is storage hygiene: failures are logged and do not turn a
+valid authorization request into an outage. No cron or second registry is
+introduced.
+
+Better Auth's `oauthClient` row is the connected-client authority. It retains
+the discovery provenance and validated name, URI, redirect URIs, application
+type, and private server metadata. The consent UI reads only the public
+secret-free projection. Remote client metadata is not copied into portable
+`HandlerContext` or deferred event envelopes.
+
+### Breaking migration
+
+All Better Auth packages upgrade together to 1.7. The D1 schema adopts account
+issuer identity, resource/client relationships, resource-bound token and
+consent fields, discovery provenance, and replay storage required by the
+installed plugins. Removed `validAudiences` configuration becomes the one
+explicit MCP resource; generic upstream OAuth adopts the 1.7 social sign-in and
+callback contract.
+
+This is an alpha breaking migration. KV registrations, grants, and opaque
+tokens are not migrated into D1 because their issuer/resource provenance cannot
+be established safely; MCP clients reconnect through CIMD or DCR. Existing
+pre-1.7 alpha auth databases are reset and re-bootstrapped rather than receiving
+a guessed account issuer backfill.
+
+The authorization endpoints consequently move from `/oauth/*` to Better
+Auth's `/api/auth/oauth2/*` discovery-advertised endpoints. No compatibility
+aliases are retained: existing KV client identifiers are invalid after the
+authority change regardless, and standards-compliant clients rediscover the
+new endpoints.
+
+### Downstream ownership
+
+Starters remove their obsolete OAuth package and `OAUTH_KV` binding while
+retaining `global_fetch_strictly_public`. Landing opts its custom `createAuth`
+construction into the same MCP mode. Landing may keep an `OAUTH_KV` binding for
+its own launch/bootstrap state; that storage is unrelated to the removed Core
+OAuth store and is not renamed by this decision.
+
+This amendment adopts the 2026-07-28 CIMD authorization profile only. Updating
+Mantle's JSON-RPC dispatcher to the complete MCP 2026-07-28 transport revision
+is a separate decision.

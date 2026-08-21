@@ -38,7 +38,7 @@ describe("conventional Auth", () => {
     for (const path of [
       "/admin",
       "/api/auth/methods",
-      "/oauth/authorize",
+      "/oauth/consent",
       "/.well-known/oauth-authorization-server",
       "/mcp/staff",
     ]) {

@@ -118,8 +118,9 @@ const STAFF_USER = {
   role: "owner" as const,
   githubLogin: "admin-login",
 };
+const MCP_RESOURCE = "https://example.test/mcp";
 
-function staffAuth(): Auth {
+function staffAuth(scopes: readonly string[] = ["mcp"]): Auth {
   return {
     ...stubAuth,
     getSession: async () => ({
@@ -127,6 +128,20 @@ function staffAuth(): Auth {
       user: STAFF_USER,
     }),
     getUserRole: async () => "owner",
+    verifyOAuthAccessToken: async () => scopes.includes("mcp")
+      ? {
+          ok: true,
+          userId: STAFF_USER.id,
+          clientId: "mcp-client",
+          credentialId: "token-1",
+          scopes,
+        }
+      : {
+          ok: false,
+          status: 403,
+          reason: "insufficient-scope",
+          missingScopes: ["mcp"],
+        },
   };
 }
 
@@ -359,7 +374,7 @@ describe("smoke: MCP media tool catalog", () => {
       },
       auth: staffAuth(),
     });
-    const handler = createMcpApiHandler({ ref, surface: "staff" });
+    const handler = createMcpApiHandler({ ref, surface: "staff", resource: MCP_RESOURCE });
     const props = {
       props: {
         userId: STAFF_USER.id,
@@ -708,7 +723,7 @@ describe("MCP View surface gating (#438)", () => {
   };
 
   async function toolNames(surface: "public" | "staff"): Promise<string[]> {
-    const handler = createMcpApiHandler({ ref: viewRef(), surface });
+    const handler = createMcpApiHandler({ ref: viewRef(), surface, resource: MCP_RESOURCE });
     const res = await handler.fetch!(
       jsonRpcReq("tools/list"),
       {},
@@ -727,7 +742,7 @@ describe("MCP View surface gating (#438)", () => {
   });
 
   it("projects the canonical site identity into current MCP server metadata", async () => {
-    const handler = createMcpApiHandler({ ref: viewRef(), surface: "public" });
+    const handler = createMcpApiHandler({ ref: viewRef(), surface: "public", resource: MCP_RESOURCE });
     const response = await handler.fetch!(
       jsonRpcReq("initialize"),
       {},
@@ -757,7 +772,11 @@ describe("MCP View surface gating (#438)", () => {
   });
 
   it("returns a standards-compatible 403 challenge when the MCP scope is missing", async () => {
-    const handler = createMcpApiHandler({ ref: viewRef(), surface: "public" });
+    const handler = createMcpApiHandler({
+      ref: viewRef(staffAuth(["accounts:read"])),
+      surface: "public",
+      resource: MCP_RESOURCE,
+    });
     const res = await handler.fetch!(
       jsonRpcReq("tools/list"),
       {},
@@ -774,8 +793,37 @@ describe("MCP View surface gating (#438)", () => {
     expect(res.headers.get("www-authenticate")).toContain('scope="mcp"');
   });
 
-  it.each([undefined, "mcp"])("fails closed for malformed token scopes: %s", async (scopes) => {
-    const handler = createMcpApiHandler({ ref: viewRef(), surface: "public" });
+  it("returns a DPoP challenge when sender-constraint verification fails", async () => {
+    const handler = createMcpApiHandler({
+      ref: viewRef({
+        ...stubAuth,
+        verifyOAuthAccessToken: async () => ({
+          ok: false,
+          status: 401,
+          reason: "invalid-dpop-proof",
+        }),
+      }),
+      surface: "public",
+      resource: MCP_RESOURCE,
+    });
+    const res = await handler.fetch!(
+      jsonRpcReq("tools/list"),
+      {},
+      props as unknown as ExecutionContext,
+    );
+
+    expect(res.status).toBe(401);
+    expect(res.headers.get("www-authenticate")).toMatch(
+      /^DPoP error="invalid_dpop_proof", algs=".+"$/u,
+    );
+  });
+
+  it("does not trust identity injected through legacy ExecutionContext props", async () => {
+    const handler = createMcpApiHandler({
+      ref: viewRef(stubAuth),
+      surface: "public",
+      resource: MCP_RESOURCE,
+    });
     const res = await handler.fetch!(
       jsonRpcReq("tools/list"),
       {},
@@ -783,15 +831,15 @@ describe("MCP View surface gating (#438)", () => {
         props: {
           userId: STAFF_USER.id,
           clientId: "mcp-client",
-          ...(scopes === undefined ? {} : { scopes }),
+          scopes: ["mcp"],
         },
       } as unknown as ExecutionContext,
     );
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
   });
 
   it("public surface tools/call for a staff View returns unknown-tool", async () => {
-    const handler = createMcpApiHandler({ ref: viewRef(), surface: "public" });
+    const handler = createMcpApiHandler({ ref: viewRef(), surface: "public", resource: MCP_RESOURCE });
     const res = await handler.fetch!(
       jsonRpcReq("tools/call", { name: "query_view_staff_report", arguments: {} }),
       {},
@@ -815,7 +863,7 @@ describe("MCP View surface gating (#438)", () => {
     expect(names).toContain("query_view_staff_report");
     expect(names).toContain("create_draft_posts");
 
-    const handler = createMcpApiHandler({ ref: viewRef(), surface: "staff" });
+    const handler = createMcpApiHandler({ ref: viewRef(), surface: "staff", resource: MCP_RESOURCE });
     const res = await handler.fetch!(
       jsonRpcReq("tools/call", { name: "query_view_staff_report", arguments: {} }),
       {},
@@ -837,7 +885,11 @@ describe("MCP View surface gating (#438)", () => {
       ...staffAuth(),
       getUserRole: async () => role,
     };
-    const handler = createMcpApiHandler({ ref: viewRef(liveAuth), surface: "staff" });
+    const handler = createMcpApiHandler({
+      ref: viewRef(liveAuth),
+      surface: "staff",
+      resource: MCP_RESOURCE,
+    });
     const first = await handler.fetch!(
       jsonRpcReq("tools/list"),
       {},

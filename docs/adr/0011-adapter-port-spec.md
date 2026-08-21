@@ -5,13 +5,13 @@ Retained as the alpha.7 Cloudflare adapter record; `DatabaseDriver` is now an
 implementation detail of the SQLite/D1 `MantleStorageAdapter`, while the asset
 contract belongs to optional `@aotter/mantle-admin`.
 
-**Date:** 2026-05-04 (revised 2026-05-09, 2026-05-10, 2026-08-11, and 2026-08-13).
+**Date:** 2026-05-04 (revised 2026-05-09, 2026-05-10, 2026-08-11, 2026-08-13, and 2026-08-22).
 
 ## Context
 
 `@aotter/mantle-runtime` is adapter-agnostic. It owns dispatcher, entry-writer, view executor, content-ops, render pipeline, boot validation, and MCP JSON-RPC dispatch. It depends only on `@aotter/mantle-spec` and a small set of TypeScript interfaces it defines itself.
 
-`@aotter/mantle-cloudflare` is the only adapter shipping in v0.1.0. It binds the runtime's interfaces against Cloudflare Workers' D1 and ASSETS, and supplies a Better Auth instance (per ADR-0014) for sign-in + MCP bearer validation. OAuth grant KV remains adapter-owned infrastructure and is not a runtime port.
+`@aotter/mantle-cloudflare` is the only adapter shipping in v0.1.0. It binds the runtime's interfaces against Cloudflare Workers' D1 and ASSETS, and supplies a Better Auth instance (per ADR-0014) for sign-in and MCP authorization. Better Auth 1.7 stores OAuth grants in D1; auth storage remains adapter-owned infrastructure, not a runtime port.
 
 This ADR fixes the contract so:
 - Future adapter authors have a stable target.
@@ -149,6 +149,10 @@ CF adapter: wraps `env.ASSETS.fetch(req)`. Other adapters can use a filesystem o
 The admin SPA itself lives in `@aotter/mantle-admin-ui` as a pre-built `dist/`. The adapter binds `AssetServer` to whatever serves that `dist/`; the runtime knows nothing about static asset serving except "ask the port and pass through the response."
 
 ## How adapters wire ports
+
+> Historical alpha.7 example. Current convenience composition is
+> `createMantleWorker`; ADR-0014's 2026-08-22 amendment replaces the OAuth
+> provider shown below with Better Auth 1.7 MCP/CIMD.
 
 ```ts
 // simplified Cloudflare adapter wiring (post-ADR-0014, amended

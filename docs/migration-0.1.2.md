@@ -30,12 +30,16 @@ Intentional behavior changes:
   rejected at the request boundary.
 - Malformed percent-encoded paths are routing misses (`404`), not claimed
   Mantle routes.
-- `oauthProvider.validAudiences` accepts at most one audience while Mantle uses
-  Better Auth 1.6. Multi-audience grants are rejected to prevent
-  [GHSA-p2fr-6hmx-4528](https://github.com/advisories/GHSA-p2fr-6hmx-4528).
+- Better Auth and every `@better-auth/*` package move together to 1.7.
+  `oauthProvider.validAudiences` becomes protected `resources`; MCP uses one
+  canonical `${PUBLIC_ORIGIN}/mcp` resource and CIMD client discovery.
+- The Cloudflare adapter no longer requires `OAUTH_KV` or
+  `@cloudflare/workers-oauth-provider`. Old opaque tokens and KV registrations
+  cannot be migrated safely and must reconnect.
 - Canonical plan ordering may change stable field/export order (including
   Admin CSV columns) without changing field values.
 
-No database migration is required solely for this API deletion. Existing
-SQLite/D1 data remains compatible when the same official storage adapter is
-prepared with the generated plan.
+This alpha changes the Better Auth D1 schema, including required account
+issuer identity and OAuth resource/client tables. Reset and re-bootstrap a
+pre-1.7 alpha auth database; do not guess an issuer backfill. Content tables
+remain portable through the normal application migration/export path.

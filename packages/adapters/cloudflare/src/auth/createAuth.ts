@@ -1,9 +1,11 @@
-import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
+import { betterAuth, type BetterAuthOptions } from "better-auth";
 import {
-  applyDefaultAccessTokenExpiry,
-  refreshAccessToken,
-  validateAuthorizationCode,
+  createDpopReplayStore,
+  enforceDpopBinding,
+  isDpopBindingError,
+  parseAccessTokenAuthorization,
   verifyJwsAccessToken,
+  type DpopReplayStore,
 } from "better-auth/oauth2";
 import type { SocialProvider } from "better-auth/social-providers";
 import { admin, emailOTP, jwt, magicLink } from "better-auth/plugins";
@@ -15,6 +17,8 @@ import {
 } from "better-auth/plugins/generic-oauth";
 import { splitSetCookieHeader } from "better-auth/cookies";
 import { oauthProvider, type Scope } from "@better-auth/oauth-provider";
+import { mcp } from "@better-auth/mcp";
+import { cimd } from "@better-auth/cimd";
 import { decodeMemberCursor, encodeMemberCursor } from "@aotter/mantle-admin";
 import type { EmailSender } from "@aotter/mantle-runtime";
 import { STAFF_ROLES, type StaffRole } from "@aotter/mantle-spec";
@@ -92,9 +96,8 @@ export type AuthMethodConfig =
     }
   | {
       readonly kind: "oauth";
-      /** Better Auth generic OAuth provider id. Stable across sign-in
-       *  start (`/sign-in/oauth2`) and callback
-       *  (`/oauth2/callback/:providerId`). */
+      /** Better Auth generic OAuth provider id. In 1.7 generic providers use
+       *  the standard social sign-in and `/callback/:id` routes. */
       readonly providerId: string;
       /** Human label surfaced by `/api/auth/methods` so the admin SPA
        *  can render "Continue with Mantle Platform" without knowing
@@ -105,8 +108,6 @@ export type AuthMethodConfig =
       /** OIDC discovery document URL. Prefer this over hand-wiring
        *  authorization/token/userinfo URLs. */
       readonly discoveryUrl?: string;
-      readonly issuer?: string;
-      readonly requireIssuerValidation?: boolean;
       readonly authorizationUrl?: string;
       readonly tokenUrl?: string;
       readonly userInfoUrl?: string;
@@ -203,12 +204,22 @@ export interface OAuthProviderConfig {
   readonly clientRegistrationDefaultScopes?: ReadonlyArray<Scope>;
   readonly clientRegistrationAllowedScopes?: ReadonlyArray<Scope>;
   readonly cachedTrustedClients?: ReadonlySet<string>;
-  /** Explicit JWT audience this authorization server may mint. Mantle rejects
-   *  multiple entries until Better Auth 1.7 grant binding is adopted. */
-  readonly validAudiences?: ReadonlyArray<string>;
+  /** Protected resources this authorization server may issue tokens for. */
+  readonly resources?: ReadonlyArray<string>;
+  /** Turn this provider into the MCP authorization server for one canonical
+   *  resource. Cloudflare deployments must enable
+   *  `global_fetch_strictly_public` for CIMD fetches. */
+  readonly mcpResource?: string;
   readonly clientPrivileges?: (context: {
     readonly headers: Headers;
-    readonly action: "create" | "read" | "update" | "delete" | "list" | "rotate";
+    readonly action:
+      | "create"
+      | "read"
+      | "update"
+      | "delete"
+      | "list"
+      | "rotate"
+      | "configure-client-credentials-scopes";
     readonly user?: { readonly id: string; readonly email: string } & Record<string, unknown>;
     readonly session?: { readonly id: string; readonly userId: string } & Record<
       string,
@@ -238,7 +249,7 @@ export interface RegisterOAuthClientInput {
     "authorization_code" | "client_credentials" | "refresh_token"
   >;
   readonly responseTypes?: ReadonlyArray<"code">;
-  readonly type?: "web" | "native" | "user-agent-based";
+  readonly applicationType?: "web" | "native";
   readonly skipConsent?: boolean;
   readonly enableEndSession?: boolean;
   readonly requirePKCE?: boolean;
@@ -254,8 +265,7 @@ export interface RegisteredOAuthClient {
   readonly clientName?: string;
   readonly clientUri?: string;
   readonly tokenEndpointAuthMethod?: string;
-  readonly type?: string;
-  readonly public?: boolean;
+  readonly applicationType?: "web" | "native";
 }
 
 export interface CreateAuthConfig {
@@ -435,12 +445,9 @@ export function buildGenericOAuthProviders(
   methods: ReadonlyArray<AuthMethodConfig>,
 ): Array<{
   providerId: string;
-  displayName?: string;
   clientId: string;
   clientSecret?: string;
   discoveryUrl?: string;
-  issuer?: string;
-  requireIssuerValidation?: boolean;
   authorizationUrl?: string;
   tokenUrl?: string;
   userInfoUrl?: string;
@@ -453,6 +460,7 @@ export function buildGenericOAuthProviders(
   mapProfileToUser?: GenericOAuthConfig["mapProfileToUser"];
   authorizationUrlParams?: Record<string, string>;
   tokenUrlParams?: Record<string, string>;
+  refreshTokenParams?: Record<string, string>;
 }> {
   const seenProviderIds = new Set<string>();
   const socialProviderIds: ReadonlySet<string> = new Set(
@@ -482,14 +490,9 @@ export function buildGenericOAuthProviders(
     }
     out.push({
       providerId: method.providerId,
-      ...(method.displayName ? { displayName: method.displayName } : {}),
       clientId: method.clientId,
       ...(method.clientSecret ? { clientSecret: method.clientSecret } : {}),
       ...(method.discoveryUrl ? { discoveryUrl: method.discoveryUrl } : {}),
-      ...(method.issuer ? { issuer: method.issuer } : {}),
-      ...(method.requireIssuerValidation !== undefined
-        ? { requireIssuerValidation: method.requireIssuerValidation }
-        : {}),
       ...(method.authorizationUrl ? { authorizationUrl: method.authorizationUrl } : {}),
       ...(method.tokenUrl ? { tokenUrl: method.tokenUrl } : {}),
       ...(method.userInfoUrl ? { userInfoUrl: method.userInfoUrl } : {}),
@@ -506,6 +509,7 @@ export function buildGenericOAuthProviders(
             resource: method.resource,
             authorizationUrlParams: { resource: method.resource },
             tokenUrlParams: { resource: method.resource },
+            refreshTokenParams: { resource: method.resource },
           }
         : {}),
     });
@@ -647,16 +651,12 @@ export function guardGithubLoginProfile(
   methods: ReadonlyArray<AuthMethodConfig>,
 ): { readonly data: { readonly githubLogin: null } } | undefined {
   if (!("githubLogin" in user)) return undefined;
-  const providerId = context?.path === "/callback/:id"
-    ? context.params?.id
-    : context?.path === "/oauth2/callback/:providerId"
-      ? context.params?.providerId
-      : null;
+  const providerId = context?.path === "/callback/:id" ? context.params?.id : null;
   const trusted = typeof providerId === "string" && methods.some((method) =>
     method.kind === "social"
       ? context?.path === "/callback/:id" && method.provider === "github" && providerId === "github"
       : method.kind === "oauth" &&
-        context?.path === "/oauth2/callback/:providerId" &&
+        context?.path === "/callback/:id" &&
         method.providerId === providerId &&
         Boolean(method.mapProfileToUser),
   );
@@ -722,130 +722,22 @@ function methodsRequireSameSiteNone(
   return methods.some((m) => m.kind === "social" && m.provider === "apple");
 }
 
-/**
- * Better Auth 1.6.x declares generic-OAuth URL parameter options but
- * its provider implementation does not replay them across every token
- * lifecycle step. Patch only resource-configured generic providers at
- * the provider boundary, using Better Auth's public OAuth helpers.
- */
-/** @internal exported for lifecycle regression tests. */
-export function buildOAuthResourceLifecyclePlugin(
-  methods: ReadonlyArray<AuthMethodConfig>,
-): BetterAuthPlugin | null {
-  const configured = new Map(
-    methods
-      .filter(
-        (method): method is Extract<AuthMethodConfig, { kind: "oauth" }> =>
-          method.kind === "oauth" && typeof method.resource === "string",
-      )
-      .map((method) => [method.providerId, method] as const),
-  );
-  if (configured.size === 0) return null;
-
-  return {
-    id: "mantle-oauth-resource-lifecycle",
-    init(ctx) {
-      const tokenEndpoints = new Map<string, Promise<string>>();
-      const resolveTokenEndpoint = (
-        method: Extract<AuthMethodConfig, { kind: "oauth" }>,
-      ): Promise<string> => {
-        if (method.tokenUrl) return Promise.resolve(method.tokenUrl);
-        const existing = tokenEndpoints.get(method.providerId);
-        if (existing) return existing;
-        const pending = (async () => {
-          if (!method.discoveryUrl) {
-            throw new Error(
-              `OAuth provider '${method.providerId}' has no token endpoint.`,
-            );
-          }
-          const response = await fetch(method.discoveryUrl, {
-            headers: { accept: "application/json" },
-            redirect: "error",
-          });
-          if (!response.ok) {
-            throw new Error(
-              `OAuth discovery for '${method.providerId}' returned ${response.status}.`,
-            );
-          }
-          const discovery = (await response.json()) as { token_endpoint?: unknown };
-          if (typeof discovery.token_endpoint !== "string") {
-            throw new Error(
-              `OAuth discovery for '${method.providerId}' omitted token_endpoint.`,
-            );
-          }
-          return discovery.token_endpoint;
-        })();
-        tokenEndpoints.set(method.providerId, pending);
-        return pending;
-      };
-
-      return {
-        context: {
-          socialProviders: ctx.socialProviders.map((provider) => {
-            const method = configured.get(provider.id);
-            if (!method?.resource) return provider;
-            const createAuthorizationURL = provider.createAuthorizationURL.bind(provider);
-            return {
-              ...provider,
-              async createAuthorizationURL(data) {
-                const url = await createAuthorizationURL(data);
-                url.searchParams.set("resource", method.resource!);
-                return url;
-              },
-              async validateAuthorizationCode(data) {
-                const tokens = await validateAuthorizationCode({
-                  code: data.code,
-                  codeVerifier: data.codeVerifier,
-                  redirectURI: data.redirectURI,
-                  options: {
-                    clientId: method.clientId,
-                    clientSecret: method.clientSecret,
-                    redirectURI: method.redirectURI,
-                  },
-                  tokenEndpoint: await resolveTokenEndpoint(method),
-                  authentication: method.authentication,
-                  resource: method.resource,
-                });
-                return applyDefaultAccessTokenExpiry(tokens, undefined);
-              },
-              async refreshAccessToken(refreshTokenValue: string) {
-                const tokens = await refreshAccessToken({
-                  refreshToken: refreshTokenValue,
-                  options: {
-                    clientId: method.clientId,
-                    clientSecret: method.clientSecret,
-                  },
-                  tokenEndpoint: await resolveTokenEndpoint(method),
-                  authentication: method.authentication,
-                  extraParams: { resource: method.resource! },
-                });
-                return applyDefaultAccessTokenExpiry(tokens, undefined);
-              },
-            };
-          }),
-        },
-      };
-    },
-  };
-}
-
 /** @internal exported for provider-option mapping tests. */
 export function buildOAuthProviderOptions(
   config: OAuthProviderConfig,
 ): Parameters<typeof oauthProvider>[0] {
-  // GHSA-p2fr-6hmx-4528: the stable 1.6 line does not bind multiple
-  // audiences to a grant. One audience is the upstream-documented workaround.
-  if ((config.validAudiences?.length ?? 0) > 1) {
-    throw new Error(
-      "oauthProvider.validAudiences supports at most one audience until Better Auth 1.7 grant binding is adopted",
-    );
-  }
   return {
     loginPage: config.loginPage,
     consentPage: config.consentPage,
     ...(config.scopes ? { scopes: [...config.scopes] } : {}),
-    ...(config.validAudiences
-      ? { validAudiences: [...config.validAudiences] }
+    ...(config.resources
+      ? { resources: [...config.resources] }
+      : {}),
+    ...(config.mcpResource
+      ? {
+          clientRegistrationClientSecretExpiration: "90d",
+          allowPublicClientPrelogin: true,
+        }
       : {}),
     ...(config.allowDynamicClientRegistration !== undefined
       ? { allowDynamicClientRegistration: config.allowDynamicClientRegistration }
@@ -893,7 +785,9 @@ function buildAuth(config: CreateAuthConfig) {
   const bootstrap = config.bootstrapOwner;
   const emailOtpMethod = pickSingleton(config.methods, "email-otp");
   const magicLinkMethod = pickSingleton(config.methods, "magic-link");
-  const resourceLifecyclePlugin = buildOAuthResourceLifecyclePlugin(config.methods);
+  const providerOptions = config.oauthProvider
+    ? buildOAuthProviderOptions(config.oauthProvider)
+    : null;
 
   // Rate limit: Better Auth's per-route limits gate on
   // `process.env.NODE_ENV === "production"`, which is unset on
@@ -929,19 +823,34 @@ function buildAuth(config: CreateAuthConfig) {
     ...(genericOAuthProviders.length > 0
       ? [
           genericOAuth({
-            config: genericOAuthProviders.map(
-              ({ displayName: _displayName, ...provider }) => provider,
-            ),
+            config: genericOAuthProviders,
           }),
         ]
       : []),
-    ...(resourceLifecyclePlugin ? [resourceLifecyclePlugin] : []),
     ...(emailOtpMethod ? [buildEmailOTPPlugin(emailOtpMethod)] : []),
     ...(magicLinkMethod ? [buildMagicLinkPlugin(magicLinkMethod)] : []),
-    ...(config.oauthProvider
+    ...(config.oauthProvider && providerOptions
       ? [
           jwt(),
-          oauthProvider(buildOAuthProviderOptions(config.oauthProvider)),
+          config.oauthProvider.mcpResource
+            ? mcp({
+                ...providerOptions,
+                resource: config.oauthProvider.mcpResource,
+              })
+            : oauthProvider(providerOptions),
+          ...(config.oauthProvider.mcpResource
+            ? [
+                cimd({
+                  // Cloudflare's `global_fetch_strictly_public` flag is the
+                  // runtime network boundary: resolution and connection stay
+                  // on the public Internet. Better Auth owns timeout, limits,
+                  // validation, caching, and redirect rejection above it.
+                  fetchClientMetadataResource: (input, init) =>
+                    fetch(input, { ...init, redirect: "error" }),
+                  metadataProfile: "mcp-2026-07-28",
+                }),
+              ]
+            : []),
         ]
       : []),
   ];
@@ -1146,9 +1055,21 @@ export type OAuthAccessTokenVerification =
   | {
       readonly ok: false;
       readonly status: 401 | 403;
-      readonly reason: "invalid-token" | "insufficient-scope";
+      readonly reason:
+        | "invalid-token"
+        | "invalid-dpop-proof"
+        | "insufficient-scope";
       readonly missingScopes?: readonly string[];
     };
+
+export interface OAuthConsentRequest {
+  readonly clientName: string;
+  readonly redirectUri: string;
+  readonly scopes: readonly string[];
+  /** Better Auth-signed authorization query. Return it unchanged with the
+   *  consent decision so Better Auth can verify the flow. */
+  readonly oauthQuery: string;
+}
 
 // Better Auth's full inferred type pulls plugin internals
 // (`AdminOptions`) that aren't re-exported, so emitting a .d.ts that
@@ -1156,6 +1077,8 @@ export type OAuthAccessTokenVerification =
 // public surface stable.
 export interface Auth {
   readonly basePath: string;
+  /** Canonical MCP protected resource when this Auth owns one. */
+  readonly mcpResource?: string;
   readonly handler: (request: Request) => Promise<Response>;
   readonly getSession: (request: Request) => Promise<{
     session: { id: string; userId: string; expiresAt: Date };
@@ -1183,7 +1106,8 @@ export interface Auth {
     providerId: string,
   ) => Promise<ProviderAccessToken>;
   /** Verify a JWT access token against this Auth instance's issuer and
-   *  JWKS. Opaque tokens and remote introspection are intentionally not
+   *  JWKS. Passing a Request also enforces DPoP proof binding and persistent
+   *  replay protection. Opaque tokens and remote introspection are not
    *  supported. */
   readonly verifyOAuthAccessToken: (
     tokenOrRequest: string | Request,
@@ -1192,6 +1116,15 @@ export interface Auth {
       readonly scopes?: readonly string[];
     },
   ) => Promise<OAuthAccessTokenVerification>;
+  /** Secret-free client projection for the current consent redirect. */
+  readonly getOAuthConsentRequest: (
+    request: Request,
+  ) => Promise<OAuthConsentRequest | null>;
+  /** Submit the original signed query and return the validated client redirect. */
+  readonly completeOAuthConsent: (
+    request: Request,
+    accept: boolean,
+  ) => Promise<string>;
   /** Methods the consumer registered, in declaration order. The admin
    *  SPA renders sign-in sections per this list. Secrets, senders, and
    *  per-provider extras are intentionally excluded — UI doesn't need
@@ -1267,12 +1200,22 @@ export function isSetupIncompleteAuth(auth: Auth): boolean {
   return SETUP_INCOMPLETE_AUTHS.has(auth);
 }
 
+const LEGACY_DCR_TTL_MS = 90 * 24 * 60 * 60 * 1_000;
+const LEGACY_DCR_CLEANUP_INTERVAL_MS = 60 * 60 * 1_000;
+
 export function createAuth(config: CreateAuthConfig): Auth {
   const auth = buildAuth(config);
   const basePath = normalizeAuthBasePath(config.basePath);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const api = auth.api as any;
   const localJwksCacheKey = {};
+  let dpopReplayStore: DpopReplayStore | null = null;
+  const getDpopReplayStore = async (): Promise<DpopReplayStore> => {
+    if (dpopReplayStore) return dpopReplayStore;
+    const context = await auth.$context;
+    dpopReplayStore = createDpopReplayStore(context.internalAdapter);
+    return dpopReplayStore;
+  };
   const verifyAccessToken = config.oauthProvider
     ? async (token: string, audience: string) => {
         const context = await auth.$context;
@@ -1285,10 +1228,38 @@ export function createAuth(config: CreateAuthConfig): Auth {
         );
       }
     : null;
+  let nextDcrCleanupAt = 0;
+
+  const pruneExpiredDynamicClients = async (): Promise<void> => {
+    const now = Date.now();
+    if (!config.oauthProvider?.mcpResource || now < nextDcrCleanupAt) return;
+    // Set before awaiting so concurrent OAuth requests do not fan out writes.
+    nextDcrCleanupAt = now + LEGACY_DCR_CLEANUP_INTERVAL_MS;
+    try {
+      await config.database
+        .prepare(
+          "DELETE FROM oauthClient WHERE clientDiscoveryId IS NULL AND userId IS NULL AND referenceId IS NULL AND createdAt < ?",
+        )
+        .bind(new Date(now - LEGACY_DCR_TTL_MS).toISOString())
+        .run();
+    } catch (error) {
+      // Cleanup is bounded storage hygiene, not an authorization decision.
+      console.error("[better-auth] legacy DCR cleanup failed", error);
+    }
+  };
+
   return {
     basePath,
-    handler: async (request) =>
-      normalizeAuthResponseCookies(await auth.handler(request)),
+    ...(config.oauthProvider?.mcpResource
+      ? { mcpResource: config.oauthProvider.mcpResource }
+      : {}),
+    handler: async (request) => {
+      const pathname = new URL(request.url).pathname;
+      if (pathname.startsWith(`${basePath}/oauth2/`)) {
+        await pruneExpiredDynamicClients();
+      }
+      return normalizeAuthResponseCookies(await auth.handler(request));
+    },
     getSession: (request) =>
       api.getSession({ headers: request.headers }).then((r: unknown) => r ?? null),
     getUserRole: async (userId) => {
@@ -1330,14 +1301,84 @@ export function createAuth(config: CreateAuthConfig): Auth {
         createdAt,
       };
     },
-    getProviderAccessToken: (request, providerId) =>
-      getProviderAccessTokenForRequest(api, request, providerId),
+    getProviderAccessToken: async (request, providerId) => {
+      const session = await api.getSession({ headers: request.headers });
+      const userId = session?.user?.id;
+      const account = userId
+        ? await config.database
+          .prepare("SELECT id FROM account WHERE userId = ? AND providerId = ? LIMIT 1")
+          .bind(userId, providerId)
+          .first<{ id: string }>()
+        : null;
+      if (!account) {
+        throw new Error(
+          `getProviderAccessToken: provider '${providerId}' is not linked to the current user.`,
+        );
+      }
+      return getProviderAccessTokenForRequest(api, request, account.id, providerId);
+    },
     verifyOAuthAccessToken: async (tokenOrRequest, options) => {
       return verifyOAuthJwt(
         tokenOrRequest,
         options,
         verifyAccessToken,
+        getDpopReplayStore,
       );
+    },
+    getOAuthConsentRequest: async (request) => {
+      if (!config.oauthProvider) return null;
+      const url = new URL(request.url);
+      const clientId = url.searchParams.get("client_id");
+      if (!clientId || !url.search) return null;
+      const oauthQuery = url.search.slice(1);
+      const client = await api.getOAuthClientPublicPrelogin({
+        headers: request.headers,
+        body: { client_id: clientId, oauth_query: oauthQuery },
+      });
+      const redirectUri = url.searchParams.get("redirect_uri") ??
+        (Array.isArray(client?.redirect_uris) &&
+            typeof client.redirect_uris[0] === "string"
+          ? client.redirect_uris[0]
+          : "");
+      return {
+        clientName: typeof client?.client_name === "string"
+          ? client.client_name
+          : clientId,
+        redirectUri,
+        scopes: (url.searchParams.get("scope") ?? "")
+          .split(/\s+/u)
+          .filter(Boolean),
+        oauthQuery,
+      };
+    },
+    completeOAuthConsent: async (request, accept) => {
+      if (!config.oauthProvider) {
+        throw new Error("completeOAuthConsent: oauthProvider is not configured.");
+      }
+      const form = await request.formData();
+      const oauthQuery = form.get("oauth_query");
+      if (typeof oauthQuery !== "string" || oauthQuery.length === 0) {
+        throw new Error("completeOAuthConsent: oauth_query is missing.");
+      }
+      const headers = new Headers(request.headers);
+      headers.set("content-type", "application/json");
+      headers.delete("content-length");
+      const response = await auth.handler(new Request(
+        new URL(`${basePath}/oauth2/consent`, request.url),
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ accept, oauth_query: oauthQuery }),
+        },
+      ));
+      if (!response.ok) {
+        throw new Error(`completeOAuthConsent: Better Auth returned ${response.status}.`);
+      }
+      const result = await response.json() as { url?: unknown };
+      if (!result || typeof result.url !== "string") {
+        throw new Error("completeOAuthConsent: Better Auth omitted the redirect URL.");
+      }
+      return result.url;
     },
     methods: config.methods.map<AuthMethodInfo>((m) => {
       switch (m.kind) {
@@ -1530,7 +1571,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
             : {}),
           ...(input.grantTypes ? { grant_types: [...input.grantTypes] } : {}),
           ...(input.responseTypes ? { response_types: [...input.responseTypes] } : {}),
-          ...(input.type ? { type: input.type } : {}),
+          ...(input.applicationType ? { application_type: input.applicationType } : {}),
           ...(input.skipConsent !== undefined ? { skip_consent: input.skipConsent } : {}),
           ...(input.enableEndSession !== undefined
             ? { enable_end_session: input.enableEndSession }
@@ -1583,6 +1624,10 @@ export function createSetupIncompleteAuth(
       status: 401,
       reason: "invalid-token",
     }),
+    getOAuthConsentRequest: async () => null,
+    completeOAuthConsent: async () => {
+      throw new Error(message);
+    },
     methods: [],
     listLinkedAccounts: async () => [],
     unlinkAccount: async () => false,
@@ -1601,29 +1646,22 @@ export function createSetupIncompleteAuth(
   return auth;
 }
 
-function bearerTokenFrom(tokenOrRequest: string | Request): string | null {
-  if (typeof tokenOrRequest === "string") return tokenOrRequest.trim() || null;
-  const header = tokenOrRequest.headers.get("authorization");
-  if (!header) return null;
-  const match = /^Bearer ([^\s]+)$/i.exec(header);
-  return match?.[1] ?? null;
-}
-
 /** @internal exported to pin the session-bound Better Auth request and
  *  secret-minimizing response mapping. */
 export async function getProviderAccessTokenForRequest(
   api: {
     getAccessToken(input: {
       headers: Headers;
-      body: { providerId: string };
+      body: { accountId: string };
     }): Promise<unknown>;
   },
   request: Request,
+  accountId: string,
   providerId: string,
 ): Promise<ProviderAccessToken> {
   const value = (await api.getAccessToken({
     headers: request.headers,
-    body: { providerId },
+    body: { accountId },
   })) as {
     accessToken?: unknown;
     accessTokenExpiresAt?: unknown;
@@ -1682,8 +1720,13 @@ export async function verifyOAuthJwt(
     readonly scopes?: readonly string[];
   },
   verify: ((token: string, audience: string) => Promise<Record<string, unknown>>) | null,
+  getDpopReplayStore?: () => Promise<DpopReplayStore>,
 ): Promise<OAuthAccessTokenVerification> {
-  const token = bearerTokenFrom(tokenOrRequest);
+  const request = typeof tokenOrRequest === "string" ? null : tokenOrRequest;
+  const authorization = parseAccessTokenAuthorization(
+    request?.headers.get("authorization") ?? `Bearer ${tokenOrRequest}`,
+  );
+  const token = authorization?.token;
   // JWT compact serialization has exactly three non-empty parts.
   // Reject opaque tokens before any network/JWKS work.
   if (
@@ -1696,6 +1739,16 @@ export async function verifyOAuthJwt(
   }
   try {
     const claims = await verify(token, options.audience);
+    await enforceDpopBinding({
+      payload: claims,
+      authorization,
+      proofJwt: request?.headers.get("dpop"),
+      method: request?.method ?? "GET",
+      url: request?.url ?? options.audience,
+      ...(request && authorization.scheme === "DPoP" && getDpopReplayStore
+        ? { replayStore: await getDpopReplayStore() }
+        : {}),
+    });
     if (typeof claims["sub"] !== "string" || claims["sub"].length === 0) {
       return { ok: false, status: 401, reason: "invalid-token" };
     }
@@ -1718,7 +1771,10 @@ export async function verifyOAuthJwt(
       credentialId: typeof claims["jti"] === "string" ? claims["jti"] : null,
       scopes,
     };
-  } catch {
+  } catch (error) {
+    if (isDpopBindingError(error)) {
+      return { ok: false, status: 401, reason: "invalid-dpop-proof" };
+    }
     return { ok: false, status: 401, reason: "invalid-token" };
   }
 }
@@ -1733,15 +1789,14 @@ export function mapRegisteredOAuthClient(value: unknown): RegisteredOAuthClient 
     client_name?: string;
     client_uri?: string;
     token_endpoint_auth_method?: string;
-    type?: string;
-    public?: boolean;
+    application_type?: "web" | "native";
   };
   if (!row.client_id || !Array.isArray(row.redirect_uris)) {
     throw new Error("registerOAuthClient: Better Auth returned an invalid client.");
   }
   return {
     clientId: row.client_id,
-    ...(row.client_secret && row.public !== true && row.token_endpoint_auth_method !== "none"
+    ...(row.client_secret && row.token_endpoint_auth_method !== "none"
       ? { clientSecret: row.client_secret }
       : {}),
     redirectUris: row.redirect_uris,
@@ -1751,8 +1806,7 @@ export function mapRegisteredOAuthClient(value: unknown): RegisteredOAuthClient 
     ...(row.token_endpoint_auth_method
       ? { tokenEndpointAuthMethod: row.token_endpoint_auth_method }
       : {}),
-    ...(row.type ? { type: row.type } : {}),
-    ...(row.public !== undefined ? { public: row.public } : {}),
+    ...(row.application_type ? { applicationType: row.application_type } : {}),
   };
 }
 
