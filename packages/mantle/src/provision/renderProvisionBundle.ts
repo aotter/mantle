@@ -10,12 +10,6 @@
  * values, reporting failures as stable neutral codes the hosts map to their
  * own error shapes, and holds no filesystem, process, git, GitHub, auth, or
  * deploy code.
- *
- * One exception is outstanding: `applyWrangler` rewrites a Cloudflare project
- * and D1 database name, because the shipped bundles hard-code those instead of
- * templating them. Removing it before the bundles change would only move the
- * same rewrite into all three hosts. It leaves once the starter templates those
- * fields — see aotter/mantle#705. Do not add a second host-shaped exception.
  */
 import {
   canonicalizeLocaleList,
@@ -116,8 +110,6 @@ export interface LaunchValues {
   readonly afterLaunchSkillUrl?: string;
   readonly installSummary?: string;
   readonly turnstileSiteKey?: string;
-  /** Extra `[vars]` entries upserted into wrangler.toml (deployment facts). */
-  readonly wranglerVars?: Readonly<Record<string, string>>;
 }
 
 export interface RenderProvisionBundleInput {
@@ -179,10 +171,9 @@ export function renderProvisionBundle(input: RenderProvisionBundleInput): Render
   assertLocalesSupported(bundle, launch);
   selectLocaleCatalogs(files, bundle.localizedFiles, launch);
   trimManifestLocales(files, launch.locales);
-  applyWrangler(files, launch);
   // Limits are declared over what gets written. Measure the finished tree:
-  // substitution expands, and locale, manifest, and wrangler transforms all
-  // run after the input measurement in validateBundle.
+  // substitution expands, and locale and manifest transforms both run after
+  // the input measurement in validateBundle.
   assertProjectSize(files, binaryFiles, limits);
 
   return { files, binaryFiles };
@@ -242,12 +233,6 @@ function validateLaunchValues(launch: LaunchValues): LaunchValues {
   }
   for (const [name, value] of [["brand", launch.brand], ["description", launch.description]] as const) {
     if (value.length === 0) fail("launch_value_invalid", `${name} must not be empty.`);
-  }
-  for (const [name, value] of Object.entries(launch.wranglerVars ?? {})) {
-    if (!/^[A-Z][A-Z0-9_]*$/.test(name)) fail("launch_value_invalid", `wrangler var ${name} must be SCREAMING_SNAKE_CASE.`);
-    if (value.length > 500) fail("launch_value_invalid", `wrangler var ${name} must be at most 500 characters.`);
-    if (CONTROL_CHARACTERS.test(value)) fail("launch_value_invalid", `wrangler var ${name} must be a single line.`);
-    if (value.includes('"')) fail("launch_value_invalid", `wrangler var ${name} must not contain a quote.`);
   }
   return { ...launch, locales, canonicalLocale };
 }
@@ -437,39 +422,6 @@ function trimManifestLocales(files: Map<string, string>, locales: readonly strin
       `${MANIFEST_PATH}: ${error.message}`,
     );
   }
-}
-
-// --- wrangler --------------------------------------------------------------
-
-/**
- * The bundle ships a starter-shaped `wrangler.toml`; the project name, its D1
- * database name, and any host-supplied `[vars]` are the only parts a caller
- * must rewrite. Everything else stays exactly as the starter authored it.
- */
-function applyWrangler(files: Map<string, string>, launch: LaunchValues): void {
-  const text = files.get("wrangler.toml");
-  if (text === undefined) return;
-  const envStart = text.search(/\n\[env\./);
-  const head = envStart === -1 ? text : text.slice(0, envStart);
-  const tail = envStart === -1 ? "" : text.slice(envStart);
-  let next = head
-    .replace(/^name = ".*"$/m, `name = ${JSON.stringify(launch.projectName)}`)
-    .replace(/^database_name = ".*"$/m, `database_name = ${JSON.stringify(`${launch.projectName}-db`)}`);
-  for (const [name, value] of Object.entries(launch.wranglerVars ?? {})) {
-    next = upsertWranglerVar(next, name, value);
-  }
-  files.set("wrangler.toml", `${next}${tail}`);
-}
-
-export function upsertWranglerVar(text: string, name: string, value: string): string {
-  const line = `${name} = ${JSON.stringify(value)}`;
-  const existing = new RegExp(`^\\s*#?\\s*${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=.*$`, "m");
-  // Replacer function, not a string: a `$&` in the value must stay literal.
-  if (existing.test(text)) return text.replace(existing, () => line);
-  const vars = /^\[vars\]\s*$/m.exec(text);
-  if (!vars || vars.index === undefined) return `${text.trimEnd()}\n\n[vars]\n${line}\n`;
-  const insertAt = vars.index + vars[0].length;
-  return `${text.slice(0, insertAt)}\n${line}${text.slice(insertAt)}`;
 }
 
 // --- small helpers ---------------------------------------------------------

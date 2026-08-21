@@ -12,7 +12,7 @@ import {
 } from "../../src/provision.js";
 
 // One golden bundle exercising text, template, binary, localized, manifest,
-// and wrangler paths. Failure cases mutate a copy of it.
+// and Wrangler placeholders. Failure cases mutate a copy of it.
 const GOLDEN: ProvisionBundle = {
   kind: PROVISION_BUNDLE_KIND,
   version: "0.1.0-alpha.7",
@@ -20,7 +20,7 @@ const GOLDEN: ProvisionBundle = {
   files: {
     "README.md": "# {{BRAND}}\n\n{{DESCRIPTION}}\n",
     "wrangler.toml": [
-      'name = "mantle-intake"',
+      'name = "{{PROJECT_NAME}}"',
       'main = "src/index.ts"',
       "",
       "[vars]",
@@ -29,7 +29,7 @@ const GOLDEN: ProvisionBundle = {
       "",
       "[[d1_databases]]",
       'binding = "DB"',
-      'database_name = "mantle-intake-local"',
+      'database_name = "{{PROJECT_NAME}}-db"',
       "",
     ].join("\n"),
     ".mantle/launch-state.json.template": '{\n  "project_name": "{{PROJECT_NAME}}",\n  "brand": "{{BRAND}}",\n  "locales": {{LOCALES}}\n}\n',
@@ -118,23 +118,12 @@ describe("renderProvisionBundle — golden bundle", () => {
     expect(manifest).not.toContain("zh-TW");
   });
 
-  it("rewrites the wrangler project and database name only", () => {
+  it("substitutes the Wrangler project and database identity", () => {
     const wrangler = rendered.files.get("wrangler.toml") as string;
     expect(wrangler).toContain('name = "morning-lab"');
     expect(wrangler).toContain('database_name = "morning-lab-db"');
     expect(wrangler).toContain('MANTLE_AUTH_MODE = "self-managed"');
     expect(wrangler).toContain('main = "src/index.ts"');
-  });
-
-  it("upserts host-supplied wrangler vars without touching the rest", () => {
-    const withVars = renderProvisionBundle({
-      bundle: GOLDEN,
-      launch: { ...LAUNCH, wranglerVars: { PUBLIC_ORIGIN: "https://example.com", TURNSTILE_SITE_KEY: "abc" } },
-    });
-    const wrangler = withVars.files.get("wrangler.toml") as string;
-    expect(wrangler).toContain('PUBLIC_ORIGIN = "https://example.com"');
-    expect(wrangler).toContain('TURNSTILE_SITE_KEY = "abc"');
-    expect(wrangler).not.toContain("http://localhost:8787");
   });
 
 });
@@ -320,21 +309,6 @@ describe("renderProvisionBundle — injection through launch values", () => {
     (bundle.files as Record<string, string>)[path] = content;
     return bundle;
   };
-
-  it("rejects a quote in a wrangler var, which would break out of the string", () => {
-    expectFailure("launch_value_invalid", GOLDEN, {
-      ...LAUNCH,
-      wranglerVars: { PUBLIC_ORIGIN: 'https://x"\nADMIN_BYPASS = "1' },
-    });
-  });
-
-  it("treats a $-pattern in a wrangler var literally", () => {
-    const rendered = renderProvisionBundle({
-      bundle: GOLDEN,
-      launch: { ...LAUNCH, wranglerVars: { PUBLIC_ORIGIN: "https://x/$&$`$'" } },
-    });
-    expect(rendered.files.get("wrangler.toml")).toContain(`PUBLIC_ORIGIN = "https://x/$&$\`$'"`);
-  });
 
   // A brand may legitimately contain braces; only bundle-side tokens are ours.
   it("keeps a placeholder-shaped brand instead of failing the render", () => {
