@@ -46,6 +46,32 @@ verdict expires when that SHA changes. After two patch rounds, a new
 foundational blocker returns to the state table and the user for a scope
 decision instead of starting another local redesign loop.
 
+For the candidate-to-channel transition, the controller follows this finite
+state table:
+
+| Durable state | Permitted next mutation | Re-run behavior | Public channel |
+|---|---|---|---|
+| Source gated; version unused | Create the immutable Core tag, then publish and verify exact packages under `mantle-release` | Existing state must match or the run fails | Unchanged |
+| Candidate packages verified; Starter tag absent | Dispatch the pinned Starter release and wait | The Starter worker resumes or reports its matching no-op | Unchanged |
+| Matching Starter tag exists | Validate its Core/base provenance and run the frozen public-registry gates | Validation and gates repeat without mutation | Unchanged |
+| Released Starter passes | Promote npmjs and GitHub Packages channel tags monotonically | Same version is a no-op; an older run preserves a newer tag | Candidate version |
+| Channels promoted | Create the Core GitHub Release; optionally dispatch Landing | Existing matching release is a no-op | Candidate version |
+
+Invariants:
+
+- immutable package versions and Core/Starter tags must keep the requested
+  version, Core SHA, and pinned Starter SHA identity;
+- public channel tags cannot move until the released Starter passes provenance
+  and public-registry gates;
+- channel updates use the controller's monotonic promotion boundary, so an
+  older re-run cannot move a channel backward;
+- the candidate version may be fetched explicitly or through the temporary
+  `mantle-release` tag before promotion, but is not the public channel default.
+
+Non-goals: this transition does not change Starter worker ownership, add
+rollback or unpublish behavior, migrate Landing compatibility gates, or deploy
+Landing unless `deploy_landing=true`.
+
 ## Branches and channels
 
 - Feature and release PRs target `develop`.
