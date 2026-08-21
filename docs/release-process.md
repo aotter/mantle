@@ -16,10 +16,11 @@ The controller owns this order:
 ```text
 Core source + exact-packed Starter gates
   -> Core tag
-  -> npmjs + GitHub Packages
+  -> npmjs + GitHub Packages candidate packages (`mantle-release`)
   -> Starter release worker
   -> immutable Starter tag
   -> public-registry Starter gate
+  -> npmjs + GitHub Packages public channel promotion
   -> Core GitHub Release
   -> optional Landing worker
 ```
@@ -45,6 +46,34 @@ row, a concrete event interleaving, and the wrong mutation it permits. A clean
 verdict expires when that SHA changes. After two patch rounds, a new
 foundational blocker returns to the state table and the user for a scope
 decision instead of starting another local redesign loop.
+
+For the candidate-to-channel transition, the controller follows this finite
+state table:
+
+| Durable state | Permitted next mutation | Re-run behavior | Public channel |
+|---|---|---|---|
+| Source gated; version unused | Create the immutable Core tag | Existing tag must match or the run fails | Unchanged |
+| Core tag exists; candidate packages incomplete | Publish and verify missing exact versions under `mantle-release` through each registry's sole publish step | Existing versions are verified and skipped | Unchanged |
+| Candidate packages verified; Starter tag absent | Dispatch the pinned Starter release and wait | The Starter worker resumes or reports its matching no-op | Unchanged |
+| Matching Starter tag exists | Validate its Core/base provenance and run the frozen public-registry gates | Validation and gates repeat without mutation | Unchanged |
+| Released Starter passes | Promote npmjs and GitHub Packages channel tags monotonically | Same version is a no-op; an older run preserves a newer tag | Candidate or newer version |
+| Channels promoted or preserved newer | Create the Core GitHub Release | Existing matching release is a no-op | Candidate or newer version |
+| Core GitHub Release exists | Dispatch Landing only when explicitly enabled | Landing remains untouched by default | Candidate or newer version |
+
+Invariants:
+
+- immutable package versions and Core/Starter tags must keep the requested
+  version, Core SHA, and pinned Starter SHA identity;
+- public channel tags cannot move until the released Starter passes provenance
+  and public-registry gates;
+- channel updates use the controller's monotonic promotion boundary, so an
+  older re-run cannot move a channel backward;
+- the candidate version may be fetched explicitly or through the temporary
+  `mantle-release` tag before promotion, but is not the public channel default.
+
+Non-goals: this transition does not change Starter worker ownership, add
+rollback or unpublish behavior, migrate Landing compatibility gates, or deploy
+Landing unless `deploy_landing=true`.
 
 ## Branches and channels
 
@@ -129,11 +158,12 @@ Before creating the Core tag, the controller proves:
 - a fresh version is unused across npmjs, GitHub Packages, and Starter tags;
 - the pinned Starter commit is still the remote `develop` tip.
 
-After npm publication, it compares each public registry integrity value with
-the locally packed tarball, rejects leaked `workspace:*` dependencies, waits
-for the Starter tag, checks that tag's exact Core/base provenance, installs its
-frozen locks from the public registry, and reruns the Starter bundle gates.
-Only then does it create the Core GitHub Release.
+After candidate publication under `mantle-release`, it compares each public
+registry integrity value with the locally packed tarball, rejects leaked
+`workspace:*` dependencies, waits for the Starter tag, checks that tag's exact
+Core/base provenance, installs its frozen locks from the public registry, and
+reruns the Starter bundle gates. Only then does it promote the public npmjs and
+GitHub Packages channel tags and create the Core GitHub Release.
 
 ## Idempotency and recovery
 
