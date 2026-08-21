@@ -30,6 +30,9 @@ Intentional behavior changes:
   rejected at the request boundary.
 - Malformed percent-encoded paths are routing misses (`404`), not claimed
   Mantle routes.
+- `oauthProvider.validAudiences` accepts at most one audience while Mantle uses
+  Better Auth 1.6. Multi-audience grants are rejected to prevent
+  [GHSA-p2fr-6hmx-4528](https://github.com/advisories/GHSA-p2fr-6hmx-4528).
 - Canonical plan ordering may change stable field/export order (including
   Admin CSV columns) without changing field values.
 

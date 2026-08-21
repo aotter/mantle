@@ -203,7 +203,8 @@ export interface OAuthProviderConfig {
   readonly clientRegistrationDefaultScopes?: ReadonlyArray<Scope>;
   readonly clientRegistrationAllowedScopes?: ReadonlyArray<Scope>;
   readonly cachedTrustedClients?: ReadonlySet<string>;
-  /** Explicit JWT audiences this authorization server may mint. */
+  /** Explicit JWT audience this authorization server may mint. Mantle rejects
+   *  multiple entries until Better Auth 1.7 grant binding is adopted. */
   readonly validAudiences?: ReadonlyArray<string>;
   readonly clientPrivileges?: (context: {
     readonly headers: Headers;
@@ -832,6 +833,13 @@ export function buildOAuthResourceLifecyclePlugin(
 export function buildOAuthProviderOptions(
   config: OAuthProviderConfig,
 ): Parameters<typeof oauthProvider>[0] {
+  // GHSA-p2fr-6hmx-4528: the stable 1.6 line does not bind multiple
+  // audiences to a grant. One audience is the upstream-documented workaround.
+  if ((config.validAudiences?.length ?? 0) > 1) {
+    throw new Error(
+      "oauthProvider.validAudiences supports at most one audience until Better Auth 1.7 grant binding is adopted",
+    );
+  }
   return {
     loginPage: config.loginPage,
     consentPage: config.consentPage,
