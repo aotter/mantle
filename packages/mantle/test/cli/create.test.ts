@@ -14,7 +14,7 @@ const BUNDLE = {
   archetype: "blank",
   files: {
     "README.md": "# {{BRAND}}\n",
-    "wrangler.toml": 'name = "mantle-blank"\n\n[vars]\nMANTLE_AUTH_MODE = "{{AUTH_MODE}}"\n',
+    "wrangler.toml": 'name = "{{PROJECT_NAME}}"\n\n[vars]\nMANTLE_AUTH_MODE = "{{AUTH_MODE}}"\n',
     ".mantle/launch-state.json.template": '{"project_name":"{{PROJECT_NAME}}","locales":{{LOCALES}}}\n',
   },
   binaryFiles: { "public/icon.png": "aGVsbG8=" },
