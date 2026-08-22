@@ -513,11 +513,15 @@ jobs:
             corepack pnpm@9.15.0 --dir "$ROOT/$PROJECT" check
           done
 
+      # Landing is private, and the job's own GITHUB_TOKEN cannot read another
+      # repository. Without an explicit cross-repository token this gate fails
+      # after the tag, the packages, and the Starter tag already exist.
       - name: Check out the reviewed Landing consumer
         uses: actions/checkout@v7.0.1
         with:
           repository: aotter/mantle-landing
           ref: ${{ env.LANDING_SHA }}
+          token: ${{ secrets.RELEASE_FANOUT_TOKEN }}
           path: .published-consumer/mantle-landing
           persist-credentials: false
 
