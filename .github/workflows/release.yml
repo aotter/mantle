@@ -247,9 +247,13 @@ jobs:
               exit 1
             }
           npm whoami --userconfig "$NPMRC" --registry https://registry.npmjs.org >/dev/null
+          # `npm access list packages` only reports packages that already
+          # exist in the scope, so a first publish is absent rather than
+          # denied. Scope-level write cannot be proven from this listing;
+          # `npm publish` is the boundary that rejects a token without it.
           npm access list packages @aotter --json --userconfig "$NPMRC" \
             --registry https://registry.npmjs.org | \
-            node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{const access=JSON.parse(s);const denied=process.argv.slice(1).filter(p=>access[p]!=='read-write');if(denied.length){console.error('NPM_TOKEN lacks read-write access: '+denied.join(', '));process.exit(1)}})" \
+            node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{const access=JSON.parse(s);const denied=process.argv.slice(1).filter(p=>p in access&&access[p]!=='read-write');if(denied.length){console.error('NPM_TOKEN lacks read-write access: '+denied.join(', '));process.exit(1)}})" \
             $PKG_NAMES
           [ "$(gh api repos/aotter/mantle-starters --jq '.permissions.push // false')" = true ] || {
             echo "::error::RELEASE_FANOUT_TOKEN lacks Contents write on mantle-starters"
