@@ -22,3 +22,11 @@ dist-*/
 .vscode/
 coverage/
 .packed-consumer/
+# Release controller artifacts, all written into the Core root: packed
+# tarballs, their GitHub Packages re-pack, and the consumer checkouts the
+# published-registry gates clone in. check-packed-consumer.mjs refuses to
+# run from a dirty tree, so an untracked artifact from an earlier step fails
+# a later gate.
+.published-consumer/
+.release-tarballs/
+.github-package-tarballs/
