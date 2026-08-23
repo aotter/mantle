@@ -39,7 +39,7 @@ jobs:
     # Names are read from these package.json files during packing.
     env:
       LANDING_SHA: 7d293477e28ccb62b8a3d89bb7924de0a7c052be
-      STARTER_SHA: aea7c7bfc2e425faa064ab64eb766d1999af9685
+      STARTER_SHA: 0520cd10aaa7c66d62fec9305bed797e474f6545
       PKG_DIRS: >-
         packages/mantle-spec
         packages/mantle-admin-ui
