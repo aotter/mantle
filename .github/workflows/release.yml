@@ -355,10 +355,17 @@ jobs:
           done
 
       - name: Verify npm metadata
+        env:
+          # Unauthenticated, a restricted package would 404 here and the error
+          # below would blame propagation.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           VERSION="${{ steps.ver.outputs.version }}"
-          for attempt in 1 2 3 4 5 6 7 8; do
+          # A new version of an existing package is readable in seconds; a
+          # package published under a brand new name took ten minutes at
+          # v0.1.0-alpha.8. Budget for the slow case.
+          for attempt in $(seq 40); do
             READY=1
             for p in $PKG_NAMES; do
               npm view "$p@$VERSION" dist.integrity --json --registry https://registry.npmjs.org | \
@@ -569,7 +576,7 @@ jobs:
 
           for pkg in $PKG_NAMES; do
             promote "$pkg" "$CHANNEL"
-            if [[ "$VERSION" == 0.0.* && "$CHANNEL" != latest ]]; then
+            if [[ "$CHANNEL" != latest ]]; then
               promote "$pkg" latest
             fi
           done
@@ -615,7 +622,7 @@ jobs:
 
           for pkg in $PKG_NAMES; do
             promote "$pkg" "$CHANNEL"
-            if [[ "$VERSION" == 0.0.* && "$CHANNEL" != latest ]]; then
+            if [[ "$CHANNEL" != latest ]]; then
               promote "$pkg" latest
             fi
           done
