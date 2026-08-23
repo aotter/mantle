@@ -154,6 +154,7 @@ describe("mountPublicRoutes response-cache contract", () => {
     const homeMarkdown = await h.app.request("/en.md");
     const listMarkdown = await h.app.request("/en/posts.md");
     const sitemap = await (await h.app.request("/sitemap.xml")).text();
+    const robots = await h.app.request("/robots.txt");
 
     for (const response of [home, list, single]) {
       const html = await response.text();
@@ -164,6 +165,10 @@ describe("mountPublicRoutes response-cache contract", () => {
       expect(html).toContain('name="twitter:card"');
       expect(html).toContain('type="application/ld+json"');
     }
+    expect(robots.status).toBe(200);
+    const robotsBody = await robots.text();
+    expect(robotsBody).toContain("User-agent: *");
+    expect(robotsBody).toContain(`Sitemap: ${sitemap.match(/<loc>([^<]*)\//)?.[1] ?? ""}/sitemap.xml`);
     expect(homeMarkdown.status).toBe(200);
     await expect(homeMarkdown.text()).resolves.toContain("Ocean home");
     expect(listMarkdown.status).toBe(200);
