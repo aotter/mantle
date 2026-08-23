@@ -33,6 +33,7 @@ import { PUBLIC_CACHE_TAG } from "../oauth/cachePolicy.js";
  *   - `GET /{locale}/{segment}/{slug}?preview=1` → live render via `previewEntry` use case
  *   - `GET /{locale}/llms.txt`                 → composed llms.txt
  *   - `GET /llms.txt`                          → composed root llms.txt
+ *   - `GET /robots.txt`                        → crawl policy + sitemap pointer
  *   - `GET /sitemap.xml`                       → composed sitemap
  *
  * Slug overrides intercept `(collection, slug)` pairs the consumer
@@ -150,6 +151,12 @@ export function mountPublicRoutes(
     const web = ref.web(runtime);
     const body = await composeRootLlmsTxt(runtime, web, await runtime.siteConfig.load(), options);
     if (!body) return textNotFound();
+    return new Response(body, { status: 200, headers: TEXT_PUBLIC });
+  });
+
+  app.get("/robots.txt", async () => {
+    const site = await (await ref.get()).siteConfig.load();
+    const body = `User-agent: *\nAllow: /\n\nSitemap: ${absoluteUrl(site.origin, "/sitemap.xml")}\n`;
     return new Response(body, { status: 200, headers: TEXT_PUBLIC });
   });
 
