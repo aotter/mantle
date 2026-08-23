@@ -1,7 +1,7 @@
 {
   "name": "mantle-monorepo",
   "private": true,
-  "version": "0.1.0-alpha.10",
+  "version": "0.1.0-alpha.11",
   "description": "Embeddable, manifest-driven application runtime.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
