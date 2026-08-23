@@ -62,6 +62,9 @@ npx -y @aotter/mantle@alpha create transaction ./my-shop \
 From there, your coding agent can take over by following the generated
 `AGENTS.md`.
 
+If you ran that command before an earlier release, `npx` reuses its cached copy
+and npm fails with `ERESOLVE`. `npm cache clean --force` clears it.
+
 Or, send your agent this prompt:
 
 ```text
