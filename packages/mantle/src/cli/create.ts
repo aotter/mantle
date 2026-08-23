@@ -112,7 +112,11 @@ export async function runCreate(rawArgs: readonly string[]): Promise<number> {
     siteUrl: "http://localhost:8787",
     githubOwner: "",
     adminGithubLogin: "",
-    afterLaunchSkillUrl: "",
+    // The launch flow points this at a per-site hosted skill. There is no
+    // such thing for a local create, so use the version-matched Core skill;
+    // an empty value renders a dangling label in the generated AGENTS.md.
+    afterLaunchSkillUrl:
+      `https://raw.githubusercontent.com/aotter/mantle/${starterRef}/skills/develop/SKILL.md`,
   };
 
   let rendered;
