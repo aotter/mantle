@@ -34,8 +34,8 @@ catalogs:
       specifier: ^1.7.1
       version: 1.7.1
     hono:
-      specifier: ^4.12.34
-      version: 4.13.0
+      specifier: ^4.13.1
+      version: 4.13.5
     typescript:
       specifier: ^6.0.3
       version: 6.0.3
@@ -111,7 +111,7 @@ importers:
         version: 1.7.1(@cloudflare/workers-types@5.20260813.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10(@types/node@26.1.1)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0)))
       hono:
         specifier: 'catalog:'
-        version: 4.13.0
+        version: 4.13.5
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -219,7 +219,7 @@ importers:
         version: 1.7.1(@cloudflare/workers-types@5.20260813.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10(@types/node@26.1.1)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0)))
       hono:
         specifier: 'catalog:'
-        version: 4.13.0
+        version: 4.13.5
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -244,7 +244,7 @@ importers:
         version: 26.1.1
       hono:
         specifier: 'catalog:'
-        version: 4.13.0
+        version: 4.13.5
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -2847,6 +2847,10 @@ packages:
 
   hono@4.13.0:
     resolution: {integrity: sha512-jhunvfHWxd7J5EFfSgH4xsYJzSe/lfqbUCxiyyeaQasUsXeEHXtzVid+7EOGByc5JnFa23SSFL3Y2RV/z1T+eQ==}
+    engines: {node: '>=16.9.0'}
+
+  hono@4.13.5:
+    resolution: {integrity: sha512-O6+/eCYRkzzzy0rPWwKLiGBR1nFuUPZynnwjxN1MBA62NNqbT0wQEzQyK2gSO5yDIDB336sXQleAhOHrzlYyKw==}
     engines: {node: '>=16.9.0'}
 
   http-errors@2.0.1:
@@ -6304,6 +6308,8 @@ snapshots:
       function-bind: 1.1.2
 
   hono@4.13.0: {}
+
+  hono@4.13.5: {}
 
   http-errors@2.0.1:
     dependencies:
