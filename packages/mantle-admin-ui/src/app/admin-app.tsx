@@ -16,6 +16,7 @@ import { PreferencesView } from "../features/system/preferences-view";
 import { SettingsView } from "../features/system/settings-view";
 import { StaffView } from "../features/system/staff-view";
 import { MembersView } from "../features/system/members-view";
+import { ManifestLogicView } from "../features/logic/manifest-logic-view";
 
 export function AdminApp(): React.ReactElement {
   const location = useAdminLocation();
@@ -117,6 +118,14 @@ function Gate({ path }: { path: string }): React.ReactElement {
     return (
       <AuthenticatedLayout>
         <MembersView />
+      </AuthenticatedLayout>
+    );
+  }
+
+  if (path === "/admin/dev/logic") {
+    return (
+      <AuthenticatedLayout workspace="developer">
+        <ManifestLogicView />
       </AuthenticatedLayout>
     );
   }

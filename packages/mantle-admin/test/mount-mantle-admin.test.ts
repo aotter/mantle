@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { linkManifestSet, parseManifestSources } from "@aotter/mantle-spec";
-import { compileRuntimePlan } from "@aotter/mantle-runtime";
+import { compileRuntimePlan, type RuntimePlan } from "@aotter/mantle-runtime";
 import { mountMantleAdmin, type AdminAuth } from "../src/index.js";
 
 const parsed = parseManifestSources({ sources: [] });
@@ -54,12 +54,58 @@ describe("mountMantleAdmin", () => {
     }).request("https://example.test/admin/api/me");
     expect(denied.status).toBe(403);
   });
+
+  it("projects the sealed manifest plan as logic nodes and edges", async () => {
+    const response = await mounted({
+      getSession: async () => ({ session: { id: "session" }, user: { id: "user" } }),
+      getUserRole: async () => "owner",
+    }, compilePlan(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  schema: { type: object, properties: { status: { type: string } } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: open-orders }
+spec: { surface: staff, from: orders }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: place-order }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: placeOrder }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: place-order-http }
+spec:
+  source: { kind: http, method: POST, path: /api/orders }
+  target: { procedure: place-order }
+`)).request("https://example.test/admin/api/manifest-logic");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      nodes: expect.arrayContaining([
+        expect.objectContaining({ id: "Schema:orders", kind: "Schema", name: "orders" }),
+        expect.objectContaining({ id: "Trigger:place-order-http", detail: "POST /api/orders" }),
+      ]),
+      edges: expect.arrayContaining([
+        expect.objectContaining({ from: "Schema:orders", to: "View:open-orders", label: "reads" }),
+        expect.objectContaining({ from: "Trigger:place-order-http", to: "Procedure:place-order", label: "invokes" }),
+      ]),
+    });
+  });
 });
 
-function mounted(overrides: Partial<AdminAuth> = {}): Hono {
+function mounted(overrides: Partial<AdminAuth> = {}, plan: RuntimePlan = compiled.value): Hono {
   const app = new Hono();
   mountMantleAdmin(app, {
-    plan: compiled.value,
+    plan,
     auth: { ...auth, ...overrides },
     assets: { fetch: async () => new Response("admin shell") },
     get: async () => {
@@ -67,4 +113,14 @@ function mounted(overrides: Partial<AdminAuth> = {}): Hono {
     },
   });
   return app;
+}
+
+function compilePlan(text: string): RuntimePlan {
+  const parsed = parseManifestSources({ sources: [{ sourceId: "memory:test", text }] });
+  if (!parsed.ok) throw new Error(JSON.stringify(parsed.diagnostics));
+  const linked = linkManifestSet(parsed.value);
+  if (!linked.ok) throw new Error(JSON.stringify(linked.diagnostics));
+  const compiled = compileRuntimePlan(linked.value);
+  if (!compiled.ok) throw new Error("expected Admin logic fixture to compile");
+  return compiled.value;
 }

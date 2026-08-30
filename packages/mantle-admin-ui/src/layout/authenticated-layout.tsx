@@ -1,11 +1,14 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  ArrowLeft,
   BarChart3,
   Folder,
   Globe,
   Home,
   Images,
+  Network,
+  SquareTerminal,
   Settings as SettingsIcon,
   ContactRound,
   Users,
@@ -38,9 +41,13 @@ import type { AdminBrand, NavGroupData, NavItem, NavLink } from "./types";
 
 interface AuthenticatedLayoutProps {
   children: React.ReactNode;
+  workspace?: "content" | "developer";
 }
 
-export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): React.ReactElement {
+export function AuthenticatedLayout({
+  children,
+  workspace = "content",
+}: AuthenticatedLayoutProps): React.ReactElement {
   const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
   const { pathname, search } = useAdminLocation();
   const { language } = usePreferences();
@@ -56,12 +63,16 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
       const res = await api.get<{ collections: Collection[] }>("/collections");
       return res.collections;
     },
+    enabled: workspace === "content",
   });
   const site = useQuery<SiteInfo>({
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
   });
-  const viewsQuery = useQuery<ViewManifestInfo[]>(viewsManifestQueryOptions());
+  const viewsQuery = useQuery<ViewManifestInfo[]>({
+    ...viewsManifestQueryOptions(),
+    enabled: workspace === "content",
+  });
 
   React.useEffect(() => {
     if (!site.data?.icons.length) return;
@@ -79,24 +90,27 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
 
   const resolvedBrand = React.useMemo<AdminBrand>(
     () => ({
-      title: site.data?.brand ?? t(language, "admin.consoleTitle"),
-      href: "/admin",
+      title: workspace === "developer"
+        ? t(language, "developer.consoleTitle")
+        : site.data?.brand ?? t(language, "admin.consoleTitle"),
+      href: workspace === "developer" ? "/admin/dev/logic" : "/admin",
       image: preferredAdminIcon(site.data?.icons),
     }),
-    [language, site.data],
+    [language, site.data, workspace],
   );
 
   const canonical = site.data?.canonicalLocale ?? null;
   const groups = React.useMemo<ReadonlyArray<NavGroupData>>(
-    () =>
-      buildNavGroups(
-        collectionsQuery.data ?? [],
-        viewsQuery.data ?? [],
-        language,
-        canonical,
-        me.data?.role ?? null,
-      ),
-    [collectionsQuery.data, viewsQuery.data, language, canonical, me.data?.role],
+    () => workspace === "developer"
+      ? buildDeveloperNavGroups(language)
+      : buildNavGroups(
+          collectionsQuery.data ?? [],
+          viewsQuery.data ?? [],
+          language,
+          canonical,
+          me.data?.role ?? null,
+        ),
+    [collectionsQuery.data, viewsQuery.data, language, canonical, me.data?.role, workspace],
   );
   const collectionName = pathname.match(/^\/admin\/c\/([^/]+)/)?.[1];
   const viewName = pathname.match(/^\/admin\/views\/([^/]+)/)?.[1];
@@ -127,6 +141,11 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
             site={resolvedBrand}
             publicUrl={site.data?.publicUrl}
             pageTitle={pageTitle}
+            workspaceLink={workspace === "developer"
+              ? { href: "/admin", label: t(language, "common.contentAdmin"), icon: ArrowLeft }
+              : me.data?.role === "owner"
+              ? { href: "/admin/dev/logic", label: t(language, "developer.consoleTitle"), icon: SquareTerminal }
+              : undefined}
           />
           <Main className="min-h-0 overflow-y-auto overscroll-contain pt-20 pb-20">{children}</Main>
           <footer
@@ -235,6 +254,13 @@ export function buildNavGroups(
     ...(reportsGroup ? [reportsGroup] : []),
     ...(moreGroup.items.length > 0 ? [moreGroup] : []),
   ];
+}
+
+export function buildDeveloperNavGroups(language: AdminLanguage): ReadonlyArray<NavGroupData> {
+  return [{
+    title: t(language, "nav.build"),
+    items: [{ title: t(language, "nav.logic"), url: "/admin/dev/logic", icon: Network }],
+  }];
 }
 
 function collectionNavItem(c: Collection, language: AdminLanguage, canonical: string | null): NavItem {

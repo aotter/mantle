@@ -245,4 +245,26 @@ export interface ViewManifestInfo {
   list: { columns: string[]; searchFields: string[]; filterFields: string[] };
 }
 
+export type ManifestLogicKind = "Schema" | "View" | "Procedure" | "Trigger";
+
+export interface ManifestLogicNode {
+  id: string;
+  kind: ManifestLogicKind;
+  name: string;
+  detail: string;
+}
+
+export interface ManifestLogicEdge {
+  id: string;
+  from: string;
+  to: string;
+  label: string;
+}
+
+export interface ManifestLogicGraph {
+  fingerprint: string;
+  nodes: ManifestLogicNode[];
+  edges: ManifestLogicEdge[];
+}
+
 export const PUBLISHING_STATUSES: SidebarStatus[] = ["draft", "published", "archived"];

@@ -9,6 +9,7 @@ import {
   httpStatusFor,
   meetsRole,
   redactForWire,
+  resolveLifecycle,
   runtimeDiagnostic,
   checkSchemaAdminUi,
   checkViewAdminUi,
@@ -192,6 +193,7 @@ export function mountMantleAdmin<E extends Env>(
     "/admin/staff",
     "/admin/members",
     "/admin/ops",
+    "/admin/dev/logic",
     "/admin/views/:name",
   ]) {
     app.get(path, spa);
@@ -255,6 +257,7 @@ export function mountMantleAdmin<E extends Env>(
     fields: v.spec.fields ?? null,
     list: checkViewAdminUi(v).list,
   }));
+  const manifestLogic = projectManifestLogic(ref.plan);
 
   type StaffGateOk = Extract<StaffGate, { kind: "ok" }>;
   const guarded = (
@@ -424,6 +427,8 @@ export function mountMantleAdmin<E extends Env>(
   });
 
   guarded("get", "/admin/api/collections", () => Response.json({ collections }));
+
+  roleGuarded("get", "/admin/api/manifest-logic", "owner", () => Response.json(manifestLogic));
 
   guarded("get", "/admin/api/views-manifest", () => Response.json({ views: viewsManifest }));
 
@@ -1892,6 +1897,104 @@ function mediaFieldsForSchema(schema: SchemaManifest): Array<{ name: string; hin
     out.push({ name, hint });
   }
   return out;
+}
+
+type ManifestLogicKind = "Schema" | "View" | "Procedure" | "Trigger";
+
+interface ManifestLogicNode {
+  readonly id: string;
+  readonly kind: ManifestLogicKind;
+  readonly name: string;
+  readonly detail: string;
+}
+
+interface ManifestLogicEdge {
+  readonly id: string;
+  readonly from: string;
+  readonly to: string;
+  readonly label: string;
+}
+
+function projectManifestLogic(plan: RuntimePlan): {
+  readonly fingerprint: string;
+  readonly nodes: readonly ManifestLogicNode[];
+  readonly edges: readonly ManifestLogicEdge[];
+} {
+  const nodes: ManifestLogicNode[] = [
+    ...Object.values(plan.triggers).map((trigger) => ({
+      id: logicNodeId("Trigger", trigger.name),
+      kind: "Trigger" as const,
+      name: trigger.name,
+      detail: triggerSourceLabel(trigger.manifest.spec.source),
+    })),
+    ...Object.values(plan.procedures).map((procedure) => ({
+      id: logicNodeId("Procedure", procedure.name),
+      kind: "Procedure" as const,
+      name: procedure.name,
+      detail: procedure.manifest.spec.handler.kind === "builtin" ? "built-in handler" : "code handler",
+    })),
+    ...Object.values(plan.schemas).map((schema) => ({
+      id: logicNodeId("Schema", schema.name),
+      kind: "Schema" as const,
+      name: schema.name,
+      detail: `${resolveLifecycle(schema.manifest)} data`,
+    })),
+    ...Object.values(plan.views).map((view) => ({
+      id: logicNodeId("View", view.name),
+      kind: "View" as const,
+      name: view.name,
+      detail: `${view.manifest.spec.surface} ${view.query.kind} view`,
+    })),
+  ];
+  const edges: ManifestLogicEdge[] = [];
+  const edge = (from: string, to: string, label: string): void => {
+    edges.push({ id: `${from}->${to}:${label}`, from, to, label });
+  };
+
+  for (const trigger of Object.values(plan.triggers)) {
+    edge(logicNodeId("Trigger", trigger.name), logicNodeId("Procedure", trigger.target), "invokes");
+    if (trigger.lifecycleSchema) {
+      edge(logicNodeId("Schema", trigger.lifecycleSchema), logicNodeId("Trigger", trigger.name), "lifecycle");
+    }
+  }
+  for (const procedure of Object.values(plan.procedures)) {
+    const schema = procedure.collectionActionSchema ?? procedure.builtinSchema;
+    if (schema) {
+      edge(logicNodeId("Procedure", procedure.name), logicNodeId("Schema", schema), "writes");
+    }
+    if (procedure.guard) {
+      edge(logicNodeId("Procedure", procedure.guard), logicNodeId("Procedure", procedure.name), "guards");
+    }
+  }
+  for (const schema of Object.values(plan.schemas)) {
+    if (schema.translationParent) {
+      edge(logicNodeId("Schema", schema.translationParent), logicNodeId("Schema", schema.name), "translates");
+    }
+  }
+  for (const view of Object.values(plan.views)) {
+    if (view.query.kind === "declarative") {
+      edge(logicNodeId("Schema", view.query.from), logicNodeId("View", view.name), "reads");
+    }
+    if (view.guard) {
+      edge(logicNodeId("Procedure", view.guard), logicNodeId("View", view.name), "guards");
+    }
+  }
+
+  return {
+    fingerprint: plan.semanticFingerprint,
+    nodes,
+    edges: edges.sort((a, b) => a.id.localeCompare(b.id)),
+  };
+}
+
+function logicNodeId(kind: ManifestLogicKind, name: string): string {
+  return `${kind}:${name}`;
+}
+
+function triggerSourceLabel(source: RuntimePlan["triggers"][string]["manifest"]["spec"]["source"]): string {
+  if (source.kind === "http") return `${source.method} ${source.path}`;
+  if (source.kind === "mcp") return `${source.surface} MCP`;
+  return `lifecycle · ${source.on.join(", ")}`;
 }
 
 export async function runMantleUseCase<T>(

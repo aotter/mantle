@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, type LucideIcon } from "lucide-react";
 
 import { useAdminLocation } from "@/app/router";
 import { usePreferences } from "@/app/preferences";
@@ -28,6 +28,7 @@ interface HeaderProps {
   site?: AdminBrand;
   publicUrl?: string;
   pageTitle?: string;
+  workspaceLink?: { href: string; label: string; icon: LucideIcon };
 }
 
 export function Header({
@@ -35,6 +36,7 @@ export function Header({
   site,
   publicUrl,
   pageTitle,
+  workspaceLink,
 }: HeaderProps): React.ReactElement {
   const { pathname } = useAdminLocation();
   const { language } = usePreferences();
@@ -52,7 +54,7 @@ export function Header({
       <Breadcrumb className="min-w-0" aria-label={t(language, "common.breadcrumb")}>
         <BreadcrumbList className="flex-nowrap">
           <BreadcrumbItem className="hidden sm:block">
-            <BreadcrumbLink href="/admin">{site?.title ?? t(language, "admin.consoleTitle")}</BreadcrumbLink>
+            <BreadcrumbLink href={site?.href ?? "/admin"}>{site?.title ?? t(language, "admin.consoleTitle")}</BreadcrumbLink>
           </BreadcrumbItem>
           {current ? (
             <>
@@ -65,6 +67,19 @@ export function Header({
         </BreadcrumbList>
       </Breadcrumb>
       <div className="ms-auto flex shrink-0 items-center gap-1">
+        {workspaceLink ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button asChild variant="ghost" size="sm">
+                <a href={workspaceLink.href} aria-label={workspaceLink.label}>
+                  <workspaceLink.icon aria-hidden />
+                  <span className="hidden lg:inline">{workspaceLink.label}</span>
+                </a>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{workspaceLink.label}</TooltipContent>
+          </Tooltip>
+        ) : null}
         {publicUrl ? (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -99,5 +114,6 @@ function currentPage(pathname: string, language: ReturnType<typeof usePreference
   if (pathname === "/admin/settings") return t(language, "nav.settings");
   if (pathname === "/admin/staff") return t(language, "nav.staff");
   if (pathname === "/admin/members") return t(language, "nav.members");
+  if (pathname === "/admin/dev/logic") return t(language, "logic.title");
   return segment ? fieldLabel(segment) : null;
 }
