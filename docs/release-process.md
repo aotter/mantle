@@ -99,15 +99,17 @@ rollback or unpublish behavior, or deploy Landing unless
 3. Set that exact version in every workspace package and in all four agent
    plugin manifests. Set `.agents/plugins/marketplace.json` to the immutable
    `v<version>` ref.
-4. Pin both the controller and Core CI to the exact reviewed
-   `mantle-starters/develop` commit intended for this release. Do not use a
-   branch, latest tag, or inferred fallback.
+4. Pin the controller to the exact reviewed `mantle-starters/develop` and
+   `mantle-landing/develop` commits intended for this release, and Core CI to
+   the same Starter commit. Do not use a branch, latest tag, or inferred
+   fallback.
 5. If an SDK type changed, audit downstream literal constructors and exhaustive
    switches before publication. CI in Core cannot prove downstream source
    compatibility by itself.
 6. Run `pnpm check`, inspect the packed umbrella package, and run the exact
-   packed-consumer gate. Review and merge a same-repository PR into `develop`;
-   the controller rejects a direct-push release commit.
+   packed-consumer gates against both pinned Starter and Landing commits before
+   tagging. Review and merge a same-repository PR into `develop`; the
+   controller rejects a direct-push release commit.
 
 Preview the native notes before merging the release PR:
 

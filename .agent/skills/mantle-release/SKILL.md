@@ -41,14 +41,15 @@ does not promote `main`, backport, or dispatch Landing.
 
 ## Prepare the release PR
 
-1. Fetch Core and Starter remotes. Prove the intended version and both tags are
-   unused.
+1. Fetch Core, Starter, and Landing remotes. Prove the intended version and
+   both tags are unused.
 2. Preview GitHub's generated notes since the previous tag. Correct PR metadata
    and apply `skip-release-notes` to the release-only PR.
 3. Align every workspace package, plugin manifest, and marketplace ref to the
    exact version.
-4. Pin the controller and Core CI to the reviewed Starter `develop` commit.
-   Never substitute a branch or floating tag.
+4. Pin the controller to the reviewed Starter and Landing `develop` commits,
+   and Core CI to the same Starter commit. Never substitute a branch or
+   floating tag.
 5. Audit downstream literals when an SDK type or closed enum changed.
 6. Run:
 
@@ -56,6 +57,10 @@ does not promote `main`, backport, or dispatch Landing.
    pnpm check
    node scripts/check-packed-consumer.mjs --self-test
    ```
+
+   Before merge, run the workflow's exact packed-consumer commands against
+   both pinned checkouts: Starter's `pnpm check:packed` path and Landing's
+   `pnpm check` path.
 
 7. Inspect the diff and packed umbrella payload. Merge a same-repository PR
    only after CI and review pass; direct-push commits are not releasable.
