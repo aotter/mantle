@@ -721,7 +721,7 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
       );
     }
   }
-  validateJsonSchemaPatterns(s["schema"], idx, "Schema", m.metadata.name, "/spec/schema");
+  validateJsonSchema(s["schema"], idx, "Schema", m.metadata.name, "/spec/schema");
   if (properties && typeof properties === "object" && !Array.isArray(properties)) {
     for (const [propertyName, property] of Object.entries(properties)) {
       if (!property || typeof property !== "object" || Array.isArray(property)) continue;
@@ -856,6 +856,7 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   let paramSchema: JsonSchema | undefined;
   if ("params" in s && s["params"] != null) {
     paramSchema = validateViewParams(s["params"], idx);
+    validateJsonSchema(paramSchema, idx, "View", m.metadata.name, "/spec/params");
   }
   if (hasSql) {
     validateViewSql(s["sql"] as string, paramSchema, idx);
@@ -1134,7 +1135,7 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
   if (typeof s["input"] !== "object" || s["input"] === null) {
     throw new ManifestParseError("Procedure.spec.input is required (JSON Schema)", idx, "/spec/input");
   }
-  validateJsonSchemaPatterns(s["input"], idx, "Procedure", m.metadata.name, "/spec/input");
+  validateJsonSchema(s["input"], idx, "Procedure", m.metadata.name, "/spec/input");
   const uiProblem = checkFormUiSchema(s["input"] as JsonSchema, s["uiSchema"], "Procedure")[0];
   if (uiProblem) {
     throw new ManifestParseError(uiProblem.message, idx, uiProblem.pointer, "SCHEMA_UI_INVALID");
@@ -1142,7 +1143,7 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
   if (typeof s["output"] !== "object" || s["output"] === null) {
     throw new ManifestParseError("Procedure.spec.output is required (JSON Schema)", idx, "/spec/output");
   }
-  validateJsonSchemaPatterns(s["output"], idx, "Procedure", m.metadata.name, "/spec/output");
+  validateJsonSchema(s["output"], idx, "Procedure", m.metadata.name, "/spec/output");
   const handler = s["handler"] as Record<string, unknown> | undefined;
   if (!handler) {
     throw new ManifestParseError("Procedure.spec.handler is required", idx, "/spec/handler");
@@ -1154,16 +1155,61 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
   return m;
 }
 
-function validateJsonSchemaPatterns(
+const UNSUPPORTED_JSON_SCHEMA_KEYWORDS = new Set([
+  "anyOf",
+  "allOf",
+  "not",
+  "if",
+  "then",
+  "else",
+  "$anchor",
+  "$dynamicAnchor",
+  "$dynamicRef",
+  "definitions",
+  "patternProperties",
+  "prefixItems",
+  "contains",
+  "dependentSchemas",
+  "propertyNames",
+  "unevaluatedProperties",
+]);
+
+function validateJsonSchema(
   root: unknown,
   idx: number,
-  kind: "Schema" | "Procedure",
+  kind: "Schema" | "View" | "Procedure",
   name: string,
   basePointer: string,
 ): void {
-  const visit = (node: unknown, pointer: string): void => {
-    if (!node || typeof node !== "object" || Array.isArray(node)) return;
+  if (!root || typeof root !== "object" || Array.isArray(root)) {
+    throw new ManifestParseError(`${kind} '${name}' JSON Schema must be an object`, idx, basePointer);
+  }
+  const rootObject = root as Record<string, unknown>;
+  let nodes = 0;
+  const visit = (node: unknown, pointer: string, depth: number): void => {
+    if (!node || typeof node !== "object" || Array.isArray(node)) {
+      throw new ManifestParseError(`${kind} '${name}' has a non-object JSON Schema at ${pointer}`, idx, pointer);
+    }
+    if (depth > 100 || ++nodes > 10_000) {
+      throw new ManifestParseError(
+        `${kind} '${name}' exceeds the JSON Schema complexity limit`,
+        idx,
+        pointer,
+        "JSON_SCHEMA_LIMIT_EXCEEDED",
+      );
+    }
     const value = node as Record<string, unknown>;
+    for (const keyword of UNSUPPORTED_JSON_SCHEMA_KEYWORDS) {
+      if (keyword in value) {
+        throw new ManifestParseError(
+          `${kind} '${name}' uses unsupported JSON Schema keyword '${keyword}'`,
+          idx,
+          `${pointer}/${escapeJsonPointerSegment(keyword)}`,
+          "JSON_SCHEMA_UNSUPPORTED",
+        );
+      }
+    }
+    if ("$ref" in value) validateLocalSchemaRef(value["$ref"], rootObject, idx, kind, name, `${pointer}/$ref`);
     if (typeof value["pattern"] === "string") {
       try {
         new RegExp(value["pattern"]);
@@ -1181,14 +1227,93 @@ function validateJsonSchemaPatterns(
       }
     }
     const properties = value["properties"];
-    if (properties && typeof properties === "object" && !Array.isArray(properties)) {
+    if (properties !== undefined && (!properties || typeof properties !== "object" || Array.isArray(properties))) {
+      throw new ManifestParseError(`${kind} '${name}' properties must be an object`, idx, `${pointer}/properties`);
+    }
+    if (properties && typeof properties === "object") {
       for (const [property, child] of Object.entries(properties)) {
-        visit(child, `${pointer}/properties/${property}`);
+        visit(child, `${pointer}/properties/${escapeJsonPointerSegment(property)}`, depth + 1);
       }
     }
-    visit(value["items"], `${pointer}/items`);
+    if (value["items"] !== undefined) visit(value["items"], `${pointer}/items`, depth + 1);
+    if (typeof value["additionalProperties"] === "object" && value["additionalProperties"] !== null) {
+      visit(value["additionalProperties"], `${pointer}/additionalProperties`, depth + 1);
+    } else if (
+      value["additionalProperties"] !== undefined &&
+      typeof value["additionalProperties"] !== "boolean"
+    ) {
+      throw new ManifestParseError(
+        `${kind} '${name}' additionalProperties must be a boolean or schema`,
+        idx,
+        `${pointer}/additionalProperties`,
+      );
+    }
+    const defs = value["$defs"];
+    if (defs !== undefined) {
+      if (!defs || typeof defs !== "object" || Array.isArray(defs)) {
+        throw new ManifestParseError(`${kind} '${name}' $defs must be an object`, idx, `${pointer}/$defs`);
+      }
+      for (const [definition, child] of Object.entries(defs)) {
+        visit(child, `${pointer}/$defs/${escapeJsonPointerSegment(definition)}`, depth + 1);
+      }
+    }
+    const oneOf = value["oneOf"];
+    if (oneOf !== undefined) {
+      if (!Array.isArray(oneOf) || oneOf.length === 0) {
+        throw new ManifestParseError(`${kind} '${name}' oneOf must be a non-empty array`, idx, `${pointer}/oneOf`);
+      }
+      oneOf.forEach((child, index) => visit(child, `${pointer}/oneOf/${index}`, depth + 1));
+    }
   };
-  visit(root, basePointer);
+  visit(root, basePointer, 0);
+}
+
+function validateLocalSchemaRef(
+  ref: unknown,
+  root: Record<string, unknown>,
+  idx: number,
+  kind: "Schema" | "View" | "Procedure",
+  name: string,
+  pointer: string,
+): void {
+  if (typeof ref !== "string" || !ref.startsWith("#/$defs/")) {
+    throw new ManifestParseError(
+      `${kind} '${name}' $ref must be a same-document pointer beginning '#/$defs/'`,
+      idx,
+      pointer,
+      "JSON_SCHEMA_REF_INVALID",
+      { value: ref, expected: "#/$defs/<definition>" },
+    );
+  }
+  let tokens: string[] | undefined;
+  try {
+    tokens = decodeURIComponent(ref.slice(2)).split("/");
+  } catch {
+    tokens = undefined;
+  }
+  let current: unknown = tokens ? root : undefined;
+  for (const token of tokens ?? []) {
+    if (/~(?:[^01]|$)/.test(token)) current = undefined;
+    else if (current && typeof current === "object") {
+      const key = token.replace(/~1/g, "/").replace(/~0/g, "~");
+      current = Object.prototype.hasOwnProperty.call(current, key)
+        ? (current as Record<string, unknown>)[key]
+        : undefined;
+    } else current = undefined;
+  }
+  if (!current || typeof current !== "object" || Array.isArray(current)) {
+    throw new ManifestParseError(
+      `${kind} '${name}' cannot resolve local $ref '${ref}'`,
+      idx,
+      pointer,
+      "JSON_SCHEMA_REF_INVALID",
+      { value: ref, expected: "a JSON Schema object in this document" },
+    );
+  }
+}
+
+function escapeJsonPointerSegment(value: string): string {
+  return value.replace(/~/g, "~0").replace(/\//g, "~1");
 }
 
 function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {

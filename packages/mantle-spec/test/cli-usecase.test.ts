@@ -425,6 +425,7 @@ describe("EmitTypesUseCase", () => {
     expect(source).toContain("export interface ViewRow_posts_by_locale");
     // Required field is non-optional, optional field has `?`
     expect(source).toMatch(/slug: string;\n\s+title\?: string;/);
+    expect(source).toContain("[key: string]: unknown;");
     // Reserved columns surface on every ViewRow
     expect(source).toContain("status: \"draft\" | \"published\" | \"archived\"");
   });
@@ -458,5 +459,60 @@ spec:
     const { source } = EmitTypesUseCase.run({ linked: parsed.linked!, namespace: "Test" });
     expect(source).not.toContain("unsafe */ export type Injected");
     expect(source).toContain("unsafe *\\/ export type Injected");
+  });
+
+  it("emits recursive refs, oneOf, const, and dictionary schemas without `unknown`", () => {
+    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: tree }
+spec:
+  input:
+    $defs:
+      node:
+        type: object
+        required: [value]
+        properties:
+          value: { oneOf: [{ const: leaf }, { const: branch }] }
+          next: { $ref: '#/$defs/node' }
+    $ref: '#/$defs/node'
+  output: { type: object, additionalProperties: { type: integer } }
+  handler: { kind: ref, ref: tree }
+`);
+    expect(parsed.diagnostics).toEqual([]);
+    const { source } = EmitTypesUseCase.run({ linked: parsed.linked!, namespace: "Test" });
+    expect(source).toContain("export interface ProcInput_tree_node");
+    expect(source).toContain('value: "leaf" | "branch";');
+    expect(source).toContain("next?: ProcInput_tree_node;");
+    expect(source).toContain("export type ProcInput_tree = ProcInput_tree_node;");
+    expect(source).toContain("export type ProcOutput_tree = Record<string, number>;");
+    expect(source).not.toContain(" = unknown;");
+  });
+
+  it("preserves nested composition in emitted OpenAPI", () => {
+    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: choose }
+spec:
+  input:
+    type: object
+    $defs:
+      choice: { oneOf: [{ const: yes }, { const: no }] }
+    properties:
+      choice: { $ref: '#/$defs/choice' }
+  output: { type: object }
+  handler: { kind: ref, ref: choose }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: choose-http }
+spec:
+  source: { kind: http, method: POST, path: /api/choose }
+  target: { procedure: choose }
+`);
+    expect(parsed.diagnostics).toEqual([]);
+    const { document } = EmitOpenapiUseCase.run({ linked: parsed.linked!, title: "Test", version: "0" });
+    const paths = document["paths"] as Record<string, Record<string, any>>;
+    expect(paths["/api/choose"]!.post.requestBody.content["application/json"].schema.$defs.choice.oneOf)
+      .toEqual([{ const: "yes" }, { const: "no" }]);
   });
 });

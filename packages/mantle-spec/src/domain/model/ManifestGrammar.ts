@@ -40,6 +40,10 @@ export function isMediaMcpHint(value: unknown): value is MediaMcpHint {
  *  `media`, `media-image`, `media-video`, `media-file`, `money-minor`,
  *  `timestamp-ms`, and `idempotency-key`. */
 export type JsonSchema = {
+  readonly $defs?: Readonly<Record<string, JsonSchema>>;
+  readonly $ref?: string;
+  readonly oneOf?: readonly JsonSchema[];
+  readonly const?: unknown;
   readonly type?: string | readonly string[];
   readonly properties?: Readonly<Record<string, JsonSchema>>;
   readonly required?: readonly string[];

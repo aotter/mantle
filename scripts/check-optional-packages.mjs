@@ -43,6 +43,21 @@ try {
     const spec = await import("@aotter/mantle-spec");
     const parsed = spec.parseManifestSources({ sources: [] });
     if (!parsed.ok) throw new Error("empty source set did not parse");
+    const recursive = spec.jsonSchemaToZod({
+      $defs: {
+        node: {
+          oneOf: [
+            { type: "object", required: ["value"], properties: { value: { const: "leaf" } }, additionalProperties: false },
+            { type: "object", required: ["next"], properties: { next: { $ref: "#/$defs/node" } }, additionalProperties: false },
+          ],
+        },
+      },
+      $ref: "#/$defs/node",
+    });
+    if (!recursive.safeParse({ next: { value: "leaf" } }).success ||
+        recursive.safeParse({ value: "leaf", next: { value: "leaf" } }).success) {
+      throw new Error("packed recursive oneOf validation failed");
+    }
   `);
   if (existsSync(join(temp, "spec-only/node_modules/@aotter/mantle-runtime"))) {
     throw new Error("spec-only consumer installed @aotter/mantle-runtime");

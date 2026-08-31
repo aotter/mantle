@@ -43,7 +43,7 @@ describe("jsonSchemaToZod — object", () => {
     expect(zs.safeParse({ a: "x", b: 1 }).success).toBe(false);
   });
 
-  it("default (no `additionalProperties`) strips unknown keys but does not fail", () => {
+  it("default (no `additionalProperties`) preserves unknown keys", () => {
     const zs = jsonSchemaToZod({
       type: "object",
       properties: { a: { type: "string" } },
@@ -51,6 +51,13 @@ describe("jsonSchemaToZod — object", () => {
     });
     const parsed = zs.safeParse({ a: "x", b: 1 });
     expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data).toEqual({ a: "x", b: 1 });
+  });
+
+  it("validates schema-valued `additionalProperties`", () => {
+    const zs = jsonSchemaToZod({ type: "object", additionalProperties: { type: "integer" } });
+    expect(zs.safeParse({ one: 1, two: 2 }).success).toBe(true);
+    expect(zs.safeParse({ one: "1" }).success).toBe(false);
   });
 });
 
@@ -232,6 +239,56 @@ describe("jsonSchemaToZod — type union", () => {
   });
 });
 
+describe("jsonSchemaToZod — JSON Schema composition", () => {
+  it("enforces exact-one `oneOf` semantics", () => {
+    const zs = jsonSchemaToZod({
+      oneOf: [
+        { type: "object", required: ["a"], properties: { a: { type: "string" } } },
+        { type: "object", required: ["b"], properties: { b: { type: "number" } } },
+      ],
+    });
+    expect(zs.safeParse({ a: "x" }).success).toBe(true);
+    expect(zs.safeParse({ b: 1 }).success).toBe(true);
+    expect(zs.safeParse({ a: "x", b: 1 }).success).toBe(false);
+  });
+
+  it("resolves recursive local `$defs` refs", () => {
+    const zs = jsonSchemaToZod({
+      $defs: {
+        node: {
+          type: "object",
+          required: ["value"],
+          properties: {
+            value: { type: "string" },
+            next: { $ref: "#/$defs/node" },
+          },
+          additionalProperties: false,
+        },
+      },
+      $ref: "#/$defs/node",
+    });
+    expect(zs.safeParse({ value: "a", next: { value: "b" } }).success).toBe(true);
+    expect(zs.safeParse({ value: "a", next: { value: 2 } }).success).toBe(false);
+  });
+
+  it("keeps the legacy nullable extension on a local ref", () => {
+    const zs = jsonSchemaToZod({
+      $defs: { value: { type: "string" } },
+      $ref: "#/$defs/value",
+      nullable: true,
+    });
+    expect(zs.safeParse("ok").success).toBe(true);
+    expect(zs.safeParse(null).success).toBe(true);
+    expect(zs.safeParse(1).success).toBe(false);
+  });
+
+  it("enforces `const`", () => {
+    const zs = jsonSchemaToZod({ const: "ready" });
+    expect(zs.safeParse("ready").success).toBe(true);
+    expect(zs.safeParse("pending").success).toBe(false);
+  });
+});
+
 describe("zodPathToJsonPointer", () => {
   it("empty path → empty string", () => {
     expect(zodPathToJsonPointer([])).toBe("");
@@ -291,7 +348,7 @@ describe("jsonSchemaToZod — malformed pattern (#395)", () => {
       type: "object",
       properties: { slug: { type: "string", pattern: "[a-" } },
     });
-    // Constraint dropped → any string still parses.
-    expect(zs.safeParse({ slug: "anything" }).success).toBe(true);
+    // Invalid schema is converted to a controlled validation failure.
+    expect(zs.safeParse({ slug: "anything" }).success).toBe(false);
   });
 });

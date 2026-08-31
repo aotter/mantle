@@ -1520,3 +1520,42 @@ spec:
     expect(diag).toBeDefined();
   });
 });
+
+describe("JSON Schema composition (#752)", () => {
+  const procedure = (input: string) => `apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: composed }
+spec:
+  input: ${input}
+  output: { type: object }
+  handler: { kind: ref, ref: composed }
+`;
+
+  it("accepts recursive local refs, oneOf, const, and schema-valued additionalProperties", () => {
+    const result = parseManifests(procedure(`
+    type: object
+    $defs:
+      node:
+        oneOf:
+          - { const: null }
+          - type: object
+            required: [value]
+            properties:
+              value: { type: string }
+              next: { $ref: '#/$defs/node' }
+    properties:
+      root: { $ref: '#/$defs/node' }
+      counts: { type: object, additionalProperties: { type: integer } }
+  `));
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it.each([
+    ["remote refs", `{ $ref: 'https://example.com/schema.json' }`, "JSON_SCHEMA_REF_INVALID"],
+    ["unresolved refs", `{ $ref: '#/$defs/missing' }`, "JSON_SCHEMA_REF_INVALID"],
+    ["unsupported composition", `{ anyOf: [{ type: string }, { type: number }] }`, "JSON_SCHEMA_UNSUPPORTED"],
+  ])("rejects %s with a stable diagnostic", (_label, input, code) => {
+    const result = parseManifests(procedure(input));
+    expect(result.diagnostics[0]?.code).toBe(code);
+  });
+});
