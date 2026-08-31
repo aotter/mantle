@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle-vercel",
-  "version": "0.1.0-alpha.11",
+  "version": "0.1.0-alpha.12",
   "description": "Embedded Vercel Functions adapter for Mantle Core with injected durable storage and Web-standard transport.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",

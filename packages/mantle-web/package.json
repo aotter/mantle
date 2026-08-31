@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle-web",
-  "version": "0.1.0-alpha.11",
+  "version": "0.1.0-alpha.12",
   "description": "Optional public document composition for Mantle: HTML, Markdown, llms.txt, sitemap, SEO, and preview.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
