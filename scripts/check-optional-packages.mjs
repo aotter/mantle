@@ -135,7 +135,11 @@ try {
   }, `
     await import("@aotter/mantle-runtime");
     const web = await import("@aotter/mantle-web");
+    const webmcp = await import("@aotter/mantle-web/webmcp");
     if (typeof web.createMantleWeb !== "function") throw new Error("missing createMantleWeb");
+    if (typeof webmcp.bindWebMcp !== "function") throw new Error("missing WebMCP subpath");
+    const binding = await webmcp.bindWebMcp([]);
+    if (binding.supported !== false) throw new Error("headless WebMCP feature detection failed");
   `);
 
   installConsumer("core-with-admin", {

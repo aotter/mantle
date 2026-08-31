@@ -122,6 +122,13 @@ rather than bypassing Trigger identity with a direct Procedure call. Hosts may
 select a surface and bind transport or browser lifecycle, but do not rescan raw
 manifests or maintain a second registry.
 
+`@aotter/mantle-web/webmcp` is an opt-in host binding over that projection. It
+feature-detects `document.modelContext`, registers only public View
+capabilities, invokes the existing same-origin View REST route, and uses the
+registration `AbortSignal` for teardown. It does not add browser globals to
+runtime Core, expose staff/mutating capabilities, or introduce a second
+manifest/runtime path.
+
 ### Naming and code generation
 
 The Core execution unit is `MantleRuntime`, not a site. Optional TypeScript
