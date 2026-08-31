@@ -10,6 +10,7 @@ import {
   sealRuntimePlan,
   type RuntimePlan,
 } from "../src/domain/service/RuntimePlanCompiler.js";
+import { projectCallableCapabilities } from "../src/domain/service/CallableCapabilityProjector.js";
 
 describe("compileRuntimePlan", () => {
   it("snapshots the #662 characterization corpus", () => {
@@ -95,6 +96,7 @@ spec:
       ownerKind: "Procedure",
       ownerName: "write",
       surface: "public",
+      trigger: "write-mcp",
     });
   });
 
@@ -112,6 +114,59 @@ spec:
 
     visit(plan);
     expect(() => JSON.stringify(plan)).not.toThrow();
+  });
+
+  it("projects callable discovery and invocation from the same sealed plan", () => {
+    const capabilities = projectCallableCapabilities(compile(parse(richManifest)), {
+      surface: "public",
+    });
+    expect(capabilities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: "view",
+        name: "query_view_recent",
+        ownerName: "recent",
+        surface: "public",
+      }),
+      expect.objectContaining({
+        kind: "procedure",
+        name: "write",
+        ownerName: "write",
+        trigger: "write-mcp",
+        surface: "public",
+        inputSchema: { type: "object" },
+        outputSchema: { type: "object" },
+      }),
+    ]));
+    expect(Object.isFrozen(capabilities)).toBe(true);
+    expect(capabilities.every(Object.isFrozen)).toBe(true);
+  });
+
+  it("takes Procedure presentation and schemas from the Procedure contract", () => {
+    const plan = compile(parse(`apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: lookup }
+spec:
+  title: Lookup
+  description: Canonical procedure description.
+  input: { type: object, description: Legacy input description. }
+  output: { type: string }
+  handler: { kind: ref, ref: lookup }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: lookup-browser }
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: lookup }
+`));
+    expect(projectCallableCapabilities(plan)).toContainEqual(expect.objectContaining({
+      kind: "procedure",
+      title: "Lookup",
+      description: "Canonical procedure description.",
+      trigger: "lookup-browser",
+      inputSchema: expect.objectContaining({ description: "Legacy input description." }),
+      outputSchema: { type: "string" },
+    }));
   });
 
   it("rejects a generated plan whose semantics no longer match its fingerprint", () => {

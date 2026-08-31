@@ -89,12 +89,16 @@ export interface HttpRoutePlan {
   readonly procedure: string;
 }
 
-export interface McpToolPlan {
+interface McpToolPlanBase {
   readonly name: string;
-  readonly ownerKind: "Schema" | "View" | "Procedure";
   readonly ownerName: string;
   readonly surface: "staff" | "public";
 }
+
+export type McpToolPlan = McpToolPlanBase & (
+  | { readonly ownerKind: "Schema" | "View" }
+  | { readonly ownerKind: "Procedure"; readonly trigger: string }
+);
 
 declare const runtimePlanBrand: unique symbol;
 
@@ -302,6 +306,7 @@ function compileMcpTools(
       ownerKind: "Procedure",
       ownerName: trigger.target,
       surface: source.surface,
+      trigger: trigger.name,
     });
   }
   return [...new Map(tools.map((tool) => [`${tool.surface}\0${tool.name}`, tool])).values()]

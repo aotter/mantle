@@ -1,5 +1,7 @@
-import { McpJsonRpcDispatcher } from "@aotter/mantle-runtime";
-import type { ProcedureManifest } from "@aotter/mantle-spec";
+import {
+  McpJsonRpcDispatcher,
+  projectCallableCapabilities,
+} from "@aotter/mantle-runtime";
 import { DPOP_SIGNING_ALGORITHMS } from "better-auth/oauth2";
 import type { MantleRuntimeRef } from "./bootRuntimeOnce.js";
 import { contextForVerifiedUser } from "./resolveCaller.js";
@@ -115,11 +117,8 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
                 view: request.view.metadata.name,
               }),
             },
-            invokeProcedure: {
-              execute: (request) => runtime.invokeProcedure({
-                ...request,
-                procedure: request.procedure.metadata.name,
-              }),
+            invokeTrigger: {
+              execute: (request) => runtime.invokeTrigger(request),
             },
             media: mediaEnabled && runtime.media
               ? {
@@ -132,14 +131,7 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
           [...runtime.schemas.values()],
           {
             surface,
-            // A View belongs on surface S iff its declared surface
-            // (default "public") matches — mirrors how procedures are
-            // gated (#438). Without this, `surface: "staff"` Views leaked
-            // into the public `/mcp` tools/list + tools/call.
-            views: Object.values(ref.plan.views)
-              .map(({ manifest }) => manifest)
-              .filter((view) => view.spec.surface === surface),
-            procedures: collectMcpProcedures(ref.plan, surface),
+            capabilities: projectCallableCapabilities(ref.plan, { surface }),
             serverInfo,
           },
         );
@@ -182,26 +174,4 @@ function oauthDenied(
       "access-control-expose-headers": "WWW-Authenticate",
     },
   });
-}
-
-/**
- * Collect Procedures bound to MCP Triggers on the given surface (#281).
- * The Trigger declares `source: { kind: "mcp", surface: "<staff|public>" }`;
- * we resolve `target.procedure` against the runtime's procedure map
- * and return only the matches. Triggers pointing at unknown procedures
- * are silently dropped here — boot validation already rejects those
- * with TRIGGER_TARGET_PROCEDURE_UNKNOWN before we get this far.
- */
-function collectMcpProcedures(
-  plan: MantleRuntimeRef["plan"],
-  surface: "staff" | "public",
-): readonly ProcedureManifest[] {
-  const out: ProcedureManifest[] = [];
-  for (const { manifest: t } of Object.values(plan.triggers)) {
-    if (t.spec.source.kind !== "mcp") continue;
-    if (t.spec.source.surface !== surface) continue;
-    const p = plan.procedures[t.spec.target.procedure]?.manifest;
-    if (p) out.push(p);
-  }
-  return out;
 }

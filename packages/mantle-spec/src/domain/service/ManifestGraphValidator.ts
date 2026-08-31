@@ -76,6 +76,7 @@ export function validateManifestGraph(
     partitioned.schemas,
     partitioned.views,
     partitioned.procedures,
+    partitioned.triggers,
     filePaths,
   ));
 
@@ -572,6 +573,7 @@ function checkMcpToolNameCollisions(
   schemas: readonly SchemaManifest[],
   views: readonly ViewManifest[],
   procedures: readonly ProcedureManifest[],
+  triggers: readonly TriggerManifest[],
   filePaths?: ManifestFilePaths,
 ): Diagnostic[] {
   const seen = new Map<string, ToolNameOwner>();
@@ -636,6 +638,26 @@ function checkMcpToolNameCollisions(
       continue;
     }
     seen.set(name, { kind: "Procedure", name: procedure.metadata.name });
+  }
+  const mcpTriggers = new Map<string, string>();
+  for (const trigger of triggers) {
+    const source = trigger.spec.source;
+    if (source.kind !== "mcp") continue;
+    const tool = mcpToolNameSegment(trigger.spec.target.procedure);
+    const key = `${source.surface}\0${tool}`;
+    const prior = mcpTriggers.get(key);
+    if (prior) {
+      out.push(validateDiagnostic({
+        code: "MCP_TOOL_NAME_COLLISION",
+        severity: "error",
+        path: manifestPath("Trigger", trigger.metadata.name, "/spec/source", filePaths),
+        value: tool,
+        expected: `one MCP Trigger per surface and tool name (already bound by '${prior}')`,
+        message: `Trigger '${trigger.metadata.name}' and Trigger '${prior}' both bind '${tool}' on the ${source.surface} MCP surface; invocation would lose Trigger identity.`,
+      }));
+    } else {
+      mcpTriggers.set(key, trigger.metadata.name);
+    }
   }
   return out;
 }

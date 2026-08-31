@@ -11,10 +11,13 @@ import {
   resolveLocalizedText,
   type JsonSchema,
   type MediaPurposePolicy,
-  type ProcedureManifest,
   type SchemaManifest,
-  type ViewManifest,
 } from "@aotter/mantle-spec";
+import type {
+  ProcedureCallableCapability,
+  RuntimeCallableCapability,
+  ViewCallableCapability,
+} from "../../domain/service/CallableCapabilityProjector.js";
 
 /**
  * MCP tool catalog. Mix of generic tools (read paths, status flips
@@ -46,8 +49,12 @@ import {
  */
 export interface McpToolDefinition {
   readonly name: string;
+  readonly title?: string;
   readonly description: string;
   readonly inputSchema: Record<string, unknown>;
+  readonly annotations?: {
+    readonly readOnlyHint?: boolean;
+  };
 }
 
 export const COMMIT_MEDIA_UPLOAD_TOOL: McpToolDefinition = {
@@ -262,12 +269,9 @@ export interface BuildMcpToolCatalogOpts {
   /** Staff surface exposes authoring / lifecycle tools. Public
    *  surface exposes only read-only View queries for v0.1. */
   readonly surface?: McpToolSurface;
-  readonly views?: ReadonlyArray<ViewManifest>;
-  /** Procedures exposed on this MCP surface via `Trigger.source.kind: "mcp"`
-   *  (#281). The adapter pre-filters Triggers by surface and passes the
-   *  matching Procedures here. The catalog factory does NOT re-filter
-   *  by surface — caller is authoritative. */
-  readonly procedures?: ReadonlyArray<ProcedureManifest>;
+  /** Sealed-plan callable projection. The same descriptors drive
+   *  discovery and tools/call routing. */
+  readonly capabilities?: readonly RuntimeCallableCapability[];
 }
 
 export function buildMcpToolCatalog(
@@ -275,12 +279,10 @@ export function buildMcpToolCatalog(
   opts: BuildMcpToolCatalogOpts = {},
 ): readonly McpToolDefinition[] {
   const surface = opts.surface ?? "staff";
-  const procedureTools = (opts.procedures ?? []).map(buildProcedureTool);
+  const capabilities = (opts.capabilities ?? []).filter((item) => item.surface === surface);
+  const callableTools = capabilities.map(buildCallableTool);
   if (surface === "public") {
-    return collapseToolSchemaAnnotations([
-      ...(opts.views ?? []).map(buildQueryViewTool),
-      ...procedureTools,
-    ]);
+    return collapseToolSchemaAnnotations(callableTools);
   }
   const out: McpToolDefinition[] = [...GENERIC_TOOLS];
   if (opts.mediaEnabled) out.push(...buildMediaTools(opts.mediaPurposes ?? []));
@@ -289,8 +291,7 @@ export function buildMcpToolCatalog(
     out.push(buildCreateTool(s));
     out.push(buildUpdateTool(s));
   }
-  out.push(...(opts.views ?? []).map(buildQueryViewTool));
-  out.push(...procedureTools);
+  out.push(...callableTools);
   return collapseToolSchemaAnnotations(out);
 }
 
@@ -410,8 +411,7 @@ function buildUpdateTool(schema: SchemaManifest): McpToolDefinition {
  * Per-Procedure MCP tool factory (#281). The Procedure's `input`
  * JSON Schema becomes the tool's `inputSchema`; localized schema
  * annotations are collapsed at the catalog boundary. The
- * description comes from `input.description` when set, otherwise a
- * generic stub naming the Procedure. `output` is not surfaced — MCP
+ * description comes from the projected Procedure contract. `output` is not surfaced — MCP
  * clients infer the response shape from the `tools/call` result.
  *
  * Naming: the tool name is the Procedure's metadata name mangled
@@ -419,47 +419,35 @@ function buildUpdateTool(schema: SchemaManifest): McpToolDefinition {
  * that the mangled name does not collide with generic tools, media
  * tools, or per-schema authoring tools.
  */
-function buildProcedureTool(procedure: ProcedureManifest): McpToolDefinition {
-  const input: JsonSchema = procedure.spec.input;
-  // `input.description` is the standard JSON Schema keyword and, like
-  // property `description` (#453, same LocalizedText shape as property
-  // `title` — #443), may be a locale map for the admin UI's benefit.
-  // MCP tool descriptions are plain strings read by the agent, not the
-  // localized admin-UI surface, so collapse to `en` (or the map's first
-  // entry) here rather than passing a locale map through.
-  const description =
-    resolveLocalizedText(input.description, "en") ??
-    `Invoke Procedure '${procedure.metadata.name}'. Input shape declared by the manifest.`;
+function buildCallableTool(capability: RuntimeCallableCapability): McpToolDefinition {
+  return capability.kind === "view"
+    ? buildQueryViewTool(capability)
+    : buildProcedureTool(capability);
+}
+
+function buildProcedureTool(capability: ProcedureCallableCapability): McpToolDefinition {
   return {
-    name: mcpToolNameSegment(procedure.metadata.name),
-    description: `${description}${authorizationSummary(procedure.spec.requires)}`,
-    inputSchema: input as Record<string, unknown>,
+    name: capability.name,
+    ...(capability.title ? { title: capability.title } : {}),
+    description: `${capability.description}${authorizationSummary(capability.manifest.spec.requires)}`,
+    inputSchema: capability.inputSchema as Record<string, unknown>,
   };
 }
 
-function buildQueryViewTool(view: ViewManifest): McpToolDefinition {
-  const params = view.spec.params as
-    | { properties?: Record<string, unknown>; required?: readonly string[] }
-    | undefined;
-  const properties: Record<string, unknown> = {
-    ...(params?.properties ?? {}),
-    page: { type: "number", description: "Optional 1-based page number." },
-    show: { type: "number", description: "Optional page size, capped by the View limit." },
-  };
-  const inputSchema: Record<string, unknown> = {
-    type: "object",
-    properties,
-  };
-  if (params?.required?.length) inputSchema["required"] = params.required;
+function buildQueryViewTool(capability: ViewCallableCapability): McpToolDefinition {
   return {
-    name: `${QUERY_VIEW_PREFIX}${mcpToolNameSegment(view.metadata.name)}`,
-    description: `Query ${view.spec.surface} View '${view.metadata.name}'.${authorizationSummary(view.spec.requires)}`,
-    inputSchema,
+    name: capability.name,
+    ...(capability.title ? { title: capability.title } : {}),
+    description: `${capability.description}${authorizationSummary(capability.manifest.spec.requires)}`,
+    inputSchema: capability.inputSchema as Record<string, unknown>,
+    annotations: { readOnlyHint: true },
   };
 }
 
 function authorizationSummary(
-  requires: ProcedureManifest["spec"]["requires"] | ViewManifest["spec"]["requires"],
+  requires:
+    | ProcedureCallableCapability["manifest"]["spec"]["requires"]
+    | ViewCallableCapability["manifest"]["spec"]["requires"],
 ): string {
   if (!requires) return "";
   const scopes = (requires.auth?.all ?? []).flatMap((predicate) =>
