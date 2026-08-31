@@ -80,6 +80,7 @@ spec:
   input: { type: object }
   output: { type: object }
   handler: { kind: ref, ref: placeOrder }
+  uiSchema: { collectionAction: orders }
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: Trigger
@@ -90,7 +91,8 @@ spec:
 `)).request("https://example.test/admin/api/developer-console");
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
+    const body = await response.json() as { edges: Array<{ from: string; to: string; label: string }> };
+    expect(body).toMatchObject({
       summary: {
         atoms: { triggers: 1, procedures: 1, schemas: 1, views: 1 },
         interfaces: {
@@ -111,7 +113,21 @@ spec:
         expect.objectContaining({ from: "Schema:orders", to: "View:open-orders", label: "reads" }),
         expect.objectContaining({ from: "Trigger:place-order-http", to: "Procedure:place-order", label: "invokes" }),
       ]),
+      surfaces: expect.arrayContaining([
+        expect.objectContaining({ kind: "http", name: "POST /api/orders", ownerId: "Trigger:place-order-http" }),
+        expect.objectContaining({ kind: "mcp", ownerId: "Schema:orders", visibility: "staff" }),
+        expect.objectContaining({ kind: "view", name: "open-orders", ownerId: "View:open-orders" }),
+      ]),
+      limitations: {
+        opaqueProcedures: ["place-order"],
+        nativeViews: [],
+      },
     });
+    expect(body.edges).not.toContainEqual(expect.objectContaining({
+      from: "Procedure:place-order",
+      to: "Schema:orders",
+      label: "writes",
+    }));
   });
 });
 

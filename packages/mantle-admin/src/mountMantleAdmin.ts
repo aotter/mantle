@@ -1916,6 +1916,17 @@ interface ManifestLogicEdge {
   readonly label: string;
 }
 
+type DeveloperSurfaceKind = "http" | "mcp" | "view" | "lifecycle";
+
+interface DeveloperSurface {
+  readonly id: string;
+  readonly kind: DeveloperSurfaceKind;
+  readonly name: string;
+  readonly detail: string;
+  readonly ownerId: string;
+  readonly visibility?: "public" | "staff";
+}
+
 function projectDeveloperConsole(plan: RuntimePlan): {
   readonly fingerprint: string;
   readonly summary: {
@@ -1934,6 +1945,11 @@ function projectDeveloperConsole(plan: RuntimePlan): {
     };
     readonly explicitRelations: number;
     readonly opaqueHandlers: number;
+  };
+  readonly surfaces: readonly DeveloperSurface[];
+  readonly limitations: {
+    readonly opaqueProcedures: readonly string[];
+    readonly nativeViews: readonly string[];
   };
   readonly nodes: readonly ManifestLogicNode[];
   readonly edges: readonly ManifestLogicEdge[];
@@ -1976,9 +1992,8 @@ function projectDeveloperConsole(plan: RuntimePlan): {
     }
   }
   for (const procedure of Object.values(plan.procedures)) {
-    const schema = procedure.collectionActionSchema ?? procedure.builtinSchema;
-    if (schema) {
-      edge(logicNodeId("Procedure", procedure.name), logicNodeId("Schema", schema), "writes");
+    if (procedure.builtinSchema) {
+      edge(logicNodeId("Procedure", procedure.name), logicNodeId("Schema", procedure.builtinSchema), "writes");
     }
     if (procedure.guard) {
       edge(logicNodeId("Procedure", procedure.guard), logicNodeId("Procedure", procedure.name), "guards");
@@ -1998,8 +2013,54 @@ function projectDeveloperConsole(plan: RuntimePlan): {
     }
   }
 
+  const surfaces: DeveloperSurface[] = [
+    ...plan.httpRoutes.map((route) => ({
+      id: `http:${route.method}:${route.path}`,
+      kind: "http" as const,
+      name: `${route.method} ${route.path}`,
+      detail: `invokes ${route.procedure}`,
+      ownerId: logicNodeId("Trigger", route.trigger),
+    })),
+    ...plan.mcpTools.map((tool) => ({
+      id: `mcp:${tool.surface}:${tool.name}`,
+      kind: "mcp" as const,
+      name: tool.name,
+      detail: `${tool.ownerKind} · ${tool.ownerName}`,
+      ownerId: logicNodeId(tool.ownerKind, tool.ownerName),
+      visibility: tool.surface,
+    })),
+    ...Object.values(plan.views).map((view) => ({
+      id: `view:${view.name}`,
+      kind: "view" as const,
+      name: view.name,
+      detail: view.query.kind === "declarative"
+        ? `${view.query.kind} · ${view.query.from}`
+        : `${view.query.kind} query`,
+      ownerId: logicNodeId("View", view.name),
+      visibility: view.manifest.spec.surface,
+    })),
+    ...plan.lifecycleHooks.map((binding) => ({
+      id: `lifecycle:${binding.schema}:${binding.hook}`,
+      kind: "lifecycle" as const,
+      name: `${binding.schema} · ${binding.hook}`,
+      detail: binding.triggerNames.join(", "),
+      ownerId: logicNodeId("Schema", binding.schema),
+    })),
+  ].sort((a, b) => a.id.localeCompare(b.id));
+
+  const opaqueProcedures = Object.values(plan.procedures)
+    .filter(({ manifest }) => manifest.spec.handler.kind !== "builtin")
+    .map(({ name }) => name)
+    .sort();
+  const nativeViews = Object.values(plan.views)
+    .filter(({ query }) => query.kind !== "declarative")
+    .map(({ name }) => name)
+    .sort();
+
   return {
     fingerprint: plan.semanticFingerprint,
+    surfaces,
+    limitations: { opaqueProcedures, nativeViews },
     summary: {
       atoms: {
         triggers: Object.keys(plan.triggers).length,
@@ -2012,10 +2073,10 @@ function projectDeveloperConsole(plan: RuntimePlan): {
         mcpTools: plan.mcpTools.length,
         publicViews: Object.values(plan.views).filter(({ manifest }) => manifest.spec.surface === "public").length,
         staffViews: Object.values(plan.views).filter(({ manifest }) => manifest.spec.surface === "staff").length,
-        lifecycleBindings: Object.values(plan.triggers).filter(({ manifest }) => manifest.spec.source.kind === "lifecycle").length,
+        lifecycleBindings: plan.lifecycleHooks.length,
       },
       explicitRelations: edges.length,
-      opaqueHandlers: Object.values(plan.procedures).filter(({ manifest }) => manifest.spec.handler.kind !== "builtin").length,
+      opaqueHandlers: opaqueProcedures.length,
     },
     nodes,
     edges: edges.sort((a, b) => a.id.localeCompare(b.id)),

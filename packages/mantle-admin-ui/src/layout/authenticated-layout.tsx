@@ -9,7 +9,7 @@ import {
   Images,
   LayoutDashboard,
   Network,
-  SquareTerminal,
+  Wrench,
   Settings as SettingsIcon,
   ContactRound,
   Users,
@@ -145,7 +145,7 @@ export function AuthenticatedLayout({
             workspaceLink={workspace === "developer"
               ? { href: "/admin", label: t(language, "common.contentAdmin"), icon: ArrowLeft }
               : me.data?.role === "owner"
-              ? { href: "/admin/dev", label: t(language, "developer.consoleTitle"), icon: SquareTerminal }
+              ? { href: "/admin/dev", label: t(language, "developer.consoleTitle"), icon: Wrench }
               : undefined}
           />
           <Main className={`min-h-0 overflow-y-auto overscroll-contain pt-20 ${workspace === "developer" ? "pb-14" : "pb-20"}`}>{children}</Main>

@@ -70,10 +70,9 @@ export function Header({
         {workspaceLink ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button asChild variant="ghost" size="sm">
+              <Button asChild variant="ghost" size="icon-sm">
                 <a href={workspaceLink.href} aria-label={workspaceLink.label}>
                   <workspaceLink.icon aria-hidden />
-                  <span className="hidden lg:inline">{workspaceLink.label}</span>
                 </a>
               </Button>
             </TooltipTrigger>

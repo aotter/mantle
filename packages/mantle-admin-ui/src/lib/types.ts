@@ -267,7 +267,23 @@ export interface ManifestLogicGraph {
   edges: ManifestLogicEdge[];
 }
 
+export type DeveloperSurfaceKind = "http" | "mcp" | "view" | "lifecycle";
+
+export interface DeveloperSurface {
+  id: string;
+  kind: DeveloperSurfaceKind;
+  name: string;
+  detail: string;
+  ownerId: string;
+  visibility?: "public" | "staff";
+}
+
 export interface DeveloperConsoleSnapshot extends ManifestLogicGraph {
+  surfaces: DeveloperSurface[];
+  limitations: {
+    opaqueProcedures: string[];
+    nativeViews: string[];
+  };
   summary: {
     atoms: {
       triggers: number;
