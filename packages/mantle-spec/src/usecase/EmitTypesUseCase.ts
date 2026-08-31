@@ -12,10 +12,8 @@ import type { EmitTypesResponse } from "./dto/EmitTypesResponse.js";
  *   - Procedure → ProcInput_<name> / ProcOutput_<name>
  *   - View → ViewParams_<name> / ViewRow_<name>
  *
- * Covers v0.1 JsonSchema features (string / integer / number /
- * boolean / object / array / enum / required / items). Skips $ref /
- * oneOf / anyOf / allOf / if-then-else — none in v0.1 grammar; they
- * fall through to `unknown`.
+ * Covers Mantle's supported JSON Schema subset, including local `$defs`
+ * refs, recursive definitions, `oneOf`, `const`, and dictionaries.
  *
  * Pure: no I/O. CLI handles stdout.
  */
@@ -43,16 +41,16 @@ export class EmitTypesUseCase {
 
     for (const s of schemas) {
       out.push(`  /** Entry data for Schema '${docText(s.metadata.name)}' */`);
-      out.push(declLine(`Entry_${manifestTypeIdentifier(s.metadata.name)}`, s.spec.schema));
+      out.push(...declarationLines(`Entry_${manifestTypeIdentifier(s.metadata.name)}`, s.spec.schema));
       out.push("");
     }
 
     for (const p of procedures) {
       out.push(`  /** Procedure '${docText(p.metadata.name)}' input */`);
-      out.push(declLine(`ProcInput_${manifestTypeIdentifier(p.metadata.name)}`, p.spec.input));
+      out.push(...declarationLines(`ProcInput_${manifestTypeIdentifier(p.metadata.name)}`, p.spec.input));
       out.push("");
       out.push(`  /** Procedure '${docText(p.metadata.name)}' output */`);
-      out.push(declLine(`ProcOutput_${manifestTypeIdentifier(p.metadata.name)}`, p.spec.output));
+      out.push(...declarationLines(`ProcOutput_${manifestTypeIdentifier(p.metadata.name)}`, p.spec.output));
       out.push("");
     }
 
@@ -61,7 +59,7 @@ export class EmitTypesUseCase {
       if (v.spec.params) {
         out.push(`  /** Parameters accepted by View '${docText(v.metadata.name)}' */`);
         out.push(
-          `  export type ViewParams_${manifestTypeIdentifier(v.metadata.name)} = ${renderType(v.spec.params, "  ")};`,
+          ...declarationLines(`ViewParams_${manifestTypeIdentifier(v.metadata.name)}`, v.spec.params, false),
         );
         out.push("");
       }
@@ -69,7 +67,9 @@ export class EmitTypesUseCase {
       if (!parent) {
         out.push(`  export type ViewRow_${manifestTypeIdentifier(v.metadata.name)} = unknown;`);
       } else {
-        const props = (parent.spec.schema.properties ?? {}) as Record<string, JsonSchema>;
+        const rootSchema = parent.spec.schema;
+        const props = (rootSchema.properties ?? {}) as Record<string, JsonSchema>;
+        const context = renderContext(`Entry_${manifestTypeIdentifier(parent.metadata.name)}`, rootSchema);
         const fields = v.spec.fields ?? [...RESERVED_ENTRY_COLUMNS, ...Object.keys(props)];
         const reservedSet = new Set<string>(RESERVED_ENTRY_COLUMNS);
         const rendered: string[] = [];
@@ -77,7 +77,7 @@ export class EmitTypesUseCase {
           if (reservedSet.has(f)) {
             rendered.push(`    ${f}: ${RESERVED_COLUMN_TYPES[f as ReservedEntryColumn]};`);
           } else if (props[f]) {
-            rendered.push(`    ${f}?: ${renderTypeInline(props[f]!)};`);
+            rendered.push(`    ${f}?: ${renderTypeInline(props[f]!, context)};`);
           } else {
             rendered.push(`    ${f}?: unknown;`);
           }
@@ -114,49 +114,91 @@ function docText(value: string): string {
  * TypeScript syntax error that would silently break the consumer's
  * generated .d.ts. (#394)
  */
-function declLine(name: string, schema: JsonSchema): string {
-  if (schema.type === "object") {
-    return `  export interface ${name} ${renderType(schema, "  ")}`;
-  }
-  return `  export type ${name} = ${renderTypeInline(schema)};`;
+interface RenderContext {
+  readonly root: JsonSchema;
+  readonly definitionNames: ReadonlyMap<string, string>;
 }
 
-function renderType(schema: JsonSchema, indent: string): string {
+function renderContext(name: string, schema: JsonSchema): RenderContext {
+  return {
+    root: schema,
+    definitionNames: new Map(
+      Object.keys(schema.$defs ?? {}).map((definition) => [
+        definition,
+        `${name}_${manifestTypeIdentifier(definition)}`,
+      ]),
+    ),
+  };
+}
+
+function declarationLines(name: string, schema: JsonSchema, preferInterface = true): string[] {
+  const context = renderContext(name, schema);
+  const lines = Object.entries(schema.$defs ?? {}).map(([definition, child]) =>
+    declLine(context.definitionNames.get(definition)!, child, context),
+  );
+  lines.push(declLine(name, schema, context, preferInterface));
+  return lines;
+}
+
+function declLine(name: string, schema: JsonSchema, context: RenderContext, preferInterface = true): string {
+  if (preferInterface && schema.type === "object" && typeof schema.additionalProperties !== "object") {
+    return `  export interface ${name} ${renderType(schema, "  ", context)}`;
+  }
+  return `  export type ${name} = ${renderTypeInline(schema, context)};`;
+}
+
+function renderType(schema: JsonSchema, indent: string, context: RenderContext): string {
   if (schema.type === "object") {
     const props = (schema.properties ?? {}) as Record<string, JsonSchema>;
+    if (Object.keys(props).length === 0 && typeof schema.additionalProperties === "object") {
+      return `Record<string, ${renderTypeInline(schema.additionalProperties, context)}>`;
+    }
     const required = new Set(schema.required ?? []);
     const lines: string[] = ["{"];
     for (const [name, sub] of Object.entries(props)) {
       const optional = required.has(name) ? "" : "?";
-      lines.push(`${indent}  ${tsKey(name)}${optional}: ${renderTypeInline(sub)};`);
+      lines.push(`${indent}  ${tsKey(name)}${optional}: ${renderTypeInline(sub, context)};`);
+    }
+    if (schema.additionalProperties !== false) {
+      if (typeof schema.additionalProperties === "object") {
+        const values = Object.values(props).map((sub) => renderTypeInline(sub, context));
+        if (Object.keys(props).some((name) => !required.has(name))) values.push("undefined");
+        values.push(renderTypeInline(schema.additionalProperties, context));
+        lines.push(`${indent}  [key: string]: ${[...new Set(values)].join(" | ")};`);
+      } else {
+        lines.push(`${indent}  [key: string]: unknown;`);
+      }
     }
     lines.push(`${indent}}`);
     return lines.join("\n");
   }
-  return renderTypeInline(schema);
+  return renderTypeInline(schema, context);
 }
 
-function renderTypeInline(schema: JsonSchema): string {
+function renderTypeInline(schema: JsonSchema, context: RenderContext): string {
+  if (schema.$ref) return withNullable(renderRef(schema.$ref, context), schema);
+  if (schema.oneOf?.length) {
+    return withNullable(schema.oneOf.map((variant) => renderTypeInline(variant, context)).join(" | "), schema);
+  }
+  if ("const" in schema) return withNullable(JSON.stringify(schema.const), schema);
   const t = schema.type;
   if (Array.isArray(schema.enum) && schema.enum.length > 0) {
-    return schema.enum
-      .map((v) => (typeof v === "string" ? JSON.stringify(v) : String(v)))
-      .join(" | ");
+    return withNullable(schema.enum.map((value) => JSON.stringify(value)).join(" | "), schema);
   }
   if (Array.isArray(t)) {
-    return t.map((kind) => primitiveType(kind, schema)).join(" | ");
+    return withNullable(t.map((kind) => primitiveType(kind)).join(" | "), schema);
   }
   if (t === "object") {
-    return renderType(schema, "");
+    return withNullable(renderType(schema, "", context), schema);
   }
   if (t === "array") {
-    const items = schema.items ? renderTypeInline(schema.items) : "unknown";
-    return `${items}[]`;
+    const items = schema.items ? renderTypeInline(schema.items, context) : "unknown";
+    return withNullable(`${items.includes(" | ") ? `(${items})` : items}[]`, schema);
   }
-  return primitiveType(typeof t === "string" ? t : "unknown", schema);
+  return withNullable(primitiveType(typeof t === "string" ? t : "unknown"), schema);
 }
 
-function primitiveType(t: string, schema: JsonSchema): string {
+function primitiveType(t: string): string {
   switch (t) {
     case "string":
       return "string";
@@ -168,8 +210,37 @@ function primitiveType(t: string, schema: JsonSchema): string {
     case "null":
       return "null";
     default:
-      return schema.nullable === true ? "unknown | null" : "unknown";
+      return "unknown";
   }
+}
+
+function withNullable(rendered: string, schema: JsonSchema): string {
+  return schema.nullable === true && !rendered.split(" | ").includes("null")
+    ? `${rendered} | null`
+    : rendered;
+}
+
+function renderRef(ref: string, context: RenderContext): string {
+  let tokens: string[];
+  try {
+    tokens = decodeURIComponent(ref.slice(2)).split("/")
+      .map((token) => token.replace(/~1/g, "/").replace(/~0/g, "~"));
+  } catch {
+    return "never";
+  }
+  const directDefinition = tokens.length === 2 && tokens[0] === "$defs"
+    ? context.definitionNames.get(tokens[1]!)
+    : undefined;
+  if (directDefinition) return directDefinition;
+  let current: unknown = context.root;
+  for (const token of tokens) {
+    current = current && typeof current === "object" && Object.prototype.hasOwnProperty.call(current, token)
+      ? (current as Record<string, unknown>)[token]
+      : undefined;
+  }
+  return current && typeof current === "object" && !Array.isArray(current)
+    ? renderTypeInline(current as JsonSchema, context)
+    : "never";
 }
 
 function tsKey(name: string): string {

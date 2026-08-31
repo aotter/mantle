@@ -43,6 +43,12 @@ export {
   type HttpRoutePlan,
   type McpToolPlan,
 } from "./domain/service/RuntimePlanCompiler.js";
+export {
+  projectCallableCapabilities,
+  type RuntimeCallableCapability,
+  type ViewCallableCapability,
+  type ProcedureCallableCapability,
+} from "./domain/service/CallableCapabilityProjector.js";
 
 // Adapter-facing ports. These are the stable boundary platform
 // adapters implement; runtime-internal seams remain off the root

@@ -584,17 +584,23 @@ That split is intentional and load-bearing.
   draft-2020-12 JSON Schema documents. This is what AI authors and
   human authors write, what the admin UI feeds JSON Forms, and what
   the OpenAPI emitter relays unchanged.
-- **Runtime engine** = zod 4. The `@aotter/mantle-spec`
-  package ships a JSON-Schema → zod converter; the runtime calls the converted zod
+- **Runtime engine** = zod 4.5+. The `@aotter/mantle-spec`
+  package delegates JSON-Schema → zod conversion to Zod's official
+  `z.fromJSONSchema`; the runtime calls the converted zod
   schema on every Procedure invocation, View parameter parse, and
   manifest boot check.
 
 **Why zod, not Ajv**: Cloudflare Workers' default Content-Security
 Policy posture and bundle-size budget make Ajv (which generates
 validators via `new Function(...)`) a poor fit. zod is interpreted,
-ships small, and has no eval-shaped code paths. The price is a
-narrower JSON Schema feature set; the converter documents which
-keywords it supports.
+ships small, and has no eval-shaped code paths. Mantle accepts its existing
+scalar/object/array constraints plus `oneOf`, `const`, root `$defs`, recursive
+same-document `$ref` values beginning `#/$defs/`, and schema-valued
+`additionalProperties`. Unsupported composition and remote refs fail during
+manifest validation. Standard `additionalProperties` semantics apply: omitted
+or `true` preserves extras, `false` rejects them, and a schema validates them.
+The non-standard `nullable` and `format: url` spellings remain compatibility
+normalizations at the boundary.
 
 The split also means: **manifests stay portable**. A consumer who
 later swaps to a non-Workers adapter inherits the same JSON Schema

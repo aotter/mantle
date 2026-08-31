@@ -3,14 +3,12 @@ import type {
   DeferredHookDispatcher,
   DeferredHookEnvelope,
 } from "@aotter/mantle-runtime";
-import { z } from "zod";
 
 // Cloudflare's 128 KB limit is decimal and includes roughly 100 bytes
 // of platform metadata. Reserve a full 1 KB so accepted envelopes stay
 // below the provider limit rather than failing only at queue.send.
 const MAX_ENVELOPE_BYTES = 127_000;
 const MAX_CONCURRENCY = 5;
-const jsonValue = z.json();
 
 /**
  * `DeferredHookDispatcher` impl backed by a Cloudflare Workers Queue
@@ -35,22 +33,26 @@ export class WorkersQueueHookDispatcher implements DeferredHookDispatcher {
     const wireEnvelope = locale === undefined
       ? { ...envelope, entry: entryWithoutLocale }
       : envelope;
-    let json: ReturnType<typeof jsonValue.safeParse>;
+    let json: string;
     try {
-      json = jsonValue.safeParse(wireEnvelope);
+      json = JSON.stringify(wireEnvelope, (_key, value: unknown) => {
+        if (
+          value === undefined ||
+          typeof value === "function" ||
+          typeof value === "symbol" ||
+          typeof value === "bigint"
+        ) {
+          throw new TypeError("value is not JSON-safe");
+        }
+        return value;
+      });
     } catch (cause) {
       throw new Error(
         `Deferred lifecycle envelope '${envelope.eventId}' is not JSON-safe.`,
         { cause },
       );
     }
-    if (!json.success) {
-      const issue = json.error.issues[0];
-      throw new Error(
-        `Deferred lifecycle envelope '${envelope.eventId}' is not JSON-safe at '${issue?.path.join("/") ?? "unknown"}'.`,
-      );
-    }
-    const bytes = new TextEncoder().encode(JSON.stringify(json.data)).byteLength;
+    const bytes = new TextEncoder().encode(json).byteLength;
     if (bytes >= MAX_ENVELOPE_BYTES) {
       throw new Error(
         `Deferred lifecycle envelope '${envelope.eventId}' is ${bytes} bytes; this adapter requires less than ${MAX_ENVELOPE_BYTES} to leave room under Cloudflare's 128 KB message limit.`,

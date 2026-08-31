@@ -2,12 +2,11 @@ import {
   DiagnosticError,
   redactForWire,
   runtimeDiagnostic,
+  type Diagnostic,
   type ContentState,
   type MediaPurposePolicy,
-  type ProcedureManifest,
   type SchemaManifest,
   type SiteIcon,
-  type ViewManifest,
 } from "@aotter/mantle-spec";
 import type { MediaVariantRole } from "../../domain/port/MediaStorage.js";
 import type { HandlerContext } from "../../domain/model/HandlerContext.js";
@@ -27,11 +26,10 @@ import {
 } from "../../usecase/media/index.js";
 import { mcpToolNameSegment } from "@aotter/mantle-spec";
 import { ExecuteViewUseCase } from "../../usecase/view/index.js";
-import { InvokeProcedureUseCase } from "../../usecase/procedure/InvokeProcedureUseCase.js";
+import type { RuntimeCallableCapability } from "../../domain/service/CallableCapabilityProjector.js";
 import {
   CREATE_DRAFT_PREFIX,
   CREATE_RECORD_PREFIX,
-  QUERY_VIEW_PREFIX,
   UPDATE_DRAFT_PREFIX,
   UPDATE_RECORD_PREFIX,
   buildMcpToolCatalog,
@@ -75,11 +73,19 @@ export interface McpUseCases {
   readonly archive: ArchiveUseCase;
   readonly deleteEntry: DeleteEntryUseCase;
   readonly executeView?: Pick<ExecuteViewUseCase, "execute">;
-  /** Optional. When set together with `options.procedures`, MCP
-   *  Triggers (#281) route through here. The dispatcher evaluates the
-   *  Procedure's `requires.auth` against the HandlerContext before
-   *  invoking. */
-  readonly invokeProcedure?: Pick<InvokeProcedureUseCase, "execute">;
+  /** Optional. Trigger-backed callable capabilities route through the
+   *  runtime's shared Trigger invocation chokepoint. */
+  readonly invokeTrigger?: {
+    execute(request: {
+      readonly trigger: string;
+      readonly input: unknown;
+      readonly ctx: HandlerContext;
+      readonly pathPrefix?: string;
+    }): Promise<
+      | { readonly ok: true; readonly data: unknown }
+      | { readonly ok: false; readonly diagnostic: Diagnostic }
+    >;
+  };
   /** Optional. When set, `create_media_upload` and
    *  `commit_media_upload` appear in the catalog and route here.
    *  `purposes` is the declared taxonomy (#272 shape — name +
@@ -102,20 +108,14 @@ export class McpJsonRpcDispatcher {
    *  collection name. */
   private readonly schemaBySegment: ReadonlyMap<string, string>;
   private readonly readOnlyCollections: ReadonlySet<string>;
-  private readonly viewBySegment: ReadonlyMap<string, ViewManifest>;
-  /** tool-name → Procedure manifest, for MCP triggers (#281). */
-  private readonly procedureByToolName: ReadonlyMap<string, ProcedureManifest>;
+  private readonly capabilityByToolName: ReadonlyMap<string, RuntimeCallableCapability>;
 
   constructor(
     private readonly useCases: McpUseCases,
     private readonly schemas: ReadonlyArray<SchemaManifest>,
     private readonly options: {
       readonly surface?: McpToolSurface;
-      readonly views?: ReadonlyArray<ViewManifest>;
-      /** Procedures exposed on this MCP surface via
-       *  `Trigger.source.kind: "mcp"` (#281). Adapter pre-filters
-       *  by surface; dispatcher trusts the slice. */
-      readonly procedures?: ReadonlyArray<ProcedureManifest>;
+      readonly capabilities?: readonly RuntimeCallableCapability[];
       readonly serverInfo?: McpServerInfo;
     } = {},
   ) {
@@ -123,8 +123,7 @@ export class McpJsonRpcDispatcher {
       surface: options.surface ?? "staff",
       mediaEnabled: useCases.media !== undefined,
       mediaPurposes: useCases.media?.purposes,
-      views: options.views,
-      procedures: options.procedures,
+      capabilities: options.capabilities,
     });
     this.catalogWireJson = `{"tools":${JSON.stringify(this.catalog)}}`;
     this.catalogToolNames = new Set(this.catalog.map((tool) => tool.name));
@@ -134,14 +133,11 @@ export class McpJsonRpcDispatcher {
     const map = new Map<string, string>();
     for (const s of schemas) map.set(mcpToolNameSegment(s.metadata.name), s.metadata.name);
     this.schemaBySegment = map;
-    const views = new Map<string, ViewManifest>();
-    for (const v of options.views ?? []) views.set(mcpToolNameSegment(v.metadata.name), v);
-    this.viewBySegment = views;
-    const procs = new Map<string, ProcedureManifest>();
-    for (const p of options.procedures ?? []) {
-      procs.set(mcpToolNameSegment(p.metadata.name), p);
-    }
-    this.procedureByToolName = procs;
+    this.capabilityByToolName = new Map(
+      (options.capabilities ?? [])
+        .filter((item) => item.surface === (options.surface ?? "staff"))
+        .map((item) => [item.name, item]),
+    );
   }
 
   async dispatch(
@@ -236,16 +232,11 @@ export class McpJsonRpcDispatcher {
     args: Record<string, unknown>,
     ctx: HandlerContext,
   ): Promise<unknown | typeof UNKNOWN_TOOL | typeof MISSING_ARG> {
-    // Procedure-derived MCP tools (#281). Check first on every
-    // surface — a Procedure's tool name lives in the same namespace
-    // as the per-collection / per-view tools, and the catalog
-    // collision check runs at boot so we don't have to disambiguate
-    // here.
-    const procedure = this.procedureByToolName.get(name);
-    if (procedure) {
-      if (!this.useCases.invokeProcedure) return UNKNOWN_TOOL;
-      const result = await this.useCases.invokeProcedure.execute({
-        procedure,
+    const capability = this.capabilityByToolName.get(name);
+    if (capability?.kind === "procedure") {
+      if (!this.useCases.invokeTrigger) return UNKNOWN_TOOL;
+      const result = await this.useCases.invokeTrigger.execute({
+        trigger: capability.trigger,
         input: args,
         ctx,
         pathPrefix: `MCP ${name}`,
@@ -253,20 +244,14 @@ export class McpJsonRpcDispatcher {
       if (!result.ok) throw new DiagnosticError(result.diagnostic);
       return result.data;
     }
-
-    // Views exist on both public and staff MCP surfaces. The adapter
-    // passes a pre-filtered slice, so a guessed public call cannot
-    // resolve a staff View while staff MCP can list and invoke it.
-    const viewSegment = extractCollectionSegment(name, QUERY_VIEW_PREFIX);
-    if (viewSegment) {
-      const view = this.viewBySegment.get(viewSegment);
-      if (!view || !this.useCases.executeView) return UNKNOWN_TOOL;
+    if (capability?.kind === "view") {
+      if (!this.useCases.executeView) return UNKNOWN_TOOL;
       // Use the adapter-normalized caller so the executeView use case can
       // evaluate `requires.auth.all`. Without
       // this, every auth-gated public-surface View returned
       // UNAUTHENTICATED for every caller including authenticated staff.
       const result = await this.useCases.executeView.execute({
-        view,
+        view: capability.manifest,
         options: {
           params: stripViewReservedArgs(args),
           page: typeof args["page"] === "number" ? args["page"] : undefined,

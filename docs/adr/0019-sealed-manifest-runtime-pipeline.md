@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Date:** 2026-08-16
+**Date:** 2026-08-16; last amended 2026-08-31
 
 **Related:** [#656](https://github.com/aotter/mantle/issues/656),
 [#662](https://github.com/aotter/mantle/issues/662),
@@ -110,6 +110,24 @@ Declarative Views compile to logical plans once. Storage preparation lowers
 those plans to native queries. The v0.1 `View.spec.sql` form remains explicitly
 SQLite-only and is rejected by unsupported storage during preparation; Mantle
 does not guess a translation and does not add a universal query driver.
+
+### Callable capability projection
+
+Optional callable transports consume `projectCallableCapabilities(RuntimePlan)`.
+Each Procedure capability retains the owning MCP Trigger name while its
+input/output/title/description remain owned by the target Procedure; View
+capabilities retain their read-only View contract. Discovery and invocation use
+the same projected descriptor, and invocation routes through `invokeTrigger`
+rather than bypassing Trigger identity with a direct Procedure call. Hosts may
+select a surface and bind transport or browser lifecycle, but do not rescan raw
+manifests or maintain a second registry.
+
+`@aotter/mantle-web/webmcp` is an opt-in host binding over that projection. It
+feature-detects `document.modelContext`, registers only public View
+capabilities, invokes the existing same-origin View REST route, and uses the
+registration `AbortSignal` for teardown. It does not add browser globals to
+runtime Core, expose staff/mutating capabilities, or introduce a second
+manifest/runtime path.
 
 ### Naming and code generation
 

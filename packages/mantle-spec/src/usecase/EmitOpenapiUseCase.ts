@@ -302,11 +302,13 @@ function errorResponse(description: string): Record<string, unknown> {
  * mutating the manifest's schema.
  */
 function collapseSchemaDescriptions(schema: JsonSchema): JsonSchema {
-  const { description, properties, items, ...rest } = schema;
+  const { description, title, properties, items, $defs, oneOf, additionalProperties, ...rest } = schema;
   const resolvedDescription = description === undefined ? null : resolveLocalizedText(description, "en");
+  const resolvedTitle = title === undefined ? null : resolveLocalizedText(title, "en");
   return {
     ...rest,
     ...(resolvedDescription !== null ? { description: resolvedDescription } : {}),
+    ...(resolvedTitle !== null ? { title: resolvedTitle } : {}),
     ...(properties
       ? {
           properties: Object.fromEntries(
@@ -315,6 +317,19 @@ function collapseSchemaDescriptions(schema: JsonSchema): JsonSchema {
         }
       : {}),
     ...(items ? { items: collapseSchemaDescriptions(items) } : {}),
+    ...($defs
+      ? {
+          $defs: Object.fromEntries(
+            Object.entries($defs).map(([name, definition]) => [name, collapseSchemaDescriptions(definition)]),
+          ),
+        }
+      : {}),
+    ...(oneOf ? { oneOf: oneOf.map(collapseSchemaDescriptions) } : {}),
+    ...(typeof additionalProperties === "object"
+      ? { additionalProperties: collapseSchemaDescriptions(additionalProperties) }
+      : additionalProperties !== undefined
+        ? { additionalProperties }
+        : {}),
   };
 }
 

@@ -26,6 +26,10 @@ import type {
   DeferredHookEnvelope,
 } from "../src/domain/port/DeferredHookDispatcher.js";
 import { TriggerIndex } from "../src/domain/service/TriggerIndex.js";
+import type {
+  ProcedureCallableCapability,
+  ViewCallableCapability,
+} from "../src/domain/service/CallableCapabilityProjector.js";
 import { LifecycleHookingEntryRepository } from "../src/infrastructure/persistence/LifecycleHookingEntryRepository.js";
 import { RunLifecycleHooksUseCase } from "../src/usecase/lifecycle/RunLifecycleHooksUseCase.js";
 import { InMemoryEntryRepository } from "./fakes/in-memory-store.js";
@@ -93,6 +97,57 @@ function minimalUseCases(): McpUseCases {
     unpublish: new UnpublishUseCase(store, schemasByName, clock),
     archive: new ArchiveUseCase(store, schemasByName, clock),
     deleteEntry: new DeleteEntryUseCase(store, schemasByName),
+  };
+}
+
+function procedureCapability(
+  procedure: ReturnType<typeof makeProcedure>,
+  surface: "staff" | "public" = "staff",
+): ProcedureCallableCapability {
+  return {
+    kind: "procedure",
+    name: procedure.metadata.name.replaceAll("-", "_").toLowerCase(),
+    ownerName: procedure.metadata.name,
+    trigger: `${procedure.metadata.name}-mcp`,
+    surface,
+    description: `Invoke Procedure '${procedure.metadata.name}'.`,
+    inputSchema: procedure.spec.input,
+    outputSchema: procedure.spec.output,
+    manifest: procedure,
+  };
+}
+
+function viewCapability(view: ReturnType<typeof recentPostsView>): ViewCallableCapability {
+  return {
+    kind: "view",
+    name: `query_view_${view.metadata.name.replaceAll("-", "_").toLowerCase()}`,
+    ownerName: view.metadata.name,
+    surface: view.spec.surface,
+    description: `Query ${view.spec.surface} View '${view.metadata.name}'.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...(view.spec.params?.properties ?? {}),
+        page: { type: "number" },
+        show: { type: "number" },
+      },
+      ...(view.spec.params?.required?.length ? { required: view.spec.params.required } : {}),
+    },
+    manifest: view,
+  };
+}
+
+function triggerInvoker(
+  procedure: ReturnType<typeof makeProcedure>,
+  invokeProcedure: InvokeProcedureUseCase,
+): NonNullable<McpUseCases["invokeTrigger"]> {
+  return {
+    execute: ({ input, ctx, pathPrefix }) => invokeProcedure.execute({
+      procedure,
+      input,
+      ctx,
+      pathPrefix,
+    }),
   };
 }
 
@@ -242,7 +297,7 @@ describe("McpJsonRpcDispatcher", () => {
       },
     });
 
-    const tools = buildMcpToolCatalog([schema], { procedures: [procedure] });
+    const tools = buildMcpToolCatalog([schema], { capabilities: [procedureCapability(procedure)] });
     const createInput = tools.find((tool) => tool.name === "create_draft_posts")!
       .inputSchema;
     expect(createInput).toMatchObject({
@@ -374,7 +429,7 @@ describe("McpJsonRpcDispatcher", () => {
       [postsSchema()],
       {
         surface: "public",
-        views: [recentPostsView()],
+        capabilities: [viewCapability(recentPostsView())],
       },
     );
     const res = await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext());
@@ -763,9 +818,9 @@ describe("McpJsonRpcDispatcher", () => {
     });
     const invokeProcedure = new InvokeProcedureUseCase(registry);
     const dispatcher = new McpJsonRpcDispatcher(
-      { ...minimalUseCases(), invokeProcedure },
+      { ...minimalUseCases(), invokeTrigger: triggerInvoker(procedure, invokeProcedure) },
       [],
-      { surface: "staff", procedures: [procedure] },
+      { surface: "staff", capabilities: [procedureCapability(procedure)] },
     );
     const list = (await (
       await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext())
@@ -797,12 +852,11 @@ describe("McpJsonRpcDispatcher", () => {
     registry.register("echoHandler", () => ({ ok: true }));
     const invokeProcedure = new InvokeProcedureUseCase(registry);
     const dispatcher = new McpJsonRpcDispatcher(
-      { ...minimalUseCases(), invokeProcedure },
+      { ...minimalUseCases(), invokeTrigger: triggerInvoker(procedure, invokeProcedure) },
       [postsSchema()],
       {
         surface: "public",
-        views: [recentPostsView()],
-        procedures: [procedure],
+        capabilities: [viewCapability(recentPostsView()), procedureCapability(procedure, "public")],
       },
     );
     const list = (await (
@@ -833,9 +887,9 @@ describe("McpJsonRpcDispatcher", () => {
     const registry = new InMemoryHandlerRegistry();
     registry.register("echoHandler", () => ({ ok: true }));
     const dispatcher = new McpJsonRpcDispatcher(
-      { ...minimalUseCases(), invokeProcedure: new InvokeProcedureUseCase(registry) },
+      { ...minimalUseCases(), invokeTrigger: triggerInvoker(procedure, new InvokeProcedureUseCase(registry)) },
       [],
-      { surface: "staff", procedures: [procedure] },
+      { surface: "staff", capabilities: [procedureCapability(procedure)] },
     );
     // Bearer authenticated but no staff role: the structured runtime
     // diagnostic is surfaced as JSON-RPC error data.
@@ -866,13 +920,12 @@ describe("McpJsonRpcDispatcher", () => {
       {
         ...minimalUseCases(),
         executeView: fakeExecuteView,
-        invokeProcedure: new InvokeProcedureUseCase(new InMemoryHandlerRegistry()),
+        invokeTrigger: triggerInvoker(procedure, new InvokeProcedureUseCase(new InMemoryHandlerRegistry())),
       },
       [postsSchema()],
       {
         surface: "public",
-        views: [recentPostsView()],
-        procedures: [procedure],
+        capabilities: [viewCapability(recentPostsView()), procedureCapability(procedure, "public")],
       },
     );
     const res = await dispatcher.dispatch(
@@ -912,9 +965,9 @@ describe("McpJsonRpcDispatcher", () => {
       return { ok: true };
     });
     const dispatcher = new McpJsonRpcDispatcher(
-      { ...minimalUseCases(), invokeProcedure: new InvokeProcedureUseCase(registry) },
+      { ...minimalUseCases(), invokeTrigger: triggerInvoker(procedure, new InvokeProcedureUseCase(registry)) },
       [],
-      { surface: "public", procedures: [procedure] },
+      { surface: "public", capabilities: [procedureCapability(procedure, "public")] },
     );
 
     // Bearer without staff: denied.
@@ -944,10 +997,10 @@ describe("McpJsonRpcDispatcher", () => {
     const dispatcher = new McpJsonRpcDispatcher(
       {
         ...minimalUseCases(),
-        invokeProcedure: new InvokeProcedureUseCase(new InMemoryHandlerRegistry()),
+        invokeTrigger: triggerInvoker(procedure, new InvokeProcedureUseCase(new InMemoryHandlerRegistry())),
       },
       [],
-      { surface: "staff", procedures: [procedure] },
+      { surface: "staff", capabilities: [procedureCapability(procedure)] },
     );
     const list = (await (
       await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext())

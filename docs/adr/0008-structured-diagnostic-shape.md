@@ -3,7 +3,7 @@
 **Status:** Carried over from POC v0.0.x; amended for the shipped v0.1
 diagnostic emitters and measured harnesses.
 
-**Date:** 2026-04-30 (POC); last amended 2026-08-03.
+**Date:** 2026-04-30 (POC); last amended 2026-08-31.
 
 **Deciders**: phsu
 
@@ -215,8 +215,13 @@ admin SPA and CF Workers could share a CSP-safe path with no
 `Function`-constructor codegen. The v0.1.0 rebuild inherits zod
 from day 1 — manifest authoring stays JSON Schema, but the
 runtime validator a manifest author's request body hits is a
-zod schema, produced by the JSON-Schema → zod converter in
+zod schema, produced by Zod's official `z.fromJSONSchema` importer behind the
+compatibility boundary in
 `@aotter/mantle-spec` (see [`docs/design-atoms.md`](../design-atoms.md) § "Manifest validation — JSON Schema in, zod at runtime").
+Mantle validates its supported keyword/ref policy before import and emits
+`JSON_SCHEMA_UNSUPPORTED`, `JSON_SCHEMA_REF_INVALID`, or
+`JSON_SCHEMA_LIMIT_EXCEEDED`; Zod owns the accepted keywords' validation
+semantics.
 
 Concretely, runtime entry validation consumes `ZodError.issues`:
 

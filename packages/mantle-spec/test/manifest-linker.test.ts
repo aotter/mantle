@@ -134,6 +134,39 @@ spec: { surface: public, from: orders }
       source: expect.objectContaining({ sourceId: "memory:link" }),
     }));
   });
+
+  it("rejects duplicate MCP bindings that would lose Trigger identity", () => {
+    const linked = linkManifestSet(parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: lookup }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: lookup }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: lookup-first }
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: lookup }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: lookup-second }
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: lookup }
+`));
+
+    expect(linked.ok).toBe(false);
+    expect(linked.diagnostics).toContainEqual(expect.objectContaining({
+      code: "MCP_TOOL_NAME_COLLISION",
+      path: "/spec/source",
+      value: "lookup",
+    }));
+  });
 });
 
 function parse(text: string): ParsedManifestSet {

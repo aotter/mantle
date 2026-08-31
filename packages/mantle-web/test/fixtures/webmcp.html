@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Mantle WebMCP browser fixture</title>
+<main>
+  <h1>Mantle WebMCP browser fixture</h1>
+  <p>This fixture uses a Model Context test double to exercise the compiled browser binding.</p>
+  <pre id="result">running</pre>
+</main>
+<script type="module">
+  const registrations = [];
+  const modelContext = {
+    registerTool(tool, options) {
+      registrations.push({ tool, signal: options.signal });
+    },
+  };
+
+  const calls = [];
+  const { bindWebMcp } = await import("/dist/webmcp.js");
+  const capability = {
+    kind: "view",
+    name: "query_view_recent_posts",
+    ownerName: "recent-posts",
+    surface: "public",
+    description: "Query recent posts.",
+    inputSchema: { type: "object", properties: { page: { type: "number" } } },
+    manifest: {
+      apiVersion: "cms.mantle.aotter.net/v1",
+      kind: "View",
+      metadata: { name: "recent-posts" },
+      spec: { surface: "public", from: "posts" },
+    },
+  };
+  const binding = await bindWebMcp([capability], {
+    modelContext,
+    fetch: async (url, init) => {
+      calls.push({ url, signal: init.signal });
+      return Response.json({
+        ok: true,
+        data: { rows: [{ title: "Hello" }], page: 2, show: 10, hasMore: false },
+      });
+    },
+  });
+  const invocation = new AbortController();
+  const data = await registrations[0].tool.execute({ page: 2 }, { signal: invocation.signal });
+  invocation.abort();
+  const cancellationForwarded = calls[0].signal.aborted;
+  binding.dispose();
+  const proof = {
+    supported: binding.supported,
+    registered: binding.registered,
+    annotations: registrations[0].tool.annotations,
+    url: calls[0].url,
+    cancellationForwarded,
+    disposed: registrations[0].signal.aborted,
+    rows: data.rows.length,
+  };
+  document.querySelector("#result").textContent = JSON.stringify(proof, null, 2);
+</script>

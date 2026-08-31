@@ -25,6 +25,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
       "ownerKind": "Procedure",
       "ownerName": "place-order",
       "surface": "public",
+      "trigger": "place-order-mcp",
     },
     {
       "name": "query_view_open_orders",
@@ -173,7 +174,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
       "name": "orders",
     },
   },
-  "semanticFingerprint": "fnv1a64:1bececc8251e8b45",
+  "semanticFingerprint": "fnv1a64:38f4e5d9cf49b5c8",
   "triggers": {
     "order-created": {
       "lifecycleSchema": "orders",

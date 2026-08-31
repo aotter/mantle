@@ -43,6 +43,21 @@ try {
     const spec = await import("@aotter/mantle-spec");
     const parsed = spec.parseManifestSources({ sources: [] });
     if (!parsed.ok) throw new Error("empty source set did not parse");
+    const recursive = spec.jsonSchemaToZod({
+      $defs: {
+        node: {
+          oneOf: [
+            { type: "object", required: ["value"], properties: { value: { const: "leaf" } }, additionalProperties: false },
+            { type: "object", required: ["next"], properties: { next: { $ref: "#/$defs/node" } }, additionalProperties: false },
+          ],
+        },
+      },
+      $ref: "#/$defs/node",
+    });
+    if (!recursive.safeParse({ next: { value: "leaf" } }).success ||
+        recursive.safeParse({ value: "leaf", next: { value: "leaf" } }).success) {
+      throw new Error("packed recursive oneOf validation failed");
+    }
   `);
   if (existsSync(join(temp, "spec-only/node_modules/@aotter/mantle-runtime"))) {
     throw new Error("spec-only consumer installed @aotter/mantle-runtime");
@@ -120,7 +135,11 @@ try {
   }, `
     await import("@aotter/mantle-runtime");
     const web = await import("@aotter/mantle-web");
+    const webmcp = await import("@aotter/mantle-web/webmcp");
     if (typeof web.createMantleWeb !== "function") throw new Error("missing createMantleWeb");
+    if (typeof webmcp.bindWebMcp !== "function") throw new Error("missing WebMCP subpath");
+    const binding = await webmcp.bindWebMcp([]);
+    if (binding.supported !== false) throw new Error("headless WebMCP feature detection failed");
   `);
 
   installConsumer("core-with-admin", {
