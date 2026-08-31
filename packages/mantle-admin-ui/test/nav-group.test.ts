@@ -41,6 +41,7 @@ describe("member navigation", () => {
   it("keeps developer navigation out of Content Admin", () => {
     expect(JSON.stringify(buildNavGroups([], [], "en", null, "owner"))).not.toContain("/admin/dev");
     expect(buildDeveloperNavGroups("en")[0]?.items).toEqual([
+      expect.objectContaining({ url: "/admin/dev" }),
       expect.objectContaining({ url: "/admin/dev/logic" }),
     ]);
   });

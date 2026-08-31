@@ -7,6 +7,7 @@ import {
   Globe,
   Home,
   Images,
+  LayoutDashboard,
   Network,
   SquareTerminal,
   Settings as SettingsIcon,
@@ -93,7 +94,7 @@ export function AuthenticatedLayout({
       title: workspace === "developer"
         ? t(language, "developer.consoleTitle")
         : site.data?.brand ?? t(language, "admin.consoleTitle"),
-      href: workspace === "developer" ? "/admin/dev/logic" : "/admin",
+      href: workspace === "developer" ? "/admin/dev" : "/admin",
       image: preferredAdminIcon(site.data?.icons),
     }),
     [language, site.data, workspace],
@@ -144,13 +145,13 @@ export function AuthenticatedLayout({
             workspaceLink={workspace === "developer"
               ? { href: "/admin", label: t(language, "common.contentAdmin"), icon: ArrowLeft }
               : me.data?.role === "owner"
-              ? { href: "/admin/dev/logic", label: t(language, "developer.consoleTitle"), icon: SquareTerminal }
+              ? { href: "/admin/dev", label: t(language, "developer.consoleTitle"), icon: SquareTerminal }
               : undefined}
           />
-          <Main className="min-h-0 overflow-y-auto overscroll-contain pt-20 pb-20">{children}</Main>
+          <Main className={`min-h-0 overflow-y-auto overscroll-contain pt-20 ${workspace === "developer" ? "pb-14" : "pb-20"}`}>{children}</Main>
           <footer
             data-slot="status-bar"
-            className="absolute inset-x-0 bottom-0 z-30 flex min-h-16 items-center border-t px-4 py-3 sm:px-6"
+            className={`absolute inset-x-0 bottom-0 z-30 flex items-center border-t px-4 sm:px-6 ${workspace === "developer" ? "min-h-10 py-1.5" : "min-h-16 py-3"}`}
           >
             <div
               ref={setFormActionBarHost}
@@ -259,7 +260,10 @@ export function buildNavGroups(
 export function buildDeveloperNavGroups(language: AdminLanguage): ReadonlyArray<NavGroupData> {
   return [{
     title: t(language, "nav.build"),
-    items: [{ title: t(language, "nav.logic"), url: "/admin/dev/logic", icon: Network }],
+    items: [
+      { title: t(language, "nav.overview"), url: "/admin/dev", icon: LayoutDashboard },
+      { title: t(language, "nav.logic"), url: "/admin/dev/logic", icon: Network },
+    ],
   }];
 }
 

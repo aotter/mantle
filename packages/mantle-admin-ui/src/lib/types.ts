@@ -267,4 +267,24 @@ export interface ManifestLogicGraph {
   edges: ManifestLogicEdge[];
 }
 
+export interface DeveloperConsoleSnapshot extends ManifestLogicGraph {
+  summary: {
+    atoms: {
+      triggers: number;
+      procedures: number;
+      schemas: number;
+      views: number;
+    };
+    interfaces: {
+      httpRoutes: number;
+      mcpTools: number;
+      publicViews: number;
+      staffViews: number;
+      lifecycleBindings: number;
+    };
+    explicitRelations: number;
+    opaqueHandlers: number;
+  };
+}
+
 export const PUBLISHING_STATUSES: SidebarStatus[] = ["draft", "published", "archived"];

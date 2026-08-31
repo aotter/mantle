@@ -193,6 +193,7 @@ export function mountMantleAdmin<E extends Env>(
     "/admin/staff",
     "/admin/members",
     "/admin/ops",
+    "/admin/dev",
     "/admin/dev/logic",
     "/admin/views/:name",
   ]) {
@@ -257,7 +258,7 @@ export function mountMantleAdmin<E extends Env>(
     fields: v.spec.fields ?? null,
     list: checkViewAdminUi(v).list,
   }));
-  const manifestLogic = projectManifestLogic(ref.plan);
+  const developerConsole = projectDeveloperConsole(ref.plan);
 
   type StaffGateOk = Extract<StaffGate, { kind: "ok" }>;
   const guarded = (
@@ -428,7 +429,7 @@ export function mountMantleAdmin<E extends Env>(
 
   guarded("get", "/admin/api/collections", () => Response.json({ collections }));
 
-  roleGuarded("get", "/admin/api/manifest-logic", "owner", () => Response.json(manifestLogic));
+  roleGuarded("get", "/admin/api/developer-console", "owner", () => Response.json(developerConsole));
 
   guarded("get", "/admin/api/views-manifest", () => Response.json({ views: viewsManifest }));
 
@@ -1915,8 +1916,25 @@ interface ManifestLogicEdge {
   readonly label: string;
 }
 
-function projectManifestLogic(plan: RuntimePlan): {
+function projectDeveloperConsole(plan: RuntimePlan): {
   readonly fingerprint: string;
+  readonly summary: {
+    readonly atoms: {
+      readonly triggers: number;
+      readonly procedures: number;
+      readonly schemas: number;
+      readonly views: number;
+    };
+    readonly interfaces: {
+      readonly httpRoutes: number;
+      readonly mcpTools: number;
+      readonly publicViews: number;
+      readonly staffViews: number;
+      readonly lifecycleBindings: number;
+    };
+    readonly explicitRelations: number;
+    readonly opaqueHandlers: number;
+  };
   readonly nodes: readonly ManifestLogicNode[];
   readonly edges: readonly ManifestLogicEdge[];
 } {
@@ -1982,6 +2000,23 @@ function projectManifestLogic(plan: RuntimePlan): {
 
   return {
     fingerprint: plan.semanticFingerprint,
+    summary: {
+      atoms: {
+        triggers: Object.keys(plan.triggers).length,
+        procedures: Object.keys(plan.procedures).length,
+        schemas: Object.keys(plan.schemas).length,
+        views: Object.keys(plan.views).length,
+      },
+      interfaces: {
+        httpRoutes: Object.values(plan.triggers).filter(({ manifest }) => manifest.spec.source.kind === "http").length,
+        mcpTools: plan.mcpTools.length,
+        publicViews: Object.values(plan.views).filter(({ manifest }) => manifest.spec.surface === "public").length,
+        staffViews: Object.values(plan.views).filter(({ manifest }) => manifest.spec.surface === "staff").length,
+        lifecycleBindings: Object.values(plan.triggers).filter(({ manifest }) => manifest.spec.source.kind === "lifecycle").length,
+      },
+      explicitRelations: edges.length,
+      opaqueHandlers: Object.values(plan.procedures).filter(({ manifest }) => manifest.spec.handler.kind !== "builtin").length,
+    },
     nodes,
     edges: edges.sort((a, b) => a.id.localeCompare(b.id)),
   };

@@ -30,6 +30,7 @@ describe("mountMantleAdmin", () => {
     const response = await app.request("https://example.test/admin/settings");
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("admin shell");
+    expect((await app.request("https://example.test/admin/dev")).status).toBe(200);
   });
 
   it("denies Admin APIs without a session", async () => {
@@ -86,10 +87,22 @@ metadata: { name: place-order-http }
 spec:
   source: { kind: http, method: POST, path: /api/orders }
   target: { procedure: place-order }
-`)).request("https://example.test/admin/api/manifest-logic");
+`)).request("https://example.test/admin/api/developer-console");
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
+      summary: {
+        atoms: { triggers: 1, procedures: 1, schemas: 1, views: 1 },
+        interfaces: {
+          httpRoutes: 1,
+          mcpTools: 3,
+          publicViews: 0,
+          staffViews: 1,
+          lifecycleBindings: 0,
+        },
+        explicitRelations: 2,
+        opaqueHandlers: 1,
+      },
       nodes: expect.arrayContaining([
         expect.objectContaining({ id: "Schema:orders", kind: "Schema", name: "orders" }),
         expect.objectContaining({ id: "Trigger:place-order-http", detail: "POST /api/orders" }),

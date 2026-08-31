@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Braces, Database, Eye, Network, Zap, type LucideIcon } from "lucide-react";
 import { api } from "../../lib/api";
 import type {
+  DeveloperConsoleSnapshot,
   ManifestLogicGraph,
   ManifestLogicKind,
   ManifestLogicNode,
@@ -28,9 +29,9 @@ const KIND_META: Record<ManifestLogicKind, { icon: LucideIcon; tone: string }> =
 
 export function ManifestLogicView(): React.ReactElement {
   const { language } = usePreferences();
-  const graph = useQuery<ManifestLogicGraph>({
-    queryKey: ["manifest-logic"],
-    queryFn: () => api.get<ManifestLogicGraph>("/manifest-logic"),
+  const graph = useQuery<DeveloperConsoleSnapshot>({
+    queryKey: ["developer-console"],
+    queryFn: () => api.get<DeveloperConsoleSnapshot>("/developer-console"),
   });
 
   return (
