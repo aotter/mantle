@@ -35,7 +35,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { DeveloperRelations } from "./developer-relations";
+import { DeveloperExplorer } from "./developer-explorer";
 import { developerSelectionHref } from "./developer-route";
 
 type ModelItem =
@@ -164,24 +164,18 @@ export function DataModelView(): React.ReactElement {
   if (!snapshot.data || !selected) return <></>;
 
   return (
-    <section className="grid h-full min-h-0 grid-cols-[15rem_minmax(0,1fr)]" aria-label={t(language, "model.title")}>
-      <ModelSidebar items={visibleItems} selectedId={selected.id} search={search} onSearch={setSearch} onSelect={select} />
-      <div className="grid min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)_24rem] xl:grid-cols-[minmax(28rem,1fr)_24rem] xl:grid-rows-1">
-        <main className="min-w-0 overflow-y-auto border-b xl:border-e xl:border-b-0">
-          {selected.kind === "Schema"
-            ? <SchemaDefinition key={`${selected.id}:${manifestFocus ?? ""}`} model={selected.model} schemas={snapshot.data.dataModel.schemas} manifestOpen={manifestOpen} manifestFocus={manifestFocus} onOpenManifest={openManifest} />
-            : <ViewDefinition key={`${selected.id}:${manifestFocus ?? ""}`} model={selected.model} manifestOpen={manifestOpen} manifestFocus={manifestFocus} />}
-        </main>
-        <DeveloperRelations selectedId={selected.id} graph={snapshot.data.graph} />
-      </div>
-    </section>
+    <DeveloperExplorer label={t(language, "model.title")} sidebarLabel={t(language, "model.objects")} sidebar={<ModelSidebar items={visibleItems} selectedId={selected.id} search={search} onSearch={setSearch} onSelect={select} />} selectedId={selected.id} graph={snapshot.data.graph}>
+      {selected.kind === "Schema"
+        ? <SchemaDefinition key={`${selected.id}:${manifestFocus ?? ""}`} model={selected.model} schemas={snapshot.data.dataModel.schemas} manifestOpen={manifestOpen} manifestFocus={manifestFocus} onOpenManifest={openManifest} />
+        : <ViewDefinition key={`${selected.id}:${manifestFocus ?? ""}`} model={selected.model} manifestOpen={manifestOpen} manifestFocus={manifestFocus} />}
+    </DeveloperExplorer>
   );
 }
 
 function ModelSidebar({ items, selectedId, search, onSearch, onSelect }: { items: ModelItem[]; selectedId: string; search: string; onSearch: (value: string) => void; onSelect: (id: string) => void }): React.ReactElement {
   const { language } = usePreferences();
   return (
-    <aside className="flex min-h-0 flex-col border-e bg-sidebar text-sidebar-foreground" aria-label={t(language, "model.objects")}>
+    <aside className="flex h-full min-h-0 flex-col border-e bg-sidebar text-sidebar-foreground" aria-label={t(language, "model.objects")}>
       <SidebarHeader className="border-b border-sidebar-border">
         <label className="relative">
           <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
@@ -219,7 +213,7 @@ function ModelGroup({ title, icon: Icon, items, selectedId, onSelect }: { title:
 
 function DefinitionHeader({ name, title }: { name: string; title: string | null }): React.ReactElement {
   return (
-    <div className="flex min-h-14 items-center gap-3 border-b px-5 py-3">
+    <div className="flex min-h-14 items-center gap-3 border-b px-5 py-3 pe-32">
       <h1 className="min-w-0 font-mono text-sm font-semibold">{name}</h1>
       {title && title !== name ? <span className="truncate text-sm text-muted-foreground">{title}</span> : null}
     </div>

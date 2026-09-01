@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ArrowDownRight, ArrowUpRight, Braces } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 
 import { t } from "../../app/i18n";
 import { usePreferences } from "../../app/preferences";
@@ -7,11 +7,10 @@ import { useAdminRouter } from "../../app/router";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { DeveloperAtom, DeveloperAtomRelation, DeveloperConsoleSnapshot } from "../../lib/types";
 import { cn } from "../../lib/utils";
-import { Button } from "@/components/ui/button";
 import { atomKindTone, relationLabel } from "./atom-graph";
-import { developerDetailHref, developerSelectionHref } from "./developer-route";
+import { developerDetailHref } from "./developer-route";
 
-export function DeveloperRelations({ selectedId, graph }: { selectedId: string; graph: DeveloperConsoleSnapshot["graph"] }): React.ReactElement {
+export function DeveloperRelations({ selectedId, graph, onNavigate }: { selectedId: string; graph: DeveloperConsoleSnapshot["graph"]; onNavigate?: () => void }): React.ReactElement {
   const { language } = usePreferences();
   const { navigate } = useAdminRouter();
   const atoms = new Map(graph.atoms.map((atom) => [atom.id, atom]));
@@ -23,13 +22,10 @@ export function DeveloperRelations({ selectedId, graph }: { selectedId: string; 
       <div className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
         <h2 className="text-sm font-medium">{t(language, "model.relationships")}</h2>
         <span className="font-mono text-xs text-muted-foreground">{count}</span>
-        <Button asChild variant="ghost" size="sm" className="ms-auto">
-          <a href={developerSelectionHref("/admin/dev", selectedId)}><Braces aria-hidden />{t(language, "model.openGraph")}</a>
-        </Button>
       </div>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
-        {incoming.length ? <RelationGroup title={t(language, "developer.graph.comesFrom")} relations={incoming} outgoing={false} atoms={atoms} onSelect={(id) => navigate(developerDetailHref(id))} onOpenManifest={(id, pointer) => navigate(developerDetailHref(id, { tab: "manifest", pointer }))} /> : null}
-        {outgoing.length ? <RelationGroup title={t(language, "developer.graph.continuesTo")} relations={outgoing} outgoing atoms={atoms} onSelect={(id) => navigate(developerDetailHref(id))} onOpenManifest={(id, pointer) => navigate(developerDetailHref(id, { tab: "manifest", pointer }))} /> : null}
+        {incoming.length ? <RelationGroup title={t(language, "developer.graph.comesFrom")} relations={incoming} outgoing={false} atoms={atoms} onSelect={(id) => { navigate(developerDetailHref(id)); onNavigate?.(); }} onOpenManifest={(id, pointer) => { navigate(developerDetailHref(id, { tab: "manifest", pointer })); onNavigate?.(); }} /> : null}
+        {outgoing.length ? <RelationGroup title={t(language, "developer.graph.continuesTo")} relations={outgoing} outgoing atoms={atoms} onSelect={(id) => { navigate(developerDetailHref(id)); onNavigate?.(); }} onOpenManifest={(id, pointer) => { navigate(developerDetailHref(id, { tab: "manifest", pointer })); onNavigate?.(); }} /> : null}
         {!count ? <p className="text-sm text-muted-foreground">{t(language, "model.noRelations")}</p> : null}
       </div>
     </aside>
