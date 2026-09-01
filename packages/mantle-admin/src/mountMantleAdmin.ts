@@ -1925,7 +1925,6 @@ function projectDeveloperConsole(plan: RuntimePlan): {
     readonly schemas: ReadonlyArray<{
       readonly name: string;
       readonly title: LocalizedText;
-      readonly description: LocalizedText | null;
       readonly lifecycle: "publishing" | "operational";
       readonly localized: boolean;
       readonly translates: { readonly parent: string; readonly on: string } | null;
@@ -1999,7 +1998,6 @@ function projectDeveloperConsole(plan: RuntimePlan): {
       schemas: Object.values(plan.schemas).map(({ name, manifest }) => ({
         name,
         title: manifest.spec.title,
-        description: manifest.spec.description ?? null,
         lifecycle: resolveLifecycle(manifest),
         localized: manifest.spec.localized ?? false,
         translates: manifest.spec.translates ?? null,

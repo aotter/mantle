@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Database, Eye, Search } from "lucide-react";
+import { ChevronRight, Database, Eye, type LucideIcon } from "lucide-react";
 
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
@@ -15,10 +15,9 @@ import type {
   JsonSchema,
 } from "../../lib/types";
 import { cn } from "../../lib/utils";
-import { ErrorBox, PageHeader } from "../../ui/page";
+import { ErrorBox } from "../../ui/page";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -82,8 +81,6 @@ export function DataModelView(): React.ReactElement {
   const { language } = usePreferences();
   const location = useAdminLocation();
   const { navigate } = useAdminRouter();
-  const [search, setSearch] = React.useState("");
-  const [kind, setKind] = React.useState<"all" | ModelItem["kind"]>("all");
   const snapshot = useQuery(developerConsoleQueryOptions());
   const items: ModelItem[] = snapshot.data ? [
     ...snapshot.data.dataModel.schemas.map((model) => ({ kind: "Schema" as const, id: `Schema:${model.name}`, model })),
@@ -91,83 +88,65 @@ export function DataModelView(): React.ReactElement {
   ] : [];
   const requestedId = new URLSearchParams(location.search).get("selected");
   const selected = items.find((item) => item.id === requestedId) ?? items[0] ?? null;
-  const query = search.trim().toLowerCase();
-  const visibleItems = items.filter((item) => {
-    const title = resolveLocalizedText(item.model.title, language) ?? "";
-    return (kind === "all" || item.kind === kind)
-      && (!query || `${item.kind} ${item.model.name} ${title}`.toLowerCase().includes(query));
-  });
   const select = (id: string): void => navigate(`/admin/dev/model?selected=${encodeURIComponent(id)}`, { replace: true });
 
+  if (snapshot.isError) return <div className="p-6"><ErrorBox error={snapshot.error} /></div>;
+  if (snapshot.isLoading) return <Skeleton className="h-full w-full rounded-none" />;
+  if (!snapshot.data || !selected) return <></>;
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow={t(language, "model.eyebrow")}
-        title={t(language, "model.title")}
-        description={t(language, "model.description")}
-        actions={<Button asChild variant="outline"><a href="/admin/dev"><ArrowLeft className="size-4" aria-hidden />{t(language, "model.back")}</a></Button>}
-      />
-      {snapshot.isError ? <ErrorBox error={snapshot.error} /> : null}
-      {snapshot.isLoading ? <Skeleton className="h-[40rem] w-full rounded-xl" /> : null}
-      {snapshot.data && selected ? (
-        <section className="overflow-hidden rounded-xl border bg-card/55" aria-label={t(language, "model.workbench")}>
-          <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
-            <Database className="size-4 text-muted-foreground" aria-hidden />
-            <span className="text-sm font-medium">{t(language, "model.workbench")}</span>
-            <Badge variant="secondary">{snapshot.data.dataModel.schemas.length} {t(language, "model.schemas")}</Badge>
-            <Badge variant="outline">{snapshot.data.dataModel.views.length} {t(language, "model.views")}</Badge>
-            <code className="ms-auto hidden max-w-48 truncate text-[10px] text-muted-foreground lg:block" title={snapshot.data.fingerprint}>{snapshot.data.fingerprint}</code>
-          </div>
-          <div className="grid min-h-[40rem] lg:grid-cols-[15rem_minmax(28rem,1fr)_18rem]">
-            <aside className="border-b lg:border-b-0 lg:border-e" aria-label={t(language, "model.objects")}>
-              <div className="space-y-3 border-b p-3">
-                <label className="relative block">
-                  <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-                  <span className="sr-only">{t(language, "model.search")}</span>
-                  <Input value={search} onChange={(event) => setSearch(event.currentTarget.value)} placeholder={t(language, "model.search")} className="ps-9" />
-                </label>
-                <div className="flex gap-1">
-                  {(["all", "Schema", "View"] as const).map((value) => (
-                    <Button key={value} type="button" size="sm" variant={kind === value ? "default" : "outline"} className="h-7 px-2 text-xs" onClick={() => setKind(value)}>
-                      {value === "all" ? t(language, "model.all") : value}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              <div className="max-h-72 overflow-auto p-2 lg:max-h-[calc(100svh-20rem)]">
-                {visibleItems.length ? visibleItems.map((item) => {
-                  const Icon = item.kind === "Schema" ? Database : Eye;
-                  return (
-                    <button key={item.id} type="button" onClick={() => select(item.id)} aria-pressed={item.id === selected.id} className={cn("mb-1 flex w-full items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", item.id === selected.id ? "border-border bg-accent" : "hover:bg-muted/70")}>
-                      <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                      <span className="min-w-0">
-                        <span className="block truncate font-mono text-xs font-medium">{item.model.name}</span>
-                        <span className="block text-[11px] text-muted-foreground">{item.kind}</span>
-                      </span>
-                    </button>
-                  );
-                }) : <p className="p-4 text-center text-sm text-muted-foreground">{t(language, "model.noResults")}</p>}
-              </div>
-            </aside>
-            <main className="min-w-0 border-b lg:border-b-0 lg:border-e">
-              {selected.kind === "Schema" ? <SchemaDefinition model={selected.model} /> : <ViewDefinition model={selected.model} />}
-            </main>
-            {selected.kind === "Schema"
-              ? <SchemaInspector model={selected.model} snapshot={snapshot.data} onSelect={select} />
-              : <ViewInspector model={selected.model} onSelect={select} />}
-          </div>
-        </section>
-      ) : null}
-    </div>
+    <section className="grid h-full min-h-0 grid-cols-[15rem_minmax(0,1fr)]" aria-label={t(language, "model.title")}>
+      <ModelSidebar items={items} selectedId={selected.id} onSelect={select} />
+      <div className="grid min-h-0 grid-cols-[minmax(28rem,1fr)_18rem]">
+        <main className="min-w-0 overflow-y-auto border-e">
+          {selected.kind === "Schema" ? <SchemaDefinition model={selected.model} /> : <ViewDefinition model={selected.model} />}
+        </main>
+        <div className="overflow-y-auto">
+          {selected.kind === "Schema"
+            ? <SchemaInspector model={selected.model} snapshot={snapshot.data} onSelect={select} />
+            : <ViewInspector model={selected.model} onSelect={select} />}
+        </div>
+      </div>
+    </section>
   );
 }
 
-function DefinitionHeader({ kind, name, title, description }: { kind: ModelItem["kind"]; name: string; title: string | null; description?: string | null }): React.ReactElement {
+function ModelSidebar({ items, selectedId, onSelect }: { items: ModelItem[]; selectedId: string; onSelect: (id: string) => void }): React.ReactElement {
+  const { language } = usePreferences();
   return (
-    <div className="border-b p-5">
-      <div className="flex items-center gap-2"><Badge variant="outline">{kind}</Badge><code className="font-semibold">{name}</code></div>
-      {title && title !== name ? <h2 className="mt-3 text-xl font-semibold">{title}</h2> : null}
-      {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+    <aside className="min-h-0 overflow-y-auto border-e bg-sidebar p-2 text-sidebar-foreground" aria-label={t(language, "model.objects")}>
+      <ModelGroup title={t(language, "model.schemas")} icon={Database} items={items.filter((item) => item.kind === "Schema")} selectedId={selectedId} onSelect={onSelect} />
+      <ModelGroup title={t(language, "model.views")} icon={Eye} items={items.filter((item) => item.kind === "View")} selectedId={selectedId} onSelect={onSelect} />
+    </aside>
+  );
+}
+
+function ModelGroup({ title, icon: Icon, items, selectedId, onSelect }: { title: string; icon: LucideIcon; items: ModelItem[]; selectedId: string; onSelect: (id: string) => void }): React.ReactElement {
+  return (
+    <Collapsible defaultOpen className="group/model mb-1">
+      <CollapsibleTrigger className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm font-medium hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">
+        <Icon className="size-4" aria-hidden />
+        <span className="flex-1 text-start">{title}</span>
+        <span className="font-mono text-[10px] text-sidebar-foreground/60">{items.length}</span>
+        <ChevronRight className="size-4 transition-transform group-data-[state=open]/model:rotate-90" aria-hidden />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="ms-4 border-s border-sidebar-border ps-2">
+        {items.map((item) => (
+          <button key={item.id} type="button" onClick={() => onSelect(item.id)} aria-pressed={item.id === selectedId} className={cn("mt-1 block h-8 w-full truncate rounded-md px-2 text-start font-mono text-xs hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring", item.id === selectedId && "bg-sidebar-accent font-medium text-sidebar-accent-foreground")}>
+            {item.model.name}
+          </button>
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function DefinitionHeader({ kind, name, title }: { kind: ModelItem["kind"]; name: string; title: string | null }): React.ReactElement {
+  return (
+    <div className="flex min-h-14 items-center gap-3 border-b px-5 py-3">
+      <Badge variant="outline">{kind}</Badge>
+      <h1 className="min-w-0 font-mono text-sm font-semibold">{name}</h1>
+      {title && title !== name ? <span className="truncate text-sm text-muted-foreground">{title}</span> : null}
     </div>
   );
 }
@@ -177,11 +156,7 @@ function SchemaDefinition({ model }: { model: DeveloperSchemaModel }): React.Rea
   const fields = flattenSchemaFields(model.schema);
   return (
     <>
-      <DefinitionHeader kind="Schema" name={model.name} title={resolveLocalizedText(model.title, language)} description={resolveLocalizedText(model.description, language)} />
-      <div className="p-5">
-        <h3 className="font-semibold">{t(language, "model.fields")}</h3>
-        <p className="mt-1 text-sm text-muted-foreground">{t(language, "model.fieldsBody")}</p>
-      </div>
+      <DefinitionHeader kind="Schema" name={model.name} title={resolveLocalizedText(model.title, language)} />
       <Table>
         <TableHeader><TableRow><TableHead className="ps-5">{t(language, "model.path")}</TableHead><TableHead>{t(language, "model.type")}</TableHead><TableHead>{t(language, "model.required")}</TableHead><TableHead>{t(language, "model.constraints")}</TableHead></TableRow></TableHeader>
         <TableBody>

@@ -51,6 +51,7 @@ export function AuthenticatedLayout({
 }: AuthenticatedLayoutProps): React.ReactElement {
   const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
   const { pathname, search } = useAdminLocation();
+  const fullBleed = workspace === "developer" && pathname === "/admin/dev/model";
   const { language } = usePreferences();
 
   const me = useQuery<AdminUser>({
@@ -148,7 +149,11 @@ export function AuthenticatedLayout({
               ? { href: "/admin/dev", label: t(language, "developer.consoleTitle"), icon: Wrench }
               : undefined}
           />
-          <Main className={`min-h-0 overflow-y-auto overscroll-contain pt-20 ${workspace === "developer" ? "pb-14" : "pb-20"}`}>{children}</Main>
+          <Main className={fullBleed
+            ? "min-h-0 max-w-none overflow-hidden px-0 py-0 pt-14 pb-10"
+            : `min-h-0 overflow-y-auto overscroll-contain pt-20 ${workspace === "developer" ? "pb-14" : "pb-20"}`}>
+            {children}
+          </Main>
           <footer
             data-slot="status-bar"
             className={`absolute inset-x-0 bottom-0 z-30 flex items-center border-t px-4 sm:px-6 ${workspace === "developer" ? "min-h-10 py-1.5" : "min-h-16 py-3"}`}

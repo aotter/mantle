@@ -260,7 +260,6 @@ export interface DeveloperSurface {
 export interface DeveloperSchemaModel {
   name: string;
   title: LocalizedText;
-  description: LocalizedText | null;
   lifecycle: Lifecycle;
   localized: boolean;
   translates: { parent: string; on: string } | null;
