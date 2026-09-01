@@ -71,7 +71,7 @@ Dispatch `release.yml` with the version without `v`. Watch until all of these
 are proven:
 
 1. Core tag resolves to the release merge commit.
-2. All nine npmjs artifacts exist with matching integrity and no `workspace:*`.
+2. All ten npmjs artifacts exist with matching integrity and no `workspace:*`.
 3. GitHub Packages mirrors exist.
 4. Starter's canonical release PR passes the named gates, merges into
    `develop`, and its tag resolves to that recorded merge.

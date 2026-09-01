@@ -582,8 +582,8 @@ function checkRepositoryGuidance() {
       fail(contributingPath, `contributor authority is missing '${text}'`);
     }
   }
-  if (!releaseSkill.includes("All nine npmjs artifacts")) {
-    fail(releaseSkillPath, "canonical release skill must match the nine-package topology");
+  if (!releaseSkill.includes("All ten npmjs artifacts")) {
+    fail(releaseSkillPath, "canonical release skill must match the ten-package topology");
   }
   if (!claudeRelease.includes("../../../.agent/skills/mantle-release/SKILL.md") ||
       claudeRelease.split("\n").length > 8 ||
