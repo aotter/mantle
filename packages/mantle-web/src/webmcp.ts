@@ -1,7 +1,15 @@
-import type {
-  RuntimeCallableCapability,
-  ViewCallableCapability,
-} from "@aotter/mantle-runtime";
+import type { RuntimeCallableCapability } from "@aotter/mantle-runtime";
+
+export type WebMcpTarget =
+  | Readonly<{ readonly kind: "view"; readonly name: string }>
+  | Readonly<{ readonly kind: "procedure"; readonly name: string }>;
+
+export interface WebMcpCall {
+  readonly name: string;
+  readonly target: WebMcpTarget;
+  readonly input: Readonly<Record<string, unknown>>;
+  readonly signal: AbortSignal;
+}
 
 export interface WebMcpTool {
   readonly name: string;
@@ -9,8 +17,8 @@ export interface WebMcpTool {
   readonly description: string;
   readonly inputSchema: Record<string, unknown>;
   readonly annotations: {
-    readonly readOnlyHint: true;
-    readonly untrustedContentHint: true;
+    readonly readOnlyHint: boolean;
+    readonly untrustedContentHint?: boolean;
   };
   execute(
     input: Record<string, unknown>,
@@ -23,58 +31,131 @@ export interface WebMcpModelContext {
     tool: WebMcpTool,
     options: { readonly signal: AbortSignal },
   ): void | Promise<void>;
+  getTools?():
+    | readonly { readonly name: string }[]
+    | Promise<readonly { readonly name: string }[]>;
 }
 
 export interface WebMcpBinding {
   readonly supported: boolean;
   readonly registered: readonly string[];
+  readonly skipped: readonly string[];
   dispose(): void;
 }
 
+export type WebMcpInvoker = (
+  capability: RuntimeCallableCapability,
+  input: Readonly<Record<string, unknown>>,
+  signal: AbortSignal,
+) => Promise<unknown>;
+
 export interface BindWebMcpOptions {
+  readonly capabilities: readonly RuntimeCallableCapability[];
+  readonly invoke: WebMcpInvoker;
   readonly modelContext?: WebMcpModelContext;
-  readonly fetch?: typeof fetch;
-  readonly endpointPrefix?: string;
+  readonly before?: (call: WebMcpCall) => void | Promise<void>;
+  readonly after?: (
+    call: WebMcpCall,
+    result: PromiseSettledResult<unknown>,
+  ) => void | Promise<void>;
 }
 
-/** Opt-in browser binding for public, read-only View capabilities. */
+/** Opt-in browser binding over public callable capabilities. */
 export async function bindWebMcp(
-  capabilities: readonly RuntimeCallableCapability[],
-  options: BindWebMcpOptions = {},
+  options: BindWebMcpOptions,
 ): Promise<WebMcpBinding> {
   const modelContext = options.modelContext ?? browserModelContext();
   if (!modelContext) return unsupportedBinding();
 
-  const controller = new AbortController();
-  const views = capabilities.filter(
-    (capability): capability is ViewCallableCapability =>
-      capability.kind === "view" && capability.surface === "public",
+  const capabilities = options.capabilities.filter(
+    (capability) => capability.surface === "public",
   );
+  assertUniqueNames(capabilities);
+
+  const controller = new AbortController();
   try {
-    await Promise.all(views.map((capability) => modelContext.registerTool({
-      name: capability.name,
-      ...(capability.title ? { title: capability.title } : {}),
-      description: capability.description,
-      inputSchema: capability.inputSchema as Record<string, unknown>,
-      annotations: { readOnlyHint: true, untrustedContentHint: true },
-      execute: (input, context) => queryView(
-        capability,
-        input,
-        context.signal
-          ? AbortSignal.any([context.signal, controller.signal])
-          : controller.signal,
-        options,
-      ),
-    }, { signal: controller.signal })));
+    const existing = modelContext.getTools
+      ? new Set((await modelContext.getTools()).map((tool) => tool.name))
+      : new Set<string>();
+    const skipped = capabilities
+      .filter((capability) => existing.has(capability.name))
+      .map((capability) => capability.name);
+    const pending = capabilities.filter((capability) => !existing.has(capability.name));
+
+    await Promise.all(pending.map((capability) => modelContext.registerTool(
+      toWebMcpTool(capability, options),
+      { signal: controller.signal },
+    )));
+
+    return binding(
+      pending.map((capability) => capability.name),
+      skipped,
+      controller,
+    );
   } catch (error) {
     controller.abort();
     throw error;
   }
-  return Object.freeze({
-    supported: true,
-    registered: Object.freeze(views.map((view) => view.name)),
-    dispose: () => controller.abort(),
+}
+
+function toWebMcpTool(
+  capability: RuntimeCallableCapability,
+  options: BindWebMcpOptions,
+): WebMcpTool {
+  const target: WebMcpTarget = Object.freeze({
+    kind: capability.kind,
+    name: capability.ownerName,
   });
+  return {
+    name: capability.name,
+    ...(capability.title ? { title: capability.title } : {}),
+    description: capability.description,
+    inputSchema: capability.inputSchema as Record<string, unknown>,
+    annotations: {
+      readOnlyHint: capability.kind === "view" || capability.inputSchema.readOnly === true,
+      ...(capability.kind === "view" ? { untrustedContentHint: true } : {}),
+    },
+    execute: async (input, context) => {
+      if (!input || typeof input !== "object" || Array.isArray(input)) {
+        throw new TypeError("WebMCP tool input must be an object.");
+      }
+      const signal = context.signal ?? new AbortController().signal;
+      const call: WebMcpCall = Object.freeze({
+        name: capability.name,
+        target,
+        input,
+        signal,
+      });
+      let result: PromiseSettledResult<unknown>;
+      try {
+        signal.throwIfAborted();
+        await options.before?.(call);
+        result = {
+          status: "fulfilled",
+          value: await options.invoke(capability, input, signal),
+        };
+      } catch (reason) {
+        result = { status: "rejected", reason };
+      }
+      try {
+        await options.after?.(call, result);
+      } catch {
+        // Observational hooks never change the domain result.
+      }
+      if (result.status === "fulfilled") return result.value;
+      throw result.reason;
+    },
+  };
+}
+
+function assertUniqueNames(capabilities: readonly RuntimeCallableCapability[]): void {
+  const names = new Set<string>();
+  for (const capability of capabilities) {
+    if (names.has(capability.name)) {
+      throw new TypeError(`Duplicate WebMCP capability name '${capability.name}'.`);
+    }
+    names.add(capability.name);
+  }
 }
 
 function browserModelContext(): WebMcpModelContext | undefined {
@@ -85,44 +166,24 @@ function browserModelContext(): WebMcpModelContext | undefined {
     : undefined;
 }
 
+function binding(
+  registered: readonly string[],
+  skipped: readonly string[],
+  controller: AbortController,
+): WebMcpBinding {
+  return Object.freeze({
+    supported: true,
+    registered: Object.freeze(registered),
+    skipped: Object.freeze(skipped),
+    dispose: () => controller.abort(),
+  });
+}
+
 function unsupportedBinding(): WebMcpBinding {
   return Object.freeze({
     supported: false,
     registered: Object.freeze([]),
+    skipped: Object.freeze([]),
     dispose: () => {},
   });
-}
-
-async function queryView(
-  capability: ViewCallableCapability,
-  input: Record<string, unknown>,
-  signal: AbortSignal,
-  options: BindWebMcpOptions,
-): Promise<unknown> {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    throw new TypeError("WebMCP View input must be an object.");
-  }
-  const query = Object.entries(input)
-    .filter((entry): entry is [string, string | number | boolean] =>
-      ["string", "number", "boolean"].includes(typeof entry[1]))
-    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
-    .join("&");
-  const prefix = (options.endpointPrefix ?? "/api/views").replace(/\/$/u, "");
-  if (!/^\/(?!\/)[^\\?#]*$/u.test(prefix)) {
-    throw new TypeError("WebMCP endpointPrefix must be a same-origin absolute path.");
-  }
-  const response = await (options.fetch ?? fetch)(
-    `${prefix}/${encodeURIComponent(capability.ownerName)}${query ? `?${query}` : ""}`,
-    {
-      method: "GET",
-      credentials: "same-origin",
-      headers: { accept: "application/json" },
-      signal,
-    },
-  );
-  if (!response.ok) throw new Error(`Mantle View '${capability.ownerName}' failed (${response.status}).`);
-  const body = await response.json() as unknown;
-  return body && typeof body === "object" && (body as { ok?: unknown }).ok === true
-    ? (body as { data?: unknown }).data
-    : body;
 }

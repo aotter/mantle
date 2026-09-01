@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
+  ProcedureCallableCapability,
   RuntimeCallableCapability,
   ViewCallableCapability,
 } from "@aotter/mantle-runtime";
-import { bindWebMcp, type WebMcpTool } from "../src/webmcp.js";
+import {
+  bindWebMcp,
+  type WebMcpCall,
+  type WebMcpTool,
+} from "../src/webmcp.js";
 import { makeProcedure, recentPostsView } from "../../mantle-runtime/test/fakes/manifests.js";
 
 function publicView(): ViewCallableCapability {
@@ -19,119 +24,235 @@ function publicView(): ViewCallableCapability {
   };
 }
 
+function publicProcedure(
+  name: string,
+  readOnly: boolean,
+): ProcedureCallableCapability {
+  const manifest = makeProcedure({
+    name,
+    input: {
+      type: "object",
+      properties: { value: { type: "string" } },
+      ...(readOnly ? { readOnly: true } : {}),
+    },
+  });
+  return {
+    kind: "procedure",
+    name: name.replaceAll("-", "_"),
+    ownerName: name,
+    trigger: `${name}-mcp`,
+    surface: "public",
+    description: `Invoke '${name}'.`,
+    inputSchema: manifest.spec.input,
+    outputSchema: manifest.spec.output,
+    manifest,
+  };
+}
+
 describe("bindWebMcp", () => {
-  it("feature-detects unsupported browsers without side effects", async () => {
-    await expect(bindWebMcp([publicView()])).resolves.toMatchObject({
+  it("feature-detects unsupported browsers without invoking capabilities", async () => {
+    const invoke = vi.fn();
+    await expect(bindWebMcp({
+      capabilities: [publicView()],
+      invoke,
+    })).resolves.toMatchObject({
       supported: false,
       registered: [],
+      skipped: [],
     });
+    expect(invoke).not.toHaveBeenCalled();
   });
 
-  it("registers only public Views and disposes them through AbortSignal", async () => {
+  it("registers public Views and Procedures with canonical annotations", async () => {
     const registrations: Array<{ tool: WebMcpTool; signal: AbortSignal }> = [];
-    const procedure = makeProcedure({ name: "mutate" });
     const capabilities: RuntimeCallableCapability[] = [
       publicView(),
       { ...publicView(), name: "staff", surface: "staff" },
-      {
-        kind: "procedure",
-        name: "mutate",
-        ownerName: "mutate",
-        trigger: "mutate-mcp",
-        surface: "public",
-        description: "Mutate.",
-        inputSchema: procedure.spec.input,
-        outputSchema: procedure.spec.output,
-        manifest: procedure,
-      },
+      publicProcedure("inspect-companion", true),
+      publicProcedure("submit-companion-action", false),
     ];
-    const binding = await bindWebMcp(capabilities, {
+    const binding = await bindWebMcp({
+      capabilities,
+      invoke: async () => null,
       modelContext: {
         registerTool: (tool, { signal }) => registrations.push({ tool, signal }),
       },
     });
 
-    expect(binding).toMatchObject({ supported: true, registered: ["query_view_recent_posts"] });
-    expect(registrations).toHaveLength(1);
-    expect(registrations[0]!.tool.annotations).toEqual({
-      readOnlyHint: true,
-      untrustedContentHint: true,
+    expect(binding).toMatchObject({
+      supported: true,
+      registered: [
+        "query_view_recent_posts",
+        "inspect_companion",
+        "submit_companion_action",
+      ],
+      skipped: [],
     });
-    expect(registrations[0]!.signal.aborted).toBe(false);
+    expect(registrations.map(({ tool }) => [tool.name, tool.annotations])).toEqual([
+      ["query_view_recent_posts", { readOnlyHint: true, untrustedContentHint: true }],
+      ["inspect_companion", { readOnlyHint: true }],
+      ["submit_companion_action", { readOnlyHint: false }],
+    ]);
+    expect(registrations.every(({ signal }) => !signal.aborted)).toBe(true);
     binding.dispose();
-    expect(registrations[0]!.signal.aborted).toBe(true);
+    expect(registrations.every(({ signal }) => signal.aborted)).toBe(true);
   });
 
-  it("calls the same-origin View endpoint with cancellation", async () => {
-    const tools: WebMcpTool[] = [];
-    let requestSignal: AbortSignal | undefined;
-    const fetch = vi.fn(async (_input, init) => {
-      requestSignal = init?.signal ?? undefined;
-      return Response.json({
-        ok: true,
-        data: { rows: [{ title: "Hello" }], page: 2, show: 10, hasMore: false },
-      });
+  it("keeps existing host tools and reports inspected collisions", async () => {
+    const registered: string[] = [];
+    const binding = await bindWebMcp({
+      capabilities: [publicView(), publicProcedure("inspect-companion", true)],
+      invoke: async () => null,
+      modelContext: {
+        getTools: () => [
+          { name: "host-owned" },
+          { name: "query_view_recent_posts" },
+        ],
+        registerTool: (tool) => registered.push(tool.name),
+      },
     });
-    await bindWebMcp([publicView()], {
+
+    expect(binding.registered).toEqual(["inspect_companion"]);
+    expect(binding.skipped).toEqual(["query_view_recent_posts"]);
+    expect(registered).toEqual(["inspect_companion"]);
+  });
+
+  it("passes local results, signals, and minimal call context through hooks", async () => {
+    const tools: WebMcpTool[] = [];
+    const calls: WebMcpCall[] = [];
+    const outcomes: PromiseSettledResult<unknown>[] = [];
+    const invoke = vi.fn(async (_capability, input, signal) => ({ input, signal }));
+    await bindWebMcp({
+      capabilities: [publicProcedure("inspect-companion", true)],
+      invoke,
+      before: (call) => calls.push(call),
+      after: (_call, result) => outcomes.push(result),
       modelContext: { registerTool: (tool) => tools.push(tool) },
-      fetch,
     });
     const invocation = new AbortController();
-    await expect(tools[0]!.execute(
-      { locale: "zh-TW", page: 2, ignored: { nested: true } },
-      { signal: invocation.signal },
-    )).resolves.toMatchObject({ rows: [{ title: "Hello" }] });
+    const input = { value: "hello" };
+    const result = await tools[0]!.execute(input, { signal: invocation.signal });
 
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/views/recent-posts?locale=zh-TW&page=2",
-      expect.objectContaining({
-        method: "GET",
-        credentials: "same-origin",
-        signal: expect.any(AbortSignal),
-      }),
+    expect(result).toEqual({ input, signal: invocation.signal });
+    expect(invoke).toHaveBeenCalledWith(
+      expect.objectContaining({ trigger: "inspect-companion-mcp" }),
+      input,
+      invocation.signal,
     );
-    invocation.abort();
-    expect(requestSignal?.aborted).toBe(true);
+    expect(calls).toEqual([{
+      name: "inspect_companion",
+      target: { kind: "procedure", name: "inspect-companion" },
+      input,
+      signal: invocation.signal,
+    }]);
+    expect(outcomes).toEqual([{ status: "fulfilled", value: result }]);
   });
 
-  it("aborts in-flight calls when the binding is disposed", async () => {
+  it("preserves invocation failures even when the observational after hook rejects", async () => {
     const tools: WebMcpTool[] = [];
-    let requestSignal: AbortSignal | undefined;
-    const binding = await bindWebMcp([publicView()], {
+    const failure = new Error("domain failed");
+    const outcomes: PromiseSettledResult<unknown>[] = [];
+    await bindWebMcp({
+      capabilities: [publicProcedure("submit-companion-action", false)],
+      invoke: async () => { throw failure; },
+      after: (_call, result) => {
+        outcomes.push(result);
+        throw new Error("navigation failed");
+      },
       modelContext: { registerTool: (tool) => tools.push(tool) },
-      fetch: vi.fn((_input, init) => {
-        requestSignal = init?.signal ?? undefined;
-        return new Promise<Response>(() => {});
-      }),
     });
-    void tools[0]!.execute({}, { signal: new AbortController().signal });
-    binding.dispose();
-    expect(requestSignal?.aborted).toBe(true);
+
+    await expect(tools[0]!.execute({}, {})).rejects.toBe(failure);
+    expect(outcomes).toEqual([{ status: "rejected", reason: failure }]);
   });
 
-  it("aborts partial registration when the browser rejects a tool", async () => {
+  it("runs after with a rejected result when before vetoes invocation", async () => {
+    const tools: WebMcpTool[] = [];
+    const veto = new Error("blocked by host");
+    const invoke = vi.fn();
+    const outcomes: PromiseSettledResult<unknown>[] = [];
+    await bindWebMcp({
+      capabilities: [publicProcedure("submit-companion-action", false)],
+      invoke,
+      before: () => { throw veto; },
+      after: (_call, result) => outcomes.push(result),
+      modelContext: { registerTool: (tool) => tools.push(tool) },
+    });
+
+    await expect(tools[0]!.execute({}, {})).rejects.toBe(veto);
+    expect(invoke).not.toHaveBeenCalled();
+    expect(outcomes).toEqual([{ status: "rejected", reason: veto }]);
+  });
+
+  it("keeps registration teardown separate from invocation cancellation", async () => {
+    const tools: WebMcpTool[] = [];
+    let invocationSignal: AbortSignal | undefined;
+    let finish!: () => void;
+    const finished = new Promise<void>((resolve) => { finish = resolve; });
+    let ready!: () => void;
+    const invocationStarted = new Promise<void>((resolve) => { ready = resolve; });
+    const binding = await bindWebMcp({
+      capabilities: [publicProcedure("inspect-companion", true)],
+      invoke: async (_capability, _input, signal) => {
+        invocationSignal = signal;
+        ready();
+        await finished;
+        return "done";
+      },
+      modelContext: { registerTool: (tool) => tools.push(tool) },
+    });
+    const invocation = new AbortController();
+    const pending = tools[0]!.execute({}, { signal: invocation.signal });
+    await invocationStarted;
+
+    binding.dispose();
+    expect(invocationSignal?.aborted).toBe(false);
+    invocation.abort();
+    expect(invocationSignal?.aborted).toBe(true);
+    finish();
+    await expect(pending).resolves.toBe("done");
+  });
+
+  it("rolls back this binding when registration fails without inspection", async () => {
     let signal: AbortSignal | undefined;
-    await expect(bindWebMcp([publicView()], {
+    await expect(bindWebMcp({
+      capabilities: [publicView()],
+      invoke: async () => null,
       modelContext: {
         registerTool: (_tool, options) => {
           signal = options.signal;
-          throw new Error("duplicate tool");
+          throw Object.assign(new Error("duplicate tool"), { name: "InvalidStateError" });
         },
       },
     })).rejects.toThrow("duplicate tool");
     expect(signal?.aborted).toBe(true);
   });
 
-  it.each([
-    "https://other.example/views",
-    "//other.example/views",
-    "/\\other.example/views",
-  ])("rejects unsafe endpoint override %s", async (endpointPrefix) => {
+  it("rejects duplicate projected names before registration", async () => {
+    const registerTool = vi.fn();
+    await expect(bindWebMcp({
+      capabilities: [publicView(), publicView()],
+      invoke: async () => null,
+      modelContext: { registerTool },
+    })).rejects.toThrow("Duplicate WebMCP capability name 'query_view_recent_posts'");
+    expect(registerTool).not.toHaveBeenCalled();
+  });
+
+  it("rejects non-object invocation input before hooks or dispatch", async () => {
     const tools: WebMcpTool[] = [];
-    await bindWebMcp([publicView()], {
+    const invoke = vi.fn();
+    const before = vi.fn();
+    await bindWebMcp({
+      capabilities: [publicView()],
+      invoke,
+      before,
       modelContext: { registerTool: (tool) => tools.push(tool) },
-      endpointPrefix,
     });
-    await expect(tools[0]!.execute({}, {})).rejects.toThrow("same-origin");
+
+    await expect(tools[0]!.execute([] as never, {})).rejects.toThrow(
+      "WebMCP tool input must be an object",
+    );
+    expect(before).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
   });
 });

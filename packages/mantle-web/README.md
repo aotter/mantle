@@ -26,23 +26,42 @@ headless runtime operations.
 
 ## WebMCP (opt in)
 
-Browsers implementing the draft imperative WebMCP API can expose public Views
-as read-only tools. Importing the subpath has no registration side effect;
+Browsers implementing the draft imperative WebMCP API can expose public Mantle
+capabilities as tools. Importing the subpath has no registration side effect;
 registration begins only when `bindWebMcp` is called.
 
 ```ts
 import { projectCallableCapabilities } from "@aotter/mantle-runtime";
 import { bindWebMcp } from "@aotter/mantle-web/webmcp";
 
-const binding = await bindWebMcp(
-  projectCallableCapabilities(plan, { surface: "public" }),
-);
+const capabilities = projectCallableCapabilities(plan, { surface: "public" });
+const binding = await bindWebMcp({
+  capabilities,
+  async invoke(capability, input, signal) {
+    signal.throwIfAborted();
+    if (capability.kind !== "procedure") {
+      throw new Error(`Unsupported local capability: ${capability.name}`);
+    }
+    const result = await (await getRuntime()).invokeTrigger({
+      trigger: capability.trigger,
+      input,
+      ctx: getContext(),
+    });
+    if (!result.ok) throw result.diagnostic;
+    return result.data;
+  },
+  after({ target }, result) {
+    if (result.status === "fulfilled") refreshUi(target);
+  },
+});
 
 // Unregister when the page/app scope ends.
 binding.dispose();
 ```
 
-Unsupported browsers return `{ supported: false }`. Only public View
-capabilities are registered; staff Views and Procedure mutations are excluded.
-Calls use the same-origin `/api/views/<name>` route, forward browser
-cancellation, and declare both `readOnlyHint` and `untrustedContentHint`.
+An existing WebMCP site may pass its current `modelContext`; Mantle inspects and
+skips existing tool names without replacing host registrations. Unsupported
+browsers return `{ supported: false }`. Only public capabilities are registered.
+Procedure tools must originate from explicit public MCP Triggers, and execution
+must enter Runtime through that Trigger. Runtime selection stays inside
+`invoke`, so an SPA can switch active bundles without keeping stale closures.
