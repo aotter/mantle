@@ -157,10 +157,9 @@ function ModelGroup({ title, icon: Icon, items, selectedId, onSelect }: { title:
   );
 }
 
-function DefinitionHeader({ kind, name, title }: { kind: ModelItem["kind"]; name: string; title: string | null }): React.ReactElement {
+function DefinitionHeader({ name, title }: { name: string; title: string | null }): React.ReactElement {
   return (
     <div className="flex min-h-14 items-center gap-3 border-b px-5 py-3">
-      <Badge variant="outline">{kind}</Badge>
       <h1 className="min-w-0 font-mono text-sm font-semibold">{name}</h1>
       {title && title !== name ? <span className="truncate text-sm text-muted-foreground">{title}</span> : null}
     </div>
@@ -172,7 +171,7 @@ function SchemaDefinition({ model }: { model: DeveloperSchemaModel }): React.Rea
   const fields = flattenSchemaFields(model.schema);
   return (
     <>
-      <DefinitionHeader kind="Schema" name={model.name} title={resolveLocalizedText(model.title, language)} />
+      <DefinitionHeader name={model.name} title={resolveLocalizedText(model.title, language)} />
       <DefinitionTabs
         definitionLabel={t(language, "model.fields")}
         rawLabel={t(language, "model.rawSchema")}
@@ -202,7 +201,7 @@ function ViewDefinition({ model }: { model: DeveloperViewModel }): React.ReactEl
   const query = model.query;
   return (
     <>
-      <DefinitionHeader kind="View" name={model.name} title={resolveLocalizedText(model.title, language)} />
+      <DefinitionHeader name={model.name} title={resolveLocalizedText(model.title, language)} />
       <DefinitionTabs definitionLabel={t(language, "model.queryKind")} rawLabel={t(language, "model.rawQuery")} rawValue={query}>
         <div className="space-y-5 p-5">
           <FactGrid entries={query.kind === "declarative" ? [
