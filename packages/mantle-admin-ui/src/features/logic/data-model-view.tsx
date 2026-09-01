@@ -237,34 +237,32 @@ function RelatedAtomsGraph({ selectedId, graph, onSelect }: { selectedId: string
   const atoms = graph.atoms.filter(({ id }) => ids.has(id));
   const layout = new dagre.graphlib.Graph({ multigraph: true }).setDefaultEdgeLabel(() => ({}));
   layout.setGraph({ rankdir: "TB", nodesep: 28, ranksep: 72, marginx: 16, marginy: 16 });
-  atoms.forEach(({ id }) => layout.setNode(id, { width: 220, height: 76 }));
+  atoms.forEach(({ id }) => layout.setNode(id, { width: 220, height: id === selectedId ? 76 : 96 }));
   relations.forEach(({ id, sourceId, targetId }) => layout.setEdge(sourceId, targetId, {}, id));
   dagre.layout(layout);
   const nodes: Node[] = atoms.map((atom) => {
     const position = layout.node(atom.id);
     const title = resolveLocalizedText(atom.title, language);
     const navigable = atom.kind === "Schema" || atom.kind === "View";
+    const relationLabels = relations
+      .filter(({ sourceId, targetId }) => atom.id !== selectedId && (sourceId === atom.id || targetId === atom.id))
+      .map(({ label }) => label.split(".").slice(-2).join("."));
+    const height = atom.id === selectedId ? 76 : 96;
     return {
       id: atom.id,
-      position: { x: position.x - 110, y: position.y - 38 },
-      data: { label: <div className="min-w-0 space-y-1.5 text-start"><span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atom.kind}</span><div><div className="truncate font-mono text-xs font-semibold">{atom.name}</div>{title && title !== atom.name ? <div className="truncate text-[10px] text-muted-foreground">{title}</div> : null}</div></div> },
+      position: { x: position.x - 110, y: position.y - height / 2 },
+      data: { label: <div className="min-w-0 space-y-1.5 text-start"><span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atom.kind}</span><div><div className="truncate font-mono text-xs font-semibold">{atom.name}</div>{title && title !== atom.name ? <div className="truncate text-[10px] text-muted-foreground">{title}</div> : null}</div>{relationLabels.length ? <div className="border-t pt-1.5 font-mono text-[9px] text-foreground/70">{relationLabels.join(" · ")}</div> : null}</div> },
       ariaLabel: `${atom.kind} ${atom.name}`,
-      className: cn("!w-[220px] !rounded-xl !border-border/80 !bg-card !px-3 !py-2.5 !text-card-foreground !shadow-md transition-colors", atom.id === selectedId ? "!border-primary !bg-primary/10 !ring-2 !ring-primary/30" : "hover:!border-foreground/30", navigable && atom.id !== selectedId && "cursor-pointer"),
+      className: cn("!w-[220px] !rounded-xl !border-border/80 !bg-card !px-3 !py-2.5 !text-card-foreground !shadow-md transition-colors", atom.id === selectedId ? "!min-h-[76px] !border-primary !bg-primary/10 !ring-2 !ring-primary/30" : "!min-h-[96px] hover:!border-foreground/30", navigable && atom.id !== selectedId && "cursor-pointer"),
     };
   });
-  const edges: Edge[] = relations.map(({ id, sourceId, targetId, label }) => ({
+  const edges: Edge[] = relations.map(({ id, sourceId, targetId }) => ({
     id,
     source: sourceId,
     target: targetId,
-    label: label.split(".").slice(-2).join("."),
     type: "smoothstep",
     markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: "var(--muted-foreground)" },
     style: { stroke: "var(--muted-foreground)", strokeWidth: 1.5 },
-    labelStyle: { fill: "var(--foreground)", fontFamily: "ui-monospace, monospace", fontSize: 10, fontWeight: 500 },
-    labelShowBg: true,
-    labelBgStyle: { fill: "var(--background)", fillOpacity: 0.95 },
-    labelBgPadding: [5, 3],
-    labelBgBorderRadius: 5,
   }));
   return (
     <aside className="flex min-h-0 flex-col" aria-label={t(language, "model.relatedAtoms")}>
