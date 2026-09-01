@@ -5,6 +5,7 @@ import {
 } from "@aotter/mantle-spec";
 import {
   EntryStatusConflict,
+  EntryUniqueConflict,
   EntryVersionConflict,
 } from "../model/EntryRow.js";
 
@@ -37,6 +38,18 @@ export async function withConflictDiagnostic<T>(
           value: err.actual,
           expected: `status === '${err.expected}'`,
           message: `Status mismatch on entry '${err.id}': expected '${err.expected}', found '${err.actual}'. Probably a concurrent state change.`,
+        }),
+      );
+    }
+    if (err instanceof EntryUniqueConflict) {
+      throw new DiagnosticError(
+        runtimeDiagnostic({
+          code: "CONFLICT",
+          severity: "error",
+          path,
+          value: err.fields,
+          expected: "unique entry data per Schema uniqueIndexes",
+          message: `Unique constraint violation in collection '${err.collection}': ${err.message}`,
         }),
       );
     }

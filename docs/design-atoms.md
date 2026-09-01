@@ -690,23 +690,26 @@ spec:
     kind:   builtin
     op:     create | update | upsert | delete | archive
     schema: <Schema metadata.name>
+    match:  [ <field>, ... ] # optional; only valid for op: upsert
 ```
 
-| op | Behavior |
-|---|---|
-| `create` | INSERT a new row. Project `input ∩ Schema.spec.schema.properties`; stamp `x-mantle-bind` fields; generated id; status is `draft`, or immediately `published` for `lifecycle: operational`. |
-| `update` | UPDATE in place. `input.id` + `input.expectedVersion` (OCC) required. Bumps version. |
-| `upsert` | If `input.id` resolves, behaves as `update`; else as `create`. |
-| `delete` | Hard DELETE by id. |
-| `archive` | Soft-archive a publishing entry (`status='archived'`). |
+| op | Behavior | Input Contract Requirements |
+|---|---|---|
+| `create` | INSERT a new row. Project `input ∩ Schema.spec.schema.properties`; stamp `x-mantle-bind` fields; generated id; status is `draft`, or immediately `published` for `lifecycle: operational`. | `input` must be an object schema. |
+| `update` | UPDATE in place. Merges patch with existing data via `projectUpdateAndStamp`. Bumps version. | `input.id` (strict string) and `input.expectedVersion` (strict number) are required in `input.required`. |
+| `upsert` | If `match` is declared, queries by matched natural key fields: if found, updates the row via `projectUpdateAndStamp` using the row's existing version; if not found, creates a new row. If `match` is omitted (legacy), updates when `input.id` resolves, else creates. | If `match` is set, matched fields must match a declared unique index on the Schema, be declared in `input.properties`, and appear in `input.required`; `id` and `expectedVersion` must NOT be in `input`. If `match` is omitted and `id` or `expectedVersion` is declared, both must be declared with strict string/number types. |
+| `delete` | Hard DELETE by id. | `input.id` (strict string) is required in `input.required`. |
+| `archive` | Soft-archive a publishing entry (`status='archived'`). | Valid only on Schemas with `lifecycle: publishing`. `input.id` (strict string) is required in `input.required`. |
 
 The Procedure's `input` is the contract with the *caller*. It MAY
 declare fields the Schema does not (e.g. a Turnstile token). The
 builtin op silently projects `input ∩ Schema.properties` and ignores
 the rest; JSON Schema's default `additionalProperties: true` lets
 the side-channel fields pass validation. To act on those fields
-(read the token, call the vendor), declare a `before_create`
+(read the token, call the vendor), declare a `before_create` or `before_update`
 lifecycle Trigger — see below.
+
+Under concurrent execution, database-level unique constraints catch any race conditions where concurrent writers miss preflight lookup, surfacing as standard `CONFLICT` diagnostics (HTTP 409) without automatic retries.
 
 `request_publish` and `publish` are intentionally not in the builtin
 vocabulary. They are lifecycle operations, not CRUD primitives.

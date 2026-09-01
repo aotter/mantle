@@ -4,6 +4,7 @@ import {
 } from "@aotter/mantle-spec";
 import {
   EntryStatusConflict,
+  EntryUniqueConflict,
   EntryVersionConflict,
   bootMantleRuntime,
   compileRuntimePlan,
@@ -148,6 +149,75 @@ describe("IndexedDbMantleStorageAdapter in Chrome", () => {
     await entries.create({ ...entry("clone", "stored"), data: mutable });
     mutable.title = "mutated after commit";
     expect(await entries.get("clone")).toMatchObject({ data: { title: "stored" } });
+    await storage.deleteDatabase();
+  });
+
+  it("enforces Schema uniqueIndexes atomically and preserves NULL semantics for optional fields", async () => {
+    const storage = new IndexedDbMantleStorageAdapter({ databaseName: databaseName("unique") });
+    const { entries } = await storage.prepare(plan(settingsManifest));
+
+    // Two rows omitting the optional unique field 'code' can both be created
+    await entries.create({
+      id: "entry-1",
+      collection: "site-settings",
+      status: "draft",
+      data: { siteKey: "main", theme: "dark" },
+      authorId: null,
+      now: 1,
+    });
+    await entries.create({
+      id: "entry-2",
+      collection: "site-settings",
+      status: "draft",
+      data: { siteKey: "secondary", theme: "light" },
+      authorId: null,
+      now: 2,
+    });
+
+    // Row with explicit null optional unique field 'code' can also be created
+    await entries.create({
+      id: "entry-3",
+      collection: "site-settings",
+      status: "draft",
+      data: { siteKey: "third", code: null, theme: "blue" },
+      authorId: null,
+      now: 3,
+    });
+
+    // Complete duplicate tuple on siteKey: "main" throws EntryUniqueConflict
+    await expect(
+      entries.create({
+        id: "entry-4",
+        collection: "site-settings",
+        status: "draft",
+        data: { siteKey: "main", theme: "solarized" },
+        authorId: null,
+        now: 4,
+      }),
+    ).rejects.toBeInstanceOf(EntryUniqueConflict);
+
+    // Row with explicit code: "PROMO" can be created
+    await entries.create({
+      id: "entry-5",
+      collection: "site-settings",
+      status: "draft",
+      data: { siteKey: "fourth", code: "PROMO", theme: "red" },
+      authorId: null,
+      now: 5,
+    });
+
+    // Duplicate on code: "PROMO" throws EntryUniqueConflict
+    await expect(
+      entries.create({
+        id: "entry-6",
+        collection: "site-settings",
+        status: "draft",
+        data: { siteKey: "fifth", code: "PROMO", theme: "green" },
+        authorId: null,
+        now: 6,
+      }),
+    ).rejects.toBeInstanceOf(EntryUniqueConflict);
+
     await storage.deleteDatabase();
   });
 
@@ -360,4 +430,21 @@ metadata: { name: native-posts }
 spec:
   surface: public
   sql: SELECT * FROM entries
+`;
+
+const settingsManifest = `---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: site-settings }
+spec:
+  title: Site Settings
+  lifecycle: operational
+  schema:
+    type: object
+    required: [siteKey, theme]
+    properties:
+      siteKey: { type: string }
+      code: { type: string }
+      theme: { type: string }
+  uniqueIndexes: [[siteKey], [code]]
 `;

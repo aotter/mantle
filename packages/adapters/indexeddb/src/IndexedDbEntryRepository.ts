@@ -1,6 +1,7 @@
 import type { Entry, SchemaManifest } from "@aotter/mantle-spec";
 import {
   EntryStatusConflict,
+  EntryUniqueConflict,
   EntryVersionConflict,
   clampLimit,
   decodeEntrySortCursor,
@@ -67,7 +68,15 @@ export class IndexedDbEntryRepository implements EntryRepository, EntryReader {
       updatedAt: args.now,
     };
     return this.write(async (store) => {
-      await store.add(row);
+      await this.assertUniqueIndexes(store, args.collection, args.data);
+      try {
+        await store.add(row);
+      } catch (error) {
+        if (isIndexedDbConstraintError(error)) {
+          throw new EntryUniqueConflict(args.collection, args.data, (error as Error).message);
+        }
+        throw error;
+      }
       return structuredClone(row);
     });
   }
@@ -83,6 +92,7 @@ export class IndexedDbEntryRepository implements EntryRepository, EntryReader {
       if (row.version !== args.expectedVersion) {
         throw new EntryVersionConflict(args.id, args.expectedVersion, row.version);
       }
+      await this.assertUniqueIndexes(store, row.collection, args.data, args.id);
       const next: EntryRow = {
         ...row,
         locale: liftLocale(args.data),
@@ -274,6 +284,36 @@ export class IndexedDbEntryRepository implements EntryRepository, EntryReader {
     ].some((index) => index.includes(field));
   }
 
+  private async assertUniqueIndexes(
+    store: EntryStore,
+    collection: string,
+    data: Record<string, unknown>,
+    excludeId?: string,
+  ): Promise<void> {
+    const schema = this.schemas.get(collection);
+    const uniqueIndexes = schema?.spec.uniqueIndexes;
+    if (!uniqueIndexes || uniqueIndexes.length === 0) return;
+
+    let rows: readonly EntryRow[] | null = null;
+    for (const uniqueIndex of uniqueIndexes) {
+      if (uniqueIndex.some((field) => data[field] == null)) continue;
+      if (!rows) {
+        rows = await store.index("byCollection").getAll(collection);
+      }
+      const match = rows.find((r) => {
+        if (excludeId && r.id === excludeId) return false;
+        return uniqueIndex.every((col) => r.data[col] === data[col]);
+      });
+      if (match) {
+        const fields: Record<string, unknown> = {};
+        for (const col of uniqueIndex) {
+          fields[col] = data[col];
+        }
+        throw new EntryUniqueConflict(collection, fields);
+      }
+    }
+  }
+
   private async write<T>(action: (store: EntryStore) => Promise<T>): Promise<T> {
     const tx = (await this.database()).transaction("entries", "readwrite");
     try {
@@ -290,6 +330,13 @@ export class IndexedDbEntryRepository implements EntryRepository, EntryReader {
       throw error;
     }
   }
+}
+
+function isIndexedDbConstraintError(error: unknown): boolean {
+  if (!error) return false;
+  if ((error as { name?: string }).name === "ConstraintError") return true;
+  if (error instanceof Error && error.message.includes("ConstraintError")) return true;
+  return false;
 }
 
 function matchesLocale(row: EntryRow, locale: string | null | undefined): boolean {

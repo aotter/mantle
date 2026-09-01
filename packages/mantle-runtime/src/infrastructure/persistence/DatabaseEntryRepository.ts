@@ -27,6 +27,7 @@ import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
 import { clampLimit } from "../../domain/service/Pagination.js";
 import {
   EntryStatusConflict,
+  EntryUniqueConflict,
   EntryVersionConflict,
   liftLocale,
   projectPublicEntry,
@@ -56,21 +57,28 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
   ) {}
 
   async create(args: CreateEntryArgs): Promise<EntryRow> {
-    await this.db
-      .prepare(
-        `INSERT INTO entries (id, collection, status, version, data, author_id, created_at, updated_at)
-         VALUES (?, ?, ?, 1, ?, ?, ?, ?)`,
-      )
-      .bind(
-        args.id,
-        args.collection,
-        args.status,
-        JSON.stringify(args.data),
-        args.authorId,
-        args.now,
-        args.now,
-      )
-      .run();
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO entries (id, collection, status, version, data, author_id, created_at, updated_at)
+           VALUES (?, ?, ?, 1, ?, ?, ?, ?)`,
+        )
+        .bind(
+          args.id,
+          args.collection,
+          args.status,
+          JSON.stringify(args.data),
+          args.authorId,
+          args.now,
+          args.now,
+        )
+        .run();
+    } catch (err) {
+      if (isDriverUniqueConstraintError(err)) {
+        throw new EntryUniqueConflict(args.collection, args.data, (err as Error).message);
+      }
+      throw err;
+    }
     return {
       id: args.id,
       collection: args.collection,
@@ -97,20 +105,28 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
 
   async update(args: UpdateEntryArgs): Promise<EntryRow> {
     const newVersion = args.expectedVersion + 1;
-    const row = await this.db
-      .prepare(
-        `UPDATE entries SET data = ?, version = ?, updated_at = ?
-         WHERE id = ? AND version = ?
-         RETURNING id, collection, status, version, data, author_id, created_at, updated_at`,
-      )
-      .bind(
-        JSON.stringify(args.data),
-        newVersion,
-        args.now,
-        args.id,
-        args.expectedVersion,
-      )
-      .first<EntryDbRow>();
+    let row: EntryDbRow | null = null;
+    try {
+      row = await this.db
+        .prepare(
+          `UPDATE entries SET data = ?, version = ?, updated_at = ?
+           WHERE id = ? AND version = ?
+           RETURNING id, collection, status, version, data, author_id, created_at, updated_at`,
+        )
+        .bind(
+          JSON.stringify(args.data),
+          newVersion,
+          args.now,
+          args.id,
+          args.expectedVersion,
+        )
+        .first<EntryDbRow>();
+    } catch (err) {
+      if (isDriverUniqueConstraintError(err)) {
+        throw new EntryUniqueConflict(args.collection, args.data, (err as Error).message);
+      }
+      throw err;
+    }
     if (!row) throw await this.versionConflict(args.id, args.expectedVersion);
     return rowFromDb(row);
   }
@@ -566,4 +582,16 @@ export async function readEntryBySlug(
   args: ReadEntryBySlugArgs,
 ): Promise<Entry | null> {
   return new DatabaseEntryRepository(db).readBySlug(args);
+}
+
+function isDriverUniqueConstraintError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message || "";
+  return (
+    msg.includes("UNIQUE constraint failed") ||
+    msg.includes("unique constraint") ||
+    msg.includes("duplicate key") ||
+    (err as { code?: string }).code === "SQLITE_CONSTRAINT_UNIQUE" ||
+    (err as { code?: string }).code === "23505"
+  );
 }
