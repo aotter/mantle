@@ -104,4 +104,75 @@ When executing matched upsert:
 - **Fail-fast authoring**: Schema and Procedure mismatches are detected during `mantle validate` or test time rather than failing unpredictably at runtime.
 - **Strict type safety**: Nullable union types cannot bypass static contract validation.
 - **Natural key idempotency**: Clients can author natural-key upsert procedures for ingestion and sync pipelines without managing internal mantle IDs.
-- **Safe concurrency**: Concurrent writes are guarded by database-level unique constraints and translated to standard `CONFLICT` diagnostics.
+- **Safe concurrency across all adapters**: Concurrent writes are guarded by storage-level unique constraints (SQLite/D1 unique indexes, IndexedDB readwrite transaction assertions) and translated to standard `CONFLICT` diagnostics via typed `EntryUniqueConflict`.
+
+## Alternatives considered
+
+1. **Automatic retry loops on conflict**: Considered having `InvokeBuiltinUseCase` automatically re-query and retry upon catching unique collisions. Rejected because repeated attempts could fire lifecycle hooks (`before_create` / `before_update`) multiple times with unintended side effects (e.g. duplicate webhook notifications or rate limits) and mask true contention. Failing fast with a structured `CONFLICT` diagnostic gives caller control.
+2. **Arbitrary field matching without Schema unique indexes**: Considered allowing `handler.match` on arbitrary Schema properties. Rejected because storage engines cannot enforce uniqueness without dedicated unique constraints/indexes, which would result in race conditions and duplicate entries under concurrent traffic.
+3. **Permissive nullable unions**: Considered allowing `type: ["string", "null"]` in Procedure input schemas for `id`. Rejected because runtime entry mutations strictly require non-null scalar identifiers; allowing nullable schemas would let schema-valid requests crash inside builtin handlers.
+
+## How to apply
+
+1. **Declare Schema Unique Indexes**:
+   ```yaml
+   apiVersion: cms.mantle.aotter.net/v1
+   kind: Schema
+   metadata:
+     name: site-settings
+   spec:
+     title: Site Settings
+     lifecycle: publishing
+     schema:
+       type: object
+       required: [siteKey, theme]
+       properties:
+         siteKey: { type: string }
+         theme: { type: string }
+     uniqueIndexes:
+       - [siteKey]
+   ```
+
+2. **Author a Matched Upsert Procedure**:
+   ```yaml
+   apiVersion: cms.mantle.aotter.net/v1
+   kind: Procedure
+   metadata:
+     name: setSiteSetting
+   spec:
+     input:
+       type: object
+       required: [siteKey, theme]
+       properties:
+         siteKey: { type: string }
+         theme: { type: string }
+     output:
+       type: object
+     handler:
+       kind: builtin
+       op: upsert
+       schema: site-settings
+       match: [siteKey]
+   ```
+
+3. **Validate**:
+   Run `mantle validate` to verify input contracts against the declared unique indexes and schema properties.
+
+## Implementation status
+
+- **`@aotter/mantle-spec`**:
+  - `ManifestGrammar.ts`: Added `match?: readonly string[]` to `HandlerBuiltinBinding`.
+  - `diagnostic.ts`: Added `BUILTIN_HANDLER_CONTRACT_INVALID` to `DIAGNOSTIC_CODES`.
+  - `ManifestParser.ts`: Parser-level validation for `handler.match`.
+  - `ManifestGraphValidator.ts`: Static input contract validation in `checkBuiltinHandler`.
+- **`@aotter/mantle-runtime`**:
+  - `EntryRow.ts`: Added `EntryUniqueConflict` domain error.
+  - `EntryMutationDiagnostics.ts`: `withConflictDiagnostic` converts `EntryUniqueConflict` to `CONFLICT` diagnostic (HTTP 409).
+  - `DatabaseEntryRepository.ts`: SQLite/Postgres unique constraint violation translation to `EntryUniqueConflict`.
+  - `InvokeBuiltinUseCase.ts`: Matched upsert execution via `findByDataFields` and `projectUpdateAndStamp`.
+- **`@aotter/mantle-indexeddb`**:
+  - `IndexedDbEntryRepository.ts`: Atomic transaction-level unique index enforcement and `EntryUniqueConflict` emission.
+- **Documentation**:
+  - `docs/adr/0020-builtin-handler-contracts-and-matched-upsert.md` (this document).
+  - `docs/adr/README.md`.
+  - `docs/design-atoms.md`.

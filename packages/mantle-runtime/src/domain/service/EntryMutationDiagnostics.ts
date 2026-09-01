@@ -5,6 +5,7 @@ import {
 } from "@aotter/mantle-spec";
 import {
   EntryStatusConflict,
+  EntryUniqueConflict,
   EntryVersionConflict,
 } from "../model/EntryRow.js";
 
@@ -40,35 +41,20 @@ export async function withConflictDiagnostic<T>(
         }),
       );
     }
-    if (isUniqueConstraintError(err)) {
+    if (err instanceof EntryUniqueConflict) {
       throw new DiagnosticError(
         runtimeDiagnostic({
           code: "CONFLICT",
           severity: "error",
           path,
+          value: err.fields,
           expected: "unique entry data per Schema uniqueIndexes",
-          message: `Unique constraint violation during entry write: ${(err as Error).message}`,
+          message: `Unique constraint violation in collection '${err.collection}': ${err.message}`,
         }),
       );
     }
     throw err;
   }
-}
-
-export function isUniqueConstraintError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  const msg = err.message || "";
-  if (
-    msg.includes("UNIQUE constraint failed") ||
-    msg.includes("unique constraint") ||
-    msg.includes("duplicate key") ||
-    (err as { code?: string }).code === "SQLITE_CONSTRAINT_UNIQUE" ||
-    (err as { code?: string }).code === "SQLITE_CONSTRAINT" ||
-    (err as { code?: string }).code === "23505"
-  ) {
-    return true;
-  }
-  return false;
 }
 
 export function notFoundDiagnostic(

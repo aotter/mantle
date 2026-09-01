@@ -128,7 +128,7 @@ function harness(opts: {
       fn as unknown as Parameters<InMemoryHandlerRegistry["register"]>[1],
     );
   }
-  const store = new InMemoryEntryRepository();
+  const store = new InMemoryEntryRepository(schemas);
   const idgen = nthIdGen("post");
 
   let entries: import("../src/domain/port/EntryRepository.js").EntryRepository;
@@ -837,21 +837,7 @@ describe("InvokeBuiltinUseCase — matched upsert", () => {
 
     // Simulate Writer 2 racing: Writer 2 did lookup BEFORE Writer 1 created (so findByDataFields was a miss),
     // and both writers entered the create branch. When Writer 2 reaches entries.create,
-    // the store simulates a unique constraint error (e.g. SQLite SQLITE_CONSTRAINT_UNIQUE).
-    const origCreate = h.store.create.bind(h.store);
-    h.store.create = async (args) => {
-      // Check if siteKey already exists in store
-      const conflict = [...(h.store as unknown as { rows: Map<string, { data: Record<string, unknown> }> }).rows.values()]
-        .some((r) => r.data["siteKey"] === args.data["siteKey"]);
-      if (conflict) {
-        const err = new Error("UNIQUE constraint failed: entries.uq_site-settings__siteKey");
-        (err as { code: string }).code = "SQLITE_CONSTRAINT_UNIQUE";
-        throw err;
-      }
-      return origCreate(args);
-    };
-
-    // Force Writer 2 to simulate missing lookup (as in a real concurrent race)
+    // the repository's atomic unique index enforcement detects the duplicate key and throws EntryUniqueConflict.
     const origFindByDataFields = h.store.findByDataFields.bind(h.store);
     h.store.findByDataFields = async () => null;
 

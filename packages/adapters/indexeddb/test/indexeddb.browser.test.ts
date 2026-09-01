@@ -4,6 +4,7 @@ import {
 } from "@aotter/mantle-spec";
 import {
   EntryStatusConflict,
+  EntryUniqueConflict,
   EntryVersionConflict,
   bootMantleRuntime,
   compileRuntimePlan,
@@ -148,6 +149,32 @@ describe("IndexedDbMantleStorageAdapter in Chrome", () => {
     await entries.create({ ...entry("clone", "stored"), data: mutable });
     mutable.title = "mutated after commit";
     expect(await entries.get("clone")).toMatchObject({ data: { title: "stored" } });
+    await storage.deleteDatabase();
+  });
+
+  it("enforces Schema uniqueIndexes atomically and throws EntryUniqueConflict on collision", async () => {
+    const storage = new IndexedDbMantleStorageAdapter({ databaseName: databaseName("unique") });
+    const { entries } = await storage.prepare(plan(settingsManifest));
+    await entries.create({
+      id: "entry-1",
+      collection: "site-settings",
+      status: "draft",
+      data: { siteKey: "main", theme: "dark" },
+      authorId: null,
+      now: 1,
+    });
+
+    await expect(
+      entries.create({
+        id: "entry-2",
+        collection: "site-settings",
+        status: "draft",
+        data: { siteKey: "main", theme: "light" },
+        authorId: null,
+        now: 2,
+      }),
+    ).rejects.toBeInstanceOf(EntryUniqueConflict);
+
     await storage.deleteDatabase();
   });
 
@@ -360,4 +387,20 @@ metadata: { name: native-posts }
 spec:
   surface: public
   sql: SELECT * FROM entries
+`;
+
+const settingsManifest = `---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: site-settings }
+spec:
+  title: Site Settings
+  lifecycle: operational
+  schema:
+    type: object
+    required: [siteKey, theme]
+    properties:
+      siteKey: { type: string }
+      theme: { type: string }
+  uniqueIndexes: [[siteKey]]
 `;

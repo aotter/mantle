@@ -1,6 +1,7 @@
-import type { ContentState, Entry } from "@aotter/mantle-spec";
+import type { ContentState, Entry, SchemaManifest } from "@aotter/mantle-spec";
 import {
   EntryStatusConflict,
+  EntryUniqueConflict,
   EntryVersionConflict,
   liftLocale,
   projectPublicEntry,
@@ -41,8 +42,23 @@ import {
 export class InMemoryEntryRepository implements EntryRepository, EntryReader {
   private rows = new Map<string, EntryRow>();
 
+  constructor(
+    private readonly schemasByName?: ReadonlyMap<string, SchemaManifest>,
+  ) {}
+
   async create(args: CreateEntryArgs): Promise<EntryRow> {
     if (this.rows.has(args.id)) throw new Error(`duplicate id: ${args.id}`);
+    const schema = this.schemasByName?.get(args.collection);
+    if (schema?.spec.uniqueIndexes) {
+      for (const uq of schema.spec.uniqueIndexes) {
+        const conflict = [...this.rows.values()]
+          .filter((r) => r.collection === args.collection)
+          .some((r) => uq.every((field) => r.data[field] === args.data[field]));
+        if (conflict) {
+          throw new EntryUniqueConflict(args.collection, uq);
+        }
+      }
+    }
     const data = { ...args.data };
     const row: EntryRow = {
       id: args.id,
@@ -68,6 +84,17 @@ export class InMemoryEntryRepository implements EntryRepository, EntryReader {
     if (!row) throw new EntryVersionConflict(args.id, args.expectedVersion, -1);
     if (row.version !== args.expectedVersion) {
       throw new EntryVersionConflict(args.id, args.expectedVersion, row.version);
+    }
+    const schema = this.schemasByName?.get(row.collection);
+    if (schema?.spec.uniqueIndexes) {
+      for (const uq of schema.spec.uniqueIndexes) {
+        const conflict = [...this.rows.values()]
+          .filter((r) => r.collection === row.collection && r.id !== args.id)
+          .some((r) => uq.every((field) => r.data[field] === args.data[field]));
+        if (conflict) {
+          throw new EntryUniqueConflict(row.collection, uq);
+        }
+      }
     }
     const data = { ...args.data };
     const next: EntryRow = {

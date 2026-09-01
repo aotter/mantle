@@ -499,8 +499,8 @@ function checkBuiltinHandler(
         validateDiagnostic({
           code: "BUILTIN_HANDLER_CONTRACT_INVALID",
           severity: "error",
-          path: manifestPath("Procedure", p.metadata.name, "/spec/handler/schema", filePaths),
-          value: target.spec.lifecycle,
+          path: manifestPath("Procedure", p.metadata.name, "/spec/handler/op", filePaths),
+          value: h.op,
           expected: "Schema with lifecycle: 'publishing' (operational Schemas do not support archive)",
           message: `Procedure '${p.metadata.name}' (builtin op: archive) targets Schema '${target.metadata.name}' with lifecycle: 'operational'. Operational Schemas cannot be archived.`,
         }),

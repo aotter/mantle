@@ -287,7 +287,10 @@ describe("validateManifests — builtin handler contracts", () => {
     });
     const res = validateManifests({ manifests: [operationalSchema, arcOp] });
     expect(res.errorCount).toBeGreaterThan(0);
-    expect(res.diagnostics.some((d) => d.code === "BUILTIN_HANDLER_CONTRACT_INVALID")).toBe(true);
+    const diag = res.diagnostics.find((d) => d.code === "BUILTIN_HANDLER_CONTRACT_INVALID");
+    expect(diag).toBeDefined();
+    expect(diag?.path).toMatch(/\/spec\/handler\/op$/);
+    expect(diag?.value).toBe("archive");
   });
 
   it("rejects matched upsert when match does not match declared Schema uniqueIndexes", () => {

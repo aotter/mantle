@@ -88,3 +88,23 @@ export class EntryStatusConflict extends Error {
     this.name = "EntryStatusConflict";
   }
 }
+
+/**
+ * Thrown by repository implementations when an insert or update violates
+ * a Schema unique index constraint.
+ */
+export class EntryUniqueConflict extends Error {
+  constructor(
+    public readonly collection: string,
+    public readonly fields: Record<string, unknown> | readonly string[],
+    message?: string,
+  ) {
+    const detail = Array.isArray(fields)
+      ? fields.join(", ")
+      : Object.entries(fields)
+          .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+          .join(", ");
+    super(message ?? `unique conflict in collection '${collection}' on (${detail})`);
+    this.name = "EntryUniqueConflict";
+  }
+}

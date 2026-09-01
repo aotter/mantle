@@ -97,6 +97,7 @@ export type {
 } from "./domain/port/MantleStorageAdapter.js";
 export {
   EntryStatusConflict,
+  EntryUniqueConflict,
   EntryVersionConflict,
   liftLocale,
   projectPublicEntry,
