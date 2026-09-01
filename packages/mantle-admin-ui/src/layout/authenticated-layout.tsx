@@ -93,10 +93,10 @@ export function AuthenticatedLayout({
   const resolvedBrand = React.useMemo<AdminBrand>(
     () => ({
       title: workspace === "developer"
-        ? t(language, "developer.consoleTitle")
+        ? t(language, "developer.workspaceTitle")
         : site.data?.brand ?? t(language, "admin.consoleTitle"),
       href: workspace === "developer" ? "/admin/dev" : "/admin",
-      image: preferredAdminIcon(site.data?.icons),
+      image: workspace === "developer" ? null : preferredAdminIcon(site.data?.icons),
     }),
     [language, site.data, workspace],
   );
@@ -146,7 +146,7 @@ export function AuthenticatedLayout({
             workspaceLink={workspace === "developer"
               ? { href: "/admin", label: t(language, "common.contentAdmin"), icon: ArrowLeft }
               : me.data?.role === "owner"
-              ? { href: "/admin/dev", label: t(language, "developer.consoleTitle"), icon: Wrench }
+              ? { href: "/admin/dev", label: t(language, "developer.workspaceTitle"), icon: Wrench }
               : undefined}
           />
           <Main className={fullBleed

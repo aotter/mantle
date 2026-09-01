@@ -18,7 +18,7 @@ import type { AdminLanguage } from "./preferences";
 const STRINGS = {
   en: {
     "admin.consoleTitle": "Admin console",
-    "developer.consoleTitle": "Developer Console",
+    "developer.workspaceTitle": "Developer",
     "auth.accessDenied.title": "Access denied",
     "auth.accessDenied.noStaff": "You're signed in, but this account doesn't have access to the admin console.",
     "auth.accessDenied.askOwner": "Ask a site owner to add you to the team, or sign out to try a different account.",
@@ -232,7 +232,7 @@ const STRINGS = {
     "model.noAuth": "No declarative authorization predicates.",
     "model.sourceSchema": "Source schema",
     "model.none": "None declared.",
-    "developer.overview.eyebrow": "Developer console",
+    "developer.overview.eyebrow": "Developer",
     "developer.overview.title": "Application overview",
     "developer.overview.description": "A decision-ready summary of what this build exposes and what remains hidden in code.",
     "developer.overview.compiled": "Manifest compiled",
@@ -438,7 +438,7 @@ const STRINGS = {
   },
   "zh-TW": {
     "admin.consoleTitle": "管理後台",
-    "developer.consoleTitle": "開發者控制台",
+    "developer.workspaceTitle": "開發者檢視",
     "auth.accessDenied.title": "無法存取",
     "auth.accessDenied.noStaff": "你已登入，但這個帳號沒有管理後台權限。",
     "auth.accessDenied.askOwner": "請網站擁有者將你加入團隊，或登出改用其他帳號。",
@@ -641,7 +641,7 @@ const STRINGS = {
     "model.noAuth": "沒有宣告 authorization predicates。",
     "model.sourceSchema": "來源 schema",
     "model.none": "未宣告。",
-    "developer.overview.eyebrow": "開發者控制台",
+    "developer.overview.eyebrow": "開發者檢視",
     "developer.overview.title": "應用總覽",
     "developer.overview.description": "快速掌握這個版本開放了哪些能力，以及哪些行為仍隱藏在程式碼中。",
     "developer.overview.compiled": "Manifest 已編譯",
