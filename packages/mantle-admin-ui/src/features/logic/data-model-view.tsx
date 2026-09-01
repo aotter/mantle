@@ -21,6 +21,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { SidebarContent, SidebarHeader, SidebarInput } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type ModelItem =
   | { kind: "Schema"; id: string; model: DeveloperSchemaModel }
@@ -172,21 +173,26 @@ function SchemaDefinition({ model }: { model: DeveloperSchemaModel }): React.Rea
   return (
     <>
       <DefinitionHeader kind="Schema" name={model.name} title={resolveLocalizedText(model.title, language)} />
-      <Table>
-        <TableHeader><TableRow><TableHead className="ps-5">{t(language, "model.path")}</TableHead><TableHead>{t(language, "model.type")}</TableHead><TableHead>{t(language, "model.required")}</TableHead><TableHead>{t(language, "model.constraints")}</TableHead></TableRow></TableHeader>
-        <TableBody>
-          {fields.map((field) => (
-            <TableRow key={field.path}>
-              <TableCell className="ps-5 font-mono text-xs">{field.path}</TableCell>
-              <TableCell><Badge variant="secondary" className="font-mono text-[10px]">{field.type}</Badge></TableCell>
-              <TableCell>{field.required ? t(language, "common.yes") : "—"}</TableCell>
-              <TableCell className="max-w-md whitespace-normal text-xs text-muted-foreground">{field.constraints.length ? field.constraints.join(" · ") : "—"}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      {!fields.length ? <p className="p-5 text-sm text-muted-foreground">{t(language, "model.noFields")}</p> : null}
-      <RawDefinition label={t(language, "model.rawSchema")} value={model.schema} />
+      <DefinitionTabs
+        definitionLabel={t(language, "model.fields")}
+        rawLabel={t(language, "model.rawSchema")}
+        rawValue={model.schema}
+      >
+        <Table>
+          <TableHeader><TableRow><TableHead className="ps-5">{t(language, "model.path")}</TableHead><TableHead>{t(language, "model.type")}</TableHead><TableHead>{t(language, "model.required")}</TableHead><TableHead>{t(language, "model.constraints")}</TableHead></TableRow></TableHeader>
+          <TableBody>
+            {fields.map((field) => (
+              <TableRow key={field.path}>
+                <TableCell className="ps-5 font-mono text-xs">{field.path}</TableCell>
+                <TableCell><Badge variant="secondary" className="font-mono text-[10px]">{field.type}</Badge></TableCell>
+                <TableCell>{field.required ? t(language, "common.yes") : "—"}</TableCell>
+                <TableCell className="max-w-md whitespace-normal text-xs text-muted-foreground">{field.constraints.length ? field.constraints.join(" · ") : "—"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        {!fields.length ? <p className="p-5 text-sm text-muted-foreground">{t(language, "model.noFields")}</p> : null}
+      </DefinitionTabs>
     </>
   );
 }
@@ -197,23 +203,24 @@ function ViewDefinition({ model }: { model: DeveloperViewModel }): React.ReactEl
   return (
     <>
       <DefinitionHeader kind="View" name={model.name} title={resolveLocalizedText(model.title, language)} />
-      <div className="space-y-5 p-5">
-        <FactGrid entries={query.kind === "declarative" ? [
-          [t(language, "model.queryKind"), query.kind],
-          [t(language, "model.source"), query.from],
-          [t(language, "model.fields"), query.fields?.join(", ") ?? t(language, "model.allFields")],
-          [t(language, "model.order"), query.orderBy.length ? query.orderBy.map(({ field, direction }) => `${field} ${direction}`).join(", ") : "—"],
-          [t(language, "model.limit"), query.limit?.toString() ?? "—"],
-        ] : [
-          [t(language, "model.queryKind"), query.kind],
-          [t(language, "model.dialect"), query.dialect],
-          [t(language, "model.limit"), query.limit?.toString() ?? "—"],
-        ]} />
-        {query.kind === "native" ? <CodeBlock value={query.statement} /> : null}
-        {query.kind === "declarative" && query.filter ? <RawSection label={t(language, "model.filter")} value={query.filter} /> : null}
-        {query.params ? <RawSection label={t(language, "model.params")} value={query.params} /> : null}
-      </div>
-      <RawDefinition label={t(language, "model.rawQuery")} value={query} />
+      <DefinitionTabs definitionLabel={t(language, "model.queryKind")} rawLabel={t(language, "model.rawQuery")} rawValue={query}>
+        <div className="space-y-5 p-5">
+          <FactGrid entries={query.kind === "declarative" ? [
+            [t(language, "model.queryKind"), query.kind],
+            [t(language, "model.source"), query.from],
+            [t(language, "model.fields"), query.fields?.join(", ") ?? t(language, "model.allFields")],
+            [t(language, "model.order"), query.orderBy.length ? query.orderBy.map(({ field, direction }) => `${field} ${direction}`).join(", ") : "—"],
+            [t(language, "model.limit"), query.limit?.toString() ?? "—"],
+          ] : [
+            [t(language, "model.queryKind"), query.kind],
+            [t(language, "model.dialect"), query.dialect],
+            [t(language, "model.limit"), query.limit?.toString() ?? "—"],
+          ]} />
+          {query.kind === "native" ? <CodeBlock value={query.statement} /> : null}
+          {query.kind === "declarative" && query.filter ? <RawSection label={t(language, "model.filter")} value={query.filter} /> : null}
+          {query.params ? <RawSection label={t(language, "model.params")} value={query.params} /> : null}
+        </div>
+      </DefinitionTabs>
     </>
   );
 }
@@ -290,16 +297,25 @@ function SurfaceItem({ surface }: { surface: DeveloperSurface }): React.ReactEle
   return <div className="rounded-lg border bg-muted/20 p-2.5"><div className="flex gap-1"><Badge variant="secondary" className="text-[10px]">{surface.kind}</Badge>{surface.visibility ? <Badge variant="outline" className="text-[10px]">{surface.visibility}</Badge> : null}</div><code className="mt-2 block break-words text-xs">{surface.name}</code></div>;
 }
 
-function RawDefinition({ label, value }: { label: string; value: unknown }): React.ReactElement {
-  return <details className="border-t p-5"><summary className="cursor-pointer text-sm font-medium">{label}</summary><div className="mt-3"><CodeBlock value={JSON.stringify(value, null, 2)} /></div></details>;
+function DefinitionTabs({ definitionLabel, rawLabel, rawValue, children }: { definitionLabel: string; rawLabel: string; rawValue: unknown; children: React.ReactNode }): React.ReactElement {
+  return (
+    <Tabs defaultValue="definition" className="gap-0">
+      <TabsList variant="line" className="h-10 w-full justify-start rounded-none border-b px-5">
+        <TabsTrigger value="definition" className="flex-none px-3">{definitionLabel}</TabsTrigger>
+        <TabsTrigger value="raw" className="flex-none px-3">{rawLabel}</TabsTrigger>
+      </TabsList>
+      <TabsContent value="definition">{children}</TabsContent>
+      <TabsContent value="raw" className="p-5"><CodeBlock value={JSON.stringify(rawValue, null, 2)} className="max-h-none" /></TabsContent>
+    </Tabs>
+  );
 }
 
 function RawSection({ label, value }: { label: string; value: unknown }): React.ReactElement {
   return <section><h3 className="mb-2 text-sm font-medium">{label}</h3><CodeBlock value={JSON.stringify(value, null, 2)} /></section>;
 }
 
-function CodeBlock({ value }: { value: string }): React.ReactElement {
-  return <pre className="max-h-72 overflow-auto rounded-lg border bg-muted/40 p-3 font-mono text-[11px] leading-5"><code>{value}</code></pre>;
+function CodeBlock({ value, className }: { value: string; className?: string }): React.ReactElement {
+  return <pre className={cn("max-h-72 overflow-auto rounded-lg border bg-muted/40 p-3 font-mono text-[11px] leading-5", className)}><code>{value}</code></pre>;
 }
 
 function Empty(): React.ReactElement {
