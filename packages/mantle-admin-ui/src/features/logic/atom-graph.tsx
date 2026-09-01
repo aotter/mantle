@@ -194,7 +194,7 @@ function layoutGraph(
         },
         ariaLabel: `${atom.kind} ${atom.name}`,
         className: cn(
-          "!h-[76px] !w-[220px] !cursor-grab !rounded-xl !border-2 !px-3 !py-2 !text-card-foreground !shadow-lg transition-[border-color,box-shadow,filter] hover:brightness-110 active:!cursor-grabbing [&.selected]:!ring-2 [&.selected]:!ring-primary/50",
+          "!h-[76px] !w-[220px] !cursor-grab !rounded-xl !border-2 !px-3 !py-2 !text-card-foreground !shadow-lg transition-[border-color,box-shadow,filter] hover:brightness-110 active:!cursor-grabbing [&.selected]:!border-primary [&.selected]:!ring-4 [&.selected]:!ring-primary/70 [&.selected]:!shadow-[0_0_28px_var(--primary)]",
           atomKindNodeTone[atom.kind],
         ),
       } satisfies Node;
