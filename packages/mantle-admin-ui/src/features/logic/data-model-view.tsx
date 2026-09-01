@@ -1,9 +1,6 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ArrowDownRight,
-  ArrowUpRight,
-  Braces,
   Check,
   ChevronRight,
   Copy,
@@ -24,9 +21,6 @@ import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { developerConsoleQueryOptions } from "../../lib/queries";
 import type {
-  DeveloperAtom,
-  DeveloperAtomRelation,
-  DeveloperConsoleSnapshot,
   DeveloperSchemaModel,
   DeveloperViewModel,
   JsonSchema,
@@ -41,7 +35,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { atomKindTone, relationLabel } from "./atom-graph";
+import { DeveloperRelations } from "./developer-relations";
 import { developerSelectionHref } from "./developer-route";
 
 type ModelItem =
@@ -160,10 +154,8 @@ export function DataModelView(): React.ReactElement {
   const visibleItems = query
     ? items.filter((item) => `${item.kind} ${item.model.name} ${resolveLocalizedText(item.model.title, language) ?? ""}`.toLowerCase().includes(query))
     : items;
-  const modelIds = new Set(items.map(({ id }) => id));
   const select = (id: string): void => navigate(developerSelectionHref("/admin/dev/model", id));
   const openManifest = (id: string, pointer: string): void => {
-    if (!modelIds.has(id)) return;
     navigate(developerSelectionHref("/admin/dev/model", id, { tab: "manifest", pointer }));
   };
 
@@ -180,7 +172,7 @@ export function DataModelView(): React.ReactElement {
             ? <SchemaDefinition key={`${selected.id}:${manifestFocus ?? ""}`} model={selected.model} schemas={snapshot.data.dataModel.schemas} manifestOpen={manifestOpen} manifestFocus={manifestFocus} onOpenManifest={openManifest} />
             : <ViewDefinition key={`${selected.id}:${manifestFocus ?? ""}`} model={selected.model} manifestOpen={manifestOpen} manifestFocus={manifestFocus} />}
         </main>
-        <RelatedAtomsList selectedId={selected.id} graph={snapshot.data.graph} modelIds={modelIds} onSelect={select} onOpenManifest={openManifest} />
+        <DeveloperRelations selectedId={selected.id} graph={snapshot.data.graph} />
       </div>
     </section>
   );
@@ -319,74 +311,7 @@ function ViewDefinition({ model, manifestOpen, manifestFocus }: { model: Develop
   );
 }
 
-function RelatedAtomsList({ selectedId, graph, modelIds, onSelect, onOpenManifest }: { selectedId: string; graph: DeveloperConsoleSnapshot["graph"]; modelIds: ReadonlySet<string>; onSelect: (id: string) => void; onOpenManifest: (id: string, pointer: string) => void }): React.ReactElement {
-  const { language } = usePreferences();
-  const atoms = new Map(graph.atoms.map((atom) => [atom.id, atom]));
-  const outgoing = graph.relations.filter(({ sourceId }) => sourceId === selectedId);
-  const incoming = graph.relations.filter(({ targetId }) => targetId === selectedId);
-  const count = outgoing.length + incoming.length;
-  return (
-    <aside className="flex min-h-0 flex-col" aria-label={t(language, "model.relationships")}>
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
-        <h2 className="text-sm font-medium">{t(language, "model.relationships")}</h2>
-        <span className="font-mono text-xs text-muted-foreground">{count}</span>
-        <Button asChild variant="ghost" size="sm" className="ms-auto">
-          <a href={developerSelectionHref("/admin/dev", selectedId)}><Braces aria-hidden />{t(language, "model.openGraph")}</a>
-        </Button>
-      </div>
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
-        {outgoing.length ? <RelationGroup title={t(language, "model.references")} relations={outgoing} outgoing atoms={atoms} modelIds={modelIds} onSelect={onSelect} onOpenManifest={onOpenManifest} /> : null}
-        {incoming.length ? <RelationGroup title={t(language, "model.referencedBy")} relations={incoming} outgoing={false} atoms={atoms} modelIds={modelIds} onSelect={onSelect} onOpenManifest={onOpenManifest} /> : null}
-        {!count ? <p className="text-sm text-muted-foreground">{t(language, "model.noRelations")}</p> : null}
-      </div>
-    </aside>
-  );
-}
-
-function RelationGroup({ title, relations, outgoing, atoms, modelIds, onSelect, onOpenManifest }: { title: string; relations: readonly DeveloperAtomRelation[]; outgoing: boolean; atoms: ReadonlyMap<string, DeveloperAtom>; modelIds: ReadonlySet<string>; onSelect: (id: string) => void; onOpenManifest: (id: string, pointer: string) => void }): React.ReactElement {
-  return (
-    <section>
-      <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">{title}</h3>
-      <div className="space-y-2">
-        {relations.map((relation) => {
-          const relatedId = outgoing ? relation.targetId : relation.sourceId;
-          const atom = atoms.get(relatedId);
-          return atom ? <RelationCard key={relation.id} relation={relation} atom={atom} outgoing={outgoing} canSelect={modelIds.has(relatedId)} canOpenManifest={modelIds.has(relation.sourceId)} onSelect={onSelect} onOpenManifest={onOpenManifest} /> : null;
-        })}
-      </div>
-    </section>
-  );
-}
-
-function RelationCard({ relation, atom, outgoing, canSelect, canOpenManifest, onSelect, onOpenManifest }: { relation: DeveloperAtomRelation; atom: DeveloperAtom; outgoing: boolean; canSelect: boolean; canOpenManifest: boolean; onSelect: (id: string) => void; onOpenManifest: (id: string, pointer: string) => void }): React.ReactElement {
-  const { language } = usePreferences();
-  const title = resolveLocalizedText(atom.title, language);
-  const DirectionIcon = outgoing ? ArrowDownRight : ArrowUpRight;
-  return (
-    <div className="rounded-lg border bg-card p-3">
-      <div className="flex min-w-0 items-center gap-2">
-        <DirectionIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-        <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atom.kind}</span>
-        {canSelect ? <button type="button" onClick={() => onSelect(atom.id)} className="min-w-0 truncate font-mono text-xs font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{atom.name}</button> : <span className="min-w-0 truncate font-mono text-xs font-semibold">{atom.name}</span>}
-      </div>
-      {title && title !== atom.name ? <div className="mt-1 truncate ps-5 text-xs text-muted-foreground">{title}</div> : null}
-      <div className="mt-2 text-xs font-medium">{relationLabel(language, relation.kind)}</div>
-      {canOpenManifest ? (
-        <button type="button" onClick={() => onOpenManifest(relation.sourceId, relation.pointer)} className="mt-2 block w-full rounded-md bg-muted/50 p-2 text-start hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={t(language, "model.openDeclaration")}>
-          <code className="block truncate text-[10px] text-muted-foreground">{relation.sourceId.replace(":", "/")}</code>
-          <code className="mt-0.5 block break-all text-[10px]">{relation.pointer} = {JSON.stringify(relation.value)}</code>
-        </button>
-      ) : (
-        <div className="mt-2 rounded-md bg-muted/50 p-2">
-          <code className="block truncate text-[10px] text-muted-foreground">{relation.sourceId.replace(":", "/")}</code>
-          <code className="mt-0.5 block break-all text-[10px]">{relation.pointer} = {JSON.stringify(relation.value)}</code>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FactGrid({ entries }: { entries: Array<[string, string]> }): React.ReactElement {
+export function FactGrid({ entries }: { entries: Array<[string, string]> }): React.ReactElement {
   return <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">{entries.map(([label, value]) => <React.Fragment key={label}><dt className="text-muted-foreground">{label}</dt><dd className="break-words font-mono text-foreground">{value}</dd></React.Fragment>)}</dl>;
 }
 
@@ -407,7 +332,7 @@ function DefinitionTabs({ definitionLabel, rawLabel, rawValue, manifestValue, ma
   );
 }
 
-function CodeTab({ value, label, focus }: { value: unknown; label: string; focus?: string | null }): React.ReactElement {
+export function CodeTab({ value, label, focus }: { value: unknown; label: string; focus?: string | null }): React.ReactElement {
   const raw = JSON.stringify(value, null, 2) ?? "";
   return (
     <div className="space-y-3 p-5">

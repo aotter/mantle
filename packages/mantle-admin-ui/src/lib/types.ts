@@ -291,6 +291,36 @@ export type DeveloperAtomKind = "Schema" | "View" | "Procedure" | "Trigger";
 export type DeveloperAudience = "public" | "members" | "staff" | "system" | "api-clients";
 export type DeveloperTransport = "http" | "mcp" | "lifecycle";
 
+export type DeveloperProcedureHandler =
+  | { kind: "builtin"; op: "create" | "update" | "upsert" | "delete" | "archive"; schema: string; match?: readonly string[] }
+  | { kind: "ref"; ref: string };
+
+export interface DeveloperProcedureModel {
+  name: string;
+  title: LocalizedText | null;
+  description: LocalizedText | null;
+  audience: DeveloperAudience;
+  input: JsonSchema;
+  output: JsonSchema;
+  authorization: unknown[];
+  guard: string | null;
+  handler: DeveloperProcedureHandler;
+  manifest: unknown;
+}
+
+export type DeveloperTriggerSource =
+  | { kind: "http"; method: string; path: string }
+  | { kind: "mcp"; surface: "public" | "staff" }
+  | { kind: "lifecycle"; schema: string; on: string[]; errorPolicy?: string };
+
+export interface DeveloperTriggerModel {
+  name: string;
+  target: string;
+  audience: DeveloperAudience;
+  source: DeveloperTriggerSource;
+  manifest: unknown;
+}
+
 export type DeveloperRelationKind =
   | "translation-parent"
   | "schema-reference"
@@ -310,9 +340,7 @@ export interface DeveloperAtom {
   description?: LocalizedText | null;
   audience?: DeveloperAudience;
   transport?: DeveloperTransport;
-  handler?:
-    | { kind: "builtin"; op: "create" | "update" | "upsert" | "delete" | "archive"; schema: string; match?: readonly string[] }
-    | { kind: "ref"; ref: string };
+  handler?: DeveloperProcedureHandler;
 }
 
 export interface DeveloperAtomRelation {
@@ -328,6 +356,10 @@ export interface DeveloperConsoleSnapshot {
   dataModel: {
     schemas: DeveloperSchemaModel[];
     views: DeveloperViewModel[];
+  };
+  logic: {
+    triggers: DeveloperTriggerModel[];
+    procedures: DeveloperProcedureModel[];
   };
   graph: {
     atoms: DeveloperAtom[];

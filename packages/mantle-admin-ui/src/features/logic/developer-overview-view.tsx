@@ -8,7 +8,7 @@ import { developerConsoleQueryOptions } from "../../lib/queries";
 import { ErrorBox } from "../../ui/page";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AtomGraph } from "./atom-graph";
-import { developerSelectionHref } from "./developer-route";
+import { developerDetailHref, developerSelectionHref } from "./developer-route";
 
 export function DeveloperOverviewView(): React.ReactElement {
   const { language } = usePreferences();
@@ -27,7 +27,7 @@ export function DeveloperOverviewView(): React.ReactElement {
         graph={snapshot.data.graph}
         selectedAtomId={selectedId}
         onSelect={(id) => navigate(developerSelectionHref("/admin/dev", id))}
-        onOpen={(atom) => navigate(developerSelectionHref("/admin/dev/model", atom.id))}
+        onOpen={(atom) => navigate(developerDetailHref(atom.id))}
       />
     </section>
   );

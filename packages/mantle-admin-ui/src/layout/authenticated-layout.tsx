@@ -12,6 +12,7 @@ import {
   Settings as SettingsIcon,
   ContactRound,
   Users,
+  Workflow,
 } from "lucide-react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -50,7 +51,7 @@ export function AuthenticatedLayout({
 }: AuthenticatedLayoutProps): React.ReactElement {
   const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
   const { pathname, search } = useAdminLocation();
-  const fullBleed = workspace === "developer" && (pathname === "/admin/dev" || pathname === "/admin/dev/model");
+  const fullBleed = workspace === "developer" && ["/admin/dev", "/admin/dev/model", "/admin/dev/logic"].includes(pathname);
   const { language } = usePreferences();
 
   const me = useQuery<AdminUser>({
@@ -267,6 +268,7 @@ export function buildDeveloperNavGroups(language: AdminLanguage): ReadonlyArray<
     items: [
       { title: t(language, "nav.overview"), url: "/admin/dev", icon: LayoutDashboard },
       { title: t(language, "nav.model"), url: "/admin/dev/model", icon: Database },
+      { title: t(language, "nav.logic"), url: "/admin/dev/logic", icon: Workflow },
     ],
   }];
 }

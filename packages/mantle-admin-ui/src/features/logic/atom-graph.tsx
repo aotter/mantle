@@ -1,6 +1,6 @@
 import * as React from "react";
 import dagre from "@dagrejs/dagre";
-import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Database, Info, LayoutGrid, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Database, Info, LayoutGrid, Workflow, X } from "lucide-react";
 import {
   BaseEdge,
   ControlButton,
@@ -74,7 +74,7 @@ export function relationLabel(language: AdminLanguage, kind: DeveloperRelationKi
   return t(language, "developer.graph.relation.lifecycleSource");
 }
 
-function audienceLabel(language: AdminLanguage, audience: DeveloperAudience): string {
+export function audienceLabel(language: AdminLanguage, audience: DeveloperAudience): string {
   if (audience === "public") return t(language, "developer.graph.audience.public");
   if (audience === "members") return t(language, "developer.graph.audience.members");
   if (audience === "staff") return t(language, "developer.graph.audience.staff");
@@ -439,7 +439,9 @@ function GraphHud({ atom, graph, atomsById, traceAtoms, onClose, onSelect, onOpe
   const description = resolveLocalizedText(atom.description ?? null, language);
   const outgoing = graph.relations.filter(({ sourceId }) => sourceId === atom.id);
   const incoming = graph.relations.filter(({ targetId }) => targetId === atom.id);
-  const navigable = atom.kind === "Schema" || atom.kind === "View";
+  const modelAtom = atom.kind === "Schema" || atom.kind === "View";
+  const OpenIcon = modelAtom ? Database : Workflow;
+  const openLabel = t(language, modelAtom ? "developer.graph.openModel" : "developer.graph.openLogic");
   const currentIndex = Math.max(0, traceAtoms.findIndex(({ id }) => id === atom.id));
   const previous = traceAtoms[currentIndex - 1];
   const next = traceAtoms[currentIndex + 1];
@@ -458,7 +460,7 @@ function GraphHud({ atom, graph, atomsById, traceAtoms, onClose, onSelect, onOpe
             {title && title !== atom.name ? <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{atom.name}</p> : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            {navigable ? <Tooltip><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon-sm" onClick={() => onOpen(atom)} aria-label={t(language, "developer.graph.openModel")}><Database aria-hidden /></Button></TooltipTrigger><TooltipContent>{t(language, "developer.graph.openModel")}</TooltipContent></Tooltip> : null}
+            <Tooltip><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon-sm" onClick={() => onOpen(atom)} aria-label={openLabel}><OpenIcon aria-hidden /></Button></TooltipTrigger><TooltipContent>{openLabel}</TooltipContent></Tooltip>
             <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label={t(language, "common.close")}><X aria-hidden /></Button>
           </div>
         </div>

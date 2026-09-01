@@ -18,6 +18,7 @@ import { StaffView } from "../features/system/staff-view";
 import { MembersView } from "../features/system/members-view";
 import { DataModelView } from "../features/logic/data-model-view";
 import { DeveloperOverviewView } from "../features/logic/developer-overview-view";
+import { LogicView } from "../features/logic/logic-view";
 
 export function AdminApp(): React.ReactElement {
   const location = useAdminLocation();
@@ -135,6 +136,14 @@ function Gate({ path }: { path: string }): React.ReactElement {
     return (
       <AuthenticatedLayout workspace="developer">
         <DataModelView />
+      </AuthenticatedLayout>
+    );
+  }
+
+  if (path === "/admin/dev/logic") {
+    return (
+      <AuthenticatedLayout workspace="developer">
+        <LogicView />
       </AuthenticatedLayout>
     );
   }

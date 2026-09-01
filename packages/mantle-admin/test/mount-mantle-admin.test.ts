@@ -144,6 +144,30 @@ spec:
           },
         })],
       },
+      logic: {
+        triggers: [expect.objectContaining({
+          name: "place-order-http",
+          target: "place-order",
+          audience: "members",
+          source: { kind: "http", method: "POST", path: "/api/orders" },
+          manifest: expect.objectContaining({ kind: "Trigger" }),
+        })],
+        procedures: expect.arrayContaining([
+          expect.objectContaining({
+            name: "place-order",
+            audience: "members",
+            authorization: ["ctx.user"],
+            guard: null,
+            handler: { kind: "ref", ref: "placeOrder" },
+            input: { type: "object" },
+            output: { type: "object" },
+          }),
+          expect.objectContaining({
+            name: "create-order",
+            handler: { kind: "builtin", op: "create", schema: "orders" },
+          }),
+        ]),
+      },
       graph: {
         atoms: expect.arrayContaining([
           expect.objectContaining({ id: "Schema:orders", kind: "Schema" }),

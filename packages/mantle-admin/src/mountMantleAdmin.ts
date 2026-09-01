@@ -196,6 +196,7 @@ export function mountMantleAdmin<E extends Env>(
     "/admin/ops",
     "/admin/dev",
     "/admin/dev/model",
+    "/admin/dev/logic",
     "/admin/views/:name",
   ]) {
     app.get(path, spa);
@@ -1982,12 +1983,56 @@ function projectDeveloperConsole(plan: RuntimePlan): {
       readonly manifest: ViewManifest;
     }>;
   };
+  readonly logic: {
+    readonly triggers: ReadonlyArray<{
+      readonly name: string;
+      readonly target: string;
+      readonly audience: DeveloperAudience;
+      readonly source: RuntimePlan["triggers"][string]["manifest"]["spec"]["source"];
+      readonly manifest: RuntimePlan["triggers"][string]["manifest"];
+    }>;
+    readonly procedures: ReadonlyArray<{
+      readonly name: string;
+      readonly title: LocalizedText | null;
+      readonly description: LocalizedText | null;
+      readonly audience: DeveloperAudience;
+      readonly input: JsonSchema;
+      readonly output: JsonSchema;
+      readonly authorization: readonly AuthPredicate[];
+      readonly guard: string | null;
+      readonly handler: ProcedureManifest["spec"]["handler"];
+      readonly manifest: ProcedureManifest;
+    }>;
+  };
   readonly graph: {
     readonly atoms: readonly DeveloperAtom[];
     readonly relations: readonly DeveloperAtomRelation[];
   };
 } {
   const schemasByName = new Map(Object.values(plan.schemas).map(({ name, manifest }) => [name, manifest]));
+  const procedures = Object.values(plan.procedures).map(({ name, manifest, authorization, guard }) => ({
+    name,
+    title: manifest.spec.title ?? null,
+    description: manifest.spec.description ?? null,
+    audience: developerAudience(authorization?.all ?? []) ?? "public" as const,
+    input: manifest.spec.input,
+    output: manifest.spec.output,
+    authorization: authorization?.all ?? [],
+    guard: guard ?? null,
+    handler: manifest.spec.handler,
+    manifest,
+  })).sort((a, b) => a.name.localeCompare(b.name));
+  const triggers = Object.values(plan.triggers).map(({ name, manifest, target }) => {
+    const source = manifest.spec.source;
+    const targetAudience = developerAudience(plan.procedures[target]?.authorization?.all ?? []);
+    return {
+      name,
+      target,
+      audience: source.kind === "lifecycle" ? "system" as const : source.kind === "mcp" && source.surface === "staff" ? "staff" as const : targetAudience ?? "public" as const,
+      source,
+      manifest,
+    };
+  }).sort((a, b) => a.name.localeCompare(b.name));
   const graph = {
     atoms: [
       ...Object.values(plan.schemas).map(({ name, manifest }) => ({ id: `Schema:${name}`, kind: "Schema" as const, name, title: manifest.spec.title })),
@@ -1998,27 +2043,23 @@ function projectDeveloperConsole(plan: RuntimePlan): {
         title: manifest.spec.title ?? null,
         audience: manifest.spec.surface === "staff" ? "staff" as const : developerAudience(authorization?.all ?? []) ?? "public" as const,
       })),
-      ...Object.values(plan.procedures).map(({ name, manifest, authorization }) => ({
+      ...procedures.map(({ name, title, description, audience, handler }) => ({
         id: `Procedure:${name}`,
         kind: "Procedure" as const,
         name,
-        title: manifest.spec.title ?? null,
-        description: manifest.spec.description ?? null,
-        audience: developerAudience(authorization?.all ?? []) ?? "public" as const,
-        handler: manifest.spec.handler,
+        title,
+        description,
+        audience,
+        handler,
       })),
-      ...Object.values(plan.triggers).map(({ name, manifest, target }) => {
-        const source = manifest.spec.source;
-        const targetAudience = developerAudience(plan.procedures[target]?.authorization?.all ?? []);
-        return {
-          id: `Trigger:${name}`,
-          kind: "Trigger" as const,
-          name,
-          title: null,
-          audience: source.kind === "lifecycle" ? "system" as const : source.kind === "mcp" && source.surface === "staff" ? "staff" as const : targetAudience ?? "public" as const,
-          transport: source.kind,
-        };
-      }),
+      ...triggers.map(({ name, source, audience }) => ({
+        id: `Trigger:${name}`,
+        kind: "Trigger" as const,
+        name,
+        title: null,
+        audience,
+        transport: source.kind,
+      })),
     ].sort((a, b) => a.id.localeCompare(b.id)),
     relations: [
       ...Object.values(plan.schemas).flatMap(({ name, manifest, translationParent }) => [
@@ -2091,6 +2132,7 @@ function projectDeveloperConsole(plan: RuntimePlan): {
         manifest,
       })).sort((a, b) => a.name.localeCompare(b.name)),
     },
+    logic: { triggers, procedures },
     graph,
   };
 }
