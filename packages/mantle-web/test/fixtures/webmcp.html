@@ -9,6 +9,9 @@
 <script type="module">
   const registrations = [];
   const modelContext = {
+    getTools() {
+      return [{ name: "host_tool" }];
+    },
     registerTool(tool, options) {
       registrations.push({ tool, signal: options.signal });
     },
@@ -30,14 +33,12 @@
       spec: { surface: "public", from: "posts" },
     },
   };
-  const binding = await bindWebMcp([capability], {
+  const binding = await bindWebMcp({
+    capabilities: [capability],
     modelContext,
-    fetch: async (url, init) => {
-      calls.push({ url, signal: init.signal });
-      return Response.json({
-        ok: true,
-        data: { rows: [{ title: "Hello" }], page: 2, show: 10, hasMore: false },
-      });
+    invoke: async (selected, input, signal) => {
+      calls.push({ selected, input, signal });
+      return { rows: [{ title: "Hello" }], page: input.page };
     },
   });
   const invocation = new AbortController();
@@ -49,7 +50,7 @@
     supported: binding.supported,
     registered: binding.registered,
     annotations: registrations[0].tool.annotations,
-    url: calls[0].url,
+    target: calls[0].selected.ownerName,
     cancellationForwarded,
     disposed: registrations[0].signal.aborted,
     rows: data.rows.length,

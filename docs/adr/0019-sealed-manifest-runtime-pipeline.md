@@ -123,11 +123,18 @@ select a surface and bind transport or browser lifecycle, but do not rescan raw
 manifests or maintain a second registry.
 
 `@aotter/mantle-web/webmcp` is an opt-in host binding over that projection. It
-feature-detects `document.modelContext`, registers only public View
-capabilities, invokes the existing same-origin View REST route, and uses the
-registration `AbortSignal` for teardown. It does not add browser globals to
-runtime Core, expose staff/mutating capabilities, or introduce a second
-manifest/runtime path.
+feature-detects `document.modelContext`, adds public capabilities without
+replacing existing host tools, and uses the registration `AbortSignal` only for
+teardown. A browser-local host supplies the projected capabilities and a
+late-bound invoker; Procedure calls retain their explicit MCP Trigger identity.
+For a server-backed host, the Cloudflare adapter publishes a minimal public View
+catalog at `GET /api/views`; the binding validates that wire catalog and invokes
+the existing same-origin `GET /api/views/<name>` route. The catalog contains no
+raw manifest or staff capability.
+Invocation hooks may drive host UI effects but cannot replace Runtime
+validation, authorization, dispatch, or domain results. The binding does not
+add browser globals to Runtime Core, expose staff capabilities, or introduce a
+second manifest/runtime path.
 
 ### Naming and code generation
 
