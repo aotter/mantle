@@ -31,6 +31,7 @@ describe("mountMantleAdmin", () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("admin shell");
     expect((await app.request("https://example.test/admin/dev")).status).toBe(200);
+    expect((await app.request("https://example.test/admin/dev/docs")).status).toBe(200);
   });
 
   it("denies Admin APIs without a session", async () => {
@@ -184,6 +185,57 @@ spec:
         ]),
       },
     });
+  });
+
+  it("projects HTTP, MCP, and server-backed WebMCP documentation from the plan", async () => {
+    const response = await mounted({
+      getSession: async () => ({ session: { id: "session" }, user: { id: "user" } }),
+      getUserRole: async () => "owner",
+    }, compilePlan(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: inquiries }
+spec:
+  title: Inquiries
+  lifecycle: operational
+  schema:
+    type: object
+    required: [email]
+    properties: { email: { type: string } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: public-inquiries }
+spec: { surface: public, from: inquiries, fields: [email] }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: submit-inquiry }
+spec:
+  input: { type: object, properties: { email: { type: string } } }
+  output: { type: object }
+  handler: { kind: builtin, op: create, schema: inquiries }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: submit-inquiry-http }
+spec: { source: { kind: http, method: POST, path: /api/inquiries }, target: { procedure: submit-inquiry } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: submit-inquiry-mcp }
+spec: { source: { kind: mcp, surface: public }, target: { procedure: submit-inquiry } }
+`)).request("https://example.test/admin/api/developer-console");
+
+    const body = await response.json();
+    expect(body.interfaces.http).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "procedure", name: "submit-inquiry-http", method: "POST", path: "/api/inquiries", audience: "public" }),
+      expect.objectContaining({ kind: "view", name: "query_view_public_inquiries", method: "GET", path: "/api/views/public-inquiries", audience: "public" }),
+    ]));
+    expect(body.interfaces.callable).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "procedure", name: "submit_inquiry", target: "submit-inquiry", trigger: "submit-inquiry-mcp", surface: "public", audience: "public" }),
+      expect.objectContaining({ kind: "view", name: "query_view_public_inquiries", target: "public-inquiries", trigger: null, surface: "public", audience: "public" }),
+    ]));
   });
 
   it("keeps schema relationship provenance in the developer graph", async () => {

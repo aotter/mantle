@@ -361,10 +361,40 @@ export interface DeveloperConsoleSnapshot {
     triggers: DeveloperTriggerModel[];
     procedures: DeveloperProcedureModel[];
   };
+  interfaces: {
+    http: DeveloperHttpOperation[];
+    callable: DeveloperCallableCapability[];
+  };
   graph: {
     atoms: DeveloperAtom[];
     relations: DeveloperAtomRelation[];
   };
+}
+
+export interface DeveloperHttpOperation {
+  kind: "view" | "procedure";
+  name: string;
+  target: string;
+  method: string;
+  path: string;
+  audience: DeveloperAudience;
+  title: string | null;
+  description: string;
+  input: JsonSchema;
+  output: JsonSchema | null;
+}
+
+export interface DeveloperCallableCapability {
+  kind: "view" | "procedure";
+  name: string;
+  target: string;
+  surface: "public" | "staff";
+  audience: DeveloperAudience;
+  title: string | null;
+  description: string;
+  input: JsonSchema;
+  output: JsonSchema | null;
+  trigger: string | null;
 }
 
 export const PUBLISHING_STATUSES: SidebarStatus[] = ["draft", "published", "archived"];

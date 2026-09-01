@@ -9,6 +9,7 @@ import {
   httpStatusFor,
   meetsRole,
   redactForWire,
+  resolveLocalizedText,
   resolveLifecycle,
   runtimeDiagnostic,
   checkSchemaAdminUi,
@@ -30,6 +31,7 @@ import {
   ViewParamCoercionError,
   coerceViewParams,
   evaluateAuthAll,
+  projectCallableCapabilities,
   type HandlerContext,
   type MantleRuntime,
   type MediaAsset,
@@ -197,6 +199,7 @@ export function mountMantleAdmin<E extends Env>(
     "/admin/dev",
     "/admin/dev/model",
     "/admin/dev/logic",
+    "/admin/dev/docs",
     "/admin/views/:name",
   ]) {
     app.get(path, spa);
@@ -2004,6 +2007,7 @@ function projectDeveloperConsole(plan: RuntimePlan): {
       readonly manifest: ProcedureManifest;
     }>;
   };
+  readonly interfaces: ReturnType<typeof projectDeveloperInterfaces>;
   readonly graph: {
     readonly atoms: readonly DeveloperAtom[];
     readonly relations: readonly DeveloperAtomRelation[];
@@ -2133,8 +2137,61 @@ function projectDeveloperConsole(plan: RuntimePlan): {
       })).sort((a, b) => a.name.localeCompare(b.name)),
     },
     logic: { triggers, procedures },
+    interfaces: projectDeveloperInterfaces(plan),
     graph,
   };
+}
+
+function projectDeveloperInterfaces(plan: RuntimePlan) {
+  const callable = projectCallableCapabilities(plan).map((capability) => ({
+    kind: capability.kind,
+    name: capability.name,
+    target: capability.ownerName,
+    surface: capability.surface,
+    audience: developerAudience(
+      (capability.kind === "view"
+        ? plan.views[capability.ownerName]?.authorization?.all
+        : plan.procedures[capability.ownerName]?.authorization?.all) ?? [],
+    ) ?? "public" as const,
+    title: capability.title ?? null,
+    description: capability.description,
+    input: capability.inputSchema,
+    output: capability.kind === "procedure" ? capability.outputSchema : null,
+    trigger: capability.kind === "procedure" ? capability.trigger : null,
+  }));
+  const http = [
+    ...plan.httpRoutes.map((route) => {
+      const procedure = plan.procedures[route.procedure]!;
+      return {
+        kind: "procedure" as const,
+        name: route.trigger,
+        target: route.procedure,
+        method: route.method,
+        path: route.path,
+        audience: developerAudience(procedure.authorization?.all ?? []) ?? "public" as const,
+        title: resolveLocalizedText(procedure.manifest.spec.title, "en") ?? null,
+        description: resolveLocalizedText(procedure.manifest.spec.description, "en") ?? `Invoke Procedure '${route.procedure}'.`,
+        input: procedure.manifest.spec.input,
+        output: procedure.manifest.spec.output,
+      };
+    }),
+    ...callable.filter((capability) => capability.kind === "view" && capability.surface === "public").map((capability) => {
+      const view = plan.views[capability.target]!;
+      return {
+        kind: "view" as const,
+        name: capability.name,
+        target: capability.target,
+        method: "GET" as const,
+        path: `/api/views/${capability.target}`,
+        audience: developerAudience(view.authorization?.all ?? []) ?? "public" as const,
+        title: capability.title,
+        description: capability.description,
+        input: capability.input,
+        output: null,
+      };
+    }),
+  ].sort((a, b) => `${a.path}\0${a.method}`.localeCompare(`${b.path}\0${b.method}`));
+  return { http, callable };
 }
 
 export async function runMantleUseCase<T>(

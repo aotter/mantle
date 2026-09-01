@@ -44,6 +44,7 @@ describe("member navigation", () => {
       expect.objectContaining({ url: "/admin/dev" }),
       expect.objectContaining({ url: "/admin/dev/model" }),
       expect.objectContaining({ url: "/admin/dev/logic" }),
+      expect.objectContaining({ url: "/admin/dev/docs" }),
     ]);
   });
 });

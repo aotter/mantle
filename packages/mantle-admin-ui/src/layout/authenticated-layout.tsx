@@ -2,6 +2,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarChart3,
+  BookOpenText,
   Database,
   Folder,
   Globe,
@@ -51,7 +52,7 @@ export function AuthenticatedLayout({
 }: AuthenticatedLayoutProps): React.ReactElement {
   const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
   const { pathname, search } = useAdminLocation();
-  const fullBleed = workspace === "developer" && ["/admin/dev", "/admin/dev/model", "/admin/dev/logic"].includes(pathname);
+  const fullBleed = workspace === "developer" && ["/admin/dev", "/admin/dev/model", "/admin/dev/logic", "/admin/dev/docs"].includes(pathname);
   const { language } = usePreferences();
 
   const me = useQuery<AdminUser>({
@@ -269,6 +270,7 @@ export function buildDeveloperNavGroups(language: AdminLanguage): ReadonlyArray<
       { title: t(language, "nav.overview"), url: "/admin/dev", icon: LayoutDashboard },
       { title: t(language, "nav.model"), url: "/admin/dev/model", icon: Database },
       { title: t(language, "nav.logic"), url: "/admin/dev/logic", icon: Workflow },
+      { title: t(language, "nav.docs"), url: "/admin/dev/docs", icon: BookOpenText },
     ],
   }];
 }

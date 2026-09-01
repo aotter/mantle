@@ -116,5 +116,6 @@ function currentPage(pathname: string, language: ReturnType<typeof usePreference
   if (pathname === "/admin/dev") return t(language, "nav.overview");
   if (pathname === "/admin/dev/model") return t(language, "model.title");
   if (pathname === "/admin/dev/logic") return t(language, "logic.title");
+  if (pathname === "/admin/dev/docs") return t(language, "docs.title");
   return segment ? fieldLabel(segment) : null;
 }
