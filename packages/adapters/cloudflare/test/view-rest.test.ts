@@ -169,6 +169,33 @@ function row(id: string, data: Record<string, unknown>, status = "published") {
 }
 
 describe("GET /api/views/<name>", () => {
+  it("publishes a minimal public View catalog for WebMCP", async () => {
+    const res = await staffHarness().app.request("/api/views");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok: boolean;
+      data: Array<Record<string, unknown>>;
+    };
+
+    expect(body.ok).toBe(true);
+    expect(body.data.map((view) => view.name)).toEqual([
+      "query_view_postsbylocale",
+      "query_view_postspublished",
+    ]);
+    expect(body.data[0]).toMatchObject({
+      target: { kind: "view", name: "postsByLocale" },
+      description: "Query public View 'postsByLocale'.",
+      inputSchema: { type: "object" },
+    });
+    expect(Object.keys(body.data[0]!).sort()).toEqual([
+      "description",
+      "inputSchema",
+      "name",
+      "target",
+    ]);
+    expect(JSON.stringify(body.data)).not.toMatch(/orders|manifest|surface/u);
+  });
+
   it("returns matching rows for a static View", async () => {
     const h = harness((db) => {
       db.entries.set("p1", row("p1", { slug: "a", locale: "en" }));

@@ -138,10 +138,7 @@ try {
     const webmcp = await import("@aotter/mantle-web/webmcp");
     if (typeof web.createMantleWeb !== "function") throw new Error("missing createMantleWeb");
     if (typeof webmcp.bindWebMcp !== "function") throw new Error("missing WebMCP subpath");
-    const binding = await webmcp.bindWebMcp({
-      capabilities: [],
-      invoke: async () => null,
-    });
+    const binding = await webmcp.bindWebMcp();
     if (binding.supported !== false) throw new Error("headless WebMCP feature detection failed");
   `);
 

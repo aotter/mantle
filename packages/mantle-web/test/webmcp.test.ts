@@ -6,6 +6,7 @@ import type {
 } from "@aotter/mantle-runtime";
 import {
   bindWebMcp,
+  type BindWebMcpOptions,
   type WebMcpCall,
   type WebMcpTool,
 } from "../src/webmcp.js";
@@ -51,16 +52,11 @@ function publicProcedure(
 
 describe("bindWebMcp", () => {
   it("feature-detects unsupported browsers without invoking capabilities", async () => {
-    const invoke = vi.fn();
-    await expect(bindWebMcp({
-      capabilities: [publicView()],
-      invoke,
-    })).resolves.toMatchObject({
+    await expect(bindWebMcp()).resolves.toMatchObject({
       supported: false,
       registered: [],
       skipped: [],
     });
-    expect(invoke).not.toHaveBeenCalled();
   });
 
   it("registers public Views and Procedures with canonical annotations", async () => {
@@ -148,6 +144,52 @@ describe("bindWebMcp", () => {
     expect(outcomes).toEqual([{ status: "fulfilled", value: result }]);
   });
 
+  it("resolves the current local Runtime for View and Trigger invocation", async () => {
+    const tools: WebMcpTool[] = [];
+    const first = {
+      executeView: vi.fn(),
+      invokeTrigger: vi.fn(async () => ({ ok: true, data: "first-trigger" })),
+    };
+    const second = {
+      executeView: vi.fn(async () => ({ ok: true, result: "second-view" })),
+      invokeTrigger: vi.fn(),
+    };
+    let current = first;
+    await bindWebMcp({
+      capabilities: [publicView(), publicProcedure("inspect-companion", true)],
+      invoke: async (capability, input) => {
+        const runtime = current;
+        if (capability.kind === "procedure") {
+          const result = await runtime.invokeTrigger({
+            trigger: capability.trigger,
+            input,
+            ctx: {},
+          });
+          if (!result?.ok) throw new Error("Trigger failed");
+          return result.data;
+        }
+        const result = await runtime.executeView({
+          view: capability.ownerName,
+          options: { params: input },
+          ctx: {},
+        });
+        if (!result?.ok) throw new Error("View failed");
+        return result.result;
+      },
+      modelContext: { registerTool: (tool) => tools.push(tool) },
+    });
+
+    await expect(tools[1]!.execute({ value: "a" }, {})).resolves.toBe("first-trigger");
+    current = second;
+    await expect(tools[0]!.execute({ locale: "en" }, {})).resolves.toBe("second-view");
+    expect(first.invokeTrigger).toHaveBeenCalledWith(expect.objectContaining({
+      trigger: "inspect-companion-mcp",
+    }));
+    expect(second.executeView).toHaveBeenCalledWith(expect.objectContaining({
+      view: "recent-posts",
+    }));
+  });
+
   it("preserves invocation failures even when the observational after hook rejects", async () => {
     const tools: WebMcpTool[] = [];
     const failure = new Error("domain failed");
@@ -184,6 +226,30 @@ describe("bindWebMcp", () => {
     expect(outcomes).toEqual([{ status: "rejected", reason: veto }]);
   });
 
+  it("reports invocation cancellation to after without calling before", async () => {
+    const tools: WebMcpTool[] = [];
+    const before = vi.fn();
+    const outcomes: PromiseSettledResult<unknown>[] = [];
+    const invocation = new AbortController();
+    invocation.abort();
+    await bindWebMcp({
+      capabilities: [publicProcedure("inspect-companion", true)],
+      invoke: vi.fn(),
+      before,
+      after: (_call, result) => outcomes.push(result),
+      modelContext: { registerTool: (tool) => tools.push(tool) },
+    });
+
+    await expect(tools[0]!.execute({}, { signal: invocation.signal })).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    expect(before).not.toHaveBeenCalled();
+    expect(outcomes[0]).toMatchObject({
+      status: "rejected",
+      reason: { name: "AbortError" },
+    });
+  });
+
   it("keeps registration teardown separate from invocation cancellation", async () => {
     const tools: WebMcpTool[] = [];
     let invocationSignal: AbortSignal | undefined;
@@ -209,6 +275,117 @@ describe("bindWebMcp", () => {
     expect(invocationSignal?.aborted).toBe(false);
     invocation.abort();
     expect(invocationSignal?.aborted).toBe(true);
+    finish();
+    await expect(pending).resolves.toBe("done");
+  });
+
+  it("discovers and invokes server-backed public Views", async () => {
+    const tools: WebMcpTool[] = [];
+    const requests: Array<{ input: RequestInfo | URL; signal?: AbortSignal }> = [];
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({ input, signal: init?.signal ?? undefined });
+      return input === "/api/views"
+        ? Response.json({
+            ok: true,
+            data: [{
+              name: "query_view_recent_posts",
+              target: { kind: "view", name: "recent-posts" },
+              description: "Query public View 'recent-posts'.",
+              inputSchema: { type: "object" },
+              manifest: { should: "not cross the trust boundary" },
+            }],
+          })
+        : Response.json({ ok: true, data: { rows: [{ title: "Hello" }] } });
+    });
+    const binding = await bindWebMcp({
+      modelContext: { registerTool: (tool) => tools.push(tool) },
+      fetch: fetcher as typeof fetch,
+    });
+    const invocation = new AbortController();
+
+    await expect(tools[0]!.execute(
+      { locale: "zh-TW", page: 2, ignored: { nested: true } },
+      { signal: invocation.signal },
+    )).resolves.toEqual({ rows: [{ title: "Hello" }] });
+    expect(binding.registered).toEqual(["query_view_recent_posts"]);
+    expect(tools[0]).not.toHaveProperty("manifest");
+    expect(requests.map(({ input }) => input)).toEqual([
+      "/api/views",
+      "/api/views/recent-posts?locale=zh-TW&page=2",
+    ]);
+    expect(requests[1]!.signal).toBe(invocation.signal);
+  });
+
+  it("rejects malformed server catalogs before registration", async () => {
+    const registerTool = vi.fn();
+    await expect(bindWebMcp({
+      modelContext: { registerTool },
+      fetch: vi.fn(async () => Response.json({ ok: true, data: [{ name: "unsafe" }] })),
+    })).rejects.toThrow("catalog contains an invalid View");
+    expect(registerTool).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unavailable server catalog", async () => {
+    await expect(bindWebMcp({
+      modelContext: { registerTool: vi.fn() },
+      fetch: vi.fn(async () => new Response(null, { status: 503 })),
+    })).rejects.toThrow("Mantle WebMCP catalog failed (503)");
+  });
+
+  it("requires local capabilities and invoke together", async () => {
+    await expect(bindWebMcp({
+      capabilities: [publicView()],
+      modelContext: { registerTool: vi.fn() },
+    } as BindWebMcpOptions)).rejects.toThrow(
+      "capabilities and invoke must be provided together",
+    );
+  });
+
+  it.each([
+    "https://other.example/views",
+    "//other.example/views",
+    "/\\other.example/views",
+  ])("rejects unsafe server endpoint override %s before fetching", async (endpointPrefix) => {
+    const fetcher = vi.fn();
+    await expect(bindWebMcp({
+      endpointPrefix,
+      fetch: fetcher,
+      modelContext: { registerTool: vi.fn() },
+    })).rejects.toThrow("same-origin");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("does not let registration disposal cancel a server invocation", async () => {
+    const tools: WebMcpTool[] = [];
+    let requestSignal: AbortSignal | undefined;
+    let finish!: () => void;
+    const finished = new Promise<Response>((resolve) => {
+      finish = () => resolve(Response.json({ ok: true, data: "done" }));
+    });
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (input === "/api/views") {
+        return Response.json({
+          ok: true,
+          data: [{
+            name: "query_view_recent_posts",
+            target: { kind: "view", name: "recent-posts" },
+            description: "Query recent posts.",
+            inputSchema: { type: "object" },
+          }],
+        });
+      }
+      requestSignal = init?.signal ?? undefined;
+      return await finished;
+    });
+    const binding = await bindWebMcp({
+      modelContext: { registerTool: (tool) => tools.push(tool) },
+      fetch: fetcher as typeof fetch,
+    });
+    const pending = tools[0]!.execute({}, {});
+    await vi.waitFor(() => expect(requestSignal).toBeDefined());
+
+    binding.dispose();
+    expect(requestSignal?.aborted).toBe(false);
     finish();
     await expect(pending).resolves.toBe("done");
   });

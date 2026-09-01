@@ -1,5 +1,8 @@
 import type { Context, Env, Hono } from "hono";
-import { createMantleRequestHandler } from "@aotter/mantle-runtime";
+import {
+  createMantleRequestHandler,
+  projectCallableCapabilities,
+} from "@aotter/mantle-runtime";
 import { rejectCrossOriginMutation } from "../auth/rejectCrossOriginMutation.js";
 import type { MantleRuntimeRef } from "./bootRuntimeOnce.js";
 import { resolveCaller } from "./resolveCaller.js";
@@ -36,6 +39,16 @@ export function mountRuntimeEndpoints<E extends Env>(
   for (const route of ref.plan.httpRoutes) {
     app.on(route.method, openApiToHono(route.path), dispatch);
   }
+  const publicViews = projectCallableCapabilities(ref.plan, { surface: "public" })
+    .filter((capability) => capability.kind === "view")
+    .map((capability) => ({
+      name: capability.name,
+      target: { kind: "view", name: capability.ownerName },
+      ...(capability.title ? { title: capability.title } : {}),
+      description: capability.description,
+      inputSchema: capability.inputSchema as Record<string, unknown>,
+    }));
+  app.get("/api/views", () => Response.json({ ok: true, data: publicViews }));
   for (const view of Object.values(ref.plan.views)) {
     if (view.manifest.spec.surface === "public") {
       app.get(`/api/views/${view.name}`, dispatch);
