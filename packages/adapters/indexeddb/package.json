@@ -1,0 +1,53 @@
+{
+  "name": "@aotter/mantle-indexeddb",
+  "version": "0.1.0-alpha.13",
+  "description": "IndexedDB storage adapter for browser-hosted Mantle Runtime.",
+  "license": "Apache-2.0",
+  "homepage": "https://mantle.tools/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aotter/mantle.git",
+    "directory": "packages/adapters/indexeddb"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha",
+    "registry": "https://registry.npmjs.org"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "prebuild": "rm -rf dist .tsbuildinfo",
+    "build": "tsc -b tsconfig.lib.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --config vitest.config.ts",
+    "bench": "vitest run --config vitest.config.ts -t baseline"
+  },
+  "dependencies": {
+    "@aotter/mantle-runtime": "workspace:*",
+    "@aotter/mantle-spec": "workspace:*",
+    "idb": "catalog:"
+  },
+  "devDependencies": {
+    "@vitest/browser-playwright": "catalog:",
+    "playwright": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "zod": "catalog:peer"
+  }
+}

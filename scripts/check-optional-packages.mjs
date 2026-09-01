@@ -26,6 +26,7 @@ try {
     ["@aotter/mantle-spec", "packages/mantle-spec"],
     ["@aotter/mantle-runtime", "packages/mantle-runtime"],
     ["@aotter/mantle-web", "packages/mantle-web"],
+    ["@aotter/mantle-indexeddb", "packages/adapters/indexeddb"],
     ["@aotter/mantle-admin-ui", "packages/mantle-admin-ui"],
     ["@aotter/mantle-admin", "packages/mantle-admin"],
   ].map(([name, directory]) => {
@@ -91,6 +92,7 @@ try {
     "mantle-admin",
     "mantle-admin-ui",
     "mantle-bun",
+    "mantle-indexeddb",
     "mantle-vercel",
   ]) {
     if (existsSync(join(temp, `core-only/node_modules/@aotter/${optional}`))) {
@@ -120,6 +122,7 @@ try {
     "mantle-admin-ui",
     "mantle-bun",
     "mantle-cloudflare",
+    "mantle-indexeddb",
     "mantle-vercel",
   ]) {
     if (existsSync(join(temp, `umbrella-core/node_modules/@aotter/${optional}`))) {
@@ -140,6 +143,21 @@ try {
     if (typeof webmcp.bindWebMcp !== "function") throw new Error("missing WebMCP subpath");
     const binding = await webmcp.bindWebMcp();
     if (binding.supported !== false) throw new Error("headless WebMCP feature detection failed");
+  `);
+
+  installConsumer("core-with-indexeddb", {
+    "@aotter/mantle-spec": `file:${tarballs["@aotter/mantle-spec"]}`,
+    "@aotter/mantle-runtime": `file:${tarballs["@aotter/mantle-runtime"]}`,
+    "@aotter/mantle-indexeddb": `file:${tarballs["@aotter/mantle-indexeddb"]}`,
+    zod,
+  }, `
+    const browser = await import("@aotter/mantle-indexeddb");
+    const storage = new browser.IndexedDbMantleStorageAdapter({ databaseName: "packed" });
+    if (storage.nativeViewDialects.length !== 0 ||
+        typeof storage.prepare !== "function" ||
+        typeof storage.deleteDatabase !== "function") {
+      throw new Error("packed IndexedDB adapter surface is incomplete");
+    }
   `);
 
   installConsumer("core-with-admin", {
@@ -196,7 +214,7 @@ try {
     throw new Error("Admin API consumer installed the optional Admin UI");
   }
 
-  console.log("Packed spec-only, Core-only, umbrella Core, Core+Web, and Core+Admin consumers passed.");
+  console.log("Packed spec-only, Core-only, umbrella Core, Core+Web, Core+IndexedDB, and Core+Admin consumers passed.");
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }

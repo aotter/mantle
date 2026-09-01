@@ -2,10 +2,12 @@
 
 **Status:** Accepted
 
-**Date:** 2026-08-16; last amended 2026-08-31
+**Date:** 2026-08-16; last amended 2026-09-01
 
 **Related:** [#656](https://github.com/aotter/mantle/issues/656),
 [#662](https://github.com/aotter/mantle/issues/662),
+[#759](https://github.com/aotter/mantle/issues/759),
+[#760](https://github.com/aotter/mantle/issues/760),
 [#546](https://github.com/aotter/mantle/issues/546), ADR-0008, ADR-0009,
 ADR-0011, ADR-0018
 
@@ -105,6 +107,15 @@ including existing content repositories/readers and a `ViewQueryExecutor`.
 Concrete D1/SQLite drivers and SQL repositories remain implementation details.
 An existing application may either pass its already-owned database/client to
 an official adapter or implement the semantic ports over its own tables.
+
+`@aotter/mantle-indexeddb` is the optional browser storage implementation of
+the same semantic ports. One adapter exclusively owns one application-selected
+database name, uses structured-clone persistence and IndexedDB transaction
+completion as its write boundary, and exposes database deletion only on the
+concrete adapter. Runtime Core gains no browser global, browser facade,
+namespace, persistence request, reactive binding, or synchronization port.
+Declarative browser Views use a documented O(n) scan until measured use proves
+an IndexedDB query planner necessary.
 
 Declarative Views compile to logical plans once. Storage preparation lowers
 those plans to native queries. The v0.1 `View.spec.sql` form remains explicitly

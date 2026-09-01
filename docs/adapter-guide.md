@@ -106,6 +106,15 @@ optional `/libsql` subpath adapts a caller-owned remote Turso/libSQL client to
 the canonical SQLite chain; the default entry has no database-vendor policy.
 Vercel's read-only filesystem and writable `/tmp` are never durable state.
 
+### Browser IndexedDB embedding
+
+`@aotter/mantle-indexeddb` implements the same required semantic storage ports
+over one application-owned IndexedDB database. It keeps browser globals out of
+Runtime Core, supports declarative Views with a documented O(n) collection
+scan, and exposes `deleteDatabase()` only on the concrete adapter. The host owns
+database naming, `navigator.storage` persistence requests, active-runtime
+selection, UI invalidation, and any remote synchronization.
+
 ## HTTP and MCP surfaces
 
 The runtime is a library, not an HTTP server. A new adapter must mount equivalent framework routes:
