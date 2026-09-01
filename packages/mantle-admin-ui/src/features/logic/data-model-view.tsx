@@ -1,6 +1,18 @@
 import * as React from "react";
+import dagre from "@dagrejs/dagre";
 import { useQuery } from "@tanstack/react-query";
+import {
+  Background,
+  BackgroundVariant,
+  Controls,
+  MarkerType,
+  ReactFlow,
+  type Edge,
+  type Node,
+} from "@xyflow/react";
 import { ChevronRight, Database, Eye, Search, type LucideIcon } from "lucide-react";
+
+import "@xyflow/react/dist/style.css";
 
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
@@ -10,7 +22,6 @@ import { developerConsoleQueryOptions } from "../../lib/queries";
 import type {
   DeveloperConsoleSnapshot,
   DeveloperSchemaModel,
-  DeveloperSurface,
   DeveloperViewModel,
   JsonSchema,
 } from "../../lib/types";
@@ -104,15 +115,11 @@ export function DataModelView(): React.ReactElement {
   return (
     <section className="grid h-full min-h-0 grid-cols-[15rem_minmax(0,1fr)]" aria-label={t(language, "model.title")}>
       <ModelSidebar items={visibleItems} selectedId={selected.id} search={search} onSearch={setSearch} onSelect={select} />
-      <div className="grid min-h-0 grid-cols-[minmax(28rem,1fr)_18rem]">
-        <main className="min-w-0 overflow-y-auto border-e">
+      <div className="grid min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(28rem,1fr)_24rem] xl:grid-rows-1">
+        <main className="min-w-0 overflow-y-auto border-b xl:border-e xl:border-b-0">
           {selected.kind === "Schema" ? <SchemaDefinition model={selected.model} /> : <ViewDefinition model={selected.model} />}
         </main>
-        <div className="overflow-y-auto">
-          {selected.kind === "Schema"
-            ? <SchemaInspector model={selected.model} snapshot={snapshot.data} onSelect={select} />
-            : <ViewInspector model={selected.model} onSelect={select} />}
-        </div>
+        <RelatedAtomsGraph key={selected.id} selectedId={selected.id} graph={snapshot.data.graph} onSelect={select} />
       </div>
     </section>
   );
@@ -224,76 +231,66 @@ function ViewDefinition({ model }: { model: DeveloperViewModel }): React.ReactEl
   );
 }
 
-function SchemaInspector({ model, snapshot, onSelect }: { model: DeveloperSchemaModel; snapshot: DeveloperConsoleSnapshot; onSelect: (id: string) => void }): React.ReactElement {
-  const { language } = usePreferences();
-  const views = snapshot.dataModel.views.filter((view) => {
-    const query = view.query;
-    return query.kind === "declarative" && query.from === model.name;
+function RelatedAtomsGraph({ selectedId, graph, onSelect }: { selectedId: string; graph: DeveloperConsoleSnapshot["graph"]; onSelect: (id: string) => void }): React.ReactElement {
+  const { language, theme } = usePreferences();
+  const relations = graph.relations.filter(({ sourceId, targetId }) => sourceId === selectedId || targetId === selectedId);
+  const ids = new Set([selectedId, ...relations.flatMap(({ sourceId, targetId }) => [sourceId, targetId])]);
+  const atoms = graph.atoms.filter(({ id }) => ids.has(id));
+  const layout = new dagre.graphlib.Graph({ multigraph: true }).setDefaultEdgeLabel(() => ({}));
+  layout.setGraph({ rankdir: "LR", nodesep: 18, ranksep: 64, marginx: 12, marginy: 12 });
+  atoms.forEach(({ id }) => layout.setNode(id, { width: 172, height: 64 }));
+  relations.forEach(({ id, sourceId, targetId }) => layout.setEdge(sourceId, targetId, {}, id));
+  dagre.layout(layout);
+  const nodes: Node[] = atoms.map((atom) => {
+    const position = layout.node(atom.id);
+    const title = resolveLocalizedText(atom.title, language);
+    const navigable = atom.kind === "Schema" || atom.kind === "View";
+    return {
+      id: atom.id,
+      position: { x: position.x - 86, y: position.y - 32 },
+      data: { label: <div className="min-w-0 text-start"><div className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground">{atom.kind}</div><div className="truncate font-mono text-xs font-semibold">{atom.name}</div>{title && title !== atom.name ? <div className="truncate text-[10px] text-muted-foreground">{title}</div> : null}</div> },
+      ariaLabel: `${atom.kind} ${atom.name}`,
+      className: cn("!w-[172px] !rounded-lg !border-border !bg-card !px-3 !py-2 !text-card-foreground !shadow-sm", atom.id === selectedId && "!border-primary !ring-1 !ring-primary/30", navigable && atom.id !== selectedId && "cursor-pointer"),
+    };
   });
-  const surfaces = snapshot.surfaces.filter((surface) => surface.ownerId === `Schema:${model.name}`);
+  const edges: Edge[] = relations.map(({ id, sourceId, targetId, label }) => ({
+    id,
+    source: sourceId,
+    target: targetId,
+    label: label.split(".").slice(-2).join("."),
+    type: "smoothstep",
+    markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12 },
+    labelStyle: { fontSize: 8 },
+  }));
   return (
-    <aside className="space-y-5 p-4">
-      <InspectorSection title={t(language, "model.behavior")}>
-        <FactGrid entries={[
-          [t(language, "model.lifecycle"), model.lifecycle],
-          [t(language, "model.localized"), model.localized ? t(language, "common.yes") : t(language, "common.no")],
-          [t(language, "model.translation"), model.translates ? `${model.translates.parent} · ${model.translates.on}` : "—"],
-        ]} />
-      </InspectorSection>
-      <InspectorSection title={t(language, "model.indexes")}>
-        <StringList label={t(language, "model.unique")} items={model.uniqueIndexes.map((fields) => fields.join(" + "))} />
-        <StringList label={t(language, "model.nonUnique")} items={model.indexes.map((fields) => fields.join(" + "))} />
-        <StringList label={t(language, "model.searchable")} items={model.searchableFields} />
-      </InspectorSection>
-      <InspectorSection title={t(language, "model.relatedViews")}>
-        {views.length ? views.map((view) => <ModelLink key={view.name} label={view.name} onClick={() => onSelect(`View:${view.name}`)} />) : <Empty />}
-      </InspectorSection>
-      <InspectorSection title={t(language, "model.surfaces")}>
-        {surfaces.length ? surfaces.map((surface) => <SurfaceItem key={surface.id} surface={surface} />) : <Empty />}
-      </InspectorSection>
-    </aside>
-  );
-}
-
-function ViewInspector({ model, onSelect }: { model: DeveloperViewModel; onSelect: (id: string) => void }): React.ReactElement {
-  const { language } = usePreferences();
-  const source = model.query.kind === "declarative" ? model.query.from : null;
-  return (
-    <aside className="space-y-5 p-4">
-      <InspectorSection title={t(language, "model.access")}>
-        <FactGrid entries={[
-          [t(language, "model.surface"), model.surface],
-          [t(language, "model.guard"), model.guard ?? "—"],
-        ]} />
-        {model.authorization.length ? <CodeBlock value={JSON.stringify(model.authorization, null, 2)} /> : <p className="text-xs text-muted-foreground">{t(language, "model.noAuth")}</p>}
-      </InspectorSection>
-      {source ? (
-        <InspectorSection title={t(language, "model.sourceSchema")}>
-          <ModelLink label={source} onClick={() => onSelect(`Schema:${source}`)} />
-        </InspectorSection>
-      ) : null}
+    <aside className="flex min-h-0 flex-col" aria-label={t(language, "model.relatedAtoms")}>
+      <div className="flex h-14 shrink-0 items-center justify-between border-b px-4">
+        <h2 className="text-sm font-medium">{t(language, "model.relatedAtoms")}</h2>
+        <span className="font-mono text-xs text-muted-foreground">{atoms.length - 1}</span>
+      </div>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        colorMode={theme}
+        fitView
+        fitViewOptions={{ padding: 0.18 }}
+        minZoom={0.45}
+        maxZoom={1.5}
+        nodesConnectable={false}
+        nodesDraggable={false}
+        onNodeClick={(_, node) => {
+          if (node.id.startsWith("Schema:") || node.id.startsWith("View:")) onSelect(node.id);
+        }}
+      >
+        <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
+        <Controls showInteractive={false} />
+      </ReactFlow>
     </aside>
   );
 }
 
 function FactGrid({ entries }: { entries: Array<[string, string]> }): React.ReactElement {
   return <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">{entries.map(([label, value]) => <React.Fragment key={label}><dt className="text-muted-foreground">{label}</dt><dd className="break-words font-mono text-foreground">{value}</dd></React.Fragment>)}</dl>;
-}
-
-function InspectorSection({ title, children }: { title: string; children: React.ReactNode }): React.ReactElement {
-  return <section><h2 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{title}</h2><div className="space-y-2">{children}</div></section>;
-}
-
-function StringList({ label, items }: { label: string; items: string[] }): React.ReactElement {
-  return <div className="rounded-lg border bg-muted/20 p-2.5"><div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div><div className="mt-1 text-xs">{items.length ? items.map((item) => <code key={item} className="me-1 inline-block rounded bg-background px-1.5 py-0.5">{item}</code>) : "—"}</div></div>;
-}
-
-function ModelLink({ label, onClick }: { label: string; onClick: () => void }): React.ReactElement {
-  return <button type="button" onClick={onClick} className="flex w-full items-center gap-2 rounded-lg border bg-muted/20 p-2.5 text-start font-mono text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Eye className="size-3.5 text-muted-foreground" aria-hidden />{label}</button>;
-}
-
-function SurfaceItem({ surface }: { surface: DeveloperSurface }): React.ReactElement {
-  return <div className="rounded-lg border bg-muted/20 p-2.5"><div className="flex gap-1"><Badge variant="secondary" className="text-[10px]">{surface.kind}</Badge>{surface.visibility ? <Badge variant="outline" className="text-[10px]">{surface.visibility}</Badge> : null}</div><code className="mt-2 block break-words text-xs">{surface.name}</code></div>;
 }
 
 function DefinitionTabs({ definitionLabel, rawLabel, rawValue, children }: { definitionLabel: string; rawLabel: string; rawValue: unknown; children: React.ReactNode }): React.ReactElement {
@@ -315,9 +312,4 @@ function RawSection({ label, value }: { label: string; value: unknown }): React.
 
 function CodeBlock({ value, className }: { value: string; className?: string }): React.ReactElement {
   return <pre className={cn("max-h-72 overflow-auto rounded-lg border bg-muted/40 p-3 font-mono text-[11px] leading-5", className)}><code>{value}</code></pre>;
-}
-
-function Empty(): React.ReactElement {
-  const { language } = usePreferences();
-  return <p className="text-xs text-muted-foreground">{t(language, "model.none")}</p>;
 }

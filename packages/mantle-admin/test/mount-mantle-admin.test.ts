@@ -133,6 +133,19 @@ spec:
           },
         })],
       },
+      graph: {
+        atoms: expect.arrayContaining([
+          expect.objectContaining({ id: "Schema:orders", kind: "Schema" }),
+          expect.objectContaining({ id: "View:open-orders", kind: "View" }),
+          expect.objectContaining({ id: "Procedure:place-order", kind: "Procedure" }),
+          expect.objectContaining({ id: "Trigger:place-order-http", kind: "Trigger" }),
+        ]),
+        relations: expect.arrayContaining([
+          expect.objectContaining({ sourceId: "View:open-orders", targetId: "Schema:orders", label: "spec.from" }),
+          expect.objectContaining({ sourceId: "Procedure:place-order", targetId: "Schema:orders", label: "spec.uiSchema.collectionAction" }),
+          expect.objectContaining({ sourceId: "Trigger:place-order-http", targetId: "Procedure:place-order", label: "spec.target.procedure" }),
+        ]),
+      },
       surfaces: expect.arrayContaining([
         expect.objectContaining({ kind: "http", name: "POST /api/orders", ownerId: "Trigger:place-order-http" }),
         expect.objectContaining({ kind: "mcp", ownerId: "Schema:orders", visibility: "staff" }),

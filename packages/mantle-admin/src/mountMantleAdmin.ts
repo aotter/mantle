@@ -1911,6 +1911,22 @@ interface DeveloperSurface {
   readonly visibility?: "public" | "staff";
 }
 
+type DeveloperAtomKind = "Schema" | "View" | "Procedure" | "Trigger";
+
+interface DeveloperAtom {
+  readonly id: string;
+  readonly kind: DeveloperAtomKind;
+  readonly name: string;
+  readonly title: LocalizedText | null;
+}
+
+interface DeveloperAtomRelation {
+  readonly id: string;
+  readonly sourceId: string;
+  readonly targetId: string;
+  readonly label: string;
+}
+
 function projectDeveloperConsole(plan: RuntimePlan): {
   readonly fingerprint: string;
   readonly summary: {
@@ -1941,6 +1957,10 @@ function projectDeveloperConsole(plan: RuntimePlan): {
       readonly authorization: NonNullable<RuntimePlan["views"][string]["authorization"]>["all"];
       readonly guard: string | null;
     }>;
+  };
+  readonly graph: {
+    readonly atoms: readonly DeveloperAtom[];
+    readonly relations: readonly DeveloperAtomRelation[];
   };
   readonly surfaces: readonly DeveloperSurface[];
   readonly limitations: {
@@ -1991,6 +2011,32 @@ function projectDeveloperConsole(plan: RuntimePlan): {
     .filter(({ query }) => query.kind !== "declarative")
     .map(({ name }) => name)
     .sort();
+  const schemasByName = new Map(Object.values(plan.schemas).map(({ name, manifest }) => [name, manifest]));
+  const graph = {
+    atoms: [
+      ...Object.values(plan.schemas).map(({ name, manifest }) => ({ id: `Schema:${name}`, kind: "Schema" as const, name, title: manifest.spec.title })),
+      ...Object.values(plan.views).map(({ name, manifest }) => ({ id: `View:${name}`, kind: "View" as const, name, title: manifest.spec.title ?? null })),
+      ...Object.values(plan.procedures).map(({ name, manifest }) => ({ id: `Procedure:${name}`, kind: "Procedure" as const, name, title: manifest.spec.title ?? null })),
+      ...Object.values(plan.triggers).map(({ name }) => ({ id: `Trigger:${name}`, kind: "Trigger" as const, name, title: null })),
+    ].sort((a, b) => a.id.localeCompare(b.id)),
+    relations: [
+      ...Object.values(plan.schemas).flatMap(({ name, translationParent }) => translationParent ? [{ id: `Schema:${name}:translates:${translationParent}`, sourceId: `Schema:${name}`, targetId: `Schema:${translationParent}`, label: "spec.translates.parent" }] : []),
+      ...Object.values(plan.views).flatMap(({ name, query, guard }) => [
+        ...(query.kind === "declarative" ? [{ id: `View:${name}:from:${query.from}`, sourceId: `View:${name}`, targetId: `Schema:${query.from}`, label: "spec.from" }] : []),
+        ...(guard ? [{ id: `View:${name}:guard:${guard}`, sourceId: `View:${name}`, targetId: `Procedure:${guard}`, label: "spec.requires.guard.procedure" }] : []),
+      ]),
+      ...Object.values(plan.procedures).flatMap(({ name, manifest, builtinSchema, collectionActionSchema, guard }) => [
+        ...(builtinSchema ? [{ id: `Procedure:${name}:builtin:${builtinSchema}`, sourceId: `Procedure:${name}`, targetId: `Schema:${builtinSchema}`, label: "spec.handler.schema" }] : []),
+        ...(collectionActionSchema ? [{ id: `Procedure:${name}:collectionAction:${collectionActionSchema}`, sourceId: `Procedure:${name}`, targetId: `Schema:${collectionActionSchema}`, label: "spec.uiSchema.collectionAction" }] : []),
+        ...discoverRowBindings(manifest, schemasByName).map(({ collection, inputField }) => ({ id: `Procedure:${name}:input:${inputField}:${collection}`, sourceId: `Procedure:${name}`, targetId: `Schema:${collection}`, label: `spec.input.properties.${inputField}.x-mantle-ref` })),
+        ...(guard ? [{ id: `Procedure:${name}:guard:${guard}`, sourceId: `Procedure:${name}`, targetId: `Procedure:${guard}`, label: "spec.requires.guard.procedure" }] : []),
+      ]),
+      ...Object.values(plan.triggers).flatMap(({ name, target, lifecycleSchema }) => [
+        { id: `Trigger:${name}:target:${target}`, sourceId: `Trigger:${name}`, targetId: `Procedure:${target}`, label: "spec.target.procedure" },
+        ...(lifecycleSchema ? [{ id: `Trigger:${name}:source:${lifecycleSchema}`, sourceId: `Trigger:${name}`, targetId: `Schema:${lifecycleSchema}`, label: "spec.source.schema" }] : []),
+      ]),
+    ].sort((a, b) => a.id.localeCompare(b.id)),
+  };
 
   return {
     fingerprint: plan.semanticFingerprint,
@@ -2015,6 +2061,7 @@ function projectDeveloperConsole(plan: RuntimePlan): {
         guard: guard ?? null,
       })).sort((a, b) => a.name.localeCompare(b.name)),
     },
+    graph,
     surfaces,
     limitations: { opaqueProcedures, nativeViews },
     summary: {

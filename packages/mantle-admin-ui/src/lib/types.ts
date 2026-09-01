@@ -296,11 +296,31 @@ export interface DeveloperViewModel {
   guard: string | null;
 }
 
+export type DeveloperAtomKind = "Schema" | "View" | "Procedure" | "Trigger";
+
+export interface DeveloperAtom {
+  id: string;
+  kind: DeveloperAtomKind;
+  name: string;
+  title: LocalizedText | null;
+}
+
+export interface DeveloperAtomRelation {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  label: string;
+}
+
 export interface DeveloperConsoleSnapshot {
   fingerprint: string;
   dataModel: {
     schemas: DeveloperSchemaModel[];
     views: DeveloperViewModel[];
+  };
+  graph: {
+    atoms: DeveloperAtom[];
+    relations: DeveloperAtomRelation[];
   };
   surfaces: DeveloperSurface[];
   limitations: {
