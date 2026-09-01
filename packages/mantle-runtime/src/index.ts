@@ -95,6 +95,22 @@ export type {
   MantleStorageAdapter,
   PreparedMantleStorage,
 } from "./domain/port/MantleStorageAdapter.js";
+export {
+  EntryStatusConflict,
+  EntryVersionConflict,
+  liftLocale,
+  projectPublicEntry,
+  type EntryRow,
+} from "./domain/model/EntryRow.js";
+export {
+  clampLimit,
+  clampPage,
+  clampShow,
+} from "./domain/service/Pagination.js";
+export {
+  decodeEntrySortCursor,
+  encodeEntrySortCursor,
+} from "./infrastructure/persistence/Pagination.js";
 export type { PreparedMantleRevision } from "./domain/model/PreparedMantleRevision.js";
 export { SqliteMigrationRunner } from "./infrastructure/boot/SqliteMigrationRunner.js";
 export {

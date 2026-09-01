@@ -21,6 +21,8 @@ dist-*/
 .idea/
 .vscode/
 coverage/
+**/test/__screenshots__/
+**/.vitest-attachments/
 .packed-consumer/
 # Release controller artifacts, all written into the Core root: packed
 # tarballs, their GitHub Packages re-pack, and the consumer checkouts the

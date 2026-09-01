@@ -247,6 +247,7 @@ everything else is opt-in.
 | `@aotter/mantle-admin` | Admin API. |
 | `@aotter/mantle-admin-ui` | Prebuilt React Admin SPA. |
 | `@aotter/mantle-bun` | Bun and `bun:sqlite`. |
+| `@aotter/mantle-indexeddb` | Browser-local IndexedDB storage. |
 | `@aotter/mantle-vercel` | Vercel Functions. |
 | `@aotter/mantle-cloudflare` | Workers, D1, Auth, MCP, Web, and Admin. |
 

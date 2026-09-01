@@ -13,6 +13,7 @@
 /packages/mantle-admin-ui/      @guyspy
 /packages/mantle/               @guyspy
 /packages/adapters/bun/         @guyspy
+/packages/adapters/indexeddb/   @guyspy
 /packages/adapters/vercel/      @guyspy
 /packages/adapters/cloudflare/  @guyspy
 

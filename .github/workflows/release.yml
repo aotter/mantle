@@ -35,7 +35,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Single source of truth for the nine public packages, in dependency order.
+    # Single source of truth for the ten public packages, in dependency order.
     # Names are read from these package.json files during packing.
     env:
       LANDING_SHA: 974687fddc8b032ef9d73f9c4f7e4f4afebd9c41
@@ -44,6 +44,7 @@ jobs:
         packages/mantle-spec
         packages/mantle-admin-ui
         packages/mantle-runtime
+        packages/adapters/indexeddb
         packages/mantle-web
         packages/mantle-admin
         packages/adapters/bun
