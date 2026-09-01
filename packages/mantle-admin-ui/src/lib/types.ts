@@ -246,17 +246,6 @@ export interface ViewManifestInfo {
   list: { columns: string[]; searchFields: string[]; filterFields: string[] };
 }
 
-export type DeveloperSurfaceKind = "http" | "mcp" | "view" | "lifecycle";
-
-export interface DeveloperSurface {
-  id: string;
-  kind: DeveloperSurfaceKind;
-  name: string;
-  detail: string;
-  ownerId: string;
-  visibility?: "public" | "staff";
-}
-
 export interface DeveloperSchemaModel {
   name: string;
   title: LocalizedText;
@@ -267,6 +256,7 @@ export interface DeveloperSchemaModel {
   uniqueIndexes: string[][];
   indexes: string[][];
   searchableFields: string[];
+  manifest: unknown;
 }
 
 export type DeveloperViewQuery =
@@ -294,9 +284,21 @@ export interface DeveloperViewModel {
   query: DeveloperViewQuery;
   authorization: unknown[];
   guard: string | null;
+  manifest: unknown;
 }
 
 export type DeveloperAtomKind = "Schema" | "View" | "Procedure" | "Trigger";
+
+export type DeveloperRelationKind =
+  | "translation-parent"
+  | "schema-reference"
+  | "view-source"
+  | "authorization-guard"
+  | "procedure-schema"
+  | "collection-action"
+  | "input-reference"
+  | "trigger-target"
+  | "lifecycle-source";
 
 export interface DeveloperAtom {
   id: string;
@@ -307,13 +309,14 @@ export interface DeveloperAtom {
 
 export interface DeveloperAtomRelation {
   id: string;
+  kind: DeveloperRelationKind;
   sourceId: string;
   targetId: string;
-  label: string;
+  pointer: string;
+  value: string;
 }
 
 export interface DeveloperConsoleSnapshot {
-  fingerprint: string;
   dataModel: {
     schemas: DeveloperSchemaModel[];
     views: DeveloperViewModel[];
@@ -321,19 +324,6 @@ export interface DeveloperConsoleSnapshot {
   graph: {
     atoms: DeveloperAtom[];
     relations: DeveloperAtomRelation[];
-  };
-  surfaces: DeveloperSurface[];
-  limitations: {
-    opaqueProcedures: string[];
-    nativeViews: string[];
-  };
-  summary: {
-    atoms: {
-      triggers: number;
-      procedures: number;
-      schemas: number;
-      views: number;
-    };
   };
 }
 

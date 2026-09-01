@@ -107,9 +107,6 @@ spec:
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body).toMatchObject({
-      summary: {
-        atoms: { triggers: 1, procedures: 1, schemas: 1, views: 1 },
-      },
       dataModel: {
         schemas: [expect.objectContaining({
           name: "orders",
@@ -119,6 +116,7 @@ spec:
           indexes: [["state"]],
           searchableFields: ["state"],
           schema: expect.objectContaining({ required: ["state"] }),
+          manifest: expect.objectContaining({ kind: "Schema", metadata: { name: "orders" } }),
         })],
         views: [expect.objectContaining({
           name: "open-orders",
@@ -141,21 +139,63 @@ spec:
           expect.objectContaining({ id: "Trigger:place-order-http", kind: "Trigger" }),
         ]),
         relations: expect.arrayContaining([
-          expect.objectContaining({ sourceId: "View:open-orders", targetId: "Schema:orders", label: "spec.from" }),
-          expect.objectContaining({ sourceId: "Procedure:place-order", targetId: "Schema:orders", label: "spec.uiSchema.collectionAction" }),
-          expect.objectContaining({ sourceId: "Trigger:place-order-http", targetId: "Procedure:place-order", label: "spec.target.procedure" }),
+          expect.objectContaining({ kind: "view-source", sourceId: "View:open-orders", targetId: "Schema:orders", pointer: "/spec/from", value: "orders" }),
+          expect.objectContaining({ kind: "collection-action", sourceId: "Procedure:place-order", targetId: "Schema:orders", pointer: "/spec/uiSchema/collectionAction", value: "orders" }),
+          expect.objectContaining({ kind: "trigger-target", sourceId: "Trigger:place-order-http", targetId: "Procedure:place-order", pointer: "/spec/target/procedure", value: "place-order" }),
         ]),
       },
-      surfaces: expect.arrayContaining([
-        expect.objectContaining({ kind: "http", name: "POST /api/orders", ownerId: "Trigger:place-order-http" }),
-        expect.objectContaining({ kind: "mcp", ownerId: "Schema:orders", visibility: "staff" }),
-        expect.objectContaining({ kind: "view", name: "open-orders", ownerId: "View:open-orders" }),
-      ]),
-      limitations: {
-        opaqueProcedures: ["place-order"],
-        nativeViews: [],
-      },
     });
+  });
+
+  it("keeps schema relationship provenance in the developer graph", async () => {
+    const response = await mounted({
+      getSession: async () => ({ session: { id: "session" }, user: { id: "user" } }),
+      getUserRole: async () => "owner",
+    }, compilePlan(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: products }
+spec:
+  title: Products
+  schema:
+    type: object
+    required: [slug]
+    properties: { slug: { type: string } }
+  uniqueIndexes: [[slug]]
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: product-translations }
+spec:
+  title: Product translations
+  localized: true
+  translates: { parent: products, on: slug }
+  schema:
+    type: object
+    required: [slug, locale, title]
+    properties:
+      slug: { type: string }
+      locale: { type: string }
+      title: { type: string }
+  uniqueIndexes: [[slug, locale]]
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: reviews }
+spec:
+  title: Reviews
+  schema:
+    type: object
+    required: [productId]
+    properties:
+      productId: { type: string, x-mantle-ref: products }
+`)).request("https://example.test/admin/api/developer-console");
+
+    const body = await response.json();
+    expect(body.graph.relations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "translation-parent", sourceId: "Schema:product-translations", targetId: "Schema:products", pointer: "/spec/translates/parent", value: "products" }),
+      expect.objectContaining({ kind: "schema-reference", sourceId: "Schema:reviews", targetId: "Schema:products", pointer: "/spec/schema/properties/productId/x-mantle-ref", value: "products" }),
+    ]));
   });
 });
 

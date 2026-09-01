@@ -51,7 +51,7 @@ export function AuthenticatedLayout({
 }: AuthenticatedLayoutProps): React.ReactElement {
   const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
   const { pathname, search } = useAdminLocation();
-  const fullBleed = workspace === "developer" && pathname === "/admin/dev/model";
+  const fullBleed = workspace === "developer" && (pathname === "/admin/dev" || pathname === "/admin/dev/model");
   const { language } = usePreferences();
 
   const me = useQuery<AdminUser>({
