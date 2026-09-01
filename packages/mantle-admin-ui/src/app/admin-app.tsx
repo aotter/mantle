@@ -16,7 +16,7 @@ import { PreferencesView } from "../features/system/preferences-view";
 import { SettingsView } from "../features/system/settings-view";
 import { StaffView } from "../features/system/staff-view";
 import { MembersView } from "../features/system/members-view";
-import { ManifestLogicView } from "../features/logic/manifest-logic-view";
+import { DataModelView } from "../features/logic/data-model-view";
 import { DeveloperOverviewView } from "../features/logic/developer-overview-view";
 
 export function AdminApp(): React.ReactElement {
@@ -131,10 +131,10 @@ function Gate({ path }: { path: string }): React.ReactElement {
     );
   }
 
-  if (path === "/admin/dev/logic") {
+  if (path === "/admin/dev/model") {
     return (
       <AuthenticatedLayout workspace="developer">
-        <ManifestLogicView />
+        <DataModelView />
       </AuthenticatedLayout>
     );
   }

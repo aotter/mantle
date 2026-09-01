@@ -42,7 +42,7 @@ describe("member navigation", () => {
     expect(JSON.stringify(buildNavGroups([], [], "en", null, "owner"))).not.toContain("/admin/dev");
     expect(buildDeveloperNavGroups("en")[0]?.items).toEqual([
       expect.objectContaining({ url: "/admin/dev" }),
-      expect.objectContaining({ url: "/admin/dev/logic" }),
+      expect.objectContaining({ url: "/admin/dev/model" }),
     ]);
   });
 });

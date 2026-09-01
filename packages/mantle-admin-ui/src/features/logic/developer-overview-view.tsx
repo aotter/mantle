@@ -5,10 +5,10 @@ import {
   ArrowRight,
   Bot,
   Braces,
+  Database,
   Eye,
   GitBranch,
   Globe2,
-  Network,
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
@@ -16,8 +16,8 @@ import {
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
+import { developerConsoleQueryOptions } from "../../lib/queries";
 import type {
-  DeveloperConsoleSnapshot,
   DeveloperSurface,
   DeveloperSurfaceKind,
   SiteInfo,
@@ -37,10 +37,7 @@ const SURFACE_META: Record<DeveloperSurfaceKind, { icon: LucideIcon; tone: strin
 export function DeveloperOverviewView(): React.ReactElement {
   const { language } = usePreferences();
   const site = useQuery<SiteInfo>({ queryKey: ["site"], queryFn: () => api.get<SiteInfo>("/site") });
-  const snapshot = useQuery<DeveloperConsoleSnapshot>({
-    queryKey: ["developer-console"],
-    queryFn: () => api.get<DeveloperConsoleSnapshot>("/developer-console"),
-  });
+  const snapshot = useQuery(developerConsoleQueryOptions());
 
   return (
     <div className="space-y-6">
@@ -50,9 +47,9 @@ export function DeveloperOverviewView(): React.ReactElement {
         description={t(language, "developer.overview.description")}
         actions={snapshot.data ? (
           <Button asChild variant="outline">
-            <a href="/admin/dev/logic">
-              <Network className="size-4" aria-hidden />
-              {t(language, "developer.overview.openLogic")}
+            <a href="/admin/dev/model">
+              <Database className="size-4" aria-hidden />
+              {t(language, "developer.overview.openModel")}
               <ArrowRight className="size-4" aria-hidden />
             </a>
           </Button>
@@ -153,19 +150,29 @@ function SurfaceGroup({ kind, surfaces }: { kind: DeveloperSurfaceKind; surfaces
         <ul className="space-y-1">
           {items.map((surface) => (
             <li key={surface.id}>
-              <a href={`/admin/dev/logic?selected=${encodeURIComponent(surface.ownerId)}`} className="group flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-mono text-xs font-medium" title={surface.name}>{surface.name}</div>
-                  <div className="truncate text-xs text-muted-foreground" title={surface.detail}>{surface.detail}</div>
-                </div>
-                {surface.visibility ? <Badge variant="outline" className="text-[10px]">{surface.visibility}</Badge> : null}
-                <ArrowRight className="size-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
-              </a>
+              {surface.ownerId.startsWith("Schema:") || surface.ownerId.startsWith("View:") ? (
+                <a href={`/admin/dev/model?selected=${encodeURIComponent(surface.ownerId)}`} className="group flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <SurfaceRow surface={surface} />
+                  <ArrowRight className="size-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+                </a>
+              ) : <div className="flex items-center gap-3 px-2 py-2"><SurfaceRow surface={surface} /></div>}
             </li>
           ))}
         </ul>
       ) : <p className="px-2 py-2 text-xs text-muted-foreground">{t(language, "developer.overview.noSurfaces")}</p>}
     </section>
+  );
+}
+
+function SurfaceRow({ surface }: { surface: DeveloperSurface }): React.ReactElement {
+  return (
+    <>
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-mono text-xs font-medium" title={surface.name}>{surface.name}</div>
+        <div className="truncate text-xs text-muted-foreground" title={surface.detail}>{surface.detail}</div>
+      </div>
+      {surface.visibility ? <Badge variant="outline" className="text-[10px]">{surface.visibility}</Badge> : null}
+    </>
   );
 }
 

@@ -62,6 +62,7 @@ export interface JsonSchema {
   description?: LocalizedText;
   /** Optional JSON Schema field label. */
   title?: LocalizedText;
+  "x-mantle-bind"?: string;
   "x-mantle-ref"?: string;
   "x-mcp-hint"?: string;
   [key: string]: unknown;
@@ -245,28 +246,6 @@ export interface ViewManifestInfo {
   list: { columns: string[]; searchFields: string[]; filterFields: string[] };
 }
 
-export type ManifestLogicKind = "Schema" | "View" | "Procedure" | "Trigger";
-
-export interface ManifestLogicNode {
-  id: string;
-  kind: ManifestLogicKind;
-  name: string;
-  detail: string;
-}
-
-export interface ManifestLogicEdge {
-  id: string;
-  from: string;
-  to: string;
-  label: string;
-}
-
-export interface ManifestLogicGraph {
-  fingerprint: string;
-  nodes: ManifestLogicNode[];
-  edges: ManifestLogicEdge[];
-}
-
 export type DeveloperSurfaceKind = "http" | "mcp" | "view" | "lifecycle";
 
 export interface DeveloperSurface {
@@ -278,7 +257,52 @@ export interface DeveloperSurface {
   visibility?: "public" | "staff";
 }
 
-export interface DeveloperConsoleSnapshot extends ManifestLogicGraph {
+export interface DeveloperSchemaModel {
+  name: string;
+  title: LocalizedText;
+  description: LocalizedText | null;
+  lifecycle: Lifecycle;
+  localized: boolean;
+  translates: { parent: string; on: string } | null;
+  schema: JsonSchema;
+  uniqueIndexes: string[][];
+  indexes: string[][];
+  searchableFields: string[];
+}
+
+export type DeveloperViewQuery =
+  | {
+      kind: "declarative";
+      from: string;
+      fields?: string[];
+      filter?: unknown;
+      orderBy: Array<{ field: string; direction: "asc" | "desc" }>;
+      limit?: number;
+      params?: JsonSchema;
+    }
+  | {
+      kind: "native";
+      dialect: "sqlite";
+      statement: string;
+      limit?: number;
+      params?: JsonSchema;
+    };
+
+export interface DeveloperViewModel {
+  name: string;
+  title: LocalizedText | null;
+  surface: "public" | "staff";
+  query: DeveloperViewQuery;
+  authorization: unknown[];
+  guard: string | null;
+}
+
+export interface DeveloperConsoleSnapshot {
+  fingerprint: string;
+  dataModel: {
+    schemas: DeveloperSchemaModel[];
+    views: DeveloperViewModel[];
+  };
   surfaces: DeveloperSurface[];
   limitations: {
     opaqueProcedures: string[];
@@ -291,15 +315,6 @@ export interface DeveloperConsoleSnapshot extends ManifestLogicGraph {
       schemas: number;
       views: number;
     };
-    interfaces: {
-      httpRoutes: number;
-      mcpTools: number;
-      publicViews: number;
-      staffViews: number;
-      lifecycleBindings: number;
-    };
-    explicitRelations: number;
-    opaqueHandlers: number;
   };
 }
 

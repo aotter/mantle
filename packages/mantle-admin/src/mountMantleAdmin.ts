@@ -194,7 +194,7 @@ export function mountMantleAdmin<E extends Env>(
     "/admin/members",
     "/admin/ops",
     "/admin/dev",
-    "/admin/dev/logic",
+    "/admin/dev/model",
     "/admin/views/:name",
   ]) {
     app.get(path, spa);
@@ -1900,22 +1900,6 @@ function mediaFieldsForSchema(schema: SchemaManifest): Array<{ name: string; hin
   return out;
 }
 
-type ManifestLogicKind = "Schema" | "View" | "Procedure" | "Trigger";
-
-interface ManifestLogicNode {
-  readonly id: string;
-  readonly kind: ManifestLogicKind;
-  readonly name: string;
-  readonly detail: string;
-}
-
-interface ManifestLogicEdge {
-  readonly id: string;
-  readonly from: string;
-  readonly to: string;
-  readonly label: string;
-}
-
 type DeveloperSurfaceKind = "http" | "mcp" | "view" | "lifecycle";
 
 interface DeveloperSurface {
@@ -1936,97 +1920,49 @@ function projectDeveloperConsole(plan: RuntimePlan): {
       readonly schemas: number;
       readonly views: number;
     };
-    readonly interfaces: {
-      readonly httpRoutes: number;
-      readonly mcpTools: number;
-      readonly publicViews: number;
-      readonly staffViews: number;
-      readonly lifecycleBindings: number;
-    };
-    readonly explicitRelations: number;
-    readonly opaqueHandlers: number;
+  };
+  readonly dataModel: {
+    readonly schemas: ReadonlyArray<{
+      readonly name: string;
+      readonly title: LocalizedText;
+      readonly description: LocalizedText | null;
+      readonly lifecycle: "publishing" | "operational";
+      readonly localized: boolean;
+      readonly translates: { readonly parent: string; readonly on: string } | null;
+      readonly schema: JsonSchema;
+      readonly uniqueIndexes: ReadonlyArray<ReadonlyArray<string>>;
+      readonly indexes: ReadonlyArray<ReadonlyArray<string>>;
+      readonly searchableFields: readonly string[];
+    }>;
+    readonly views: ReadonlyArray<{
+      readonly name: string;
+      readonly title: LocalizedText | null;
+      readonly surface: "public" | "staff";
+      readonly query: RuntimePlan["views"][string]["query"];
+      readonly authorization: NonNullable<RuntimePlan["views"][string]["authorization"]>["all"];
+      readonly guard: string | null;
+    }>;
   };
   readonly surfaces: readonly DeveloperSurface[];
   readonly limitations: {
     readonly opaqueProcedures: readonly string[];
     readonly nativeViews: readonly string[];
   };
-  readonly nodes: readonly ManifestLogicNode[];
-  readonly edges: readonly ManifestLogicEdge[];
 } {
-  const nodes: ManifestLogicNode[] = [
-    ...Object.values(plan.triggers).map((trigger) => ({
-      id: logicNodeId("Trigger", trigger.name),
-      kind: "Trigger" as const,
-      name: trigger.name,
-      detail: triggerSourceLabel(trigger.manifest.spec.source),
-    })),
-    ...Object.values(plan.procedures).map((procedure) => ({
-      id: logicNodeId("Procedure", procedure.name),
-      kind: "Procedure" as const,
-      name: procedure.name,
-      detail: procedure.manifest.spec.handler.kind === "builtin" ? "built-in handler" : "code handler",
-    })),
-    ...Object.values(plan.schemas).map((schema) => ({
-      id: logicNodeId("Schema", schema.name),
-      kind: "Schema" as const,
-      name: schema.name,
-      detail: `${resolveLifecycle(schema.manifest)} data`,
-    })),
-    ...Object.values(plan.views).map((view) => ({
-      id: logicNodeId("View", view.name),
-      kind: "View" as const,
-      name: view.name,
-      detail: `${view.manifest.spec.surface} ${view.query.kind} view`,
-    })),
-  ];
-  const edges: ManifestLogicEdge[] = [];
-  const edge = (from: string, to: string, label: string): void => {
-    edges.push({ id: `${from}->${to}:${label}`, from, to, label });
-  };
-
-  for (const trigger of Object.values(plan.triggers)) {
-    edge(logicNodeId("Trigger", trigger.name), logicNodeId("Procedure", trigger.target), "invokes");
-    if (trigger.lifecycleSchema) {
-      edge(logicNodeId("Schema", trigger.lifecycleSchema), logicNodeId("Trigger", trigger.name), "lifecycle");
-    }
-  }
-  for (const procedure of Object.values(plan.procedures)) {
-    if (procedure.builtinSchema) {
-      edge(logicNodeId("Procedure", procedure.name), logicNodeId("Schema", procedure.builtinSchema), "writes");
-    }
-    if (procedure.guard) {
-      edge(logicNodeId("Procedure", procedure.guard), logicNodeId("Procedure", procedure.name), "guards");
-    }
-  }
-  for (const schema of Object.values(plan.schemas)) {
-    if (schema.translationParent) {
-      edge(logicNodeId("Schema", schema.translationParent), logicNodeId("Schema", schema.name), "translates");
-    }
-  }
-  for (const view of Object.values(plan.views)) {
-    if (view.query.kind === "declarative") {
-      edge(logicNodeId("Schema", view.query.from), logicNodeId("View", view.name), "reads");
-    }
-    if (view.guard) {
-      edge(logicNodeId("Procedure", view.guard), logicNodeId("View", view.name), "guards");
-    }
-  }
-
   const surfaces: DeveloperSurface[] = [
     ...plan.httpRoutes.map((route) => ({
       id: `http:${route.method}:${route.path}`,
       kind: "http" as const,
       name: `${route.method} ${route.path}`,
       detail: `invokes ${route.procedure}`,
-      ownerId: logicNodeId("Trigger", route.trigger),
+      ownerId: `Trigger:${route.trigger}`,
     })),
     ...plan.mcpTools.map((tool) => ({
       id: `mcp:${tool.surface}:${tool.name}`,
       kind: "mcp" as const,
       name: tool.name,
       detail: `${tool.ownerKind} · ${tool.ownerName}`,
-      ownerId: logicNodeId(tool.ownerKind, tool.ownerName),
+      ownerId: `${tool.ownerKind}:${tool.ownerName}`,
       visibility: tool.surface,
     })),
     ...Object.values(plan.views).map((view) => ({
@@ -2036,7 +1972,7 @@ function projectDeveloperConsole(plan: RuntimePlan): {
       detail: view.query.kind === "declarative"
         ? `${view.query.kind} · ${view.query.from}`
         : `${view.query.kind} query`,
-      ownerId: logicNodeId("View", view.name),
+      ownerId: `View:${view.name}`,
       visibility: view.manifest.spec.surface,
     })),
     ...plan.lifecycleHooks.map((binding) => ({
@@ -2044,7 +1980,7 @@ function projectDeveloperConsole(plan: RuntimePlan): {
       kind: "lifecycle" as const,
       name: `${binding.schema} · ${binding.hook}`,
       detail: binding.triggerNames.join(", "),
-      ownerId: logicNodeId("Schema", binding.schema),
+      ownerId: `Schema:${binding.schema}`,
     })),
   ].sort((a, b) => a.id.localeCompare(b.id));
 
@@ -2059,6 +1995,28 @@ function projectDeveloperConsole(plan: RuntimePlan): {
 
   return {
     fingerprint: plan.semanticFingerprint,
+    dataModel: {
+      schemas: Object.values(plan.schemas).map(({ name, manifest }) => ({
+        name,
+        title: manifest.spec.title,
+        description: manifest.spec.description ?? null,
+        lifecycle: resolveLifecycle(manifest),
+        localized: manifest.spec.localized ?? false,
+        translates: manifest.spec.translates ?? null,
+        schema: manifest.spec.schema,
+        uniqueIndexes: manifest.spec.uniqueIndexes ?? [],
+        indexes: manifest.spec.indexes ?? [],
+        searchableFields: manifest.spec.searchableFields ?? [],
+      })).sort((a, b) => a.name.localeCompare(b.name)),
+      views: Object.values(plan.views).map(({ name, manifest, query, authorization, guard }) => ({
+        name,
+        title: manifest.spec.title ?? null,
+        surface: manifest.spec.surface,
+        query,
+        authorization: authorization?.all ?? [],
+        guard: guard ?? null,
+      })).sort((a, b) => a.name.localeCompare(b.name)),
+    },
     surfaces,
     limitations: { opaqueProcedures, nativeViews },
     summary: {
@@ -2068,29 +2026,8 @@ function projectDeveloperConsole(plan: RuntimePlan): {
         schemas: Object.keys(plan.schemas).length,
         views: Object.keys(plan.views).length,
       },
-      interfaces: {
-        httpRoutes: Object.values(plan.triggers).filter(({ manifest }) => manifest.spec.source.kind === "http").length,
-        mcpTools: plan.mcpTools.length,
-        publicViews: Object.values(plan.views).filter(({ manifest }) => manifest.spec.surface === "public").length,
-        staffViews: Object.values(plan.views).filter(({ manifest }) => manifest.spec.surface === "staff").length,
-        lifecycleBindings: plan.lifecycleHooks.length,
-      },
-      explicitRelations: edges.length,
-      opaqueHandlers: opaqueProcedures.length,
     },
-    nodes,
-    edges: edges.sort((a, b) => a.id.localeCompare(b.id)),
   };
-}
-
-function logicNodeId(kind: ManifestLogicKind, name: string): string {
-  return `${kind}:${name}`;
-}
-
-function triggerSourceLabel(source: RuntimePlan["triggers"][string]["manifest"]["spec"]["source"]): string {
-  if (source.kind === "http") return `${source.method} ${source.path}`;
-  if (source.kind === "mcp") return `${source.surface} MCP`;
-  return `lifecycle · ${source.on.join(", ")}`;
 }
 
 export async function runMantleUseCase<T>(

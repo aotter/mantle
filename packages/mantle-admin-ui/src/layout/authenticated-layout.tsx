@@ -3,12 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   BarChart3,
+  Database,
   Folder,
   Globe,
   Home,
   Images,
   LayoutDashboard,
-  Network,
   Wrench,
   Settings as SettingsIcon,
   ContactRound,
@@ -262,7 +262,7 @@ export function buildDeveloperNavGroups(language: AdminLanguage): ReadonlyArray<
     title: t(language, "nav.build"),
     items: [
       { title: t(language, "nav.overview"), url: "/admin/dev", icon: LayoutDashboard },
-      { title: t(language, "nav.logic"), url: "/admin/dev/logic", icon: Network },
+      { title: t(language, "nav.model"), url: "/admin/dev/model", icon: Database },
     ],
   }];
 }

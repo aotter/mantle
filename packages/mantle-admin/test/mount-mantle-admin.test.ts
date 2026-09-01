@@ -56,7 +56,7 @@ describe("mountMantleAdmin", () => {
     expect(denied.status).toBe(403);
   });
 
-  it("projects the sealed manifest plan as logic nodes and edges", async () => {
+  it("projects exact schema and view definitions from the sealed plan", async () => {
     const response = await mounted({
       getSession: async () => ({ session: { id: "session" }, user: { id: "user" } }),
       getUserRole: async () => "owner",
@@ -66,12 +66,26 @@ kind: Schema
 metadata: { name: orders }
 spec:
   title: Orders
-  schema: { type: object, properties: { status: { type: string } } }
+  lifecycle: operational
+  schema:
+    type: object
+    required: [state]
+    properties:
+      state: { type: string, enum: [open, paid] }
+      customerId: { type: string }
+  uniqueIndexes: [[customerId, state]]
+  indexes: [[state]]
+  searchableFields: [state]
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: View
 metadata: { name: open-orders }
-spec: { surface: staff, from: orders }
+spec:
+  surface: staff
+  from: orders
+  fields: [state, customerId]
+  orderBy: [{ field: state, direction: desc }]
+  requires: { auth: { all: [ctx.user] } }
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure
@@ -91,28 +105,34 @@ spec:
 `)).request("https://example.test/admin/api/developer-console");
 
     expect(response.status).toBe(200);
-    const body = await response.json() as { edges: Array<{ from: string; to: string; label: string }> };
+    const body = await response.json();
     expect(body).toMatchObject({
       summary: {
         atoms: { triggers: 1, procedures: 1, schemas: 1, views: 1 },
-        interfaces: {
-          httpRoutes: 1,
-          mcpTools: 3,
-          publicViews: 0,
-          staffViews: 1,
-          lifecycleBindings: 0,
-        },
-        explicitRelations: 2,
-        opaqueHandlers: 1,
       },
-      nodes: expect.arrayContaining([
-        expect.objectContaining({ id: "Schema:orders", kind: "Schema", name: "orders" }),
-        expect.objectContaining({ id: "Trigger:place-order-http", detail: "POST /api/orders" }),
-      ]),
-      edges: expect.arrayContaining([
-        expect.objectContaining({ from: "Schema:orders", to: "View:open-orders", label: "reads" }),
-        expect.objectContaining({ from: "Trigger:place-order-http", to: "Procedure:place-order", label: "invokes" }),
-      ]),
+      dataModel: {
+        schemas: [expect.objectContaining({
+          name: "orders",
+          lifecycle: "operational",
+          localized: false,
+          uniqueIndexes: [["customerId", "state"]],
+          indexes: [["state"]],
+          searchableFields: ["state"],
+          schema: expect.objectContaining({ required: ["state"] }),
+        })],
+        views: [expect.objectContaining({
+          name: "open-orders",
+          surface: "staff",
+          authorization: ["ctx.user"],
+          guard: null,
+          query: {
+            kind: "declarative",
+            from: "orders",
+            fields: ["state", "customerId"],
+            orderBy: [{ field: "state", direction: "desc" }],
+          },
+        })],
+      },
       surfaces: expect.arrayContaining([
         expect.objectContaining({ kind: "http", name: "POST /api/orders", ownerId: "Trigger:place-order-http" }),
         expect.objectContaining({ kind: "mcp", ownerId: "Schema:orders", visibility: "staff" }),
@@ -123,11 +143,6 @@ spec:
         nativeViews: [],
       },
     });
-    expect(body.edges).not.toContainEqual(expect.objectContaining({
-      from: "Procedure:place-order",
-      to: "Schema:orders",
-      label: "writes",
-    }));
   });
 });
 

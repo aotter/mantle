@@ -1,5 +1,15 @@
 import { api } from "./api";
-import type { AuthMethodInfo, StaffOperation, ViewManifestInfo } from "./types";
+import type { AuthMethodInfo, DeveloperConsoleSnapshot, StaffOperation, ViewManifestInfo } from "./types";
+
+export function developerConsoleQueryOptions(): {
+  queryKey: readonly ["developer-console"];
+  queryFn: () => Promise<DeveloperConsoleSnapshot>;
+} {
+  return {
+    queryKey: ["developer-console"] as const,
+    queryFn: () => api.get<DeveloperConsoleSnapshot>("/developer-console"),
+  };
+}
 
 export function authMethodsQueryOptions(): {
   queryKey: readonly ["auth-methods"];
