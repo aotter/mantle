@@ -43,10 +43,10 @@ export const atomKindTone = {
 } as const;
 
 const atomKindNodeTone = {
-  Schema: "!border-blue-400/70 !bg-blue-500/10 dark:!bg-blue-950/70",
-  View: "!border-violet-400/70 !bg-violet-500/10 dark:!bg-violet-950/70",
-  Procedure: "!border-amber-400/70 !bg-amber-500/10 dark:!bg-amber-950/70",
-  Trigger: "!border-rose-400/70 !bg-rose-500/10 dark:!bg-rose-950/70",
+  Schema: "!border-blue-400/70 !bg-blue-500/10 [&.selected]:!border-blue-500 [&.selected]:!ring-2 [&.selected]:!ring-blue-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(59,130,246,0.65)] dark:!bg-blue-950/70 dark:[&.selected]:!border-blue-300 dark:[&.selected]:!ring-blue-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(96,165,250,0.8)]",
+  View: "!border-violet-400/70 !bg-violet-500/10 [&.selected]:!border-violet-500 [&.selected]:!ring-2 [&.selected]:!ring-violet-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(139,92,246,0.65)] dark:!bg-violet-950/70 dark:[&.selected]:!border-violet-300 dark:[&.selected]:!ring-violet-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(167,139,250,0.8)]",
+  Procedure: "!border-amber-400/70 !bg-amber-500/10 [&.selected]:!border-amber-500 [&.selected]:!ring-2 [&.selected]:!ring-amber-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(245,158,11,0.65)] dark:!bg-amber-950/70 dark:[&.selected]:!border-amber-300 dark:[&.selected]:!ring-amber-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(251,191,36,0.8)]",
+  Trigger: "!border-rose-400/70 !bg-rose-500/10 [&.selected]:!border-rose-500 [&.selected]:!ring-2 [&.selected]:!ring-rose-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(244,63,94,0.65)] dark:!bg-rose-950/70 dark:[&.selected]:!border-rose-300 dark:[&.selected]:!ring-rose-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(251,113,133,0.8)]",
 } as const;
 
 type ManifestGraphEdge = Edge<{ label: string; opacity: number }, "manifest">;
@@ -194,7 +194,7 @@ function layoutGraph(
         },
         ariaLabel: `${atom.kind} ${atom.name}`,
         className: cn(
-          "!h-[76px] !w-[220px] !cursor-grab !rounded-xl !border-2 !px-3 !py-2 !text-card-foreground !shadow-lg transition-[border-color,box-shadow,filter] hover:brightness-110 active:!cursor-grabbing [&.selected]:!border-primary [&.selected]:!ring-4 [&.selected]:!ring-primary/70 [&.selected]:!shadow-[0_0_28px_var(--primary)]",
+          "!h-[76px] !w-[220px] !cursor-grab !rounded-xl !border-2 !px-3 !py-2 !text-card-foreground !shadow-lg transition-[border-color,box-shadow,filter] hover:brightness-110 active:!cursor-grabbing",
           atomKindNodeTone[atom.kind],
         ),
       } satisfies Node;
