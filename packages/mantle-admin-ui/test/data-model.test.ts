@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { connectedComponents, layoutComponents } from "../src/features/logic/atom-graph";
+import { focusSlice, layoutComponents } from "../src/features/logic/atom-graph";
 import { flattenSchemaFields, schemaFieldMarkers } from "../src/features/logic/data-model-view";
 import type { DeveloperConsoleSnapshot, DeveloperSchemaModel } from "../src/lib/types";
 
@@ -41,7 +41,7 @@ describe("flattenSchemaFields", () => {
 });
 
 describe("layoutComponents", () => {
-  it("packs disconnected flows while preserving their left-to-right direction", () => {
+  it("places read and command surfaces before procedures and schemas", () => {
     const graph: DeveloperConsoleSnapshot["graph"] = {
       atoms: [
         { id: "Trigger:start", kind: "Trigger", name: "start", title: null },
@@ -57,9 +57,32 @@ describe("layoutComponents", () => {
 
     const positions = layoutComponents(graph);
     expect(positions.size).toBe(4);
-    expect(connectedComponents(graph).map((component) => component.length).sort()).toEqual([1, 3]);
-    expect(positions.get("Trigger:start")!.x).toBeLessThan(positions.get("Procedure:run")!.x);
-    expect(positions.get("Procedure:run")!.x).toBeLessThan(positions.get("Schema:records")!.x);
+    expect(positions.get("Trigger:start")!.y).toBeLessThan(positions.get("Procedure:run")!.y);
+    expect(positions.get("Procedure:run")!.y).toBeLessThan(positions.get("Schema:records")!.y);
+    expect(positions.get("View:standalone")!.y).toBeLessThan(positions.get("Schema:records")!.y);
+  });
+
+  it("focuses a command path without pulling in readers of the same schema", () => {
+    const graph: DeveloperConsoleSnapshot["graph"] = {
+      atoms: [
+        { id: "Trigger:start", kind: "Trigger", name: "start", title: null },
+        { id: "Procedure:run", kind: "Procedure", name: "run", title: null },
+        { id: "Schema:records", kind: "Schema", name: "records", title: null },
+        { id: "View:list", kind: "View", name: "list", title: null },
+      ],
+      relations: [
+        { id: "start-run", kind: "trigger-target", sourceId: "Trigger:start", targetId: "Procedure:run", pointer: "/spec/target", value: "run" },
+        { id: "run-records", kind: "procedure-schema", sourceId: "Procedure:run", targetId: "Schema:records", pointer: "/spec/schema", value: "records" },
+        { id: "run-reference", kind: "input-reference", sourceId: "Procedure:run", targetId: "Schema:other", pointer: "/spec/input", value: "other" },
+        { id: "list-records", kind: "view-source", sourceId: "View:list", targetId: "Schema:records", pointer: "/spec/from", value: "records" },
+      ],
+    };
+
+    const focus = focusSlice(graph, "Trigger:start");
+    expect([...focus.nodeIds]).toEqual(["Trigger:start", "Procedure:run", "Schema:records"]);
+    expect([...focus.relationIds]).toEqual(["start-run", "run-records"]);
+    expect([...focusSlice(graph, "Schema:records").nodeIds]).toEqual(["Schema:records"]);
+    expect([...focusSlice(graph, "Schema:records").relationIds]).toEqual([]);
   });
 });
 

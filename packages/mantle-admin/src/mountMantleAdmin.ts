@@ -15,6 +15,7 @@ import {
   checkViewAdminUi,
   schemaSortableFields,
   STAFF_ROLES,
+  type AuthPredicate,
   type ContentState,
   type Diagnostic,
   type Entry,
@@ -1901,12 +1902,16 @@ function mediaFieldsForSchema(schema: SchemaManifest): Array<{ name: string; hin
 }
 
 type DeveloperAtomKind = "Schema" | "View" | "Procedure" | "Trigger";
+type DeveloperAudience = "public" | "members" | "staff" | "system" | "api-clients";
+type DeveloperTransport = "http" | "mcp" | "lifecycle";
 
 interface DeveloperAtom {
   readonly id: string;
   readonly kind: DeveloperAtomKind;
   readonly name: string;
   readonly title: LocalizedText | null;
+  readonly audience?: DeveloperAudience;
+  readonly transport?: DeveloperTransport;
 }
 
 type DeveloperRelationKind =
@@ -1944,6 +1949,13 @@ function jsonPointerSegment(value: string): string {
   return value.replace(/~/g, "~0").replace(/\//g, "~1");
 }
 
+function developerAudience(predicates: readonly AuthPredicate[]): DeveloperAudience | null {
+  if (predicates.some((predicate) => typeof predicate === "object" && "ctx.staff" in predicate)) return "staff";
+  if (predicates.includes("ctx.user")) return "members";
+  if (predicates.some((predicate) => predicate === "ctx.auth" || (typeof predicate === "object" && "ctx.auth.scope" in predicate))) return "api-clients";
+  return null;
+}
+
 function projectDeveloperConsole(plan: RuntimePlan): {
   readonly dataModel: {
     readonly schemas: ReadonlyArray<{
@@ -1977,9 +1989,26 @@ function projectDeveloperConsole(plan: RuntimePlan): {
   const graph = {
     atoms: [
       ...Object.values(plan.schemas).map(({ name, manifest }) => ({ id: `Schema:${name}`, kind: "Schema" as const, name, title: manifest.spec.title })),
-      ...Object.values(plan.views).map(({ name, manifest }) => ({ id: `View:${name}`, kind: "View" as const, name, title: manifest.spec.title ?? null })),
+      ...Object.values(plan.views).map(({ name, manifest, authorization }) => ({
+        id: `View:${name}`,
+        kind: "View" as const,
+        name,
+        title: manifest.spec.title ?? null,
+        audience: manifest.spec.surface === "staff" ? "staff" as const : developerAudience(authorization?.all ?? []) ?? "public" as const,
+      })),
       ...Object.values(plan.procedures).map(({ name, manifest }) => ({ id: `Procedure:${name}`, kind: "Procedure" as const, name, title: manifest.spec.title ?? null })),
-      ...Object.values(plan.triggers).map(({ name }) => ({ id: `Trigger:${name}`, kind: "Trigger" as const, name, title: null })),
+      ...Object.values(plan.triggers).map(({ name, manifest, target }) => {
+        const source = manifest.spec.source;
+        const targetAudience = developerAudience(plan.procedures[target]?.authorization?.all ?? []);
+        return {
+          id: `Trigger:${name}`,
+          kind: "Trigger" as const,
+          name,
+          title: null,
+          audience: source.kind === "lifecycle" ? "system" as const : source.kind === "mcp" && source.surface === "staff" ? "staff" as const : targetAudience ?? "public" as const,
+          transport: source.kind,
+        };
+      }),
     ].sort((a, b) => a.id.localeCompare(b.id)),
     relations: [
       ...Object.values(plan.schemas).flatMap(({ name, manifest, translationParent }) => [

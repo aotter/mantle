@@ -94,6 +94,7 @@ spec:
   input: { type: object }
   output: { type: object }
   handler: { kind: ref, ref: placeOrder }
+  requires: { auth: { all: [ctx.user] } }
   uiSchema: { collectionAction: orders }
 ---
 apiVersion: cms.mantle.aotter.net/v1
@@ -134,9 +135,9 @@ spec:
       graph: {
         atoms: expect.arrayContaining([
           expect.objectContaining({ id: "Schema:orders", kind: "Schema" }),
-          expect.objectContaining({ id: "View:open-orders", kind: "View" }),
+          expect.objectContaining({ id: "View:open-orders", kind: "View", audience: "staff" }),
           expect.objectContaining({ id: "Procedure:place-order", kind: "Procedure" }),
-          expect.objectContaining({ id: "Trigger:place-order-http", kind: "Trigger" }),
+          expect.objectContaining({ id: "Trigger:place-order-http", kind: "Trigger", audience: "members", transport: "http" }),
         ]),
         relations: expect.arrayContaining([
           expect.objectContaining({ kind: "view-source", sourceId: "View:open-orders", targetId: "Schema:orders", pointer: "/spec/from", value: "orders" }),

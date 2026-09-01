@@ -27,6 +27,7 @@ import type { AdminLanguage } from "../../app/preferences";
 import { usePreferences } from "../../app/preferences";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type {
+  DeveloperAudience,
   DeveloperAtom,
   DeveloperAtomRelation,
   DeveloperConsoleSnapshot,
@@ -43,13 +44,15 @@ export const atomKindTone = {
 } as const;
 
 const atomKindNodeTone = {
-  Schema: "!border-blue-400/70 !bg-blue-500/10 [&.selected]:!border-blue-500 [&.selected]:!ring-2 [&.selected]:!ring-blue-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(59,130,246,0.65)] dark:!bg-blue-950/70 dark:[&.selected]:!border-blue-300 dark:[&.selected]:!ring-blue-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(96,165,250,0.8)]",
-  View: "!border-violet-400/70 !bg-violet-500/10 [&.selected]:!border-violet-500 [&.selected]:!ring-2 [&.selected]:!ring-violet-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(139,92,246,0.65)] dark:!bg-violet-950/70 dark:[&.selected]:!border-violet-300 dark:[&.selected]:!ring-violet-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(167,139,250,0.8)]",
-  Procedure: "!border-amber-400/70 !bg-amber-500/10 [&.selected]:!border-amber-500 [&.selected]:!ring-2 [&.selected]:!ring-amber-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(245,158,11,0.65)] dark:!bg-amber-950/70 dark:[&.selected]:!border-amber-300 dark:[&.selected]:!ring-amber-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(251,191,36,0.8)]",
-  Trigger: "!border-rose-400/70 !bg-rose-500/10 [&.selected]:!border-rose-500 [&.selected]:!ring-2 [&.selected]:!ring-rose-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(244,63,94,0.65)] dark:!bg-rose-950/70 dark:[&.selected]:!border-rose-300 dark:[&.selected]:!ring-rose-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(251,113,133,0.8)]",
+  Schema: "!border-blue-400/70 !bg-card [&.selected]:!border-blue-500 [&.selected]:!ring-2 [&.selected]:!ring-blue-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(59,130,246,0.65)] dark:[&.selected]:!border-blue-300 dark:[&.selected]:!ring-blue-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(96,165,250,0.8)]",
+  View: "!border-violet-400/70 !bg-card [&.selected]:!border-violet-500 [&.selected]:!ring-2 [&.selected]:!ring-violet-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(139,92,246,0.65)] dark:[&.selected]:!border-violet-300 dark:[&.selected]:!ring-violet-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(167,139,250,0.8)]",
+  Procedure: "!border-amber-400/70 !bg-card [&.selected]:!border-amber-500 [&.selected]:!ring-2 [&.selected]:!ring-amber-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(245,158,11,0.65)] dark:[&.selected]:!border-amber-300 dark:[&.selected]:!ring-amber-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(251,191,36,0.8)]",
+  Trigger: "!border-rose-400/70 !bg-card [&.selected]:!border-rose-500 [&.selected]:!ring-2 [&.selected]:!ring-rose-500/30 [&.selected]:!shadow-[0_14px_28px_-10px_rgba(244,63,94,0.65)] dark:[&.selected]:!border-rose-300 dark:[&.selected]:!ring-rose-400/45 dark:[&.selected]:!shadow-[0_0_32px_rgba(251,113,133,0.8)]",
 } as const;
 
-type ManifestGraphEdge = Edge<{ label: string; opacity: number }, "manifest">;
+const audiences = ["public", "members", "staff", "system", "api-clients"] as const satisfies readonly DeveloperAudience[];
+
+type ManifestGraphEdge = Edge<{ kind: DeveloperRelationKind; label: string; opacity: number }, "manifest">;
 
 const edgeTypes = { manifest: ManifestEdge } satisfies EdgeTypes;
 
@@ -63,6 +66,14 @@ export function relationLabel(language: AdminLanguage, kind: DeveloperRelationKi
   if (kind === "input-reference") return t(language, "developer.graph.relation.inputReference");
   if (kind === "trigger-target") return t(language, "developer.graph.relation.triggerTarget");
   return t(language, "developer.graph.relation.lifecycleSource");
+}
+
+function audienceLabel(language: AdminLanguage, audience: DeveloperAudience): string {
+  if (audience === "public") return t(language, "developer.graph.audience.public");
+  if (audience === "members") return t(language, "developer.graph.audience.members");
+  if (audience === "staff") return t(language, "developer.graph.audience.staff");
+  if (audience === "system") return t(language, "developer.graph.audience.system");
+  return t(language, "developer.graph.audience.apiClients");
 }
 
 export function AtomGraph({
@@ -87,17 +98,14 @@ export function AtomGraph({
     setSelectedId(null);
   }, [layout, setEdges, setNodes]);
 
-  const inspect = (id: string): void => {
-    const family = new Set(connectedComponents(graph).find((component) => component.includes(id)) ?? [id]);
-    setSelectedId(id);
+  const focus = (nodeIds: ReadonlySet<string>, relationIds: ReadonlySet<string>): void => {
     setNodes((current) => current.map((node) => ({
       ...node,
-      selected: node.id === id,
-      style: { ...node.style, opacity: family.has(node.id) ? 1 : 0.16, transition: "opacity 180ms ease" },
-      zIndex: family.has(node.id) ? 1 : 0,
+      style: { ...node.style, filter: atomsById.has(node.id) && !nodeIds.has(node.id) ? "brightness(0.42) saturate(0.2)" : "none", transition: "filter 180ms ease" },
+      zIndex: atomsById.has(node.id) ? nodeIds.has(node.id) ? 1 : 0 : -1,
     })));
     setEdges((current) => current.map((edge) => {
-      const active = family.has(edge.source) && family.has(edge.target);
+      const active = relationIds.has(edge.id);
       return {
         ...edge,
         style: { ...edge.style, opacity: active ? 1 : 0.08, stroke: active ? "var(--foreground)" : "var(--muted-foreground)", strokeWidth: active ? 2.5 : 1.25 },
@@ -107,23 +115,24 @@ export function AtomGraph({
       };
     }));
     window.requestAnimationFrame(() => void flow?.fitView({
-      nodes: [...family].map((familyId) => ({ id: familyId })),
+      nodes: [...nodeIds].map((nodeId) => ({ id: nodeId })),
       padding: { top: "12%", right: "34%", bottom: "12%", left: "8%" },
       maxZoom: 1.05,
       duration: 320,
     }));
   };
 
+  const inspect = (id: string): void => {
+    const slice = focusSlice(graph, id);
+    setSelectedId(id);
+    setNodes((current) => current.map((node) => ({ ...node, selected: node.id === id })));
+    window.requestAnimationFrame(() => focus(slice.nodeIds, slice.relationIds));
+  };
+
   const closeHud = (): void => {
     setSelectedId(null);
-    setNodes((current) => current.map((node) => ({ ...node, selected: false, style: { ...node.style, opacity: 1 }, zIndex: 0 })));
-    setEdges((current) => current.map((edge) => ({
-      ...edge,
-      style: { ...edge.style, opacity: 1, stroke: "var(--muted-foreground)", strokeWidth: 2 },
-      data: edge.data ? { ...edge.data, opacity: 1 } : edge.data,
-      markerEnd: typeof edge.markerEnd === "object" ? { ...edge.markerEnd, color: "var(--muted-foreground)" } : edge.markerEnd,
-      zIndex: 0,
-    })));
+    setNodes((current) => current.map((node) => ({ ...node, selected: false, style: { ...node.style, filter: "none" }, zIndex: atomsById.has(node.id) ? 0 : -1 })));
+    setEdges(layout.edges);
   };
 
   const relayout = (): void => {
@@ -150,7 +159,7 @@ export function AtomGraph({
       nodesConnectable={false}
       nodesDraggable
       onNodeClick={(_, node) => {
-        inspect(node.id);
+        if (atomsById.has(node.id)) inspect(node.id);
       }}
       onPaneClick={closeHud}
     >
@@ -161,7 +170,7 @@ export function AtomGraph({
       </Controls>
       {selected ? (
         <Panel position="top-right" className="!m-3 w-[22rem] max-w-[calc(100%-1.5rem)]">
-          <GraphHud atom={selected} graph={graph} atomsById={atomsById} onClose={closeHud} onInspect={inspect} onOpen={onOpen} />
+          <GraphHud atom={selected} graph={graph} atomsById={atomsById} onClose={closeHud} onFocus={(relation) => focus(new Set([relation.sourceId, relation.targetId]), new Set([relation.id]))} onOpen={onOpen} />
         </Panel>
       ) : null}
     </ReactFlow>
@@ -172,21 +181,37 @@ function layoutGraph(
   graph: DeveloperConsoleSnapshot["graph"],
   language: AdminLanguage,
 ): { nodes: Node[]; edges: Edge[] } {
-  const positions = layoutComponents(graph);
+  const { positions, groups } = layoutTopDown(graph);
 
   return {
-    nodes: graph.atoms.map((atom) => {
+    nodes: [
+      ...groups.map((group) => ({
+        id: `Audience:${group.audience}`,
+        position: { x: group.x, y: group.y },
+        data: { label: <div className="flex w-full items-center justify-between px-4 py-3 text-start text-xs font-semibold uppercase tracking-wider"><span>{audienceLabel(language, group.audience)}</span><span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground">{group.count}</span></div> },
+        className: "pointer-events-none !rounded-2xl !border !border-border !bg-card !p-0 !shadow-sm",
+        style: { width: group.width, height: group.height },
+        selectable: false,
+        draggable: false,
+        connectable: false,
+        focusable: false,
+        zIndex: -1,
+      } satisfies Node)),
+      ...graph.atoms.map((atom) => {
       const position = positions.get(atom.id) ?? { x: 0, y: 0 };
       const title = resolveLocalizedText(atom.title, language);
       return {
         id: atom.id,
         position,
-        sourcePosition: Position.Right,
-        targetPosition: Position.Left,
+        sourcePosition: Position.Bottom,
+        targetPosition: Position.Top,
         data: {
           label: (
             <div className="min-w-0 space-y-1.5 text-start">
-              <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atom.kind}</span>
+              <div className="flex items-center gap-1.5">
+                <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atom.kind}</span>
+                {atom.transport ? <span className="inline-flex rounded border bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">{atom.transport}</span> : null}
+              </div>
               <div className="truncate font-mono text-xs font-semibold">{atom.name}</div>
               {title && title !== atom.name ? <div className="truncate text-[10px] text-muted-foreground">{title}</div> : null}
             </div>
@@ -199,15 +224,16 @@ function layoutGraph(
         ),
       } satisfies Node;
     }),
+    ],
     edges: graph.relations.map((relation) => ({
       id: relation.id,
       source: relation.sourceId,
       target: relation.targetId,
       type: "manifest",
-      data: { label: relationLabel(language, relation.kind), opacity: 1 },
+      data: { kind: relation.kind, label: relationLabel(language, relation.kind), opacity: 0 },
       ariaLabel: `${relationLabel(language, relation.kind)}: ${relation.sourceId} to ${relation.targetId}`,
       markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: "var(--muted-foreground)" },
-      style: { stroke: "var(--muted-foreground)", strokeWidth: 2 },
+      style: { opacity: relationOpacity(relation.kind), stroke: "var(--muted-foreground)", strokeWidth: relationOpacity(relation.kind) > 0.2 ? 1.5 : 1 },
     } satisfies Edge)),
   };
 }
@@ -230,84 +256,86 @@ function ManifestEdge({ id, data, sourceX, sourceY, sourcePosition, targetX, tar
 }
 
 export function layoutComponents(graph: DeveloperConsoleSnapshot["graph"]): Map<string, { x: number; y: number }> {
+  return layoutTopDown(graph).positions;
+}
+
+function layoutTopDown(graph: DeveloperConsoleSnapshot["graph"]): { positions: Map<string, { x: number; y: number }>; groups: Array<{ audience: DeveloperAudience; x: number; y: number; width: number; height: number; count: number }> } {
   const nodeWidth = 220;
   const nodeHeight = 76;
-  const gap = 72;
-  const targetRowWidth = 1800;
-  const components = connectedComponents(graph);
-  const laidOut = components.map((ids) => {
-    const idSet = new Set(ids);
-    const layout = new dagre.graphlib.Graph({ multigraph: true }).setDefaultEdgeLabel(() => ({}));
-    layout.setGraph({ rankdir: "LR", nodesep: 28, ranksep: 112, edgesep: 20, marginx: 28, marginy: 28 });
-    ids.forEach((id) => layout.setNode(id, { width: nodeWidth, height: nodeHeight }));
-    graph.relations.filter(({ sourceId, targetId }) => idSet.has(sourceId) && idSet.has(targetId)).forEach(({ id, sourceId, targetId }) => layout.setEdge(sourceId, targetId, {}, id));
-    dagre.layout(layout);
-    const bounds = ids.reduce((current, id) => {
-      const node = layout.node(id);
-      return {
-        minX: Math.min(current.minX, node.x - nodeWidth / 2),
-        minY: Math.min(current.minY, node.y - nodeHeight / 2),
-        maxX: Math.max(current.maxX, node.x + nodeWidth / 2),
-        maxY: Math.max(current.maxY, node.y + nodeHeight / 2),
-      };
-    }, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
-    return {
-      ids,
-      layout,
-      bounds,
-      width: bounds.maxX - bounds.minX,
-      height: bounds.maxY - bounds.minY,
-    };
-  }).sort((a, b) => (b.width * b.height) - (a.width * a.height));
+  const gap = 32;
+  const groupPadding = 24;
+  const groupHeader = 48;
+  const groupColumns = 4;
+  const layout = new dagre.graphlib.Graph({ multigraph: true }).setDefaultEdgeLabel(() => ({}));
+  layout.setGraph({ rankdir: "TB", nodesep: gap, ranksep: 160, edgesep: 20 });
+  graph.atoms.forEach(({ id }) => layout.setNode(id, { width: nodeWidth, height: nodeHeight }));
+  graph.relations.filter(({ kind }) => ["trigger-target", "procedure-schema", "collection-action", "view-source"].includes(kind)).forEach(({ id, sourceId, targetId }) => layout.setEdge(sourceId, targetId, {}, id));
+  dagre.layout(layout);
 
   const positions = new Map<string, { x: number; y: number }>();
-  let x = gap;
-  let y = gap;
-  let rowHeight = 0;
-  laidOut.forEach((component) => {
-    if (x > gap && x + component.width > targetRowWidth) {
-      x = gap;
-      y += rowHeight + gap;
-      rowHeight = 0;
-    }
-    component.ids.forEach((id) => {
-      const node = component.layout.node(id);
-      positions.set(id, { x: x + node.x - component.bounds.minX - nodeWidth / 2, y: y + node.y - component.bounds.minY - nodeHeight / 2 });
-    });
-    x += component.width + gap;
-    rowHeight = Math.max(rowHeight, component.height);
+  const groups: Array<{ audience: DeveloperAudience; x: number; y: number; width: number; height: number; count: number }> = [];
+  const relationTarget = new Map(graph.relations.filter(({ kind }) => kind === "trigger-target" || kind === "view-source").map(({ sourceId, targetId }) => [sourceId, targetId]));
+  let groupX = 72;
+  audiences.forEach((audience) => {
+    const atoms = graph.atoms.filter((atom) => (atom.kind === "Trigger" || atom.kind === "View") && (atom.audience ?? "public") === audience).sort((a, b) => `${relationTarget.get(a.id) ?? ""}:${a.id}`.localeCompare(`${relationTarget.get(b.id) ?? ""}:${b.id}`));
+    if (!atoms.length) return;
+    const columns = Math.min(groupColumns, atoms.length);
+    const rows = Math.ceil(atoms.length / groupColumns);
+    const width = groupPadding * 2 + columns * nodeWidth + (columns - 1) * gap;
+    const height = groupHeader + groupPadding + rows * nodeHeight + (rows - 1) * gap + groupPadding;
+    groups.push({ audience, x: groupX, y: 48, width, height, count: atoms.length });
+    atoms.forEach((atom, index) => positions.set(atom.id, { x: groupX + groupPadding + index % groupColumns * (nodeWidth + gap), y: 48 + groupHeader + groupPadding + Math.floor(index / groupColumns) * (nodeHeight + gap) }));
+    groupX += width + 56;
   });
-  return positions;
+
+  const surfaceBottom = Math.max(...groups.map(({ y, height }) => y + height), 200);
+  const preferredX = (atom: DeveloperAtom, kinds: readonly DeveloperRelationKind[]): number => {
+    const related = graph.relations.filter(({ targetId, kind }) => targetId === atom.id && kinds.includes(kind)).map(({ sourceId }) => positions.get(sourceId)).filter((position): position is { x: number; y: number } => Boolean(position));
+    return related.length ? related.reduce((sum, position) => sum + position.x + nodeWidth / 2, 0) / related.length : layout.node(atom.id).x;
+  };
+  const bandColumns = 7;
+  const pack = (atoms: DeveloperAtom[], y: number, kinds: readonly DeveloperRelationKind[]): number => {
+    const ordered = atoms.map((atom) => ({ atom, preferred: preferredX(atom, kinds) })).sort((a, b) => a.preferred - b.preferred);
+    const columns = Math.min(bandColumns, ordered.length);
+    ordered.forEach(({ atom }, index) => positions.set(atom.id, { x: 72 + index % bandColumns * (nodeWidth + 52), y: y + Math.floor(index / bandColumns) * (nodeHeight + gap) }));
+    return Math.ceil(ordered.length / Math.max(columns, 1)) * (nodeHeight + gap);
+  };
+  const procedureY = surfaceBottom + 180;
+  const procedureHeight = pack(graph.atoms.filter(({ kind }) => kind === "Procedure"), procedureY, ["trigger-target"]);
+  pack(graph.atoms.filter(({ kind }) => kind === "Schema"), procedureY + procedureHeight + 140, ["procedure-schema", "collection-action", "view-source"]);
+  return { positions, groups };
 }
 
-export function connectedComponents(graph: DeveloperConsoleSnapshot["graph"]): string[][] {
-  const adjacency = new Map(graph.atoms.map(({ id }) => [id, new Set<string>()]));
-  graph.relations.forEach(({ sourceId, targetId }) => {
-    adjacency.get(sourceId)?.add(targetId);
-    adjacency.get(targetId)?.add(sourceId);
-  });
-  const remaining = new Set(adjacency.keys());
-  const components: string[][] = [];
-  while (remaining.size) {
-    const first = remaining.values().next().value as string;
-    const component: string[] = [];
-    const pending = [first];
-    remaining.delete(first);
-    while (pending.length) {
-      const id = pending.pop();
-      if (!id) continue;
-      component.push(id);
-      adjacency.get(id)?.forEach((related) => {
-        if (!remaining.delete(related)) return;
-        pending.push(related);
-      });
-    }
-    components.push(component);
+export function focusSlice(graph: DeveloperConsoleSnapshot["graph"], selectedId: string): { nodeIds: Set<string>; relationIds: Set<string> } {
+  const nodeIds = new Set([selectedId]);
+  const relationIds = new Set<string>();
+  const selectedKind = graph.atoms.find(({ id }) => id === selectedId)?.kind;
+  const add = (relation: DeveloperAtomRelation): void => {
+    relationIds.add(relation.id);
+    nodeIds.add(relation.sourceId);
+    nodeIds.add(relation.targetId);
+  };
+  const direct = graph.relations.filter(({ sourceId, targetId }) => sourceId === selectedId || targetId === selectedId);
+
+  if (selectedKind === "Trigger") {
+    const targets = graph.relations.filter(({ sourceId, kind }) => sourceId === selectedId && kind === "trigger-target");
+    targets.forEach(add);
+    const procedureIds = new Set(targets.map(({ targetId }) => targetId));
+    graph.relations.filter(({ sourceId, kind }) => procedureIds.has(sourceId) && ["procedure-schema", "collection-action"].includes(kind)).forEach(add);
+  } else if (selectedKind === "Procedure") {
+    direct.filter(({ kind }) => ["trigger-target", "procedure-schema", "collection-action"].includes(kind)).forEach(add);
+  } else if (selectedKind === "View") {
+    direct.filter(({ kind }) => kind === "view-source").forEach(add);
   }
-  return components;
+
+  return { nodeIds, relationIds };
 }
 
-function GraphHud({ atom, graph, atomsById, onClose, onInspect, onOpen }: { atom: DeveloperAtom; graph: DeveloperConsoleSnapshot["graph"]; atomsById: ReadonlyMap<string, DeveloperAtom>; onClose: () => void; onInspect: (id: string) => void; onOpen: (atom: DeveloperAtom) => void }): React.ReactElement {
+function relationOpacity(kind: DeveloperRelationKind): number {
+  return ["schema-reference", "translation-parent", "input-reference", "authorization-guard"].includes(kind) ? 0.12 : 0.58;
+}
+
+function GraphHud({ atom, graph, atomsById, onClose, onFocus, onOpen }: { atom: DeveloperAtom; graph: DeveloperConsoleSnapshot["graph"]; atomsById: ReadonlyMap<string, DeveloperAtom>; onClose: () => void; onFocus: (relation: DeveloperAtomRelation) => void; onOpen: (atom: DeveloperAtom) => void }): React.ReactElement {
   const { language } = usePreferences();
   const title = resolveLocalizedText(atom.title, language);
   const outgoing = graph.relations.filter(({ sourceId }) => sourceId === atom.id);
@@ -317,15 +345,18 @@ function GraphHud({ atom, graph, atomsById, onClose, onInspect, onOpen }: { atom
     <aside className="max-h-[calc(100vh-7rem)] overflow-y-auto rounded-xl border bg-popover/95 text-popover-foreground shadow-2xl backdrop-blur" aria-label={t(language, "developer.graph.details")}>
       <header className="sticky top-0 z-10 flex items-start gap-3 border-b bg-popover/95 p-4 backdrop-blur">
         <div className="min-w-0 flex-1">
-          <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atom.kind}</span>
+          <div className="flex items-center gap-1.5">
+            <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atom.kind}</span>
+            {atom.transport ? <span className="inline-flex rounded border bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">{atom.transport}</span> : null}
+          </div>
           <h2 className="mt-2 truncate font-mono text-sm font-semibold">{atom.name}</h2>
           {title && title !== atom.name ? <p className="mt-1 truncate text-xs text-muted-foreground">{title}</p> : null}
         </div>
         <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label={t(language, "common.close")}><X aria-hidden /></Button>
       </header>
       <div className="space-y-5 p-4">
-        {outgoing.length ? <HudRelationGroup title={t(language, "model.references")} relations={outgoing} outgoing atomsById={atomsById} onInspect={onInspect} /> : null}
-        {incoming.length ? <HudRelationGroup title={t(language, "model.referencedBy")} relations={incoming} outgoing={false} atomsById={atomsById} onInspect={onInspect} /> : null}
+        {outgoing.length ? <HudRelationGroup title={t(language, "model.references")} relations={outgoing} outgoing atomsById={atomsById} onFocus={onFocus} /> : null}
+        {incoming.length ? <HudRelationGroup title={t(language, "model.referencedBy")} relations={incoming} outgoing={false} atomsById={atomsById} onFocus={onFocus} /> : null}
         {!outgoing.length && !incoming.length ? <p className="text-sm text-muted-foreground">{t(language, "model.noRelations")}</p> : null}
         {navigable ? <Button type="button" className="w-full" onClick={() => onOpen(atom)}>{t(language, "developer.graph.openModel")}<ExternalLink aria-hidden /></Button> : null}
       </div>
@@ -333,7 +364,7 @@ function GraphHud({ atom, graph, atomsById, onClose, onInspect, onOpen }: { atom
   );
 }
 
-function HudRelationGroup({ title, relations, outgoing, atomsById, onInspect }: { title: string; relations: readonly DeveloperAtomRelation[]; outgoing: boolean; atomsById: ReadonlyMap<string, DeveloperAtom>; onInspect: (id: string) => void }): React.ReactElement {
+function HudRelationGroup({ title, relations, outgoing, atomsById, onFocus }: { title: string; relations: readonly DeveloperAtomRelation[]; outgoing: boolean; atomsById: ReadonlyMap<string, DeveloperAtom>; onFocus: (relation: DeveloperAtomRelation) => void }): React.ReactElement {
   const { language } = usePreferences();
   const DirectionIcon = outgoing ? ArrowDownRight : ArrowUpRight;
   return (
@@ -347,7 +378,7 @@ function HudRelationGroup({ title, relations, outgoing, atomsById, onInspect }: 
               <div className="flex items-center gap-2">
                 <DirectionIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                 <span className="text-xs font-medium">{relationLabel(language, relation.kind)}</span>
-                <button type="button" className="ms-auto min-w-0 truncate font-mono text-xs font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onInspect(related.id)}>{related.name}</button>
+                <button type="button" className="ms-auto min-w-0 truncate font-mono text-xs font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onFocus(relation)}>{related.name}</button>
               </div>
               <code className="mt-2 block break-all rounded bg-muted/60 p-2 text-[10px] text-muted-foreground">{relation.sourceId.replace(":", "/")}{relation.pointer} = {JSON.stringify(relation.value)}</code>
             </div>

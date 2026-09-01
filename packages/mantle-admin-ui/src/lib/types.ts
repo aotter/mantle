@@ -288,6 +288,8 @@ export interface DeveloperViewModel {
 }
 
 export type DeveloperAtomKind = "Schema" | "View" | "Procedure" | "Trigger";
+export type DeveloperAudience = "public" | "members" | "staff" | "system" | "api-clients";
+export type DeveloperTransport = "http" | "mcp" | "lifecycle";
 
 export type DeveloperRelationKind =
   | "translation-parent"
@@ -305,6 +307,8 @@ export interface DeveloperAtom {
   kind: DeveloperAtomKind;
   name: string;
   title: LocalizedText | null;
+  audience?: DeveloperAudience;
+  transport?: DeveloperTransport;
 }
 
 export interface DeveloperAtomRelation {
