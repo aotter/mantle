@@ -1910,8 +1910,10 @@ interface DeveloperAtom {
   readonly kind: DeveloperAtomKind;
   readonly name: string;
   readonly title: LocalizedText | null;
+  readonly description?: LocalizedText | null;
   readonly audience?: DeveloperAudience;
   readonly transport?: DeveloperTransport;
+  readonly handler?: ProcedureManifest["spec"]["handler"];
 }
 
 type DeveloperRelationKind =
@@ -1996,7 +1998,15 @@ function projectDeveloperConsole(plan: RuntimePlan): {
         title: manifest.spec.title ?? null,
         audience: manifest.spec.surface === "staff" ? "staff" as const : developerAudience(authorization?.all ?? []) ?? "public" as const,
       })),
-      ...Object.values(plan.procedures).map(({ name, manifest }) => ({ id: `Procedure:${name}`, kind: "Procedure" as const, name, title: manifest.spec.title ?? null })),
+      ...Object.values(plan.procedures).map(({ name, manifest, authorization }) => ({
+        id: `Procedure:${name}`,
+        kind: "Procedure" as const,
+        name,
+        title: manifest.spec.title ?? null,
+        description: manifest.spec.description ?? null,
+        audience: developerAudience(authorization?.all ?? []) ?? "public" as const,
+        handler: manifest.spec.handler,
+      })),
       ...Object.values(plan.triggers).map(({ name, manifest, target }) => {
         const source = manifest.spec.source;
         const targetAudience = developerAudience(plan.procedures[target]?.authorization?.all ?? []);

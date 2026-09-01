@@ -307,8 +307,12 @@ export interface DeveloperAtom {
   kind: DeveloperAtomKind;
   name: string;
   title: LocalizedText | null;
+  description?: LocalizedText | null;
   audience?: DeveloperAudience;
   transport?: DeveloperTransport;
+  handler?:
+    | { kind: "builtin"; op: "create" | "update" | "upsert" | "delete" | "archive"; schema: string; match?: readonly string[] }
+    | { kind: "ref"; ref: string };
 }
 
 export interface DeveloperAtomRelation {

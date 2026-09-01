@@ -98,6 +98,18 @@ spec:
   uiSchema: { collectionAction: orders }
 ---
 apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: create-order }
+spec:
+  input:
+    type: object
+    properties:
+      customerId: { type: string }
+      state: { type: string }
+  output: { type: object }
+  handler: { kind: builtin, op: create, schema: orders }
+---
+apiVersion: cms.mantle.aotter.net/v1
 kind: Trigger
 metadata: { name: place-order-http }
 spec:
@@ -136,12 +148,14 @@ spec:
         atoms: expect.arrayContaining([
           expect.objectContaining({ id: "Schema:orders", kind: "Schema" }),
           expect.objectContaining({ id: "View:open-orders", kind: "View", audience: "staff" }),
-          expect.objectContaining({ id: "Procedure:place-order", kind: "Procedure" }),
+          expect.objectContaining({ id: "Procedure:place-order", kind: "Procedure", audience: "members", handler: { kind: "ref", ref: "placeOrder" } }),
+          expect.objectContaining({ id: "Procedure:create-order", kind: "Procedure", handler: { kind: "builtin", op: "create", schema: "orders" } }),
           expect.objectContaining({ id: "Trigger:place-order-http", kind: "Trigger", audience: "members", transport: "http" }),
         ]),
         relations: expect.arrayContaining([
           expect.objectContaining({ kind: "view-source", sourceId: "View:open-orders", targetId: "Schema:orders", pointer: "/spec/from", value: "orders" }),
           expect.objectContaining({ kind: "collection-action", sourceId: "Procedure:place-order", targetId: "Schema:orders", pointer: "/spec/uiSchema/collectionAction", value: "orders" }),
+          expect.objectContaining({ kind: "procedure-schema", sourceId: "Procedure:create-order", targetId: "Schema:orders", pointer: "/spec/handler/schema", value: "orders" }),
           expect.objectContaining({ kind: "trigger-target", sourceId: "Trigger:place-order-http", targetId: "Procedure:place-order", pointer: "/spec/target/procedure", value: "place-order" }),
         ]),
       },

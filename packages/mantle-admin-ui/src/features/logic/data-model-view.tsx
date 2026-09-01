@@ -42,6 +42,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { atomKindTone, relationLabel } from "./atom-graph";
+import { developerSelectionHref } from "./developer-route";
 
 type ModelItem =
   | { kind: "Schema"; id: string; model: DeveloperSchemaModel }
@@ -160,10 +161,10 @@ export function DataModelView(): React.ReactElement {
     ? items.filter((item) => `${item.kind} ${item.model.name} ${resolveLocalizedText(item.model.title, language) ?? ""}`.toLowerCase().includes(query))
     : items;
   const modelIds = new Set(items.map(({ id }) => id));
-  const select = (id: string): void => navigate(`/admin/dev/model?selected=${encodeURIComponent(id)}`, { replace: true });
+  const select = (id: string): void => navigate(developerSelectionHref("/admin/dev/model", id));
   const openManifest = (id: string, pointer: string): void => {
     if (!modelIds.has(id)) return;
-    navigate(`/admin/dev/model?selected=${encodeURIComponent(id)}&tab=manifest&pointer=${encodeURIComponent(pointer)}`, { replace: true });
+    navigate(developerSelectionHref("/admin/dev/model", id, { tab: "manifest", pointer }));
   };
 
   if (snapshot.isError) return <div className="p-6"><ErrorBox error={snapshot.error} /></div>;
@@ -330,7 +331,7 @@ function RelatedAtomsList({ selectedId, graph, modelIds, onSelect, onOpenManifes
         <h2 className="text-sm font-medium">{t(language, "model.relationships")}</h2>
         <span className="font-mono text-xs text-muted-foreground">{count}</span>
         <Button asChild variant="ghost" size="sm" className="ms-auto">
-          <a href="/admin/dev"><Braces aria-hidden />{t(language, "model.openGraph")}</a>
+          <a href={developerSelectionHref("/admin/dev", selectedId)}><Braces aria-hidden />{t(language, "model.openGraph")}</a>
         </Button>
       </div>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">

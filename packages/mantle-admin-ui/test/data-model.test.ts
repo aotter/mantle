@@ -62,7 +62,7 @@ describe("layoutComponents", () => {
     expect(positions.get("View:standalone")!.y).toBeLessThan(positions.get("Schema:records")!.y);
   });
 
-  it("focuses a command path without pulling in readers of the same schema", () => {
+  it("traces a schema through its command upstream", () => {
     const graph: DeveloperConsoleSnapshot["graph"] = {
       atoms: [
         { id: "Trigger:start", kind: "Trigger", name: "start", title: null },
@@ -81,8 +81,9 @@ describe("layoutComponents", () => {
     const focus = focusSlice(graph, "Trigger:start");
     expect([...focus.nodeIds]).toEqual(["Trigger:start", "Procedure:run", "Schema:records"]);
     expect([...focus.relationIds]).toEqual(["start-run", "run-records"]);
-    expect([...focusSlice(graph, "Schema:records").nodeIds]).toEqual(["Schema:records"]);
-    expect([...focusSlice(graph, "Schema:records").relationIds]).toEqual([]);
+    const schemaFocus = focusSlice(graph, "Schema:records");
+    expect([...schemaFocus.nodeIds]).toEqual(["Schema:records", "Procedure:run", "Trigger:start"]);
+    expect([...schemaFocus.relationIds]).toEqual(["run-records", "start-run"]);
   });
 });
 

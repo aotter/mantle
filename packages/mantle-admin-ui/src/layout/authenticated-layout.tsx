@@ -1,7 +1,6 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ArrowLeft,
   BarChart3,
   Database,
   Folder,
@@ -144,7 +143,7 @@ export function AuthenticatedLayout({
             publicUrl={site.data?.publicUrl}
             pageTitle={pageTitle}
             workspaceLink={workspace === "developer"
-              ? { href: "/admin", label: t(language, "common.contentAdmin"), icon: ArrowLeft }
+              ? { href: "/admin", label: t(language, "common.contentAdmin"), icon: LayoutDashboard }
               : me.data?.role === "owner"
               ? { href: "/admin/dev", label: t(language, "developer.workspaceTitle"), icon: Wrench }
               : undefined}
