@@ -8,6 +8,7 @@ import {
   hasCtxUserRefKey,
   isCtxUserRef,
   type FilterAst,
+  type JsonSchema,
   type Manifest,
   type ProcedureManifest,
   type SchemaManifest,
@@ -404,7 +405,299 @@ function checkBuiltinHandler(
     );
     return out;
   }
+
+  const inputSchema = p.spec.input as JsonSchema;
+  if (!isObjectSchema(inputSchema)) {
+    out.push(
+      validateDiagnostic({
+        code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+        severity: "error",
+        path: manifestPath("Procedure", p.metadata.name, "/spec/input", filePaths),
+        value: inputSchema.type,
+        expected: "type: 'object'",
+        message: `Procedure '${p.metadata.name}' (builtin op: ${h.op}) input must be an object schema.`,
+      }),
+    );
+    return out;
+  }
+
+  const inputProps = (inputSchema.properties ?? {}) as Record<string, JsonSchema>;
+  const inputRequired = new Set(inputSchema.required ?? []);
+
+  if (h.op === "update") {
+    if (!("id" in inputProps) || inputProps.id === undefined) {
+      out.push(
+        validateDiagnostic({
+          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+          severity: "error",
+          path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/id", filePaths),
+          expected: "property 'id' with type 'string'",
+          message: `Procedure '${p.metadata.name}' (builtin op: update) requires input property 'id' with type 'string'.`,
+        }),
+      );
+    } else if (!isStrictTypeString(inputProps.id)) {
+      out.push(
+        validateDiagnostic({
+          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+          severity: "error",
+          path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/id", filePaths),
+          value: inputProps.id.type,
+          expected: "type: 'string'",
+          message: `Procedure '${p.metadata.name}' (builtin op: update) property 'id' must be strict type 'string'.`,
+        }),
+      );
+    }
+
+    if (!("expectedVersion" in inputProps) || inputProps.expectedVersion === undefined) {
+      out.push(
+        validateDiagnostic({
+          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+          severity: "error",
+          path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/expectedVersion", filePaths),
+          expected: "property 'expectedVersion' with type 'number'",
+          message: `Procedure '${p.metadata.name}' (builtin op: update) requires input property 'expectedVersion' with type 'number'.`,
+        }),
+      );
+    } else if (!isStrictTypeNumber(inputProps.expectedVersion)) {
+      out.push(
+        validateDiagnostic({
+          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+          severity: "error",
+          path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/expectedVersion", filePaths),
+          value: inputProps.expectedVersion.type,
+          expected: "type: 'number'",
+          message: `Procedure '${p.metadata.name}' (builtin op: update) property 'expectedVersion' must be strict type 'number'.`,
+        }),
+      );
+    }
+
+    if (!inputRequired.has("id")) {
+      out.push(
+        validateDiagnostic({
+          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+          severity: "error",
+          path: manifestPath("Procedure", p.metadata.name, "/spec/input/required", filePaths),
+          expected: "required to include 'id'",
+          message: `Procedure '${p.metadata.name}' (builtin op: update) requires 'id' in input.required.`,
+        }),
+      );
+    }
+    if (!inputRequired.has("expectedVersion")) {
+      out.push(
+        validateDiagnostic({
+          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+          severity: "error",
+          path: manifestPath("Procedure", p.metadata.name, "/spec/input/required", filePaths),
+          expected: "required to include 'expectedVersion'",
+          message: `Procedure '${p.metadata.name}' (builtin op: update) requires 'expectedVersion' in input.required.`,
+        }),
+      );
+    }
+  } else if (h.op === "delete" || h.op === "archive") {
+    if (h.op === "archive" && target.spec.lifecycle === "operational") {
+      out.push(
+        validateDiagnostic({
+          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+          severity: "error",
+          path: manifestPath("Procedure", p.metadata.name, "/spec/handler/schema", filePaths),
+          value: target.spec.lifecycle,
+          expected: "Schema with lifecycle: 'publishing' (operational Schemas do not support archive)",
+          message: `Procedure '${p.metadata.name}' (builtin op: archive) targets Schema '${target.metadata.name}' with lifecycle: 'operational'. Operational Schemas cannot be archived.`,
+        }),
+      );
+    }
+
+    if (!("id" in inputProps) || inputProps.id === undefined) {
+      out.push(
+        validateDiagnostic({
+          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+          severity: "error",
+          path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/id", filePaths),
+          expected: "property 'id' with type 'string'",
+          message: `Procedure '${p.metadata.name}' (builtin op: ${h.op}) requires input property 'id' with type 'string'.`,
+        }),
+      );
+    } else if (!isStrictTypeString(inputProps.id)) {
+      out.push(
+        validateDiagnostic({
+          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+          severity: "error",
+          path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/id", filePaths),
+          value: inputProps.id.type,
+          expected: "type: 'string'",
+          message: `Procedure '${p.metadata.name}' (builtin op: ${h.op}) property 'id' must be strict type 'string'.`,
+        }),
+      );
+    }
+
+    if (!inputRequired.has("id")) {
+      out.push(
+        validateDiagnostic({
+          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+          severity: "error",
+          path: manifestPath("Procedure", p.metadata.name, "/spec/input/required", filePaths),
+          expected: "required to include 'id'",
+          message: `Procedure '${p.metadata.name}' (builtin op: ${h.op}) requires 'id' in input.required.`,
+        }),
+      );
+    }
+  } else if (h.op === "upsert") {
+    if (h.match) {
+      const targetProps = ((target.spec.schema as { properties?: Record<string, unknown> }).properties ?? {});
+      const uniqueIndexes = target.spec.uniqueIndexes ?? [];
+      const matchesUniqueIndex = uniqueIndexes.some(
+        (idx) => idx.length === h.match!.length && idx.every((col, i) => col === h.match![i]),
+      );
+      if (!matchesUniqueIndex) {
+        out.push(
+          validateDiagnostic({
+            code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+            severity: "error",
+            path: manifestPath("Procedure", p.metadata.name, "/spec/handler/match", filePaths),
+            value: h.match,
+            expected: `exact match with one declared unique index in Schema '${target.metadata.name}'`,
+            message: `Procedure '${p.metadata.name}' handler.match [${h.match.join(", ")}] does not match any declared unique index on Schema '${target.metadata.name}'.`,
+          }),
+        );
+      }
+
+      for (const field of h.match) {
+        if (!(field in targetProps)) {
+          out.push(
+            validateDiagnostic({
+              code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+              severity: "error",
+              path: manifestPath("Procedure", p.metadata.name, "/spec/handler/match", filePaths),
+              value: field,
+              expected: `property declared in Schema '${target.metadata.name}' spec.schema.properties`,
+              message: `Procedure '${p.metadata.name}' matched field '${field}' is not declared on Schema '${target.metadata.name}'.`,
+            }),
+          );
+        }
+        if (!(field in inputProps) || inputProps[field] === undefined) {
+          out.push(
+            validateDiagnostic({
+              code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+              severity: "error",
+              path: manifestPath("Procedure", p.metadata.name, `/spec/input/properties/${field}`, filePaths),
+              expected: `property '${field}' declared in Procedure input properties`,
+              message: `Procedure '${p.metadata.name}' matched field '${field}' is missing from Procedure input properties.`,
+            }),
+          );
+        }
+        if (!inputRequired.has(field)) {
+          out.push(
+            validateDiagnostic({
+              code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+              severity: "error",
+              path: manifestPath("Procedure", p.metadata.name, "/spec/input/required", filePaths),
+              expected: `required to include matched field '${field}'`,
+              message: `Procedure '${p.metadata.name}' matched field '${field}' must be in input.required.`,
+            }),
+          );
+        }
+      }
+
+      if ("id" in inputProps && inputProps.id !== undefined) {
+        out.push(
+          validateDiagnostic({
+            code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+            severity: "error",
+            path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/id", filePaths),
+            value: inputProps.id,
+            expected: "no 'id' property when using matched upsert",
+            message: `Procedure '${p.metadata.name}' uses matched upsert; input must not declare 'id'.`,
+          }),
+        );
+      }
+      if ("expectedVersion" in inputProps && inputProps.expectedVersion !== undefined) {
+        out.push(
+          validateDiagnostic({
+            code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+            severity: "error",
+            path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/expectedVersion", filePaths),
+            value: inputProps.expectedVersion,
+            expected: "no 'expectedVersion' property when using matched upsert",
+            message: `Procedure '${p.metadata.name}' uses matched upsert; input must not declare 'expectedVersion'.`,
+          }),
+        );
+      }
+    } else {
+      const hasId = "id" in inputProps && inputProps.id !== undefined;
+      const hasVersion = "expectedVersion" in inputProps && inputProps.expectedVersion !== undefined;
+      if (hasId || hasVersion) {
+        if (!hasId) {
+          out.push(
+            validateDiagnostic({
+              code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+              severity: "error",
+              path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/id", filePaths),
+              expected: "property 'id' with type 'string'",
+              message: `Procedure '${p.metadata.name}' (builtin op: upsert) declares expectedVersion but is missing property 'id'.`,
+            }),
+          );
+        } else if (!isStrictTypeString(inputProps.id)) {
+          out.push(
+            validateDiagnostic({
+              code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+              severity: "error",
+              path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/id", filePaths),
+              value: inputProps.id?.type,
+              expected: "type: 'string'",
+              message: `Procedure '${p.metadata.name}' (builtin op: upsert) property 'id' must be strict type 'string'.`,
+            }),
+          );
+        }
+
+        if (!hasVersion) {
+          out.push(
+            validateDiagnostic({
+              code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+              severity: "error",
+              path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/expectedVersion", filePaths),
+              expected: "property 'expectedVersion' with type 'number'",
+              message: `Procedure '${p.metadata.name}' (builtin op: upsert) declares id but is missing property 'expectedVersion'.`,
+            }),
+          );
+        } else if (!isStrictTypeNumber(inputProps.expectedVersion)) {
+          out.push(
+            validateDiagnostic({
+              code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+              severity: "error",
+              path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/expectedVersion", filePaths),
+              value: inputProps.expectedVersion?.type,
+              expected: "type: 'number'",
+              message: `Procedure '${p.metadata.name}' (builtin op: upsert) property 'expectedVersion' must be strict type 'number'.`,
+            }),
+          );
+        }
+      }
+    }
+  }
+
   return out;
+}
+
+function isObjectSchema(s: JsonSchema): boolean {
+  if (s.type === "object") return true;
+  if (Array.isArray(s.type) && s.type.length === 1 && s.type[0] === "object") return true;
+  return false;
+}
+
+function isStrictTypeString(s?: JsonSchema): boolean {
+  if (!s || typeof s !== "object") return false;
+  if (Array.isArray(s.type)) return false;
+  if (s.type !== "string") return false;
+  if ((s as { nullable?: boolean }).nullable === true) return false;
+  return true;
+}
+
+function isStrictTypeNumber(s?: JsonSchema): boolean {
+  if (!s || typeof s !== "object") return false;
+  if (Array.isArray(s.type)) return false;
+  if (s.type !== "number") return false;
+  if ((s as { nullable?: boolean }).nullable === true) return false;
+  return true;
 }
 
 function checkGuards(

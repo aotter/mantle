@@ -1343,7 +1343,7 @@ function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
     }
     return;
   }
-  rejectUnknownKeys(h, ["kind", "op", "schema"], idx, "/spec/handler");
+  rejectUnknownKeys(h, ["kind", "op", "schema", "match"], idx, "/spec/handler");
   const op = h["op"];
   if (typeof op !== "string" || !V01_BUILTIN_OPS.has(op as BuiltinOp)) {
     throw new ManifestParseError(
@@ -1358,6 +1358,42 @@ function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
       idx,
       "/spec/handler/schema",
     );
+  }
+  if ("match" in h) {
+    if (op !== "upsert") {
+      throw new ManifestParseError(
+        "Procedure.spec.handler.match is only valid when op is 'upsert'",
+        idx,
+        "/spec/handler/match",
+      );
+    }
+    const match = h["match"];
+    if (!Array.isArray(match) || match.length === 0) {
+      throw new ManifestParseError(
+        "Procedure.spec.handler.match must be a non-empty array of field names",
+        idx,
+        "/spec/handler/match",
+      );
+    }
+    const seen = new Set<string>();
+    for (let i = 0; i < match.length; i++) {
+      const field = match[i];
+      if (typeof field !== "string" || field.length === 0) {
+        throw new ManifestParseError(
+          `Procedure.spec.handler.match[${i}] must be a non-empty string`,
+          idx,
+          `/spec/handler/match/${i}`,
+        );
+      }
+      if (seen.has(field)) {
+        throw new ManifestParseError(
+          `Procedure.spec.handler.match contains duplicate field '${field}'`,
+          idx,
+          `/spec/handler/match/${i}`,
+        );
+      }
+      seen.add(field);
+    }
   }
   if ("ref" in h) {
     throw new ManifestParseError(

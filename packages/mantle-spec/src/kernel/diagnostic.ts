@@ -77,6 +77,7 @@ export const DIAGNOSTIC_CODES = [
   "VIEW_DIALECT_UNSUPPORTED",
   // Builtin handlers + lifecycle hooks: validate / boot.
   "BUILTIN_HANDLER_SCHEMA_UNKNOWN",
+  "BUILTIN_HANDLER_CONTRACT_INVALID",
   "LIFECYCLE_SCHEMA_UNKNOWN",
   "LIFECYCLE_HOOK_REJECTED",
   // Locale + translates: validate / boot.

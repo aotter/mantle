@@ -4,6 +4,7 @@ import {
   EntryDataValidator,
   resolveLifecycle,
   runtimeDiagnostic,
+  type HandlerBuiltinBinding,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
 import type { EntryRow } from "../../domain/model/EntryRow.js";
@@ -96,7 +97,7 @@ export class InvokeBuiltinUseCase {
       case "update":
         return this.opUpdate(schema, input, request.ctx, now);
       case "upsert":
-        return this.opUpsert(schema, input, request.ctx, now);
+        return this.opUpsert(schema, input, request.ctx, now, handler);
       case "delete":
         return this.opDelete(schema, input, request.ctx);
       case "archive":
@@ -133,16 +134,18 @@ export class InvokeBuiltinUseCase {
       validator: this.validator,
       siteConfig: this.siteConfig,
     });
-    return this.entries.create({
-      id: this.idgen.next(),
-      collection: schema.metadata.name,
-      status: resolveLifecycle(schema) === "operational" ? "published" : "draft",
-      data,
-      authorId: ctx.user?.id ?? null,
-      now,
-      hookContext: ctx,
-      originalInput: input,
-    });
+    return withConflictDiagnostic(opPath, () =>
+      this.entries.create({
+        id: this.idgen.next(),
+        collection: schema.metadata.name,
+        status: resolveLifecycle(schema) === "operational" ? "published" : "draft",
+        data,
+        authorId: ctx.user?.id ?? null,
+        now,
+        hookContext: ctx,
+        originalInput: input,
+      }),
+    );
   }
 
   private async opUpdate(
@@ -153,8 +156,10 @@ export class InvokeBuiltinUseCase {
     preloaded?: EntryRow,
   ): Promise<EntryRow> {
     const opPath = `usecase/InvokeBuiltin/${schema.metadata.name}/update`;
-    const id = requireField(input, "id", "string");
-    const expectedVersion = requireField(input, "expectedVersion", "number");
+    const id = preloaded ? preloaded.id : requireField(input, "id", "string");
+    const expectedVersion = preloaded
+      ? preloaded.version
+      : requireField(input, "expectedVersion", "number");
     // Read the existing row and PATCH it. The create projector
     // (`projectAndStamp`) would drop every Schema field the caller
     // omitted and re-stamp `x-mantle-bind` fields (author → current
@@ -190,15 +195,17 @@ export class InvokeBuiltinUseCase {
       excludeId: id,
       siteConfig: this.siteConfig,
     });
-    return this.entries.update({
-      id,
-      collection: schema.metadata.name,
-      expectedVersion,
-      data,
-      now,
-      hookContext: ctx,
-      originalInput: input,
-    });
+    return withConflictDiagnostic(opPath, () =>
+      this.entries.update({
+        id,
+        collection: schema.metadata.name,
+        expectedVersion,
+        data,
+        now,
+        hookContext: ctx,
+        originalInput: input,
+      }),
+    );
   }
 
   private async opUpsert(
@@ -206,7 +213,23 @@ export class InvokeBuiltinUseCase {
     input: Record<string, unknown>,
     ctx: HandlerContext,
     now: number,
+    handler: HandlerBuiltinBinding,
   ): Promise<EntryRow> {
+    if (handler.match && handler.match.length > 0) {
+      const fields: Record<string, unknown> = {};
+      for (const field of handler.match) {
+        fields[field] = input[field];
+      }
+      const existing = await this.entries.findByDataFields({
+        collection: schema.metadata.name,
+        fields,
+      });
+      if (existing) {
+        return this.opUpdate(schema, input, ctx, now, existing);
+      }
+      return this.opCreate(schema, input, ctx, now);
+    }
+
     const id = typeof input["id"] === "string" ? input["id"] : undefined;
     if (id) {
       const existing = await this.entries.get(id);
@@ -279,15 +302,18 @@ export class InvokeBuiltinUseCase {
         }),
       );
     }
-    return this.entries.transitionStatus({
-      id,
-      collection: schema.metadata.name,
-      to: "archived",
-      expectedVersion: existing.version,
-      now,
-      hookContext: ctx,
-      originalInput: input,
-    });
+    const opPath = `usecase/InvokeBuiltin/${schema.metadata.name}/archive`;
+    return withConflictDiagnostic(opPath, () =>
+      this.entries.transitionStatus({
+        id,
+        collection: schema.metadata.name,
+        to: "archived",
+        expectedVersion: existing.version,
+        now,
+        hookContext: ctx,
+        originalInput: input,
+      }),
+    );
   }
 }
 

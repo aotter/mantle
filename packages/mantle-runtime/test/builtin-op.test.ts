@@ -41,17 +41,65 @@ const postsSchemaWithBindings: SchemaManifest = {
   },
 };
 
+const siteSettingsSchema: SchemaManifest = {
+  apiVersion: "cms.mantle.aotter.net/v1",
+  kind: "Schema",
+  metadata: { name: "site-settings" },
+  spec: {
+    title: "Site Settings",
+    schema: {
+      type: "object",
+      properties: {
+        siteKey: { type: "string" },
+        variant: { type: "string" },
+        theme: { type: "string" },
+        title: { type: "string" },
+        authorId: { type: "string", "x-mantle-bind": "ctx.user" },
+        createdAt: { type: "number", "x-mantle-bind": "now" },
+      },
+    },
+    uniqueIndexes: [["siteKey"], ["siteKey", "variant"]],
+    lifecycle: "publishing",
+  },
+};
+
+const compositeOnlySchema: SchemaManifest = {
+  apiVersion: "cms.mantle.aotter.net/v1",
+  kind: "Schema",
+  metadata: { name: "composite-settings" },
+  spec: {
+    title: "Composite Settings",
+    schema: {
+      type: "object",
+      properties: {
+        siteKey: { type: "string" },
+        variant: { type: "string" },
+        theme: { type: "string" },
+        title: { type: "string" },
+      },
+    },
+    uniqueIndexes: [["siteKey", "variant"]],
+    lifecycle: "publishing",
+  },
+};
+
 function builtinProcedure(opts: {
   name: string;
-  op: "create" | "update" | "upsert" | "delete";
+  op: "create" | "update" | "upsert" | "delete" | "archive";
   schema: string;
   inputProperties?: Record<string, unknown>;
+  required?: string[];
+  match?: string[];
 }): ProcedureManifest {
   return makeProcedure({
     name: opts.name,
-    input: { type: "object", properties: opts.inputProperties ?? { data: { type: "object" } } },
+    input: {
+      type: "object",
+      properties: opts.inputProperties ?? { data: { type: "object" } },
+      ...(opts.required ? { required: opts.required } : {}),
+    },
     output: { type: "object" },
-    handler: { kind: "builtin", op: opts.op, schema: opts.schema },
+    handler: { kind: "builtin", op: opts.op, schema: opts.schema, match: opts.match },
   });
 }
 
@@ -92,6 +140,8 @@ function harness(opts: {
       delete: (a) => entries.delete(a),
       transitionStatus: (a) => entries.transitionStatus(a),
       list: (a) => entries.list(a),
+      findByDataField: (a) => entries.findByDataField(a),
+      findByDataFields: (a) => entries.findByDataFields(a),
     },
     schemas,
     clock,
@@ -556,3 +606,269 @@ describe("InvokeBuiltinUseCase — lifecycle hook integration", () => {
     expect(list.rows).toHaveLength(0);
   });
 });
+
+describe("InvokeBuiltinUseCase — matched upsert", () => {
+  const upsertByKey = builtinProcedure({
+    name: "upsertSettingByKey",
+    op: "upsert",
+    schema: "site-settings",
+    match: ["siteKey"],
+    inputProperties: {
+      siteKey: { type: "string" },
+      theme: { type: "string" },
+      title: { type: "string" },
+    },
+    required: ["siteKey", "theme"],
+  });
+
+  const upsertByComposite = builtinProcedure({
+    name: "upsertCompositeSetting",
+    op: "upsert",
+    schema: "composite-settings",
+    match: ["siteKey", "variant"],
+    inputProperties: {
+      siteKey: { type: "string" },
+      variant: { type: "string" },
+      theme: { type: "string" },
+      title: { type: "string" },
+    },
+    required: ["siteKey", "variant"],
+  });
+
+  it("matched upsert creates when no row matches", async () => {
+    const h = harness({ schemas: [siteSettingsSchema] });
+    const result = await h.invoke.execute({
+      procedure: upsertByKey,
+      input: { siteKey: "main", theme: "dark", title: "Main Site" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const row = result.data as { id: string; version: number; data: Record<string, unknown> };
+    expect(row.version).toBe(1);
+    expect(row.data).toMatchObject({
+      siteKey: "main",
+      theme: "dark",
+      title: "Main Site",
+      authorId: "u-1",
+      createdAt: NOW,
+    });
+    const list = await h.store.list({ collection: "site-settings" });
+    expect(list.rows).toHaveLength(1);
+  });
+
+  it("matched upsert patches the matching row without creating a second row", async () => {
+    const h = harness({ schemas: [siteSettingsSchema] });
+    const created = await h.invoke.execute({
+      procedure: upsertByKey,
+      input: { siteKey: "main", theme: "dark", title: "Main Site" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const createdRow = created.data as { id: string; version: number };
+
+    const updated = await h.invoke.execute({
+      procedure: upsertByKey,
+      input: { siteKey: "main", theme: "light" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) return;
+    const updatedRow = updated.data as { id: string; version: number; data: Record<string, unknown> };
+    expect(updatedRow.id).toBe(createdRow.id);
+    expect(updatedRow.version).toBe(2);
+    expect(updatedRow.data["theme"]).toBe("light");
+
+    const list = await h.store.list({ collection: "site-settings" });
+    expect(list.rows).toHaveLength(1);
+  });
+
+  it("composite unique-index matching works in declared order", async () => {
+    const h = harness({ schemas: [compositeOnlySchema] });
+    const r1 = await h.invoke.execute({
+      procedure: upsertByComposite,
+      input: { siteKey: "docs", variant: "v1", theme: "dark", title: "Docs V1" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    const r2 = await h.invoke.execute({
+      procedure: upsertByComposite,
+      input: { siteKey: "docs", variant: "v2", theme: "solarized", title: "Docs V2" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    expect(r1.ok && r2.ok).toBe(true);
+
+    // Update V1 only
+    const updateV1 = await h.invoke.execute({
+      procedure: upsertByComposite,
+      input: { siteKey: "docs", variant: "v1", theme: "light" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    expect(updateV1.ok).toBe(true);
+    if (!updateV1.ok) return;
+    const v1Row = updateV1.data as { version: number; data: Record<string, unknown> };
+    expect(v1Row.version).toBe(2);
+    expect(v1Row.data["theme"]).toBe("light");
+
+    // V2 remains version 1 and solarized
+    const all = await h.store.list({ collection: "composite-settings" });
+    expect(all.rows).toHaveLength(2);
+    const v2Row = all.rows.find((r) => r.data["variant"] === "v2");
+    expect(v2Row?.version).toBe(1);
+    expect(v2Row?.data["theme"]).toBe("solarized");
+  });
+
+  it("omitted fields survive the update branch", async () => {
+    const h = harness({ schemas: [siteSettingsSchema] });
+    await h.invoke.execute({
+      procedure: upsertByKey,
+      input: { siteKey: "main", theme: "dark", title: "Preserve Me" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+
+    const updated = await h.invoke.execute({
+      procedure: upsertByKey,
+      input: { siteKey: "main", theme: "light" }, // omitted 'title'
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) return;
+    const row = updated.data as { data: Record<string, unknown> };
+    expect(row.data["theme"]).toBe("light");
+    expect(row.data["title"]).toBe("Preserve Me");
+  });
+
+  it("lifecycle hooks fire for matched upsert with original caller input", async () => {
+    let beforeUpdateInput: unknown = null;
+    let hookCtxUser: unknown = null;
+    const h = harness({
+      schemas: [siteSettingsSchema],
+      procedures: [
+        makeProcedure({
+          name: "logSettingsUpdate",
+          handlerRef: "logSettingsUpdate",
+          input: {
+            type: "object",
+            properties: {
+              siteKey: { type: "string" },
+              theme: { type: "string" },
+            },
+          },
+          output: { type: "object" },
+        }),
+      ],
+      triggers: [
+        {
+          procedure: "logSettingsUpdate",
+          schema: "site-settings",
+          on: ["before_update"],
+        },
+      ],
+      handlers: {
+        logSettingsUpdate: (input, ctx) => {
+          beforeUpdateInput = input;
+          hookCtxUser = (ctx as { user?: { id: string } })?.user?.id;
+          return { ok: true };
+        },
+      },
+    });
+
+    await h.invoke.execute({
+      procedure: upsertByKey,
+      input: { siteKey: "main", theme: "dark", title: "Init" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+
+    const callerInput = { siteKey: "main", theme: "light" };
+    const res = await h.invoke.execute({
+      procedure: upsertByKey,
+      input: callerInput,
+      ctx: { user: { id: "u-2" }, staff: null, env: {} },
+    });
+    expect(res.ok).toBe(true);
+    // Preserves caller's original input; does not expose synthesized id/expectedVersion
+    expect(beforeUpdateInput).toEqual(callerInput);
+    expect(hookCtxUser).toBe("u-2");
+  });
+
+  it("OCC conflict returns CONFLICT diagnostic and does not retry", async () => {
+    const h = harness({ schemas: [siteSettingsSchema] });
+    const created = await h.invoke.execute({
+      procedure: upsertByKey,
+      input: { siteKey: "main", theme: "dark" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    if (!created.ok) throw new Error("create failed");
+    const row = created.data as { id: string };
+
+    // Simulate concurrent modification bumping the version in the store to 2
+    const current = await h.store.get(row.id);
+    if (current) {
+      h.store._seed({ ...current, version: 2 });
+    }
+
+    // Intercept findByDataFields to simulate returning a snapshot before the concurrent update
+    const origFindByDataFields = h.store.findByDataFields.bind(h.store);
+    h.store.findByDataFields = async (args) => {
+      const found = await origFindByDataFields(args);
+      return found ? { ...found, version: 1 } : null;
+    };
+
+    const result = await h.invoke.execute({
+      procedure: upsertByKey,
+      input: { siteKey: "main", theme: "light" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostic.code).toBe("CONFLICT");
+  });
+
+  it("concurrent-create race: atomic unique constraint failure surfaces as CONFLICT diagnostic without duplicates", async () => {
+    const h = harness({ schemas: [siteSettingsSchema] });
+
+    // Writer 1 executes matched upsert and creates the row.
+    const w1 = await h.invoke.execute({
+      procedure: upsertByKey,
+      input: { siteKey: "main", theme: "dark" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    expect(w1.ok).toBe(true);
+
+    // Simulate Writer 2 racing: Writer 2 did lookup BEFORE Writer 1 created (so findByDataFields was a miss),
+    // and both writers entered the create branch. When Writer 2 reaches entries.create,
+    // the store simulates a unique constraint error (e.g. SQLite SQLITE_CONSTRAINT_UNIQUE).
+    const origCreate = h.store.create.bind(h.store);
+    h.store.create = async (args) => {
+      // Check if siteKey already exists in store
+      const conflict = [...(h.store as unknown as { rows: Map<string, { data: Record<string, unknown> }> }).rows.values()]
+        .some((r) => r.data["siteKey"] === args.data["siteKey"]);
+      if (conflict) {
+        const err = new Error("UNIQUE constraint failed: entries.uq_site-settings__siteKey");
+        (err as { code: string }).code = "SQLITE_CONSTRAINT_UNIQUE";
+        throw err;
+      }
+      return origCreate(args);
+    };
+
+    // Force Writer 2 to simulate missing lookup (as in a real concurrent race)
+    const origFindByDataFields = h.store.findByDataFields.bind(h.store);
+    h.store.findByDataFields = async () => null;
+
+    const w2 = await h.invoke.execute({
+      procedure: upsertByKey,
+      input: { siteKey: "main", theme: "solarized" },
+      ctx: { user: { id: "u-2" }, staff: null, env: {} },
+    });
+
+    expect(w2.ok).toBe(false);
+    if (w2.ok) return;
+    expect(w2.diagnostic.code).toBe("CONFLICT");
+
+    // No duplicate row created
+    const all = await h.store.list({ collection: "site-settings" });
+    expect(all.rows).toHaveLength(1);
+    expect(all.rows[0]?.data["theme"]).toBe("dark");
+  });
+});
+

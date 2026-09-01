@@ -411,6 +411,8 @@ export interface HandlerBuiltinBinding {
   /** Target Schema name (`Schema.metadata.name`). The op writes to
    *  this collection. */
   readonly schema: string;
+  /** Ordered composite unique-index field names for matched upsert (valid only when `op: upsert`). */
+  readonly match?: readonly string[];
 }
 
 /** Closed predicate vocabulary. `ctx.user` and `ctx.auth` are bare

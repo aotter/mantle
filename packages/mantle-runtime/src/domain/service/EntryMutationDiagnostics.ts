@@ -40,8 +40,35 @@ export async function withConflictDiagnostic<T>(
         }),
       );
     }
+    if (isUniqueConstraintError(err)) {
+      throw new DiagnosticError(
+        runtimeDiagnostic({
+          code: "CONFLICT",
+          severity: "error",
+          path,
+          expected: "unique entry data per Schema uniqueIndexes",
+          message: `Unique constraint violation during entry write: ${(err as Error).message}`,
+        }),
+      );
+    }
     throw err;
   }
+}
+
+export function isUniqueConstraintError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message || "";
+  if (
+    msg.includes("UNIQUE constraint failed") ||
+    msg.includes("unique constraint") ||
+    msg.includes("duplicate key") ||
+    (err as { code?: string }).code === "SQLITE_CONSTRAINT_UNIQUE" ||
+    (err as { code?: string }).code === "SQLITE_CONSTRAINT" ||
+    (err as { code?: string }).code === "23505"
+  ) {
+    return true;
+  }
+  return false;
 }
 
 export function notFoundDiagnostic(
