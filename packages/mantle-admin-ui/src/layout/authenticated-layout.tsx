@@ -150,7 +150,7 @@ export function AuthenticatedLayout({
               : undefined}
           />
           <Main className={fullBleed
-            ? "min-h-0 max-w-none overflow-hidden px-0 py-0 pt-14 pb-10"
+            ? "min-h-0 max-w-none overflow-hidden px-0 py-0 pt-14 pb-10 sm:px-0"
             : `min-h-0 overflow-y-auto overscroll-contain pt-20 ${workspace === "developer" ? "pb-14" : "pb-20"}`}>
             {children}
           </Main>

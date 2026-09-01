@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Database, Eye, type LucideIcon } from "lucide-react";
+import { ChevronRight, Database, Eye, Search, type LucideIcon } from "lucide-react";
 
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
@@ -18,6 +18,7 @@ import { cn } from "../../lib/utils";
 import { ErrorBox } from "../../ui/page";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { SidebarContent, SidebarHeader, SidebarInput } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -81,6 +82,7 @@ export function DataModelView(): React.ReactElement {
   const { language } = usePreferences();
   const location = useAdminLocation();
   const { navigate } = useAdminRouter();
+  const [search, setSearch] = React.useState("");
   const snapshot = useQuery(developerConsoleQueryOptions());
   const items: ModelItem[] = snapshot.data ? [
     ...snapshot.data.dataModel.schemas.map((model) => ({ kind: "Schema" as const, id: `Schema:${model.name}`, model })),
@@ -88,6 +90,10 @@ export function DataModelView(): React.ReactElement {
   ] : [];
   const requestedId = new URLSearchParams(location.search).get("selected");
   const selected = items.find((item) => item.id === requestedId) ?? items[0] ?? null;
+  const query = search.trim().toLowerCase();
+  const visibleItems = query
+    ? items.filter((item) => `${item.kind} ${item.model.name} ${resolveLocalizedText(item.model.title, language) ?? ""}`.toLowerCase().includes(query))
+    : items;
   const select = (id: string): void => navigate(`/admin/dev/model?selected=${encodeURIComponent(id)}`, { replace: true });
 
   if (snapshot.isError) return <div className="p-6"><ErrorBox error={snapshot.error} /></div>;
@@ -96,7 +102,7 @@ export function DataModelView(): React.ReactElement {
 
   return (
     <section className="grid h-full min-h-0 grid-cols-[15rem_minmax(0,1fr)]" aria-label={t(language, "model.title")}>
-      <ModelSidebar items={items} selectedId={selected.id} onSelect={select} />
+      <ModelSidebar items={visibleItems} selectedId={selected.id} search={search} onSearch={setSearch} onSelect={select} />
       <div className="grid min-h-0 grid-cols-[minmax(28rem,1fr)_18rem]">
         <main className="min-w-0 overflow-y-auto border-e">
           {selected.kind === "Schema" ? <SchemaDefinition model={selected.model} /> : <ViewDefinition model={selected.model} />}
@@ -111,12 +117,21 @@ export function DataModelView(): React.ReactElement {
   );
 }
 
-function ModelSidebar({ items, selectedId, onSelect }: { items: ModelItem[]; selectedId: string; onSelect: (id: string) => void }): React.ReactElement {
+function ModelSidebar({ items, selectedId, search, onSearch, onSelect }: { items: ModelItem[]; selectedId: string; search: string; onSearch: (value: string) => void; onSelect: (id: string) => void }): React.ReactElement {
   const { language } = usePreferences();
   return (
-    <aside className="min-h-0 overflow-y-auto border-e bg-sidebar p-2 text-sidebar-foreground" aria-label={t(language, "model.objects")}>
-      <ModelGroup title={t(language, "model.schemas")} icon={Database} items={items.filter((item) => item.kind === "Schema")} selectedId={selectedId} onSelect={onSelect} />
-      <ModelGroup title={t(language, "model.views")} icon={Eye} items={items.filter((item) => item.kind === "View")} selectedId={selectedId} onSelect={onSelect} />
+    <aside className="flex min-h-0 flex-col border-e bg-sidebar text-sidebar-foreground" aria-label={t(language, "model.objects")}>
+      <SidebarHeader className="border-b border-sidebar-border">
+        <label className="relative">
+          <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <span className="sr-only">{t(language, "model.search")}</span>
+          <SidebarInput value={search} onChange={(event) => onSearch(event.currentTarget.value)} placeholder={t(language, "model.search")} className="ps-8" />
+        </label>
+      </SidebarHeader>
+      <SidebarContent className="gap-0 p-2">
+        <ModelGroup title={t(language, "model.schemas")} icon={Database} items={items.filter((item) => item.kind === "Schema")} selectedId={selectedId} onSelect={onSelect} />
+        <ModelGroup title={t(language, "model.views")} icon={Eye} items={items.filter((item) => item.kind === "View")} selectedId={selectedId} onSelect={onSelect} />
+      </SidebarContent>
     </aside>
   );
 }
