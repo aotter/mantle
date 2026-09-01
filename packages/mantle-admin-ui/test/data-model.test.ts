@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { layoutComponents } from "../src/features/logic/atom-graph";
+import { connectedComponents, layoutComponents } from "../src/features/logic/atom-graph";
 import { flattenSchemaFields, schemaFieldMarkers } from "../src/features/logic/data-model-view";
 import type { DeveloperConsoleSnapshot, DeveloperSchemaModel } from "../src/lib/types";
 
@@ -57,6 +57,7 @@ describe("layoutComponents", () => {
 
     const positions = layoutComponents(graph);
     expect(positions.size).toBe(4);
+    expect(connectedComponents(graph).map((component) => component.length).sort()).toEqual([1, 3]);
     expect(positions.get("Trigger:start")!.x).toBeLessThan(positions.get("Procedure:run")!.x);
     expect(positions.get("Procedure:run")!.x).toBeLessThan(positions.get("Schema:records")!.x);
   });

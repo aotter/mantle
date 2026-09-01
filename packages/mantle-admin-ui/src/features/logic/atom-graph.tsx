@@ -6,6 +6,7 @@ import {
   Controls,
   MarkerType,
   Panel,
+  Position,
   ReactFlow,
   type Edge,
   type Node,
@@ -74,16 +75,48 @@ export function AtomGraph({
   React.useEffect(() => {
     setNodes(layout.nodes);
     setEdges(layout.edges);
+    setSelectedId(null);
   }, [layout, setEdges, setNodes]);
 
   const inspect = (id: string): void => {
+    const family = new Set(connectedComponents(graph).find((component) => component.includes(id)) ?? [id]);
     setSelectedId(id);
-    setNodes((current) => current.map((node) => ({ ...node, selected: node.id === id })));
+    setNodes((current) => current.map((node) => ({
+      ...node,
+      selected: node.id === id,
+      style: { ...node.style, opacity: family.has(node.id) ? 1 : 0.16, transition: "opacity 180ms ease" },
+      zIndex: family.has(node.id) ? 1 : 0,
+    })));
+    setEdges((current) => current.map((edge) => {
+      const active = family.has(edge.source) && family.has(edge.target);
+      return {
+        ...edge,
+        style: { ...edge.style, opacity: active ? 1 : 0.08, stroke: active ? "var(--foreground)" : "var(--muted-foreground)", strokeWidth: active ? 2.5 : 1.25 },
+        labelStyle: { ...edge.labelStyle, opacity: active ? 1 : 0.08 },
+        labelBgStyle: { ...edge.labelBgStyle, opacity: active ? 1 : 0.08 },
+        markerEnd: typeof edge.markerEnd === "object" ? { ...edge.markerEnd, color: active ? "var(--foreground)" : "var(--muted-foreground)" } : edge.markerEnd,
+        zIndex: active ? 1 : 0,
+      };
+    }));
+    window.requestAnimationFrame(() => void flow?.fitView({
+      nodes: [...family].map((familyId) => ({ id: familyId })),
+      padding: { top: "12%", right: "34%", bottom: "12%", left: "8%" },
+      maxZoom: 1.05,
+      duration: 320,
+    }));
   };
 
   const closeHud = (): void => {
     setSelectedId(null);
-    setNodes((current) => current.map((node) => node.selected ? { ...node, selected: false } : node));
+    setNodes((current) => current.map((node) => ({ ...node, selected: false, style: { ...node.style, opacity: 1 }, zIndex: 0 })));
+    setEdges((current) => current.map((edge) => ({
+      ...edge,
+      style: { ...edge.style, opacity: 1, stroke: "var(--muted-foreground)", strokeWidth: 2 },
+      labelStyle: { ...edge.labelStyle, opacity: 1 },
+      labelBgStyle: { ...edge.labelBgStyle, opacity: 1 },
+      markerEnd: typeof edge.markerEnd === "object" ? { ...edge.markerEnd, color: "var(--muted-foreground)" } : edge.markerEnd,
+      zIndex: 0,
+    })));
   };
 
   const relayout = (): void => {
@@ -140,6 +173,8 @@ function layoutGraph(
       return {
         id: atom.id,
         position,
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
         data: {
           label: (
             <div className="min-w-0 space-y-1.5 text-start">
@@ -178,30 +213,7 @@ export function layoutComponents(graph: DeveloperConsoleSnapshot["graph"]): Map<
   const nodeHeight = 76;
   const gap = 72;
   const targetRowWidth = 1800;
-  const adjacency = new Map(graph.atoms.map(({ id }) => [id, new Set<string>()]));
-  graph.relations.forEach(({ sourceId, targetId }) => {
-    adjacency.get(sourceId)?.add(targetId);
-    adjacency.get(targetId)?.add(sourceId);
-  });
-  const remaining = new Set(adjacency.keys());
-  const components: string[][] = [];
-  while (remaining.size) {
-    const first = remaining.values().next().value as string;
-    const component: string[] = [];
-    const pending = [first];
-    remaining.delete(first);
-    while (pending.length) {
-      const id = pending.pop();
-      if (!id) continue;
-      component.push(id);
-      adjacency.get(id)?.forEach((related) => {
-        if (!remaining.delete(related)) return;
-        pending.push(related);
-      });
-    }
-    components.push(component);
-  }
-
+  const components = connectedComponents(graph);
   const laidOut = components.map((ids) => {
     const idSet = new Set(ids);
     const layout = new dagre.graphlib.Graph({ multigraph: true }).setDefaultEdgeLabel(() => ({}));
@@ -245,6 +257,33 @@ export function layoutComponents(graph: DeveloperConsoleSnapshot["graph"]): Map<
     rowHeight = Math.max(rowHeight, component.height);
   });
   return positions;
+}
+
+export function connectedComponents(graph: DeveloperConsoleSnapshot["graph"]): string[][] {
+  const adjacency = new Map(graph.atoms.map(({ id }) => [id, new Set<string>()]));
+  graph.relations.forEach(({ sourceId, targetId }) => {
+    adjacency.get(sourceId)?.add(targetId);
+    adjacency.get(targetId)?.add(sourceId);
+  });
+  const remaining = new Set(adjacency.keys());
+  const components: string[][] = [];
+  while (remaining.size) {
+    const first = remaining.values().next().value as string;
+    const component: string[] = [];
+    const pending = [first];
+    remaining.delete(first);
+    while (pending.length) {
+      const id = pending.pop();
+      if (!id) continue;
+      component.push(id);
+      adjacency.get(id)?.forEach((related) => {
+        if (!remaining.delete(related)) return;
+        pending.push(related);
+      });
+    }
+    components.push(component);
+  }
+  return components;
 }
 
 function GraphHud({ atom, graph, atomsById, onClose, onInspect, onOpen }: { atom: DeveloperAtom; graph: DeveloperConsoleSnapshot["graph"]; atomsById: ReadonlyMap<string, DeveloperAtom>; onClose: () => void; onInspect: (id: string) => void; onOpen: (atom: DeveloperAtom) => void }): React.ReactElement {
