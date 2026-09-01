@@ -51,6 +51,7 @@ export class InMemoryEntryRepository implements EntryRepository, EntryReader {
     const schema = this.schemasByName?.get(args.collection);
     if (schema?.spec.uniqueIndexes) {
       for (const uq of schema.spec.uniqueIndexes) {
+        if (uq.some((field) => args.data[field] == null)) continue;
         const conflict = [...this.rows.values()]
           .filter((r) => r.collection === args.collection)
           .some((r) => uq.every((field) => r.data[field] === args.data[field]));
@@ -88,6 +89,7 @@ export class InMemoryEntryRepository implements EntryRepository, EntryReader {
     const schema = this.schemasByName?.get(row.collection);
     if (schema?.spec.uniqueIndexes) {
       for (const uq of schema.spec.uniqueIndexes) {
+        if (uq.some((field) => args.data[field] == null)) continue;
         const conflict = [...this.rows.values()]
           .filter((r) => r.collection === row.collection && r.id !== args.id)
           .some((r) => uq.every((field) => r.data[field] === args.data[field]));

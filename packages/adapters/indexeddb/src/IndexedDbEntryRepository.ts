@@ -294,8 +294,12 @@ export class IndexedDbEntryRepository implements EntryRepository, EntryReader {
     const uniqueIndexes = schema?.spec.uniqueIndexes;
     if (!uniqueIndexes || uniqueIndexes.length === 0) return;
 
-    const rows = await store.index("byCollection").getAll(collection);
+    let rows: readonly EntryRow[] | null = null;
     for (const uniqueIndex of uniqueIndexes) {
+      if (uniqueIndex.some((field) => data[field] == null)) continue;
+      if (!rows) {
+        rows = await store.index("byCollection").getAll(collection);
+      }
       const match = rows.find((r) => {
         if (excludeId && r.id === excludeId) return false;
         return uniqueIndex.every((col) => r.data[col] === data[col]);

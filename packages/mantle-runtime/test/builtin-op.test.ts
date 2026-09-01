@@ -11,6 +11,7 @@ import { LifecycleHookingEntryRepository } from "../src/infrastructure/persisten
 import { InvokeBuiltinUseCase } from "../src/usecase/procedure/InvokeBuiltinUseCase.js";
 import { InvokeProcedureUseCase } from "../src/usecase/procedure/InvokeProcedureUseCase.js";
 import { RunLifecycleHooksUseCase } from "../src/usecase/lifecycle/RunLifecycleHooksUseCase.js";
+import { EntryUniqueConflict } from "../src/domain/model/EntryRow.js";
 import { InMemoryEntryRepository } from "./fakes/in-memory-store.js";
 import { makeLifecycleTrigger, makeProcedure } from "./fakes/manifests.js";
 
@@ -855,6 +856,70 @@ describe("InvokeBuiltinUseCase — matched upsert", () => {
     const all = await h.store.list({ collection: "site-settings" });
     expect(all.rows).toHaveLength(1);
     expect(all.rows[0]?.data["theme"]).toBe("dark");
+  });
+
+  it("preserves NULL semantics for optional unique index fields in in-memory repository", async () => {
+    const optionalUniqueSchema: SchemaManifest = {
+      apiVersion: "cms.mantle.aotter.net/v1",
+      kind: "Schema",
+      metadata: { name: "profiles" },
+      spec: {
+        title: "Profiles",
+        schema: {
+          type: "object",
+          properties: {
+            username: { type: "string" },
+            handle: { type: "string" },
+          },
+          required: ["username"],
+        },
+        uniqueIndexes: [["handle"]],
+        lifecycle: "publishing",
+      },
+    };
+
+    const h = harness({ schemas: [optionalUniqueSchema] });
+
+    // Two entries omitting the optional unique 'handle' can both be created
+    const r1 = await h.store.create({
+      id: "p-1",
+      collection: "profiles",
+      status: "draft",
+      data: { username: "alice" },
+      authorId: null,
+      now: 1,
+    });
+    const r2 = await h.store.create({
+      id: "p-2",
+      collection: "profiles",
+      status: "draft",
+      data: { username: "bob" },
+      authorId: null,
+      now: 2,
+    });
+    expect(r1.id).toBe("p-1");
+    expect(r2.id).toBe("p-2");
+
+    // Explicit handle duplicate throws EntryUniqueConflict
+    await h.store.create({
+      id: "p-3",
+      collection: "profiles",
+      status: "draft",
+      data: { username: "charlie", handle: "dev" },
+      authorId: null,
+      now: 3,
+    });
+
+    await expect(
+      h.store.create({
+        id: "p-4",
+        collection: "profiles",
+        status: "draft",
+        data: { username: "dana", handle: "dev" },
+        authorId: null,
+        now: 4,
+      }),
+    ).rejects.toBeInstanceOf(EntryUniqueConflict);
   });
 });
 
