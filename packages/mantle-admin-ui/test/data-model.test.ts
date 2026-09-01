@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { layoutComponents } from "../src/features/logic/atom-graph";
 import { flattenSchemaFields, schemaFieldMarkers } from "../src/features/logic/data-model-view";
-import type { DeveloperSchemaModel } from "../src/lib/types";
+import type { DeveloperConsoleSnapshot, DeveloperSchemaModel } from "../src/lib/types";
 
 describe("flattenSchemaFields", () => {
   it("keeps nested paths, required flags, and exact constraints", () => {
@@ -36,6 +37,28 @@ describe("flattenSchemaFields", () => {
       { kind: "translation", target: "products.slug", direction: "outgoing", sourceId: "Schema:product-translations", pointer: "/spec/translates" },
       { kind: "unique", index: 0, fields: ["slug", "locale"], sourceId: "Schema:product-translations", pointer: "/spec/uniqueIndexes/0" },
     ]);
+  });
+});
+
+describe("layoutComponents", () => {
+  it("packs disconnected flows while preserving their left-to-right direction", () => {
+    const graph: DeveloperConsoleSnapshot["graph"] = {
+      atoms: [
+        { id: "Trigger:start", kind: "Trigger", name: "start", title: null },
+        { id: "Procedure:run", kind: "Procedure", name: "run", title: null },
+        { id: "Schema:records", kind: "Schema", name: "records", title: null },
+        { id: "View:standalone", kind: "View", name: "standalone", title: null },
+      ],
+      relations: [
+        { id: "start-run", kind: "trigger-target", sourceId: "Trigger:start", targetId: "Procedure:run", pointer: "/spec/target", value: "run" },
+        { id: "run-records", kind: "procedure-schema", sourceId: "Procedure:run", targetId: "Schema:records", pointer: "/spec/schema", value: "records" },
+      ],
+    };
+
+    const positions = layoutComponents(graph);
+    expect(positions.size).toBe(4);
+    expect(positions.get("Trigger:start")!.x).toBeLessThan(positions.get("Procedure:run")!.x);
+    expect(positions.get("Procedure:run")!.x).toBeLessThan(positions.get("Schema:records")!.x);
   });
 });
 
