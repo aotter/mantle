@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Braces, Globe2, RadioTower } from "lucide-react";
+import { Braces, Globe2 } from "lucide-react";
 
 import { t } from "../../app/i18n";
 import { usePreferences } from "../../app/preferences";
@@ -42,7 +42,7 @@ export function InterfaceDocsView(): React.ReactElement {
       <Tabs value={tab} onValueChange={(value) => navigate(`/admin/dev/docs?tab=${value}`)} className="gap-0">
         <TabsList variant="line" className="sticky top-0 z-10 h-11 w-full justify-start rounded-none border-b bg-background/95 px-5 backdrop-blur sm:px-7">
           <TabsTrigger value="api" className="flex-none"><Globe2 aria-hidden />{t(language, "docs.api")}</TabsTrigger>
-          <TabsTrigger value="mcp" className="flex-none"><RadioTower aria-hidden />{t(language, "docs.mcp")}</TabsTrigger>
+          <TabsTrigger value="mcp" className="flex-none"><McpIcon />{t(language, "docs.mcp")}</TabsTrigger>
           <TabsTrigger value="webmcp" className="flex-none"><Braces aria-hidden />{t(language, "docs.webmcp")}</TabsTrigger>
         </TabsList>
         <TabsContent value="api"><DocSection intro={t(language, "docs.httpIntro")}><OperationGrid>{http.map((operation) => <HttpCard key={`${operation.method}:${operation.path}`} operation={operation} />)}</OperationGrid>{!http.length ? <EmptyDocs /> : null}</DocSection></TabsContent>
@@ -65,6 +65,16 @@ export function InterfaceDocsView(): React.ReactElement {
         </TabsContent>
       </Tabs>
     </section>
+  );
+}
+
+function McpIcon(): React.ReactElement {
+  return (
+    <svg viewBox="0 0 190 195" fill="none" aria-hidden>
+      <path d="M25 97.8528 92.8823 29.9706c9.3727-9.3726 24.5687-9.3726 33.9407 0 9.373 9.3725 9.373 24.5685 0 33.9411L75.5581 115.177" stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
+      <path d="m76.2653 114.47 50.5577-50.5583c9.373-9.3726 24.569-9.3726 33.942 0l.353.3535c9.373 9.3726 9.373 24.5686 0 33.9411L99.7248 159.6a8 8 0 0 0 0 11.313l12.6062 12.607" stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
+      <path d="m109.853 46.9411-50.2048 50.2046c-9.3725 9.3723-9.3725 24.5683 0 33.9413 9.3726 9.372 24.5686 9.372 33.9412 0l50.2046-50.2048" stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
+    </svg>
   );
 }
 
