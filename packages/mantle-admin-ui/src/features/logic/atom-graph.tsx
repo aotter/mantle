@@ -2,13 +2,18 @@ import * as React from "react";
 import dagre from "@dagrejs/dagre";
 import { ArrowDownRight, ArrowUpRight, ExternalLink, LayoutGrid, X } from "lucide-react";
 import {
+  BaseEdge,
   ControlButton,
   Controls,
+  EdgeLabelRenderer,
   MarkerType,
   Panel,
   Position,
   ReactFlow,
+  getSmoothStepPath,
   type Edge,
+  type EdgeProps,
+  type EdgeTypes,
   type Node,
   type ReactFlowInstance,
   useEdgesState,
@@ -43,6 +48,10 @@ const atomKindNodeTone = {
   Procedure: "!border-amber-400/70 !bg-amber-500/10 dark:!bg-amber-950/70",
   Trigger: "!border-rose-400/70 !bg-rose-500/10 dark:!bg-rose-950/70",
 } as const;
+
+type ManifestGraphEdge = Edge<{ label: string; opacity: number }, "manifest">;
+
+const edgeTypes = { manifest: ManifestEdge } satisfies EdgeTypes;
 
 export function relationLabel(language: AdminLanguage, kind: DeveloperRelationKind): string {
   if (kind === "translation-parent") return t(language, "developer.graph.relation.translationParent");
@@ -92,8 +101,7 @@ export function AtomGraph({
       return {
         ...edge,
         style: { ...edge.style, opacity: active ? 1 : 0.08, stroke: active ? "var(--foreground)" : "var(--muted-foreground)", strokeWidth: active ? 2.5 : 1.25 },
-        labelStyle: { ...edge.labelStyle, opacity: active ? 1 : 0.08 },
-        labelBgStyle: { ...edge.labelBgStyle, opacity: active ? 1 : 0.08 },
+        data: edge.data ? { ...edge.data, opacity: active ? 1 : 0.08 } : edge.data,
         markerEnd: typeof edge.markerEnd === "object" ? { ...edge.markerEnd, color: active ? "var(--foreground)" : "var(--muted-foreground)" } : edge.markerEnd,
         zIndex: active ? 1 : 0,
       };
@@ -112,8 +120,7 @@ export function AtomGraph({
     setEdges((current) => current.map((edge) => ({
       ...edge,
       style: { ...edge.style, opacity: 1, stroke: "var(--muted-foreground)", strokeWidth: 2 },
-      labelStyle: { ...edge.labelStyle, opacity: 1 },
-      labelBgStyle: { ...edge.labelBgStyle, opacity: 1 },
+      data: edge.data ? { ...edge.data, opacity: 1 } : edge.data,
       markerEnd: typeof edge.markerEnd === "object" ? { ...edge.markerEnd, color: "var(--muted-foreground)" } : edge.markerEnd,
       zIndex: 0,
     })));
@@ -134,6 +141,7 @@ export function AtomGraph({
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onInit={setFlow}
+      edgeTypes={edgeTypes}
       colorMode={theme}
       fitView
       fitViewOptions={{ padding: 0.08 }}
@@ -195,17 +203,30 @@ function layoutGraph(
       id: relation.id,
       source: relation.sourceId,
       target: relation.targetId,
-      type: "smoothstep",
-      label: relationLabel(language, relation.kind),
+      type: "manifest",
+      data: { label: relationLabel(language, relation.kind), opacity: 1 },
       ariaLabel: `${relationLabel(language, relation.kind)}: ${relation.sourceId} to ${relation.targetId}`,
       markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: "var(--muted-foreground)" },
       style: { stroke: "var(--muted-foreground)", strokeWidth: 2 },
-      labelStyle: { fill: "var(--foreground)", fontSize: 12, fontWeight: 700 },
-      labelBgStyle: { fill: "var(--popover)", fillOpacity: 1, stroke: "var(--border)", strokeWidth: 1 },
-      labelBgPadding: [8, 4],
-      labelBgBorderRadius: 7,
     } satisfies Edge)),
   };
+}
+
+function ManifestEdge({ id, data, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, markerEnd, style }: EdgeProps<ManifestGraphEdge>): React.ReactElement {
+  const [path, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+  return (
+    <>
+      <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />
+      <EdgeLabelRenderer>
+        <div
+          className="nodrag nopan pointer-events-none absolute z-20 whitespace-nowrap rounded-md border bg-popover px-1.5 py-0.5 text-[10px] font-semibold text-popover-foreground shadow-sm"
+          style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, opacity: data?.opacity ?? 1, boxShadow: "0 0 0 3px var(--background)", transition: "opacity 180ms ease" }}
+        >
+          {data?.label}
+        </div>
+      </EdgeLabelRenderer>
+    </>
+  );
 }
 
 export function layoutComponents(graph: DeveloperConsoleSnapshot["graph"]): Map<string, { x: number; y: number }> {
