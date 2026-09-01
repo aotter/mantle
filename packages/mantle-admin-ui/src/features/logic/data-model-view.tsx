@@ -2,15 +2,13 @@ import * as React from "react";
 import dagre from "@dagrejs/dagre";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Background,
-  BackgroundVariant,
   Controls,
   MarkerType,
   ReactFlow,
   type Edge,
   type Node,
 } from "@xyflow/react";
-import { ChevronRight, Database, Eye, Search, type LucideIcon } from "lucide-react";
+import { Check, ChevronRight, Copy, Database, Eye, Search, type LucideIcon } from "lucide-react";
 
 import "@xyflow/react/dist/style.css";
 
@@ -28,6 +26,7 @@ import type {
 import { cn } from "../../lib/utils";
 import { ErrorBox } from "../../ui/page";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SidebarContent, SidebarHeader, SidebarInput } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -115,7 +114,7 @@ export function DataModelView(): React.ReactElement {
   return (
     <section className="grid h-full min-h-0 grid-cols-[15rem_minmax(0,1fr)]" aria-label={t(language, "model.title")}>
       <ModelSidebar items={visibleItems} selectedId={selected.id} search={search} onSearch={setSearch} onSelect={select} />
-      <div className="grid min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(28rem,1fr)_24rem] xl:grid-rows-1">
+      <div className="grid min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)_24rem] xl:grid-cols-[minmax(28rem,1fr)_24rem] xl:grid-rows-1">
         <main className="min-w-0 overflow-y-auto border-b xl:border-e xl:border-b-0">
           {selected.kind === "Schema" ? <SchemaDefinition model={selected.model} /> : <ViewDefinition model={selected.model} />}
         </main>
@@ -237,8 +236,8 @@ function RelatedAtomsGraph({ selectedId, graph, onSelect }: { selectedId: string
   const ids = new Set([selectedId, ...relations.flatMap(({ sourceId, targetId }) => [sourceId, targetId])]);
   const atoms = graph.atoms.filter(({ id }) => ids.has(id));
   const layout = new dagre.graphlib.Graph({ multigraph: true }).setDefaultEdgeLabel(() => ({}));
-  layout.setGraph({ rankdir: "LR", nodesep: 18, ranksep: 64, marginx: 12, marginy: 12 });
-  atoms.forEach(({ id }) => layout.setNode(id, { width: 172, height: 64 }));
+  layout.setGraph({ rankdir: "TB", nodesep: 28, ranksep: 72, marginx: 16, marginy: 16 });
+  atoms.forEach(({ id }) => layout.setNode(id, { width: 220, height: 76 }));
   relations.forEach(({ id, sourceId, targetId }) => layout.setEdge(sourceId, targetId, {}, id));
   dagre.layout(layout);
   const nodes: Node[] = atoms.map((atom) => {
@@ -247,10 +246,10 @@ function RelatedAtomsGraph({ selectedId, graph, onSelect }: { selectedId: string
     const navigable = atom.kind === "Schema" || atom.kind === "View";
     return {
       id: atom.id,
-      position: { x: position.x - 86, y: position.y - 32 },
-      data: { label: <div className="min-w-0 text-start"><div className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground">{atom.kind}</div><div className="truncate font-mono text-xs font-semibold">{atom.name}</div>{title && title !== atom.name ? <div className="truncate text-[10px] text-muted-foreground">{title}</div> : null}</div> },
+      position: { x: position.x - 110, y: position.y - 38 },
+      data: { label: <div className="min-w-0 space-y-1.5 text-start"><span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atom.kind}</span><div><div className="truncate font-mono text-xs font-semibold">{atom.name}</div>{title && title !== atom.name ? <div className="truncate text-[10px] text-muted-foreground">{title}</div> : null}</div></div> },
       ariaLabel: `${atom.kind} ${atom.name}`,
-      className: cn("!w-[172px] !rounded-lg !border-border !bg-card !px-3 !py-2 !text-card-foreground !shadow-sm", atom.id === selectedId && "!border-primary !ring-1 !ring-primary/30", navigable && atom.id !== selectedId && "cursor-pointer"),
+      className: cn("!w-[220px] !rounded-xl !border-border/80 !bg-card !px-3 !py-2.5 !text-card-foreground !shadow-md transition-colors", atom.id === selectedId ? "!border-primary !bg-primary/10 !ring-2 !ring-primary/30" : "hover:!border-foreground/30", navigable && atom.id !== selectedId && "cursor-pointer"),
     };
   });
   const edges: Edge[] = relations.map(({ id, sourceId, targetId, label }) => ({
@@ -259,8 +258,13 @@ function RelatedAtomsGraph({ selectedId, graph, onSelect }: { selectedId: string
     target: targetId,
     label: label.split(".").slice(-2).join("."),
     type: "smoothstep",
-    markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12 },
-    labelStyle: { fontSize: 8 },
+    markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: "var(--muted-foreground)" },
+    style: { stroke: "var(--muted-foreground)", strokeWidth: 1.5 },
+    labelStyle: { fill: "var(--foreground)", fontFamily: "ui-monospace, monospace", fontSize: 10, fontWeight: 500 },
+    labelShowBg: true,
+    labelBgStyle: { fill: "var(--background)", fillOpacity: 0.95 },
+    labelBgPadding: [5, 3],
+    labelBgBorderRadius: 5,
   }));
   return (
     <aside className="flex min-h-0 flex-col" aria-label={t(language, "model.relatedAtoms")}>
@@ -269,6 +273,7 @@ function RelatedAtomsGraph({ selectedId, graph, onSelect }: { selectedId: string
         <span className="font-mono text-xs text-muted-foreground">{atoms.length - 1}</span>
       </div>
       <ReactFlow
+        className="bg-muted/10"
         nodes={nodes}
         edges={edges}
         colorMode={theme}
@@ -282,8 +287,7 @@ function RelatedAtomsGraph({ selectedId, graph, onSelect }: { selectedId: string
           if (node.id.startsWith("Schema:") || node.id.startsWith("View:")) onSelect(node.id);
         }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
-        <Controls showInteractive={false} />
+        <Controls className="overflow-hidden rounded-lg border bg-background/90 shadow-sm" showInteractive={false} />
       </ReactFlow>
     </aside>
   );
@@ -294,6 +298,7 @@ function FactGrid({ entries }: { entries: Array<[string, string]> }): React.Reac
 }
 
 function DefinitionTabs({ definitionLabel, rawLabel, rawValue, children }: { definitionLabel: string; rawLabel: string; rawValue: unknown; children: React.ReactNode }): React.ReactElement {
+  const raw = JSON.stringify(rawValue, null, 2);
   return (
     <Tabs defaultValue="definition" className="gap-0">
       <TabsList variant="line" className="h-10 w-full justify-start rounded-none border-b px-5">
@@ -301,8 +306,34 @@ function DefinitionTabs({ definitionLabel, rawLabel, rawValue, children }: { def
         <TabsTrigger value="raw" className="flex-none px-3">{rawLabel}</TabsTrigger>
       </TabsList>
       <TabsContent value="definition">{children}</TabsContent>
-      <TabsContent value="raw" className="p-5"><CodeBlock value={JSON.stringify(rawValue, null, 2)} className="max-h-none" /></TabsContent>
+      <TabsContent value="raw" className="p-5"><div className="relative"><JsonCopyButton value={raw} label={rawLabel} /><CodeBlock value={raw} className="max-h-none pe-12" /></div></TabsContent>
     </Tabs>
+  );
+}
+
+const atomKindTone = {
+  Schema: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  View: "border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  Procedure: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  Trigger: "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300",
+} as const;
+
+function JsonCopyButton({ value, label }: { value: string; label: string }): React.ReactElement {
+  const { language } = usePreferences();
+  const [copied, setCopied] = React.useState(false);
+  async function copy(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  }
+  return (
+    <Button type="button" variant="secondary" size="icon-sm" className="absolute end-2 top-2 z-10 shadow-sm" onClick={() => void copy()} aria-label={`${t(language, "common.copy")} ${label}`} aria-pressed={copied}>
+      {copied ? <Check className="text-[color:var(--success)]" aria-hidden /> : <Copy aria-hidden />}
+    </Button>
   );
 }
 
