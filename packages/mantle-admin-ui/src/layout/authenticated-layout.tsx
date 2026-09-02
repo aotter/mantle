@@ -44,11 +44,13 @@ import type { AdminBrand, NavGroupData, NavItem, NavLink } from "./types";
 interface AuthenticatedLayoutProps {
   children: React.ReactNode;
   workspace?: "content" | "developer";
+  preview?: boolean;
 }
 
 export function AuthenticatedLayout({
   children,
   workspace = "content",
+  preview = false,
 }: AuthenticatedLayoutProps): React.ReactElement {
   const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
   const { pathname, search } = useAdminLocation();
@@ -59,6 +61,7 @@ export function AuthenticatedLayout({
     queryKey: ["me"],
     queryFn: () => api.get<AdminUser>("/me"),
     retry: false,
+    enabled: !preview,
   });
   const collectionsQuery = useQuery<Collection[]>({
     queryKey: ["collections"],
@@ -71,6 +74,7 @@ export function AuthenticatedLayout({
   const site = useQuery<SiteInfo>({
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
+    enabled: !preview,
   });
   const viewsQuery = useQuery<ViewManifestInfo[]>({
     ...viewsManifestQueryOptions(),
@@ -132,7 +136,7 @@ export function AuthenticatedLayout({
           groups={groups}
           pathname={pathname}
           search={search}
-          user={{
+          user={preview ? undefined : {
             login: me.data?.login ?? null,
             image: me.data?.image ?? null,
             role: me.data?.role ?? null,
@@ -144,7 +148,7 @@ export function AuthenticatedLayout({
             site={resolvedBrand}
             publicUrl={site.data?.publicUrl}
             pageTitle={pageTitle}
-            workspaceLink={workspace === "developer"
+            workspaceLink={preview ? undefined : workspace === "developer"
               ? { href: "/admin", label: t(language, "common.contentAdmin"), icon: LayoutDashboard }
               : me.data?.role === "owner"
               ? { href: "/admin/dev", label: t(language, "developer.workspaceTitle"), icon: Wrench }

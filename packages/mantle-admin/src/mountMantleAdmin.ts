@@ -1962,7 +1962,7 @@ function developerAudience(predicates: readonly AuthPredicate[]): DeveloperAudie
   return null;
 }
 
-function projectDeveloperConsole(plan: RuntimePlan): {
+export function projectDeveloperConsole(plan: RuntimePlan): {
   readonly dataModel: {
     readonly schemas: ReadonlyArray<{
       readonly name: string;

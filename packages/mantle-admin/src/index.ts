@@ -11,6 +11,7 @@ export {
   type AdminStaffUser,
   type MantleAdminRef,
   type MantleAdminRuntime,
+  projectDeveloperConsole,
   runMantleUseCase,
   type StaffRole,
 } from "./mountMantleAdmin.js";

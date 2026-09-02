@@ -1,13 +1,16 @@
 import { api } from "./api";
+import { isDeveloperSnapshotPreview } from "./developer-snapshot-preview";
 import type { AuthMethodInfo, DeveloperConsoleSnapshot, StaffOperation, ViewManifestInfo } from "./types";
 
 export function developerConsoleQueryOptions(): {
   queryKey: readonly ["developer-console"];
   queryFn: () => Promise<DeveloperConsoleSnapshot>;
+  enabled: boolean;
 } {
   return {
     queryKey: ["developer-console"] as const,
     queryFn: () => api.get<DeveloperConsoleSnapshot>("/developer-console"),
+    enabled: !isDeveloperSnapshotPreview(),
   };
 }
 

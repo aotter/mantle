@@ -19,7 +19,7 @@ interface AppSidebarProps {
   groups: ReadonlyArray<NavGroupData>;
   pathname: string;
   search: string;
-  user: {
+  user?: {
     login: string | null;
     image: string | null;
     role: "owner" | "editor" | "contributor" | null;
@@ -62,9 +62,11 @@ export function AppSidebar({
           />
         ))}
       </SidebarContent>
-      <SidebarFooter className="border-t border-sidebar-border">
-        <NavUser login={user.login} image={user.image} role={user.role} />
-      </SidebarFooter>
+      {user ? (
+        <SidebarFooter className="border-t border-sidebar-border">
+          <NavUser login={user.login} image={user.image} role={user.role} />
+        </SidebarFooter>
+      ) : null}
       <SidebarRail aria-label={t(language, "common.toggleSidebar")} />
     </Sidebar>
   );

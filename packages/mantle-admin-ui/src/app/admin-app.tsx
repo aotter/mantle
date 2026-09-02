@@ -20,12 +20,17 @@ import { DataModelView } from "../features/logic/data-model-view";
 import { DeveloperOverviewView } from "../features/logic/developer-overview-view";
 import { LogicView } from "../features/logic/logic-view";
 import { InterfaceDocsView } from "../features/logic/interface-docs-view";
+import { isDeveloperSnapshotPreview } from "../lib/developer-snapshot-preview";
 
 export function AdminApp(): React.ReactElement {
   const location = useAdminLocation();
 
   if (location.pathname === "/admin/sign-in") {
     return <SignInView />;
+  }
+
+  if (isDeveloperSnapshotPreview()) {
+    return <DeveloperWorkspace path={location.pathname} preview />;
   }
 
   return <Gate path={location.pathname} />;
@@ -125,37 +130,7 @@ function Gate({ path }: { path: string }): React.ReactElement {
     );
   }
 
-  if (path === "/admin/dev") {
-    return (
-      <AuthenticatedLayout workspace="developer">
-        <DeveloperOverviewView />
-      </AuthenticatedLayout>
-    );
-  }
-
-  if (path === "/admin/dev/model") {
-    return (
-      <AuthenticatedLayout workspace="developer">
-        <DataModelView />
-      </AuthenticatedLayout>
-    );
-  }
-
-  if (path === "/admin/dev/logic") {
-    return (
-      <AuthenticatedLayout workspace="developer">
-        <LogicView />
-      </AuthenticatedLayout>
-    );
-  }
-
-  if (path === "/admin/dev/docs") {
-    return (
-      <AuthenticatedLayout workspace="developer">
-        <InterfaceDocsView />
-      </AuthenticatedLayout>
-    );
-  }
+  if (path.startsWith("/admin/dev")) return <DeveloperWorkspace path={path} />;
 
   const viewMatch = path.match(/^\/admin\/views\/([^/]+)\/?$/);
   if (viewMatch) {
@@ -171,4 +146,13 @@ function Gate({ path }: { path: string }): React.ReactElement {
       <NotFoundView path={path} />
     </AuthenticatedLayout>
   );
+}
+
+function DeveloperWorkspace({ path, preview = false }: { path: string; preview?: boolean }): React.ReactElement {
+  const view = path === "/admin/dev" ? <DeveloperOverviewView />
+    : path === "/admin/dev/model" ? <DataModelView />
+    : path === "/admin/dev/logic" ? <LogicView />
+    : path === "/admin/dev/docs" ? <InterfaceDocsView />
+    : <NotFoundView path={path} />;
+  return <AuthenticatedLayout workspace="developer" preview={preview}>{view}</AuthenticatedLayout>;
 }
