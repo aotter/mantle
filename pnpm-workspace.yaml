@@ -43,12 +43,12 @@ catalog:
   '@libsql/client': ^0.17.4
   '@vercel/functions': ^3.9.3
   idb: ^8.0.3
-  '@vitest/browser-playwright': 4.1.10
+  '@vitest/browser-playwright': 4.1.11
   playwright: ^1.62.1
   # Shared toolchain — every package's devDeps.
   typescript: ^6.0.3
   '@types/node': ^26
-  vitest: ^4.1.10
+  vitest: ^4.1.11
 
 allowBuilds:
   esbuild: true
