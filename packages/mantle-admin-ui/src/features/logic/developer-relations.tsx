@@ -7,7 +7,7 @@ import { useAdminRouter } from "../../app/router";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { DeveloperAtom, DeveloperAtomRelation, DeveloperConsoleSnapshot } from "../../lib/types";
 import { cn } from "../../lib/utils";
-import { atomKindTone, relationLabel } from "./atom-graph";
+import { atomKindLabel, atomKindTone, relationLabel } from "./atom-graph";
 import { developerDetailHref } from "./developer-route";
 
 export function DeveloperRelations({ selectedId, graph, onNavigate }: { selectedId: string; graph: DeveloperConsoleSnapshot["graph"]; onNavigate?: () => void }): React.ReactElement {
@@ -54,7 +54,7 @@ function RelationCard({ relation, atom, outgoing, onSelect, onOpenManifest }: { 
     <div className="rounded-lg border bg-card p-3">
       <button type="button" onClick={() => onSelect(atom.id)} className="flex w-full min-w-0 items-center gap-2 text-start hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <DirectionIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-        <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atom.kind}</span>
+        <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atomKindLabel(language, atom.kind)}</span>
         <span className="min-w-0 truncate font-mono text-xs font-semibold">{atom.name}</span>
       </button>
       {title && title !== atom.name ? <div className="mt-1 truncate ps-5 text-xs text-muted-foreground">{title}</div> : null}

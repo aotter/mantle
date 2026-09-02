@@ -82,6 +82,13 @@ export function audienceLabel(language: AdminLanguage, audience: DeveloperAudien
   return t(language, "developer.graph.audience.apiClients");
 }
 
+export function atomKindLabel(language: AdminLanguage, kind: DeveloperAtom["kind"]): string {
+  if (kind === "Schema") return t(language, "developer.graph.kind.schema");
+  if (kind === "View") return t(language, "developer.graph.kind.view");
+  if (kind === "Procedure") return t(language, "developer.graph.kind.procedure");
+  return t(language, "developer.graph.kind.trigger");
+}
+
 function audienceDescription(language: AdminLanguage, audience: DeveloperAudience): string {
   if (audience === "public") return t(language, "developer.graph.audienceDescription.public");
   if (audience === "members") return t(language, "developer.graph.audienceDescription.members");
@@ -293,7 +300,7 @@ function layoutGraph(
           label: (
             <div className="min-w-0 space-y-1.5 text-start">
               <div className="flex items-center gap-1.5">
-                <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atom.kind}</span>
+                <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atomKindLabel(language, atom.kind)}</span>
                 {atom.transport ? <span className="inline-flex rounded border bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">{atom.transport}</span> : null}
               </div>
               <div className="truncate font-mono text-xs font-semibold">{atom.name}</div>
@@ -301,7 +308,7 @@ function layoutGraph(
             </div>
           ),
         },
-        ariaLabel: `${atom.kind} ${atom.name}`,
+        ariaLabel: `${atomKindLabel(language, atom.kind)} ${atom.name}`,
         className: cn(
           "!h-[76px] !w-[220px] !cursor-grab !rounded-xl !border-2 !bg-white !px-3 !py-2 !text-card-foreground !shadow-lg transition-[border-color,box-shadow,filter] hover:brightness-110 active:!cursor-grabbing dark:!bg-[#0a1124]",
           atomKindNodeTone[atom.kind],
@@ -452,7 +459,7 @@ function GraphHud({ atom, graph, atomsById, traceAtoms, onClose, onSelect, onOpe
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atom.kind}</span>
+              <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atomKindLabel(language, atom.kind)}</span>
               {atom.transport ? <span className="inline-flex rounded border bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">{atom.transport}</span> : null}
               {atom.audience ? <AudienceBadge language={language} audience={atom.audience} /> : null}
             </div>

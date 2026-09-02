@@ -24,7 +24,7 @@ import { SidebarContent, SidebarHeader, SidebarInput } from "@/components/ui/sid
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { atomKindTone, audienceLabel, focusSlice, traceAtomIds } from "./atom-graph";
+import { atomKindLabel, atomKindTone, audienceLabel, focusSlice, traceAtomIds } from "./atom-graph";
 import { CodeTab, FactGrid, flattenSchemaFields } from "./data-model-view";
 import { DeveloperExplorer } from "./developer-explorer";
 import { developerDetailHref, developerSelectionHref } from "./developer-route";
@@ -153,7 +153,7 @@ function LogicDefinition({ item, snapshot, manifestOpen, manifestFocus, onNaviga
   return (
     <>
       <div className="flex min-h-14 items-center gap-3 border-b px-5 py-3 pe-32">
-        <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[item.kind])}>{item.kind}</span>
+        <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[item.kind])}>{atomKindLabel(language, item.kind)}</span>
         {item.kind === "Trigger" ? <><Badge variant="outline" className="text-[9px] uppercase">{audienceLabel(language, item.model.audience)}</Badge><Badge variant="secondary" className="font-mono text-[9px]">{triggerChannel(item.model.source)}</Badge></> : null}
         <h1 className="min-w-0 truncate font-mono text-sm font-semibold">{item.model.name}</h1>
         {title && title !== item.model.name ? <span className="truncate text-sm text-muted-foreground">{title}</span> : null}
@@ -201,7 +201,7 @@ function ExecutionStrip({ selectedId, graph, onNavigate }: { selectedId: string;
           <React.Fragment key={atom.id}>
             {index ? <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden /> : null}
             <button type="button" onClick={() => onNavigate(atom.id)} className={cn("min-w-0 max-w-52 rounded-lg border bg-card px-3 py-2 text-start shadow-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", atom.id === selectedId && "ring-2 ring-primary/50")}>
-              <span className={cn("inline-flex rounded border px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atom.kind}</span>
+              <span className={cn("inline-flex rounded border px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atomKindLabel(language, atom.kind)}</span>
               <span className="mt-1 block truncate font-mono text-xs font-semibold">{atom.name}</span>
             </button>
           </React.Fragment>

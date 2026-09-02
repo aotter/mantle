@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { focusSlice, traceAtomIds } from "../src/features/logic/atom-graph";
+import { atomKindLabel, focusSlice, traceAtomIds } from "../src/features/logic/atom-graph";
 import { developerDetailHref, developerSelectionHref } from "../src/features/logic/developer-route";
 import type { DeveloperConsoleSnapshot } from "../src/lib/types";
 
@@ -42,5 +42,11 @@ describe("manifest graph trace", () => {
     expect(developerSelectionHref("/admin/dev/logic", "Trigger:place-order-http")).toBe("/admin/dev/logic?selected=Trigger%3Aplace-order-http");
     expect(developerDetailHref("Procedure:place-order")).toBe("/admin/dev/logic?selected=Procedure%3Aplace-order");
     expect(developerDetailHref("View:open-orders")).toBe("/admin/dev/model?selected=View%3Aopen-orders");
+  });
+
+  it("localizes developer atom labels", () => {
+    expect(atomKindLabel("en", "Procedure")).toBe("Procedure");
+    expect(atomKindLabel("zh-TW", "Procedure")).toBe("程序");
+    expect(atomKindLabel("ja", "Procedure")).toBe("プロシージャ");
   });
 });

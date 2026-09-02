@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { audienceLabel } from "./atom-graph";
+import { atomKindLabel, audienceLabel } from "./atom-graph";
 import { developerDetailHref } from "./developer-route";
 
 const WEBMCP_SNIPPET = `import { bindWebMcp } from "@aotter/mantle-web/webmcp";
@@ -100,7 +100,7 @@ function HttpCard({ operation }: { operation: DeveloperHttpOperation }): React.R
         <CardDescription>{operation.description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="flex flex-wrap gap-2"><Badge variant="outline">{operation.kind}</Badge><Badge variant="outline">{audienceLabel(language, operation.audience)}</Badge><Badge variant="outline">{t(language, "docs.target")}: {operation.target}</Badge></div>
+        <div className="flex flex-wrap gap-2"><Badge variant="outline">{atomKindLabel(language, operation.kind === "view" ? "View" : "Procedure")}</Badge><Badge variant="outline">{audienceLabel(language, operation.audience)}</Badge><Badge variant="outline">{t(language, "docs.target")}: {operation.target}</Badge></div>
         <SchemaDetails label={t(language, "docs.inputSchema")} schema={operation.input} />
         {operation.output ? <SchemaDetails label={t(language, "docs.outputSchema")} schema={operation.output} /> : null}
       </CardContent>
@@ -113,12 +113,12 @@ function CapabilityCard({ capability, webMcp = false }: { capability: DeveloperC
   return (
     <Card>
       <CardHeader>
-        <div className="flex flex-wrap items-center gap-2"><Badge variant="secondary">{capability.kind}</Badge><Badge variant="outline">{capability.surface}</Badge><Badge variant="outline">{audienceLabel(language, capability.audience)}</Badge>{webMcp ? <Badge variant="outline">{t(language, "docs.readOnly")}</Badge> : null}</div>
+        <div className="flex flex-wrap items-center gap-2"><Badge variant="secondary">{atomKindLabel(language, capability.kind === "view" ? "View" : "Procedure")}</Badge><Badge variant="outline">{audienceLabel(language, capability.surface)}</Badge><Badge variant="outline">{audienceLabel(language, capability.audience)}</Badge>{webMcp ? <Badge variant="outline">{t(language, "docs.readOnly")}</Badge> : null}</div>
         <CardTitle className="font-mono text-sm"><a href={developerDetailHref(`${capability.kind === "view" ? "View" : "Procedure"}:${capability.target}`)} className="hover:underline">{capability.name}</a></CardTitle>
         <CardDescription>{capability.description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="flex flex-wrap gap-2"><Badge variant="outline">{t(language, "docs.target")}: {capability.target}</Badge>{capability.trigger ? <Badge variant="outline">Trigger: {capability.trigger}</Badge> : null}</div>
+        <div className="flex flex-wrap gap-2"><Badge variant="outline">{t(language, "docs.target")}: {capability.target}</Badge>{capability.trigger ? <Badge variant="outline">{atomKindLabel(language, "Trigger")}: {capability.trigger}</Badge> : null}</div>
         <SchemaDetails label={t(language, "docs.inputSchema")} schema={capability.input} />
         {capability.output ? <SchemaDetails label={t(language, "docs.outputSchema")} schema={capability.output} /> : null}
       </CardContent>
