@@ -9,15 +9,12 @@ import { ConfirmProvider } from "./ui/confirm-dialog";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { usePreferences } from "./app/preferences";
-import { installDeveloperSnapshotPreview } from "./lib/developer-snapshot-preview";
 import "./styles/global.css";
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {
   throw new Error("Missing #root element.");
 }
-
-installDeveloperSnapshotPreview(queryClient);
 
 ReactDOM.createRoot(rootElement).render(
   <StrictMode>

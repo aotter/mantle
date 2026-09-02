@@ -1,6 +1,5 @@
 import * as React from "react";
 import { flushSync } from "react-dom";
-import { isDeveloperSnapshotPreview } from "../lib/developer-snapshot-preview";
 
 export interface AdminLocation {
   pathname: string;
@@ -16,11 +15,6 @@ const AdminRouterContext = React.createContext<AdminRouterContextValue | null>(n
 
 function readLocation(): AdminLocation {
   if (typeof window === "undefined") return { pathname: "/admin", search: "" };
-  if (isDeveloperSnapshotPreview()) {
-    const state = window.history.state as { mantleAdminPreviewLocation?: unknown } | null;
-    if (isAdminLocation(state?.mantleAdminPreviewLocation)) return state.mantleAdminPreviewLocation;
-    return { pathname: "/admin/dev", search: "" };
-  }
   return {
     pathname: window.location.pathname,
     search: window.location.search,
@@ -51,13 +45,6 @@ export function AdminRouterProvider({
       const next = `${url.pathname}${url.search}${url.hash}`;
       const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       const nextLocation = { pathname: url.pathname, search: url.search };
-      if (isDeveloperSnapshotPreview()) {
-        const state = { mantleAdminPreviewLocation: nextLocation };
-        if (opts.replace) window.history.replaceState(state, "", window.location.href);
-        else window.history.pushState(state, "", window.location.href);
-        flushSync(() => setLocation(nextLocation));
-        return;
-      }
       if (next !== current) {
         if (opts.replace) window.history.replaceState(null, "", next);
         else window.history.pushState(null, "", next);
@@ -104,14 +91,6 @@ export function AdminRouterProvider({
       {children}
     </AdminRouterContext.Provider>
   );
-}
-
-function isAdminLocation(value: unknown): value is AdminLocation {
-  if (!value || typeof value !== "object") return false;
-  const location = value as Partial<AdminLocation>;
-  return typeof location.pathname === "string"
-    && location.pathname.startsWith("/admin/dev")
-    && typeof location.search === "string";
 }
 
 export function useAdminRouter(): AdminRouterContextValue {
