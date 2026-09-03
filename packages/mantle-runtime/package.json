@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle-runtime",
-  "version": "0.1.0-alpha.14",
+  "version": "0.1.0-alpha.15",
   "description": "Headless runtime engine for Mantle: entry operations, procedures, views, triggers, lifecycle, and adapter-agnostic ports.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
