@@ -2,13 +2,18 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarChart3,
+  BookOpenText,
+  Database,
   Folder,
   Globe,
   Home,
   Images,
+  LayoutDashboard,
+  Wrench,
   Settings as SettingsIcon,
   ContactRound,
   Users,
+  Workflow,
 } from "lucide-react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -38,11 +43,16 @@ import type { AdminBrand, NavGroupData, NavItem, NavLink } from "./types";
 
 interface AuthenticatedLayoutProps {
   children: React.ReactNode;
+  workspace?: "content" | "developer";
 }
 
-export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): React.ReactElement {
+export function AuthenticatedLayout({
+  children,
+  workspace = "content",
+}: AuthenticatedLayoutProps): React.ReactElement {
   const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
   const { pathname, search } = useAdminLocation();
+  const fullBleed = workspace === "developer" && ["/admin/dev", "/admin/dev/model", "/admin/dev/logic", "/admin/dev/docs"].includes(pathname);
   const { language } = usePreferences();
 
   const me = useQuery<AdminUser>({
@@ -56,12 +66,16 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
       const res = await api.get<{ collections: Collection[] }>("/collections");
       return res.collections;
     },
+    enabled: workspace === "content",
   });
   const site = useQuery<SiteInfo>({
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
   });
-  const viewsQuery = useQuery<ViewManifestInfo[]>(viewsManifestQueryOptions());
+  const viewsQuery = useQuery<ViewManifestInfo[]>({
+    ...viewsManifestQueryOptions(),
+    enabled: workspace === "content",
+  });
 
   React.useEffect(() => {
     if (!site.data?.icons.length) return;
@@ -79,24 +93,27 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
 
   const resolvedBrand = React.useMemo<AdminBrand>(
     () => ({
-      title: site.data?.brand ?? t(language, "admin.consoleTitle"),
-      href: "/admin",
-      image: preferredAdminIcon(site.data?.icons),
+      title: workspace === "developer"
+        ? t(language, "developer.workspaceTitle")
+        : site.data?.brand ?? t(language, "admin.consoleTitle"),
+      href: workspace === "developer" ? "/admin/dev" : "/admin",
+      image: workspace === "developer" ? null : preferredAdminIcon(site.data?.icons),
     }),
-    [language, site.data],
+    [language, site.data, workspace],
   );
 
   const canonical = site.data?.canonicalLocale ?? null;
   const groups = React.useMemo<ReadonlyArray<NavGroupData>>(
-    () =>
-      buildNavGroups(
-        collectionsQuery.data ?? [],
-        viewsQuery.data ?? [],
-        language,
-        canonical,
-        me.data?.role ?? null,
-      ),
-    [collectionsQuery.data, viewsQuery.data, language, canonical, me.data?.role],
+    () => workspace === "developer"
+      ? buildDeveloperNavGroups(language)
+      : buildNavGroups(
+          collectionsQuery.data ?? [],
+          viewsQuery.data ?? [],
+          language,
+          canonical,
+          me.data?.role ?? null,
+        ),
+    [collectionsQuery.data, viewsQuery.data, language, canonical, me.data?.role, workspace],
   );
   const collectionName = pathname.match(/^\/admin\/c\/([^/]+)/)?.[1];
   const viewName = pathname.match(/^\/admin\/views\/([^/]+)/)?.[1];
@@ -127,11 +144,20 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps): Rea
             site={resolvedBrand}
             publicUrl={site.data?.publicUrl}
             pageTitle={pageTitle}
+            workspaceLink={workspace === "developer"
+              ? { href: "/admin", label: t(language, "common.contentAdmin"), icon: LayoutDashboard }
+              : me.data?.role === "owner"
+              ? { href: "/admin/dev", label: t(language, "developer.workspaceTitle"), icon: Wrench }
+              : undefined}
           />
-          <Main className="min-h-0 overflow-y-auto overscroll-contain pt-20 pb-20">{children}</Main>
+          <Main className={fullBleed
+            ? "min-h-0 max-w-none overflow-hidden px-0 py-0 pt-14 pb-10 sm:px-0"
+            : `min-h-0 overflow-y-auto overscroll-contain pt-20 ${workspace === "developer" ? "pb-14" : "pb-20"}`}>
+            {children}
+          </Main>
           <footer
             data-slot="status-bar"
-            className="absolute inset-x-0 bottom-0 z-30 flex min-h-16 items-center border-t px-4 py-3 sm:px-6"
+            className={`absolute inset-x-0 bottom-0 z-30 flex items-center border-t px-4 sm:px-6 ${workspace === "developer" ? "min-h-10 py-1.5" : "min-h-16 py-3"}`}
           >
             <div
               ref={setFormActionBarHost}
@@ -235,6 +261,18 @@ export function buildNavGroups(
     ...(reportsGroup ? [reportsGroup] : []),
     ...(moreGroup.items.length > 0 ? [moreGroup] : []),
   ];
+}
+
+export function buildDeveloperNavGroups(language: AdminLanguage): ReadonlyArray<NavGroupData> {
+  return [{
+    title: t(language, "nav.build"),
+    items: [
+      { title: t(language, "nav.overview"), url: "/admin/dev", icon: LayoutDashboard },
+      { title: t(language, "nav.model"), url: "/admin/dev/model", icon: Database },
+      { title: t(language, "nav.logic"), url: "/admin/dev/logic", icon: Workflow },
+      { title: t(language, "nav.docs"), url: "/admin/dev/docs", icon: BookOpenText },
+    ],
+  }];
 }
 
 function collectionNavItem(c: Collection, language: AdminLanguage, canonical: string | null): NavItem {

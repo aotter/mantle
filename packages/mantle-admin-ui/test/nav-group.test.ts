@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isSubLinkActive } from "../src/layout/nav-group";
-import { buildNavGroups } from "../src/layout/authenticated-layout";
+import { buildDeveloperNavGroups, buildNavGroups } from "../src/layout/authenticated-layout";
 import type { NavLink } from "../src/layout/types";
 
 const links: NavLink[] = [
@@ -36,5 +36,15 @@ describe("member navigation", () => {
   it("does not create a standalone operations destination", () => {
     const groups = buildNavGroups([], [], "en", null, "owner");
     expect(JSON.stringify(groups)).not.toContain("/admin/ops");
+  });
+
+  it("keeps developer navigation out of Content Admin", () => {
+    expect(JSON.stringify(buildNavGroups([], [], "en", null, "owner"))).not.toContain("/admin/dev");
+    expect(buildDeveloperNavGroups("en")[0]?.items).toEqual([
+      expect.objectContaining({ url: "/admin/dev" }),
+      expect.objectContaining({ url: "/admin/dev/model" }),
+      expect.objectContaining({ url: "/admin/dev/logic" }),
+      expect.objectContaining({ url: "/admin/dev/docs" }),
+    ]);
   });
 });

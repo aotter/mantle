@@ -24,12 +24,14 @@ export function AppTitle({ brand }: AppTitleProps): React.ReactElement {
           className="p-1"
         >
           <a href={href} onClick={() => setOpenMobile(false)}>
-            <Avatar className="size-7 rounded-md">
-              {brand.image ? <AvatarImage src={brand.image} alt="" /> : null}
-              <AvatarFallback className="rounded-md text-xs">
-                {initialsFor(brand.title)}
-              </AvatarFallback>
-            </Avatar>
+            {brand.image !== null ? (
+              <Avatar className="size-7 rounded-md">
+                {brand.image ? <AvatarImage src={brand.image} alt="" /> : null}
+                <AvatarFallback className="rounded-md text-xs">
+                  {initialsFor(brand.title)}
+                </AvatarFallback>
+              </Avatar>
+            ) : null}
             <span className="truncate font-semibold">{brand.title}</span>
           </a>
         </SidebarMenuButton>

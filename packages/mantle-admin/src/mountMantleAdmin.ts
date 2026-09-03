@@ -9,11 +9,14 @@ import {
   httpStatusFor,
   meetsRole,
   redactForWire,
+  resolveLocalizedText,
+  resolveLifecycle,
   runtimeDiagnostic,
   checkSchemaAdminUi,
   checkViewAdminUi,
   schemaSortableFields,
   STAFF_ROLES,
+  type AuthPredicate,
   type ContentState,
   type Diagnostic,
   type Entry,
@@ -28,6 +31,7 @@ import {
   ViewParamCoercionError,
   coerceViewParams,
   evaluateAuthAll,
+  projectCallableCapabilities,
   type HandlerContext,
   type MantleRuntime,
   type MediaAsset,
@@ -192,6 +196,10 @@ export function mountMantleAdmin<E extends Env>(
     "/admin/staff",
     "/admin/members",
     "/admin/ops",
+    "/admin/dev",
+    "/admin/dev/model",
+    "/admin/dev/logic",
+    "/admin/dev/docs",
     "/admin/views/:name",
   ]) {
     app.get(path, spa);
@@ -255,6 +263,7 @@ export function mountMantleAdmin<E extends Env>(
     fields: v.spec.fields ?? null,
     list: checkViewAdminUi(v).list,
   }));
+  const developerConsole = projectDeveloperConsole(ref.plan);
 
   type StaffGateOk = Extract<StaffGate, { kind: "ok" }>;
   const guarded = (
@@ -424,6 +433,8 @@ export function mountMantleAdmin<E extends Env>(
   });
 
   guarded("get", "/admin/api/collections", () => Response.json({ collections }));
+
+  roleGuarded("get", "/admin/api/developer-console", "owner", () => Response.json(developerConsole));
 
   guarded("get", "/admin/api/views-manifest", () => Response.json({ views: viewsManifest }));
 
@@ -1892,6 +1903,295 @@ function mediaFieldsForSchema(schema: SchemaManifest): Array<{ name: string; hin
     out.push({ name, hint });
   }
   return out;
+}
+
+type DeveloperAtomKind = "Schema" | "View" | "Procedure" | "Trigger";
+type DeveloperAudience = "public" | "members" | "staff" | "system" | "api-clients";
+type DeveloperTransport = "http" | "mcp" | "lifecycle";
+
+interface DeveloperAtom {
+  readonly id: string;
+  readonly kind: DeveloperAtomKind;
+  readonly name: string;
+  readonly title: LocalizedText | null;
+  readonly description?: LocalizedText | null;
+  readonly audience?: DeveloperAudience;
+  readonly transport?: DeveloperTransport;
+  readonly handler?: ProcedureManifest["spec"]["handler"];
+}
+
+type DeveloperRelationKind =
+  | "translation-parent"
+  | "schema-reference"
+  | "view-source"
+  | "authorization-guard"
+  | "procedure-schema"
+  | "collection-action"
+  | "input-reference"
+  | "trigger-target"
+  | "lifecycle-source";
+
+interface DeveloperAtomRelation {
+  readonly id: string;
+  readonly kind: DeveloperRelationKind;
+  readonly sourceId: string;
+  readonly targetId: string;
+  readonly pointer: string;
+  readonly value: string;
+}
+
+function developerRelation(
+  id: string,
+  kind: DeveloperRelationKind,
+  sourceId: string,
+  targetId: string,
+  pointer: string,
+  value: string,
+): DeveloperAtomRelation {
+  return { id, kind, sourceId, targetId, pointer, value };
+}
+
+function jsonPointerSegment(value: string): string {
+  return value.replace(/~/g, "~0").replace(/\//g, "~1");
+}
+
+function developerAudience(predicates: readonly AuthPredicate[]): DeveloperAudience | null {
+  if (predicates.some((predicate) => typeof predicate === "object" && "ctx.staff" in predicate)) return "staff";
+  if (predicates.includes("ctx.user")) return "members";
+  if (predicates.some((predicate) => predicate === "ctx.auth" || (typeof predicate === "object" && "ctx.auth.scope" in predicate))) return "api-clients";
+  return null;
+}
+
+function projectDeveloperConsole(plan: RuntimePlan): {
+  readonly dataModel: {
+    readonly schemas: ReadonlyArray<{
+      readonly name: string;
+      readonly title: LocalizedText;
+      readonly lifecycle: "publishing" | "operational";
+      readonly localized: boolean;
+      readonly translates: { readonly parent: string; readonly on: string } | null;
+      readonly schema: JsonSchema;
+      readonly uniqueIndexes: ReadonlyArray<ReadonlyArray<string>>;
+      readonly indexes: ReadonlyArray<ReadonlyArray<string>>;
+      readonly searchableFields: readonly string[];
+      readonly manifest: SchemaManifest;
+    }>;
+    readonly views: ReadonlyArray<{
+      readonly name: string;
+      readonly title: LocalizedText | null;
+      readonly surface: "public" | "staff";
+      readonly query: RuntimePlan["views"][string]["query"];
+      readonly authorization: NonNullable<RuntimePlan["views"][string]["authorization"]>["all"];
+      readonly guard: string | null;
+      readonly manifest: ViewManifest;
+    }>;
+  };
+  readonly logic: {
+    readonly triggers: ReadonlyArray<{
+      readonly name: string;
+      readonly target: string;
+      readonly audience: DeveloperAudience;
+      readonly source: RuntimePlan["triggers"][string]["manifest"]["spec"]["source"];
+      readonly manifest: RuntimePlan["triggers"][string]["manifest"];
+    }>;
+    readonly procedures: ReadonlyArray<{
+      readonly name: string;
+      readonly title: LocalizedText | null;
+      readonly description: LocalizedText | null;
+      readonly audience: DeveloperAudience;
+      readonly input: JsonSchema;
+      readonly output: JsonSchema;
+      readonly authorization: readonly AuthPredicate[];
+      readonly guard: string | null;
+      readonly handler: ProcedureManifest["spec"]["handler"];
+      readonly manifest: ProcedureManifest;
+    }>;
+  };
+  readonly interfaces: ReturnType<typeof projectDeveloperInterfaces>;
+  readonly graph: {
+    readonly atoms: readonly DeveloperAtom[];
+    readonly relations: readonly DeveloperAtomRelation[];
+  };
+} {
+  const schemasByName = new Map(Object.values(plan.schemas).map(({ name, manifest }) => [name, manifest]));
+  const procedures = Object.values(plan.procedures).map(({ name, manifest, authorization, guard }) => ({
+    name,
+    title: manifest.spec.title ?? null,
+    description: manifest.spec.description ?? null,
+    audience: developerAudience(authorization?.all ?? []) ?? "public" as const,
+    input: manifest.spec.input,
+    output: manifest.spec.output,
+    authorization: authorization?.all ?? [],
+    guard: guard ?? null,
+    handler: manifest.spec.handler,
+    manifest,
+  })).sort((a, b) => a.name.localeCompare(b.name));
+  const triggers = Object.values(plan.triggers).map(({ name, manifest, target }) => {
+    const source = manifest.spec.source;
+    const targetAudience = developerAudience(plan.procedures[target]?.authorization?.all ?? []);
+    return {
+      name,
+      target,
+      audience: source.kind === "lifecycle" ? "system" as const : source.kind === "mcp" && source.surface === "staff" ? "staff" as const : targetAudience ?? "public" as const,
+      source,
+      manifest,
+    };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+  const graph = {
+    atoms: [
+      ...Object.values(plan.schemas).map(({ name, manifest }) => ({ id: `Schema:${name}`, kind: "Schema" as const, name, title: manifest.spec.title })),
+      ...Object.values(plan.views).map(({ name, manifest, authorization }) => ({
+        id: `View:${name}`,
+        kind: "View" as const,
+        name,
+        title: manifest.spec.title ?? null,
+        audience: manifest.spec.surface === "staff" ? "staff" as const : developerAudience(authorization?.all ?? []) ?? "public" as const,
+      })),
+      ...procedures.map(({ name, title, description, audience, handler }) => ({
+        id: `Procedure:${name}`,
+        kind: "Procedure" as const,
+        name,
+        title,
+        description,
+        audience,
+        handler,
+      })),
+      ...triggers.map(({ name, source, audience }) => ({
+        id: `Trigger:${name}`,
+        kind: "Trigger" as const,
+        name,
+        title: null,
+        audience,
+        transport: source.kind,
+      })),
+    ].sort((a, b) => a.id.localeCompare(b.id)),
+    relations: [
+      ...Object.values(plan.schemas).flatMap(({ name, manifest, translationParent }) => [
+        ...(translationParent ? [developerRelation(
+          `Schema:${name}:translates:${translationParent}`,
+          "translation-parent",
+          `Schema:${name}`,
+          `Schema:${translationParent}`,
+          "/spec/translates/parent",
+          translationParent,
+        )] : []),
+        ...Object.entries(manifest.spec.schema.properties ?? {}).flatMap(([field, property]) => {
+          const target = property[MANTLE_REF_KEYWORD];
+          if (typeof target !== "string" || !schemasByName.has(target)) return [];
+          return [developerRelation(
+            `Schema:${name}:field:${field}:${target}`,
+            "schema-reference",
+            `Schema:${name}`,
+            `Schema:${target}`,
+            `/spec/schema/properties/${jsonPointerSegment(field)}/x-mantle-ref`,
+            target,
+          )];
+        }),
+      ]),
+      ...Object.values(plan.views).flatMap(({ name, query, guard }) => [
+        ...(query.kind === "declarative" ? [developerRelation(`View:${name}:from:${query.from}`, "view-source", `View:${name}`, `Schema:${query.from}`, "/spec/from", query.from)] : []),
+        ...(guard ? [developerRelation(`View:${name}:guard:${guard}`, "authorization-guard", `View:${name}`, `Procedure:${guard}`, "/spec/requires/guard/procedure", guard)] : []),
+      ]),
+      ...Object.values(plan.procedures).flatMap(({ name, manifest, builtinSchema, collectionActionSchema, guard }) => [
+        ...(builtinSchema ? [developerRelation(`Procedure:${name}:builtin:${builtinSchema}`, "procedure-schema", `Procedure:${name}`, `Schema:${builtinSchema}`, "/spec/handler/schema", builtinSchema)] : []),
+        ...(collectionActionSchema ? [developerRelation(`Procedure:${name}:collectionAction:${collectionActionSchema}`, "collection-action", `Procedure:${name}`, `Schema:${collectionActionSchema}`, "/spec/uiSchema/collectionAction", collectionActionSchema)] : []),
+        ...discoverRowBindings(manifest, schemasByName).map(({ collection, inputField }) => developerRelation(
+          `Procedure:${name}:input:${inputField}:${collection}`,
+          "input-reference",
+          `Procedure:${name}`,
+          `Schema:${collection}`,
+          `/spec/input/properties/${jsonPointerSegment(inputField)}/x-mantle-ref`,
+          collection,
+        )),
+        ...(guard ? [developerRelation(`Procedure:${name}:guard:${guard}`, "authorization-guard", `Procedure:${name}`, `Procedure:${guard}`, "/spec/requires/guard/procedure", guard)] : []),
+      ]),
+      ...Object.values(plan.triggers).flatMap(({ name, target, lifecycleSchema }) => [
+        developerRelation(`Trigger:${name}:target:${target}`, "trigger-target", `Trigger:${name}`, `Procedure:${target}`, "/spec/target/procedure", target),
+        ...(lifecycleSchema ? [developerRelation(`Trigger:${name}:source:${lifecycleSchema}`, "lifecycle-source", `Trigger:${name}`, `Schema:${lifecycleSchema}`, "/spec/source/schema", lifecycleSchema)] : []),
+      ]),
+    ].sort((a, b) => a.id.localeCompare(b.id)),
+  };
+
+  return {
+    dataModel: {
+      schemas: Object.values(plan.schemas).map(({ name, manifest }) => ({
+        name,
+        title: manifest.spec.title,
+        lifecycle: resolveLifecycle(manifest),
+        localized: manifest.spec.localized ?? false,
+        translates: manifest.spec.translates ?? null,
+        schema: manifest.spec.schema,
+        uniqueIndexes: manifest.spec.uniqueIndexes ?? [],
+        indexes: manifest.spec.indexes ?? [],
+        searchableFields: manifest.spec.searchableFields ?? [],
+        manifest,
+      })).sort((a, b) => a.name.localeCompare(b.name)),
+      views: Object.values(plan.views).map(({ name, manifest, query, authorization, guard }) => ({
+        name,
+        title: manifest.spec.title ?? null,
+        surface: manifest.spec.surface,
+        query,
+        authorization: authorization?.all ?? [],
+        guard: guard ?? null,
+        manifest,
+      })).sort((a, b) => a.name.localeCompare(b.name)),
+    },
+    logic: { triggers, procedures },
+    interfaces: projectDeveloperInterfaces(plan),
+    graph,
+  };
+}
+
+function projectDeveloperInterfaces(plan: RuntimePlan) {
+  const callable = projectCallableCapabilities(plan).map((capability) => ({
+    kind: capability.kind,
+    name: capability.name,
+    target: capability.ownerName,
+    surface: capability.surface,
+    audience: developerAudience(
+      (capability.kind === "view"
+        ? plan.views[capability.ownerName]?.authorization?.all
+        : plan.procedures[capability.ownerName]?.authorization?.all) ?? [],
+    ) ?? "public" as const,
+    title: capability.title ?? null,
+    description: capability.description,
+    input: capability.inputSchema,
+    output: capability.kind === "procedure" ? capability.outputSchema : null,
+    trigger: capability.kind === "procedure" ? capability.trigger : null,
+  }));
+  const http = [
+    ...plan.httpRoutes.map((route) => {
+      const procedure = plan.procedures[route.procedure]!;
+      return {
+        kind: "procedure" as const,
+        name: route.trigger,
+        target: route.procedure,
+        method: route.method,
+        path: route.path,
+        audience: developerAudience(procedure.authorization?.all ?? []) ?? "public" as const,
+        title: resolveLocalizedText(procedure.manifest.spec.title, "en") ?? null,
+        description: resolveLocalizedText(procedure.manifest.spec.description, "en") ?? `Invoke Procedure '${route.procedure}'.`,
+        input: procedure.manifest.spec.input,
+        output: procedure.manifest.spec.output,
+      };
+    }),
+    ...callable.filter((capability) => capability.kind === "view" && capability.surface === "public").map((capability) => {
+      const view = plan.views[capability.target]!;
+      return {
+        kind: "view" as const,
+        name: capability.name,
+        target: capability.target,
+        method: "GET" as const,
+        path: `/api/views/${capability.target}`,
+        audience: developerAudience(view.authorization?.all ?? []) ?? "public" as const,
+        title: capability.title,
+        description: capability.description,
+        input: capability.input,
+        output: null,
+      };
+    }),
+  ].sort((a, b) => `${a.path}\0${a.method}`.localeCompare(`${b.path}\0${b.method}`));
+  return { http, callable };
 }
 
 export async function runMantleUseCase<T>(

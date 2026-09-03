@@ -16,6 +16,10 @@ import { PreferencesView } from "../features/system/preferences-view";
 import { SettingsView } from "../features/system/settings-view";
 import { StaffView } from "../features/system/staff-view";
 import { MembersView } from "../features/system/members-view";
+import { DataModelView } from "../features/logic/data-model-view";
+import { DeveloperOverviewView } from "../features/logic/developer-overview-view";
+import { LogicView } from "../features/logic/logic-view";
+import { InterfaceDocsView } from "../features/logic/interface-docs-view";
 
 export function AdminApp(): React.ReactElement {
   const location = useAdminLocation();
@@ -121,6 +125,8 @@ function Gate({ path }: { path: string }): React.ReactElement {
     );
   }
 
+  if (path.startsWith("/admin/dev")) return <DeveloperWorkspace path={path} />;
+
   const viewMatch = path.match(/^\/admin\/views\/([^/]+)\/?$/);
   if (viewMatch) {
     return (
@@ -135,4 +141,13 @@ function Gate({ path }: { path: string }): React.ReactElement {
       <NotFoundView path={path} />
     </AuthenticatedLayout>
   );
+}
+
+function DeveloperWorkspace({ path }: { path: string }): React.ReactElement {
+  const view = path === "/admin/dev" ? <DeveloperOverviewView />
+    : path === "/admin/dev/model" ? <DataModelView />
+    : path === "/admin/dev/logic" ? <LogicView />
+    : path === "/admin/dev/docs" ? <InterfaceDocsView />
+    : <NotFoundView path={path} />;
+  return <AuthenticatedLayout workspace="developer">{view}</AuthenticatedLayout>;
 }
