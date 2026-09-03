@@ -59,6 +59,16 @@ npx -y @aotter/mantle@alpha create transaction ./my-shop \
   --locales en,zh-TW
 ```
 
+Mantle requires Node.js 22+. If this command unexpectedly resolves `@aotter`
+from another registry, retry without changing your npm configuration:
+
+```bash
+npx -y --@aotter:registry=https://registry.npmjs.org/ \
+  @aotter/mantle@alpha create transaction ./my-shop \
+  --brand "My Shop" \
+  --locales en,zh-TW
+```
+
 From there, your coding agent can take over by following the generated
 `AGENTS.md`.
 
