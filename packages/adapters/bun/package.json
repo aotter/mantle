@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle-bun",
-  "version": "0.1.0-alpha.14",
+  "version": "0.1.0-alpha.15",
   "description": "Embedded Bun adapter for Mantle Core with caller-owned bun:sqlite storage and Web-standard HTTP transport.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
