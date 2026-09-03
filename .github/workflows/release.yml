@@ -133,14 +133,14 @@ jobs:
         run: |
           set -euo pipefail
           node --input-type=module -e "
-            import { readdirSync, readFileSync } from 'node:fs';
+            import { globSync, readFileSync } from 'node:fs';
             const expected = '${{ steps.ver.outputs.version }}';
             let failed = false;
             const packagePaths = [
               'package.json',
-              ...readdirSync('packages', { recursive: true })
-                .filter((path) => path.endsWith('/package.json') && !path.includes('/node_modules/'))
-                .map((path) => 'packages/' + path),
+              ...globSync('packages/**/package.json', {
+                exclude: ['packages/**/node_modules/**'],
+              }),
             ];
             for (const path of packagePaths) {
               const pkg = JSON.parse(readFileSync(path, 'utf8'));
