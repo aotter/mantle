@@ -381,15 +381,26 @@ function layoutTopDown(graph: DeveloperConsoleSnapshot["graph"]): { positions: M
 
   const surfaceBottom = Math.max(...groups.map(({ y, height }) => y + height), 200);
   const preferredX = (atom: DeveloperAtom, kinds: readonly DeveloperRelationKind[]): number => {
-    const related = graph.relations.filter(({ targetId, kind }) => targetId === atom.id && kinds.includes(kind)).map(({ sourceId }) => positions.get(sourceId)).filter((position): position is { x: number; y: number } => Boolean(position));
-    return related.length ? related.reduce((sum, position) => sum + position.x + nodeWidth / 2, 0) / related.length : layout.node(atom.id).x;
+    const related = graph.relations.filter(({ targetId, kind }) => targetId === atom.id && kinds.includes(kind)).map(({ sourceId }) => positions.get(sourceId)).filter((position): position is { x: number; y: number } => Boolean(position)).map(({ x }) => x + nodeWidth / 2).sort((a, b) => a - b);
+    if (!related.length) return layout.node(atom.id).x;
+    const middle = Math.floor(related.length / 2);
+    return related.length % 2 ? related[middle]! : (related[middle - 1]! + related[middle]!) / 2;
   };
   const bandColumns = 7;
   const pack = (atoms: DeveloperAtom[], y: number, kinds: readonly DeveloperRelationKind[]): number => {
     const ordered = atoms.map((atom) => ({ atom, preferred: preferredX(atom, kinds) })).sort((a, b) => a.preferred - b.preferred);
-    const columns = Math.min(bandColumns, ordered.length);
-    ordered.forEach(({ atom }, index) => positions.set(atom.id, { x: 72 + index % bandColumns * (nodeWidth + 52), y: y + Math.floor(index / bandColumns) * (nodeHeight + gap) }));
-    return Math.ceil(ordered.length / Math.max(columns, 1)) * (nodeHeight + gap);
+    const rows = Math.ceil(ordered.length / bandColumns);
+    for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+      const row = ordered.slice(rowIndex * bandColumns, (rowIndex + 1) * bandColumns);
+      const desired = row.map(({ preferred }) => preferred - nodeWidth / 2);
+      const placed: number[] = [];
+      desired.forEach((x, index) => placed.push(index === 0 ? x : Math.max(x, placed[index - 1]! + nodeWidth + gap)));
+      const average = (values: number[]): number => values.reduce((sum, value) => sum + value, 0) / values.length;
+      let shift = average(desired) - average(placed);
+      if (placed[0]! + shift < 72) shift += 72 - (placed[0]! + shift);
+      row.forEach(({ atom }, index) => positions.set(atom.id, { x: placed[index]! + shift, y: y + rowIndex * (nodeHeight + gap) }));
+    }
+    return rows * (nodeHeight + gap);
   };
   const procedureY = surfaceBottom + 180;
   const procedureHeight = pack(graph.atoms.filter(({ kind }) => kind === "Procedure"), procedureY, ["trigger-target"]);

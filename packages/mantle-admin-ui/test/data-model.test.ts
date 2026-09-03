@@ -62,6 +62,31 @@ describe("layoutComponents", () => {
     expect(positions.get("View:standalone")!.y).toBeLessThan(positions.get("Schema:records")!.y);
   });
 
+  it("keeps independent chains vertically aligned", () => {
+    const graph: DeveloperConsoleSnapshot["graph"] = {
+      atoms: [
+        { id: "Trigger:first", kind: "Trigger", name: "first", title: null },
+        { id: "Trigger:second", kind: "Trigger", name: "second", title: null },
+        { id: "Procedure:first", kind: "Procedure", name: "first", title: null },
+        { id: "Procedure:second", kind: "Procedure", name: "second", title: null },
+        { id: "Schema:first", kind: "Schema", name: "first", title: null },
+        { id: "Schema:second", kind: "Schema", name: "second", title: null },
+      ],
+      relations: [
+        { id: "first-trigger", kind: "trigger-target", sourceId: "Trigger:first", targetId: "Procedure:first", pointer: "/spec/target", value: "first" },
+        { id: "second-trigger", kind: "trigger-target", sourceId: "Trigger:second", targetId: "Procedure:second", pointer: "/spec/target", value: "second" },
+        { id: "first-schema", kind: "procedure-schema", sourceId: "Procedure:first", targetId: "Schema:first", pointer: "/spec/schema", value: "first" },
+        { id: "second-schema", kind: "procedure-schema", sourceId: "Procedure:second", targetId: "Schema:second", pointer: "/spec/schema", value: "second" },
+      ],
+    };
+
+    const positions = layoutComponents(graph);
+    expect(positions.get("Procedure:first")!.x).toBe(positions.get("Trigger:first")!.x);
+    expect(positions.get("Schema:first")!.x).toBe(positions.get("Procedure:first")!.x);
+    expect(positions.get("Procedure:second")!.x).toBe(positions.get("Trigger:second")!.x);
+    expect(positions.get("Schema:second")!.x).toBe(positions.get("Procedure:second")!.x);
+  });
+
   it("traces a schema through its command upstream", () => {
     const graph: DeveloperConsoleSnapshot["graph"] = {
       atoms: [
