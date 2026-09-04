@@ -295,6 +295,45 @@ describe("IndexedDbMantleStorageAdapter in Chrome", () => {
     expect((await indexedDB.databases()).some((database) => database.name === name)).toBe(false);
   });
 
+  it("returns rows that match any branch of a declarative or filter", async () => {
+    const storage = new IndexedDbMantleStorageAdapter({
+      databaseName: databaseName("or-filter"),
+    });
+    const { entries, views } = await storage.prepare(plan(localeFilterViews));
+    await Promise.all([
+      entries.create({
+        ...entry("en-post", "Tea"),
+        status: "published",
+        data: { slug: "tea", title: "Tea", score: 8, locale: "en" },
+      }),
+      entries.create({
+        ...entry("zh-post", "茶"),
+        status: "published",
+        data: { slug: "cha", title: "茶", score: 9, locale: "zh-TW" },
+      }),
+      entries.create({
+        ...entry("ja-post", "茶"),
+        status: "published",
+        data: { slug: "ocha", title: "お茶", score: 7, locale: "ja" },
+      }),
+      entries.create({
+        ...entry("en-draft", "Draft tea"),
+        data: { slug: "draft-tea", title: "Draft tea", score: 1, locale: "en" },
+      }),
+    ]);
+
+    const localeOr = await views.execute<{ id: string; locale: string }>({
+      view: "locale-or-posts",
+    });
+    expect(localeOr.rows.map(({ id }) => id).sort()).toEqual(["en-draft", "en-post", "zh-post"]);
+
+    const nested = await views.execute<{ id: string; locale: string }>({
+      view: "published-locale-or-posts",
+    });
+    expect(nested.rows.map(({ id }) => id).sort()).toEqual(["en-post", "zh-post"]);
+    await storage.deleteDatabase();
+  });
+
   it("records the O(n) declarative View scan baseline", async () => {
     const storage = new IndexedDbMantleStorageAdapter({ databaseName: databaseName("baseline") });
     const prepared = await storage.prepare(plan());
@@ -421,6 +460,34 @@ metadata: { name: echo-mcp }
 spec:
   source: { kind: mcp, surface: public }
   target: { procedure: echo }
+`;
+
+const localeFilterViews = `---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: locale-or-posts }
+spec:
+  surface: public
+  from: posts
+  fields: [id, title, locale]
+  filter:
+    or:
+      - { eq: { field: locale, value: en } }
+      - { eq: { field: locale, value: zh-TW } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: published-locale-or-posts }
+spec:
+  surface: public
+  from: posts
+  fields: [id, title, locale]
+  filter:
+    and:
+      - { eq: { field: status, value: published } }
+      - or:
+          - { eq: { field: locale, value: en } }
+          - { eq: { field: locale, value: zh-TW } }
 `;
 
 const nativeView = `---

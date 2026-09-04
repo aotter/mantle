@@ -104,7 +104,7 @@ function matchesFilter(
   if ("and" in node) {
     return node.and.every((child) => matchesFilter(row, child, params, ctxUserId));
   }
-  return ("or" in node ? node.or : []).every(
+  return ("or" in node ? node.or : []).some(
     (child) => matchesFilter(row, child, params, ctxUserId),
   );
 }
