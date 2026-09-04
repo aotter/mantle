@@ -240,6 +240,7 @@ export interface StaffOperation {
 export interface ViewManifestInfo {
   name: string;
   title: LocalizedText | null;
+  surface: "public" | "staff";
   from: string | null;
   params: JsonSchema | null;
   fields: string[] | null;

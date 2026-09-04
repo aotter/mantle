@@ -631,17 +631,19 @@ describe("GET /admin/api/views/<name> — staff surface (#433)", () => {
   });
 });
 
-describe("GET /admin/api/views-manifest — staff-only filter (#433)", () => {
-  it("lists ONLY surface:staff Views (public storefront Views excluded)", async () => {
+describe("GET /admin/api/views-manifest — Admin View inspection", () => {
+  it("lists public services and staff reports with their surfaces", async () => {
     const h = staffHarness();
     const res = await h.app.request("/admin/api/views-manifest");
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { views: Array<{ name: string }> };
-    const names = body.views.map((v) => v.name).sort();
-    // Base fixture declares public Views `postsPublished` + `postsByLocale`
-    // (default surface); only the staff Views `ordersRecent` +
-    // `ordersArchive` must appear.
-    expect(names).toEqual(["ordersArchive", "ordersRecent"]);
+    const body = (await res.json()) as { views: Array<{ name: string; surface: string }> };
+    expect(body.views.map(({ name, surface }) => ({ name, surface })).sort((a, b) => a.name.localeCompare(b.name))).toEqual([
+      { name: "ordersArchive", surface: "staff" },
+      { name: "ordersRecent", surface: "staff" },
+      { name: "postsByLocale", surface: "public" },
+      { name: "postsPublished", surface: "public" },
+    ]);
+    expect((await h.app.request("/admin/api/views/postsPublished")).status).toBe(200);
   });
 
   it("surfaces View.spec.title (#443) as raw LocalizedText, unresolved", async () => {

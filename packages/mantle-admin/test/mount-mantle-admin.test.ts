@@ -188,7 +188,7 @@ spec:
   });
 
   it("projects HTTP, MCP, and server-backed WebMCP documentation from the plan", async () => {
-    const response = await mounted({
+    const app = mounted({
       getSession: async () => ({ session: { id: "session" }, user: { id: "user" } }),
       getUserRole: async () => "owner",
     }, compilePlan(`
@@ -225,7 +225,8 @@ apiVersion: cms.mantle.aotter.net/v1
 kind: Trigger
 metadata: { name: submit-inquiry-mcp }
 spec: { source: { kind: mcp, surface: public }, target: { procedure: submit-inquiry } }
-`)).request("https://example.test/admin/api/developer-console");
+`));
+    const response = await app.request("https://example.test/admin/api/developer-console");
 
     const body = await response.json();
     expect(body.interfaces.http).toEqual(expect.arrayContaining([
@@ -236,6 +237,9 @@ spec: { source: { kind: mcp, surface: public }, target: { procedure: submit-inqu
       expect.objectContaining({ kind: "procedure", name: "submit_inquiry", target: "submit-inquiry", trigger: "submit-inquiry-mcp", surface: "public", audience: "public" }),
       expect.objectContaining({ kind: "view", name: "query_view_public_inquiries", target: "public-inquiries", trigger: null, surface: "public", audience: "public" }),
     ]));
+    await expect((await app.request("https://example.test/admin/api/views-manifest")).json()).resolves.toMatchObject({
+      views: [expect.objectContaining({ name: "public-inquiries", surface: "public", from: "inquiries" })],
+    });
   });
 
   it("keeps schema relationship provenance in the developer graph", async () => {

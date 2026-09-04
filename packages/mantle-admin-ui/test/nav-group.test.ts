@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { isSubLinkActive } from "../src/layout/nav-group";
+import { isGroupActive, isLinkActive, isSubLinkActive } from "../src/layout/nav-group";
 import { buildDeveloperNavGroups, buildNavGroups } from "../src/layout/authenticated-layout";
-import type { NavLink } from "../src/layout/types";
+import type { ViewManifestInfo } from "../src/lib/types";
+import type { NavCollapsible, NavLink } from "../src/layout/types";
 
 const links: NavLink[] = [
   { title: "All", url: "/admin/c/orders" },
@@ -17,6 +18,15 @@ describe("sidebar collection filters", () => {
 
   it("keeps All selected for unrelated search and paging params", () => {
     expect(isSubLinkActive(links[0]!, links, "/admin/c/orders", "?search=86&page=2")).toBe(true);
+  });
+
+  it("keeps the collection and matching filter active on entry detail routes", () => {
+    const group: NavCollapsible = { title: "Orders", items: links };
+    expect(isLinkActive({ title: "Requests", url: "/admin/c/requests" }, "/admin/c/requests/request-1", "", true)).toBe(true);
+    expect(isSubLinkActive(links[0]!, links, "/admin/c/orders/order-1", "")).toBe(true);
+    expect(isSubLinkActive(links[0]!, links, "/admin/c/orders/order-1", "?filter_field=state&filter_value=paid")).toBe(false);
+    expect(isSubLinkActive(links[1]!, links, "/admin/c/orders/order-1", "?filter_field=state&filter_value=paid")).toBe(true);
+    expect(isGroupActive(group, "/admin/c/orders/order-1", "")).toBe(true);
   });
 });
 
@@ -46,5 +56,18 @@ describe("member navigation", () => {
       expect.objectContaining({ url: "/admin/dev/logic" }),
       expect.objectContaining({ url: "/admin/dev/docs" }),
     ]);
+  });
+
+  it("separates public services from staff Reports", () => {
+    const view = (name: string, surface: ViewManifestInfo["surface"]): ViewManifestInfo => ({ name, surface, title: null, from: null, params: null, fields: null, list: { columns: [], searchFields: [], filterFields: [] } });
+    const groups = buildNavGroups([], [view("public-catalog", "public"), view("staff-queue", "staff")], "en", null, "owner");
+    expect(groups.find(({ title }) => title === "Public services")?.items).toEqual([
+      expect.objectContaining({ url: "/admin/views/public-catalog" }),
+    ]);
+    expect(groups.find(({ title }) => title === "Reports")?.items).toEqual([
+      expect.objectContaining({ url: "/admin/views/staff-queue" }),
+    ]);
+    expect(groups.find(({ title }) => title === "Public services")?.items[0]?.icon)
+      .not.toBe(groups.find(({ title }) => title === "Reports")?.items[0]?.icon);
   });
 });

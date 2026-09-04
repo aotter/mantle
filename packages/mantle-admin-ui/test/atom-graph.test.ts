@@ -39,7 +39,8 @@ describe("manifest graph trace", () => {
   it("keeps graph and model selection in shareable URLs", () => {
     expect(developerSelectionHref("/admin/dev", "View:my requisitions")).toBe("/admin/dev?selected=View%3Amy+requisitions");
     expect(developerSelectionHref("/admin/dev/model", "Schema:orders", { tab: "manifest", pointer: "/spec/schema" })).toBe("/admin/dev/model?selected=Schema%3Aorders&tab=manifest&pointer=%2Fspec%2Fschema");
-    expect(developerSelectionHref("/admin/dev/logic", "Trigger:place-order-http")).toBe("/admin/dev/logic?selected=Trigger%3Aplace-order-http");
+    expect(developerSelectionHref("/admin/dev/model", "View:open-orders", { tab: "raw" })).toBe("/admin/dev/model?selected=View%3Aopen-orders&tab=raw");
+    expect(developerSelectionHref("/admin/dev/logic", "Trigger:place-order-http", { tab: "contract" })).toBe("/admin/dev/logic?selected=Trigger%3Aplace-order-http&tab=contract");
     expect(developerDetailHref("Procedure:place-order")).toBe("/admin/dev/logic?selected=Procedure%3Aplace-order");
     expect(developerDetailHref("View:open-orders")).toBe("/admin/dev/model?selected=View%3Aopen-orders");
   });
