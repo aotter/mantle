@@ -33,6 +33,8 @@ type LogicItem =
   | { kind: "Trigger"; id: string; model: DeveloperTriggerModel }
   | { kind: "Procedure"; id: string; model: DeveloperProcedureModel };
 
+type LogicTab = "overview" | "contract" | "manifest";
+
 const triggerAudiences = ["public", "members", "staff", "api-clients", "system"] as const satisfies readonly DeveloperAudience[];
 
 export function LogicView(): React.ReactElement {
@@ -47,8 +49,9 @@ export function LogicView(): React.ReactElement {
   ] : [];
   const params = new URLSearchParams(location.search);
   const selected = items.find(({ id }) => id === params.get("selected")) ?? items[0] ?? null;
-  const manifestOpen = params.get("tab") === "manifest";
-  const manifestFocus = manifestOpen ? params.get("pointer") : null;
+  const requestedTab = params.get("tab");
+  const tab: LogicTab = requestedTab === "contract" || requestedTab === "manifest" ? requestedTab : "overview";
+  const manifestFocus = tab === "manifest" ? params.get("pointer") : null;
   const query = search.trim().toLowerCase();
   const visibleItems = query
     ? items.filter((item) => `${item.kind} ${item.model.name} ${item.kind === "Procedure" ? resolveLocalizedText(item.model.title, language) ?? "" : `${audienceLabel(language, item.model.audience)} ${triggerChannel(item.model.source)}`}`.toLowerCase().includes(query))
@@ -58,9 +61,14 @@ export function LogicView(): React.ReactElement {
   if (snapshot.isLoading) return <Skeleton className="h-full w-full rounded-none" />;
   if (!snapshot.data || !selected) return <></>;
 
+  const selectTab = (next: string): void => {
+    if (next !== "overview" && next !== "contract" && next !== "manifest") return;
+    navigate(developerSelectionHref("/admin/dev/logic", selected.id, next === "overview" ? undefined : { tab: next }));
+  };
+
   return (
     <DeveloperExplorer label={t(language, "logic.title")} sidebarLabel={t(language, "logic.objects")} sidebar={<LogicSidebar items={visibleItems} selectedId={selected.id} search={search} onSearch={setSearch} onSelect={(id) => navigate(developerSelectionHref("/admin/dev/logic", id))} />} selectedId={selected.id} graph={snapshot.data.graph}>
-      <LogicDefinition key={`${selected.id}:${manifestFocus ?? ""}`} item={selected} snapshot={snapshot.data} manifestOpen={manifestOpen} manifestFocus={manifestFocus} onNavigate={(id) => navigate(developerDetailHref(id))} />
+      <LogicDefinition item={selected} snapshot={snapshot.data} tab={tab} manifestFocus={manifestFocus} onTabChange={selectTab} onNavigate={(id) => navigate(developerDetailHref(id))} />
     </DeveloperExplorer>
   );
 }
@@ -138,7 +146,7 @@ function LogicItemButton({ item, selected, onSelect }: { item: LogicItem; select
   );
 }
 
-function LogicDefinition({ item, snapshot, manifestOpen, manifestFocus, onNavigate }: { item: LogicItem; snapshot: DeveloperConsoleSnapshot; manifestOpen: boolean; manifestFocus: string | null; onNavigate: (id: string) => void }): React.ReactElement {
+function LogicDefinition({ item, snapshot, tab, manifestFocus, onTabChange, onNavigate }: { item: LogicItem; snapshot: DeveloperConsoleSnapshot; tab: LogicTab; manifestFocus: string | null; onTabChange: (tab: string) => void; onNavigate: (id: string) => void }): React.ReactElement {
   const { language } = usePreferences();
   const procedure = item.kind === "Procedure" ? item.model : snapshot.logic.procedures.find(({ name }) => name === item.model.target) ?? null;
   const title = item.kind === "Procedure" ? resolveLocalizedText(item.model.title, language) : null;
@@ -149,7 +157,6 @@ function LogicDefinition({ item, snapshot, manifestOpen, manifestFocus, onNaviga
     : item.model.handler.kind === "builtin"
     ? t(language, "developer.graph.summary.builtin", { op: item.model.handler.op, schema: item.model.handler.schema })
     : t(language, "developer.graph.summary.ref", { ref: item.model.handler.ref }));
-  const [tab, setTab] = React.useState(manifestOpen ? "manifest" : "overview");
   return (
     <>
       <div className="flex min-h-14 items-center gap-3 border-b px-5 py-3 pe-32">
@@ -158,7 +165,7 @@ function LogicDefinition({ item, snapshot, manifestOpen, manifestFocus, onNaviga
         <h1 className="min-w-0 truncate font-mono text-sm font-semibold">{item.model.name}</h1>
         {title && title !== item.model.name ? <span className="truncate text-sm text-muted-foreground">{title}</span> : null}
       </div>
-      <Tabs value={tab} onValueChange={setTab} className="gap-0">
+      <Tabs value={tab} onValueChange={onTabChange} className="gap-0">
         <TabsList variant="line" className="h-10 w-full justify-start rounded-none border-b px-5">
           <TabsTrigger value="overview" className="flex-none px-3">{t(language, "logic.overview")}</TabsTrigger>
           <TabsTrigger value="contract" className="flex-none px-3">{t(language, "logic.contract")}</TabsTrigger>

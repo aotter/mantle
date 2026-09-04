@@ -108,7 +108,7 @@ function NavLinkItem({
   search: string;
 }): React.ReactElement {
   const { setOpenMobile } = useSidebar();
-  const active = isLinkActive(item, pathname, search);
+  const active = isLinkActive(item, pathname, search, true);
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild isActive={active}>
@@ -139,9 +139,14 @@ function NavCollapsibleExpanded({
   search: string;
 }): React.ReactElement {
   const groupActive = isGroupActive(item, pathname, search);
+  const [open, setOpen] = React.useState(groupActive);
+  React.useEffect(() => {
+    if (groupActive) setOpen(true);
+  }, [groupActive]);
   return (
     <Collapsible
-      defaultOpen={groupActive}
+      open={open}
+      onOpenChange={setOpen}
       className="group/collapsible"
       asChild
     >
@@ -267,13 +272,14 @@ function NavMarker({ item }: { item: NavLink | NavCollapsible }): React.ReactEle
   );
 }
 
-function isLinkActive(
+export function isLinkActive(
   link: NavLink,
   pathname: string,
   search: string,
+  collectionDescendant = false,
 ): boolean {
   const url = new URL(link.url, "http://x");
-  if (url.pathname !== pathname) return false;
+  if (url.pathname !== pathname && !(collectionDescendant && url.pathname.startsWith("/admin/c/") && pathname.startsWith(`${url.pathname}/`))) return false;
   // If the link includes any query string, every param it sets must match.
   if (!url.search) return true;
   const want = new URLSearchParams(url.search);
@@ -290,11 +296,11 @@ export function isSubLinkActive(
   pathname: string,
   search: string,
 ): boolean {
-  if (!isLinkActive(link, pathname, search)) return false;
+  if (!isLinkActive(link, pathname, search, true)) return false;
   if (new URL(link.url, "http://x").search) return true;
   return !siblings.some((sibling) => {
     if (sibling.url === link.url || !new URL(sibling.url, "http://x").search) return false;
-    return isLinkActive(sibling, pathname, search);
+    return isLinkActive(sibling, pathname, search, true);
   });
 }
 
@@ -302,12 +308,12 @@ export function isSubLinkActive(
 // pathname — regardless of query params. Lets a base path like /admin/c/posts
 // (no `?status`) keep its parent group active, even though no individual
 // sub-link with `?status=…` is the exact current URL.
-function isGroupActive(
+export function isGroupActive(
   item: NavCollapsible,
   pathname: string,
   search: string,
 ): boolean {
-  if (item.items.some((sub) => isLinkActive(sub, pathname, search))) return true;
+  if (item.items.some((sub) => isLinkActive(sub, pathname, search, true))) return true;
   return item.items.some((sub) => {
     const url = new URL(sub.url, "http://x");
     return url.pathname === pathname;

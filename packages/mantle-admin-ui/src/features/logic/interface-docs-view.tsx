@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Braces, Globe2 } from "lucide-react";
+import { Braces, Eye, Globe2 } from "lucide-react";
 
 import { t } from "../../app/i18n";
 import { usePreferences } from "../../app/preferences";
@@ -9,6 +9,7 @@ import { developerConsoleQueryOptions } from "../../lib/queries";
 import type { DeveloperCallableCapability, DeveloperHttpOperation, JsonSchema } from "../../lib/types";
 import { ErrorBox } from "../../ui/page";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,6 +33,8 @@ export function InterfaceDocsView(): React.ReactElement {
   if (!snapshot.data) return <></>;
 
   const { http, callable } = snapshot.data.interfaces;
+  const publicServices = http.filter((operation) => operation.kind === "view");
+  const httpTriggers = http.filter((operation) => operation.kind === "procedure");
   const webMcp = callable.filter((capability) => capability.surface === "public" && capability.kind === "view");
   return (
     <section className="h-full min-h-0 overflow-y-auto" aria-label={t(language, "docs.title")}>
@@ -45,7 +48,13 @@ export function InterfaceDocsView(): React.ReactElement {
           <TabsTrigger value="mcp" className="flex-none"><McpIcon />{t(language, "docs.mcp")}</TabsTrigger>
           <TabsTrigger value="webmcp" className="flex-none"><Braces aria-hidden />{t(language, "docs.webmcp")}</TabsTrigger>
         </TabsList>
-        <TabsContent value="api"><DocSection intro={t(language, "docs.httpIntro")}><OperationGrid>{http.map((operation) => <HttpCard key={`${operation.method}:${operation.path}`} operation={operation} />)}</OperationGrid>{!http.length ? <EmptyDocs /> : null}</DocSection></TabsContent>
+        <TabsContent value="api">
+          <DocSection intro={t(language, "docs.httpIntro")}>
+            {publicServices.length ? <OperationSection title={t(language, "docs.publicEndpoint")} operations={publicServices} /> : null}
+            {httpTriggers.length ? <OperationSection title={atomKindLabel(language, "Trigger")} operations={httpTriggers} /> : null}
+            {!http.length ? <EmptyDocs /> : null}
+          </DocSection>
+        </TabsContent>
         <TabsContent value="mcp">
           <DocSection intro={t(language, "docs.mcpIntro")} endpoints={<><Endpoint label={t(language, "docs.publicEndpoint")} value="/mcp" /><Endpoint label={t(language, "docs.staffEndpoint")} value="/mcp/staff" /></>}>
             {(["public", "staff"] as const).map((surface) => {
@@ -90,6 +99,10 @@ function OperationGrid({ children }: { children: React.ReactNode }): React.React
   return <div className="grid gap-4 xl:grid-cols-2">{children}</div>;
 }
 
+function OperationSection({ title, operations }: { title: string; operations: DeveloperHttpOperation[] }): React.ReactElement {
+  return <section className="space-y-3"><h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{title}</h2><OperationGrid>{operations.map((operation) => <HttpCard key={`${operation.method}:${operation.path}`} operation={operation} />)}</OperationGrid></section>;
+}
+
 function HttpCard({ operation }: { operation: DeveloperHttpOperation }): React.ReactElement {
   const { language } = usePreferences();
   return (
@@ -103,6 +116,7 @@ function HttpCard({ operation }: { operation: DeveloperHttpOperation }): React.R
         <div className="flex flex-wrap gap-2"><Badge variant="outline">{atomKindLabel(language, operation.kind === "view" ? "View" : "Procedure")}</Badge><Badge variant="outline">{audienceLabel(language, operation.audience)}</Badge><Badge variant="outline">{t(language, "docs.target")}: {operation.target}</Badge></div>
         <SchemaDetails label={t(language, "docs.inputSchema")} schema={operation.input} />
         {operation.output ? <SchemaDetails label={t(language, "docs.outputSchema")} schema={operation.output} /> : null}
+        {operation.kind === "view" ? <Button asChild variant="outline" size="sm"><a href={`/admin/views/${encodeURIComponent(operation.target)}`}><Eye aria-hidden />{t(language, "views.openInAdmin")}</a></Button> : null}
       </CardContent>
     </Card>
   );

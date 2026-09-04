@@ -223,12 +223,25 @@ export function buildNavGroups(
         }
       : null;
 
-  // Read-only views get direct sidebar links.
+  // Read-only views get direct sidebar links, grouped by their audience.
+  const publicViews = views.filter((view) => view.surface === "public");
+  const staffViews = views.filter((view) => view.surface === "staff");
+  const publicServicesGroup: NavGroupData | null =
+    publicViews.length > 0
+      ? {
+          title: t(language, "views.publicServices"),
+          items: publicViews.map((v) => ({
+            title: resolveLocalizedText(v.title, language, canonical) ?? fieldLabel(v.name),
+            icon: Globe,
+            url: `/admin/views/${encodeURIComponent(v.name)}`,
+          })),
+        }
+      : null;
   const reportsGroup: NavGroupData | null =
-    views.length > 0
+    staffViews.length > 0
       ? {
           title: t(language, "nav.reports"),
-          items: views.map((v) => ({
+          items: staffViews.map((v) => ({
             title: resolveLocalizedText(v.title, language, canonical) ?? fieldLabel(v.name),
             icon: BarChart3,
             url: `/admin/views/${encodeURIComponent(v.name)}`,
@@ -258,6 +271,7 @@ export function buildNavGroups(
     homeGroup,
     contentGroup,
     ...(recordsGroup ? [recordsGroup] : []),
+    ...(publicServicesGroup ? [publicServicesGroup] : []),
     ...(reportsGroup ? [reportsGroup] : []),
     ...(moreGroup.items.length > 0 ? [moreGroup] : []),
   ];

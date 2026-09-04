@@ -248,16 +248,11 @@ export function mountMantleAdmin<E extends Env>(
   // `/admin/api/collections` precedent exactly (same shape of
   // "precompute at mount from ref.plan, list on GET") and needs
   // no changes to the `SiteInfo` type or its query key.
-  // Report-sidebar source (#433): ONLY `surface: staff` Views. Public
-  // storefront Views explicitly marked public auto-mount on the public REST
-  // path and must not appear in the admin report sidebar — listing
-  // them was noise + broke on param-driven storefront Views (see #433).
-  const staffViews = Object.values(ref.plan.views)
-    .map(({ manifest }) => manifest)
-    .filter((view) => view.spec.surface === "staff");
-  const viewsManifest = staffViews.map((v) => ({
+  const views = Object.values(ref.plan.views).map(({ manifest }) => manifest);
+  const viewsManifest = views.map((v) => ({
     name: v.metadata.name,
     title: v.spec.title ?? null,
+    surface: v.spec.surface,
     from: v.spec.from ?? null,
     params: v.spec.params ?? null,
     fields: v.spec.fields ?? null,
@@ -438,12 +433,9 @@ export function mountMantleAdmin<E extends Env>(
 
   guarded("get", "/admin/api/views-manifest", () => Response.json({ views: viewsManifest }));
 
-  // Staff Views (#433): mounted behind the staff gate at
-  // `/admin/api/views/<name>` — NOT on the public `/api/views/<name>`
-  // path (the public mount loop skips `surface: staff`). Reuses the
-  // exact same `handleViewRequest` logic and response shape as the
-  // public surface; only the gate + path differ.
-  for (const v of staffViews) {
+  // Admin inspection is staff-gated for both surfaces. Public Views keep
+  // their separate public `/api/views/<name>` contract.
+  for (const v of views) {
     const viewName = v.metadata.name;
     guarded("get", `/admin/api/views/${viewName}`, async (c, gate) => {
       const runtime = await ref.get();

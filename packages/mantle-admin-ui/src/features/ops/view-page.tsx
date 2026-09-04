@@ -20,6 +20,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { SchemaFields } from "../content/entry-edit-view";
 import { renderDataValue } from "../../lib/render-data-value";
 import { cn } from "../../lib/utils";
@@ -127,8 +128,9 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow={<div className="flex flex-wrap items-center gap-2"><Badge variant="secondary">{t(language, view.surface === "public" ? "views.publicService" : "views.staffReport")}</Badge>{view.surface === "public" ? <code className="text-xs">/api/views/{view.name}</code> : null}</div>}
         title={viewTitle}
-        description={t(language, "views.page.body", { schema: view.from ?? view.name })}
+        description={t(language, view.surface === "public" ? "views.publicBody" : "views.page.body", { schema: view.from ?? view.name })}
         actions={
           <Button
             type="button"
