@@ -196,6 +196,101 @@ describe("compileView", () => {
     expect(c.sql).toMatch(/AND/);
   });
 
+  it("compiles `or` of multiple eqs", () => {
+    const c = compileView(
+      view({
+        from: "posts",
+        filter: {
+          or: [
+            { eq: { field: "locale", value: "en" } },
+            { eq: { field: "locale", value: "zh-TW" } },
+          ],
+        },
+      }),
+    );
+    expect(c.params).toEqual(["posts", "en", "zh-TW"]);
+    expect(c.sql).toContain(
+      `(json_extract(data, '$."locale"') = ?) OR (json_extract(data, '$."locale"') = ?)`,
+    );
+  });
+
+  it("compiles nested `and` / `or` without collapsing OR into AND", () => {
+    const c = compileView(
+      view({
+        from: "posts",
+        filter: {
+          and: [
+            { eq: { field: "status", value: "published" } },
+            {
+              or: [
+                { eq: { field: "locale", value: "en" } },
+                { eq: { field: "locale", value: "zh-TW" } },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    expect(c.params).toEqual(["posts", "published", "en", "zh-TW"]);
+    expect(c.sql).toContain(
+      `(status = ?) AND ((json_extract(data, '$."locale"') = ?) OR (json_extract(data, '$."locale"') = ?))`,
+    );
+  });
+
+  it("returns the same locale-or fixture rows that IndexedDB must match (#783)", () => {
+    const db = new DatabaseSync(":memory:");
+    try {
+      db.exec(`CREATE TABLE entries (
+        id TEXT, collection TEXT, status TEXT, version INTEGER, data TEXT,
+        author_id TEXT, created_at INTEGER, updated_at INTEGER
+      )`);
+      const insert = db.prepare("INSERT INTO entries VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+      for (const [id, locale, status] of [
+        ["en-post", "en", "published"],
+        ["zh-post", "zh-TW", "published"],
+        ["ja-post", "ja", "published"],
+        ["en-draft", "en", "draft"],
+      ] as const) {
+        insert.run(id, "posts", status, 1, JSON.stringify({ locale }), null, 1, 1);
+      }
+
+      const localeOr = compileView(view({
+        from: "posts",
+        fields: ["id"],
+        filter: {
+          or: [
+            { eq: { field: "locale", value: "en" } },
+            { eq: { field: "locale", value: "zh-TW" } },
+          ],
+        },
+      }));
+      const localeOrRows = db.prepare(localeOr.sql)
+        .all(...localeOr.params as SQLInputValue[]) as Array<{ id: string }>;
+      expect(localeOrRows.map((row) => row.id).sort()).toEqual(["en-draft", "en-post", "zh-post"]);
+
+      const nested = compileView(view({
+        from: "posts",
+        fields: ["id"],
+        filter: {
+          and: [
+            { eq: { field: "status", value: "published" } },
+            {
+              or: [
+                { eq: { field: "locale", value: "en" } },
+                { eq: { field: "locale", value: "zh-TW" } },
+              ],
+            },
+          ],
+        },
+      }));
+      const nestedRows = db.prepare(nested.sql)
+        .all(...nested.params as SQLInputValue[]) as Array<{ id: string }>;
+      expect(nestedRows.map((row) => row.id).sort()).toEqual(["en-post", "zh-post"]);
+    } finally {
+      db.close();
+    }
+  });
+
   it("orderBy + limit compile through", () => {
     const c = compileView(
       view({
