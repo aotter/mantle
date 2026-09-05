@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runGenerate } from "../../src/cli/generate.js";
+import { resolveAdminUiIndexHtml, runGenerate } from "../../src/cli/generate.js";
+
+const coreOnly = { resolveAdminUiIndexHtml: () => null };
 
 const originalCwd = process.cwd();
 const execFileAsync = promisify(execFile);
@@ -33,7 +35,7 @@ describe("mantle generate", () => {
       await writeFile(join(root, "manifests", "site.yaml"), fixture);
       process.chdir(root);
 
-      expect(await runGenerate([])).toBe(0);
+      expect(await runGenerate([], coreOnly)).toBe(0);
       const mantlePath = join(root, ".mantle", "generated", "mantle.ts");
       const firstMantle = await readFile(mantlePath, "utf8");
       expect(firstMantle).toContain("export async function createMantle<Env = unknown>");
@@ -146,19 +148,19 @@ if (false) {
         throw new Error(output.stderr || output.stdout || String(error));
       }
 
-      expect(await runGenerate([])).toBe(0);
+      expect(await runGenerate([], coreOnly)).toBe(0);
       expect(await readFile(mantlePath, "utf8")).toBe(firstMantle);
-      expect(await runGenerate(["--check"])).toBe(0);
+      expect(await runGenerate(["--check"], coreOnly)).toBe(0);
 
       const adminIndexPath = join(root, "public", "_mantle", "admin", "index.html");
       await mkdir(join(root, "public", "_mantle", "admin"), { recursive: true });
       await writeFile(adminIndexPath, "owned by the host\n");
-      expect(await runGenerate(["--check"])).toBe(0);
+      expect(await runGenerate(["--check"], coreOnly)).toBe(0);
       expect(await readFile(adminIndexPath, "utf8")).toBe("owned by the host\n");
 
       await writeFile(mantlePath, "stale\n");
       const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-      expect(await runGenerate(["--check"])).toBe(1);
+      expect(await runGenerate(["--check"], coreOnly)).toBe(1);
       expect(stderr).toHaveBeenCalledWith("Mantle generated files are stale; run `mantle generate`.\n");
       expect(await readFile(mantlePath, "utf8")).toBe("stale\n");
     } finally {
@@ -228,6 +230,67 @@ spec: {}
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("skips Admin assets when the optional UI package does not resolve", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mantle-generate-core-only-"));
+    try {
+      await mkdir(join(root, "manifests"));
+      await writeFile(join(root, "manifests", "site.yaml"), fixture);
+      process.chdir(root);
+
+      expect(await runGenerate([], coreOnly)).toBe(0);
+      expect(await readFile(join(root, ".mantle", "generated", "mantle.ts"), "utf8"))
+        .toContain("export async function createMantle<Env = unknown>");
+      await expect(readFile(join(root, "public", "_mantle", "admin", "index.html")))
+        .rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("syncs Admin SPA assets when the optional UI package resolves", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mantle-generate-admin-"));
+    const adminDist = await mkdtemp(join(tmpdir(), "mantle-admin-ui-dist-"));
+    try {
+      await mkdir(join(root, "manifests"));
+      await writeFile(join(root, "manifests", "site.yaml"), fixture);
+      await mkdir(join(adminDist, "assets"));
+      await writeFile(join(adminDist, "index.html"), "<!doctype html><title>Admin</title>\n");
+      await writeFile(join(adminDist, "assets", "app.js"), "console.log('admin');\n");
+      await writeFile(join(adminDist, "server.js"), "export const systemTokensCss = '';\n");
+      await writeFile(join(adminDist, "server.d.ts"), "export declare const systemTokensCss: string;\n");
+      process.chdir(root);
+
+      const deps = { resolveAdminUiIndexHtml: () => join(adminDist, "index.html") };
+      expect(await runGenerate([], deps)).toBe(0);
+
+      const adminIndexPath = join(root, "public", "_mantle", "admin", "index.html");
+      expect(await readFile(adminIndexPath, "utf8")).toBe("<!doctype html><title>Admin</title>\n");
+      expect(await readFile(join(root, "public", "_mantle", "admin", "assets", "app.js"), "utf8"))
+        .toBe("console.log('admin');\n");
+      await expect(readFile(join(root, "public", "_mantle", "admin", "server.js"))).rejects.toThrow();
+      await expect(readFile(join(root, "public", "_mantle", "admin", "server.d.ts"))).rejects.toThrow();
+      expect(await runGenerate(["--check"], deps)).toBe(0);
+
+      await writeFile(adminIndexPath, "corrupted\n");
+      const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      expect(await runGenerate(["--check"], deps)).toBe(1);
+      expect(stderr).toHaveBeenCalledWith("Mantle generated files are stale; run `mantle generate`.\n");
+      expect(await readFile(adminIndexPath, "utf8")).toBe("corrupted\n");
+      stderr.mockRestore();
+
+      expect(await runGenerate([], deps)).toBe(0);
+      expect(await readFile(adminIndexPath, "utf8")).toBe("<!doctype html><title>Admin</title>\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(adminDist, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves the workspace Admin UI package when it is installed", () => {
+    const resolved = resolveAdminUiIndexHtml();
+    expect(resolved).toMatch(/index\.html$/);
   });
 });
 

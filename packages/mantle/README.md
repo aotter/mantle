@@ -60,7 +60,9 @@ pnpm exec mantle-harness http --base-url http://127.0.0.1:8787 --route page=/en/
 ```
 
 `mantle generate` validates and compiles `./manifests/`, then writes one typed
-`.mantle/generated/mantle.ts` module. It performs no Admin asset installation,
+`.mantle/generated/mantle.ts` module. When `@aotter/mantle-admin-ui` is
+installed, it also syncs the Admin SPA to `public/_mantle/admin/` (excluding
+`server.*` package exports). Core-only installs skip that copy. It performs no
 skill sync, package update, styling, provisioning, or deployment.
 The same pure emitter is available from `@aotter/mantle/codegen` when a host
 wants to own parsing and filesystem IO.

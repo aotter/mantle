@@ -317,7 +317,7 @@ The umbrella provides one `mantle` command set:
 |---|---|
 | `mantle create <type> <dir>` | Materialize a version-matched starter into a new directory. |
 | `mantle generate` | Compile manifests into a sealed plan and typed runtime module. |
-| `mantle generate --check` | Fail without writing when generated code is stale. |
+| `mantle generate --check` | Fail without writing when generated code or optional Admin assets are stale. |
 | `mantle validate` | Validate manifests and handler-source references. |
 | `mantle emit-openapi` | Emit OpenAPI 3.1 from HTTP Triggers and View routes. |
 | `mantle skills` | Project version-matched Core skills into the consumer repository. |
@@ -330,9 +330,10 @@ Advanced manifest primitives remain in the direct `@aotter/mantle-spec`
 package: `mantle-spec introspect` and `mantle-spec emit-types`.
 
 `generate` writes one `.mantle/generated/mantle.ts` module containing the
-sealed plan, generated types, `createMantle`, and `bindMantle`. It does not
-install Admin, change styling, project skills, provision providers, or deploy
-the application.
+sealed plan, generated types, `createMantle`, and `bindMantle`. When
+`@aotter/mantle-admin-ui` is installed, it also syncs the Admin SPA to
+`public/_mantle/admin/`. It does not change styling, project skills, provision
+providers, or deploy the application.
 
 ## Contributing
 
