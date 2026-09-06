@@ -1,8 +1,8 @@
 # Spec-only adoption in an existing host
 
-An existing application can participate in the Mantle ecosystem by consuming
-the published `@aotter/mantle-spec` package, without running Mantle Runtime.
-This is the parser/linker-only path already allowed by
+An existing application can reuse Mantle's Schema grammar and validation by
+consuming the published `@aotter/mantle-spec` package, without running Mantle
+Runtime. This Spec-only path is allowed by
 [ADR-0019](adr/0019-sealed-manifest-runtime-pipeline.md), not a new adapter,
 manifest grammar, or fork of Core.
 
