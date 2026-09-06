@@ -24,7 +24,11 @@ describe("Better Auth 1.7 MCP smoke", () => {
       software_version: "1.2.3",
       redirect_uris: ["https://client.example.com/callback"],
       token_endpoint_auth_method: "none",
-      grant_types: ["authorization_code", "refresh_token"],
+      grant_types: [
+        "authorization_code",
+        "refresh_token",
+        "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      ],
       response_types: ["code"],
       scope: "mcp",
     };

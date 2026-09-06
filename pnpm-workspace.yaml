@@ -26,7 +26,7 @@ catalogs:
   peer:
     hono: ^4.12.0
     zod: ^4.5.0
-    better-auth: ^1.7.1
+    better-auth: 1.7.2
     aws4fetch: ^1.0.20
     '@libsql/client': ^0.17.4
 
@@ -34,10 +34,12 @@ catalog:
   # Shared runtime deps — tracked via lockfile, bumped by dependabot.
   hono: ^4.13.3
   zod: ^4.5.4
-  better-auth: ^1.7.1
-  '@better-auth/oauth-provider': ^1.7.1
-  '@better-auth/mcp': ^1.7.1
-  '@better-auth/cimd': ^1.7.1
+  better-auth: 1.7.2
+  '@better-auth/core': 1.7.2
+  '@better-auth/utils': 0.4.2
+  '@better-auth/oauth-provider': 1.7.2
+  '@better-auth/mcp': 1.7.2
+  '@better-auth/cimd': 1.7.2
   aws4fetch: ^1.0.20
   '@types/bun': ^1.3.14
   '@libsql/client': ^0.17.4
