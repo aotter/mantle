@@ -6,7 +6,7 @@
     "noEmit": false,
     "tsBuildInfoFile": "./.tsbuildinfo",
     "stripInternal": true,
-    "types": ["@cloudflare/workers-types"]
+    "types": ["@cloudflare/workers-types", "node"]
   },
   "include": ["src/**/*"],
   "exclude": ["test/**/*", "dist/**/*"]

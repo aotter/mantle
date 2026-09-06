@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import {
   createDpopReplayStore,
@@ -22,6 +23,29 @@ import { cimd } from "@better-auth/cimd";
 import { decodeMemberCursor, encodeMemberCursor } from "@aotter/mantle-admin";
 import type { EmailSender } from "@aotter/mantle-runtime";
 import { STAFF_ROLES, type StaffRole } from "@aotter/mantle-spec";
+
+// Better Auth lazily imports AsyncLocalStorage. On Workers that promise belongs
+// to the request that first touches it; if the request is canceled, the whole
+// isolate can keep awaiting the abandoned promise. Seed its shared stores
+// synchronously so auth calls remain usable after client disconnects.
+const betterAuthGlobalKey = Symbol.for("better-auth:global");
+const betterAuthGlobals = globalThis as typeof globalThis & {
+  [key: symbol]: BetterAuthGlobal | undefined;
+};
+const betterAuthGlobal = betterAuthGlobals[betterAuthGlobalKey] ??= {
+  version: "",
+  epoch: 0,
+  context: {},
+};
+betterAuthGlobal.context.requestStateAsyncStorage ??= new AsyncLocalStorage();
+betterAuthGlobal.context.endpointContextAsyncStorage ??= new AsyncLocalStorage();
+betterAuthGlobal.context.adapterAsyncStorage ??= new AsyncLocalStorage();
+
+interface BetterAuthGlobal {
+  version: string;
+  epoch: number;
+  context: Record<string, unknown>;
+}
 
 export { decodeMemberCursor, encodeMemberCursor };
 export { STAFF_ROLES, type StaffRole };
