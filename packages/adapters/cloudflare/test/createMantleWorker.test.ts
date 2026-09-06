@@ -83,7 +83,7 @@ describe("createMantleWorker", () => {
     expect(db.appliedMigrations.size).toBeGreaterThan(0);
   });
 
-  it("does not boot the CMS runtime for OAuth transport-only requests", async () => {
+  it("boots before the initial MCP challenge and OAuth discovery", async () => {
     const db = new InMemoryDatabase();
     const auth = {
       ...stubAuth,
@@ -95,15 +95,14 @@ describe("createMantleWorker", () => {
       bindings: () => ({ db, adminAssets: new StubAssetServer() }),
     });
 
-    for (const path of [
-      "/.well-known/oauth-authorization-server/api/auth",
-    ]) {
-      expect((await fetchWorker(worker, path, testEnv())).status, path).toBe(200);
-    }
     expect((await fetchWorker(worker, "/mcp/staff", testEnv())).status).toBe(401);
+    expect(db.appliedMigrations.size).toBeGreaterThan(0);
 
-    expect(db.appliedMigrations.size).toBe(0);
-    await fetchWorker(worker, "/api/auth/oauth2/register", testEnv());
+    expect((await fetchWorker(
+      worker,
+      "/.well-known/oauth-authorization-server/api/auth",
+      testEnv(),
+    )).status).toBe(200);
     expect(db.appliedMigrations.size).toBeGreaterThan(0);
   });
 

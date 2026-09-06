@@ -256,7 +256,7 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
         const worker = assemble(env);
         const setupIncomplete = await setupIncompleteAuthResponse(request, worker.auth);
         if (setupIncomplete) return setupIncomplete;
-        if (!isRuntimeIndependentOAuthRequest(request)) await worker.getRuntime();
+        await worker.getRuntime();
         return worker.fetch(request, env, ctx);
       });
     },
@@ -271,13 +271,6 @@ async function purgePublicCache(): Promise<void> {
   if (!result.success) {
     console.error("Mantle public cache purge failed", result.errors);
   }
-}
-
-function isRuntimeIndependentOAuthRequest(request: Request): boolean {
-  const pathname = new URL(request.url).pathname;
-  if (pathname.startsWith(MANTLE_RESERVED_WELL_KNOWN_PREFIX)) return true;
-  return (pathname === "/mcp" || pathname.startsWith("/mcp/")) &&
-    !request.headers.has("authorization");
 }
 
 /** Redacted fail-closed boundary for facade and low-level Worker assembly failures. */
