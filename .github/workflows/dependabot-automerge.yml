@@ -1,6 +1,6 @@
-# Auto-merge dependabot PRs after CI passes — but only for patch /
-# minor / digest update types. Major bumps stay manual because the
-# breaking-change surface is too wide to merge unattended.
+# Auto-merge Dependabot PRs after current-base CI passes, but only for patch
+# and digest updates. Minor and major bumps stay manual because passing tests
+# do not prove that a raised dependency floor or new behavior is intentional.
 #
 # Sequencing: dependabot opens its PR against `develop` (see
 # `.github/dependabot.yml`); CI runs via `ci.yml`; once CI is green
@@ -15,7 +15,7 @@ name: dependabot-automerge
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [develop]
 
 permissions:
   contents: write
@@ -41,10 +41,9 @@ jobs:
       # `chore(deps): bump X` subject as the head commit. Squash is
       # disabled on this repo; merge-commit is allowed but generates
       # noisy 'Merge pull request #N from ...' subjects we don't want.
-      - name: Auto-approve + auto-merge patch + minor + digest
+      - name: Auto-approve + auto-merge patch + digest
         if: |
           steps.meta.outputs.update-type == 'version-update:semver-patch' ||
-          steps.meta.outputs.update-type == 'version-update:semver-minor' ||
           steps.meta.outputs.update-type == 'version-update:semver-digest'
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}

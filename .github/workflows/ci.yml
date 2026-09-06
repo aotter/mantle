@@ -16,7 +16,8 @@ permissions:
   contents: read
 
 jobs:
-  # Fast checks that fail the PR quickly. Runs on every push + PR.
+  # Deterministic checks required before merge. Platform performance sampling
+  # runs separately in cloudflare-bench.yml for relevant paths.
   lint:
     name: Typecheck + tests
     runs-on: ubuntu-latest
@@ -67,9 +68,6 @@ jobs:
         run: pnpm typecheck
 
       - run: pnpm test
-
-      - name: Check crowded D1 and public cache paths
-        run: pnpm bench:wrangler
 
       - name: Check packed-consumer provenance rejection
         run: node scripts/check-packed-consumer.mjs --self-test

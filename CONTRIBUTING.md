@@ -112,7 +112,11 @@ while iterating. Changes to Cloudflare request/storage performance must also run
   `fix/issue-N-topic`, `docs/issue-N-topic`, or `chore/issue-N-topic`.
 - Use conventional commit subjects. Keep each commit and PR coherent and
   reviewable.
-- Open PRs against `develop` and merge with a merge commit, not squash.
+- Open PRs against `develop`. Human-authored PRs merge with a merge commit.
+  Dependabot patch and digest updates are the only rebase-merge exception;
+  minor and major dependency updates require human review. Do not squash.
+- Before merge, update the branch with its base and pass the required checks on
+  that combined state.
 - Start non-trivial work from an issue. Use the templates and labels described
   in [`docs/labels.md`](docs/labels.md).
 - A PR body states outcome, scope/non-goals, commands actually run, omitted
@@ -130,5 +134,9 @@ metadata through `.github/release.yml`. Do not add version entries to
 Release mechanics are governed by [`docs/release-process.md`](docs/release-process.md)
 and the canonical [maintainer release skill](.agent/skills/mantle-release/SKILL.md).
 No task implies permission to publish.
+
+The organization-admin ruleset bypass exists only for repository or release
+recovery. If it is used, record the reason and resulting state in an issue or
+PR so the bypass remains auditable.
 
 Do not file public vulnerability issues. Follow [`SECURITY.md`](SECURITY.md).

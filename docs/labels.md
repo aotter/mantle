@@ -34,6 +34,7 @@ For package README or package-local docs changes, prefer the package area label 
 | `area:admin-ui` | `packages/mantle-admin-ui` React admin SPA. |
 | `area:docs` | Repo-wide human docs, governance docs, ADR text, release docs, root README content, and cross-cutting documentation work. |
 | `area:adapter` | Adapter boundary work spanning Cloudflare or future adapters. |
+| `area:ci` | GitHub Actions, dependency automation, and repository checks. |
 
 ## Release and review gates
 
@@ -60,6 +61,7 @@ gh label create "area:skills" --description "Agent Skills and install/extend/pro
 gh label create "area:admin-ui" --description "React admin UI" --color "1d76db"
 gh label create "area:docs" --description "Documentation and governance" --color "1d76db"
 gh label create "area:adapter" --description "Adapter boundary and future adapter work" --color "1d76db"
+gh label create "area:ci" --description "CI, dependency automation, and repository checks" --color "1d76db"
 gh label create "breaking-change" --description "Semver-relevant breaking change" --color "b60205"
 gh label create "skip-release-notes" --description "Release bookkeeping only; omit from generated GitHub notes" --color "ededed"
 gh label create "needs-adr" --description "Requires an ADR or ADR-lite decision before merge" --color "d93f0b"
