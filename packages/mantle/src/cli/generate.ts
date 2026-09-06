@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { cwd, stderr, stdout } from "node:process";
@@ -25,7 +26,8 @@ export interface GenerateDeps {
  */
 export function resolveAdminUiIndexHtml(): string | null {
   try {
-    return fileURLToPath(import.meta.resolve("@aotter/mantle-admin-ui/index.html"));
+    const path = fileURLToPath(import.meta.resolve("@aotter/mantle-admin-ui/index.html"));
+    return existsSync(path) ? path : null;
   } catch {
     return null;
   }
