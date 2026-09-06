@@ -1,0 +1,50 @@
+name: Cloudflare benchmark
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - packages/adapters/cloudflare/**
+      - packages/mantle-spec/src/**
+      - packages/mantle-runtime/src/**
+      - packages/mantle-admin/src/**
+      - packages/mantle-web/src/**
+      - scripts/run-wrangler-performance.mjs
+      - .github/workflows/cloudflare-bench.yml
+  push:
+    branches: [main, develop]
+    paths:
+      - packages/adapters/cloudflare/**
+      - packages/mantle-spec/src/**
+      - packages/mantle-runtime/src/**
+      - packages/mantle-admin/src/**
+      - packages/mantle-web/src/**
+      - scripts/run-wrangler-performance.mjs
+      - .github/workflows/cloudflare-bench.yml
+
+concurrency:
+  group: cloudflare-bench-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Wrangler performance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: pnpm/action-setup@v6.0.10
+
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm bench:wrangler

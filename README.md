@@ -344,6 +344,9 @@ the application.
   authority for humans and agents.
 - [`docs/adr/`](docs/adr/) records accepted, path-dependent decisions.
 - [`docs/release-process.md`](docs/release-process.md) governs releases.
+- [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) defines community behavior.
+- [`SUPPORT.md`](SUPPORT.md) routes questions, bugs, and feature requests.
+- [`SECURITY.md`](SECURITY.md) provides the private vulnerability-reporting path.
 - [GitHub Releases](https://github.com/aotter/mantle/releases) is the canonical
   public change history.
 

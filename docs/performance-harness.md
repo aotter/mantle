@@ -75,12 +75,14 @@ Timing always reports p50/p95/max. A test-only Worker wrapper may also return
 `x-mantle-query-count` and `x-mantle-rows-read`; those become distributions in
 the same report. Do not expose these diagnostic headers in production.
 
-Core CI runs `pnpm bench:wrangler` against real Wrangler-local D1, Worker HTTP
-routing, View execution, and origin page rendering. It compares 100 and 10,000
-row fixtures and gates row-read scaling plus endpoint query budgets, not
-absolute milliseconds. Wrangler-local does not emulate the new entrypoint
-Workers Cache, so cache hits are a deployment-level smoke check rather than a
-fabricated local metric.
+The path-scoped Cloudflare benchmark workflow runs `pnpm bench:wrangler`
+against real Wrangler-local D1, Worker HTTP routing, View execution, and origin
+page rendering. It compares 100 and 10,000 row fixtures and gates row-read
+scaling plus endpoint query budgets, not absolute milliseconds. It is separate
+from the required repository checks so an unrelated dependency or docs PR does
+not fail on the platform harness. Wrangler-local does not emulate the new
+entrypoint Workers Cache, so cache hits are a deployment-level smoke check
+rather than a fabricated local metric.
 
 ## Seven findings: measured disposition
 
