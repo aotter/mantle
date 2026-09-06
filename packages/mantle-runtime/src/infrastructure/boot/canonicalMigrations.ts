@@ -342,6 +342,18 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
       );
     `,
   },
+  {
+    id: "0008-oauth-grant-revocations",
+    description: "Keep revoked OAuth JWT grants invalid after a client is re-authorized",
+    sql: `
+      CREATE TABLE IF NOT EXISTS oauthGrantRevocation (
+        userId        TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+        clientId      TEXT NOT NULL REFERENCES oauthClient(clientId) ON DELETE CASCADE,
+        revokedBefore INTEGER NOT NULL,
+        PRIMARY KEY (userId, clientId)
+      );
+    `,
+  },
 ];
 
 /** Keep Schema logical tables exact across manifest additions, edits, and removals. */

@@ -69,4 +69,10 @@ describe("CANONICAL_MIGRATIONS", () => {
     expect(refreshToken).not.toMatch(/\brefreshToken\s+TEXT/);
     expect(consent).not.toMatch(/\bconsentGiven\b/);
   });
+
+  it("keeps a per-user/client OAuth revocation watermark", () => {
+    const sql = migrationSql("0008-oauth-grant-revocations");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS oauthGrantRevocation");
+    expect(sql).toContain("PRIMARY KEY (userId, clientId)");
+  });
 });

@@ -1,9 +1,12 @@
 import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountTestEndpoints } from "./mountTestEndpoints.js";
-import { renderConsentHtml } from "../src/oauth/consentHtml.js";
+import {
+  renderConnectedAppsHtml,
+  renderConsentHtml,
+} from "../src/oauth/consentHtml.js";
 import { mountAuthorize } from "../src/oauth/mountOAuth.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
@@ -155,6 +158,83 @@ describe("mountAuthorize", () => {
     expect(html).toContain('this.setAttribute("aria-busy","true")');
     expect(html).toContain('action.disabled=true');
     expect(html).toContain('<script nonce="test-nonce">');
+  });
+
+  it("renders connected apps with a locked revoke action", () => {
+    const html = renderConnectedAppsHtml("en", [{
+      id: "consent-1",
+      clientId: "https://client.example/metadata",
+      clientName: "Claude",
+      scopes: ["mcp"],
+    }], "test-nonce");
+
+    expect(html).toContain("Connected apps");
+    expect(html).toContain("Claude");
+    expect(html).toContain('name="consent_id" value="consent-1"');
+    expect(html).toContain('data-loading-label="Revoking…"');
+    expect(html).toContain('form[data-submit-lock]');
+    expect(html).toContain('<script nonce="test-nonce">');
+  });
+
+  it("lists and revokes only the current user's connected app", async () => {
+    const listOAuthConsents = vi.fn(async () => [{
+      id: "consent-1",
+      clientId: "client-1",
+      clientName: "Claude",
+      scopes: ["mcp"],
+    }]);
+    const revokeOAuthConsent = vi.fn(async () => true);
+    const app = new Hono();
+    mountAuthorize(app, {
+      auth: {
+        ...stubAuth,
+        getSession: async () => ({
+          session: { id: "s1", userId: "u1", expiresAt: new Date(Date.now() + 60_000) },
+          user: { id: "u1", email: "u1@example.test", name: "U", role: "owner" },
+        }),
+        listOAuthConsents,
+        revokeOAuthConsent,
+      },
+    });
+
+    const page = await app.request("https://example.test/oauth/consents");
+    expect(page.status).toBe(200);
+    expect(page.headers.get("cache-control")).toBe("private, no-store");
+    expect(page.headers.get("content-security-policy")).toContain("script-src 'nonce-");
+    expect(await page.text()).toContain("Claude");
+    expect(listOAuthConsents).toHaveBeenCalledWith("u1");
+
+    const revoked = await app.request("https://example.test/oauth/consents/revoke", {
+      method: "POST",
+      headers: { "sec-fetch-site": "same-origin" },
+      body: new URLSearchParams({ consent_id: "consent-1" }),
+    });
+    expect(revoked.status).toBe(303);
+    expect(revoked.headers.get("location")).toBe("/oauth/consents");
+    expect(revokeOAuthConsent).toHaveBeenCalledWith("u1", "consent-1");
+  });
+
+  it("requires a session and same-origin mutation for connected apps", async () => {
+    const app = new Hono();
+    mountAuthorize(app, {
+      auth: {
+        ...stubAuth,
+        listOAuthConsents: async () => [],
+        revokeOAuthConsent: async () => true,
+      },
+    });
+
+    const page = await app.request("https://example.test/oauth/consents");
+    expect(page.status).toBe(302);
+    expect(page.headers.get("location")).toBe(
+      "/admin/sign-in?return=%2Foauth%2Fconsents",
+    );
+    const rejected = await app.request("https://example.test/oauth/consents/revoke", {
+      method: "POST",
+      headers: { "sec-fetch-site": "cross-site" },
+      body: new URLSearchParams({ consent_id: "consent-1" }),
+    });
+    expect(rejected.status).toBe(403);
   });
 
   describe("consent POST CSRF defense (#389)", () => {

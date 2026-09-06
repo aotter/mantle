@@ -1097,6 +1097,13 @@ export interface OAuthConsentRequest {
   readonly oauthQuery: string;
 }
 
+export interface OAuthConsentInfo {
+  readonly id: string;
+  readonly clientId: string;
+  readonly clientName: string;
+  readonly scopes: readonly string[];
+}
+
 // Better Auth's full inferred type pulls plugin internals
 // (`AdminOptions`) that aren't re-exported, so emitting a .d.ts that
 // names that type fails (TS4058). The structural facade keeps the
@@ -1151,6 +1158,15 @@ export interface Auth {
     request: Request,
     accept: boolean,
   ) => Promise<string>;
+  /** User-facing OAuth grants. Optional so custom Auth facades stay compatible. */
+  readonly listOAuthConsents?: (
+    userId: string,
+  ) => Promise<readonly OAuthConsentInfo[]>;
+  /** Revoke every token and consent row for one user/client grant. */
+  readonly revokeOAuthConsent?: (
+    userId: string,
+    consentId: string,
+  ) => Promise<boolean>;
   /** Methods the consumer registered, in declaration order. The admin
    *  SPA renders sign-in sections per this list. Secrets, senders, and
    *  per-provider extras are intentionally excluded — UI doesn't need
@@ -1245,13 +1261,17 @@ export function createAuth(config: CreateAuthConfig): Auth {
   const verifyAccessToken = config.oauthProvider
     ? async (token: string, audience: string) => {
         const context = await auth.$context;
-        return verifyOAuthJwtWithLocalJwks(
+        const claims = await verifyOAuthJwtWithLocalJwks(
           token,
           audience,
           context.baseURL,
           async () => api.getJwks(),
           localJwksCacheKey,
         );
+        if (audience === config.oauthProvider?.mcpResource) {
+          await assertActiveMcpGrant(config.database, claims, audience);
+        }
+        return claims;
       }
     : null;
   let nextDcrCleanupAt = 0;
@@ -1406,6 +1426,77 @@ export function createAuth(config: CreateAuthConfig): Auth {
       }
       return result.url;
     },
+    ...(config.oauthProvider
+      ? {
+          listOAuthConsents: async (userId: string) => {
+            const result = await config.database
+              .prepare(
+                `SELECT consent.id, consent.clientId,
+                        COALESCE(client.name, consent.clientId) AS clientName,
+                        consent.scopes
+                   FROM oauthConsent AS consent
+                   LEFT JOIN oauthClient AS client ON client.clientId = consent.clientId
+                  WHERE consent.userId = ?
+                  ORDER BY consent.updatedAt DESC, consent.id ASC`,
+              )
+              .bind(userId)
+              .all<{
+                id: string;
+                clientId: string;
+                clientName: string;
+                scopes: string;
+              }>();
+            return (result.results ?? []).map((row) => ({
+              id: row.id,
+              clientId: row.clientId,
+              clientName: row.clientName,
+              scopes: parseStoredStringArray(row.scopes) ?? [],
+            }));
+          },
+          revokeOAuthConsent: async (userId: string, consentId: string) => {
+            const consent = await config.database
+              .prepare(
+                "SELECT clientId FROM oauthConsent WHERE id = ? AND userId = ? LIMIT 1",
+              )
+              .bind(consentId, userId)
+              .first<{ clientId: string }>();
+            if (!consent) return false;
+            const revokedAt = new Date().toISOString();
+            const revokedBefore = Math.floor(Date.now() / 1_000);
+            await config.database.batch([
+              config.database
+                .prepare(
+                  `INSERT INTO oauthGrantRevocation (userId, clientId, revokedBefore)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(userId, clientId) DO UPDATE SET revokedBefore = excluded.revokedBefore`,
+                )
+                .bind(userId, consent.clientId, revokedBefore),
+              config.database
+                .prepare(
+                  "UPDATE oauthRefreshToken SET revoked = ? WHERE userId = ? AND clientId = ? AND revoked IS NULL",
+                )
+                .bind(revokedAt, userId, consent.clientId),
+              config.database
+                .prepare(
+                  "UPDATE oauthAccessToken SET revoked = ? WHERE userId = ? AND clientId = ? AND revoked IS NULL",
+                )
+                .bind(revokedAt, userId, consent.clientId),
+              config.database
+                .prepare(
+                  `DELETE FROM verification
+                    WHERE CASE WHEN json_valid(value) THEN json_extract(value, '$.type') END = 'authorization_code'
+                      AND CASE WHEN json_valid(value) THEN json_extract(value, '$.userId') END = ?
+                      AND CASE WHEN json_valid(value) THEN json_extract(value, '$.query.client_id') END = ?`,
+                )
+                .bind(userId, consent.clientId),
+              config.database
+                .prepare("DELETE FROM oauthConsent WHERE userId = ? AND clientId = ?")
+                .bind(userId, consent.clientId),
+            ]);
+            return true;
+          },
+        }
+      : {}),
     methods: config.methods.map<AuthMethodInfo>((m) => {
       switch (m.kind) {
         case "social":
@@ -1715,6 +1806,65 @@ function scopesFromClaim(value: unknown): string[] {
     return value.filter((scope): scope is string => typeof scope === "string");
   }
   return [];
+}
+
+function parseStoredStringArray(value: unknown): string[] | null {
+  if (typeof value !== "string") return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string")
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function assertActiveMcpGrant(
+  database: D1Database,
+  claims: Record<string, unknown>,
+  audience: string,
+): Promise<void> {
+  const userId = claims["sub"];
+  const clientId = claims["azp"];
+  const sessionId = claims["sid"];
+  const issuedAt = claims["iat"];
+  if (
+    typeof userId !== "string" ||
+    typeof clientId !== "string" ||
+    typeof sessionId !== "string" ||
+    typeof issuedAt !== "number"
+  ) {
+    throw new Error("MCP token is not bound to a user session.");
+  }
+  const session = await database
+    .prepare(
+      "SELECT id FROM session WHERE id = ? AND userId = ? AND expiresAt > ? LIMIT 1",
+    )
+    .bind(sessionId, userId, new Date().toISOString())
+    .first<{ id: string }>();
+  if (!session) throw new Error("MCP token session is no longer active.");
+
+  const result = await database
+    .prepare(
+      `SELECT consent.resources, consent.scopes, revocation.revokedBefore
+         FROM oauthConsent AS consent
+         LEFT JOIN oauthGrantRevocation AS revocation
+           ON revocation.userId = consent.userId AND revocation.clientId = consent.clientId
+        WHERE consent.userId = ? AND consent.clientId = ?`,
+    )
+    .bind(userId, clientId)
+    .all<{ resources: string | null; scopes: string; revokedBefore: number | null }>();
+  const tokenScopes = scopesFromClaim(claims["scope"]);
+  const active = (result.results ?? []).some((row) => {
+    const resources = parseStoredStringArray(row.resources);
+    const scopes = parseStoredStringArray(row.scopes);
+    return resources?.includes(audience) === true &&
+      scopes !== null &&
+      (row.revokedBefore == null || issuedAt > row.revokedBefore) &&
+      tokenScopes.every((scope) => scopes.includes(scope));
+  });
+  if (!active) throw new Error("MCP authorization grant is no longer active.");
 }
 
 type LocalJwksFetcher = Exclude<

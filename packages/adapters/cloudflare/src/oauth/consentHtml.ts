@@ -4,6 +4,8 @@
  * Supports zh-TW and en locales.
  */
 
+import type { OAuthConsentInfo } from "../auth/createAuth.js";
+
 export interface ConsentModel {
   readonly clientName: string;
   readonly redirectUri: string;
@@ -32,6 +34,14 @@ const STRINGS = {
     denying: "Denying…",
     invalidTitle: "Invalid authorization request",
     invalidBody: "Missing or malformed consent payload. Return to your MCP client and try again.",
+    appsTitle: "Connected apps · mantle",
+    appsEyebrow: "OAuth access",
+    appsHeading: "Connected apps",
+    appsBody: "Apps you authorized to access this site.",
+    appsEmpty: "No connected apps.",
+    revoke: "Revoke access",
+    revoking: "Revoking…",
+    back: "Back to admin",
   },
   "zh-TW": {
     title: "授權 · mantle",
@@ -45,6 +55,14 @@ const STRINGS = {
     denying: "拒絕中…",
     invalidTitle: "無效的授權請求",
     invalidBody: "缺少或格式錯誤的授權資訊，請返回 MCP 客戶端重試。",
+    appsTitle: "已連結應用程式 · mantle",
+    appsEyebrow: "OAuth 存取權",
+    appsHeading: "已連結應用程式",
+    appsBody: "您已授權存取此站台的應用程式。",
+    appsEmpty: "目前沒有已連結的應用程式。",
+    revoke: "撤銷存取權",
+    revoking: "撤銷中…",
+    back: "返回管理後台",
   },
 } as const;
 
@@ -69,7 +87,7 @@ const CSS = `
   code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8rem;padding:.125rem .4rem;border-radius:.25rem;background:var(--muted);overflow-wrap:anywhere}
   .scopes{margin:0 0 1.5rem;display:flex;flex-wrap:wrap;gap:.375rem}
   .scope{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.75rem;padding:.25rem .5rem;border-radius:.25rem;background:var(--muted)}
-  form{display:flex;gap:.75rem}
+  .actions{display:flex;gap:.75rem}
   button{flex:1;display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.625rem 1rem;border:0;border-radius:.5rem;font:inherit;font-weight:500;cursor:pointer;transition:opacity .15s,background .15s}
   button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
   button:disabled{cursor:not-allowed;opacity:.65}
@@ -78,13 +96,21 @@ const CSS = `
   button[value="approve"]:not(:disabled):hover{opacity:.9}
   button[value="deny"]{background:var(--secondary);color:var(--secondary-foreground)}
   button[value="deny"]:not(:disabled):hover{background:var(--accent)}
+  .apps{display:grid;gap:.75rem;margin:1.5rem 0}
+  .app{padding:1rem;border:1px solid var(--border);border-radius:.5rem}
+  .app h2{font-size:1rem;margin:0 0 .25rem}
+  .app .scopes{margin:.75rem 0}
+  .app form{display:flex;justify-content:flex-end}
+  .app button{flex:0 0 auto;background:var(--secondary);color:var(--secondary-foreground)}
+  .app button:not(:disabled):hover{background:var(--accent)}
+  .back{color:var(--primary);font-size:.875rem}
   @keyframes spin{to{transform:rotate(360deg)}}
   @media(prefers-reduced-motion:reduce){button[data-loading="true"]::before{animation-duration:1.5s}}
-  @media(max-width:30rem){form{flex-direction:column}}
+  @media(max-width:30rem){.actions{flex-direction:column}}
 `.trim();
 
 function submitScript(nonce: string): string {
-  return `<script nonce="${escapeHtml(nonce)}">document.querySelector("form").addEventListener("submit",function(event){const button=event.submitter;this.elements.namedItem("decision").value=button.value;this.setAttribute("aria-busy","true");button.dataset.loading="true";button.textContent=button.dataset.loadingLabel;for(const action of this.querySelectorAll("button"))action.disabled=true;});</script>`;
+  return `<script nonce="${escapeHtml(nonce)}">for(const form of document.querySelectorAll("form[data-submit-lock]"))form.addEventListener("submit",function(event){const button=event.submitter;if(!button)return;const decision=this.elements.namedItem("decision");if(decision)decision.value=button.value;this.setAttribute("aria-busy","true");button.dataset.loading="true";button.textContent=button.dataset.loadingLabel;for(const action of this.querySelectorAll("button"))action.disabled=true;});</script>`;
 }
 
 export function renderConsentHtml(
@@ -112,7 +138,7 @@ export function renderConsentHtml(
     `<h1>${t.heading(escapeHtml(model.clientName))}</h1>` +
     `<p class="muted">${t.redirectLabel} <code>${escapeHtml(model.redirectUri)}</code></p>` +
     `${scopesBlock}` +
-    `<form method="post" action="/oauth/consent">` +
+    `<form class="actions" method="post" action="/oauth/consent" data-submit-lock>` +
     `<input type="hidden" name="oauth_query" value="${escapeHtml(model.oauthQuery)}"/>` +
     `<input type="hidden" name="decision"/>` +
     `<button type="submit" value="approve" data-loading-label="${t.approving}">${t.approve}</button>` +
@@ -120,5 +146,35 @@ export function renderConsentHtml(
     `</form>` +
     `${submitScript(nonce)}` +
     `${tail}`
+  );
+}
+
+export function renderConnectedAppsHtml(
+  locale: "zh-TW" | "en",
+  consents: readonly OAuthConsentInfo[],
+  nonce: string,
+): string {
+  const t = STRINGS[locale];
+  const lang = locale === "zh-TW" ? "zh-Hant-TW" : "en";
+  const apps = consents.length === 0
+    ? `<p class="muted">${t.appsEmpty}</p>`
+    : `<div class="apps">${consents.map((consent) => (
+        `<section class="app"><h2>${escapeHtml(consent.clientName)}</h2>` +
+        `<code>${escapeHtml(consent.clientId)}</code>` +
+        (consent.scopes.length === 0
+          ? ""
+          : `<div class="scopes">${consent.scopes.map((scope) => `<span class="scope">${escapeHtml(scope)}</span>`).join("")}</div>`) +
+        `<form method="post" action="/oauth/consents/revoke" data-submit-lock>` +
+        `<input type="hidden" name="consent_id" value="${escapeHtml(consent.id)}"/>` +
+        `<button type="submit" data-loading-label="${t.revoking}">${t.revoke}</button>` +
+        `</form></section>`
+      )).join("")}</div>`;
+  return (
+    `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"/>` +
+    `<meta name="viewport" content="width=device-width,initial-scale=1"/>` +
+    `<title>${t.appsTitle}</title><style>${CSS}</style></head><body><main class="card">` +
+    `<p class="eyebrow">${t.appsEyebrow}</p><h1>${t.appsHeading}</h1>` +
+    `<p class="muted">${t.appsBody}</p>${apps}<a class="back" href="/admin">${t.back}</a>` +
+    `${submitScript(nonce)}</main></body></html>`
   );
 }
