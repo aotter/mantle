@@ -38,3 +38,13 @@ canonical and sealed; a failed parse returns diagnostics without a partial
 The CLI `--manifests` directory reads its immediate `.yaml` and `.yml` files
 in lexicographic order. File names belong to the caller; discovery is not
 recursive.
+
+## Use Spec in an existing application
+
+An application can reuse manifest parsing, linking, diagnostics, and entry-data
+validation while keeping its own framework, storage, authentication, and admin
+UI. It does not need to install Runtime or adopt a Starter.
+
+See [Spec-only host adoption](https://github.com/aotter/mantle/blob/develop/docs/spec-only-host-adoption.md) for a
+tested fixture, a model/ER-browser pattern, and the distinction between Spec
+validation and a future maintainer-defined ecosystem recognition process.
