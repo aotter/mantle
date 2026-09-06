@@ -288,29 +288,34 @@ spec: {}
     }
   });
 
-  it("copies the installed Admin UI SPA when generate uses the default resolver", async () => {
-    if (resolveAdminUiIndexHtml() === null) return;
-    const root = await mkdtemp(join(tmpdir(), "mantle-generate-installed-admin-"));
-    try {
-      await mkdir(join(root, "manifests"));
-      await writeFile(join(root, "manifests", "site.yaml"), fixture);
-      process.chdir(root);
+  it.skipIf(resolveAdminUiIndexHtml() === null)(
+    "copies the installed Admin UI SPA when generate uses the default resolver",
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), "mantle-generate-installed-admin-"));
+      try {
+        await mkdir(join(root, "manifests"));
+        await writeFile(join(root, "manifests", "site.yaml"), fixture);
+        process.chdir(root);
 
-      expect(await runGenerate([])).toBe(0);
-      const adminIndexPath = join(root, "public", "_mantle", "admin", "index.html");
-      expect(await readFile(adminIndexPath, "utf8")).toContain("/_mantle/admin/");
-      await expect(readFile(join(root, "public", "_mantle", "admin", "server.js"))).rejects.toThrow();
-      expect(await runGenerate(["--check"])).toBe(0);
+        expect(await runGenerate([])).toBe(0);
+        const adminIndexPath = join(root, "public", "_mantle", "admin", "index.html");
+        expect(await readFile(adminIndexPath, "utf8")).toContain("/_mantle/admin/");
+        await expect(readFile(join(root, "public", "_mantle", "admin", "server.js")))
+          .rejects.toThrow();
+        expect(await runGenerate(["--check"])).toBe(0);
 
-      await writeFile(adminIndexPath, "corrupted\n");
-      const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-      expect(await runGenerate(["--check"])).toBe(1);
-      expect(stderr).toHaveBeenCalledWith("Mantle generated files are stale; run `mantle generate`.\n");
-      expect(await readFile(adminIndexPath, "utf8")).toBe("corrupted\n");
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+        await writeFile(adminIndexPath, "corrupted\n");
+        const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+        expect(await runGenerate(["--check"])).toBe(1);
+        expect(stderr).toHaveBeenCalledWith(
+          "Mantle generated files are stale; run `mantle generate`.\n",
+        );
+        expect(await readFile(adminIndexPath, "utf8")).toBe("corrupted\n");
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 const fixture = `
