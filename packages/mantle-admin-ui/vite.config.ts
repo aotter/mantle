@@ -9,8 +9,9 @@ const { version } = JSON.parse(
 ) as { version: string };
 
 /**
- * Admin SPA build. `mantle generate` copies this dist into the
- * consumer's Cloudflare Static Assets directory.
+ * Admin SPA build. When `@aotter/mantle-admin-ui` is installed,
+ * `mantle generate` copies this dist into the consumer's Cloudflare
+ * Static Assets directory (`public/_mantle/admin/`).
  */
 export default defineConfig({
   base: "/_mantle/admin/",
