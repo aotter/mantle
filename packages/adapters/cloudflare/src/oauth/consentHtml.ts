@@ -27,7 +27,9 @@ const STRINGS = {
     redirectLabel: "Will redirect to",
     scopesLabel: "Requested scopes",
     approve: "Approve",
+    approving: "Approving…",
     deny: "Deny",
+    denying: "Denying…",
     invalidTitle: "Invalid authorization request",
     invalidBody: "Missing or malformed consent payload. Return to your MCP client and try again.",
   },
@@ -38,7 +40,9 @@ const STRINGS = {
     redirectLabel: "將重新導向至",
     scopesLabel: "請求的授權範圍",
     approve: "同意",
+    approving: "授權中…",
     deny: "拒絕",
+    denying: "拒絕中…",
     invalidTitle: "無效的授權請求",
     invalidBody: "缺少或格式錯誤的授權資訊，請返回 MCP 客戶端重試。",
   },
@@ -66,16 +70,28 @@ const CSS = `
   .scopes{margin:0 0 1.5rem;display:flex;flex-wrap:wrap;gap:.375rem}
   .scope{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.75rem;padding:.25rem .5rem;border-radius:.25rem;background:var(--muted)}
   form{display:flex;gap:.75rem}
-  button{flex:1;padding:.625rem 1rem;border:0;border-radius:.5rem;font:inherit;font-weight:500;cursor:pointer;transition:opacity .15s,background .15s}
+  button{flex:1;display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.625rem 1rem;border:0;border-radius:.5rem;font:inherit;font-weight:500;cursor:pointer;transition:opacity .15s,background .15s}
   button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+  button:disabled{cursor:not-allowed;opacity:.65}
+  button[data-loading="true"]::before{content:"";width:.875rem;height:.875rem;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .65s linear infinite}
   button[value="approve"]{background:var(--primary);color:var(--primary-foreground)}
-  button[value="approve"]:hover{opacity:.9}
+  button[value="approve"]:not(:disabled):hover{opacity:.9}
   button[value="deny"]{background:var(--secondary);color:var(--secondary-foreground)}
-  button[value="deny"]:hover{background:var(--accent)}
+  button[value="deny"]:not(:disabled):hover{background:var(--accent)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media(prefers-reduced-motion:reduce){button[data-loading="true"]::before{animation-duration:1.5s}}
   @media(max-width:30rem){form{flex-direction:column}}
 `.trim();
 
-export function renderConsentHtml(locale: "zh-TW" | "en", model: ConsentModel | null): string {
+function submitScript(nonce: string): string {
+  return `<script nonce="${escapeHtml(nonce)}">document.querySelector("form").addEventListener("submit",function(event){const button=event.submitter;this.elements.namedItem("decision").value=button.value;this.setAttribute("aria-busy","true");button.dataset.loading="true";button.textContent=button.dataset.loadingLabel;for(const action of this.querySelectorAll("button"))action.disabled=true;});</script>`;
+}
+
+export function renderConsentHtml(
+  locale: "zh-TW" | "en",
+  model: ConsentModel | null,
+  nonce: string,
+): string {
   const t = STRINGS[locale];
   const lang = locale === "zh-TW" ? "zh-Hant-TW" : "en";
   const head = `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${t.title}</title><style>${CSS}</style></head><body><main class="card">`;
@@ -98,9 +114,11 @@ export function renderConsentHtml(locale: "zh-TW" | "en", model: ConsentModel | 
     `${scopesBlock}` +
     `<form method="post" action="/oauth/consent">` +
     `<input type="hidden" name="oauth_query" value="${escapeHtml(model.oauthQuery)}"/>` +
-    `<button type="submit" name="decision" value="approve">${t.approve}</button>` +
-    `<button type="submit" name="decision" value="deny">${t.deny}</button>` +
+    `<input type="hidden" name="decision"/>` +
+    `<button type="submit" value="approve" data-loading-label="${t.approving}">${t.approve}</button>` +
+    `<button type="submit" value="deny" data-loading-label="${t.denying}">${t.deny}</button>` +
     `</form>` +
+    `${submitScript(nonce)}` +
     `${tail}`
   );
 }
