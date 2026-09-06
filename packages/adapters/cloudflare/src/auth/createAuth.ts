@@ -845,8 +845,10 @@ function buildAuth(config: CreateAuthConfig) {
                   // runtime network boundary: resolution and connection stay
                   // on the public Internet. Better Auth owns timeout, limits,
                   // validation, caching, and redirect rejection above it.
+                  // Workers does not implement `redirect: "error"`; `manual`
+                  // exposes 3xx responses so Better Auth can reject them.
                   fetchClientMetadataResource: (input, init) =>
-                    fetch(input, { ...init, redirect: "error" }),
+                    fetch(input, { ...init, redirect: "manual" }),
                   metadataProfile: "mcp-2026-07-28",
                 }),
               ]

@@ -29,7 +29,7 @@ describe("Better Auth 1.7 MCP smoke", () => {
       scope: "mcp",
     };
     const metadataFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      expect(init?.redirect).toBe("error");
+      expect(init?.redirect).toBe("manual");
       return Response.json(metadata, {
         headers: { "cache-control": "public, max-age=60" },
       });
