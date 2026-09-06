@@ -281,6 +281,10 @@ optional packages. The [umbrella package README](packages/mantle/README.md) is
 the installed API guide; adapter authors start with the
 [adapter guide](docs/adapter-guide.md).
 
+Keeping an existing framework and CMS? Start with the
+[Spec-only host adoption example](docs/spec-only-host-adoption.md): reuse
+schemas and validation without installing Runtime or replacing your admin UI.
+
 ### Coding agents
 
 This repository has a second entrance: it is an installable agent plugin bundle
