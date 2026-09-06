@@ -83,7 +83,7 @@ describe("createMantleWorker", () => {
     expect(db.appliedMigrations.size).toBeGreaterThan(0);
   });
 
-  it("boots before OAuth discovery after a runtime-independent MCP challenge", async () => {
+  it("boots before the initial MCP challenge and OAuth discovery", async () => {
     const db = new InMemoryDatabase();
     const auth = {
       ...stubAuth,
@@ -96,7 +96,7 @@ describe("createMantleWorker", () => {
     });
 
     expect((await fetchWorker(worker, "/mcp/staff", testEnv())).status).toBe(401);
-    expect(db.appliedMigrations.size).toBe(0);
+    expect(db.appliedMigrations.size).toBeGreaterThan(0);
 
     expect((await fetchWorker(
       worker,
