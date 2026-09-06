@@ -256,7 +256,7 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
         const worker = assemble(env);
         const setupIncomplete = await setupIncompleteAuthResponse(request, worker.auth);
         if (setupIncomplete) return setupIncomplete;
-        if (!isRuntimeIndependentOAuthRequest(request)) await worker.getRuntime();
+        if (!isRuntimeIndependentMcpChallenge(request)) await worker.getRuntime();
         return worker.fetch(request, env, ctx);
       });
     },
@@ -273,9 +273,8 @@ async function purgePublicCache(): Promise<void> {
   }
 }
 
-function isRuntimeIndependentOAuthRequest(request: Request): boolean {
+function isRuntimeIndependentMcpChallenge(request: Request): boolean {
   const pathname = new URL(request.url).pathname;
-  if (pathname.startsWith(MANTLE_RESERVED_WELL_KNOWN_PREFIX)) return true;
   return (pathname === "/mcp" || pathname.startsWith("/mcp/")) &&
     !request.headers.has("authorization");
 }
