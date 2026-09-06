@@ -12,7 +12,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("Better Auth 1.7 MCP smoke", () => {
   it("discovers CIMD clients, retains their metadata, and prunes only expired DCR rows", async () => {
     const { db, sqlite } = sqliteD1();
-    sqlite.exec(CANONICAL_MIGRATIONS[0]!.sql);
+    for (const migration of CANONICAL_MIGRATIONS) sqlite.exec(migration.sql);
     let otp = "";
     const metadata = {
       client_id: CLIENT_ID,
@@ -179,15 +179,17 @@ describe("Better Auth 1.7 MCP smoke", () => {
     }));
     expect(token.status).toBe(200);
     const accessToken = String((await token.json() as { access_token?: string }).access_token);
-    await expect(auth.verifyOAuthAccessToken(
+    const verification = await auth.verifyOAuthAccessToken(
       new Request(RESOURCE, { headers: { authorization: `Bearer ${accessToken}` } }),
       { audience: RESOURCE, scopes: ["mcp"] },
-    )).resolves.toMatchObject({
+    );
+    expect(verification).toMatchObject({
       ok: true,
       userId: expect.any(String),
       clientId: CLIENT_ID,
       scopes: ["mcp"],
     });
+    if (!verification.ok) throw new Error("expected a verified MCP access token");
 
     const client = sqlite.prepare(`
       SELECT clientId, clientDiscoveryId, name, uri, icon, contacts,
@@ -232,6 +234,80 @@ describe("Better Auth 1.7 MCP smoke", () => {
       token_endpoint_auth_method: "none",
       scope: "mcp",
     });
+
+    const consents = await auth.listOAuthConsents!(verification.userId);
+    expect(consents).toEqual([{
+      id: expect.any(String),
+      clientId: CLIENT_ID,
+      clientName: metadata.client_name,
+      scopes: ["mcp"],
+    }]);
+    const now = new Date().toISOString();
+    const future = new Date(Date.now() + 60_000).toISOString();
+    sqlite.prepare(`
+      INSERT INTO oauthRefreshToken
+        (id, token, clientId, userId, expiresAt, createdAt, scopes)
+      VALUES ('refresh-1', 'refresh-token', ?, ?, ?, ?, '["mcp"]')
+    `).run(CLIENT_ID, verification.userId, future, now);
+    sqlite.prepare(`
+      INSERT INTO oauthAccessToken
+        (id, token, clientId, userId, expiresAt, createdAt, scopes)
+      VALUES ('access-1', 'opaque-access-token', ?, ?, ?, ?, '["mcp"]')
+    `).run(CLIENT_ID, verification.userId, future, now);
+    sqlite.prepare(`
+      INSERT INTO verification (id, identifier, value, expiresAt, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      "pending-code",
+      "authorization-code",
+      JSON.stringify({
+        type: "authorization_code",
+        userId: verification.userId,
+        query: { client_id: CLIENT_ID },
+      }),
+      future,
+      now,
+      now,
+    );
+    sqlite.prepare(`
+      INSERT INTO verification (id, identifier, value, expiresAt, createdAt, updatedAt)
+      VALUES ('unrelated-verification', 'otp', 'plain-value', ?, ?, ?)
+    `).run(future, now, now);
+
+    expect(await auth.revokeOAuthConsent!(verification.userId, consents[0]!.id)).toBe(true);
+    await expect(auth.verifyOAuthAccessToken(
+      new Request(RESOURCE, { headers: { authorization: `Bearer ${accessToken}` } }),
+      { audience: RESOURCE, scopes: ["mcp"] },
+    )).resolves.toEqual({ ok: false, status: 401, reason: "invalid-token" });
+    expect(await auth.listOAuthConsents!(verification.userId)).toEqual([]);
+    expect(sqlite.prepare(
+      "SELECT revoked FROM oauthRefreshToken WHERE id = 'refresh-1'",
+    ).get()).toMatchObject({ revoked: expect.any(String) });
+    expect(sqlite.prepare(
+      "SELECT revoked FROM oauthAccessToken WHERE id = 'access-1'",
+    ).get()).toMatchObject({ revoked: expect.any(String) });
+    expect(sqlite.prepare(
+      "SELECT id FROM verification WHERE id = 'pending-code'",
+    ).get()).toBeUndefined();
+    expect(sqlite.prepare(
+      "SELECT id FROM verification WHERE id = 'unrelated-verification'",
+    ).get()).toEqual({ id: "unrelated-verification" });
+    expect(await auth.revokeOAuthConsent!(verification.userId, consents[0]!.id)).toBe(false);
+    expect(sqlite.prepare(
+      "SELECT revokedBefore FROM oauthGrantRevocation WHERE userId = ? AND clientId = ?",
+    ).get(verification.userId, CLIENT_ID)).toMatchObject({
+      revokedBefore: expect.any(Number),
+    });
+
+    sqlite.prepare(`
+      INSERT INTO oauthConsent
+        (id, clientId, userId, resources, scopes, createdAt, updatedAt)
+      VALUES ('reauthorized-consent', ?, ?, ?, '["mcp"]', ?, ?)
+    `).run(CLIENT_ID, verification.userId, JSON.stringify([RESOURCE]), now, now);
+    await expect(auth.verifyOAuthAccessToken(
+      new Request(RESOURCE, { headers: { authorization: `Bearer ${accessToken}` } }),
+      { audience: RESOURCE, scopes: ["mcp"] },
+    )).resolves.toEqual({ ok: false, status: 401, reason: "invalid-token" });
 
     sqlite.close();
   });

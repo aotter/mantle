@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ChevronsUpDown, LogOut, Settings } from "lucide-react";
+import { ChevronsUpDown, LogOut, Settings, Unplug } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -68,6 +68,12 @@ export function NavUser({ login, image, role }: NavUserProps): React.ReactElemen
               <a href="/admin/preferences">
                 <Settings aria-hidden />
                 {t(language, "preferences.page.open")}
+              </a>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <a href="/oauth/consents">
+                <Unplug aria-hidden />
+                {t(language, "oauth.connectedApps")}
               </a>
             </DropdownMenuItem>
             <DropdownMenuItem variant="destructive" onSelect={() => signOut()}>
