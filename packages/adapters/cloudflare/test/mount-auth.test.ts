@@ -108,7 +108,7 @@ describe("mountTestEndpoints: /api/auth/* surface", () => {
 
 describe("mountAuthorize", () => {
   it("renders consent with the shared admin system tokens", () => {
-    const html = renderConsentHtml("en", null);
+    const html = renderConsentHtml("en", null, "test-nonce");
 
     expect(html).toContain("--mantle-blue-deep");
     expect(html).toContain("background:var(--app-background)");
@@ -135,7 +135,26 @@ describe("mountAuthorize", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(await res.text()).toContain("Claude");
+    expect(res.headers.get("content-security-policy")).toContain("script-src 'nonce-");
+    const html = await res.text();
+    expect(html).toContain("Claude");
+    expect(html).toMatch(/<script nonce="[^"]+">/u);
+  });
+
+  it("locks both consent actions while preserving the submitted decision", () => {
+    const html = renderConsentHtml("zh-TW", {
+      clientName: "Claude",
+      redirectUri: "https://client.example/callback",
+      scopes: ["mcp"],
+      oauthQuery: "signed=query",
+    }, "test-nonce");
+
+    expect(html).toContain('<input type="hidden" name="decision"/>');
+    expect(html).toContain('data-loading-label="授權中…"');
+    expect(html).toContain('data-loading-label="拒絕中…"');
+    expect(html).toContain('this.setAttribute("aria-busy","true")');
+    expect(html).toContain('action.disabled=true');
+    expect(html).toContain('<script nonce="test-nonce">');
   });
 
   describe("consent POST CSRF defense (#389)", () => {

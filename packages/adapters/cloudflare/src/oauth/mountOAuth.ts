@@ -20,6 +20,7 @@ export function mountAuthorize<E extends Env>(
 
   app.get("/oauth/consent", async (c) => {
     const locale = detectConsentLocale(c.req.header("accept-language") ?? null);
+    const nonce = crypto.randomUUID();
     let model: OAuthConsentRequest | null = null;
     try {
       model = await auth.getOAuthConsentRequest(c.req.raw);
@@ -27,7 +28,17 @@ export function mountAuthorize<E extends Env>(
       // Invalid, expired, or unauthenticated signed queries render the same
       // non-sensitive failure page.
     }
-    return c.html(renderConsentHtml(locale, model), model ? 200 : 400);
+    return c.html(
+      renderConsentHtml(locale, model, nonce),
+      model ? 200 : 400,
+      {
+        "content-security-policy":
+          `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`,
+        "referrer-policy": "no-referrer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+      },
+    );
   });
 
   app.post("/oauth/consent", async (c) => {
