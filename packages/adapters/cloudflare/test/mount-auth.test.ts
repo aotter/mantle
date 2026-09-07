@@ -110,6 +110,69 @@ describe("mountTestEndpoints: /api/auth/* surface", () => {
 });
 
 describe("mountAuthorize", () => {
+  it("serves OAuth pages from the shared Admin SPA when assets exist", async () => {
+    const app = new Hono();
+    mountAuthorize(app, {
+      auth: stubAuth,
+      adminAssets: {
+        fetch: async () => new Response('<div id="root"></div>', {
+          headers: { "content-type": "text/html" },
+        }),
+      },
+    });
+
+    const res = await app.request("https://example.test/oauth/consent?sig=signed");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('id="root"');
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect(res.headers.get("content-security-policy")).toContain("script-src 'self'");
+    expect(res.headers.get("content-security-policy")).not.toContain("unsafe-inline");
+  });
+
+  it("projects consent and connected apps as secret-free SPA data", async () => {
+    const app = new Hono();
+    mountAuthorize(app, {
+      auth: {
+        ...stubAuth,
+        getSession: async () => ({
+          session: { id: "s1", userId: "u1", expiresAt: new Date(Date.now() + 60_000) },
+          user: { id: "u1", email: "u1@example.test", name: "U", role: "owner" },
+        }),
+        getOAuthConsentRequest: async () => ({
+          clientName: "Claude",
+          redirectUri: "https://client.example/callback",
+          scopes: ["mcp"],
+          oauthQuery: "signed=query",
+        }),
+        listOAuthConsents: async () => [{
+          id: "consent-1",
+          clientId: "client-1",
+          clientName: "Claude",
+          scopes: ["mcp"],
+        }],
+        revokeOAuthConsent: async () => true,
+      },
+    });
+
+    const consent = await app.request("https://example.test/oauth/consent/data?sig=signed");
+    expect(consent.status).toBe(200);
+    expect(await consent.json()).toEqual({ consent: {
+      clientName: "Claude",
+      redirectUri: "https://client.example/callback",
+      scopes: ["mcp"],
+      oauthQuery: "signed=query",
+    } });
+
+    const apps = await app.request("https://example.test/oauth/consents/data");
+    expect(apps.status).toBe(200);
+    expect(await apps.json()).toEqual({ consents: [{
+      id: "consent-1",
+      clientId: "client-1",
+      clientName: "Claude",
+      scopes: ["mcp"],
+    }] });
+  });
+
   it("renders consent with the shared admin system tokens", () => {
     const html = renderConsentHtml("en", null, "test-nonce");
 

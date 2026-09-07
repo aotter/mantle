@@ -7,81 +7,8 @@
     <link rel="icon" type="image/svg+xml" sizes="any" href="/_mantle/admin/favicon.svg" />
     <meta name="theme-color" content="#f6f8fc" />
     <meta name="theme-color" content="#02050d" media="(prefers-color-scheme: dark)" />
-    <!--
-      Inline blocking script — applies `class="dark"` to <html> BEFORE
-      first paint to avoid FOUC. Preferences are browser-local and do
-      not mutate site settings.
-    -->
-    <script>
-      (function () {
-        try {
-          var pref = localStorage.getItem("cms.preference.theme") || localStorage.getItem("cms.theme");
-          var lang = localStorage.getItem("cms.preference.language");
-          var dir = localStorage.getItem("cms.preference.direction");
-          var normalize = function (value) {
-            var lower = String(value || "").toLowerCase();
-            if (lower === "zh-tw" || lower === "zh-hant" || lower.indexOf("zh-hant") === 0) return "zh-TW";
-            if (lower === "zh-cn" || lower === "zh-hans" || lower.indexOf("zh-hans") === 0) return "zh-CN";
-            if (lower.indexOf("pt-br") === 0 || lower === "pt") return "pt-BR";
-            var base = lower.split("-")[0];
-            if (base === "iw") return "he";
-            if (base === "pt") return "pt-BR";
-            if (base === "zh") return "zh-TW";
-            return base;
-          };
-          var htmlLang = {
-            en: "en",
-            ar: "ar",
-            cs: "cs",
-            de: "de",
-            es: "es",
-            fa: "fa",
-            fr: "fr",
-            he: "he",
-            id: "id",
-            it: "it",
-            ja: "ja",
-            ko: "ko",
-            nl: "nl",
-            pl: "pl",
-            "pt-BR": "pt-BR",
-            ru: "ru",
-            th: "th",
-            tr: "tr",
-            uk: "uk",
-            vi: "vi",
-            "zh-CN": "zh-Hans-CN",
-            "zh-TW": "zh-Hant-TW"
-          };
-          var langDir = {
-            ar: "rtl",
-            fa: "rtl",
-            he: "rtl"
-          };
-          if (!htmlLang[lang]) {
-            var navs = navigator.languages && navigator.languages.length
-              ? navigator.languages
-              : [navigator.language];
-            for (var i = 0; i < navs.length; i += 1) {
-              var candidate = normalize(navs[i]);
-              if (htmlLang[candidate]) {
-                lang = candidate;
-                break;
-              }
-            }
-          }
-          if (htmlLang[lang]) document.documentElement.lang = htmlLang[lang];
-          if (dir === "rtl" || dir === "ltr") document.documentElement.dir = dir;
-          else if (langDir[lang]) document.documentElement.dir = langDir[lang];
-          if (
-            pref === "dark" ||
-            ((!pref || pref === "system") && matchMedia("(prefers-color-scheme: dark)").matches)
-          ) {
-            document.documentElement.classList.add("dark");
-          }
-        } catch (_) {}
-      })();
-    </script>
+    <!-- Blocking so system theme + browser-local override apply before first paint. -->
+    <script src="/_mantle/admin/theme.js"></script>
   </head>
   <body>
     <div id="root"></div>

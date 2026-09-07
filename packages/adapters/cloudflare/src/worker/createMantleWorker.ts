@@ -207,7 +207,7 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
     const app = new Hono<WorkerHonoEnv<Env>>();
     mountRuntimeEndpoints(app, ref);
     if (bindings.adminAssets) mountAdmin(app, ref, bindings.adminAssets);
-    mountAuthorize(app, { auth });
+    mountAuthorize(app, { auth, adminAssets: bindings.adminAssets });
     const mcpResource = auth.mcpResource ?? conventionalMcpResource(env);
     const publicMcp = createMcpApiHandler<Env>({
       ref,

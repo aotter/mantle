@@ -7,6 +7,7 @@ import {
   SignInButton,
 } from "../src/features/auth/auth-views";
 import { signOut } from "../src/lib/auth";
+import { resolveTheme } from "../src/app/preferences";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -31,6 +32,13 @@ describe("signOut", () => {
 });
 
 describe("sign-in", () => {
+  it("uses the system theme until an explicit override exists", () => {
+    expect(resolveTheme("system", true)).toBe("dark");
+    expect(resolveTheme("system", false)).toBe("light");
+    expect(resolveTheme("light", true)).toBe("light");
+    expect(resolveTheme("dark", false)).toBe("dark");
+  });
+
   it("keeps return navigation on the same origin", () => {
     expect(safeReturnPath("/admin/c/stories?draft=1#edit")).toBe(
       "/admin/c/stories?draft=1#edit",

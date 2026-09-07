@@ -28,6 +28,7 @@ export const ADMIN_LANGUAGES = [
 export type AdminLanguage = (typeof ADMIN_LANGUAGES)[number]["value"];
 export type AdminDirection = "ltr" | "rtl";
 export type AdminTheme = "light" | "dark" | "system";
+export type ResolvedTheme = Exclude<AdminTheme, "system">;
 
 const LANGUAGE_STORAGE_KEY = "cms.preference.language";
 export const THEME_STORAGE_KEY = "cms.preference.theme";
@@ -36,6 +37,7 @@ interface PreferencesContextValue {
   language: AdminLanguage;
   direction: AdminDirection;
   theme: AdminTheme;
+  resolvedTheme: ResolvedTheme;
   setLanguage: (language: AdminLanguage) => void;
   setTheme: (theme: AdminTheme) => void;
 }
@@ -50,6 +52,9 @@ export function PreferencesProvider({
   const [language, setLanguageState] = React.useState<AdminLanguage>(readInitialLanguage);
   const direction = directionForLanguage(language);
   const [theme, setThemeState] = React.useState<AdminTheme>(readInitialTheme);
+  const [resolvedTheme, setResolvedTheme] = React.useState<ResolvedTheme>(() =>
+    resolveTheme(theme, systemPrefersDark()),
+  );
 
   const setLanguage = React.useCallback((next: AdminLanguage) => {
     writeStorage(LANGUAGE_STORAGE_KEY, next);
@@ -69,13 +74,9 @@ export function PreferencesProvider({
 
   React.useEffect(() => {
     const applyTheme = () => {
-      const systemDark =
-        typeof matchMedia !== "undefined" &&
-        matchMedia("(prefers-color-scheme: dark)").matches;
-      document.documentElement.classList.toggle(
-        "dark",
-        theme === "dark" || (theme === "system" && systemDark),
-      );
+      const resolved = resolveTheme(theme, systemPrefersDark());
+      setResolvedTheme(resolved);
+      document.documentElement.classList.toggle("dark", resolved === "dark");
     };
     applyTheme();
     if (theme !== "system" || typeof matchMedia === "undefined") return;
@@ -89,10 +90,11 @@ export function PreferencesProvider({
       language,
       direction,
       theme,
+      resolvedTheme,
       setLanguage,
       setTheme,
     }),
-    [language, direction, theme, setLanguage, setTheme],
+    [language, direction, theme, resolvedTheme, setLanguage, setTheme],
   );
 
   return (
@@ -123,6 +125,15 @@ function readInitialTheme(): AdminTheme {
   const stored = readStorage(THEME_STORAGE_KEY);
   if (stored === "light" || stored === "dark" || stored === "system") return stored;
   return "system";
+}
+
+function systemPrefersDark(): boolean {
+  return typeof matchMedia !== "undefined" &&
+    matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+export function resolveTheme(theme: AdminTheme, systemDark: boolean): ResolvedTheme {
+  return theme === "system" ? (systemDark ? "dark" : "light") : theme;
 }
 
 function readStorage(key: string): string | null {
