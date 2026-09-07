@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Loader2Icon, LogOut } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Loader2Icon, LogOut } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,6 +17,7 @@ import { t } from "../../app/i18n";
 import { authMethodsQueryOptions } from "../../lib/queries";
 import type { AuthMethodInfo } from "../../lib/types";
 import { signOut } from "../../lib/auth";
+import { ThemeToggle } from "../../layout/preference-controls";
 
 function AuthPage({
   children,
@@ -26,7 +28,12 @@ function AuthPage({
 }): React.ReactElement {
   return (
     <main className="flex min-h-svh items-center justify-center p-6">
-      <Card className={wide ? "w-full max-w-md" : "w-full max-w-sm"}>
+      <Card
+        className={`${wide ? "w-full max-w-md" : "w-full max-w-sm"} relative [&>[data-slot=card-header]]:pe-14`}
+      >
+        <div className="absolute top-2 end-2 z-10">
+          <ThemeToggle />
+        </div>
         {children}
       </Card>
     </main>
@@ -217,6 +224,199 @@ export function SignInView(): React.ReactElement {
       </CardContent>
     </AuthPage>
   );
+}
+
+interface OAuthConsentModel {
+  readonly clientName: string;
+  readonly redirectUri: string;
+  readonly scopes: readonly string[];
+  readonly oauthQuery: string;
+}
+
+interface OAuthConsentInfo {
+  readonly id: string;
+  readonly clientId: string;
+  readonly clientName: string;
+  readonly scopes: readonly string[];
+}
+
+export function OAuthConsentView(): React.ReactElement {
+  const { language } = usePreferences();
+  const [submitting, setSubmitting] = React.useState<"approve" | "deny" | null>(null);
+  const decision = React.useRef<HTMLInputElement>(null);
+  const consent = useQuery<OAuthConsentModel | null>({
+    queryKey: ["oauth-consent", window.location.search],
+    queryFn: async () => {
+      const response = await fetch(`/oauth/consent/data${window.location.search}`);
+      if (response.status === 401) return redirectToSignIn();
+      const body = await response.json() as { consent: OAuthConsentModel | null };
+      if (response.status === 400) return null;
+      if (!response.ok) throw new Error(t(language, "common.failedToLoad"));
+      return body.consent;
+    },
+    retry: false,
+  });
+
+  if (consent.isLoading) return <GateLoading />;
+  if (consent.isError) return <GateError error={consent.error} />;
+  if (!consent.data) {
+    return (
+      <AuthPage wide>
+        <CardHeader>
+          <CardDescription>{t(language, "oauth.consent.eyebrow")}</CardDescription>
+          <CardTitle className="text-xl">
+            <h1>{t(language, "oauth.consent.invalidTitle")}</h1>
+          </CardTitle>
+          <CardDescription>{t(language, "oauth.consent.invalidBody")}</CardDescription>
+        </CardHeader>
+      </AuthPage>
+    );
+  }
+
+  return (
+    <AuthPage wide>
+      <CardHeader>
+        <CardDescription>{t(language, "oauth.consent.eyebrow")}</CardDescription>
+        <CardTitle className="text-xl">
+          <h1>{t(language, "oauth.consent.heading", { client: consent.data.clientName })}</h1>
+        </CardTitle>
+        <CardDescription>
+          {t(language, "oauth.consent.redirect")} {" "}
+          <code className="break-all rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+            {consent.data.redirectUri}
+          </code>
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {consent.data.scopes.length > 0 ? (
+          <div className="mb-6">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              {t(language, "oauth.consent.scopes")}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {consent.data.scopes.map((scope) => (
+                <Badge key={scope} variant="secondary" className="font-mono">{scope}</Badge>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        <form
+          method="post"
+          action="/oauth/consent"
+          className="flex gap-2 max-sm:flex-col"
+          aria-busy={submitting !== null || undefined}
+          onSubmit={(event) => {
+            const submitter = event.nativeEvent.submitter as HTMLButtonElement | null;
+            if (submitter?.value !== "approve" && submitter?.value !== "deny") return;
+            if (decision.current) decision.current.value = submitter.value;
+            setSubmitting(submitter.value);
+          }}
+        >
+          <input type="hidden" name="oauth_query" value={consent.data.oauthQuery} />
+          <input ref={decision} type="hidden" name="decision" />
+          <SignInButton
+            type="submit"
+            value="approve"
+            className="flex-1"
+            busy={submitting === "approve"}
+            disabled={submitting !== null}
+          >
+            {t(language, "oauth.consent.approve")}
+          </SignInButton>
+          <SignInButton
+            type="submit"
+            value="deny"
+            variant="secondary"
+            className="flex-1"
+            busy={submitting === "deny"}
+            disabled={submitting !== null}
+          >
+            {t(language, "oauth.consent.deny")}
+          </SignInButton>
+        </form>
+      </CardContent>
+    </AuthPage>
+  );
+}
+
+export function OAuthConsentsView(): React.ReactElement {
+  const { language } = usePreferences();
+  const [submitting, setSubmitting] = React.useState<string | null>(null);
+  const consents = useQuery<readonly OAuthConsentInfo[]>({
+    queryKey: ["oauth-consents"],
+    queryFn: async () => {
+      const response = await fetch("/oauth/consents/data");
+      if (response.status === 401) return redirectToSignIn();
+      if (!response.ok) throw new Error(t(language, "common.failedToLoad"));
+      return ((await response.json()) as { consents: readonly OAuthConsentInfo[] }).consents;
+    },
+    retry: false,
+  });
+
+  if (consents.isLoading) return <GateLoading />;
+  if (consents.isError) return <GateError error={consents.error} />;
+
+  return (
+    <AuthPage wide>
+      <CardHeader>
+        <CardDescription>{t(language, "oauth.apps.eyebrow")}</CardDescription>
+        <CardTitle className="text-xl">
+          <h1>{t(language, "oauth.connectedApps")}</h1>
+        </CardTitle>
+        <CardDescription>{t(language, "oauth.apps.body")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {consents.data?.length === 0 ? (
+          <p className="mb-5 text-sm text-muted-foreground">{t(language, "oauth.apps.empty")}</p>
+        ) : (
+          <div className="mb-5 space-y-3">
+            {consents.data?.map((consent) => (
+              <section key={consent.id} className="rounded-lg border p-3">
+                <h2 className="font-medium">{consent.clientName}</h2>
+                <code className="mt-1 block break-all text-xs text-muted-foreground">
+                  {consent.clientId}
+                </code>
+                {consent.scopes.length > 0 ? (
+                  <div className="my-3 flex flex-wrap gap-1.5">
+                    {consent.scopes.map((scope) => (
+                      <Badge key={scope} variant="secondary" className="font-mono">{scope}</Badge>
+                    ))}
+                  </div>
+                ) : null}
+                <form
+                  method="post"
+                  action="/oauth/consents/revoke"
+                  className="mt-3 flex justify-end"
+                  onSubmit={() => setSubmitting(consent.id)}
+                >
+                  <input type="hidden" name="consent_id" value={consent.id} />
+                  <SignInButton
+                    type="submit"
+                    variant="destructive"
+                    busy={submitting === consent.id}
+                    disabled={submitting !== null}
+                  >
+                    {t(language, "oauth.apps.revoke")}
+                  </SignInButton>
+                </form>
+              </section>
+            ))}
+          </div>
+        )}
+        <Button asChild variant="link" className="px-0">
+          <a href="/admin"><ArrowLeft aria-hidden />{t(language, "oauth.apps.back")}</a>
+        </Button>
+      </CardContent>
+    </AuthPage>
+  );
+}
+
+function redirectToSignIn(): never {
+  const current = `${window.location.pathname}${window.location.search}`;
+  const params = new URLSearchParams(window.location.search);
+  params.set("return", current);
+  window.location.replace(`/admin/sign-in?${params}`);
+  throw new Error("Redirecting to sign in");
 }
 
 function MethodSection({

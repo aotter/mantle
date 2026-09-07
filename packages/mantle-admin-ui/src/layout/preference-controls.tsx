@@ -128,6 +128,26 @@ export function ThemePreferenceDropdown({ compact = false }: { compact?: boolean
   );
 }
 
+/** Auth surfaces follow the system until this two-state control writes an override. */
+export function ThemeToggle(): React.ReactElement {
+  const { language, resolvedTheme, setTheme } = usePreferences();
+  const dark = resolvedTheme === "dark";
+  const label = t(language, dark ? "preferences.light" : "preferences.dark");
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      onClick={() => setTheme(dark ? "light" : "dark")}
+      aria-label={label}
+      title={label}
+    >
+      {dark ? <Sun aria-hidden /> : <Moon aria-hidden />}
+    </Button>
+  );
+}
+
 function themeOptions(language: AdminLanguage): ReadonlyArray<{
   value: AdminTheme;
   label: string;

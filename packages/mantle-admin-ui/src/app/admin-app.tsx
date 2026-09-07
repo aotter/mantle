@@ -5,7 +5,14 @@ import { AuthenticatedLayout } from "../layout/authenticated-layout";
 import { api, ApiError } from "../lib/api";
 import type { AdminUser } from "../lib/types";
 import { useAdminLocation } from "./router";
-import { AccessDeniedView, GateError, GateLoading, SignInView } from "../features/auth/auth-views";
+import {
+  AccessDeniedView,
+  GateError,
+  GateLoading,
+  OAuthConsentsView,
+  OAuthConsentView,
+  SignInView,
+} from "../features/auth/auth-views";
 import { HomeView } from "../features/console/home-view";
 import { CollectionView } from "../features/content/collection-view";
 import { EntryEditView } from "../features/content/entry-edit-view";
@@ -23,6 +30,9 @@ import { InterfaceDocsView } from "../features/logic/interface-docs-view";
 
 export function AdminApp(): React.ReactElement {
   const location = useAdminLocation();
+
+  if (location.pathname === "/oauth/consent") return <OAuthConsentView />;
+  if (location.pathname === "/oauth/consents") return <OAuthConsentsView />;
 
   if (location.pathname === "/admin/sign-in") {
     return <SignInView />;

@@ -35,7 +35,7 @@ export default defineConfig({
 });
 
 /**
- * OAuth consent HTML reuses only the small system-token stylesheet;
+ * Keep the small system-token stylesheet available to server consumers;
  * the SPA itself stays in native static files.
  */
 function serverExportsPlugin(): Plugin {
