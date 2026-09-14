@@ -1,3 +1,4 @@
+import { canRenderAdmin } from "./app/frame-policy";
 import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -16,14 +17,15 @@ if (!rootElement) {
   throw new Error("Missing #root element.");
 }
 
-ReactDOM.createRoot(rootElement).render(
+const preview = document.querySelector('meta[name="mantle-admin-preview"]')?.getAttribute("content") === "1";
+if (canRenderAdmin(window, preview)) ReactDOM.createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <PreferencesProvider>
         <AdminRouterProvider>
           <TooltipProvider>
             <ConfirmProvider>
-              <AdminApp />
+              <AdminApp preview={preview} />
               <AdminToaster />
             </ConfirmProvider>
           </TooltipProvider>

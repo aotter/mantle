@@ -66,6 +66,15 @@ export function PreferencesProvider({
     setThemeState(next);
   }, []);
 
+  // Embedded hosts may supply a theme without changing the user's saved Admin preference.
+  React.useEffect(() => {
+    const syncHostTheme = () => setThemeState(readInitialTheme());
+    const observer = new MutationObserver(syncHostTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-mantle-theme"] });
+    syncHostTheme();
+    return () => observer.disconnect();
+  }, []);
+
   React.useEffect(() => {
     document.documentElement.lang =
       ADMIN_LANGUAGES.find((l) => l.value === language)?.htmlLang ?? "en";
@@ -122,6 +131,8 @@ function readInitialLanguage(): AdminLanguage {
 }
 
 function readInitialTheme(): AdminTheme {
+  const hostTheme = typeof document === "undefined" ? undefined : document.documentElement.getAttribute("data-mantle-theme");
+  if (hostTheme === "light" || hostTheme === "dark") return hostTheme;
   const stored = readStorage(THEME_STORAGE_KEY);
   if (stored === "light" || stored === "dark" || stored === "system") return stored;
   return "system";

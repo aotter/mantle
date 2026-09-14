@@ -1,3 +1,4 @@
+import { canRenderAdmin } from "./frame-policy";
 import * as React from "react";
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -29,11 +30,11 @@ import { DeveloperOverviewView } from "../features/logic/developer-overview-view
 import { LogicView } from "../features/logic/logic-view";
 import { InterfaceDocsView } from "../features/logic/interface-docs-view";
 
-export function AdminApp(): React.ReactElement | null {
+export function AdminApp({ preview = false }: { preview?: boolean } = {}): React.ReactElement | null {
   const location = useAdminLocation();
 
   // Static asset URLs can bypass the server's frame-ancestors headers.
-  if (typeof window !== "undefined" && window.self !== window.top) return null;
+  if (typeof window !== "undefined" && !canRenderAdmin(window, preview)) return null;
 
   if (location.pathname === "/oauth/consent") return <OAuthConsentView />;
 

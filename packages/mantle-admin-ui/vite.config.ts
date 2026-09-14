@@ -44,6 +44,9 @@ function serverExportsPlugin(): Plugin {
     apply: "build",
     writeBundle() {
       const dist = resolve(__dirname, "dist");
+      // A separate opt-in document; canonical index.html keeps frame refusal.
+      writeFileSync(resolve(dist, "preview.html"), readFileSync(resolve(dist, "index.html"), "utf8")
+        .replace("</head>", '<meta name="mantle-admin-preview" content="1"></head>'));
       const systemTokensCss = readFileSync(
         resolve(__dirname, "src/styles/system-tokens.css"),
         "utf8",
