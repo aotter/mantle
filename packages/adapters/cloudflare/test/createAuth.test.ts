@@ -148,8 +148,11 @@ function fakeDb(): D1Database {
   // bare `{}` raises `BetterAuthError: Failed to initialize database
   // adapter` as an unhandled rejection. Tests that actually exercise
   // queries are out of scope here (would need miniflare).
+  let id: unknown;
   const stmt = {
-    bind: () => stmt,
+    bind: (...args: unknown[]) => { id = args[0]; return stmt; },
+    // Unit facades use a prepared database; cold schemas use sqliteD1 tests.
+    first: async () => typeof id === "string" && id.startsWith("auth-schema:") ? { id } : null,
     all: async () => ({ results: [], success: true, meta: {} }),
   };
   return {
@@ -1127,6 +1130,7 @@ function fakeDbWith(behaviour: FakeDbBehaviour): D1Database {
   };
   return {
     prepare: (sql: string) => {
+      if (sql === "SELECT id FROM _migrations WHERE id = ?") return fakeDb().prepare(sql);
       behaviour.onPrepare?.(sql);
       return stmt;
     },

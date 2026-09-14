@@ -1,3 +1,4 @@
+import { useAdminRouter } from "../../app/router";
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CalendarIcon, ExternalLink, Globe, Images, ImagePlus, LockKeyhole, MoreHorizontal, Plus, RotateCcw, Save, Send, Trash2 } from "lucide-react";
@@ -64,6 +65,7 @@ export function EntryEditView({
   entryId: string;
 }): React.ReactElement {
   const { language } = usePreferences();
+  const { navigate } = useAdminRouter();
   const queryClient = useQueryClient();
   const queryKey = React.useMemo(() => ["entry-editor", collectionName, entryId], [collectionName, entryId]);
   const query = useQuery<EntryEditorPayload>({
@@ -124,7 +126,7 @@ export function EntryEditView({
         },
       }),
     onSuccess: (next) => {
-      window.location.href = `/admin/c/${encodeURIComponent(next.entry.collection)}/${encodeURIComponent(next.entry.id)}`;
+      navigate(`/admin/c/${encodeURIComponent(next.entry.collection)}/${encodeURIComponent(next.entry.id)}`);
     },
   });
 

@@ -15,8 +15,8 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useAdminLocation } from "../../app/router";
-import { api } from "../../lib/api";
+import { useAdminLocation, useAdminRouter } from "../../app/router";
+import { api, downloadAdminFile } from "../../lib/api";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { operationsQueryOptions } from "../../lib/queries";
@@ -77,8 +77,10 @@ export function CollectionView({
   collectionName: string;
 }): React.ReactElement {
   const { language } = usePreferences();
+  const { navigate } = useAdminRouter();
   const location = useAdminLocation();
   const queryClient = useQueryClient();
+  const exportFile = useMutation({ mutationFn: downloadAdminFile });
   const params = new URLSearchParams(location.search);
   const status = params.get("status") ?? undefined;
   const searchTerm = params.get("search")?.trim() ?? "";
@@ -237,7 +239,7 @@ export function CollectionView({
         data: {},
       }),
     onSuccess: (payload) => {
-      window.location.href = `/admin/c/${encodeURIComponent(collectionName)}/${encodeURIComponent(payload.entry.id)}`;
+      navigate(`/admin/c/${encodeURIComponent(collectionName)}/${encodeURIComponent(payload.entry.id)}`);
     },
   });
 
@@ -270,8 +272,9 @@ export function CollectionView({
                 }
                 exportParams.set("sort", sortField);
                 exportParams.set("direction", sortDirection);
-                window.location.href = `/admin/api/entries/export?${exportParams.toString()}`;
+                exportFile.mutate(`/admin/api/entries/export?${exportParams.toString()}`);
               }}
+              disabled={exportFile.isPending}
             >
               <Download className="size-4" aria-hidden />
               {t(language, "collection.export")}
@@ -299,6 +302,7 @@ export function CollectionView({
       />
 
       {createMutation.isError ? <ErrorBox error={createMutation.error} /> : null}
+      {exportFile.isError ? <ErrorBox error={exportFile.error} /> : null}
 
       {collection ? (
         <ListQueryToolbar
@@ -308,14 +312,14 @@ export function CollectionView({
           filters={listQueryFilter ? [listQueryFilter] : []}
           onSubmit={({ search, filters }) => {
             const nextFilter = collectionFilter ? filters[collectionFilter.field] : undefined;
-            window.location.href = collectionHref(collection.name, {
+            navigate(collectionHref(collection.name, {
               status: isOperationalCollection ? status : filters.status || undefined,
               searchTerm: search,
               filterField: nextFilter ? collectionFilter?.field : undefined,
               filterValue: nextFilter || undefined,
               sortField,
               sortDirection,
-            });
+            }));
           }}
         />
       ) : null}

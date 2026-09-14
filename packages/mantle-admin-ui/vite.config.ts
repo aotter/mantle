@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { PREVIEW_CSP } from "./src/app/frame-policy";
 
 const { version } = JSON.parse(
   readFileSync(resolve(__dirname, "package.json"), "utf8"),
@@ -46,7 +47,7 @@ function serverExportsPlugin(): Plugin {
       const dist = resolve(__dirname, "dist");
       // A separate opt-in document; canonical index.html keeps frame refusal.
       writeFileSync(resolve(dist, "preview.html"), readFileSync(resolve(dist, "index.html"), "utf8")
-        .replace("</head>", '<meta name="mantle-admin-preview" content="1"></head>'));
+        .replace("<head>", `<head><meta name="mantle-admin-preview" content="1"><meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}">`));
       const systemTokensCss = readFileSync(
         resolve(__dirname, "src/styles/system-tokens.css"),
         "utf8",

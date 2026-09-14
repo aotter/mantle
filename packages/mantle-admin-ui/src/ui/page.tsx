@@ -1,3 +1,4 @@
+import { isAdminPreview } from "../app/frame-policy";
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { AlertCircle, Check, Copy, ExternalLink, type LucideIcon } from "lucide-react";
@@ -139,11 +140,11 @@ export function OperationErrorBox({ error }: { error: unknown }): React.ReactEle
 function useUnauthorizedRedirect(error: unknown): boolean {
   const is401 = error instanceof ApiError && error.status === 401;
   React.useEffect(() => {
-    if (!is401 || typeof window === "undefined") return;
+    if (!is401 || isAdminPreview() || typeof window === "undefined") return;
     const ret = window.location.pathname + window.location.search;
     window.location.href = `/admin/sign-in?return=${encodeURIComponent(ret)}`;
   }, [is401]);
-  return is401;
+  return is401 && !isAdminPreview();
 }
 
 /** Renders `description` plainly unless it looks like raw schema notes

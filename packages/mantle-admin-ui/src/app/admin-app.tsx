@@ -1,4 +1,6 @@
 import { canRenderAdmin } from "./frame-policy";
+import { usePreferences } from "./preferences";
+import { t } from "./i18n";
 import * as React from "react";
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -37,16 +39,25 @@ export function AdminApp({ preview = false }: { preview?: boolean } = {}): React
   // Static asset URLs can bypass the server's frame-ancestors headers.
   if (typeof window !== "undefined" && !canRenderAdmin(window, preview)) return null;
 
+  if (preview && ["/admin/sign-in", "/admin/connected-apps", "/oauth/consent"].includes(location.pathname)) {
+    return <PreviewAccountNotice />;
+  }
+
   if (location.pathname === "/oauth/consent") return <OAuthConsentView />;
 
   if (location.pathname === "/admin/sign-in") {
     return <SignInView />;
   }
 
-  return <Gate path={location.pathname} />;
+  return <Gate path={location.pathname} preview={preview} />;
 }
 
-function Gate({ path }: { path: string }): React.ReactElement {
+function PreviewAccountNotice(): React.ReactElement {
+  const { language } = usePreferences();
+  return <div className="p-6"><h1 className="text-xl font-semibold">{t(language, "preview.accountTitle")}</h1><p className="mt-2">{t(language, "preview.accountBody")}</p></div>;
+}
+
+function Gate({ path, preview }: { path: string; preview: boolean }): React.ReactElement {
   const me = useQuery<AdminUser>({
     queryKey: ["me"],
     queryFn: () => api.get<AdminUser>("/me"),
@@ -55,11 +66,11 @@ function Gate({ path }: { path: string }): React.ReactElement {
 
   const is401 = me.isError && me.error instanceof ApiError && me.error.status === 401;
   useEffect(() => {
-    if (!is401 || typeof window === "undefined") return;
+    if (!is401 || preview || typeof window === "undefined") return;
     const ret = window.location.pathname + window.location.search;
     window.location.href = `/admin/sign-in?return=${encodeURIComponent(ret)}`;
-  }, [is401]);
-  if (is401) return <GateLoading />;
+  }, [is401, preview]);
+  if (is401) return preview ? <GateError error={me.error} /> : <GateLoading />;
 
   if (me.isError && me.error instanceof ApiError && me.error.status === 403) {
     if (path === "/admin/connected-apps") return <ConnectedAppsPage />;

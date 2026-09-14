@@ -32,6 +32,8 @@ export interface EntryContext {
 }
 
 export interface ListContext {
+  /** Render and escape this URL in host-owned pagination when present. */
+  readonly nextPageUrl?: string;
   readonly collection: string;
   readonly locale: string;
   readonly entries: readonly Entry[];

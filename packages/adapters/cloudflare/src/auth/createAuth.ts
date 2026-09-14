@@ -1,5 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
+import { getMigrations } from "better-auth/db/migration";
+import { D1DatabaseDriver } from "../bindings/D1DatabaseDriver.js";
 import {
   createDpopReplayStore,
   enforceDpopBinding,
@@ -1286,6 +1288,28 @@ export function createAuth(config: CreateAuthConfig): Auth {
   // Observe eager initialization even for low-level callers; keep the original
   // rejection available to callers awaiting ready and Better Auth's handlers.
   void ready.catch(() => {});
+  // Auth owns its schema even when content uses a different semantic store.
+  // Keep schema work lazy: static/plan-only routes must not prepare tables.
+  let schemaReady: Promise<void> | null = null;
+  const prepareAuth = (): Promise<void> => schemaReady ??= (async () => {
+    const context = await auth.$context;
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(context.tables)));
+    const id = `auth-schema:1:${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("")}`;
+    try {
+      const applied = await config.database.prepare("SELECT id FROM _migrations WHERE id = ?").bind(id).first<{ id: string }>();
+      if (applied?.id === id) return;
+    } catch (error) {
+      // A new, auth-only database has no legacy Runtime ledger yet.
+      if (!/no such table: _migrations/i.test(String(error))) throw error;
+    }
+    const { compileMigrations } = await getMigrations(context.options);
+    await new D1DatabaseDriver(config.database).migrations.runAll([{
+      id,
+      description: "Selected Better Auth schema and staff-role access path",
+      sql: `${await compileMigrations()}\nCREATE INDEX IF NOT EXISTS user_role_idx ON user (role) WHERE role IS NOT NULL;`,
+    }]);
+  })().catch(error => { schemaReady = null; throw error; });
+
   const basePath = normalizeAuthBasePath(config.basePath);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const api = auth.api as any;
@@ -1299,6 +1323,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
   };
   const verifyAccessToken = config.oauthProvider
     ? async (token: string, audience: string) => {
+        await prepareAuth();
         const context = await auth.$context;
         const claims = await verifyOAuthJwtWithLocalJwks(
           token,
@@ -1340,15 +1365,19 @@ export function createAuth(config: CreateAuthConfig): Auth {
       ? { mcpResource: config.oauthProvider.mcpResource }
       : {}),
     handler: async (request) => {
+      await prepareAuth();
       const pathname = new URL(request.url).pathname;
       if (pathname.startsWith(`${basePath}/oauth2/`)) {
         await pruneExpiredDynamicClients();
       }
       return normalizeAuthResponseCookies(await auth.handler(request));
     },
-    getSession: (request) =>
-      api.getSession({ headers: request.headers }).then((r: unknown) => r ?? null),
+    getSession: async (request) => {
+      await prepareAuth();
+      return (await api.getSession({ headers: request.headers })) ?? null;
+    },
     getUserRole: async (userId) => {
+      await prepareAuth();
       const row = await config.database
         .prepare("SELECT role FROM user WHERE id = ? LIMIT 1")
         .bind(userId)
@@ -1356,6 +1385,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
       return row?.role ?? null;
     },
     getUser: async (userId) => {
+      await prepareAuth();
       const row = await config.database
         .prepare(
           "SELECT id, email, name, image, role, githubLogin, emailVerified, createdAt FROM user WHERE id = ? LIMIT 1",
@@ -1388,6 +1418,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
       };
     },
     getProviderAccessToken: async (request, providerId) => {
+      await prepareAuth();
       const session = await api.getSession({ headers: request.headers });
       const userId = session?.user?.id;
       const account = userId
@@ -1416,6 +1447,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
       const url = new URL(request.url);
       const clientId = url.searchParams.get("client_id");
       if (!clientId || !url.search) return null;
+      await prepareAuth();
       const oauthQuery = url.search.slice(1);
       const client = await api.getOAuthClientPublicPrelogin({
         headers: request.headers,
@@ -1446,6 +1478,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
       if (typeof oauthQuery !== "string" || oauthQuery.length === 0) {
         throw new Error("completeOAuthConsent: oauth_query is missing.");
       }
+      await prepareAuth();
       const headers = new Headers(request.headers);
       headers.set("content-type", "application/json");
       headers.delete("content-length");
@@ -1469,6 +1502,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
     ...(config.oauthProvider
       ? {
           listOAuthConsents: async (userId: string) => {
+            await prepareAuth();
             const result = await config.database
               .prepare(
                 `SELECT consent.id, consent.clientId,
@@ -1494,6 +1528,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
             }));
           },
           revokeOAuthConsent: async (userId: string, consentId: string) => {
+            await prepareAuth();
             const consent = await config.database
               .prepare(
                 "SELECT clientId FROM oauthConsent WHERE id = ? AND userId = ? LIMIT 1",
@@ -1545,6 +1580,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
       }
     }),
     listLinkedAccounts: async (userId) => {
+      await prepareAuth();
       const result = await config.database
         .prepare(
           "SELECT id, providerId, accountId, createdAt, updatedAt FROM account WHERE userId = ? ORDER BY createdAt ASC, id ASC",
@@ -1566,6 +1602,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
       }));
     },
     unlinkAccount: async (userId, providerId) => {
+      await prepareAuth();
       const result = await config.database
         .prepare("DELETE FROM account WHERE userId = ? AND providerId = ?")
         .bind(userId, providerId)
@@ -1573,6 +1610,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
       return (result.meta?.changes ?? 0) > 0;
     },
     listUsers: async () => {
+      await prepareAuth();
       const placeholders = STAFF_ROLES.map(() => "?").join(",");
       const result = await config.database
         .prepare(
@@ -1599,6 +1637,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
       }));
     },
     listMembers: async ({ search, cursor, cursorDirection = "forward", limit }) => {
+      await prepareAuth();
       const parsedCursor = cursor ? decodeMemberCursor(cursor) : null;
       const backward = cursorDirection === "backward";
       const conditions = [
@@ -1657,6 +1696,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
           `setUserRole: '${role}' is not a staff role — expected one of [${STAFF_ROLES.join(", ")}] or null.`,
         );
       }
+      await prepareAuth();
       const result = await config.database
         .prepare("UPDATE user SET role = ?, updatedAt = ? WHERE id = ?")
         .bind(role, new Date().toISOString(), userId)
@@ -1669,6 +1709,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
           `inviteUser: '${role}' is not a staff role — expected one of [${STAFF_ROLES.join(", ")}].`,
         );
       }
+      await prepareAuth();
       const normalized = email.trim().toLowerCase();
       const existing = await config.database
         .prepare("SELECT id FROM user WHERE email = ? LIMIT 1")
@@ -1689,6 +1730,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
       return { kind: "created", id };
     },
     revokeInvite: async (userId) => {
+      await prepareAuth();
       const result = await config.database
         .prepare(
           "DELETE FROM user WHERE id = ? AND emailVerified = 0 AND NOT EXISTS (SELECT 1 FROM account WHERE account.userId = user.id)",
@@ -1701,6 +1743,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
       if (!config.oauthProvider) {
         throw new Error("registerOAuthClient: oauthProvider is not configured.");
       }
+      await prepareAuth();
       const created = await api.adminCreateOAuthClient({
         headers: new Headers(input.requestHeaders),
         body: {
