@@ -4,6 +4,7 @@ import {
   collectionOperationsFor,
   operationFormSchema,
 } from "../src/features/content/row-operations";
+import { globalOperations } from "../src/features/ops/operations-view";
 import type { JsonSchema, StaffOperation } from "../src/lib/types";
 
 describe("row operation form inference", () => {
@@ -43,6 +44,7 @@ describe("collection operation binding", () => {
       operation("create-product", "products"),
     ];
 
+    expect(globalOperations([...operations, { ...operation("row-only"), rowBindings: [{ collection: "orders", inputField: "id", rowField: "id" }] }]).map(({ name }) => name)).toEqual(["adjust-inventory"]);
     expect(collectionOperationsFor(operations, "orders").map(({ name }) => name))
       .toEqual(["create-manual-order"]);
   });
