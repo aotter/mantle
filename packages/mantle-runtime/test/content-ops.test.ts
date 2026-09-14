@@ -903,60 +903,40 @@ describe("GetEntryUseCase / ListEntriesUseCase / DeleteEntryUseCase", () => {
   });
 
   it("scopes lists by a required x-mantle-ref field without dropping enum filters", async () => {
-    const organizations: SchemaManifest = {
-      apiVersion: "cms.mantle.aotter.net/v1",
-      kind: "Schema",
-      metadata: { name: "organizations" },
-      spec: {
-        title: "Organizations",
-        schema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
-        lifecycle: "operational",
-      },
-    };
-    const projects: SchemaManifest = {
-      apiVersion: "cms.mantle.aotter.net/v1",
-      kind: "Schema",
-      metadata: { name: "projects" },
-      spec: {
-        title: "Projects",
-        lifecycle: "operational",
-        schema: {
-          type: "object",
-          required: ["name", "organizationId", "kind"],
-          properties: {
-            name: { type: "string" },
-            organizationId: { type: "string", "x-mantle-ref": "organizations" },
-            kind: { type: "string", enum: ["app", "lib"] },
-          },
-        },
-        indexes: [["kind"]],
-        uiSchema: {
-          list: { filterField: "kind", primaryField: "name" },
-          nav: { standalone: true },
-        },
-      },
-    };
+    const schema = (name: string, spec: SchemaManifest["spec"]): SchemaManifest => ({
+      apiVersion: "cms.mantle.aotter.net/v1", kind: "Schema", metadata: { name }, spec,
+    });
     const h = harness({
       schemas: new Map([
-        ["organizations", organizations],
-        ["projects", projects],
+        ["organizations", schema("organizations", {
+          title: "Organizations",
+          lifecycle: "operational",
+          schema: { type: "object", required: ["name"], properties: { name: { type: "string" } } },
+        })],
+        ["projects", schema("projects", {
+          title: "Projects",
+          lifecycle: "operational",
+          schema: {
+            type: "object",
+            required: ["name", "organizationId", "kind"],
+            properties: {
+              name: { type: "string" },
+              organizationId: { type: "string", "x-mantle-ref": "organizations" },
+              kind: { type: "string", enum: ["app", "lib"] },
+            },
+          },
+          indexes: [["kind"]],
+          uiSchema: { list: { filterField: "kind", primaryField: "name" }, nav: { standalone: true } },
+        })],
       ]),
     });
-    await h.createDraft.execute({
-      collection: "projects",
-      data: { name: "one", organizationId: "org-a", kind: "app" },
-      authorId: null,
-    });
-    await h.createDraft.execute({
-      collection: "projects",
-      data: { name: "two", organizationId: "org-b", kind: "app" },
-      authorId: null,
-    });
-    await h.createDraft.execute({
-      collection: "projects",
-      data: { name: "three", organizationId: "org-a", kind: "lib" },
-      authorId: null,
-    });
+    for (const data of [
+      { name: "one", organizationId: "org-a", kind: "app" },
+      { name: "two", organizationId: "org-b", kind: "app" },
+      { name: "three", organizationId: "org-a", kind: "lib" },
+    ]) {
+      await h.createDraft.execute({ collection: "projects", data, authorId: null });
+    }
     const scoped = await h.listEntries.execute({
       collection: "projects",
       scope: { field: "organizationId", value: "org-a" },
