@@ -3,6 +3,7 @@ import type {
   DatabaseDriver,
   DeferredHookDispatcher,
   MediaStorage,
+  MantleStorageAdapter,
   RuntimePlan,
 } from "@aotter/mantle-runtime";
 import type { AdminAssetServer } from "@aotter/mantle-admin";
@@ -26,6 +27,10 @@ export interface MantleCloudflareConfig {
   /** Routes owned by the capabilities this composition actually mounts. */
   readonly reservedHttpPathPrefixes?: readonly string[];
   readonly bindings: { readonly db: DatabaseDriver } & {
+    /** Host-selected semantic storage. Defaults to SQLite over `db`. The host
+     *  owns site defaults/preparation when supplied; cannot combine with the
+     *  conventional `mcpCatalogKv` decorator. Auth still owns its database. */
+    readonly storage?: MantleStorageAdapter;
     /** Optional Admin SPA assets. Omitting this mounts no Admin surface. */
     readonly adminAssets?: AdminAssetServer;
     /** Optional media storage adapter. When set, media MCP tools and

@@ -45,7 +45,10 @@ export function createMantleRuntimeRef(config: MantleCloudflareConfig): MantleRu
   let web: MantleWeb | null = null;
   let kvSiteConfig: KvSiteConfigRepository | undefined;
   const mcpCatalogKv = config.bindings.mcpCatalogKv;
-  const storage = new SqliteMantleStorageAdapter(config.bindings.db, config.siteDefaults, {
+  if (config.bindings.storage && mcpCatalogKv) {
+    throw new Error("Custom storage owns site configuration; omit mcpCatalogKv and decorate the selected storage explicitly.");
+  }
+  const storage = config.bindings.storage ?? new SqliteMantleStorageAdapter(config.bindings.db, config.siteDefaults, {
     decorateSiteConfigRepository: mcpCatalogKv
       ? (canonical) => {
           kvSiteConfig = new KvSiteConfigRepository(canonical, mcpCatalogKv);
@@ -86,7 +89,7 @@ export function createMantleRuntimeRef(config: MantleCloudflareConfig): MantleRu
             },
           });
           if (!runtime.siteConfig || !runtime.updateSiteSettings) {
-            throw new Error("Cloudflare SQLite storage did not prepare site configuration.");
+            throw new Error("Cloudflare storage did not prepare site configuration.");
           }
           return runtime as CloudflareMantleRuntime;
         })

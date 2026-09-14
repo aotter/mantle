@@ -13,6 +13,8 @@ import type {
 import type { Manifest } from "@aotter/mantle-spec";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import { D1DatabaseDriver } from "../src/bindings/D1DatabaseDriver.js";
+import { SqliteMantleStorageAdapter } from "@aotter/mantle-runtime";
+import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
 import {
   MANTLE_RESERVED_EXACT_PATHS,
   MANTLE_RESERVED_PATH_PREFIXES,
@@ -26,6 +28,44 @@ import { StubAssetServer, stubAuth } from "./fakes/runtime-bindings.js";
 type TestEnv = MantleCloudflareEnv & { readonly TEST_NAME?: string };
 
 describe("createMantleWorker", () => {
+  it("uses selected semantic storage for CRUD and builtin writes while preserving reads and deletion", async () => {
+    const db = new InMemoryDatabase();
+    const sqlite = new SqliteMantleStorageAdapter(db);
+    let blocked = false;
+    const prepare = vi.fn(async (plan: Parameters<typeof sqlite.prepare>[0]) => {
+      const prepared = await sqlite.prepare(plan);
+      const create = prepared.entries.create.bind(prepared.entries);
+      prepared.entries.create = async (args) => {
+        if (blocked) throw Error("host_write_limit");
+        return create(args);
+      };
+      return prepared;
+    });
+    const apiVersion = "cms.mantle.aotter.net/v1";
+    const worker = createMantleWorker<TestEnv>({
+      plan: compileTestPlan([
+        { apiVersion, kind: "Schema", metadata: { name: "items" }, spec: { title: "Items", lifecycle: "operational", schema: { type: "object", properties: { title: { type: "string" } } } } },
+        { apiVersion, kind: "Procedure", metadata: { name: "add-item" }, spec: { input: { type: "object", properties: { title: { type: "string" } } }, output: { type: "object" }, handler: { kind: "builtin", op: "create", schema: "items" } } },
+      ]),
+      auth: () => stubAuth,
+      bindings: () => ({ db, storage: { nativeViewDialects: sqlite.nativeViewDialects, prepare } }),
+    });
+    const env = testEnv();
+    const [runtime, same] = await Promise.all([worker.getRuntime(env), worker.getRuntime(env)]);
+    expect(same).toBe(runtime);
+    expect(prepare).toHaveBeenCalledTimes(1);
+    const entry = await runtime.createDraft.execute({ collection: "items", data: { title: "kept" }, authorId: null });
+    blocked = true;
+    await expect(runtime.createDraft.execute({ collection: "items", data: {}, authorId: null })).rejects.toThrow("host_write_limit");
+    await expect(runtime.invokeProcedure({ procedure: "add-item", input: { title: "blocked" }, ctx: { user: null, staff: null, env: {} } })).resolves.toMatchObject({ ok: false, diagnostic: { message: expect.stringContaining("host_write_limit") } });
+    expect((await runtime.getEntry.execute({ id: entry.id })).data).toMatchObject({ title: "kept" });
+    expect(await runtime.deleteEntry.execute({ id: entry.id })).toEqual({ removed: true });
+    expect(() => createMantleRuntimeRef({
+      plan: compileTestPlan([]), auth: stubAuth,
+      bindings: { db, storage: sqlite, mcpCatalogKv: { namespace: {} as KVNamespace, scope: "test" } },
+    })).toThrow("Custom storage owns site configuration");
+  });
+
   it("keeps the canonical docs aligned with the route contract", async () => {
     const docs = await readFile(
       fileURLToPath(new URL("../../../mantle/README.md", import.meta.url)),
