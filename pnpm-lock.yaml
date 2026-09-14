@@ -358,6 +358,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^6.1.0
         version: 6.1.0(vite@8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
+      playwright:
+        specifier: 'catalog:'
+        version: 1.62.1
       shadcn:
         specifier: ^4.19.0
         version: 4.19.0(typescript@6.0.3)

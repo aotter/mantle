@@ -121,10 +121,7 @@ export function RowOperationsMenu({
           language={language}
           canonical={canonical}
           onClose={() => setActiveOperation(null)}
-          onSuccess={() => {
-            setActiveOperation(null);
-            onSuccess();
-          }}
+          onSuccess={onSuccess}
         />
       ) : null}
     </>
@@ -160,10 +157,7 @@ export function CollectionOperations({
           language={language}
           canonical={canonical}
           onClose={() => setActiveOperation(null)}
-          onSuccess={() => {
-            setActiveOperation(null);
-            onSuccess();
-          }}
+          onSuccess={onSuccess}
         />
       ) : null}
     </>
@@ -174,7 +168,7 @@ export function CollectionOperations({
  * Locks the bound reference to this row and renders the remaining
  * operation input as an editable form. The server resolves `rowField`.
  */
-function OperationDialog({
+export function OperationDialog({
   operation,
   binding,
   row,
@@ -286,9 +280,18 @@ function OperationDialog({
         {row && entryQuery.isError ? <ErrorBox error={entryQuery.error} /> : null}
         {invoke.isError ? <OperationErrorBox error={asRenderable(invoke.error)} /> : null}
 
+        {invoke.isSuccess ? (
+          <section aria-label={t(language, "ops.output")} className="min-w-0 space-y-2">
+            <h3 className="text-sm font-semibold">{t(language, "ops.output")}</h3>
+            <pre className="max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 text-xs" tabIndex={0}>
+              {JSON.stringify(invoke.data.output ?? null, null, 2)}
+            </pre>
+          </section>
+        ) : null}
+
         <DialogFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={invoke.isPending}>
-            {t(language, "rowActions.cancel")}
+            {t(language, invoke.isSuccess ? "common.close" : "rowActions.cancel")}
           </Button>
           <Button
             type="button"

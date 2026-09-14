@@ -109,6 +109,7 @@ function currentPage(pathname: string, language: ReturnType<typeof usePreference
   if (collectionMatch) return fieldLabel(decodeURIComponent(collectionMatch[1]!));
   const parts = pathname.split("/").filter(Boolean);
   const segment = decodeURIComponent(parts[parts.length - 1] ?? "");
+  if (pathname === "/admin/operations") return t(language, "ops.title");
   if (pathname === "/admin/media") return t(language, "nav.media");
   if (pathname === "/admin/connected-apps") return t(language, "oauth.connectedApps");
   if (pathname === "/admin/settings") return t(language, "nav.settings");

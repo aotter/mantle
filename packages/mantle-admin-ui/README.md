@@ -28,3 +28,15 @@ continues to refuse all iframe rendering.
 
 This is a consumer-owned sandbox contract, not a way to embed authenticated
 production Admin. Do not mount it in an untrusted same-origin application.
+
+## Staff operations
+
+The Operations navigation item (`/admin/operations`) lists authorized staff
+Procedures without a row binding or `uiSchema.collectionAction`. It works on a
+site with no collections. Bound operations stay in their collection and row
+menus. All use the existing Admin operations API and schema form.
+
+Successful output stays in the dialog until closed. Failed input, diagnostics,
+and generated idempotency keys remain available for retry. Close and reopen a
+successful operation to start a new invocation. API authorization and Procedure
+validation remain authoritative.

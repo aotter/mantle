@@ -207,6 +207,7 @@ export function buildNavGroups(
         url: "/admin",
         icon: Home,
       },
+      { title: t(language, "ops.title"), url: "/admin/operations", icon: Workflow },
     ],
   };
 
