@@ -387,9 +387,40 @@ Mantle does not issue or store API keys or personal tokens, does not define a sc
 
 Related: [Procurement approvals](./procurement-approvals.md) shows session-based `ctx.user` and `ctx.staff` predicates; [Commerce](./commerce-transaction.md) shows a payment callback that is verified by the application rather than by a guard.
 
+## Runnable contract check
+
+The integration fixture uses mutable, consumer-owned credential and
+entitlement fakes. It proves this sequence for one Procedure over REST and MCP:
+
+```text
+grant -> REST succeeds -> MCP succeeds
+revoke entitlement while credential remains valid
+-> next REST call is 402 -> next MCP call is ENTITLEMENT_REQUIRED
+```
+
+Run the guide/contract and normalization checks from the Mantle repository:
+
+```bash
+pnpm --filter @aotter/mantle-cloudflare exec vitest run \
+  test/authorization-integration.test.ts \
+  test/resolve-caller.test.ts \
+  test/mount-http-trigger-auth.test.ts
+```
+
+`authorization-integration.test.ts` also asserts that the handbook still
+contains all four scenarios and the exact public API names used by the fixture.
+The package typecheck catches changes to those APIs; the integration test
+catches changes to REST/MCP enforcement and mutable guard behavior.
+
+The canonical MCP grant check joins the JWT's exact consent and original
+session in one indexed D1 statement. Both identities, their user/client
+bindings, session expiration, resource and the complete token scope set must
+still match. The adapter then reads the user's role on every protected request;
+no grant or role result is cached. With warm JWKS, this is one grant binding
+call plus one role binding call, excluding DPoP replay, catalog and tool work.
+
 ## Source
 
-- [`docs/api-mcp-authorization.md`](../../../docs/api-mcp-authorization.md) — the four scenarios, resolver wiring, status tables
 - [`packages/adapters/cloudflare/src/mount/resolveCaller.ts`](../../../packages/adapters/cloudflare/src/mount/resolveCaller.ts) — `ConsumerCredentialResolution` shape and precedence
 - [`packages/adapters/cloudflare/src/worker/createMantleWorker.ts`](../../../packages/adapters/cloudflare/src/worker/createMantleWorker.ts) — `extend` returning `credentialResolver` and `jwtBearer`
 - [`packages/mantle-runtime/src/domain/model/HandlerContext.ts`](../../../packages/mantle-runtime/src/domain/model/HandlerContext.ts) — `ctx.auth`

@@ -19,10 +19,13 @@ import {
 
 const apiVersion = "cms.mantle.aotter.net/v1" as const;
 const MCP_RESOURCE = "https://example.test/mcp";
-const guide = readFileSync(
-  new URL("../../../../docs/api-mcp-authorization.md", import.meta.url),
-  "utf8",
-);
+const guide = [
+  "examples/guarded-api.md",
+  "reference/authorization.md",
+  "cloudflare/authentication.md",
+].map((page) => readFileSync(
+  new URL(`../../../../docs/handbook/${page}`, import.meta.url), "utf8",
+)).join("\n");
 
 function manifests(): Manifest[] {
   return [
@@ -116,13 +119,13 @@ function mcpCall(): Request {
 describe("authorization integration: one target across REST and MCP", () => {
   it("keeps the shipped four-scenario guide aligned with the public seams", () => {
     for (const text of [
-      "## 1. Anonymous public API",
-      "## 2. Public API requiring an API key",
-      "## 3. API key plus a mutable paid/transaction guard",
-      "## 4. Personal token with user scope, shared by REST and MCP semantics",
+      "Rung 1, anonymous:",
+      "Rung 2, API key with scope:",
+      "Rung 3, API key plus paid state:",
+      "Rung 4, personal token over REST:",
       "ConsumerCredentialResolver",
       "credentialResolver: siteCredentialResolver(env.DB)",
-      "createMantleWorker({",
+      "createMantleWorker<Env>({",
       "jwtBearer: {",
       "getProviderAccessToken(request, \"mantle-platform\")",
       "verifyOAuthAccessToken(request",

@@ -18,9 +18,10 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0014](0014-auth-better-auth-and-multi-tenant-mcp.md) | The Cloudflare adapter owns one curated Better Auth 1.7 identity/OAuth/MCP authority with CIMD discovery. Verified callers are normalized into runtime context; mutable staff role and target authorization are re-evaluated per call. | Accepted + amended |
 | [0016](0016-site-semantic-layer.md) | Site semantic layer: `AGENTS.md` (cross-tool entry) + `.mantle/launch-state.json` (deterministic install context). The older `mantle/site.md` letter surface is suspended from first-run scaffolds. | Accepted (slimmed) |
 | [0017](0017-media-multi-variant-agent-side-optimization.md) | Multi-variant media assets with agent-side optimization and asset-id entry references. | Accepted |
-| [0018](0018-core-starters-repository-boundary.md) | Core produces published SDK artifacts; the separate starters repository validates them as an external consumer. Revisit after release-contract simplification. | Accepted for now |
+| [0018](0018-core-starters-repository-boundary.md) | Core produces published SDK artifacts; the separate starters repository validates them as an external consumer. Revisit after release-contract simplification. | Superseded by 0021 |
 | [0019](0019-sealed-manifest-runtime-pipeline.md) | One sealed source-to-runtime pipeline, semantic storage seam, and optional Web/Admin/platform dependency direction. | Accepted |
 | [0020](0020-builtin-handler-contracts-and-matched-upsert.md) | Static builtin handler contracts and natural-key matched upsert (`handler.match`). | Accepted |
+| [0021](0021-retire-starter-scaffolding.md) | Direct authoring; retire Starter scaffolding. | Accepted; supersedes 0018 |
 
 ## Reading order
 
@@ -32,7 +33,7 @@ If you're new to the codebase:
 4. **0007** — what running the SDK feels like as an AI author (and as the operator agent).
 5. **0011** — the boundary between the runtime and the adapter.
 6. **0010** — how locale flows through the system.
-7. **0013** — historical install-session context; current first launch is landing provision bundles plus repo-local handoff.
+7. **0021** — current direct-authoring boundary; **0013** is historical install-session context.
 8. **0002, 0008** — the two ADRs that touch every diagnostic and every binding.
 
 ## What's NOT here (and why)
@@ -55,10 +56,20 @@ The rebuild's ADR-0011 (new) is the most load-bearing addition — the POC accum
 
 ## Contributing a new ADR
 
-1. Pick the next number (currently 0020).
+1. Pick the next unused number after the highest existing ADR.
 2. File: `docs/adr/<NNNN>-<kebab-title>.md`.
 3. Sections: Status, Date, Context, Decision, Consequences, Alternatives, How to apply, Implementation status.
 4. Link from this README's table.
 5. Land it in a PR alongside (or before) the implementation it documents — ADR-as-design-artifact, not ADR-as-archaeology.
 
-- [ADR-0021: Direct authoring; retire Starter scaffolding](0021-retire-starter-scaffolding.md) — accepted for 0.1.2; supersedes ADR-0018.
+## ADR-lite records
+
+These retain their issue-based filenames and original decision status.
+
+| Record | Status |
+|---|---|
+| [#803 Request diagnostics](adr-lite-803-request-diagnostics.md) | Implemented |
+| [#808 Route readiness](adr-lite-808-route-readiness.md) | Accepted |
+| [#809 Bounded public content](adr-lite-809-bounded-public-content.md) | Implemented |
+| [#812 Native parity](adr-lite-812-native-parity.md) | Implemented; deployment evidence linked in record |
+| [#823 Home statistics](adr-lite-823-home-statistics.md) | Proposed; unmerged demo |

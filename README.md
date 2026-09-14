@@ -172,7 +172,7 @@ and [D1](https://developers.cloudflare.com/d1/platform/pricing/) free limits.
      target: { procedure: request-reservation }
    ```
 
-   See the [complete manifest reference](docs/design-atoms.md) for the full syntax.
+   See the [complete manifest reference](docs/handbook/reference/manifest.md) for the full syntax.
 
 2. Install Mantle and generate the typed runtime binding:
 

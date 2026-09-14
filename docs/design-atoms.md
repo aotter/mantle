@@ -1,16 +1,9 @@
-# Design atoms — the 4 things this SDK exposes
+# Design atoms — Builder compatibility reference
 
-> If you're an AI working in a project that consumes `@aotter/mantle-*`,
-> read this first. It explains the entire surface area in one page.
->
-> **Status**: v0.1 shipped grammar. Unknown keys and enum values are rejected.
->
-> **This is the reference manual** — what the system is. For *why* it
-> ended up this shape (alternatives considered, trade-offs accepted),
-> see the Architecture Decision Records under [`docs/adr/`](adr/README.md).
-> For the SDK's contract with its primary author (CLI feedback loops,
-> structured diagnostics, deterministic authoring), see
-> [ADR-0007](adr/0007-ai-as-primary-author.md).
+The [handbook](handbook/concepts/four-atoms.md) is the user documentation.
+This file retains the headings and content consumed by mantle-home's Builder;
+do not replace it with a pointer until those consumers migrate to the handbook.
+See [#837](https://github.com/aotter/mantle/issues/837).
 
 ## TL;DR
 

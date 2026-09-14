@@ -106,6 +106,54 @@ createMantleWorker({
 
 With `auth` set, `MANTLE_AUTH_MODE` and the mode variables are not read. Core still owns the Auth routes: the factory's `basePath` joins the reserved paths, the MCP resource defaults to `auth.mcpResource ?? <PUBLIC_ORIGIN>/mcp`, and a rejected `auth.ready` evicts the isolate's assembly. Keep the D1 `DB` binding; Better Auth tables live there.
 
+## OAuth resource primitives
+
+When one Mantle site is an OAuth client of another, request a stable RFC 8707
+resource and use standard `offline_access` when refresh is needed:
+
+```ts
+const clientAuth = createAuth({
+  // database, baseURL, secret, other methods...
+  methods: [{
+    kind: "oauth",
+    providerId: "mantle-platform",
+    clientId: env.PLATFORM_CLIENT_ID,
+    discoveryUrl: "https://platform.example.com/api/auth/.well-known/openid-configuration",
+    scopes: ["openid", "offline_access", "accounts:read"],
+    resource: "https://api.example.com",
+  }],
+});
+
+const { accessToken, accessTokenExpiresAt, scopes } =
+  await clientAuth.getProviderAccessToken(request, "mantle-platform");
+```
+
+The server-side getter is bound to the current local session request and never
+returns a refresh token or account row. On the provider:
+
+```ts
+const providerAuth = createAuth({
+  // database, baseURL, secret, methods...
+  oauthProvider: {
+    loginPage: "/sign-in",
+    consentPage: "/consent",
+    scopes: ["openid", "offline_access", "accounts:read"],
+    resources: ["https://api.example.com"],
+  },
+});
+
+const verification = await providerAuth.verifyOAuthAccessToken(request, {
+  audience: "https://api.example.com",
+  scopes: ["accounts:read"],
+});
+```
+
+The verifier accepts JWT access tokens only and checks the configured issuer,
+JWKS/signature, audience, time claims, required scopes, and—when passed the
+request—DPoP proof binding with database-backed replay protection. It returns
+only `userId`, `clientId`, `credentialId`, and scopes. Opaque tokens are
+rejected; there is no introspection fallback.
+
 ## Source
 - [`packages/adapters/cloudflare/README.md`](../../../packages/adapters/cloudflare/README.md)
 - [`packages/adapters/cloudflare/src/auth/conventionalAuth.ts`](../../../packages/adapters/cloudflare/src/auth/conventionalAuth.ts)

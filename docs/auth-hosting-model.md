@@ -138,7 +138,7 @@ handler that checks current business state.
 Mantle Platform may be the identity or OAuth token authority for a hosted
 flow. That does not make token claims the generated site's live membership or
 entitlement authority. The target site's guard reads its authoritative state
-on every call. See [API and MCP authorization](api-mcp-authorization.md) for
+on every call. See [API and MCP authorization](handbook/examples/guarded-api.md) for
 the exact public API and four consumer examples.
 
 ## SDK Surface Rule

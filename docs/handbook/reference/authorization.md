@@ -257,6 +257,27 @@ export const requireActiveSubscription = async (
 
 Cookie sessions are emitted as cookies, never relabelled as bearer tokens. A protected target with no configured security scheme is an emission error, not a silently unprotected operation. MCP is out of scope for the emitter; required scopes and guard behaviour reach agents through the standard Tool description, and every `tools/call` re-runs the predicates and the guard. Discovery is never the enforcement boundary — see [MCP and agents](../concepts/mcp-and-agents.md).
 
+Configure the accepted schemes through the public API:
+
+```ts
+import { EmitOpenapiUseCase } from "@aotter/mantle/spec";
+
+const { document } = EmitOpenapiUseCase.run({
+  linked, // successful linkManifestSet result
+  title: "Site API",
+  version: "1.0.0",
+  security: {
+    sessionCookie: false,
+    oauthBearer: {
+      openIdConnectUrl:
+        "https://platform.example.com/api/auth/.well-known/openid-configuration",
+    },
+    apiKey: { in: "header", name: "X-API-Key" },
+    personalToken: { bearerFormat: "PAT" },
+  },
+});
+```
+
 ## Source
 
 - [`packages/mantle-spec/src/domain/model/ManifestGrammar.ts`](../../../packages/mantle-spec/src/domain/model/ManifestGrammar.ts)
@@ -270,5 +291,4 @@ Cookie sessions are emitted as cookies, never relabelled as bearer tokens. A pro
 - [`packages/mantle-runtime/src/usecase/view/ExecuteViewUseCase.ts`](../../../packages/mantle-runtime/src/usecase/view/ExecuteViewUseCase.ts)
 - [`packages/mantle-admin/src/mountMantleAdmin.ts`](../../../packages/mantle-admin/src/mountMantleAdmin.ts)
 - [`packages/adapters/cloudflare/src/mount/mountMcp.ts`](../../../packages/adapters/cloudflare/src/mount/mountMcp.ts)
-- [`docs/api-mcp-authorization.md`](../../../docs/api-mcp-authorization.md)
 - [`docs/design-atoms.md`](../../../docs/design-atoms.md)
