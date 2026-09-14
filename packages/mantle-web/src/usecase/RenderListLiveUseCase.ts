@@ -39,6 +39,7 @@ export class RenderListLiveUseCase {
     });
     const mediaAssets = await resolveMediaAssetsForEntries(this.mediaAssets, entries);
     const html = renderListHtml({
+      nextPageUrl: page.nextCursor ? request.pathForPage?.(page.nextCursor) : undefined,
       collection: request.collection,
       locale: request.locale,
       entries,

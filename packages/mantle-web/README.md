@@ -54,9 +54,25 @@ Custom `PublicPathResolver` implementations can declare `dataFields` for the
 Cloudflare mount to use; omission retains full data. Missing projected keys
 are null and envelope fields, including locale, remain available.
 
-Cloudflare's public mount supplies visible Next navigation and HTTP continuation
-links, and serves `/sitemap.xml?part=1&cursor=...` parts automatically. The
-existing preview authorization and public-response cache policy still apply.
+Cloudflare's public mount supplies `nextPageUrl` to list templates and publishes
+HTTP continuation links. Templates must render their own accessible navigation
+when this URL is present (escape it like any other attribute). This replaces
+the adapter's injected English Next link; update existing list templates when
+adopting this version. For example, with Hono's escaping `html` tagged template:
+
+```ts
+import { html } from "hono/html";
+
+templates.registerListTemplate("posts", ({ entries, nextPageUrl }) =>
+  html`<main>${entries.map(entry => html`<article>${entry.data.title}</article>`)}
+    ${nextPageUrl ? html`<nav aria-label="Pagination"><a rel="next" href="${nextPageUrl}">Next</a></nav>` : ""}
+  </main>`.toString(),
+);
+```
+
+Custom adapters pass `pathForPage(cursor)` to `renderListLive.execute` to provide
+their own URL mapping. Cloudflare serves `/sitemap.xml?part=1&cursor=...` parts
+automatically. Preview authorization and public-response cache policy still apply.
 
 ## WebMCP (opt in)
 

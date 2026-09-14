@@ -17,8 +17,11 @@ Selected data fields retain JSON types and use one bound JSON field list, includ
 for projections larger than D1's ordinary bind or SQL-function argument limits.
 
 The optional Web use cases return an explicit page object. Cloudflare mounts
-publish its continuation in a body link and `Link: rel="next"`. HTML lists include
-accessible navigation. An empty intermediate/final llms page remains traversable.
+publish `Link: rel="next"` and map cursors to URLs. Web passes `nextPageUrl` to
+the list template; the host renders accessible navigation with its own language
+and design. The adapter does not rewrite template HTML. Existing templates must
+adopt this field to retain visible continuation. Web-owned llms composition
+retains its body link. An empty intermediate/final llms page remains traversable.
 Root llms reads each canonical page once and expands shared entries per locale
 without repeated canonical reads. Unknown/unmapped/no-content rows consume their
 place in the page; they do not prevent reaching later eligible rows.

@@ -20,11 +20,20 @@ JavaScript bundle or change the canonical Admin document.
 
 Before its module script boots, install your sandbox transport as `window.fetch`
 and set `window.__MANTLE_ADMIN_PREVIEW__ = { fetch: window.fetch }`. The transport
-must intercept all Admin/auth API requests and reject failures; never fall back
-to live Admin API requests. The preview refuses to render without this explicit
+must intercept `/admin/api/*` requests and reject failures; never fall back
+to live Admin API requests. Preview permits only this same-origin fetch surface,
+with native connections and form submissions disabled by document CSP. Use an
+in-memory implementation or delegate with `postMessage` to the parent; a bridge
+that performs native fetch inside the iframe is blocked. The preview refuses to render without this explicit
 bridge, outside an iframe, in nested frames, or with a foreign-origin parent.
 Only a same-origin top-level parent is supported. The ordinary `index.html`
 continues to refuse all iframe rendering.
+
+Sign-in, OAuth consent, connected apps and sign-out are unavailable in preview.
+An unauthorized bridge response stays an error instead of navigating to live
+sign-in. Internal edits/search/pagination use the Admin router; CSV downloads use
+the bridge and a local blob. Canonical Admin retains its normal account flows
+and browser-streamed downloads, without buffering large exports in the SPA.
 
 This is a consumer-owned sandbox contract, not a way to embed authenticated
 production Admin. Do not mount it in an untrusted same-origin application.

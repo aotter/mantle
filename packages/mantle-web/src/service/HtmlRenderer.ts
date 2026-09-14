@@ -52,6 +52,7 @@ export function renderEntryHtml(args: RenderEntryArgs): string | null {
 }
 
 export interface RenderListArgs {
+  readonly nextPageUrl?: string;
   readonly collection: string;
   readonly locale: string;
   readonly entries: ReadonlyArray<Entry>;
@@ -70,6 +71,7 @@ export function renderListHtml(args: RenderListArgs): string | null {
   return injectTrackingTags(
     (args.doctype ?? DEFAULT_DOCTYPE) +
       tpl({
+        nextPageUrl: args.nextPageUrl,
         collection: args.collection,
         locale: args.locale,
         entries: args.entries,

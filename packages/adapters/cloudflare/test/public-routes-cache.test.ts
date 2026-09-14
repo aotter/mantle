@@ -1,5 +1,6 @@
 import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
+import { html } from "hono/html";
 import { describe, expect, it } from "vitest";
 import type { Manifest } from "@aotter/mantle-spec";
 import {
@@ -60,7 +61,7 @@ function harness(
   );
   templates.registerListTemplate(
     "posts",
-    ({ entries, site, seo }) => `<html><head>${seo ? renderSeoTagsHtml(seo) : ""}</head><body><section data-brand="${site.brand}">${entries.map((e) => e.data["title"]).join(",")}</section></body></html>`,
+    ({ entries, site, seo, nextPageUrl }) => `<html><head>${seo ? renderSeoTagsHtml(seo) : ""}</head><body><section data-brand="${site.brand}">${entries.map((e) => e.data["title"]).join(",")}</section>${nextPageUrl ? html`<nav aria-label="分頁"><a rel="next" href="${nextPageUrl}">更多文章</a></nav>` : ""}</body></html>`,
   );
   const ref = createMantleRuntimeRef({
     plan: compileTestPlan(manifests()),
@@ -139,7 +140,12 @@ describe("mountPublicRoutes response-cache contract", () => {
         titles.push(...[...body.matchAll(/Title-\d+/g)].map((match) => match[0]));
         expect(body).not.toContain("private-author");
         next = response.headers.get("link")?.match(/^<([^>]+)>; rel="next"$/)?.[1];
-        if (next) expect(body).toContain(path === "/en/posts" ? 'rel="next"' : "[Next page]");
+        if (path === "/en/posts") {
+          expect(body).not.toContain('aria-label="Pagination"');
+          expect(body).not.toContain(">Next</a>");
+          expect(body.includes("更多文章")).toBe(Boolean(next));
+          if (next) expect(body).toContain(`href="${next.replace(/&/g, "&amp;")}"`);
+        } else if (next) expect(body).toContain("[Next page]");
         pages++;
         expect(pages).toBeLessThan(5);
       } while (next);

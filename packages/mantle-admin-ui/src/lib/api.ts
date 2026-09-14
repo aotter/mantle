@@ -1,3 +1,5 @@
+import { isAdminPreview } from "../app/frame-policy";
+
 const BASE = "/admin/api";
 
 export class ApiError extends Error {
@@ -40,6 +42,28 @@ export const api = {
     request<T>(path, jsonInit("PATCH", body)),
   delete: <T>(path: string): Promise<T> => request<T>(path, { method: "DELETE" }),
 };
+
+/** Preview downloads use its bridge; live exports retain browser streaming. */
+export async function downloadAdminFile(path: string): Promise<void> {
+  const url = new URL(path, window.location.href);
+  if (url.origin !== window.location.origin || !url.pathname.startsWith(`${BASE}/`)) {
+    throw new TypeError("Expected an Admin download URL.");
+  }
+  if (!isAdminPreview()) {
+    window.location.assign(url.href);
+    return;
+  }
+  const response = await fetch(url, { credentials: "same-origin" });
+  if (!response.ok) throw new ApiError(`${response.status} ${response.statusText}`, response.status, await response.text());
+  const objectUrl = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = /filename="([^"]+)"/i.exec(response.headers.get("content-disposition") ?? "")?.[1] ?? "export.csv";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+}
 
 function jsonInit(method: string, body: unknown): RequestInit {
   return {

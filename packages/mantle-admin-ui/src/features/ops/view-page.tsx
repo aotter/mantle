@@ -1,10 +1,10 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download, Search } from "lucide-react";
-import { useAdminLocation } from "../../app/router";
+import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
-import { api } from "../../lib/api";
+import { api, downloadAdminFile } from "../../lib/api";
 import { viewsManifestQueryOptions } from "../../lib/queries";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
@@ -71,7 +71,9 @@ async function fetchView(
 /** Render a read-only View with schema-driven parameters and formatting. */
 export function ViewPage({ name }: { name: string }): React.ReactElement {
   const { language } = usePreferences();
+  const { navigate } = useAdminRouter();
   const location = useAdminLocation();
+  const exportFile = useMutation({ mutationFn: downloadAdminFile });
   const urlParams = React.useMemo(() => new URLSearchParams(location.search), [location.search]);
   const currentPage = positiveInt(urlParams.get("page")) ?? 1;
   const viewsQuery = useQuery<ViewManifestInfo[]>(viewsManifestQueryOptions());
@@ -135,14 +137,16 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
           <Button
             type="button"
             variant="secondary"
-            disabled={!canQuery}
-            onClick={() => { window.location.href = exportHref; }}
+            disabled={!canQuery || exportFile.isPending}
+            onClick={() => exportFile.mutate(exportHref)}
           >
             <Download className="size-4" aria-hidden />
             {t(language, "collection.export")}
           </Button>
         }
       />
+
+      {exportFile.isError ? <ErrorBox error={exportFile.error} /> : null}
 
       {view.params ? (
         <SectionCard className="space-y-4">
@@ -159,7 +163,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
           />
           <Button
             type="button"
-            onClick={() => { window.location.href = viewParamsHref(name, urlParams, view.params!, params); }}
+            onClick={() => { navigate(viewParamsHref(name, urlParams, view.params!, params)); }}
             disabled={query.isFetching}
           >
             <Search className="size-4" aria-hidden />
@@ -187,7 +191,7 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
             }
             next.delete("page");
             next.delete("show");
-            window.location.href = viewHref(name, next);
+            navigate(viewHref(name, next));
           }}
         />
       ) : null}

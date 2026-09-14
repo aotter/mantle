@@ -323,6 +323,7 @@ function mountCollection(
       const page = await web.renderListLive.execute({
         collection: route.collection,
         cursor: c.req.query("cursor"),
+        pathForPage: (cursor) => continuationPath(c, cursor)!,
         locale,
         contentLocale: contentLocale(runtime, route.collection, locale),
         site,
@@ -331,13 +332,8 @@ function mountCollection(
       if (page === null) return notFound();
       const headers = new Headers(liveDev ? HTML_NO_STORE : HTML_PUBLIC);
       const next = continuationPath(c, page.nextCursor);
-      let html = page.html;
-      if (next) {
-        headers.set("link", `<${next}>; rel="next"`);
-        const nav = `<nav aria-label="Pagination"><a rel="next" href="${next.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}">Next</a></nav>`;
-        html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, () => `${nav}</body>`) : html + nav;
-      }
-      return new Response(html, { status: 200, headers });
+      if (next) headers.set("link", `<${next}>; rel="next"`);
+      return new Response(page.html, { status: 200, headers });
     });
   }
 

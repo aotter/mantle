@@ -33,5 +33,10 @@
   "devDependencies": {
     "typescript": "catalog:"
   },
-  "packageManager": "pnpm@9.15.0"
+  "packageManager": "pnpm@9.15.0",
+  "pnpm": {
+    "overrides": {
+      "miniflare>sharp": "0.35.4"
+    }
+  }
 }

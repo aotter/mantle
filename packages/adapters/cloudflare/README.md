@@ -37,6 +37,15 @@ site-default preparation and must provide site configuration for the mounted
 Cloudflare product. Do not combine it with `mcpCatalogKv`; apply any site-config
 decorator in the selected storage instead. Auth keeps its separate database.
 
+`createAuth` prepares its selected D1 database on first Auth access, using Better
+Auth's schema and the shared transactional migration ledger. Content adapters do
+not prepare Auth. Concurrent calls share preparation; a failed attempt can retry.
+An already prepared database needs only a ledger read on a new Auth instance.
+`Auth.ready` remains Better Auth context initialization, not database preparation;
+static and plan-only routes do not trigger schema migrations. Custom Auth facades
+own their own readiness. Legacy mixed SQLite migrations remain compatible with
+existing databases; they are not a requirement for custom content storage.
+
 Without an `auth` option, `createMantleWorker` requires one explicit mode:
 
 | Mode | Non-secret bindings | Worker secrets | Must be absent |

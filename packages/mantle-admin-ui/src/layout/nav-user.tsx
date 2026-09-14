@@ -19,6 +19,7 @@ import { usePreferences } from "@/app/preferences";
 import { t } from "@/app/i18n";
 import { signOut } from "@/lib/auth";
 import { initialsFor } from "@/lib/initials";
+import { isAdminPreview } from "@/app/frame-policy";
 
 export interface NavUserProps {
   login: string | null;
@@ -68,7 +69,7 @@ export function NavUser({ login, image, role }: NavUserProps): React.ReactElemen
                 {t(language, "preferences.page.open")}
               </a>
             </DropdownMenuItem>
-            <DropdownMenuItem asChild>
+            {!isAdminPreview() ? <><DropdownMenuItem asChild>
               <a href="/admin/connected-apps">
                 <Unplug aria-hidden />
                 {t(language, "oauth.connectedApps")}
@@ -78,6 +79,7 @@ export function NavUser({ login, image, role }: NavUserProps): React.ReactElemen
               <LogOut aria-hidden />
               {t(language, "common.signOut")}
             </DropdownMenuItem>
+            </> : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

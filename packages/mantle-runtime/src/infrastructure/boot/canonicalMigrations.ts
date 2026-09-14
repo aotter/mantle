@@ -10,8 +10,10 @@ import type {
 } from "../../domain/port/DatabaseDriver.js";
 
 /**
- * Canonical migration list — the runtime owns the schema; adapters
- * just execute. `id` strings are stable forever; the `_migrations`
+ * Historical SQLite migration list. The mixed Auth DDL in 0001 stays
+ * for existing ledger compatibility; selected Auth owns its own readiness.
+ * Custom content storage does not need Auth tables. `id` strings are stable;
+ * the `_migrations`
  * tracking table makes subsequent boots idempotent. Append-only from
  * v0.1.0 onwards.
  */

@@ -9,6 +9,8 @@ export interface RenderListLiveRequest {
   /** Forward continuation returned by the previous page. Defaults to 50 entries. */
   readonly cursor?: string;
   readonly limit?: number;
+  /** Adapter/host-owned URL mapping; templates own visible navigation. */
+  readonly pathForPage?: (cursor: string) => string;
   readonly collection: string;
   readonly locale: string;
   /** DB locale filter; null for non-localized collections mounted under a locale URL. */
