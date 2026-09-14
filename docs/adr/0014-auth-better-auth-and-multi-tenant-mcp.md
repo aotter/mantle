@@ -703,3 +703,14 @@ HTTP requests anchor it without making public responses depend on Auth health.
 The conventional `/favicon.ico` reflects the configured site icon, but is a
 fallback after consumer routes, not a newly reserved namespace. Existing
 consumer icon routes must continue to work after a package update.
+
+## Amendment — 2026-09-14: Host-only control-plane cookies
+
+`CreateAuthConfig.hostOnlyCookies` is an opt-in, curated auth field for a
+control plane on a parent domain shared with tenants. It uses native `__Host-`
+cookie names, `Secure`, `Path=/` and no `Domain`; HTTPS is required and enabling
+cross-subdomain sharing at the same time is rejected. Existing defaults and
+Apple's `SameSite=None` requirement remain unchanged. Consumers must treat
+switching cookie names as an explicit sign-in migration, not rewrite request
+or response cookies. This keeps cookie semantics in the auth adapter rather
+than requiring each consumer to wrap Admin, member and OAuth routes.

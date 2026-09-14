@@ -326,6 +326,9 @@ export interface CreateAuthConfig {
   /** Forwarded to Better Auth's `advanced.cookiePrefix`. Set this
    *  when multiple Better Auth apps share a parent cookie domain. */
   readonly cookiePrefix?: string;
+  /** HTTPS-only __Host- cookies for isolation from sibling tenant domains.
+   * Incompatible with crossSubDomainCookies.enabled. Defaults to false. */
+  readonly hostOnlyCookies?: boolean;
   /** Turn this Better Auth instance into an OAuth/OIDC provider.
    *  Consumer sites should use `methods: [{ kind: "oauth", ... }]`
    *  against its discovery document. */
@@ -803,6 +806,9 @@ export function buildOAuthProviderOptions(
 }
 
 function buildAuth(config: CreateAuthConfig) {
+  if (config.hostOnlyCookies && (new URL(config.baseURL).protocol !== "https:" || config.crossSubDomainCookies?.enabled)) {
+    throw new Error("createAuth: hostOnlyCookies requires HTTPS and cannot share cookies across subdomains.");
+  }
   if (config.methods.length === 0) {
     throw new Error(
       "createAuth: methods[] is empty — register at least one AuthMethodConfig so staff can sign in.",
@@ -922,6 +928,13 @@ function buildAuth(config: CreateAuthConfig) {
       ? { crossSubDomainCookies: config.crossSubDomainCookies }
       : {}),
     ...(config.cookiePrefix ? { cookiePrefix: config.cookiePrefix } : {}),
+    ...(config.hostOnlyCookies ? {
+      // Better Auth prepends __Secure- otherwise. Secure is set explicitly below.
+      useSecureCookies: false,
+      cookiePrefix: `__Host-${config.cookiePrefix || "better-auth"}`,
+      crossSubDomainCookies: { enabled: false },
+      defaultCookieAttributes: { secure: true, path: "/", ...(appleNeedsCrossSite ? { sameSite: "none" as const } : {}) },
+    } : {}),
     // Fire-and-forget hook closes the user-existence timing oracle
     // on OTP send — see § "Auth as contract" notes in ADR-0014.
     backgroundTasks: {
