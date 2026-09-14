@@ -109,7 +109,6 @@ An MCP `tools/call` runs the identical evaluator, in the identical order, with t
 - [Authentication](../cloudflare/authentication.md) — sessions, first owner, role management routes.
 
 ## Source
-- [`docs/api-mcp-authorization.md`](../../../docs/api-mcp-authorization.md)
 - [`docs/adapter-guide.md`](../../../docs/adapter-guide.md)
 - [`packages/mantle-runtime/src/domain/model/HandlerContext.ts`](../../../packages/mantle-runtime/src/domain/model/HandlerContext.ts)
 - [`packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts`](../../../packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts)

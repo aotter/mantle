@@ -135,7 +135,7 @@ adapter. A narrow adapter extension seam may let consumer code verify its own
 API-key or personal-token formats, but credential storage/issuance must not
 become a runtime port. The Cloudflare reference is
 `mount/resolveCaller.ts`; consumer usage is documented in
-[API and MCP authorization](api-mcp-authorization.md).
+[API and MCP authorization](handbook/examples/guarded-api.md).
 
 Minimum HTTP behavior for a full adapter:
 
@@ -161,27 +161,10 @@ its document operations into their own routing and cache conventions.
 
 ### HTTP cache contract
 
-The Cloudflare adapter is private by default. Consumers must apply its final
-cache policy after admin, auth, API, OAuth, MCP, application routes, redirects,
-and errors.
-Those responses receive `Cache-Control: private, no-store`; Cloudflare-specific
-CDN cache overrides are removed.
-
-`mountPublicRoutes(...)` renders canonical D1 state and opts only successful HTML, markdown,
-`llms.txt`, and sitemap responses into the shared cache with
-`Cache-Control: public, max-age=0, s-maxage=300` and the site-level
-`Cache-Tag: mantle-public`. The top-level policy preserves
-that opt-in only for anonymous `GET`/`HEAD` responses with status 200, explicit
-shared freshness, no request `Cookie` or `Authorization`, and no response
-`Set-Cookie`. It also varies public responses by `Cookie` and `Authorization`.
-
-An application-level Workers Cache may therefore store only responses that still
-meet that exact public contract. It must bypass credentialed/cookie requests
-and must never infer cacheability from a URL prefix. Cache entries remain
-version-local; cross-version caching is outside this contract. Successful
-publishing-content and site-setting mutations purge `mantle-public` through
-Cloudflare's native cache API. Operational records and immutable assets do not
-purge the public render cache.
+Keep responses private by default. For Cloudflare, apply the final policy after
+all routes and preserve only explicit anonymous public opt-in. Follow the
+[public cache contract](handbook/cloudflare/public-web.md#cache-contract) and the
+[performance harness](performance-harness.md#cache-contract) for verification.
 
 Minimum auth/MCP behavior:
 

@@ -102,7 +102,6 @@ Never point a versioned project at a mutable branch. See [Project layout and the
 ## Source
 - [`docs/adapter-guide.md`](../../../docs/adapter-guide.md)
 - [`docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md`](../../../docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md)
-- [`docs/api-mcp-authorization.md`](../../../docs/api-mcp-authorization.md)
 - [`packages/mantle-spec/src/domain/service/McpToolNaming.ts`](../../../packages/mantle-spec/src/domain/service/McpToolNaming.ts)
 - [`packages/mantle-web/README.md`](../../../packages/mantle-web/README.md)
 - [`packages/mantle/README.md`](../../../packages/mantle/README.md)

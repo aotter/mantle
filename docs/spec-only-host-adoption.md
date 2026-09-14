@@ -153,32 +153,6 @@ compatibility, HTTP authorization/invalid-input paths, metadata exclusions and
 responsive UI. Existing data need not be published or uploaded to prove this.
 Keep sensitive evidence internal and expose only an agreed verification report.
 
-## Maintainer decision requested: ecosystem identity and recognition
-
-The Aotter website is offered as a first **candidate** for a maintainer-designed
-recognition process. This section asks for that design; it does not establish
-an official certification, new compatibility tier or permission to use a badge.
-
-Decisions requested from Mantle maintainers:
-
-1. **Presentation:** how should a host show its relationship to Mantle in its
-   admin/about UI? Define approved terminology, visual mark and link target,
-   including how Spec-only adoption differs from Runtime/module adoption.
-2. **Criteria and evidence:** which capabilities are being attested, against
-   which exact SDK version, and which checks must be reproducible? Distinguish
-   schema validation from runtime interoperability and security review.
-3. **Authority and lifecycle:** who can grant recognition, where can a badge
-   be independently verified, and when must it be renewed or withdrawn after
-   package or application changes? Prevent self-issued marks from implying
-   maintainer approval.
-4. **Pilot:** what additional evidence should this existing-host candidate
-   provide before receiving a mark, without exposing content or credentials?
-
-Until that decision exists, an accurate technical status is **"Spec validation
-passed against <exact version>"**, with a tested-capabilities list. It must not
-be presented as **"Mantle certified"** or as a guarantee of data migration,
-release reliability, security, shared UI components or full Runtime support.
-
-This proposal uses the optional composition in ADR-0019 and respects
-[ADR-0021](adr/0021-retire-starter-scaffolding.md): the website remains
-an external consumer; the SDK receives only documentation and synthetic tests.
+Spec validation against an exact SDK version is not official certification or
+proof of Runtime compatibility, data migration, or security. Recognition policy
+is tracked separately in [#840](https://github.com/aotter/mantle/issues/840).

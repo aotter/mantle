@@ -246,8 +246,8 @@ adapter is a port-implementation exercise, not a runtime refactor.
   The copy in `node_modules` describes the installed release.
 - Embedded docs and agent skills ship inside this npm package for
   generated-site agents:
-  - `node_modules/@aotter/mantle/docs/design-atoms.md`
-  - `node_modules/@aotter/mantle/docs/api-mcp-authorization.md` (anonymous,
+  - `node_modules/@aotter/mantle/docs/handbook/reference/manifest.md`
+  - `node_modules/@aotter/mantle/docs/handbook/examples/guarded-api.md` (anonymous,
     API-key, paid guard, personal-token, OAuth, REST, and MCP examples)
   - `node_modules/@aotter/mantle/docs/handbook/cloudflare/media-r2.md` (Cloudflare R2 adapter recipe)
   - `node_modules/@aotter/mantle/docs/handbook/cloudflare/deferred-hooks-queues.md` (versioned
@@ -264,7 +264,7 @@ adapter is a port-implementation exercise, not a runtime refactor.
   - `node_modules/@aotter/mantle/skills/install/SKILL.md`
   - `node_modules/@aotter/mantle/skills/provision/SKILL.md`
 - [4-atom manifest model (ADR-0001)](docs/adr/0001-four-atom-manifest-model.md)
-- [API and MCP authorization](docs/api-mcp-authorization.md)
+- [API and MCP authorization](docs/handbook/examples/guarded-api.md)
 - [Deferred lifecycle Queues](docs/handbook/cloudflare/deferred-hooks-queues.md)
 - [Schema indexes on D1](docs/handbook/reference/schema.md)
 - [Release process](docs/release-process.md)

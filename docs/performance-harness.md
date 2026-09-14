@@ -218,4 +218,4 @@ small latency differences.
 `pnpm bench:wrangler` now also runs the native parity smoke. The full
 `pnpm bench:parity` matrix adds real Auth/MCP, cold workerd processes, R2,
 TTFB/full-body timing and CPU/heap evidence. See
-[the controls, gates and reproducible commands](./adr-lite-812-native-parity.md).
+[the controls, gates and reproducible commands](./adr/adr-lite-812-native-parity.md).
