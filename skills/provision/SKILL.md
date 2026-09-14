@@ -143,7 +143,7 @@ authenticates, then skip the self-hosted flow.
 
 Media uploads are optional. Configure R2 only when the owner asks for
 staff-managed files; then read
-`node_modules/@aotter/mantle/docs/media-uploads.md`.
+`node_modules/@aotter/mantle/docs/handbook/cloudflare/media-r2.md`.
 
 ## Handoff
 

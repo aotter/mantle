@@ -27,7 +27,7 @@ turn `generate` into implicit scaffolding.
    version. Install only the adapter/optional packages the application needs.
    If a global scope registry overrides public npmjs, use a project-owned
    `.npmrc` with `@aotter:registry=https://registry.npmjs.org/`.
-3. Read the installed `node_modules/@aotter/mantle/docs/direct-authoring.md`.
+3. Read the installed `node_modules/@aotter/mantle/docs/handbook/start/project-and-cli.md`.
    The version-matched `docs/examples/minimal-worker/` is a runnable Cloudflare
    reference, not a template to install wholesale. Other hosts use the embedded
    adapter guides. Author package scripts, manifests, entry and configuration

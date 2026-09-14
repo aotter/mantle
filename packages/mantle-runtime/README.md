@@ -110,7 +110,7 @@ For a fresh adapter implementation, start with
 `node_modules/@aotter/mantle/docs/adr/0019-sealed-manifest-runtime-pipeline.md`.
 
 Queue-backed `after_*` lifecycle delivery is optional and at-least-once. See
-`node_modules/@aotter/mantle/docs/deferred-lifecycle-queues.md`
+`node_modules/@aotter/mantle/docs/handbook/cloudflare/deferred-hooks-queues.md`
 for the strict envelope, idempotency key, Cloudflare bindings, retry/DLQ
 behavior, and upgrade procedure.
 

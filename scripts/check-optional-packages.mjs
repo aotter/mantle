@@ -124,7 +124,7 @@ try {
     "@aotter/mantle-runtime": `file:${tarballs["@aotter/mantle-runtime"]}`,
   });
   const umbrella = join(temp, "umbrella-core/node_modules/@aotter/mantle");
-  for (const doc of ["docs/direct-authoring.md", "docs/transaction-patterns.md", "docs/examples/minimal-worker/package.json"]) {
+  for (const doc of ["docs/direct-authoring.md", "docs/transaction-patterns.md", "docs/handbook/navigation.json", "docs/handbook/start/project-and-cli.md", "docs/handbook/reference/schema.md", "docs/examples/minimal-worker/package.json"]) {
     if (!existsSync(join(umbrella, doc))) throw new Error(`Packed authoring reference missing: ${doc}`);
   }
   const packedManifest = JSON.parse(readFileSync(join(umbrella, "package.json"), "utf8"));

@@ -11,7 +11,7 @@
 
 The retired alpha.17 Starter source and bundles remain in
 [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters). File
-legacy issues there. New applications use [direct authoring](docs/direct-authoring.md).
+legacy issues there. New applications use [direct authoring](docs/handbook/start/project-and-cli.md).
 
 ## What we don't offer
 

@@ -18,4 +18,4 @@ Repository safety gates:
 
 `CLAUDE.md` is a compatibility pointer, not a second instruction authority.
 Applications project version-matched instructions from their installed Core
-package with `mantle skills`; see [direct authoring](docs/direct-authoring.md).
+package with `mantle skills`; see [direct authoring](docs/handbook/start/project-and-cli.md).

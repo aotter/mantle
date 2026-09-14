@@ -86,7 +86,7 @@ does not cache or retry. Dynamic and platform hosts can keep their own lifecycle
 use generated `bindMantle(runtime)`, or skip code generation and call
 `runtime.executeView({ view: "published-notes" })` directly.
 
-Author the application directly using [the installed guide](docs/direct-authoring.md).
+Author the application directly using [the installed guide](docs/handbook/start/project-and-cli.md).
 The CLI has no scaffold/type picker; missing manifests fail without creating
 an application or a visitor home page.
 
@@ -100,7 +100,7 @@ project may also carry `.agent/skills/`, which is left untouched. Manifest
 generation never rewrites agent instructions.
 
 SDK upgrades use the package manager and the version-matched update skill.
-For npm peer-resolution troubleshooting, see [the authoring guide](docs/direct-authoring.md#npm-optional-peer-resolution).
+For npm peer-resolution troubleshooting, see [the authoring guide](docs/handbook/start/project-and-cli.md).
 See [0.1.2 migration](docs/migration-0.1.2.md) for removed bundle APIs and how to
 preserve legacy application source and provider configuration.
 
@@ -176,13 +176,13 @@ identity reused by browser favicons, Admin chrome, and MCP `serverInfo.icons`;
 PNG is the compatibility rendition and SVG remains the editable source.
 
 For an uncommon deployment that must own the top-level assembly, use the
-embedded [`docs/cloudflare-low-level-composition.md`](docs/cloudflare-low-level-composition.md)
+embedded [`docs/handbook/cloudflare/low-level-composition.md`](docs/handbook/cloudflare/low-level-composition.md)
 fixture. It composes the same public primitives without importing package
 internals or rebuilding Mantle's adapters.
 
 ## Getting started
 
-Use the installed install skill and [direct-authoring guide](docs/direct-authoring.md).
+Use the installed install skill and [direct-authoring guide](docs/handbook/start/project-and-cli.md).
 The owner or agent writes the application's manifests, entry and configuration;
 `generate` compiles them and `skills` projects the version-matched instructions.
 The [minimal Worker reference](docs/examples/minimal-worker/README.md) is an
@@ -240,16 +240,20 @@ adapter is a port-implementation exercise, not a runtime refactor.
 
 ## Documentation
 
+- The handbook is the user documentation and ships inside this npm package:
+  `node_modules/@aotter/mantle/docs/handbook/` (start, concepts, Cloudflare
+  guides, examples, reference; `navigation.json` lists every page in order).
+  The copy in `node_modules` describes the installed release.
 - Embedded docs and agent skills ship inside this npm package for
   generated-site agents:
   - `node_modules/@aotter/mantle/docs/design-atoms.md`
   - `node_modules/@aotter/mantle/docs/api-mcp-authorization.md` (anonymous,
     API-key, paid guard, personal-token, OAuth, REST, and MCP examples)
-  - `node_modules/@aotter/mantle/docs/media-uploads.md` (Cloudflare R2 adapter recipe)
-  - `node_modules/@aotter/mantle/docs/deferred-lifecycle-queues.md` (versioned
+  - `node_modules/@aotter/mantle/docs/handbook/cloudflare/media-r2.md` (Cloudflare R2 adapter recipe)
+  - `node_modules/@aotter/mantle/docs/handbook/cloudflare/deferred-hooks-queues.md` (versioned
     Queue wiring, retry/DLQ, idempotency, and delivery guarantees)
-  - `node_modules/@aotter/mantle/docs/schema-indexes.md` (ordered composite
-    JSON-field indexes, D1 query plans, and the safe Procedure SQL helper)
+  - `node_modules/@aotter/mantle/docs/handbook/reference/schema.md` (Schema grammar,
+    ordered composite JSON-field indexes and the safe Procedure SQL helper)
   - `node_modules/@aotter/mantle/docs/performance-harness.md` (crowded SQLite,
     Wrangler-local D1 origin paths and coding-agent guardrails)
   - `node_modules/@aotter/mantle/docs/adr/`
@@ -261,8 +265,8 @@ adapter is a port-implementation exercise, not a runtime refactor.
   - `node_modules/@aotter/mantle/skills/provision/SKILL.md`
 - [4-atom manifest model (ADR-0001)](docs/adr/0001-four-atom-manifest-model.md)
 - [API and MCP authorization](docs/api-mcp-authorization.md)
-- [Deferred lifecycle Queues](docs/deferred-lifecycle-queues.md)
-- [Schema indexes on D1](docs/schema-indexes.md)
+- [Deferred lifecycle Queues](docs/handbook/cloudflare/deferred-hooks-queues.md)
+- [Schema indexes on D1](docs/handbook/reference/schema.md)
 - [Release process](docs/release-process.md)
 - [Source repository](https://github.com/aotter/mantle)
 - [Issues](https://github.com/aotter/mantle/issues)

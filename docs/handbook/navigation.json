@@ -1,0 +1,62 @@
+{
+  "$comment": "Sidebar for the Mantle handbook. Hosts render these groups in order and may insert their own entries (for example a site overview or a product page) into the first group. Links are handbook-root-relative without the .md extension.",
+  "groups": [
+    {
+      "text": "Start here",
+      "items": [
+        { "text": "Quickstart: a minimal Worker", "link": "/start/quickstart-worker" },
+        { "text": "Project layout and the CLI loop", "link": "/start/project-and-cli" }
+      ]
+    },
+    {
+      "text": "Concepts",
+      "items": [
+        { "text": "The four atoms", "link": "/concepts/four-atoms" },
+        { "text": "Lifecycle and locales", "link": "/concepts/lifecycle-and-locales" },
+        { "text": "Reads: Views, REST and MCP", "link": "/concepts/views" },
+        { "text": "Writes: Procedures, Triggers and hooks", "link": "/concepts/procedures-and-triggers" },
+        { "text": "Authorization", "link": "/concepts/authorization" },
+        { "text": "MCP and agents", "link": "/concepts/mcp-and-agents" },
+        { "text": "Runtime pipeline and adapters", "link": "/concepts/runtime-and-adapters" }
+      ]
+    },
+    {
+      "text": "Cloudflare",
+      "items": [
+        { "text": "The conventional Worker", "link": "/cloudflare/conventional-worker" },
+        { "text": "Bindings and primitives", "link": "/cloudflare/bindings" },
+        { "text": "Authentication", "link": "/cloudflare/authentication" },
+        { "text": "Public web, SEO and cache", "link": "/cloudflare/public-web" },
+        { "text": "Deferred hooks with Queues", "link": "/cloudflare/deferred-hooks-queues" },
+        { "text": "Media uploads with R2", "link": "/cloudflare/media-r2" },
+        { "text": "Deploy and operate", "link": "/cloudflare/deploy-and-operate" },
+        { "text": "Low-level composition", "link": "/cloudflare/low-level-composition" }
+      ]
+    },
+    {
+      "text": "Examples",
+      "items": [
+        { "text": "Intake form", "link": "/examples/intake-form" },
+        { "text": "Publication", "link": "/examples/publication" },
+        { "text": "Reservation requests", "link": "/examples/reservation" },
+        { "text": "Procurement approvals", "link": "/examples/procurement-approvals" },
+        { "text": "Commerce and settlement", "link": "/examples/commerce-transaction" },
+        { "text": "Guarded API access", "link": "/examples/guarded-api" }
+      ]
+    },
+    {
+      "text": "Reference",
+      "items": [
+        { "text": "Manifest envelope", "link": "/reference/manifest" },
+        { "text": "Schema", "link": "/reference/schema" },
+        { "text": "View", "link": "/reference/view" },
+        { "text": "Procedure", "link": "/reference/procedure" },
+        { "text": "Trigger", "link": "/reference/trigger" },
+        { "text": "Authorization requirements", "link": "/reference/authorization" },
+        { "text": "Site defaults and site_config", "link": "/reference/site-config" },
+        { "text": "Diagnostic codes", "link": "/reference/diagnostics" },
+        { "text": "HTTP, MCP, CLI and packages", "link": "/reference/surface" }
+      ]
+    }
+  ]
+}

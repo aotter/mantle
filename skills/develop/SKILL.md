@@ -30,8 +30,8 @@ version; never use `develop` branch docs for a versioned consumer project.
 
 ## Existing Examples
 
-Read installed `docs/direct-authoring.md`, `docs/examples/minimal-worker/`
-and `docs/transaction-patterns.md` before inventing a pattern. The reference
+Read installed `docs/handbook/start/project-and-cli.md`, `docs/examples/minimal-worker/`
+and `docs/handbook/examples/commerce-transaction.md` before inventing a pattern. The reference
 consumer is test/documentation, not a Starter or a fixed application shape.
 
 Public rendering is opt-in consumer wiring: `mountPublicRoutes`, a

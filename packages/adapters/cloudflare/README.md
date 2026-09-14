@@ -62,7 +62,7 @@ createMantleWorker({
 ```
 
 When the conventional lifecycle really does not fit, copy the
-`node_modules/@aotter/mantle/docs/cloudflare-low-level-composition.md`.
+`node_modules/@aotter/mantle/docs/handbook/cloudflare/low-level-composition.md`.
 It uses the same public bindings, Auth, runtime, OAuth/MCP, cache and error
 primitives as the facade, and states which code becomes application-owned.
 
@@ -188,7 +188,7 @@ R2-backed staff media uploads are adapter-specific post-launch work, not part
 of the Core SDK skill contract or Day 1 landing path. Use the Cloudflare recipe
 only when a site actually needs staff-managed images or files:
 
-`node_modules/@aotter/mantle/docs/media-uploads.md`
+`node_modules/@aotter/mantle/docs/handbook/cloudflare/media-r2.md`
 
 ## Optional deferred lifecycle hooks
 
@@ -203,4 +203,4 @@ and maps failures to per-message retry/DLQ behavior.
 Producer/consumer bindings, Worker export, idempotent D1/upstream examples,
 site-queue multiplexing, verification, and the legacy-envelope drain step are
 in the shipped
-`node_modules/@aotter/mantle/docs/deferred-lifecycle-queues.md`.
+`node_modules/@aotter/mantle/docs/handbook/cloudflare/deferred-hooks-queues.md`.

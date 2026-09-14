@@ -61,7 +61,7 @@ pnpm exec mantle generate
 pnpm exec mantle validate
 ```
 
-Follow [direct authoring](docs/direct-authoring.md), or give its version-matched
+Follow [direct authoring](docs/handbook/start/project-and-cli.md), or give its version-matched
 install skill to your coding agent. The [minimal Worker reference](docs/examples/minimal-worker/README.md)
 shows a tested Cloudflare application without a visitor frontend. Other hosts
 can embed the same [manifest contract](#one-manifest-one-contract).
@@ -95,7 +95,7 @@ social metadata from the same published state.
 
 Compose the four atoms for your actual business flow. Useful transaction
 coordination, idempotency and Queue/DO patterns are retained as
-[worked reference notes](docs/transaction-patterns.md), without a second
+[worked reference notes](docs/handbook/examples/commerce-transaction.md), without a second
 launch product or a preset catalog.
 
 ## Publishing and operations in one Admin
