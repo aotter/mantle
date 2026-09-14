@@ -578,3 +578,105 @@ describe("GET /admin/api/entries/:id related entries", () => {
     )).toBe(true);
   });
 });
+
+function standaloneNavManifests(): Manifest[] {
+  const apiVersion = "cms.mantle.aotter.net/v1" as const;
+  return [
+    {
+      apiVersion,
+      kind: "Schema",
+      metadata: { name: "organizations" },
+      spec: {
+        title: "Organizations",
+        schema: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+        },
+        lifecycle: "operational",
+      },
+    },
+    {
+      apiVersion,
+      kind: "Schema",
+      metadata: { name: "projects" },
+      spec: {
+        title: "Projects",
+        description: "Work inside an organization.",
+        schema: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            organizationId: { type: "string", "x-mantle-ref": "organizations" },
+            kind: { type: "string", enum: ["app", "lib"] },
+          },
+          required: ["name", "organizationId", "kind"],
+        },
+        indexes: [["kind"], ["organizationId"]],
+        lifecycle: "operational",
+        uiSchema: {
+          list: { filterField: "kind", primaryField: "name", columns: ["kind"] },
+          nav: { standalone: true },
+        },
+      },
+    },
+  ];
+}
+
+describe("Admin standalone nav and parent scope", () => {
+  it("keeps collection.parent, projects nav, and filters with enum tabs", async () => {
+    const { app, db } = harness(undefined, undefined, standaloneNavManifests());
+    const collections = ((await (await app.request("/admin/api/collections")).json()) as {
+      collections: Array<{
+        name: string;
+        parent: { collection: string; parentField: string; childField: string } | null;
+        nav: { standalone: true; parentField: string; parentCollection: string } | null;
+      }>;
+    }).collections;
+    const byName = Object.fromEntries(collections.map((collection) => [collection.name, collection]));
+    expect(byName.organizations).toMatchObject({ parent: null, nav: null });
+    expect(byName.projects).toMatchObject({
+      parent: { collection: "organizations", parentField: "id", childField: "organizationId" },
+      nav: { standalone: true, parentField: "organizationId", parentCollection: "organizations" },
+    });
+
+    db.entries.set("org-a", relatedRow("org-a", "organizations", "published", { name: "A" }, 3));
+    db.entries.set("p1", relatedRow("p1", "projects", "published", {
+      name: "one", organizationId: "org-a", kind: "app",
+    }, 3));
+    db.entries.set("p2", relatedRow("p2", "projects", "published", {
+      name: "two", organizationId: "org-b", kind: "app",
+    }, 2));
+    db.entries.set("p3", relatedRow("p3", "projects", "published", {
+      name: "three", organizationId: "org-a", kind: "lib",
+    }, 1));
+    const ids = async (query: string) => {
+      const response = await app.request(`/admin/api/entries?collection=projects${query}`);
+      expect(response.status).toBe(200);
+      return ((await response.json()) as { items: Array<{ id: string }> }).items.map(({ id }) => id);
+    };
+    expect(await ids("&scope_field=organizationId&scope_value=org-a")).toEqual(["p1", "p3"]);
+    expect(await ids("&filter_field=kind&filter_value=app")).toEqual(["p1", "p2"]);
+    expect(await ids("&filter_field=kind&filter_value=app&scope_field=organizationId&scope_value=org-a"))
+      .toEqual(["p1"]);
+
+    const incomplete = await app.request(
+      "/admin/api/entries?collection=projects&scope_field=organizationId",
+    );
+    expect(incomplete.status).toBe(400);
+    expect(await incomplete.json()).toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
+  });
+
+  it("does not expose a folded-only child as a nav descriptor", async () => {
+    const { app } = harness(undefined, undefined, relatedManifests());
+    const comments = ((await (await app.request("/admin/api/collections")).json()) as {
+      collections: Array<{ name: string; nav: unknown; parent: unknown }>;
+    }).collections.find((collection) => collection.name === "comments");
+    expect(comments?.parent).toEqual({
+      collection: "parents",
+      parentField: "id",
+      childField: "parentId",
+    });
+    expect(comments?.nav).toBeNull();
+  });
+});

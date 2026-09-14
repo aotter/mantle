@@ -53,6 +53,8 @@ export interface ListEntriesRequest {
   readonly search?: string;
   /** One exact, indexed enum filter exposed by the Schema. */
   readonly filter?: EntryFilter;
+  /** Admin parent/child list scope: exact match on a required x-mantle-ref field. */
+  readonly scope?: EntryFilter;
   readonly sort?: EntrySort;
 }
 

@@ -55,8 +55,12 @@ The parser rejects keys outside the shipped grammar at every level it knows. The
 | `/spec/target` | `procedure` |
 | `/spec/uiSchema` (View) | `list` (only on `surface: staff`; violations are `VIEW_UI_INVALID`) |
 | `/spec/uiSchema/list` (View) | `columns`, `searchFields`, `filterFields` |
+| `/spec/uiSchema` (Schema) | `fields`, `list`, `nav` |
+| `/spec/uiSchema/list` (Schema) | `filterField`, `primaryField`, `columns` |
+| `/spec/uiSchema/nav` (Schema) | `standalone`, `parentField` |
+| `/spec/uiSchema` (Procedure) | `collectionAction`, `fields` |
 
-`uiSchema` on Schema and Procedure is the one place where unknown root keys are tolerated. The parser inspects only `fields` (Schema and Procedure), `list` (Schema) and `collectionAction` (Procedure); a Schema that declares `uiSchema.collectionAction` is rejected with `SCHEMA_UI_INVALID`. JSON Schema documents inside `spec.schema`, `spec.input`, `spec.output` and `spec.params` follow the [JSON Schema subset](./schema.md#json-schema-subset) instead of an allowlist.
+`uiSchema` roots are closed. Schema accepts `fields`, `list`, and `nav`; Procedure accepts `collectionAction` and `fields`; View accepts `list` on `surface: staff`. Nested keys are closed. A Schema that declares `uiSchema.collectionAction` is rejected with `SCHEMA_UI_INVALID`. JSON Schema documents inside `spec.schema`, `spec.input`, `spec.output` and `spec.params` follow the [JSON Schema subset](./schema.md#json-schema-subset) instead of an allowlist.
 
 ## Multi-document YAML and sources
 

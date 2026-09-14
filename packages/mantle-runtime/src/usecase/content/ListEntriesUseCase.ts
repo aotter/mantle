@@ -1,6 +1,7 @@
 import {
   DiagnosticError,
   checkSchemaAdminUi,
+  isRequiredMantleRefField,
   runtimeDiagnostic,
   schemaSortableFields,
   type SchemaManifest,
@@ -74,6 +75,13 @@ export class ListEntriesUseCase {
     )) {
       throw new DiagnosticError(filterUnavailableDiagnostic(opPath, request.filter));
     }
+    if (request.scope && (
+      typeof request.scope.value !== "string" ||
+      !request.scope.value ||
+      !isRequiredMantleRefField(schema, request.scope.field)
+    )) {
+      throw new DiagnosticError(scopeUnavailableDiagnostic(opPath, request.scope));
+    }
     return this.entries.list({
       collection: request.collection,
       status: request.status,
@@ -83,6 +91,7 @@ export class ListEntriesUseCase {
       search: request.search,
       searchFields: schema.spec.searchableFields ?? [],
       filter: request.filter,
+      scope: request.scope,
       sort: request.sort,
     });
   }
@@ -99,6 +108,20 @@ function filterUnavailableDiagnostic(
     value: filter,
     expected: "an indexed string-enum field and one of its declared values",
     message: `Filter '${filter.field}=${filter.value}' is not available.`,
+  });
+}
+
+function scopeUnavailableDiagnostic(
+  path: string,
+  scope: NonNullable<ListEntriesRequest["scope"]>,
+) {
+  return runtimeDiagnostic({
+    code: "INPUT_VALIDATION_FAILED",
+    severity: "error",
+    path: `${path}/scope`,
+    value: scope,
+    expected: "a required x-mantle-ref field and a non-empty parent id",
+    message: `Scope '${scope.field}=${scope.value}' is not available.`,
   });
 }
 

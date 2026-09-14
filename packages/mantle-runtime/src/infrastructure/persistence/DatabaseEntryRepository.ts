@@ -271,6 +271,15 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
       conditions.push(...compiled.conditions);
       binds.push(...compiled.binds);
     }
+    if (args.scope) {
+      const compiled = compileDataPredicates(schema, [{
+        field: args.scope.field,
+        kind: "equal",
+        value: args.scope.value,
+      }]);
+      conditions.push(...compiled.conditions);
+      binds.push(...compiled.binds);
+    }
     if (cursor) {
       const comparison = backward
         ? (sort.direction === "asc" ? "<" : ">")

@@ -176,7 +176,8 @@ export interface SchemaManifestSpec {
   /** JSON Schema Draft 2020-12 describing per-entry data. May carry the
    *  v0.1 property extensions: `x-mantle-bind`, `x-mantle-ref`, `x-mcp-hint`. */
   readonly schema: JsonSchema;
-  /** JSON Forms uiSchema. Optional. */
+  /** Admin-only presentation. Closed Schema roots: `fields`, `list`,
+   *  `nav`. Optional. */
   readonly uiSchema?: Record<string, unknown>;
   /** Composite unique-index declarations, e.g. `[[slug, locale]]`. */
   readonly uniqueIndexes?: ReadonlyArray<ReadonlyArray<string>>;

@@ -70,4 +70,35 @@ describe("member navigation", () => {
     expect(groups.find(({ title }) => title === "Public services")?.items[0]?.icon)
       .not.toBe(groups.find(({ title }) => title === "Reports")?.items[0]?.icon);
   });
+
+  it("includes standalone folded children in main Nav without dropping parent collections", () => {
+    const collection = (
+      name: string,
+      lifecycle: "publishing" | "operational",
+      parent: { collection: string; parentField: string; childField: string } | null = null,
+      nav: { standalone: true; parentField: string; parentCollection: string } | null = null,
+    ) => ({
+      name,
+      title: name,
+      description: null,
+      lifecycle,
+      parent,
+      nav,
+      hasTranslations: false,
+      localized: false,
+    });
+    const groups = buildNavGroups([
+      collection("organizations", "operational"),
+      collection("projects", "operational", { collection: "organizations", parentField: "id", childField: "organizationId" }, {
+        standalone: true,
+        parentField: "organizationId",
+        parentCollection: "organizations",
+      }),
+      collection("members", "operational", { collection: "organizations", parentField: "id", childField: "organizationId" }),
+    ], [], "en", null, "owner");
+    const urls = (groups.find(({ title }) => title === "Records")?.items ?? [])
+      .flatMap((item) => "url" in item ? [item.url] : item.items.map((link) => link.url));
+    expect(urls).toEqual(expect.arrayContaining(["/admin/c/organizations", "/admin/c/projects"]));
+    expect(urls).not.toContain("/admin/c/members");
+  });
 });

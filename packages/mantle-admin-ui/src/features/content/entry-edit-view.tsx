@@ -5,6 +5,7 @@ import { ArrowLeft, CalendarIcon, ExternalLink, Globe, Images, ImagePlus, LockKe
 import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
+import { isFoldedFieldChild } from "../../lib/collection-nav";
 import { propertyDescription, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import { operationsQueryOptions } from "../../lib/queries";
@@ -167,7 +168,15 @@ export function EntryEditView({
   const mediaPurposes = site.data?.media?.purposes ?? [];
   const parentLink = parentAdminLink(payload.collection, data, payload.parentEntryId);
   const translationSections = payload.related.filter((section) => section.relationship.kind === "translation");
-  const inlineRelated = payload.related.filter(isPrimaryInlineSection);
+  const hasWorkbench = payload.related.some((section) =>
+    section.relationship.kind === "field" && isFoldedFieldChild(section.collection, collectionName, section.relationship.childField)
+  );
+  const inlineRelated = payload.related.filter((section) =>
+    section.relationship.kind === "field" && !isFoldedFieldChild(section.collection, collectionName, section.relationship.childField)
+  );
+  const backHref = hasWorkbench
+    ? `/admin/c/${encodeURIComponent(collectionName)}/${encodeURIComponent(entryId)}`
+    : `/admin/c/${encodeURIComponent(backCollection)}`;
   const currentLocale = typeof data.locale === "string" ? data.locale : "";
   const localeOptions = contentLocales(payload.collection.schema, site.data?.locales, currentLocale);
   const hiddenFields = editorHiddenFields(payload.collection);
@@ -178,7 +187,7 @@ export function EntryEditView({
         eyebrow={
           <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
             <a
-              href={`/admin/c/${encodeURIComponent(backCollection)}`}
+              href={backHref}
               className="inline-flex items-center gap-2 hover:underline"
             >
               <ArrowLeft className="size-3.5" aria-hidden />
@@ -1291,10 +1300,6 @@ function parentAdminLink(
     href: `/admin/c/${encodeURIComponent(collection.parent.collection)}/${encodeURIComponent(parentEntryId)}`,
     label: `${collection.parent.collection} / ${String(parentValue)}`,
   };
-}
-
-function isPrimaryInlineSection(section: RelatedEntrySection): boolean {
-  return section.relationship.kind === "field";
 }
 
 export function entryTitle(

@@ -67,14 +67,35 @@ import { renderDataValue } from "../../lib/render-data-value";
 import { renderTitleText } from "../../lib/entry-title";
 import { LocaleBadge, LocaleStatusBadges } from "./locale-badge";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
+import { entryEditPath, entryLandingPath, hasFoldedChildCollections } from "../../lib/collection-nav";
 
 const COLLECTION_PAGE_SIZE = 50;
 type SortDirection = "asc" | "desc";
 
-export function CollectionView({
+export function CollectionView(props: React.ComponentProps<typeof CollectionList>): React.ReactElement {
+  const { search } = useAdminLocation();
+  // A different collection or parent is a different editing context. Reset
+  // selections and cached rows synchronously, before any new list can render.
+  const identity = JSON.stringify([
+    props.collectionName,
+    props.scope?.field,
+    props.scope?.value ?? new URLSearchParams(search).get("parent"),
+  ]);
+  return <CollectionList key={identity} {...props} />;
+}
+
+function CollectionList({
   collectionName,
+  scope,
+  layout = "page",
+  pathBase,
+  extraParams,
 }: {
   collectionName: string;
+  scope?: { field: string; value: string };
+  layout?: "page" | "panel";
+  pathBase?: string;
+  extraParams?: Record<string, string>;
 }): React.ReactElement {
   const { language } = usePreferences();
   const { navigate } = useAdminRouter();
@@ -86,6 +107,7 @@ export function CollectionView({
   const searchTerm = params.get("search")?.trim() ?? "";
   const filterField = params.get("filter_field") ?? undefined;
   const filterValue = params.get("filter_value") ?? undefined;
+  const parentQuery = params.get("parent") ?? undefined;
   const sortField = params.get("sort") || "updatedAt";
   const sortDirection: SortDirection = params.get("direction") === "asc" ? "asc" : "desc";
   const cursor = params.get("cursor") || undefined;
@@ -98,6 +120,11 @@ export function CollectionView({
       return res.collections;
     },
   });
+  const collection = collectionsQuery.data?.find((c) => c.name === collectionName);
+  const appliesParentQuery = collection === undefined || collection.nav?.standalone === true;
+  const parentFilter = scope?.value ?? (appliesParentQuery ? parentQuery : undefined);
+  const resolvedScopeField = scope?.field ?? (parentFilter ? collection?.nav?.parentField : undefined);
+  const resolvedScopeValue = scope?.value ?? parentFilter;
   const site = useQuery<SiteInfo>({
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
@@ -125,11 +152,14 @@ export function CollectionView({
       searchTerm,
       filterField ?? "no-filter",
       filterValue ?? "no-value",
+      resolvedScopeField ?? "no-scope-field",
+      resolvedScopeValue ?? "no-scope-value",
       sortField,
       sortDirection,
       cursor ?? "first",
       cursorDirection,
     ],
+    enabled: !parentFilter || Boolean(resolvedScopeField) || Boolean(scope),
     queryFn: () => {
       const qs = new URLSearchParams({
         collection: collectionName,
@@ -142,6 +172,10 @@ export function CollectionView({
       if (filterField && filterValue) {
         qs.set("filter_field", filterField);
         qs.set("filter_value", filterValue);
+      }
+      if (resolvedScopeField && resolvedScopeValue) {
+        qs.set("scope_field", resolvedScopeField);
+        qs.set("scope_value", resolvedScopeValue);
       }
       if (cursor) qs.set("cursor", cursor);
       if (cursorDirection === "backward") qs.set("cursor_direction", "backward");
@@ -158,7 +192,6 @@ export function CollectionView({
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const clearSelection = React.useCallback(() => setSelected(new Set()), []);
 
-  const collection = collectionsQuery.data?.find((c) => c.name === collectionName);
   const heading = collection
     ? resolveLocalizedText(collection.title, language, canonical) ?? collection.name
     : collectionName;
@@ -169,6 +202,19 @@ export function CollectionView({
   const showSelection = canManageContent && !isReadOnlyCollection;
   const dataColumns = isOperationalCollection ? collection?.list?.columns ?? [] : [];
   const collectionFilter = isOperationalCollection ? collection?.filter ?? null : null;
+  const listPath = pathBase ?? `/admin/c/${encodeURIComponent(collectionName)}`;
+  const listState = {
+    status,
+    searchTerm,
+    filterField,
+    filterValue,
+    sortField,
+    sortDirection,
+    parent: scope ? undefined : parentFilter,
+    extraParams,
+  };
+  const listHref = (state: Parameters<typeof collectionHref>[1] = {}) =>
+    collectionHref(listPath, { ...listState, ...state });
   const listQueryFilter = collectionFilter ? {
     name: collectionFilter.field,
     label: propertyLabel(
@@ -178,11 +224,11 @@ export function CollectionView({
       canonical,
     ),
     value: filterField === collectionFilter.field ? filterValue : "",
-    allHref: collectionHref(collectionName, { searchTerm, sortField, sortDirection }),
+    allHref: listHref({ searchTerm, sortField, sortDirection, filterField: undefined, filterValue: undefined }),
     options: collectionFilter.values.map((value) => ({
       value,
       label: fieldLabel(value),
-      href: collectionHref(collectionName, {
+      href: listHref({
         searchTerm,
         filterField: collectionFilter.field,
         filterValue: value,
@@ -194,11 +240,11 @@ export function CollectionView({
     name: "status",
     label: t(language, "collection.table.status"),
     value: status,
-    allHref: collectionHref(collection.name, { searchTerm, sortField, sortDirection }),
+    allHref: listHref({ searchTerm, sortField, sortDirection, status: undefined }),
     options: PUBLISHING_STATUSES.map((value) => ({
       value,
       label: statusLabel(language, value),
-      href: collectionHref(collection.name, {
+      href: listHref({
         status: value,
         searchTerm,
         sortField,
@@ -236,27 +282,31 @@ export function CollectionView({
     mutationFn: () =>
       api.post<EntryEditorPayload>("/entries", {
         collection: collectionName,
-        data: {},
+        data: resolvedScopeField && resolvedScopeValue
+          ? { [resolvedScopeField]: resolvedScopeValue }
+          : {},
       }),
     onSuccess: (payload) => {
-      navigate(`/admin/c/${encodeURIComponent(collectionName)}/${encodeURIComponent(payload.entry.id)}`);
+      const path = hasFoldedChildCollections(collectionsQuery.data ?? [], collectionName)
+        ? entryEditPath(collectionName, payload.entry.id)
+        : entryLandingPath(collectionName, payload.entry.id);
+      navigate(path);
     },
   });
 
-  return (
-    <div>
-      <PageHeader
-        eyebrow={
-          <>
-            <a href="/admin" className="hover:underline">
-              {t(language, "collection.breadcrumb")}
-            </a>
-            <span className="mx-2 text-foreground/30">/</span>
-            <span className="text-foreground/70">{heading}</span>
-          </>
-        }
-        title={heading}
-        description={renderCollectionDescription(collection, language, canonical)}
+  const header = (
+    <PageHeader
+      eyebrow={layout === "page" ? (
+        <>
+          <a href="/admin" className="hover:underline">
+            {t(language, "collection.breadcrumb")}
+          </a>
+          <span className="mx-2 text-foreground/30">/</span>
+          <span className="text-foreground/70">{heading}</span>
+        </>
+      ) : undefined}
+      title={heading}
+      description={renderCollectionDescription(collection, language, canonical)}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
@@ -269,6 +319,10 @@ export function CollectionView({
                 if (filterField && filterValue) {
                   exportParams.set("filter_field", filterField);
                   exportParams.set("filter_value", filterValue);
+                }
+                if (resolvedScopeField && resolvedScopeValue) {
+                  exportParams.set("scope_field", resolvedScopeField);
+                  exportParams.set("scope_value", resolvedScopeValue);
                 }
                 exportParams.set("sort", sortField);
                 exportParams.set("direction", sortDirection);
@@ -300,9 +354,23 @@ export function CollectionView({
           </div>
         }
       />
+  );
 
+  return (
+    <div>
+      {header}
       {createMutation.isError ? <ErrorBox error={createMutation.error} /> : null}
       {exportFile.isError ? <ErrorBox error={exportFile.error} /> : null}
+
+      {collection?.nav?.standalone && !scope ? (
+        <ParentScopeFilter
+          collection={collection}
+          selectedId={parentFilter}
+          language={language}
+          canonical={canonical}
+          onSelect={(id) => navigate(listHref({ parent: id, cursor: undefined, cursorDirection: undefined }))}
+        />
+      ) : null}
 
       {collection ? (
         <ListQueryToolbar
@@ -312,7 +380,7 @@ export function CollectionView({
           filters={listQueryFilter ? [listQueryFilter] : []}
           onSubmit={({ search, filters }) => {
             const nextFilter = collectionFilter ? filters[collectionFilter.field] : undefined;
-            navigate(collectionHref(collection.name, {
+            navigate(listHref({
               status: isOperationalCollection ? status : filters.status || undefined,
               searchTerm: search,
               filterField: nextFilter ? collectionFilter?.field : undefined,
@@ -388,7 +456,7 @@ export function CollectionView({
                   field="id"
                   activeField={sortField}
                   direction={sortDirection}
-                  href={sortHref(collectionName, status, searchTerm, "id", sortField, sortDirection, filterField, filterValue)}
+                  href={sortHref(listPath, listState, "id", sortField, sortDirection)}
                 />
                 {!isOperationalCollection || titleField ? (
                   titleField && collection?.sortableFields?.includes(titleField)
@@ -397,7 +465,7 @@ export function CollectionView({
                         field={titleField}
                         activeField={sortField}
                         direction={sortDirection}
-                        href={sortHref(collectionName, status, searchTerm, titleField, sortField, sortDirection, filterField, filterValue)}
+                        href={sortHref(listPath, listState, titleField, sortField, sortDirection)}
                       />
                     : <TableHead>{titleColumnLabel}</TableHead>
                 ) : null}
@@ -410,7 +478,7 @@ export function CollectionView({
                           field={name}
                           activeField={sortField}
                           direction={sortDirection}
-                          href={sortHref(collectionName, status, searchTerm, name, sortField, sortDirection, filterField, filterValue)}
+                          href={sortHref(listPath, listState, name, sortField, sortDirection)}
                         />
                       : <TableHead key={name}>
                           {propertyLabel(name, collection?.schema?.properties?.[name], language, canonical)}
@@ -424,7 +492,7 @@ export function CollectionView({
                       field="status"
                       activeField={sortField}
                       direction={sortDirection}
-                      href={sortHref(collectionName, status, searchTerm, "status", sortField, sortDirection, filterField, filterValue)}
+                      href={sortHref(listPath, listState, "status", sortField, sortDirection)}
                     />
                     {collection && (collection.localized || collection.hasTranslations) ? (
                       <TableHead>
@@ -443,7 +511,7 @@ export function CollectionView({
                   field="updatedAt"
                   activeField={sortField}
                   direction={sortDirection}
-                  href={sortHref(collectionName, status, searchTerm, "updatedAt", sortField, sortDirection, filterField, filterValue)}
+                  href={sortHref(listPath, listState, "updatedAt", sortField, sortDirection)}
                 />
                 <TableHead>{t(language, "collection.table.actions")}</TableHead>
               </TableRow>
@@ -493,15 +561,14 @@ export function CollectionView({
             </p>
           ) : null}
           <CollectionPagination
-            collectionName={collectionName}
-            status={status}
-            searchTerm={searchTerm}
-            filterField={filterField}
-            filterValue={filterValue}
-            sortField={sortField}
-            sortDirection={sortDirection}
-            previousCursor={displayedEntries.previous_cursor}
-            nextCursor={displayedEntries.next_cursor}
+            previousHref={displayedEntries.previous_cursor ? listHref({
+              cursor: displayedEntries.previous_cursor,
+              cursorDirection: "backward",
+            }) : undefined}
+            nextHref={displayedEntries.next_cursor ? listHref({
+              cursor: displayedEntries.next_cursor,
+              cursorDirection: "forward",
+            }) : undefined}
             language={language}
           />
         </>
@@ -640,7 +707,7 @@ export function collectionSummaryKey(collection: Collection | undefined): I18nKe
 }
 
 function collectionHref(
-  collectionName: string,
+  path: string,
   state: {
     status?: string;
     searchTerm?: string;
@@ -650,15 +717,21 @@ function collectionHref(
     sortDirection?: SortDirection;
     cursor?: string;
     cursorDirection?: "forward" | "backward";
-  },
+    parent?: string;
+    extraParams?: Record<string, string>;
+  } = {},
 ): string {
   const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(state.extraParams ?? {})) {
+    if (value) params.set(key, value);
+  }
   if (state.status) params.set("status", state.status);
   if (state.searchTerm) params.set("search", state.searchTerm);
   if (state.filterField && state.filterValue) {
     params.set("filter_field", state.filterField);
     params.set("filter_value", state.filterValue);
   }
+  if (state.parent) params.set("parent", state.parent);
   if (state.sortField && state.sortField !== "updatedAt") params.set("sort", state.sortField);
   if (state.sortDirection && state.sortDirection !== "desc") {
     params.set("direction", state.sortDirection);
@@ -666,24 +739,20 @@ function collectionHref(
   if (state.cursor) params.set("cursor", state.cursor);
   if (state.cursorDirection === "backward") params.set("cursor_direction", "backward");
   const suffix = params.toString();
-  return `/admin/c/${encodeURIComponent(collectionName)}${suffix ? `?${suffix}` : ""}`;
+  return `${path}${suffix ? `?${suffix}` : ""}`;
 }
 
 function sortHref(
-  collectionName: string,
-  status: string | undefined,
-  searchTerm: string,
+  path: string,
+  state: Parameters<typeof collectionHref>[1],
   field: string,
   activeField: string,
   direction: SortDirection,
-  filterField?: string,
-  filterValue?: string,
 ): string {
-  return collectionHref(collectionName, {
-    status,
-    searchTerm,
-    filterField,
-    filterValue,
+  return collectionHref(path, {
+    ...state,
+    cursor: undefined,
+    cursorDirection: undefined,
     sortField: field,
     sortDirection: activeField === field
       ? (direction === "asc" ? "desc" : "asc")
@@ -718,63 +787,155 @@ function SortableTableHead({
 }
 
 function CollectionPagination({
-  collectionName,
-  status,
-  searchTerm,
-  filterField,
-  filterValue,
-  sortField,
-  sortDirection,
-  previousCursor,
-  nextCursor,
+  previousHref,
+  nextHref,
   language,
 }: {
-  collectionName: string;
-  status: string | undefined;
-  searchTerm: string;
-  filterField: string | undefined;
-  filterValue: string | undefined;
-  sortField: string;
-  sortDirection: SortDirection;
-  previousCursor: string | null;
-  nextCursor: string | null;
+  previousHref?: string;
+  nextHref?: string;
   language: AdminLanguage;
 }): React.ReactElement | null {
-  if (!previousCursor && !nextCursor) return null;
-  const base = { status, searchTerm, filterField, filterValue, sortField, sortDirection };
+  if (!previousHref && !nextHref) return null;
   return (
     <Pagination className="mt-4 justify-end" aria-label={t(language, "collection.pagination")}>
       <PaginationContent>
         <PaginationItem>
           <PaginationPrevious
-            href={previousCursor ? collectionHref(collectionName, {
-              ...base,
-              cursor: previousCursor,
-              cursorDirection: "backward",
-            }) : undefined}
+            href={previousHref}
             text={t(language, "collection.previousPage")}
             aria-label={t(language, "collection.previousPage")}
-            aria-disabled={!previousCursor || undefined}
-            tabIndex={previousCursor ? undefined : -1}
-            className={cn(!previousCursor && "pointer-events-none opacity-50")}
+            aria-disabled={!previousHref || undefined}
+            tabIndex={previousHref ? undefined : -1}
+            className={cn(!previousHref && "pointer-events-none opacity-50")}
           />
         </PaginationItem>
         <PaginationItem>
           <PaginationNext
-            href={nextCursor ? collectionHref(collectionName, {
-              ...base,
-              cursor: nextCursor,
-              cursorDirection: "forward",
-            }) : undefined}
+            href={nextHref}
             text={t(language, "collection.nextPage")}
             aria-label={t(language, "collection.nextPage")}
-            aria-disabled={!nextCursor || undefined}
-            tabIndex={nextCursor ? undefined : -1}
-            className={cn(!nextCursor && "pointer-events-none opacity-50")}
+            aria-disabled={!nextHref || undefined}
+            tabIndex={nextHref ? undefined : -1}
+            className={cn(!nextHref && "pointer-events-none opacity-50")}
           />
         </PaginationItem>
       </PaginationContent>
     </Pagination>
+  );
+}
+
+function ParentScopeFilter({
+  collection,
+  selectedId,
+  language,
+  canonical,
+  onSelect,
+}: {
+  collection: Collection;
+  selectedId: string | undefined;
+  language: AdminLanguage;
+  canonical: string | null;
+  onSelect: (id: string | undefined) => void;
+}): React.ReactElement {
+  const parentName = collection.nav?.parentCollection;
+  const parentField = collection.nav?.parentField ?? "parent";
+  const [term, setTerm] = React.useState("");
+  const [open, setOpen] = React.useState(false);
+  const collectionsQuery = useQuery<Collection[]>({
+    queryKey: ["collections"],
+    queryFn: async () => {
+      const res = await api.get<{ collections: Collection[] }>("/collections");
+      return res.collections;
+    },
+  });
+  const parentCollection = collectionsQuery.data?.find((item) => item.name === parentName);
+  const parentLabel = parentCollection
+    ? resolveLocalizedText(parentCollection.title, language, canonical) ?? parentCollection.name
+    : parentName ?? parentField;
+  const selected = useQuery<EntryEditorPayload>({
+    queryKey: ["entry-editor", selectedId],
+    queryFn: () => api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(selectedId!)}`),
+    enabled: Boolean(selectedId),
+  });
+  const options = useQuery<ListEntriesResult>({
+    queryKey: ["parent-scope-options", parentName, term],
+    queryFn: () => {
+      const qs = new URLSearchParams({
+        collection: parentName!,
+        limit: "20",
+        sort: "updatedAt",
+        direction: "desc",
+      });
+      if (term.trim()) qs.set("search", term.trim());
+      return api.get<ListEntriesResult>(`/entries?${qs.toString()}`);
+    },
+    enabled: Boolean(parentName) && open,
+  });
+  const selectedTitle = selected.data
+    ? renderTitleText(selected.data.entry.data.title ?? selected.data.entry.data.name ?? selected.data.entry.id, language)
+    : selectedId;
+  return (
+    <div className="mb-4 max-w-xl space-y-2">
+      <label className="text-sm font-medium" htmlFor={`parent-filter-${collection.name}`}>
+        {t(language, "collection.parentFilter", { name: parentLabel })}
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        {selectedId ? (
+          <span className="inline-flex items-center gap-1 rounded-lg border bg-secondary px-2 py-1 text-sm">
+            <span className="max-w-56 truncate">{selectedTitle}</span>
+            <button
+              type="button"
+              className="rounded-sm p-0.5 hover:bg-accent"
+              aria-label={t(language, "collection.parentFilterClear")}
+              onClick={() => onSelect(undefined)}
+            >
+              <X className="size-3.5" aria-hidden />
+            </button>
+          </span>
+        ) : null}
+        <Input
+          id={`parent-filter-${collection.name}`}
+          className="h-9 max-w-xs"
+          value={term}
+          placeholder={t(language, "collection.parentFilterPlaceholder", { name: parentLabel })}
+          onFocus={() => setOpen(true)}
+          onChange={(event) => {
+            setTerm(event.target.value);
+            setOpen(true);
+          }}
+        />
+      </div>
+      {open && options.data ? (
+        <ul className="max-h-56 overflow-y-auto rounded-lg border bg-card text-sm shadow-sm">
+          {options.data.items.length === 0 ? (
+            <li className="px-3 py-2 text-muted-foreground">{t(language, "collection.empty.title")}</li>
+          ) : options.data.items.map((row) => {
+            const label = renderTitleText(
+              row.title ?? (parentCollection?.list?.primaryField
+                ? row.data_preview?.[parentCollection.list.primaryField]
+                : row.id),
+              language,
+            );
+            return (
+              <li key={row.id}>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-accent"
+                  onClick={() => {
+                    onSelect(row.id);
+                    setTerm("");
+                    setOpen(false);
+                  }}
+                >
+                  <span className="truncate">{label || row.id}</span>
+                  <span className="font-mono text-xs text-muted-foreground">{idTail(row.id)}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
@@ -924,7 +1085,7 @@ function EntryRowDisplay({
         <div className="min-w-44 md:min-w-64">
           {isOperational ? (
             <a
-              href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}
+              href={entryLandingPath(row.collection, row.id)}
               className="block truncate font-medium hover:underline"
               title={itemName}
             >
@@ -966,7 +1127,7 @@ function EntryRowDisplay({
             </button>
           ) : (
             <a
-              href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}
+              href={entryLandingPath(row.collection, row.id)}
               className="block truncate font-medium hover:underline"
               title={itemName}
             >
@@ -1013,7 +1174,7 @@ function EntryRowDisplay({
               <a
                 title={t(language, "crud.editTooltip", { name: itemName })}
                 aria-label={t(language, "crud.editTooltip", { name: itemName })}
-                href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}
+                href={entryEditPath(row.collection, row.id)}
               >
                 <PencilLine className="size-3.5" aria-hidden />
               </a>
@@ -1023,7 +1184,7 @@ function EntryRowDisplay({
               <a
                 title={t(language, "crud.viewTooltip", { name: itemName })}
                 aria-label={t(language, "crud.viewTooltip", { name: itemName })}
-                href={`/admin/c/${encodeURIComponent(row.collection)}/${encodeURIComponent(row.id)}`}
+                href={entryLandingPath(row.collection, row.id)}
               >
                 <Eye className="size-3.5" aria-hidden />
               </a>

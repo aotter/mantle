@@ -64,15 +64,40 @@ describe("mountMantleAdmin", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("gates statistics before storage and validates collection/range", async () => {
+  it.each([false, true])("gates statistics before storage and validates collection/range (standalone=%s)", async (standalone) => {
     const plan = compilePlan(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: organizations }
+spec:
+  title: Organizations
+  lifecycle: operational
+  schema: { type: object, properties: { name: { type: string } } }
+---
 apiVersion: cms.mantle.aotter.net/v1
 kind: Schema
 metadata: { name: orders }
 spec:
   title: Orders
   lifecycle: operational
-  schema: { type: object, properties: { name: { type: string } } }
+  schema:
+    type: object
+    required: ${standalone ? "[organizationId]" : "[]"}
+    properties:
+      name: { type: string }
+      organizationId: { type: string, x-mantle-ref: organizations }
+  ${standalone ? "uiSchema: { nav: { standalone: true } }" : ""}
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: items }
+spec:
+  title: Items
+  lifecycle: operational
+  schema:
+    type: object
+    required: [orderId]
+    properties: { orderId: { type: string, x-mantle-ref: orders } }
 `);
     const readCreationStatistics = vi.fn(async () => ({ total: 5, buckets: [] }));
     const runtime = { entries: { readCreationStatistics } } as MantleAdminRuntime;
@@ -94,6 +119,7 @@ spec:
     expect((await app.request(path + "?range=all")).status).toBe(400);
     expect((await app.request(path + "?range=toString")).status).toBe(400);
     expect((await app.request("/admin/api/collections/missing/statistics")).status).toBe(404);
+    expect((await app.request("/admin/api/collections/items/statistics")).status).toBe(404);
     expect(get).not.toHaveBeenCalled();
     for (const [range, duration, bucketMs] of [["1h", 3_600_000, 300_000], ["24h", 86_400_000, 3_600_000], ["7d", 604_800_000, 21_600_000], ["20d", 1_728_000_000, 86_400_000]] as const) {
       const response = await app.request(path + "?range=" + range);

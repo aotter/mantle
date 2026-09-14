@@ -161,6 +161,7 @@ export class IndexedDbEntryRepository implements EntryRepository, EntryReader {
           typeof row.data[field] === "string" &&
           row.data[field].toLowerCase().includes(search)))
       .filter((row) => !args.filter || row.data[args.filter.field] === args.filter.value)
+      .filter((row) => !args.scope || row.data[args.scope.field] === args.scope.value)
       .sort((a, b) => compareRows(a, b, sort.field, sort.direction));
     const candidates = cursor
       ? rows.filter((row) => {

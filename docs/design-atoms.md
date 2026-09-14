@@ -143,6 +143,16 @@ columns. Without them Admin shows only platform metadata. Form-only choices use
 `x-mcp-hint: markdown|html|richtext`. Neither setting changes runtime or MCP
 input validation.
 
+**`spec.uiSchema.nav`** — optional Admin-only main-Nav co-entry for a child
+collection that still folds under its required `x-mantle-ref` parent.
+`nav.standalone: true` adds a main Nav list with a parent autocomplete filter;
+omitting `nav` keeps fold-only discovery via the parent-entry workbench. Nested
+keys are closed (`standalone`, `parentField`). `parentField` is required when
+more than one eligible required ref exists and is rejected without
+`standalone: true`. This does not unfold, clear `collection.parent`, add MCP
+fields, or change publishing validation. Admin parent-scope is an internal
+`ListEntries` filter used by the Admin list/export routes.
+
 A staff-operable Procedure may declare `uiSchema.collectionAction: orders` to
 appear as an action in that collection's Admin header. The target must be an
 existing Schema. This binding is Admin-only; the Procedure input, authorization,
