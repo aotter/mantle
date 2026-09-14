@@ -489,4 +489,48 @@ spec:
     const resDup = parseManifests(dupYaml);
     expect(resDup.diagnostics.some((d) => /contains duplicate field/.test(d.message))).toBe(true);
   });
+
+  it("rejects Schema data properties named expectedVersion", () => {
+    const colliding: SchemaManifest = {
+      apiVersion: "cms.mantle.aotter.net/v1",
+      kind: "Schema",
+      metadata: { name: "posts" },
+      spec: {
+        title: "Posts",
+        schema: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            expectedVersion: { type: "number" },
+          },
+        },
+        lifecycle: "publishing",
+      },
+    };
+    const res = validateManifests({ manifests: [colliding] });
+    expect(res.errorCount).toBeGreaterThan(0);
+    expect(res.diagnostics.some((d) =>
+      d.code === "INVALID_MANIFEST_ENVELOPE" &&
+      d.path.includes("/spec/schema/properties/expectedVersion") &&
+      /reserved Procedure input name/.test(d.message),
+    )).toBe(true);
+
+    const yaml = parseManifests(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: logs }
+spec:
+  title: Logs
+  lifecycle: operational
+  schema:
+    type: object
+    properties:
+      message: { type: string }
+      expectedVersion: { type: number }
+`);
+    expect(yaml.diagnostics.some((d) =>
+      d.code === "INVALID_MANIFEST_ENVELOPE" &&
+      /reserved Procedure input name 'expectedVersion'/.test(d.message),
+    )).toBe(true);
+  });
 });

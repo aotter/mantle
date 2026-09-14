@@ -43,7 +43,7 @@ Raised by the parser, the graph validator and the code generator. `mantle valida
 
 | Code | Meaning | HTTP |
 |---|---|---|
-| `INVALID_MANIFEST_ENVELOPE` | Wrong `apiVersion`, unknown key at a known level, wrong value shape, or a YAML syntax or alias-limit failure. | — |
+| `INVALID_MANIFEST_ENVELOPE` | Wrong `apiVersion`, unknown key at a known level, wrong value shape, a YAML syntax or alias-limit failure, or a Schema data property named `expectedVersion` (reserved Procedure OCC token; ADR-0022). | — |
 | `DUPLICATE_NAME` | Two documents of the same kind declare the same `metadata.name`. | — |
 | `VIEW_FROM_UNKNOWN_SCHEMA` | `spec.from` names no declared Schema. | — |
 | `VIEW_FIELD_NOT_IN_SCHEMA` | A `fields` entry or `orderBy[i].field` is neither a Schema property nor a reserved entry column. | — |

@@ -103,6 +103,17 @@ export function resolveOccTargetId(args: {
     return undefined;
   }
 
+  if (args.targetCollection && args.row?.collection !== args.targetCollection) {
+    const other = bindings.find(
+      (binding) => binding.collection === args.targetCollection && binding.rowField === "id",
+    );
+    if (other) {
+      const value = args.formValue[other.inputField];
+      return typeof value === "string" && value.length > 0 ? value : undefined;
+    }
+    return undefined;
+  }
+
   if (args.row) {
     const other = bindings.find(
       (binding) => binding.collection !== args.row!.collection && binding.rowField === "id",
@@ -114,6 +125,25 @@ export function resolveOccTargetId(args: {
   }
 
   return args.row?.id;
+}
+
+/**
+ * Whether the operation dialog may submit OCC. A resolvable target or a
+ * row-bound dialog is update-path intent and must wait for the observed
+ * version. Collection create / no-row dialogs may omit when the field is
+ * not required.
+ */
+export function operationVersionReady(args: {
+  readonly declaresExpectedVersion: boolean;
+  readonly expectedVersionRequired: boolean;
+  readonly capturedVersion: unknown;
+  readonly occTargetId: string | undefined;
+  readonly boundRow: boolean;
+}): boolean {
+  if (!args.declaresExpectedVersion) return true;
+  if (typeof args.capturedVersion === "number" && Number.isFinite(args.capturedVersion)) return true;
+  if (args.occTargetId || args.boundRow) return false;
+  return !args.expectedVersionRequired;
 }
 
 export function operationFormSchema(schema: JsonSchema, hiddenFields: readonly string[]): JsonSchema {
@@ -371,11 +401,13 @@ export function OperationDialog({
     }
   }, [occTargetId, queryClient, row]);
 
-  const hasCapturedVersion = typeof formValue[EXPECTED_VERSION_PROPERTY] === "number";
-  const versionReady =
-    !hasExpectedVersion ||
-    hasCapturedVersion ||
-    (!expectedVersionRequired && !occTargetId);
+  const versionReady = operationVersionReady({
+    declaresExpectedVersion: hasExpectedVersion,
+    expectedVersionRequired,
+    capturedVersion: formValue[EXPECTED_VERSION_PROPERTY],
+    occTargetId,
+    boundRow: Boolean(row),
+  });
   const canSubmit = (!inputField || prefillValue !== undefined) && versionReady && !needsReread;
 
   return (

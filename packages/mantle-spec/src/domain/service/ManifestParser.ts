@@ -24,6 +24,7 @@ import {
   STAFF_ROLES,
   FILTER_COMPARISON_OPS,
   VIEW_PARAMS_RESERVED,
+  RESERVED_PROCEDURE_INPUT_NAMES,
   isParamRef,
   hasCtxUserRefKey,
   isCtxUserRef,
@@ -699,6 +700,14 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
       "Non-localized Schema must not declare the reserved entry field 'locale'; use a domain name such as 'orderLocale', or set localized: true.",
       idx,
       "/spec/schema/properties/locale",
+    );
+  }
+  for (const reserved of RESERVED_PROCEDURE_INPUT_NAMES) {
+    if (!propertyNames.includes(reserved)) continue;
+    throw new ManifestParseError(
+      `Schema '${m.metadata.name}' must not declare reserved Procedure input name '${reserved}' as a data property (ADR-0022). New reserved names need an ADR.`,
+      idx,
+      `/spec/schema/properties/${reserved}`,
     );
   }
   const required = schema["required"];

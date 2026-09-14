@@ -6,6 +6,7 @@ import {
   FILTER_COMPARISON_OPS,
   RESERVED_ENTRY_COLUMNS,
   EXPECTED_VERSION_PROPERTY,
+  RESERVED_PROCEDURE_INPUT_NAMES,
   hasCtxUserRefKey,
   isCtxUserRef,
   type FilterAst,
@@ -53,6 +54,7 @@ export function validateManifestGraph(
   diags.push(...checkDuplicates("View", partitioned.views, filePaths));
   diags.push(...checkDuplicates("Procedure", partitioned.procedures, filePaths));
   diags.push(...checkDuplicates("Trigger", partitioned.triggers, filePaths));
+  diags.push(...checkSchemaReservedWireNames(partitioned.schemas, filePaths));
 
   diags.push(...checkTranslatesReferences(partitioned.schemas, "validate", filePaths));
 
@@ -106,6 +108,30 @@ function byName<M extends { metadata: { name: string } }>(arr: ReadonlyArray<M>)
   const m = new Map<string, M>();
   for (const x of arr) m.set(x.metadata.name, x);
   return m;
+}
+
+function checkSchemaReservedWireNames(
+  schemas: readonly SchemaManifest[],
+  filePaths?: ManifestFilePaths,
+): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  for (const schema of schemas) {
+    const properties = schema.spec.schema.properties ?? {};
+    for (const reserved of RESERVED_PROCEDURE_INPUT_NAMES) {
+      if (!(reserved in properties) || properties[reserved] === undefined) continue;
+      out.push(
+        validateDiagnostic({
+          code: "INVALID_MANIFEST_ENVELOPE",
+          severity: "error",
+          path: manifestPath("Schema", schema.metadata.name, `/spec/schema/properties/${reserved}`, filePaths),
+          value: reserved,
+          expected: `Schema data properties that do not collide with reserved Procedure input names (${RESERVED_PROCEDURE_INPUT_NAMES.join(", ")}). New reserved names need an ADR.`,
+          message: `Schema '${schema.metadata.name}' must not declare reserved Procedure input name '${reserved}' as a data property (ADR-0022). New reserved names need an ADR.`,
+        }),
+      );
+    }
+  }
+  return out;
 }
 
 function checkDuplicates<M extends { kind: string; metadata: { name: string } }>(

@@ -1,71 +1,14 @@
 import { expect, it } from "vitest";
-import { chromium } from "playwright";
+import { chromium, type Page } from "playwright";
 import { createServer } from "vite";
 import { resolve } from "node:path";
 
 it("binds observed entry.version on row operations and does not reuse it after target or conflict", async () => {
-  const server = await createServer({ configFile: resolve("vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
-  await server.listen();
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const session = await bootAdmin({
+    operations: [quotaOperation(), memberOperation()],
+  });
   try {
-    const page = await browser.newPage();
-    page.setDefaultTimeout(8_000);
-    await page.addInitScript(() => {
-      localStorage.setItem("cms.preference.language", "en");
-      history.replaceState(null, "", "/admin/c/organizations");
-    });
-    const quotaBodies: unknown[] = [];
-    const memberBodies: unknown[] = [];
-    const orgVersion = { current: 4 };
-    await page.route("**/admin/api/**", async (route) => {
-      const url = new URL(route.request().url());
-      const path = url.pathname.replace("/admin/api", "");
-      const method = route.request().method();
-      if (path === "/me") {
-        return route.fulfill({ json: { id: "owner", role: "owner", login: "owner", image: null } });
-      }
-      if (path === "/site") {
-        return route.fulfill({ json: { brand: "Site", icons: [], canonicalLocale: "en", locales: ["en"], title: "Site", description: "", publicUrl: "https://site.test", mcpUrl: "https://site.test/mcp" } });
-      }
-      if (path === "/collections") {
-        return route.fulfill({ json: { collections: [orgCollection(), memberCollection()] } });
-      }
-      if (path === "/views-manifest") return route.fulfill({ json: { views: [] } });
-      if (path === "/operations") {
-        return route.fulfill({ json: { operations: [quotaOperation(), memberOperation()] } });
-      }
-      if (path === "/entries" && method === "GET") {
-        return route.fulfill({ json: { items: [orgListRow()], previous_cursor: null, next_cursor: null } });
-      }
-      if (path === "/entries/org-1" && method === "GET") {
-        return route.fulfill({ json: orgEditor(orgVersion.current) });
-      }
-      if (path === "/entries/member-1" && method === "GET") {
-        return route.fulfill({ json: memberEditor(7) });
-      }
-      if (path === "/entries/member-2" && method === "GET") {
-        return route.fulfill({ json: memberEditor(11, "member-2") });
-      }
-      if (path === "/operations/set-quota" && method === "POST") {
-        quotaBodies.push(route.request().postDataJSON());
-        if (quotaBodies.length === 1) {
-          orgVersion.current = 5;
-          return route.fulfill({
-            status: 409,
-            json: { ok: false, diagnostic: { code: "CONFLICT", message: "Version mismatch" } },
-          });
-        }
-        return route.fulfill({ json: { ok: true, output: { ok: true } } });
-      }
-      if (path === "/operations/set-member-role" && method === "POST") {
-        memberBodies.push(route.request().postDataJSON());
-        return route.fulfill({ json: { ok: true, output: { ok: true } } });
-      }
-      return route.fulfill({ json: {} });
-    });
-
-    await page.goto(new URL("/_mantle/admin/", server.resolvedUrls!.local[0]!).href);
-    await page.getByRole("button", { name: "Row operations" }).waitFor();
+    const { page, quotaBodies, memberBodies } = session;
     await page.getByRole("button", { name: "Row operations" }).click();
     await page.getByRole("menuitem", { name: "Set quota" }).click();
     const quotaDialog = page.getByRole("dialog");
@@ -102,10 +45,151 @@ it("binds observed entry.version on row operations and does not reuse it after t
       expectedVersion: 11,
     });
   } finally {
-    await browser.close();
-    await server.close();
+    await session.close();
   }
 }, 30_000);
+
+it("binds observed version on a row-opened upsert before submit even when expectedVersion is not required", async () => {
+  const session = await bootAdmin({
+    operations: [upsertThemeOperation()],
+  });
+  try {
+    const { page, upsertBodies } = session;
+    await page.getByRole("button", { name: "Row operations" }).click();
+    await page.getByRole("menuitem", { name: "Set theme" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("textbox", { name: "Theme" }).fill("dark");
+    await dialog.getByRole("button", { name: "Run", exact: true }).click();
+    expect(upsertBodies[0]).toEqual({ organizationId: "org-1", theme: "dark", expectedVersion: 4 });
+  } finally {
+    await session.close();
+  }
+}, 30_000);
+
+it("keeps Run disabled when expectedVersion is required and no OCC target is resolved", async () => {
+  const session = await bootAdmin({
+    operations: [memberOperation()],
+  });
+  try {
+    const { page, memberBodies } = session;
+    await page.getByRole("button", { name: "Row operations" }).click();
+    await page.getByRole("menuitem", { name: "Set member role" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("textbox", { name: "Role" }).fill("owner");
+    expect(await dialog.getByRole("button", { name: "Run", exact: true }).isEnabled()).toBe(false);
+    expect(memberBodies).toHaveLength(0);
+  } finally {
+    await session.close();
+  }
+}, 30_000);
+
+it("lets a collection create dialog omit expectedVersion when it is not required", async () => {
+  const session = await bootAdmin({
+    operations: [createSettingOperation()],
+  });
+  try {
+    const { page, createBodies } = session;
+    await page.getByRole("button", { name: "Create setting" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("textbox", { name: "Site Key" }).fill("main");
+    await dialog.getByRole("textbox", { name: "Theme" }).fill("light");
+    await dialog.getByRole("button", { name: "Run", exact: true }).click();
+    expect(createBodies[0]).toEqual({ siteKey: "main", theme: "light" });
+  } finally {
+    await session.close();
+  }
+}, 30_000);
+
+async function bootAdmin(args: { operations: unknown[] }): Promise<{
+  page: Page;
+  quotaBodies: unknown[];
+  memberBodies: unknown[];
+  upsertBodies: unknown[];
+  createBodies: unknown[];
+  close: () => Promise<void>;
+}> {
+  const server = await createServer({ configFile: resolve("vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
+  await server.listen();
+  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const page = await browser.newPage();
+  page.setDefaultTimeout(8_000);
+  await page.addInitScript(() => {
+    localStorage.setItem("cms.preference.language", "en");
+    history.replaceState(null, "", "/admin/c/organizations");
+  });
+  const quotaBodies: unknown[] = [];
+  const memberBodies: unknown[] = [];
+  const upsertBodies: unknown[] = [];
+  const createBodies: unknown[] = [];
+  const orgVersion = { current: 4 };
+  await page.route("**/admin/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname.replace("/admin/api", "");
+    const method = route.request().method();
+    if (path === "/me") {
+      return route.fulfill({ json: { id: "owner", role: "owner", login: "owner", image: null } });
+    }
+    if (path === "/site") {
+      return route.fulfill({ json: { brand: "Site", icons: [], canonicalLocale: "en", locales: ["en"], title: "Site", description: "", publicUrl: "https://site.test", mcpUrl: "https://site.test/mcp" } });
+    }
+    if (path === "/collections") {
+      return route.fulfill({ json: { collections: [orgCollection(), memberCollection()] } });
+    }
+    if (path === "/views-manifest") return route.fulfill({ json: { views: [] } });
+    if (path === "/operations") {
+      return route.fulfill({ json: { operations: args.operations } });
+    }
+    if (path === "/entries" && method === "GET") {
+      return route.fulfill({ json: { items: [orgListRow()], previous_cursor: null, next_cursor: null } });
+    }
+    if (path === "/entries/org-1" && method === "GET") {
+      return route.fulfill({ json: orgEditor(orgVersion.current) });
+    }
+    if (path === "/entries/member-1" && method === "GET") {
+      return route.fulfill({ json: memberEditor(7) });
+    }
+    if (path === "/entries/member-2" && method === "GET") {
+      return route.fulfill({ json: memberEditor(11, "member-2") });
+    }
+    if (path === "/operations/set-quota" && method === "POST") {
+      quotaBodies.push(route.request().postDataJSON());
+      if (quotaBodies.length === 1) {
+        orgVersion.current = 5;
+        return route.fulfill({
+          status: 409,
+          json: { ok: false, diagnostic: { code: "CONFLICT", message: "Version mismatch" } },
+        });
+      }
+      return route.fulfill({ json: { ok: true, output: { ok: true } } });
+    }
+    if (path === "/operations/set-member-role" && method === "POST") {
+      memberBodies.push(route.request().postDataJSON());
+      return route.fulfill({ json: { ok: true, output: { ok: true } } });
+    }
+    if (path === "/operations/set-theme" && method === "POST") {
+      upsertBodies.push(route.request().postDataJSON());
+      return route.fulfill({ json: { ok: true, output: { ok: true } } });
+    }
+    if (path === "/operations/create-setting" && method === "POST") {
+      createBodies.push(route.request().postDataJSON());
+      return route.fulfill({ json: { ok: true, output: { ok: true } } });
+    }
+    return route.fulfill({ json: {} });
+  });
+  await page.goto(new URL("/_mantle/admin/", server.resolvedUrls!.local[0]!).href);
+  await page.getByRole("heading", { name: "Organizations" }).waitFor();
+  return {
+    page,
+    quotaBodies,
+    memberBodies,
+    upsertBodies,
+    createBodies,
+    close: async () => {
+      await browser.close();
+      await server.close();
+    },
+  };
+}
 
 function orgCollection() {
   return {
@@ -224,6 +308,48 @@ function memberOperation() {
         id: { type: "string", title: "Id", "x-mantle-ref": "organization-members" },
         organizationId: { type: "string", title: "Organization", "x-mantle-ref": "organizations" },
         role: { type: "string", title: "Role" },
+        expectedVersion: { type: "number" },
+      },
+    },
+  };
+}
+
+function upsertThemeOperation() {
+  return {
+    name: "set-theme",
+    title: "Set theme",
+    description: null,
+    triggers: ["mcp"],
+    uiSchema: null,
+    targetCollection: "organizations",
+    rowBindings: [{ collection: "organizations", inputField: "organizationId", rowField: "id" }],
+    input: {
+      type: "object",
+      required: ["organizationId", "theme"],
+      properties: {
+        organizationId: { type: "string", title: "Organization", "x-mantle-ref": "organizations" },
+        theme: { type: "string", title: "Theme" },
+        expectedVersion: { type: "number" },
+      },
+    },
+  };
+}
+
+function createSettingOperation() {
+  return {
+    name: "create-setting",
+    title: "Create setting",
+    description: null,
+    triggers: ["mcp"],
+    uiSchema: { collectionAction: "organizations" },
+    targetCollection: "site-settings",
+    rowBindings: [],
+    input: {
+      type: "object",
+      required: ["siteKey", "theme"],
+      properties: {
+        siteKey: { type: "string", title: "Site Key" },
+        theme: { type: "string", title: "Theme" },
         expectedVersion: { type: "number" },
       },
     },

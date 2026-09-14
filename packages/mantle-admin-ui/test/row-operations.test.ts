@@ -3,6 +3,7 @@ import {
   automaticOperationInputFields,
   collectionOperationsFor,
   operationFormSchema,
+  operationVersionReady,
   resolveOccTargetId,
 } from "../src/features/content/row-operations";
 import { globalOperations } from "../src/features/ops/operations-view";
@@ -73,6 +74,56 @@ describe("resolveOccTargetId", () => {
       binding: membershipBindings[1],
       rowBindings: membershipBindings,
     })).toBeUndefined();
+  });
+
+  it("does not fall back to the launch row when targetCollection is a different collection", () => {
+    expect(resolveOccTargetId({
+      input: { type: "object", properties: { organizationId: { type: "string" }, userId: { type: "string" }, expectedVersion: { type: "number" } } },
+      formValue: { organizationId: "org-1", userId: "user-a" },
+      row: { id: "org-1", collection: "organizations" },
+      binding: membershipBindings[0],
+      rowBindings: [membershipBindings[0]!],
+      targetCollection: "organization-members",
+    })).toBeUndefined();
+  });
+});
+
+describe("operationVersionReady", () => {
+  it("requires a captured version whenever an OCC target or row is present", () => {
+    expect(operationVersionReady({
+      declaresExpectedVersion: true,
+      expectedVersionRequired: false,
+      capturedVersion: undefined,
+      occTargetId: "org-1",
+      boundRow: true,
+    })).toBe(false);
+    expect(operationVersionReady({
+      declaresExpectedVersion: true,
+      expectedVersionRequired: false,
+      capturedVersion: 4,
+      occTargetId: "org-1",
+      boundRow: true,
+    })).toBe(true);
+  });
+
+  it("keeps submit disabled when expectedVersion is required and no target exists", () => {
+    expect(operationVersionReady({
+      declaresExpectedVersion: true,
+      expectedVersionRequired: true,
+      capturedVersion: undefined,
+      occTargetId: undefined,
+      boundRow: false,
+    })).toBe(false);
+  });
+
+  it("allows create-path omit when version is not required and there is no row or target", () => {
+    expect(operationVersionReady({
+      declaresExpectedVersion: true,
+      expectedVersionRequired: false,
+      capturedVersion: undefined,
+      occTargetId: undefined,
+      boundRow: false,
+    })).toBe(true);
   });
 });
 

@@ -44,9 +44,11 @@ still bumps storage to `expectedVersion + 1`. The token is **not**
 ### 2. Closed reserved wire names
 
 The reserved Procedure input wire name for OCC is `expectedVersion`. Business
-fields must not collide with it. New reserved wire names require an ADR.
-OCC behaviour must not depend on `x-mcp-hint`. The magic word is the property
-name only.
+fields must not collide with it. Schema `spec.schema.properties` must not
+declare `expectedVersion`; validate fails closed (`INVALID_MANIFEST_ENVELOPE`)
+so `projectUpdateAndStamp` cannot copy the OCC token into `data`. New reserved
+wire names require an ADR. OCC behaviour must not depend on `x-mcp-hint`. The
+magic word is the property name only.
 
 ### 3. Static contracts (amends ADR-0020 §2 matched upsert)
 
@@ -97,6 +99,14 @@ first-party SDK helper) treats the name as magic:
 - Auto-bind the OCC target row's current `version` captured at read.
 - Hide the field from the editable form (same UX idea as
   `x-mcp-hint: idempotency-key`, keyed by reserved **name**).
+- A resolvable OCC target (row menu, `id` in the form, or
+  `targetCollection` binding) **must** be bound before submit is enabled,
+  including matched upsert where `expectedVersion` is declared but not
+  globally required (opening from a row is update-path intent).
+- If `expectedVersion` is in `input.required` and no OCC target can be
+  resolved, submit stays disabled (do not invent a version).
+- Collection create / no-row dialogs may omit the token when it is not
+  required (create branch).
 - Rebind when the selected target changes. An organization row must not
   supply `expectedVersion` for a membership mutation.
 - On `CONFLICT` / HTTP 409: keep operator business inputs; require an
@@ -189,10 +199,14 @@ spec:
 
 ## Implementation status
 
-- `@aotter/mantle-spec`: `ManifestGraphValidator` fail-closed
-  `expectedVersion` on upsert; `EXPECTED_VERSION_PROPERTY` reserved name.
+- `@aotter/mantle-spec`: `ManifestGraphValidator` / parser fail-closed
+  `expectedVersion` on upsert; Schema `spec.schema.properties` must not
+  declare reserved Procedure input names; `EXPECTED_VERSION_PROPERTY`
+  reserved name.
 - `@aotter/mantle-runtime`: `InvokeBuiltinUseCase` uses the caller token;
   MCP catalog copy states observed version.
 - `@aotter/mantle-admin` / `@aotter/mantle-admin-ui`: operations expose
-  builtin `targetCollection`; Admin binds and hides `expectedVersion`.
+  builtin `targetCollection`; Admin binds and hides `expectedVersion`,
+  and does not enable submit on a resolvable OCC target until the
+  observed version is captured.
 - Docs: this ADR, ADR-0020 amendment pointer, design-atoms, handbook.
