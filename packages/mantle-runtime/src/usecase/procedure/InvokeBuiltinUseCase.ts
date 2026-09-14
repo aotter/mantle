@@ -171,7 +171,7 @@ export class InvokeBuiltinUseCase {
     // UpdateDraftUseCase: merge via `projectUpdateAndStamp` so omitted
     // fields and server-stamped values (author, created-at) survive.
     const existing = preloaded ?? (await this.entries.get(id));
-    if (!existing) {
+    if (!existing || existing.collection !== schema.metadata.name) {
       throw new DiagnosticError(
         runtimeDiagnostic({
           code: "NOT_FOUND",
@@ -313,7 +313,7 @@ export class InvokeBuiltinUseCase {
   ): Promise<EntryRow> {
     const id = requireField(input, "id", "string");
     const existing = await this.entries.get(id);
-    if (!existing) {
+    if (!existing || existing.collection !== schema.metadata.name) {
       throw new DiagnosticError(
         runtimeDiagnostic({
           code: "NOT_FOUND",
