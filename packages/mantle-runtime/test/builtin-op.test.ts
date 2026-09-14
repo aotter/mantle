@@ -415,6 +415,42 @@ describe("InvokeBuiltinUseCase — update / delete / upsert", () => {
     expect(await h.store.get("shared-id")).not.toBeNull();
   });
 
+  it("update, id-upsert, and archive cannot cross the Procedure's bound collection", async () => {
+    const comments: SchemaManifest = {
+      ...postsSchemaWithBindings,
+      metadata: { name: "comments" },
+      spec: { ...postsSchemaWithBindings.spec, title: "Comments" },
+    };
+    const h = harness({ schemas: [postsSchemaWithBindings, comments] });
+    const original = await h.store.create({
+      id: "shared-id",
+      collection: "comments",
+      status: "draft",
+      data: { title: "private" },
+      authorId: null,
+      now: NOW,
+    });
+
+    for (const op of ["update", "upsert", "archive"] as const) {
+      const result = await h.invoke.execute({
+        procedure: builtinProcedure({
+          name: `${op}Post`,
+          op,
+          schema: "posts",
+          inputProperties: {
+            id: { type: "string" },
+            expectedVersion: { type: "number" },
+            title: { type: "string" },
+          },
+        }),
+        input: { id: "shared-id", expectedVersion: 1, title: "overwritten" },
+        ctx: { user: null, staff: null, env: {} },
+      });
+      expect(result).toMatchObject({ ok: false, diagnostic: { code: "NOT_FOUND" } });
+      expect(await h.store.get("shared-id")).toEqual(original);
+    }
+  });
+
   it("delete removes lifecycle: operational records even though they are published", async () => {
     const schema: SchemaManifest = {
       ...postsSchemaWithBindings,
@@ -1080,4 +1116,3 @@ describe("InvokeBuiltinUseCase — matched upsert", () => {
     ).rejects.toBeInstanceOf(EntryUniqueConflict);
   });
 });
-
