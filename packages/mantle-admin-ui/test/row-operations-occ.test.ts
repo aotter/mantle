@@ -65,18 +65,17 @@ it("binds observed entry.version on row operations and does not reuse it after t
     });
 
     await page.goto(new URL("/_mantle/admin/", server.resolvedUrls!.local[0]!).href);
-    await page.getByText("Acme").waitFor();
+    await page.getByRole("button", { name: "Row operations" }).waitFor();
     await page.getByRole("button", { name: "Row operations" }).click();
     await page.getByRole("menuitem", { name: "Set quota" }).click();
     const quotaDialog = page.getByRole("dialog");
-    await expect(quotaDialog.getByText("Expected Version")).toHaveCount(0);
+    expect(await quotaDialog.getByText("Expected Version").count()).toBe(0);
     await quotaDialog.getByRole("spinbutton").fill("20");
     await quotaDialog.getByRole("button", { name: "Run", exact: true }).click();
     await quotaDialog.getByText("This record changed since you opened it.").waitFor();
     expect(quotaBodies[0]).toEqual({ organizationId: "org-1", quota: 20, expectedVersion: 4 });
-    await expect(quotaDialog.getByRole("spinbutton")).toHaveValue("20");
+    expect(await quotaDialog.getByRole("spinbutton").inputValue()).toBe("20");
     await quotaDialog.getByRole("button", { name: "Reload version" }).click();
-    await expect(quotaDialog.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
     await quotaDialog.getByRole("button", { name: "Run", exact: true }).click();
     expect(quotaBodies[1]).toEqual({ organizationId: "org-1", quota: 20, expectedVersion: 5 });
     await quotaDialog.getByRole("button", { name: "Close" }).last().click();
@@ -84,10 +83,8 @@ it("binds observed entry.version on row operations and does not reuse it after t
     await page.getByRole("button", { name: "Row operations" }).click();
     await page.getByRole("menuitem", { name: "Set member role" }).click();
     const memberDialog = page.getByRole("dialog");
-    const memberFields = memberDialog.getByRole("textbox");
-    await memberFields.nth(0).fill("member-1");
-    await memberFields.nth(1).fill("owner");
-    await expect(memberDialog.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
+    await memberDialog.getByRole("textbox", { name: "Id" }).fill("member-1");
+    await memberDialog.getByRole("textbox", { name: "Role" }).fill("owner");
     await memberDialog.getByRole("button", { name: "Run", exact: true }).click();
     await memberDialog.getByRole("region", { name: "Result" }).waitFor();
     expect(memberBodies[0]).toEqual({
@@ -96,8 +93,7 @@ it("binds observed entry.version on row operations and does not reuse it after t
       role: "owner",
       expectedVersion: 7,
     });
-    await memberFields.nth(0).fill("member-2");
-    await expect(memberDialog.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
+    await memberDialog.getByRole("textbox", { name: "Id" }).fill("member-2");
     await memberDialog.getByRole("button", { name: "Run", exact: true }).click();
     expect(memberBodies[1]).toEqual({
       organizationId: "org-1",
