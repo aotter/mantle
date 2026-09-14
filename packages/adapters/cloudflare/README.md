@@ -30,6 +30,13 @@ and idempotency.
 
 ### Conventional Auth
 
+Hosts can supply `bindings.storage: MantleStorageAdapter` to select or decorate
+semantic storage before Runtime binds its write ports. Without it, the Worker
+uses the existing SQLite adapter over `bindings.db`. Custom storage owns its
+site-default preparation and must provide site configuration for the mounted
+Cloudflare product. Do not combine it with `mcpCatalogKv`; apply any site-config
+decorator in the selected storage instead. Auth keeps its separate database.
+
 Without an `auth` option, `createMantleWorker` requires one explicit mode:
 
 | Mode | Non-secret bindings | Worker secrets | Must be absent |
