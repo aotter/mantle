@@ -20,8 +20,9 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0017](0017-media-multi-variant-agent-side-optimization.md) | Multi-variant media assets with agent-side optimization and asset-id entry references. | Accepted |
 | [0018](0018-core-starters-repository-boundary.md) | Core produces published SDK artifacts; the separate starters repository validates them as an external consumer. Revisit after release-contract simplification. | Superseded by 0021 |
 | [0019](0019-sealed-manifest-runtime-pipeline.md) | One sealed source-to-runtime pipeline, semantic storage seam, and optional Web/Admin/platform dependency direction. | Accepted |
-| [0020](0020-builtin-handler-contracts-and-matched-upsert.md) | Static builtin handler contracts and natural-key matched upsert (`handler.match`). | Accepted |
+| [0020](0020-builtin-handler-contracts-and-matched-upsert.md) | Static builtin handler contracts and natural-key matched upsert (`handler.match`). | Accepted + amended by 0022 |
 | [0021](0021-retire-starter-scaffolding.md) | Direct authoring; retire Starter scaffolding. | Accepted; supersedes 0018 |
+| [0022](0022-caller-observed-version-occ.md) | Caller-observed `expectedVersion` for Admin bind and builtin upsert OCC. | Accepted |
 
 ## Reading order
 

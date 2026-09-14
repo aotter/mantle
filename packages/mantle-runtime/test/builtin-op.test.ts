@@ -517,6 +517,7 @@ describe("InvokeBuiltinUseCase — update / delete / upsert", () => {
         schema: "posts",
         inputProperties: {
           id: { type: "string" },
+          expectedVersion: { type: "number" },
           title: { type: "string" },
         },
       }),
@@ -618,6 +619,7 @@ describe("InvokeBuiltinUseCase — matched upsert", () => {
       siteKey: { type: "string" },
       theme: { type: "string" },
       title: { type: "string" },
+      expectedVersion: { type: "number" },
     },
     required: ["siteKey", "theme"],
   });
@@ -629,9 +631,10 @@ describe("InvokeBuiltinUseCase — matched upsert", () => {
     match: ["siteKey", "variant"],
     inputProperties: {
       siteKey: { type: "string" },
-      variant: { type: "string" },
       theme: { type: "string" },
       title: { type: "string" },
+      variant: { type: "string" },
+      expectedVersion: { type: "number" },
     },
     required: ["siteKey", "variant"],
   });
@@ -671,7 +674,7 @@ describe("InvokeBuiltinUseCase — matched upsert", () => {
 
     const updated = await h.invoke.execute({
       procedure: upsertByKey,
-      input: { siteKey: "main", theme: "light" },
+      input: { siteKey: "main", theme: "light", expectedVersion: createdRow.version },
       ctx: { user: { id: "u-1" }, staff: null, env: {} },
     });
     expect(updated.ok).toBe(true);
@@ -702,7 +705,7 @@ describe("InvokeBuiltinUseCase — matched upsert", () => {
     // Update V1 only
     const updateV1 = await h.invoke.execute({
       procedure: upsertByComposite,
-      input: { siteKey: "docs", variant: "v1", theme: "light" },
+      input: { siteKey: "docs", variant: "v1", theme: "light", expectedVersion: 1 },
       ctx: { user: { id: "u-1" }, staff: null, env: {} },
     });
     expect(updateV1.ok).toBe(true);
@@ -729,7 +732,7 @@ describe("InvokeBuiltinUseCase — matched upsert", () => {
 
     const updated = await h.invoke.execute({
       procedure: upsertByKey,
-      input: { siteKey: "main", theme: "light" }, // omitted 'title'
+      input: { siteKey: "main", theme: "light", expectedVersion: 1 }, // omitted 'title'
       ctx: { user: { id: "u-1" }, staff: null, env: {} },
     });
     expect(updated.ok).toBe(true);
@@ -753,6 +756,7 @@ describe("InvokeBuiltinUseCase — matched upsert", () => {
             properties: {
               siteKey: { type: "string" },
               theme: { type: "string" },
+              expectedVersion: { type: "number" },
             },
           },
           output: { type: "object" },
@@ -780,14 +784,14 @@ describe("InvokeBuiltinUseCase — matched upsert", () => {
       ctx: { user: { id: "u-1" }, staff: null, env: {} },
     });
 
-    const callerInput = { siteKey: "main", theme: "light" };
+    const callerInput = { siteKey: "main", theme: "light", expectedVersion: 1 };
     const res = await h.invoke.execute({
       procedure: upsertByKey,
       input: callerInput,
       ctx: { user: { id: "u-2" }, staff: null, env: {} },
     });
     expect(res.ok).toBe(true);
-    // Preserves caller's original input; does not expose synthesized id/expectedVersion
+    // Preserves caller's original input, including the observed version token
     expect(beforeUpdateInput).toEqual(callerInput);
     expect(hookCtxUser).toBe("u-2");
   });
@@ -800,29 +804,25 @@ describe("InvokeBuiltinUseCase — matched upsert", () => {
       ctx: { user: { id: "u-1" }, staff: null, env: {} },
     });
     if (!created.ok) throw new Error("create failed");
-    const row = created.data as { id: string };
+    const row = created.data as { id: string; version: number };
 
-    // Simulate concurrent modification bumping the version in the store to 2
-    const current = await h.store.get(row.id);
-    if (current) {
-      h.store._seed({ ...current, version: 2 });
-    }
-
-    // Intercept findByDataFields to simulate returning a snapshot before the concurrent update
-    const origFindByDataFields = h.store.findByDataFields.bind(h.store);
-    h.store.findByDataFields = async (args) => {
-      const found = await origFindByDataFields(args);
-      return found ? { ...found, version: 1 } : null;
-    };
-
-    const result = await h.invoke.execute({
+    const first = await h.invoke.execute({
       procedure: upsertByKey,
-      input: { siteKey: "main", theme: "light" },
+      input: { siteKey: "main", theme: "light", expectedVersion: row.version },
       ctx: { user: { id: "u-1" }, staff: null, env: {} },
     });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.diagnostic.code).toBe("CONFLICT");
+    expect(first.ok).toBe(true);
+
+    const stale = await h.invoke.execute({
+      procedure: upsertByKey,
+      input: { siteKey: "main", theme: "solarized", expectedVersion: row.version },
+      ctx: { user: { id: "u-2" }, staff: null, env: {} },
+    });
+    expect(stale.ok).toBe(false);
+    if (stale.ok) return;
+    expect(stale.diagnostic.code).toBe("CONFLICT");
+    const stored = await h.store.get(row.id);
+    expect(stored?.data["theme"]).toBe("light");
   });
 
   it("concurrent-create race: atomic unique constraint failure surfaces as CONFLICT diagnostic without duplicates", async () => {
@@ -856,6 +856,164 @@ describe("InvokeBuiltinUseCase — matched upsert", () => {
     const all = await h.store.list({ collection: "site-settings" });
     expect(all.rows).toHaveLength(1);
     expect(all.rows[0]?.data["theme"]).toBe("dark");
+  });
+
+  it("update without expectedVersion is rejected and does not overwrite", async () => {
+    const h = harness({ schemas: [siteSettingsSchema] });
+    const created = await h.invoke.execute({
+      procedure: upsertByKey,
+      input: { siteKey: "main", theme: "dark" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    if (!created.ok) throw new Error("create failed");
+    const row = created.data as { id: string };
+
+    const result = await h.invoke.execute({
+      procedure: upsertByKey,
+      input: { siteKey: "main", theme: "light" },
+      ctx: { user: { id: "u-2" }, staff: null, env: {} },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostic.code).toBe("INPUT_VALIDATION_FAILED");
+    expect((await h.store.get(row.id))?.data["theme"]).toBe("dark");
+  });
+
+  it("versioned update of a deleted match target is NOT_FOUND and does not recreate", async () => {
+    const h = harness({ schemas: [siteSettingsSchema] });
+    const created = await h.invoke.execute({
+      procedure: upsertByKey,
+      input: { siteKey: "main", theme: "dark" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    if (!created.ok) throw new Error("create failed");
+    const row = created.data as { id: string; version: number };
+    await h.store.delete({
+      id: row.id,
+      collection: "site-settings",
+      expectedStatus: "draft",
+      expectedVersion: row.version,
+    });
+
+    const result = await h.invoke.execute({
+      procedure: upsertByKey,
+      input: { siteKey: "main", theme: "light", expectedVersion: row.version },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostic.code).toBe("NOT_FOUND");
+    const list = await h.store.list({ collection: "site-settings" });
+    expect(list.rows).toHaveLength(0);
+  });
+
+  it("membership unique-key match uses caller expectedVersion", async () => {
+    const members: SchemaManifest = {
+      apiVersion: "cms.mantle.aotter.net/v1",
+      kind: "Schema",
+      metadata: { name: "organization-members" },
+      spec: {
+        title: "Organization members",
+        schema: {
+          type: "object",
+          properties: {
+            organizationId: { type: "string" },
+            userId: { type: "string" },
+            role: { type: "string" },
+          },
+        },
+        uniqueIndexes: [["organizationId", "userId"]],
+        lifecycle: "operational",
+      },
+    };
+    const upsertMember = builtinProcedure({
+      name: "upsertMember",
+      op: "upsert",
+      schema: "organization-members",
+      match: ["organizationId", "userId"],
+      inputProperties: {
+        organizationId: { type: "string" },
+        userId: { type: "string" },
+        role: { type: "string" },
+        expectedVersion: { type: "number" },
+      },
+      required: ["organizationId", "userId"],
+    });
+    const h = harness({ schemas: [members] });
+    const created = await h.invoke.execute({
+      procedure: upsertMember,
+      input: { organizationId: "org-1", userId: "user-a", role: "editor" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    if (!created.ok) throw new Error("create failed");
+    const row = created.data as { id: string; version: number };
+
+    const updated = await h.invoke.execute({
+      procedure: upsertMember,
+      input: {
+        organizationId: "org-1",
+        userId: "user-a",
+        role: "owner",
+        expectedVersion: row.version,
+      },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) return;
+    expect((updated.data as { version: number }).version).toBe(row.version + 1);
+    expect((updated.data as { data: { role: string } }).data.role).toBe("owner");
+
+    const stale = await h.invoke.execute({
+      procedure: upsertMember,
+      input: {
+        organizationId: "org-1",
+        userId: "user-a",
+        role: "contributor",
+        expectedVersion: row.version,
+      },
+      ctx: { user: { id: "u-2" }, staff: null, env: {} },
+    });
+    expect(stale).toMatchObject({ ok: false, diagnostic: { code: "CONFLICT" } });
+  });
+
+  it("ID-based upsert uses caller expectedVersion and rejects deleted targets", async () => {
+    const upsertById = builtinProcedure({
+      name: "upsertPostById",
+      op: "upsert",
+      schema: "posts",
+      inputProperties: {
+        id: { type: "string" },
+        expectedVersion: { type: "number" },
+        title: { type: "string" },
+      },
+    });
+    const h = harness();
+    const created = await h.invoke.execute({
+      procedure: upsertById,
+      input: { title: "v1" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    if (!created.ok) throw new Error("create failed");
+    const row = created.data as { id: string; version: number };
+
+    const updated = await h.invoke.execute({
+      procedure: upsertById,
+      input: { id: row.id, expectedVersion: row.version, title: "v2" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) return;
+    expect((updated.data as { version: number }).version).toBe(row.version + 1);
+
+    const missing = await h.invoke.execute({
+      procedure: upsertById,
+      input: { id: "ghost", expectedVersion: 1, title: "nope" },
+      ctx: { user: { id: "u-1" }, staff: null, env: {} },
+    });
+    expect(missing).toMatchObject({ ok: false, diagnostic: { code: "NOT_FOUND" } });
+    const list = await h.store.list({ collection: "posts" });
+    expect(list.rows).toHaveLength(1);
+    expect(list.rows[0]?.data["title"]).toBe("v2");
   });
 
   it("preserves NULL semantics for optional unique index fields in in-memory repository", async () => {

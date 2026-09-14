@@ -149,6 +149,8 @@ A free-form string that tells agents and Admin widgets how to render or produce 
 | `timestamp-ms` | Unix epoch milliseconds. |
 | `idempotency-key` | On a Procedure input: Admin generates and hides one UUID per form; other callers generate one and reuse it on retry. |
 
+Do not use a hint for optimistic concurrency. The reserved Procedure input name `expectedVersion` is the OCC token (observed `entry.version` at read time). First-party Admin binds and hides it by that name.
+
 ### Root `readOnly: true`
 
 `schema.readOnly: true` at the root marks a Procedure-managed collection. Staff MCP emits no `create_*` or `update_*` tool for it, and Admin's generic create, update, status change and delete return `CONFLICT` with the message that the Schema is read-only on generic authoring surfaces. List and detail access and declared Procedures (builtin or `ref`) keep working.

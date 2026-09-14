@@ -126,9 +126,9 @@ handler:
 | `op` | Runtime behavior | Input contract |
 |---|---|---|
 | `create` | Projects `input ∩ Schema.properties` into `data`, stamps every `x-mantle-bind` property, generates an id and writes. `status` is `draft`, or `published` on a `lifecycle: operational` Schema. `authorId` is `ctx.user?.id ?? null`. Returns the created row. | `input` is an object schema. No other required properties. |
-| `update` | Loads the row (`NOT_FOUND` if absent), merges the patch over the stored `data` so omitted fields and existing stamps survive, writes under optimistic concurrency against `expectedVersion`, bumps `version`. | `id` (strict `type: string`) and `expectedVersion` (strict `type: number`) declared under `properties` **and** listed in `required`. |
-| `upsert` with `match` | Reads the matched fields off the validated input and looks the row up by those data values. Found: the update path, using the row's own current version. Not found: the create path. | `match` equals one declared `uniqueIndexes` tuple exactly, in order. Every matched field is a Schema property, is declared in `input.properties`, and appears in `input.required`. `input` must **not** declare `id` or `expectedVersion`. |
-| `upsert` without `match` | Legacy form. Updates when `input.id` is a string that resolves to a row; otherwise creates. | If either `id` or `expectedVersion` is declared, both must be, with strict `string` and `number` types. |
+| `update` | Loads the row (`NOT_FOUND` if absent), merges the patch over the stored `data` so omitted fields and existing stamps survive, writes under optimistic concurrency against the caller's `expectedVersion` (observed native `entry.version` at read time, not `version+1`), bumps `version`. | `id` (strict `type: string`) and `expectedVersion` (strict `type: number`) declared under `properties` **and** listed in `required`. |
+| `upsert` with `match` | Reads the matched fields off the validated input and looks the row up by those data values. Found: the update path, using the **caller's** `expectedVersion` (never the preloaded row's version). Not found: the create path only when `expectedVersion` is omitted; a versioned write for a missing row is `NOT_FOUND` and does not recreate. | `match` equals one declared `uniqueIndexes` tuple exactly, in order. Every matched field is a Schema property, is declared in `input.properties`, and appears in `input.required`. `input` must **not** declare `id`. `expectedVersion` **must** be declared as strict `number`; it is not globally required so create can omit it. |
+| `upsert` without `match` | Legacy form. Create when the caller omits `expectedVersion` (and either omits `id` or the id is unknown). Update when a resolved `id` is present — the caller token is required and is the OCC check. A versioned write for a missing id is `NOT_FOUND`. | `expectedVersion` must be declared as strict `number`. If `id` is declared it must be strict `string`. Neither is in `required`. |
 | `delete` | Loads the row (`NOT_FOUND` if absent), runs the delete guard, then hard-deletes pinned to the row's status and version. Returns `{ removed }`. | `id` (strict `type: string`) declared and in `required`. |
 | `archive` | Loads the row, checks the lifecycle state machine (`CONFLICT` on an illegal transition), then transitions to `archived` pinned to the version just read. | `id` (strict `type: string`) declared and in `required`. The target Schema must be `lifecycle: publishing`; an operational target is rejected. |
 
@@ -166,6 +166,7 @@ spec:
       onHand: { type: integer, minimum: 0 }
       countedAt: { type: integer, x-mcp-hint: timestamp-ms }
       requestId: { type: string, x-mcp-hint: idempotency-key }
+      expectedVersion: { type: number }
   output:
     type: object
     required: [id, version]
@@ -179,7 +180,7 @@ spec:
     match: [sku, warehouse]
 ```
 
-This requires `inventory-levels` to declare `uniqueIndexes: [[sku, warehouse]]` — the same fields, in the same order. `requestId` is a side-channel field: it validates, reaches `before_*` hooks, and is never written to `data`.
+This requires `inventory-levels` to declare `uniqueIndexes: [[sku, warehouse]]` — the same fields, in the same order. `requestId` is a side-channel field: it validates, reaches `before_*` hooks, and is never written to `data`. `expectedVersion` is the observed native `entry.version` at read time (not `version+1`). Omit it to create; send it to update. First-party Admin binds and hides it; HTTP and MCP callers supply it themselves.
 
 ## The response shape
 
@@ -209,6 +210,8 @@ A unique-index preflight runs before every write, and the database's own constra
 
 Idempotency has no grammar key. The convention is an `input` property marked `x-mcp-hint: idempotency-key`: Admin generates and hides one UUID per form submission, and other callers generate one and reuse it across retries of the same logical request. The handler is responsible for acting on it.
 
+Optimistic concurrency uses the reserved input name `expectedVersion` — the version the caller **read**, not the next version. First-party Admin and SDK bind-and-hide that property from the OCC target row; other callers send it themselves. There is no `x-mcp-hint` for OCC. On `CONFLICT` (409) Admin keeps the operator's business fields and requires an explicit re-read; it does not retry with the latest version. New reserved Procedure input names need an ADR.
+
 Deferred lifecycle hooks have a stronger guarantee to work with: delivery is at-least-once, and handlers key on `${ctx.event.id}:${ctx.event.trigger}` — stable across enqueue fallback, queue retries and replay. See [Deferred hooks on Queues](../cloudflare/deferred-hooks-queues.md).
 
 ## `uiSchema`
@@ -232,9 +235,11 @@ Admin derives its operations surface from the manifest graph — there is no ext
 | `GET /admin/api/operations` | Lists the staff-operable Procedures the calling staff member may actually run. |
 | `POST /admin/api/operations/:name` | Invokes one, through the same pipeline as any other caller. |
 
-Each listed operation carries `name`, `title`, `description`, `input`, `uiSchema`, `triggers` (the distinct kinds that qualified it, so a Procedure can be both) and `rowBindings`.
+Each listed operation carries `name`, `title`, `description`, `input`, `uiSchema`, `triggers` (the distinct kinds that qualified it, so a Procedure can be both), `rowBindings`, and `targetCollection` (the builtin handler schema, or `null`).
 
 `rowBindings` come from `x-mantle-ref` on the Procedure's input properties. An input property referencing a declared, non-`translates` Schema produces `{ collection, inputField, rowField }`, and Admin offers the operation from that collection's row menu with the field pre-filled and read-only. `rowField` is the target Schema's same-named property when it has one, otherwise the lone field of a single single-field unique index, otherwise the reserved `id` column. Refs to unknown collections or to translation children produce no binding and no error.
+
+When `input` declares `expectedVersion`, Admin treats that reserved name as magic: it captures the OCC target's current `version` at read time, submits it, and does not render an editable version field. Changing the selected target rebinds version (an organization row must not supply a membership mutation's version). Builtin operations also expose `targetCollection` (the handler schema) so Admin can pick the mutated collection over a contextual parent.
 
 Worked end-to-end examples live in [Commerce transaction](../examples/commerce-transaction.md) and [Procurement approvals](../examples/procurement-approvals.md).
 
@@ -246,6 +251,8 @@ Worked end-to-end examples live in [Commerce transaction](../examples/commerce-t
 - [`packages/mantle-spec/src/domain/service/SchemaAdminUiChecker.ts`](../../../packages/mantle-spec/src/domain/service/SchemaAdminUiChecker.ts)
 - [`packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts`](../../../packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts)
 - [`packages/mantle-runtime/src/usecase/procedure/InvokeBuiltinUseCase.ts`](../../../packages/mantle-runtime/src/usecase/procedure/InvokeBuiltinUseCase.ts)
+- [`docs/adr/0020-builtin-handler-contracts-and-matched-upsert.md`](../../adr/0020-builtin-handler-contracts-and-matched-upsert.md)
+- [`docs/adr/0022-caller-observed-version-occ.md`](../../adr/0022-caller-observed-version-occ.md)
 - [`packages/mantle-runtime/src/domain/service/BuiltinProjector.ts`](../../../packages/mantle-runtime/src/domain/service/BuiltinProjector.ts)
 - [`packages/mantle-runtime/src/domain/model/EntryRow.ts`](../../../packages/mantle-runtime/src/domain/model/EntryRow.ts)
 - [`packages/mantle-runtime/src/domain/service/io/EntryWriteGuard.ts`](../../../packages/mantle-runtime/src/domain/service/io/EntryWriteGuard.ts)

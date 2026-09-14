@@ -32,8 +32,8 @@ One Procedure may carry several Triggers, and that is how the same handler becom
 | `op` | What it does | Input contract |
 |---|---|---|
 | `create` | Projects `input ∩ Schema.properties`, stamps `x-mantle-bind` fields, inserts. Status is `draft`, or `published` for an operational Schema. Returns the created `EntryRow`. | An object schema |
-| `update` | Loads, merges the patch, bumps `version` under optimistic concurrency | `id` (strict string) and `expectedVersion` (strict number), both required |
-| `upsert` | With `match`, looks the row up by natural key and updates it, otherwise creates | `match` equals one `uniqueIndexes` tuple exactly, in order; no `id` or `expectedVersion` |
+| `update` | Loads, merges the patch, bumps `version` under optimistic concurrency using the caller's observed `expectedVersion` (not `version+1`) | `id` (strict string) and `expectedVersion` (strict number), both required |
+| `upsert` | With `match`, looks the row up by natural key: update with the caller token, or create when no row exists and no version was sent | `match` equals one `uniqueIndexes` tuple exactly, in order; no `id`; `expectedVersion` declared as strict number but not globally required |
 | `delete` | Hard delete by id | `id` (strict string) required |
 | `archive` | Transitions to `archived`, or `CONFLICT` if the machine disallows it | `id` required; publishing Schemas only |
 

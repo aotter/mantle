@@ -1,8 +1,8 @@
 import * as React from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { fieldLabel } from "../../lib/field-label";
-import { api } from "../../lib/api";
+import { api, ApiError } from "../../lib/api";
 import { asRenderable } from "../../lib/errors";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { EntryEditorPayload, JsonSchema, StaffOperation } from "../../lib/types";
@@ -28,10 +28,19 @@ import type { AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { SchemaFields } from "./entry-edit-view";
 
+/** Reserved OCC wire name. Observed native `entry.version` at read time. */
+export const EXPECTED_VERSION_PROPERTY = "expectedVersion";
+
 /** Minimal row identity needed to prefill a bound operation. */
 type OperableRow = {
   id: string;
   collection: string;
+};
+
+export type OperationRowBinding = {
+  collection: string;
+  inputField: string;
+  rowField: string;
 };
 
 /** Operations bound to rows from this collection. */
@@ -52,8 +61,59 @@ export function collectionOperationsFor(
 
 export function automaticOperationInputFields(schema: JsonSchema): string[] {
   return Object.entries(schema.properties ?? {})
-    .filter(([, property]) => property["x-mcp-hint"] === "idempotency-key")
+    .filter(([name, property]) =>
+      name === EXPECTED_VERSION_PROPERTY || property["x-mcp-hint"] === "idempotency-key",
+    )
     .map(([name]) => name);
+}
+
+export function operationDeclaresExpectedVersion(schema: JsonSchema): boolean {
+  return EXPECTED_VERSION_PROPERTY in (schema.properties ?? {});
+}
+
+/**
+ * Entry id whose native version is bound as `expectedVersion`.
+ * Prefer the mutated row (`id` / builtin target collection), never a
+ * leftover parent-row version after the operator changes target.
+ */
+export function resolveOccTargetId(args: {
+  input: JsonSchema;
+  formValue: Record<string, unknown>;
+  row?: OperableRow;
+  binding?: OperationRowBinding;
+  rowBindings?: readonly OperationRowBinding[];
+  targetCollection?: string | null;
+}): string | undefined {
+  const properties = args.input.properties ?? {};
+  if ("id" in properties) {
+    const id = args.formValue.id;
+    return typeof id === "string" && id.length > 0 ? id : undefined;
+  }
+
+  const bindings = args.rowBindings ?? (args.binding ? [args.binding] : []);
+  const preferred = args.targetCollection
+    ? bindings.find((binding) => binding.collection === args.targetCollection)
+    : undefined;
+  if (preferred) {
+    const value = args.formValue[preferred.inputField];
+    if (preferred.rowField === "id" && typeof value === "string" && value.length > 0) {
+      return value;
+    }
+    if (args.row?.collection === preferred.collection) return args.row.id;
+    return undefined;
+  }
+
+  if (args.row) {
+    const other = bindings.find(
+      (binding) => binding.collection !== args.row!.collection && binding.rowField === "id",
+    );
+    if (other) {
+      const value = args.formValue[other.inputField];
+      return typeof value === "string" && value.length > 0 ? value : undefined;
+    }
+  }
+
+  return args.row?.id;
 }
 
 export function operationFormSchema(schema: JsonSchema, hiddenFields: readonly string[]): JsonSchema {
@@ -167,6 +227,8 @@ export function CollectionOperations({
 /**
  * Locks the bound reference to this row and renders the remaining
  * operation input as an editable form. The server resolves `rowField`.
+ * `expectedVersion` is bound from the OCC target's observed version and
+ * hidden from the form (ADR-0022).
  */
 export function OperationDialog({
   operation,
@@ -178,17 +240,20 @@ export function OperationDialog({
   onSuccess,
 }: {
   operation: StaffOperation;
-  binding?: { collection: string; inputField: string; rowField: string };
+  binding?: OperationRowBinding;
   row?: OperableRow;
   language: AdminLanguage;
   canonical: string | null;
   onClose: () => void;
   onSuccess: () => void;
 }): React.ReactElement {
+  const queryClient = useQueryClient();
   const title = resolveLocalizedText(operation.title, language, canonical) ?? fieldLabel(operation.name);
   const description = resolveLocalizedText(operation.description, language, canonical);
   const rowField = binding?.rowField ?? "id";
   const inputField = binding?.inputField;
+  const hasExpectedVersion = operationDeclaresExpectedVersion(operation.input);
+  const expectedVersionRequired = (operation.input.required ?? []).includes(EXPECTED_VERSION_PROPERTY);
 
   const entryQuery = useQuery<EntryEditorPayload>({
     queryKey: ["entry-editor", row?.collection ?? "", row?.id ?? ""],
@@ -210,12 +275,58 @@ export function OperationDialog({
     [operation.input],
   );
   const [formValue, setFormValue] = React.useState<Record<string, unknown>>(() =>
-    Object.fromEntries(automaticInputFields.map((name) => [name, crypto.randomUUID()])),
+    Object.fromEntries(
+      automaticInputFields
+        .filter((name) => name !== EXPECTED_VERSION_PROPERTY)
+        .map((name) => [name, crypto.randomUUID()]),
+    ),
   );
   React.useEffect(() => {
     if (prefillValue === undefined || !inputField) return;
     setFormValue((prev) => ({ ...prev, [inputField]: prefillValue }));
   }, [prefillValue, inputField]);
+
+  const occTargetId = resolveOccTargetId({
+    input: operation.input,
+    formValue,
+    row,
+    binding,
+    rowBindings: operation.rowBindings,
+    targetCollection: operation.targetCollection,
+  });
+  const capturedVersion = React.useRef<{ id: string; version: number } | null>(null);
+  const [needsReread, setNeedsReread] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!hasExpectedVersion) return;
+    if (capturedVersion.current?.id === occTargetId) return;
+    capturedVersion.current = null;
+    setNeedsReread(false);
+    setFormValue((prev) => {
+      if (!(EXPECTED_VERSION_PROPERTY in prev)) return prev;
+      const next = { ...prev };
+      delete next[EXPECTED_VERSION_PROPERTY];
+      return next;
+    });
+  }, [hasExpectedVersion, occTargetId]);
+
+  const occEntryQuery = useQuery<EntryEditorPayload>({
+    queryKey: ["entry-editor", "occ", occTargetId ?? ""],
+    queryFn: () => api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(occTargetId!)}`),
+    enabled: Boolean(hasExpectedVersion && occTargetId && occTargetId !== row?.id),
+  });
+
+  const occEntry =
+    occTargetId && occTargetId === row?.id
+      ? entryQuery.data?.entry
+      : occEntryQuery.data?.entry;
+
+  React.useEffect(() => {
+    if (!hasExpectedVersion || !occTargetId || !occEntry || occEntry.id !== occTargetId) return;
+    if (capturedVersion.current?.id === occTargetId) return;
+    capturedVersion.current = { id: occTargetId, version: occEntry.version };
+    setFormValue((prev) => ({ ...prev, [EXPECTED_VERSION_PROPERTY]: occEntry.version }));
+  }, [hasExpectedVersion, occTargetId, occEntry]);
 
   const editableSchema = React.useMemo(() => {
     return operationFormSchema(operation.input, [
@@ -239,9 +350,33 @@ export function OperationDialog({
       toast.success(t(language, "ops.success", { name: title }));
       onSuccess();
     },
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 409) setNeedsReread(true);
+    },
   });
 
-  const canSubmit = !inputField || prefillValue !== undefined;
+  const rereadTarget = React.useCallback(() => {
+    capturedVersion.current = null;
+    setNeedsReread(false);
+    setFormValue((prev) => {
+      if (!(EXPECTED_VERSION_PROPERTY in prev)) return prev;
+      const next = { ...prev };
+      delete next[EXPECTED_VERSION_PROPERTY];
+      return next;
+    });
+    if (occTargetId && occTargetId === row?.id) {
+      void queryClient.invalidateQueries({ queryKey: ["entry-editor", row.collection, row.id] });
+    } else if (occTargetId) {
+      void queryClient.invalidateQueries({ queryKey: ["entry-editor", "occ", occTargetId] });
+    }
+  }, [occTargetId, queryClient, row]);
+
+  const hasCapturedVersion = typeof formValue[EXPECTED_VERSION_PROPERTY] === "number";
+  const versionReady =
+    !hasExpectedVersion ||
+    hasCapturedVersion ||
+    (!expectedVersionRequired && !occTargetId);
+  const canSubmit = (!inputField || prefillValue !== undefined) && versionReady && !needsReread;
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -278,7 +413,11 @@ export function OperationDialog({
         )}
 
         {row && entryQuery.isError ? <ErrorBox error={entryQuery.error} /> : null}
+        {occEntryQuery.isError ? <ErrorBox error={occEntryQuery.error} /> : null}
         {invoke.isError ? <OperationErrorBox error={asRenderable(invoke.error)} /> : null}
+        {needsReread ? (
+          <p className="text-sm text-muted-foreground">{t(language, "ops.conflict.rereadRequired")}</p>
+        ) : null}
 
         {invoke.isSuccess ? (
           <section aria-label={t(language, "ops.output")} className="min-w-0 space-y-2">
@@ -293,6 +432,11 @@ export function OperationDialog({
           <Button type="button" variant="secondary" onClick={onClose} disabled={invoke.isPending}>
             {t(language, invoke.isSuccess ? "common.close" : "rowActions.cancel")}
           </Button>
+          {needsReread ? (
+            <Button type="button" variant="secondary" onClick={rereadTarget} disabled={invoke.isPending}>
+              {t(language, "ops.conflict.reread")}
+            </Button>
+          ) : null}
           <Button
             type="button"
             onClick={() => invoke.mutate(formValue)}

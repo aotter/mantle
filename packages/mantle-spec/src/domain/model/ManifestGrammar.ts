@@ -565,3 +565,13 @@ export const RESERVED_ENTRY_COLUMNS = [
   "authorId",
 ] as const;
 export type ReservedEntryColumn = (typeof RESERVED_ENTRY_COLUMNS)[number];
+
+/**
+ * Reserved Procedure input wire names. `expectedVersion` is the observed
+ * native `entry.version` at read time (not version+1). First-party Admin/SDK
+ * bind and hide it; other callers supply it. New reserved names need an ADR
+ * (ADR-0022). Business fields must not collide.
+ */
+export const EXPECTED_VERSION_PROPERTY = "expectedVersion" as const;
+export const RESERVED_PROCEDURE_INPUT_NAMES = [EXPECTED_VERSION_PROPERTY] as const;
+export type ReservedProcedureInputName = (typeof RESERVED_PROCEDURE_INPUT_NAMES)[number];

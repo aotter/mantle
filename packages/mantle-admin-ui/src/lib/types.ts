@@ -234,6 +234,12 @@ export interface StaffOperation {
   triggers: Array<"mcp" | "http">;
   /** References that expose this operation from collection row menus. */
   rowBindings: Array<{ collection: string; inputField: string; rowField: string }>;
+  /**
+   * Builtin handler schema name, when this Procedure writes through
+   * `handler.kind: builtin`. Admin uses it to bind `expectedVersion` to
+   * the mutated collection rather than a contextual parent row.
+   */
+  targetCollection?: string | null;
 }
 
 /** Read-only View projection exposed by the Admin API. */

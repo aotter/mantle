@@ -169,6 +169,7 @@ describe("GET /admin/api/operations", () => {
         uiSchema: Record<string, unknown> | null;
         triggers: string[];
         rowBindings: Array<{ collection: string; inputField: string; rowField: string }>;
+        targetCollection: string | null;
       }>;
     };
     const names = body.operations.map((op) => op.name).sort();
@@ -183,6 +184,7 @@ describe("GET /admin/api/operations", () => {
     expect(recompute.uiSchema).toEqual({ fields: { sku: { widget: "textarea" } } });
     expect(recompute.triggers).toEqual(["mcp"]);
     expect(recompute.rowBindings).toEqual([]);
+    expect(recompute.targetCollection).toBeNull();
 
     const reindex = body.operations.find((op) => op.name === "reindex-catalog")!;
     expect(reindex.triggers).toEqual(["http"]);

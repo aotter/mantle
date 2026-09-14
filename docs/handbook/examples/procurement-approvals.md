@@ -165,7 +165,7 @@ A missing identity fails with 401; the runtime never drops the filter and never 
 
 ### Optimistic concurrency
 
-`review-requisition` is a builtin `update`. Its input must declare `id` (string) and `expectedVersion` (number) in `required`; the parser rejects the Manifest otherwise. At runtime the row is loaded, the patch is merged over existing data (omitted fields and server stamps survive), and the write is applied only if the stored version equals `expectedVersion`. A stale version fails with `CONFLICT` (HTTP 409) and nothing changes; the reviewer re-reads and decides again. `requestStatus` is narrowed to `approved | rejected`, so this Procedure cannot move a row back to `submitted`.
+`review-requisition` is a builtin `update`. Its input must declare `id` (string) and `expectedVersion` (number) in `required`; the parser rejects the Manifest otherwise. `expectedVersion` is the version the reviewer **read**, not that value plus one. At runtime the row is loaded, the patch is merged over existing data (omitted fields and server stamps survive), and the write is applied only if the stored version equals `expectedVersion`. A stale version fails with `CONFLICT` (HTTP 409) and nothing changes; the reviewer re-reads and decides again. Admin binds and hides `expectedVersion` on row-bound forms. `requestStatus` is narrowed to `approved | rejected`, so this Procedure cannot move a row back to `submitted`.
 
 ### Admin row action
 

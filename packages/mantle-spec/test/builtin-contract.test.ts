@@ -131,6 +131,7 @@ describe("validateManifests — builtin handler contracts", () => {
         properties: {
           slug: { type: "string" },
           title: { type: "string" },
+          expectedVersion: { type: "number" },
         },
         required: ["slug"],
       },
@@ -145,6 +146,7 @@ describe("validateManifests — builtin handler contracts", () => {
           slug: { type: "string" },
           variant: { type: "string" },
           title: { type: "string" },
+          expectedVersion: { type: "number" },
         },
         required: ["slug", "variant"],
       },
@@ -154,16 +156,8 @@ describe("validateManifests — builtin handler contracts", () => {
     expect(res.errorCount).toBe(0);
   });
 
-  it("accepts legacy upsert with no id/expectedVersion or with both", () => {
-    const legacyEmpty = procedure({
-      name: "legacyUpsertEmpty",
-      op: "upsert",
-      input: {
-        type: "object",
-        properties: { title: { type: "string" } },
-      },
-    });
-    const legacyBoth = procedure({
+  it("accepts version-checked upsert with expectedVersion declared but not required", () => {
+    const legacyId = procedure({
       name: "legacyUpsertBoth",
       op: "upsert",
       input: {
@@ -175,7 +169,18 @@ describe("validateManifests — builtin handler contracts", () => {
         },
       },
     });
-    const res = validateManifests({ manifests: [postsSchema, legacyEmpty, legacyBoth] });
+    const createCapable = procedure({
+      name: "upsertCreateCapable",
+      op: "upsert",
+      input: {
+        type: "object",
+        properties: {
+          expectedVersion: { type: "number" },
+          title: { type: "string" },
+        },
+      },
+    });
+    const res = validateManifests({ manifests: [postsSchema, legacyId, createCapable] });
     expect(res.diagnostics).toEqual([]);
     expect(res.errorCount).toBe(0);
   });
@@ -349,56 +354,77 @@ describe("validateManifests — builtin handler contracts", () => {
     expect(res2.diagnostics.some((d) => d.code === "BUILTIN_HANDLER_CONTRACT_INVALID")).toBe(true);
   });
 
-  it("rejects matched upsert when input declares id or expectedVersion", () => {
+  it("rejects matched upsert when input declares id", () => {
     const withId = procedure({
       name: "upsertWithId",
       op: "upsert",
       match: ["slug"],
       input: {
         type: "object",
-        properties: { slug: { type: "string" }, id: { type: "string" } },
-        required: ["slug"],
-      },
-    });
-    const withVersion = procedure({
-      name: "upsertWithVersion",
-      op: "upsert",
-      match: ["slug"],
-      input: {
-        type: "object",
-        properties: { slug: { type: "string" }, expectedVersion: { type: "number" } },
+        properties: {
+          slug: { type: "string" },
+          id: { type: "string" },
+          expectedVersion: { type: "number" },
+        },
         required: ["slug"],
       },
     });
     const res1 = validateManifests({ manifests: [postsSchema, withId] });
     expect(res1.diagnostics.some((d) => d.code === "BUILTIN_HANDLER_CONTRACT_INVALID")).toBe(true);
-
-    const res2 = validateManifests({ manifests: [postsSchema, withVersion] });
-    expect(res2.diagnostics.some((d) => d.code === "BUILTIN_HANDLER_CONTRACT_INVALID")).toBe(true);
   });
 
-  it("rejects legacy upsert with only one of id or expectedVersion", () => {
-    const onlyId = procedure({
-      name: "upsertOnlyId",
+  it("rejects upsert when expectedVersion is omitted or not a strict number", () => {
+    const matchMissing = procedure({
+      name: "upsertMatchMissingVersion",
+      op: "upsert",
+      match: ["slug"],
+      input: {
+        type: "object",
+        properties: { slug: { type: "string" } },
+        required: ["slug"],
+      },
+    });
+    const legacyMissing = procedure({
+      name: "upsertLegacyMissingVersion",
       op: "upsert",
       input: {
         type: "object",
-        properties: { id: { type: "string" } },
+        properties: { title: { type: "string" } },
       },
     });
-    const onlyVersion = procedure({
-      name: "upsertOnlyVersion",
+    const nullableVersion = procedure({
+      name: "upsertNullableVersion",
       op: "upsert",
+      match: ["slug"],
       input: {
         type: "object",
-        properties: { expectedVersion: { type: "number" } },
+        properties: {
+          slug: { type: "string" },
+          expectedVersion: { type: ["number", "null"] },
+        },
+        required: ["slug"],
       },
     });
-    const res1 = validateManifests({ manifests: [postsSchema, onlyId] });
-    expect(res1.diagnostics.some((d) => d.code === "BUILTIN_HANDLER_CONTRACT_INVALID")).toBe(true);
+    for (const p of [matchMissing, legacyMissing, nullableVersion]) {
+      const res = validateManifests({ manifests: [postsSchema, p] });
+      expect(res.diagnostics.some((d) => d.code === "BUILTIN_HANDLER_CONTRACT_INVALID")).toBe(true);
+    }
+  });
 
-    const res2 = validateManifests({ manifests: [postsSchema, onlyVersion] });
-    expect(res2.diagnostics.some((d) => d.code === "BUILTIN_HANDLER_CONTRACT_INVALID")).toBe(true);
+  it("rejects ID-based upsert when id is not a strict string", () => {
+    const nullableId = procedure({
+      name: "upsertNullableId",
+      op: "upsert",
+      input: {
+        type: "object",
+        properties: {
+          id: { type: ["string", "null"] },
+          expectedVersion: { type: "number" },
+        },
+      },
+    });
+    const res = validateManifests({ manifests: [postsSchema, nullableId] });
+    expect(res.diagnostics.some((d) => d.code === "BUILTIN_HANDLER_CONTRACT_INVALID")).toBe(true);
   });
 });
 
