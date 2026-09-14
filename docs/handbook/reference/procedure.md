@@ -216,7 +216,7 @@ Deferred lifecycle hooks have a stronger guarantee to work with: delivery is at-
 
 ## `uiSchema`
 
-Admin presentation only. It never affects input validation, the MCP tool schema or the OpenAPI document. Unknown root keys are tolerated; the parser inspects the two below.
+Admin presentation only. It never affects input validation, the MCP tool schema or the OpenAPI document. Roots are closed: `collectionAction` and `fields`.
 
 | Key | Rule |
 |---|---|

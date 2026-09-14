@@ -12,7 +12,7 @@ A Schema declares one collection: the JSON Schema for each entry's `data`, its i
 | `title` | LocalizedText | yes | — | Admin label. Non-empty string or locale map. |
 | `description` | LocalizedText | no | — | Same shape as `title`. |
 | `schema` | JSON Schema 2020-12 | yes | — | Must be an object. Walked by the [subset validator](#json-schema-subset). |
-| `uiSchema` | object | no | — | Accepts `fields` and `list`. Violations are `SCHEMA_UI_INVALID`. |
+| `uiSchema` | object | no | — | Accepts `fields`, `list`, and `nav`. Violations are `SCHEMA_UI_INVALID`. |
 | `uniqueIndexes` | `string[][]` | no | `[]` | Ordered tuples of top-level scalar fields. See [Indexes](#indexes). |
 | `indexes` | `string[][]` | no | `[]` | Ordered non-unique tuples. Must not repeat a `uniqueIndexes` tuple. |
 | `searchableFields` | `string[]` | no | `[]` | Top-level string fields for Admin and Staff MCP substring search. |
@@ -157,14 +157,28 @@ Do not use a hint for optimistic concurrency. The reserved Procedure input name 
 
 ## `uiSchema`
 
+Closed Admin-only roots: `fields`, `list`, `nav`. Nested keys are closed too. Unknown roots or nested keys are `SCHEMA_UI_INVALID`.
+
 | Key | Rule |
 |---|---|
 | `fields.<field>.widget` | Only `textarea`. The field must be a top-level property with a string type (`string` or `[string, null]`). |
 | `list.filterField` | Operational Schemas only. A declared property with a non-empty string `enum` that is the first field of some `indexes` or `uniqueIndexes` tuple. Admin renders the enum as sidebar links and list tabs. |
 | `list.primaryField` | Operational Schemas only. A non-empty top-level scalar property; rendered as the linked leading column. |
 | `list.columns` | Operational Schemas only. Top-level scalar properties, no repeats and not repeating `primaryField`. |
+| `nav.standalone` | Boolean. `true` also emits a main Admin Nav list entry with a **parent autocomplete filter**. It does not unfold: required `x-mantle-ref` children still compose under the parent. Omit or `false` means fold-only (discover via the parent-entry workbench). Rejected on top-level Schemas, `translates` children, and Schemas with no eligible required-ref parent. |
+| `nav.parentField` | Allowed only with `standalone: true`. Names a required `x-mantle-ref` field used as the parent filter. One eligible required ref is inferred; more than one requires an explicit `parentField`. Do not rely on property-order heuristics when multiple refs exist. |
 
-Every violation is `SCHEMA_UI_INVALID`. Without `primaryField` and `columns`, Admin lists an operational collection with platform metadata only. None of these settings changes runtime or MCP validation.
+```yaml
+uiSchema:
+  list:
+    primaryField: name
+    columns: [status]
+  nav:
+    standalone: true
+    parentField: organizationId
+```
+
+Every violation is `SCHEMA_UI_INVALID`. Without `primaryField` and `columns`, Admin lists an operational collection with platform metadata only. `nav` is operational Admin navigation only — it does not change runtime, MCP, or publishing validation. Parent autocomplete coexists with `list.filterField` enum tabs as a separate control.
 
 ## Indexes
 

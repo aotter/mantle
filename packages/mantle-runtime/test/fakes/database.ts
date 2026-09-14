@@ -351,9 +351,20 @@ class InMemoryStatement implements PreparedStatement {
           pi += 1; // each field uses the same escaped search term
         }
       }
-      const filterMatch = /AND ("m2c_[0-9a-f]+_[0-9a-f]+_[0-9a-f]+") = \?/.exec(sql);
-      const filterField = filterMatch ? listSortField(filterMatch[1]!) : null;
-      const filterValue = filterField ? p[pi++] : null;
+      // Enum tabs (`filter`) and parent scope may both emit `AND col = ?`
+      // (generated column or json_extract). Consume every equality in SQL
+      // order so the bound LIMIT is not stolen as a filter value.
+      const dataEquals = [...sql.matchAll(
+        /AND (?:json_extract\(data, \?\)|("m2c_[0-9a-f]+_[0-9a-f]+_[0-9a-f]+")) = \?/g,
+      )];
+      const dataFilters: Array<{ field: string; value: unknown }> = [];
+      for (const match of dataEquals) {
+        const generated = match[1];
+        const field = generated
+          ? listSortField(generated)
+          : fieldFromJsonPath(String(p[pi++]));
+        dataFilters.push({ field, value: p[pi++] });
+      }
       const cursorValue = cursorMatch ? (p[pi++] as string | number) : null;
       const cursorId = cursorMatch ? (p[pi++] as string) : null;
       const limit = (p[pi++] as number) ?? 100;
@@ -363,7 +374,7 @@ class InMemoryStatement implements PreparedStatement {
         .filter((r) => r.collection === collection)
         .filter((r) => (status ? r.status === status : true))
         .filter((r) => (searchTerm ? matchesLikeSearch(r, searchTerm, searchFields) : true))
-        .filter((r) => filterField ? JSON.parse(r.data)[filterField] === filterValue : true)
+        .filter((r) => dataFilters.every(({ field, value }) => JSON.parse(r.data)[field] === value))
         .filter((r) => cursorValue === null || compareListRow(r, sortField, cursorValue, cursorId!) ===
           (cursorMatch![2] === ">" ? 1 : -1))
         .sort((a, b) => compareListRows(a, b, sortField) * (direction === "ASC" ? 1 : -1))

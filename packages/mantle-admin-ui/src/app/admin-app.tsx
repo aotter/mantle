@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AuthenticatedLayout } from "../layout/authenticated-layout";
 import { api, ApiError } from "../lib/api";
-import type { AdminUser } from "../lib/types";
+import type { AdminUser, Collection } from "../lib/types";
 import { useAdminLocation } from "./router";
 import {
   AccessDeniedView,
@@ -20,6 +20,7 @@ import {
 import { HomeView } from "../features/console/home-view";
 import { CollectionView } from "../features/content/collection-view";
 import { EntryEditView } from "../features/content/entry-edit-view";
+import { ParentEntryWorkbench, shouldOpenParentWorkbench } from "../features/content/parent-entry-workbench";
 import { MediaLibraryView } from "../features/media/media-library-view";
 import { OperationsView } from "../features/ops/operations-view";
 import { ViewPage } from "../features/ops/view-page";
@@ -93,13 +94,25 @@ function Gate({ path, preview }: { path: string; preview: boolean }): React.Reac
     );
   }
 
+  const entryEditMatch = path.match(/^\/admin\/c\/([^/]+)\/([^/]+)\/edit\/?$/);
+  if (entryEditMatch) {
+    return (
+      <AuthenticatedLayout>
+        <EntryEditView
+          collectionName={decodeURIComponent(entryEditMatch[1]!)}
+          entryId={decodeURIComponent(entryEditMatch[2]!)}
+        />
+      </AuthenticatedLayout>
+    );
+  }
+
   const entryMatch = path.match(/^\/admin\/c\/([^/]+)\/([^/]+)\/?$/);
   if (entryMatch) {
     const collectionName = decodeURIComponent(entryMatch[1]!);
     const entryId = decodeURIComponent(entryMatch[2]!);
     return (
       <AuthenticatedLayout>
-        <EntryEditView collectionName={collectionName} entryId={entryId} />
+        <EntryLanding collectionName={collectionName} entryId={entryId} />
       </AuthenticatedLayout>
     );
   }
@@ -178,6 +191,27 @@ function Gate({ path, preview }: { path: string; preview: boolean }): React.Reac
       <NotFoundView path={path} />
     </AuthenticatedLayout>
   );
+}
+
+function EntryLanding({
+  collectionName,
+  entryId,
+}: {
+  collectionName: string;
+  entryId: string;
+}): React.ReactElement {
+  const collectionsQuery = useQuery<Collection[]>({
+    queryKey: ["collections"],
+    queryFn: async () => {
+      const res = await api.get<{ collections: Collection[] }>("/collections");
+      return res.collections;
+    },
+  });
+  if (collectionsQuery.isLoading) return <GateLoading />;
+  if (shouldOpenParentWorkbench(collectionsQuery.data, collectionName)) {
+    return <ParentEntryWorkbench collectionName={collectionName} entryId={entryId} />;
+  }
+  return <EntryEditView collectionName={collectionName} entryId={entryId} />;
 }
 
 function DeveloperWorkspace({ path }: { path: string }): React.ReactElement {

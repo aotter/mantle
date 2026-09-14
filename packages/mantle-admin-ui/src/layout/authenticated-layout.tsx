@@ -18,6 +18,7 @@ import {
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { api } from "../lib/api";
+import { isPrimaryNavCollection } from "../lib/collection-nav";
 import { fieldLabel } from "../lib/field-label";
 import { viewsManifestQueryOptions } from "../lib/queries";
 import { resolveLocalizedText } from "../lib/localized-text";
@@ -197,7 +198,7 @@ export function buildNavGroups(
   canonical: string | null,
   role: AdminUser["role"],
 ): ReadonlyArray<NavGroupData> {
-  const primaryCollections = collections.filter((collection) => !collection.parent);
+  const primaryCollections = collections.filter(isPrimaryNavCollection);
   const contentCollections = primaryCollections.filter((c) => c.lifecycle !== "operational");
   const operationalCollections = primaryCollections.filter((c) => c.lifecycle === "operational");
   const homeGroup: NavGroupData = {

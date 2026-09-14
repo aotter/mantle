@@ -37,6 +37,12 @@ export interface Collection {
   filter?: { field: string; values: string[] } | null;
   /** Operational list data fields resolved from uiSchema.list. */
   list?: { primaryField: string | null; columns: string[] };
+  /** Standalone main-Nav co-entry. Fold parent stays on `parent`. */
+  nav?: {
+    standalone: true;
+    parentField: string;
+    parentCollection: string;
+  } | null;
   schema?: JsonSchema;
 }
 

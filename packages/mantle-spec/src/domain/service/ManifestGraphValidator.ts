@@ -19,7 +19,7 @@ import {
 } from "../model/ManifestGrammar.js";
 import { partitionManifests } from "./ManifestPartition.js";
 import { checkTranslatesReferences } from "./CrossSchemaChecker.js";
-import { checkViewAdminUi } from "./SchemaAdminUiChecker.js";
+import { checkSchemaNavTargets, checkViewAdminUi } from "./SchemaAdminUiChecker.js";
 import {
   bestMatch,
   manifestPath,
@@ -57,6 +57,7 @@ export function validateManifestGraph(
   diags.push(...checkSchemaReservedWireNames(partitioned.schemas, filePaths));
 
   diags.push(...checkTranslatesReferences(partitioned.schemas, "validate", filePaths));
+  diags.push(...checkSchemaNavTargetsGraph(partitioned.schemas, schemasByName, filePaths));
 
   for (const v of partitioned.views) {
     diags.push(...checkViewRefs(v, schemasByName, filePaths));
@@ -85,6 +86,27 @@ export function validateManifestGraph(
   ));
 
   return { diagnostics: diags, ...partitioned };
+}
+
+function checkSchemaNavTargetsGraph(
+  schemas: readonly SchemaManifest[],
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+  filePaths?: ManifestFilePaths,
+): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  for (const schema of schemas) {
+    const problem = checkSchemaNavTargets(schema, schemasByName);
+    if (!problem) continue;
+    out.push(validateDiagnostic({
+      code: "SCHEMA_UI_INVALID",
+      severity: "error",
+      path: manifestPath("Schema", schema.metadata.name, problem.pointer, filePaths),
+      value: problem.value,
+      expected: problem.expected,
+      message: problem.message,
+    }));
+  }
+  return out;
 }
 
 function checkCollectionActionRef(

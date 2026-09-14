@@ -14,12 +14,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CopyField, EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
+import { CollectionStatisticsCard } from "./collection-statistics-card";
+import { isPrimaryNavCollection } from "../../lib/collection-nav";
 
 const CLAUDE_CUSTOMIZE_URL =
   "https://claude.ai/customize/connectors?modal=add-custom-connector";
 const CLAUDE_NEW_CHAT_URL = "https://claude.ai/new";
-
-import { CollectionStatisticsCard } from "./collection-statistics-card";
 
 export function HomeView(): React.ReactElement {
   const { language } = usePreferences();
@@ -35,7 +35,7 @@ export function HomeView(): React.ReactElement {
     },
   });
   const collections = collectionsQuery.data ?? [];
-  const primaryCollections = collections.filter((collection) => !collection.parent);
+  const primaryCollections = collections.filter(isPrimaryNavCollection);
   const collectionGroups = [
     {
       title: t(language, "nav.content"),

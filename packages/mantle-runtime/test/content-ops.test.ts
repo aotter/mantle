@@ -902,6 +902,78 @@ describe("GetEntryUseCase / ListEntriesUseCase / DeleteEntryUseCase", () => {
     expect(published).toHaveLength(1);
   });
 
+  it("scopes lists by a required x-mantle-ref field without dropping enum filters", async () => {
+    const organizations: SchemaManifest = {
+      apiVersion: "cms.mantle.aotter.net/v1",
+      kind: "Schema",
+      metadata: { name: "organizations" },
+      spec: {
+        title: "Organizations",
+        schema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
+        lifecycle: "operational",
+      },
+    };
+    const projects: SchemaManifest = {
+      apiVersion: "cms.mantle.aotter.net/v1",
+      kind: "Schema",
+      metadata: { name: "projects" },
+      spec: {
+        title: "Projects",
+        lifecycle: "operational",
+        schema: {
+          type: "object",
+          required: ["name", "organizationId", "kind"],
+          properties: {
+            name: { type: "string" },
+            organizationId: { type: "string", "x-mantle-ref": "organizations" },
+            kind: { type: "string", enum: ["app", "lib"] },
+          },
+        },
+        indexes: [["kind"]],
+        uiSchema: {
+          list: { filterField: "kind", primaryField: "name" },
+          nav: { standalone: true },
+        },
+      },
+    };
+    const h = harness({
+      schemas: new Map([
+        ["organizations", organizations],
+        ["projects", projects],
+      ]),
+    });
+    await h.createDraft.execute({
+      collection: "projects",
+      data: { name: "one", organizationId: "org-a", kind: "app" },
+      authorId: null,
+    });
+    await h.createDraft.execute({
+      collection: "projects",
+      data: { name: "two", organizationId: "org-b", kind: "app" },
+      authorId: null,
+    });
+    await h.createDraft.execute({
+      collection: "projects",
+      data: { name: "three", organizationId: "org-a", kind: "lib" },
+      authorId: null,
+    });
+    const scoped = await h.listEntries.execute({
+      collection: "projects",
+      scope: { field: "organizationId", value: "org-a" },
+    });
+    expect(scoped.map((row) => row.data["name"])).toEqual(["three", "one"]);
+    const both = await h.listEntries.execute({
+      collection: "projects",
+      filter: { field: "kind", value: "app" },
+      scope: { field: "organizationId", value: "org-a" },
+    });
+    expect(both.map((row) => row.data["name"])).toEqual(["one"]);
+    await expect(h.listEntries.execute({
+      collection: "projects",
+      scope: { field: "name", value: "one" },
+    })).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
+  });
+
   it("ListEntriesUseCase.executePage() returns nextCursor when there are more rows", async () => {
     const h = harness();
     for (let i = 1; i <= 5; i++) {

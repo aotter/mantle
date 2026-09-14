@@ -578,3 +578,137 @@ describe("GET /admin/api/entries/:id related entries", () => {
     )).toBe(true);
   });
 });
+
+function standaloneNavManifests(): Manifest[] {
+  const apiVersion = "cms.mantle.aotter.net/v1" as const;
+  return [
+    {
+      apiVersion,
+      kind: "Schema",
+      metadata: { name: "organizations" },
+      spec: {
+        title: "Organizations",
+        schema: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+        },
+        lifecycle: "operational",
+      },
+    },
+    {
+      apiVersion,
+      kind: "Schema",
+      metadata: { name: "projects" },
+      spec: {
+        title: "Projects",
+        description: "Work inside an organization.",
+        schema: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            organizationId: { type: "string", "x-mantle-ref": "organizations" },
+            kind: { type: "string", enum: ["app", "lib"] },
+          },
+          required: ["name", "organizationId", "kind"],
+        },
+        indexes: [["kind"], ["organizationId"]],
+        lifecycle: "operational",
+        uiSchema: {
+          list: { filterField: "kind", primaryField: "name", columns: ["kind"] },
+          nav: { standalone: true },
+        },
+      },
+    },
+  ];
+}
+
+describe("Admin standalone nav and parent scope", () => {
+  it("keeps collection.parent while projecting a nav descriptor", async () => {
+    const { app } = harness(undefined, undefined, standaloneNavManifests());
+    const res = await app.request("/admin/api/collections");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      collections: Array<{
+        name: string;
+        parent: { collection: string; childField: string } | null;
+        nav: { standalone: true; parentField: string; parentCollection: string } | null;
+      }>;
+    };
+    const projects = body.collections.find((collection) => collection.name === "projects");
+    const organizations = body.collections.find((collection) => collection.name === "organizations");
+    expect(organizations?.parent).toBeNull();
+    expect(organizations?.nav).toBeNull();
+    expect(projects?.parent).toEqual({
+      collection: "organizations",
+      parentField: "id",
+      childField: "organizationId",
+    });
+    expect(projects?.nav).toEqual({
+      standalone: true,
+      parentField: "organizationId",
+      parentCollection: "organizations",
+    });
+  });
+
+  it("filters a standalone child list by parent id and coexists with enum tabs", async () => {
+    const { app, db } = harness(undefined, undefined, standaloneNavManifests());
+    db.entries.set("org-a", relatedRow("org-a", "organizations", "published", { name: "A" }, 3));
+    db.entries.set("p1", relatedRow("p1", "projects", "published", {
+      name: "one", organizationId: "org-a", kind: "app",
+    }, 3));
+    db.entries.set("p2", relatedRow("p2", "projects", "published", {
+      name: "two", organizationId: "org-b", kind: "app",
+    }, 2));
+    db.entries.set("p3", relatedRow("p3", "projects", "published", {
+      name: "three", organizationId: "org-a", kind: "lib",
+    }, 1));
+
+    const scoped = await app.request(
+      "/admin/api/entries?collection=projects&scope_field=organizationId&scope_value=org-a",
+    );
+    expect(scoped.status).toBe(200);
+    expect(((await scoped.json()) as { items: Array<{ id: string }> }).items.map(({ id }) => id))
+      .toEqual(["p1", "p3"]);
+
+    const byKind = await app.request(
+      "/admin/api/entries?collection=projects&filter_field=kind&filter_value=app",
+    );
+    expect(byKind.status).toBe(200);
+    expect(((await byKind.json()) as { items: Array<{ id: string }> }).items.map(({ id }) => id))
+      .toEqual(["p1", "p2"]);
+
+    const both = await app.request(
+      "/admin/api/entries?collection=projects&filter_field=kind&filter_value=app&scope_field=organizationId&scope_value=org-a",
+    );
+    expect(both.status).toBe(200);
+    expect(((await both.json()) as { items: Array<{ id: string }> }).items.map(({ id }) => id))
+      .toEqual(["p1"]);
+  });
+
+  it("rejects incomplete parent scope parameters", async () => {
+    const { app } = harness(undefined, undefined, standaloneNavManifests());
+    const response = await app.request(
+      "/admin/api/entries?collection=projects&scope_field=organizationId",
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      diagnostic: { code: "INPUT_VALIDATION_FAILED" },
+    });
+  });
+
+  it("does not expose a folded-only child as a nav descriptor", async () => {
+    const { app } = harness(undefined, undefined, relatedManifests());
+    const res = await app.request("/admin/api/collections");
+    const body = (await res.json()) as {
+      collections: Array<{ name: string; nav: unknown; parent: unknown }>;
+    };
+    const comments = body.collections.find((collection) => collection.name === "comments");
+    expect(comments?.parent).toEqual({
+      collection: "parents",
+      parentField: "id",
+      childField: "parentId",
+    });
+    expect(comments?.nav).toBeNull();
+  });
+});

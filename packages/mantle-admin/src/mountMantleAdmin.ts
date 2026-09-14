@@ -623,6 +623,20 @@ export function mountMantleAdmin<E extends Env>(
         }),
       }, { status: 400 });
     }
+    const scopeField = c.req.query("scope_field");
+    const scopeValue = c.req.query("scope_value");
+    if (Boolean(scopeField) !== Boolean(scopeValue)) {
+      return Response.json({
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "INPUT_VALIDATION_FAILED",
+          severity: "error",
+          path: "GET /admin/api/entries",
+          expected: "scope_field and scope_value together",
+          message: "List parent scope requires both `scope_field` and `scope_value`.",
+        }),
+      }, { status: 400 });
+    }
     // Admin pagination needs the cursored shape — `executePage` returns
     // `{ rows, nextCursor? }`. `execute()` is the flat-array variant
     // for app code.
@@ -635,6 +649,9 @@ export function mountMantleAdmin<E extends Env>(
       search: c.req.query("search") || undefined,
       filter: filterField && filterValue
         ? { field: filterField, value: filterValue }
+        : undefined,
+      scope: scopeField && scopeValue
+        ? { field: scopeField, value: scopeValue }
         : undefined,
       sort: {
         field: c.req.query("sort") || "updatedAt",
@@ -715,11 +732,26 @@ export function mountMantleAdmin<E extends Env>(
         }),
       }, { status: 400 });
     }
+    const scopeField = c.req.query("scope_field");
+    const scopeValue = c.req.query("scope_value");
+    if (Boolean(scopeField) !== Boolean(scopeValue)) {
+      return Response.json({
+        ok: false,
+        diagnostic: runtimeDiagnostic({
+          code: "INPUT_VALIDATION_FAILED",
+          severity: "error",
+          path: "GET /admin/api/entries/export",
+          expected: "scope_field and scope_value together",
+          message: "List parent scope requires both `scope_field` and `scope_value`.",
+        }),
+      }, { status: 400 });
+    }
     const listOptions = {
       collection,
       status: statusQuery && statusQuery !== "all" ? statusQuery as ContentState : undefined,
       search: c.req.query("search") || undefined,
       filter: filterField && filterValue ? { field: filterField, value: filterValue } : undefined,
+      scope: scopeField && scopeValue ? { field: scopeField, value: scopeValue } : undefined,
       sort: {
         field: c.req.query("sort") || "updatedAt",
         direction: c.req.query("direction") === "asc" ? "asc" as const : "desc" as const,
@@ -1440,6 +1472,11 @@ type AdminEditorCollection = {
   readonly sortableFields: readonly string[];
   readonly filter: { readonly field: string; readonly values: readonly string[] } | null;
   readonly list: { readonly primaryField: string | null; readonly columns: readonly string[] };
+  readonly nav: {
+    readonly standalone: true;
+    readonly parentField: string;
+    readonly parentCollection: string;
+  } | null;
 };
 
 type AdminEditorEntry = {
@@ -1490,6 +1527,7 @@ function adminEditorCollection(
     sortableFields: schemaSortableFields(schema),
     filter: adminUi.filter,
     list: adminUi.list,
+    nav: adminUi.nav,
   };
 }
 

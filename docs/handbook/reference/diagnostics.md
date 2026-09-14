@@ -73,7 +73,7 @@ Raised by the parser, the graph validator and the code generator. `mantle valida
 | `UNIQUE_INDEX_FIELD_UNKNOWN` | A `uniqueIndexes` field is not a top-level Schema property. | — |
 | `SCHEMA_SEARCH_INVALID` | `searchableFields` repeats an entry or names a non-string property. | — |
 | `SCHEMA_SEARCH_FIELD_UNKNOWN` | A `searchableFields` entry is not a Schema property. | — |
-| `SCHEMA_UI_INVALID` | A Schema or Procedure `uiSchema` rule is broken, including a Schema declaring `uiSchema.collectionAction`. | — |
+| `SCHEMA_UI_INVALID` | A Schema or Procedure `uiSchema` rule is broken, including unknown roots, invalid `nav.standalone`, or a Schema declaring `uiSchema.collectionAction`. | — |
 | `HANDLER_BUILTIN_NOT_IN_V010` | A builtin Procedure was invoked on a runtime assembled without the builtin collaborator. | — |
 | `MANIFEST_ROOT_NOT_FOUND` | The manifests directory is missing, unreadable, or contains no `.yaml` or `.yml` file. | — |
 | `MANIFEST_READ_FAILED` | A manifest source could not be read. | — |

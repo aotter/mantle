@@ -1,4 +1,5 @@
 import type { JsonSchema, SchemaManifest, ViewManifest } from "../model/ManifestGrammar.js";
+import { MANTLE_REF_KEYWORD } from "../model/ManifestGrammar.js";
 import { checkSchemaIndexes } from "./SchemaIndexChecker.js";
 
 export interface SchemaListFilter {
@@ -9,6 +10,13 @@ export interface SchemaListFilter {
 export interface SchemaListPresentation {
   readonly primaryField: string | null;
   readonly columns: readonly string[];
+}
+
+/** Normalized Admin nav descriptor. Absent/`null` means fold-only. */
+export interface SchemaNavPresentation {
+  readonly standalone: true;
+  readonly parentField: string;
+  readonly parentCollection: string;
 }
 
 export interface SchemaAdminUiProblem {
@@ -115,6 +123,9 @@ export function checkViewAdminUi(view: ViewManifest): {
 }
 
 const EMPTY_LIST: SchemaListPresentation = { primaryField: null, columns: [] };
+const SCHEMA_UI_ROOTS = new Set(["fields", "list", "nav"]);
+const SCHEMA_LIST_KEYS = new Set(["filterField", "primaryField", "columns"]);
+const SCHEMA_NAV_KEYS = new Set(["standalone", "parentField"]);
 const SCALAR_TYPES = new Set(["string", "number", "integer", "boolean"]);
 
 export function schemaSortableFields(schema: SchemaManifest): readonly string[] {
@@ -129,14 +140,27 @@ export function schemaSortableFields(schema: SchemaManifest): readonly string[] 
 export function checkSchemaAdminUi(schema: SchemaManifest): {
   readonly filter: SchemaListFilter | null;
   readonly list: SchemaListPresentation;
+  readonly nav: SchemaNavPresentation | null;
   readonly problems: readonly SchemaAdminUiProblem[];
 } {
   const formProblem = checkFormUiSchema(schema.spec.schema, schema.spec.uiSchema, "Schema")[0];
   if (formProblem) return invalid(formProblem);
 
-  const list = schema.spec.uiSchema?.["list"];
-  if (list === undefined) return { filter: null, list: EMPTY_LIST, problems: [] };
-  if (!list || typeof list !== "object" || Array.isArray(list)) {
+  const uiSchema = schema.spec.uiSchema;
+  if (uiSchema === undefined) return { filter: null, list: EMPTY_LIST, nav: null, problems: [] };
+  const roots = uiSchema as Record<string, unknown>;
+  const unknownRoot = Object.keys(roots).find((key) => !SCHEMA_UI_ROOTS.has(key));
+  if (unknownRoot) {
+    return invalid(problem(
+      `/spec/uiSchema/${unknownRoot}`,
+      roots[unknownRoot],
+      "fields, list, or nav",
+      `Schema.spec.uiSchema.${unknownRoot} is not supported.`,
+    ));
+  }
+
+  const list = roots["list"];
+  if (list !== undefined && (!list || typeof list !== "object" || Array.isArray(list))) {
     return invalid(problem(
       "/spec/uiSchema/list",
       list,
@@ -145,8 +169,21 @@ export function checkSchemaAdminUi(schema: SchemaManifest): {
     ));
   }
 
-  const config = list as Record<string, unknown>;
-  const filterResult = checkListFilter(schema, config);
+  const config = (list ?? {}) as Record<string, unknown>;
+  if (list !== undefined) {
+    const unknownList = Object.keys(config).find((key) => !SCHEMA_LIST_KEYS.has(key));
+    if (unknownList) {
+      return invalid(problem(
+        `/spec/uiSchema/list/${unknownList}`,
+        config[unknownList],
+        "filterField, primaryField, or columns",
+        `Schema.spec.uiSchema.list.${unknownList} is not supported.`,
+      ));
+    }
+  }
+  const filterResult = list === undefined
+    ? { filter: null as SchemaListFilter | null }
+    : checkListFilter(schema, config);
   if (filterResult.problem) return invalid(filterResult.problem);
 
   const primaryField = config["primaryField"];
@@ -209,9 +246,13 @@ export function checkSchemaAdminUi(schema: SchemaManifest): {
     }
   }
 
+  const navResult = checkNav(schema, roots["nav"]);
+  if (navResult.problem) return invalid(navResult.problem);
+
   return {
     filter: filterResult.filter,
     list: { primaryField: normalizedPrimary, columns: normalizedColumns },
+    nav: navResult.nav,
     problems: [],
   };
 }
@@ -231,6 +272,17 @@ export function checkFormUiSchema(
     )];
   }
   const config = uiSchema as Record<string, unknown>;
+  if (owner === "Procedure") {
+    const unknownRoot = Object.keys(config).find((key) => key !== "collectionAction" && key !== "fields");
+    if (unknownRoot) {
+      return [problem(
+        `/spec/uiSchema/${unknownRoot}`,
+        config[unknownRoot],
+        "collectionAction or fields",
+        `Procedure.spec.uiSchema.${unknownRoot} is not supported.`,
+      )];
+    }
+  }
   const collectionAction = config["collectionAction"];
   if (collectionAction !== undefined && owner !== "Procedure") {
     return [problem(
@@ -349,6 +401,196 @@ function checkListFilter(
   return { filter: { field, values } };
 }
 
+function checkNav(
+  schema: SchemaManifest,
+  nav: unknown,
+): { readonly nav: SchemaNavPresentation | null; readonly problem?: SchemaAdminUiProblem } {
+  if (nav === undefined) return { nav: null };
+  if (!nav || typeof nav !== "object" || Array.isArray(nav)) {
+    return {
+      nav: null,
+      problem: problem(
+        "/spec/uiSchema/nav",
+        nav,
+        "an object",
+        "Schema.spec.uiSchema.nav must be an object.",
+      ),
+    };
+  }
+  const config = nav as Record<string, unknown>;
+  const unknown = Object.keys(config).find((key) => !SCHEMA_NAV_KEYS.has(key));
+  if (unknown) {
+    return {
+      nav: null,
+      problem: problem(
+        `/spec/uiSchema/nav/${unknown}`,
+        config[unknown],
+        "standalone or parentField",
+        `Schema.spec.uiSchema.nav.${unknown} is not supported.`,
+      ),
+    };
+  }
+
+  const standalone = config["standalone"];
+  if (standalone !== undefined && typeof standalone !== "boolean") {
+    return {
+      nav: null,
+      problem: problem(
+        "/spec/uiSchema/nav/standalone",
+        standalone,
+        "a boolean",
+        "Schema.spec.uiSchema.nav.standalone must be a boolean.",
+      ),
+    };
+  }
+
+  const parentField = config["parentField"];
+  if (parentField !== undefined && (typeof parentField !== "string" || !parentField)) {
+    return {
+      nav: null,
+      problem: problem(
+        "/spec/uiSchema/nav/parentField",
+        parentField,
+        "a non-empty required x-mantle-ref field name",
+        "Schema.spec.uiSchema.nav.parentField must be a field-name string.",
+      ),
+    };
+  }
+
+  if (parentField !== undefined && standalone !== true) {
+    return {
+      nav: null,
+      problem: problem(
+        "/spec/uiSchema/nav/parentField",
+        parentField,
+        "parentField only with standalone: true",
+        "Schema.spec.uiSchema.nav.parentField requires nav.standalone: true.",
+      ),
+    };
+  }
+
+  if (standalone !== true) return { nav: null };
+
+  if (schema.spec.translates) {
+    return {
+      nav: null,
+      problem: problem(
+        "/spec/uiSchema/nav/standalone",
+        true,
+        "standalone on a Schema that folds under a required-ref parent",
+        `Schema '${schema.metadata.name}' cannot declare nav.standalone because it is a translates child.`,
+      ),
+    };
+  }
+
+  const eligible = requiredMantleRefFields(schema);
+  if (eligible.length === 0) {
+    return {
+      nav: null,
+      problem: problem(
+        "/spec/uiSchema/nav/standalone",
+        true,
+        "standalone on a Schema with a required x-mantle-ref parent",
+        `Schema '${schema.metadata.name}' cannot declare nav.standalone: it has no required x-mantle-ref parent to fold under.`,
+      ),
+    };
+  }
+
+  if (eligible.length === 1) {
+    const only = eligible[0]!;
+    if (typeof parentField === "string" && parentField !== only.field) {
+      return {
+        nav: null,
+        problem: problem(
+          "/spec/uiSchema/nav/parentField",
+          parentField,
+          `the Schema's only required x-mantle-ref field '${only.field}'`,
+          `Schema '${schema.metadata.name}' nav.parentField must be '${only.field}'.`,
+        ),
+      };
+    }
+    return {
+      nav: { standalone: true, parentField: only.field, parentCollection: only.collection },
+    };
+  }
+
+  if (typeof parentField !== "string") {
+    return {
+      nav: null,
+      problem: problem(
+        "/spec/uiSchema/nav/parentField",
+        parentField,
+        `one of ${eligible.map((item) => item.field).join(", ")}`,
+        `Schema '${schema.metadata.name}' declares more than one required x-mantle-ref; nav.parentField is required.`,
+      ),
+    };
+  }
+  const matched = eligible.find((item) => item.field === parentField);
+  if (!matched) {
+    return {
+      nav: null,
+      problem: problem(
+        "/spec/uiSchema/nav/parentField",
+        parentField,
+        `one of ${eligible.map((item) => item.field).join(", ")}`,
+        `Schema '${schema.metadata.name}' nav.parentField must name a required x-mantle-ref field.`,
+      ),
+    };
+  }
+  return {
+    nav: { standalone: true, parentField: matched.field, parentCollection: matched.collection },
+  };
+}
+
+/** Required top-level properties that carry `x-mantle-ref`. Order follows
+ *  `properties` declaration — callers must not treat that order as a
+ *  standalone-filter default when more than one field is eligible. */
+export function requiredMantleRefFields(
+  schema: SchemaManifest,
+): readonly { readonly field: string; readonly collection: string }[] {
+  const required = new Set(schema.spec.schema.required ?? []);
+  const properties = schema.spec.schema.properties ?? {};
+  const fields: Array<{ field: string; collection: string }> = [];
+  for (const [field, property] of Object.entries(properties)) {
+    if (!required.has(field)) continue;
+    const collection = property[MANTLE_REF_KEYWORD];
+    if (typeof collection === "string" && collection.length > 0) {
+      fields.push({ field, collection });
+    }
+  }
+  return fields;
+}
+
+export function isRequiredMantleRefField(schema: SchemaManifest, field: string): boolean {
+  return requiredMantleRefFields(schema).some((item) => item.field === field);
+}
+
+/** Graph-time: standalone parent collection must exist and not be a translates child. */
+export function checkSchemaNavTargets(
+  schema: SchemaManifest,
+  schemasByName: ReadonlyMap<string, SchemaManifest>,
+): SchemaAdminUiProblem | null {
+  const { nav, problems } = checkSchemaAdminUi(schema);
+  if (problems.length > 0 || !nav) return null;
+  const parent = schemasByName.get(nav.parentCollection);
+  if (!parent || parent.spec.translates) {
+    const declaredParentField = schema.spec.uiSchema
+      && typeof schema.spec.uiSchema === "object"
+      && !Array.isArray(schema.spec.uiSchema)
+      && schema.spec.uiSchema["nav"]
+      && typeof schema.spec.uiSchema["nav"] === "object"
+      && !Array.isArray(schema.spec.uiSchema["nav"])
+      && "parentField" in (schema.spec.uiSchema["nav"] as Record<string, unknown>);
+    return problem(
+      declaredParentField ? "/spec/uiSchema/nav/parentField" : "/spec/uiSchema/nav/standalone",
+      nav.parentCollection,
+      "the metadata.name of an existing non-translates Schema",
+      `Schema '${schema.metadata.name}' nav parent collection '${nav.parentCollection}' is not an eligible fold parent.`,
+    );
+  }
+  return null;
+}
+
 function isScalar(schema: JsonSchema): boolean {
   const types = Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : [];
   return types.some((type) => SCALAR_TYPES.has(type)) &&
@@ -372,7 +614,8 @@ function problem(
 function invalid(problem: SchemaAdminUiProblem): {
   readonly filter: null;
   readonly list: SchemaListPresentation;
+  readonly nav: null;
   readonly problems: readonly SchemaAdminUiProblem[];
 } {
-  return { filter: null, list: EMPTY_LIST, problems: [problem] };
+  return { filter: null, list: EMPTY_LIST, nav: null, problems: [problem] };
 }

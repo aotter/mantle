@@ -119,6 +119,8 @@ export interface ListEntriesArgs {
   readonly searchFields?: readonly string[];
   /** Trusted exact enum filter resolved from the Schema's indexed fields. */
   readonly filter?: { readonly field: string; readonly value: string };
+  /** Trusted exact match on a required `x-mantle-ref` field (Admin parent scope). */
+  readonly scope?: { readonly field: string; readonly value: string };
   /** Native fields or Schema-indexed scalar data fields only. */
   readonly sort?: EntrySort;
 }
