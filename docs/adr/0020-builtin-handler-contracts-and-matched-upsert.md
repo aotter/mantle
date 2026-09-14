@@ -1,12 +1,20 @@
 # ADR-0020: Builtin Handler Contracts and Matched Upsert
 
-**Status:** Accepted
+**Status:** Accepted + amended by [ADR-0022](0022-caller-observed-version-occ.md)
 
 **Date:** 2026-09-01
 
 **Related:** [#765](https://github.com/aotter/mantle/issues/765),
 [#766](https://github.com/aotter/mantle/issues/766),
-ADR-0008, ADR-0010, ADR-0014, ADR-0019
+[#850](https://github.com/aotter/mantle/issues/850),
+ADR-0008, ADR-0010, ADR-0014, ADR-0019, ADR-0022
+
+> **Amendment (ADR-0022):** matched-upsert OCC no longer forbids caller
+> `expectedVersion` or substitutes `preloaded.version`. Keep this ADR for
+> builtin static contracts, `handler.match` / uniqueIndexes, `CONFLICT`
+> without auto-retry, and natural-key lookup without system `id`. Read
+> ADR-0022 for caller-observed version on the update branch, create vs
+> update, reserved wire names, and first-party Admin bind.
 
 ## Context
 
@@ -36,8 +44,10 @@ Manifest linking (`ManifestGraphValidator.ts`) now validates Procedure `input` s
   - Target Schema must have `lifecycle: "publishing"` (operational Schemas have no lifecycle transitions and cannot be archived).
   - `properties.id` must be strict, non-nullable `string`.
   - `required` must include `"id"`.
-- **`upsert` (legacy mode without `match`)**:
-  - If either `id` or `expectedVersion` is declared, both must be declared with strict string and number types respectively. Neither is in `required` because the create branch accepts new entries without IDs.
+- **`upsert` (legacy mode without `match`)** (ADR-0022):
+  - `properties.expectedVersion` must be declared as strict `number`.
+  - If `id` is declared it must be strict `string`. Neither is in `required`
+    because the create branch accepts new entries without IDs or versions.
 
 ### 2. Matched Upsert Grammar and Static Contract (`handler.match`)
 
@@ -58,6 +68,8 @@ spec:
         type: string
       body:
         type: string
+      expectedVersion:
+        type: number
     required:
       - slug
       - title
@@ -79,7 +91,11 @@ spec:
 - `handler.match` must exactly match one declared unique index in the target Schema's `spec.uniqueIndexes` (matching length, field names, and order).
 - Every field in `handler.match` must be declared in the target Schema's `spec.schema.properties`.
 - Every field in `handler.match` must be declared in Procedure `input.properties` and listed in `input.required`.
-- Procedure `input` must NOT declare `id` or `expectedVersion` when using `match`.
+- Procedure `input` must NOT declare `id` when using `match`.
+- Procedure `input` **must** declare `expectedVersion` as strict `number`
+  (ADR-0022). It is not globally required: create has no version; update
+  requires the caller token at runtime. Do not overwrite that token with
+  `preloaded.version`.
 
 ### 3. Runtime Semantics and Atomic Conflict Handling (`InvokeBuiltinUseCase.ts`)
 
@@ -88,9 +104,13 @@ When executing matched upsert:
 2. Query existing entry using `entries.findByDataFields({ collection, fields })`.
 3. **If found**: Execute update path (`opUpdate`):
    - Merge input into existing data using `projectUpdateAndStamp`, preserving omitted fields and system bindings.
-   - Use `existing.id` and `existing.version` for optimistic concurrency control (OCC).
+   - Require the caller's `expectedVersion` and pass **that** token to the
+     atomic repository OCC check. Do not use `existing.version` as the token
+     (ADR-0022). Missing token → `INPUT_VALIDATION_FAILED` (do not overwrite).
    - Pass caller's original input to lifecycle hooks (`before_update` / `after_update`).
-4. **If not found**: Execute create path (`opCreate`):
+4. **If not found**: Execute create path (`opCreate`) only when the caller
+   omitted `expectedVersion`. A versioned write for a missing row is
+   `NOT_FOUND` (do not recreate).
    - Project and stamp data using `projectAndStamp`.
    - Set status to `"published"` (if `lifecycle: "operational"`) or `"draft"` (if `lifecycle: "publishing"`).
    - Pass caller's original input to lifecycle hooks (`before_create` / `after_create`).
@@ -146,6 +166,7 @@ When executing matched upsert:
        properties:
          siteKey: { type: string }
          theme: { type: string }
+         expectedVersion: { type: number }
      output:
        type: object
      handler:

@@ -358,6 +358,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+const OBSERVED_VERSION_DESCRIPTION =
+  "Observed native entry.version at read time (not version+1). A successful write still bumps storage to this value + 1. First-party Admin/SDK bind this field automatically; other callers must send the version they read.";
+
+function annotateExpectedVersion(
+  schema: Record<string, unknown>,
+): Record<string, unknown> {
+  const properties = schema["properties"];
+  if (!isRecord(properties) || !isRecord(properties["expectedVersion"])) return schema;
+  const current = properties["expectedVersion"];
+  const description = current["description"];
+  if (typeof description === "string" && description.trim()) return schema;
+  return {
+    ...schema,
+    properties: {
+      ...properties,
+      expectedVersion: { ...current, description: OBSERVED_VERSION_DESCRIPTION },
+    },
+  };
+}
+
 /** Re-export the naming util from `domain/service/` so existing
  *  consumers of `McpToolCatalog` (the dispatcher) keep their import
  *  surface stable. */
@@ -394,7 +414,8 @@ function buildUpdateTool(schema: SchemaManifest): McpToolDefinition {
       id: { type: "string", description: "Entry id to update." },
       expected_version: {
         type: "number",
-        description: "OCC version (must match current row version).",
+        description:
+          "Observed native entry.version at read time (not version+1). A successful write still bumps storage to this value + 1.",
       },
       ...properties,
     },
@@ -430,7 +451,9 @@ function buildProcedureTool(capability: ProcedureCallableCapability): McpToolDef
     name: capability.name,
     ...(capability.title ? { title: capability.title } : {}),
     description: `${capability.description}${authorizationSummary(capability.manifest.spec.requires)}`,
-    inputSchema: capability.inputSchema as Record<string, unknown>,
+    inputSchema: annotateExpectedVersion(
+      capability.inputSchema as Record<string, unknown>,
+    ),
   };
 }
 
@@ -477,9 +500,11 @@ function describeCreateTool(schema: SchemaManifest): string {
 }
 
 function describeUpdateTool(schema: SchemaManifest): string {
+  const occ =
+    " Send expected_version as the observed native entry.version from read time, not version+1.";
   return resolveLifecycle(schema) === "operational"
-    ? `Update an operational record in '${schema.metadata.name}' with optimistic-concurrency check.`
-    : `Update a draft entry in '${schema.metadata.name}' with optimistic-concurrency check.`;
+    ? `Update an operational record in '${schema.metadata.name}' with optimistic-concurrency check.${occ}`
+    : `Update a draft entry in '${schema.metadata.name}' with optimistic-concurrency check.${occ}`;
 }
 
 interface AuthoringFields {

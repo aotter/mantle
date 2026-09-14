@@ -22,7 +22,7 @@ A Schema declares one collection: the JSON Schema for each entry's `data`, its i
 
 ### Reserved entry columns
 
-Every entry carries `id`, `status`, `version`, `createdAt`, `updatedAt` and `authorId` as native columns outside `data`. They cannot be indexed (`SCHEMA_INDEX_INVALID`) but are valid in View `fields`, `filter`, `orderBy` and `uiSchema.list`. `locale` is a reserved data field: only a localized Schema may declare it, and the runtime requires it on writes to a localized Schema. Do not name data properties after the native columns; SQL Views project the native column.
+Every entry carries `id`, `status`, `version`, `createdAt`, `updatedAt` and `authorId` as native columns outside `data`. They cannot be indexed (`SCHEMA_INDEX_INVALID`) but are valid in View `fields`, `filter`, `orderBy` and `uiSchema.list`. `locale` is a reserved data field: only a localized Schema may declare it, and the runtime requires it on writes to a localized Schema. Do not name data properties after the native columns; SQL Views project the native column. Do not declare `expectedVersion` under `spec.schema.properties` — that name is the reserved Procedure OCC token; validate fails closed with `INVALID_MANIFEST_ENVELOPE` (ADR-0022). New reserved Procedure input names need an ADR.
 
 ## Example
 
@@ -148,6 +148,8 @@ A free-form string that tells agents and Admin widgets how to render or produce 
 | `money-minor` | Integer amount in minor currency units. |
 | `timestamp-ms` | Unix epoch milliseconds. |
 | `idempotency-key` | On a Procedure input: Admin generates and hides one UUID per form; other callers generate one and reuse it on retry. |
+
+Do not use a hint for optimistic concurrency. The reserved Procedure input name `expectedVersion` is the OCC token (observed `entry.version` at read time). First-party Admin binds and hides it by that name. Schema `spec.schema.properties` must not declare it (`INVALID_MANIFEST_ENVELOPE`).
 
 ### Root `readOnly: true`
 

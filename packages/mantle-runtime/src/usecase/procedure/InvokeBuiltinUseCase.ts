@@ -36,8 +36,14 @@ import type { InvokeBuiltinRequest } from "../dto/procedure/index.js";
  *     Schema-declared keys land in `data` and `x-mantle-bind` fields are
  *     server-stamped from `ctx`.
  *   - `update` → `entries.update`. Caller supplies `id` +
- *     `expectedVersion` in the input; OCC enforced at the chokepoint.
- *   - `upsert` → `update` if `input.id` resolves, else `create`.
+ *     `expectedVersion` (observed native `entry.version` at read time,
+ *     not version+1); OCC enforced at the chokepoint. A successful write
+ *     still bumps storage to expectedVersion+1.
+ *   - `upsert` → create when no row matches and the caller omitted
+ *     `expectedVersion`; update when a row matches, using the **caller**
+ *     token (never `preloaded.version`). A versioned write for a missing
+ *     row is NOT_FOUND (do not recreate). Create-intent against an
+ *     existing row is INPUT_VALIDATION_FAILED (do not overwrite).
  *   - `delete` → guarded `entries.delete(...)` over the loaded row snapshot.
  *
  * Pre-projection original input is forwarded to the chokepoint via
@@ -157,9 +163,7 @@ export class InvokeBuiltinUseCase {
   ): Promise<EntryRow> {
     const opPath = `usecase/InvokeBuiltin/${schema.metadata.name}/update`;
     const id = preloaded ? preloaded.id : requireField(input, "id", "string");
-    const expectedVersion = preloaded
-      ? preloaded.version
-      : requireField(input, "expectedVersion", "number");
+    const expectedVersion = requireField(input, "expectedVersion", "number");
     // Read the existing row and PATCH it. The create projector
     // (`projectAndStamp`) would drop every Schema field the caller
     // omitted and re-stamp `x-mantle-bind` fields (author → current
@@ -215,6 +219,7 @@ export class InvokeBuiltinUseCase {
     now: number,
     handler: HandlerBuiltinBinding,
   ): Promise<EntryRow> {
+    const callerVersion = optionalExpectedVersion(input);
     if (handler.match && handler.match.length > 0) {
       const fields: Record<string, unknown> = {};
       for (const field of handler.match) {
@@ -225,7 +230,17 @@ export class InvokeBuiltinUseCase {
         fields,
       });
       if (existing) {
+        if (callerVersion === undefined) {
+          throw missingExpectedVersionOnUpdate(schema.metadata.name);
+        }
         return this.opUpdate(schema, input, ctx, now, existing);
+      }
+      if (callerVersion !== undefined) {
+        throw deletedTargetDiagnostic(
+          `usecase/InvokeBuiltin/${schema.metadata.name}/upsert`,
+          schema.metadata.name,
+          matchIdentity(handler.match, fields),
+        );
       }
       return this.opCreate(schema, input, ctx, now);
     }
@@ -233,7 +248,30 @@ export class InvokeBuiltinUseCase {
     const id = typeof input["id"] === "string" ? input["id"] : undefined;
     if (id) {
       const existing = await this.entries.get(id);
-      if (existing) return this.opUpdate(schema, input, ctx, now, existing);
+      if (existing) {
+        if (callerVersion === undefined) {
+          throw missingExpectedVersionOnUpdate(schema.metadata.name);
+        }
+        return this.opUpdate(schema, input, ctx, now, existing);
+      }
+      if (callerVersion !== undefined) {
+        throw deletedTargetDiagnostic(
+          `usecase/InvokeBuiltin/${schema.metadata.name}/upsert/${id}`,
+          schema.metadata.name,
+          id,
+        );
+      }
+    } else if (callerVersion !== undefined) {
+      throw new DiagnosticError(
+        runtimeDiagnostic({
+          code: "INPUT_VALIDATION_FAILED",
+          severity: "error",
+          path: "builtin-input/expectedVersion",
+          value: callerVersion,
+          expected: "omit expectedVersion on create, or supply id / match fields for update",
+          message: "Builtin upsert received expectedVersion without a target identity. Omit expectedVersion to create, or identify the row to update.",
+        }),
+      );
     }
     return this.opCreate(schema, input, ctx, now);
   }
@@ -337,4 +375,49 @@ function requireField<T extends "string" | "number">(
     );
   }
   return v as T extends "string" ? string : number;
+}
+
+function optionalExpectedVersion(input: Record<string, unknown>): number | undefined {
+  const value = input["expectedVersion"];
+  if (value === undefined) return undefined;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  throw new DiagnosticError(
+    runtimeDiagnostic({
+      code: "INPUT_VALIDATION_FAILED",
+      severity: "error",
+      path: "builtin-input/expectedVersion",
+      value,
+      expected: "finite number (observed native entry.version at read time, not version+1)",
+      message: "Builtin upsert expectedVersion must be a finite number when provided.",
+    }),
+  );
+}
+
+function missingExpectedVersionOnUpdate(collection: string): DiagnosticError {
+  return new DiagnosticError(
+    runtimeDiagnostic({
+      code: "INPUT_VALIDATION_FAILED",
+      severity: "error",
+      path: "builtin-input/expectedVersion",
+      expected: "number field 'expectedVersion' (observed native entry.version at read time)",
+      message: `Builtin upsert found an existing '${collection}' row; send expectedVersion from that read. Omitting it would overwrite the row.`,
+    }),
+  );
+}
+
+function deletedTargetDiagnostic(path: string, collection: string, identity: string): DiagnosticError {
+  return new DiagnosticError(
+    runtimeDiagnostic({
+      code: "NOT_FOUND",
+      severity: "error",
+      path,
+      value: identity,
+      expected: `existing ${collection} row for a versioned update`,
+      message: `Versioned upsert target not found (${identity}). The row was not created.`,
+    }),
+  );
+}
+
+function matchIdentity(match: readonly string[], fields: Record<string, unknown>): string {
+  return match.map((field) => `${field}=${String(fields[field])}`).join(",");
 }

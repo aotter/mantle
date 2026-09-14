@@ -513,6 +513,9 @@ export function mountMantleAdmin<E extends Env>(
         uiSchema: op.uiSchema,
         triggers: op.triggers,
         rowBindings: op.rowBindings,
+        targetCollection: op.procedure.spec.handler.kind === "builtin"
+          ? op.procedure.spec.handler.schema
+          : null,
       })),
     }),
   );

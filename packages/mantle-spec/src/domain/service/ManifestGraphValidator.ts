@@ -5,6 +5,8 @@ import {
 import {
   FILTER_COMPARISON_OPS,
   RESERVED_ENTRY_COLUMNS,
+  EXPECTED_VERSION_PROPERTY,
+  RESERVED_PROCEDURE_INPUT_NAMES,
   hasCtxUserRefKey,
   isCtxUserRef,
   type FilterAst,
@@ -52,6 +54,7 @@ export function validateManifestGraph(
   diags.push(...checkDuplicates("View", partitioned.views, filePaths));
   diags.push(...checkDuplicates("Procedure", partitioned.procedures, filePaths));
   diags.push(...checkDuplicates("Trigger", partitioned.triggers, filePaths));
+  diags.push(...checkSchemaReservedWireNames(partitioned.schemas, filePaths));
 
   diags.push(...checkTranslatesReferences(partitioned.schemas, "validate", filePaths));
 
@@ -105,6 +108,30 @@ function byName<M extends { metadata: { name: string } }>(arr: ReadonlyArray<M>)
   const m = new Map<string, M>();
   for (const x of arr) m.set(x.metadata.name, x);
   return m;
+}
+
+function checkSchemaReservedWireNames(
+  schemas: readonly SchemaManifest[],
+  filePaths?: ManifestFilePaths,
+): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  for (const schema of schemas) {
+    const properties = schema.spec.schema.properties ?? {};
+    for (const reserved of RESERVED_PROCEDURE_INPUT_NAMES) {
+      if (!(reserved in properties) || properties[reserved] === undefined) continue;
+      out.push(
+        validateDiagnostic({
+          code: "INVALID_MANIFEST_ENVELOPE",
+          severity: "error",
+          path: manifestPath("Schema", schema.metadata.name, `/spec/schema/properties/${reserved}`, filePaths),
+          value: reserved,
+          expected: `Schema data properties that do not collide with reserved Procedure input names (${RESERVED_PROCEDURE_INPUT_NAMES.join(", ")}). New reserved names need an ADR.`,
+          message: `Schema '${schema.metadata.name}' must not declare reserved Procedure input name '${reserved}' as a data property (ADR-0022). New reserved names need an ADR.`,
+        }),
+      );
+    }
+  }
+  return out;
 }
 
 function checkDuplicates<M extends { kind: string; metadata: { name: string } }>(
@@ -448,28 +475,10 @@ function checkBuiltinHandler(
       );
     }
 
-    if (!("expectedVersion" in inputProps) || inputProps.expectedVersion === undefined) {
-      out.push(
-        validateDiagnostic({
-          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-          severity: "error",
-          path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/expectedVersion", filePaths),
-          expected: "property 'expectedVersion' with type 'number'",
-          message: `Procedure '${p.metadata.name}' (builtin op: update) requires input property 'expectedVersion' with type 'number'.`,
-        }),
-      );
-    } else if (!isStrictTypeNumber(inputProps.expectedVersion)) {
-      out.push(
-        validateDiagnostic({
-          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-          severity: "error",
-          path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/expectedVersion", filePaths),
-          value: inputProps.expectedVersion.type,
-          expected: "type: 'number'",
-          message: `Procedure '${p.metadata.name}' (builtin op: update) property 'expectedVersion' must be strict type 'number'.`,
-        }),
-      );
-    }
+    pushExpectedVersionContract(out, p, inputProps, inputRequired, filePaths, {
+      opLabel: "update",
+      required: true,
+    });
 
     if (!inputRequired.has("id")) {
       out.push(
@@ -479,17 +488,6 @@ function checkBuiltinHandler(
           path: manifestPath("Procedure", p.metadata.name, "/spec/input/required", filePaths),
           expected: "required to include 'id'",
           message: `Procedure '${p.metadata.name}' (builtin op: update) requires 'id' in input.required.`,
-        }),
-      );
-    }
-    if (!inputRequired.has("expectedVersion")) {
-      out.push(
-        validateDiagnostic({
-          code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-          severity: "error",
-          path: manifestPath("Procedure", p.metadata.name, "/spec/input/required", filePaths),
-          expected: "required to include 'expectedVersion'",
-          message: `Procedure '${p.metadata.name}' (builtin op: update) requires 'expectedVersion' in input.required.`,
         }),
       );
     }
@@ -610,68 +608,28 @@ function checkBuiltinHandler(
           }),
         );
       }
-      if ("expectedVersion" in inputProps && inputProps.expectedVersion !== undefined) {
+      pushExpectedVersionContract(out, p, inputProps, inputRequired, filePaths, {
+        opLabel: "upsert",
+        required: false,
+      });
+    } else {
+      const hasId = "id" in inputProps && inputProps.id !== undefined;
+      if (hasId && !isStrictTypeString(inputProps.id)) {
         out.push(
           validateDiagnostic({
             code: "BUILTIN_HANDLER_CONTRACT_INVALID",
             severity: "error",
-            path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/expectedVersion", filePaths),
-            value: inputProps.expectedVersion,
-            expected: "no 'expectedVersion' property when using matched upsert",
-            message: `Procedure '${p.metadata.name}' uses matched upsert; input must not declare 'expectedVersion'.`,
+            path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/id", filePaths),
+            value: inputProps.id?.type,
+            expected: "type: 'string'",
+            message: `Procedure '${p.metadata.name}' (builtin op: upsert) property 'id' must be strict type 'string'.`,
           }),
         );
       }
-    } else {
-      const hasId = "id" in inputProps && inputProps.id !== undefined;
-      const hasVersion = "expectedVersion" in inputProps && inputProps.expectedVersion !== undefined;
-      if (hasId || hasVersion) {
-        if (!hasId) {
-          out.push(
-            validateDiagnostic({
-              code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-              severity: "error",
-              path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/id", filePaths),
-              expected: "property 'id' with type 'string'",
-              message: `Procedure '${p.metadata.name}' (builtin op: upsert) declares expectedVersion but is missing property 'id'.`,
-            }),
-          );
-        } else if (!isStrictTypeString(inputProps.id)) {
-          out.push(
-            validateDiagnostic({
-              code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-              severity: "error",
-              path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/id", filePaths),
-              value: inputProps.id?.type,
-              expected: "type: 'string'",
-              message: `Procedure '${p.metadata.name}' (builtin op: upsert) property 'id' must be strict type 'string'.`,
-            }),
-          );
-        }
-
-        if (!hasVersion) {
-          out.push(
-            validateDiagnostic({
-              code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-              severity: "error",
-              path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/expectedVersion", filePaths),
-              expected: "property 'expectedVersion' with type 'number'",
-              message: `Procedure '${p.metadata.name}' (builtin op: upsert) declares id but is missing property 'expectedVersion'.`,
-            }),
-          );
-        } else if (!isStrictTypeNumber(inputProps.expectedVersion)) {
-          out.push(
-            validateDiagnostic({
-              code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-              severity: "error",
-              path: manifestPath("Procedure", p.metadata.name, "/spec/input/properties/expectedVersion", filePaths),
-              value: inputProps.expectedVersion?.type,
-              expected: "type: 'number'",
-              message: `Procedure '${p.metadata.name}' (builtin op: upsert) property 'expectedVersion' must be strict type 'number'.`,
-            }),
-          );
-        }
-      }
+      pushExpectedVersionContract(out, p, inputProps, inputRequired, filePaths, {
+        opLabel: "upsert",
+        required: false,
+      });
     }
   }
 
@@ -698,6 +656,50 @@ function isStrictTypeNumber(s?: JsonSchema): boolean {
   if (s.type !== "number") return false;
   if ((s as { nullable?: boolean }).nullable === true) return false;
   return true;
+}
+
+function pushExpectedVersionContract(
+  out: Diagnostic[],
+  p: ProcedureManifest,
+  inputProps: Record<string, JsonSchema>,
+  inputRequired: ReadonlySet<string>,
+  filePaths: ManifestFilePaths | undefined,
+  opts: { readonly opLabel: string; readonly required: boolean },
+): void {
+  const declared = EXPECTED_VERSION_PROPERTY in inputProps && inputProps[EXPECTED_VERSION_PROPERTY] !== undefined;
+  if (!declared) {
+    out.push(
+      validateDiagnostic({
+        code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+        severity: "error",
+        path: manifestPath("Procedure", p.metadata.name, `/spec/input/properties/${EXPECTED_VERSION_PROPERTY}`, filePaths),
+        expected: `property '${EXPECTED_VERSION_PROPERTY}' with type 'number'`,
+        message: `Procedure '${p.metadata.name}' (builtin op: ${opts.opLabel}) requires input property '${EXPECTED_VERSION_PROPERTY}' with type 'number' (observed native entry.version at read time, not version+1).`,
+      }),
+    );
+  } else if (!isStrictTypeNumber(inputProps[EXPECTED_VERSION_PROPERTY])) {
+    out.push(
+      validateDiagnostic({
+        code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+        severity: "error",
+        path: manifestPath("Procedure", p.metadata.name, `/spec/input/properties/${EXPECTED_VERSION_PROPERTY}`, filePaths),
+        value: inputProps[EXPECTED_VERSION_PROPERTY]?.type,
+        expected: "type: 'number'",
+        message: `Procedure '${p.metadata.name}' (builtin op: ${opts.opLabel}) property '${EXPECTED_VERSION_PROPERTY}' must be strict type 'number'.`,
+      }),
+    );
+  }
+  if (opts.required && !inputRequired.has(EXPECTED_VERSION_PROPERTY)) {
+    out.push(
+      validateDiagnostic({
+        code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+        severity: "error",
+        path: manifestPath("Procedure", p.metadata.name, "/spec/input/required", filePaths),
+        expected: `required to include '${EXPECTED_VERSION_PROPERTY}'`,
+        message: `Procedure '${p.metadata.name}' (builtin op: ${opts.opLabel}) requires '${EXPECTED_VERSION_PROPERTY}' in input.required.`,
+      }),
+    );
+  }
 }
 
 function checkGuards(

@@ -256,6 +256,20 @@ describe("McpJsonRpcDispatcher", () => {
     expect(names).not.toContain("create_draft");
   });
 
+  it("update tools describe expected_version as the observed native version", () => {
+    const tools = buildMcpToolCatalog([postsSchema()]);
+    const update = tools.find((tool) => tool.name === "update_draft_posts");
+    expect(update?.description).toContain("observed native entry.version");
+    expect(update?.description).toContain("not version+1");
+    expect(update?.inputSchema).toMatchObject({
+      properties: {
+        expected_version: {
+          description: expect.stringContaining("not version+1"),
+        },
+      },
+    });
+  });
+
   it("collapses localized JSON Schema annotations at the MCP catalog boundary", () => {
     const baseSchema = postsSchema();
     const schema = {
