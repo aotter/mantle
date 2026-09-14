@@ -43,6 +43,8 @@ export interface Collection {
     parentField: string;
     parentCollection: string;
   } | null;
+  /** Translation-child Schemas set this; they are not workbench/subnav children. */
+  translates?: { parent: string; on: string } | null;
   schema?: JsonSchema;
 }
 

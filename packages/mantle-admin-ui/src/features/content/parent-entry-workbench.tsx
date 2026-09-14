@@ -5,7 +5,7 @@ import { useAdminLocation } from "../../app/router";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
-import { entryEditPath } from "../../lib/collection-nav";
+import { entryEditPath, hasFoldedChildCollections, isFoldedFieldChild } from "../../lib/collection-nav";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { Collection, EntryEditorPayload, SiteInfo } from "../../lib/types";
 import { Button } from "@/components/ui/button";
@@ -47,7 +47,8 @@ export function ParentEntryWorkbench({
     payload.entry.id,
   );
   const children = payload.related.filter((section) =>
-    section.relationship.kind === "field" && section.collection.parent?.collection === collectionName
+    section.relationship.kind === "field" &&
+    isFoldedFieldChild(section.collection, collectionName)
   );
   const selected = children.find((section) => section.collection.name === childParam) ?? children[0];
 
@@ -124,5 +125,5 @@ export function shouldOpenParentWorkbench(
   collections: readonly Collection[] | undefined,
   collectionName: string,
 ): boolean {
-  return (collections ?? []).some((collection) => collection.parent?.collection === collectionName);
+  return hasFoldedChildCollections(collections ?? [], collectionName);
 }
