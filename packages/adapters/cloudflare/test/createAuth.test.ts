@@ -1039,6 +1039,25 @@ describe("createAuth — boot invariants", () => {
     ]);
   });
 
+  it("emits native host-only cookies and rejects incompatible configuration", async () => {
+    expect(() => createAuth(baseConfig({ hostOnlyCookies: true, baseURL: "http://example.test" }))).toThrow("requires HTTPS");
+    expect(() => createAuth(baseConfig({ hostOnlyCookies: true, crossSubDomainCookies: { enabled: true, domain: "example.test" } }))).toThrow("cannot share");
+    const auth = createAuth(baseConfig({ hostOnlyCookies: true, cookiePrefix: "cloud" }));
+    await auth.ready;
+    const response = await auth.handler(new Request("https://example.test/api/auth/sign-out", {
+      method: "POST", headers: { origin: "https://example.test", "content-type": "application/json" }, body: "{}",
+    }));
+    expect(response.status).toBe(200);
+    const cookies = response.headers.getSetCookie();
+    expect(cookies.length).toBeGreaterThan(0);
+    for (const cookie of cookies) {
+      expect(cookie).toMatch(/^__Host-cloud\./);
+      expect(cookie).toMatch(/; Secure/i);
+      expect(cookie).toMatch(/; Path=\//i);
+      expect(cookie).not.toMatch(/; Domain=/i);
+    }
+  });
+
   it("constructs when cross-subdomain cookies are configured", () => {
     const auth = createAuth(
       baseConfig({

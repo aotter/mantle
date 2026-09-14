@@ -48,30 +48,26 @@
 
 .dark {
   color-scheme: dark;
-  --app-base: #02050d;
-  --chrome-glass: color-mix(in srgb, var(--app-base) 52%, transparent);
-  --app-background:
-    radial-gradient(110% 75% at 68% 28%, color-mix(in srgb, var(--mantle-blue-light) 26%, transparent), transparent 62%),
-    radial-gradient(100% 70% at 34% 82%, color-mix(in srgb, var(--mantle-blue-mid) 16%, transparent), transparent 70%),
-    linear-gradient(135deg, transparent 16%, rgb(235 240 255 / 3%) 48%, transparent 76%),
-    var(--app-base);
-  --background: rgb(3 7 18 / 68%);
-  --foreground: #f1f4fb;
-  --card: rgb(10 17 36 / 54%);
-  --card-foreground: #f1f4fb;
-  --popover: rgb(9 15 32 / 96%);
-  --popover-foreground: #f1f4fb;
-  --primary: var(--mantle-blue-deep);
+  --app-base: #171717;
+  --chrome-glass: #202020;
+  --app-background: var(--app-base);
+  --background: #171717;
+  --foreground: #f5f5f5;
+  --card: #202020;
+  --card-foreground: var(--foreground);
+  --popover: #262626;
+  --popover-foreground: var(--foreground);
+  --primary: var(--mantle-blue-mid);
   --primary-foreground: #ffffff;
-  --secondary: color-mix(in srgb, var(--mantle-blue-deep) 58%, transparent);
-  --secondary-foreground: #eef2fb;
-  --muted: color-mix(in srgb, var(--mantle-blue-deep) 48%, transparent);
-  --muted-foreground: #b8c3d8;
-  --accent: color-mix(in srgb, var(--mantle-blue-mid) 46%, transparent);
-  --accent-foreground: #f5f7fc;
+  --secondary: #2b2b2b;
+  --secondary-foreground: var(--foreground);
+  --muted: #242424;
+  --muted-foreground: #bdbdbd;
+  --accent: #333333;
+  --accent-foreground: var(--foreground);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: color-mix(in srgb, var(--mantle-blue-light) 28%, transparent);
-  --input: color-mix(in srgb, var(--mantle-blue-light) 34%, transparent);
+  --border: #404040;
+  --input: #525252;
   --ring: color-mix(in srgb, var(--mantle-blue-light) 76%, white);
   --success: oklch(0.723 0.219 149.579);
   --warning: oklch(0.828 0.189 84.429);
@@ -81,12 +77,12 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: rgb(5 10 24 / 58%);
-  --sidebar-foreground: #eef2fb;
-  --sidebar-primary: var(--mantle-blue-deep);
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: color-mix(in srgb, var(--mantle-blue-mid) 42%, transparent);
-  --sidebar-accent-foreground: #f5f7fc;
-  --sidebar-border: color-mix(in srgb, var(--mantle-blue-light) 26%, transparent);
-  --sidebar-ring: color-mix(in srgb, var(--mantle-blue-light) 76%, white);
+  --sidebar: #1c1c1c;
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }

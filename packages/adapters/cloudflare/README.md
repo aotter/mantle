@@ -204,3 +204,13 @@ Producer/consumer bindings, Worker export, idempotent D1/upstream examples,
 site-queue multiplexing, verification, and the legacy-envelope drain step are
 in the shipped
 `node_modules/@aotter/mantle/docs/handbook/cloudflare/deferred-hooks-queues.md`.
+
+### Host-only auth cookies
+
+For a control plane sharing a parent domain with untrusted tenants, pass
+`hostOnlyCookies: true` to `createAuth` (with an optional `cookiePrefix`). This
+uses native `__Host-` cookies with `Secure`, `Path=/` and no `Domain`. HTTPS is
+required and `crossSubDomainCookies.enabled` is rejected. Existing cookies use
+different names, so enable this during an explicit sign-in migration; do not
+rewrite old cookies at the application boundary. The default behavior remains
+unchanged. Social providers that require `SameSite=None` retain that attribute.

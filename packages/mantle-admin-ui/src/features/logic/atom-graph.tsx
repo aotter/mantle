@@ -101,7 +101,7 @@ function AudienceBadge({ language, audience, prominent = false }: { language: Ad
   const label = audienceLabel(language, audience);
   const description = audienceDescription(language, audience);
   return (
-    <span className={cn("inline-flex items-center gap-1 rounded border font-semibold uppercase tracking-wider", prominent ? "border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-800 shadow-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" : "border-border bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground")}>
+    <span className={cn("inline-flex items-center gap-1 rounded border font-semibold uppercase tracking-wider", prominent ? "border-slate-300 bg-white px-2 py-1 text-sm text-slate-800 shadow-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" : "border-border bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground")}>
       {label}
       <Tooltip>
         <TooltipTrigger asChild>
@@ -120,7 +120,7 @@ function AudienceGroupNode({ data }: NodeProps<AudienceGroupGraphNode>): React.R
     <section className="pointer-events-none h-full w-full overflow-hidden rounded-2xl border-2 border-blue-200 bg-blue-50 text-slate-950 shadow-sm dark:border-slate-600 dark:bg-[#111d35] dark:text-slate-50">
       <header className="flex h-12 items-center justify-between border-b border-blue-200 bg-blue-100 px-4 dark:border-slate-600 dark:bg-[#172845]">
         <AudienceBadge language={data.language} audience={data.audience} prominent />
-        <span className="rounded-full border border-slate-300 bg-white px-2.5 py-1 font-mono text-[11px] font-bold text-slate-700 shadow-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">{data.count}</span>
+        <span className="rounded-full border border-slate-300 bg-white px-2.5 py-1 font-mono text-sm font-bold text-slate-700 shadow-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">{data.count}</span>
       </header>
     </section>
   );
@@ -298,19 +298,19 @@ function layoutGraph(
         targetPosition: Position.Top,
         data: {
           label: (
-            <div className="min-w-0 space-y-1.5 text-start">
+            <div className="min-w-0 space-y-1 text-start">
               <div className="flex items-center gap-1.5">
-                <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atomKindLabel(language, atom.kind)}</span>
-                {atom.transport ? <span className="inline-flex rounded border bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">{atom.transport}</span> : null}
+                <span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider", atomKindTone[atom.kind])}>{atomKindLabel(language, atom.kind)}</span>
+                {atom.transport ? <span className="inline-flex rounded border bg-muted px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{atom.transport}</span> : null}
               </div>
-              <div className="truncate font-mono text-xs font-semibold">{atom.name}</div>
-              {title && title !== atom.name ? <div className="truncate text-[10px] text-muted-foreground">{title}</div> : null}
+              <div className="truncate font-mono text-sm font-semibold">{atom.name}</div>
+              {title && title !== atom.name ? <div className="truncate text-xs text-foreground/80">{title}</div> : null}
             </div>
           ),
         },
         ariaLabel: `${atomKindLabel(language, atom.kind)} ${atom.name}`,
         className: cn(
-          "!h-[76px] !w-[220px] !cursor-grab !rounded-xl !border-2 !bg-white !px-3 !py-2 !text-card-foreground !shadow-lg transition-[border-color,box-shadow,filter] hover:brightness-110 active:!cursor-grabbing dark:!bg-[#0a1124]",
+          "!h-[88px] !w-[220px] !cursor-grab !rounded-xl !border-2 !bg-white !px-3 !py-2 !text-card-foreground !shadow-lg transition-[border-color,box-shadow,filter] hover:brightness-110 active:!cursor-grabbing dark:!bg-[#0a1124]",
           atomKindNodeTone[atom.kind],
         ),
       } satisfies Node;
@@ -336,7 +336,7 @@ function ManifestEdge({ id, data, sourceX, sourceY, sourcePosition, targetX, tar
       <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />
       <EdgeLabelRenderer>
         <div
-          className="nodrag nopan pointer-events-none absolute z-20 whitespace-nowrap rounded-md border bg-popover px-1.5 py-0.5 text-[10px] font-semibold text-popover-foreground shadow-sm"
+          className="nodrag nopan pointer-events-none absolute z-20 whitespace-nowrap rounded-md border bg-popover px-1.5 py-0.5 text-xs font-semibold text-popover-foreground shadow-sm"
           style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, opacity: data?.opacity ?? 1, boxShadow: "0 0 0 3px var(--background)", transition: "opacity 180ms ease" }}
         >
           {data?.label}
@@ -352,13 +352,13 @@ export function layoutComponents(graph: DeveloperConsoleSnapshot["graph"]): Map<
 
 function layoutTopDown(graph: DeveloperConsoleSnapshot["graph"]): { positions: Map<string, { x: number; y: number }>; groups: Array<{ audience: DeveloperAudience; x: number; y: number; width: number; height: number; count: number }> } {
   const nodeWidth = 220;
-  const nodeHeight = 76;
-  const gap = 32;
-  const groupPadding = 24;
+  const nodeHeight = 88;
+  const gap = 24;
+  const groupPadding = 16;
   const groupHeader = 48;
   const groupColumns = 4;
   const layout = new dagre.graphlib.Graph({ multigraph: true }).setDefaultEdgeLabel(() => ({}));
-  layout.setGraph({ rankdir: "TB", nodesep: gap, ranksep: 160, edgesep: 20 });
+  layout.setGraph({ rankdir: "TB", nodesep: gap, ranksep: 80, edgesep: 20 });
   graph.atoms.forEach(({ id }) => layout.setNode(id, { width: nodeWidth, height: nodeHeight }));
   graph.relations.filter(({ kind }) => ["trigger-target", "procedure-schema", "collection-action", "view-source"].includes(kind)).forEach(({ id, sourceId, targetId }) => layout.setEdge(sourceId, targetId, {}, id));
   dagre.layout(layout);
@@ -376,7 +376,7 @@ function layoutTopDown(graph: DeveloperConsoleSnapshot["graph"]): { positions: M
     const height = groupHeader + groupPadding + rows * nodeHeight + (rows - 1) * gap + groupPadding;
     groups.push({ audience, x: groupX, y: 48, width, height, count: atoms.length });
     atoms.forEach((atom, index) => positions.set(atom.id, { x: groupX + groupPadding + index % groupColumns * (nodeWidth + gap), y: 48 + groupHeader + groupPadding + Math.floor(index / groupColumns) * (nodeHeight + gap) }));
-    groupX += width + 56;
+    groupX += width + 32;
   });
 
   const surfaceBottom = Math.max(...groups.map(({ y, height }) => y + height), 200);
@@ -402,9 +402,9 @@ function layoutTopDown(graph: DeveloperConsoleSnapshot["graph"]): { positions: M
     }
     return rows * (nodeHeight + gap);
   };
-  const procedureY = surfaceBottom + 180;
+  const procedureY = surfaceBottom + 64;
   const procedureHeight = pack(graph.atoms.filter(({ kind }) => kind === "Procedure"), procedureY, ["trigger-target"]);
-  pack(graph.atoms.filter(({ kind }) => kind === "Schema"), procedureY + procedureHeight + 140, ["procedure-schema", "collection-action", "view-source"]);
+  pack(graph.atoms.filter(({ kind }) => kind === "Schema"), procedureY + procedureHeight + 48, ["procedure-schema", "collection-action", "view-source"]);
   return { positions, groups };
 }
 

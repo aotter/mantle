@@ -10,3 +10,21 @@ surfaces, and Mantle-branded system pages.
 
 This package is prerelease software. Its `package.json` is the exact version
 authority; the API surface may change until `v0.1.0`.
+
+## Same-origin sandbox preview
+
+Use the separate `dist/preview.html` document for a Builder preview. Copy its
+assets unchanged; replace the `/_mantle/admin/` asset prefix if mounting the copy
+elsewhere. Serve the preview document at your own preview route. Do not patch the
+JavaScript bundle or change the canonical Admin document.
+
+Before its module script boots, install your sandbox transport as `window.fetch`
+and set `window.__MANTLE_ADMIN_PREVIEW__ = { fetch: window.fetch }`. The transport
+must intercept all Admin/auth API requests and reject failures; never fall back
+to live Admin API requests. The preview refuses to render without this explicit
+bridge, outside an iframe, in nested frames, or with a foreign-origin parent.
+Only a same-origin top-level parent is supported. The ordinary `index.html`
+continues to refuse all iframe rendering.
+
+This is a consumer-owned sandbox contract, not a way to embed authenticated
+production Admin. Do not mount it in an untrusted same-origin application.
