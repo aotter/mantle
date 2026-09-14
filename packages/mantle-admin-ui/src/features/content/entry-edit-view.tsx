@@ -169,10 +169,10 @@ export function EntryEditView({
   const parentLink = parentAdminLink(payload.collection, data, payload.parentEntryId);
   const translationSections = payload.related.filter((section) => section.relationship.kind === "translation");
   const hasWorkbench = payload.related.some((section) =>
-    section.relationship.kind === "field" && isFoldedFieldChild(section.collection, collectionName)
+    section.relationship.kind === "field" && isFoldedFieldChild(section.collection, collectionName, section.relationship.childField)
   );
   const inlineRelated = payload.related.filter((section) =>
-    section.relationship.kind === "field" && !isFoldedFieldChild(section.collection, collectionName)
+    section.relationship.kind === "field" && !isFoldedFieldChild(section.collection, collectionName, section.relationship.childField)
   );
   const backHref = hasWorkbench
     ? `/admin/c/${encodeURIComponent(collectionName)}/${encodeURIComponent(entryId)}`

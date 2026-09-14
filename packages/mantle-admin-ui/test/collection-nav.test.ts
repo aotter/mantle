@@ -3,6 +3,7 @@ import {
   foldedChildCollections,
   hasFoldedChildCollections,
   isPrimaryNavCollection,
+  isFoldedFieldChild,
   entryEditPath,
   entryLandingPath,
 } from "../src/lib/collection-nav";
@@ -27,6 +28,13 @@ function collection(overrides: Partial<Collection>): Collection {
 }
 
 describe("collection nav helpers", () => {
+  it("folds only the composition field when another ref targets the same parent", () => {
+    const projects = collection({ name: "projects", parent: orgFold });
+    const relatedFields = ["billingOrganizationId", "organizationId", "secondaryOrganizationId"];
+    expect(relatedFields.filter((field) => isFoldedFieldChild(projects, "organizations", field)))
+      .toEqual(["organizationId"]);
+    expect(isFoldedFieldChild(projects, "other-parent", "organizationId")).toBe(false);
+  });
   it("keeps folded children out of main Nav unless standalone is set", () => {
     const child = collection({ name: "projects", parent: orgFold });
     expect(isPrimaryNavCollection(child)).toBe(false);

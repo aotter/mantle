@@ -72,7 +72,19 @@ import { entryEditPath, entryLandingPath, hasFoldedChildCollections } from "../.
 const COLLECTION_PAGE_SIZE = 50;
 type SortDirection = "asc" | "desc";
 
-export function CollectionView({
+export function CollectionView(props: React.ComponentProps<typeof CollectionList>): React.ReactElement {
+  const { search } = useAdminLocation();
+  // A different collection or parent is a different editing context. Reset
+  // selections and cached rows synchronously, before any new list can render.
+  const identity = JSON.stringify([
+    props.collectionName,
+    props.scope?.field,
+    props.scope?.value ?? new URLSearchParams(search).get("parent"),
+  ]);
+  return <CollectionList key={identity} {...props} />;
+}
+
+function CollectionList({
   collectionName,
   scope,
   layout = "page",

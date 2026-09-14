@@ -48,7 +48,7 @@ export function ParentEntryWorkbench({
   );
   const children = payload.related.filter((section) =>
     section.relationship.kind === "field" &&
-    isFoldedFieldChild(section.collection, collectionName)
+    isFoldedFieldChild(section.collection, collectionName, section.relationship.childField)
   );
   const selected = children.find((section) => section.collection.name === childParam) ?? children[0];
 

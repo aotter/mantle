@@ -448,7 +448,8 @@ export function mountMantleAdmin<E extends Env>(
   guarded("get", "/admin/api/collections", () => Response.json({ collections }));
 
   guarded("get", "/admin/api/collections/:name/statistics", async (c) => {
-    const collection = collections.find((item) => item.name === c.req.param("name") && !item.parent);
+    const collection = collections.find((item) => item.name === c.req.param("name") &&
+      (!item.parent || item.nav?.standalone === true));
     if (!collection) return Response.json({ error: "Collection not found" }, { status: 404 });
     const ranges: Record<string, readonly [number, number]> = {
       "1h": [3_600_000, 300_000], "24h": [86_400_000, 3_600_000],

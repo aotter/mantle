@@ -8,12 +8,15 @@ export function isPrimaryNavCollection(
 }
 
 /** Required-ref composition children only. Translation children also set
- *  `parent` via `collectionParentFor`, but they stay on language tabs. */
+ *  `parent` via `collectionParentFor`, but they stay on language tabs.
+ *  For a related section, match its field so other refs stay inline. */
 export function isFoldedFieldChild(
   collection: Pick<Collection, "parent" | "translates">,
   parentName: string,
+  childField?: string,
 ): boolean {
-  return collection.parent?.collection === parentName && !collection.translates;
+  return collection.parent?.collection === parentName && !collection.translates &&
+    (childField === undefined || collection.parent.childField === childField);
 }
 
 export function foldedChildCollections(
