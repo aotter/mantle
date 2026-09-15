@@ -1,5 +1,6 @@
 import type { Context, Env, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { staffMcp } from "./staffMcp.js";
 import { rejectCrossOriginMutation } from "./rejectCrossOriginMutation.js";
 import {
   DiagnosticError,
@@ -306,6 +307,15 @@ export function mountMantleAdmin<E extends Env>(
       return body(c, gate);
     });
   };
+
+  guarded("get", "/admin/api/webmcp", async () => {
+    const { tools, routes } = await staffMcp(await ref.get(), ref.plan);
+    return Response.json({ tools, routes }, { headers: { "cache-control": "private, no-store" } });
+  });
+  guarded("post", "/admin/api/mcp", async (c, gate) => {
+    const { dispatcher } = await staffMcp(await ref.get(), ref.plan);
+    return dispatcher.dispatch(c.req.raw, adminHandlerContext(c, gate, ref));
+  });
 
   guarded("get", "/admin/api/me", (_c, gate) =>
     Response.json({ login: gate.login, role: gate.role, userId: gate.userId, image: gate.image }),

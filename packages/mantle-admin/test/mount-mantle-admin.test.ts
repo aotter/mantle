@@ -411,6 +411,83 @@ spec:
   });
 });
 
+describe("Admin staff WebMCP", () => {
+  it("reuses staff MCP discovery, preserves media descriptions, and rechecks session roles", async () => {
+    const plan = compilePlan(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: staff-action }
+spec:
+  description: Staff operation description
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: staffAction }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: staff-action-mcp }
+spec:
+  source: { kind: mcp, surface: staff }
+  target: { procedure: staff-action }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: member-action }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: memberAction }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: member-action-mcp }
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: member-action }
+`);
+    let role: string | null = "owner";
+    let purposes = [{ name: "photo", required: ["image/webp"], maxBytes: { "image/webp": 1000 } }];
+    const invokeTrigger = vi.fn(async () => ({ ok: true, data: { done: true } }));
+    const runtime = {
+      schemas: new Map(), invokeTrigger,
+      siteConfig: { load: async () => ({ media: { purposes } }) },
+      media: { createUpload: {}, commitUpload: {} },
+    } as unknown as MantleAdminRuntime;
+    const app = new Hono();
+    mountMantleAdmin(app, { plan, get: async () => runtime, assets: { fetch: async () => null }, auth: {
+      ...auth, getSession: async () => ({ session: { id: "s" }, user: { id: "staff" } }), getUserRole: async () => role,
+    } });
+    const call = (method: string, params?: unknown, origin = "https://example.test") => app.request("https://example.test/admin/api/mcp", {
+      method: "POST", headers: { origin, "content-type": "application/json", "mcp-protocol-version": "2025-11-25" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    });
+    const catalog = await (await app.request("https://example.test/admin/api/webmcp")).json();
+    const rpc = await (await call("tools/list")).json();
+    expect(catalog.tools).toEqual(rpc.result.tools);
+    const names = catalog.tools.map((tool: { name: string }) => tool.name);
+    expect(names).toContain("create_media_upload");
+    expect(names).toContain("commit_media_upload");
+    const staffTool = catalog.tools.find((tool: { description: string }) => tool.description === "Staff operation description");
+    expect(staffTool).toBeDefined();
+    expect(names.some((name: string) => name.includes("member"))).toBe(false);
+    expect((await (await call("tools/call", { name: staffTool.name, arguments: {} })).json()).result).toBeDefined();
+    expect(invokeTrigger).toHaveBeenCalledWith(expect.objectContaining({ ctx: expect.objectContaining({ staff: { id: "staff", role: "owner" }, auth: expect.objectContaining({ credential: "session" }) }) }));
+    expect((await call("tools/call", { name: staffTool.name }, "https://evil.test")).status).toBe(403);
+    const unknown = await (await call("tools/call", { name: "member_action" })).json();
+    expect(unknown.error).toBeDefined();
+    purposes = [];
+    expect((await (await app.request("https://example.test/admin/api/webmcp")).json()).tools.some((tool: { name: string }) => tool.name === "create_media_upload")).toBe(false);
+    role = null;
+    expect((await app.request("https://example.test/admin/api/webmcp")).status).toBe(403);
+    expect((await call("tools/list")).status).toBe(403);
+  });
+  it("denies anonymous discovery and execution before preparing storage", async () => {
+    const app = mounted();
+    expect((await app.request("https://example.test/admin/api/webmcp")).status).toBe(401);
+    expect((await app.request("https://example.test/admin/api/mcp", { method: "POST" })).status).toBe(401);
+  });
+});
+
 function mounted(overrides: Partial<AdminAuth> = {}, plan: RuntimePlan = compiled.value): Hono {
   const app = new Hono();
   mountMantleAdmin(app, {

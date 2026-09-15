@@ -17,6 +17,13 @@ import type { AdminLanguage } from "./preferences";
  */
 export const STRINGS = {
   en: {
+    "webmcp.title": "Work with an AI agent",
+    "webmcp.description": "WebMCP is available in this browser. An AI agent can use your staff tools, upload images and navigate Admin with your current permissions. Copy this prompt into your agent to begin.",
+    "webmcp.prompt": "Use the WebMCP tools on this Mantle Admin page. First call admin_get_context and explain what you can help me do. Ask what I want to accomplish, then use the available staff tools and show the relevant page. Read the current version before updates; do not retry conflicts automatically. For images, use create_media_upload, upload directly to the returned URLs, then commit_media_upload.",
+    "webmcp.copied": "Copied",
+    "webmcp.copy": "Copy prompt",
+    "webmcp.copyFailed": "Could not copy. Select and copy the prompt manually.",
+
     "admin.consoleTitle": "Admin console",
     "developer.workspaceTitle": "Developer",
     "auth.accessDenied.title": "Access denied",
@@ -542,6 +549,13 @@ export const STRINGS = {
     "entryEdit.dateTime.time": "Time",
   },
   "zh-TW": {
+    "webmcp.copied": "已複製",
+    "webmcp.title": "與 AI agent 一起操作",
+    "webmcp.description": "此瀏覽器已支援 WebMCP。AI agent 可依你目前的後台權限操作工具、上傳圖片及切換頁面。複製下方提示詞給 agent 即可開始。",
+    "webmcp.prompt": "請使用這個 Mantle Admin 頁面的 WebMCP 工具。先呼叫 admin_get_context，說明你可以協助我做什麼，再詢問我的目標。使用可用的 staff 工具，並顯示相關頁面。更新前先讀取目前版本；版本衝突時不要自動重試。圖片請使用 create_media_upload，直接上傳到回傳的 URL，再呼叫 commit_media_upload。",
+    "webmcp.copy": "複製提示詞",
+    "webmcp.copyFailed": "無法複製，請選取提示詞後手動複製。",
+
     "admin.consoleTitle": "管理後台",
     "developer.workspaceTitle": "開發者檢視",
     "auth.accessDenied.title": "無法存取",
@@ -1067,6 +1081,13 @@ export const STRINGS = {
     "entryEdit.dateTime.time": "時間",
   },
   "zh-CN": {
+    "webmcp.copied": "已复制",
+    "webmcp.title": "与 AI agent 一起操作",
+    "webmcp.description": "此浏览器已支持 WebMCP。AI agent 可按你当前的后台权限操作工具、上传图片及切换页面。复制下方提示词给 agent 即可开始。",
+    "webmcp.prompt": "请使用这个 Mantle Admin 页面的 WebMCP 工具。先调用 admin_get_context，说明你可以协助我做什么，再询问我的目标。使用可用的 staff 工具，并显示相关页面。更新前先读取当前版本；版本冲突时不要自动重试。图片请使用 create_media_upload，直接上传到返回的 URL，再调用 commit_media_upload。",
+    "webmcp.copy": "复制提示词",
+    "webmcp.copyFailed": "无法复制，请选中提示词后手动复制。",
+
     "admin.consoleTitle": "管理后台",
     "developer.workspaceTitle": "开发",
     "auth.accessDenied.noStaff": "你已登录，但这个账号没有管理后台权限。",

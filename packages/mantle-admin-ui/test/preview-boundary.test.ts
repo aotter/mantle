@@ -30,6 +30,7 @@ it("keeps the built preview on its bridge, including search and downloads, while
               const url = new URL(request.url);
               const path = url.pathname;
               window.bridged.push(path + url.search);
+              if (path === '/admin/api/webmcp') return Response.json({tools:[],routes:{}});
               if (path === '/admin/api/me') return Response.json({role:'owner',login:'sandbox',image:null}, {status:${route === "/admin/unauthorized" ? 401 : 200}});
               if (path === '/admin/api/site') return Response.json({brand:'Sandbox',icons:[],locales:['en'],canonicalLocale:'en'});
               if (path === '/admin/api/collections') return Response.json({collections:[]});
@@ -66,6 +67,13 @@ it("keeps the built preview on its bridge, including search and downloads, while
     await page.goto(`${origin}/host`);
     const frame = page.frames()[1]!;
     await frame.getByRole("cell", {name:"Ada",exact:true}).waitFor();
+    const tools = await page.evaluate(() => new Promise(resolve => {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = event => { resolve(event.data); channel.port1.close(); };
+      document.querySelector("iframe")!.contentWindow!.postMessage({ type: "mantle:admin-tools:request", protocolVersion: 1, method: "list" }, location.origin, [channel.port2]);
+    }));
+    expect(tools).toMatchObject({ok:true,result:{tools:expect.arrayContaining([expect.objectContaining({name:"admin_navigate"})])}});
+
     await frame.getByRole("search").getByRole("textbox").fill("Ada");
     await frame.getByRole("search").getByRole("button", {name:"Search",exact:true}).click();
     await expect.poll(() => frame.url()).toContain("search=Ada");

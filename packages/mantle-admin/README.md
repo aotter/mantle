@@ -13,3 +13,13 @@ platform-neutral `MantleOAuthAuth` contract and may call `handleMantleOAuth`
 directly; `mountMantleOAuth` is the existing thin Hono bridge. Admin assets use
 the shared React/shadcn UI, while no-assets deployments receive only a minimal
 functional HTML fallback.
+
+### Admin WebMCP
+
+Admin exposes the canonical **staff** MCP catalog at `GET /admin/api/webmcp`
+and accepts JSON-RPC calls at `POST /admin/api/mcp` using the current staff
+session. Descriptions, schemas, media upload tools and diagnostics match MCP.
+The Admin UI registers these tools when `document.modelContext` is available,
+adds page context/navigation, and shows a green WebMCP help/prompt control.
+See [ADR-lite #861](../../docs/adr/adr-lite-861-admin-webmcp.md) for the preview
+bridge, authorization and binary upload boundaries.
