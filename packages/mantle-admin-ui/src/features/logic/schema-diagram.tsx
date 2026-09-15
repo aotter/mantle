@@ -40,7 +40,7 @@ function SchemaDiagramCanvas({ snapshot, onOpen }: { snapshot: DeveloperConsoleS
   React.useEffect(() => {
     if (flow && nodesInitialized && !fitted.current) {
       fitted.current = true;
-      void flow.fitView({ padding: 0.12 });
+      void flow.fitView({ padding: 0.12, maxZoom: 1 });
     }
   }, [flow, nodesInitialized]);
 
@@ -59,7 +59,7 @@ function SchemaDiagramCanvas({ snapshot, onOpen }: { snapshot: DeveloperConsoleS
   const relayout = (): void => {
     setNodes(layout.nodes);
     setEdges(layout.edges);
-    window.requestAnimationFrame(() => void flow?.fitView({ padding: 0.12, duration: 240 }));
+    window.requestAnimationFrame(() => void flow?.fitView({ padding: 0.12, maxZoom: 1, duration: 240 }));
   };
 
   return (
@@ -78,7 +78,7 @@ function SchemaDiagramCanvas({ snapshot, onOpen }: { snapshot: DeveloperConsoleS
       onPaneClick={() => select(null)}
       nodesConnectable={false}
       fitView
-      fitViewOptions={{ padding: 0.12 }}
+      fitViewOptions={{ padding: 0.12, maxZoom: 1 }}
       minZoom={0.35}
       maxZoom={1.8}
     >
