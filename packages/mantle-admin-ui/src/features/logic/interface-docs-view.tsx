@@ -1,10 +1,10 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Braces, Eye, Globe2 } from "lucide-react";
+import { Eye } from "lucide-react";
 
 import { t } from "../../app/i18n";
 import { usePreferences } from "../../app/preferences";
-import { useAdminLocation, useAdminRouter } from "../../app/router";
+import { useAdminLocation } from "../../app/router";
 import { adminWebMcpQueryOptions, developerConsoleQueryOptions } from "../../lib/queries";
 import type { AdminTool } from "../../lib/admin-tools";
 import type { DeveloperCallableCapability, DeveloperHttpOperation, JsonSchema } from "../../lib/types";
@@ -13,7 +13,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { atomKindLabel, audienceLabel } from "./atom-graph";
 import { developerDetailHref } from "./developer-route";
 
@@ -24,11 +23,10 @@ const binding = await bindWebMcp();`;
 export function InterfaceDocsView(): React.ReactElement {
   const { language } = usePreferences();
   const location = useAdminLocation();
-  const { navigate } = useAdminRouter();
   const snapshot = useQuery(developerConsoleQueryOptions());
   const adminWebMcp = useQuery(adminWebMcpQueryOptions());
-  const requestedTab = new URLSearchParams(location.search).get("tab");
-  const tab = requestedTab === "mcp" || requestedTab === "webmcp" ? requestedTab : "api";
+  const section = location.pathname.split("/").pop();
+  const page = section === "mcp" || section === "webmcp" ? section : "api";
 
   if (snapshot.isError) return <div className="p-6"><ErrorBox error={snapshot.error} /></div>;
   if (snapshot.isLoading) return <Skeleton className="h-full w-full rounded-none" />;
@@ -44,20 +42,14 @@ export function InterfaceDocsView(): React.ReactElement {
         <h1 className="text-xl font-semibold">{t(language, "docs.title")}</h1>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{t(language, "docs.intro")}</p>
       </header>
-      <Tabs value={tab} onValueChange={(value) => navigate(`/admin/dev/docs?tab=${value}`)} className="gap-0">
-        <TabsList variant="line" className="sticky top-0 z-10 h-11 w-full justify-start rounded-none border-b bg-background/95 px-5 backdrop-blur sm:px-7">
-          <TabsTrigger value="api" className="flex-none"><Globe2 aria-hidden />{t(language, "docs.api")}</TabsTrigger>
-          <TabsTrigger value="mcp" className="flex-none"><McpIcon />{t(language, "docs.mcp")}</TabsTrigger>
-          <TabsTrigger value="webmcp" className="flex-none"><Braces aria-hidden />{t(language, "docs.webmcp")}</TabsTrigger>
-        </TabsList>
-        <TabsContent value="api">
+      {page === "api" ? (
           <DocSection intro={t(language, "docs.httpIntro")}>
             {publicServices.length ? <OperationSection title={t(language, "docs.publicEndpoint")} operations={publicServices} /> : null}
             {httpTriggers.length ? <OperationSection title={atomKindLabel(language, "Trigger")} operations={httpTriggers} /> : null}
             {!http.length ? <EmptyDocs /> : null}
           </DocSection>
-        </TabsContent>
-        <TabsContent value="mcp">
+      ) : null}
+      {page === "mcp" ? (
           <DocSection intro={t(language, "docs.mcpIntro")} endpoints={<><Endpoint label={t(language, "docs.publicEndpoint")} value="/mcp" /><Endpoint label={t(language, "docs.staffEndpoint")} value="/mcp/staff" /></>}>
             {(["public", "staff"] as const).map((surface) => {
               const entries = callable.filter((capability) => capability.surface === surface);
@@ -65,8 +57,8 @@ export function InterfaceDocsView(): React.ReactElement {
             })}
             {!callable.length ? <EmptyDocs /> : null}
           </DocSection>
-        </TabsContent>
-        <TabsContent value="webmcp">
+      ) : null}
+      {page === "webmcp" ? (
           <DocSection intro={t(language, "docs.intro")}>
             <section className="space-y-3">
               <div className="flex flex-wrap items-center gap-3"><h2 className="me-auto text-sm font-semibold uppercase tracking-wider text-muted-foreground">Admin WebMCP</h2><Endpoint label={t(language, "docs.catalogEndpoint")} value="/admin/api/webmcp" /></div>
@@ -81,8 +73,7 @@ export function InterfaceDocsView(): React.ReactElement {
             {!webMcp.length ? <EmptyDocs /> : null}
             </section>
           </DocSection>
-        </TabsContent>
-      </Tabs>
+      ) : null}
     </section>
   );
 }
@@ -90,16 +81,6 @@ export function InterfaceDocsView(): React.ReactElement {
 function AdminToolCard({ tool }: { tool: AdminTool }): React.ReactElement {
   const { language } = usePreferences();
   return <Card><CardHeader><div className="flex gap-2"><Badge variant="secondary">{t(language, "docs.staffEndpoint")}</Badge>{tool.annotations?.readOnlyHint ? <Badge variant="outline">{t(language, "docs.readOnly")}</Badge> : null}</div><CardTitle className="font-mono text-sm">{tool.name}</CardTitle><CardDescription>{tool.description}</CardDescription></CardHeader><CardContent><SchemaDetails label={t(language, "docs.inputSchema")} schema={tool.inputSchema} /></CardContent></Card>;
-}
-
-function McpIcon(): React.ReactElement {
-  return (
-    <svg viewBox="0 0 190 195" fill="none" aria-hidden>
-      <path d="M25 97.8528 92.8823 29.9706c9.3727-9.3726 24.5687-9.3726 33.9407 0 9.373 9.3725 9.373 24.5685 0 33.9411L75.5581 115.177" stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
-      <path d="m76.2653 114.47 50.5577-50.5583c9.373-9.3726 24.569-9.3726 33.942 0l.353.3535c9.373 9.3726 9.373 24.5686 0 33.9411L99.7248 159.6a8 8 0 0 0 0 11.313l12.6062 12.607" stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
-      <path d="m109.853 46.9411-50.2048 50.2046c-9.3725 9.3723-9.3725 24.5683 0 33.9413 9.3726 9.372 24.5686 9.372 33.9412 0l50.2046-50.2048" stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
-    </svg>
-  );
 }
 
 function DocSection({ intro, endpoints, children }: { intro: string; endpoints?: React.ReactNode; children: React.ReactNode }): React.ReactElement {

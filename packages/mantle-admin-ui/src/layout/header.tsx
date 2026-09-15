@@ -120,6 +120,6 @@ function currentPage(pathname: string, language: ReturnType<typeof usePreference
   if (pathname === "/admin/dev" || pathname.startsWith("/admin/dev/overview/")) return t(language, "nav.overview");
   if (pathname === "/admin/dev/model" || pathname.startsWith("/admin/dev/model/")) return t(language, "model.title");
   if (pathname === "/admin/dev/logic" || pathname.startsWith("/admin/dev/logic/")) return t(language, "logic.title");
-  if (pathname === "/admin/dev/docs") return t(language, "docs.title");
+  if (pathname === "/admin/dev/docs" || pathname.startsWith("/admin/dev/docs/")) return t(language, "docs.title");
   return segment ? fieldLabel(segment) : null;
 }

@@ -68,7 +68,7 @@ it("hides unsupported WebMCP and binds staff tools, navigation and localized pro
     expect(new URL(page.url()).pathname).toBe("/admin");
     expect(calls).toHaveLength(2);
     expect(await invoke("admin_navigate", { path: "https://evil.test" })).toMatchObject({ result: { isError: true } });
-    await invoke("admin_navigate", { path: "/admin/dev/docs?tab=webmcp" });
+    await invoke("admin_navigate", { path: "/admin/dev/docs/webmcp" });
     await page.getByText(staffTool.description).last().waitFor({ state: "visible" });
   } finally { await browser.close(); await server.close(); }
 }, 30_000);
