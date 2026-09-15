@@ -1,13 +1,16 @@
 import * as React from "react";
 import dagre from "@dagrejs/dagre";
-import { Handle, MarkerType, Position, ReactFlow, ReactFlowProvider, type Node, type NodeProps, type NodeTypes, type ReactFlowInstance, useEdgesState, useNodesInitialized, useNodesState } from "@xyflow/react";
-import { Link2 } from "lucide-react";
+import { Handle, MarkerType, Panel, Position, ReactFlow, ReactFlowProvider, type Node, type NodeProps, type NodeTypes, type ReactFlowInstance, useEdgesState, useNodesInitialized, useNodesState } from "@xyflow/react";
+import { Database, Link2, X } from "lucide-react";
 
+import { t } from "../../app/i18n";
 import type { AdminLanguage } from "../../app/preferences";
 import { usePreferences } from "../../app/preferences";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { DeveloperAtomRelation, DeveloperConsoleSnapshot, DeveloperSchemaModel } from "../../lib/types";
 import { cn } from "../../lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { flattenSchemaFields } from "./data-model-view";
 import { GraphControls, graphCanvasClassName, manifestEdgeTypes, relationLabel, type ManifestGraphEdge } from "./atom-graph";
 
@@ -29,12 +32,14 @@ function SchemaDiagramCanvas({ snapshot, onOpen }: { snapshot: DeveloperConsoleS
   const [nodes, setNodes, onNodesChange] = useNodesState(layout.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layout.edges);
   const [flow, setFlow] = React.useState<ReactFlowInstance<SchemaGraphNode, ManifestGraphEdge> | null>(null);
+  const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const nodesInitialized = useNodesInitialized();
   const fitted = React.useRef(false);
 
   React.useEffect(() => {
     setNodes(layout.nodes);
     setEdges(layout.edges);
+    setSelectedId(null);
   }, [layout, setEdges, setNodes]);
 
   React.useEffect(() => {
@@ -45,6 +50,7 @@ function SchemaDiagramCanvas({ snapshot, onOpen }: { snapshot: DeveloperConsoleS
   }, [flow, nodesInitialized]);
 
   const select = (id: string | null): void => {
+    setSelectedId(id);
     const related = new Set(id ? [id] : []);
     if (id) layout.edges.forEach((edge) => {
       if (edge.source === id || edge.target === id) related.add(edge.source).add(edge.target);
@@ -59,6 +65,7 @@ function SchemaDiagramCanvas({ snapshot, onOpen }: { snapshot: DeveloperConsoleS
   const relayout = (): void => {
     setNodes(layout.nodes);
     setEdges(layout.edges);
+    setSelectedId(null);
     window.requestAnimationFrame(() => void flow?.fitView({ padding: 0.12, maxZoom: 1, duration: 240 }));
   };
 
@@ -83,8 +90,17 @@ function SchemaDiagramCanvas({ snapshot, onOpen }: { snapshot: DeveloperConsoleS
       maxZoom={1.8}
     >
       <GraphControls onRelayout={relayout} />
+      {selectedId ? <Panel position="top-right" className="!m-3 w-72 max-w-[calc(100%-1.5rem)]"><SchemaHud model={snapshot.dataModel.schemas.find(({ name }) => `Schema:${name}` === selectedId)} relationCount={layout.edges.filter(({ source, target }) => source === selectedId || target === selectedId).length} onClose={() => select(null)} onOpen={() => onOpen(selectedId)} /></Panel> : null}
     </ReactFlow>
   );
+}
+
+function SchemaHud({ model, relationCount, onClose, onOpen }: { model: DeveloperSchemaModel | undefined; relationCount: number; onClose: () => void; onOpen: () => void }): React.ReactElement | null {
+  const { language } = usePreferences();
+  if (!model) return null;
+  const fields = flattenSchemaFields(model.schema);
+  const title = resolveLocalizedText(model.title, language);
+  return <aside className="overflow-hidden rounded-xl border bg-white text-popover-foreground shadow-2xl dark:bg-[#090f20]" aria-label={t(language, "developer.graph.details")}><header className="flex items-start gap-3 border-b p-4"><div className="min-w-0 flex-1"><Badge variant="outline">{t(language, "developer.graph.kind.schema")}</Badge><h2 className="mt-2 truncate font-mono text-sm font-semibold">{model.name}</h2>{title && title !== model.name ? <p className="mt-1 truncate text-xs text-muted-foreground">{title}</p> : null}</div><Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label={t(language, "common.close")}><X aria-hidden /></Button></header><div className="space-y-4 p-4"><dl className="grid grid-cols-2 gap-3"><div><dt className="text-[10px] uppercase tracking-wider text-muted-foreground">{t(language, "model.fields")}</dt><dd className="mt-1 font-mono text-sm font-semibold">{fields.length}</dd></div><div><dt className="text-[10px] uppercase tracking-wider text-muted-foreground">{t(language, "model.relationships")}</dt><dd className="mt-1 font-mono text-sm font-semibold">{relationCount}</dd></div></dl><Button type="button" className="w-full" variant="outline" onClick={onOpen}><Database aria-hidden />{t(language, "developer.graph.openModel")}</Button></div></aside>;
 }
 
 export function buildSchemaDiagram(snapshot: DeveloperConsoleSnapshot, language: AdminLanguage): { nodes: SchemaGraphNode[]; edges: ManifestGraphEdge[] } {
