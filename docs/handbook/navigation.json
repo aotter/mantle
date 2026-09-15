@@ -38,6 +38,7 @@
       "items": [
         { "text": "Intake form", "link": "/examples/intake-form" },
         { "text": "Publication", "link": "/examples/publication" },
+        { "text": "Legal documents and consent", "link": "/examples/legal-documents" },
         { "text": "Reservation requests", "link": "/examples/reservation" },
         { "text": "Procurement approvals", "link": "/examples/procurement-approvals" },
         { "text": "Commerce and settlement", "link": "/examples/commerce-transaction" },

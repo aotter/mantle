@@ -69,7 +69,7 @@ function buildHarness(schemas = [postsSchema()]): Harness {
 
 function operationalPostsSchema() {
   const schema = postsSchema();
-  return { ...schema, spec: { ...schema.spec, lifecycle: "operational" as const } };
+  return { ...schema, spec: { ...schema.spec, description: { en: "Operational posts", "zh-TW": "營運文章" }, lifecycle: "operational" as const } };
 }
 
 function readOnlyOperationalPostsSchema() {
@@ -348,6 +348,12 @@ describe("McpJsonRpcDispatcher", () => {
     expect(
       listBody.result.tools.find((tool) => tool.name === "create_record_posts")?.description,
     ).toContain("live operational record");
+    expect(
+      listBody.result.tools.find((tool) => tool.name === "create_record_posts")?.description,
+    ).toContain("Operational posts");
+    expect(
+      listBody.result.tools.find((tool) => tool.name === "update_record_posts")?.description,
+    ).toContain("Operational posts");
 
     const call = await dispatcher.dispatch(
       jsonRpcReq("tools/call", {

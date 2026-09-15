@@ -484,15 +484,18 @@ function describeCreateTool(schema: SchemaManifest): string {
   const base = resolveLifecycle(schema) === "operational"
     ? `Create a live operational record in '${schema.metadata.name}'.`
     : `Create a new draft entry in '${schema.metadata.name}'.`;
-  return schema.spec.description ? `${base} ${schema.spec.description}`.trim() : base;
+  const description = resolveLocalizedText(schema.spec.description, "en");
+  return description ? `${base} ${description}` : base;
 }
 
 function describeUpdateTool(schema: SchemaManifest): string {
   const occ =
     " Send expected_version as the observed native entry.version from read time, not version+1.";
-  return resolveLifecycle(schema) === "operational"
+  const base = resolveLifecycle(schema) === "operational"
     ? `Update an operational record in '${schema.metadata.name}' with optimistic-concurrency check.${occ}`
     : `Update a draft entry in '${schema.metadata.name}' with optimistic-concurrency check.${occ}`;
+  const description = resolveLocalizedText(schema.spec.description, "en");
+  return description ? `${base} ${description}` : base;
 }
 
 interface AuthoringFields {
