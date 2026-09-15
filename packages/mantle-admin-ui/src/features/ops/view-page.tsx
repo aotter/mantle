@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SchemaFields } from "../content/entry-edit-view";
 import { renderDataValue } from "../../lib/render-data-value";
+import { IdValue, isIdField } from "../../ui/id-value";
 import { cn } from "../../lib/utils";
 import {
   Pagination,
@@ -217,11 +218,17 @@ export function ViewPage({ name }: { name: string }): React.ReactElement {
           <TableBody>
             {rows.map((row, index) => (
               <TableRow key={index}>
-                {columns.map((col) => (
-                  <TableCell key={col} className="text-muted-foreground">
-                    {renderDataValue(sourceSchema?.properties?.[col], row[col])}
-                  </TableCell>
-                ))}
+                {columns.map((col) => {
+                  const schema = sourceSchema?.properties?.[col];
+                  const value = row[col];
+                  return (
+                    <TableCell key={col} className="text-muted-foreground">
+                      {isIdField(col, schema) && typeof value === "string"
+                        ? <IdValue value={value} language={language} />
+                        : renderDataValue(schema, value)}
+                    </TableCell>
+                  );
+                })}
               </TableRow>
             ))}
           </TableBody>

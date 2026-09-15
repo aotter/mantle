@@ -6,7 +6,6 @@ import {
   ArrowUpDown,
   Check,
   ChevronsUpDown,
-  Copy,
   Download,
   Eye,
   FileText,
@@ -70,6 +69,7 @@ import { renderTitleText } from "../../lib/entry-title";
 import { LocaleBadge, LocaleStatusBadges } from "./locale-badge";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 import { entryEditPath, entryLandingPath, hasFoldedChildCollections } from "../../lib/collection-nav";
+import { IdValue, isIdField } from "../../ui/id-value";
 
 const COLLECTION_PAGE_SIZE = 50;
 type SortDirection = "asc" | "desc";
@@ -965,37 +965,6 @@ function EntriesSkeleton(): React.ReactElement {
   );
 }
 
-/** Show a short id suffix while copy and tooltip retain the full value. */
-function CopyIdButton({ id, language }: { id: string; language: AdminLanguage }): React.ReactElement {
-  const [copied, setCopied] = React.useState(false);
-
-  async function copy(): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(id);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1400);
-    } catch {
-      setCopied(false);
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      className="group inline-flex items-center gap-1 hover:text-foreground"
-      title={`${id} — ${t(language, "collection.copyId")}`}
-      onClick={() => void copy()}
-    >
-      {idTail(id)}
-      {copied ? (
-        <Check className="size-3 text-[color:var(--success)]" aria-hidden />
-      ) : (
-        <Copy className="size-3 opacity-40 transition-opacity group-hover:opacity-80" aria-hidden />
-      )}
-    </button>
-  );
-}
-
 function EntryRowDisplay({
   row,
   language,
@@ -1039,6 +1008,8 @@ function EntryRowDisplay({
     isOperational ? (primaryField ? row.data_preview?.[primaryField] : row.id) : row.title,
     language,
   );
+  const primarySchema = collection?.schema?.properties?.[primaryField ?? ""];
+  const primaryValue = row.data_preview?.[primaryField ?? ""];
   const [editing, setEditing] = React.useState(false);
   const [draftTitle, setDraftTitle] = React.useState(itemName);
   const [error, setError] = React.useState<string | null>(null);
@@ -1088,18 +1059,20 @@ function EntryRowDisplay({
         </TableCell>
       ) : null}
       <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
-        <CopyIdButton id={String(row.id)} language={language} />
+        <IdValue value={String(row.id)} language={language} />
       </TableCell>
       {!isOperational || primaryField ? <TableCell className="max-w-[28rem]">
         <div className="min-w-44 md:min-w-64">
           {isOperational ? (
-            <a
-              href={entryLandingPath(row.collection, row.id)}
-              className="block truncate font-medium hover:underline"
-              title={itemName}
-            >
-              {renderDataValue(collection?.schema?.properties?.[primaryField ?? ""], row.data_preview?.[primaryField ?? ""])}
-            </a>
+            isIdField(primaryField ?? "", primarySchema) && typeof primaryValue === "string"
+              ? <IdValue value={primaryValue} language={language} href={entryLandingPath(row.collection, row.id)} />
+              : <a
+                  href={entryLandingPath(row.collection, row.id)}
+                  className="block truncate font-medium hover:underline"
+                  title={itemName}
+                >
+                  {renderDataValue(primarySchema, primaryValue)}
+                </a>
           ) : editing ? (
             <div className="flex items-center gap-1">
               <Input
@@ -1147,11 +1120,17 @@ function EntryRowDisplay({
         </div>
       </TableCell> : null}
       {dataColumns ? (
-        dataColumns.map((name) => (
-          <TableCell key={name} className="text-muted-foreground">
-            {renderDataValue(collection?.schema?.properties?.[name], row.data_preview?.[name])}
-          </TableCell>
-        ))
+        dataColumns.map((name) => {
+          const schema = collection?.schema?.properties?.[name];
+          const value = row.data_preview?.[name];
+          return (
+            <TableCell key={name} className="text-muted-foreground">
+              {isIdField(name, schema) && typeof value === "string"
+                ? <IdValue value={value} language={language} />
+                : renderDataValue(schema, value)}
+            </TableCell>
+          );
+        })
       ) : (
         <>
           <TableCell className="hidden md:table-cell">
