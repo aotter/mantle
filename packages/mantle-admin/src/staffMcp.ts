@@ -33,7 +33,7 @@ export async function staffMcp(runtime: MantleRuntime, plan: RuntimePlan): Promi
   return {
     tools, routes,
     dispatcher: new McpJsonRpcDispatcher({
-      listEntries: runtime.listEntries, getEntry: runtime.getEntry,
+      getEntry: runtime.getEntry,
       createDraft: runtime.createDraft, updateDraft: runtime.updateDraft,
       requestPublish: runtime.requestPublish, unpublish: runtime.unpublish,
       archive: runtime.archive, deleteEntry: runtime.deleteEntry,

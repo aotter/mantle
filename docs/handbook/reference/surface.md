@@ -99,8 +99,6 @@ Tool names are the mangled `metadata.name`: lower-cased, with `-` replaced by `_
 |---|---|---|
 | `query_view_<segment>` | The View's own `surface` | One per declared View. `annotations.readOnlyHint` is `true`; the input schema is the View's `params.properties` plus `page` and `show`. |
 | `<procedure segment>` | The Trigger's `surface` | One per `Trigger.source.kind: mcp`. A Procedure with no MCP Trigger is not exposed. |
-| `list_entries` | staff | Always. Search, sort and cursor-paged entry listing. |
-| `get_entry` | staff | Always. |
 | `request_publish` | staff | Always. Rejected at call time for an operational Schema. |
 | `unpublish_entry` | staff | Always. Same restriction. |
 | `archive_entry` | staff | Always. Same restriction. |

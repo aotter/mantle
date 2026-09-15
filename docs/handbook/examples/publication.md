@@ -221,7 +221,7 @@ MCP tools:
 | `/mcp/staff` | `create_draft_posts`, `update_draft_posts` | publishing Schema `posts` |
 | `/mcp/staff` | `create_draft_post_translations`, `update_draft_post_translations` | publishing Schema `post-translations` |
 | `/mcp/staff` | `create_record_post_suggestions`, `update_record_post_suggestions` | operational Schema `post-suggestions` |
-| `/mcp/staff` | `list_entries`, `get_entry`, `request_publish`, `unpublish_entry`, `archive_entry`, `delete_entry` | generic staff tools |
+| `/mcp/staff` | `request_publish`, `unpublish_entry`, `archive_entry`, `delete_entry` | generic lifecycle tools |
 
 There is no `submit_post_suggestion` tool because no MCP Trigger targets that Procedure. See [MCP and agents](../concepts/mcp-and-agents.md).
 

@@ -4,7 +4,6 @@ import {
   runtimeDiagnostic,
   resolveLifecycle,
   type Diagnostic,
-  type ContentState,
   type MediaPurposePolicy,
   type SchemaManifest,
   type SiteIcon,
@@ -16,7 +15,6 @@ import {
   CreateDraftUseCase,
   DeleteEntryUseCase,
   GetEntryUseCase,
-  ListEntriesUseCase,
   RequestPublishUseCase,
   UnpublishUseCase,
   UpdateDraftUseCase,
@@ -67,7 +65,6 @@ export interface McpServerInfo {
  * assembly root assembles these alongside everything else).
  */
 export interface McpUseCases {
-  readonly listEntries: ListEntriesUseCase;
   readonly getEntry: GetEntryUseCase;
   readonly createDraft: CreateDraftUseCase;
   readonly updateDraft: UpdateDraftUseCase;
@@ -275,32 +272,6 @@ export class McpJsonRpcDispatcher {
     }
 
     switch (name) {
-      case "list_entries": {
-        const collection = args["collection"];
-        if (typeof collection !== "string") return MISSING_ARG;
-        // MCP exposes the cursored shape so agents can walk pages
-        // through `nextCursor`. App code reaches for `execute()`
-        // instead and gets a flat array.
-        return this.useCases.listEntries.executePage({
-          collection,
-          status: args["status"] as ContentState | undefined,
-          search: typeof args["search"] === "string" ? args["search"] : undefined,
-          sort: typeof args["sort"] === "string"
-            ? {
-                field: args["sort"],
-                direction: args["direction"] === "asc" ? "asc" : "desc",
-              }
-            : undefined,
-          limit: typeof args["limit"] === "number" ? args["limit"] : undefined,
-          cursor: typeof args["cursor"] === "string" ? args["cursor"] : undefined,
-          cursorDirection: args["cursorDirection"] === "backward" ? "backward" : "forward",
-        });
-      }
-      case "get_entry": {
-        const id = args["id"];
-        if (typeof id !== "string") return MISSING_ARG;
-        return this.useCases.getEntry.execute({ id });
-      }
       case "request_publish": {
         const id = args["id"];
         if (typeof id !== "string") return MISSING_ARG;
