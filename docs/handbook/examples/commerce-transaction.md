@@ -797,7 +797,7 @@ The DO protects local coordination. It is not a distributed transaction across t
 ## Source
 
 - [`docs/transaction-patterns.md`](../../../docs/transaction-patterns.md) — reserve/settle exactly once, delayed expiry, adoption checks
-- [`docs/design-atoms.md`](../../../docs/design-atoms.md) — `readOnly`, `x-mantle-ref`, `idempotency-key`, `sql` Views
+- [Schema](../reference/schema.md), [Procedure](../reference/procedure.md), and [View](../reference/view.md) references — `readOnly`, `x-mantle-ref`, `idempotency-key`, `sql` Views
 - [`docs/deferred-lifecycle-queues.md`](../../../docs/deferred-lifecycle-queues.md) — Queue contract and multiplexing
 - [`packages/adapters/cloudflare/src/worker/createMantleWorker.ts`](../../../packages/adapters/cloudflare/src/worker/createMantleWorker.ts) — `extend.mount`, `getRuntime`
 - [`packages/mantle/src/codegen/emitMantleModule.ts`](../../../packages/mantle/src/codegen/emitMantleModule.ts) — `bindMantle(...).procedures`

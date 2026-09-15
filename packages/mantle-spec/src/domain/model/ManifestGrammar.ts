@@ -137,7 +137,7 @@ export function resolveLocalizedText(
 
 /**
  * Four declarative atoms. Each maps 1-to-1 to a Postgres primitive — see
- * ADR-0001 / `docs/design-atoms.md` § TL;DR for the mapping. `Procedure`
+ * ADR-0001 / `docs/handbook/concepts/four-atoms.md` for the mapping. `Procedure`
  * is the only kind with a code seam (handler ref to consumer's TS file).
  */
 export type ManifestKind = "Schema" | "View" | "Procedure" | "Trigger";

@@ -166,7 +166,6 @@ Postgres exposes roughly twenty-five object kinds; an application developer writ
 
 ## Source
 
-- [`docs/design-atoms.md`](../../../docs/design-atoms.md)
 - [`docs/adr/0001-four-atom-manifest-model.md`](../../../docs/adr/0001-four-atom-manifest-model.md)
 - [`docs/adr/0012-views-as-public-rest.md`](../../../docs/adr/0012-views-as-public-rest.md)
 - [`packages/mantle-spec/src/domain/model/ManifestGrammar.ts`](../../../packages/mantle-spec/src/domain/model/ManifestGrammar.ts)

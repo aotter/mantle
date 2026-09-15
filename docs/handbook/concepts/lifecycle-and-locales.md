@@ -133,7 +133,6 @@ The full worked version of this pattern, with a locale-parameterized public View
 
 ## Source
 
-- [`docs/design-atoms.md`](../../../docs/design-atoms.md)
 - [`packages/mantle-spec/src/domain/service/LifecycleStateMachine.ts`](../../../packages/mantle-spec/src/domain/service/LifecycleStateMachine.ts)
 - [`packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts`](../../../packages/mantle-spec/src/domain/service/LocaleCanonicalizer.ts)
 - [`packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts`](../../../packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts)

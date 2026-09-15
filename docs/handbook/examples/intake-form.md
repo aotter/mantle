@@ -310,7 +310,7 @@ Related: [Reservation requests](./reservation.md) uses the same builtin-create s
 
 ## Source
 
-- [`docs/design-atoms.md`](../../../docs/design-atoms.md) — builtin table, side-channel input fields, lifecycle hooks
+- [Procedure reference](../reference/procedure.md) — builtin table, side-channel input fields, lifecycle hooks
 - [`packages/mantle-runtime/src/usecase/lifecycle/RunLifecycleHooksUseCase.ts`](../../../packages/mantle-runtime/src/usecase/lifecycle/RunLifecycleHooksUseCase.ts) — abort propagates the hook's diagnostic
 - [`packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts`](../../../packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts) — `InvokeFailure`
 - [`packages/mantle-spec/src/kernel/diagnostic.ts`](../../../packages/mantle-spec/src/kernel/diagnostic.ts) — `LIFECYCLE_HOOK_REJECTED` → 409

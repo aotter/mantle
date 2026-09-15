@@ -215,6 +215,6 @@ Requests are **not confirmed automatically**. A successful `POST` means the requ
 ## Source
 
 - [`README.md`](../../../README.md) — reservations excerpt
-- [`docs/design-atoms.md`](../../../docs/design-atoms.md) — builtin `create`, lifecycle hooks
+- [Procedure reference](../reference/procedure.md) — builtin `create`, lifecycle hooks
 - [`packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts`](../../../packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts) — `InvokeFailure`
 - [`packages/mantle-runtime/src/index.ts`](../../../packages/mantle-runtime/src/index.ts) — `InvokeFailure` export re-exported by `@aotter/mantle/runtime`
