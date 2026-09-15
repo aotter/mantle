@@ -1,6 +1,6 @@
 import * as React from "react";
 import dagre from "@dagrejs/dagre";
-import { Handle, MarkerType, Position, ReactFlow, type Node, type NodeProps, type NodeTypes, type ReactFlowInstance, useEdgesState, useNodesState } from "@xyflow/react";
+import { Handle, MarkerType, Position, ReactFlow, ReactFlowProvider, type Node, type NodeProps, type NodeTypes, type ReactFlowInstance, useEdgesState, useNodesInitialized, useNodesState } from "@xyflow/react";
 import { Link2 } from "lucide-react";
 
 import type { AdminLanguage } from "../../app/preferences";
@@ -20,16 +20,29 @@ type SchemaGraphNode = Node<{ model: DeveloperSchemaModel; language: AdminLangua
 const nodeTypes = { schema: SchemaNode } satisfies NodeTypes;
 
 export function SchemaDiagram({ snapshot, onOpen }: { snapshot: DeveloperConsoleSnapshot; onOpen: (id: string) => void }): React.ReactElement {
+  return <ReactFlowProvider><SchemaDiagramCanvas snapshot={snapshot} onOpen={onOpen} /></ReactFlowProvider>;
+}
+
+function SchemaDiagramCanvas({ snapshot, onOpen }: { snapshot: DeveloperConsoleSnapshot; onOpen: (id: string) => void }): React.ReactElement {
   const { language, theme } = usePreferences();
   const layout = React.useMemo(() => buildSchemaDiagram(snapshot, language), [snapshot, language]);
   const [nodes, setNodes, onNodesChange] = useNodesState(layout.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layout.edges);
   const [flow, setFlow] = React.useState<ReactFlowInstance<SchemaGraphNode, ManifestGraphEdge> | null>(null);
+  const nodesInitialized = useNodesInitialized();
+  const fitted = React.useRef(false);
 
   React.useEffect(() => {
     setNodes(layout.nodes);
     setEdges(layout.edges);
   }, [layout, setEdges, setNodes]);
+
+  React.useEffect(() => {
+    if (flow && nodesInitialized && !fitted.current) {
+      fitted.current = true;
+      void flow.fitView({ padding: 0.12 });
+    }
+  }, [flow, nodesInitialized]);
 
   const select = (id: string | null): void => {
     const related = new Set(id ? [id] : []);
