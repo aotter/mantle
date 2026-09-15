@@ -5,7 +5,7 @@ description: Localized Terms and Privacy documents with immutable revisions, pub
 
 This example gives an application a portable shape for Terms of Use, Privacy Policy and consent receipts. It uses existing Mantle atoms. Core does not install it or own the public pages.
 
-Each `(kind, revision, locale)` row is one legal artifact. Publish a new row for a new legal revision; do not overwrite a published row whose id appears in acceptance records. The English Schema description is also the MCP and WebMCP authoring instruction.
+Each `(kind, revision, locale)` row is one legal artifact. The Schema is Procedure-managed, so a new revision can be created and published but an existing artifact cannot be rewritten. The English Procedure description is also the MCP and WebMCP authoring instruction.
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v1
@@ -28,6 +28,7 @@ spec:
   searchableFields: [title, revision]
   schema:
     type: object
+    readOnly: true
     additionalProperties: false
     required: [kind, revision, locale, title, body, effectiveAt]
     properties:
@@ -70,6 +71,50 @@ spec:
   orderBy:
     - { field: effectiveAt, direction: desc }
   limit: 1
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata:
+  name: create-legal-document
+spec:
+  title:
+    en: Create legal document revision
+    zh-TW: 建立法律文件修訂
+  description:
+    en: Supply the site's complete, reviewed legal text. Never create empty, placeholder, or agent-invented terms. Create a new revision instead of rewriting a published document accepted by users.
+    zh-TW: 請填入網站已審閱的完整法律正文。不得建立空白、佔位或由 agent 虛構的條款；已有使用者同意的已發佈文件應建立新修訂，不得覆寫。
+  input:
+    type: object
+    additionalProperties: false
+    required: [kind, revision, locale, title, body, effectiveAt]
+    properties:
+      kind: { type: string, enum: [terms, privacy] }
+      revision: { type: string, minLength: 1, maxLength: 100 }
+      locale: { type: string }
+      title: { type: string, minLength: 1, maxLength: 200 }
+      body:
+        type: string
+        minLength: 1
+        x-mcp-hint: markdown
+        description:
+          en: Complete reviewed legal text in Markdown; placeholders are not acceptable.
+          zh-TW: 已審閱的完整 Markdown 法律正文，不得使用佔位文字。
+      effectiveAt: { type: integer, minimum: 0, x-mcp-hint: timestamp-ms }
+  output: { type: object }
+  handler: { kind: builtin, op: create, schema: legal-documents }
+  requires:
+    auth:
+      all:
+        - ctx.user
+        - { ctx.staff: [owner, editor] }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata:
+  name: create-legal-document-staff
+spec:
+  source: { kind: mcp, surface: staff }
+  target: { procedure: create-legal-document }
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: Schema
@@ -164,7 +209,7 @@ Register it under the manifest ref name `require-published-legal-document`. The 
 
 Serve `/terms` and `/privacy` in application code by querying `current-legal-document` with the requested locale, falling back to the site's default locale, and rendering Markdown as escaped/sanitized HTML. Return a clear unavailable page when no reviewed document is published. The application also owns the checkbox or other consent UI, authentication, retention and export policy.
 
-Staff MCP and Admin WebMCP automatically expose `create_draft_legal_documents` and `update_draft_legal_documents`. Both descriptions include the Schema description above, so agents are told to collect real reviewed text rather than inventing it. Do not add an MCP Trigger for `accept-legal-document`: accepting legal terms is an explicit user-interface action.
+Staff MCP and Admin WebMCP expose `create_legal_document` from the explicit staff Trigger. Both use the same Procedure description, so agents are told to collect real reviewed text rather than inventing it. The read-only Schema deliberately emits no generic update tool. Do not add an MCP Trigger for `accept-legal-document`: accepting legal terms is an explicit user-interface action.
 
 ## Source
 
