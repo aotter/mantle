@@ -180,6 +180,8 @@ uiSchema:
 
 Every violation is `SCHEMA_UI_INVALID`. Without `primaryField` and `columns`, Admin lists an operational collection with platform metadata only. `nav` is operational Admin navigation only — it does not change runtime, MCP, or publishing validation. Parent autocomplete coexists with `list.filterField` enum tabs as a separate control.
 
+Keep implementation-detail children fold-only. Use `nav.standalone: true` when staff also need a cross-parent list; see the [inventory example](../examples/commerce-transaction.md).
+
 ## Indexes
 
 `uniqueIndexes` and `indexes` are arrays of ordered field tuples. Shape errors are `INVALID_MANIFEST_ENVELOPE`; semantic errors are `SCHEMA_INDEX_INVALID` unless noted. Bare strings and the retired `indexedFields` key are rejected; each index is an array of field names, even when it has one field.
