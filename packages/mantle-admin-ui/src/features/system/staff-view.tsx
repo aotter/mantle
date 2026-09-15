@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/table";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
+import { IdValue } from "../../ui/id-value";
 
 const EMAIL_SETUP_GUIDE_URL = "https://developers.cloudflare.com/email-service/";
 const EMAIL_SETUP_PROMPT = `Enable email sign-in for this Mantle site. Implement the Mantle EmailSender port with a transactional email provider. For Cloudflare, prefer an Email Service binding. Register either { kind: "email-otp", sender } or { kind: "magic-link", sender } in createAuth(), keep credentials in Worker secrets, deploy, then verify that /api/auth/methods lists the method and a real email arrives.`;
@@ -134,7 +135,7 @@ export function StaffView(): React.ReactElement {
                 : "none";
               return (
                 <TableRow key={user.id}>
-                  <TableCell className="font-mono text-xs">{user.id}</TableCell>
+                  <TableCell><IdValue value={user.id} language={language} /></TableCell>
                   <TableCell>{user.name}</TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>

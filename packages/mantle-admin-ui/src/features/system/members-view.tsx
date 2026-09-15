@@ -35,6 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EmptyState, ErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { IdValue } from "../../ui/id-value";
 
 const MEMBER_PAGE_SIZE = 50;
 const STAFF_ROLES: readonly StaffRole[] = ["owner", "editor", "contributor"];
@@ -106,7 +107,7 @@ export function MembersView(): React.ReactElement {
               <TableBody>
                 {members.data.items.map((member) => (
                   <TableRow key={member.id}>
-                    <TableCell className="font-mono text-xs">{member.id}</TableCell>
+                    <TableCell><IdValue value={member.id} language={language} /></TableCell>
                     <TableCell className="font-medium">{member.name}</TableCell>
                     <TableCell>{member.email}</TableCell>
                     <TableCell>
