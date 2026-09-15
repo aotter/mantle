@@ -221,9 +221,7 @@ export function mountMantleAdmin<E extends Env>(
     "/admin/members",
     "/admin/ops",
     "/admin/dev",
-    "/admin/dev/model",
-    "/admin/dev/logic",
-    "/admin/dev/docs",
+    "/admin/dev/*",
     "/admin/views/:name",
   ]) {
     app.get(path, spa);

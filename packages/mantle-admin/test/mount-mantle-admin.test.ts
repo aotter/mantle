@@ -148,6 +148,8 @@ spec:
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect((await app.request("https://example.test/admin/dev")).status).toBe(200);
     expect((await app.request("https://example.test/admin/dev/docs")).status).toBe(200);
+    expect((await app.request("https://example.test/admin/dev/overview/relationships")).status).toBe(200);
+    expect((await app.request("https://example.test/admin/dev/model/schemas")).status).toBe(200);
     expect((await app.request("https://example.test/admin/connected-apps")).status).toBe(200);
   });
 
