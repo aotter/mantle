@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { navigationTools, type AdminToolCatalog } from "./admin-tools";
 import type { AuthMethodInfo, DeveloperConsoleSnapshot, StaffOperation, ViewManifestInfo } from "./types";
 
 export function developerConsoleQueryOptions(): {
@@ -8,6 +9,21 @@ export function developerConsoleQueryOptions(): {
   return {
     queryKey: ["developer-console"] as const,
     queryFn: () => api.get<DeveloperConsoleSnapshot>("/developer-console"),
+  };
+}
+
+export function adminWebMcpQueryOptions(): {
+  queryKey: readonly ["admin-webmcp"];
+  queryFn: () => Promise<AdminToolCatalog>;
+} {
+  return {
+    queryKey: ["admin-webmcp"] as const,
+    queryFn: async () => {
+      const catalog = await api.get<AdminToolCatalog>("/webmcp");
+      const tools = [...catalog.tools, ...navigationTools];
+      if (new Set(tools.map(tool => tool.name)).size !== tools.length) throw new Error("Admin navigation tool name collision.");
+      return { ...catalog, tools };
+    },
   };
 }
 

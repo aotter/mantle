@@ -5,7 +5,8 @@ import { Braces, Eye, Globe2 } from "lucide-react";
 import { t } from "../../app/i18n";
 import { usePreferences } from "../../app/preferences";
 import { useAdminLocation, useAdminRouter } from "../../app/router";
-import { developerConsoleQueryOptions } from "../../lib/queries";
+import { adminWebMcpQueryOptions, developerConsoleQueryOptions } from "../../lib/queries";
+import type { AdminTool } from "../../lib/admin-tools";
 import type { DeveloperCallableCapability, DeveloperHttpOperation, JsonSchema } from "../../lib/types";
 import { ErrorBox } from "../../ui/page";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,7 @@ export function InterfaceDocsView(): React.ReactElement {
   const location = useAdminLocation();
   const { navigate } = useAdminRouter();
   const snapshot = useQuery(developerConsoleQueryOptions());
+  const adminWebMcp = useQuery(adminWebMcpQueryOptions());
   const requestedTab = new URLSearchParams(location.search).get("tab");
   const tab = requestedTab === "mcp" || requestedTab === "webmcp" ? requestedTab : "api";
 
@@ -65,16 +67,29 @@ export function InterfaceDocsView(): React.ReactElement {
           </DocSection>
         </TabsContent>
         <TabsContent value="webmcp">
-          <DocSection intro={t(language, "docs.webmcpIntro")} endpoints={<Endpoint label={t(language, "docs.catalogEndpoint")} value="/api/views" />}>
+          <DocSection intro={t(language, "docs.intro")}>
+            <section className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3"><h2 className="me-auto text-sm font-semibold uppercase tracking-wider text-muted-foreground">Admin WebMCP</h2><Endpoint label={t(language, "docs.catalogEndpoint")} value="/admin/api/webmcp" /></div>
+              {adminWebMcp.data ? <OperationGrid>{adminWebMcp.data.tools.map(tool => <AdminToolCard key={tool.name} tool={tool} />)}</OperationGrid> : null}
+              {adminWebMcp.isLoading ? <Skeleton className="h-32 w-full" /> : null}
+              {adminWebMcp.isError ? <ErrorBox error={adminWebMcp.error} /> : null}
+            </section>
+            <section className="space-y-3"><div className="flex flex-wrap items-center gap-3"><h2 className="me-auto text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t(language, "docs.publicEndpoint")} WebMCP</h2><Endpoint label={t(language, "docs.catalogEndpoint")} value="/api/views" /></div>
             <pre className="overflow-x-auto rounded-xl border bg-muted/40 p-4 text-xs leading-6"><code>{WEBMCP_SNIPPET}</code></pre>
             <p className="text-sm text-muted-foreground">{t(language, "docs.webmcpNote")}</p>
             <OperationGrid>{webMcp.map((capability) => <CapabilityCard key={capability.name} capability={capability} webMcp />)}</OperationGrid>
             {!webMcp.length ? <EmptyDocs /> : null}
+            </section>
           </DocSection>
         </TabsContent>
       </Tabs>
     </section>
   );
+}
+
+function AdminToolCard({ tool }: { tool: AdminTool }): React.ReactElement {
+  const { language } = usePreferences();
+  return <Card><CardHeader><div className="flex gap-2"><Badge variant="secondary">{t(language, "docs.staffEndpoint")}</Badge>{tool.annotations?.readOnlyHint ? <Badge variant="outline">{t(language, "docs.readOnly")}</Badge> : null}</div><CardTitle className="font-mono text-sm">{tool.name}</CardTitle><CardDescription>{tool.description}</CardDescription></CardHeader><CardContent><SchemaDetails label={t(language, "docs.inputSchema")} schema={tool.inputSchema} /></CardContent></Card>;
 }
 
 function McpIcon(): React.ReactElement {
