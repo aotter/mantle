@@ -96,11 +96,20 @@ it("uses only the composition relationship and resets bulk selection when collec
     page.on("pageerror", (error) => errors.push(String(error)));
     await page.goto(`${origin}/admin/c/organizations/org-a?child=projects`);
     await page.getByRole("cell", { name: "Project A", exact: true }).waitFor();
-    const children = page.getByRole("navigation", { name: "Child collections" });
-    expect(await children.getByRole("link", { name: "Projects", exact: true }).count()).toBe(1);
+    const searchBox = await page.getByPlaceholder("Search id or searchable fields...").boundingBox();
+    const exportButton = await page.getByRole("button", { name: "Export CSV" }).boundingBox();
+    expect((searchBox?.y ?? 0) + (searchBox?.height ?? 0) / 2)
+      .toBe((exportButton?.y ?? 0) + (exportButton?.height ?? 0) / 2);
+    const children = page.getByRole("tablist", { name: "Child collections" });
+    expect(await children.getByRole("tab", { name: "Projects", exact: true }).count()).toBe(1);
+    await page.getByRole("button", { name: "Row operations" }).click();
+    const editItem = page.getByRole("menuitem", { name: "Edit", exact: true });
+    expect(await editItem.count()).toBe(1);
+    await page.keyboard.press("Escape");
+    await editItem.waitFor({ state: "hidden" });
     await page.getByRole("checkbox").first().check();
     await page.getByText("1 selected", { exact: true }).waitFor();
-    await children.getByRole("link", { name: "Members", exact: true }).click();
+    await children.getByRole("tab", { name: "Members", exact: true }).click();
     await page.getByRole("cell", { name: "Member A", exact: true }).waitFor();
     expect(await page.getByText("1 selected", { exact: true }).isVisible()).toBe(false);
     await page.getByRole("checkbox").first().check();
@@ -110,9 +119,14 @@ it("uses only the composition relationship and resets bulk selection when collec
 
     await page.goto(`${origin}/admin/c/projects?parent=org-a`);
     await page.getByRole("cell", { name: "Project A", exact: true }).waitFor();
+    const standaloneSearch = await page.getByPlaceholder("Search id or searchable fields...").boundingBox();
+    const standaloneExport = await page.getByRole("button", { name: "Export CSV" }).boundingBox();
+    expect((standaloneSearch?.y ?? 0) + (standaloneSearch?.height ?? 0) / 2)
+      .toBe((standaloneExport?.y ?? 0) + (standaloneExport?.height ?? 0) / 2);
     await page.getByRole("checkbox").first().check();
     await page.getByText("1 selected", { exact: true }).waitFor();
-    await page.locator("#parent-filter-projects").fill("Org B");
+    await page.getByRole("button", { name: /Organizations: Org A/ }).click();
+    await page.getByPlaceholder("Search Organizations...").fill("Org B");
     await page.getByRole("button", { name: /Org B/ }).click();
     await page.getByRole("cell", { name: "Project B", exact: true }).waitFor();
     expect(await page.getByText("1 selected", { exact: true }).isVisible()).toBe(false);

@@ -1646,9 +1646,9 @@ export function createAuth(config: CreateAuthConfig): Auth {
       const bindings: unknown[] = [...STAFF_ROLES];
       const term = search?.trim().toLowerCase();
       if (term) {
-        conditions.push("(LOWER(name) LIKE ? ESCAPE '\\' OR LOWER(email) LIKE ? ESCAPE '\\')");
+        conditions.push("(LOWER(id) LIKE ? ESCAPE '\\' OR LOWER(name) LIKE ? ESCAPE '\\' OR LOWER(email) LIKE ? ESCAPE '\\')");
         const like = `%${term.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
-        bindings.push(like, like);
+        bindings.push(like, like, like);
       }
       if (parsedCursor) {
         const operator = backward ? "<" : ">";

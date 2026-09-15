@@ -5,6 +5,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   Check,
+  ChevronsUpDown,
   Copy,
   Download,
   Eye,
@@ -34,6 +35,7 @@ import { cn } from "../../lib/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Pagination,
   PaginationContent,
@@ -294,9 +296,55 @@ function CollectionList({
     },
   });
 
-  const header = (
+  const headerActions = (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <Button
+        type="button"
+        variant="secondary"
+        onClick={() => {
+          const exportParams = new URLSearchParams({ collection: collectionName });
+          if (status) exportParams.set("status", status);
+          if (searchTerm) exportParams.set("search", searchTerm);
+          if (filterField && filterValue) {
+            exportParams.set("filter_field", filterField);
+            exportParams.set("filter_value", filterValue);
+          }
+          if (resolvedScopeField && resolvedScopeValue) {
+            exportParams.set("scope_field", resolvedScopeField);
+            exportParams.set("scope_value", resolvedScopeValue);
+          }
+          exportParams.set("sort", sortField);
+          exportParams.set("direction", sortDirection);
+          exportFile.mutate(`/admin/api/entries/export?${exportParams.toString()}`);
+        }}
+        disabled={exportFile.isPending}
+      >
+        <Download className="size-4" aria-hidden />
+        {t(language, "collection.export")}
+      </Button>
+      {collection && canCreateDraft ? (
+        <Button
+          type="button"
+          onClick={() => createMutation.mutate()}
+          disabled={createMutation.isPending}
+        >
+          <Plus className="size-4" aria-hidden />
+          {createMutation.isPending
+            ? t(language, "crud.saving")
+            : t(language, "collection.create")}
+        </Button>
+      ) : null}
+      <CollectionOperations
+        operations={collectionOperations}
+        language={language}
+        canonical={canonical}
+        onSuccess={refreshEntries}
+      />
+    </div>
+  );
+  const header = layout === "page" ? (
     <PageHeader
-      eyebrow={layout === "page" ? (
+      eyebrow={
         <>
           <a href="/admin" className="hover:underline">
             {t(language, "collection.breadcrumb")}
@@ -304,57 +352,11 @@ function CollectionList({
           <span className="mx-2 text-foreground/30">/</span>
           <span className="text-foreground/70">{heading}</span>
         </>
-      ) : undefined}
+      }
       title={heading}
       description={renderCollectionDescription(collection, language, canonical)}
-        actions={
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                const exportParams = new URLSearchParams({ collection: collectionName });
-                if (status) exportParams.set("status", status);
-                if (searchTerm) exportParams.set("search", searchTerm);
-                if (filterField && filterValue) {
-                  exportParams.set("filter_field", filterField);
-                  exportParams.set("filter_value", filterValue);
-                }
-                if (resolvedScopeField && resolvedScopeValue) {
-                  exportParams.set("scope_field", resolvedScopeField);
-                  exportParams.set("scope_value", resolvedScopeValue);
-                }
-                exportParams.set("sort", sortField);
-                exportParams.set("direction", sortDirection);
-                exportFile.mutate(`/admin/api/entries/export?${exportParams.toString()}`);
-              }}
-              disabled={exportFile.isPending}
-            >
-              <Download className="size-4" aria-hidden />
-              {t(language, "collection.export")}
-            </Button>
-            {collection && canCreateDraft ? (
-              <Button
-                type="button"
-                onClick={() => createMutation.mutate()}
-                disabled={createMutation.isPending}
-              >
-                <Plus className="size-4" aria-hidden />
-                {createMutation.isPending
-                  ? t(language, "crud.saving")
-                  : t(language, "collection.create")}
-              </Button>
-            ) : null}
-            <CollectionOperations
-              operations={collectionOperations}
-              language={language}
-              canonical={canonical}
-              onSuccess={refreshEntries}
-            />
-          </div>
-        }
-      />
-  );
+    />
+  ) : null;
 
   return (
     <div>
@@ -362,22 +364,22 @@ function CollectionList({
       {createMutation.isError ? <ErrorBox error={createMutation.error} /> : null}
       {exportFile.isError ? <ErrorBox error={exportFile.error} /> : null}
 
-      {collection?.nav?.standalone && !scope ? (
-        <ParentScopeFilter
-          collection={collection}
-          selectedId={parentFilter}
-          language={language}
-          canonical={canonical}
-          onSelect={(id) => navigate(listHref({ parent: id, cursor: undefined, cursorDirection: undefined }))}
-        />
-      ) : null}
-
       {collection ? (
         <ListQueryToolbar
           key={location.search}
           language={language}
           searchValue={searchTerm}
           filters={listQueryFilter ? [listQueryFilter] : []}
+          leading={collection.nav?.standalone && !scope ? (
+            <ParentScopeFilter
+              collection={collection}
+              selectedId={parentFilter}
+              language={language}
+              canonical={canonical}
+              onSelect={(id) => navigate(listHref({ parent: id, cursor: undefined, cursorDirection: undefined }))}
+            />
+          ) : undefined}
+          actions={headerActions}
           onSubmit={({ search, filters }) => {
             const nextFilter = collectionFilter ? filters[collectionFilter.field] : undefined;
             navigate(listHref({
@@ -872,41 +874,47 @@ function ParentScopeFilter({
     enabled: Boolean(parentName) && open,
   });
   const selectedTitle = selected.data
-    ? renderTitleText(selected.data.entry.data.title ?? selected.data.entry.data.name ?? selected.data.entry.id, language)
-    : selectedId;
+    ? renderTitleText(
+        (parentCollection?.list?.primaryField
+          ? selected.data.entry.data[parentCollection.list.primaryField]
+          : undefined)
+          ?? selected.data.entry.data.title
+          ?? selected.data.entry.data.name
+          ?? selected.data.entry.id,
+        language,
+      )
+    : undefined;
   return (
-    <div className="mb-4 max-w-xl space-y-2">
-      <label className="text-sm font-medium" htmlFor={`parent-filter-${collection.name}`}>
-        {t(language, "collection.parentFilter", { name: parentLabel })}
-      </label>
-      <div className="flex flex-wrap items-center gap-2">
-        {selectedId ? (
-          <span className="inline-flex items-center gap-1 rounded-lg border bg-secondary px-2 py-1 text-sm">
-            <span className="max-w-56 truncate">{selectedTitle}</span>
-            <button
-              type="button"
-              className="rounded-sm p-0.5 hover:bg-accent"
-              aria-label={t(language, "collection.parentFilterClear")}
-              onClick={() => onSelect(undefined)}
-            >
-              <X className="size-3.5" aria-hidden />
-            </button>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline" className="h-9 w-64 justify-between font-normal">
+          <span className="truncate">
+            {selectedTitle
+              ? `${parentLabel}: ${selectedTitle}`
+              : t(language, "collection.parentFilter", { name: parentLabel })}
           </span>
-        ) : null}
+          <ChevronsUpDown className="size-4 text-muted-foreground" aria-hidden />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 gap-2 p-2">
         <Input
-          id={`parent-filter-${collection.name}`}
-          className="h-9 max-w-xs"
+          autoFocus
+          aria-label={t(language, "collection.parentFilterPlaceholder", { name: parentLabel })}
           value={term}
           placeholder={t(language, "collection.parentFilterPlaceholder", { name: parentLabel })}
-          onFocus={() => setOpen(true)}
-          onChange={(event) => {
-            setTerm(event.target.value);
-            setOpen(true);
-          }}
+          onChange={(event) => setTerm(event.target.value)}
         />
-      </div>
-      {open && options.data ? (
-        <ul className="max-h-56 overflow-y-auto rounded-lg border bg-card text-sm shadow-sm">
+        {selectedId ? (
+          <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={() => {
+            onSelect(undefined);
+            setOpen(false);
+          }}>
+            <X aria-hidden />
+            {t(language, "collection.parentFilterClear")}
+          </Button>
+        ) : null}
+        {options.data ? (
+          <ul className="max-h-56 overflow-y-auto text-sm">
           {options.data.items.length === 0 ? (
             <li className="px-3 py-2 text-muted-foreground">{t(language, "collection.empty.title")}</li>
           ) : options.data.items.map((row) => {
@@ -920,7 +928,7 @@ function ParentScopeFilter({
               <li key={row.id}>
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-accent"
+                  className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left hover:bg-accent"
                   onClick={() => {
                     onSelect(row.id);
                     setTerm("");
@@ -933,9 +941,10 @@ function ParentScopeFilter({
               </li>
             );
           })}
-        </ul>
-      ) : null}
-    </div>
+          </ul>
+        ) : null}
+      </PopoverContent>
+    </Popover>
   );
 }
 

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { MoreHorizontal, PencilLine, Plus, Workflow } from "lucide-react";
 import { fieldLabel } from "../../lib/field-label";
 import { api, ApiError } from "../../lib/api";
 import { asRenderable } from "../../lib/errors";
@@ -161,6 +161,7 @@ export function operationFormSchema(schema: JsonSchema, hiddenFields: readonly s
 export function RowOperationsMenu({
   row,
   operations,
+  editHref,
   language,
   canonical,
   onSuccess,
@@ -169,6 +170,7 @@ export function RowOperationsMenu({
   row: OperableRow;
   /** Pre-filtered via `boundOperationsFor(allOps, row.collection)`. */
   operations: readonly StaffOperation[];
+  editHref?: string;
   language: AdminLanguage;
   canonical: string | null;
   onSuccess: () => void;
@@ -177,7 +179,7 @@ export function RowOperationsMenu({
   trigger?: React.ReactNode;
 }): React.ReactElement | null {
   const [activeOperation, setActiveOperation] = React.useState<StaffOperation | null>(null);
-  if (operations.length === 0) return null;
+  if (operations.length === 0 && !editHref) return null;
 
   return (
     <>
@@ -196,8 +198,17 @@ export function RowOperationsMenu({
           )}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {editHref ? (
+            <DropdownMenuItem asChild>
+              <a href={editHref}>
+                <PencilLine aria-hidden />
+                {t(language, "entryWorkbench.editEntry")}
+              </a>
+            </DropdownMenuItem>
+          ) : null}
           {operations.map((op) => (
             <DropdownMenuItem key={op.name} onSelect={() => setActiveOperation(op)}>
+              <Workflow aria-hidden />
               {resolveLocalizedText(op.title, language, canonical) ?? fieldLabel(op.name)}
             </DropdownMenuItem>
           ))}

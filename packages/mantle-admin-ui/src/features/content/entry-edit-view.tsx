@@ -166,7 +166,7 @@ export function EntryEditView({
   const canSave = canEdit && dirty && (isDraft || isOperational);
   const actionPending = save.isPending || publish.isPending || unpublish.isPending;
   const mediaPurposes = site.data?.media?.purposes ?? [];
-  const parentLink = parentAdminLink(payload.collection, data, payload.parentEntryId);
+  const parentLink = parentAdminLink(payload.collection, data, payload.parentEntryId, payload.parentEntryTitle);
   const translationSections = payload.related.filter((section) => section.relationship.kind === "translation");
   const hasWorkbench = payload.related.some((section) =>
     section.relationship.kind === "field" && isFoldedFieldChild(section.collection, collectionName, section.relationship.childField)
@@ -197,16 +197,13 @@ export function EntryEditView({
               <>
                 <span className="text-foreground/30">/</span>
                 <a href={parentLink.href} className="hover:underline">
-                  {t(language, "entryEdit.parent", { name: parentLink.label })}
+                  {parentLink.label}
                 </a>
               </>
             ) : null}
           </span>
         }
         title={title}
-        description={t(language, "entryEdit.body", {
-          name: collectionTitle,
-        })}
         actions={
           <>
             {payload.collection.localized && !payload.collection.translates ? (
@@ -1292,13 +1289,14 @@ function parentAdminLink(
   collection: EntryEditorPayload["collection"],
   data: Record<string, unknown>,
   parentEntryId: string | null,
+  parentEntryTitle?: string | null,
 ): { href: string; label: string } | null {
   if (!collection.parent || !parentEntryId) return null;
   const parentValue = data[collection.parent.childField];
   if (typeof parentValue !== "string" && typeof parentValue !== "number" && typeof parentValue !== "boolean") return null;
   return {
     href: `/admin/c/${encodeURIComponent(collection.parent.collection)}/${encodeURIComponent(parentEntryId)}`,
-    label: `${collection.parent.collection} / ${String(parentValue)}`,
+    label: parentEntryTitle || String(parentValue),
   };
 }
 

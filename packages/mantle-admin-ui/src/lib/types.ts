@@ -107,6 +107,7 @@ export interface EntryEditorPayload {
   collection: EntryEditorCollection;
   entry: EntryEditorEntry;
   parentEntryId: string | null;
+  parentEntryTitle?: string | null;
   related: RelatedEntrySection[];
 }
 

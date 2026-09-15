@@ -1323,8 +1323,9 @@ describe("Auth.listMembers", () => {
     ]);
     expect(result.previousCursor).toBeNull();
     expect(prepared.at(-1)).toContain("role IS NULL OR role NOT IN (?,?,?)");
+    expect(prepared.at(-1)).toContain("LOWER(id) LIKE ?");
     expect(prepared.at(-1)).toContain("LOWER(name) LIKE ?");
-    expect(binds.at(-1)).toEqual([...STAFF_ROLES, "%\\_\\%%", "%\\_\\%%", 3]);
+    expect(binds.at(-1)).toEqual([...STAFF_ROLES, "%\\_\\%%", "%\\_\\%%", "%\\_\\%%", 3]);
   });
 });
 

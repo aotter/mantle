@@ -498,6 +498,7 @@ describe("GET /admin/api/entries/:id related entries", () => {
     const editor = await app.request("/admin/api/entries/en");
     expect(await editor.json()).toMatchObject({
       parentEntryId: "article",
+      parentEntryTitle: "hello",
       related: [{
         collection: { name: "article-translations" },
         relationship: { kind: "translation", parentValue: "hello" },

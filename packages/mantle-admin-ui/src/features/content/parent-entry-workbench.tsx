@@ -1,18 +1,20 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, PencilLine } from "lucide-react";
+import { ArrowLeft, MoreHorizontal } from "lucide-react";
 import { useAdminLocation } from "../../app/router";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
+import { operationsQueryOptions } from "../../lib/queries";
 import { entryEditPath, hasFoldedChildCollections, isFoldedFieldChild } from "../../lib/collection-nav";
 import { resolveLocalizedText } from "../../lib/localized-text";
-import type { Collection, EntryEditorPayload, SiteInfo } from "../../lib/types";
+import type { Collection, EntryEditorPayload, SiteInfo, StaffOperation } from "../../lib/types";
 import { Button } from "@/components/ui/button";
-import { cn } from "../../lib/utils";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ErrorBox, PageHeader } from "../../ui/page";
 import { CollectionView } from "./collection-view";
 import { entryTitle } from "./entry-edit-view";
+import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
 
 export function ParentEntryWorkbench({
   collectionName,
@@ -32,6 +34,11 @@ export function ParentEntryWorkbench({
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
   });
+  const operationsQuery = useQuery<StaffOperation[]>(operationsQueryOptions());
+  const boundOperations = React.useMemo(
+    () => boundOperationsFor(operationsQuery.data, collectionName),
+    [operationsQuery.data, collectionName],
+  );
 
   if (query.isLoading) return <div className="text-sm text-muted-foreground">{t(language, "collection.refreshing")}</div>;
   if (query.isError) return <ErrorBox error={query.error} />;
@@ -65,44 +72,45 @@ export function ParentEntryWorkbench({
           </a>
         }
         title={title}
-        description={t(language, "entryWorkbench.body", { name: collectionTitle })}
         actions={
-          <Button asChild>
-            <a href={entryEditPath(collectionName, entryId)}>
-              <PencilLine className="size-4" aria-hidden />
-              {t(language, "entryWorkbench.editEntry")}
-            </a>
-          </Button>
+          <RowOperationsMenu
+            row={payload.entry}
+            operations={boundOperations}
+            editHref={entryEditPath(collectionName, entryId)}
+            language={language}
+            canonical={canonical}
+            onSuccess={() => void query.refetch()}
+            trigger={
+              <Button type="button" variant="secondary" size="icon-sm" aria-label={t(language, "rowActions.menuLabel")}>
+                <MoreHorizontal className="size-4" aria-hidden />
+              </Button>
+            }
+          />
         }
       />
 
       {children.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t(language, "entryEdit.noChildEntries")}</p>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
-          <nav aria-label={t(language, "entryWorkbench.children")} className="flex gap-2 overflow-x-auto lg:flex-col">
-            {children.map((section) => {
-              const label = resolveLocalizedText(section.collection.title, language, canonical)
-                ?? section.collection.name;
-              const href = `/admin/c/${encodeURIComponent(collectionName)}/${encodeURIComponent(entryId)}?child=${encodeURIComponent(section.collection.name)}`;
-              const active = selected?.collection.name === section.collection.name;
-              return (
-                <a
-                  key={section.collection.name}
-                  href={href}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "shrink-0 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
-                    active
-                      ? "border-border bg-secondary text-secondary-foreground"
-                      : "border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                  )}
-                >
-                  {label}
-                </a>
-              );
-            })}
-          </nav>
+        <div className="flex min-w-0 flex-col gap-6">
+          <Tabs value={selected?.collection.name}>
+            <TabsList
+              variant="line"
+              aria-label={t(language, "entryWorkbench.children")}
+              className="w-full justify-start overflow-x-auto rounded-none border-b"
+            >
+              {children.map((section) => {
+                const label = resolveLocalizedText(section.collection.title, language, canonical)
+                  ?? section.collection.name;
+                const href = `/admin/c/${encodeURIComponent(collectionName)}/${encodeURIComponent(entryId)}?child=${encodeURIComponent(section.collection.name)}`;
+                return (
+                  <TabsTrigger key={section.collection.name} value={section.collection.name} asChild>
+                    <a href={href} className="flex-none px-3">{label}</a>
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </Tabs>
           {selected ? (
             <CollectionView
               collectionName={selected.collection.name}
