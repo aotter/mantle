@@ -32,10 +32,12 @@ describe("mountMantleAdmin", () => {
     { "sec-fetch-site": "same-site" },
   ])("blocks cross-origin session mutations %j", async (headers) => {
     const inviteUser = vi.fn(async () => ({ kind: "created" as const, id: "invited" }));
+    const sendStaffInvitation = vi.fn(async () => {});
     const app = mounted({
       getSession: async () => ({ session: { id: "s" }, user: { id: "owner" } }),
       getUserRole: async () => "owner",
       inviteUser,
+      sendStaffInvitation,
     });
     const response = await app.request("https://example.test/admin/api/staff/invitations", {
       method: "POST", headers: { ...headers, "content-type": "text/plain" },
@@ -49,6 +51,7 @@ describe("mountMantleAdmin", () => {
     });
     expect(allowed.status).toBe(200);
     expect(inviteUser).toHaveBeenCalledOnce();
+    expect(sendStaffInvitation).toHaveBeenCalledWith("staff@example.test", "editor");
   });
 
   it("bounds Admin and auth bodies before calling the handler", async () => {

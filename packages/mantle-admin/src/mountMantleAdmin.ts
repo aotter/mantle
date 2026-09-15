@@ -103,6 +103,7 @@ export interface AdminAuth {
     email: string,
     role: StaffRole,
   ) => Promise<{ readonly kind: "created" | "exists"; readonly id: string }>;
+  readonly sendStaffInvitation?: (email: string, role: StaffRole) => Promise<void>;
   readonly revokeInvite: (userId: string) => Promise<boolean>;
 }
 
@@ -424,7 +425,8 @@ export function mountMantleAdmin<E extends Env>(
       }
       await auth.setUserRole(result.id, role as StaffRole);
     }
-    return Response.json({ ok: true, userId: result.id });
+    await auth.sendStaffInvitation?.(email, role as StaffRole);
+    return Response.json({ ok: true, userId: result.id, emailSent: Boolean(auth.sendStaffInvitation) });
   });
 
   roleGuarded("delete", "/admin/api/staff/invitations/:id", "owner", async (c) => {

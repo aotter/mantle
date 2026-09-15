@@ -1429,6 +1429,19 @@ describe("Auth.setUserRole", () => {
 });
 
 describe("Auth.inviteUser", () => {
+  it("sends the shared English staff invitation template", async () => {
+    const send = vi.fn<EmailSender["send"]>(async () => {});
+    const auth = createAuth(baseConfig({ staffInvitationSender: { send } }));
+    await auth.sendStaffInvitation?.(" Staff@Example.COM ", "editor");
+    expect(send).toHaveBeenCalledWith({
+      to: "staff@example.com",
+      subject: "You have been invited to Mantle",
+      text: expect.stringContaining("https://example.test/admin/sign-in"),
+      locale: "en",
+      category: "auth.staff-invitation",
+    });
+  });
+
   it("returns exists with the prior row's id instead of inserting", async () => {
     const prepared: string[] = [];
     const auth = createAuth(
