@@ -214,3 +214,5 @@ export { CANONICAL_MIGRATIONS } from "./infrastructure/boot/canonicalMigrations.
 // Procedure handler failure carrier used by platform helper handlers
 // such as Cloudflare Turnstile.
 export { InvokeFailure } from "./usecase/procedure/InvokeProcedureUseCase.js";
+
+export { buildMcpToolCatalog, type McpToolDefinition } from "./infrastructure/mcp/McpToolCatalog.js";

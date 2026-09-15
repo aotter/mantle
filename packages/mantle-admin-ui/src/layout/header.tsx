@@ -1,4 +1,5 @@
 import * as React from "react";
+import { WebMcpControl } from "./webmcp-control";
 import { ExternalLink, type LucideIcon } from "lucide-react";
 
 import { useAdminLocation } from "@/app/router";
@@ -98,6 +99,7 @@ export function Header({
         ) : null}
         <LanguagePreferenceDropdown compact />
         <ThemePreferenceDropdown compact />
+        <WebMcpControl />
       </div>
     </header>
   );
