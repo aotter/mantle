@@ -19,12 +19,16 @@ export function ListQueryToolbar({
   searchable = true,
   searchValue = "",
   filters = [],
+  leading,
+  actions,
   onSubmit,
 }: {
   language: AdminLanguage;
   searchable?: boolean;
   searchValue?: string;
   filters?: readonly ListQueryFilter[];
+  leading?: React.ReactNode;
+  actions?: React.ReactNode;
   onSubmit: (query: { search: string; filters: Record<string, string> }) => void;
 }): React.ReactElement {
   const optionFilters = filters.filter((filter) => filter.options);
@@ -44,18 +48,24 @@ export function ListQueryToolbar({
         });
       }}
     >
-      {searchable ? (
-        <div className="flex max-w-xl gap-2">
-          <label className="relative block flex-1" aria-label={t(language, "collection.searchPlaceholder")}>
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-            <Input
-              name="search"
-              className="h-9 ps-9"
-              defaultValue={searchValue}
-              placeholder={t(language, "collection.searchPlaceholder")}
-            />
-          </label>
-          <SubmitButton language={language} />
+      {searchable || leading || actions ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {leading}
+          {searchable ? (
+            <div className="flex min-w-64 max-w-xl flex-1 gap-2">
+              <label className="relative block flex-1" aria-label={t(language, "collection.searchPlaceholder")}>
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                <Input
+                  name="search"
+                  className="h-9 ps-9"
+                  defaultValue={searchValue}
+                  placeholder={t(language, "collection.searchPlaceholder")}
+                />
+              </label>
+              <SubmitButton language={language} />
+            </div>
+          ) : null}
+          {actions ? <div className="ms-auto">{actions}</div> : null}
         </div>
       ) : null}
       {fieldFilters.length > 0 ? (

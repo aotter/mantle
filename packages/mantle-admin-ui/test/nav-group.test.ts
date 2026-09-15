@@ -58,17 +58,18 @@ describe("member navigation", () => {
     ]);
   });
 
-  it("separates public services from staff Reports", () => {
+  it("keeps public/member views out of Staff Admin", () => {
     const view = (name: string, surface: ViewManifestInfo["surface"]): ViewManifestInfo => ({ name, surface, title: null, from: null, params: null, fields: null, list: { columns: [], searchFields: [], filterFields: [] } });
     const groups = buildNavGroups([], [view("public-catalog", "public"), view("staff-queue", "staff")], "en", null, "owner");
-    expect(groups.find(({ title }) => title === "Public services")?.items).toEqual([
-      expect.objectContaining({ url: "/admin/views/public-catalog" }),
-    ]);
+    expect(JSON.stringify(groups)).not.toContain("public-catalog");
     expect(groups.find(({ title }) => title === "Reports")?.items).toEqual([
       expect.objectContaining({ url: "/admin/views/staff-queue" }),
     ]);
-    expect(groups.find(({ title }) => title === "Public services")?.items[0]?.icon)
-      .not.toBe(groups.find(({ title }) => title === "Reports")?.items[0]?.icon);
+  });
+
+  it("shows Operations only when a global operation exists", () => {
+    expect(JSON.stringify(buildNavGroups([], [], "en", null, "owner"))).not.toContain("/admin/operations");
+    expect(JSON.stringify(buildNavGroups([], [], "en", null, "owner", true))).toContain("/admin/operations");
   });
 
   it("includes standalone folded children in main Nav without dropping parent collections", () => {

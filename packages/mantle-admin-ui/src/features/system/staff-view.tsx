@@ -2,6 +2,7 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, ExternalLink, MailWarning, UserPlus } from "lucide-react";
 import { usePreferences } from "../../app/preferences";
+import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import { asRenderable } from "../../lib/errors";
@@ -27,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
+import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 
 const EMAIL_SETUP_GUIDE_URL = "https://developers.cloudflare.com/email-service/";
 const EMAIL_SETUP_PROMPT = `Enable email sign-in for this Mantle site. Implement the Mantle EmailSender port with a transactional email provider. For Cloudflare, prefer an Email Service binding. Register either { kind: "email-otp", sender } or { kind: "magic-link", sender } in createAuth(), keep credentials in Worker secrets, deploy, then verify that /api/auth/methods lists the method and a real email arrives.`;
@@ -46,7 +48,10 @@ const INVITABLE: ReadonlyArray<StaffRole> = ["owner", "editor", "contributor"];
 
 export function StaffView(): React.ReactElement {
   const { language } = usePreferences();
+  const { search: locationSearch } = useAdminLocation();
+  const { navigate } = useAdminRouter();
   const queryClient = useQueryClient();
+  const search = new URLSearchParams(locationSearch).get("search")?.trim() ?? "";
 
   const me = useQuery<AdminUser>({
     queryKey: ["me"],
@@ -87,6 +92,11 @@ export function StaffView(): React.ReactElement {
 
   const roleLabel = (role: StaffRole | "none"): string =>
     t(language, `staff.role.${role}`);
+  const term = search.toLowerCase();
+  const users = term
+    ? staff.data.users.filter((user) =>
+        [user.id, user.name, user.email, user.githubLogin].some((value) => value?.toLowerCase().includes(term)))
+    : staff.data.users;
 
   return (
     <div className="space-y-6">
@@ -98,10 +108,17 @@ export function StaffView(): React.ReactElement {
       {revoke.isError ? <ErrorBox error={asRenderable(revoke.error)} /> : null}
       {authMethods.data && !hasEmailSignIn ? <EmailSignInSetup /> : null}
       <InviteCard onInvited={refetch} />
+      <ListQueryToolbar
+        key={search}
+        language={language}
+        searchValue={search}
+        onSubmit={({ search: next }) => navigate(next ? `/admin/staff?${new URLSearchParams({ search: next })}` : "/admin/staff")}
+      />
       <SectionCard className="overflow-x-auto p-0">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>{t(language, "collection.table.id")}</TableHead>
               <TableHead>{t(language, "staff.table.name")}</TableHead>
               <TableHead>{t(language, "staff.table.email")}</TableHead>
               <TableHead>{t(language, "staff.table.status")}</TableHead>
@@ -109,7 +126,7 @@ export function StaffView(): React.ReactElement {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {staff.data.users.map((user) => {
+            {users.map((user) => {
               const isSelf = user.id === me.data?.userId;
               const invited = !user.emailVerified && !user.githubLogin;
               const current: StaffRole | "none" = isStaffRole(user.role)
@@ -117,6 +134,7 @@ export function StaffView(): React.ReactElement {
                 : "none";
               return (
                 <TableRow key={user.id}>
+                  <TableCell className="font-mono text-xs">{user.id}</TableCell>
                   <TableCell>{user.name}</TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>

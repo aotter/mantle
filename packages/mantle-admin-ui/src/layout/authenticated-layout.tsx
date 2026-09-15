@@ -20,7 +20,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { api } from "../lib/api";
 import { isPrimaryNavCollection } from "../lib/collection-nav";
 import { fieldLabel } from "../lib/field-label";
-import { viewsManifestQueryOptions } from "../lib/queries";
+import { operationsQueryOptions, viewsManifestQueryOptions } from "../lib/queries";
 import { resolveLocalizedText } from "../lib/localized-text";
 import {
   PUBLISHING_STATUSES,
@@ -29,6 +29,7 @@ import {
   type SiteInfo,
   type SiteIcon,
   type SidebarStatus,
+  type StaffOperation,
   type ViewManifestInfo,
 } from "../lib/types";
 import { useAdminLocation } from "../app/router";
@@ -77,6 +78,10 @@ export function AuthenticatedLayout({
     ...viewsManifestQueryOptions(),
     enabled: workspace === "content",
   });
+  const operationsQuery = useQuery<StaffOperation[]>({
+    ...operationsQueryOptions(),
+    enabled: workspace === "content",
+  });
 
   React.useEffect(() => {
     if (!site.data?.icons.length) return;
@@ -113,8 +118,10 @@ export function AuthenticatedLayout({
           language,
           canonical,
           me.data?.role ?? null,
+          (operationsQuery.data ?? []).some((operation) =>
+            operation.rowBindings.length === 0 && !operation.uiSchema?.["collectionAction"]),
         ),
-    [collectionsQuery.data, viewsQuery.data, language, canonical, me.data?.role, workspace],
+    [collectionsQuery.data, viewsQuery.data, operationsQuery.data, language, canonical, me.data?.role, workspace],
   );
   const collectionName = pathname.match(/^\/admin\/c\/([^/]+)/)?.[1];
   const viewName = pathname.match(/^\/admin\/views\/([^/]+)/)?.[1];
@@ -197,6 +204,7 @@ export function buildNavGroups(
   language: AdminLanguage,
   canonical: string | null,
   role: AdminUser["role"],
+  hasGlobalOperations = false,
 ): ReadonlyArray<NavGroupData> {
   const primaryCollections = collections.filter(isPrimaryNavCollection);
   const contentCollections = primaryCollections.filter((c) => c.lifecycle !== "operational");
@@ -208,7 +216,9 @@ export function buildNavGroups(
         url: "/admin",
         icon: Home,
       },
-      { title: t(language, "ops.title"), url: "/admin/operations", icon: Workflow },
+      ...(hasGlobalOperations
+        ? [{ title: t(language, "ops.title"), url: "/admin/operations", icon: Workflow }]
+        : []),
     ],
   };
 
@@ -225,20 +235,8 @@ export function buildNavGroups(
         }
       : null;
 
-  // Read-only views get direct sidebar links, grouped by their audience.
-  const publicViews = views.filter((view) => view.surface === "public");
+  // Public/member Views belong to the application surface, not Staff Admin.
   const staffViews = views.filter((view) => view.surface === "staff");
-  const publicServicesGroup: NavGroupData | null =
-    publicViews.length > 0
-      ? {
-          title: t(language, "views.publicServices"),
-          items: publicViews.map((v) => ({
-            title: resolveLocalizedText(v.title, language, canonical) ?? fieldLabel(v.name),
-            icon: Globe,
-            url: `/admin/views/${encodeURIComponent(v.name)}`,
-          })),
-        }
-      : null;
   const reportsGroup: NavGroupData | null =
     staffViews.length > 0
       ? {
@@ -273,7 +271,6 @@ export function buildNavGroups(
     homeGroup,
     contentGroup,
     ...(recordsGroup ? [recordsGroup] : []),
-    ...(publicServicesGroup ? [publicServicesGroup] : []),
     ...(reportsGroup ? [reportsGroup] : []),
     ...(moreGroup.items.length > 0 ? [moreGroup] : []),
   ];

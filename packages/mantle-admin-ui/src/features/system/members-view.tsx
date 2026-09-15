@@ -95,6 +95,7 @@ export function MembersView(): React.ReactElement {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>{t(language, "collection.table.id")}</TableHead>
                   <TableHead>{t(language, "members.table.name")}</TableHead>
                   <TableHead>{t(language, "members.table.email")}</TableHead>
                   <TableHead>{t(language, "members.table.status")}</TableHead>
@@ -105,6 +106,7 @@ export function MembersView(): React.ReactElement {
               <TableBody>
                 {members.data.items.map((member) => (
                   <TableRow key={member.id}>
+                    <TableCell className="font-mono text-xs">{member.id}</TableCell>
                     <TableCell className="font-medium">{member.name}</TableCell>
                     <TableCell>{member.email}</TableCell>
                     <TableCell>

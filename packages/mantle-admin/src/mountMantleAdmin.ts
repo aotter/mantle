@@ -1270,7 +1270,16 @@ function hasCtxStaffPredicate(procedure: ProcedureManifest): boolean {
   return predicates.some((pred) => typeof pred === "object" && pred !== null && "ctx.staff" in pred);
 }
 
-function adminEntryTitle(data: Record<string, unknown>, schema?: JsonSchema): unknown {
+function adminEntryTitle(
+  data: Record<string, unknown>,
+  schema?: JsonSchema,
+  primaryField?: string | null,
+): unknown {
+  if (primaryField) {
+    const value = data[primaryField];
+    if (typeof value === "string" && value.trim()) return value;
+    if (typeof value === "number" || typeof value === "boolean") return value;
+  }
   const key = titleFieldKey(data, schema);
   return key ? data[key] : null;
 }
@@ -1446,10 +1455,12 @@ async function entryEditorPayload(
     );
   }
   const related = await relatedEntrySections(runtime, schema, row, schemas);
+  const parent = await parentEntry(runtime, schema, row, schemas);
   return {
     collection: adminEditorCollection(schema, schemas),
     entry: adminEditorEntry(row),
-    parentEntryId: await parentEntryId(runtime, schema, row, schemas),
+    parentEntryId: parent?.id ?? null,
+    parentEntryTitle: parent ? parentEntryTitle(parent, schemas) : null,
     related,
   };
 }
@@ -1494,6 +1505,7 @@ type AdminEntryEditorPayload = {
   readonly collection: AdminEditorCollection;
   readonly entry: AdminEditorEntry;
   readonly parentEntryId: string | null;
+  readonly parentEntryTitle: string | null;
   readonly related: AdminRelatedEntrySection[];
 };
 
@@ -1683,18 +1695,33 @@ function collectionParentFor(
   return null;
 }
 
-async function parentEntryId(
+async function parentEntry(
   runtime: MantleAdminRuntime,
   childSchema: SchemaManifest,
   childRow: AdminEntryRow,
   schemas: SchemaManifest[],
-): Promise<string | null> {
+): Promise<Pick<AdminEntryRow, "id" | "collection" | "data"> | null> {
   const parent = collectionParentFor(childSchema, schemas);
   if (!parent) return null;
   const value = primitiveJoinValue(childRow.data[parent.childField]);
   if (value === null) return null;
-  if (parent.parentField === "id" && typeof value === "string") return value;
-  return (await entriesByDataValue(runtime, parent.collection, parent.parentField, value))[0]?.id ?? null;
+  if (parent.parentField === "id" && typeof value === "string") {
+    const entry = await runtime.getEntry.execute({ id: value });
+    return entry.collection === parent.collection ? entry : null;
+  }
+  return (await entriesByDataValue(runtime, parent.collection, parent.parentField, value))[0] ?? null;
+}
+
+function parentEntryTitle(
+  entry: Pick<AdminEntryRow, "id" | "collection" | "data">,
+  schemas: SchemaManifest[],
+): string {
+  const schema = schemas.find((candidate) => candidate.metadata.name === entry.collection);
+  const primaryField = schema ? checkSchemaAdminUi(schema).list.primaryField : null;
+  const value = adminEntryTitle(entry.data, schema?.spec.schema, primaryField);
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? String(value)
+    : entry.id;
 }
 
 function primitiveJoinValue(value: unknown): string | number | boolean | null {
