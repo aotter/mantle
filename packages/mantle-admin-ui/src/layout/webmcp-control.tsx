@@ -62,17 +62,25 @@ export function WebMcpControl(): React.ReactElement | null {
         removeBridge = () => window.removeEventListener("message", onMessage);
       }
       if (model?.registerTool) {
-        for (const tool of tools) {
-          controller.signal.throwIfAborted();
-          await model.registerTool({ ...tool, execute: async (input, context) => {
-            try { return await execute(tool.name, input, context?.signal); }
-            catch (error) {
-              return { isError: true, content: [{ type: "text", text: error instanceof Error ? error.message : "Admin tool failed." }],
-                ...(error && typeof error === "object" && "body" in error ? { structuredContent: { diagnostic: error.body } } : {}) };
-            }
-          } }, { signal: controller.signal });
+        const registration = new AbortController();
+        controller.signal.addEventListener("abort", () => registration.abort(), { once: true });
+        try {
+          for (const tool of tools) {
+            controller.signal.throwIfAborted();
+            await model.registerTool({ ...tool, execute: async (input, context) => {
+              try { return await execute(tool.name, input, context?.signal); }
+              catch (error) {
+                return { isError: true, content: [{ type: "text", text: error instanceof Error ? error.message : "Admin tool failed." }],
+                  ...(error && typeof error === "object" && "body" in error ? { structuredContent: { diagnostic: error.body } } : {}) };
+              }
+            } }, { signal: registration.signal });
+          }
+          if (!controller.signal.aborted) setAvailable(true);
+        } catch {
+          registration.abort();
+          // Browser permission denial must not disable the sandbox host bridge.
+          setAvailable(false);
         }
-        if (!controller.signal.aborted) setAvailable(true);
       }
     })().catch(error => {
       if (!controller.signal.aborted) console.error("Admin WebMCP registration failed.", error);

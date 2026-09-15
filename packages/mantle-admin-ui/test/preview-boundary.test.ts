@@ -24,6 +24,7 @@ it("keeps the built preview on its bridge, including search and downloads, while
           history.replaceState(null, '', ${JSON.stringify(route).replace(/</g, "\\u003c")});
           if (parent !== self) {
             window.bridged = [];
+            Object.defineProperty(document, 'modelContext', {value:{registerTool:async()=>{throw new Error('permission denied')}},configurable:true});
             const nativeFetch = window.fetch.bind(window);
             window.fetch = async (input, init) => {
               const request = new Request(input, init);
