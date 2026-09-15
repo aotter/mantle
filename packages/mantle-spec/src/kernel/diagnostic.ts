@@ -27,6 +27,12 @@ export type Phase = "validate" | "test" | "boot" | "runtime";
  * (type), so adding a code is one edit.
  */
 export const DIAGNOSTIC_CODES = [
+  "RESOURCE_EXHAUSTED",
+  "RESOURCE_UNAVAILABLE",
+  "RATE_LIMITED",
+  "OUTCOME_UNKNOWN",
+  "PARTIAL_FAILURE",
+  "PRECONDITION_FAILED",
   // Validate-only.
   "INVALID_MANIFEST_ENVELOPE",
   "DUPLICATE_NAME",
@@ -148,6 +154,12 @@ export interface Diagnostic {
   readonly candidates?: readonly string[];
   readonly suggestion?: string;
   readonly message: string;
+  /** Safe effect/retry facts supplied by a port; never provider payloads. */
+  readonly failure?: {
+    readonly outcome: "not-applied" | "partial" | "unknown";
+    readonly retry: "never" | "after-change" | "safe" | "reconcile";
+    readonly resource?: string;
+  };
 }
 
 /**
@@ -159,9 +171,15 @@ export interface Diagnostic {
  * Narrowed to a status-literal union so adding a code with a status
  * outside the v0.1 set fails compile.
  */
-export type RuntimeHttpStatus = 400 | 401 | 402 | 403 | 404 | 405 | 409 | 410 | 500 | 501;
+export type RuntimeHttpStatus = 400 | 401 | 402 | 403 | 404 | 405 | 409 | 410 | 412 | 429 | 500 | 501 | 503 | 507;
 
 export const HTTP_STATUS_BY_CODE: Readonly<Partial<Record<DiagnosticCode, RuntimeHttpStatus>>> = {
+  RESOURCE_EXHAUSTED: 507,
+  RESOURCE_UNAVAILABLE: 503,
+  RATE_LIMITED: 429,
+  OUTCOME_UNKNOWN: 503,
+  PARTIAL_FAILURE: 503,
+  PRECONDITION_FAILED: 412,
   INPUT_VALIDATION_FAILED: 400,
   INVALID_LOCALE: 400,
   UNAUTHENTICATED: 401,
@@ -228,6 +246,7 @@ export function makeDiagnostic(
     candidates,
     suggestion,
     message: msg,
+    ...(input.failure ? { failure: input.failure } : {}),
   };
 }
 
@@ -264,10 +283,10 @@ function formatValue(v: unknown): string {
  */
 export class DiagnosticError extends Error {
   readonly diagnostics: readonly Diagnostic[];
-  constructor(diagnostic: Diagnostic | readonly Diagnostic[]) {
+  constructor(diagnostic: Diagnostic | readonly Diagnostic[], options?: ErrorOptions) {
     const list = Array.isArray(diagnostic) ? diagnostic : [diagnostic as Diagnostic];
     const head = list[0];
-    super(head ? head.message : "DiagnosticError");
+    super(head ? head.message : "DiagnosticError", options);
     this.name = "DiagnosticError";
     this.diagnostics = list;
   }

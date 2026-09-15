@@ -57,7 +57,7 @@ describe("createMantleWorker", () => {
     const entry = await runtime.createDraft.execute({ collection: "items", data: { title: "kept" }, authorId: null });
     blocked = true;
     await expect(runtime.createDraft.execute({ collection: "items", data: {}, authorId: null })).rejects.toThrow("host_write_limit");
-    await expect(runtime.invokeProcedure({ procedure: "add-item", input: { title: "blocked" }, ctx: { user: null, staff: null, env: {} } })).resolves.toMatchObject({ ok: false, diagnostic: { message: expect.stringContaining("host_write_limit") } });
+    await expect(runtime.invokeProcedure({ procedure: "add-item", input: { title: "blocked" }, ctx: { user: null, staff: null, env: {} } })).resolves.toMatchObject({ ok: false, diagnostic: { code: "INTERNAL_ERROR", message: "An internal error occurred." } });
     expect((await runtime.getEntry.execute({ id: entry.id })).data).toMatchObject({ title: "kept" });
     expect(await runtime.deleteEntry.execute({ id: entry.id })).toEqual({ removed: true });
     expect(() => createMantleRuntimeRef({

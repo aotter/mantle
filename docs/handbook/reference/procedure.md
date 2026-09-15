@@ -48,7 +48,7 @@ handler:
 | `ref` is a non-empty string; only `kind` and `ref` are accepted under `handler`. | `INVALID_MANIFEST_ENVELOPE` |
 | Every declared `ref` resolves to a registered handler. | `HANDLER_NOT_REGISTERED` at boot, listing the registered keys as candidates. |
 | An unregistered key reached at request time. | The same `HANDLER_NOT_REGISTERED` code, mapped to 500 — defense in depth for embeddings that skipped boot validation. |
-| A handler throws. | Anything other than a structured error becomes `INTERNAL_ERROR` (500) with the handler label in the message. |
+| A handler throws. | Anything other than a structured error becomes `INTERNAL_ERROR` (500) with a safe generic message; exception details remain in internal logs. |
 
 To return a structured error instead, throw `InvokeFailure` carrying a diagnostic; the runtime unwraps it and returns that diagnostic with its own status. This is how a handler reports `CONFLICT`, `ENTITLEMENT_REQUIRED` or a domain-specific `INPUT_VALIDATION_FAILED` rather than a generic 500.
 

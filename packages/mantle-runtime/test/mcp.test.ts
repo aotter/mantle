@@ -1,3 +1,4 @@
+import { DiagnosticError, runtimeDiagnostic } from "@aotter/mantle-spec";
 import { describe, expect, it } from "vitest";
 import packageJson from "../package.json" with { type: "json" };
 import { buildMcpToolCatalog } from "../src/infrastructure/mcp/McpToolCatalog.js";
@@ -858,6 +859,32 @@ describe("McpJsonRpcDispatcher", () => {
     };
     expect(inner.ok).toBe(true);
     expect(calls).toEqual([{ msg: "hi", userId: "u1", role: "owner" }]);
+  });
+
+  it("preserves service failure recovery facts without exposing the cause", async () => {
+    const procedure = makeProcedure({ name: "send-message" });
+    const registry = new InMemoryHandlerRegistry();
+    let sends = 0;
+    registry.register("echoHandler", () => {
+      sends++;
+      throw new DiagnosticError(runtimeDiagnostic({
+        code: "OUTCOME_UNKNOWN", severity: "error", path: "email",
+        message: "Delivery acknowledgement unavailable.",
+        failure: { outcome: "unknown", retry: "reconcile", resource: "email" },
+      }), { cause: new Error("private-provider-response") });
+    });
+    const dispatcher = new McpJsonRpcDispatcher(
+      { ...minimalUseCases(), invokeTrigger: triggerInvoker(procedure, new InvokeProcedureUseCase(registry)) },
+      [], { surface: "public", capabilities: [procedureCapability(procedure, "public")] },
+    );
+    const response = await dispatcher.dispatch(jsonRpcReq("tools/call", {
+      name: "send_message", arguments: { msg: "hello" },
+    }), mcpContext());
+    const body = await response.json() as { error: { data: { code: string; failure: unknown } } };
+    expect(body.error.data.code).toBe("OUTCOME_UNKNOWN");
+    expect(body.error.data.failure).toEqual({ outcome: "unknown", retry: "reconcile", resource: "email" });
+    expect(JSON.stringify(body)).not.toContain("private-provider-response");
+    expect(sends).toBe(1);
   });
 
   it("Procedure-MCP trigger on public surface: tool appears alongside Views, not staff tools (#281)", async () => {

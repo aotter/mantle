@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DiagnosticError, runtimeDiagnostic,
   linkManifestSet,
   parseManifestSources,
 } from "@aotter/mantle-spec";
@@ -14,6 +15,21 @@ import { InMemoryEntryRepository } from "./fakes/in-memory-store.js";
 const ctx = { user: { id: "u-1" }, staff: null, env: {} } as const;
 
 describe("HTTP Trigger + builtin upsert OCC", () => {
+  it("preserves host capacity rejection before builtin storage write", async () => {
+    const { handle, store } = await boot(httpUpsertManifests());
+    store.create = async () => { throw new DiagnosticError(runtimeDiagnostic({
+      code: "RESOURCE_EXHAUSTED", severity: "error", path: "host/storage",
+      message: "Storage capacity reached.",
+      failure: { outcome: "not-applied", retry: "after-change", resource: "database" },
+    }), { cause: new Error("private provider detail") }); };
+    const response = await post(handle, "/api/posts", { title: "blocked" });
+    expect(response.status).toBe(507);
+    const body = await response.json();
+    expect(body).toMatchObject({ diagnostic: { code: "RESOURCE_EXHAUSTED",
+      failure: { outcome: "not-applied", retry: "after-change" } } });
+    expect(JSON.stringify(body)).not.toContain("private provider detail");
+  });
+
   it("create without version, update with observed version, stale 409; covers id and unique-key match", async () => {
     const { handle, store } = await boot(httpUpsertManifests());
 
