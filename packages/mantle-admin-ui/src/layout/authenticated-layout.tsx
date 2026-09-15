@@ -292,7 +292,11 @@ export function buildDeveloperNavGroups(language: AdminLanguage): ReadonlyArray<
         { title: t(language, "logic.triggers"), url: "/admin/dev/logic/triggers" },
         { title: t(language, "logic.procedures"), url: "/admin/dev/logic/procedures" },
       ] },
-      { title: t(language, "nav.docs"), url: "/admin/dev/docs", icon: BookOpenText },
+      { title: t(language, "nav.docs"), icon: BookOpenText, items: [
+        { title: t(language, "docs.api"), url: "/admin/dev/docs/api" },
+        { title: t(language, "docs.mcp"), url: "/admin/dev/docs/mcp" },
+        { title: t(language, "docs.webmcp"), url: "/admin/dev/docs/webmcp" },
+      ] },
     ],
   }];
 }
