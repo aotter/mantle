@@ -421,8 +421,40 @@ describe("McpJsonRpcDispatcher", () => {
       name: "delete_entry",
       arguments: { id: "managed-1" },
     }), mcpContext());
-    const deletionBody = (await deletion.json()) as { error: { data: { code: string } } };
-    expect(deletionBody.error.data.code).toBe("CONFLICT");
+    const deletionBody = (await deletion.json()) as { error: { code: number } };
+    expect(deletionBody.error.code).toBe(-32601);
+    expect(await store.get("managed-1")).not.toBeNull();
+  });
+
+  it("limits lifecycle discovery and rejects inapplicable or cross-collection calls", async () => {
+    const operational = operationalPostsSchema();
+    const content = { ...postsSchema(), metadata: { name: "articles" } };
+    const managed = { ...readOnlyOperationalPostsSchema(), metadata: { name: "managed" } };
+    const lifecycleTools = ["request_publish", "unpublish_entry", "archive_entry"];
+    for (const schemas of [[operational], [managed], [content], [content, operational, managed]]) {
+      const { dispatcher, store } = buildHarness(schemas);
+      const catalog = buildMcpToolCatalog(schemas);
+      const hasContent = schemas.includes(content);
+      for (const name of lifecycleTools) expect(catalog.some((t) => t.name === name)).toBe(hasContent);
+      expect(catalog.find((t) => t.name === "list_entries")?.inputSchema).toMatchObject({
+        properties: { collection: { enum: schemas.map((s) => s.metadata.name) } },
+      });
+      for (const schema of schemas) {
+        const original = await store.create({ id: schema.metadata.name, collection: schema.metadata.name,
+          status: "draft", data: { title: "Unchanged" }, authorId: null, now: 1 });
+        if (schema === content) continue;
+        for (const name of [...lifecycleTools, "update_draft_articles"]) {
+          const response = await dispatcher.dispatch(jsonRpcReq("tools/call", {
+            name, arguments: { id: original.id, expected_version: 1, title: "Wrong" },
+          }), mcpContext("owner", "owner"));
+          const body = await response.json() as { error: { code: number; data?: { code: string } } };
+          expect(body.error).toBeDefined();
+          if (hasContent) expect(body.error.data?.code).toBe(name === "update_draft_articles" ? "NOT_FOUND" : "CONFLICT");
+          else expect(body.error.code).toBe(-32601);
+          expect(await store.get(original.id)).toEqual(original);
+        }
+      }
+    }
   });
 
   it("public surface exposes View query tools, not staff authoring tools", async () => {

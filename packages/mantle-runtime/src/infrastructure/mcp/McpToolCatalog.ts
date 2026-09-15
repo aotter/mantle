@@ -8,6 +8,7 @@ import {
   mcpToolNameSegment,
   expandPolicyRequired,
   resolveLifecycle,
+  schemaSortableFields,
   resolveLocalizedText,
   type JsonSchema,
   type MediaPurposePolicy,
@@ -284,7 +285,21 @@ export function buildMcpToolCatalog(
   if (surface === "public") {
     return collapseToolSchemaAnnotations(callableTools);
   }
-  const out: McpToolDefinition[] = [...GENERIC_TOOLS];
+  const writable = schemas.filter((s) => s.spec.schema.readOnly !== true);
+  const content = writable.filter((s) => resolveLifecycle(s) !== "operational");
+  const out: McpToolDefinition[] = GENERIC_TOOLS.flatMap((tool) => {
+    const targets = CONTENT_LIFECYCLE_TOOLS.has(tool.name) ? content
+      : tool.name === "delete_entry" ? writable : schemas;
+    if (targets.length === 0) return [];
+    const summary = targets.map((s) =>
+      `${s.metadata.name} (${resolveLifecycle(s)}${s.spec.schema.readOnly ? "; Procedure-only writes" : ""}; search: ${["id", ...(s.spec.searchableFields ?? [])].join(", ")}; sort: ${["id", "status", "updatedAt", ...schemaSortableFields(s)].join(", ")})`,
+    ).join("; ");
+    return [{ ...tool, description: `${tool.description} Collections: ${summary}. Prefer declared business Procedures and Views when available.`,
+      ...(tool.name === "list_entries" ? { inputSchema: { ...tool.inputSchema,
+        properties: { ...(tool.inputSchema.properties as Record<string, unknown>), collection: { type: "string", enum: targets.map((s) => s.metadata.name) } },
+      } } : {}),
+    }];
+  });
   if (opts.mediaEnabled) out.push(...buildMediaTools(opts.mediaPurposes ?? []));
   for (const s of schemas) {
     if (s.spec.schema.readOnly === true) continue;
@@ -294,6 +309,10 @@ export function buildMcpToolCatalog(
   out.push(...callableTools);
   return collapseToolSchemaAnnotations(out);
 }
+
+export const CONTENT_LIFECYCLE_TOOLS: ReadonlySet<string> = new Set([
+  "request_publish", "unpublish_entry", "archive_entry",
+]);
 
 function collapseToolSchemaAnnotations(
   tools: readonly McpToolDefinition[],

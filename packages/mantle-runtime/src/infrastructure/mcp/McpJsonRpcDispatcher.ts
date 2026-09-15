@@ -2,6 +2,7 @@ import {
   DiagnosticError,
   redactForWire,
   runtimeDiagnostic,
+  resolveLifecycle,
   type Diagnostic,
   type ContentState,
   type MediaPurposePolicy,
@@ -29,6 +30,7 @@ import { ExecuteViewUseCase } from "../../usecase/view/index.js";
 import type { RuntimeCallableCapability } from "../../domain/service/CallableCapabilityProjector.js";
 import {
   CREATE_DRAFT_PREFIX,
+  CONTENT_LIFECYCLE_TOOLS,
   CREATE_RECORD_PREFIX,
   UPDATE_DRAFT_PREFIX,
   UPDATE_RECORD_PREFIX,
@@ -419,9 +421,7 @@ export class McpJsonRpcDispatcher {
           const id = args["id"];
           const expected = args["expected_version"];
           if (typeof id !== "string" || typeof expected !== "number") return MISSING_ARG;
-          // Caller may also call get_entry separately; we don't need
-          // the collection on the chokepoint args because UpdateDraft
-          // looks it up from the existing row.
+          await this.assertEntryMutable(id, name, collection);
           const data = stripReservedArgs(args);
           return this.useCases.updateDraft.execute({
             id,
@@ -436,8 +436,23 @@ export class McpJsonRpcDispatcher {
     }
   }
 
-  private async assertEntryMutable(id: string, toolName: string): Promise<void> {
+  private async assertEntryMutable(id: string, toolName: string, collection?: string): Promise<void> {
     const entry = await this.useCases.getEntry.execute({ id });
+    if (collection !== undefined && entry.collection !== collection) {
+      throw new DiagnosticError(runtimeDiagnostic({
+        code: "NOT_FOUND", severity: "error", path: `MCP ${toolName}`,
+        value: id, expected: `entry in '${collection}'`,
+        message: `No entry with id '${id}' in collection '${collection}'.`,
+      }));
+    }
+    const schema = this.schemas.find((s) => s.metadata.name === entry.collection);
+    if (CONTENT_LIFECYCLE_TOOLS.has(toolName) && (!schema || resolveLifecycle(schema) === "operational")) {
+      throw new DiagnosticError(runtimeDiagnostic({
+        code: "CONFLICT", severity: "error", path: `MCP ${toolName}`,
+        value: entry.collection, expected: "a content lifecycle",
+        message: `Tool '${toolName}' requires a content lifecycle; '${entry.collection}' does not support publishing transitions. Use its declared Procedures.`,
+      }));
+    }
     if (!this.readOnlyCollections.has(entry.collection)) return;
     throw new DiagnosticError(runtimeDiagnostic({
       code: "CONFLICT",
