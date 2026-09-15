@@ -291,4 +291,3 @@ const { document } = EmitOpenapiUseCase.run({
 - [`packages/mantle-runtime/src/usecase/view/ExecuteViewUseCase.ts`](../../../packages/mantle-runtime/src/usecase/view/ExecuteViewUseCase.ts)
 - [`packages/mantle-admin/src/mountMantleAdmin.ts`](../../../packages/mantle-admin/src/mountMantleAdmin.ts)
 - [`packages/adapters/cloudflare/src/mount/mountMcp.ts`](../../../packages/adapters/cloudflare/src/mount/mountMcp.ts)
-- [`docs/design-atoms.md`](../../../docs/design-atoms.md)

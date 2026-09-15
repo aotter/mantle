@@ -181,4 +181,3 @@ Five codes are declared in the catalog but not emitted anywhere in the shipped s
 - [`packages/mantle-runtime/src/usecase/media/diagnostics.ts`](../../../packages/mantle-runtime/src/usecase/media/diagnostics.ts)
 - [`packages/mantle-runtime/src/domain/service/EntryMutationDiagnostics.ts`](../../../packages/mantle-runtime/src/domain/service/EntryMutationDiagnostics.ts)
 - [`packages/adapters/cloudflare/src/worker/createMantleWorker.ts`](../../../packages/adapters/cloudflare/src/worker/createMantleWorker.ts)
-- [`docs/design-atoms.md`](../../../docs/design-atoms.md)

@@ -213,7 +213,6 @@ Register the two `ref` keys in the project's handlers map, then run the check lo
 
 ## Source
 
-- [`docs/design-atoms.md`](../../../docs/design-atoms.md)
 - [`docs/adr/0001-four-atom-manifest-model.md`](../../../docs/adr/0001-four-atom-manifest-model.md)
 - [`docs/deferred-lifecycle-queues.md`](../../../docs/deferred-lifecycle-queues.md)
 - [`packages/mantle-spec/src/domain/model/ManifestGrammar.ts`](../../../packages/mantle-spec/src/domain/model/ManifestGrammar.ts)

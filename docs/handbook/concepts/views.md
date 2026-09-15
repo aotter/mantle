@@ -168,7 +168,6 @@ spec:
 ## Source
 
 - [`docs/adr/0012-views-as-public-rest.md`](../../../docs/adr/0012-views-as-public-rest.md)
-- [`docs/design-atoms.md`](../../../docs/design-atoms.md)
 - [`docs/schema-indexes.md`](../../../docs/schema-indexes.md)
 - [`packages/mantle-spec/src/domain/service/ManifestGraphValidator.ts`](../../../packages/mantle-spec/src/domain/service/ManifestGraphValidator.ts)
 - [`packages/mantle-runtime/src/domain/service/Pagination.ts`](../../../packages/mantle-runtime/src/domain/service/Pagination.ts)

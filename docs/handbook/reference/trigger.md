@@ -191,4 +191,3 @@ For deferred `after_*` delivery, the ordered Trigger-name list is captured into 
 - [`packages/mantle/src/codegen/emitMantleModule.ts`](../../../packages/mantle/src/codegen/emitMantleModule.ts)
 - [`packages/adapters/cloudflare/src/worker/createMantleWorker.ts`](../../../packages/adapters/cloudflare/src/worker/createMantleWorker.ts)
 - [`packages/adapters/cloudflare/src/mount/mountMcp.ts`](../../../packages/adapters/cloudflare/src/mount/mountMcp.ts)
-- [`docs/design-atoms.md`](../../../docs/design-atoms.md)

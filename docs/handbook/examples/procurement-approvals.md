@@ -235,6 +235,6 @@ Related: [Guarded API access](./guarded-api.md) covers credentials and scopes fo
 
 ## Source
 
-- [`docs/design-atoms.md`](../../../docs/design-atoms.md) — `x-mantle-bind`, `x-mantle-ref`, builtin `update` contract, RBAC
+- [Procedure reference](../reference/procedure.md) — `x-mantle-bind`, `x-mantle-ref`, builtin `update` contract, RBAC
 - [`packages/mantle-admin/src/mountMantleAdmin.ts`](../../../packages/mantle-admin/src/mountMantleAdmin.ts) — `discoverRowBindings` and `rowField` derivation
 - [`packages/mantle-runtime/src/domain/service/AuthPredicateEvaluator.ts`](../../../packages/mantle-runtime/src/domain/service/AuthPredicateEvaluator.ts) — `UNAUTHENTICATED` versus `AUTH_DENIED`
