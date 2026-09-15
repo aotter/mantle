@@ -1,5 +1,5 @@
 export function developerSelectionHref(
-  pathname: "/admin/dev" | "/admin/dev/model" | "/admin/dev/logic",
+  pathname: `/admin/dev${string}`,
   selectedId: string | null,
   extra: Record<string, string | null> = {},
 ): string {
@@ -13,8 +13,9 @@ export function developerDetailHref(
   selectedId: string,
   extra: Record<string, string | null> = {},
 ): string {
-  const pathname = selectedId.startsWith("Schema:") || selectedId.startsWith("View:")
-    ? "/admin/dev/model"
-    : "/admin/dev/logic";
+  const pathname = selectedId.startsWith("Schema:") ? "/admin/dev/model/schemas"
+    : selectedId.startsWith("View:") ? "/admin/dev/model/views"
+    : selectedId.startsWith("Trigger:") ? "/admin/dev/logic/triggers"
+    : "/admin/dev/logic/procedures";
   return developerSelectionHref(pathname, selectedId, extra);
 }

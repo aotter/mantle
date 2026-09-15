@@ -54,7 +54,7 @@ export function AuthenticatedLayout({
 }: AuthenticatedLayoutProps): React.ReactElement {
   const [formActionBarHost, setFormActionBarHost] = React.useState<HTMLDivElement | null>(null);
   const { pathname, search } = useAdminLocation();
-  const fullBleed = workspace === "developer" && ["/admin/dev", "/admin/dev/model", "/admin/dev/logic", "/admin/dev/docs"].includes(pathname);
+  const fullBleed = workspace === "developer" && pathname.startsWith("/admin/dev");
   const { language } = usePreferences();
 
   const me = useQuery<AdminUser>({
@@ -281,8 +281,14 @@ export function buildDeveloperNavGroups(language: AdminLanguage): ReadonlyArray<
     title: t(language, "nav.build"),
     items: [
       { title: t(language, "nav.overview"), url: "/admin/dev", icon: LayoutDashboard },
-      { title: t(language, "nav.model"), url: "/admin/dev/model", icon: Database },
-      { title: t(language, "nav.logic"), url: "/admin/dev/logic", icon: Workflow },
+      { title: t(language, "nav.model"), icon: Database, items: [
+        { title: t(language, "model.schemas"), url: "/admin/dev/model/schemas" },
+        { title: t(language, "model.views"), url: "/admin/dev/model/views" },
+      ] },
+      { title: t(language, "nav.logic"), icon: Workflow, items: [
+        { title: t(language, "logic.triggers"), url: "/admin/dev/logic/triggers" },
+        { title: t(language, "logic.procedures"), url: "/admin/dev/logic/procedures" },
+      ] },
       { title: t(language, "nav.docs"), url: "/admin/dev/docs", icon: BookOpenText },
     ],
   }];

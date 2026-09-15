@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, ChevronRight, Link2, Search, Workflow, Zap, type LucideIcon } from "lucide-react";
+import { ArrowRight, Link2, Search } from "lucide-react";
 
 import { t } from "../../app/i18n";
 import { usePreferences } from "../../app/preferences";
@@ -19,7 +19,6 @@ import type {
 import { cn } from "../../lib/utils";
 import { ErrorBox } from "../../ui/page";
 import { Badge } from "@/components/ui/badge";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SidebarContent, SidebarHeader, SidebarInput } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -43,12 +42,16 @@ export function LogicView(): React.ReactElement {
   const { navigate } = useAdminRouter();
   const [search, setSearch] = React.useState("");
   const snapshot = useQuery(developerConsoleQueryOptions());
-  const items: LogicItem[] = snapshot.data ? [
-    ...snapshot.data.logic.triggers.map((model) => ({ kind: "Trigger" as const, id: `Trigger:${model.name}`, model })),
-    ...snapshot.data.logic.procedures.map((model) => ({ kind: "Procedure" as const, id: `Procedure:${model.name}`, model })),
-  ] : [];
   const params = new URLSearchParams(location.search);
-  const selected = items.find(({ id }) => id === params.get("selected")) ?? items[0] ?? null;
+  const requestedId = params.get("selected");
+  const kind = location.pathname.endsWith("/procedures") || (location.pathname === "/admin/dev/logic" && requestedId?.startsWith("Procedure:")) ? "Procedure" : "Trigger";
+  const route = kind === "Procedure" ? "/admin/dev/logic/procedures" : "/admin/dev/logic/triggers";
+  const items: LogicItem[] = snapshot.data
+    ? kind === "Procedure"
+      ? snapshot.data.logic.procedures.map((model) => ({ kind, id: `Procedure:${model.name}`, model }))
+      : snapshot.data.logic.triggers.map((model) => ({ kind, id: `Trigger:${model.name}`, model }))
+    : [];
+  const selected = items.find(({ id }) => id === requestedId) ?? items[0] ?? null;
   const requestedTab = params.get("tab");
   const tab: LogicTab = requestedTab === "contract" || requestedTab === "manifest" ? requestedTab : "overview";
   const manifestFocus = tab === "manifest" ? params.get("pointer") : null;
@@ -63,11 +66,11 @@ export function LogicView(): React.ReactElement {
 
   const selectTab = (next: string): void => {
     if (next !== "overview" && next !== "contract" && next !== "manifest") return;
-    navigate(developerSelectionHref("/admin/dev/logic", selected.id, next === "overview" ? undefined : { tab: next }));
+    navigate(developerSelectionHref(route, selected.id, next === "overview" ? undefined : { tab: next }));
   };
 
   return (
-    <DeveloperExplorer label={t(language, "logic.title")} sidebarLabel={t(language, "logic.objects")} sidebar={<LogicSidebar items={visibleItems} selectedId={selected.id} search={search} onSearch={setSearch} onSelect={(id) => navigate(developerSelectionHref("/admin/dev/logic", id))} />} selectedId={selected.id} graph={snapshot.data.graph}>
+    <DeveloperExplorer label={t(language, "logic.title")} sidebarLabel={t(language, "logic.objects")} sidebar={<LogicSidebar items={visibleItems} selectedId={selected.id} search={search} onSearch={setSearch} onSelect={(id) => navigate(developerSelectionHref(route, id))} />} selectedId={selected.id} graph={snapshot.data.graph}>
       <LogicDefinition item={selected} snapshot={snapshot.data} tab={tab} manifestFocus={manifestFocus} onTabChange={selectTab} onNavigate={(id) => navigate(developerDetailHref(id))} />
     </DeveloperExplorer>
   );
@@ -85,54 +88,29 @@ function LogicSidebar({ items, selectedId, search, onSearch, onSelect }: { items
         </label>
       </SidebarHeader>
       <SidebarContent className="gap-0 p-2">
-        <TriggerGroup items={items.filter((item): item is Extract<LogicItem, { kind: "Trigger" }> => item.kind === "Trigger")} selectedId={selectedId} onSelect={onSelect} />
-        <LogicGroup title={t(language, "logic.procedures")} icon={Workflow} items={items.filter((item) => item.kind === "Procedure")} selectedId={selectedId} onSelect={onSelect} />
+        {items[0]?.kind === "Trigger"
+          ? <TriggerList items={items as Array<Extract<LogicItem, { kind: "Trigger" }>>} selectedId={selectedId} onSelect={onSelect} />
+          : items.map((item) => <LogicItemButton key={item.id} item={item} selected={item.id === selectedId} onSelect={onSelect} />)}
       </SidebarContent>
     </aside>
   );
 }
 
-function TriggerGroup({ items, selectedId, onSelect }: { items: Array<Extract<LogicItem, { kind: "Trigger" }>>; selectedId: string; onSelect: (id: string) => void }): React.ReactElement {
+function TriggerList({ items, selectedId, onSelect }: { items: Array<Extract<LogicItem, { kind: "Trigger" }>>; selectedId: string; onSelect: (id: string) => void }): React.ReactElement {
   const { language } = usePreferences();
   return (
-    <Collapsible defaultOpen className="group/logic mb-1">
-      <CollapsibleTrigger className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm font-medium hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">
-        <Zap className="size-4" aria-hidden />
-        <span className="flex-1 text-start">{t(language, "logic.triggers")}</span>
-        <span className="font-mono text-[10px] text-sidebar-foreground/60">{items.length}</span>
-        <ChevronRight className="size-4 transition-transform group-data-[state=open]/logic:rotate-90" aria-hidden />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="ms-4 border-s border-sidebar-border ps-2">
-        {triggerAudiences.map((audience) => {
-          const group = items.filter((item) => item.model.audience === audience);
-          return group.length ? (
-            <section key={audience} className="mt-2" aria-label={audienceLabel(language, audience)}>
-              <div className="flex h-6 items-center gap-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/60">
-                <span className="flex-1">{audienceLabel(language, audience)}</span>
-                <span className="font-mono">{group.length}</span>
-              </div>
-              {group.map((item) => <LogicItemButton key={item.id} item={item} selected={item.id === selectedId} onSelect={onSelect} />)}
-            </section>
-          ) : null;
-        })}
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-function LogicGroup({ title, icon: Icon, items, selectedId, onSelect }: { title: string; icon: LucideIcon; items: LogicItem[]; selectedId: string; onSelect: (id: string) => void }): React.ReactElement {
-  return (
-    <Collapsible defaultOpen className="group/logic mb-1">
-      <CollapsibleTrigger className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm font-medium hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">
-        <Icon className="size-4" aria-hidden />
-        <span className="flex-1 text-start">{title}</span>
-        <span className="font-mono text-[10px] text-sidebar-foreground/60">{items.length}</span>
-        <ChevronRight className="size-4 transition-transform group-data-[state=open]/logic:rotate-90" aria-hidden />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="ms-4 border-s border-sidebar-border ps-2">
-        {items.map((item) => <LogicItemButton key={item.id} item={item} selected={item.id === selectedId} onSelect={onSelect} />)}
-      </CollapsibleContent>
-    </Collapsible>
+    <>{triggerAudiences.map((audience) => {
+      const group = items.filter((item) => item.model.audience === audience);
+      return group.length ? (
+        <section key={audience} className="mb-2" aria-label={audienceLabel(language, audience)}>
+          <div className="flex h-6 items-center gap-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/60">
+            <span className="flex-1">{audienceLabel(language, audience)}</span>
+            <span className="font-mono">{group.length}</span>
+          </div>
+          {group.map((item) => <LogicItemButton key={item.id} item={item} selected={item.id === selectedId} onSelect={onSelect} />)}
+        </section>
+      ) : null;
+    })}</>
   );
 }
 

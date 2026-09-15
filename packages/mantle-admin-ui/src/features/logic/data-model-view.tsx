@@ -2,10 +2,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Check,
-  ChevronRight,
   Copy,
-  Database,
-  Eye,
   KeyRound,
   Languages,
   Link2,
@@ -29,7 +26,6 @@ import { cn } from "../../lib/utils";
 import { ErrorBox } from "../../ui/page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SidebarContent, SidebarHeader, SidebarInput } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -143,12 +139,15 @@ export function DataModelView(): React.ReactElement {
   const { navigate } = useAdminRouter();
   const [search, setSearch] = React.useState("");
   const snapshot = useQuery(developerConsoleQueryOptions());
-  const items: ModelItem[] = snapshot.data ? [
-    ...snapshot.data.dataModel.schemas.map((model) => ({ kind: "Schema" as const, id: `Schema:${model.name}`, model })),
-    ...snapshot.data.dataModel.views.map((model) => ({ kind: "View" as const, id: `View:${model.name}`, model })),
-  ] : [];
   const params = new URLSearchParams(location.search);
   const requestedId = params.get("selected");
+  const kind = location.pathname.endsWith("/views") || (location.pathname === "/admin/dev/model" && requestedId?.startsWith("View:")) ? "View" : "Schema";
+  const route = kind === "View" ? "/admin/dev/model/views" : "/admin/dev/model/schemas";
+  const items: ModelItem[] = snapshot.data
+    ? kind === "View"
+      ? snapshot.data.dataModel.views.map((model) => ({ kind, id: `View:${model.name}`, model }))
+      : snapshot.data.dataModel.schemas.map((model) => ({ kind, id: `Schema:${model.name}`, model }))
+    : [];
   const selected = items.find((item) => item.id === requestedId) ?? items[0] ?? null;
   const requestedTab = params.get("tab");
   const tab: ModelTab = requestedTab === "raw" || requestedTab === "manifest" ? requestedTab : "definition";
@@ -157,13 +156,13 @@ export function DataModelView(): React.ReactElement {
   const visibleItems = query
     ? items.filter((item) => `${item.kind} ${item.model.name} ${resolveLocalizedText(item.model.title, language) ?? ""}`.toLowerCase().includes(query))
     : items;
-  const select = (id: string): void => navigate(developerSelectionHref("/admin/dev/model", id));
+  const select = (id: string): void => navigate(developerSelectionHref(route, id));
   const openManifest = (id: string, pointer: string): void => {
-    navigate(developerSelectionHref("/admin/dev/model", id, { tab: "manifest", pointer }));
+    navigate(developerSelectionHref(route, id, { tab: "manifest", pointer }));
   };
   const selectTab = (next: string): void => {
     if (next !== "definition" && next !== "raw" && next !== "manifest") return;
-    navigate(developerSelectionHref("/admin/dev/model", selected!.id, next === "definition" ? undefined : { tab: next }));
+    navigate(developerSelectionHref(route, selected!.id, next === "definition" ? undefined : { tab: next }));
   };
 
   if (snapshot.isError) return <div className="p-6"><ErrorBox error={snapshot.error} /></div>;
@@ -191,30 +190,13 @@ function ModelSidebar({ items, selectedId, search, onSearch, onSelect }: { items
         </label>
       </SidebarHeader>
       <SidebarContent className="gap-0 p-2">
-        <ModelGroup title={t(language, "model.schemas")} icon={Database} items={items.filter((item) => item.kind === "Schema")} selectedId={selectedId} onSelect={onSelect} />
-        <ModelGroup title={t(language, "model.views")} icon={Eye} items={items.filter((item) => item.kind === "View")} selectedId={selectedId} onSelect={onSelect} />
-      </SidebarContent>
-    </aside>
-  );
-}
-
-function ModelGroup({ title, icon: Icon, items, selectedId, onSelect }: { title: string; icon: LucideIcon; items: ModelItem[]; selectedId: string; onSelect: (id: string) => void }): React.ReactElement {
-  return (
-    <Collapsible defaultOpen className="group/model mb-1">
-      <CollapsibleTrigger className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm font-medium hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">
-        <Icon className="size-4" aria-hidden />
-        <span className="flex-1 text-start">{title}</span>
-        <span className="font-mono text-[10px] text-sidebar-foreground/60">{items.length}</span>
-        <ChevronRight className="size-4 transition-transform group-data-[state=open]/model:rotate-90" aria-hidden />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="ms-4 border-s border-sidebar-border ps-2">
         {items.map((item) => (
-          <button key={item.id} type="button" onClick={() => onSelect(item.id)} aria-pressed={item.id === selectedId} className={cn("mt-1 block h-8 w-full truncate rounded-md px-2 text-start font-mono text-xs hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring", item.id === selectedId && "bg-sidebar-accent font-medium text-sidebar-accent-foreground")}>
+          <button key={item.id} type="button" onClick={() => onSelect(item.id)} aria-pressed={item.id === selectedId} className={cn("block h-8 w-full truncate rounded-md px-2 text-start font-mono text-xs hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring", item.id === selectedId && "bg-sidebar-accent font-medium text-sidebar-accent-foreground")}>
             {item.model.name}
           </button>
         ))}
-      </CollapsibleContent>
-    </Collapsible>
+      </SidebarContent>
+    </aside>
   );
 }
 
