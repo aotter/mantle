@@ -135,6 +135,27 @@ spec: { surface: public, from: orders }
     }));
   });
 
+  it("allows manifests to define the removed generic read tool names", () => {
+    const linked = linkManifestSet(parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: get-entry }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: get-entry }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: get-entry-mcp }
+spec:
+  source: { kind: mcp, surface: staff }
+  target: { procedure: get-entry }
+`));
+
+    expect(linked.ok).toBe(true);
+  });
+
   it("rejects duplicate MCP bindings that would lose Trigger identity", () => {
     const linked = linkManifestSet(parse(`
 apiVersion: cms.mantle.aotter.net/v1

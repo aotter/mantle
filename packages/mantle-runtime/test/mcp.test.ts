@@ -12,7 +12,6 @@ import {
   CreateDraftUseCase,
   DeleteEntryUseCase,
   GetEntryUseCase,
-  ListEntriesUseCase,
   RequestPublishUseCase,
   UnpublishUseCase,
   UpdateDraftUseCase,
@@ -53,7 +52,6 @@ function buildHarness(schemas = [postsSchema()]): Harness {
   const clock: Clock = { now: () => 1_000_000 };
   const idgen: IdGenerator = { next: () => `mcp-${i++}` };
   const useCases: McpUseCases = {
-    listEntries: new ListEntriesUseCase(store, schemasByName),
     getEntry: new GetEntryUseCase(store),
     createDraft: new CreateDraftUseCase(store, schemasByName, clock, idgen),
     updateDraft: new UpdateDraftUseCase(store, schemasByName, clock),
@@ -63,6 +61,7 @@ function buildHarness(schemas = [postsSchema()]): Harness {
     deleteEntry: new DeleteEntryUseCase(store, schemasByName),
   };
   return {
+    getEntry: new GetEntryUseCase(store),
     store,
     dispatcher: new McpJsonRpcDispatcher(useCases, schemas),
   };
@@ -80,9 +79,7 @@ function readOnlyOperationalPostsSchema() {
 
 /**
  * Build a stripped-down McpUseCases for tests that only exercise the
- * procedure-dispatch / public-surface paths (#281). The CRUD use cases
- * are present (the McpUseCases interface requires them) but the
- * tests never reach them.
+ * procedure-dispatch / public-surface paths (#281).
  */
 function minimalUseCases(): McpUseCases {
   const store = new InMemoryEntryRepository();
@@ -90,8 +87,6 @@ function minimalUseCases(): McpUseCases {
   const clock: Clock = { now: () => 0 };
   const idgen: IdGenerator = { next: () => "x" };
   return {
-    listEntries: new ListEntriesUseCase(store, schemasByName),
-    getEntry: new GetEntryUseCase(store),
     createDraft: new CreateDraftUseCase(store, schemasByName, clock, idgen),
     updateDraft: new UpdateDraftUseCase(store, schemasByName, clock),
     requestPublish: new RequestPublishUseCase(store, schemasByName, clock),
@@ -237,16 +232,15 @@ describe("McpJsonRpcDispatcher", () => {
     expect(await response.text()).toBe("");
   });
 
-  it("tools/list emits generic + per-collection tools", async () => {
+  it("tools/list omits generic reads and emits lifecycle + per-collection tools", async () => {
     const { dispatcher } = buildHarness();
     const res = await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext());
     const body = (await res.json()) as {
       result: { tools: { name: string }[] };
     };
     const names = body.result.tools.map((t) => t.name);
-    // Generic read/status tools.
-    expect(names).toContain("list_entries");
-    expect(names).toContain("get_entry");
+    expect(names).not.toContain("list_entries");
+    expect(names).not.toContain("get_entry");
     expect(names).toContain("request_publish");
     expect(names).toContain("unpublish_entry");
     expect(names).toContain("archive_entry");
@@ -255,6 +249,12 @@ describe("McpJsonRpcDispatcher", () => {
     expect(names).toContain("update_draft_posts");
     // Old generic create_draft is gone.
     expect(names).not.toContain("create_draft");
+    for (const name of ["list_entries", "get_entry"]) {
+      const call = await dispatcher.dispatch(jsonRpcReq("tools/call", {
+        name, arguments: name === "list_entries" ? { collection: "posts" } : { id: "post-1" },
+      }), mcpContext());
+      expect((await call.json()) as { error: { code: number } }).toMatchObject({ error: { code: -32601 } });
+    }
   });
 
   it("update tools describe expected_version as the observed native version", () => {
@@ -334,40 +334,6 @@ describe("McpJsonRpcDispatcher", () => {
     expect(procedure.spec.input.title).toEqual({ "zh-TW": "補貨" });
   });
 
-  it("list_entries shares search, indexed sort, and cursor paging with HTTP admin", async () => {
-    const { dispatcher, store } = buildHarness();
-    await store.create({
-      id: "p2",
-      collection: "posts",
-      status: "draft",
-      data: { title: "Second match", slug: "second" },
-      authorId: null,
-      now: 2,
-    });
-    await store.create({
-      id: "p1",
-      collection: "posts",
-      status: "draft",
-      data: { title: "First match", slug: "first" },
-      authorId: null,
-      now: 1,
-    });
-
-    const res = await dispatcher.dispatch(jsonRpcReq("tools/call", {
-      name: "list_entries",
-      arguments: { collection: "posts", search: "match", sort: "id", direction: "asc", limit: 1 },
-    }), mcpContext());
-    const body = (await res.json()) as {
-      result: { content: Array<{ text: string }> };
-    };
-    const page = JSON.parse(body.result.content[0]!.text) as {
-      rows: Array<{ id: string }>;
-      nextCursor?: string;
-    };
-    expect(page.rows.map((row) => row.id)).toEqual(["p1"]);
-    expect(page.nextCursor).toEqual(expect.any(String));
-  });
-
   it("uses record tools for lifecycle: operational collections and creates them live", async () => {
     const { dispatcher } = buildHarness([operationalPostsSchema()]);
     const list = await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext());
@@ -413,7 +379,8 @@ describe("McpJsonRpcDispatcher", () => {
     const list = await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext());
     const listBody = (await list.json()) as { result: { tools: Array<{ name: string }> } };
     const names = listBody.result.tools.map((tool) => tool.name);
-    expect(names).toContain("list_entries");
+    expect(names).not.toContain("list_entries");
+    expect(names).not.toContain("get_entry");
     expect(names).not.toContain("create_record_posts");
     expect(names).not.toContain("update_record_posts");
 
@@ -436,9 +403,6 @@ describe("McpJsonRpcDispatcher", () => {
       const catalog = buildMcpToolCatalog(schemas);
       const hasContent = schemas.includes(content);
       for (const name of lifecycleTools) expect(catalog.some((t) => t.name === name)).toBe(hasContent);
-      expect(catalog.find((t) => t.name === "list_entries")?.inputSchema).toMatchObject({
-        properties: { collection: { enum: schemas.map((s) => s.metadata.name) } },
-      });
       for (const schema of schemas) {
         const original = await store.create({ id: schema.metadata.name, collection: schema.metadata.name,
           status: "draft", data: { title: "Unchanged" }, authorId: null, now: 1 });
@@ -461,7 +425,6 @@ describe("McpJsonRpcDispatcher", () => {
     const { dispatcher: _staff, ...h } = buildHarness();
     const dispatcher = new McpJsonRpcDispatcher(
       {
-        listEntries: new ListEntriesUseCase(h.store, new Map([["posts", postsSchema()]])),
         getEntry: new GetEntryUseCase(h.store),
         createDraft: new CreateDraftUseCase(h.store, new Map([["posts", postsSchema()]]), { now: () => 0 }, { next: () => "x" }),
         updateDraft: new UpdateDraftUseCase(h.store, new Map([["posts", postsSchema()]]), { now: () => 0 }),
@@ -475,6 +438,7 @@ describe("McpJsonRpcDispatcher", () => {
       },
       [postsSchema()],
       {
+        getEntry: new GetEntryUseCase(h.store),
         surface: "public",
         capabilities: [viewCapability(recentPostsView())],
       },
@@ -506,8 +470,6 @@ describe("McpJsonRpcDispatcher", () => {
     const { dispatcher: _unused, ...h } = buildHarness();
     const dispatcher = new McpJsonRpcDispatcher(
       {
-        listEntries: new ListEntriesUseCase(h.store, new Map([["posts", postsSchema()]])),
-        getEntry: new GetEntryUseCase(h.store),
         createDraft: new CreateDraftUseCase(h.store, new Map([["posts", postsSchema()]]), { now: () => 0 }, { next: () => "x" }),
         updateDraft: new UpdateDraftUseCase(h.store, new Map([["posts", postsSchema()]]), { now: () => 0 }),
         requestPublish: new RequestPublishUseCase(h.store, new Map([["posts", postsSchema()]]), { now: () => 0 }),
@@ -678,7 +640,6 @@ describe("McpJsonRpcDispatcher", () => {
       deferred,
     );
     const useCases: McpUseCases = {
-      listEntries: new ListEntriesUseCase(entries, schemas),
       getEntry: new GetEntryUseCase(entries),
       createDraft: new CreateDraftUseCase(entries, schemas, { now: () => 1 }, idgen),
       updateDraft: new UpdateDraftUseCase(entries, schemas, { now: () => 2 }),

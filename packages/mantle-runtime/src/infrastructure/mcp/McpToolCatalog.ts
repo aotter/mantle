@@ -21,8 +21,7 @@ import type {
 } from "../../domain/service/CallableCapabilityProjector.js";
 
 /**
- * MCP tool catalog. Mix of generic tools (read paths, status flips
- * that take only an `id`) plus per-collection emitted authoring
+ * MCP tool catalog. Mix of generic lifecycle tools plus per-collection emitted authoring
  * tools (`create_draft_*` / `update_draft_*` for authored content,
  * `create_record_*` / `update_record_*` for operational records)
  * with the Schema's properties inlined into the tool's `inputSchema`
@@ -178,33 +177,6 @@ function buildCreateMediaUploadTool(
 
 export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   {
-    name: "list_entries",
-    description: "Search, sort, and page through entries in a collection. Result is { rows, previousCursor?, nextCursor? }; cursors are opaque.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        collection: { type: "string" },
-        status: { type: "string", enum: ["draft", "published", "archived"] },
-        search: { type: "string", description: "Substring matched against entry id and the Schema's searchableFields." },
-        sort: { type: "string", description: "id, status, updatedAt, or a Schema-indexed required scalar field." },
-        direction: { type: "string", enum: ["asc", "desc"] },
-        limit: { type: "number" },
-        cursor: { type: "string", description: "Opaque continuation token from a previous list_entries response." },
-        cursorDirection: { type: "string", enum: ["forward", "backward"] },
-      },
-      required: ["collection"],
-    },
-  },
-  {
-    name: "get_entry",
-    description: "Fetch a single entry by id.",
-    inputSchema: {
-      type: "object",
-      properties: { id: { type: "string" } },
-      required: ["id"],
-    },
-  },
-  {
     name: "request_publish",
     description: "Publish a draft immediately. Not available for operational records.",
     inputSchema: {
@@ -295,9 +267,6 @@ export function buildMcpToolCatalog(
       `${s.metadata.name} (${resolveLifecycle(s)}${s.spec.schema.readOnly ? "; Procedure-only writes" : ""}; search: ${["id", ...(s.spec.searchableFields ?? [])].join(", ")}; sort: ${["id", "status", "updatedAt", ...schemaSortableFields(s)].join(", ")})`,
     ).join("; ");
     return [{ ...tool, description: `${tool.description} Collections: ${summary}. Prefer declared business Procedures and Views when available.`,
-      ...(tool.name === "list_entries" ? { inputSchema: { ...tool.inputSchema,
-        properties: { ...(tool.inputSchema.properties as Record<string, unknown>), collection: { type: "string", enum: targets.map((s) => s.metadata.name) } },
-      } } : {}),
     }];
   });
   if (opts.mediaEnabled) out.push(...buildMediaTools(opts.mediaPurposes ?? []));

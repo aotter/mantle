@@ -13,8 +13,8 @@ export function mcpToolNameSegment(collection: string): string {
 }
 
 /**
- * Built-in MCP tool names registered by the dispatcher regardless of
- * manifests. A Procedure exposed via `Trigger.source.kind: "mcp"`
+ * Built-in MCP tool names registered by the dispatcher when applicable.
+ * A Procedure exposed via `Trigger.source.kind: "mcp"`
  * (#281) MUST NOT mangle to any of these names — the dispatcher
  * routes by tool name and a collision would shadow the built-in.
  *
@@ -23,8 +23,6 @@ export function mcpToolNameSegment(collection: string): string {
  * reference them without an infrastructure→usecase import.
  */
 export const RESERVED_MCP_GENERIC_TOOL_NAMES: ReadonlySet<string> = new Set([
-  "list_entries",
-  "get_entry",
   "request_publish",
   "unpublish_entry",
   "archive_entry",

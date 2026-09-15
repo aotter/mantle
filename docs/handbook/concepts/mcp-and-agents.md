@@ -23,7 +23,7 @@ A tool name is derived from a manifest name by `mcpToolNameSegment`: lowercased,
 | `query_view_<segment>` | Any View | The View's own `surface` |
 | `create_draft_<schema>`, `update_draft_<schema>` | A Schema with `lifecycle: publishing` | Staff |
 | `create_record_<schema>`, `update_record_<schema>` | A Schema with `lifecycle: operational` | Staff |
-| `list_entries`, `get_entry`, `request_publish`, `unpublish_entry`, `archive_entry`, `delete_entry` | Always present | Staff |
+| `request_publish`, `unpublish_entry`, `archive_entry`, `delete_entry` | Present when an applicable Schema exists | Staff |
 | `create_media_upload`, `commit_media_upload` | Media storage bound and at least one purpose declared | Staff |
 | `<procedure segment>` | A Trigger with `source.kind: mcp` | The Trigger's `source.surface` |
 

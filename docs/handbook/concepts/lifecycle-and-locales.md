@@ -35,11 +35,11 @@ Any transition the machine does not allow returns `CONFLICT` (HTTP 409). That in
 |---|---|---|
 | Admin | Draft and published buckets, publish and unpublish controls, archive | Flat list, no lifecycle chrome; `uiSchema.list` supplies the columns |
 | Staff MCP | `create_draft_<schema>`, `update_draft_<schema>` | `create_record_<schema>`, `update_record_<schema>` |
-| Staff MCP, both modes | `list_entries`, `get_entry`, `request_publish`, `unpublish_entry`, `archive_entry`, `delete_entry` | same generic tools |
+| Staff MCP, both modes | `request_publish`, `unpublish_entry`, `archive_entry`, `delete_entry` | same generic lifecycle tools |
 
 ### Procedure-managed collections
 
-Root `schema.readOnly: true` marks a collection whose authority lives in its declared Procedures, not in generic authoring. Staff MCP emits no `create_*` or `update_*` tool for it, and Admin's generic create, update, status change and delete return `CONFLICT` with a message saying the Schema is read-only on generic authoring surfaces. List and detail access, and every declared Procedure, keep working. Use it for operational mirrors, projections and audit rows.
+Root `schema.readOnly: true` marks a collection whose authority lives in its declared Procedures, not in generic authoring. Staff MCP emits no `create_*` or `update_*` tool for it, and Admin's generic create, update, status change and delete return `CONFLICT` with a message saying the Schema is read-only on generic authoring surfaces. Declared Views and Procedures keep working. Use it for operational mirrors, projections and audit rows.
 
 ## Locales in three layers
 

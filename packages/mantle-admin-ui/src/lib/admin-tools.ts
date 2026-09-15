@@ -23,11 +23,10 @@ export function adminPath(path: unknown): string {
   if (url.origin !== "https://admin.invalid" || !/^\/admin(?:\/|$)/u.test(url.pathname) || /^\/admin\/(?:api|auth)(?:\/|$)/u.test(url.pathname)) throw new TypeError("Expected an Admin page path.");
   return url.pathname + url.search;
 }
-export function resultPath(catalog: AdminToolCatalog, name: string, output: unknown, input: Record<string, unknown> = {}): string | undefined {
+export function resultPath(catalog: AdminToolCatalog, name: string, output: unknown): string | undefined {
   const row = output && typeof output === "object" ? output as Record<string, unknown> : {};
   let route = catalog.routes[name];
-  if (name === "list_entries" && typeof input.collection === "string") route = { path: `/admin/c/${encodeURIComponent(input.collection)}` };
-  if (["get_entry", "request_publish", "unpublish_entry", "archive_entry"].includes(name) && typeof row.collection === "string") route = { path: `/admin/c/${encodeURIComponent(row.collection)}`, entry: true };
+  if (["request_publish", "unpublish_entry", "archive_entry"].includes(name) && typeof row.collection === "string") route = { path: `/admin/c/${encodeURIComponent(row.collection)}`, entry: true };
   if (!route) return;
   const path = route.path + (route.entry && typeof row.id === "string" ? `/${encodeURIComponent(row.id)}` : "");
   return adminPath(path + (route.entry && typeof row.status === "string" ? `?status=${encodeURIComponent(row.status)}` : ""));

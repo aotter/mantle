@@ -113,7 +113,6 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
           const mediaEnabled = runtime.media !== null && mediaPurposes.length > 0;
           const dispatcher = new McpJsonRpcDispatcher(
             {
-              listEntries: runtime.listEntries,
               getEntry: runtime.getEntry,
               createDraft: runtime.createDraft,
               updateDraft: runtime.updateDraft,

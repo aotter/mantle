@@ -31,7 +31,7 @@ import {
  *    — agent authors who care about that reach for `executePage`.
  *
  *  - `executePage(req): ListEntriesResult` — what
- *    cursor-aware callers (MCP `list_entries`, admin pagination,
+ *    cursor-aware callers (Admin pagination,
  *    long-tail walkers) want. Returns `{ rows, nextCursor? }`.
  *
  * Why split: the Mantle thesis says the runtime should carry complexity

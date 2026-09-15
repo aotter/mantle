@@ -153,7 +153,7 @@ Do not use a hint for optimistic concurrency. The reserved Procedure input name 
 
 ### Root `readOnly: true`
 
-`schema.readOnly: true` at the root marks a Procedure-managed collection. Staff MCP emits no `create_*` or `update_*` tool for it, and Admin's generic create, update, status change and delete return `CONFLICT` with the message that the Schema is read-only on generic authoring surfaces. List and detail access and declared Procedures (builtin or `ref`) keep working.
+`schema.readOnly: true` at the root marks a Procedure-managed collection. Staff MCP emits no `create_*` or `update_*` tool for it, and Admin's generic create, update, status change and delete return `CONFLICT` with the message that the Schema is read-only on generic authoring surfaces. Declared Views and Procedures (builtin or `ref`) keep working.
 
 ## `uiSchema`
 
