@@ -23,8 +23,11 @@ triggers navigation or an automatic mutation retry. Navigation input must be
 an Admin page, not an external URL or API/auth path.
 
 The green indicator appears after document.modelContext registration succeeds.
-Its dialog uses Admin i18n with the established English fallback. The initial
-translations include English, Traditional Chinese and Simplified Chinese.
+Its dialog shows the registered tool catalog and uses Admin i18n with the
+established English fallback. The prompt tells the agent to inspect the catalog;
+tool descriptions own operation-specific guidance. Developer interface docs
+show the same live catalog. The initial translations include English,
+Traditional Chinese and Simplified Chinese.
 Registration uses AbortSignal lifetime cleanup. Browsers without WebMCP retain
 the existing UI. The browser API is feature-detected, not polyfilled.
 

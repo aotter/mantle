@@ -39,6 +39,7 @@ it("hides unsupported WebMCP and binds staff tools, navigation and localized pro
         : path === "/collections" ? { collections: [] }
         : path === "/operations" ? { operations: [] }
         : path === "/views-manifest" ? { views: [] }
+        : path === "/developer-console" ? { dataModel: { schemas: [], views: [] }, logic: { triggers: [], procedures: [] }, interfaces: { http: [], callable: [] }, graph: { atoms: [], relations: [] } }
         : path === "/webmcp" ? { tools: [staffTool], routes: { query_view_report: { path: "/admin/views/report" } } }
         : path === "/views/report" ? { ok: true, data: { rows: [], page: 1, show: 50, hasMore: false } } : {} });
     });
@@ -48,8 +49,10 @@ it("hides unsupported WebMCP and binds staff tools, navigation and localized pro
     await page.evaluate(() => sessionStorage.setItem("webmcp", "1"));
     await page.goto(new URL("/_mantle/admin/", server.resolvedUrls!.local[0]!).href);
     await page.getByRole("button", { name: "與 AI agent 一起操作" }).click();
+    expect(await page.getByText("3 WebMCP tools").isVisible()).toBe(true);
     await page.getByRole("button", { name: "複製提示詞" }).click();
     expect(await page.evaluate(() => (window as unknown as { copiedPrompt: string }).copiedPrompt)).toContain("admin_get_context");
+    expect(await page.evaluate(() => (window as unknown as { copiedPrompt: string }).copiedPrompt)).not.toContain("create_media_upload");
     await page.keyboard.press("Escape");
     const invoke = (name: string, input = {}) => page.evaluate(async ({ name, input }) => {
       const tools = (window as unknown as { testTools: Map<string, { execute(input: unknown): Promise<unknown> }> }).testTools;
@@ -65,5 +68,7 @@ it("hides unsupported WebMCP and binds staff tools, navigation and localized pro
     expect(new URL(page.url()).pathname).toBe("/admin");
     expect(calls).toHaveLength(2);
     expect(await invoke("admin_navigate", { path: "https://evil.test" })).toMatchObject({ result: { isError: true } });
+    await invoke("admin_navigate", { path: "/admin/dev/docs?tab=webmcp" });
+    await page.getByText(staffTool.description).last().waitFor({ state: "visible" });
   } finally { await browser.close(); await server.close(); }
 }, 30_000);
