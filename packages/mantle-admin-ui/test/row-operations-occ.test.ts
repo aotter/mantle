@@ -16,11 +16,11 @@ it("binds observed entry.version on row operations and does not reuse it after t
     await quotaDialog.getByRole("spinbutton").fill("20");
     await quotaDialog.getByRole("button", { name: "Run", exact: true }).click();
     await quotaDialog.getByText("This record changed since you opened it.").waitFor();
-    expect(quotaBodies[0]).toEqual({ organizationId: "org-1", quota: 20, expectedVersion: 4 });
+    await expect.poll(() => quotaBodies[0]).toEqual({ organizationId: "org-1", quota: 20, expectedVersion: 4 });
     expect(await quotaDialog.getByRole("spinbutton").inputValue()).toBe("20");
     await quotaDialog.getByRole("button", { name: "Reload version" }).click();
     await quotaDialog.getByRole("button", { name: "Run", exact: true }).click();
-    expect(quotaBodies[1]).toEqual({ organizationId: "org-1", quota: 20, expectedVersion: 5 });
+    await expect.poll(() => quotaBodies[1]).toEqual({ organizationId: "org-1", quota: 20, expectedVersion: 5 });
     await quotaDialog.getByRole("button", { name: "Close" }).last().click();
 
     await page.getByRole("button", { name: "Row operations" }).click();
@@ -30,7 +30,7 @@ it("binds observed entry.version on row operations and does not reuse it after t
     await memberDialog.getByRole("textbox", { name: "Role" }).fill("owner");
     await memberDialog.getByRole("button", { name: "Run", exact: true }).click();
     await memberDialog.getByRole("region", { name: "Result" }).waitFor();
-    expect(memberBodies[0]).toEqual({
+    await expect.poll(() => memberBodies[0]).toEqual({
       organizationId: "org-1",
       id: "member-1",
       role: "owner",
@@ -38,7 +38,7 @@ it("binds observed entry.version on row operations and does not reuse it after t
     });
     await memberDialog.getByRole("textbox", { name: "Id" }).fill("member-2");
     await memberDialog.getByRole("button", { name: "Run", exact: true }).click();
-    expect(memberBodies[1]).toEqual({
+    await expect.poll(() => memberBodies[1]).toEqual({
       organizationId: "org-1",
       id: "member-2",
       role: "owner",
@@ -60,7 +60,7 @@ it("binds observed version on a row-opened upsert before submit even when expect
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("textbox", { name: "Theme" }).fill("dark");
     await dialog.getByRole("button", { name: "Run", exact: true }).click();
-    expect(upsertBodies[0]).toEqual({ organizationId: "org-1", theme: "dark", expectedVersion: 4 });
+    await expect.poll(() => upsertBodies[0]).toEqual({ organizationId: "org-1", theme: "dark", expectedVersion: 4 });
   } finally {
     await session.close();
   }
@@ -94,7 +94,7 @@ it("lets a collection create dialog omit expectedVersion when it is not required
     await dialog.getByRole("textbox", { name: "Site Key" }).fill("main");
     await dialog.getByRole("textbox", { name: "Theme" }).fill("light");
     await dialog.getByRole("button", { name: "Run", exact: true }).click();
-    expect(createBodies[0]).toEqual({ siteKey: "main", theme: "light" });
+    await expect.poll(() => createBodies[0]).toEqual({ siteKey: "main", theme: "light" });
   } finally {
     await session.close();
   }
