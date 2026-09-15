@@ -55,12 +55,24 @@ const atomKindNodeTone = {
 
 const audiences = ["public", "members", "staff", "system", "api-clients"] as const satisfies readonly DeveloperAudience[];
 
-type ManifestGraphEdge = Edge<{ kind: DeveloperRelationKind; label: string; opacity: number }, "manifest">;
+export type ManifestGraphEdge = Edge<{ kind: DeveloperRelationKind; label: string; opacity: number }, "manifest">;
 type FocusSlice = { startId: string; nodeIds: Set<string>; relationIds: Set<string> };
 type AudienceGroupGraphNode = Node<{ audience: DeveloperAudience; count: number; language: AdminLanguage }, "audience">;
 
-const edgeTypes = { manifest: ManifestEdge } satisfies EdgeTypes;
+export const manifestEdgeTypes = { manifest: ManifestEdge } satisfies EdgeTypes;
 const nodeTypes = { audience: AudienceGroupNode } satisfies NodeTypes;
+export const graphCanvasClassName = "bg-background [--graph-inactive-filter:none] [--graph-inactive-opacity:0.16] dark:[--graph-inactive-filter:brightness(0.42)_saturate(0.2)] dark:[--graph-inactive-opacity:1]";
+
+export function GraphControls({ onRelayout }: { onRelayout: () => void }): React.ReactElement {
+  const { language } = usePreferences();
+  return (
+    <Controls className="overflow-hidden rounded-lg border bg-background/95 shadow-md" showInteractive={false} fitViewOptions={{ padding: 0.08, duration: 240 }}>
+      <ControlButton onClick={onRelayout} title={t(language, "developer.graph.relayout")} aria-label={t(language, "developer.graph.relayout")}>
+        <LayoutGrid aria-hidden />
+      </ControlButton>
+    </Controls>
+  );
+}
 
 export function relationLabel(language: AdminLanguage, kind: DeveloperRelationKind): string {
   if (kind === "translation-parent") return t(language, "developer.graph.relation.translationParent");
@@ -233,13 +245,13 @@ export function AtomGraph({
 
   return (
     <ReactFlow
-      className="bg-background [--graph-inactive-filter:none] [--graph-inactive-opacity:0.16] dark:[--graph-inactive-filter:brightness(0.42)_saturate(0.2)] dark:[--graph-inactive-opacity:1]"
+      className={graphCanvasClassName}
       nodes={nodes}
       edges={edges}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onInit={setFlow}
-      edgeTypes={edgeTypes}
+      edgeTypes={manifestEdgeTypes}
       nodeTypes={nodeTypes}
       colorMode={theme}
       fitView
@@ -253,11 +265,7 @@ export function AtomGraph({
       }}
       onPaneClick={clearSelection}
     >
-      <Controls className="overflow-hidden rounded-lg border bg-background/95 shadow-md" showInteractive={false} fitViewOptions={{ padding: 0.08, duration: 240 }}>
-        <ControlButton onClick={relayout} title={t(language, "developer.graph.relayout")} aria-label={t(language, "developer.graph.relayout")}>
-          <LayoutGrid aria-hidden />
-        </ControlButton>
-      </Controls>
+      <GraphControls onRelayout={relayout} />
       {selected ? (
         <Panel position="top-right" className="!m-3 w-[20rem] max-w-[calc(100%-1.5rem)] sm:w-[22rem]">
           <GraphHud atom={selected} graph={graph} atomsById={atomsById} traceAtoms={traceAtoms} onClose={clearSelection} onSelect={moveAlongTrace} onOpen={onOpen} />
@@ -329,7 +337,7 @@ function layoutGraph(
   };
 }
 
-function ManifestEdge({ id, data, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, markerEnd, style }: EdgeProps<ManifestGraphEdge>): React.ReactElement {
+export function ManifestEdge({ id, data, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, markerEnd, style }: EdgeProps<ManifestGraphEdge>): React.ReactElement {
   const [path, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
   return (
     <>

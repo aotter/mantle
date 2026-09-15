@@ -216,8 +216,8 @@ function EntryLanding({
 
 function DeveloperWorkspace({ path }: { path: string }): React.ReactElement {
   const view = path === "/admin/dev" ? <DeveloperOverviewView />
-    : path === "/admin/dev/model" ? <DataModelView />
-    : path === "/admin/dev/logic" ? <LogicView />
+    : path === "/admin/dev/model" || path.startsWith("/admin/dev/model/") ? <DataModelView />
+    : path === "/admin/dev/logic" || path.startsWith("/admin/dev/logic/") ? <LogicView />
     : path === "/admin/dev/docs" ? <InterfaceDocsView />
     : <NotFoundView path={path} />;
   return <AuthenticatedLayout workspace="developer">{view}</AuthenticatedLayout>;

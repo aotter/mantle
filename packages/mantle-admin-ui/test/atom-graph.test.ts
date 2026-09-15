@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { atomKindLabel, focusSlice, traceAtomIds } from "../src/features/logic/atom-graph";
 import { developerDetailHref, developerSelectionHref } from "../src/features/logic/developer-route";
+import { buildSchemaDiagram } from "../src/features/logic/schema-diagram";
 import type { DeveloperConsoleSnapshot } from "../src/lib/types";
 
 const graph: DeveloperConsoleSnapshot["graph"] = {
@@ -41,8 +42,24 @@ describe("manifest graph trace", () => {
     expect(developerSelectionHref("/admin/dev/model", "Schema:orders", { tab: "manifest", pointer: "/spec/schema" })).toBe("/admin/dev/model?selected=Schema%3Aorders&tab=manifest&pointer=%2Fspec%2Fschema");
     expect(developerSelectionHref("/admin/dev/model", "View:open-orders", { tab: "raw" })).toBe("/admin/dev/model?selected=View%3Aopen-orders&tab=raw");
     expect(developerSelectionHref("/admin/dev/logic", "Trigger:place-order-http", { tab: "contract" })).toBe("/admin/dev/logic?selected=Trigger%3Aplace-order-http&tab=contract");
-    expect(developerDetailHref("Procedure:place-order")).toBe("/admin/dev/logic?selected=Procedure%3Aplace-order");
-    expect(developerDetailHref("View:open-orders")).toBe("/admin/dev/model?selected=View%3Aopen-orders");
+    expect(developerDetailHref("Procedure:place-order")).toBe("/admin/dev/logic/procedures?selected=Procedure%3Aplace-order");
+    expect(developerDetailHref("View:open-orders")).toBe("/admin/dev/model/views?selected=View%3Aopen-orders");
+  });
+
+  it("builds schema relationships from manifest references", () => {
+    const snapshot = {
+      dataModel: { schemas: [
+        { name: "orders", title: "Orders", lifecycle: "operational", localized: false, translates: null, schema: { type: "object", properties: { id: { type: "string" }, customerId: { type: "string", "x-mantle-ref": "customers" } } }, uniqueIndexes: [], indexes: [], searchableFields: [], manifest: {} },
+        { name: "customers", title: "Customers", lifecycle: "operational", localized: false, translates: null, schema: { type: "object", properties: { id: { type: "string" } } }, uniqueIndexes: [], indexes: [], searchableFields: [], manifest: {} },
+      ], views: [] },
+      logic: { triggers: [], procedures: [] },
+      interfaces: { http: [], callable: [] },
+      graph: { atoms: graph.atoms, relations: graph.relations },
+    } satisfies DeveloperConsoleSnapshot;
+    const diagram = buildSchemaDiagram(snapshot, "en");
+    expect(diagram.nodes.map(({ id }) => id)).toEqual(["Schema:orders", "Schema:customers"]);
+    expect(diagram.edges).toHaveLength(1);
+    expect(diagram.edges[0]?.data?.label).toContain("customerId");
   });
 
   it("localizes developer atom labels", () => {

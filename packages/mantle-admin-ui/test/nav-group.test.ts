@@ -50,10 +50,11 @@ describe("member navigation", () => {
 
   it("keeps developer navigation out of Content Admin", () => {
     expect(JSON.stringify(buildNavGroups([], [], "en", null, "owner"))).not.toContain("/admin/dev");
-    expect(buildDeveloperNavGroups("en")[0]?.items).toEqual([
+    const items = buildDeveloperNavGroups("en")[0]?.items ?? [];
+    expect(items).toEqual([
       expect.objectContaining({ url: "/admin/dev" }),
-      expect.objectContaining({ url: "/admin/dev/model" }),
-      expect.objectContaining({ url: "/admin/dev/logic" }),
+      expect.objectContaining({ items: [expect.objectContaining({ url: "/admin/dev/model/schemas" }), expect.objectContaining({ url: "/admin/dev/model/views" })] }),
+      expect.objectContaining({ items: [expect.objectContaining({ url: "/admin/dev/logic/triggers" }), expect.objectContaining({ url: "/admin/dev/logic/procedures" })] }),
       expect.objectContaining({ url: "/admin/dev/docs" }),
     ]);
   });
