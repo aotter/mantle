@@ -102,12 +102,15 @@ spec:
     list:
       primaryField: productSlug
       columns: [available, reserved, revision]
+    nav:
+      standalone: true
+      parentField: productSlug
   schema:
     readOnly: true
     type: object
     required: [productSlug, available, reserved, revision]
     properties:
-      productSlug: { type: string }
+      productSlug: { type: string, x-mantle-ref: products }
       available: { type: integer, minimum: 0 }
       reserved: { type: integer, minimum: 0 }
       revision: { type: integer, minimum: 0 }
@@ -399,6 +402,7 @@ spec:
 Points worth noticing:
 
 - `orders`, `inventory` and `inventory-movements` set root `schema.readOnly: true`. Admin and Staff MCP keep list and detail access and the declared row Procedures, but suppress and reject generic create, update, status and delete. Only handlers maintain these projections.
+- `inventory.productSlug` references `products`, so Inventory stays available under each product. `uiSchema.nav.standalone: true` also adds a main Admin Nav entry with a product filter for staff who need a cross-product stock list.
 - `expire-order` and `sweep-expired-orders` have **no Trigger**. They are internal Procedures: the Queue consumer and the cron handler invoke them through the generated binding. Nothing external can call them.
 - `adjust-inventory.operationId` carries `x-mcp-hint: idempotency-key`; Admin generates a hidden UUID per form, and other callers must reuse theirs on retry. `productSlug` carries `x-mantle-ref: products`, so Admin offers "Adjust inventory" on each product row with the slug prefilled. `fulfill-order.orderToken` does the same on `orders` rows.
 - `picking-list` is a raw `sql` staff View using `json_each` to unnest order lines. `sql` Views run on SQLite storage only.
