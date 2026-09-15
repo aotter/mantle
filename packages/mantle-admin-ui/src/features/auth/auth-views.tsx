@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { OneTimeCodeInput } from "@/components/one-time-code-input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
@@ -598,9 +599,8 @@ function EmailOtpSection({
     });
   };
 
-  const verifyOtp = (e: React.FormEvent): void => {
-    e.preventDefault();
-    if (!otp) return;
+  const verifyOtpCode = (code: string): void => {
+    if (code.length !== 6) return;
     void withBusy(async () => {
       const res = await fetch("/api/auth/sign-in/email-otp", {
         method: "POST",
@@ -608,7 +608,7 @@ function EmailOtpSection({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email,
-          otp,
+          otp: code,
           ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
         }),
       });
@@ -625,6 +625,11 @@ function EmailOtpSection({
       const data = (await res.json()) as { url?: string };
       window.location.assign(data.url ?? returnTo);
     });
+  };
+
+  const verifyOtp = (e: React.FormEvent): void => {
+    e.preventDefault();
+    verifyOtpCode(otp);
   };
 
   return (
@@ -658,17 +663,17 @@ function EmailOtpSection({
           <label htmlFor="signin-otp" className="sr-only">
             {t(language, "auth.signIn.method.email-otp.otpLabel")}
           </label>
-          <Input
+          <OneTimeCodeInput
             id="signin-otp"
-            type="text"
-            inputMode="numeric"
             autoComplete="one-time-code"
+            autoFocus
+            disabled={busy}
             value={otp}
-            onChange={(e) => setOtp(e.currentTarget.value)}
-            placeholder={t(language, "auth.signIn.method.email-otp.otpPlaceholder")}
+            onChange={setOtp}
+            onComplete={verifyOtpCode}
             required
           />
-          <SignInButton type="submit" className="w-full" busy={busy} disabled={!otp}>
+          <SignInButton type="submit" className="w-full" busy={busy} disabled={otp.length !== 6}>
             {t(language, "auth.signIn.method.email-otp.verifyButton")}
           </SignInButton>
           <button
