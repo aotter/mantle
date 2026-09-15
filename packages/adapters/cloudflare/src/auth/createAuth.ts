@@ -29,6 +29,7 @@ import {
   type OAuthConsentRequest,
 } from "@aotter/mantle-admin";
 import type { EmailSender } from "@aotter/mantle-runtime";
+import { signInCodeEmail, signInLinkEmail, staffInvitationEmail } from "./emailTemplates.js";
 import { STAFF_ROLES, type StaffRole } from "@aotter/mantle-spec";
 
 // Better Auth 1.7.2 initializes its shared stores asynchronously. Seed them
@@ -313,6 +314,8 @@ export interface CreateAuthConfig {
   readonly secret: string;
   /** Registered auth methods. Boot fails fast if empty. */
   readonly methods: ReadonlyArray<AuthMethodConfig>;
+  /** Sends an English notification after Admin successfully assigns a staff role. */
+  readonly staffInvitationSender?: EmailSender;
   /** First-user-becomes-owner rule. Without it, the `owner` role must
    *  be assigned manually in D1. */
   readonly bootstrapOwner?: BootstrapOwnerRule;
@@ -591,8 +594,7 @@ function buildMagicLinkPlugin(method: Extract<AuthMethodConfig, { kind: "magic-l
       const locale = pickLocale(ctx?.request, fallback);
       return method.sender.send({
         to: data.email,
-        subject: "Your sign-in link",
-        text: `Click to sign in: ${data.url}\nThe link expires shortly. If you didn't request this, ignore this email.`,
+        ...signInLinkEmail(data.url),
         locale,
         category: "auth.magic-link.sign-in",
       });
@@ -620,8 +622,7 @@ function buildEmailOTPPlugin(method: Extract<AuthMethodConfig, { kind: "email-ot
       const locale = pickLocale(ctx?.request, fallback);
       return method.sender.send({
         to: data.email,
-        subject: `Your sign-in code: ${data.otp}`,
-        text: `Your one-time code is ${data.otp}. It expires shortly. If you didn't request this, ignore this email.`,
+        ...signInCodeEmail(data.otp),
         locale,
         category: `auth.email-otp.${data.type}`,
       });
@@ -1258,6 +1259,7 @@ export interface Auth {
     email: string,
     role: StaffRole,
   ) => Promise<InviteUserResult>;
+  readonly sendStaffInvitation?: (email: string, role: StaffRole) => Promise<void>;
   /** Delete an invitation row. Guarded to rows nobody ever signed in
    *  to (`emailVerified = 0` AND no linked `account` row) so a real
    *  user with sessions/accounts can never be cascade-deleted through
@@ -1729,6 +1731,17 @@ export function createAuth(config: CreateAuthConfig): Auth {
         .run();
       return { kind: "created", id };
     },
+    ...(config.staffInvitationSender ? {
+      sendStaffInvitation: async (email: string, role: StaffRole) => {
+        const normalized = email.trim().toLowerCase();
+        await config.staffInvitationSender!.send({
+          to: normalized,
+          ...staffInvitationEmail(role, new URL("/admin/sign-in", config.baseURL).href),
+          locale: "en",
+          category: "auth.staff-invitation",
+        });
+      },
+    } : {}),
     revokeInvite: async (userId) => {
       await prepareAuth();
       const result = await config.database
