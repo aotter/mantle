@@ -1,3 +1,4 @@
+import { DiagnosticError, runtimeDiagnostic } from "@aotter/mantle-spec";
 import { expect, test, vi } from "vitest";
 import { SqliteMantleStorageAdapter } from "@aotter/mantle-runtime";
 import { createMantleWorker } from "../src/worker/createMantleWorker.js";
@@ -58,4 +59,44 @@ test("Auth prepares lazily, retries failures, coalesces callers and preserves da
     expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE name='entries'").get()).toBeUndefined();
     expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE name='oauthConsent'").get()).toBeDefined();
   } finally { sqlite.close(); }
+});
+
+
+test("selected Auth preserves a recognized storage failure without retrying a mutation", async () => {
+  const { db, sqlite } = sqliteD1();
+  try {
+    const auth = createAuth(config(db));
+    await auth.listUsers();
+    const failure = new DiagnosticError(runtimeDiagnostic({
+      code: "OUTCOME_UNKNOWN", severity: "error", path: "adapter/auth/storage",
+      message: "The operation outcome must be checked before retrying.",
+      failure: { outcome: "unknown", retry: "reconcile", resource: "auth" },
+    }), { cause: new Error("private SQL/provider detail") });
+    const prepare = vi.spyOn(db, "prepare").mockImplementation(() => { throw failure; });
+    await expect(auth.setUserRole("existing-user", "owner")).rejects.toBe(failure);
+    expect(prepare).toHaveBeenCalledTimes(1);
+  } finally { sqlite.close(); }
+});
+
+
+test("Auth email unknown outcome is observed without resending or leaking provider details", async () => {
+  const { db, sqlite } = sqliteD1();
+  const failure = new DiagnosticError(runtimeDiagnostic({
+    code: "OUTCOME_UNKNOWN", severity: "error", path: "email",
+    message: "Delivery acknowledgement unavailable.",
+    failure: { outcome: "unknown", retry: "reconcile", resource: "email" },
+  }), { cause: new Error("private-email-provider-detail") });
+  const send = vi.fn().mockRejectedValue(failure);
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const auth = createAuth({ ...config(db), methods: [{ kind: "email-otp", sender: { send } }] });
+    const response = await auth.handler(new Request(`${origin}/api/auth/email-otp/send-verification-otp`, {
+      method: "POST", headers: { origin, "content-type": "application/json" },
+      body: JSON.stringify({ email: "test@example.test", type: "sign-in" }),
+    }));
+    await vi.waitFor(() => expect(log).toHaveBeenCalledWith(expect.stringContaining("background task"), failure));
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(200); // Anonymous email acceptance avoids account-existence leakage.
+    expect(await response.text()).not.toContain("private-email-provider-detail");
+  } finally { log.mockRestore(); sqlite.close(); }
 });

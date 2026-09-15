@@ -19,6 +19,11 @@ interface Diagnostic {
   readonly candidates?: readonly string[];
   readonly suggestion?: string;
   readonly message: string;
+  readonly failure?: {
+    readonly outcome: "not-applied" | "partial" | "unknown";
+    readonly retry: "never" | "after-change" | "safe" | "reconcile";
+    readonly resource?: string;
+  };
 }
 ```
 
@@ -36,6 +41,8 @@ interface Diagnostic {
 | `message` | Human-readable. Call sites may supply their own; otherwise it is derived as `[<phase>/<code>] at <path>; expected <…>; got <…>; (did you mean <…>?)`. The structured fields stay authoritative. |
 
 `candidates` is stripped by `redactForWire` before any HTTP egress, because listing valid alternatives to an untrusted caller leaks schema information. Internal phases — validate, test and boot — skip that redaction, so a CLI or boot log keeps the full list. One or more diagnostics travel across a transport boundary inside a `DiagnosticError`; the boundary catch emits the structured payload instead of falling back to the `INTERNAL_ERROR` envelope reserved for genuinely unexpected throws.
+
+`failure` describes safe effect and recovery facts for storage and service failures. `safe` means retrying the same idempotent operation is safe, not that Mantle automatically retries it. Unknown write/send outcomes require reconciliation unless the adapter guarantees idempotence. Provider payloads, SQL and credentials belong in `DiagnosticError`’s internal `cause`, never public fields. See the [port operation matrix](../../adr/0023-port-failure-contract.md).
 
 ## Validate-only
 
@@ -123,6 +130,12 @@ These are the codes that reach a caller. Everything else in this catalog is caug
 
 | Code | Meaning | HTTP |
 |---|---|---|
+| `RESOURCE_EXHAUSTED` | A known capacity or quota refusal. | `507` |
+| `RESOURCE_UNAVAILABLE` | A required storage or service dependency is unavailable. | `503` |
+| `RATE_LIMITED` | A recognized request-rate refusal. | `429` |
+| `OUTCOME_UNKNOWN` | The operation may have taken effect; reconcile before retry. | `503` |
+| `PARTIAL_FAILURE` | Some effects completed; inspect the operation’s recovery contract. | `503` |
+| `PRECONDITION_FAILED` | A storage or service precondition failed. | `412` |
 | `INPUT_VALIDATION_FAILED` | Procedure input, View params or an entry's `data` failed the compiled schema, including the write-time locale gate. | `400` |
 | `INVALID_LOCALE` | A locale value is not a canonical Mantle v0.1 tag. Also raised at boot against `site_config/locales`. | `400` |
 | `UNAUTHENTICATED` | An auth predicate failed and the caller presented no identity at all. | `401` |

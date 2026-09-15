@@ -228,7 +228,7 @@ export class InvokeProcedureUseCase {
       if (err instanceof DiagnosticError) {
         return { ok: false, diagnostic: err.diagnostic };
       }
-      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[mantle procedure ${handlerLabel}] unhandled failure`, err);
       return {
         ok: false,
         diagnostic: makeDiagnostic({
@@ -237,7 +237,7 @@ export class InvokeProcedureUseCase {
           severity: "error",
           path: procPath,
           expected: "handler completes without throwing",
-          message: `Handler '${handlerLabel}' threw: ${msg}`,
+          message: "An internal error occurred.",
         }),
       };
     }

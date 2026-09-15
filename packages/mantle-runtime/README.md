@@ -116,3 +116,11 @@ behavior, and upgrade procedure.
 
 This package is prerelease software. Its `package.json` is the exact version
 authority; the API surface may change until the first stable `0.1.2` release.
+
+## Port failures
+
+Recognized storage/service rejections use `DiagnosticError` from `@aotter/mantle-spec`,
+including optional safe `failure` outcome/retry facts. A thrown timeout is not
+proof that a write or send did not happen. See the operation-by-operation
+[failure contract](../../docs/adr/0023-port-failure-contract.md) for effects,
+reconciliation and ownership. Runtime does not retry arbitrary side effects.

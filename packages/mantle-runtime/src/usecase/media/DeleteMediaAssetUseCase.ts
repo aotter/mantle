@@ -1,4 +1,4 @@
-import { DiagnosticError } from "@aotter/mantle-spec";
+import { DiagnosticError, runtimeDiagnostic } from "@aotter/mantle-spec";
 import type { MediaAssetRepository } from "../../domain/port/MediaAssetRepository.js";
 import type { MediaStorage } from "../../domain/port/MediaStorage.js";
 import { mediaAssetNotFoundDiagnostic } from "./diagnostics.js";
@@ -8,9 +8,9 @@ import { mediaAssetNotFoundDiagnostic } from "./diagnostics.js";
  * Orchestrates the two-sided deletion the ports describe: delete every
  * variant's R2 object via `MediaStorage.deleteObject`, then delete the
  * `media_assets` row. Ordering matters — drop the objects first so a
- * crash between the two leaves an orphan *row* (which the sweeper can
- * reconcile from a bucket listing) rather than a dangling *reference*
- * to bytes that are already gone.
+ * crash or partial object failure retains the asset identity and keys
+ * for an idempotent retry. During recovery the row may reference
+ * already deleted objects; no cross-store atomicity is promised.
  *
  * # Reference safety (v1 decision)
  *
@@ -36,30 +36,22 @@ export class DeleteMediaAssetUseCase {
         mediaAssetNotFoundDiagnostic("usecase/DeleteMediaAsset", id),
       );
     }
-    // Attempt EVERY reachable object delete before touching the row —
-    // a single rejecting deleteObject must not abort the loop (which
-    // would leave both partial R2 objects AND the D1 row, contradicting
-    // the docstring's crash-safety invariant). Failures are collected,
-    // not thrown: orphan objects are the sweeper's job. A variant with
-    // no storageKey has no object to drop, so skip it rather than call
-    // deleteObject with an empty key.
+    // Object delete is idempotent. Retain metadata until every variant is
+    // removed so a partial failure can be retried with the same asset id.
     const deletable = asset.variants.filter((v) => v.storageKey);
     const results = await Promise.allSettled(
       deletable.map((variant) =>
         this.storage.deleteObject({ storageKey: variant.storageKey }),
       ),
     );
-    for (const r of results) {
-      if (r.status === "rejected") {
-        console.warn(
-          "[DeleteMediaAsset] object delete failed; leaving orphan for sweeper",
-          r.reason,
-        );
-      }
+    const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (failures.length) {
+      throw new DiagnosticError(runtimeDiagnostic({
+        code: "PARTIAL_FAILURE", severity: "error", path: "usecase/DeleteMediaAsset",
+        message: "Some objects could not be removed. Retry deletion of the same asset.",
+        failure: { outcome: "partial", retry: "safe", resource: "media" },
+      }), { cause: new AggregateError(failures.map(r => r.reason)) });
     }
-    // Delete the row only after every reachable object delete was
-    // attempted — even if some failed (orphan objects are recoverable
-    // from a bucket listing; a dangling reference to gone bytes is not).
     await this.assets.delete(id);
     return { deleted: true, variantsRemoved: asset.variants.length };
   }

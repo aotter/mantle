@@ -84,7 +84,7 @@ describe("InvokeProcedureUseCase", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.diagnostic.code).toBe("INTERNAL_ERROR");
-    expect(result.diagnostic.message).toContain("boom");
+    expect(result.diagnostic.message).not.toContain("boom");
   });
 
   it("InvokeFailure unwrap preserves the structured diagnostic", async () => {

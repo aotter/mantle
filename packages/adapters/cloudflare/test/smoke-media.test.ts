@@ -10,7 +10,7 @@ import type {
   MediaVariant,
   UploadCapability,
 } from "@aotter/mantle-runtime";
-import type { MediaPurposePolicy } from "@aotter/mantle-spec";
+import { DiagnosticError, runtimeDiagnostic, type MediaPurposePolicy } from "@aotter/mantle-spec";
 import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
 import { createMcpApiHandler } from "../src/mount/mountMcp.js";
 import { mountTestEndpoints } from "./mountTestEndpoints.js";
@@ -200,6 +200,21 @@ const THREE_VARIANT_BODY = {
 };
 
 describe("smoke: /admin/api/media/uploads", () => {
+  it("preserves expected capacity rejection on the direct Admin media route", async () => {
+    const h = harness({ withMedia: true, auth: staffAuth() });
+    h.storage!.createUpload = async () => { throw new DiagnosticError(runtimeDiagnostic({
+      code: "RESOURCE_EXHAUSTED", severity: "error", path: "host/media",
+      message: "Storage capacity reached.", failure: { outcome: "not-applied", retry: "after-change" },
+    }), { cause: new Error("private-provider") }); };
+    const response = await h.app.request("/admin/api/media/uploads", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(THREE_VARIANT_BODY),
+    });
+    expect(response.status).toBe(507);
+    const body = await response.json();
+    expect(body).toMatchObject({ diagnostic: { code: "RESOURCE_EXHAUSTED" } });
+    expect(JSON.stringify(body)).not.toContain("private-provider");
+  });
+
   it("returns 501 + MEDIA_NOT_CONFIGURED when no mediaStorage is bound", async () => {
     const h = harness({ withMedia: false, auth: staffAuth() });
     const res = await h.app.request("/admin/api/media/uploads", {
@@ -665,24 +680,20 @@ describe("media library: /admin/api/media", () => {
     expect(body.diagnostic.code).toBe("MEDIA_ASSET_NOT_FOUND");
   });
 
-  it("DELETE stays resilient: one variant's deleteObject rejecting still drops the row + deletes the other variants (F2)", async () => {
+  it("retains metadata after partial object deletion and permits same-id retry", async () => {
     const h = harness({ withMedia: true, auth: staffAuth() });
     const id = await seedAsset(h.app);
-    // Fail only the primary variant's object delete. The other two
-    // variants must still be deleted and the D1 row must still be gone.
     h.storage!.failDeleteKeys = ["/primary"];
     const res = await h.app.request(`/admin/api/media/${id}`, { method: "DELETE" });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { deleted: boolean; variantsRemoved: number };
-    expect(body.deleted).toBe(true);
-    expect(body.variantsRemoved).toBe(3);
-    // The two non-failing variants were still deleted (the loop did not
-    // abort on the primary's rejection).
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ diagnostic: {
+      code: "PARTIAL_FAILURE", failure: { outcome: "partial", retry: "safe" },
+    } });
     expect(h.storage!.deleteCalls).toHaveLength(2);
-    expect(h.storage!.deleteCalls.every((k) => !k.endsWith("/primary"))).toBe(true);
-    // Row is gone despite the object-delete failure: a follow-up GET 404s.
-    const after = await h.app.request(`/admin/api/media/${id}`);
-    expect(after.status).toBe(404);
+    expect((await h.app.request(`/admin/api/media/${id}`)).status).toBe(200);
+    h.storage!.failDeleteKeys = [];
+    expect((await h.app.request(`/admin/api/media/${id}`, { method: "DELETE" })).status).toBe(200);
+    expect((await h.app.request(`/admin/api/media/${id}`)).status).toBe(404);
   });
 });
 
