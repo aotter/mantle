@@ -100,7 +100,46 @@ it("lets a collection create dialog omit expectedVersion when it is not required
   }
 }, 30_000);
 
-async function bootAdmin(args: { operations: unknown[] }): Promise<{
+it("re-reads identical cached data and refreshes version after success before reopening", async () => {
+  const session = await bootAdmin({ operations: [quotaOperation()], unchangedConflict: true });
+  try {
+    const { page, quotaBodies } = session;
+    const open = async () => {
+      await page.getByRole("button", { name: "Row operations" }).click();
+      await page.getByRole("menuitem", { name: "Set quota" }).click();
+    };
+    await open();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("spinbutton").fill("20");
+    await dialog.getByRole("button", { name: "Run", exact: true }).click();
+    await dialog.getByRole("button", { name: "Reload version" }).click();
+    await dialog.getByRole("button", { name: "Run", exact: true }).click();
+    await dialog.getByRole("region", { name: "Result" }).waitFor();
+    expect(quotaBodies[1]).toMatchObject({ expectedVersion: 4, quota: 20 });
+    await dialog.getByRole("button", { name: "Close" }).last().click();
+    await open();
+    await dialog.getByRole("spinbutton").fill("30");
+    await dialog.getByRole("button", { name: "Run", exact: true }).click();
+    await dialog.getByRole("region", { name: "Result" }).waitFor();
+    expect(quotaBodies[2]).toMatchObject({ expectedVersion: 5, quota: 30 });
+  } finally { await session.close(); }
+}, 30_000);
+
+it("does not offer version reload for non-OCC 409", async () => {
+  const session = await bootAdmin({ operations: [quotaOperation()], conflictCode: "LIFECYCLE_HOOK_REJECTED" });
+  try {
+    const { page } = session;
+    await page.getByRole("button", { name: "Row operations" }).click();
+    await page.getByRole("menuitem", { name: "Set quota" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("spinbutton").fill("20");
+    await dialog.getByRole("button", { name: "Run", exact: true }).click();
+    await dialog.getByText("The operation ran but failed to complete.").waitFor();
+    expect(await dialog.getByRole("button", { name: "Reload version" }).count()).toBe(0);
+  } finally { await session.close(); }
+}, 30_000);
+
+async function bootAdmin(args: { operations: unknown[]; unchangedConflict?: boolean; conflictCode?: string }): Promise<{
   page: Page;
   quotaBodies: unknown[];
   memberBodies: unknown[];
@@ -154,12 +193,13 @@ async function bootAdmin(args: { operations: unknown[] }): Promise<{
     if (path === "/operations/set-quota" && method === "POST") {
       quotaBodies.push(route.request().postDataJSON());
       if (quotaBodies.length === 1) {
-        orgVersion.current = 5;
+        orgVersion.current = args.unchangedConflict ? 4 : 5;
         return route.fulfill({
           status: 409,
-          json: { ok: false, diagnostic: { code: "CONFLICT", message: "Version mismatch" } },
+          json: { ok: false, diagnostic: { code: args.conflictCode ?? "CONFLICT", message: "Rejected" } },
         });
       }
+      orgVersion.current++;
       return route.fulfill({ json: { ok: true, output: { ok: true } } });
     }
     if (path === "/operations/set-member-role" && method === "POST") {

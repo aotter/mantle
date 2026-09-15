@@ -286,6 +286,7 @@ export function OperationDialog({
   const expectedVersionRequired = (operation.input.required ?? []).includes(EXPECTED_VERSION_PROPERTY);
 
   const entryQuery = useQuery<EntryEditorPayload>({
+    refetchOnMount: "always",
     queryKey: ["entry-editor", row?.collection ?? "", row?.id ?? ""],
     queryFn: () => {
       if (!row) throw new Error("row operation is missing its row");
@@ -341,6 +342,7 @@ export function OperationDialog({
   }, [hasExpectedVersion, occTargetId]);
 
   const occEntryQuery = useQuery<EntryEditorPayload>({
+    refetchOnMount: "always",
     queryKey: ["entry-editor", "occ", occTargetId ?? ""],
     queryFn: () => api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(occTargetId!)}`),
     enabled: Boolean(hasExpectedVersion && occTargetId && occTargetId !== row?.id),
@@ -351,12 +353,17 @@ export function OperationDialog({
       ? entryQuery.data?.entry
       : occEntryQuery.data?.entry;
 
+  const observedQuery = occTargetId === row?.id ? entryQuery : occEntryQuery;
+  const activeTarget = React.useRef(occTargetId);
+  activeTarget.current = occTargetId;
+
   React.useEffect(() => {
+    if (!observedQuery.isSuccess || !observedQuery.isFetchedAfterMount || observedQuery.isFetching) return;
     if (!hasExpectedVersion || !occTargetId || !occEntry || occEntry.id !== occTargetId) return;
     if (capturedVersion.current?.id === occTargetId) return;
     capturedVersion.current = { id: occTargetId, version: occEntry.version };
     setFormValue((prev) => ({ ...prev, [EXPECTED_VERSION_PROPERTY]: occEntry.version }));
-  }, [hasExpectedVersion, occTargetId, occEntry]);
+  }, [hasExpectedVersion, occTargetId, occEntry, observedQuery.isSuccess, observedQuery.isFetchedAfterMount, observedQuery.isFetching]);
 
   const editableSchema = React.useMemo(() => {
     return operationFormSchema(operation.input, [
@@ -376,30 +383,31 @@ export function OperationDialog({
   const invoke = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api.post<{ ok: true; output: unknown }>(`/operations/${encodeURIComponent(operation.name)}`, body),
-    onSuccess: () => {
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["entry-editor"] });
       toast.success(t(language, "ops.success", { name: title }));
       onSuccess();
     },
     onError: (error) => {
-      if (error instanceof ApiError && error.status === 409) setNeedsReread(true);
+      if (hasExpectedVersion && error instanceof ApiError && error.status === 409 &&
+          (error.body as { diagnostic?: { code?: string } } | null)?.diagnostic?.code === "CONFLICT") setNeedsReread(true);
     },
   });
 
-  const rereadTarget = React.useCallback(() => {
-    capturedVersion.current = null;
-    setNeedsReread(false);
-    setFormValue((prev) => {
-      if (!(EXPECTED_VERSION_PROPERTY in prev)) return prev;
-      const next = { ...prev };
-      delete next[EXPECTED_VERSION_PROPERTY];
-      return next;
-    });
-    if (occTargetId && occTargetId === row?.id) {
-      void queryClient.invalidateQueries({ queryKey: ["entry-editor", row.collection, row.id] });
-    } else if (occTargetId) {
-      void queryClient.invalidateQueries({ queryKey: ["entry-editor", "occ", occTargetId] });
-    }
-  }, [occTargetId, queryClient, row]);
+  const reread = useMutation({
+    mutationFn: async (id: string) => {
+      const result = await observedQuery.refetch({ throwOnError: true });
+      if (!result.data || result.data.entry.id !== id) throw new Error("Version target changed.");
+      return result.data.entry;
+    },
+    onSuccess: (entry) => {
+      if (activeTarget.current !== entry.id) return;
+      capturedVersion.current = { id: entry.id, version: entry.version };
+      setFormValue((prev) => ({ ...prev, [EXPECTED_VERSION_PROPERTY]: entry.version }));
+      setNeedsReread(false);
+      invoke.reset();
+    },
+  });
 
   const versionReady = operationVersionReady({
     declaresExpectedVersion: hasExpectedVersion,
@@ -446,6 +454,7 @@ export function OperationDialog({
 
         {row && entryQuery.isError ? <ErrorBox error={entryQuery.error} /> : null}
         {occEntryQuery.isError ? <ErrorBox error={occEntryQuery.error} /> : null}
+        {reread.isError ? <ErrorBox error={reread.error} /> : null}
         {invoke.isError ? <OperationErrorBox error={asRenderable(invoke.error)} /> : null}
         {needsReread ? (
           <p className="text-sm text-muted-foreground">{t(language, "ops.conflict.rereadRequired")}</p>
@@ -465,7 +474,7 @@ export function OperationDialog({
             {t(language, invoke.isSuccess ? "common.close" : "rowActions.cancel")}
           </Button>
           {needsReread ? (
-            <Button type="button" variant="secondary" onClick={rereadTarget} disabled={invoke.isPending}>
+            <Button type="button" variant="secondary" onClick={() => occTargetId && reread.mutate(occTargetId)} disabled={invoke.isPending || reread.isPending}>
               {t(language, "ops.conflict.reread")}
             </Button>
           ) : null}
