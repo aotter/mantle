@@ -94,7 +94,13 @@ export interface AdminAuth {
   readonly methods: readonly AdminAuthMethod[];
   readonly getSession: (request: Request) => Promise<{
     session: { id: string };
-    user: { id: string; image?: string | null; githubLogin?: string | null };
+    user: {
+      id: string;
+      email?: string | null;
+      name?: string | null;
+      image?: string | null;
+      githubLogin?: string | null;
+    };
   } | null>;
   readonly getUserRole: (userId: string) => Promise<string | null>;
   readonly listUsers: () => Promise<readonly AdminStaffUser[]>;
@@ -1830,7 +1836,8 @@ async function readStaffGate(c: Context, auth: AdminAuth): Promise<StaffGate> {
   const session = await auth.getSession(c.req.raw);
   if (!session) return { kind: "unauth" };
   const role = await auth.getUserRole(session.user.id);
-  const login = session.user.githubLogin ?? null;
+  const login = [session.user.githubLogin, session.user.name, session.user.email]
+    .find((value) => value?.trim()) ?? null;
   if (!role || !STAFF_ROLE_SET.has(role)) {
     return { kind: "forbidden", login };
   }

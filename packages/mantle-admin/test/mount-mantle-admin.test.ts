@@ -160,12 +160,16 @@ spec:
   });
 
   it("accepts staff and denies signed-in non-staff users", async () => {
-    const session = async () => ({ session: { id: "session" }, user: { id: "user" } });
+    const session = async () => ({
+      session: { id: "session" },
+      user: { id: "user", email: "phsu@example.test", name: "" },
+    });
     const accepted = await mounted({
       getSession: session,
       getUserRole: async () => "owner",
     }).request("https://example.test/admin/api/me");
     expect(accepted.status).toBe(200);
+    await expect(accepted.json()).resolves.toMatchObject({ login: "phsu@example.test" });
 
     const denied = await mounted({
       getSession: session,
