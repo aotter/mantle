@@ -47,7 +47,7 @@ describe("manifest graph trace", () => {
   });
 
   it("builds schema relationships from manifest references", () => {
-    const snapshot = {
+    const snapshot: DeveloperConsoleSnapshot = {
       dataModel: { schemas: [
         { name: "orders", title: "Orders", lifecycle: "operational", localized: false, translates: null, schema: { type: "object", properties: { id: { type: "string" }, customerId: { type: "string", "x-mantle-ref": "customers" } } }, uniqueIndexes: [], indexes: [], searchableFields: [], manifest: {} },
         { name: "customers", title: "Customers", lifecycle: "operational", localized: false, translates: null, schema: { type: "object", properties: { id: { type: "string" } } }, uniqueIndexes: [], indexes: [], searchableFields: [], manifest: {} },
@@ -55,7 +55,7 @@ describe("manifest graph trace", () => {
       logic: { triggers: [], procedures: [] },
       interfaces: { http: [], callable: [] },
       graph: { atoms: graph.atoms, relations: graph.relations },
-    } satisfies DeveloperConsoleSnapshot;
+    };
     const diagram = buildSchemaDiagram(snapshot, "en");
     expect(diagram.nodes.map(({ id }) => id)).toEqual(["Schema:orders", "Schema:customers"]);
     expect(diagram.edges).toHaveLength(1);

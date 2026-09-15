@@ -280,7 +280,10 @@ export function buildDeveloperNavGroups(language: AdminLanguage): ReadonlyArray<
   return [{
     title: t(language, "nav.build"),
     items: [
-      { title: t(language, "nav.overview"), url: "/admin/dev", icon: LayoutDashboard },
+      { title: t(language, "nav.overview"), icon: LayoutDashboard, items: [
+        { title: t(language, "logic.execution"), url: "/admin/dev/overview/flow" },
+        { title: t(language, "model.relationships"), url: "/admin/dev/overview/relationships" },
+      ] },
       { title: t(language, "nav.model"), icon: Database, items: [
         { title: t(language, "model.schemas"), url: "/admin/dev/model/schemas" },
         { title: t(language, "model.views"), url: "/admin/dev/model/views" },
