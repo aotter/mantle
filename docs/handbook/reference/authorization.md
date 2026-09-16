@@ -90,7 +90,7 @@ A guard denies by throwing a `DiagnosticError` carrying a runtime diagnostic. `E
 
 `users` is the base identity layer; `staff` is a privilege overlay with one row per privileged user, so `ctx.staff.id` always equals `ctx.user.id`. A signed-in user with no staff row is an ordinary site member with no Admin access and no `/mcp/staff` access.
 
-Rank ordering exists for "this role or above" gates — Admin's own route table uses it, so an `owner` passes an `editor`-gated Admin route. The manifest predicate does not: `{ "ctx.staff": [editor] }` admits editors only. List every role you mean.
+Rank ordering exists for "this role or above" gates — Admin's own route table uses it, so an `owner` passes an `editor`-gated Admin route. Generic staff MCP tools (including Admin WebMCP) use the same rank table: contributors may call `create_draft_*` / `update_draft_*`; publish, unpublish, archive, delete, media, and operational `create_record_*` / `update_record_*` require editor or owner. Declared Procedures still use their own `requires.auth.all`. The manifest predicate does not rank-order: `{ "ctx.staff": [editor] }` admits editors only. List every role you mean.
 
 The adapter re-reads the caller's current role from the database on every protected request. A role is never taken from a token, a consent snapshot or a cached catalog, so a demotion takes effect on the next call.
 

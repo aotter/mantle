@@ -18,6 +18,11 @@ checks the target row for readOnly and lifecycle suitability, and binds
 per-collection updates to their declared collection before mutation. Unsupported
 lifecycle calls return CONFLICT with an explicit reason; wrong-collection IDs
 return NOT_FOUND. Existing status/OCC checks remain in the use cases.
+Generic staff tools also apply Admin's rank table at `tools/call`:
+contributor may create/update drafts; editor+ is required for lifecycle,
+delete, media, and operational record tools. Declared Procedures keep their
+own `requires` predicates. `tools/list` may still show editor tools to
+contributors; a guessed call is `AUTH_DENIED`.
 
 Compatibility: operational-only and read-only sites lose unusable generic
 tools. Clients must rediscover tools rather than retaining a global tool list.
