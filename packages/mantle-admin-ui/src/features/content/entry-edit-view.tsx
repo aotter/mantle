@@ -338,7 +338,7 @@ export function EntryEditView({
         </div>
       </div>
 
-      {canEdit || (canManageContent && !isOperational) ? (
+      {canEdit || (canManageContent && !isOperational && !isReadOnly) ? (
         <FormActionBar
           status={save.isPending
             ? t(language, "crud.saving")
