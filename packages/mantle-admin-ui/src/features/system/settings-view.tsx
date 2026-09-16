@@ -39,6 +39,7 @@ export function SettingsView(): React.ReactElement {
     mutationFn: (next: SiteSettings) => api.patch<SiteSettings>("/site-settings", next),
     onSuccess: (data) => {
       queryClient.setQueryData(["site-settings"], data);
+      void queryClient.invalidateQueries({ queryKey: ["site"] });
       setForm(data);
     },
   });
