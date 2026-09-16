@@ -52,7 +52,27 @@ export class DeleteMediaAssetUseCase {
         failure: { outcome: "partial", retry: "safe", resource: "media" },
       }), { cause: new AggregateError(failures.map(r => r.reason)) });
     }
-    await this.assets.delete(id);
+    try {
+      await this.assets.delete(id);
+    } catch (error) {
+      // Objects are already gone. Recognized port failures retry the same
+      // id; unknown/unclassified outcomes reconcile by asset id (ADR-0023).
+      const recognized = error instanceof DiagnosticError
+        && error.diagnostic.code !== "OUTCOME_UNKNOWN"
+        && error.diagnostic.code !== "INTERNAL_ERROR"
+        && error.diagnostic.failure?.outcome !== "unknown";
+      throw new DiagnosticError(runtimeDiagnostic({
+        code: recognized ? "PARTIAL_FAILURE" : "OUTCOME_UNKNOWN",
+        severity: "error",
+        path: "usecase/DeleteMediaAsset",
+        message: recognized
+          ? "Asset objects were removed but metadata could not be deleted. Retry deletion of the same asset."
+          : "Asset objects were removed but metadata deletion outcome is unknown. Reconcile by the same asset id.",
+        failure: recognized
+          ? { outcome: "partial", retry: "safe", resource: "media" }
+          : { outcome: "unknown", retry: "reconcile", resource: "media" },
+      }), { cause: error });
+    }
     return { deleted: true, variantsRemoved: asset.variants.length };
   }
 }
