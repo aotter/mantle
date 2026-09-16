@@ -72,6 +72,8 @@ describe("stringFieldWidget", () => {
   it("uses only explicit UI and content-format declarations", () => {
     expect(stringFieldWidget({ type: "string", maxLength: 500 }, null)).toBe("input");
     expect(stringFieldWidget({ type: "string" }, "textarea")).toBe("textarea");
-    expect(stringFieldWidget({ type: "string", "x-mcp-hint": "markdown" }, null)).toBe("richtext");
+    expect(stringFieldWidget({ type: "string", "x-mcp-hint": "markdown" }, null)).toBe("markdown");
+    expect(stringFieldWidget({ type: "string", "x-mcp-hint": "html" }, null)).toBe("html");
+    expect(stringFieldWidget({ type: "string", "x-mcp-hint": "richtext" }, null)).toBe("textarea");
   });
 });

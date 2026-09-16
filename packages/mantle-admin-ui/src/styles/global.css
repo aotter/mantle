@@ -115,6 +115,14 @@
       inset 0 1px 0 rgb(255 255 255 / 3%),
       0 18px 48px rgb(0 0 0 / 24%);
   }
+
+  .mantle-html-editor { min-height: 8rem; }
+
+  :is(.mantle-markdown-preview, .mantle-html-editor) :where(ul, ol) { margin-block: 0.5rem; padding-left: 1.5rem; }
+  :is(.mantle-markdown-preview, .mantle-html-editor) ul { list-style: disc; }
+  :is(.mantle-markdown-preview, .mantle-html-editor) ol { list-style: decimal; }
+  :is(.mantle-markdown-preview, .mantle-html-editor) blockquote { border-left: 3px solid var(--border); padding-left: 0.75rem; color: var(--muted-foreground); }
+  :is(.mantle-markdown-preview, .mantle-html-editor) pre { overflow-x: auto; border-radius: var(--radius-sm); background: var(--muted); padding: 0.75rem; }
 }
 
 @layer utilities {
