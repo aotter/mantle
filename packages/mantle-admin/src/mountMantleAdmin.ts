@@ -99,6 +99,8 @@ export interface AdminAuth {
       email?: string | null;
       name?: string | null;
       image?: string | null;
+      role?: string | null;
+      roleCurrent?: true;
       githubLogin?: string | null;
     };
   } | null>;
@@ -1833,7 +1835,9 @@ function adminHandlerContext(
 async function readStaffGate(c: Context, auth: AdminAuth): Promise<StaffGate> {
   const session = await auth.getSession(c.req.raw);
   if (!session) return { kind: "unauth" };
-  const role = await auth.getUserRole(session.user.id);
+  const role = session.user.roleCurrent
+    ? session.user.role ?? null
+    : await auth.getUserRole(session.user.id);
   const login = [session.user.githubLogin, session.user.name, session.user.email]
     .find((value) => value?.trim()) ?? null;
   if (!role || !STAFF_ROLE_SET.has(role)) {

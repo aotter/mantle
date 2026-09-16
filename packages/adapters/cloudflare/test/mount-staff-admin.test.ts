@@ -326,6 +326,21 @@ describe("GET /admin/api/staff", () => {
     expect(getUserRole).toHaveBeenCalledWith("user-1");
   });
 
+  it("reuses the current role from the built-in session read", async () => {
+    const getUserRole = vi.fn(async () => null);
+    const getSession = sessionAs("owner");
+    const { app } = harness({
+      getSession: async (request) => {
+        const session = await getSession(request);
+        return { ...session, user: { ...session.user, roleCurrent: true } };
+      },
+      getUserRole,
+    });
+
+    expect((await app.request("/admin/api/staff")).status).toBe(200);
+    expect(getUserRole).not.toHaveBeenCalled();
+  });
+
   it("returns the user list for owner", async () => {
     const { app } = harness({
       getSession: sessionAs("owner"),

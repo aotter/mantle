@@ -470,7 +470,9 @@ async function assertStaffSession(
 ): Promise<Response | null> {
   const session = await ref.auth.getSession(req);
   if (!session) return new Response("unauthorized", { status: 401 });
-  const role = await ref.auth.getUserRole(session.user.id);
+  const role = session.user.roleCurrent
+    ? session.user.role ?? null
+    : await ref.auth.getUserRole(session.user.id);
   if (!role || !STAFF_ROLE_SET.has(role)) {
     return new Response("forbidden", { status: 403 });
   }

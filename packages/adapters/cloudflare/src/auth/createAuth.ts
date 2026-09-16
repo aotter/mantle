@@ -1159,6 +1159,8 @@ export interface Auth {
       name: string;
       image?: string | null;
       role?: string | null;
+      /** The role came from the same uncached database read as this session. */
+      roleCurrent?: true;
       githubLogin?: string | null;
     };
   } | null>;
@@ -1376,7 +1378,16 @@ export function createAuth(config: CreateAuthConfig): Auth {
     },
     getSession: async (request) => {
       await prepareAuth();
-      return (await api.getSession({ headers: request.headers })) ?? null;
+      const session = await api.getSession({ headers: request.headers });
+      return session
+        ? {
+            ...session,
+            user: {
+              ...session.user,
+              ...(Object.hasOwn(session.user, "role") ? { roleCurrent: true as const } : {}),
+            },
+          }
+        : null;
     },
     getUserRole: async (userId) => {
       await prepareAuth();

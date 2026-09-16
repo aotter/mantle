@@ -132,6 +132,7 @@ export async function resolveCaller(
       },
       options.auth,
       base,
+      session.user.roleCurrent ? session.user.role ?? null : undefined,
     ),
   };
 }
@@ -141,8 +142,11 @@ export async function contextForVerifiedUser(
   authContext: NonNullable<HandlerContext["auth"]>,
   auth: Auth,
   base: Pick<HandlerContext, "env" | "waitUntil">,
+  currentRole?: string | null,
 ): Promise<HandlerContext> {
-  const role = userId ? await auth.getUserRole(userId) : null;
+  const role = currentRole !== undefined
+    ? currentRole
+    : userId ? await auth.getUserRole(userId) : null;
   const staff =
     userId && role && STAFF_ROLE_SET.has(role)
       ? { id: userId, role: role as StaffRole }
