@@ -8,7 +8,7 @@ import { api } from "../../lib/api";
 import { isFoldedFieldChild } from "../../lib/collection-nav";
 import { propertyDescription, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
-import { operationsQueryOptions } from "../../lib/queries";
+import { entryEditorQueryOptions, operationsQueryOptions } from "../../lib/queries";
 import type {
   AdminUser,
   EntryEditorCollection,
@@ -68,11 +68,8 @@ export function EntryEditView({
   const { language } = usePreferences();
   const { navigate } = useAdminRouter();
   const queryClient = useQueryClient();
-  const queryKey = React.useMemo(() => ["entry-editor", collectionName, entryId], [collectionName, entryId]);
-  const query = useQuery<EntryEditorPayload>({
-    queryKey,
-    queryFn: () => api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}`),
-  });
+  const queryOptions = React.useMemo(() => entryEditorQueryOptions(collectionName, entryId), [collectionName, entryId]);
+  const query = useQuery<EntryEditorPayload>(queryOptions);
   const site = useQuery<SiteInfo>({
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
@@ -96,9 +93,9 @@ export function EntryEditView({
   const syncPayload = React.useCallback(
     (payload: EntryEditorPayload) => {
       setData(payload.entry.data);
-      queryClient.setQueryData(queryKey, payload);
+      queryClient.setQueryData(queryOptions.queryKey, payload);
     },
-    [queryClient, queryKey],
+    [queryClient, queryOptions.queryKey],
   );
 
   const save = useMutation({
@@ -221,7 +218,7 @@ export function EntryEditView({
               operations={boundOperations}
               language={language}
               canonical={canonical}
-              onSuccess={() => void queryClient.invalidateQueries({ queryKey })}
+              onSuccess={() => void queryClient.invalidateQueries({ queryKey: queryOptions.queryKey })}
               trigger={
                 <Button type="button" variant="secondary">
                   <MoreHorizontal className="size-4" aria-hidden />
@@ -317,7 +314,7 @@ export function EntryEditView({
               language={language}
               canonical={canonical}
               operations={operationsQuery.data}
-              onOperationSuccess={() => void queryClient.invalidateQueries({ queryKey })}
+              onOperationSuccess={() => void queryClient.invalidateQueries({ queryKey: queryOptions.queryKey })}
             />
           ) : null}
         </div>

@@ -3,6 +3,20 @@ import { chromium, type Page } from "playwright";
 import { createServer } from "vite";
 import { resolve } from "node:path";
 
+it("prefetches row detail on intent and reuses it after navigation", async () => {
+  const session = await bootAdmin({ operations: [] });
+  try {
+    const { page, entryReads } = session;
+    await page.getByRole("row").filter({ hasText: "Acme" }).hover();
+    await expect.poll(() => entryReads).toEqual(["org-1"]);
+    await page.getByRole("link", { name: "Edit Acme." }).click();
+    await page.getByRole("heading", { name: "Acme" }).waitFor();
+    expect(entryReads).toEqual(["org-1"]);
+  } finally {
+    await session.close();
+  }
+}, 30_000);
+
 it("binds observed entry.version on row operations and does not reuse it after target or conflict", async () => {
   const session = await bootAdmin({
     operations: [quotaOperation(), memberOperation()],
@@ -145,6 +159,7 @@ async function bootAdmin(args: { operations: unknown[]; unchangedConflict?: bool
   memberBodies: unknown[];
   upsertBodies: unknown[];
   createBodies: unknown[];
+  entryReads: string[];
   close: () => Promise<void>;
 }> {
   const server = await createServer({ configFile: resolve("vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
@@ -160,6 +175,7 @@ async function bootAdmin(args: { operations: unknown[]; unchangedConflict?: bool
   const memberBodies: unknown[] = [];
   const upsertBodies: unknown[] = [];
   const createBodies: unknown[] = [];
+  const entryReads: string[] = [];
   const orgVersion = { current: 4 };
   await page.route("**/admin/api/**", async (route) => {
     const url = new URL(route.request().url());
@@ -193,6 +209,7 @@ async function bootAdmin(args: { operations: unknown[]; unchangedConflict?: bool
       return route.fulfill({ json: { items: [orgListRow()], previous_cursor: null, next_cursor: null } });
     }
     if (path === "/entries/org-1" && method === "GET") {
+      entryReads.push("org-1");
       return route.fulfill({ json: orgEditor(orgVersion.current) });
     }
     if (path === "/entries/member-1" && method === "GET") {
@@ -235,6 +252,7 @@ async function bootAdmin(args: { operations: unknown[]; unchangedConflict?: bool
     memberBodies,
     upsertBodies,
     createBodies,
+    entryReads,
     close: async () => {
       await browser.close();
       await server.close();
