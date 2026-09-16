@@ -7,6 +7,7 @@ import { resolve } from "node:path";
 import { Card, CardDescription } from "../src/components/ui/card";
 import { Dialog, DialogDescription } from "../src/components/ui/dialog";
 import { AlertDialog, AlertDialogDescription } from "../src/components/ui/alert-dialog";
+import { CollapsibleDescription, PageHeader } from "../src/ui/page";
 
 it("keeps primary descriptions readable in dark mode without changing light or metadata colors", async () => {
   const server = await createServer({ configFile: resolve("vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
@@ -18,6 +19,12 @@ it("keeps primary descriptions readable in dark mode without changing light or m
       h(Card, null, h(CardDescription, null, "Review the operation before continuing.")),
       h(Dialog, null, h(DialogDescription, null, "Select media to attach to this entry.")),
       h(AlertDialog, null, h(AlertDialogDescription, null, "This operation cannot be undone.")),
+      h(PageHeader, { title: "Library", description: "Review assets before deleting them." }),
+      h(CollapsibleDescription, {
+        description: "Schema notes that mention a `field` so the long copy collapses.",
+        summaryLabel: "Details",
+        collapsedIntro: "This collection stores published entries.",
+      }),
       h("small", { className: "text-muted-foreground" }, "Updated yesterday"),
     ));
     await page.route("**/contrast-test", route => route.fulfill({ contentType: "text/html", body:
@@ -30,7 +37,7 @@ it("keeps primary descriptions readable in dark mode without changing light or m
         secondary: getComputedStyle(document.querySelector("small")!).color,
         descriptions: [...document.querySelectorAll('[data-slot$="description"]')].map(el => getComputedStyle(el).color),
       }));
-      expect(colors.descriptions).toHaveLength(3);
+      expect(colors.descriptions).toHaveLength(6);
       expect(colors.primary).not.toBe(colors.secondary);
       for (const color of colors.descriptions) expect(color).toBe(dark ? colors.primary : colors.secondary);
     }
