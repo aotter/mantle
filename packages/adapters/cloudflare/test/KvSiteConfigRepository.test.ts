@@ -1,4 +1,4 @@
-import { siteConfigFromDefaults, type SiteConfigRepository } from "@aotter/mantle-runtime";
+import { SqliteMantleStorageAdapter, siteConfigFromDefaults, type SiteConfigRepository } from "@aotter/mantle-runtime";
 import type {
   SiteConfig,
   SiteDefaults,
@@ -290,6 +290,30 @@ describe("KvSiteConfigRepository", () => {
     await runtime.updateSiteSettings.execute({ brand: "Saved despite KV outage" });
     expect(purge).toHaveBeenCalledTimes(1);
     expect((await runtime.siteConfig.load()).brand).toBe("Saved despite KV outage");
+  });
+
+  it("discovers an MCP catalog reader owned by custom storage", async () => {
+    const kv = new FakeKvNamespace();
+    let repository: KvSiteConfigRepository | undefined;
+    const db = new InMemoryDatabase();
+    const storage = new SqliteMantleStorageAdapter(db, siteDefaults(), {
+      decorateSiteConfigRepository(canonical) {
+        return repository = new KvSiteConfigRepository(canonical, {
+          namespace: kv as unknown as KVNamespace,
+          scope: SCOPE,
+        });
+      },
+    });
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan([]),
+      bindings: { db, storage },
+      auth: stubAuth,
+    });
+
+    await ref.get();
+
+    expect(ref.mcpCatalogSiteConfig).toBe(repository);
+    await expect(ref.mcpCatalogSiteConfig!.loadCatalogSite({})).resolves.toMatchObject({ brand: "Mantle" });
   });
 
   it("keeps OAuth and mutable roles live on warm KV and dispatcher hits", async () => {
