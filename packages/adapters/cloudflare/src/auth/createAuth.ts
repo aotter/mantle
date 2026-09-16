@@ -1405,8 +1405,15 @@ export function createAuth(config: CreateAuthConfig): Auth {
       return normalizeAuthResponseCookies(await auth.handler(request));
     },
     getSession: async (request) => {
-      await prepareAuth();
-      const session = await api.getSession({ headers: request.headers });
+      let session;
+      try {
+        session = await api.getSession({ headers: request.headers });
+      } catch {
+        // Existing sessions resolve from KV without paying the schema-ledger read.
+        // A fresh database with a stale cookie prepares once, then retries safely.
+        await prepareAuth();
+        session = await api.getSession({ headers: request.headers });
+      }
       return session
         ? {
             ...session,
