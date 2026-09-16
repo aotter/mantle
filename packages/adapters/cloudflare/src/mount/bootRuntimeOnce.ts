@@ -45,7 +45,7 @@ export type CloudflareMantleRuntime = MantleRuntime & {
 export function createMantleRuntimeRef(config: MantleCloudflareConfig): MantleRuntimeRef {
   let booted: Promise<CloudflareMantleRuntime> | null = null;
   let web: MantleWeb | null = null;
-  let kvSiteConfig: KvSiteConfigRepository | undefined;
+  let mcpCatalogSiteConfig: McpCatalogSiteConfigReader | undefined;
   const mcpCatalogKv = config.bindings.mcpCatalogKv;
   const publicCacheTag = scopedPublicCacheTag(config.cacheScope);
   if (config.bindings.storage && mcpCatalogKv) {
@@ -54,8 +54,9 @@ export function createMantleRuntimeRef(config: MantleCloudflareConfig): MantleRu
   const storage = config.bindings.storage ?? new SqliteMantleStorageAdapter(config.bindings.db, config.siteDefaults, {
     decorateSiteConfigRepository: mcpCatalogKv
       ? (canonical) => {
-          kvSiteConfig = new KvSiteConfigRepository(canonical, mcpCatalogKv);
-          return kvSiteConfig;
+          const repository = new KvSiteConfigRepository(canonical, mcpCatalogKv);
+          mcpCatalogSiteConfig = repository;
+          return repository;
         }
       : undefined,
   });
@@ -65,7 +66,9 @@ export function createMantleRuntimeRef(config: MantleCloudflareConfig): MantleRu
     adminAssets: config.bindings.adminAssets,
     credentialResolver: config.credentialResolver,
     jwtBearer: config.jwtBearer,
-    ...(kvSiteConfig ? { mcpCatalogSiteConfig: kvSiteConfig } : {}),
+    get mcpCatalogSiteConfig() {
+      return mcpCatalogSiteConfig;
+    },
     ...(publicCacheTag ? { publicCacheTag } : {}),
     web(runtime): MantleWeb {
       return web ??= createMantleWeb(runtime, {
@@ -94,6 +97,9 @@ export function createMantleRuntimeRef(config: MantleCloudflareConfig): MantleRu
           });
           if (!runtime.siteConfig || !runtime.updateSiteSettings) {
             throw new Error("Cloudflare storage did not prepare site configuration.");
+          }
+          if (!mcpCatalogSiteConfig && "loadCatalogSite" in runtime.siteConfig) {
+            mcpCatalogSiteConfig = runtime.siteConfig as SiteConfigRepository & McpCatalogSiteConfigReader;
           }
           return runtime as CloudflareMantleRuntime;
         })
