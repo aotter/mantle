@@ -28,7 +28,7 @@ export function PageHeader({
         {eyebrow ? <div className="mb-1 text-sm text-muted-foreground">{eyebrow}</div> : null}
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         {description ? (
-          <div className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          <div data-slot="page-description" className="mt-1 max-w-3xl text-sm text-muted-foreground dark:text-foreground">
             {description}
           </div>
         ) : null}
@@ -165,12 +165,12 @@ export function CollapsibleDescription({
 
   return (
     <div className="space-y-2">
-      <p>{collapsedIntro}</p>
+      <p data-slot="page-description" className="text-muted-foreground dark:text-foreground">{collapsedIntro}</p>
       <details className="group">
         <summary className="inline-flex cursor-pointer list-none items-center rounded-md border border-border bg-card/70 px-2.5 py-1 text-xs font-semibold text-foreground/70 transition hover:bg-accent hover:text-accent-foreground">
           {summaryLabel}
         </summary>
-        <p className="mt-2 max-w-3xl rounded-md border border-border bg-card/55 p-3 text-xs leading-relaxed text-muted-foreground">
+        <p data-slot="page-description" className="mt-2 max-w-3xl rounded-md border border-border bg-card/55 p-3 text-xs leading-relaxed text-muted-foreground dark:text-foreground">
           {description}
         </p>
       </details>
