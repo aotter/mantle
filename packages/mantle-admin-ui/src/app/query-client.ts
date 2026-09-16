@@ -3,7 +3,10 @@ import { ApiError } from "../lib/api";
 
 export const queryClient = new QueryClient({
   mutationCache: new MutationCache({
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["collection-statistics"] }); },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["collection-statistics"] });
+      void queryClient.invalidateQueries({ queryKey: ["entries"] });
+    },
   }),
   defaultOptions: {
     queries: {
@@ -26,3 +29,5 @@ for (const key of ["collections", "views-manifest", "operations"]) {
 for (const key of ["me", "site", "admin-webmcp"]) {
   queryClient.setQueryDefaults([key], { staleTime: 300_000, refetchOnWindowFocus: true });
 }
+
+queryClient.setQueryDefaults(["entries"], { staleTime: 300_000 });
