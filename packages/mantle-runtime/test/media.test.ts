@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
+import { DiagnosticError, runtimeDiagnostic } from "@aotter/mantle-spec";
 import type { MediaAsset, MediaStorage, MediaVariant } from "../src/domain/port/MediaStorage.js";
 import type { MediaAssetRepository } from "../src/domain/port/MediaAssetRepository.js";
 import {
   CommitMediaUploadUseCase,
   CreateMediaUploadUseCase,
+  DeleteMediaAssetUseCase,
 } from "../src/usecase/media/index.js";
 import { InMemoryPendingUploadRepository } from "./fakes/pending.js";
 import { InMemorySiteConfigRepository } from "./fakes/site-config.js";
@@ -13,6 +15,7 @@ const DEFAULT_PURPOSES = ["post-cover", "product-cover"] as const;
 class FakeMediaStorage implements MediaStorage {
   public createCalls: Parameters<MediaStorage["createUpload"]>[0][] = [];
   public commitCalls: Parameters<MediaStorage["commitUpload"]>[0][] = [];
+  public deleteCalls: string[] = [];
 
   async createUpload(args: Parameters<MediaStorage["createUpload"]>[0]) {
     this.createCalls.push(args);
@@ -53,14 +56,14 @@ class FakeMediaStorage implements MediaStorage {
     return `https://media.example/${args.storageKey}`;
   }
 
-  async deleteObject(): Promise<void> {
-    /* noop */
+  async deleteObject(args: Parameters<MediaStorage["deleteObject"]>[0]): Promise<void> {
+    this.deleteCalls.push(args.storageKey);
   }
-
 }
 
 class InMemoryMediaAssetRepository implements MediaAssetRepository {
   public saved: MediaAsset[] = [];
+  public deleteError: unknown | null = null;
   private store = new Map<string, MediaAsset>();
 
   async findById(id: string): Promise<MediaAsset | null> {
@@ -82,6 +85,7 @@ class InMemoryMediaAssetRepository implements MediaAssetRepository {
   }
 
   async delete(id: string): Promise<void> {
+    if (this.deleteError) throw this.deleteError;
     this.store.delete(id);
   }
 
@@ -695,5 +699,84 @@ describe("CommitMediaUploadUseCase (#272)", () => {
       diagnostic: { code: "MEDIA_UPLOAD_EXPIRED" },
     });
     await expect(pending.findById("expired")).resolves.toBeNull();
+  });
+});
+
+function sampleAsset(id: string): MediaAsset {
+  return {
+    id,
+    createdAt: FROZEN_NOW,
+    variants: [
+      {
+        mimeType: "image/jpeg",
+        publicUrl: `https://media.example/${id}/primary`,
+        storageKey: `${id}/primary`,
+        byteSize: 1024,
+        role: "primary",
+      },
+      {
+        mimeType: "image/webp",
+        publicUrl: `https://media.example/${id}/alternate`,
+        storageKey: `${id}/alternate`,
+        byteSize: 800,
+        role: "alternate",
+      },
+    ],
+  };
+}
+
+describe("DeleteMediaAssetUseCase", () => {
+  it("maps unclassified metadata-delete throws to OUTCOME_UNKNOWN and permits same-id retry", async () => {
+    const storage = new FakeMediaStorage();
+    const assets = new InMemoryMediaAssetRepository();
+    const asset = sampleAsset("asset-1");
+    await assets.save(asset);
+    assets.deleteError = new Error("d1 timeout");
+    const useCase = new DeleteMediaAssetUseCase(storage, assets);
+
+    await expect(useCase.execute(asset.id)).rejects.toMatchObject({
+      diagnostic: {
+        code: "OUTCOME_UNKNOWN",
+        failure: { outcome: "unknown", retry: "reconcile", resource: "media" },
+      },
+    });
+    expect(storage.deleteCalls).toEqual([`${asset.id}/primary`, `${asset.id}/alternate`]);
+    expect(await assets.findById(asset.id)).toEqual(asset);
+
+    assets.deleteError = null;
+    await expect(useCase.execute(asset.id)).resolves.toEqual({
+      deleted: true,
+      variantsRemoved: 2,
+    });
+    expect(await assets.findById(asset.id)).toBeNull();
+  });
+
+  it("maps recognized metadata-delete failures to PARTIAL_FAILURE for a safe retry", async () => {
+    const storage = new FakeMediaStorage();
+    const assets = new InMemoryMediaAssetRepository();
+    const asset = sampleAsset("asset-2");
+    await assets.save(asset);
+    assets.deleteError = new DiagnosticError(runtimeDiagnostic({
+      code: "RESOURCE_UNAVAILABLE",
+      severity: "error",
+      path: "host/media",
+      message: "Database unavailable.",
+      failure: { outcome: "not-applied", retry: "after-change", resource: "database" },
+    }));
+    const useCase = new DeleteMediaAssetUseCase(storage, assets);
+
+    await expect(useCase.execute(asset.id)).rejects.toMatchObject({
+      diagnostic: {
+        code: "PARTIAL_FAILURE",
+        failure: { outcome: "partial", retry: "safe", resource: "media" },
+      },
+    });
+    expect(await assets.findById(asset.id)).toEqual(asset);
+
+    assets.deleteError = null;
+    await expect(useCase.execute(asset.id)).resolves.toEqual({
+      deleted: true,
+      variantsRemoved: 2,
+    });
   });
 });
