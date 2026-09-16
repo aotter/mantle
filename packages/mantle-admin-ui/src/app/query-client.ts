@@ -18,3 +18,7 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+for (const key of ["me", "site", "collections", "views-manifest", "operations", "admin-webmcp"]) {
+  queryClient.setQueryDefaults([key], { staleTime: Infinity });
+}
