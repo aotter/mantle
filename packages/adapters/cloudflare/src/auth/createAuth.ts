@@ -304,6 +304,10 @@ export interface RegisteredOAuthClient {
 
 export interface CreateAuthConfig {
   readonly database: D1Database;
+  /** Deployment-owned KV used by Better Auth for session reads. Session rows
+   * stay in D1; verification codes and rate limits never use eventually
+   * consistent KV. */
+  readonly sessionCacheKv?: KVNamespace;
   readonly baseURL: string;
   /** Better Auth route prefix. Defaults to `/api/auth`. Set this when
    *  multiple auth instances live in one Worker, e.g. hosted platform
@@ -839,6 +843,7 @@ function buildAuth(config: CreateAuthConfig) {
     max: hasEmailMethod ? 10 : 100,
     ...config.rateLimit,
     enabled: true as const,
+    storage: "memory" as const,
   };
 
   // `trustedOrigins`: per-provider auto-origins (Apple needs
@@ -1021,8 +1026,31 @@ function buildAuth(config: CreateAuthConfig) {
     },
   };
 
+  const secondaryStorage = config.sessionCacheKv ? {
+    get: (key: string) => key.startsWith("verification:")
+      ? Promise.resolve(null)
+      : config.sessionCacheKv!.get(`better-auth:${key}`),
+    set: (key: string, value: string, ttl?: number) => key.startsWith("verification:")
+      ? Promise.resolve()
+      : config.sessionCacheKv!.put(
+          `better-auth:${key}`,
+          value,
+          ttl ? { expirationTtl: Math.max(60, Math.ceil(ttl)) } : undefined,
+        ),
+    delete: (key: string) => key.startsWith("verification:")
+      ? Promise.resolve()
+      : config.sessionCacheKv!.delete(`better-auth:${key}`),
+    // Verification and rate limiting stay in D1/memory below. Fail loudly if
+    // Better Auth starts routing either atomic operation through this adapter.
+    getAndDelete: async () => { throw new Error("Better Auth KV getAndDelete is disabled"); },
+    increment: async () => { throw new Error("Better Auth KV increment is disabled"); },
+  } : undefined;
+
   return betterAuth({
     database: config.database,
+    secondaryStorage,
+    session: { storeSessionInDatabase: true },
+    verification: { storeInDatabase: true },
     secret: config.secret,
     baseURL: config.baseURL,
     basePath: normalizeAuthBasePath(config.basePath),
@@ -1710,6 +1738,13 @@ export function createAuth(config: CreateAuthConfig): Auth {
         );
       }
       await prepareAuth();
+      if (config.sessionCacheKv) {
+        const context = await auth.$context;
+        return !!await context.internalAdapter.updateUser(userId, {
+          role,
+          updatedAt: new Date(),
+        });
+      }
       const result = await config.database
         .prepare("UPDATE user SET role = ?, updatedAt = ? WHERE id = ?")
         .bind(role, new Date().toISOString(), userId)

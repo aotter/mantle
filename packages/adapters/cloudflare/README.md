@@ -95,6 +95,7 @@ same-parent-domain cookies explicitly:
 ```ts
 const auth = createAuth({
   database: env.DB,
+  sessionCacheKv: env.MANTLE_KV,
   baseURL: "https://platform.mantle.tools",
   secret: env.BETTER_AUTH_SECRET,
   methods,
@@ -125,10 +126,10 @@ Core does not create credential or payment tables. See the shipped
 the exact resolver contract, OAuth resource helpers, manifest examples,
 status behavior, OpenAPI reflection, and runnable integration fixture.
 
-### Optional MCP catalog KV projection
+### Optional KV projections
 
-Bind a deployment-owned KV namespace as `MANTLE_KV` to avoid a D1 site-settings
-read while assembling each authenticated MCP tool catalog:
+Bind a deployment-owned KV namespace as `MANTLE_KV` to avoid D1 reads for
+Better Auth sessions and authenticated MCP tool catalogs:
 
 ```toml
 [[kv_namespaces]]
@@ -141,8 +142,10 @@ D1 remains canonical. Runtime preparation and Admin site-setting mutations
 write the caller-independent catalog projection (brand, description, origin,
 icons, and media-purpose policy) to KV after the D1 write commits. Missing,
 invalid, or expired snapshots are repaired from D1; KV failures do not turn a
-committed setting change into a failed request. Tokens, sessions, caller data,
-operator-only settings, and content are never stored in this projection.
+committed setting change into a failed request. That projection never stores
+tokens, sessions, caller data, operator-only settings, or content. Better Auth
+session values use a separate `better-auth:` key prefix; D1 remains canonical,
+including for OTP verification.
 All Cloudflare locations follow Workers KV's eventual-consistency model while
 a write propagates; the one-hour repair deadline prevents an observation from
 remaining authoritative indefinitely.

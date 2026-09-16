@@ -8,6 +8,7 @@ import { applyCachePolicy } from "../oauth/cachePolicy.js";
 
 export interface ConventionalAuthEnv {
   readonly DB: D1Database;
+  readonly MANTLE_KV?: KVNamespace;
   readonly PUBLIC_ORIGIN?: string;
   readonly BETTER_AUTH_SECRET?: string;
   readonly MANTLE_AUTH_MODE?: string;
@@ -58,6 +59,7 @@ export function createConventionalAuth(env: ConventionalAuthEnv): Auth {
     }
     return createAuth({
       database: env.DB,
+      sessionCacheKv: env.MANTLE_KV,
       baseURL,
       secret,
       methods: [{
@@ -94,6 +96,7 @@ export function createConventionalAuth(env: ConventionalAuthEnv): Auth {
     }
     return createAuth({
       database: env.DB,
+      sessionCacheKv: env.MANTLE_KV,
       baseURL,
       secret,
       methods: [{

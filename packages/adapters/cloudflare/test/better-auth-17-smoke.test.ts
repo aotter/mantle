@@ -16,6 +16,50 @@ afterEach(() => {
 });
 
 describe("Better Auth 1.7 MCP smoke", () => {
+  it("stores sessions in deployment KV while keeping OTP verification in D1", async () => {
+    const { db, sqlite } = sqliteD1();
+    const values = new Map<string, string>();
+    const kv = {
+      get: async (key: string) => values.get(key) ?? null,
+      put: async (key: string, value: string) => { values.set(key, value); },
+      delete: async (key: string) => { values.delete(key); },
+    } as unknown as KVNamespace;
+    let otp = "";
+    try {
+      const auth = createAuth({
+        database: db,
+        sessionCacheKv: kv,
+        baseURL: ORIGIN,
+        secret: "x".repeat(40),
+        methods: [{ kind: "email-otp", sender: { send: async ({ subject }) => {
+          otp = subject.match(/\d{6}/u)?.[0] ?? "";
+        } } }],
+      });
+      const email = "cache@example.com";
+      expect((await auth.handler(jsonRequest(
+        `${ORIGIN}/api/auth/email-otp/send-verification-otp`,
+        { email, type: "sign-in" },
+        "",
+      ))).status).toBe(200);
+      expect([...values.keys()].some(key => key.includes("verification"))).toBe(false);
+
+      const response = await auth.handler(jsonRequest(
+        `${ORIGIN}/api/auth/sign-in/email-otp`,
+        { email, otp },
+        "",
+      ));
+      expect(response.status).toBe(200);
+      const sessionKey = [...values.keys()].find(key => key.startsWith("better-auth:") && !key.includes("active-sessions"));
+      expect(sessionKey).toBeDefined();
+      expect(sqlite.prepare("SELECT COUNT(*) AS count FROM session").get()!.count).toBe(1);
+      const cached = JSON.parse(values.get(sessionKey!)!) as { user: { id: string; role: string } };
+      expect(await auth.setUserRole(cached.user.id, "owner")).toBe(true);
+      expect(JSON.parse(values.get(sessionKey!)!).user.role).toBe("owner");
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it("initializes Better Auth and OAuth discovery on an empty Worker database", async () => {
     const { db, sqlite } = sqliteD1();
     const worker = createMantleWorker({
