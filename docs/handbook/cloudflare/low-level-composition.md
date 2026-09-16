@@ -17,7 +17,7 @@ All of these are exported from `@aotter/mantle/cloudflare` unless noted:
 
 | Export | Role |
 |---|---|
-| `createConventionalBindings(env)` | `DB` to D1 driver, `ASSETS` to Admin assets, optional `MANTLE_KV` |
+| `createConventionalBindings(env, cacheScope?)` | `DB` to D1 driver, `ASSETS` to Admin assets, optional deployment-scoped `MANTLE_KV` |
 | `createConventionalAuth(env)`, `createAuth(config)` | Mode-driven Auth, or a curated custom factory |
 | `conventionalMcpResource(env)`, `conventionalAuthBaseURL(env)` | `<PUBLIC_ORIGIN>/mcp` and the canonical base URL |
 | `setupIncompleteAuthResponse(request, auth)` | The `503 setup_incomplete` guard for Auth-owned paths |
@@ -27,7 +27,7 @@ All of these are exported from `@aotter/mantle/cloudflare` unless noted:
 | `mountMantleOAuth(app, { auth, assets })` | OAuth consent and discovery, from `@aotter/mantle/admin` |
 | `createMcpApiHandler({ ref, surface, resource })` | `/mcp` (`"public"`) and `/mcp/staff` (`"staff"`) handlers |
 | `mountPublicRoutes(app, ref, options)` | Public HTML, `.md`, `llms.txt`, sitemap |
-| `applyCachePolicy(request, response)` | The final cache decision |
+| `applyCachePolicy(request, response, cacheTag?)` | The final cache decision |
 | `runMantleWorkerRequest(fn)` | Redacted `500 internal_error` boundary |
 | `D1DatabaseDriver`, `AssetsAssetServer`, `R2MediaStorage`, `WorkersQueueHookDispatcher`, `createQueueHandler`, `KvSiteConfigRepository`, `cloudflareTurnstileCheck`, `resolveCaller` | Individual adapters and helpers |
 | `MANTLE_RESERVED_PATH_PREFIXES`, `MANTLE_RESERVED_WELL_KNOWN_PREFIX`, `MANTLE_RESERVED_EXACT_PATHS` | Core-owned path constants |
@@ -48,6 +48,7 @@ import {
   mountAdmin,
   mountRuntimeEndpoints,
   runMantleWorkerRequest,
+  scopedPublicCacheTag,
   setupIncompleteAuthResponse,
   type MantleCloudflareEnv,
 } from "@aotter/mantle/cloudflare";
@@ -59,6 +60,8 @@ interface Env extends MantleCloudflareEnv {
 }
 
 let assembled: ReturnType<typeof assemble> | undefined;
+const CACHE_SCOPE = "my-site-production";
+const CACHE_TAG = scopedPublicCacheTag(CACHE_SCOPE)!;
 
 export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -81,9 +84,15 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 function assemble(env: Env) {
-  const bindings = createConventionalBindings(env);
+  const bindings = createConventionalBindings(env, CACHE_SCOPE);
   const auth = createConventionalAuth(env);
-  const ref = createMantleRuntimeRef({ plan, bindings, auth });
+  const ref = createMantleRuntimeRef({
+    plan,
+    bindings,
+    auth,
+    cacheScope: CACHE_SCOPE,
+    onPublicChange: purgePublicCache,
+  });
   const app = new Hono<{ Bindings: Env }>();
 
   mountRuntimeEndpoints(app, ref);
@@ -109,9 +118,18 @@ function assemble(env: Env) {
       const response = handler?.fetch
         ? await handler.fetch(request, workerEnv, ctx)
         : await app.fetch(request, workerEnv, ctx);
-      return applyCachePolicy(request, response);
+      return applyCachePolicy(request, response, CACHE_TAG);
     },
   };
+}
+
+async function purgePublicCache() {
+  try {
+    const { cache } = await import("cloudflare:workers");
+    await cache.purge({ tags: [CACHE_TAG] });
+  } catch (error) {
+    console.error("public cache purge failed", error);
+  }
 }
 ```
 

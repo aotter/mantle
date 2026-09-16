@@ -850,7 +850,7 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
       "/spec/surface",
     );
   }
-  if ("cache" in s && s["cache"] != null) validateViewCache(s["cache"], m, idx);
+  if ("cache" in s) validateViewCache(s["cache"], m, idx);
   if ("requires" in s && s["requires"] != null) {
     validateRequires(s["requires"], idx, "View");
   }

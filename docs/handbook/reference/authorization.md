@@ -218,6 +218,8 @@ spec:
 
 The guard handler denies with a structured diagnostic rather than a thrown string, so the boundary emits `402` instead of the `INTERNAL_ERROR` envelope:
 
+Because `my-reports` is guarded and binds `$ctx.user`, it must not declare `View.spec.cache`. Shared View caching is reserved for caller-independent anonymous reads; `VIEW_CACHE_INVALID` rejects guarded or identity-bound combinations.
+
 ```ts
 import { DiagnosticError, runtimeDiagnostic } from "@aotter/mantle/spec";
 import type { HandlerContext } from "@aotter/mantle/runtime";
