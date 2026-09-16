@@ -5,7 +5,7 @@ description: Localized Terms and Privacy documents with immutable revisions, pub
 
 This example gives an application a portable shape for Terms of Use, Privacy Policy and consent receipts. It uses existing Mantle atoms. Core does not install it or own the public pages.
 
-Each `(kind, revision, locale)` row is one legal artifact. The Schema is Procedure-managed, so a new revision can be created and published but an existing artifact cannot be rewritten. The English Procedure description is also the MCP and WebMCP authoring instruction.
+Each `(kind, revision, locale)` row is one legal artifact. Immutability here is not a legal-specific Runtime: it is the generic-surface `schema.readOnly: true` pattern (Admin and Staff MCP suppress generic create, update, status and delete), the unique `(kind, revision, locale)` index, and a Procedure-only write path. Host code that calls `updateDraft` (or other mutation use cases) directly can still rewrite a row — do not expose those host mutation APIs for this collection. The English Procedure description is also the MCP and WebMCP authoring instruction.
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v1
@@ -209,7 +209,7 @@ Register it under the manifest ref name `require-published-legal-document`. The 
 
 Serve `/terms` and `/privacy` in application code by querying `current-legal-document` with the requested locale, falling back to the site's default locale, and rendering Markdown as escaped/sanitized HTML. Return a clear unavailable page when no reviewed document is published. The application also owns the checkbox or other consent UI, authentication, retention and export policy.
 
-Staff MCP and Admin WebMCP expose `create_legal_document` from the explicit staff Trigger. Both use the same Procedure description, so agents are told to collect real reviewed text rather than inventing it. The read-only Schema deliberately emits no generic update tool. Do not add an MCP Trigger for `accept-legal-document`: accepting legal terms is an explicit user-interface action.
+Staff MCP and Admin WebMCP expose `create_legal_document` from the explicit staff Trigger. Both use the same Procedure description, so agents are told to collect real reviewed text rather than inventing it. Root `readOnly` deliberately emits no generic update tool on Admin or Staff MCP; that is a generic-surface gate, not a storage lock. Do not add an MCP Trigger for `accept-legal-document`: accepting legal terms is an explicit user-interface action.
 
 ## Source
 
