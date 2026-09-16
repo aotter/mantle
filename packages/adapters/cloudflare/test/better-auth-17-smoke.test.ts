@@ -49,12 +49,39 @@ describe("Better Auth 1.7 MCP smoke", () => {
         "",
       ));
       expect(response.status).toBe(200);
+      const cookies = mergeCookies("", response);
       const sessionKey = [...values.keys()].find(key => key.startsWith("better-auth:") && !key.includes("active-sessions"));
       expect(sessionKey).toBeDefined();
       expect(sqlite.prepare("SELECT COUNT(*) AS count FROM session").get()!.count).toBe(1);
       const cached = JSON.parse(values.get(sessionKey!)!) as { user: { id: string; role: string } };
       expect(await auth.setUserRole(cached.user.id, "owner")).toBe(true);
       expect(JSON.parse(values.get(sessionKey!)!).user.role).toBe("owner");
+
+      const prepare = vi.spyOn(db, "prepare");
+      expect((await createAuth({
+        database: db,
+        sessionCacheKv: kv,
+        baseURL: ORIGIN,
+        secret: "x".repeat(40),
+        methods: [{ kind: "email-otp", sender: { send: async () => {} } }],
+      }).getSession(new Request(ORIGIN, { headers: { cookie: cookies } })))?.user.role).toBe("owner");
+      expect(prepare.mock.calls.some(([sql]) => String(sql).includes("_migrations"))).toBe(false);
+
+      const empty = sqliteD1();
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const cold = createAuth({
+          database: empty.db,
+          baseURL: ORIGIN,
+          secret: "x".repeat(40),
+          methods: [{ kind: "email-otp", sender: { send: async () => {} } }],
+        });
+        expect(await cold.getSession(new Request(ORIGIN, { headers: { cookie: cookies } }))).toBeNull();
+        expect(empty.sqlite.prepare("SELECT COUNT(*) AS count FROM _migrations").get()!.count).toBe(1);
+      } finally {
+        log.mockRestore();
+        empty.sqlite.close();
+      }
     } finally {
       sqlite.close();
     }

@@ -8,7 +8,7 @@ import { AuthenticatedLayout } from "../layout/authenticated-layout";
 import { api, ApiError } from "../lib/api";
 import type { AdminUser, Collection, ListEntriesResult, SiteInfo, StaffOperation, ViewManifestInfo } from "../lib/types";
 import type { AdminToolCatalog } from "../lib/admin-tools";
-import { entriesQueryOptions, entriesQuerySearchParams, withNavigationTools } from "../lib/queries";
+import { entriesQueryArgsFromSearch, entriesQueryOptions, entriesQuerySearchParams, withNavigationTools } from "../lib/queries";
 import { useAdminLocation } from "./router";
 import {
   AccessDeniedView,
@@ -31,10 +31,8 @@ import { PreferencesView } from "../features/system/preferences-view";
 import { SettingsView } from "../features/system/settings-view";
 import { StaffView } from "../features/system/staff-view";
 import { MembersView } from "../features/system/members-view";
-import { DataModelView } from "../features/logic/data-model-view";
-import { DeveloperOverviewView } from "../features/logic/developer-overview-view";
-import { LogicView } from "../features/logic/logic-view";
-import { InterfaceDocsView } from "../features/logic/interface-docs-view";
+
+const DeveloperWorkspace = React.lazy(() => import("../features/logic/developer-workspace"));
 
 export function AdminApp({ preview = false }: { preview?: boolean } = {}): React.ReactElement | null {
   const location = useAdminLocation();
@@ -75,17 +73,9 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
   const collectionMatch = path.match(/^\/admin\/c\/([^/]+)\/?$/);
   const params = new URLSearchParams(search);
   const collectionName = collectionMatch ? decodeURIComponent(collectionMatch[1]!) : null;
-  const bootstrapArgs = collectionName && !params.has("parent") ? {
-    collectionName,
-    status: params.get("status") ?? undefined,
-    searchTerm: params.get("search")?.trim() ?? "",
-    filterField: params.get("filter_field") ?? undefined,
-    filterValue: params.get("filter_value") ?? undefined,
-    sortField: params.get("sort") || "updatedAt",
-    sortDirection: params.get("direction") === "asc" ? "asc" as const : "desc" as const,
-    cursor: params.get("cursor") || undefined,
-    cursorDirection: params.get("cursor_direction") === "backward" ? "backward" as const : "forward" as const,
-  } : null;
+  const bootstrapArgs = collectionName && !params.has("parent")
+    ? entriesQueryArgsFromSearch(collectionName, params)
+    : null;
   const me = useQuery<AdminUser>({
     queryKey: ["me"],
     queryFn: async () => {
@@ -212,7 +202,9 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
     );
   }
 
-  if (path.startsWith("/admin/dev")) return <DeveloperWorkspace path={path} />;
+  if (path.startsWith("/admin/dev")) {
+    return <React.Suspense fallback={<GateLoading />}><DeveloperWorkspace path={path} /></React.Suspense>;
+  }
 
   const viewMatch = path.match(/^\/admin\/views\/([^/]+)\/?$/);
   if (viewMatch) {
@@ -249,13 +241,4 @@ function EntryLanding({
     return <ParentEntryWorkbench collectionName={collectionName} entryId={entryId} />;
   }
   return <EntryEditView collectionName={collectionName} entryId={entryId} />;
-}
-
-function DeveloperWorkspace({ path }: { path: string }): React.ReactElement {
-  const view = path === "/admin/dev" || path.startsWith("/admin/dev/overview/") ? <DeveloperOverviewView />
-    : path === "/admin/dev/model" || path.startsWith("/admin/dev/model/") ? <DataModelView />
-    : path === "/admin/dev/logic" || path.startsWith("/admin/dev/logic/") ? <LogicView />
-    : path === "/admin/dev/docs" || path.startsWith("/admin/dev/docs/") ? <InterfaceDocsView />
-    : <NotFoundView path={path} />;
-  return <AuthenticatedLayout workspace="developer">{view}</AuthenticatedLayout>;
 }

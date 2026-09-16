@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
 import {
   Collapsible,
@@ -27,6 +28,7 @@ import {
 import { cn } from "../lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePreferences } from "../app/preferences";
+import { entriesQueryArgsFromSearch, entriesQueryOptions } from "../lib/queries";
 import {
   isCollapsible,
   type NavCollapsible,
@@ -108,6 +110,7 @@ function NavLinkItem({
   search: string;
 }): React.ReactElement {
   const { setOpenMobile } = useSidebar();
+  const prefetch = useCollectionPrefetch(item.url);
   const active = isLinkActive(item, pathname, search, true);
   return (
     <SidebarMenuItem>
@@ -116,6 +119,8 @@ function NavLinkItem({
           href={item.url}
           title={item.title}
           onClick={() => setOpenMobile(false)}
+          onPointerEnter={prefetch}
+          onFocus={prefetch}
           {...(item.external
             ? { target: "_blank", rel: "noreferrer" }
             : null)}
@@ -193,11 +198,12 @@ function NavSubLink({
   search: string;
 }): React.ReactElement {
   const { setOpenMobile } = useSidebar();
+  const prefetch = useCollectionPrefetch(link.url);
   const active = isSubLinkActive(link, siblings, pathname, search);
   return (
     <SidebarMenuSubItem>
       <SidebarMenuSubButton asChild isActive={active}>
-        <a href={link.url} title={link.title} onClick={() => setOpenMobile(false)}>
+        <a href={link.url} title={link.title} onClick={() => setOpenMobile(false)} onPointerEnter={prefetch} onFocus={prefetch}>
           {link.icon && <link.icon aria-hidden />}
           <span>{link.title}</span>
         </a>
@@ -238,21 +244,35 @@ function NavCollapsibleDropdown({
           <DropdownMenuLabel>{item.title}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           {item.items.map((sub) => (
-            <DropdownMenuItem asChild key={sub.url}>
-              <a
-                href={sub.url}
-                className={cn(
-                  isSubLinkActive(sub, item.items, pathname, search) && "font-medium",
-                )}
-              >
-                {sub.title}
-              </a>
-            </DropdownMenuItem>
+            <NavDropdownLink key={sub.url} link={sub} active={isSubLinkActive(sub, item.items, pathname, search)} />
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
     </SidebarMenuItem>
   );
+}
+
+function NavDropdownLink({ link, active }: { link: NavLink; active: boolean }): React.ReactElement {
+  const prefetch = useCollectionPrefetch(link.url);
+  return (
+    <DropdownMenuItem asChild>
+      <a href={link.url} className={cn(active && "font-medium")} onPointerEnter={prefetch} onFocus={prefetch}>
+        {link.title}
+      </a>
+    </DropdownMenuItem>
+  );
+}
+
+function useCollectionPrefetch(url: string): () => void {
+  const queryClient = useQueryClient();
+  return React.useCallback(() => {
+    const target = new URL(url, "http://admin.local");
+    const match = target.pathname.match(/^\/admin\/c\/([^/]+)\/?$/);
+    if (!match) return;
+    void queryClient.prefetchQuery(entriesQueryOptions(
+      entriesQueryArgsFromSearch(decodeURIComponent(match[1]!), target.searchParams),
+    ));
+  }, [queryClient, url]);
 }
 
 function NavMarker({ item }: { item: NavLink | NavCollapsible }): React.ReactElement | null {

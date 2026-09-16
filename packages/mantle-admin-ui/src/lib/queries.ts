@@ -18,6 +18,24 @@ export interface EntriesQueryArgs {
   cursorDirection: "forward" | "backward";
 }
 
+export function entriesQueryArgsFromSearch(
+  collectionName: string,
+  search: string | URLSearchParams,
+): EntriesQueryArgs {
+  const params = typeof search === "string" ? new URLSearchParams(search) : search;
+  return {
+    collectionName,
+    status: params.get("status") ?? undefined,
+    searchTerm: params.get("search")?.trim() ?? "",
+    filterField: params.get("filter_field") ?? undefined,
+    filterValue: params.get("filter_value") ?? undefined,
+    sortField: params.get("sort") || "updatedAt",
+    sortDirection: params.get("direction") === "asc" ? "asc" : "desc",
+    cursor: params.get("cursor") || undefined,
+    cursorDirection: params.get("cursor_direction") === "backward" ? "backward" : "forward",
+  };
+}
+
 export function entriesQuerySearchParams(args: EntriesQueryArgs): URLSearchParams {
   const qs = new URLSearchParams({
     collection: args.collectionName,
