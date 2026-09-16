@@ -176,6 +176,12 @@ function mcpContext(
   };
 }
 
+function staffCtx(
+  role: NonNullable<HandlerContext["staff"]>["role"] = "editor",
+): HandlerContext {
+  return mcpContext("u1", role);
+}
+
 describe("McpJsonRpcDispatcher", () => {
   it("initialize returns protocol info", async () => {
     const { dispatcher } = buildHarness();
@@ -360,7 +366,7 @@ describe("McpJsonRpcDispatcher", () => {
         name: "create_record_posts",
         arguments: { title: "Submission" },
       }),
-      mcpContext(),
+      staffCtx(),
     );
     const callBody = (await call.json()) as {
       result: { content: Array<{ text: string }> };
@@ -565,7 +571,7 @@ describe("McpJsonRpcDispatcher", () => {
         // (no `{ data: ... }` wrapper).
         arguments: { title: "From MCP" },
       }),
-      mcpContext(),
+      staffCtx("contributor"),
     );
     const body = (await res.json()) as { result: { content: { text: string }[] } };
     const created = JSON.parse(body.result.content[0]!.text) as { id: string };
@@ -738,7 +744,7 @@ describe("McpJsonRpcDispatcher", () => {
         name: "request_publish",
         arguments: { id: created.id },
       }),
-      mcpContext(),
+      staffCtx(),
     );
     const body = (await res.json()) as { result: { content: { text: string }[] } };
     const result = JSON.parse(body.result.content[0]!.text) as { status: string };
@@ -760,11 +766,82 @@ describe("McpJsonRpcDispatcher", () => {
         name: "unpublish_entry",
         arguments: { id: created.id },
       }),
-      mcpContext(),
+      staffCtx(),
     );
     const body = (await res.json()) as { result: { content: { text: string }[] } };
     const result = JSON.parse(body.result.content[0]!.text) as { status: string };
     expect(result.status).toBe("draft");
+  });
+
+  it("generic staff tools follow the Admin rank table", async () => {
+    const { dispatcher, store } = buildHarness();
+    const draft = await store.create({
+      id: "p1",
+      collection: "posts",
+      status: "draft",
+      data: { title: "x" },
+      authorId: "u1",
+      now: 0,
+    });
+    const contributorCreate = await dispatcher.dispatch(
+      jsonRpcReq("tools/call", {
+        name: "create_draft_posts",
+        arguments: { title: "Contributor draft" },
+      }),
+      staffCtx("contributor"),
+    );
+    expect(
+      ((await contributorCreate.json()) as { error?: unknown }).error,
+    ).toBeUndefined();
+
+    for (const name of ["request_publish", "unpublish_entry", "archive_entry", "delete_entry"]) {
+      const denied = await dispatcher.dispatch(
+        jsonRpcReq("tools/call", { name, arguments: { id: draft.id } }),
+        staffCtx("contributor"),
+      );
+      const body = (await denied.json()) as { error?: { data?: { code?: string } } };
+      expect(body.error?.data?.code).toBe("AUTH_DENIED");
+    }
+    expect(await store.get(draft.id)).toMatchObject({ id: draft.id, status: "draft" });
+
+    const operational = buildHarness([operationalPostsSchema()]);
+    const recordDenied = await operational.dispatcher.dispatch(
+      jsonRpcReq("tools/call", {
+        name: "create_record_posts",
+        arguments: { title: "Live" },
+      }),
+      staffCtx("contributor"),
+    );
+    expect(
+      ((await recordDenied.json()) as { error?: { data?: { code?: string } } }).error?.data?.code,
+    ).toBe("AUTH_DENIED");
+
+    const mediaDispatcher = new McpJsonRpcDispatcher(
+      {
+        ...minimalUseCases(),
+        getEntry: new GetEntryUseCase(store),
+        media: {
+          createUpload: { execute: async () => ({ leaked: true }) } as never,
+          commitUpload: { execute: async () => ({ leaked: true }) } as never,
+          purposes: [{ name: "post-cover", required: ["image/jpeg"], maxBytes: { "image/jpeg": 1 } }],
+        },
+      },
+      [postsSchema()],
+    );
+    const mediaDenied = await mediaDispatcher.dispatch(
+      jsonRpcReq("tools/call", {
+        name: "create_media_upload",
+        arguments: {
+          filename: "cover.jpg",
+          purpose: "post-cover",
+          variants: [{ mimeType: "image/jpeg", byteSize: 1, role: "primary" }],
+        },
+      }),
+      staffCtx("contributor"),
+    );
+    expect(
+      ((await mediaDenied.json()) as { error?: { data?: { code?: string } } }).error?.data?.code,
+    ).toBe("AUTH_DENIED");
   });
 
   it("tools/call request_publish rejects orphan translated children", async () => {
@@ -774,7 +851,7 @@ describe("McpJsonRpcDispatcher", () => {
         name: "create_draft_post_translations",
         arguments: { slug: "ghost", locale: "en", title: "Ghost", body: "Missing parent" },
       }),
-      mcpContext(),
+      staffCtx("contributor"),
     );
     const createdBody = (await createdRes.json()) as { result: { content: { text: string }[] } };
     const created = JSON.parse(createdBody.result.content[0]!.text) as { id: string };
@@ -784,7 +861,7 @@ describe("McpJsonRpcDispatcher", () => {
         name: "request_publish",
         arguments: { id: created.id },
       }),
-      mcpContext(),
+      staffCtx(),
     );
     const body = (await publishRes.json()) as {
       error: { code: number; data: { code: string; value: Record<string, unknown> } };

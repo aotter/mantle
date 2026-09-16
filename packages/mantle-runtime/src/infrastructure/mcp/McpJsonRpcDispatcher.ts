@@ -1,5 +1,7 @@
 import {
   DiagnosticError,
+  meetsRole,
+  mcpToolNameSegment,
   redactForWire,
   runtimeDiagnostic,
   resolveLifecycle,
@@ -7,6 +9,7 @@ import {
   type MediaPurposePolicy,
   type SchemaManifest,
   type SiteIcon,
+  type StaffRole,
 } from "@aotter/mantle-spec";
 import type { MediaVariantRole } from "../../domain/port/MediaStorage.js";
 import type { HandlerContext } from "../../domain/model/HandlerContext.js";
@@ -23,7 +26,6 @@ import {
   CommitMediaUploadUseCase,
   CreateMediaUploadUseCase,
 } from "../../usecase/media/index.js";
-import { mcpToolNameSegment } from "@aotter/mantle-spec";
 import { ExecuteViewUseCase } from "../../usecase/view/index.js";
 import type { RuntimeCallableCapability } from "../../domain/service/CallableCapabilityProjector.js";
 import {
@@ -271,6 +273,9 @@ export class McpJsonRpcDispatcher {
       return UNKNOWN_TOOL;
     }
 
+    const minimumRole = genericStaffToolMinimumRole(name);
+    if (minimumRole) this.assertStaffRole(name, ctx, minimumRole);
+
     switch (name) {
       case "request_publish": {
         const id = args["id"];
@@ -407,6 +412,18 @@ export class McpJsonRpcDispatcher {
     }
   }
 
+  private assertStaffRole(toolName: string, ctx: HandlerContext, minimumRole: StaffRole): void {
+    const role = ctx.staff?.role;
+    if (role && meetsRole(role, minimumRole)) return;
+    throw new DiagnosticError(runtimeDiagnostic({
+      code: "AUTH_DENIED",
+      severity: "error",
+      path: `MCP ${toolName}`,
+      expected: `${minimumRole} role or higher for the signed-in staff user`,
+      message: `Tool '${toolName}' requires the ${minimumRole} role.`,
+    }));
+  }
+
   private async assertEntryMutable(id: string, toolName: string, collection?: string): Promise<void> {
     const entry = await this.useCases.getEntry.execute({ id });
     if (collection !== undefined && entry.collection !== collection) {
@@ -438,6 +455,31 @@ export class McpJsonRpcDispatcher {
 
 const UNKNOWN_TOOL = Symbol("unknown-tool");
 const MISSING_ARG = Symbol("missing-arg");
+const EDITOR_GENERIC_TOOLS: ReadonlySet<string> = new Set([
+  "request_publish",
+  "unpublish_entry",
+  "archive_entry",
+  "delete_entry",
+  "create_media_upload",
+  "commit_media_upload",
+]);
+
+function genericStaffToolMinimumRole(name: string): StaffRole | null {
+  if (EDITOR_GENERIC_TOOLS.has(name)) return "editor";
+  if (
+    extractCollectionSegment(name, CREATE_RECORD_PREFIX) ||
+    extractCollectionSegment(name, UPDATE_RECORD_PREFIX)
+  ) {
+    return "editor";
+  }
+  if (
+    extractCollectionSegment(name, CREATE_DRAFT_PREFIX) ||
+    extractCollectionSegment(name, UPDATE_DRAFT_PREFIX)
+  ) {
+    return "contributor";
+  }
+  return null;
+}
 
 /**
  * Strip the `id` + `expected_version` envelope keys before passing

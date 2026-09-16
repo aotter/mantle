@@ -10,7 +10,7 @@ Mantle is an MCP server out of the box. Nothing is registered, exported or annot
 | Mount | Caller | Exposes |
 |---|---|---|
 | `/mcp` | Any authenticated OAuth caller; anonymous requests get `401` | Views with `surface: public`, and Procedures reached by an MCP Trigger with `surface: public` |
-| `/mcp/staff` | Authenticated caller holding a staff role | Views with `surface: staff`, the generic authoring tools, Procedures reached by an MCP Trigger with `surface: staff` |
+| `/mcp/staff` | Authenticated caller holding a staff role | Views with `surface: staff`, the generic authoring tools (rank-gated at `tools/call`), Procedures reached by an MCP Trigger with `surface: staff` |
 
 Both accept tokens for one canonical protected resource, `${PUBLIC_ORIGIN}/mcp`. `/mcp/staff` is a stricter server-side role projection, not a second OAuth audience.
 
