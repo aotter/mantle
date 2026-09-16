@@ -291,8 +291,11 @@ export function mountMantleAdmin<E extends Env>(
     body: (c: Context, gate: StaffGateOk, trace?: AdminBootstrapTrace) => Response | Promise<Response>,
   ): void => {
     app.on(method.toUpperCase(), path, async (c) => {
-      const trace: AdminBootstrapTrace | undefined = path === "/admin/api/bootstrap"
-        ? { requestId: crypto.randomUUID(), ray: c.req.header("cf-ray") ?? null, startedAt: performance.now() }
+      const trace: AdminBootstrapTrace | undefined = path === "/admin/api/bootstrap" || path === "/admin/api/entries"
+        ? {
+          kind: path === "/admin/api/bootstrap" ? "mantle-admin-bootstrap-v1" : "mantle-admin-entries-v1",
+          requestId: crypto.randomUUID(), ray: c.req.header("cf-ray") ?? null, startedAt: performance.now(),
+        }
         : undefined;
       let status: number | null = null;
       try {
@@ -308,7 +311,7 @@ export function mountMantleAdmin<E extends Env>(
         return response;
       } finally {
         if (trace) console.info(JSON.stringify({
-          kind: "mantle-admin-bootstrap-v1", requestId: trace.requestId, ray: trace.ray, status,
+          kind: trace.kind, requestId: trace.requestId, ray: trace.ray, status,
           totalMs: elapsed(trace.startedAt), sessionMs: trace.sessionMs ?? null,
           runtimeMs: trace.runtimeMs ?? null, siteMs: trace.siteMs ?? null,
           catalogMs: trace.catalogMs ?? null, entriesMs: trace.entriesMs ?? null,
@@ -648,7 +651,9 @@ export function mountMantleAdmin<E extends Env>(
         }),
       }, { status: 400 });
     }
+    const runtimeStartedAt = performance.now();
     const resolvedRuntime = runtime ?? await ref.get();
+    if (trace) trace.runtimeMs = elapsed(runtimeStartedAt);
     const rawLimit = c.req.query("limit");
     const parsedLimit = rawLimit ? Number.parseInt(rawLimit, 10) : NaN;
     const statusQuery = c.req.query("status");
@@ -750,9 +755,13 @@ export function mountMantleAdmin<E extends Env>(
     };
   };
 
-  guarded("get", "/admin/api/entries", async (c) => {
-    const payload = await entriesPayload(c);
-    return payload instanceof Response ? payload : Response.json(payload);
+  guarded("get", "/admin/api/entries", async (c, _gate, trace) => {
+    const payload = await entriesPayload(c, undefined, trace);
+    if (payload instanceof Response) return payload;
+    const serializeStartedAt = performance.now();
+    const response = Response.json(payload);
+    if (trace) trace.serializeMs = elapsed(serializeStartedAt);
+    return response;
   });
 
   guarded("get", "/admin/api/bootstrap", async (c, gate, trace) => {
@@ -1882,6 +1891,7 @@ type StaffGate =
     };
 
 interface AdminBootstrapTrace {
+  kind: "mantle-admin-bootstrap-v1" | "mantle-admin-entries-v1";
   requestId: string;
   ray: string | null;
   startedAt: number;
