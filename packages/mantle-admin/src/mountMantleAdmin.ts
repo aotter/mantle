@@ -515,9 +515,8 @@ export function mountMantleAdmin<E extends Env>(
     });
   }
 
-  guarded("get", "/admin/api/operations", (c, gate) =>
-    Response.json({
-      operations: operations.filter((op) =>
+  const operationsPayload = (c: Context, gate: StaffGateOk) => ({
+    operations: operations.filter((op) =>
         evaluateAuthAll(
           op.procedure.spec.requires,
           adminHandlerContext(c, gate, ref),
@@ -536,7 +535,10 @@ export function mountMantleAdmin<E extends Env>(
           ? op.procedure.spec.handler.schema
           : null,
       })),
-    }),
+  });
+
+  guarded("get", "/admin/api/operations", (c, gate) =>
+    Response.json(operationsPayload(c, gate)),
   );
 
   guarded("post", "/admin/api/operations/:name", async (c, gate) => {
@@ -576,16 +578,20 @@ export function mountMantleAdmin<E extends Env>(
     });
   });
 
-  guarded("get", "/admin/api/site", async (c) => {
-    const runtime = await ref.get();
-    const { origin, ...site } = await runtime.siteConfig.load();
+  const sitePayload = async (c: Context, runtime?: MantleAdminRuntime) => {
+    const resolvedRuntime = runtime ?? await ref.get();
+    const { origin, ...site } = await resolvedRuntime.siteConfig.load();
     const publicUrl = origin || new URL(c.req.url).origin;
-    return Response.json({
+    return {
       ...site,
       publicUrl,
       mcpUrl: `${publicUrl}/mcp/staff`,
-    });
-  });
+    };
+  };
+
+  guarded("get", "/admin/api/site", async (c) =>
+    Response.json(await sitePayload(c)),
+  );
 
   roleGuarded("get", "/admin/api/site-settings", "owner", async () =>
     runMantleUseCase("GET /admin/api/site-settings", async () => {
@@ -609,7 +615,7 @@ export function mountMantleAdmin<E extends Env>(
     }),
   );
 
-  guarded("get", "/admin/api/entries", async (c) => {
+  const entriesPayload = async (c: Context, runtime?: MantleAdminRuntime) => {
     const collection = c.req.query("collection");
     if (!collection) {
       return Response.json({
@@ -623,7 +629,7 @@ export function mountMantleAdmin<E extends Env>(
         }),
       }, { status: 400 });
     }
-    const runtime = await ref.get();
+    const resolvedRuntime = runtime ?? await ref.get();
     const rawLimit = c.req.query("limit");
     const parsedLimit = rawLimit ? Number.parseInt(rawLimit, 10) : NaN;
     const statusQuery = c.req.query("status");
@@ -659,7 +665,7 @@ export function mountMantleAdmin<E extends Env>(
     // Admin pagination needs the cursored shape — `executePage` returns
     // `{ rows, nextCursor? }`. `execute()` is the flat-array variant
     // for app code.
-    const result = await runtime.listEntries.executePage({
+    const result = await resolvedRuntime.listEntries.executePage({
       collection,
       status: statusQuery && statusQuery !== "all" ? (statusQuery as ContentState) : undefined,
       limit: Number.isFinite(parsedLimit) ? parsedLimit : 99,
@@ -686,7 +692,7 @@ export function mountMantleAdmin<E extends Env>(
         const value = primitiveJoinValue(row.data[field]);
         if (value !== null) parentValues.set(joinValueKey(value), value);
       }
-      const translations = await runtime.entries.readByDataFieldIn({
+      const translations = await resolvedRuntime.entries.readByDataFieldIn({
         collection: schema.metadata.name,
         field,
         values: [...parentValues.values()],
@@ -711,11 +717,40 @@ export function mountMantleAdmin<E extends Env>(
     const items = result.rows.map((row) =>
       adminListItem(row, schemasByName, [...(translationLocales.get(row.id) ?? [])])
     );
-    return Response.json({
+    return {
       items,
       previous_cursor: result.previousCursor ?? null,
       next_cursor: result.nextCursor ?? null,
-    });
+    };
+  };
+
+  guarded("get", "/admin/api/entries", async (c) => {
+    const payload = await entriesPayload(c);
+    return payload instanceof Response ? payload : Response.json(payload);
+  });
+
+  guarded("get", "/admin/api/bootstrap", async (c, gate) => {
+    const runtime = await ref.get();
+    const [site, catalog, entries] = await Promise.all([
+      sitePayload(c, runtime),
+      staffMcp(runtime, ref.plan),
+      entriesPayload(c, runtime),
+    ]);
+    if (entries instanceof Response) return entries;
+    return Response.json({
+      me: {
+        login: gate.login,
+        role: gate.role,
+        userId: gate.userId,
+        image: gate.image,
+      },
+      collections,
+      site,
+      operations: operationsPayload(c, gate).operations,
+      views: viewsManifest,
+      webmcp: { tools: catalog.tools, routes: catalog.routes },
+      entries,
+    }, { headers: { "cache-control": "private, no-store" } });
   });
 
   guarded("get", "/admin/api/entries/export", async (c) => {
