@@ -12,7 +12,12 @@ export function mountRuntimeEndpoints<E extends Env>(
   app: Hono<E>,
   ref: MantleRuntimeRef,
 ): void {
-  const handle = createMantleRequestHandler({ plan: ref.plan, getRuntime: () => ref.get() });
+  const handle = createMantleRequestHandler({
+    plan: ref.plan,
+    getRuntime: () => ref.get(),
+    allowSharedViewCache: !ref.credentialResolver && Boolean(ref.publicCacheTag),
+    publicCacheTag: ref.publicCacheTag,
+  });
   const dispatch = async (c: Context): Promise<Response> => {
     // Credential resolvers and fresh roles may use the same canonical database.
     await ref.get();

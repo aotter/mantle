@@ -76,7 +76,7 @@ When Worker routes and static paths overlap, list Worker-owned paths in `run_wor
 "cache": { "enabled": true }
 ```
 
-Mantle stores nothing in the cache itself. It marks anonymous `200` `GET`/`HEAD` responses from the public mount (HTML, `.md`, `llms.txt`, sitemap) with `public, max-age=0, s-maxage=300` and `Cache-Tag: mantle-public`; everything else is `private, no-store`. Publishing-content and site-setting writes purge the tag. The local emulator does not simulate the entrypoint cache or its purge API. See [Public web](./public-web.md#cache-contract).
+With a valid `cacheScope`, Mantle marks anonymous `200` `GET`/`HEAD` responses from the public mount (HTML, `.md`, `llms.txt`, sitemap) and eligible Views with a shared lifetime and a deployment-scoped `Cache-Tag`; everything else is `private, no-store`. Supplying a custom `credentialResolver` disables shared responses because Core cannot infer which request headers carry identity. Publishing-content and site-setting writes purge the tag after the canonical write. Purge failure is logged and does not turn a committed write into an error. The local emulator does not simulate the entrypoint cache or its purge API. See [Public web](./public-web.md#cache-contract).
 
 ## KV: `MANTLE_KV` (optional)
 
@@ -86,7 +86,7 @@ Mantle stores nothing in the cache itself. It marks anonymous `200` `GET`/`HEAD`
 ]
 ```
 
-A deployment-owned namespace that caches the caller-independent MCP catalog projection (brand, description, origin, icons, media-purpose policy) so an authenticated MCP catalog does not read D1 site settings. D1 stays canonical; missing or expired snapshots are repaired from D1 within one hour, and a KV failure never fails a committed write. Never store tokens, sessions or content here. `createConventionalBindings` detects it automatically.
+A deployment-owned namespace that caches the caller-independent MCP catalog projection (brand, description, origin, icons, media-purpose policy) so an authenticated MCP catalog does not read D1 site settings. D1 stays canonical; missing or expired snapshots are repaired from D1 within one hour, and a KV failure never fails a committed write. Never store tokens, sessions or content here. `createMantleWorker` uses this binding only when `cacheScope` is valid, producing keys such as `mantle:my-site-production:site-config:v1:mcp`. KV is eventually consistent across regions, so invalidation is not a global read-after-write guarantee.
 
 ## R2: `MEDIA_BUCKET` (optional)
 

@@ -224,6 +224,11 @@ export type LifecycleMode = "publishing" | "operational";
 
 export type ViewManifest = ManifestEnvelope<"View", ViewManifestSpec>;
 
+export interface ViewCachePolicy {
+  /** Maximum shared-cache staleness for anonymous REST reads, in seconds. */
+  readonly sharedMaxAge: number;
+}
+
 export interface ViewManifestSpec {
   /** Human-readable label for the admin UI's report sidebar / report
    *  page (#443). Same string-or-locale-map `LocalizedText` shape as
@@ -252,6 +257,9 @@ export interface ViewManifestSpec {
    *  the report-sidebar source. Guards data behind a staff session; use
    *  it for any View over sensitive rows. */
   readonly surface: McpTriggerSurface;
+  /** Optional anonymous REST response-cache policy. Validation limits this
+   *  to caller-independent public declarative Views over publishing Schemas. */
+  readonly cache?: ViewCachePolicy;
   /** Auth gate. Identical shape to `ProcedureManifestSpec.requires.auth`.
    *  When absent the View is public — `ExecuteViewUseCase` skips the
    *  predicate check. When present, ALL predicates must hold; the

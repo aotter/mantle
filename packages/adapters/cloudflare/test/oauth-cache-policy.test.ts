@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { applyCachePolicy } from "../src/oauth/cachePolicy.js";
+import {
+  applyCachePolicy,
+  normalizeCacheScope,
+  scopedPublicCacheTag,
+} from "../src/oauth/cachePolicy.js";
 
 function responseFor(request: Request): Response {
   const path = new URL(request.url).pathname;
@@ -48,17 +52,31 @@ function responseFor(request: Request): Response {
 
 function request(path: string, init?: RequestInit): Response {
   const incoming = new Request(`https://example.test${path}`, init);
-  return applyCachePolicy(incoming, responseFor(incoming));
+  return applyCachePolicy(incoming, responseFor(incoming), "mantle-public-test");
 }
 
 describe("top-level OAuth cache boundary", () => {
+  it("normalizes a deployment scope and rejects unsafe scopes", () => {
+    expect(normalizeCacheScope(" Site_PROD ")).toBe("site_prod");
+    expect(scopedPublicCacheTag(" Site_PROD ")).toBe("mantle-public-site_prod");
+    expect(normalizeCacheScope("tenant/site")).toBeUndefined();
+  });
+
+  it("disables public caching when no deployment scope was configured", () => {
+    const incoming = new Request("https://example.test/public");
+    const response = applyCachePolicy(incoming, responseFor(incoming));
+
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("cache-tag")).toBeNull();
+  });
+
   it("keeps only explicit anonymous public responses cacheable", async () => {
     const response = await request("/public");
 
     expect(response.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
     expect(response.headers.get("cloudflare-cdn-cache-control")).toBeNull();
     expect(response.headers.get("vary")).toBe("Accept-Encoding, Cookie, Authorization");
-    expect(response.headers.get("cache-tag")).toBe("mantle-public");
+    expect(response.headers.get("cache-tag")).toBe("mantle-public-test");
   });
 
   it.each([

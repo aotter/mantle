@@ -23,6 +23,8 @@ export interface MantleCloudflareConfig {
   readonly handlers?: Readonly<Record<string, AnyHandler>>;
   readonly templates?: TemplateRegistry;
   readonly siteDefaults?: SiteDefaults;
+  /** Stable deployment/site identifier for KV keys and public cache tags. */
+  readonly cacheScope?: string;
   readonly publicPathResolver?: PublicPathResolver;
   /** Routes owned by the capabilities this composition actually mounts. */
   readonly reservedHttpPathPrefixes?: readonly string[];
@@ -46,7 +48,7 @@ export interface MantleCloudflareConfig {
     readonly deferredHookDispatcher?: DeferredHookDispatcher;
     /** Optional Cloudflare KV projection for MCP catalog site settings.
      *  Low-level compositions must provide a stable deployment-owned scope;
-     *  the conventional `MANTLE_KV` binding uses the isolated `default` scope. */
+     *  conventional assembly derives it from `cacheScope`. */
     readonly mcpCatalogKv?: McpCatalogKvBinding;
   };
   /** Pass-through to runtime: SVG opt-in flag (default false). */

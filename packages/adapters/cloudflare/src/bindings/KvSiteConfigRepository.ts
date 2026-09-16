@@ -101,7 +101,7 @@ export class KvSiteConfigRepository
         "Mantle MCP catalog KV scope must contain 1-64 ASCII letters, digits, '_' or '-'.",
       );
     }
-    this.key = `mantle:site-config:v1:${binding.scope}:mcp`;
+    this.key = `mantle:${binding.scope}:site-config:v1:mcp`;
   }
 
   load(): Promise<SiteConfig> {

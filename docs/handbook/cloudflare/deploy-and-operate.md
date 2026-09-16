@@ -66,7 +66,7 @@ pnpm exec mantle-harness http --base-url https://example.com \
 Sign in to Admin with a staff account. Publishing collections (`lifecycle: publishing`) follow draft, publish, verify:
 
 1. Create a draft with its title, slug, locale and body.
-2. Publish (`editor` or above). The write purges the `mantle-public` cache tag.
+2. Publish (`editor` or above). The write purges the deployment-scoped public cache tag.
 3. Open the public URL and its `.md` mirror. Drafts never appear on pages, mirrors, `llms.txt` or the sitemap; use `?preview=1` with a staff session to see one.
 4. Unpublish removes the entry from every public surface; the Admin delete action and the Staff MCP `archive_entry` tool retire it.
 

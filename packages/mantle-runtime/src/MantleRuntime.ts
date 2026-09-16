@@ -394,27 +394,35 @@ function invalidateAfterWrites(
   return {
     async create(args) {
       const row = await inner.create(args);
-      if (affectsPublishingContent(args.collection)) await invalidate();
+      if (affectsPublishingContent(args.collection)) await invalidateBestEffort(invalidate);
       return row;
     },
     get: (id) => inner.get(id),
     async update(args) {
       const row = await inner.update(args);
-      if (affectsPublishingContent(args.collection)) await invalidate();
+      if (affectsPublishingContent(args.collection)) await invalidateBestEffort(invalidate);
       return row;
     },
     async delete(args) {
       const result = await inner.delete(args);
-      if (result.removed && affectsPublishingContent(args.collection)) await invalidate();
+      if (result.removed && affectsPublishingContent(args.collection)) await invalidateBestEffort(invalidate);
       return result;
     },
     async transitionStatus(args) {
       const row = await inner.transitionStatus(args);
-      if (affectsPublishingContent(args.collection)) await invalidate();
+      if (affectsPublishingContent(args.collection)) await invalidateBestEffort(invalidate);
       return row;
     },
     list: (args) => inner.list(args),
     findByDataField: (args) => inner.findByDataField(args),
     findByDataFields: (args) => inner.findByDataFields(args),
   };
+}
+
+async function invalidateBestEffort(invalidate: () => Promise<void>): Promise<void> {
+  try {
+    await invalidate();
+  } catch (error) {
+    console.error("[mantle] public cache invalidation failed after committed write", error);
+  }
 }

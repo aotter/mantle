@@ -217,6 +217,17 @@ function checkViewRefs(
     return out;
   }
 
+  if (v.spec.cache && (schema.spec.lifecycle ?? "publishing") !== "publishing") {
+    out.push(validateDiagnostic({
+      code: "VIEW_CACHE_INVALID",
+      severity: "error",
+      path: manifestPath("View", v.metadata.name, "/spec/cache", filePaths),
+      value: fromName,
+      expected: "a View over a publishing Schema",
+      message: `View '${v.metadata.name}' cannot cache operational Schema '${fromName}'.`,
+    }));
+  }
+
   const props = (schema.spec.schema as { properties?: Record<string, unknown> }).properties ?? {};
   const validFieldNames = new Set([...Object.keys(props), ...RESERVED_ENTRY_COLUMNS]);
 

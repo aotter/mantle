@@ -27,6 +27,7 @@ function fixture() {
   } as unknown as KVNamespace);
   const worker = createMantleWorker({
     plan: compileTestPlan([]), siteDefaults: { title: "Fixture", brand: "Fixture", locales: ["en"] },
+    cacheScope: "diagnostics-fixture",
     auth: () => ({ ...stubAuth,
       verifyOAuthAccessToken: async (request) => {
         // Deliberately deterministic auth, with native D1 I/O for attribution.

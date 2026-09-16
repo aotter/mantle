@@ -25,6 +25,9 @@ export const MANTLE_VIEW_ROUTE_PREFIX = "/api/views";
 export interface MantleRequestHandlerOptions {
   readonly plan: RuntimePlan;
   readonly getRuntime: () => Promise<MantleRuntime>;
+  /** Disable when the host accepts credentials outside Cookie/Authorization. */
+  readonly allowSharedViewCache?: boolean;
+  readonly publicCacheTag?: string;
 }
 
 export type MantleRequestHandler = (
@@ -55,7 +58,7 @@ export function createMantleRequestHandler(
 
     try {
       const runtime = await options.getRuntime();
-      if (view) return handleView(request, runtime, view.name, view.manifest, context);
+      if (view) return handleView(request, runtime, view.name, view.manifest, context, options);
       return handleTrigger(
         request,
         runtime,
@@ -116,6 +119,7 @@ async function handleView(
   view: string,
   manifest: RuntimePlan["views"][string]["manifest"],
   context: HandlerContext,
+  options: Pick<MantleRequestHandlerOptions, "allowSharedViewCache" | "publicCacheTag">,
 ): Promise<Response> {
   const pathPrefix = `GET ${MANTLE_VIEW_ROUTE_PREFIX}/${view}`;
   const search = new URL(request.url).searchParams;
@@ -146,9 +150,18 @@ async function handleView(
     ctx: context,
     pathPrefix,
   });
-  return result.ok
-    ? Response.json({ ok: true, data: result.result })
-    : diagnosticResponse(result.diagnostic);
+  if (!result.ok) return diagnosticResponse(result.diagnostic);
+  const cache = manifest.spec.cache;
+  const shared = cache
+    && options.allowSharedViewCache === true
+    && request.headers.get("cookie") === null
+    && request.headers.get("authorization") === null;
+  return Response.json({ ok: true, data: result.result }, shared ? {
+    headers: {
+      "cache-control": `public, max-age=0, s-maxage=${cache.sharedMaxAge}`,
+      ...(options.publicCacheTag ? { "cache-tag": options.publicCacheTag } : {}),
+    },
+  } : undefined);
 }
 
 async function readBody(request: Request): Promise<Record<string, unknown>> {

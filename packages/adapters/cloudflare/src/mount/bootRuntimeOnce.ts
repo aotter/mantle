@@ -14,6 +14,7 @@ import {
   KvSiteConfigRepository,
   type McpCatalogSiteConfigReader,
 } from "../bindings/KvSiteConfigRepository.js";
+import { scopedPublicCacheTag } from "../oauth/cachePolicy.js";
 
 import { diagnosticPhase } from "../requestDiagnostics.js";
 
@@ -33,6 +34,7 @@ export interface MantleRuntimeRef {
   readonly jwtBearer?: MantleCloudflareConfig["jwtBearer"];
   /** Caller-independent catalog reader. MCP invokes this only after auth. */
   readonly mcpCatalogSiteConfig?: McpCatalogSiteConfigReader;
+  readonly publicCacheTag?: string;
 }
 
 export type CloudflareMantleRuntime = MantleRuntime & {
@@ -45,6 +47,7 @@ export function createMantleRuntimeRef(config: MantleCloudflareConfig): MantleRu
   let web: MantleWeb | null = null;
   let kvSiteConfig: KvSiteConfigRepository | undefined;
   const mcpCatalogKv = config.bindings.mcpCatalogKv;
+  const publicCacheTag = scopedPublicCacheTag(config.cacheScope);
   if (config.bindings.storage && mcpCatalogKv) {
     throw new Error("Custom storage owns site configuration; omit mcpCatalogKv and decorate the selected storage explicitly.");
   }
@@ -63,6 +66,7 @@ export function createMantleRuntimeRef(config: MantleCloudflareConfig): MantleRu
     credentialResolver: config.credentialResolver,
     jwtBearer: config.jwtBearer,
     ...(kvSiteConfig ? { mcpCatalogSiteConfig: kvSiteConfig } : {}),
+    ...(publicCacheTag ? { publicCacheTag } : {}),
     web(runtime): MantleWeb {
       return web ??= createMantleWeb(runtime, {
         templates: config.templates,

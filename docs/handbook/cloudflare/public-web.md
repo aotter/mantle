@@ -120,9 +120,9 @@ Lists and `llms.txt` return 50 entries per page, ordered `updatedAt DESC, id DES
 
 ## Cache contract
 
-Public responses carry `Cache-Control: public, max-age=0, s-maxage=300` and `Cache-Tag: mantle-public`. The facade's final policy keeps that only for anonymous `200` `GET`/`HEAD` responses with no request `Cookie` or `Authorization` and no `Set-Cookie`, and adds `Vary: Cookie, Authorization`. Everything else becomes `private, no-store`, and CDN override headers are removed.
+With a valid `cacheScope`, public responses carry `Cache-Control: public, max-age=0, s-maxage=300` and a deployment-scoped cache tag. The facade's final policy keeps that only for anonymous `200` `GET`/`HEAD` responses with no request `Cookie` or `Authorization` and no `Set-Cookie`, and adds `Vary: Cookie, Authorization`. Everything else becomes `private, no-store`, and CDN override headers are removed.
 
-Publishing-content and site-setting writes purge the `mantle-public` tag through the native Workers cache API. Operational records and static assets are outside that boundary. Enable the cache with `"cache": { "enabled": true }`; see [Bindings](./bindings.md#workers-cache).
+Publishing-content and site-setting writes purge the scoped tag through the native Workers cache API. Purge is best effort after the canonical write. Operational records and static assets are outside that boundary. Enable the cache with `"cache": { "enabled": true }`; see [Bindings](./bindings.md#workers-cache).
 
 > **Warning**
 > The local emulator does not simulate the entrypoint Workers Cache or its purge API. Verify `cf-cache-status` and post-publish invalidation on a deployed environment, not with `wrangler dev`.

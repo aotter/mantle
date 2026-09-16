@@ -49,6 +49,7 @@ The parser rejects keys outside the shipped grammar at every level it knows. The
 | `/spec/handler` (`kind: builtin`) | `kind`, `op`, `schema`, `match` |
 | `/spec/filter/<op>` | `field`, `value` |
 | `/spec/orderBy/<i>` | `field`, `direction` |
+| `/spec/cache` (View) | `sharedMaxAge` |
 | `/spec/source` (`kind: http`) | `kind`, `method`, `path` |
 | `/spec/source` (`kind: lifecycle`) | `kind`, `schema`, `on`, `errorPolicy` |
 | `/spec/source` (`kind: mcp`) | `kind`, `surface` |

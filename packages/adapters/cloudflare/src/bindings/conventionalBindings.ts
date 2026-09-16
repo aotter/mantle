@@ -19,13 +19,14 @@ export type MantleWorkerBindings = MantleCloudflareConfig["bindings"];
 /** Bind the conventional Cloudflare names to Mantle's existing runtime adapters. */
 export function createConventionalBindings(
   env: ConventionalBindingsEnv,
+  cacheScope?: string,
 ): MantleWorkerBindings {
   if (!env.DB) throw new Error("Mantle requires the conventional DB binding.");
   return {
     db: new D1DatabaseDriver(env.DB),
     adminAssets: env.ASSETS ? new AssetsAssetServer(env.ASSETS) : NO_ASSETS,
-    ...(env.MANTLE_KV
-      ? { mcpCatalogKv: { namespace: env.MANTLE_KV, scope: "default" } }
+    ...(env.MANTLE_KV && cacheScope
+      ? { mcpCatalogKv: { namespace: env.MANTLE_KV, scope: cacheScope } }
       : {}),
   };
 }

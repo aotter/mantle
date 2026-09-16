@@ -201,7 +201,7 @@ curl -sS 'http://localhost:8787/api/views/published-posts?locale=en&show=10'
 }
 ```
 
-Omitting `locale` returns HTTP 400 `INPUT_VALIDATION_FAILED`. `show` is capped at the View's `limit` (50); `hasMore` is `rows.length === show`. Public responses carry `Cache-Control: public, max-age=0, s-maxage=300` and `Cache-Tag: mantle-public`, and are purged when publishing content changes.
+Omitting `locale` returns HTTP 400 `INPUT_VALIDATION_FAILED`. `show` is capped at the View's `limit` (50); `hasMore` is `rows.length === show`. A View may declare `cache.sharedMaxAge` to cache eligible anonymous REST responses under the Worker's deployment-scoped tag; publishing content changes purge that tag.
 
 Submit a suggestion:
 

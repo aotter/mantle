@@ -130,7 +130,7 @@ function assemble(env: Env) {
 - Return `setupIncompleteAuthResponse` before dispatch so misconfigured Auth fails closed on Auth-owned paths only.
 - Keep the conventional `DB` binding, both compatibility flags, and the optional `MANTLE_KV` binding. Low-level bindings may instead set `mcpCatalogKv: { namespace, scope }` with a stable deployment-owned scope, never one derived from a request.
 - Pass `reservedHttpPathPrefixes` (the exported constants plus `auth.basePath`) to `createMantleRuntimeRef` so a manifest HTTP Trigger cannot claim a Core path.
-- If you mount public routes, also pass `onPublicChange` to `createMantleRuntimeRef` and purge the `mantle-public` tag there with the Workers cache API. The facade wires this purge itself; a bare `createMantleRuntimeRef` does not.
+- If you mount public routes, provide a stable `cacheScope`, pass `onPublicChange` to `createMantleRuntimeRef`, and purge the resulting scoped tag there with the Workers cache API. The facade wires this purge itself; a bare `createMantleRuntimeRef` does not.
 - Do not replace Auth, MCP or cache handling with local copies.
 
 ## Adding an application queue producer

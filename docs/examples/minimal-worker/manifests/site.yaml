@@ -18,6 +18,7 @@ metadata:
 spec:
   surface: public
   from: notes
+  cache: { sharedMaxAge: 3600 }
   fields: [id, title]
   filter:
     eq: { field: status, value: published }

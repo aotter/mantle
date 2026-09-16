@@ -14,7 +14,7 @@ Every table below describes the conventional Cloudflare Worker assembled by `cre
 | Route | Response | Cache |
 |---|---|---|
 | `GET /api/views` | `{ ok: true, data: [ { name, title?, description, inputSchema } ] }` — one descriptor per public View. | `private, no-store` |
-| `GET /api/views/<name>?page=&show=` | `{ ok: true, data: { rows, page, show, hasMore } }`. One route per View declaring `surface: public`. Query values are coerced against `params`; a bad value is `400`. | `private, no-store` |
+| `GET /api/views/<name>?page=&show=` | `{ ok: true, data: { rows, page, show, hasMore } }`. One route per View declaring `surface: public`. Query values are coerced against `params`; a bad value is `400`. | `private, no-store`, or the View's `cache.sharedMaxAge` for an anonymous eligible response |
 | `<METHOD> <path>` | Every manifest HTTP Trigger, at its declared `POST`, `PUT`, `PATCH` or `DELETE` and path under `/api/`. The JSON body must be an object. Success is `{ ok: true, data: … }`. | `private, no-store` |
 
 Staff Views are not mounted here; they live under `/admin/api/views/<name>`.
@@ -61,7 +61,7 @@ These are opt-in and application-declared. Public rendering needs three matching
 | Route | Response | Cache |
 |---|---|---|
 | `GET /` | `302` to `/{canonical locale}`. | `private, no-store` |
-| `GET /:locale` | Composed home page. | `public, max-age=0, s-maxage=300` + `Cache-Tag: mantle-public` |
+| `GET /:locale` | Composed home page. | `public, max-age=0, s-maxage=300` + a deployment-scoped cache tag |
 | `GET /:locale.md` | Markdown mirror of the home page. | public |
 | `GET /:locale/:segment` | Collection list page. Opt-in per collection route. Paginates by `?cursor=` and adds `Link: <…>; rel="next"` plus an in-page next link. | public |
 | `GET /:locale/:segment.md` | Markdown mirror of the list. | public |
@@ -74,7 +74,7 @@ These are opt-in and application-declared. Public rendering needs three matching
 | `GET /robots.txt` | `User-agent: *`, `Allow: /`, and a `Sitemap:` pointer built from `siteDefaults.origin`. | public |
 | `GET /favicon.ico` | A convention, not a reserved path: an existing host route wins. Picks the first themeless PNG icon, else the first themeless icon, else the first icon; serves it from the assets binding when it resolves to `/favicon.ico` on this origin, and otherwise redirects to the icon `src`. | `private, no-store` |
 
-The first three rows register only when a home renderer is supplied; without one, `/` and `/{locale}` are not mounted at all. Unmatched paths fall through to the supplied not-found renderer. Setting `liveDev` switches entry and list HTML to `private, no-store`. Publishing-content and site-setting writes purge the `mantle-public` tag; immutable assets and operational records stay outside that boundary. More in [Public web](../cloudflare/public-web.md).
+The first three rows register only when a home renderer is supplied; without one, `/` and `/{locale}` are not mounted at all. Unmatched paths fall through to the supplied not-found renderer. Setting `liveDev` switches entry and list HTML to `private, no-store`. `cacheScope` isolates each deployment's tag and optional KV key; without it the facade disables shared caching. Publishing-content and site-setting writes purge that scoped tag. Purge is best effort after the canonical write, and Cloudflare KV remains eventually consistent. Immutable assets and operational records stay outside that boundary. More in [Public web](../cloudflare/public-web.md).
 
 ### Reserved paths
 

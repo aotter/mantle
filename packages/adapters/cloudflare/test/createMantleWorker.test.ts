@@ -365,6 +365,7 @@ describe("createMantleWorker", () => {
   it("applies the public cache contract once after extension dispatch", async () => {
     const worker = createMantleWorker<TestEnv>({
       plan: compileTestPlan([]),
+      cacheScope: "test-site",
       auth: () => stubAuth,
       bindings: testBindings,
       extend: () => ({
@@ -383,6 +384,25 @@ describe("createMantleWorker", () => {
       headers: { cookie: "session=secret" },
     });
     expect(credentialed.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("disables shared responses when the host owns a credential format", async () => {
+    const worker = createMantleWorker<TestEnv>({
+      plan: compileTestPlan([]),
+      cacheScope: "test-site",
+      auth: () => stubAuth,
+      bindings: testBindings,
+      extend: () => ({
+        credentialResolver: () => ({ kind: "not-handled" }),
+        mount: ({ app }) => app.get("/public", () => new Response("public", {
+          headers: { "cache-control": "public, s-maxage=60" },
+        })),
+      }),
+    });
+
+    const response = await fetchWorker(worker, "/public", testEnv());
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("cache-tag")).toBeNull();
   });
 
   it("preserves extension HTTP errors and middleware headers", async () => {
