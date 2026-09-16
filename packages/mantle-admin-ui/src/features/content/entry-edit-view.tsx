@@ -37,7 +37,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CollapsibleDescription, ErrorBox, FormActionBar, OperationErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
-import { RichTextEditor } from "../editor/rich-text-editor";
+import { HtmlEditor } from "../editor/html-editor";
+import { MarkdownEditor } from "../editor/markdown-editor";
 import { primaryPublicUrl, purposeForMediaField, uploadMediaAsset } from "../media/media-upload";
 import { MediaBrowser } from "../media/media-library-view";
 import {
@@ -687,8 +688,14 @@ function SchemaField({
           collectionName={collectionName}
           mediaPurposes={mediaPurposes}
         />
-      ) : stringFieldWidget(schema, widget) === "richtext" ? (
-        <RichTextEditor
+      ) : stringFieldWidget(schema, widget) === "markdown" ? (
+        <MarkdownEditor
+          compact
+          value={stringForInput(value)}
+          onChange={setValue}
+        />
+      ) : stringFieldWidget(schema, widget) === "html" ? (
+        <HtmlEditor
           compact
           value={stringForInput(value)}
           onChange={setValue}
@@ -696,7 +703,7 @@ function SchemaField({
       ) : stringFieldWidget(schema, widget) === "textarea" ? (
         <Textarea
           aria-label={label}
-          className="min-h-24"
+          className="min-h-24 whitespace-pre-wrap"
           value={stringForInput(value)}
           maxLength={schema.maxLength}
           onChange={(event) => setValue(event.target.value)}
@@ -1347,12 +1354,18 @@ function schemaType(schema: JsonSchema): string {
   return "string";
 }
 
+export type StringFieldWidget = "input" | "textarea" | "markdown" | "html";
+
+/** Conventional `x-mcp-hint` authoring widgets. The grammar stays free-form;
+ *  unknown hints fall through to uiSchema `widget: textarea` or a text input. */
 export function stringFieldWidget(
   schema: JsonSchema,
   widget: "textarea" | null,
-): "input" | "textarea" | "richtext" {
+): StringFieldWidget {
   const hint = typeof schema["x-mcp-hint"] === "string" ? schema["x-mcp-hint"] : "";
-  if (hint === "markdown" || hint === "html" || hint === "richtext") return "richtext";
+  if (hint === "markdown") return "markdown";
+  if (hint === "html") return "html";
+  if (hint === "richtext") return "textarea";
   return widget ?? "input";
 }
 

@@ -143,7 +143,10 @@ A free-form string that tells agents and Admin widgets how to render or produce 
 
 | Value | Meaning |
 |---|---|
-| `markdown`, `richtext`, `code` | Text editor and authoring format. |
+| `markdown` | Markdown string. Admin opens a Markdown editor (source + live preview; Markdown-only toolbar). |
+| `html` | HTML string. Admin opens a WYSIWYG that reads and writes HTML. |
+| `richtext` | Plain text with newlines. Admin uses a textarea (no rich toolbar). Public templates typically render with `nl2br`. |
+| `code` | Monospace / code-oriented authoring; Admin keeps the ordinary string control unless `uiSchema.fields.<field>.widget` is `textarea`. |
 | `media`, `media-image`, `media-video`, `media-file` | Media-shaped URL or asset reference (`isMediaMcpHint`). |
 | `money-minor` | Integer amount in minor currency units. |
 | `timestamp-ms` | Unix epoch milliseconds. |
