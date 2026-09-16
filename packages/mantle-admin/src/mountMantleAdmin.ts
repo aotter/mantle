@@ -288,15 +288,34 @@ export function mountMantleAdmin<E extends Env>(
   const guarded = (
     method: "get" | "post" | "patch" | "delete",
     path: string,
-    body: (c: Context, gate: StaffGateOk) => Response | Promise<Response>,
+    body: (c: Context, gate: StaffGateOk, trace?: AdminBootstrapTrace) => Response | Promise<Response>,
   ): void => {
     app.on(method.toUpperCase(), path, async (c) => {
-      const rejected = rejectCrossOriginMutation(c.req.raw);
-      if (rejected) return rejected;
-      const gate = await readStaffGate(c, auth);
-      if (gate.kind === "unauth") return adminUnauthenticated(c, path);
-      if (gate.kind === "forbidden") return adminNotStaff(c, path, gate.login);
-      return body(c, gate);
+      const trace: AdminBootstrapTrace | undefined = path === "/admin/api/bootstrap"
+        ? { requestId: crypto.randomUUID(), ray: c.req.header("cf-ray") ?? null, startedAt: performance.now() }
+        : undefined;
+      let status: number | null = null;
+      try {
+        const rejected = rejectCrossOriginMutation(c.req.raw);
+        if (rejected) return rejected;
+        const sessionStartedAt = performance.now();
+        const gate = await readStaffGate(c, auth);
+        if (trace) trace.sessionMs = elapsed(sessionStartedAt);
+        if (gate.kind === "unauth") return adminUnauthenticated(c, path);
+        if (gate.kind === "forbidden") return adminNotStaff(c, path, gate.login);
+        const response = await body(c, gate, trace);
+        status = response.status;
+        return response;
+      } finally {
+        if (trace) console.info(JSON.stringify({
+          kind: "mantle-admin-bootstrap-v1", requestId: trace.requestId, ray: trace.ray, status,
+          totalMs: elapsed(trace.startedAt), sessionMs: trace.sessionMs ?? null,
+          runtimeMs: trace.runtimeMs ?? null, siteMs: trace.siteMs ?? null,
+          catalogMs: trace.catalogMs ?? null, entriesMs: trace.entriesMs ?? null,
+          listMs: trace.listMs ?? null, translationsMs: trace.translationsMs ?? null,
+          serializeMs: trace.serializeMs ?? null, rows: trace.rows ?? null,
+        }));
+      }
     });
   };
 
@@ -615,7 +634,7 @@ export function mountMantleAdmin<E extends Env>(
     }),
   );
 
-  const entriesPayload = async (c: Context, runtime?: MantleAdminRuntime) => {
+  const entriesPayload = async (c: Context, runtime?: MantleAdminRuntime, trace?: AdminBootstrapTrace) => {
     const collection = c.req.query("collection");
     if (!collection) {
       return Response.json({
@@ -665,6 +684,7 @@ export function mountMantleAdmin<E extends Env>(
     // Admin pagination needs the cursored shape — `executePage` returns
     // `{ rows, nextCursor? }`. `execute()` is the flat-array variant
     // for app code.
+    const listStartedAt = performance.now();
     const result = await resolvedRuntime.listEntries.executePage({
       collection,
       status: statusQuery && statusQuery !== "all" ? (statusQuery as ContentState) : undefined,
@@ -683,6 +703,11 @@ export function mountMantleAdmin<E extends Env>(
         direction: sortDirection,
       },
     });
+    if (trace) {
+      trace.listMs = elapsed(listStartedAt);
+      trace.rows = result.rows.length;
+    }
+    const translationsStartedAt = performance.now();
     const translationLocales = new Map<string, Set<string>>();
     const translationSchemas = schemas.filter((schema) => schema.spec.translates?.parent === collection);
     for (const schema of translationSchemas) {
@@ -714,6 +739,7 @@ export function mountMantleAdmin<E extends Env>(
         translationLocales.set(row.id, locales);
       }
     }
+    if (trace) trace.translationsMs = elapsed(translationsStartedAt);
     const items = result.rows.map((row) =>
       adminListItem(row, schemasByName, [...(translationLocales.get(row.id) ?? [])])
     );
@@ -729,15 +755,21 @@ export function mountMantleAdmin<E extends Env>(
     return payload instanceof Response ? payload : Response.json(payload);
   });
 
-  guarded("get", "/admin/api/bootstrap", async (c, gate) => {
+  guarded("get", "/admin/api/bootstrap", async (c, gate, trace) => {
+    const runtimeStartedAt = performance.now();
     const runtime = await ref.get();
+    if (trace) trace.runtimeMs = elapsed(runtimeStartedAt);
+    const siteStartedAt = performance.now();
+    const catalogStartedAt = performance.now();
+    const entriesStartedAt = performance.now();
     const [site, catalog, entries] = await Promise.all([
-      sitePayload(c, runtime),
-      staffMcp(runtime, ref.plan),
-      entriesPayload(c, runtime),
+      sitePayload(c, runtime).finally(() => { if (trace) trace.siteMs = elapsed(siteStartedAt); }),
+      staffMcp(runtime, ref.plan).finally(() => { if (trace) trace.catalogMs = elapsed(catalogStartedAt); }),
+      entriesPayload(c, runtime, trace).finally(() => { if (trace) trace.entriesMs = elapsed(entriesStartedAt); }),
     ]);
     if (entries instanceof Response) return entries;
-    return Response.json({
+    const serializeStartedAt = performance.now();
+    const response = Response.json({
       me: {
         login: gate.login,
         role: gate.role,
@@ -751,6 +783,8 @@ export function mountMantleAdmin<E extends Env>(
       webmcp: { tools: catalog.tools, routes: catalog.routes },
       entries,
     }, { headers: { "cache-control": "private, no-store" } });
+    if (trace) trace.serializeMs = elapsed(serializeStartedAt);
+    return response;
   });
 
   guarded("get", "/admin/api/entries/export", async (c) => {
@@ -1846,6 +1880,25 @@ type StaffGate =
       role: StaffRole;
       sessionId: string;
     };
+
+interface AdminBootstrapTrace {
+  requestId: string;
+  ray: string | null;
+  startedAt: number;
+  sessionMs?: number;
+  runtimeMs?: number;
+  siteMs?: number;
+  catalogMs?: number;
+  entriesMs?: number;
+  listMs?: number;
+  translationsMs?: number;
+  serializeMs?: number;
+  rows?: number;
+}
+
+function elapsed(startedAt: number): number {
+  return Math.round((performance.now() - startedAt) * 100) / 100;
+}
 
 function adminHandlerContext(
   c: Context,
