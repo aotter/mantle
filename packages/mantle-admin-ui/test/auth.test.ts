@@ -9,6 +9,7 @@ import {
   safeReturnPath,
   signedOAuthQuery,
   SignInButton,
+  claimInFlight,
 } from "../src/features/auth/auth-views";
 import { signOut } from "../src/lib/auth";
 import { PreferencesProvider, resolveTheme } from "../src/app/preferences";
@@ -106,5 +107,13 @@ describe("sign-in", () => {
     expect(html).toContain('aria-busy="true"');
     expect(html).toContain("animate-spin");
     expect(html).toContain("Continue with GitHub");
+  });
+
+  it("rejects a second OTP verify in the same tick before busy state updates", () => {
+    const lock = { current: false };
+    expect(claimInFlight(lock)).toBe(true);
+    expect(claimInFlight(lock)).toBe(false);
+    lock.current = false;
+    expect(claimInFlight(lock)).toBe(true);
   });
 });

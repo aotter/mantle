@@ -152,6 +152,17 @@ export function signedOAuthQuery(search: string): string | undefined {
   return signed.toString();
 }
 
+/**
+ * Same-tick in-flight lock. React `busy` updates are async, so OTP
+ * autocomplete `onComplete` and form Enter can both call verify before
+ * the next render. Claiming the ref here is visible immediately.
+ */
+export function claimInFlight(lock: { current: boolean }): boolean {
+  if (lock.current) return false;
+  lock.current = true;
+  return true;
+}
+
 export function SignInButton({
   busy,
   children,
@@ -560,6 +571,7 @@ function EmailOtpSection({
   const [otp, setOtp] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const verifyInFlight = React.useRef(false);
 
   // Wraps an async submit handler so each call site gets identical
   // busy / error-reset bookkeeping. `busy` clears in `finally` even
@@ -601,6 +613,7 @@ function EmailOtpSection({
 
   const verifyOtpCode = (code: string): void => {
     if (code.length !== 6) return;
+    if (!claimInFlight(verifyInFlight)) return;
     void withBusy(async () => {
       const res = await fetch("/api/auth/sign-in/email-otp", {
         method: "POST",
@@ -624,6 +637,8 @@ function EmailOtpSection({
       // and renders SignInView again instead of routing through.
       const data = (await res.json()) as { url?: string };
       window.location.assign(data.url ?? returnTo);
+    }).finally(() => {
+      verifyInFlight.current = false;
     });
   };
 
