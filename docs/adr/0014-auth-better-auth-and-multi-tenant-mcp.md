@@ -714,3 +714,14 @@ Apple's `SameSite=None` requirement remain unchanged. Consumers must treat
 switching cookie names as an explicit sign-in migration, not rewrite request
 or response cookies. This keeps cookie semantics in the auth adapter rather
 than requiring each consumer to wrap Admin, member and OAuth routes.
+
+## Amendment — 2026-09-16: deployment KV session reads
+
+Cloudflare deployments may pass their deployment-owned KV namespace as
+`CreateAuthConfig.sessionCacheKv`. Better Auth reads sessions from KV while
+keeping the canonical session row in D1. OTP verification remains D1-backed
+and rate limiting remains isolate-local because Workers KV does not provide
+the atomic consume or increment operations those paths require. Auth keys use
+the `better-auth:` prefix so the namespace can also hold Mantle projections.
+Session revocation and user updates use Better Auth's cache invalidation and
+therefore follow Workers KV's propagation model.
