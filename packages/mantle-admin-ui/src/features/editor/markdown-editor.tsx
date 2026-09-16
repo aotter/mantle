@@ -14,9 +14,9 @@ export function MarkdownEditor({ value, onChange }: { value: string; onChange: (
   const { language } = usePreferences();
   return <div className="space-y-2">
     <p className="text-xs text-muted-foreground">{t(language, "editor.markdownHint")}</p>
-    <Tabs defaultValue="source">
+    <Tabs defaultValue="preview">
       <TabsList>
-        <TabsTrigger value="source">{t(language, "editor.mode.markdown")}</TabsTrigger>
+        <TabsTrigger value="source">{t(language, "entryWorkbench.editEntry")}</TabsTrigger>
         <TabsTrigger value="preview">{t(language, "editor.preview")}</TabsTrigger>
       </TabsList>
       <TabsContent value="source">
