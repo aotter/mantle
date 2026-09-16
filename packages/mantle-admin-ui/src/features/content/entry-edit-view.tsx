@@ -37,7 +37,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CollapsibleDescription, ErrorBox, FormActionBar, OperationErrorBox, PageHeader, SectionCard } from "../../ui/page";
 import { StatusBadge } from "../../ui/status-badge";
-import { RichTextEditor } from "../editor/rich-text-editor";
 import { primaryPublicUrl, purposeForMediaField, uploadMediaAsset } from "../media/media-upload";
 import { MediaBrowser } from "../media/media-library-view";
 import {
@@ -57,6 +56,9 @@ import {
 } from "./field-render";
 import { boundOperationsFor, RowOperationsMenu } from "./row-operations";
 import { contentLocales, LocaleBadge, localeName } from "./locale-badge";
+
+const MarkdownEditor = React.lazy(() => import("../editor/markdown-editor").then((module) => ({ default: module.MarkdownEditor })));
+const HtmlEditor = React.lazy(() => import("../editor/html-editor").then((module) => ({ default: module.HtmlEditor })));
 
 export function EntryEditView({
   collectionName,
@@ -687,36 +689,8 @@ function SchemaField({
           collectionName={collectionName}
           mediaPurposes={mediaPurposes}
         />
-      ) : stringFieldWidget(schema, widget) === "richtext" ? (
-        <RichTextEditor
-          compact
-          value={stringForInput(value)}
-          onChange={setValue}
-        />
-      ) : stringFieldWidget(schema, widget) === "textarea" ? (
-        <Textarea
-          aria-label={label}
-          className="min-h-24"
-          value={stringForInput(value)}
-          maxLength={schema.maxLength}
-          onChange={(event) => setValue(event.target.value)}
-        />
       ) : (
-        schema.format === "date-time" ? (
-          <DateTimePicker
-            label={label}
-            language={language}
-            value={value}
-            onChange={(date) => setValue(date?.toISOString() ?? "")}
-          />
-        ) : (
-          <Input
-            type="text"
-            aria-label={label}
-            value={stringForInput(value)}
-            onChange={(event) => setValue(event.target.value)}
-          />
-        )
+        <StringFieldControl schema={schema} widget={widget} value={value} label={label} language={language} onChange={setValue} />
       )}
     </div>
   );
@@ -1350,10 +1324,35 @@ function schemaType(schema: JsonSchema): string {
 export function stringFieldWidget(
   schema: JsonSchema,
   widget: "textarea" | null,
-): "input" | "textarea" | "richtext" {
+): "input" | "textarea" | "markdown" | "html" {
   const hint = typeof schema["x-mcp-hint"] === "string" ? schema["x-mcp-hint"] : "";
-  if (hint === "markdown" || hint === "html" || hint === "richtext") return "richtext";
+  if (hint === "markdown" || hint === "html") return hint;
+  if (hint === "richtext") return "textarea";
   return widget ?? "input";
+}
+
+function StringFieldControl({
+  schema,
+  widget,
+  value,
+  label,
+  language,
+  onChange,
+}: {
+  schema: JsonSchema;
+  widget: "textarea" | null;
+  value: unknown;
+  label: string;
+  language: AdminLanguage;
+  onChange: (next: unknown) => void;
+}): React.ReactElement {
+  const kind = stringFieldWidget(schema, widget);
+  const text = stringForInput(value);
+  if (kind === "markdown") return <React.Suspense fallback={<Skeleton className="h-32 w-full" />}><MarkdownEditor value={text} onChange={onChange} /></React.Suspense>;
+  if (kind === "html") return <React.Suspense fallback={<Skeleton className="h-32 w-full" />}><HtmlEditor value={text} onChange={onChange} /></React.Suspense>;
+  if (kind === "textarea") return <Textarea aria-label={label} className="min-h-24" value={text} maxLength={schema.maxLength} onChange={(event) => onChange(event.target.value)} />;
+  if (schema.format === "date-time") return <DateTimePicker label={label} language={language} value={value} onChange={(date) => onChange(date?.toISOString() ?? "")} />;
+  return <Input type="text" aria-label={label} value={text} onChange={(event) => onChange(event.target.value)} />;
 }
 
 function fieldWidget(
