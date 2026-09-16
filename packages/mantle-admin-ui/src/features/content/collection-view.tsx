@@ -19,7 +19,7 @@ import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { api, downloadAdminFile } from "../../lib/api";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
-import { operationsQueryOptions } from "../../lib/queries";
+import { entriesQueryOptions, operationsQueryOptions } from "../../lib/queries";
 import type {
   AdminUser,
   Collection,
@@ -71,7 +71,6 @@ import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 import { entryEditPath, entryLandingPath, hasFoldedChildCollections } from "../../lib/collection-nav";
 import { IdValue, isIdField } from "../../ui/id-value";
 
-const COLLECTION_PAGE_SIZE = 50;
 type SortDirection = "asc" | "desc";
 
 export function CollectionView(props: React.ComponentProps<typeof CollectionList>): React.ReactElement {
@@ -147,42 +146,20 @@ function CollectionList({
     [operationsQuery.data, collectionName],
   );
   const entries = useQuery<ListEntriesResult>({
-    queryKey: [
-      "entries",
+    ...entriesQueryOptions({
       collectionName,
-      status ?? "all",
+      status,
       searchTerm,
-      filterField ?? "no-filter",
-      filterValue ?? "no-value",
-      resolvedScopeField ?? "no-scope-field",
-      resolvedScopeValue ?? "no-scope-value",
+      filterField,
+      filterValue,
+      scopeField: resolvedScopeField,
+      scopeValue: resolvedScopeValue,
       sortField,
       sortDirection,
-      cursor ?? "first",
+      cursor,
       cursorDirection,
-    ],
+    }),
     enabled: !parentFilter || Boolean(resolvedScopeField) || Boolean(scope),
-    queryFn: () => {
-      const qs = new URLSearchParams({
-        collection: collectionName,
-        limit: String(COLLECTION_PAGE_SIZE),
-        sort: sortField,
-        direction: sortDirection,
-      });
-      if (status) qs.set("status", status);
-      if (searchTerm) qs.set("search", searchTerm);
-      if (filterField && filterValue) {
-        qs.set("filter_field", filterField);
-        qs.set("filter_value", filterValue);
-      }
-      if (resolvedScopeField && resolvedScopeValue) {
-        qs.set("scope_field", resolvedScopeField);
-        qs.set("scope_value", resolvedScopeValue);
-      }
-      if (cursor) qs.set("cursor", cursor);
-      if (cursorDirection === "backward") qs.set("cursor_direction", "backward");
-      return api.get<ListEntriesResult>(`/entries?${qs.toString()}`);
-    },
   });
   const [visibleEntries, setVisibleEntries] = React.useState<ListEntriesResult | null>(null);
   React.useEffect(() => {

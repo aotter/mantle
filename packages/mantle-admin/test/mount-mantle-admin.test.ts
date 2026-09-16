@@ -492,6 +492,39 @@ spec:
     expect((await app.request("https://example.test/admin/api/webmcp")).status).toBe(401);
     expect((await app.request("https://example.test/admin/api/mcp", { method: "POST" })).status).toBe(401);
   });
+
+  it("bootstraps the collection shell and first page behind one staff gate", async () => {
+    const getSession = vi.fn(async () => ({
+      session: { id: "session-1" },
+      user: { id: "owner-1", email: "owner@example.test", role: "owner", roleCurrent: true as const },
+    }));
+    const runtime = {
+      schemas: new Map(),
+      siteConfig: { load: async () => ({ title: "Test", brand: "Test", locales: ["en"], canonicalLocale: "en", icons: [] }) },
+      listEntries: { executePage: async () => ({ rows: [], previousCursor: null, nextCursor: null }) },
+      entries: { readByDataFieldIn: async () => [] },
+    } as unknown as MantleAdminRuntime;
+    const app = new Hono();
+    mountMantleAdmin(app, {
+      plan: compiled.value,
+      get: async () => runtime,
+      assets: { fetch: async () => null },
+      auth: { ...auth, getSession },
+    });
+
+    const response = await app.request("https://example.test/admin/api/bootstrap?collection=posts&limit=50");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(getSession).toHaveBeenCalledOnce();
+    expect(await response.json()).toMatchObject({
+      me: { userId: "owner-1", login: "owner@example.test", role: "owner" },
+      collections: [],
+      operations: [],
+      views: [],
+      webmcp: { tools: [] },
+      entries: { items: [], previous_cursor: null, next_cursor: null },
+    });
+  });
 });
 
 function mounted(overrides: Partial<AdminAuth> = {}, plan: RuntimePlan = compiled.value): Hono {

@@ -3,10 +3,12 @@ import { usePreferences } from "./preferences";
 import { t } from "./i18n";
 import * as React from "react";
 import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AuthenticatedLayout } from "../layout/authenticated-layout";
 import { api, ApiError } from "../lib/api";
-import type { AdminUser, Collection } from "../lib/types";
+import type { AdminUser, Collection, ListEntriesResult, SiteInfo, StaffOperation, ViewManifestInfo } from "../lib/types";
+import type { AdminToolCatalog } from "../lib/admin-tools";
+import { entriesQueryOptions, entriesQuerySearchParams, withNavigationTools } from "../lib/queries";
 import { useAdminLocation } from "./router";
 import {
   AccessDeniedView,
@@ -50,7 +52,7 @@ export function AdminApp({ preview = false }: { preview?: boolean } = {}): React
     return <SignInView />;
   }
 
-  return <Gate path={location.pathname} preview={preview} />;
+  return <Gate path={location.pathname} search={location.search} preview={preview} />;
 }
 
 function PreviewAccountNotice(): React.ReactElement {
@@ -58,10 +60,46 @@ function PreviewAccountNotice(): React.ReactElement {
   return <div className="p-6"><h1 className="text-xl font-semibold">{t(language, "preview.accountTitle")}</h1><p className="mt-2">{t(language, "preview.accountBody")}</p></div>;
 }
 
-function Gate({ path, preview }: { path: string; preview: boolean }): React.ReactElement {
+interface BootstrapPayload {
+  me: AdminUser;
+  collections: Collection[];
+  site: SiteInfo;
+  operations: StaffOperation[];
+  views: ViewManifestInfo[];
+  webmcp: AdminToolCatalog;
+  entries: ListEntriesResult;
+}
+
+function Gate({ path, search, preview }: { path: string; search: string; preview: boolean }): React.ReactElement {
+  const queryClient = useQueryClient();
+  const collectionMatch = path.match(/^\/admin\/c\/([^/]+)\/?$/);
+  const params = new URLSearchParams(search);
+  const collectionName = collectionMatch ? decodeURIComponent(collectionMatch[1]!) : null;
+  const bootstrapArgs = collectionName && !params.has("parent") ? {
+    collectionName,
+    status: params.get("status") ?? undefined,
+    searchTerm: params.get("search")?.trim() ?? "",
+    filterField: params.get("filter_field") ?? undefined,
+    filterValue: params.get("filter_value") ?? undefined,
+    sortField: params.get("sort") || "updatedAt",
+    sortDirection: params.get("direction") === "asc" ? "asc" as const : "desc" as const,
+    cursor: params.get("cursor") || undefined,
+    cursorDirection: params.get("cursor_direction") === "backward" ? "backward" as const : "forward" as const,
+  } : null;
   const me = useQuery<AdminUser>({
     queryKey: ["me"],
-    queryFn: () => api.get<AdminUser>("/me"),
+    queryFn: async () => {
+      if (!bootstrapArgs) return api.get<AdminUser>("/me");
+      const entriesOptions = entriesQueryOptions(bootstrapArgs);
+      const data = await api.get<BootstrapPayload>(`/bootstrap?${entriesQuerySearchParams(bootstrapArgs).toString()}`);
+      queryClient.setQueryData(["collections"], data.collections);
+      queryClient.setQueryData(["site"], data.site);
+      queryClient.setQueryData(["operations"], data.operations);
+      queryClient.setQueryData(["views-manifest"], data.views);
+      queryClient.setQueryData(["admin-webmcp"], withNavigationTools(data.webmcp));
+      queryClient.setQueryData(entriesOptions.queryKey, data.entries);
+      return data.me;
+    },
     retry: false,
   });
 
@@ -85,7 +123,6 @@ function Gate({ path, preview }: { path: string; preview: boolean }): React.Reac
 
   if (me.isLoading) return <GateLoading />;
 
-  const collectionMatch = path.match(/^\/admin\/c\/([^/]+)\/?$/);
   if (collectionMatch) {
     return (
       <AuthenticatedLayout>

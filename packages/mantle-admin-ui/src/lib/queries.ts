@@ -1,6 +1,66 @@
 import { api } from "./api";
 import { navigationTools, type AdminToolCatalog } from "./admin-tools";
-import type { AuthMethodInfo, DeveloperConsoleSnapshot, StaffOperation, ViewManifestInfo } from "./types";
+import type { AuthMethodInfo, DeveloperConsoleSnapshot, ListEntriesResult, StaffOperation, ViewManifestInfo } from "./types";
+
+export const COLLECTION_PAGE_SIZE = 50;
+
+export interface EntriesQueryArgs {
+  collectionName: string;
+  status?: string;
+  searchTerm: string;
+  filterField?: string;
+  filterValue?: string;
+  scopeField?: string;
+  scopeValue?: string;
+  sortField: string;
+  sortDirection: "asc" | "desc";
+  cursor?: string;
+  cursorDirection: "forward" | "backward";
+}
+
+export function entriesQuerySearchParams(args: EntriesQueryArgs): URLSearchParams {
+  const qs = new URLSearchParams({
+    collection: args.collectionName,
+    limit: String(COLLECTION_PAGE_SIZE),
+    sort: args.sortField,
+    direction: args.sortDirection,
+  });
+  if (args.status) qs.set("status", args.status);
+  if (args.searchTerm) qs.set("search", args.searchTerm);
+  if (args.filterField && args.filterValue) {
+    qs.set("filter_field", args.filterField);
+    qs.set("filter_value", args.filterValue);
+  }
+  if (args.scopeField && args.scopeValue) {
+    qs.set("scope_field", args.scopeField);
+    qs.set("scope_value", args.scopeValue);
+  }
+  if (args.cursor) qs.set("cursor", args.cursor);
+  if (args.cursorDirection === "backward") qs.set("cursor_direction", "backward");
+  return qs;
+}
+
+export function entriesQueryOptions(args: EntriesQueryArgs) {
+  const queryKey = [
+    "entries", args.collectionName, args.status ?? "all", args.searchTerm,
+    args.filterField ?? "no-filter", args.filterValue ?? "no-value",
+    args.scopeField ?? "no-scope-field", args.scopeValue ?? "no-scope-value",
+    args.sortField, args.sortDirection, args.cursor ?? "first", args.cursorDirection,
+  ] as const;
+  return {
+    queryKey,
+    queryFn: () => {
+      const qs = entriesQuerySearchParams(args);
+      return api.get<ListEntriesResult>(`/entries?${qs.toString()}`);
+    },
+  };
+}
+
+export function withNavigationTools(catalog: AdminToolCatalog): AdminToolCatalog {
+  const tools = [...catalog.tools, ...navigationTools];
+  if (new Set(tools.map(tool => tool.name)).size !== tools.length) throw new Error("Admin navigation tool name collision.");
+  return { ...catalog, tools };
+}
 
 export function developerConsoleQueryOptions(): {
   queryKey: readonly ["developer-console"];
@@ -20,9 +80,7 @@ export function adminWebMcpQueryOptions(): {
     queryKey: ["admin-webmcp"] as const,
     queryFn: async () => {
       const catalog = await api.get<AdminToolCatalog>("/webmcp");
-      const tools = [...catalog.tools, ...navigationTools];
-      if (new Set(tools.map(tool => tool.name)).size !== tools.length) throw new Error("Admin navigation tool name collision.");
-      return { ...catalog, tools };
+      return withNavigationTools(catalog);
     },
   };
 }

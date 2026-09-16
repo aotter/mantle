@@ -165,6 +165,17 @@ async function bootAdmin(args: { operations: unknown[]; unchangedConflict?: bool
     const url = new URL(route.request().url());
     const path = url.pathname.replace("/admin/api", "");
     const method = route.request().method();
+    if (path === "/bootstrap") {
+      return route.fulfill({ json: {
+        me: { userId: "owner", role: "owner", login: "owner", image: null },
+        site: { brand: "Site", icons: [], canonicalLocale: "en", locales: ["en"], title: "Site", description: "", publicUrl: "https://site.test", mcpUrl: "https://site.test/mcp" },
+        collections: [orgCollection(), memberCollection()],
+        views: [],
+        operations: args.operations,
+        webmcp: { tools: [], routes: {} },
+        entries: { items: [orgListRow()], previous_cursor: null, next_cursor: null },
+      } });
+    }
     if (path === "/me") {
       return route.fulfill({ json: { id: "owner", role: "owner", login: "owner", image: null } });
     }
