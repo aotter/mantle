@@ -122,3 +122,75 @@
     display: none;
   }
 }
+
+.mantle-md-preview,
+.mantle-html-wysiwyg {
+  max-height: 20rem;
+  overflow: auto;
+  border: 1px solid var(--border);
+  background: var(--background);
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.mantle-md-preview {
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  border-top: 0;
+}
+
+.mantle-html-wysiwyg {
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  border-top: 0;
+  outline: none;
+}
+
+.mantle-html-wysiwyg:focus-visible {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
+}
+
+.mantle-md-preview :where(h1, h2, h3, h4, h5, h6),
+.mantle-html-wysiwyg :where(h1, h2, h3, h4, h5, h6) {
+  margin: 0.75em 0 0.35em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.mantle-md-preview :where(h1), .mantle-html-wysiwyg :where(h1) { font-size: 1.5rem; }
+.mantle-md-preview :where(h2), .mantle-html-wysiwyg :where(h2) { font-size: 1.25rem; }
+.mantle-md-preview :where(h3), .mantle-html-wysiwyg :where(h3) { font-size: 1.1rem; }
+
+.mantle-md-preview :where(p, ul, ol, blockquote, pre, table),
+.mantle-html-wysiwyg :where(p, ul, ol, blockquote, pre, table) {
+  margin: 0.5em 0;
+}
+
+.mantle-md-preview :where(ul), .mantle-html-wysiwyg :where(ul) { list-style: disc; padding-inline-start: 1.25rem; }
+.mantle-md-preview :where(ol), .mantle-html-wysiwyg :where(ol) { list-style: decimal; padding-inline-start: 1.25rem; }
+.mantle-md-preview :where(blockquote), .mantle-html-wysiwyg :where(blockquote) {
+  border-inline-start: 3px solid var(--border);
+  padding-inline-start: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.mantle-md-preview :where(code), .mantle-html-wysiwyg :where(code) {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.mantle-md-preview :where(pre), .mantle-html-wysiwyg :where(pre) {
+  overflow: auto;
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  padding: 0.75rem;
+}
+
+.mantle-md-preview :where(img), .mantle-html-wysiwyg :where(img) { max-width: 100%; height: auto; }
+.mantle-md-preview :where(a), .mantle-html-wysiwyg :where(a) { color: var(--primary); text-decoration: underline; }
+.mantle-md-preview :where(table), .mantle-html-wysiwyg :where(table) { width: 100%; border-collapse: collapse; }
+.mantle-md-preview :where(th, td), .mantle-html-wysiwyg :where(th, td) {
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.5rem;
+}

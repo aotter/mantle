@@ -143,7 +143,7 @@ A free-form string that tells agents and Admin widgets how to render or produce 
 
 | Value | Meaning |
 |---|---|
-| `markdown`, `richtext`, `code` | Text editor and authoring format. |
+| `markdown`, `html`, `richtext`, `code` | Text editor and authoring format. Admin maps `markdown` to a Markdown editor, `html` to an HTML WYSIWYG, and `richtext` to a plain textarea. |
 | `media`, `media-image`, `media-video`, `media-file` | Media-shaped URL or asset reference (`isMediaMcpHint`). |
 | `money-minor` | Integer amount in minor currency units. |
 | `timestamp-ms` | Unix epoch milliseconds. |
