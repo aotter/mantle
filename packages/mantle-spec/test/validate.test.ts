@@ -1076,11 +1076,54 @@ spec:
     expect(result.diagnostics[0]?.code).toBe("VIEW_CACHE_INVALID");
   });
 
+  it.each(["null", "[]", "{ sharedMaxAge: 0 }", "{ sharedMaxAge: 1.5 }"])(
+    "rejects invalid shared cache value %s",
+    (cache) => {
+      const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: cachedPosts }
+spec:
+  from: posts
+  surface: public
+  cache: ${cache}
+`);
+      expect(result.diagnostics.length).toBeGreaterThan(0);
+    },
+  );
+
+  it("rejects unknown shared cache keys", () => {
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: cachedPosts }
+spec:
+  from: posts
+  surface: public
+  cache: { sharedMaxAge: 60, staleWhileRevalidate: 30 }
+`);
+    expect(result.diagnostics.length).toBeGreaterThan(0);
+  });
+
   it("rejects shared cache over an operational Schema", () => {
     const result = validateManifests({
       manifests: [
         schema("sessions", { lifecycle: "operational" }),
         view("cachedSessions", "sessions", { cache: { sharedMaxAge: 60 } }),
+      ],
+    });
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain("VIEW_CACHE_INVALID");
+  });
+
+  it("rejects shared cache on an identity-bound View", () => {
+    const result = validateManifests({
+      manifests: [
+        schema("accounts", { indexes: [["ownerId"]], schema: {
+          type: "object",
+          properties: { ownerId: { type: "string" } },
+        } }),
+        view("myAccount", "accounts", {
+          cache: { sharedMaxAge: 60 },
+          filter: { eq: { field: "ownerId", value: { "$ctx.user": "id" } } },
+        }),
       ],
     });
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain("VIEW_CACHE_INVALID");

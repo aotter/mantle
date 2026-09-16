@@ -195,6 +195,7 @@ function viewOperation(v: ViewManifest, request: EmitOpenapiRequest): Record<str
   const op: Record<string, unknown> = {
     operationId: `view_${v.metadata.name.replace(/[^a-z0-9]+/gi, "_")}`,
     summary: `View ${v.metadata.name}`,
+    ...(v.spec.cache ? { "x-mantle-cache": v.spec.cache } : {}),
     parameters: params,
     responses,
   };

@@ -57,8 +57,11 @@ function request(path: string, init?: RequestInit): Response {
 
 describe("top-level OAuth cache boundary", () => {
   it("normalizes a deployment scope and rejects unsafe scopes", () => {
-    expect(normalizeCacheScope(" Site_PROD ")).toBe("site_prod");
-    expect(scopedPublicCacheTag(" Site_PROD ")).toBe("mantle-public-site_prod");
+    expect(normalizeCacheScope("site_prod")).toBe("site_prod");
+    expect(scopedPublicCacheTag("site_prod")).toBe("mantle-public-site_prod");
+    expect(scopedPublicCacheTag("site-a")).not.toBe(scopedPublicCacheTag("site-b"));
+    expect(normalizeCacheScope("Site_PROD")).toBeUndefined();
+    expect(normalizeCacheScope(" site_prod ")).toBeUndefined();
     expect(normalizeCacheScope("tenant/site")).toBeUndefined();
   });
 

@@ -1,8 +1,7 @@
 export const PUBLIC_CACHE_TAG = "mantle-public";
 
 export function normalizeCacheScope(scope: string | undefined): string | undefined {
-  const normalized = scope?.trim().toLowerCase();
-  return normalized && /^[a-z0-9][a-z0-9_-]{0,63}$/u.test(normalized) ? normalized : undefined;
+  return scope && /^[a-z0-9][a-z0-9_-]{0,63}$/u.test(scope) ? scope : undefined;
 }
 
 export function scopedPublicCacheTag(scope: string | undefined): string | undefined {

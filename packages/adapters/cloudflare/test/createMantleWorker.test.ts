@@ -400,9 +400,13 @@ describe("createMantleWorker", () => {
       }),
     });
 
-    const response = await fetchWorker(worker, "/public", testEnv());
-    expect(response.headers.get("cache-control")).toBe("private, no-store");
-    expect(response.headers.get("cache-tag")).toBeNull();
+    for (const key of ["key-a", "key-b"]) {
+      const response = await fetchWorker(worker, "/public", testEnv(), {
+        headers: { "x-api-key": key },
+      });
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+      expect(response.headers.get("cache-tag")).toBeNull();
+    }
   });
 
   it("preserves extension HTTP errors and middleware headers", async () => {

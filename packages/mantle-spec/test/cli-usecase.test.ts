@@ -26,6 +26,7 @@ metadata: { name: posts-by-locale }
 spec:
   surface: public
   from: posts
+  cache: { sharedMaxAge: 300 }
   params:
     type: object
     properties:
@@ -82,6 +83,7 @@ describe("IntrospectManifestsUseCase", () => {
       name: "posts-by-locale",
       from: "posts",
       restPath: "/api/views/posts-by-locale",
+      cache: { sharedMaxAge: 300 },
     });
     expect(out.views[0]!.params?.required).toEqual(["locale"]);
     expect(out.procedures).toHaveLength(1);
@@ -97,9 +99,10 @@ describe("EmitOpenapiUseCase", () => {
       title: "Test",
       version: "0.1.0",
     });
-    const paths = document["paths"] as Record<string, Record<string, { operationId: string }>>;
+    const paths = document["paths"] as Record<string, Record<string, Record<string, unknown>>>;
     expect(paths["/api/contact"]?.post?.operationId).toBe("post_submitContact");
     expect(paths["/api/views/posts-by-locale"]?.get?.operationId).toBe("view_posts_by_locale");
+    expect(paths["/api/views/posts-by-locale"]?.get?.["x-mantle-cache"]).toEqual({ sharedMaxAge: 300 });
   });
 
   it("projects HTTP path fields out of the body without changing the Procedure schema (#531)", () => {

@@ -49,6 +49,10 @@ A View can filter to the calling user's own rows with the closed sentinel `{ "$c
 
 This is a filter, not a row-level policy engine. `requires` authorizes the whole query; it does not inject per-row visibility predicates. Membership, payment and entitlement checks belong in a guard Procedure. See [Procurement approvals](../examples/procurement-approvals.md).
 
+## Shared response cache
+
+Caller-independent published data may declare `cache: { sharedMaxAge: <seconds> }`, with an integer from 1 through 86400. The Cloudflare adapter applies it only to anonymous REST responses when the Worker also has a stable `cacheScope`. Staff, guarded, identity-bound, SQL and operational-schema Views cannot opt in; MCP and WebMCP calls remain private. Publishing writes purge the deployment-scoped tag after the canonical write.
+
 ## Pagination and the envelope
 
 REST callers pass `?page=<1-indexed>&show=<page size>`; MCP callers pass the same two names as tool arguments.
@@ -109,6 +113,7 @@ spec:
   title: Published announcements
   surface: public
   from: announcements
+  cache: { sharedMaxAge: 3600 }
   params:
     type: object
     additionalProperties: false
