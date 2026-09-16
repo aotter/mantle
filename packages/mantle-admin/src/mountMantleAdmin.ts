@@ -288,15 +288,55 @@ export function mountMantleAdmin<E extends Env>(
   const guarded = (
     method: "get" | "post" | "patch" | "delete",
     path: string,
-    body: (c: Context, gate: StaffGateOk) => Response | Promise<Response>,
+    body: (
+      c: Context,
+      gate: StaffGateOk,
+      trace?: AdminHotpathTrace,
+    ) => Response | Promise<Response>,
   ): void => {
     app.on(method.toUpperCase(), path, async (c) => {
-      const rejected = rejectCrossOriginMutation(c.req.raw);
-      if (rejected) return rejected;
-      const gate = await readStaffGate(c, auth);
-      if (gate.kind === "unauth") return adminUnauthenticated(c, path);
-      if (gate.kind === "forbidden") return adminNotStaff(c, path, gate.login);
-      return body(c, gate);
+      const trace: AdminHotpathTrace | undefined = method === "get" && path === "/admin/api/entries"
+        ? { requestId: crypto.randomUUID(), startedAt: performance.now() }
+        : undefined;
+      let status: number | null = null;
+      try {
+        const rejected = rejectCrossOriginMutation(c.req.raw);
+        if (rejected) {
+          status = rejected.status;
+          return rejected;
+        }
+        const gate = await readStaffGate(c, auth, trace);
+        if (gate.kind === "unauth") {
+          const response = adminUnauthenticated(c, path);
+          status = response.status;
+          return response;
+        }
+        if (gate.kind === "forbidden") {
+          const response = adminNotStaff(c, path, gate.login);
+          status = response.status;
+          return response;
+        }
+        const response = await body(c, gate, trace);
+        status = response.status;
+        return response;
+      } finally {
+        if (trace) {
+          console.info(JSON.stringify({
+            kind: "mantle-admin-hotpath-v1",
+            requestId: trace.requestId,
+            status,
+            totalMs: elapsed(trace.startedAt),
+            sessionMs: trace.sessionMs ?? null,
+            roleMs: trace.roleMs ?? null,
+            parseMs: trace.parseMs ?? null,
+            runtimeMs: trace.runtimeMs ?? null,
+            listMs: trace.listMs ?? null,
+            translationsMs: trace.translationsMs ?? null,
+            serializeMs: trace.serializeMs ?? null,
+            rows: trace.rows ?? null,
+          }));
+        }
+      }
     });
   };
 
@@ -609,7 +649,8 @@ export function mountMantleAdmin<E extends Env>(
     }),
   );
 
-  guarded("get", "/admin/api/entries", async (c) => {
+  guarded("get", "/admin/api/entries", async (c, _gate, trace) => {
+    const parseStartedAt = performance.now();
     const collection = c.req.query("collection");
     if (!collection) {
       return Response.json({
@@ -623,7 +664,6 @@ export function mountMantleAdmin<E extends Env>(
         }),
       }, { status: 400 });
     }
-    const runtime = await ref.get();
     const rawLimit = c.req.query("limit");
     const parsedLimit = rawLimit ? Number.parseInt(rawLimit, 10) : NaN;
     const statusQuery = c.req.query("status");
@@ -656,9 +696,14 @@ export function mountMantleAdmin<E extends Env>(
         }),
       }, { status: 400 });
     }
+    if (trace) trace.parseMs = elapsed(parseStartedAt);
+    const runtimeStartedAt = performance.now();
+    const runtime = await ref.get();
+    if (trace) trace.runtimeMs = elapsed(runtimeStartedAt);
     // Admin pagination needs the cursored shape — `executePage` returns
     // `{ rows, nextCursor? }`. `execute()` is the flat-array variant
     // for app code.
+    const listStartedAt = performance.now();
     const result = await runtime.listEntries.executePage({
       collection,
       status: statusQuery && statusQuery !== "all" ? (statusQuery as ContentState) : undefined,
@@ -677,6 +722,11 @@ export function mountMantleAdmin<E extends Env>(
         direction: sortDirection,
       },
     });
+    if (trace) {
+      trace.listMs = elapsed(listStartedAt);
+      trace.rows = result.rows.length;
+    }
+    const translationsStartedAt = performance.now();
     const translationLocales = new Map<string, Set<string>>();
     const translationSchemas = schemas.filter((schema) => schema.spec.translates?.parent === collection);
     for (const schema of translationSchemas) {
@@ -708,14 +758,18 @@ export function mountMantleAdmin<E extends Env>(
         translationLocales.set(row.id, locales);
       }
     }
+    if (trace) trace.translationsMs = elapsed(translationsStartedAt);
+    const serializeStartedAt = performance.now();
     const items = result.rows.map((row) =>
       adminListItem(row, schemasByName, [...(translationLocales.get(row.id) ?? [])])
     );
-    return Response.json({
+    const response = Response.json({
       items,
       previous_cursor: result.previousCursor ?? null,
       next_cursor: result.nextCursor ?? null,
     });
+    if (trace) trace.serializeMs = elapsed(serializeStartedAt);
+    return response;
   });
 
   guarded("get", "/admin/api/entries/export", async (c) => {
@@ -1812,6 +1866,23 @@ type StaffGate =
       sessionId: string;
     };
 
+interface AdminHotpathTrace {
+  requestId: string;
+  startedAt: number;
+  sessionMs?: number;
+  roleMs?: number;
+  parseMs?: number;
+  runtimeMs?: number;
+  listMs?: number;
+  translationsMs?: number;
+  serializeMs?: number;
+  rows?: number;
+}
+
+function elapsed(startedAt: number): number {
+  return Math.round((performance.now() - startedAt) * 100) / 100;
+}
+
 function adminHandlerContext(
   c: Context,
   gate: Extract<StaffGate, { kind: "ok" }>,
@@ -1832,12 +1903,20 @@ function adminHandlerContext(
   };
 }
 
-async function readStaffGate(c: Context, auth: AdminAuth): Promise<StaffGate> {
+async function readStaffGate(
+  c: Context,
+  auth: AdminAuth,
+  trace?: AdminHotpathTrace,
+): Promise<StaffGate> {
+  const sessionStartedAt = performance.now();
   const session = await auth.getSession(c.req.raw);
+  if (trace) trace.sessionMs = elapsed(sessionStartedAt);
   if (!session) return { kind: "unauth" };
+  const roleStartedAt = performance.now();
   const role = session.user.roleCurrent
     ? session.user.role ?? null
     : await auth.getUserRole(session.user.id);
+  if (trace) trace.roleMs = elapsed(roleStartedAt);
   const login = [session.user.githubLogin, session.user.name, session.user.email]
     .find((value) => value?.trim()) ?? null;
   if (!role || !STAFF_ROLE_SET.has(role)) {
