@@ -26,4 +26,30 @@ describe("UpdateSiteSettingsUseCase", () => {
     expect(result.title).toBe("Updated");
     expect(calls).toEqual(["update", "load"]);
   });
+
+  it("returns committed settings when cache invalidation fails", async () => {
+    const error = console.error;
+    console.error = () => undefined;
+    try {
+      const siteConfig = {
+        updateEditable: async () => undefined,
+        load: async () => ({
+          title: "Saved",
+          description: "",
+          origin: "",
+          locales: ["en"],
+          canonicalLocale: "en",
+          brand: "Saved",
+          media: { purposes: [] },
+        }),
+      } as unknown as SiteConfigRepository;
+
+      await expect(new UpdateSiteSettingsUseCase(
+        siteConfig,
+        async () => { throw new Error("purge unavailable"); },
+      ).execute({ title: "Saved" })).resolves.toMatchObject({ title: "Saved" });
+    } finally {
+      console.error = error;
+    }
+  });
 });

@@ -24,6 +24,8 @@ projects version-matched instructions. Public GET `/api/views/published-notes`
 returns an empty result against fresh local D1. `/` is 404: no visitor frontend
 is installed or rendered. Auth routes fail closed until auth is configured.
 No provider resources or secrets are needed for this local reference.
+The View declares a one-hour shared-cache hint and the Worker supplies the
+stable `minimal-worker-local` cache scope; authenticated requests remain private.
 
 `mantle-web` is optional runtime document composition; it does not generate a
 home page. Add application-owned routes/templates/frontend only when needed.

@@ -35,10 +35,11 @@ describe("createConventionalBindings", () => {
   it("wires the conventional MANTLE_KV binding to an isolated catalog scope", () => {
     const MANTLE_KV = {} as KVNamespace;
 
-    expect(createConventionalBindings({ DB, MANTLE_KV }).mcpCatalogKv).toEqual({
+    expect(createConventionalBindings({ DB, MANTLE_KV }, "site-prod").mcpCatalogKv).toEqual({
       namespace: MANTLE_KV,
-      scope: "default",
+      scope: "site-prod",
     });
+    expect(createConventionalBindings({ DB, MANTLE_KV }).mcpCatalogKv).toBeUndefined();
     expect(createConventionalBindings({ DB }).mcpCatalogKv).toBeUndefined();
   });
 

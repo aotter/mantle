@@ -28,7 +28,13 @@ export class UpdateSiteSettingsUseCase {
         "a numeric Facebook Pixel ID, or an empty string",
       ),
     });
-    await this.onPublicChange?.();
+    if (this.onPublicChange) {
+      try {
+        await this.onPublicChange();
+      } catch (error) {
+        console.error("[mantle] public cache invalidation failed after committed site settings write", error);
+      }
+    }
     return this.siteConfig.load();
   }
 }

@@ -11,7 +11,7 @@ description: Assemble a Mantle Worker with createMantleWorker, add handlers and 
 import { createMantleWorker } from "@aotter/mantle/cloudflare";
 import { plan } from "../.mantle/generated/mantle.js";
 
-export default createMantleWorker({ plan });
+export default createMantleWorker({ plan, cacheScope: "my-site-production" });
 ```
 
 `plan` is the sealed plan that `mantle generate` writes to `.mantle/generated/mantle.ts`. With only `plan`, the Worker serves public View REST, HTTP Triggers, Admin, Auth, OAuth and MCP. It renders no public pages and `/` is a 404; see [Public web](./public-web.md).
@@ -23,6 +23,7 @@ export default createMantleWorker({ plan });
 | `plan` | `RuntimePlan` | Required. Generated plan; a fingerprint or version mismatch fails immediately and asks you to regenerate. |
 | `handlers` | `Record<string, AnyHandler>` | Implementations for `handler.kind: ref` Procedures. Merged with `extend().handlers`; a name registered twice throws. |
 | `siteDefaults` | `SiteDefaults \| (env) => SiteDefaults` | Brand, title, description, origin, locales, icons, media purposes. Use the function form to read `env.PUBLIC_ORIGIN`. See [Site config](../reference/site-config.md). |
+| `cacheScope` | `string \| (env) => string` | Stable deployment/site identifier for public cache tags and optional `MANTLE_KV` keys. Lowercase letters, digits, `_` and `-`, up to 64 characters. Shared caching is disabled when absent or invalid. |
 | `templates` | `TemplateRegistry` | Entry and list templates for public HTML. |
 | `publicPathResolver` | `PublicPathResolver` | Collection-to-URL mapping used for canonical URLs, sitemap and hreflang. |
 | `mediaAllowSvg` | `boolean \| (env) => boolean` | Accept SVG uploads. Default `false`. |
@@ -52,7 +53,7 @@ Once per isolate, `createMantleWorker` assembles and memoizes:
 - Runtime endpoints: manifest HTTP Triggers, `GET /api/views` and `GET /api/views/<name>` for public Views.
 - Admin at `/admin` when Admin assets are present, OAuth consent and discovery, and MCP at `/mcp` and `/mcp/staff`.
 - A `/favicon.ico` route derived from `siteDefaults.icons`. This is a convention, not a reserved path; an existing host route wins.
-- The final cache policy on every response, and a purge of the `mantle-public` cache tag after publishing-content and site-setting writes.
+- The final cache policy on every response, and best-effort purge of the deployment-scoped public tag after publishing-content and site-setting writes.
 - A redacted error boundary: an unexpected failure returns `500` with `{ "ok": false, "error": "internal_error" }` and `private, no-store`.
 
 If `auth.ready` rejects, the memoized assembly is evicted so the next request rebuilds instead of reusing a poisoned isolate.

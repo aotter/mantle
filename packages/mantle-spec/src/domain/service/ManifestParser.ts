@@ -822,7 +822,7 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   const s = m.spec as unknown as Record<string, unknown>;
   rejectUnknownKeys(
     s,
-    ["title", "uiSchema", "from", "sql", "surface", "requires", "filter", "fields", "orderBy", "limit", "params"],
+    ["title", "uiSchema", "from", "sql", "surface", "cache", "requires", "filter", "fields", "orderBy", "limit", "params"],
     idx,
     "/spec",
   );
@@ -850,6 +850,7 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
       "/spec/surface",
     );
   }
+  if ("cache" in s && s["cache"] != null) validateViewCache(s["cache"], m, idx);
   if ("requires" in s && s["requires"] != null) {
     validateRequires(s["requires"], idx, "View");
   }
@@ -886,6 +887,31 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
     validateViewOrderBy(s["orderBy"], idx);
   }
   return m;
+}
+
+function validateViewCache(raw: unknown, view: ViewManifest, idx: number): void {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new ManifestParseError("View.spec.cache must be an object", idx, "/spec/cache", "VIEW_CACHE_INVALID");
+  }
+  const cache = raw as Record<string, unknown>;
+  rejectUnknownKeys(cache, ["sharedMaxAge"], idx, "/spec/cache");
+  const maxAge = cache["sharedMaxAge"];
+  if (!Number.isInteger(maxAge) || (maxAge as number) < 1 || (maxAge as number) > 86_400) {
+    throw new ManifestParseError(
+      "View.spec.cache.sharedMaxAge must be an integer from 1 to 86400",
+      idx,
+      "/spec/cache/sharedMaxAge",
+      "VIEW_CACHE_INVALID",
+    );
+  }
+  if (view.spec.surface !== "public" || view.spec.sql || view.spec.requires) {
+    throw new ManifestParseError(
+      "View.spec.cache requires an unguarded public declarative View",
+      idx,
+      "/spec/cache",
+      "VIEW_CACHE_INVALID",
+    );
+  }
 }
 
 function validateViewSql(sql: string, params: JsonSchema | undefined, idx: number): void {

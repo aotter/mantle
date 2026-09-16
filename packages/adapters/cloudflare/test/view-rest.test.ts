@@ -5,6 +5,7 @@ import type { Manifest } from "@aotter/mantle-spec";
 import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountTestEndpoints } from "./mountTestEndpoints.js";
 import type { Auth } from "../src/auth/createAuth.js";
+import type { ConsumerCredentialResolver } from "../src/mount/resolveCaller.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
   StubAssetServer,
@@ -45,6 +46,7 @@ function manifests(): Manifest[] {
       spec: {
         surface: "public",
         from: "posts",
+        cache: { sharedMaxAge: 300 },
         filter: { eq: { field: "status", value: "published" } },
       },
     },
@@ -72,17 +74,22 @@ function manifests(): Manifest[] {
   ];
 }
 
-function harness(seed?: (db: InMemoryDatabase) => void) {
+function harness(
+  seed?: (db: InMemoryDatabase) => void,
+  credentialResolver?: ConsumerCredentialResolver,
+) {
   const db = new InMemoryDatabase();
   if (seed) seed(db);
   const ref = createMantleRuntimeRef({
     plan: compileTestPlan(manifests()),
+    cacheScope: "test-site",
     siteDefaults: { locales: ["en", "zh-TW"] },
     bindings: {
       db,
       adminAssets: new StubAssetServer(),
     },
     auth: stubAuth,
+    credentialResolver,
   });
   const app = new Hono();
   mountTestEndpoints(app, ref);
@@ -146,6 +153,7 @@ function staffHarness(
   ];
   const ref = createMantleRuntimeRef({
     plan: compileTestPlan(staffViewManifests),
+    cacheScope: "test-site",
     siteDefaults: { locales: ["en", "zh-TW"] },
     bindings: { db, adminAssets: new StubAssetServer() },
     auth,
@@ -212,6 +220,31 @@ describe("GET /api/views/<name>", () => {
     expect(body.data.rows).toHaveLength(2);
     expect(body.data.page).toBe(1);
     expect(body.data.hasMore).toBe(false);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
+    expect(res.headers.get("cache-tag")).toBe("mantle-public-test-site");
+  });
+
+  it("does not share a cached View response when credentials are present", async () => {
+    const h = harness((db) => db.entries.set("p1", row("p1", { slug: "a", locale: "en" })));
+    const res = await h.app.request("/api/views/postsPublished", {
+      headers: { cookie: "session=private" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBeNull();
+    expect(res.headers.get("cache-tag")).toBeNull();
+  });
+
+  it("disables shared View caching when the host owns a credential format", async () => {
+    const h = harness(
+      (db) => db.entries.set("p1", row("p1", { slug: "a", locale: "en" })),
+      () => ({ kind: "not-handled" }),
+    );
+    const res = await h.app.request("/api/views/postsPublished");
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBeNull();
+    expect(res.headers.get("cache-tag")).toBeNull();
   });
 
   it("filters by required param via { $param: locale }", async () => {

@@ -1,7 +1,21 @@
 export const PUBLIC_CACHE_TAG = "mantle-public";
 
+export function normalizeCacheScope(scope: string | undefined): string | undefined {
+  const normalized = scope?.trim().toLowerCase();
+  return normalized && /^[a-z0-9][a-z0-9_-]{0,63}$/u.test(normalized) ? normalized : undefined;
+}
+
+export function scopedPublicCacheTag(scope: string | undefined): string | undefined {
+  const normalized = normalizeCacheScope(scope);
+  return normalized ? `${PUBLIC_CACHE_TAG}-${normalized}` : undefined;
+}
+
 /** Apply the Worker's final cache decision after OAuth/default dispatch. */
-export function applyCachePolicy(request: Request, response: Response): Response {
+export function applyCachePolicy(
+  request: Request,
+  response: Response,
+  publicCacheTag: string | null = null,
+): Response {
   const headers = new Headers(response.headers);
   const directives = parseCacheDirectives(headers.get("cache-control"));
   const pathname = new URL(request.url).pathname;
@@ -23,8 +37,9 @@ export function applyCachePolicy(request: Request, response: Response): Response
   headers.delete("cdn-cache-control");
   headers.delete("cloudflare-cdn-cache-control");
 
-  if (publicResponse) {
+  if (publicResponse && publicCacheTag) {
     mergeVary(headers, "Cookie", "Authorization");
+    headers.set("cache-tag", publicCacheTag);
   } else {
     headers.set("cache-control", "private, no-store");
     headers.delete("cache-tag");

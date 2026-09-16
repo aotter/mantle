@@ -36,6 +36,7 @@ export class IntrospectManifestsUseCase {
       from: v.spec.from ?? null,
       sql: v.spec.sql ?? null,
       surface: v.spec.surface,
+      cache: v.spec.cache ?? null,
       params: v.spec.params ?? null,
       filter: v.spec.filter ?? null,
       orderBy: v.spec.orderBy ?? [],

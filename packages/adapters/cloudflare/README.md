@@ -147,9 +147,11 @@ All Cloudflare locations follow Workers KV's eventual-consistency model while
 a write propagates; the one-hour repair deadline prevents an observation from
 remaining authoritative indefinitely.
 
-`createConventionalBindings(env)` detects `MANTLE_KV` automatically. Low-level
-bindings may instead set `mcpCatalogKv: { namespace, scope }`; the scope must be
-a stable deployment-owned identifier and must never be derived from a request.
+`createMantleWorker({ plan, cacheScope: "my-site-production" })` uses
+`MANTLE_KV` automatically. Without a valid stable scope the optional KV
+projection and shared response cache remain disabled. Low-level bindings may
+instead set `mcpCatalogKv: { namespace, scope }`; the scope must never be
+derived from a request.
 
 The shared SQLite storage accepts a `decorateSiteConfigRepository` hook; KV
 serialization and consistency policy belong to this Cloudflare decorator, not
@@ -191,10 +193,11 @@ responses that explicitly declare `public` plus shared freshness remain
 cacheable; they vary on `Cookie` and `Authorization`.
 
 `mountPublicRoutes(...)` renders D1-backed HTML, markdown, `llms.txt`, and
-sitemap responses with that explicit public contract and one `mantle-public`
-Cache-Tag. Publishing-content and site-setting mutations purge that tag through
-the native Workers cache API; immutable assets and operational records stay
-outside the purge boundary. Workers Cache stores only responses that still
+sitemap responses with that explicit public contract and one deployment-scoped
+Cache-Tag. Eligible public Views opt in with `cache.sharedMaxAge`.
+Publishing-content and site-setting mutations purge that tag through the native
+Workers cache API after the canonical write; purge failure is logged. Immutable
+assets and operational records stay outside the purge boundary. Workers Cache stores only responses that still
 satisfy the anonymous policy, and remains version-local. See the
 `node_modules/@aotter/mantle/docs/adapter-guide.md` (“HTTP cache contract”).
 

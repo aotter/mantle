@@ -1036,6 +1036,56 @@ spec:
 });
 
 describe("parseManifests() — View.spec.surface (#433)", () => {
+  it("accepts a bounded shared cache on an unguarded public View", () => {
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: cachedPosts }
+spec:
+  from: posts
+  surface: public
+  cache: { sharedMaxAge: 3600 }
+`);
+    expect(result.diagnostics).toEqual([]);
+    expect((result.manifests[0] as ViewManifest).spec.cache).toEqual({ sharedMaxAge: 3600 });
+  });
+
+  it.each([
+    ["staff", "surface: staff\n  from: posts"],
+    ["guarded", "surface: public\n  from: posts\n  requires: can-read"],
+    ["SQL", "surface: public\n  sql: SELECT * FROM posts"],
+  ])("rejects shared cache on a %s View", (_case, body) => {
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: unsafeCache }
+spec:
+  ${body}
+  cache: { sharedMaxAge: 60 }
+`);
+    expect(result.diagnostics[0]?.code).toBe("VIEW_CACHE_INVALID");
+  });
+
+  it("rejects shared cache outside the supported TTL range", () => {
+    const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: cachedPosts }
+spec:
+  from: posts
+  surface: public
+  cache: { sharedMaxAge: 86401 }
+`);
+    expect(result.diagnostics[0]?.code).toBe("VIEW_CACHE_INVALID");
+  });
+
+  it("rejects shared cache over an operational Schema", () => {
+    const result = validateManifests({
+      manifests: [
+        schema("sessions", { lifecycle: "operational" }),
+        view("cachedSessions", "sessions", { cache: { sharedMaxAge: 60 } }),
+      ],
+    });
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain("VIEW_CACHE_INVALID");
+  });
+
   it("accepts surface: public", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v1
 kind: View

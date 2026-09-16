@@ -27,6 +27,7 @@ export interface IntrospectedView {
   readonly from: string | null;
   readonly sql: string | null;
   readonly surface: "public" | "staff";
+  readonly cache: { readonly sharedMaxAge: number } | null;
   readonly params: JsonSchema | null;
   readonly filter: FilterAst | null;
   readonly orderBy: ReadonlyArray<{ readonly field: string; readonly direction?: "asc" | "desc" }>;

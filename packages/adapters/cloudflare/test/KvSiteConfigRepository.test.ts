@@ -16,7 +16,7 @@ import { compileTestPlan } from "./compileTestPlan.js";
 import { StubAssetServer, stubAuth } from "./fakes/runtime-bindings.js";
 
 const SCOPE = "production";
-const KEY = `mantle:site-config:v1:${SCOPE}:mcp`;
+const KEY = `mantle:${SCOPE}:site-config:v1:mcp`;
 
 describe("KvSiteConfigRepository", () => {
   afterEach(() => {

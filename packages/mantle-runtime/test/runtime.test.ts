@@ -96,6 +96,26 @@ describe("SQLite runtime composition", () => {
     expect(calls).toHaveLength(6);
   });
 
+  it("keeps a committed content write successful when cache invalidation fails", async () => {
+    const error = console.error;
+    console.error = () => undefined;
+    try {
+      const runtime = await createTestRuntime({
+        manifests: [postsSchema()],
+        db: new InMemoryDatabase(),
+        onPublicChange: async () => { throw new Error("purge unavailable"); },
+      });
+
+      await expect(runtime.createDraft.execute({
+        collection: "posts",
+        data: { title: "Saved", slug: "saved", content: "Body" },
+        authorId: null,
+      })).resolves.toMatchObject({ data: { title: "Saved" } });
+    } finally {
+      console.error = error;
+    }
+  });
+
   it("installs manifest Schema indexes", async () => {
     const db = new InMemoryDatabase();
     const schema = postsSchema();

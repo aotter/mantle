@@ -50,7 +50,9 @@ export function projectCallableCapabilities(
       ownerName: view.name,
       surface: tool.surface,
       ...(title ? { title } : {}),
-      description: `Query ${manifest.spec.surface} View '${view.name}'.`,
+      description: `Query ${manifest.spec.surface} View '${view.name}'.${manifest.spec.cache
+        ? ` Anonymous REST responses may be shared for up to ${manifest.spec.cache.sharedMaxAge} seconds.`
+        : ""}`,
       inputSchema: viewInputSchema(manifest),
       manifest,
     });

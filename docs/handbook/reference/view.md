@@ -14,6 +14,7 @@ A View is a named read-only query over Schemas. It is the only atom that needs n
 | `from` | string | exactly one of `from` / `sql` | — | Name of a declared Schema (`VIEW_FROM_UNKNOWN_SCHEMA`). The declarative form. |
 | `sql` | string | exactly one of `from` / `sql` | — | One SQLite `SELECT`. See [`sql`](#sql). |
 | `surface` | `public` \| `staff` | yes | — | Decides where the View mounts. See [Surfaces](#surfaces). |
+| `cache` | `{ sharedMaxAge }` | no | — | Anonymous REST shared-cache hint. `sharedMaxAge` is an integer from 1 to 86400. Only an unguarded, declarative public View over a publishing Schema may declare it. |
 | `requires` | AuthorizationRequirements | no | — | `auth.all` predicates plus one optional `guard.procedure`. See [Authorization](./authorization.md). |
 | `filter` | FilterAst | no | — | `from` form only. See [Filter AST](#filter-ast). |
 | `fields` | `string[]` | no | every column | `from` form only. Projection. Not shape-validated by the parser. |
@@ -53,6 +54,17 @@ spec:
 ```
 
 The Schema this reads must index `submittedBy` as the leftmost field of some tuple, otherwise the identity filter is rejected. See [Schema indexes](./schema.md#indexes).
+
+For caller-independent published data, a View may opt its anonymous REST response into the deployment cache:
+
+```yaml
+spec:
+  surface: public
+  from: published-notes
+  cache: { sharedMaxAge: 3600 }
+```
+
+This emits `Cache-Control: public, max-age=0, s-maxage=3600` only when the request has no cookie or authorization header and the Cloudflare Worker has a valid `cacheScope`. MCP, WebMCP, staff, guarded, SQL and operational-schema reads remain uncached. Invalid combinations fail with `VIEW_CACHE_INVALID`.
 
 ## SQL example
 

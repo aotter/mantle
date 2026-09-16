@@ -32,7 +32,11 @@ import { createMcpApiHandler } from "../mount/mountMcp.js";
 import { mountAdmin } from "../mount/mountAdmin.js";
 import { mountRuntimeEndpoints } from "../mount/mountRuntimeEndpoints.js";
 import type { ConsumerCredentialResolver } from "../mount/resolveCaller.js";
-import { applyCachePolicy, PUBLIC_CACHE_TAG } from "../oauth/cachePolicy.js";
+import {
+  applyCachePolicy,
+  normalizeCacheScope,
+  scopedPublicCacheTag,
+} from "../oauth/cachePolicy.js";
 
 /** Fixed namespaces owned by Mantle's standard Worker surfaces. */
 export const MANTLE_RESERVED_PATH_PREFIXES = [
@@ -136,6 +140,8 @@ export interface CreateMantleWorkerOptions<Env extends MantleCloudflareEnv> {
   readonly plan: RuntimePlan;
   readonly handlers?: Readonly<Record<string, AnyHandler>>;
   readonly siteDefaults?: SiteDefaults | ((env: Env) => SiteDefaults);
+  /** Stable deployment/site identifier used by public cache tags and optional KV. */
+  readonly cacheScope?: string | ((env: Env) => string);
   readonly templates?: TemplateRegistry;
   readonly publicPathResolver?: PublicPathResolver;
   readonly mediaAllowSvg?: boolean | ((env: Env) => boolean);
@@ -178,7 +184,9 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
   const assemble = (env: Env): AssembledWorker<Env> => {
     if (assembled) return assembled;
 
-    const conventional = createConventionalBindings(env);
+    const cacheScope = normalizeCacheScope(resolve(options.cacheScope, env));
+    const publicCacheTag = scopedPublicCacheTag(cacheScope);
+    const conventional = createConventionalBindings(env, cacheScope);
     const bindings = options.bindings?.(env, conventional) ?? conventional;
     const auth = options.auth?.(env) ?? createConventionalAuth(env);
     let ref: MantleRuntimeRef | null = null;
@@ -187,11 +195,13 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
       : Promise.reject(new Error("Mantle runtime is unavailable until `extend` returns."));
     const bootstrap = { env, auth, bindings, getRuntime };
     const extension = options.extend?.(bootstrap) ?? {};
+    const sharedPublicCacheTag = extension.credentialResolver ? undefined : publicCacheTag;
 
     ref = createMantleRuntimeRef({
       plan: options.plan,
       handlers: mergeHandlers(options.handlers, extension.handlers),
       siteDefaults: resolve(options.siteDefaults, env),
+      cacheScope: sharedPublicCacheTag ? cacheScope : undefined,
       templates: options.templates,
       publicPathResolver: options.publicPathResolver,
       reservedHttpPathPrefixes: [
@@ -204,7 +214,7 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
       auth,
       credentialResolver: extension.credentialResolver,
       jwtBearer: extension.jwtBearer,
-      onPublicChange: purgePublicCache,
+      onPublicChange: () => purgePublicCache(sharedPublicCacheTag),
     });
 
     const app = new Hono<WorkerHonoEnv<Env>>();
@@ -278,7 +288,7 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
       auth,
       getRuntime,
       fetch: async (request, workerEnv, ctx) =>
-        applyCachePolicy(request, await app.fetch(request, workerEnv, ctx)),
+        applyCachePolicy(request, await app.fetch(request, workerEnv, ctx), sharedPublicCacheTag ?? null),
     };
     assembled = next;
     void auth.ready?.catch(() => {
@@ -305,11 +315,12 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
   };
 }
 
-async function purgePublicCache(): Promise<void> {
+async function purgePublicCache(publicCacheTag: string | undefined): Promise<void> {
+  if (!publicCacheTag) return;
   const { cache } = await import("cloudflare:workers");
   // Miniflare does not simulate entrypoint caching or its purge API.
   if (typeof cache.purge !== "function") return;
-  const result = await cache.purge({ tags: [PUBLIC_CACHE_TAG] });
+  const result = await cache.purge({ tags: [publicCacheTag] });
   if (!result.success) {
     console.error("Mantle public cache purge failed", result.errors);
   }
