@@ -19,7 +19,12 @@ import { useAdminLocation, useAdminRouter } from "../../app/router";
 import { api, downloadAdminFile } from "../../lib/api";
 import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
-import { entriesQueryOptions, operationsQueryOptions } from "../../lib/queries";
+import {
+  entriesQueryOptions,
+  entryEditorQueryOptions,
+  entryLandingChildQueryOptions,
+  operationsQueryOptions,
+} from "../../lib/queries";
 import type {
   AdminUser,
   Collection,
@@ -161,12 +166,8 @@ function CollectionList({
     }),
     enabled: !parentFilter || Boolean(resolvedScopeField) || Boolean(scope),
   });
-  const [visibleEntries, setVisibleEntries] = React.useState<ListEntriesResult | null>(null);
-  React.useEffect(() => {
-    if (entries.data) setVisibleEntries(entries.data);
-  }, [entries.data]);
-  const displayedEntries = entries.data ?? visibleEntries;
-  const isFirstLoad = entries.isLoading && !displayedEntries;
+  const displayedEntries = entries.data;
+  const isLoadingEntries = entries.isFetching && !displayedEntries;
 
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const clearSelection = React.useCallback(() => setSelected(new Set()), []);
@@ -371,7 +372,7 @@ function CollectionList({
         />
       ) : null}
 
-      {isFirstLoad && <EntriesSkeleton />}
+      {isLoadingEntries && <EntriesSkeleton />}
       {entries.isError && !displayedEntries && <ErrorBox error={entries.error} />}
       {displayedEntries && displayedEntries.items.length === 0 && (
         <EmptyState
@@ -534,11 +535,6 @@ function CollectionList({
               ))}
             </TableBody>
           </Table>
-          {entries.isFetching && !entries.data ? (
-            <p className="mt-3 text-xs text-muted-foreground">
-              {t(language, "collection.refreshing")}
-            </p>
-          ) : null}
           <CollectionPagination
             previousHref={displayedEntries.previous_cursor ? listHref({
               cursor: displayedEntries.previous_cursor,
@@ -991,6 +987,29 @@ function EntryRowDisplay({
   const [draftTitle, setDraftTitle] = React.useState(itemName);
   const [error, setError] = React.useState<string | null>(null);
   const confirm = useConfirm();
+  const queryClient = useQueryClient();
+  const prefetchEntry = React.useCallback(() => {
+    void queryClient.fetchQuery(entryEditorQueryOptions(row.collection, row.id))
+      .then((payload) => {
+        const childQuery = entryLandingChildQueryOptions(payload);
+        if (childQuery) return queryClient.prefetchQuery(childQuery);
+      })
+      .catch(() => undefined);
+  }, [queryClient, row.collection, row.id]);
+  const prefetchTimer = React.useRef<number | undefined>(undefined);
+  const cancelPrefetch = React.useCallback(() => {
+    if (prefetchTimer.current === undefined) return;
+    window.clearTimeout(prefetchTimer.current);
+    prefetchTimer.current = undefined;
+  }, []);
+  const schedulePrefetch = React.useCallback(() => {
+    cancelPrefetch();
+    prefetchTimer.current = window.setTimeout(() => {
+      prefetchTimer.current = undefined;
+      prefetchEntry();
+    }, 75);
+  }, [cancelPrefetch, prefetchEntry]);
+  React.useEffect(() => cancelPrefetch, [cancelPrefetch]);
 
   React.useEffect(() => {
     if (!editing) setDraftTitle(itemName);
@@ -1025,7 +1044,13 @@ function EntryRowDisplay({
   }
 
   return (
-    <TableRow>
+    <TableRow
+      onPointerEnter={schedulePrefetch}
+      onPointerLeave={cancelPrefetch}
+      onPointerDown={prefetchEntry}
+      onFocusCapture={prefetchEntry}
+      onTouchStart={prefetchEntry}
+    >
       {canDelete ? (
         <TableCell>
           <Checkbox

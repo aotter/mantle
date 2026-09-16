@@ -5,11 +5,12 @@ import { useAdminLocation } from "../../app/router";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
-import { operationsQueryOptions } from "../../lib/queries";
+import { entryEditorQueryOptions, operationsQueryOptions } from "../../lib/queries";
 import { entryEditPath, hasFoldedChildCollections, isFoldedFieldChild } from "../../lib/collection-nav";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { Collection, EntryEditorPayload, SiteInfo, StaffOperation } from "../../lib/types";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ErrorBox, PageHeader } from "../../ui/page";
 import { CollectionView } from "./collection-view";
@@ -26,10 +27,7 @@ export function ParentEntryWorkbench({
   const { language } = usePreferences();
   const location = useAdminLocation();
   const childParam = new URLSearchParams(location.search).get("child");
-  const query = useQuery<EntryEditorPayload>({
-    queryKey: ["entry-editor", collectionName, entryId],
-    queryFn: () => api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}`),
-  });
+  const query = useQuery<EntryEditorPayload>(entryEditorQueryOptions(collectionName, entryId));
   const site = useQuery<SiteInfo>({
     queryKey: ["site"],
     queryFn: () => api.get<SiteInfo>("/site"),
@@ -40,7 +38,7 @@ export function ParentEntryWorkbench({
     [operationsQuery.data, collectionName],
   );
 
-  if (query.isLoading) return <div className="text-sm text-muted-foreground">{t(language, "collection.refreshing")}</div>;
+  if (query.isLoading) return <Skeleton className="h-64 w-full" />;
   if (query.isError) return <ErrorBox error={query.error} />;
   if (!query.data) return <ErrorBox error={new Error(t(language, "common.unknownError"))} />;
 

@@ -1,6 +1,7 @@
 import { api } from "./api";
 import { navigationTools, type AdminToolCatalog } from "./admin-tools";
-import type { AuthMethodInfo, DeveloperConsoleSnapshot, ListEntriesResult, StaffOperation, ViewManifestInfo } from "./types";
+import { isFoldedFieldChild } from "./collection-nav";
+import type { AuthMethodInfo, DeveloperConsoleSnapshot, EntryEditorPayload, ListEntriesResult, StaffOperation, ViewManifestInfo } from "./types";
 
 export const COLLECTION_PAGE_SIZE = 50;
 
@@ -72,6 +73,26 @@ export function entriesQueryOptions(args: EntriesQueryArgs) {
       return api.get<ListEntriesResult>(`/entries?${qs.toString()}`);
     },
   };
+}
+
+export function entryEditorQueryOptions(collectionName: string, entryId: string) {
+  return {
+    queryKey: ["entry-editor", collectionName, entryId] as const,
+    queryFn: () => api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}`),
+  };
+}
+
+export function entryLandingChildQueryOptions(payload: EntryEditorPayload) {
+  const child = payload.related.find((section) =>
+    section.relationship.kind === "field" &&
+    isFoldedFieldChild(section.collection, payload.collection.name, section.relationship.childField)
+  );
+  if (!child) return null;
+  return entriesQueryOptions({
+    ...entriesQueryArgsFromSearch(child.collection.name, ""),
+    scopeField: child.relationship.childField,
+    scopeValue: String(child.relationship.parentValue ?? payload.entry.id),
+  });
 }
 
 export function withNavigationTools(catalog: AdminToolCatalog): AdminToolCatalog {
