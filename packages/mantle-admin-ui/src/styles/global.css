@@ -118,6 +118,15 @@
 
   .mantle-html-editor { min-height: 8rem; }
 
+  :is(.mantle-markdown-preview, .mantle-html-editor) :where(h1, h2, h3, h4, h5, h6) { margin-block: 1.25em 0.5em; font-weight: 650; line-height: 1.25; }
+  :is(.mantle-markdown-preview, .mantle-html-editor) h1 { font-size: 1.875rem; }
+  :is(.mantle-markdown-preview, .mantle-html-editor) h2 { font-size: 1.5rem; }
+  :is(.mantle-markdown-preview, .mantle-html-editor) h3 { font-size: 1.25rem; }
+  :is(.mantle-markdown-preview, .mantle-html-editor) :where(h4, h5, h6) { font-size: 1.125rem; }
+  :is(.mantle-markdown-preview, .mantle-html-editor) p { margin-block: 0.75rem; }
+  :is(.mantle-markdown-preview, .mantle-html-editor) a { color: var(--primary); text-decoration: underline; text-underline-offset: 0.2em; }
+  :is(.mantle-markdown-preview, .mantle-html-editor) > :first-child { margin-top: 0; }
+  :is(.mantle-markdown-preview, .mantle-html-editor) > :last-child { margin-bottom: 0; }
   :is(.mantle-markdown-preview, .mantle-html-editor) :where(ul, ol) { margin-block: 0.5rem; padding-left: 1.5rem; }
   :is(.mantle-markdown-preview, .mantle-html-editor) ul { list-style: disc; }
   :is(.mantle-markdown-preview, .mantle-html-editor) ol { list-style: decimal; }
