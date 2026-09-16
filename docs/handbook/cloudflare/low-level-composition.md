@@ -126,7 +126,8 @@ function assemble(env: Env) {
 async function purgePublicCache() {
   try {
     const { cache } = await import("cloudflare:workers");
-    await cache.purge({ tags: [CACHE_TAG] });
+    const result = await cache.purge({ tags: [CACHE_TAG] });
+    if (!result.success) console.error("public cache purge failed", result.errors);
   } catch (error) {
     console.error("public cache purge failed", error);
   }
