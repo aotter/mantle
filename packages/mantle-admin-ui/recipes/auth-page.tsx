@@ -1,8 +1,9 @@
 import * as React from "react";
 import "@aotter/mantle-admin-ui/kit.css";
 import {
+  AuthCard,
+  AuthLegalNotice,
   Button,
-  Card,
   CardContent,
   CardDescription,
   CardHeader,
@@ -10,12 +11,10 @@ import {
   Input,
   Label,
   OneTimeCodeInput,
+  type AuthLegalLinks,
 } from "@aotter/mantle-admin-ui/kit";
 
-export type AuthLegalLinks = {
-  privacy?: string;
-  terms?: string;
-};
+export type { AuthLegalLinks };
 
 export type AuthPageProps = {
   brand?: React.ReactNode;
@@ -25,19 +24,6 @@ export type AuthPageProps = {
   onVerifyCode(email: string, code: string): Promise<void>;
   title?: string;
 };
-
-export function LegalNotice({ legal }: { legal?: AuthLegalLinks }) {
-  if (!legal?.privacy && !legal?.terms) return null;
-  return (
-    <p className="text-xs leading-5 text-muted-foreground">
-      By continuing, an account may be created. {legal.terms ? <>
-        You agree to the <a className="underline underline-offset-2" href={legal.terms} target="_blank" rel="noreferrer">Terms of Use</a>
-      </> : null}{legal.terms && legal.privacy ? " and " : null}{legal.privacy ? <>
-        {legal.terms ? "you" : "You"} acknowledge the <a className="underline underline-offset-2" href={legal.privacy} target="_blank" rel="noreferrer">Privacy Policy</a>
-      </> : null}.
-    </p>
-  );
-}
 
 export function AuthPage({
   brand = "Mantle",
@@ -64,14 +50,13 @@ export function AuthPage({
   };
 
   return (
-    <main className="grid min-h-svh place-items-center bg-background px-5 py-16 text-foreground">
-      <Card className="w-full max-w-md rounded-3xl shadow-2xl">
-        <CardHeader className="gap-3 p-7 pb-4 sm:p-9 sm:pb-4">
+    <AuthCard wide>
+      <CardHeader className="gap-3 p-7 pb-4 sm:p-9 sm:pb-4">
           <div className="mb-7 text-lg font-semibold">{brand}</div>
           <CardTitle className="text-3xl tracking-tight">{title}</CardTitle>
           <CardDescription className="text-base leading-6">{description}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6 p-7 pt-3 sm:p-9 sm:pt-3">
+      </CardHeader>
+      <CardContent className="space-y-6 p-7 pt-3 sm:p-9 sm:pt-3">
           <form onSubmit={submit} className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="auth-email">Email</Label>
@@ -88,10 +73,9 @@ export function AuthPage({
               Use another email or resend
             </button> : null}
           </form>
-          <LegalNotice legal={legal} />
+          <AuthLegalNotice legal={legal} />
           {error ? <p role="alert" className="rounded-lg border border-destructive p-3 text-sm text-destructive">{error}</p> : null}
-        </CardContent>
-      </Card>
-    </main>
+      </CardContent>
+    </AuthCard>
   );
 }

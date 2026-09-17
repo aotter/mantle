@@ -1,3 +1,4 @@
+export * from "./components/auth-card";
 export * from "./components/one-time-code-input";
 export * from "./components/ui/alert-dialog";
 export * from "./components/ui/avatar";

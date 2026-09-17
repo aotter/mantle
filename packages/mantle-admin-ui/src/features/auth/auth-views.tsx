@@ -3,8 +3,8 @@ import type { OAuthConsentInfo, OAuthConsentRequest } from "@aotter/mantle-admin
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Loader2Icon, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AuthCard } from "@/components/auth-card";
 import {
-  Card,
   CardContent,
   CardDescription,
   CardHeader,
@@ -21,30 +21,9 @@ import { signOut } from "../../lib/auth";
 import { ThemeToggle } from "../../layout/preference-controls";
 import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 
-function AuthPage({
-  children,
-  wide = false,
-}: {
-  children: React.ReactNode;
-  wide?: boolean;
-}): React.ReactElement {
-  return (
-    <main className="flex min-h-svh items-center justify-center p-6">
-      <Card
-        className={`${wide ? "w-full max-w-md" : "w-full max-w-sm"} relative [&>[data-slot=card-header]]:pe-14`}
-      >
-        <div className="absolute top-2 end-2 z-10">
-          <ThemeToggle />
-        </div>
-        {children}
-      </Card>
-    </main>
-  );
-}
-
 export function GateLoading(): React.ReactElement {
   return (
-    <AuthPage>
+    <AuthCard action={<ThemeToggle />}>
       <CardHeader>
         <Skeleton className="h-4 w-24" />
       </CardHeader>
@@ -52,7 +31,7 @@ export function GateLoading(): React.ReactElement {
         <Skeleton className="h-3 w-full" />
         <Skeleton className="h-3 w-2/3" />
       </CardContent>
-    </AuthPage>
+    </AuthCard>
   );
 }
 
@@ -60,14 +39,14 @@ export function GateError({ error }: { error: unknown }): React.ReactElement {
   const { language } = usePreferences();
   const message = error instanceof Error ? error.message : t(language, "common.unknownError");
   return (
-    <AuthPage>
+    <AuthCard action={<ThemeToggle />}>
       <CardHeader className="text-center">
         <CardTitle className="text-xl">
           <h1>{t(language, "auth.error.title")}</h1>
         </CardTitle>
         <CardDescription role="alert">{message}</CardDescription>
       </CardHeader>
-    </AuthPage>
+    </AuthCard>
   );
 }
 
@@ -78,7 +57,7 @@ export function AccessDeniedView({
 }): React.ReactElement {
   const { language } = usePreferences();
   return (
-    <AuthPage wide>
+    <AuthCard action={<ThemeToggle />} wide>
       <CardHeader className="text-center">
         <div className="mx-auto mb-3 inline-flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
           <AlertTriangle className="size-5" aria-hidden />
@@ -107,7 +86,7 @@ export function AccessDeniedView({
           {t(language, "common.signOut")}
         </Button>
       </CardContent>
-    </AuthPage>
+    </AuthCard>
   );
 }
 
@@ -196,7 +175,7 @@ export function SignInView(): React.ReactElement {
   const methods = useQuery<AuthMethodInfo[]>(authMethodsQueryOptions());
 
   return (
-    <AuthPage>
+    <AuthCard action={<ThemeToggle />}>
       <CardHeader>
         <CardDescription>{t(language, "auth.signIn.eyebrow")}</CardDescription>
         <CardTitle className="text-xl">
@@ -238,7 +217,7 @@ export function SignInView(): React.ReactElement {
           </div>
         ) : null}
       </CardContent>
-    </AuthPage>
+    </AuthCard>
   );
 }
 
@@ -263,7 +242,7 @@ export function OAuthConsentView(): React.ReactElement {
   if (consent.isError) return <GateError error={consent.error} />;
   if (!consent.data) {
     return (
-      <AuthPage wide>
+      <AuthCard action={<ThemeToggle />} wide>
         <CardHeader>
           <CardDescription>{t(language, "oauth.consent.eyebrow")}</CardDescription>
           <CardTitle className="text-xl">
@@ -271,12 +250,12 @@ export function OAuthConsentView(): React.ReactElement {
           </CardTitle>
           <CardDescription>{t(language, "oauth.consent.invalidBody")}</CardDescription>
         </CardHeader>
-      </AuthPage>
+      </AuthCard>
     );
   }
 
   return (
-    <AuthPage wide>
+    <AuthCard action={<ThemeToggle />} wide>
       <CardHeader>
         <CardDescription>{t(language, "oauth.consent.eyebrow")}</CardDescription>
         <CardTitle className="text-xl">
@@ -320,18 +299,18 @@ export function OAuthConsentView(): React.ReactElement {
           </SignInButton>
         </form>
       </CardContent>
-    </AuthPage>
+    </AuthCard>
   );
 }
 
 /** Members can manage their own grants without access to staff Admin APIs. */
 export function ConnectedAppsPage(): React.ReactElement {
   return (
-    <AuthPage wide>
+    <AuthCard action={<ThemeToggle />} wide>
       <CardContent className="pt-6">
         <ConnectedAppsView />
       </CardContent>
-    </AuthPage>
+    </AuthCard>
   );
 }
 

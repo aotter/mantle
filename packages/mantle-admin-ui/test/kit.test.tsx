@@ -1,8 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { Button, Card, CardContent, Input } from "../src/kit";
-import { AuthPage, LegalNotice } from "../recipes/auth-page";
+import { AuthCard, AuthLegalNotice, Button, Card, CardContent, CardHeader, Input } from "../src/kit";
 
 describe("Mantle UI kit", () => {
   it("renders the shared shadcn primitives without an Admin runtime", () => {
@@ -15,10 +14,10 @@ describe("Mantle UI kit", () => {
   });
 
   it("renders only the legal links supplied by the host application", () => {
-    const privacy = renderToStaticMarkup(<LegalNotice legal={{ privacy: "/privacy" }} />);
+    const privacy = renderToStaticMarkup(<AuthLegalNotice legal={{ privacy: "/privacy" }} />);
     expect(privacy).toContain("Privacy Policy");
     expect(privacy).not.toContain("Terms of Use");
-    expect(renderToStaticMarkup(<AuthPage legal={{ terms: "/terms" }} onSendCode={async () => {}} onVerifyCode={async () => {}} />))
-      .toContain("Terms of Use");
+    expect(renderToStaticMarkup(<AuthCard action={<button>Theme</button>}><CardHeader>Sign in</CardHeader></AuthCard>))
+      .toContain("max-w-sm");
   });
 });
