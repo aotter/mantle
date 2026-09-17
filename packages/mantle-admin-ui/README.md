@@ -8,6 +8,27 @@ This package builds a React/Tailwind static bundle. When it is installed,
 It currently provides the system admin shell, preference UI, site overview
 surfaces, and Mantle-branded system pages.
 
+## Mantle UI kit
+
+Applications that need the same React/shadcn visual language without embedding
+the Admin product can import the domain-neutral primitives and compiled theme:
+
+```tsx
+import { Button, Card, CardContent, Input } from "@aotter/mantle-admin-ui/kit";
+import "@aotter/mantle-admin-ui/kit.css";
+```
+
+Use `@aotter/mantle-admin-ui/tokens.css` when an application only needs the
+Mantle color, radius, background, and sidebar variables. The kit intentionally
+does not export `AdminApp`, authenticated layouts, routes, queries, or feature
+views; use the static Admin SPA or sandbox preview for the complete product.
+
+`dist/r/auth-page.json` is a shadcn registry item for a working email OTP page.
+It is copied into the consuming application, so its agent or author can change
+the markup and flow without forking this package. The recipe accepts optional
+Privacy Policy and Terms of Use links; their discovery and enforcement remain
+the application's responsibility.
+
 This package is prerelease software. Its `package.json` is the exact version
 authority; the API surface may change until `v0.1.0`.
 

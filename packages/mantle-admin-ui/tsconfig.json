@@ -6,7 +6,8 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@aotter/mantle-admin-ui/kit": ["./src/kit.ts"]
     },
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
@@ -19,5 +20,5 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true
   },
-  "include": ["src", "vite.config.ts", "vitest.config.ts", "test"]
+  "include": ["src", "recipes", "vite.config.ts", "vitest.config.ts", "test"]
 }
