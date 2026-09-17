@@ -23,13 +23,20 @@
       "types": "./dist/server.d.ts",
       "import": "./dist/server.js"
     },
-    "./index.html": "./dist/index.html"
+    "./index.html": "./dist/index.html",
+    "./kit": {
+      "types": "./dist/kit.d.ts",
+      "import": "./dist/kit.js"
+    },
+    "./kit.css": "./dist/kit.css",
+    "./tokens.css": "./dist/tokens.css",
+    "./registry/auth-page.json": "./dist/r/auth-page.json"
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && vite build --config vite.kit.config.ts && tsc -p tsconfig.kit.json && shadcn build registry.json -o dist/r",
     "watch": "vite build --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vite.config.ts"

@@ -62,6 +62,7 @@ function serverExportsPlugin(): Plugin {
         resolve(dist, "server.d.ts"),
         `${banner}export declare const systemTokensCss: string;\n`,
       );
+      writeFileSync(resolve(dist, "tokens.css"), systemTokensCss);
     },
   };
 }
