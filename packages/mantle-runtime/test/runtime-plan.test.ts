@@ -72,7 +72,7 @@ spec:
     expect(plan.views["native"]?.query).toEqual({
       kind: "native",
       dialect: "sqlite",
-      statement: "SELECT id FROM entries",
+      statement: "SELECT _mantle_id FROM posts",
     });
     expect(plan.lifecycleHooks).toEqual([{
       schema: "posts",
@@ -235,7 +235,7 @@ kind: View
 metadata: { name: native }
 spec:
   surface: staff
-  sql: SELECT id FROM entries
+  sql: SELECT _mantle_id FROM posts
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: Trigger

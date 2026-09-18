@@ -41,9 +41,10 @@ native table. The table contains:
 - one column for every top-level Schema property;
 - native indexes for every `indexes` and `uniqueIndexes` tuple.
 
-Scalar JSON Schema types map to SQLite affinities: string to `TEXT`, integer
-and boolean to `INTEGER`, and number to `REAL`. Objects and arrays use `TEXT`
-containing canonical JSON. Nullable values use SQL `NULL`.
+Single scalar JSON Schema types map to SQLite affinities: string to `TEXT`,
+integer and boolean to `INTEGER`, and number to `REAL`. Objects, arrays, unions,
+and otherwise polymorphic values use `TEXT` containing canonical JSON so a
+round trip cannot change their JSON type. Nullable values use SQL `NULL`.
 
 Business columns remain nullable at the database layer. Mantle allows an
 incomplete authoring draft; Runtime validation enforces required fields when a
@@ -99,35 +100,38 @@ RuntimePlan and emits a versioned SQL migration artifact containing:
 - whether the change is expand-only or destructive.
 
 Mantle deterministically emits initial tables and safe additive changes. Field
-renames, type conversions, data transforms, table removal, and narrowing
-constraints require an explicitly authored migration. AI may author that
-migration, but the reviewed artifact is immutable deployment input; production
-does not ask a model to generate SQL.
+renames, type conversions, data transforms, and narrowing constraints are
+destructive in the pre-beta contract. Cloud rejects them; operators export,
+reset or rebuild the database, and import through an application-reviewed
+process. Production neither generates nor accepts arbitrary migration SQL.
 
 Preparation records applied migration ids in the existing `_migrations` ledger.
-The enclosing immutable artifact checksum protects the ordered SQL and
-fingerprints. Preparation rejects an unknown source fingerprint, changed
-artifact checksum, skipped revision, or target mismatch. Every migration is
-transactionally retryable. Failed preparation leaves the previous storage
-revision active.
+The enclosing immutable artifact checksum protects the ordered SQL,
+fingerprints, and target projections. Preparation rejects an unknown source
+fingerprint, changed artifact checksum, skipped revision, or target mismatch.
+Generated migrations are idempotent and retryable after partial application;
+activation and integrity verification run on every attempt instead of being
+treated as one-time ledger entries.
 
-Because SQLite cannot make arbitrary destructive schema changes safely with a
-single `ALTER TABLE`, destructive changes use create-copy-verify-swap inside a
-transaction. Generated migrations quote all identifiers and never interpolate
-runtime input.
+Generated migrations quote all identifiers and never interpolate runtime
+input. Automatic deployments retain removed fields, indexes, and tables as a
+physical superset; logical reads follow the selected plan, while retained
+storage keeps the previous Worker rollback-compatible.
 
 ### Builder support
 
 Builder keeps its in-memory or IndexedDB semantic adapter for interactive
 preview. It does not carry SQLite into portable Runtime.
 
-Each successful build also produces the same physical storage plan and
-migration artifact used by deployment. Builder verifies its checksum and shows
-the source/target fingerprints, risk classification, ordered SQL, and checksum.
+Each successful build can show a draft-to-draft storage delta for authoring
+feedback. It is not labeled as the deployment artifact: only Cloud knows the
+last successfully deployed source revision and produces the exact immutable
+artifact used by deployment. The publish result shows its source/target
+fingerprints, risk classification, ordered SQL, and checksum.
 The interactive preview continues to run the real Mantle Runtime over the
 existing IndexedDB semantic adapter; it does not carry a second SQLite runtime
 or copy preview data into one. Destructive changes remain previewable but are
-marked not deployable until reviewed migration SQL is supplied in code.
+not deployable on the pre-beta Cloud path.
 
 CI executes generated SQL against SQLite. Mantle Cloud/D1 is authoritative at
 deployment: it checks the immutable artifact, migration ledger, source/target
@@ -149,29 +153,29 @@ Every Cloud deployment pins these immutable identities:
 - migration checksum;
 - application artifact checksum.
 
-Schema-changing deployments use a short maintenance window. The deployment
+Automatic migrations are expand-only and therefore run online. The deployment
 sequence is:
 
-1. disable tenant traffic and wait for the existing write lease to end;
-2. verify the current tenant D1 storage fingerprint;
-3. apply and verify the migration;
-4. upload the Worker pinned to that target storage/runtime pair;
-5. run the canary against the pinned identities;
-6. activate traffic and record the revision.
+1. verify the current tenant D1 storage fingerprint;
+2. apply idempotent additive DDL and verify the ledger, marker, and integrity;
+3. upload an immutable Worker script named by project revision;
+4. run the canary directly against that script and the actual D1 marker;
+5. select that revision for the default and custom host routes;
+6. record the revision active.
 
-A runtime-only deployment whose storage fingerprint is unchanged may use the
-existing live upload path. The maintenance window is the deliberately simple
-first contract; measured demand may later justify online migration machinery.
+There is no KV maintenance gate: KV propagation cannot drain in-flight writes,
+and additive DDL does not need one. Destructive changes stop before deployment.
+The old revision script remains addressable, so route failure or operator
+rollback selects the previous script without rebuilding or replacing it.
 
 Automatic deployments retain old columns and tables needed by the previous
-active Worker. This keeps code rollback valid. Destructive cleanup is a later,
-explicit deployment after the previous runtime is no longer a rollback target.
-Mantle runtime upgrades use the same mechanism even when the authored Manifest
-does not change.
+active Worker. This keeps code rollback valid. Physical cleanup happens only
+during a later reset or rebuild. Mantle runtime upgrades use the same mechanism
+even when the authored Manifest does not change.
 
-Release objects are content-addressed or version-addressed. A retry reads the
-same release and migration selected by the original operation; a mutable
-`release/current` object is not valid deployment input.
+Release and application objects are content-addressed. A retry validates and
+reads the same bytes selected by the original operation; mutable release names
+are not valid deployment input.
 
 ## Consequences
 
@@ -191,8 +195,8 @@ same release and migration selected by the original operation; a mutable
   Runtime, SQLite adapters, conformance tests, Builder, and Cloud deployment.
 - Unqualified global entry lookups and implicit cross-Schema lists disappear.
 - Optional nullable fields no longer distinguish absent from explicit null.
-- Destructive schema changes require a reviewed migration and a later cleanup
-  deployment.
+- Destructive schema changes require an explicit export/reset/rebuild/import
+  operation outside automatic Cloud deployment.
 
 ## Alternatives
 
@@ -230,9 +234,9 @@ production mutation.
 4. Update memory and IndexedDB adapters to the new semantic port shape.
 5. Add build-time migration diff/artifact inspection, plus SQLite execution in
    CI and Cloud/D1 deployment verification.
-6. Pin runtime, storage, migration, and artifact identities in Cloud deploys;
-   test initial deploy, additive Schema change, runtime-only upgrade, failed
-   migration retry, and rollback.
+6. Pin content-addressed runtime, storage, migration, application, and Worker
+   revision identities in Cloud deploys; test initial deploy, additive Schema
+   change, runtime-only upgrade, partial migration retry, and route rollback.
 7. Update all public storage, Schema, Builder, deployment, and migration
    documentation after the conformance and consumer checks pass.
 
@@ -244,9 +248,9 @@ The review found and corrected three boundary mistakes before acceptance:
 
 - authored data may legitimately contain `id`, `status`, or `createdAt`, so
   physical envelope columns require the `_mantle_` prefix;
-- Builder should expose the exact immutable artifact but not embed SQLite WASM;
-  CI and Cloud/D1 already own executable DDL verification, while preview owns
-  semantic Runtime behavior over IndexedDB;
+- Builder should expose draft storage risk without pretending it knows the
+  deployed baseline; Cloud shows the exact immutable artifact, while CI and
+  Cloud/D1 own executable DDL verification and preview stays on IndexedDB;
 - Cloud must pin the runtime release and storage artifact selected when the
   operation starts; a mutable current release would make retry and rollback
   nondeterministic.

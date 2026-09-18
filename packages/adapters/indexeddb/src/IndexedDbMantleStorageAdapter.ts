@@ -60,6 +60,7 @@ export class IndexedDbMantleStorageAdapter implements MantleStorageAdapter {
       {
         upgrade(database, oldVersion, _newVersion, transaction) {
           if (oldVersion < 3 && database.objectStoreNames.contains("entries")) {
+            console.warn("[mantle] Clearing incompatible pre-0.1.2 IndexedDB preview data.");
             database.deleteObjectStore("entries");
           }
           const entries = database.objectStoreNames.contains("entries")

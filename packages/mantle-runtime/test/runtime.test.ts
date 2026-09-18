@@ -56,6 +56,7 @@ describe("SQLite runtime composition", () => {
     await createTestRuntime(options);
 
     expect(db.executions.slice(firstBootQueries).map(({ sql }) => sql)).toEqual([
+      "SELECT name FROM sqlite_schema WHERE type = 'table' AND lower(name) = 'entries' LIMIT 1",
       "SELECT fingerprint FROM _mantle_boot_state WHERE id = ? LIMIT 1",
     ]);
   });
@@ -134,14 +135,14 @@ describe("SQLite runtime composition", () => {
     });
 
     const ids = schemaTableMigrations([indexedSchema]).map(({ id }) => id);
-    expect(ids.filter((id) => id.startsWith("schema-table-v1:column:"))).toHaveLength(4);
-    expect(ids.filter((id) => id.startsWith("schema-table-v1:index:"))).toHaveLength(5);
+    expect(ids.filter((id) => id.startsWith("schema-table-v2:column:"))).toHaveLength(4);
+    expect(ids.filter((id) => id.startsWith("schema-table-v2:index:"))).toHaveLength(5);
     expect(ids.every((id) => db.appliedMigrations.has(id))).toBe(true);
     expect(db.native().prepare('PRAGMA table_info("posts")').all().map((row) => row.name))
       .toEqual(expect.arrayContaining(["_mantle_id", "_mantle_status", "title", "slug", "content"]));
   });
 
-  it("allows additive fields but rejects implicit index removal", async () => {
+  it("allows additive fields and keeps removed fields or non-unique indexes for rollback", async () => {
     const db = new InMemoryDatabase();
     const schema = postsSchema();
     await createTestRuntime({
@@ -153,8 +154,8 @@ describe("SQLite runtime composition", () => {
       properties: { ...schema.spec.schema.properties, subtitle: { type: "string" } },
     }, indexes: [["slug"]] } } as const;
     await expect(createTestRuntime({ manifests: [additive], db })).resolves.toBeDefined();
-    await expect(createTestRuntime({ manifests: [schema], db }))
-      .rejects.toThrow(/explicit destructive migration/);
+    await expect(createTestRuntime({ manifests: [schema], db })).resolves.toBeDefined();
+    expect(db.native().prepare('PRAGMA table_info("posts")').all().map((row) => row.name)).toContain("subtitle");
   });
 
   it("rejects creation with BootValidationError when a handler ref is missing", async () => {

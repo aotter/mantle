@@ -362,51 +362,10 @@ function buildOrderBy(
   return ` ORDER BY ${parts.join(", ")}`;
 }
 
-// Schema JSON property keys can be arbitrary strings per RFC 8259,
-// but SQLite's JSON1 path syntax (`$."key"`) has no documented way
-// to escape an inner `"` or `\` inside a quoted key — doubled-quote
-// escaping is the SQLite identifier convention, NOT a JSON-path
-// convention. So we always quote the path/alias (admitting hyphens,
-// spaces, etc.) but refuse `"`, `\`, and `\0` in field names —
-// those break either the JSON-path resolution or the SQL string
-// literal. Real Schema authors don't use those characters in keys;
-// rejecting them keeps the path always-resolvable.
-
-const FORBIDDEN_FIELD_CHARS = /["\\\0]/;
-
-function assertFieldNameSafe(name: string, callsite: string): void {
-  if (!FORBIDDEN_FIELD_CHARS.test(name)) return;
-  throw new DiagnosticError(
-    runtimeDiagnostic({
-      code: "INTERNAL_ERROR",
-      severity: "error",
-      path: `compileView/${callsite}`,
-      value: name,
-      expected: 'field name without `"`, `\\`, or NUL',
-      message: `field name '${name}' contains an unrepresentable character (\", \\, or NUL); Schema validation should have caught this.`,
-    }),
-  );
-}
-
-/**
- * Emit `'$."<field>"'` — a SQL string literal containing a SQLite
- * JSON path. Doubles single quotes for the surrounding SQL literal
- * (SQLite literal escape). Field name itself is guaranteed free of
- * `"` / `\` / NUL by `assertFieldNameSafe`, so the inner double-
- * quoted key needs no further escape.
- */
-function quotedJsonPath(field: string): string {
-  assertFieldNameSafe(field, "quotedJsonPath");
-  // Only `'` needs escaping for the surrounding SQL literal; field
-  // is guaranteed free of `"` / `\` / NUL.
-  return `'$."${field.replace(/'/g, "''")}"'`;
-}
-
 /**
  * SQLite quoted-identifier alias (`"hero-image"`). Used as the result
  * column name so callers read the field back under its declared key.
  */
 function quoteIdent(name: string): string {
-  assertFieldNameSafe(name, "quoteIdent");
-  return `"${name}"`;
+  return `"${name.replace(/"/g, '""')}"`;
 }

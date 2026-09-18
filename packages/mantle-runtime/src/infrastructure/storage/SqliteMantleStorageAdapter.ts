@@ -33,8 +33,10 @@ import { DatabasePendingUploadRepository } from "../persistence/DatabasePendingU
 import { DatabaseSiteConfigRepository } from "../persistence/DatabaseSiteConfigRepository.js";
 import {
   isAdditiveSchemaTableChange,
+  mergeSchemaTableProjections,
   schemaTableMigrations,
   schemaTableProjection,
+  validateSqliteSchemaTables,
 } from "./SqliteSchemaTables.js";
 import { storageFingerprint } from "./SqliteMigrationArtifact.js";
 
@@ -48,6 +50,9 @@ export interface SqliteMantleStorageAdapterOptions {
   readonly decorateSiteConfigRepository?: (
     canonical: SiteConfigRepository,
   ) => SiteConfigRepository;
+  /** Managed deployments apply reviewed DDL before boot. Runtime validates
+   *  this revision and never mutates physical schema ownership. */
+  readonly managedStorageFingerprint?: string;
 }
 
 /** Existing SQLite/D1 implementation behind the semantic preparation seam. */
@@ -59,7 +64,7 @@ export class SqliteMantleStorageAdapter implements MantleStorageAdapter {
   constructor(
     private readonly db: DatabaseDriver,
     private readonly siteDefaults?: SiteDefaults,
-    options: SqliteMantleStorageAdapterOptions = {},
+    private readonly options: SqliteMantleStorageAdapterOptions = {},
   ) {
     const canonical = this.canonicalSiteConfig = new DatabaseSiteConfigRepository(db);
     this.siteConfig = options.decorateSiteConfigRepository?.(canonical) ?? canonical;
@@ -67,7 +72,19 @@ export class SqliteMantleStorageAdapter implements MantleStorageAdapter {
 
   async prepare(plan: RuntimePlan): Promise<PreparedMantleStorage> {
     const prepared = sqliteStoragePorts(this.db, plan, this.siteConfig);
-    const schemas = Object.values(plan.schemas).map((schema) => schema.manifest);
+    const schemas = [...validateSqliteSchemaTables(Object.values(plan.schemas).map((schema) => schema.manifest))];
+    await assertNoLegacyStorage(this.db);
+    if (this.options.managedStorageFingerprint) {
+      const planned = await storageFingerprint(schemas);
+      if (planned !== this.options.managedStorageFingerprint) throw new Error("Managed storage fingerprint does not match the RuntimePlan.");
+      await this.siteConfig.seed(this.siteDefaults);
+      assertDeploymentPlan(plan, { siteLocales: await this.siteConfig.readLocales() });
+      await assertSchemaTableOwnership(this.db, schemas);
+      const active = await this.db.prepare("SELECT fingerprint FROM _mantle_storage_state WHERE id = 1").first<{ fingerprint: string }>();
+      if (active?.fingerprint !== planned) throw new Error("Managed storage revision is not active.");
+      this.canonicalSiteConfig.usePreparedLocales();
+      return prepared;
+    }
     const schemaMigrations = schemaTableMigrations(schemas);
     const fingerprint = await bootFingerprint({
       semanticFingerprint: plan.semanticFingerprint,
@@ -84,9 +101,11 @@ export class SqliteMantleStorageAdapter implements MantleStorageAdapter {
     assertDeploymentPlan(plan, { siteLocales: await this.siteConfig.readLocales() });
     await assertSchemaTableOwnership(this.db, schemas);
     await this.db.migrations.runAll(schemaMigrations);
+    const tracked = new Map((await this.db.prepare("SELECT name, projection FROM _mantle_schema_tables")
+      .all<{ name: string; projection: string }>()).map(({ name, projection }) => [name.toLowerCase(), projection]));
     for (const schema of schemas) {
-      await this.db.prepare("UPDATE _mantle_schema_tables SET projection = ? WHERE name = ?")
-        .bind(schemaTableProjection(schema), schema.metadata.name).run();
+      await this.db.prepare("INSERT INTO _mantle_schema_tables(name, projection) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET projection = excluded.projection")
+        .bind(schema.metadata.name, mergeSchemaTableProjections(tracked.get(schema.metadata.name.toLowerCase()), schemaTableProjection(schema))).run();
     }
     await this.db.prepare("INSERT INTO _mantle_storage_state(id, fingerprint) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET fingerprint = excluded.fingerprint")
       .bind(await storageFingerprint(schemas)).run();
@@ -101,14 +120,11 @@ async function assertSchemaTableOwnership(
   schemas: readonly SchemaManifest[],
 ): Promise<void> {
   const tracked = new Map((await db.prepare("SELECT name, projection FROM _mantle_schema_tables")
-    .all<{ name: string; projection: string }>()).map(({ name, projection }) => [name, projection]));
-  const desired = new Set(schemas.map((schema) => schema.metadata.name));
-  const retired = [...tracked.keys()].find((name) => !desired.has(name));
-  if (retired) throw new Error(`Schema table '${retired}' requires an explicit destructive migration.`);
+    .all<{ name: string; projection: string }>()).map(({ name, projection }) => [name.toLowerCase(), projection]));
   for (const schema of schemas) {
-    const object = await db.prepare("SELECT type FROM sqlite_schema WHERE name = ? LIMIT 1")
+    const object = await db.prepare("SELECT type FROM sqlite_schema WHERE lower(name) = lower(?) LIMIT 1")
       .bind(schema.metadata.name).first<{ type: string }>();
-    const previous = tracked.get(schema.metadata.name);
+    const previous = tracked.get(schema.metadata.name.toLowerCase());
     if (object && previous === undefined) {
       throw new Error(`Schema '${schema.metadata.name}' collides with an existing SQLite ${object.type}.`);
     }
@@ -118,6 +134,14 @@ async function assertSchemaTableOwnership(
     if (previous !== undefined && !isAdditiveSchemaTableChange(previous, schemaTableProjection(schema))) {
       throw new Error(`Schema table '${schema.metadata.name}' requires an explicit destructive migration.`);
     }
+  }
+}
+
+async function assertNoLegacyStorage(db: DatabaseDriver): Promise<void> {
+  const legacy = await db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND lower(name) = 'entries' LIMIT 1")
+    .first<{ name: string }>();
+  if (legacy) {
+    throw new Error("LEGACY_STORAGE_RESET_REQUIRED: rebuild this pre-native-table database before upgrading; see docs/migration-0.1.2.md.");
   }
 }
 

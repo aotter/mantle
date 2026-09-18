@@ -38,9 +38,16 @@ compatibility repository were removed.
 This is intentionally a storage-format break before beta. Reset and
 re-bootstrap development or internal-alpha content databases that contain the
 old `entries` layout, or export and import them through an application-reviewed
-migration. Automatic artifacts cover initial and additive changes only.
-Renames, type changes, data transforms and removals require reviewed SQL with a
-fixed checksum; production never asks an AI to invent migration SQL.
+migration. Automatic artifacts cover initial and additive changes only. Removed
+columns and tables remain physically present so the previous Worker can still
+run. Renames, type changes and data transforms require export, a reset or
+rebuilt database, and an application-reviewed import. The pre-beta Cloud path
+does not accept or execute destructive SQL.
+
+Row APIs are now Schema-qualified. `EntryRepository.get` and
+`EntryReader.readById` accept `{ collection, id }`; Admin entry detail and
+mutation routes require `?collection=<schema>`, and generic MCP entry tools
+require `collection`. Generated `entries.<schema>` bindings supply it for you.
 
 A new project follows [direct authoring](direct-authoring.md). Templates and
 provider setup are not hidden inside `generate`. Future Builder/landing-next

@@ -73,6 +73,39 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
     expect((await repo.get({ id: "p1", collection: "posts" }))?.data.locale).toBeNull();
   });
 
+  it("round-trips union values and legacy nullable fields without changing their meaning", async () => {
+    const flexible: SchemaManifest = {
+      ...schema,
+      metadata: { name: "flexible" },
+      spec: { ...schema.spec, schema: { type: "object", properties: {
+        value: { type: ["string", "integer"] },
+        note: { type: "string", nullable: true },
+      } } },
+    };
+    await db.migrations.runAll(schemaTableMigrations([flexible]));
+    const flexibleRepo = new DatabaseEntryRepository(db, new Map([["flexible", flexible]]));
+    await flexibleRepo.create({ id: "one", collection: "flexible", status: "draft", data: { value: 123, note: null }, authorId: null, now: 1 });
+    await flexibleRepo.create({ id: "two", collection: "flexible", status: "draft", data: { value: "123" }, authorId: null, now: 2 });
+    expect((await flexibleRepo.get({ id: "one", collection: "flexible" }))?.data).toEqual({ value: 123, note: null });
+    expect((await flexibleRepo.get({ id: "two", collection: "flexible" }))?.data).toEqual({ value: "123", note: null });
+  });
+
+  it("uses the authored id column for both ordering and cursor values", async () => {
+    const authored: SchemaManifest = {
+      ...schema,
+      metadata: { name: "authored_ids" },
+      spec: { ...schema.spec, schema: { type: "object", properties: { id: { type: "string" } } } },
+    };
+    await db.migrations.runAll(schemaTableMigrations([authored]));
+    const authoredRepo = new DatabaseEntryRepository(db, new Map([["authored_ids", authored]]));
+    await authoredRepo.create({ id: "a", collection: "authored_ids", status: "draft", data: { id: "z" }, authorId: null, now: 1 });
+    await authoredRepo.create({ id: "b", collection: "authored_ids", status: "draft", data: { id: "y" }, authorId: null, now: 2 });
+    const first = await authoredRepo.list({ collection: "authored_ids", limit: 1, sort: { field: "id", direction: "asc" } });
+    const second = await authoredRepo.list({ collection: "authored_ids", limit: 1, sort: { field: "id", direction: "asc" }, cursor: first.nextCursor });
+    expect(first.rows.map((row) => row.data.id)).toEqual(["y"]);
+    expect(second.rows.map((row) => row.data.id)).toEqual(["z"]);
+  });
+
   it("update bumps version + persists data", async () => {
     await repo.create({
       id: "p1",

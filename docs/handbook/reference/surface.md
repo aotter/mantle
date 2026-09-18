@@ -31,9 +31,9 @@ All `/admin/api/*` routes require a staff session, carry a 1 MiB JSON body limit
 | `GET /admin/api/views-manifest` | `{ views: … }` — the View manifest projection the SPA renders from. |
 | `GET /admin/api/operations` | `{ operations: [ { name, title, description, input, uiSchema, triggers, rowBindings } ] }`, filtered per caller by re-evaluating each Procedure's `requires.auth.all`. |
 | `POST /admin/api/operations/:name` | Invokes a staff-operable Procedure through the same use case the staff MCP surface uses. `404` when the name is not staff-operable. |
-| `GET /admin/api/me`, `/collections`, `/collections/:name/statistics`, `/entries`, `/entries/export`, `/entries/:id`, `/site` | Session, catalog and entry reads. |
-| `POST /admin/api/entries`, `PATCH /admin/api/entries/:id` | Create and edit. Contributors are limited to drafts on publishing Schemas. |
-| `POST /admin/api/entries/:id/publish`, `/unpublish`, `DELETE /admin/api/entries/:id` | Lifecycle. Editor or above. |
+| `GET /admin/api/me`, `/collections`, `/collections/:name/statistics`, `/entries`, `/entries/export`, `/entries/:id`, `/site` | Session, catalog and entry reads. Entry detail requires `?collection=<schema>`. |
+| `POST /admin/api/entries`, `PATCH /admin/api/entries/:id` | Create and edit. Entry mutation routes require `?collection=<schema>`; contributors are limited to drafts on publishing Schemas. |
+| `POST /admin/api/entries/:id/publish`, `/unpublish`, `DELETE /admin/api/entries/:id` | Lifecycle. Requires `?collection=<schema>` and editor or above. |
 | `POST /admin/api/media/uploads`, `POST /admin/api/media/uploads/:uploadGroupId/commit`, `GET /admin/api/media`, `GET`, `PATCH` and `DELETE /admin/api/media/:id` | Media lifecycle. Editor or above. |
 | `GET /admin/api/staff`, `PATCH /admin/api/staff/:id/role`, `POST /admin/api/staff/invitations`, `DELETE /admin/api/staff/invitations/:id`, `GET /admin/api/developer-console`, `GET` and `PATCH /admin/api/site-settings` | Owner only. |
 | `GET /admin/api/members` | Editor or above. |
@@ -152,7 +152,7 @@ mantle.triggers.expireOrderHttp;   // { name, source, target }
 await mantle.runtime.archive.execute({ id, ctx });
 ```
 
-`entries.<collection>` exposes `createDraft`, `get`, `list` and `delete`. `runtime` is the underlying Core runtime, so the typed projection never hides it. A host that owns its own lifecycle can skip generation entirely and call `runtime.executeView({ view: "published-notes" })` directly.
+`entries.<collection>` exposes `createDraft`, `get`, `list` and `delete`, supplying the required collection identity to Core. Generic MCP entry tools require a `collection` argument. `runtime` is the underlying Core runtime, so the typed projection never hides it. A host that owns its own lifecycle can skip generation entirely and call `runtime.executeView({ view: "published-notes" })` directly.
 
 ## Packages
 

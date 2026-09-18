@@ -5,6 +5,7 @@ import {
   buildSqliteMigrationArtifact,
   verifySqliteMigrationArtifact,
 } from "../src/infrastructure/storage/SqliteMigrationArtifact.js";
+import { splitSqlStatements } from "../src/infrastructure/boot/SqliteMigrationRunner.js";
 
 describe("SQLite migration artifacts", () => {
   it("emits deterministic initial and additive artifacts", async () => {
@@ -12,7 +13,7 @@ describe("SQLite migration artifacts", () => {
     const same = await buildSqliteMigrationArtifact([], [schema({ title: { type: "string" } })]);
     expect(initial).toEqual(same);
     expect(initial.destructive).toBe(false);
-    expect(initial.migrations.some(({ sql }) => sql.includes('CREATE TABLE "posts"'))).toBe(true);
+    expect(initial.migrations.some(({ sql }) => sql.includes('CREATE TABLE IF NOT EXISTS "posts"'))).toBe(true);
 
     const additive = await buildSqliteMigrationArtifact(
       [schema({ title: { type: "string" } })],
@@ -32,19 +33,37 @@ describe("SQLite migration artifacts", () => {
     db.close();
   });
 
-  it("requires reviewed SQL for destructive changes and detects mutation", async () => {
+  it("marks unsupported conversions for rebuild and detects mutation", async () => {
     const before = schema({ title: { type: "string" } });
     const after = schema({ title: { type: "integer" } });
-    await expect(buildSqliteMigrationArtifact([before], [after])).rejects.toThrow("explicit reviewed");
-    const artifact = await buildSqliteMigrationArtifact([before], [after], {
-      id: "app:posts-title-integer",
-      description: "Rebuild posts with integer title",
-      sql: 'CREATE TABLE "posts_next" ("id" TEXT PRIMARY KEY);',
-    });
+    const artifact = await buildSqliteMigrationArtifact([before], [after]);
     expect(artifact.destructive).toBe(true);
-    expect(artifact.migrations.some(({ sql }) => sql.includes("DO UPDATE SET projection"))).toBe(true);
     await expect(verifySqliteMigrationArtifact({ ...artifact, migrations: [{ ...artifact.migrations[0]!, sql: "SELECT 1" }] }))
       .rejects.toThrow("checksum mismatch");
+  });
+
+  it("normalizes property order and fingerprints codecs, nullability, and unions", async () => {
+    const a = schema({ title: { type: "string" }, rank: { type: "integer" } });
+    const reordered = schema({ rank: { type: "integer" }, title: { type: "string" } });
+    expect((await buildSqliteMigrationArtifact([a], [reordered])).sourceFingerprint)
+      .toBe((await buildSqliteMigrationArtifact([a], [reordered])).targetFingerprint);
+    expect((await buildSqliteMigrationArtifact([a], [schema({ title: { type: "string" }, rank: { type: "boolean" } })])).destructive).toBe(true);
+    expect((await buildSqliteMigrationArtifact([a], [schema({ title: { type: "string", nullable: true }, rank: { type: "integer" } })])).destructive).toBe(true);
+    expect((await buildSqliteMigrationArtifact([a], [schema({ title: { type: ["string", "integer"] }, rank: { type: "integer" } })])).destructive).toBe(true);
+  });
+
+  it("rejects SQLite namespace collisions before emitting DDL", async () => {
+    await expect(buildSqliteMigrationArtifact([], [{ ...schema({ title: { type: "string" } }), metadata: { name: "session" } }]))
+      .rejects.toThrow("reserved SQLite table");
+    await expect(buildSqliteMigrationArtifact([], [schema({ _mantle_id: { type: "string" } })]))
+      .rejects.toThrow("reserved SQLite namespace");
+    await expect(buildSqliteMigrationArtifact([], [schema({ Title: { type: "string" }, title: { type: "string" } })]))
+      .rejects.toThrow("reserved SQLite namespace");
+  });
+
+  it("splits scripts without breaking semicolons in identifiers, values, or comments", () => {
+    expect(splitSqlStatements(`CREATE TABLE "part;code" (value TEXT DEFAULT ';'); -- ;\nINSERT INTO "part;code" VALUES ('a;''b');`))
+      .toEqual([`CREATE TABLE "part;code" (value TEXT DEFAULT ';')`, `-- ;\nINSERT INTO "part;code" VALUES ('a;''b')`]);
   });
 });
 
@@ -61,6 +80,12 @@ function apply(db: DatabaseSync, artifact: Awaited<ReturnType<typeof buildSqlite
       throw error;
     }
   }
+  for (const item of artifact.projections) {
+    db.prepare("INSERT INTO _mantle_schema_tables(name, projection) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET projection=excluded.projection")
+      .run(item.name, item.projection);
+  }
+  db.prepare("INSERT INTO _mantle_storage_state(id, fingerprint) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET fingerprint=excluded.fingerprint")
+    .run(artifact.targetFingerprint);
 }
 
 function schema(properties: NonNullable<SchemaManifest["spec"]["schema"]["properties"]>): SchemaManifest {

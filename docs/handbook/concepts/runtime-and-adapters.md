@@ -155,7 +155,7 @@ await runtime.invokeTrigger({ trigger: "rename-board-mcp", input, ctx });
 
 Platform bindings belong at the composition root only: the Worker entry, `createMantleWorker` options, the `bindings` hook and `wrangler.jsonc`. Procedure handlers receive them through `ctx.env`.
 
-Application code never queries Mantle-owned tables — `entries`, `site_config`, media, Auth — and never reaches through a raw database handle to get at them. Use Manifests, runtime use cases, `runtime.entries`, `runtime.siteConfig`, generated `bindMantle(runtime)` and Views instead, and do not copy generated-column names or construct SDK storage keys. An application may of course own its own tables behind its own repository; that is different from writing to Core's.
+Application code does not bypass Mantle's storage ports to write Schema tables, `site_config`, media, or Auth tables. Each Schema is a native table, but Mantle still owns its metadata columns, lifecycle checks, and optimistic concurrency. Use Manifests, runtime use cases, `runtime.entries`, `runtime.siteConfig`, generated `bindMantle(runtime)`, and Views instead. An application may own separate tables behind its own repository; that is different from writing around Core's invariants.
 
 If a normal feature cannot be expressed through a purpose-shaped surface, treat that as a gap in the abstraction rather than teaching the project Mantle's internals. Internals change between versions; the ports do not.
 

@@ -496,7 +496,7 @@ kind: View
 metadata: { name: native-posts }
 spec:
   surface: public
-  sql: SELECT * FROM entries
+  sql: SELECT _mantle_id FROM posts
 `;
 
 const settingsManifest = `---

@@ -395,11 +395,13 @@ describe("compileView", () => {
     expect(c.params).toEqual(["x"]);
   });
 
-  it("rejects field names that Schema validation cannot represent", () => {
-    expect(() => compileView(view({
+  it("escapes double quotes in field identifiers", () => {
+    const c = compileView(view({
       from: "posts",
       filter: { eq: { field: `title\"; DROP TABLE posts; --`, value: "x" } },
-    }))).toThrow(/unrepresentable character/);
+    }));
+    expect(c.sql).toContain(`"title""; DROP TABLE posts; --"`);
+    expect(c.params).toEqual(["x"]);
   });
 
   it("clamps caller-supplied show to View.spec.limit (server-enforced cap)", () => {

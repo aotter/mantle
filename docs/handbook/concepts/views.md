@@ -154,15 +154,15 @@ spec:
   title: Requests by tag
   surface: staff
   sql: |
-    SELECT r.id AS requestId,
+    SELECT r._mantle_id AS requestId,
            r.subject AS subject,
            r.requestStatus AS requestStatus,
            tag.value AS tag,
-           r.createdAt AS createdAt
+           r._mantle_created_at AS createdAt
     FROM requests AS r
     JOIN json_each(r.tags) AS tag
     WHERE r.requestStatus = :requestStatus
-    ORDER BY r.createdAt DESC
+    ORDER BY r._mantle_created_at DESC
   params:
     type: object
     required: [requestStatus]

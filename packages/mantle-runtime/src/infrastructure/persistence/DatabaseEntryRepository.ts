@@ -49,7 +49,9 @@ import {
 import {
   decodeField,
   encodeField,
+  fieldColumn,
   fieldSql,
+  isNullableJsonSchema,
   sqliteSchemaTable,
   type SqliteSchemaTable,
 } from "../storage/SqliteSchemaTables.js";
@@ -204,8 +206,8 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
     const last = page.at(-1);
     return {
       rows: page.map((row) => rowFromDb(table, row)),
-      previousCursor: first && (backward ? hasMore : cursor !== null) ? encodeEntrySortCursor(sort.field, sort.direction, sortValue(first, sort.field), first._mantle_id) : undefined,
-      nextCursor: last && (backward ? cursor !== null : hasMore) ? encodeEntrySortCursor(sort.field, sort.direction, sortValue(last, sort.field), last._mantle_id) : undefined,
+      previousCursor: first && (backward ? hasMore : cursor !== null) ? encodeEntrySortCursor(sort.field, sort.direction, sortValue(first, table.schema, sort.field), first._mantle_id) : undefined,
+      nextCursor: last && (backward ? cursor !== null : hasMore) ? encodeEntrySortCursor(sort.field, sort.direction, sortValue(last, table.schema, sort.field), last._mantle_id) : undefined,
     };
   }
 
@@ -320,6 +322,8 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
 
   private encodedData(table: SqliteSchemaTable, data: Record<string, unknown>): unknown[] {
     const properties = table.schema.spec.schema.properties ?? {};
+    const unknown = Object.keys(data).find((field) => !Object.hasOwn(properties, field));
+    if (unknown) throw new Error(`Schema '${table.schema.metadata.name}' has no field '${unknown}'.`);
     return table.fields.map((field) => encodeField(data[field], properties[field]!));
   }
 
@@ -392,7 +396,10 @@ function rowFromDb(table: SqliteSchemaTable, row: NativeEntryRow, dataFields?: r
     if (field === "locale" && typeof value === "string") locale = value;
     if ((!dataFields || dataFields.includes(field)) && value !== undefined) data[field] = value;
   }
-  for (const field of dataFields ?? []) if (!Object.hasOwn(data, field)) data[field] = null;
+  for (const field of dataFields ?? []) {
+    const property = properties[field];
+    if (property && isNullableJsonSchema(property) && !Object.hasOwn(data, field)) data[field] = null;
+  }
   return {
     id: row._mantle_id,
     collection: table.schema.metadata.name,
@@ -417,8 +424,9 @@ function encodeScalar(schema: SchemaManifest, field: string, value: unknown): un
   return property ? encodeField(value, property) : value;
 }
 
-function sortValue(row: NativeEntryRow, field: string): string | number {
-  const physical = field === "updatedAt" ? "_mantle_updated_at" : field === "createdAt" ? "_mantle_created_at" : field === "id" ? "_mantle_id" : field;
+function sortValue(row: NativeEntryRow, schema: SchemaManifest, field: string): string | number {
+  const physical = fieldColumn(schema, field);
+  if (!physical) throw new Error(`Schema '${schema.metadata.name}' has no field '${field}'.`);
   const value = row[physical];
   if (typeof value !== "string" && typeof value !== "number") throw new Error(`non-scalar sort value for ${field}`);
   return value;
