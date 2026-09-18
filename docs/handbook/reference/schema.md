@@ -164,7 +164,7 @@ Closed Admin-only roots: `fields`, `list`, `nav`. Nested keys are closed too. Un
 | `fields.<field>.widget` | Only `textarea`. The field must be a top-level property with a string type (`string` or `[string, null]`). |
 | `list.filterField` | Operational Schemas only. A declared property with a non-empty string `enum` that is the first field of some `indexes` or `uniqueIndexes` tuple. Admin renders the enum as sidebar links and list tabs. |
 | `list.primaryField` | Operational Schemas only. A non-empty top-level scalar property; rendered as the linked leading column. |
-| `list.columns` | Operational Schemas only. Top-level scalar properties, no repeats and not repeating `primaryField`. |
+| `list.columns` | Operational Schemas only. Top-level properties, no repeats and not repeating `primaryField`; structured values render as compact JSON. |
 | `nav.standalone` | Boolean. `true` also emits a main Admin Nav list entry with a **parent autocomplete filter**. It does not unfold: required `x-mantle-ref` children still compose under the parent. Omit or `false` means fold-only (discover via the parent-entry workbench). Rejected on top-level Schemas, `translates` children, and Schemas with no eligible required-ref parent. |
 | `nav.parentField` | Allowed only with `standalone: true`. Names a required `x-mantle-ref` field used as the parent filter. One eligible required ref is inferred; more than one requires an explicit `parentField`. Do not rely on property-order heuristics when multiple refs exist. |
 

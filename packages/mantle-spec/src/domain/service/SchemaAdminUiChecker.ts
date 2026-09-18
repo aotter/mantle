@@ -210,7 +210,7 @@ export function checkSchemaAdminUi(schema: SchemaManifest): {
     return invalid(problem(
       "/spec/uiSchema/list/columns",
       columns,
-      "an array of non-empty top-level scalar field names",
+      "an array of non-empty top-level field names",
       "Schema.spec.uiSchema.list.columns must be an array of field-name strings.",
     ));
   }
@@ -236,12 +236,12 @@ export function checkSchemaAdminUi(schema: SchemaManifest): {
         `Schema '${schema.metadata.name}' list presentation references unknown field '${field}'.`,
       ));
     }
-    if (!isScalar(property)) {
+    if (field === normalizedPrimary && !isScalar(property)) {
       return invalid(problem(
-        `/spec/uiSchema/list/${field === normalizedPrimary ? "primaryField" : "columns"}`,
+        "/spec/uiSchema/list/primaryField",
         field,
         "a top-level scalar Schema property",
-        `Schema '${schema.metadata.name}' list field '${field}' must be scalar.`,
+        `Schema '${schema.metadata.name}' list primaryField '${field}' must be scalar.`,
       ));
     }
   }
