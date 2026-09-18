@@ -58,14 +58,34 @@ describe("Better Auth 1.7 MCP smoke", () => {
       expect(JSON.parse(values.get(sessionKey!)!).user.role).toBe("owner");
 
       const prepare = vi.spyOn(db, "prepare");
-      expect((await createAuth({
+      const cachedAuth = createAuth({
         database: db,
         sessionCacheKv: kv,
         baseURL: ORIGIN,
         secret: "x".repeat(40),
         methods: [{ kind: "email-otp", sender: { send: async () => {} } }],
-      }).getSession(new Request(ORIGIN, { headers: { cookie: cookies } })))?.user.role).toBe("owner");
+      });
+      const cachedSession = await cachedAuth.getSession(new Request(ORIGIN, { headers: { cookie: cookies } }));
+      expect(cachedSession?.user.role).toBe("owner");
+      expect(cachedSession?.user.roleCurrent).toBeUndefined();
       expect(prepare.mock.calls.some(([sql]) => String(sql).includes("_migrations"))).toBe(false);
+
+      const replacement = sqliteD1();
+      try {
+        const replacementAuth = createAuth({
+          database: replacement.db,
+          sessionCacheKv: kv,
+          baseURL: ORIGIN,
+          secret: "x".repeat(40),
+          methods: [{ kind: "email-otp", sender: { send: async () => {} } }],
+        });
+        const staleSession = await replacementAuth.getSession(new Request(ORIGIN, { headers: { cookie: cookies } }));
+        expect(staleSession?.user.role).toBe("owner");
+        expect(staleSession?.user.roleCurrent).toBeUndefined();
+        expect(await replacementAuth.getUserRole(staleSession!.user.id)).toBeNull();
+      } finally {
+        replacement.sqlite.close();
+      }
 
       const empty = sqliteD1();
       const log = vi.spyOn(console, "error").mockImplementation(() => {});

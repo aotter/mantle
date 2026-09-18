@@ -1419,7 +1419,11 @@ export function createAuth(config: CreateAuthConfig): Auth {
             ...session,
             user: {
               ...session.user,
-              ...(Object.hasOwn(session.user, "role") ? { roleCurrent: true as const } : {}),
+              // Secondary storage can outlive or be shared across a D1 replacement.
+              // Its user snapshot is therefore not authoritative for staff access.
+              ...(!config.sessionCacheKv && Object.hasOwn(session.user, "role")
+                ? { roleCurrent: true as const }
+                : {}),
             },
           }
         : null;
