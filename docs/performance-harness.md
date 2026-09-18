@@ -50,7 +50,7 @@ pnpm exec mantle-harness indexes --require account-members --format json
 ```
 
 Without `--require-public` or `--require`, findings are advisory. A required
-path fails on an `entries` table scan, a temporary ORDER BY B-tree, or a
+path fails on a required Schema-table scan, a temporary ORDER BY B-tree, or a
 data-field predicate/order that does not use a declared Schema index.
 Projection alone does not require an index. `mantle validate` remains a pure
 correctness check; no performance grammar or manifest atom was added.
@@ -92,7 +92,7 @@ diagnostic, while query/row counts are the stable assertions.
 | Finding | Disposition |
 |---|---|
 | Public cache hits read D1 first | Removed from Worker code. Cloudflare's entrypoint Workers Cache runs before the Worker; Core has no inner render cache. |
-| Slug/locale reads bypass generated indexes | Fixed by the shared schema-aware entry-read boundary. A 10,000-row page MISS measured 2 queries / 5 rows read. |
+| Slug/locale reads bypass Schema indexes | Fixed by the shared schema-aware entry-read boundary over native columns. A 10,000-row page MISS measured 2 queries / 5 rows read. |
 | OFFSET pagination | Retained only where the View/Admin contract explicitly uses it, with a 500-row response cap. Public content lists and discovery now use forward keyset pages; they are not covered by the old 500-row claim. |
 | Admin substring search scans | Accepted only for the authenticated Admin collection browser, with a 500-row response cap. Large/search-heavy sites should add a purpose-shaped indexed View or dedicated search service; do not expose this scan publicly. |
 | Published list/sitemap/llms paths lack system indexes | Fixed with measured partial indexes for published global, locale, collection, and collection+locale ordering. The 100-row and 10,000-row API runs both measured 1 query / 20 rows read. |

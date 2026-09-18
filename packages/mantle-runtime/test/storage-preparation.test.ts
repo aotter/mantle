@@ -185,7 +185,7 @@ describe("prepareDeployment", () => {
     expect((await prepared.storage.views.execute({ view: "published-posts" })).rows).toEqual([
       { id: "app-post", title: "Application table" },
     ]);
-    expect(await prepared.storage.entries.readPublished()).toEqual([
+    expect(await prepared.storage.entries.readPublished({ collection: "posts" })).toEqual([
       expect.objectContaining({ id: "app-post", data: { title: "Application table" } }),
     ]);
   });

@@ -12,7 +12,7 @@ export interface ComposeLlmsTxtRequest {
   readonly limit?: number;
   /** Include public non-localized entries alongside the requested locale. */
   readonly includeUnlocalized?: boolean;
-  /** Optional collection limit used by collection-list markdown mirrors. */
-  readonly collection?: string;
+  /** Ordered Schema tables to publish. */
+  readonly collections: readonly string[];
   readonly pathFor?: (entry: Entry, locale: string) => string | null;
 }

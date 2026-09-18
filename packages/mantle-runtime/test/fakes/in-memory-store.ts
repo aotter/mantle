@@ -21,6 +21,7 @@ import type {
 import type {
   CreateEntryArgs,
   DeleteEntryArgs,
+  EntryKey,
   EntryRepository,
   FindEntryByDataFieldArgs,
   FindEntryByDataFieldsArgs,
@@ -50,7 +51,7 @@ export class InMemoryEntryRepository implements EntryRepository, EntryReader {
   ) {}
 
   async create(args: CreateEntryArgs): Promise<EntryRow> {
-    if (this.rows.has(args.id)) throw new Error(`duplicate id: ${args.id}`);
+    if (this.rows.has(rowKey(args.collection, args.id))) throw new Error(`duplicate id: ${args.id}`);
     const schema = this.schemasByName?.get(args.collection);
     if (schema?.spec.uniqueIndexes) {
       for (const uq of schema.spec.uniqueIndexes) {
@@ -75,16 +76,16 @@ export class InMemoryEntryRepository implements EntryRepository, EntryReader {
       createdAt: args.now,
       updatedAt: args.now,
     };
-    this.rows.set(args.id, row);
+    this.rows.set(rowKey(args.collection, args.id), row);
     return row;
   }
 
-  async get(id: string): Promise<EntryRow | null> {
-    return this.rows.get(id) ?? null;
+  async get(args: EntryKey): Promise<EntryRow | null> {
+    return this.rows.get(rowKey(args.collection, args.id)) ?? null;
   }
 
   async update(args: UpdateEntryArgs): Promise<EntryRow> {
-    const row = this.rows.get(args.id);
+    const row = this.rows.get(rowKey(args.collection, args.id));
     if (!row) throw new EntryVersionConflict(args.id, args.expectedVersion, -1);
     if (row.version !== args.expectedVersion) {
       throw new EntryVersionConflict(args.id, args.expectedVersion, row.version);
@@ -109,25 +110,25 @@ export class InMemoryEntryRepository implements EntryRepository, EntryReader {
       version: row.version + 1,
       updatedAt: args.now,
     };
-    this.rows.set(args.id, next);
+    this.rows.set(rowKey(args.collection, args.id), next);
     return next;
   }
 
   async delete(args: DeleteEntryArgs): Promise<{ readonly removed: boolean }> {
-    const row = this.rows.get(args.id);
-    if (!row || row.collection !== args.collection) return { removed: false };
+    const row = this.rows.get(rowKey(args.collection, args.id));
+    if (!row) return { removed: false };
     if (row.version !== args.expectedVersion) {
       throw new EntryVersionConflict(args.id, args.expectedVersion, row.version);
     }
     if (row.status !== args.expectedStatus) {
       throw new EntryStatusConflict(args.id, args.expectedStatus, row.status);
     }
-    const removed = this.rows.delete(args.id);
+    const removed = this.rows.delete(rowKey(args.collection, args.id));
     return { removed };
   }
 
   async transitionStatus(args: TransitionStatusArgs): Promise<EntryRow> {
-    const row = this.rows.get(args.id);
+    const row = this.rows.get(rowKey(args.collection, args.id));
     if (!row) throw new EntryStatusConflict(args.id, args.expectedStatus ?? args.to, args.to);
     if (args.expectedVersion !== undefined && row.version !== args.expectedVersion) {
       throw new EntryVersionConflict(args.id, args.expectedVersion, row.version);
@@ -141,7 +142,7 @@ export class InMemoryEntryRepository implements EntryRepository, EntryReader {
       version: row.version + 1,
       updatedAt: args.now,
     };
-    this.rows.set(args.id, next);
+    this.rows.set(rowKey(args.collection, args.id), next);
     return next;
   }
 
@@ -213,8 +214,8 @@ export class InMemoryEntryRepository implements EntryRepository, EntryReader {
     return matches[0] ?? null;
   }
 
-  async readById(id: string): Promise<Entry | null> {
-    const row = await this.get(id);
+  async readById(args: EntryKey): Promise<Entry | null> {
+    const row = await this.get(args);
     return row ? projectPublicEntry(row) : null;
   }
 
@@ -255,17 +256,17 @@ export class InMemoryEntryRepository implements EntryRepository, EntryReader {
       .map(projectPublicEntry);
   }
 
-  async readPublished(args: ReadPublishedEntriesArgs = {}): Promise<readonly Entry[]> {
+  async readPublished(args: ReadPublishedEntriesArgs): Promise<readonly Entry[]> {
     return [...this.rows.values()]
       .filter((item) => item.status === "published")
-      .filter((item) => args.collection === undefined || item.collection === args.collection)
+      .filter((item) => item.collection === args.collection)
       .filter((item) => args.locale === undefined || (args.locale === null ? item.locale == null : item.locale === args.locale))
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, args.limit ?? this.rows.size)
       .map(projectPublicEntry);
   }
 
-  async readPublishedPage(args: ReadPublishedPageArgs = {}): Promise<PublishedEntryPage> {
+  async readPublishedPage(args: ReadPublishedPageArgs): Promise<PublishedEntryPage> {
     const rows = await this.readPublished({ collection: args.collection,
       locale: args.includeUnlocalized && typeof args.locale === "string" ? undefined : args.locale });
     return paginatePublishedEntries(args.includeUnlocalized && typeof args.locale === "string"
@@ -286,8 +287,12 @@ export class InMemoryEntryRepository implements EntryRepository, EntryReader {
   /** Test helper — directly insert/replace rows without going through
    *  the chokepoint. Use sparingly. */
   _seed(row: EntryRow): void {
-    this.rows.set(row.id, row);
+    this.rows.set(rowKey(row.collection, row.id), row);
   }
+}
+
+function rowKey(collection: string, id: string): string {
+  return `${collection}\0${id}`;
 }
 
 function entrySortValue(row: EntryRow, field: string): string | number {

@@ -5,6 +5,7 @@ import { fieldLabel } from "../../lib/field-label";
 import { api, ApiError } from "../../lib/api";
 import { asRenderable } from "../../lib/errors";
 import { resolveLocalizedText } from "../../lib/localized-text";
+import { entryApiPath } from "../../lib/queries";
 import type { EntryEditorPayload, JsonSchema, StaffOperation } from "../../lib/types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -301,7 +302,7 @@ export function OperationDialog({
     queryKey: ["entry-editor", row?.collection ?? "", row?.id ?? ""],
     queryFn: () => {
       if (!row) throw new Error("row operation is missing its row");
-      return api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(row.id)}`);
+      return api.get<EntryEditorPayload>(entryApiPath(row.collection, row.id));
     },
     enabled: Boolean(row),
   });
@@ -355,7 +356,7 @@ export function OperationDialog({
   const occEntryQuery = useQuery<EntryEditorPayload>({
     refetchOnMount: "always",
     queryKey: ["entry-editor", "occ", occTargetId ?? ""],
-    queryFn: () => api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(occTargetId!)}`),
+    queryFn: () => api.get<EntryEditorPayload>(entryApiPath(operation.targetCollection ?? row?.collection ?? "", occTargetId!)),
     enabled: Boolean(hasExpectedVersion && occTargetId && occTargetId !== row?.id),
   });
 

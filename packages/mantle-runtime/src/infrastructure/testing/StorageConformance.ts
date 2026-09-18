@@ -66,34 +66,35 @@ export async function runStorageConformance(
 
 const collection = "conformance-posts";
 const otherCollection = "conformance-other";
+const key = (id: string, target = collection) => ({ id, collection: target });
 const checks: readonly (readonly [string, (storage: PreparedMantleStorage) => Promise<void>])[] = [
   ["entries.crud", async ({ entries }) => {
-    equal(await entries.get("a"), null, "missing get");
-    equal(await entries.readById("a"), null, "missing readById");
+    equal(await entries.get(key("a")), null, "missing get");
+    equal(await entries.readById(key("a")), null, "missing readById");
     const args = entry("a");
     const created = await entries.create(args);
     equal(created, {
       id: "a", collection, status: "draft", version: 1, data: args.data,
       authorId: "synthetic-author", createdAt: 100, updatedAt: 100, locale: "en",
     }, "created row");
-    equal(await entries.get("a"), created, "persisted create");
+    equal(await entries.get(key("a")), created, "persisted create");
     const updated = await entries.update({
       id: "a", collection, expectedVersion: 1, data: { title: "Replacement" }, now: 200,
     });
     equal(updated, {
       id: "a", collection, status: "draft", version: 2,
-      data: { title: "Replacement" }, authorId: "synthetic-author",
+      data: { title: "Replacement", locale: null }, authorId: "synthetic-author",
       createdAt: 100, updatedAt: 200,
     }, "update replaces data and clears lifted locale");
-    equal(await entries.get("a"), updated, "persisted update");
+    equal(await entries.get(key("a")), updated, "persisted update");
     equal(await entries.delete({
       id: "a", collection: otherCollection, expectedVersion: 2, expectedStatus: "draft",
     }), { removed: false }, "delete respects collection");
-    equal(await entries.get("a"), updated, "wrong-collection delete preserves row");
+    equal(await entries.get(key("a")), updated, "wrong-collection delete preserves row");
     const deletion = { id: "a", collection, expectedVersion: 2, expectedStatus: "draft" } as const;
     equal(await entries.delete(deletion), { removed: true }, "delete existing row");
-    equal(await entries.get("a"), null, "deleted get");
-    equal(await entries.readById("a"), null, "deleted public read");
+    equal(await entries.get(key("a")), null, "deleted get");
+    equal(await entries.readById(key("a")), null, "deleted public read");
     equal(await entries.delete(deletion), { removed: false }, "delete missing row");
   }],
   ["entries.version-conflicts", async ({ entries }) => {
@@ -106,7 +107,7 @@ const checks: readonly (readonly [string, (storage: PreparedMantleStorage) => Pr
     assert(rejected?.status === "rejected", "concurrent loser rejects");
     assert(rejected.reason instanceof EntryVersionConflict, "concurrent loser is EntryVersionConflict");
     equal([rejected.reason.id, rejected.reason.expected, rejected.reason.actual], ["a", 1, 2], "OCC details");
-    const before = await entries.get("a");
+    const before = await entries.get(key("a"));
     assert(before !== null, "concurrent winner is persisted");
     equal(before.version, 2, "only one version increment");
     await conflict(() => entries.update({
@@ -118,7 +119,7 @@ const checks: readonly (readonly [string, (storage: PreparedMantleStorage) => Pr
     await conflict(() => entries.delete({
       id: "a", collection, expectedVersion: 1, expectedStatus: "draft",
     }), EntryVersionConflict, 1, 2);
-    equal(await entries.get("a"), before, "version conflicts leave row unchanged");
+    equal(await entries.get(key("a")), before, "version conflicts leave row unchanged");
   }],
   ["entries.status-conflicts", async ({ entries }) => {
     const original = await entries.create(entry("a"));
@@ -128,23 +129,23 @@ const checks: readonly (readonly [string, (storage: PreparedMantleStorage) => Pr
     await conflict(() => entries.delete({
       id: "a", collection, expectedVersion: 1, expectedStatus: "published",
     }), EntryStatusConflict, "published", "draft");
-    equal(await entries.get("a"), original, "status conflicts leave row unchanged");
+    equal(await entries.get(key("a")), original, "status conflicts leave row unchanged");
     const published = await entries.transitionStatus({
       id: "a", collection, expectedStatus: "draft", expectedVersion: 1, to: "published", now: 200,
     });
     equal(published, { ...original, status: "published", version: 2, updatedAt: 200 }, "successful status transition");
-    equal(await entries.get("a"), published, "persisted transition");
+    equal(await entries.get(key("a")), published, "persisted transition");
   }],
   ["entries.clone-isolation", async ({ entries }) => {
     const data = { title: "Original", nested: { values: ["stored"] } };
     const created = await entries.create({ ...entry("a"), data });
     data.nested.values.push("input mutation");
     created.data["title"] = "returned mutation";
-    const expected = { title: "Original", nested: { values: ["stored"] } };
-    equal((await entries.get("a"))?.data, expected, "create data is isolated from storage");
+    const expected = { title: "Original", nested: { values: ["stored"] }, locale: null };
+    equal((await entries.get(key("a")))?.data, expected, "create data is isolated from storage");
     const readers = [
-      () => entries.get("a"),
-      () => entries.readById("a"),
+      () => entries.get(key("a")),
+      () => entries.readById(key("a")),
       async () => (await entries.list({ collection })).rows[0],
     ];
     for (const read of readers) {
@@ -152,13 +153,13 @@ const checks: readonly (readonly [string, (storage: PreparedMantleStorage) => Pr
       assert(row != null, "isolation fixture exists");
       const nested = row.data["nested"] as { values: string[] };
       nested.values.push("read mutation");
-      equal((await entries.get("a"))?.data, expected, "nested read mutation does not persist");
+      equal((await entries.get(key("a")))?.data, expected, "nested read mutation does not persist");
     }
     const replacement = { nested: { values: ["replacement"] } };
     const updated = await entries.update({ id: "a", collection, expectedVersion: 1, data: replacement, now: 200 });
     replacement.nested.values.push("input mutation");
     (updated.data["nested"] as { values: string[] }).values.push("returned mutation");
-    equal((await entries.get("a"))?.data, { nested: { values: ["replacement"] } }, "update data is isolated from storage");
+    equal((await entries.get(key("a")))?.data, { nested: { values: ["replacement"] }, locale: null }, "update data is isolated from storage");
   }],
   ["entries.read-helpers", async ({ entries }) => {
     for (const args of [
@@ -195,7 +196,7 @@ const checks: readonly (readonly [string, (storage: PreparedMantleStorage) => Pr
     equal((await entries.findByDataFields({ collection, fields: { slug: "shared", locale: "en" }, excludeId: "draft" }))?.id, "en", "composite read and excludeId");
     equal(await entries.findByDataFields({ collection, fields: { slug: "absent", locale: "en" } }), null, "unmatched composite read");
     const publicRows = [
-      await entries.readById("en"),
+      await entries.readById(key("en")),
       await entries.readBySlug({ ...query, locale: "en" }),
       await entries.readByDataField({ collection, field: "slug", value: "shared" }),
       ...await entries.readByDataFieldIn({ collection, field: "group", values: ["g"] }),
@@ -207,7 +208,7 @@ const checks: readonly (readonly [string, (storage: PreparedMantleStorage) => Pr
     for (const row of publicRows) {
       assert(row !== null, "public projection exists");
       equal(Object.keys(row).filter((key) => !allowed.has(key)), [], "public projection excludes persistence fields");
-      const stored = await entries.get(row.id);
+      const stored = await entries.get(key(row.id, row.collection));
       assert(stored !== null, "public row has a stored counterpart");
       const { authorId: _authorId, ...projection } = stored;
       equal(row, projection, "public projection preserves public fields");

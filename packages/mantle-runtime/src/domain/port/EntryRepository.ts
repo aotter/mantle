@@ -18,7 +18,7 @@ import type { HandlerContext } from "../model/HandlerContext.js";
  */
 export interface EntryRepository {
   create(args: CreateEntryArgs): Promise<EntryRow>;
-  get(id: string): Promise<EntryRow | null>;
+  get(args: EntryKey): Promise<EntryRow | null>;
   /** Throws `EntryVersionConflict` on OCC mismatch. */
   update(args: UpdateEntryArgs): Promise<EntryRow>;
   delete(args: DeleteEntryArgs): Promise<{ readonly removed: boolean }>;
@@ -42,6 +42,11 @@ export interface EntryRepository {
   findByDataFields(args: FindEntryByDataFieldsArgs): Promise<EntryRow | null>;
 }
 
+export interface EntryKey {
+  readonly id: string;
+  readonly collection: string;
+}
+
 /**
  * Hook-related fields shared by every mutating chokepoint args type.
  * The persistence-layer impl ignores these; the
@@ -53,11 +58,9 @@ export interface EntryRepository {
  * decorator when callers don't supply one (test paths, internal
  * boot-time writes).
  *
- * `collection` is required on every mutation other than `create` so
- * the decorator can short-circuit hook firing on no-hook Schemas
- * without paying an extra `inner.get(id)` round-trip just to learn
- * the row's collection. Callers always know the collection at write
- * time (use cases hold the schema; MCP carries it in the request).
+ * `collection` is required on every operation so native-table adapters
+ * address one Schema table directly. Callers know the collection from the
+ * compiled handler, route, or generated Schema binding.
  */
 export interface MutationHookFields {
   readonly hookContext?: HandlerContext;

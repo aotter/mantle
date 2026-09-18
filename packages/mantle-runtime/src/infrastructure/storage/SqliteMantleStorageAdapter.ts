@@ -26,14 +26,17 @@ import {
   CANONICAL_MIGRATIONS,
   isBootCurrent,
   markBootCurrent,
-  reconcileSchemaIndexes,
-  reconcileSchemaSqlViews,
-  schemaIndexMigrations,
 } from "../boot/index.js";
 import { DatabaseEntryRepository } from "../persistence/DatabaseEntryRepository.js";
 import { DatabaseMediaAssetRepository } from "../persistence/DatabaseMediaAssetRepository.js";
 import { DatabasePendingUploadRepository } from "../persistence/DatabasePendingUploadRepository.js";
 import { DatabaseSiteConfigRepository } from "../persistence/DatabaseSiteConfigRepository.js";
+import {
+  isAdditiveSchemaTableChange,
+  schemaTableMigrations,
+  schemaTableProjection,
+} from "./SqliteSchemaTables.js";
+import { storageFingerprint } from "./SqliteMigrationArtifact.js";
 
 export interface SqliteMantleStorageAdapterOptions {
   /**
@@ -64,9 +67,12 @@ export class SqliteMantleStorageAdapter implements MantleStorageAdapter {
 
   async prepare(plan: RuntimePlan): Promise<PreparedMantleStorage> {
     const prepared = sqliteStoragePorts(this.db, plan, this.siteConfig);
+    const schemas = Object.values(plan.schemas).map((schema) => schema.manifest);
+    const schemaMigrations = schemaTableMigrations(schemas);
     const fingerprint = await bootFingerprint({
       semanticFingerprint: plan.semanticFingerprint,
       siteDefaults: this.siteDefaults,
+      schemaMigrations,
     });
     if (await isBootCurrent(this.db, fingerprint)) {
       this.canonicalSiteConfig.usePreparedLocales();
@@ -76,15 +82,42 @@ export class SqliteMantleStorageAdapter implements MantleStorageAdapter {
     await this.db.migrations.runAll(CANONICAL_MIGRATIONS);
     await this.siteConfig.seed(this.siteDefaults);
     assertDeploymentPlan(plan, { siteLocales: await this.siteConfig.readLocales() });
-
-    const schemas = Object.values(plan.schemas).map((schema) => schema.manifest);
-    const indexMigrations = schemaIndexMigrations(schemas);
-    await this.db.migrations.runAll(indexMigrations);
-    await reconcileSchemaIndexes(this.db, indexMigrations, schemas);
-    await reconcileSchemaSqlViews(this.db, schemas);
+    await assertSchemaTableOwnership(this.db, schemas);
+    await this.db.migrations.runAll(schemaMigrations);
+    for (const schema of schemas) {
+      await this.db.prepare("UPDATE _mantle_schema_tables SET projection = ? WHERE name = ?")
+        .bind(schemaTableProjection(schema), schema.metadata.name).run();
+    }
+    await this.db.prepare("INSERT INTO _mantle_storage_state(id, fingerprint) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET fingerprint = excluded.fingerprint")
+      .bind(await storageFingerprint(schemas)).run();
     // Mark only after every check and reconciliation succeeds so retry is safe.
     await markBootCurrent(this.db, fingerprint);
     return prepared;
+  }
+}
+
+async function assertSchemaTableOwnership(
+  db: DatabaseDriver,
+  schemas: readonly SchemaManifest[],
+): Promise<void> {
+  const tracked = new Map((await db.prepare("SELECT name, projection FROM _mantle_schema_tables")
+    .all<{ name: string; projection: string }>()).map(({ name, projection }) => [name, projection]));
+  const desired = new Set(schemas.map((schema) => schema.metadata.name));
+  const retired = [...tracked.keys()].find((name) => !desired.has(name));
+  if (retired) throw new Error(`Schema table '${retired}' requires an explicit destructive migration.`);
+  for (const schema of schemas) {
+    const object = await db.prepare("SELECT type FROM sqlite_schema WHERE name = ? LIMIT 1")
+      .bind(schema.metadata.name).first<{ type: string }>();
+    const previous = tracked.get(schema.metadata.name);
+    if (object && previous === undefined) {
+      throw new Error(`Schema '${schema.metadata.name}' collides with an existing SQLite ${object.type}.`);
+    }
+    if (!object && previous !== undefined) {
+      throw new Error(`Mantle-owned Schema table '${schema.metadata.name}' is missing.`);
+    }
+    if (previous !== undefined && !isAdditiveSchemaTableChange(previous, schemaTableProjection(schema))) {
+      throw new Error(`Schema table '${schema.metadata.name}' requires an explicit destructive migration.`);
+    }
   }
 }
 

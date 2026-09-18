@@ -25,6 +25,7 @@ export type {
 } from "./DatabaseDriver.js";
 export type {
   EntryRepository,
+  EntryKey,
   CreateEntryArgs,
   UpdateEntryArgs,
   DeleteEntryArgs,

@@ -5,21 +5,15 @@ import type { GetEntryRequest } from "../dto/content/index.js";
 import { notFoundDiagnostic } from "./diagnostics.js";
 
 /**
- * `GetEntryUseCase` — fetch an entry by id, optionally asserting its
- * collection matches.
+ * `GetEntryUseCase` — fetch one row from its compiled Schema collection.
  */
 export class GetEntryUseCase {
   constructor(private readonly entries: EntryRepository) {}
 
   async execute(request: GetEntryRequest): Promise<EntryRow> {
     const opPath = `usecase/GetEntry/${request.id}`;
-    const row = await this.entries.get(request.id);
+    const row = await this.entries.get(request);
     if (!row) {
-      throw new DiagnosticError(
-        notFoundDiagnostic(opPath, request.collection ?? "<any>", request.id),
-      );
-    }
-    if (request.collection && row.collection !== request.collection) {
       throw new DiagnosticError(
         notFoundDiagnostic(opPath, request.collection, request.id),
       );

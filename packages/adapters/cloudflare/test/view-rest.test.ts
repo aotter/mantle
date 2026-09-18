@@ -654,7 +654,7 @@ describe("GET /admin/api/views/<name> — staff surface (#433)", () => {
       }
     });
     const viewQueries = () => h.db.executions.filter(({ sql }) =>
-      sql.startsWith("SELECT") && sql.includes("FROM entries WHERE collection = ?")
+      sql.startsWith("SELECT") && sql.includes(`FROM "posts"`)
     ).length;
     const before = viewQueries();
     const res = await h.app.request("/admin/api/views/ordersRecent/export");

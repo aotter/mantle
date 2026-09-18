@@ -162,7 +162,7 @@ const order = await runtime.createDraft.execute({
   authorId: "customer-1",
   ctx: context,
 });
-await runtime.requestPublish.execute({ id: order.id, ctx: context });
+await runtime.requestPublish.execute({ id: order.id, collection: order.collection, ctx: context });
 
 const second = createVercelMantle(options);
 await second.getRuntime();

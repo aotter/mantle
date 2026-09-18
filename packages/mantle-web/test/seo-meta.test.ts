@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DatabaseEntryRepository } from "../../mantle-runtime/src/infrastructure/persistence/DatabaseEntryRepository.js";
-import type { Entry, SiteConfig } from "@aotter/mantle-spec";
+import type { Entry, SchemaManifest, SiteConfig } from "@aotter/mantle-spec";
 import {
   composeEntrySeoMeta,
   composePageSeoMeta,
@@ -9,6 +9,8 @@ import {
 import { createPublicPathResolver } from "../src/service/PublicPathResolver.js";
 import { ComposeEntrySeoMetaUseCase } from "../src/usecase/ComposeEntrySeoMetaUseCase.js";
 import { InMemoryDatabase } from "../../mantle-runtime/test/fakes/database.js";
+import { CANONICAL_MIGRATIONS } from "../../mantle-runtime/src/infrastructure/boot/index.js";
+import { schemaTableMigrations } from "../../mantle-runtime/src/infrastructure/storage/SqliteSchemaTables.js";
 
 const site: SiteConfig = {
   title: "Mantle Publication",
@@ -184,30 +186,21 @@ describe("renderSeoTagsHtml", () => {
 describe("ComposeEntrySeoMetaUseCase (with sibling lookup)", () => {
   it("reads sibling translations from DB to populate hreflangs", async () => {
     const db = new InMemoryDatabase();
-    db.entries.set("p1", {
-      id: "p1",
-      collection: "post-translations",
-      status: "published",
-      version: 1,
-      data: JSON.stringify({ slug: "hello", title: "Hello", locale: "en" }),
-      author_id: null,
-      created_at: 1,
-      updated_at: 2,
-    });
-    db.entries.set("p1-zh", {
-      id: "p1-zh",
-      collection: "post-translations",
-      status: "published",
-      version: 1,
-      data: JSON.stringify({ slug: "hello", title: "你好", locale: "zh-TW" }),
-      author_id: null,
-      created_at: 1,
-      updated_at: 2,
-    });
+    const schema: SchemaManifest = {
+      apiVersion: "cms.mantle.aotter.net/v1", kind: "Schema", metadata: { name: "post-translations" },
+      spec: { title: "Translations", schema: { type: "object", properties: {
+        slug: { type: "string" }, title: { type: "string" }, locale: { type: "string" },
+      } } },
+    };
+    await db.migrations.runAll(CANONICAL_MIGRATIONS);
+    await db.migrations.runAll(schemaTableMigrations([schema]));
+    const repository = new DatabaseEntryRepository(db, new Map([[schema.metadata.name, schema]]));
+    await repository.create({ id: "p1", collection: schema.metadata.name, status: "published", data: { slug: "hello", title: "Hello", locale: "en" }, authorId: null, now: 2 });
+    await repository.create({ id: "p1-zh", collection: schema.metadata.name, status: "published", data: { slug: "hello", title: "你好", locale: "zh-TW" }, authorId: null, now: 2 });
     const paths = createPublicPathResolver({
       collectionRoutes: { "post-translations": { segment: "posts" } },
     });
-    const usecase = new ComposeEntrySeoMetaUseCase(new DatabaseEntryRepository(db));
+    const usecase = new ComposeEntrySeoMetaUseCase(repository);
     const meta = await usecase.execute({
       entry: {
         id: "p1",

@@ -11,24 +11,13 @@ export class SqliteMigrationRunner implements MigrationRunner {
   constructor(private readonly db: MigrationDatabase) {}
 
   async runAll(migrations: ReadonlyArray<Migration>): Promise<void> {
-    const tables = new Set((await this.db.prepare(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('_migrations', '_mantle_migrations')`,
-    ).all<{ name: string }>()).map(({ name }) => name));
-    if (!tables.has("_migrations")) {
+    const ledger = await this.db.prepare(
+      `SELECT name FROM sqlite_schema WHERE type = 'table' AND name = '_migrations'`,
+    ).first<{ name: string }>();
+    if (!ledger) {
       await this.db.prepare(
         `CREATE TABLE IF NOT EXISTS _migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)`,
       ).run();
-    }
-
-    if (tables.has("_mantle_migrations")) {
-      const uncopied = await this.db.prepare(
-        `SELECT legacy.id FROM _mantle_migrations legacy LEFT JOIN _migrations current ON current.id = legacy.id WHERE current.id IS NULL LIMIT 1`,
-      ).first<{ id: string }>();
-      if (uncopied) {
-        await this.db.prepare(
-          `INSERT OR IGNORE INTO _migrations (id, applied_at) SELECT id, applied_at FROM _mantle_migrations`,
-        ).run();
-      }
     }
 
     const applied = await this.db.prepare(`SELECT id FROM _migrations`).all<{ id: string }>();

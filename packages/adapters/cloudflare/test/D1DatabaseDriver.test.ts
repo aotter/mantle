@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { D1DatabaseDriver } from "../src/bindings/D1DatabaseDriver.js";
 
 const migration: Migration = {
-  id: "schema-index-v2:column:m2c_706f737473_736c7567_54455854",
+  id: "schema-table-v1:column:706f737473:736c7567",
   description: "test migration",
-  sql: `ALTER TABLE entries ADD COLUMN "m2c_706f737473_736c7567_54455854" TEXT`,
+  sql: `ALTER TABLE "posts" ADD COLUMN "slug" TEXT`,
 };
 
 function failingD1(winnerId: string | null) {
@@ -19,7 +19,7 @@ function failingD1(winnerId: string | null) {
     run: async () => ({ success: true, meta: {} }) as D1Result,
     all: async <T>() => ({ success: true, meta: {}, results: [] as T[] }) as D1Result<T>,
     first: async <T>() => {
-      if (sql.includes("sqlite_master")) return null;
+      if (sql.includes("sqlite_schema")) return null;
       if (sql === "SELECT id FROM _migrations WHERE id = ?") {
         return (winnerId === params[0] ? { id: winnerId } : null) as T | null;
       }
@@ -50,11 +50,13 @@ describe("D1DatabaseDriver migrations", () => {
       all: async <T>() => ({
         success: true,
         meta: {},
-        results: (sql.includes("sqlite_master")
+        results: (sql.includes("sqlite_schema")
           ? [{ name: "_migrations" }]
           : [{ id: migration.id }]) as T[],
       }) as D1Result<T>,
-      first: async () => null,
+      first: async <T>() => (
+        sql.includes("sqlite_schema") ? { name: "_migrations" } as T : null
+      ),
     }) as D1PreparedStatement;
     const driver = new D1DatabaseDriver({
       prepare: vi.fn(prepare),

@@ -11,6 +11,7 @@ import {
 import type {
   CreateEntryArgs,
   DeleteEntryArgs,
+  EntryKey,
   EntryRepository,
   FindEntryByDataFieldArgs,
   FindEntryByDataFieldsArgs,
@@ -50,8 +51,8 @@ export class LifecycleHookingEntryRepository implements EntryRepository {
     return row;
   }
 
-  get(id: string): Promise<EntryRow | null> {
-    return this.inner.get(id);
+  get(args: EntryKey): Promise<EntryRow | null> {
+    return this.inner.get(args);
   }
 
   async update(args: UpdateEntryArgs): Promise<EntryRow> {
@@ -59,7 +60,7 @@ export class LifecycleHookingEntryRepository implements EntryRepository {
     const after = this.triggerNames(args.collection, "after_update");
     if (before.length === 0 && after.length === 0) return this.inner.update(args);
 
-    const existing = await this.inner.get(args.id);
+    const existing = await this.inner.get(args);
     if (!existing) return this.inner.update(args);
     const ctx = ctxOf(args);
     const beforeId = before.length > 0 ? this.idgen.next() : undefined;
@@ -75,7 +76,7 @@ export class LifecycleHookingEntryRepository implements EntryRepository {
     const after = this.triggerNames(args.collection, "after_delete");
     if (before.length === 0 && after.length === 0) return this.inner.delete(args);
 
-    const existing = await this.inner.get(args.id);
+    const existing = await this.inner.get(args);
     if (!existing) return this.inner.delete(args);
     const ctx = ctxOf(args);
     const beforeId = before.length > 0 ? this.idgen.next() : undefined;
@@ -94,7 +95,7 @@ export class LifecycleHookingEntryRepository implements EntryRepository {
     const after = this.triggerNames(args.collection, afterHook);
     if (before.length === 0 && after.length === 0) return this.inner.transitionStatus(args);
 
-    const existing = await this.inner.get(args.id);
+    const existing = await this.inner.get(args);
     if (!existing) return this.inner.transitionStatus(args);
     const ctx = ctxOf(args);
     const beforeId = before.length > 0 ? this.idgen.next() : undefined;

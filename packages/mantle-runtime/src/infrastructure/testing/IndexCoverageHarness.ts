@@ -1,8 +1,6 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import {
   RESERVED_ENTRY_COLUMNS,
-  buildDdl,
-  buildSchemaSqlView,
   type FilterAst,
   type SchemaManifest,
   type ViewManifest,
@@ -10,6 +8,7 @@ import {
 import type { RuntimePlan } from "../../domain/service/RuntimePlanCompiler.js";
 import { compileView } from "../storage/SqliteViewCompiler.js";
 import { CANONICAL_MIGRATIONS } from "../boot/canonicalMigrations.js";
+import { quoteIdent, schemaTableMigrations } from "../storage/SqliteSchemaTables.js";
 
 export interface IndexCoverageOptions {
   readonly rowsPerSchema?: number;
@@ -70,12 +69,7 @@ export function inspectIndexCoverage(
 
   try {
     for (const migration of CANONICAL_MIGRATIONS) db.exec(migration.sql);
-    for (const schema of schemas) {
-      const ddl = buildDdl(schema);
-      for (const column of ddl.columns) db.exec(column.sql);
-      for (const index of ddl.indexes) db.exec(index.sql);
-      db.exec(buildSchemaSqlView(schema).createSql);
-    }
+    for (const migration of schemaTableMigrations(schemas)) db.exec(migration.sql);
     seedSchemas(db, schemas, rowsPerSchema);
     db.exec("ANALYZE");
 
@@ -128,29 +122,28 @@ function inspectView(
     .map(({ detail }) => detail);
   const rows = db.prepare(compiled.sql).all(...sqliteParams);
   const usedIndexes = [...new Set(plan.flatMap(indexFromPlan))];
-  const entryScans = plan.filter((detail) => /\bSCAN entries\b/.test(detail));
-  const tableScan = entryScans.some(
+  const tableAccess = plan.filter((detail) => /\b(?:SCAN|SEARCH)\b/.test(detail));
+  const tableScan = tableAccess.some(
     (detail) => !/\bUSING (?:COVERING )?INDEX\b/.test(detail),
   );
-  const indexedScan = entryScans.some(
+  const indexedScan = tableAccess.some(
     (detail) => /\bUSING (?:COVERING )?INDEX\b/.test(detail),
   );
   const temporarySort = plan.some((detail) => /USE TEMP B-TREE.*ORDER BY/.test(detail));
   const accessFields = [...dataAccessFields(view)].sort();
   const filterFields = [...dataFilterFields(view)].sort();
-  const schemaIndexFields = declaredIndexFields(schema);
   const usedSchemaFields = new Set(
-    usedIndexes.flatMap((name) => schemaIndexFields.get(name) ?? []),
+    usedIndexes.flatMap((name) => indexFields(db, name)),
   );
   const schemaIndexRequired = accessFields.length > 0;
   const schemaIndexUsed = schemaIndexRequired &&
     accessFields.every((field) => usedSchemaFields.has(field));
   const findings: string[] = [];
-  if (tableScan) findings.push("full entries scan");
+  if (tableScan) findings.push("full table scan");
   if (
     indexedScan &&
     filterFields.length > 0 &&
-    !plan.some((detail) => /\bSEARCH entries\b/.test(detail))
+    !plan.some((detail) => /\bSEARCH\b/.test(detail))
   ) {
     findings.push("data-field filter scans an index without a searchable prefix");
   }
@@ -179,20 +172,9 @@ function inspectView(
   };
 }
 
-function declaredIndexFields(
-  schema: SchemaManifest | undefined,
-): ReadonlyMap<string, readonly string[]> {
-  if (!schema) return new Map();
-  const declarations = [
-    ...(schema.spec.uniqueIndexes ?? []),
-    ...(schema.spec.indexes ?? []),
-  ];
-  return new Map(
-    buildDdl(schema).indexes.map((index, position) => [
-      index.name,
-      declarations[position] ?? [],
-    ]),
-  );
+function indexFields(db: DatabaseSync, name: string): readonly string[] {
+  return (db.prepare(`PRAGMA index_info(${quoteIdent(name)})`).all() as Array<{ readonly name: string }>)
+    .map((row) => row.name);
 }
 
 function seedSchemas(
@@ -200,25 +182,28 @@ function seedSchemas(
   schemas: readonly SchemaManifest[],
   rowsPerSchema: number,
 ): void {
-  const insert = db.prepare(
-    `INSERT OR IGNORE INTO entries
-     (id, collection, status, version, data, author_id, created_at, updated_at)
-     VALUES (?, ?, ?, 1, ?, NULL, ?, ?)`,
-  );
   for (const schema of schemas) {
+    const fields = Object.keys(schema.spec.schema.properties ?? {});
+    const insert = db.prepare(
+      `INSERT OR IGNORE INTO ${quoteIdent(schema.metadata.name)}
+       (${["_mantle_id", "_mantle_status", "_mantle_version", "_mantle_author_id", "_mantle_created_at", "_mantle_updated_at", ...fields].map(quoteIdent).join(", ")})
+       VALUES (${Array.from({ length: 6 + fields.length }, () => "?").join(", ")})`,
+    );
     const singleUnique = new Set(
       (schema.spec.uniqueIndexes ?? [])
         .filter((fields) => fields.length === 1)
         .map((fields) => fields[0]!),
     );
     for (let index = 0; index < rowsPerSchema; index += 1) {
+      const data = sampleData(schema, index, singleUnique);
       insert.run(
         `${schema.metadata.name}-${index}`,
-        schema.metadata.name,
         index % 5 === 0 ? "published" : "draft",
-        JSON.stringify(sampleData(schema, index, singleUnique)),
+        1,
+        null,
         index,
         index,
+        ...fields.map((field) => toSqliteValue(data[field])),
       );
     }
   }

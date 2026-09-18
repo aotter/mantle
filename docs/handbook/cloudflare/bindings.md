@@ -50,7 +50,10 @@ export interface Env extends MantleCloudflareEnv {
 
 ## D1: `DB` (required)
 
-D1 is canonical storage. It holds `entries` (JSON data plus generated index columns), site settings, media metadata and pending uploads, and the Better Auth tables. `createConventionalBindings` throws without `DB`.
+D1 is canonical storage. It holds one native table per Manifest Schema, Mantle's
+`_mantle_*` envelope and migration metadata, site settings, media metadata and
+pending uploads, and the Better Auth tables. `createConventionalBindings`
+throws without `DB`.
 
 ```jsonc
 "d1_databases": [

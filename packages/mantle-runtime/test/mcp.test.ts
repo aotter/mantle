@@ -398,11 +398,11 @@ describe("McpJsonRpcDispatcher", () => {
 
     const deletion = await dispatcher.dispatch(jsonRpcReq("tools/call", {
       name: "delete_entry",
-      arguments: { id: "managed-1" },
+      arguments: { collection: "posts", id: "managed-1" },
     }), mcpContext());
     const deletionBody = (await deletion.json()) as { error: { code: number } };
     expect(deletionBody.error.code).toBe(-32601);
-    expect(await store.get("managed-1")).not.toBeNull();
+    expect(await store.get({ id: "managed-1", collection: "posts" })).not.toBeNull();
   });
 
   it("limits lifecycle discovery and rejects inapplicable or cross-collection calls", async () => {
@@ -421,13 +421,13 @@ describe("McpJsonRpcDispatcher", () => {
         if (schema === content) continue;
         for (const name of [...lifecycleTools, "update_draft_articles"]) {
           const response = await dispatcher.dispatch(jsonRpcReq("tools/call", {
-            name, arguments: { id: original.id, expected_version: 1, title: "Wrong" },
+            name, arguments: { collection: schema.metadata.name, id: original.id, expected_version: 1, title: "Wrong" },
           }), mcpContext("owner", "owner"));
           const body = await response.json() as { error: { code: number; data?: { code: string } } };
           expect(body.error).toBeDefined();
           if (hasContent) expect(body.error.data?.code).toBe(name === "update_draft_articles" ? "NOT_FOUND" : "CONFLICT");
           else expect(body.error.code).toBe(-32601);
-          expect(await store.get(original.id)).toEqual(original);
+          expect(await store.get({ id: original.id, collection: original.collection })).toEqual(original);
         }
       }
     }
@@ -575,7 +575,7 @@ describe("McpJsonRpcDispatcher", () => {
     );
     const body = (await res.json()) as { result: { content: { text: string }[] } };
     const created = JSON.parse(body.result.content[0]!.text) as { id: string };
-    expect(await store.get(created.id)).toMatchObject({
+    expect(await store.get({ id: created.id, collection: "posts" })).toMatchObject({
       data: { title: "From MCP" },
       authorId: "u1",
     });
@@ -689,10 +689,10 @@ describe("McpJsonRpcDispatcher", () => {
       expected_version: created["version"],
       title: "Updated",
     });
-    await call("request_publish", { id });
-    await call("unpublish_entry", { id });
-    await call("archive_entry", { id });
-    await call("delete_entry", { id });
+    await call("request_publish", { collection: "posts", id });
+    await call("unpublish_entry", { collection: "posts", id });
+    await call("archive_entry", { collection: "posts", id });
+    await call("delete_entry", { collection: "posts", id });
 
     expect(beforeCalls.map(({ hook, input }) => ({ hook, input }))).toEqual([
       { hook: "before_create", input: { title: "Created" } },
@@ -742,7 +742,7 @@ describe("McpJsonRpcDispatcher", () => {
     const res = await dispatcher.dispatch(
       jsonRpcReq("tools/call", {
         name: "request_publish",
-        arguments: { id: created.id },
+        arguments: { collection: created.collection, id: created.id },
       }),
       staffCtx(),
     );
@@ -764,7 +764,7 @@ describe("McpJsonRpcDispatcher", () => {
     const res = await dispatcher.dispatch(
       jsonRpcReq("tools/call", {
         name: "unpublish_entry",
-        arguments: { id: created.id },
+        arguments: { collection: created.collection, id: created.id },
       }),
       staffCtx(),
     );
@@ -796,13 +796,13 @@ describe("McpJsonRpcDispatcher", () => {
 
     for (const name of ["request_publish", "unpublish_entry", "archive_entry", "delete_entry"]) {
       const denied = await dispatcher.dispatch(
-        jsonRpcReq("tools/call", { name, arguments: { id: draft.id } }),
+        jsonRpcReq("tools/call", { name, arguments: { collection: draft.collection, id: draft.id } }),
         staffCtx("contributor"),
       );
       const body = (await denied.json()) as { error?: { data?: { code?: string } } };
       expect(body.error?.data?.code).toBe("AUTH_DENIED");
     }
-    expect(await store.get(draft.id)).toMatchObject({ id: draft.id, status: "draft" });
+    expect(await store.get({ id: draft.id, collection: draft.collection })).toMatchObject({ id: draft.id, status: "draft" });
 
     const operational = buildHarness([operationalPostsSchema()]);
     const recordDenied = await operational.dispatcher.dispatch(
@@ -859,7 +859,7 @@ describe("McpJsonRpcDispatcher", () => {
     const publishRes = await dispatcher.dispatch(
       jsonRpcReq("tools/call", {
         name: "request_publish",
-        arguments: { id: created.id },
+        arguments: { collection: "post-translations", id: created.id },
       }),
       staffCtx(),
     );

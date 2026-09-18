@@ -78,8 +78,12 @@ export function entriesQueryOptions(args: EntriesQueryArgs) {
 export function entryEditorQueryOptions(collectionName: string, entryId: string) {
   return {
     queryKey: ["entry-editor", collectionName, entryId] as const,
-    queryFn: () => api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}`),
+    queryFn: () => api.get<EntryEditorPayload>(entryApiPath(collectionName, entryId)),
   };
+}
+
+export function entryApiPath(collection: string, id: string, suffix = ""): string {
+  return `/entries/${encodeURIComponent(id)}${suffix}?collection=${encodeURIComponent(collection)}`;
 }
 
 export function entryLandingChildQueryOptions(payload: EntryEditorPayload) {

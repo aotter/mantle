@@ -26,6 +26,22 @@ To upgrade an existing application:
    `skills --check`, `validate`, and the project's TypeScript/tests. Test local
    routes and configured authorization before considering deployment.
 
+## Native Schema-table storage reset
+
+The 0.1.2 pre-beta line replaces the generic `entries` JSON table with one
+native SQLite/D1 table per Manifest Schema. Mantle's row envelope uses
+`_mantle_id`, `_mantle_status`, `_mantle_version`, `_mantle_author_id`,
+`_mantle_created_at`, and `_mantle_updated_at`; authored fields keep their exact
+names as native columns. The old generated columns, projection views and
+compatibility repository were removed.
+
+This is intentionally a storage-format break before beta. Reset and
+re-bootstrap development or internal-alpha content databases that contain the
+old `entries` layout, or export and import them through an application-reviewed
+migration. Automatic artifacts cover initial and additive changes only.
+Renames, type changes, data transforms and removals require reviewed SQL with a
+fixed checksum; production never asks an AI to invent migration SQL.
+
 A new project follows [direct authoring](direct-authoring.md). Templates and
 provider setup are not hidden inside `generate`. Future Builder/landing-next
 provisioning is a separate decision; this change does not migrate those hosts.
@@ -74,5 +90,6 @@ Intentional behavior changes:
 
 This alpha changes the Better Auth D1 schema, including required account
 issuer identity and OAuth resource/client tables. Reset and re-bootstrap a
-pre-1.7 alpha auth database; do not guess an issuer backfill. Content tables
-remain portable through the normal application migration/export path.
+pre-1.7 alpha auth database; do not guess an issuer backfill. Reset old generic
+content storage as described above or migrate it through the application's
+reviewed export/import path.

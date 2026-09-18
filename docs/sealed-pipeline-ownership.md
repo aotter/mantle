@@ -26,7 +26,7 @@ issue that must delete or delegate the old path.
 | Semantic fingerprint | Runtime boot from raw manifests | Compile plan | #665 |
 | Declarative View resolution | `ViewSqlCompiler` during each `ExecuteViewUseCase` call | Compile logical plan once | #665 |
 | SQLite/JSON1 View lowering and native `spec.sql` | `ViewSqlCompiler` plus `DatabaseDriver` invocation | Selected storage preparation | #666 |
-| Canonical SQL migrations, indexes, schema SQL Views, readiness | `createCmsRuntime.bootInit` and runtime infrastructure | Prepare | #666 |
+| Canonical SQL migrations, native Schema tables/indexes, readiness | `createCmsRuntime.bootInit` and runtime infrastructure | Prepare | #666 |
 | Entry/media/site repositories | Runtime constructs `Database*Repository` from `DatabaseDriver` | Prepared semantic storage ports; media/config move with final owner | #666, #669, #670 |
 | Content, View, Procedure, Trigger, lifecycle invocation | Runtime use cases over raw maps/driver | `MantleRuntime` over plan + semantic ports | #667 |
 | Target authorization/admin bypass | Runtime plus adapter entry points | One Core invocation policy; adapter resolves caller only | #667 |

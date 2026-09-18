@@ -196,7 +196,10 @@ Keep implementation-detail children fold-only. Use `nav.standalone: true` when s
 | Fields are indexable scalars: exactly one non-null type, optionally nullable. `string` maps to TEXT, `integer` and `boolean` to INTEGER, `number` to REAL. | `SCHEMA_INDEX_INVALID` |
 | No tuple repeats within a list; `indexes` does not repeat a `uniqueIndexes` tuple. | `SCHEMA_INDEX_INVALID` |
 
-On SQLite storage each tuple becomes a partial index over generated columns of `entries.data`; queries benefit from a leftmost prefix. Unique indexes are also checked before every write; a conflicting row is `CONFLICT`.
+On SQLite storage each Schema is a native table and every tuple becomes an
+index over its native field columns; queries benefit from a leftmost prefix.
+Unique indexes are also checked before every write; a conflicting row is
+`CONFLICT`.
 
 ## `searchableFields`
 

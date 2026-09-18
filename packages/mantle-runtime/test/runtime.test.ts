@@ -17,7 +17,7 @@ import {
 import type { AnyHandler } from "../src/domain/model/HandlerContext.js";
 import { BootValidationError } from "../src/usecase/boot/index.js";
 import { DatabaseSiteConfigRepository } from "../src/infrastructure/persistence/DatabaseSiteConfigRepository.js";
-import { schemaIndexMigrations } from "../src/infrastructure/boot/index.js";
+import { schemaTableMigrations } from "../src/infrastructure/storage/SqliteSchemaTables.js";
 import { InMemoryDatabase } from "./fakes/database.js";
 import { makeProcedure, postsSchema } from "./fakes/manifests.js";
 
@@ -80,12 +80,13 @@ describe("SQLite runtime composition", () => {
     });
     const updated = await runtime.updateDraft.execute({
       id: created.id,
+      collection: created.collection,
       expectedVersion: created.version,
       data: { title: "Updated" },
     });
-    const published = await runtime.requestPublish.execute({ id: updated.id });
-    const draft = await runtime.unpublish.execute({ id: published.id });
-    await runtime.deleteEntry.execute({ id: draft.id });
+    const published = await runtime.requestPublish.execute({ id: updated.id, collection: updated.collection });
+    const draft = await runtime.unpublish.execute({ id: published.id, collection: published.collection });
+    await runtime.deleteEntry.execute({ id: draft.id, collection: draft.collection });
     await runtime.updateSiteSettings!.execute({ title: "New title" });
     await runtime.createDraft.execute({
       collection: "events",
@@ -116,7 +117,7 @@ describe("SQLite runtime composition", () => {
     }
   });
 
-  it("installs manifest Schema indexes", async () => {
+  it("installs native Schema columns and indexes", async () => {
     const db = new InMemoryDatabase();
     const schema = postsSchema();
     const indexedSchema = {
@@ -132,93 +133,28 @@ describe("SQLite runtime composition", () => {
       db,
     });
 
-    const ids = schemaIndexMigrations([indexedSchema]).map(({ id }) => id);
-    expect(ids).toHaveLength(4);
-    expect(ids.filter((id) => id.startsWith("schema-index-v2:column:"))).toHaveLength(2);
-    expect(ids.filter((id) => id.startsWith("schema-index-v2:index:"))).toHaveLength(2);
+    const ids = schemaTableMigrations([indexedSchema]).map(({ id }) => id);
+    expect(ids.filter((id) => id.startsWith("schema-table-v1:column:"))).toHaveLength(4);
+    expect(ids.filter((id) => id.startsWith("schema-table-v1:index:"))).toHaveLength(5);
     expect(ids.every((id) => db.appliedMigrations.has(id))).toBe(true);
-    expect([...db.appliedMigrations]).not.toContainEqual(
-      expect.stringMatching(/^schema-(?:index-column|unique-index):/),
-    );
+    expect(db.native().prepare('PRAGMA table_info("posts")').all().map((row) => row.name))
+      .toEqual(expect.arrayContaining(["_mantle_id", "_mantle_status", "title", "slug", "content"]));
   });
 
-  it("replaces stale v2 indexes but keeps generated columns", async () => {
+  it("allows additive fields but rejects implicit index removal", async () => {
     const db = new InMemoryDatabase();
-    const schema = postsSchema();
-    const manifest = (indexes: readonly (readonly string[])[]) => ({
-      ...schema,
-      spec: { ...schema.spec, indexes },
-    } as const);
-    const runtime = (indexes: readonly (readonly string[])[]) =>
-      createTestRuntime({
-        manifests: [manifest(indexes)],
-        db,
-      });
-
-    await runtime([["slug"]]);
-    const first = schemaIndexMigrations([manifest([["slug"]])]);
-    await runtime([["slug", "title"]]);
-    const second = schemaIndexMigrations([manifest([["slug", "title"]])]);
-
-    expect(db.appliedMigrations.has(first.find(({ id }) =>
-      id.startsWith("schema-index-v2:index:"))!.id)).toBe(false);
-    expect(db.appliedMigrations.has(second.find(({ id }) =>
-      id.startsWith("schema-index-v2:index:"))!.id)).toBe(true);
-    for (const { id } of first.filter(({ id }) =>
-      id.startsWith("schema-index-v2:column:"))) {
-      expect(db.appliedMigrations.has(id)).toBe(true);
-    }
-
-    await runtime([["slug"]]);
-    expect(db.appliedMigrations.has(first.find(({ id }) =>
-      id.startsWith("schema-index-v2:index:"))!.id)).toBe(true);
-    expect(db.appliedMigrations.has(second.find(({ id }) =>
-      id.startsWith("schema-index-v2:index:"))!.id)).toBe(false);
-  });
-
-  it("retains declared alpha.59 unique indexes and removes retired ones", async () => {
-    const db = new InMemoryDatabase();
-    const legacyId = "schema-unique-index:uq_posts__slug";
-    db.appliedMigrations.add(legacyId);
-    db.legacyIndexColumns.set("uq_posts__slug", ["posts__slug"]);
-    const schema = postsSchema();
-    const runtime = (uniqueIndexes: readonly (readonly string[])[]) =>
-      createTestRuntime({
-        manifests: [{ ...schema, spec: { ...schema.spec, uniqueIndexes } }],
-        db,
-      });
-
-    await runtime([["slug"]]);
-    expect(db.appliedMigrations.has(legacyId)).toBe(true);
-
-    await runtime([]);
-    expect(db.appliedMigrations.has(legacyId)).toBe(false);
-  });
-
-  it("drops an ambiguous alpha.59 index-name collision", async () => {
-    const db = new InMemoryDatabase();
-    const legacyId = "schema-unique-index:uq_posts__a_b";
-    db.appliedMigrations.add(legacyId);
-    db.legacyIndexColumns.set("uq_posts__a_b", ["posts__a_b"]);
     const schema = postsSchema();
     await createTestRuntime({
-      manifests: [{
-        ...schema,
-        spec: {
-          ...schema.spec,
-          schema: {
-            type: "object",
-            properties: { "a.b": { type: "string" } },
-          },
-          searchableFields: [],
-          uniqueIndexes: [["a.b"]],
-        },
-      }],
+      manifests: [{ ...schema, spec: { ...schema.spec, indexes: [["slug"]] } }],
       db,
     });
-
-    expect(db.appliedMigrations.has(legacyId)).toBe(false);
-    expect(db.legacyIndexColumns.has("uq_posts__a_b")).toBe(false);
+    const additive = { ...schema, spec: { ...schema.spec, schema: {
+      ...schema.spec.schema,
+      properties: { ...schema.spec.schema.properties, subtitle: { type: "string" } },
+    }, indexes: [["slug"]] } } as const;
+    await expect(createTestRuntime({ manifests: [additive], db })).resolves.toBeDefined();
+    await expect(createTestRuntime({ manifests: [schema], db }))
+      .rejects.toThrow(/explicit destructive migration/);
   });
 
   it("rejects creation with BootValidationError when a handler ref is missing", async () => {

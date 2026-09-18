@@ -23,7 +23,7 @@ Each stage's output can be constructed only by the stage that owns it, and a fai
 | Parse + normalize | YAML syntax and alias limits, the closed four-atom shape, atom-local rules, behavior-affecting defaults, source metadata | Unknown keys, bad envelopes, unsupported JSON Schema keywords, invalid index and `uiSchema` shapes | Cross-atom references, handlers, storage, routes |
 | Link | Duplicate symbols, cross-atom references, guard graphs, translations, manifest-owned route and tool collisions | Unknown Schema or Procedure references, guard self-reference and chains, duplicate HTTP paths, MCP tool-name collisions | I/O, selected modules, handler availability |
 | Compile | Immutable lookup records, authorization plans, Trigger indices, Procedure descriptors, logical View plans, the semantic fingerprint | Nothing new; it projects an already valid graph | Connections, repositories, handlers, requests, templates, assets |
-| Prepare | Storage migrations, indexes and native Views, handler availability, selected capability and reserved-route checks, the readiness revision | Missing handler refs, reserved-path conflicts, `View.spec.sql` on storage that does not declare the SQLite dialect | Re-interpreting YAML, executing requests |
+| Prepare | Storage migrations, native Schema tables and indexes, prepared Views, handler availability, selected capability and reserved-route checks, the readiness revision | Missing handler refs, reserved-path conflicts, `View.spec.sql` on storage that does not declare the SQLite dialect | Re-interpreting YAML, executing requests |
 | Bind and invoke | Semantic ports, handler dispatch, parameter binding, centralized authorization, content, View, Procedure, Trigger and lifecycle operations | Invalid input, unauthorized callers, lifecycle transitions the state machine forbids | DDL, route mounting, assets, HTTP, session and cache policy |
 | Optional modules and adapters | Web and Admin composition; request, session, cache and platform translation | Whatever the platform itself rejects | Re-parsing, re-linking, or a second authorization stack |
 
@@ -89,7 +89,7 @@ A storage adapter prepares one `RuntimePlan` into semantic ports. Three are requ
 
 | Port | Role |
 |---|---|
-| `MantleStorageAdapter` / `PreparedMantleStorage` | Prepares one plan into a revision: migrations, indexes, native Views |
+| `MantleStorageAdapter` / `PreparedMantleStorage` | Prepares one plan into a revision: migrations, native Schema tables and indexes, prepared Views |
 | `EntryRepository` and `EntryReader` | Entry writes and reads |
 | `ViewQueryExecutor` | Executes compiled logical View plans |
 

@@ -1,13 +1,14 @@
 import {
-  schemaIndexedFieldSql,
   checkSchemaAdminUi,
   type ContentState,
   type Entry,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
+import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
 import type {
   CreateEntryArgs,
   DeleteEntryArgs,
+  EntryKey,
   EntryRepository,
   FindEntryByDataFieldArgs,
   FindEntryByDataFieldsArgs,
@@ -17,19 +18,17 @@ import type {
   UpdateEntryArgs,
 } from "../../domain/port/EntryRepository.js";
 import type {
-  EntryReader,
-  CreationStatisticsArgs,
   CreationStatistics,
+  CreationStatisticsArgs,
+  EntryReader,
   FindManyEntriesByDataFieldArgs,
+  PublishedEntryPage,
   ReadEntriesByDataFieldInArgs,
   ReadEntryByDataFieldArgs,
   ReadEntryBySlugArgs,
   ReadPublishedEntriesArgs,
   ReadPublishedPageArgs,
-  PublishedEntryPage,
 } from "../../domain/port/EntryReader.js";
-import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
-import { clampLimit } from "../../domain/service/Pagination.js";
 import {
   EntryStatusConflict,
   EntryUniqueConflict,
@@ -38,27 +37,24 @@ import {
   projectPublicEntry,
   type EntryRow,
 } from "../../domain/model/EntryRow.js";
+import { clampLimit } from "../../domain/service/Pagination.js";
 import {
-  decodeEntryCursor,
-  encodeEntryCursor,
-  publishedPageLimit,
-  PUBLISHED_PAGE_DATA_BUDGET,
   decodeEntrySortCursor,
   encodeEntrySortCursor,
   escapeLikeTerm,
+  paginatePublishedEntries,
+  PUBLISHED_PAGE_DATA_BUDGET,
+  publishedPageLimit,
 } from "./Pagination.js";
+import {
+  decodeField,
+  encodeField,
+  fieldSql,
+  sqliteSchemaTable,
+  type SqliteSchemaTable,
+} from "../storage/SqliteSchemaTables.js";
 
-/**
- * `EntryRepository` impl backed by `DatabaseDriver`. Adapters that
- * implement the SQLite-shaped `DatabaseDriver` contract get this
- * repository for free.
- *
- * `UPDATE … RETURNING` collapses the post-write SELECT to one round
- * trip on SQLite ≥ 3.35 / Postgres.
- *
- * Lifts `data.locale` to `EntryRow.locale` at the rowFromDb boundary
- * — see ADR-0010 + `domain/model/EntryRow.ts`.
- */
+/** SQLite/D1 repository where each Schema is one physical table. */
 export class DatabaseEntryRepository implements EntryRepository, EntryReader {
   constructor(
     private readonly db: DatabaseDriver,
@@ -66,52 +62,39 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
   ) {}
 
   async readCreationStatistics(args: CreationStatisticsArgs): Promise<CreationStatistics> {
-    const { collection, from, to, bucketMs } = args;
+    const { from, to, bucketMs } = args;
     if (![from, to, bucketMs].every(Number.isSafeInteger) || from < 0 || to <= from ||
         bucketMs <= 0 || to - from > 20 * 86_400_000 || Math.ceil((to - from) / bucketMs) > 480) {
       throw new RangeError("Statistics require a positive window <= 20 days and <= 480 buckets.");
     }
-    const schema = this.schemasByName.get(collection);
-    const filter = schema ? checkSchemaAdminUi(schema).filter : null;
-    const field = filter && schema ? schemaIndexedFieldSql(schema, filter.field) : null;
-    // Group unrecognized values together in SQL: corrupt/legacy rows cannot make
-    // the result unbounded. All identifiers come from the prepared schema.
-    const subtype = field
-      ? `CASE WHEN ${field} IN (SELECT value FROM json_each(?)) THEN ${field} ELSE NULL END`
+    const table = this.table(args.collection);
+    const filter = checkSchemaAdminUi(table.schema).filter;
+    const subtypeField = filter ? requiredFieldSql(table.schema, filter.field) : null;
+    const subtype = filter && subtypeField
+      ? `CASE WHEN ${subtypeField} IN (${filter.values.map(() => "?").join(", ")}) THEN ${subtypeField} ELSE NULL END`
       : "NULL";
-    const rows = await this.db.prepare(`
-      SELECT -1 AS bucket, NULL AS subtype, COUNT(*) AS count FROM entries WHERE collection = ?
-      UNION ALL
-      SELECT CAST((created_at - ?) / ? AS INTEGER) AS bucket, ${subtype} AS subtype, COUNT(*) AS count
-      FROM entries WHERE collection = ? AND created_at >= ? AND created_at < ?
-      GROUP BY bucket, subtype
-    `).bind(collection, from, bucketMs, ...(field ? [JSON.stringify(filter!.values)] : []), collection, from, to)
+    const total = await this.db.prepare(`SELECT COUNT(*) AS count FROM ${table.table}`)
+      .first<{ count: number }>();
+    const rows = await this.db.prepare(`SELECT CAST(("_mantle_created_at" - ?) / ? AS INTEGER) AS bucket,
+      ${subtype} AS subtype, COUNT(*) AS count FROM ${table.table}
+      WHERE "_mantle_created_at" >= ? AND "_mantle_created_at" < ? GROUP BY bucket, subtype`)
+      .bind(from, bucketMs, ...(filter ? filter.values : []), from, to)
       .all<{ bucket: number; subtype: string | null; count: number }>();
-    return { total: rows[0]!.count, buckets: rows.slice(1) };
+    return { total: total?.count ?? 0, buckets: rows };
   }
 
   async create(args: CreateEntryArgs): Promise<EntryRow> {
+    const table = this.table(args.collection);
+    const columns = ["_mantle_id", "_mantle_status", "_mantle_version", "_mantle_author_id", "_mantle_created_at", "_mantle_updated_at", ...table.fields];
+    const values = [args.id, args.status, 1, args.authorId, args.now, args.now, ...this.encodedData(table, args.data)];
     try {
-      await this.db
-        .prepare(
-          `INSERT INTO entries (id, collection, status, version, data, author_id, created_at, updated_at)
-           VALUES (?, ?, ?, 1, ?, ?, ?, ?)`,
-        )
-        .bind(
-          args.id,
-          args.collection,
-          args.status,
-          JSON.stringify(args.data),
-          args.authorId,
-          args.now,
-          args.now,
-        )
-        .run();
-    } catch (err) {
-      if (isDriverUniqueConstraintError(err)) {
-        throw new EntryUniqueConflict(args.collection, args.data, (err as Error).message);
+      await this.db.prepare(`INSERT INTO ${table.table} (${columns.map(quote).join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`)
+        .bind(...values).run();
+    } catch (error) {
+      if (isDriverUniqueConstraintError(error)) {
+        throw new EntryUniqueConflict(args.collection, args.data, (error as Error).message);
       }
-      throw err;
+      throw error;
     }
     return {
       id: args.id,
@@ -126,564 +109,338 @@ export class DatabaseEntryRepository implements EntryRepository, EntryReader {
     };
   }
 
-  async get(id: string): Promise<EntryRow | null> {
-    const row = await this.db
-      .prepare(
-        `SELECT id, collection, status, version, data, author_id, created_at, updated_at
-         FROM entries WHERE id = ?`,
-      )
-      .bind(id)
-      .first<EntryDbRow>();
-    return row ? rowFromDb(row) : null;
+  async get(args: EntryKey): Promise<EntryRow | null> {
+    const table = this.table(args.collection);
+    const row = await this.db.prepare(`SELECT ${table.selectColumns} FROM ${table.table} WHERE "_mantle_id" = ?`)
+      .bind(args.id).first<NativeEntryRow>();
+    return row ? rowFromDb(table, row) : null;
   }
 
   async update(args: UpdateEntryArgs): Promise<EntryRow> {
-    const newVersion = args.expectedVersion + 1;
-    let row: EntryDbRow | null = null;
+    const table = this.table(args.collection);
+    const version = args.expectedVersion + 1;
+    const assignments = [...table.fields.map((field) => `${quote(field)} = ?`), '"_mantle_version" = ?', '"_mantle_updated_at" = ?'];
+    let row: NativeEntryRow | null = null;
     try {
-      row = await this.db
-        .prepare(
-          `UPDATE entries SET data = ?, version = ?, updated_at = ?
-           WHERE id = ? AND version = ?
-           RETURNING id, collection, status, version, data, author_id, created_at, updated_at`,
-        )
-        .bind(
-          JSON.stringify(args.data),
-          newVersion,
-          args.now,
-          args.id,
-          args.expectedVersion,
-        )
-        .first<EntryDbRow>();
-    } catch (err) {
-      if (isDriverUniqueConstraintError(err)) {
-        throw new EntryUniqueConflict(args.collection, args.data, (err as Error).message);
+      row = await this.db.prepare(`UPDATE ${table.table} SET ${assignments.join(", ")}
+        WHERE "_mantle_id" = ? AND "_mantle_version" = ? RETURNING ${table.selectColumns}`)
+        .bind(...this.encodedData(table, args.data), version, args.now, args.id, args.expectedVersion)
+        .first<NativeEntryRow>();
+    } catch (error) {
+      if (isDriverUniqueConstraintError(error)) {
+        throw new EntryUniqueConflict(args.collection, args.data, (error as Error).message);
       }
-      throw err;
+      throw error;
     }
-    if (!row) throw await this.versionConflict(args.id, args.expectedVersion);
-    return rowFromDb(row);
+    if (!row) throw await this.versionConflict(table, args.id, args.expectedVersion);
+    return rowFromDb(table, row);
   }
 
   async delete(args: DeleteEntryArgs): Promise<{ readonly removed: boolean }> {
-    const parentMatches =
-      `id = ? AND collection = ? AND status = ? AND version = ?`;
-    const parentSnapshot = [
-      args.id,
-      args.collection,
-      args.expectedStatus,
-      args.expectedVersion,
-    ] as const;
-    const result = await this.db
-      .prepare(`DELETE FROM entries WHERE ${parentMatches}`)
-      .bind(...parentSnapshot)
-      .run();
+    const table = this.table(args.collection);
+    const result = await this.db.prepare(`DELETE FROM ${table.table} WHERE "_mantle_id" = ? AND "_mantle_status" = ? AND "_mantle_version" = ?`)
+      .bind(args.id, args.expectedStatus, args.expectedVersion).run();
     if (result.meta.changes > 0) return { removed: true };
-    const after = await this.db
-      .prepare(`SELECT collection, status, version FROM entries WHERE id = ?`)
-      .bind(args.id)
-      .first<{ collection: string; status: ContentState; version: number }>();
-    if (!after || after.collection !== args.collection) return { removed: false };
-    if (after.version !== args.expectedVersion) {
-      throw new EntryVersionConflict(args.id, args.expectedVersion, after.version);
-    }
+    const after = await this.db.prepare(`SELECT "_mantle_status" AS "status", "_mantle_version" AS "version" FROM ${table.table} WHERE "_mantle_id" = ?`)
+      .bind(args.id).first<{ status: ContentState; version: number }>();
+    if (!after) return { removed: false };
+    if (after.version !== args.expectedVersion) throw new EntryVersionConflict(args.id, args.expectedVersion, after.version);
     throw new EntryStatusConflict(args.id, args.expectedStatus, after.status);
   }
 
   async transitionStatus(args: TransitionStatusArgs): Promise<EntryRow> {
-    const { expectedStatus, expectedVersion } = args;
-    const guards: string[] = [];
+    const table = this.table(args.collection);
+    const conditions = ['"_mantle_id" = ?'];
     const binds: unknown[] = [args.to, args.now, args.id];
-    if (expectedStatus !== undefined) {
-      guards.push(" AND status = ?");
-      binds.push(expectedStatus);
+    if (args.expectedStatus !== undefined) { conditions.push('"_mantle_status" = ?'); binds.push(args.expectedStatus); }
+    if (args.expectedVersion !== undefined) { conditions.push('"_mantle_version" = ?'); binds.push(args.expectedVersion); }
+    const row = await this.db.prepare(`UPDATE ${table.table} SET "_mantle_status" = ?, "_mantle_version" = "_mantle_version" + 1, "_mantle_updated_at" = ?
+      WHERE ${conditions.join(" AND ")} RETURNING ${table.selectColumns}`).bind(...binds).first<NativeEntryRow>();
+    if (row) return rowFromDb(table, row);
+    const after = await this.db.prepare(`SELECT "_mantle_status" AS "status", "_mantle_version" AS "version" FROM ${table.table} WHERE "_mantle_id" = ?`)
+      .bind(args.id).first<{ status: ContentState; version: number }>();
+    if (args.expectedVersion !== undefined && after && after.version !== args.expectedVersion) {
+      throw new EntryVersionConflict(args.id, args.expectedVersion, after.version);
     }
-    if (expectedVersion !== undefined) {
-      guards.push(" AND version = ?");
-      binds.push(expectedVersion);
-    }
-    const row = await this.db
-      .prepare(
-        `UPDATE entries SET status = ?, version = version + 1, updated_at = ?
-         WHERE id = ?${guards.join("")}
-         RETURNING id, collection, status, version, data, author_id, created_at, updated_at`,
-      )
-      .bind(...binds)
-      .first<EntryDbRow>();
-    if (row) return rowFromDb(row);
-    // Disambiguate version- vs. status-conflict from a single SELECT —
-    // splitting into two SELECTs leaves a TOCTOU window where a third
-    // concurrent writer between the two reads can flip which guard
-    // appears to have failed.
-    const after = await this.db
-      .prepare(`SELECT version, status FROM entries WHERE id = ?`)
-      .bind(args.id)
-      .first<{ version: number; status: string }>();
-    if (expectedVersion !== undefined && after && after.version !== expectedVersion) {
-      throw new EntryVersionConflict(args.id, expectedVersion, after.version);
-    }
-    throw new EntryStatusConflict(
-      args.id,
-      expectedStatus ?? args.to,
-      (after?.status as ContentState | undefined) ?? args.to,
-    );
+    throw new EntryStatusConflict(args.id, args.expectedStatus ?? args.to, after?.status ?? args.to);
   }
 
   async list(args: ListEntriesArgs): Promise<ListEntriesResult> {
-    // Use the shared clamp so direct repo callers (tests, future
-    // adapters that bypass the use case) get the same default page
-    // size as ListEntriesUseCase — not a silently different 100.
+    const table = this.table(args.collection);
     const limit = clampLimit(args.limit);
     const sort = args.sort ?? { field: "updatedAt", direction: "desc" };
-    const schema = this.schemasByName.get(args.collection);
-    const sortSql = entrySortSql(schema, sort.field);
-    if (!sortSql) throw new Error(`unavailable entry sort field: ${sort.field}`);
+    const sortSql = args.sort ? requiredFieldSql(table.schema, sort.field) : '"_mantle_updated_at"';
     const cursor = decodeEntrySortCursor(args.cursor, sort.field, sort.direction);
     const backward = args.cursorDirection === "backward" && cursor !== null;
-    const queryDirection = backward
-      ? (sort.direction === "asc" ? "DESC" : "ASC")
-      : sort.direction.toUpperCase();
-    // Fetch limit+1 to detect a next page without a second query —
-    // the extra row never reaches the caller.
-    const probe = limit + 1;
-    const conditions = ["collection = ?"];
-    const binds: unknown[] = [args.collection];
-    if (args.status) {
-      conditions.push("status = ?");
-      binds.push(args.status);
-    }
+    const direction = backward ? (sort.direction === "asc" ? "DESC" : "ASC") : sort.direction.toUpperCase();
+    const conditions: string[] = [];
+    const binds: unknown[] = [];
+    if (args.status) { conditions.push('"_mantle_status" = ?'); binds.push(args.status); }
     if (args.search) {
       const term = escapeLikeTerm(args.search);
-      const searchConditions = ["id LIKE '%'||?||'%' ESCAPE '\\'"];
+      const search = ['"_mantle_id" LIKE \'%\'||?||\'%\' ESCAPE \'\\\''];
       binds.push(term);
       for (const field of args.searchFields ?? []) {
-        searchConditions.push("json_extract(data, ?) LIKE '%'||?||'%' ESCAPE '\\'");
-        binds.push(jsonPathForTopLevelField(field), term);
+        search.push(`${requiredFieldSql(table.schema, field)} LIKE '%'||?||'%' ESCAPE '\\'`);
+        binds.push(term);
       }
-      conditions.push(`(${searchConditions.join(" OR ")})`);
+      conditions.push(`(${search.join(" OR ")})`);
     }
-    if (args.filter) {
-      const compiled = compileDataPredicates(schema, [{
-        field: args.filter.field,
-        kind: "equal",
-        value: args.filter.value,
-      }]);
-      conditions.push(...compiled.conditions);
-      binds.push(...compiled.binds);
-    }
-    if (args.scope) {
-      const compiled = compileDataPredicates(schema, [{
-        field: args.scope.field,
-        kind: "equal",
-        value: args.scope.value,
-      }]);
-      conditions.push(...compiled.conditions);
-      binds.push(...compiled.binds);
-    }
+    if (args.filter) { conditions.push(`${requiredFieldSql(table.schema, args.filter.field)} = ?`); binds.push(encodeScalar(table.schema, args.filter.field, args.filter.value)); }
+    if (args.scope) { conditions.push(`${requiredFieldSql(table.schema, args.scope.field)} = ?`); binds.push(encodeScalar(table.schema, args.scope.field, args.scope.value)); }
     if (cursor) {
-      const comparison = backward
-        ? (sort.direction === "asc" ? "<" : ">")
-        : (sort.direction === "asc" ? ">" : "<");
-      conditions.push(`(${sortSql}, id) ${comparison} (?, ?)`);
+      const comparison = backward ? (sort.direction === "asc" ? "<" : ">") : (sort.direction === "asc" ? ">" : "<");
+      conditions.push(`(${sortSql}, "_mantle_id") ${comparison} (?, ?)`);
       binds.push(...cursor);
     }
-    binds.push(probe);
-    const stmt = this.db
-      .prepare(
-        `SELECT id, collection, status, version, data, author_id, created_at, updated_at
-         FROM entries WHERE ${conditions.join(" AND ")}
-         ORDER BY ${sortSql} ${queryDirection}, id ${queryDirection} LIMIT ?`,
-      )
-      .bind(...binds);
-    const rows = await stmt.all<EntryDbRow>();
+    binds.push(limit + 1);
+    const rows = await this.db.prepare(`SELECT ${table.selectColumns} FROM ${table.table}
+      ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""}
+      ORDER BY ${sortSql} ${direction}, "_mantle_id" ${direction} LIMIT ?`).bind(...binds).all<NativeEntryRow>();
     const hasMore = rows.length > limit;
     const page = [...(hasMore ? rows.slice(0, limit) : rows)];
     if (backward) page.reverse();
     const first = page[0];
-    const last = page[page.length - 1];
+    const last = page.at(-1);
     return {
-      rows: page.map(rowFromDb),
-      previousCursor: first && (backward ? hasMore : cursor !== null)
-        ? encodeEntrySortCursor(sort.field, sort.direction, entrySortValueFromDb(first, sort.field), first.id)
-        : undefined,
-      nextCursor: last && (backward ? cursor !== null : hasMore)
-        ? encodeEntrySortCursor(sort.field, sort.direction, entrySortValueFromDb(last, sort.field), last.id)
-        : undefined,
+      rows: page.map((row) => rowFromDb(table, row)),
+      previousCursor: first && (backward ? hasMore : cursor !== null) ? encodeEntrySortCursor(sort.field, sort.direction, sortValue(first, sort.field), first._mantle_id) : undefined,
+      nextCursor: last && (backward ? cursor !== null : hasMore) ? encodeEntrySortCursor(sort.field, sort.direction, sortValue(last, sort.field), last._mantle_id) : undefined,
     };
   }
 
   async findByDataField(args: FindEntryByDataFieldArgs): Promise<EntryRow | null> {
-    return this.findOneByDataFields({
-      collection: args.collection,
-      status: args.status,
-      fields: { [args.field]: args.value },
-    });
+    return this.findOne({ ...args, fields: { [args.field]: args.value } });
   }
 
   async findByDataFields(args: FindEntryByDataFieldsArgs): Promise<EntryRow | null> {
-    return this.findOneByDataFields(args);
+    return this.findOne(args);
   }
 
-  async readById(id: string): Promise<Entry | null> {
-    const row = await this.get(id);
+  async readById(args: EntryKey): Promise<Entry | null> {
+    const row = await this.get(args);
     return row ? projectPublicEntry(row) : null;
   }
 
   async readBySlug(args: ReadEntryBySlugArgs): Promise<Entry | null> {
-    return this.readByDataField({
-      collection: args.collection,
-      field: "slug",
-      value: args.slug,
-      locale: args.locale,
-      status: args.status,
-    });
+    return this.readByDataField({ ...args, field: "slug", value: args.slug });
   }
 
   async readByDataField(args: ReadEntryByDataFieldArgs): Promise<Entry | null> {
-    const row = await this.findOneByDataFields({
-      collection: args.collection,
-      status: args.status,
-      fields: { [args.field]: args.value },
-      locale: args.locale,
-    });
+    const row = await this.findOne({ ...args, fields: { [args.field]: args.value } });
     return row ? projectPublicEntry(row) : null;
   }
 
-  async readByDataFieldIn(
-    args: ReadEntriesByDataFieldInArgs,
-  ): Promise<readonly Entry[]> {
+  async readByDataFieldIn(args: ReadEntriesByDataFieldInArgs): Promise<readonly Entry[]> {
     const values = [...new Set(args.values)];
-    if (values.length === 0) return [];
-
-    const entries: Entry[] = [];
-    for (let start = 0; start < values.length; start += ENTRY_READ_BATCH_SIZE) {
-      const chunk = values.slice(start, start + ENTRY_READ_BATCH_SIZE);
-      const conditions = ["collection = ?"];
-      const binds: unknown[] = [args.collection];
-      const schema = this.schemasByName.get(args.collection);
-      const compiled = compileDataPredicates(schema, [
-        { field: args.field, kind: "in", values: chunk },
-        ...localePredicates(args.locale),
-      ]);
-      conditions.push(...compiled.conditions);
-      binds.push(...compiled.binds);
-      if (args.status) {
-        conditions.push("status = ?");
-        binds.push(args.status);
-      }
+    if (!values.length) return [];
+    const table = this.table(args.collection);
+    const field = requiredFieldSql(table.schema, args.field);
+    const output: Entry[] = [];
+    for (let start = 0; start < values.length; start += 95) {
+      const chunk = values.slice(start, start + 95);
+      const conditions = [`${field} IN (${chunk.map(() => "?").join(", ")})`];
+      const binds: unknown[] = chunk.map((value) => encodeScalar(table.schema, args.field, value));
+      this.addReadConditions(table, conditions, binds, args);
       const sql = args.latestPerValue
-        ? `SELECT ${ENTRY_COLUMNS} FROM entries WHERE id IN (
-            SELECT id FROM (
-              SELECT id, ROW_NUMBER() OVER (PARTITION BY json_extract(data, ?) ORDER BY updated_at DESC, id DESC) AS parent_rank
-              FROM entries WHERE ${conditions.join(" AND ")}
-            ) WHERE parent_rank = 1
-          ) ORDER BY updated_at DESC, id DESC`
-        : `SELECT ${ENTRY_COLUMNS} FROM entries WHERE ${conditions.join(" AND ")} ORDER BY updated_at DESC`;
-      if (args.latestPerValue) binds.unshift(jsonPathForTopLevelField(args.field));
-      const rows = await this.db.prepare(sql).bind(...binds).all<EntryDbRow>();
-      entries.push(...rows.map(rowFromDb).map(projectPublicEntry));
+        ? `SELECT ${table.selectColumns} FROM ${table.table} WHERE "_mantle_id" IN (SELECT "_mantle_id" FROM (
+            SELECT "_mantle_id", ROW_NUMBER() OVER (PARTITION BY ${field} ORDER BY "_mantle_updated_at" DESC, "_mantle_id" DESC) AS rank
+            FROM ${table.table} WHERE ${conditions.join(" AND ")}) WHERE rank = 1) ORDER BY "_mantle_updated_at" DESC, "_mantle_id" DESC`
+        : `SELECT ${table.selectColumns} FROM ${table.table} WHERE ${conditions.join(" AND ")} ORDER BY "_mantle_updated_at" DESC`;
+      const rows = await this.db.prepare(sql).bind(...binds).all<NativeEntryRow>();
+      output.push(...rows.map((row) => projectPublicEntry(rowFromDb(table, row))));
     }
-    entries.sort((a, b) => b.updatedAt - a.updatedAt);
-    return entries;
+    return output.sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
-  async readPublished(
-    args: ReadPublishedEntriesArgs = {},
-  ): Promise<readonly Entry[]> {
-    const conditions = ["status = 'published'"];
+  async readPublished(args: ReadPublishedEntriesArgs): Promise<readonly Entry[]> {
+    const table = this.table(args.collection);
+    const conditions = ['"_mantle_status" = \'published\''];
     const binds: unknown[] = [];
-    if (args.locale === null) {
-      conditions.push("entry_locale IS NULL");
-    } else if (args.locale !== undefined) {
-      conditions.push("entry_locale = ?");
-      binds.push(args.locale);
-    }
-    if (args.collection) {
-      conditions.push("collection = ?");
-      binds.push(args.collection);
-    }
-    let sql =
-      `SELECT ${ENTRY_COLUMNS} FROM entries ` +
-      `WHERE ${conditions.join(" AND ")} ORDER BY updated_at DESC`;
-    if (
-      typeof args.limit === "number" &&
-      Number.isFinite(args.limit) &&
-      args.limit > 0
-    ) {
-      sql += ` LIMIT ${Math.floor(args.limit)}`;
-    }
-    const rows = await this.db.prepare(sql).bind(...binds).all<EntryDbRow>();
-    return rows.map(rowFromDb).map(projectPublicEntry);
+    this.addLocaleCondition(table, conditions, binds, args.locale);
+    const limit = typeof args.limit === "number" && Number.isFinite(args.limit) && args.limit > 0 ? ` LIMIT ${Math.floor(args.limit)}` : "";
+    const rows = await this.db.prepare(`SELECT ${table.selectColumns} FROM ${table.table} WHERE ${conditions.join(" AND ")} ORDER BY "_mantle_updated_at" DESC${limit}`)
+      .bind(...binds).all<NativeEntryRow>();
+    return rows.map((row) => projectPublicEntry(rowFromDb(table, row)));
   }
 
-  async readPublishedPage(args: ReadPublishedPageArgs = {}): Promise<PublishedEntryPage> {
+  async readPublishedPage(args: ReadPublishedPageArgs): Promise<PublishedEntryPage> {
+    const table = this.table(args.collection);
     const limit = publishedPageLimit(args.limit);
-    const cursor = decodeEntryCursor(args.cursor);
+    const fields = args.dataFields
+      ? [...new Set([...args.dataFields.filter((field) => table.fields.includes(field)), ...(table.fields.includes("locale") ? ["locale"] : [])])]
+      : table.fields;
+    const columns = ['"_mantle_id"', '"_mantle_status"', '"_mantle_version"', '"_mantle_author_id"', '"_mantle_created_at"', '"_mantle_updated_at"', ...fields.map(quote)];
+    const conditions = ['"_mantle_status" = \'published\''];
     const binds: unknown[] = [];
-    const candidateQuery = (locale: string | null | undefined): string => {
-      const conditions = ["status = 'published'"];
-      // One bound JSON field list avoids D1's bind/function-argument ceilings.
-      // -> retains JSON types (json_extract would turn true/false into 1/0).
-      const data = args.dataFields
-        ? `(SELECT json_group_object(json_extract(field.value, '$[0]'),
-            json(entries.data -> json_extract(field.value, '$[1]')))
-            FROM json_each(?) AS field)` : "data";
-      if (args.dataFields) binds.push(JSON.stringify(args.dataFields.map((field) => [field, jsonPathForTopLevelField(field)])));
-      if (args.collection !== undefined) { conditions.push("collection = ?"); binds.push(args.collection); }
-      if (locale === null) conditions.push("entry_locale IS NULL");
-      else if (locale !== undefined) { conditions.push("entry_locale = ?"); binds.push(locale); }
-      if (cursor) { conditions.push("(updated_at, id) < (?, ?)"); binds.push(...cursor); }
-      return `SELECT id, collection, status, version, ${data} AS data, author_id,
-        created_at, updated_at, entry_locale FROM entries
-        WHERE ${conditions.join(" AND ")} ORDER BY updated_at DESC, id DESC LIMIT ${limit + 1}`;
-    };
-    const query = candidateQuery(args.locale);
-    const candidates = args.includeUnlocalized && typeof args.locale === "string"
-      ? `SELECT * FROM (${query}) UNION ALL SELECT * FROM (${candidateQuery(null)})`
-      : query;
-    // Window work is bounded to limit + 1 indexed candidates. Apply the byte
-    // budget inside SQLite, before transferring/parsing JSON in the Worker.
+    if (args.includeUnlocalized && typeof args.locale === "string") {
+      const locale = requiredFieldSql(table.schema, "locale");
+      conditions.push(`(${locale} = ? OR ${locale} IS NULL)`);
+      binds.push(args.locale);
+    } else {
+      this.addLocaleCondition(table, conditions, binds, args.locale);
+    }
+    const cursor = decodeEntrySortCursor(args.cursor, "updatedAt", "desc");
+    if (cursor) { conditions.push('("_mantle_updated_at", "_mantle_id") < (?, ?)'); binds.push(...cursor); }
+    const rowBytes = fields.length
+      ? fields.map((field) => `length(CAST(json_quote(${quote(field)}) AS BLOB)) + ${new TextEncoder().encode(field).byteLength + 3}`).join(" + ")
+      : "2";
     const rows = await this.db.prepare(`WITH candidates AS (
-      SELECT * FROM (${candidates}) ORDER BY updated_at DESC, id DESC LIMIT ${limit + 1}
+      SELECT ${columns.join(", ")} FROM ${table.table} WHERE ${conditions.join(" AND ")}
+      ORDER BY "_mantle_updated_at" DESC, "_mantle_id" DESC LIMIT ${limit + 1}
     ), budget AS (
-      SELECT *, LEAD(id) OVER (ORDER BY updated_at DESC, id DESC) AS next_id,
-        SUM(length(CAST(data AS BLOB))) OVER (ORDER BY updated_at DESC, id DESC) AS data_bytes
-        FROM candidates
-    ) SELECT * FROM budget WHERE data_bytes = length(CAST(data AS BLOB)) OR data_bytes <= ${PUBLISHED_PAGE_DATA_BUDGET}
-      ORDER BY updated_at DESC, id DESC`).bind(...binds)
-      .all<EntryDbRow & { next_id: string | null }>();
+      SELECT *, (${rowBytes}) AS "_row_bytes", LEAD("_mantle_id") OVER (ORDER BY "_mantle_updated_at" DESC, "_mantle_id" DESC) AS "_next_id",
+        SUM(${rowBytes}) OVER (ORDER BY "_mantle_updated_at" DESC, "_mantle_id" DESC) AS "_data_bytes" FROM candidates
+    ) SELECT ${columns.join(", ")}, "_next_id" FROM budget
+      WHERE "_data_bytes" = "_row_bytes" OR "_data_bytes" <= ${PUBLISHED_PAGE_DATA_BUDGET}
+      ORDER BY "_mantle_updated_at" DESC, "_mantle_id" DESC`)
+      .bind(...binds).all<NativeEntryRow & { _next_id: string | null }>();
     const page = rows.slice(0, limit);
     const last = page.at(-1);
     return {
-      rows: page.map(rowFromDb).map(projectPublicEntry),
-      ...(last?.next_id != null
-        ? { nextCursor: encodeEntryCursor(last.updated_at, last.id) } : {}),
+      rows: page.map((row) => projectPublicEntry(rowFromDb(table, row, args.dataFields))),
+      ...(last?._next_id != null ? { nextCursor: encodeEntrySortCursor("updatedAt", "desc", last._mantle_updated_at, last._mantle_id) } : {}),
     };
   }
 
-  async findManyByDataField(
-    args: FindManyEntriesByDataFieldArgs,
-  ): Promise<readonly Entry[]> {
-    const conditions = ["collection = ?"];
-    const binds: unknown[] = [args.collection];
-    const compiled = compileDataPredicates(
-      this.schemasByName.get(args.collection),
-      [{ field: args.field, kind: "equal", value: args.value }],
-    );
-    conditions.push(...compiled.conditions);
-    binds.push(...compiled.binds);
-    const limit = Number.isFinite(args.limit) && args.limit > 0
-      ? Math.floor(args.limit)
-      : 1;
-    const rows = await this.db
-      .prepare(
-        `SELECT ${ENTRY_COLUMNS} FROM entries
-         WHERE ${conditions.join(" AND ")}
-         ORDER BY updated_at DESC, id DESC LIMIT ${limit}`,
-      )
-      .bind(...binds)
-      .all<EntryDbRow>();
-    return rows.map(rowFromDb).map(projectPublicEntry);
+  async findManyByDataField(args: FindManyEntriesByDataFieldArgs): Promise<readonly Entry[]> {
+    const table = this.table(args.collection);
+    const field = requiredFieldSql(table.schema, args.field);
+    const limit = Number.isFinite(args.limit) && args.limit > 0 ? Math.floor(args.limit) : 1;
+    const rows = await this.db.prepare(`SELECT ${table.selectColumns} FROM ${table.table} WHERE ${field} = ? ORDER BY "_mantle_updated_at" DESC, "_mantle_id" DESC LIMIT ${limit}`)
+      .bind(encodeScalar(table.schema, args.field, args.value)).all<NativeEntryRow>();
+    return rows.map((row) => projectPublicEntry(rowFromDb(table, row)));
   }
 
-  private async findOneByDataFields(args: {
+  private table(collection: string): SqliteSchemaTable {
+    const schema = this.schemasByName.get(collection);
+    if (!schema) throw new Error(`unknown Schema table: ${collection}`);
+    return sqliteSchemaTable(schema);
+  }
+
+  private encodedData(table: SqliteSchemaTable, data: Record<string, unknown>): unknown[] {
+    const properties = table.schema.spec.schema.properties ?? {};
+    return table.fields.map((field) => encodeField(data[field], properties[field]!));
+  }
+
+  private async findOne(args: {
     readonly collection: string;
     readonly status?: ContentState;
     readonly fields: Readonly<Record<string, unknown>>;
     readonly locale?: string | null;
     readonly excludeId?: string;
   }): Promise<EntryRow | null> {
-    const entries = Object.entries(args.fields);
-    if (entries.length === 0) return null;
-    const conditions = ["collection = ?"];
-    const binds: unknown[] = [args.collection];
-    const schema = this.schemasByName.get(args.collection);
-    if (args.status) {
-      conditions.push("status = ?");
-      binds.push(args.status);
+    const table = this.table(args.collection);
+    const conditions: string[] = [];
+    const binds: unknown[] = [];
+    for (const [field, value] of Object.entries(args.fields)) {
+      conditions.push(`${requiredFieldSql(table.schema, field)} = ?`);
+      binds.push(encodeScalar(table.schema, field, value));
     }
-    const compiled = compileDataPredicates(schema, [
-      ...entries.map(([field, value]) => ({
-        field,
-        kind: "equal" as const,
-        value,
-      })),
-      ...localePredicates(args.locale),
-    ]);
-    conditions.push(...compiled.conditions);
-    binds.push(...compiled.binds);
-    if (args.excludeId) {
-      conditions.push("id <> ?");
-      binds.push(args.excludeId);
-    }
-    const row = await this.db
-      .prepare(
-        `SELECT id, collection, status, version, data, author_id, created_at, updated_at
-         FROM entries
-         WHERE ${conditions.join(" AND ")}
-         ORDER BY updated_at DESC LIMIT 1`,
-      )
-      .bind(...binds)
-      .first<EntryDbRow>();
-    return row ? rowFromDb(row) : null;
+    if (!conditions.length) return null;
+    if (args.status) { conditions.push('"_mantle_status" = ?'); binds.push(args.status); }
+    this.addLocaleCondition(table, conditions, binds, args.locale);
+    if (args.excludeId) { conditions.push('"_mantle_id" <> ?'); binds.push(args.excludeId); }
+    const row = await this.db.prepare(`SELECT ${table.selectColumns} FROM ${table.table} WHERE ${conditions.join(" AND ")} ORDER BY "_mantle_updated_at" DESC LIMIT 1`)
+      .bind(...binds).first<NativeEntryRow>();
+    return row ? rowFromDb(table, row) : null;
   }
 
-  private async versionConflict(
-    id: string,
-    expected: number,
-  ): Promise<EntryVersionConflict> {
-    const after = await this.db
-      .prepare(`SELECT version FROM entries WHERE id = ?`)
-      .bind(id)
-      .first<{ version: number }>();
+  private addReadConditions(
+    table: SqliteSchemaTable,
+    conditions: string[],
+    binds: unknown[],
+    args: { readonly status?: ContentState; readonly locale?: string | null },
+  ): void {
+    if (args.status) { conditions.push('"_mantle_status" = ?'); binds.push(args.status); }
+    this.addLocaleCondition(table, conditions, binds, args.locale);
+  }
+
+  private addLocaleCondition(table: SqliteSchemaTable, conditions: string[], binds: unknown[], locale: string | null | undefined): void {
+    if (locale === undefined) return;
+    const field = fieldSql(table.schema, "locale");
+    if (!field) {
+      if (locale !== null) conditions.push("0 = 1");
+      return;
+    }
+    if (locale === null) conditions.push(`${field} IS NULL`);
+    else { conditions.push(`${field} = ?`); binds.push(locale); }
+  }
+
+  private async versionConflict(table: SqliteSchemaTable, id: string, expected: number): Promise<EntryVersionConflict> {
+    const after = await this.db.prepare(`SELECT "_mantle_version" AS "version" FROM ${table.table} WHERE "_mantle_id" = ?`).bind(id).first<{ version: number }>();
     return new EntryVersionConflict(id, expected, after?.version ?? -1);
   }
 }
 
-const ENTRY_COLUMNS =
-  "id, collection, status, version, data, author_id, created_at, updated_at";
+type NativeEntryRow = Readonly<Record<string, unknown>> & {
+  readonly _mantle_id: string;
+  readonly _mantle_status: string;
+  readonly _mantle_version: number;
+  readonly _mantle_author_id: string | null;
+  readonly _mantle_created_at: number;
+  readonly _mantle_updated_at: number;
+};
 
-// D1 accepts at most 100 bound parameters. The worst fallback shape uses
-// five fixed binds (collection, two JSON paths, locale, status), leaving 95
-// values for the parent `IN` predicate.
-const ENTRY_READ_BATCH_SIZE = 95;
-
-type DataPredicate =
-  | { readonly field: string; readonly kind: "equal"; readonly value: unknown }
-  | { readonly field: string; readonly kind: "in"; readonly values: readonly (string | number | boolean)[] }
-  | { readonly field: string; readonly kind: "null" };
-
-function localePredicates(locale: string | null | undefined): DataPredicate[] {
-  if (locale === undefined) return [];
-  return locale === null
-    ? [{ field: "locale", kind: "null" }]
-    : [{ field: "locale", kind: "equal", value: locale }];
-}
-
-function compileDataPredicates(
-  schema: SchemaManifest | undefined,
-  predicates: readonly DataPredicate[],
-): { readonly conditions: string[]; readonly binds: unknown[] } {
-  const conditions: string[] = [];
-  const binds: unknown[] = [];
-  const indexed = usableIndexedFields(schema, predicates);
-  for (const predicate of predicates) {
-    const generated = schema && indexed.has(predicate.field)
-      ? schemaIndexedFieldSql(schema, predicate.field)
-      : null;
-    const reference = generated ?? "json_extract(data, ?)";
-    if (!generated) binds.push(jsonPathForTopLevelField(predicate.field));
-    if (predicate.kind === "null") {
-      conditions.push(`${reference} IS NULL`);
-    } else if (predicate.kind === "in") {
-      conditions.push(
-        `${reference} IN (${predicate.values.map(() => "?").join(", ")})`,
-      );
-      binds.push(...predicate.values);
-    } else {
-      conditions.push(`${reference} = ?`);
-      binds.push(predicate.value);
-    }
+function rowFromDb(table: SqliteSchemaTable, row: NativeEntryRow, dataFields?: readonly string[]): EntryRow {
+  const properties = table.schema.spec.schema.properties ?? {};
+  const data: Record<string, unknown> = {};
+  let locale: string | undefined;
+  for (const field of table.fields) {
+    if (!Object.hasOwn(row, field)) continue;
+    const value = decodeField(row[field], properties[field]!);
+    if (field === "locale" && typeof value === "string") locale = value;
+    if ((!dataFields || dataFields.includes(field)) && value !== undefined) data[field] = value;
   }
-  return { conditions, binds };
-}
-
-function usableIndexedFields(
-  schema: SchemaManifest | undefined,
-  predicates: readonly DataPredicate[],
-): ReadonlySet<string> {
-  if (!schema) return new Set();
-  const byField = new Map(predicates.map((predicate) => [predicate.field, predicate]));
-  const usable = new Set<string>();
-  const declarations = [
-    ...(schema.spec.uniqueIndexes ?? []),
-    ...(schema.spec.indexes ?? []),
-  ];
-  for (const declaration of declarations) {
-    for (let index = 0; index < declaration.length; index += 1) {
-      const field = declaration[index]!;
-      const predicate = byField.get(field);
-      if (!predicate) break;
-      if (
-        index === 0 &&
-        (predicate.kind === "null" ||
-          (predicate.kind === "equal" && predicate.value === null))
-      ) {
-        break;
-      }
-      usable.add(field);
-    }
-  }
-  return usable;
-}
-
-interface EntryDbRow {
-  readonly entry_locale?: string | null;
-  readonly id: string;
-  readonly collection: string;
-  readonly status: string;
-  readonly version: number;
-  readonly data: string;
-  readonly author_id: string | null;
-  readonly created_at: number;
-  readonly updated_at: number;
-}
-
-function entrySortSql(schema: SchemaManifest | undefined, field: string): string | null {
-  if (field === "id") return "id";
-  if (field === "status") return "status";
-  if (field === "updatedAt") return "updated_at";
-  return schema ? schemaIndexedFieldSql(schema, field) : null;
-}
-
-function entrySortValueFromDb(row: EntryDbRow, field: string): string | number {
-  if (field === "id") return row.id;
-  if (field === "status") return row.status;
-  if (field === "updatedAt") return row.updated_at;
-  const value = (JSON.parse(row.data) as Record<string, unknown>)[field];
-  if (typeof value === "boolean") return Number(value);
-  if (typeof value !== "string" && typeof value !== "number") {
-    throw new Error(`non-scalar sort value for ${field}`);
-  }
-  return value;
-}
-
-function rowFromDb(row: EntryDbRow): EntryRow {
-  const data = JSON.parse(row.data) as Record<string, unknown>;
+  for (const field of dataFields ?? []) if (!Object.hasOwn(data, field)) data[field] = null;
   return {
-    id: row.id,
-    collection: row.collection,
-    locale: row.entry_locale === undefined ? liftLocale(data) : row.entry_locale ?? undefined,
-    status: row.status as ContentState,
-    version: row.version,
+    id: row._mantle_id,
+    collection: table.schema.metadata.name,
+    locale: locale ?? liftLocale(data),
+    status: row._mantle_status as ContentState,
+    version: row._mantle_version,
     data,
-    authorId: row.author_id,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    authorId: row._mantle_author_id,
+    createdAt: row._mantle_created_at,
+    updatedAt: row._mantle_updated_at,
   };
 }
 
-function jsonPathForTopLevelField(field: string): string {
-  return `$."${field.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+function requiredFieldSql(schema: SchemaManifest, field: string): string {
+  const sql = fieldSql(schema, field);
+  if (!sql) throw new Error(`Schema '${schema.metadata.name}' has no field '${field}'.`);
+  return sql;
 }
 
-/** Public compatibility helper. Without a Schema map it intentionally uses
- * the safe JSON fallback; in-repo callers use `MantleRuntime.entries`. */
+function encodeScalar(schema: SchemaManifest, field: string, value: unknown): unknown {
+  const property = schema.spec.schema.properties?.[field];
+  return property ? encodeField(value, property) : value;
+}
+
+function sortValue(row: NativeEntryRow, field: string): string | number {
+  const physical = field === "updatedAt" ? "_mantle_updated_at" : field === "createdAt" ? "_mantle_created_at" : field === "id" ? "_mantle_id" : field;
+  const value = row[physical];
+  if (typeof value !== "string" && typeof value !== "number") throw new Error(`non-scalar sort value for ${field}`);
+  return value;
+}
+
+function quote(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+/** Compatibility helper now requires the Schema that owns the table. */
 export async function readEntryBySlug(
   db: DatabaseDriver,
+  schema: SchemaManifest,
   args: ReadEntryBySlugArgs,
 ): Promise<Entry | null> {
-  return new DatabaseEntryRepository(db).readBySlug(args);
+  return new DatabaseEntryRepository(db, new Map([[schema.metadata.name, schema]])).readBySlug(args);
 }
 
-function isDriverUniqueConstraintError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  const msg = err.message || "";
-  return (
-    msg.includes("UNIQUE constraint failed") ||
-    msg.includes("unique constraint") ||
-    msg.includes("duplicate key") ||
-    (err as { code?: string }).code === "SQLITE_CONSTRAINT_UNIQUE" ||
-    (err as { code?: string }).code === "23505"
-  );
+function isDriverUniqueConstraintError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message || "";
+  return message.includes("UNIQUE constraint failed") || message.includes("unique constraint") ||
+    message.includes("duplicate key") || (error as { code?: string }).code === "SQLITE_CONSTRAINT_UNIQUE" ||
+    (error as { code?: string }).code === "23505";
 }

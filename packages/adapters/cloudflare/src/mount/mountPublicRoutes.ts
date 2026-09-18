@@ -171,6 +171,7 @@ export function mountPublicRoutes(
     }
     const request: ComposeSitemapRequest = {
       site,
+      collections: [...new Set(options.collectionRoutes.map(({ collection }) => collection))],
       cursor: c.req.query("cursor"),
       dataFields: web.paths.dataFields,
       maxUrls: Math.max(1, Math.min(2000, Math.floor(40_000 / Math.max(1, site.locales.length)))),
@@ -291,7 +292,7 @@ function mountCollection(
         const page = await web.composeLlmsTxt.execute({
           site,
           locale: contentLocale(runtime, route.collection, locale),
-          collection: route.collection,
+          collections: [route.collection],
           cursor: c.req.query("cursor"),
           pathFor: (entry) => entryPathForLocale(web, options.collectionRoutes, entry, locale),
         });
@@ -499,6 +500,7 @@ async function composeLlmsPage(
   }
   const page = await web.composeLlmsTxt.execute({
     site,
+    collections: [...new Set(options.collectionRoutes.map(({ collection }) => collection))],
     locale: locale ?? (locales.length ? undefined : null),
     locales: locale || !locales.length ? undefined : locales,
     includeUnlocalized: true,

@@ -103,7 +103,7 @@ const order = await runtime.createDraft.execute({
   authorId: "customer-1",
   ctx: context,
 });
-await runtime.requestPublish.execute({ id: order.id, ctx: context });
+await runtime.requestPublish.execute({ id: order.id, collection: order.collection, ctx: context });
 queries.length = 0;
 
 const server = Bun.serve({

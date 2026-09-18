@@ -31,7 +31,7 @@ function manifests(): Manifest[] {
           properties: {
             name: { type: "string" },
             message: { type: "string" },
-            createdAt: { type: "number", "x-mantle-bind": "now" },
+            submittedAt: { type: "number", "x-mantle-bind": "now" },
           },
           required: ["name", "message"],
         },
@@ -197,7 +197,7 @@ describe("smoke: HTTP Trigger → builtin → lifecycle hooks", () => {
     const data = JSON.parse(entry.data) as Record<string, unknown>;
     expect(data["name"]).toBe("Alice");
     expect(data["message"]).toBe("Hi there");
-    expect(data["createdAt"]).toEqual(expect.any(Number));
+    expect(data["submittedAt"]).toEqual(expect.any(Number));
     expect("recaptchaToken" in data).toBe(false);
   });
 

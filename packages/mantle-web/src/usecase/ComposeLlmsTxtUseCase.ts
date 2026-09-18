@@ -3,6 +3,7 @@ import type { EntryReader } from "@aotter/mantle-runtime";
 import type { PublicPathResolver } from "../service/PublicPathResolver.js";
 import { serializeLlmsTxt } from "../service/MarkdownSerializer.js";
 import type { ComposeLlmsTxtRequest } from "../dto/ComposeLlmsTxtRequest.js";
+import { readPublishedAcrossCollections } from "../service/PublishedCollectionPager.js";
 
 /** Compose one bounded discovery page; callers must expose nextCursor. */
 export class ComposeLlmsTxtUseCase {
@@ -13,9 +14,8 @@ export class ComposeLlmsTxtUseCase {
 
   async execute(request: ComposeLlmsTxtRequest): Promise<{ body: string | null; nextCursor?: string } | null> {
     if (!this.paths) return null;
-    const page = await this.reader.readPublishedPage({
+    const page = await readPublishedAcrossCollections(this.reader, request.collections, {
       locale: request.locale,
-      collection: request.collection,
       includeUnlocalized: request.includeUnlocalized,
       cursor: request.cursor,
       limit: request.limit,

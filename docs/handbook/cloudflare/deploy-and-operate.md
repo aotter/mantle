@@ -34,7 +34,7 @@ Add tests and the frontend build where the project has them, then confirm index 
 pnpm exec mantle-harness indexes --require-public --format text
 ```
 
-A required path fails on an `entries` table scan, a temporary sort or an unindexed data-field predicate. Then dry-run and deploy:
+A required path fails on a required Schema-table scan, a temporary sort or an unindexed data-field predicate. Then dry-run and deploy:
 
 ```sh
 wrangler deploy --dry-run
@@ -82,6 +82,15 @@ Read the migration notes shipped with the target release before changing version
 2. Remove scripts that call retired commands. Keep application source, Worker/D1/KV identity, origins, auth mode and secrets.
 3. Run `mantle generate`, `generate --check`, `skills`, `skills --check`, `validate`, typecheck and tests.
 4. Test local routes and authorization, then deploy.
+
+The native-table storage contract is part of the release. A deployment artifact
+pins the runtime release, source and target storage fingerprints, ordered SQL
+checksum, and application checksum. Schema-changing or storage-changing runtime
+upgrades enter maintenance mode, verify the current D1 fingerprint, apply the
+reviewed migration, upload the paired Worker, run a canary, then restore traffic.
+Retries reuse those immutable inputs; rollback restores the previous Worker and
+keeps columns/tables needed by it. Destructive cleanup is a later explicit
+deployment, never an automatic deploy-time guess.
 
 ## Source
 - [`packages/mantle/README.md`](../../../packages/mantle/README.md)

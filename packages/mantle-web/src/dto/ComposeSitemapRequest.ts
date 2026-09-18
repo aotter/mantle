@@ -3,6 +3,8 @@ import type { WebSiteConfig } from "../model/WebSiteConfig.js";
 
 export interface ComposeSitemapRequest {
   readonly site: WebSiteConfig;
+  /** Ordered Schema tables whose public routes are serialized. */
+  readonly collections: readonly string[];
   /** Map storage row → one or more public routes. Returning `null` skips. */
   readonly pathFor?: (entry: Entry) => string | readonly string[] | null;
   /** Public routes without a backing Entry, such as home and collection lists. */

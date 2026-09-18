@@ -63,6 +63,7 @@ export type {
 } from "./domain/port/DatabaseDriver.js";
 export type {
   EntryRepository,
+  EntryKey,
   CreateEntryArgs,
   UpdateEntryArgs,
   DeleteEntryArgs,
@@ -104,6 +105,7 @@ export {
   EntryUniqueConflict,
   EntryVersionConflict,
   liftLocale,
+  materializeNullableFields,
   projectPublicEntry,
   type EntryRow,
 } from "./domain/model/EntryRow.js";
@@ -136,6 +138,13 @@ export {
   SqliteMantleStorageAdapter,
   type SqliteMantleStorageAdapterOptions,
 } from "./infrastructure/storage/SqliteMantleStorageAdapter.js";
+export {
+  buildSqliteMigrationArtifact,
+  storageFingerprint,
+  verifySqliteMigrationArtifact,
+  type ExplicitSqliteMigration,
+  type SqliteMigrationArtifact,
+} from "./infrastructure/storage/SqliteMigrationArtifact.js";
 export {
   prepareDeployment,
   type DeploymentPreparationOptions,

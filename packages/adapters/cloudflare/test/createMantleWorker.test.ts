@@ -13,7 +13,7 @@ import type {
 import type { Manifest } from "@aotter/mantle-spec";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import { D1DatabaseDriver } from "../src/bindings/D1DatabaseDriver.js";
-import { SqliteMantleStorageAdapter } from "@aotter/mantle-runtime";
+import { SqliteMantleStorageAdapter, SqliteMigrationRunner } from "@aotter/mantle-runtime";
 import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
 import {
   MANTLE_RESERVED_EXACT_PATHS,
@@ -58,8 +58,8 @@ describe("createMantleWorker", () => {
     blocked = true;
     await expect(runtime.createDraft.execute({ collection: "items", data: {}, authorId: null })).rejects.toThrow("host_write_limit");
     await expect(runtime.invokeProcedure({ procedure: "add-item", input: { title: "blocked" }, ctx: { user: null, staff: null, env: {} } })).resolves.toMatchObject({ ok: false, diagnostic: { code: "INTERNAL_ERROR", message: "An internal error occurred." } });
-    expect((await runtime.getEntry.execute({ id: entry.id })).data).toMatchObject({ title: "kept" });
-    expect(await runtime.deleteEntry.execute({ id: entry.id })).toEqual({ removed: true });
+    expect((await runtime.getEntry.execute({ collection: "items", id: entry.id })).data).toMatchObject({ title: "kept" });
+    expect(await runtime.deleteEntry.execute({ collection: "items", id: entry.id })).toEqual({ removed: true });
     expect(() => createMantleRuntimeRef({
       plan: compileTestPlan([]), auth: stubAuth,
       bindings: { db, storage: sqlite, mcpCatalogKv: { namespace: {} as KVNamespace, scope: "test" } },
@@ -622,7 +622,7 @@ class FailFirstMigrationDatabase extends InMemoryDatabase {
     runAll: async (migrations: readonly Migration[]) => {
       this.migrationAttempts += 1;
       if (this.migrationAttempts === 1) throw new Error(this.failure);
-      for (const migration of migrations) this.appliedMigrations.add(migration.id);
+      await new SqliteMigrationRunner(this).runAll(migrations);
     },
   };
 }

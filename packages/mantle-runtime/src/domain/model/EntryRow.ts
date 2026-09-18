@@ -1,21 +1,9 @@
-import type { ContentState, Entry } from "@aotter/mantle-spec";
+import type { ContentState, Entry, JsonSchema, SchemaManifest } from "@aotter/mantle-spec";
 
 /**
- * `EntryRow` — DB row shape for `entries`. Mirrors the canonical
- * schema the runtime's migration list creates.
- *
- * `data` is the per-entry JSON blob authored against the Schema's
- * `spec.schema`. `version` is OCC; bumps on every persisted update.
- *
- * Per ADR-0010 the table has no `locale` column — locale lives at
- * `data.locale` (json_extract) so the lookup is uniform with every
- * other Schema-property field. `EntryRow.locale?` is a hydrated
- * convenience: every repository impl lifts `data.locale` onto the
- * top-level field at read time so renderers, path resolvers, and MCP
- * entry readers can branch on `row.locale`
- * without drilling into `data`. Mirrors spec `Entry`'s `locale?`
- * field for the same reason. The DB column shape stays unchanged;
- * this is purely a read-side projection.
+ * `EntryRow` — semantic stored-record shape. SQLite/D1 projects it onto one
+ * native table per Schema; non-SQL adapters preserve the same contract.
+ * `version` is OCC and bumps on every persisted update.
  */
 export interface EntryRow {
   readonly id: string;
@@ -43,6 +31,25 @@ export function liftLocale(
 ): string | undefined {
   const v = data["locale"];
   return typeof v === "string" ? v : undefined;
+}
+
+/** Native SQL represents an omitted nullable field as NULL. Apply the same
+ * projection in semantic adapters so preview and deployed reads agree. */
+export function materializeNullableFields(
+  schema: SchemaManifest,
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  let output: Record<string, unknown> | undefined;
+  for (const [name, property] of Object.entries(schema.spec.schema.properties ?? {})) {
+    if (Object.hasOwn(data, name) || !allowsNull(property)) continue;
+    output ??= { ...data };
+    output[name] = null;
+  }
+  return output ?? data;
+}
+
+function allowsNull(property: JsonSchema): boolean {
+  return Array.isArray(property.type) && property.type.includes("null");
 }
 
 /** Explicit public projection. Keep this field-by-field so adding another

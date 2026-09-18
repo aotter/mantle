@@ -108,12 +108,14 @@ class OrderedDatabase extends InMemoryDatabase {
   }
 
   override async batch(stmts: Parameters<InMemoryDatabase["batch"]>[0]) {
-    if (this.failWrites) {
+    const writesSiteConfig = stmts.some((stmt) => /^\s*(?:INSERT|UPDATE|DELETE)\b/i.test((stmt as unknown as { sql: string }).sql) &&
+      (stmt as unknown as { sql: string }).sql.includes("site_config"));
+    if (this.failWrites && writesSiteConfig) {
       this.events.push("write-failed");
       throw new Error("scripted site settings write failure");
     }
     const result = await super.batch(stmts);
-    this.events.push("write");
+    if (writesSiteConfig) this.events.push("write");
     return result;
   }
 }

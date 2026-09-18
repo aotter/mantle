@@ -26,9 +26,10 @@ CSV cells are quoted and formula-shaped headers are neutralized.
 ## Aggregation and freshness
 
 A single SQL statement returns a total and sparse grouped counts from one SQLite
-snapshot. `entries(collection, created_at)` is prepared by canonical migration
-0008. The range branch searches the index, and the total branch counts index
-entries. Payload JSON stays in the database; only count rows reach the Worker.
+snapshot. Each native Schema table carries `_mantle_created_at` and its own
+creation index. The range branch searches that index, and the total branch
+counts index entries. Other field columns stay in the database; only count rows
+reach the Worker.
 
 The existing Cloudflare KV decorator caches MCP site configuration, not entry
 queries. Reusing that key/projection would mix unrelated data and mutation

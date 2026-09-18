@@ -1,31 +1,50 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import type { SchemaManifest } from "@aotter/mantle-spec";
 import {
   EntryStatusConflict,
   EntryVersionConflict,
 } from "../src/domain/model/EntryRow.js";
 import { DatabaseEntryRepository } from "../src/infrastructure/persistence/DatabaseEntryRepository.js";
 import { InMemoryDatabase } from "./fakes/database.js";
+import { CANONICAL_MIGRATIONS } from "../src/infrastructure/boot/index.js";
+import { schemaTableMigrations } from "../src/infrastructure/storage/SqliteSchemaTables.js";
+
+const schema: SchemaManifest = {
+  apiVersion: "cms.mantle.aotter.net/v1", kind: "Schema", metadata: { name: "posts" },
+  spec: { title: "Posts", schema: { type: "object", properties: {
+    title: { type: "string" }, locale: { type: ["string", "null"] },
+    t: { type: "integer" }, slug: { type: "string" },
+  } } },
+};
 
 describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
+  let db: InMemoryDatabase;
+  let repo: DatabaseEntryRepository;
+
+  beforeEach(async () => {
+    db = new InMemoryDatabase();
+    await db.migrations.runAll(CANONICAL_MIGRATIONS);
+    await db.migrations.runAll(schemaTableMigrations([schema]));
+    repo = new DatabaseEntryRepository(db, new Map([["posts", schema]]));
+  });
+
   it("create + get round-trips data", async () => {
-    const db = new InMemoryDatabase();
-    const repo = new DatabaseEntryRepository(db);
     const created = await repo.create({
       id: "p1",
       collection: "posts",
       status: "draft",
-      data: { title: "Hi" },
+      data: { title: "Hi", locale: null },
       authorId: "u1",
       now: 1,
     });
-    expect(created.data).toEqual({ title: "Hi" });
-    expect(await repo.get("p1")).toEqual({
+    expect(created.data).toEqual({ title: "Hi", locale: null });
+    expect(await repo.get({ id: "p1", collection: "posts" })).toEqual({
       id: "p1",
       collection: "posts",
       locale: undefined,
       status: "draft",
       version: 1,
-      data: { title: "Hi" },
+      data: { title: "Hi", locale: null },
       authorId: "u1",
       createdAt: 1,
       updatedAt: 1,
@@ -33,8 +52,6 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
   });
 
   it("create lifts data.locale to top-level locale", async () => {
-    const db = new InMemoryDatabase();
-    const repo = new DatabaseEntryRepository(db);
     const created = await repo.create({
       id: "p1",
       collection: "posts",
@@ -44,13 +61,19 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
       now: 1,
     });
     expect(created.locale).toBe("en-US");
-    const fetched = await repo.get("p1");
+    const fetched = await repo.get({ id: "p1", collection: "posts" });
     expect(fetched?.locale).toBe("en-US");
   });
 
+  it("round-trips nullable native columns as null", async () => {
+    await repo.create({
+      id: "p1", collection: "posts", status: "draft",
+      data: { title: "Hi", locale: null }, authorId: null, now: 1,
+    });
+    expect((await repo.get({ id: "p1", collection: "posts" }))?.data.locale).toBeNull();
+  });
+
   it("update bumps version + persists data", async () => {
-    const db = new InMemoryDatabase();
-    const repo = new DatabaseEntryRepository(db);
     await repo.create({
       id: "p1",
       collection: "posts",
@@ -67,12 +90,10 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
       now: 2,
     });
     expect(updated.version).toBe(2);
-    expect(updated.data).toEqual({ title: "v2" });
+    expect(updated.data).toEqual({ title: "v2", locale: null });
   });
 
   it("update with stale version throws EntryVersionConflict", async () => {
-    const db = new InMemoryDatabase();
-    const repo = new DatabaseEntryRepository(db);
     await repo.create({
       id: "p1",
       collection: "posts",
@@ -87,8 +108,6 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
   });
 
   it("transitionStatus with expectedStatus enforces guard", async () => {
-    const db = new InMemoryDatabase();
-    const repo = new DatabaseEntryRepository(db);
     await repo.create({
       id: "p1",
       collection: "posts",
@@ -109,8 +128,6 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
   });
 
   it("transitionStatus with wrong expectedStatus throws EntryStatusConflict", async () => {
-    const db = new InMemoryDatabase();
-    const repo = new DatabaseEntryRepository(db);
     await repo.create({
       id: "p1",
       collection: "posts",
@@ -131,8 +148,6 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
   });
 
   it("archive flips status to 'archived' and bumps version", async () => {
-    const db = new InMemoryDatabase();
-    const repo = new DatabaseEntryRepository(db);
     await repo.create({
       id: "p1",
       collection: "posts",
@@ -153,8 +168,6 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
   });
 
   it("delete removes the row", async () => {
-    const db = new InMemoryDatabase();
-    const repo = new DatabaseEntryRepository(db);
     await repo.create({
       id: "p1",
       collection: "posts",
@@ -170,12 +183,10 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
       expectedVersion: 1,
     });
     expect(result.removed).toBe(true);
-    expect(await repo.get("p1")).toBeNull();
+    expect(await repo.get({ id: "p1", collection: "posts" })).toBeNull();
   });
 
   it("delete keeps the row when the loaded snapshot is stale", async () => {
-    const db = new InMemoryDatabase();
-    const repo = new DatabaseEntryRepository(db);
     await repo.create({
       id: "p1",
       collection: "posts",
@@ -201,12 +212,10 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
         expectedVersion: 1,
       }),
     ).rejects.toBeInstanceOf(EntryVersionConflict);
-    expect(await repo.get("p1")).not.toBeNull();
+    expect(await repo.get({ id: "p1", collection: "posts" })).not.toBeNull();
   });
 
   it("list orders by updated_at DESC and respects status filter", async () => {
-    const db = new InMemoryDatabase();
-    const repo = new DatabaseEntryRepository(db);
     await repo.create({
       id: "p1",
       collection: "posts",
@@ -238,8 +247,6 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
   });
 
   it("paginates equal timestamps without overlap", async () => {
-    const db = new InMemoryDatabase();
-    const repo = new DatabaseEntryRepository(db);
     for (const id of ["p1", "p2", "p3", "p4", "p5"]) {
       await repo.create({
         id,
@@ -273,8 +280,6 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
   });
 
   it("findByDataField finds a matching row with optional status filter", async () => {
-    const db = new InMemoryDatabase();
-    const repo = new DatabaseEntryRepository(db);
     await repo.create({
       id: "p1",
       collection: "posts",

@@ -26,11 +26,11 @@ export class UnpublishUseCase {
 
   async execute(request: UnpublishRequest): Promise<EntryRow> {
     const opPath = `usecase/Unpublish/${request.id}`;
-    const existing = await this.entries.get(request.id);
+    const existing = await this.entries.get(request);
     if (!existing) {
-      throw new DiagnosticError(notFoundDiagnostic(opPath, "<unknown>", request.id));
+      throw new DiagnosticError(notFoundDiagnostic(opPath, request.collection, request.id));
     }
-    const schema = this.schemas.get(existing.collection);
+    const schema = this.schemas.get(request.collection);
     if (!canTransition(schema, existing.status, "draft")) {
       throw new DiagnosticError(
         illegalTransitionDiagnostic(opPath, existing.status, "draft"),
@@ -39,7 +39,7 @@ export class UnpublishUseCase {
     const unpublished = await withConflictDiagnostic(opPath, () =>
       this.entries.transitionStatus({
         id: request.id,
-        collection: existing.collection,
+        collection: request.collection,
         to: "draft",
         expectedStatus: existing.status,
         // Pin the version we read above — a concurrent mutation between

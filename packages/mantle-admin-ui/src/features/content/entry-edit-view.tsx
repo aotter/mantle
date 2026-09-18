@@ -8,7 +8,7 @@ import { api } from "../../lib/api";
 import { isFoldedFieldChild } from "../../lib/collection-nav";
 import { propertyDescription, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
-import { entryEditorQueryOptions, operationsQueryOptions } from "../../lib/queries";
+import { entryApiPath, entryEditorQueryOptions, operationsQueryOptions } from "../../lib/queries";
 import type {
   AdminUser,
   EntryEditorCollection,
@@ -102,18 +102,18 @@ export function EntryEditView({
 
   const save = useMutation({
     mutationFn: (nextData: Record<string, unknown>) =>
-      api.patch<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}`, {
+      api.patch<EntryEditorPayload>(entryApiPath(collectionName, entryId), {
         data: nextData,
         expectedVersion: query.data?.entry.version,
       }),
     onSuccess: syncPayload,
   });
   const publish = useMutation({
-    mutationFn: () => api.post<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}/publish`, {}),
+    mutationFn: () => api.post<EntryEditorPayload>(entryApiPath(collectionName, entryId, "/publish"), {}),
     onSuccess: syncPayload,
   });
   const unpublish = useMutation({
-    mutationFn: () => api.post<EntryEditorPayload>(`/entries/${encodeURIComponent(entryId)}/unpublish`, {}),
+    mutationFn: () => api.post<EntryEditorPayload>(entryApiPath(collectionName, entryId, "/unpublish"), {}),
     onSuccess: syncPayload,
   });
   const createTranslation = useMutation({

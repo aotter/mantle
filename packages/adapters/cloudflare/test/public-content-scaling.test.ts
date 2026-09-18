@@ -3,6 +3,7 @@ import type { SchemaManifest, SiteConfig } from "@aotter/mantle-spec";
 import { CANONICAL_MIGRATIONS } from "@aotter/mantle-runtime";
 import { ComposeLlmsTxtUseCase, ComposeSitemapUseCase, RenderListLiveUseCase, TemplateRegistry, createPublicPathResolver } from "@aotter/mantle-web";
 import { DatabaseEntryRepository } from "../../../mantle-runtime/src/infrastructure/persistence/DatabaseEntryRepository.js";
+import { schemaTableMigrations } from "../../../mantle-runtime/src/infrastructure/storage/SqliteSchemaTables.js";
 import { D1DatabaseDriver } from "../src/bindings/D1DatabaseDriver.js";
 import { sqliteD1 } from "./fakes/sqlite-d1.js";
 
@@ -14,6 +15,17 @@ const bytes = (value: unknown) => new TextEncoder().encode(typeof value === "str
 function fixture() {
   const { db, sqlite } = sqliteD1();
   for (const migration of CANONICAL_MIGRATIONS) sqlite.exec(migration.sql);
+  const schema = (name: string, properties: Record<string, SchemaManifest["spec"]["schema"]>, extra: Partial<SchemaManifest["spec"]> = {}): SchemaManifest => ({
+    apiVersion: "cms.mantle.aotter.net/v1", kind: "Schema", metadata: { name },
+    spec: { title: name, schema: { type: "object", properties }, ...extra },
+  });
+  const schemas = new Map<string, SchemaManifest>([
+    ["shared", schema("shared", { slug: { type: "string" }, title: { type: "string" }, body: { type: "string" } })],
+    ["posts", schema("posts", { slug: { type: "string" }, locale: { type: "string" }, title: { type: "string" }, body: { type: "string" } })],
+    ["parents", schema("parents", { slug: { type: "string" }, title: { type: "string" }, marker: { type: "string" }, coverAssetId: { type: "string" } }, { indexes: [["slug"]] })],
+    ["translations", schema("translations", { slug: { type: "string" }, locale: { type: "string" }, title: { type: "string" }, imageAssetId: { type: "string" } }, { localized: true, translates: { parent: "parents", on: "slug" }, indexes: [["slug"]] })],
+  ]);
+  for (const migration of schemaTableMigrations(schemas.values())) sqlite.exec(migration.sql);
   const results: { rows: number; dataBytes: number; resultBytes: number }[] = [];
   const prepare = db.prepare.bind(db);
   const observe = (statement: D1PreparedStatement): D1PreparedStatement => new Proxy(statement, {
@@ -21,7 +33,7 @@ function fixture() {
       if (key === "bind") return (...values: unknown[]) => observe(target.bind(...values));
       if (key === "all") return async () => {
         const result = await target.all<{ data?: string }>();
-        results.push({ rows: result.results.length, dataBytes: result.results.reduce((sum, row) => sum + bytes(row.data ?? ""), 0), resultBytes: bytes(result.results) });
+        results.push({ rows: result.results.length, dataBytes: bytes(result.results), resultBytes: bytes(result.results) });
         return result;
       };
       const value = Reflect.get(target, key);
@@ -29,7 +41,7 @@ function fixture() {
     },
   });
   vi.spyOn(db, "prepare").mockImplementation((sql) => observe(prepare(sql)));
-  return { sqlite, results, reader: new DatabaseEntryRepository(new D1DatabaseDriver(db)) };
+  return { sqlite, results, reader: new DatabaseEntryRepository(new D1DatabaseDriver(db), schemas) };
 }
 
 // Full Cartesian fixture matrix, including complete discovery traversal. The
@@ -40,13 +52,18 @@ for (const count of [100, 10_000, 50_000]) for (const bodyBytes of [64, 4096]) f
     try {
       const activeLocales = locales.slice(0, localeCount);
       const currentSite = { ...site, locales: activeLocales };
-      const insert = sqlite.prepare("INSERT INTO entries (id, collection, status, version, data, author_id, created_at, updated_at) VALUES (?, ?, 'published', 1, ?, 'private-author', 1, ?)");
+      const inserts = {
+        posts: sqlite.prepare(`INSERT INTO posts (_mantle_id, _mantle_status, _mantle_version, _mantle_author_id, _mantle_created_at, _mantle_updated_at, slug, locale, title, body) VALUES (?, 'published', 1, 'private-author', 1, ?, ?, ?, ?, ?)`),
+        shared: sqlite.prepare(`INSERT INTO shared (_mantle_id, _mantle_status, _mantle_version, _mantle_author_id, _mantle_created_at, _mantle_updated_at, slug, title, body) VALUES (?, 'published', 1, 'private-author', 1, ?, ?, ?, ?)`),
+      };
       sqlite.exec("BEGIN");
       const body = "x".repeat(bodyBytes);
       for (let index = 0; index < count; index++) {
         const locale = index % 2 ? activeLocales[Math.floor(index / 2) % localeCount] : undefined;
-        insert.run(`entry-${String(index).padStart(6, "0")}`, locale ? "posts" : "shared",
-          JSON.stringify({ slug: `item-${index}`, ...(locale ? { locale } : {}), title: `Title ${index}`, body }), Math.floor(index / 3));
+        const id = `entry-${String(index).padStart(6, "0")}`;
+        const updated = Math.floor(index / 3);
+        if (locale) inserts.posts.run(id, updated, `item-${index}`, locale, `Title ${index}`, body);
+        else inserts.shared.run(id, updated, `item-${index}`, `Title ${index}`, body);
       }
       sqlite.exec("COMMIT; ANALYZE");
       const templates = new TemplateRegistry();
@@ -60,7 +77,7 @@ for (const count of [100, 10_000, 50_000]) for (const bodyBytes of [64, 4096]) f
       expect(cold!.nextCursor).toBeDefined();
       expect(coldResult).toHaveLength(1);
       expect(coldResult[0]!.rows).toBe(21); // One continuation lookahead.
-      expect(coldResult[0]!.dataBytes).toBeLessThan(21 * (bodyBytes + 100));
+      expect(coldResult[0]!.dataBytes).toBeLessThan(21 * (bodyBytes + 250));
       const warm = await list.execute({ site: currentSite, collection: "shared", locale: "en", contentLocale: null, limit: 20 });
       expect(warm).toEqual(cold);
       expect(results.splice(0)).toEqual(coldResult);
@@ -72,7 +89,7 @@ for (const count of [100, 10_000, 50_000]) for (const bodyBytes of [64, 4096]) f
       let llmsCalls = 0;
       let llmsResultBytes = 0;
       do {
-        const page = await llms.execute({ site: currentSite, locales: activeLocales, cursor,
+        const page = await llms.execute({ site: currentSite, collections: ["posts", "shared"], locales: activeLocales, cursor,
           pathFor: (entry, locale) => entry.locale ? paths.forEntry(entry) : `/${locale.toLowerCase()}/shared/${entry.data.slug}` });
         const calls = results.splice(0);
         expect(calls).toHaveLength(1); // Shared content is read once, regardless of locales.
@@ -90,7 +107,7 @@ for (const count of [100, 10_000, 50_000]) for (const bodyBytes of [64, 4096]) f
       expect(llmsCalls).toBe(Math.ceil(count / 50));
       expect(urls.size).toBe(count / 2 * (1 + localeCount));
       const sitemap = new ComposeSitemapUseCase(reader);
-      const sitemapRequest = { site: currentSite, dataFields: ["slug"], pathFor: (entry: Parameters<typeof paths.forEntry>[0]) => entry.locale
+      const sitemapRequest = { site: currentSite, collections: ["posts", "shared"], dataFields: ["slug"], pathFor: (entry: Parameters<typeof paths.forEntry>[0]) => entry.locale
         ? paths.forEntry(entry) : activeLocales.map((locale) => `/${locale.toLowerCase()}/shared/${entry.data.slug}`) };
       const index = await sitemap.index(sitemapRequest, (partCursor) => `/sitemap.xml?part=1${partCursor ? `&cursor=${encodeURIComponent(partCursor)}` : ""}`);
       const parts = [...index.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => new URL(match[1]!.replace(/&amp;/g, "&")));
@@ -100,8 +117,8 @@ for (const count of [100, 10_000, 50_000]) for (const bodyBytes of [64, 4096]) f
       for (const part of parts) {
         const page = await sitemap.execute({ ...sitemapRequest, cursor: part.searchParams.get("cursor") ?? undefined });
         const calls = results.splice(0);
-        expect(calls).toHaveLength(1);
-        expect(calls[0]!.dataBytes).toBeLessThan(2001 * 30); // No body transfer, even at 50k rows.
+        expect(calls.length).toBeLessThanOrEqual(2);
+        expect(calls.reduce((total, call) => total + call.dataBytes, 0)).toBeLessThan(2001 * 250); // No body transfer, even at 50k rows.
         sitemapBytes += bytes(page.body);
         for (const match of page.body.matchAll(/<loc>([^<]+)<\/loc>/g)) expect(urls.delete(`${match[1]}.md`)).toBe(true);
       }
@@ -124,15 +141,16 @@ describe("bounded list joins", () => {
         apiVersion: "cms.mantle.aotter.net/v1", kind: "Schema", metadata: { name: "translations" },
         spec: { title: "Translations", localized: true, lifecycle: "publishing", schema: { type: "object" }, translates: { parent: "parents", on: "slug" } },
       }]]);
-      const insert = sqlite.prepare("INSERT INTO entries (id, collection, status, version, data, author_id, created_at, updated_at) VALUES (?, ?, ?, 1, ?, 'private-author', 1, ?)");
+      const parentInsert = sqlite.prepare(`INSERT INTO parents (_mantle_id, _mantle_status, _mantle_version, _mantle_author_id, _mantle_created_at, _mantle_updated_at, slug, title, marker, coverAssetId) VALUES (?, ?, 1, 'private-author', 1, ?, ?, ?, ?, ?)`);
+      const childInsert = sqlite.prepare(`INSERT INTO translations (_mantle_id, _mantle_status, _mantle_version, _mantle_author_id, _mantle_created_at, _mantle_updated_at, slug, locale, title, imageAssetId) VALUES (?, ?, 1, 'private-author', 1, ?, ?, ?, ?, ?)`);
       for (const [index, status] of ["published", "draft"].entries()) {
-        insert.run(`parent-${index}`, "parents", status, JSON.stringify({ slug: `slug-${index}`, title: "Parent", marker: status, coverAssetId: "cover" }), index);
+        parentInsert.run(`parent-${index}`, status, index, `slug-${index}`, "Parent", status, "cover");
       }
       for (let index = 0; index < 100; index++) {
-        insert.run(`duplicate-${index}`, "parents", "published", JSON.stringify({ slug: "slug-0", marker: "obsolete" }), -index - 1);
+        parentInsert.run(`duplicate-${index}`, "published", -index - 1, "slug-0", null, "obsolete", null);
       }
       for (let index = 0; index < 4; index++) {
-        insert.run(`child-${index}`, "translations", index === 3 ? "draft" : "published", JSON.stringify({ slug: `slug-${index}`, locale: "en", title: "Child", imageAssetId: "inline" }), 10 - index);
+        childInsert.run(`child-${index}`, index === 3 ? "draft" : "published", 10 - index, `slug-${index}`, "en", "Child", "inline");
       }
       const templates = new TemplateRegistry();
       const rendered: unknown[] = [];

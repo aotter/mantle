@@ -69,7 +69,7 @@ semantic fingerprint.
 | Parse + normalize | YAML syntax/alias limits, closed four-atom shape, primitive and atom-local rules, behavior-affecting defaults, source metadata | Cross-atom references, handlers, storage, optional routes |
 | Link | Duplicate symbols, cross-atom references, guard graphs, translations, manifest-owned route/tool collisions | I/O, selected modules, handler availability |
 | Compile | Immutable lookup records, authorization plans, Trigger indices, Procedure descriptors, logical View plans, semantic fingerprint | Connections, repositories, handlers, requests, templates, assets |
-| Prepare | Selected storage migrations/indexes/native Views, handler availability, selected capability/route checks, readiness revision | YAML interpretation or request execution |
+| Prepare | Selected storage migrations/native Schema tables and indexes/prepared Views, handler availability, selected capability/route checks, readiness revision | YAML interpretation or request execution |
 | Bind/invoke | Semantic ports, handler dispatch, parameter binding, centralized authorization, content/View/Procedure/Trigger/lifecycle operations | DDL, route mounting, assets, HTTP/session/cache policy |
 | Optional modules/adapters | Web/Admin composition and request/session/cache/platform translation | Re-parsing, re-linking, or a second authorization/runtime stack |
 

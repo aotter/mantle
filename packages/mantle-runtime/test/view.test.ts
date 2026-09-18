@@ -14,11 +14,13 @@ import {
 import { InMemoryDatabase } from "./fakes/database.js";
 import {
   runtimeDiagnostic,
-  buildSchemaSqlView,
   type SchemaManifest,
   type ViewManifest,
 } from "@aotter/mantle-spec";
 import type { DatabaseDriver } from "../src/domain/port/DatabaseDriver.js";
+import { CANONICAL_MIGRATIONS } from "../src/infrastructure/boot/index.js";
+import { DatabaseEntryRepository } from "../src/infrastructure/persistence/DatabaseEntryRepository.js";
+import { schemaTableMigrations } from "../src/infrastructure/storage/SqliteSchemaTables.js";
 
 function view(
   opts: Partial<ViewManifest["spec"]> & ({ from: string } | { sql: string }),
@@ -56,6 +58,26 @@ function sqliteUseCase(
   );
 }
 
+function nativeSchema(name: string, properties: Record<string, SchemaManifest["spec"]["schema"]>): SchemaManifest {
+  return {
+    apiVersion: "cms.mantle.aotter.net/v1",
+    kind: "Schema",
+    metadata: { name },
+    spec: { title: name, schema: { type: "object", properties } },
+  };
+}
+
+async function seed(
+  db: InMemoryDatabase,
+  schema: SchemaManifest,
+  rows: readonly { readonly id: string; readonly status: "draft" | "published"; readonly data: Record<string, unknown>; readonly now: number }[],
+): Promise<void> {
+  await db.migrations.runAll(CANONICAL_MIGRATIONS);
+  await db.migrations.runAll(schemaTableMigrations([schema]));
+  const repository = new DatabaseEntryRepository(db, new Map([[schema.metadata.name, schema]]));
+  for (const row of rows) await repository.create({ ...row, collection: schema.metadata.name, authorId: null });
+}
+
 describe("compileView", () => {
   it("queries Schema logical tables, flattens JSON rows, and binds SQL params", () => {
     const orders: SchemaManifest = {
@@ -75,24 +97,17 @@ describe("compileView", () => {
     };
     const db = new DatabaseSync(":memory:");
     try {
-      db.exec(`CREATE TABLE entries (
-        id TEXT, collection TEXT, status TEXT, version INTEGER, data TEXT,
-        author_id TEXT, created_at INTEGER, updated_at INTEGER
-      )`);
-      db.exec(buildSchemaSqlView(orders).createSql);
-      db.prepare("INSERT INTO entries VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
-        "o1", "orders", "published", 1,
-        JSON.stringify({
-          orderStatus: "paid",
-          items: [
-            { title: "Tea", quantity: 2 },
-            { title: "Cake", quantity: 1 },
-          ],
-        }),
-        null, 1, 1,
-      );
+      for (const migration of CANONICAL_MIGRATIONS) db.exec(migration.sql);
+      for (const migration of schemaTableMigrations([orders])) db.exec(migration.sql);
+      db.prepare(`INSERT INTO orders
+        (_mantle_id, _mantle_status, _mantle_version, _mantle_author_id, _mantle_created_at, _mantle_updated_at, orderStatus, items)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run("o1", "published", 1, null, 1, 1, "paid", JSON.stringify([
+          { title: "Tea", quantity: 2 },
+          { title: "Cake", quantity: 1 },
+        ]));
       const compiled = compileView(view({
-        sql: `SELECT o.id AS orderId,
+        sql: `SELECT o._mantle_id AS orderId,
           json_extract(item.value, '$.title') AS title,
           json_extract(item.value, '$.quantity') AS quantity
           FROM orders AS o JOIN json_each(o.items) AS item
@@ -119,16 +134,16 @@ describe("compileView", () => {
 
   it("emits a default-projection SELECT for a bare from-only view", () => {
     const c = compileView(view({ from: "posts" }));
-    expect(c.sql).toContain("FROM entries WHERE collection = ?");
+    expect(c.sql).toContain(`FROM "posts"`);
     expect(c.sql).toContain("LIMIT");
-    expect(c.params).toEqual(["posts"]);
+    expect(c.params).toEqual([]);
   });
 
   it("compiles `eq` filter with parameter binding", () => {
     const c = compileView(
       view({ from: "posts", filter: { eq: { field: "status", value: "published" } } }),
     );
-    expect(c.params).toEqual(["posts", "published"]);
+    expect(c.params).toEqual(["published"]);
     expect(c.sql).toMatch(/status = \?/);
   });
 
@@ -160,24 +175,23 @@ describe("compileView", () => {
       },
     );
     expect(c.params).toEqual([
-      "stock-movements",
       "2026-06-01T00:00:00Z",
       "2026-07-01T00:00:00Z",
       0,
     ]);
-    expect(c.sql).toContain(`json_extract(data, '$."occurredAt"') >= ?`);
-    expect(c.sql).toContain(`json_extract(data, '$."occurredAt"') < ?`);
-    expect(c.sql).toContain(`json_extract(data, '$."quantity"') > ?`);
+    expect(c.sql).toContain(`"occurredAt" >= ?`);
+    expect(c.sql).toContain(`"occurredAt" < ?`);
+    expect(c.sql).toContain(`"quantity" > ?`);
   });
 
-  it("non-reserved field uses json_extract", () => {
+  it("non-reserved field uses its native column", () => {
     const c = compileView(
       view({
         from: "posts",
         filter: { eq: { field: "locale", value: "en-US" } },
       }),
     );
-    expect(c.sql).toContain(`json_extract(data, '$."locale"') = ?`);
+    expect(c.sql).toContain(`"locale" = ?`);
   });
 
   it("compiles `and` of multiple eqs", () => {
@@ -192,7 +206,7 @@ describe("compileView", () => {
         },
       }),
     );
-    expect(c.params).toEqual(["posts", "published", "en-US"]);
+    expect(c.params).toEqual(["published", "en-US"]);
     expect(c.sql).toMatch(/AND/);
   });
 
@@ -208,9 +222,9 @@ describe("compileView", () => {
         },
       }),
     );
-    expect(c.params).toEqual(["posts", "en", "zh-TW"]);
+    expect(c.params).toEqual(["en", "zh-TW"]);
     expect(c.sql).toContain(
-      `(json_extract(data, '$."locale"') = ?) OR (json_extract(data, '$."locale"') = ?)`,
+      `("locale" = ?) OR ("locale" = ?)`,
     );
   });
 
@@ -231,27 +245,31 @@ describe("compileView", () => {
         },
       }),
     );
-    expect(c.params).toEqual(["posts", "published", "en", "zh-TW"]);
+    expect(c.params).toEqual(["published", "en", "zh-TW"]);
     expect(c.sql).toContain(
-      `(status = ?) AND ((json_extract(data, '$."locale"') = ?) OR (json_extract(data, '$."locale"') = ?))`,
+      `(_mantle_status = ?) AND (("locale" = ?) OR ("locale" = ?))`,
     );
   });
 
   it("returns the same locale-or fixture rows that IndexedDB must match (#783)", () => {
     const db = new DatabaseSync(":memory:");
     try {
-      db.exec(`CREATE TABLE entries (
-        id TEXT, collection TEXT, status TEXT, version INTEGER, data TEXT,
-        author_id TEXT, created_at INTEGER, updated_at INTEGER
-      )`);
-      const insert = db.prepare("INSERT INTO entries VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+      const posts: SchemaManifest = {
+        apiVersion: "cms.mantle.aotter.net/v1", kind: "Schema", metadata: { name: "posts" },
+        spec: { title: "Posts", schema: { type: "object", properties: { locale: { type: "string" } } } },
+      };
+      for (const migration of CANONICAL_MIGRATIONS) db.exec(migration.sql);
+      for (const migration of schemaTableMigrations([posts])) db.exec(migration.sql);
+      const insert = db.prepare(`INSERT INTO posts
+        (_mantle_id, _mantle_status, _mantle_version, _mantle_author_id, _mantle_created_at, _mantle_updated_at, locale)
+        VALUES (?, ?, 1, NULL, 1, 1, ?)`);
       for (const [id, locale, status] of [
         ["en-post", "en", "published"],
         ["zh-post", "zh-TW", "published"],
         ["ja-post", "ja", "published"],
         ["en-draft", "en", "draft"],
       ] as const) {
-        insert.run(id, "posts", status, 1, JSON.stringify({ locale }), null, 1, 1);
+        insert.run(id, status, locale);
       }
 
       const localeOr = compileView(view({
@@ -263,7 +281,7 @@ describe("compileView", () => {
             { eq: { field: "locale", value: "zh-TW" } },
           ],
         },
-      }));
+      }), {}, posts);
       const localeOrRows = db.prepare(localeOr.sql)
         .all(...localeOr.params as SQLInputValue[]) as Array<{ id: string }>;
       expect(localeOrRows.map((row) => row.id).sort()).toEqual(["en-draft", "en-post", "zh-post"]);
@@ -282,7 +300,7 @@ describe("compileView", () => {
             },
           ],
         },
-      }));
+      }), {}, posts);
       const nestedRows = db.prepare(nested.sql)
         .all(...nested.params as SQLInputValue[]) as Array<{ id: string }>;
       expect(nestedRows.map((row) => row.id).sort()).toEqual(["en-post", "zh-post"]);
@@ -299,7 +317,7 @@ describe("compileView", () => {
         limit: 5,
       }),
     );
-    expect(c.sql).toMatch(/ORDER BY updated_at DESC/);
+    expect(c.sql).toMatch(/ORDER BY _mantle_updated_at DESC/);
     expect(c.sql).toMatch(/LIMIT 5 OFFSET 0/);
   });
 
@@ -316,8 +334,8 @@ describe("compileView", () => {
       }),
       { params: { locale: "zh-TW" } },
     );
-    expect(c.params).toEqual(["posts", "zh-TW"]);
-    expect(c.sql).toContain(`json_extract(data, '$."locale"') = ?`);
+    expect(c.params).toEqual(["zh-TW"]);
+    expect(c.sql).toContain(`"locale" = ?`);
   });
 
   it("binds the normalized site-local user id for $ctx.user filters", () => {
@@ -328,8 +346,8 @@ describe("compileView", () => {
       }),
       { ctxUserId: "site-user-1" },
     );
-    expect(c.params).toEqual(["orders", "site-user-1"]);
-    expect(c.sql).toContain(`json_extract(data, '$."userId"') = ?`);
+    expect(c.params).toEqual(["site-user-1"]);
+    expect(c.sql).toContain(`"userId" = ?`);
     expect(() => compileView(
       view({
         from: "orders",
@@ -353,10 +371,7 @@ describe("compileView", () => {
     )).toThrow(/requires param 'locale'/);
   });
 
-  it("accepts hyphenated field names via quoted JSON paths (#210 PR14 / codex CX3)", () => {
-    // Schema property keys are arbitrary JSON strings per RFC 8259;
-    // the prior identifier-only allowlist rejected legitimate
-    // manifests at query time. Now we always quote the path + alias.
+  it("quotes hyphenated native column names", () => {
     const c = compileView(
       view({
         from: "posts",
@@ -364,36 +379,27 @@ describe("compileView", () => {
         filter: { eq: { field: "hero-image", value: "x" } },
       }),
     );
-    expect(c.sql).toContain(`json_extract(data, '$."hero-image"')`);
+    expect(c.sql).toContain(`"hero-image"`);
     expect(c.sql).toMatch(/AS "hero-image"/);
-    expect(c.params).toEqual(["posts", "x"]);
+    expect(c.params).toEqual(["x"]);
   });
 
-  it("safely escapes single quotes in field names without rejecting them", () => {
-    // Outer SQL literal uses `'...'` so inner `'` doubles to `''`;
-    // the field still resolves to the original key at JSON path time.
+  it("safely quotes single quotes in native column names", () => {
     const c = compileView(
       view({
         from: "posts",
         filter: { eq: { field: `foo'bar`, value: "x" } },
       }),
     );
-    expect(c.sql).toContain(`json_extract(data, '$."foo''bar"')`);
-    expect(c.params).toEqual(["posts", "x"]);
+    expect(c.sql).toContain(`"foo'bar"`);
+    expect(c.params).toEqual(["x"]);
   });
 
-  it("rejects field names containing `\"`, `\\`, or NUL (SQLite JSON path can't resolve them)", () => {
-    // SQLite JSON1 path syntax `$."key"` has no documented escape for
-    // an inner `"` or `\`. Codex CX3 follow-up: previously this PR
-    // tried to escape via doubling but SQLite returns NULL for such
-    // paths. Reject instead — Schema authors don't write these.
-    for (const bad of [`foo"bar`, `foo\\bar`, "foo\0bar"]) {
-      expect(() =>
-        compileView(
-          view({ from: "posts", filter: { eq: { field: bad, value: "x" } } }),
-        ),
-      ).toThrow(/unrepresentable character|NUL|"|\\/);
-    }
+  it("rejects field names that Schema validation cannot represent", () => {
+    expect(() => compileView(view({
+      from: "posts",
+      filter: { eq: { field: `title\"; DROP TABLE posts; --`, value: "x" } },
+    }))).toThrow(/unrepresentable character/);
   });
 
   it("clamps caller-supplied show to View.spec.limit (server-enforced cap)", () => {
@@ -424,12 +430,12 @@ describe("compileView", () => {
       }),
     );
     expect(c.sql).not.toContain("LIMIT 0 --");
-    expect(c.sql).toMatch(/ORDER BY id ASC/); // anything not "desc" → ASC
+    expect(c.sql).toMatch(/ORDER BY _mantle_id ASC/); // anything not "desc" → ASC
   });
 
   it("emits DESC only for an exact \"desc\" (#392)", () => {
     const c = compileView(view({ from: "posts", orderBy: [{ field: "id", direction: "desc" }] }));
-    expect(c.sql).toMatch(/ORDER BY id DESC/);
+    expect(c.sql).toMatch(/ORDER BY _mantle_id DESC/);
   });
 
   it("caps a huge ?page= so OFFSET stays a plain in-range integer (#397)", () => {
@@ -458,22 +464,20 @@ describe("ExecuteViewUseCase", () => {
 
   it("returns only rows owned by the normalized ctx.user", async () => {
     const db = new InMemoryDatabase();
-    for (const [id, userId, status, placedAt] of [
+    const orders = nativeSchema("orders", {
+      userId: { type: "string" },
+      placedAt: { type: "integer" },
+    });
+    await seed(db, orders, [
       ["o1", "user-a", "published", 3],
       ["o2", "user-b", "published", 2],
       ["o3", "user-a", "draft", 1],
-    ] as const) {
-      db.entries.set(id, {
-        id,
-        collection: "orders",
-        status,
-        version: 1,
-        data: JSON.stringify({ userId, placedAt }),
-        author_id: null,
-        created_at: placedAt,
-        updated_at: placedAt,
-      });
-    }
+    ].map(([id, userId, status, placedAt]) => ({
+      id: id as string,
+      status: status as "draft" | "published",
+      data: { userId, placedAt },
+      now: placedAt as number,
+    })));
     const manifest = view({
       from: "orders",
       fields: ["id"],
@@ -485,7 +489,7 @@ describe("ExecuteViewUseCase", () => {
         ],
       },
     });
-    const useCase = sqliteUseCase(db, manifest);
+    const useCase = sqliteUseCase(db, manifest, undefined, [orders]);
     const result = await useCase.execute({
       view: manifest,
       ctx: {
@@ -561,31 +565,16 @@ describe("ExecuteViewUseCase", () => {
 
   it("returns published entries for a status=published filter", async () => {
     const db = new InMemoryDatabase();
-    db.entries.set("p1", {
-      id: "p1",
-      collection: "posts",
-      status: "published",
-      version: 1,
-      data: JSON.stringify({ title: "Hi" }),
-      author_id: null,
-      created_at: 1,
-      updated_at: 2,
-    });
-    db.entries.set("p2", {
-      id: "p2",
-      collection: "posts",
-      status: "draft",
-      version: 1,
-      data: JSON.stringify({ title: "Drafty" }),
-      author_id: null,
-      created_at: 1,
-      updated_at: 3,
-    });
+    const posts = nativeSchema("posts", { title: { type: "string" } });
+    await seed(db, posts, [
+      { id: "p1", status: "published", data: { title: "Hi" }, now: 2 },
+      { id: "p2", status: "draft", data: { title: "Drafty" }, now: 3 },
+    ]);
     const manifest = view({
       from: "posts",
       filter: { eq: { field: "status", value: "published" } },
     });
-    const useCase = sqliteUseCase(db, manifest);
+    const useCase = sqliteUseCase(db, manifest, undefined, [posts]);
     const result = await useCase.execute({
       view: manifest,
     });
@@ -599,36 +588,14 @@ describe("ExecuteViewUseCase", () => {
 
   it("returns entries matching comparison filter ranges", async () => {
     const db = new InMemoryDatabase();
-    db.entries.set("m1", {
-      id: "m1",
-      collection: "stock-movements",
-      status: "published",
-      version: 1,
-      data: JSON.stringify({ occurredAt: "2026-06-10T00:00:00Z", quantity: 3 }),
-      author_id: null,
-      created_at: 1,
-      updated_at: 1,
+    const movements = nativeSchema("stock-movements", {
+      occurredAt: { type: "string" }, quantity: { type: "integer" },
     });
-    db.entries.set("m2", {
-      id: "m2",
-      collection: "stock-movements",
-      status: "published",
-      version: 1,
-      data: JSON.stringify({ occurredAt: "2026-07-02T00:00:00Z", quantity: 5 }),
-      author_id: null,
-      created_at: 2,
-      updated_at: 2,
-    });
-    db.entries.set("m3", {
-      id: "m3",
-      collection: "stock-movements",
-      status: "published",
-      version: 1,
-      data: JSON.stringify({ occurredAt: "2026-06-15T00:00:00Z", quantity: -1 }),
-      author_id: null,
-      created_at: 3,
-      updated_at: 3,
-    });
+    await seed(db, movements, [
+      { id: "m1", status: "published", data: { occurredAt: "2026-06-10T00:00:00Z", quantity: 3 }, now: 1 },
+      { id: "m2", status: "published", data: { occurredAt: "2026-07-02T00:00:00Z", quantity: 5 }, now: 2 },
+      { id: "m3", status: "published", data: { occurredAt: "2026-06-15T00:00:00Z", quantity: -1 }, now: 3 },
+    ]);
 
     const manifest = view({
       from: "stock-movements",
@@ -640,7 +607,7 @@ describe("ExecuteViewUseCase", () => {
         ],
       },
     });
-    const useCase = sqliteUseCase(db, manifest);
+    const useCase = sqliteUseCase(db, manifest, undefined, [movements]);
     const result = await useCase.execute({
       view: manifest,
     });
@@ -689,21 +656,13 @@ describe("ExecuteViewUseCase", () => {
 
   it("allows an auth-gated View when the staff role matches", async () => {
     const db = new InMemoryDatabase();
-    db.entries.set("p1", {
-      id: "p1",
-      collection: "posts",
-      status: "published",
-      version: 1,
-      data: JSON.stringify({ title: "Hi" }),
-      author_id: null,
-      created_at: 1,
-      updated_at: 2,
-    });
+    const posts = nativeSchema("posts", { title: { type: "string" } });
+    await seed(db, posts, [{ id: "p1", status: "published", data: { title: "Hi" }, now: 2 }]);
     const manifest = view({
       from: "posts",
       requires: { auth: { all: [{ "ctx.staff": ["owner"] }] } },
     });
-    const useCase = sqliteUseCase(db, manifest);
+    const useCase = sqliteUseCase(db, manifest, undefined, [posts]);
     const result = await useCase.execute({
       view: manifest,
       ctx: {
@@ -786,20 +745,13 @@ describe("ExecuteViewUseCase", () => {
 
   it("hasMore=true when result fills the requested page exactly", async () => {
     const db = new InMemoryDatabase();
-    for (let i = 1; i <= 4; i++) {
-      db.entries.set(`p${i}`, {
-        id: `p${i}`,
-        collection: "posts",
-        status: "published",
-        version: 1,
-        data: JSON.stringify({ title: `t${i}` }),
-        author_id: null,
-        created_at: i,
-        updated_at: i,
-      });
-    }
+    const posts = nativeSchema("posts", { title: { type: "string" } });
+    await seed(db, posts, Array.from({ length: 4 }, (_, index) => ({
+      id: `p${index + 1}`, status: "published" as const,
+      data: { title: `t${index + 1}` }, now: index + 1,
+    })));
     const manifest = view({ from: "posts" });
-    const useCase = sqliteUseCase(db, manifest);
+    const useCase = sqliteUseCase(db, manifest, undefined, [posts]);
     const result = await useCase.execute({
       view: manifest,
       options: { show: 2 },
