@@ -83,14 +83,12 @@ Read the migration notes shipped with the target release before changing version
 3. Run `mantle generate`, `generate --check`, `skills`, `skills --check`, `validate`, typecheck and tests.
 4. Test local routes and authorization, then deploy.
 
-The native-table storage contract is part of the release. A deployment artifact
-pins the runtime release, source and target storage fingerprints, ordered SQL
-checksum, and application checksum. Schema-changing or storage-changing runtime
-upgrades enter maintenance mode, verify the current D1 fingerprint, apply the
-reviewed migration, upload the paired Worker, run a canary, then restore traffic.
-Retries reuse those immutable inputs; rollback restores the previous Worker and
-keeps columns/tables needed by it. Destructive cleanup is a later explicit
-deployment, never an automatic deploy-time guess.
+The native-table storage contract is a pre-beta breaking change. Existing
+generic-`entries` databases are unsupported: rebuild the instance and move any
+required data manually outside Mantle. New native-table instances deploy safe
+additive changes online; destructive changes are rejected and require another
+manual rebuild. Mantle does not ship an in-product migration workflow for this
+unreleased storage format.
 
 ## Source
 - [`packages/mantle/README.md`](../../../packages/mantle/README.md)

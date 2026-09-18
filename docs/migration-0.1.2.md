@@ -37,12 +37,12 @@ compatibility repository were removed.
 
 This is intentionally a storage-format break before beta. Reset and
 re-bootstrap development or internal-alpha content databases that contain the
-old `entries` layout, or export and import them through an application-reviewed
-migration. Automatic artifacts cover initial and additive changes only. Removed
-columns and tables remain physically present so the previous Worker can still
-run. Renames, type changes and data transforms require export, a reset or
-rebuilt database, and an application-reviewed import. The pre-beta Cloud path
-does not accept or execute destructive SQL.
+old `entries` layout. Move required data manually outside Mantle and Control;
+there is no product migration workflow for this unreleased format. Automatic
+artifacts cover initial and additive changes only. Removed columns and tables
+remain physically present so the previous Worker can still run. Renames, type
+changes and data transforms require the same manual rebuild. The pre-beta Cloud
+path does not accept or execute destructive SQL.
 
 Row APIs are now Schema-qualified. `EntryRepository.get` and
 `EntryReader.readById` accept `{ collection, id }`; Admin entry detail and
@@ -98,5 +98,5 @@ Intentional behavior changes:
 This alpha changes the Better Auth D1 schema, including required account
 issuer identity and OAuth resource/client tables. Reset and re-bootstrap a
 pre-1.7 alpha auth database; do not guess an issuer backfill. Reset old generic
-content storage as described above or migrate it through the application's
-reviewed export/import path.
+content storage as described above and move required data manually outside
+Mantle.

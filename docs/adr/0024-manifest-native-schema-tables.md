@@ -101,9 +101,9 @@ RuntimePlan and emits a versioned SQL migration artifact containing:
 
 Mantle deterministically emits initial tables and safe additive changes. Field
 renames, type conversions, data transforms, and narrowing constraints are
-destructive in the pre-beta contract. Cloud rejects them; operators export,
-reset or rebuild the database, and import through an application-reviewed
-process. Production neither generates nor accepts arbitrary migration SQL.
+destructive in the pre-beta contract. Cloud rejects them; operators rebuild the
+database and move required data manually outside Mantle and Control. Production
+neither generates nor accepts arbitrary migration SQL.
 
 Preparation records applied migration ids in the existing `_migrations` ledger.
 The enclosing immutable artifact checksum protects the ordered SQL,
@@ -195,8 +195,8 @@ are not valid deployment input.
   Runtime, SQLite adapters, conformance tests, Builder, and Cloud deployment.
 - Unqualified global entry lookups and implicit cross-Schema lists disappear.
 - Optional nullable fields no longer distinguish absent from explicit null.
-- Destructive schema changes require an explicit export/reset/rebuild/import
-  operation outside automatic Cloud deployment.
+- Destructive schema changes require a manual rebuild and data move outside
+  Mantle and Control.
 
 ## Alternatives
 
