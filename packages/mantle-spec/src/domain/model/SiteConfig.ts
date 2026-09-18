@@ -178,11 +178,10 @@ export interface SiteIcon {
   readonly theme?: "light" | "dark";
 }
 
-export const DEFAULT_SITE_ICONS: readonly SiteIcon[] = [{
-  src: "/_mantle/admin/favicon.svg",
-  mimeType: "image/svg+xml",
-  sizes: ["any"],
-}];
+export const DEFAULT_SITE_ICONS: readonly SiteIcon[] = [
+  { src: "/_mantle/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] },
+  { src: "/_mantle/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
+];
 
 /** Slug regex for `media.purposes[].name`. Matches a lowercase
  *  alphanumeric word, optionally followed by dash-separated

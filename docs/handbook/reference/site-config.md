@@ -42,11 +42,10 @@ interface SiteIcon {
 When the deployment declares no icons, the runtime stores `DEFAULT_SITE_ICONS`:
 
 ```ts
-const DEFAULT_SITE_ICONS = [{
-  src: "/_mantle/admin/favicon.svg",
-  mimeType: "image/svg+xml",
-  sizes: ["any"],
-}];
+const DEFAULT_SITE_ICONS = [
+  { src: "/_mantle/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] },
+  { src: "/_mantle/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
+];
 ```
 
 Multiple renditions are allowed. Keep SVG as the source and add a PNG rendition when a target MCP client needs a baseline raster format. `GET /favicon.ico` resolves against this list; see [Surface](./surface.md).

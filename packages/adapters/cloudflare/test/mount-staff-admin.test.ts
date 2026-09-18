@@ -147,7 +147,10 @@ describe("GET /admin/api/site", () => {
     expect(body).toMatchObject({
       publicUrl: "https://example.test",
       mcpUrl: "https://example.test/mcp/staff",
-      icons: [{ src: "/_mantle/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
+      icons: [
+        { src: "/_mantle/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] },
+        { src: "/_mantle/admin/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
+      ],
     });
     expect(body).not.toHaveProperty("origin");
   });
