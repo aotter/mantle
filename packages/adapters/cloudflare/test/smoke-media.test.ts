@@ -827,11 +827,18 @@ describe("MCP View surface gating (#438)", () => {
     const body = (await response.json()) as {
       result: { serverInfo: { icons: unknown[] } };
     };
-    expect(body.result.serverInfo.icons).toEqual([{
-      src: "https://shop.example/_mantle/admin/favicon.svg",
-      mimeType: "image/svg+xml",
-      sizes: ["any"],
-    }]);
+    expect(body.result.serverInfo.icons).toEqual([
+      {
+        src: "https://shop.example/_mantle/admin/favicon.png",
+        mimeType: "image/png",
+        sizes: ["64x64"],
+      },
+      {
+        src: "https://shop.example/_mantle/admin/favicon.svg",
+        mimeType: "image/svg+xml",
+        sizes: ["any"],
+      },
+    ]);
   });
 
   it("returns a standards-compatible 403 challenge when the MCP scope is missing", async () => {
