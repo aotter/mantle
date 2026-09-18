@@ -100,7 +100,8 @@ RuntimePlan and emits a versioned SQL migration artifact containing:
 - whether the change is expand-only or destructive.
 
 Mantle deterministically emits initial tables and safe additive changes. Field
-renames, type conversions, data transforms, and narrowing constraints are
+renames, type conversions, data transforms, narrowing constraints, and any
+`uniqueIndexes` tuple change are
 destructive in the pre-beta contract. Cloud rejects them; operators rebuild the
 database and move required data manually outside Mantle and Control. Production
 neither generates nor accepts arbitrary migration SQL.

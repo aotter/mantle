@@ -41,7 +41,8 @@ old `entries` layout. Move required data manually outside Mantle and Control;
 there is no product migration workflow for this unreleased format. Automatic
 artifacts cover initial and additive changes only. Removed columns and tables
 remain physically present so the previous Worker can still run. Renames, type
-changes and data transforms require the same manual rebuild. The pre-beta Cloud
+changes, data transforms, and any `uniqueIndexes` tuple change require the same
+manual rebuild. The pre-beta Cloud
 path does not accept or execute destructive SQL.
 
 Row APIs are now Schema-qualified. `EntryRepository.get` and

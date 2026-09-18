@@ -199,7 +199,9 @@ Keep implementation-detail children fold-only. Use `nav.standalone: true` when s
 On SQLite storage each Schema is a native table and every tuple becomes an
 index over its native field columns; queries benefit from a leftmost prefix.
 Unique indexes are also checked before every write; a conflicting row is
-`CONFLICT`.
+`CONFLICT`. After the first deployment, adding, removing, reordering, or changing
+any `uniqueIndexes` tuple is destructive and requires rebuilding the instance
+and moving required data manually. Automatic deployment rejects the change.
 
 ## `searchableFields`
 
