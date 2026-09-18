@@ -3,7 +3,7 @@ description: Configure MANTLE_AUTH_MODE, secrets, the first owner and staff role
 ---
 # Authentication
 
-Conventional Auth is chosen by one variable, `MANTLE_AUTH_MODE`, and fails closed when its configuration is incomplete. This page covers the two modes, the secrets each needs, first-owner bootstrap, roles, the routes that require a session, and the curated Better Auth surface.
+Conventional Auth is chosen by one variable, `MANTLE_AUTH_MODE`, and fails closed when its configuration is incomplete. This page covers the two modes, the secrets each needs, first-owner bootstrap, roles, the routes that require a session, and the Better Auth integration surface.
 
 ## Mode matrix
 
@@ -71,9 +71,59 @@ The staff role is re-read from D1 on every protected REST and MCP call; a revoke
 
 MCP tokens are session-bound: signing out of Admin ends MCP access. See [MCP and agents](../concepts/mcp-and-agents.md).
 
-## Curated Better Auth surface
+## Better Auth configuration
 
-`createAuth()` exposes curated fields, not a Better Auth passthrough: `database`, `baseURL`, `secret`, `methods`, `bootstrapOwner`, `oauthProvider`, `rateLimit`, and for first-party SSO `trustedOrigins`, `cookiePrefix` and `crossSubDomainCookies`. There is no `betterAuthOptions` or `advanced` escape hatch; a new Better Auth knob appears only when a Mantle use case justifies a first-class field.
+`createAuth()` owns the Worker lifecycle, Admin metadata, sender integration,
+bootstrap rules, roles and MCP invariants. Method-specific configuration stays
+native to Better Auth under `options`, so provider updates and type inference do
+not need a matching Mantle DSL update. There is deliberately no
+`Partial<BetterAuthOptions>` deep merge.
+
+```ts
+methods: [
+  {
+    kind: "social",
+    provider: "google",
+    options: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET, accessType: "offline" },
+  },
+  {
+    kind: "social",
+    provider: "apple",
+    options: async () => ({ clientId: env.APPLE_CLIENT_ID, clientSecret: await loadAppleSecret(env) }),
+  },
+  {
+    kind: "email-otp",
+    sender,
+    options: { otpLength: 8 },
+  },
+]
+```
+
+Email OTP and magic-link storage defaults to `hashed`. Explicit official
+overrides remain available, including custom hashing/encryption:
+
+```ts
+{ kind: "email-otp", sender, options: {
+  storeOTP: { encrypt: encryptOtp, decrypt: decryptOtp },
+} }
+{ kind: "magic-link", sender, options: {
+  storeToken: { type: "custom-hasher", hash: hashMagicToken },
+} }
+```
+
+For complete callback ownership, register an official plugin instance directly.
+Raw plugins do not add a button to `Auth.methods`; the application owns that UI.
+Duplicate plugin ids fail at construction rather than silently replacing one:
+
+```ts
+createAuth({
+  database: env.DB,
+  baseURL: env.PUBLIC_ORIGIN,
+  secret: env.BETTER_AUTH_SECRET,
+  methods: [],
+  plugins: [emailOTP({ sendVerificationOTP, storeOTP: "encrypted" })],
+});
+```
 
 When several first-party apps share one parent domain that the same party controls, configure shared cookies explicitly. `cookiePrefix` is required whenever more than one Better Auth app writes cookies under that domain; `trustedOrigins` is the auth-flow trust list, not a CORS policy.
 
@@ -116,11 +166,15 @@ const clientAuth = createAuth({
   // database, baseURL, secret, other methods...
   methods: [{
     kind: "oauth",
-    providerId: "mantle-platform",
-    clientId: env.PLATFORM_CLIENT_ID,
-    discoveryUrl: "https://platform.example.com/api/auth/.well-known/openid-configuration",
-    scopes: ["openid", "offline_access", "accounts:read"],
-    resource: "https://api.example.com",
+    options: {
+      providerId: "mantle-platform",
+      clientId: env.PLATFORM_CLIENT_ID,
+      discoveryUrl: "https://platform.example.com/api/auth/.well-known/openid-configuration",
+      scopes: ["openid", "offline_access", "accounts:read"],
+      authorizationUrlParams: { resource: "https://api.example.com" },
+      tokenUrlParams: { resource: "https://api.example.com" },
+      refreshTokenParams: { resource: "https://api.example.com" },
+    },
   }],
 });
 

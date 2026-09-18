@@ -1,5 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { betterAuth, type BetterAuthOptions } from "better-auth";
+import {
+  betterAuth,
+  type BetterAuthOptions,
+  type BetterAuthPlugin,
+} from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
 import { D1DatabaseDriver } from "../bindings/D1DatabaseDriver.js";
 import {
@@ -10,14 +14,19 @@ import {
   verifyJwsAccessToken,
   type DpopReplayStore,
 } from "better-auth/oauth2";
-import type { SocialProvider } from "better-auth/social-providers";
-import { admin, emailOTP, jwt, magicLink } from "better-auth/plugins";
+import type { SocialProviders } from "better-auth/social-providers";
+import {
+  admin,
+  emailOTP,
+  jwt,
+  magicLink,
+  type EmailOTPOptions,
+  type GenericOAuthConfig,
+  type MagicLinkOptions,
+} from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
-import {
-  genericOAuth,
-  type GenericOAuthConfig,
-} from "better-auth/plugins/generic-oauth";
+import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import { splitSetCookieHeader } from "better-auth/cookies";
 import { oauthProvider, type Scope } from "@better-auth/oauth-provider";
 import { mcp } from "@better-auth/mcp";
@@ -70,20 +79,16 @@ export const STAFF_ROLE_SET: ReadonlySet<string> = new Set(STAFF_ROLES);
  * Auth as-is; no per-provider wiring in this adapter (beyond the
  * github `mapProfileToUser` shim).
  */
-export type SocialProviderId = SocialProvider;
+export type SocialProviderId = keyof SocialProviders;
 
-export type OAuthProfileMapper = (
-  profile: Readonly<Record<string, unknown>>,
-) => OAuthMappedProfile | Promise<OAuthMappedProfile>;
-
-export type OAuthMappedProfile = Readonly<Partial<{
-  id: string | number;
-  email: string;
-  emailVerified: boolean;
-  name: string;
-  image: string | null;
-  githubLogin: string | null;
-}>>;
+type SocialAuthMethodConfig = {
+  [Provider in SocialProviderId]: {
+    readonly kind: "social";
+    readonly provider: Provider;
+    /** Native Better Auth options for this provider, including async factories. */
+    readonly options: NonNullable<SocialProviders[Provider]>;
+  };
+}[SocialProviderId];
 
 /**
  * Auth method config (discriminated union). Each `kind` is one auth
@@ -93,85 +98,27 @@ export type OAuthMappedProfile = Readonly<Partial<{
  *
  * `kind: "social"` is the OAuth-based bucket — `provider` discriminates
  * the upstream IDP. We use one case rather than one-per-provider so
- * adding (e.g.) Apple doesn't churn the union; Better Auth's
- * provider-shaped quirks ride in `extras`.
+ * adding (e.g.) Apple doesn't churn Mantle-owned fields; Better Auth's
+ * provider-specific options remain natively typed under `options`.
  */
 export type AuthMethodConfig =
-  | {
-      readonly kind: "social";
-      readonly provider: SocialProviderId;
-      readonly clientId: string;
-      readonly clientSecret: string;
-      /** Override the OAuth callback URL Better Auth tells the IDP to
-       *  redirect to. The consumer is then responsible for forwarding
-       *  requests at that URI to `auth.handler`. */
-      readonly redirectURI?: string;
-      /** OAuth scopes. Defaults vary per provider; only set when the
-       *  default doesn't cover what you need (e.g. extra Google
-       *  scopes for a Drive integration). */
-      readonly scope?: ReadonlyArray<string>;
-      /** Escape hatch for provider-specific options Better Auth
-       *  accepts but we don't surface as first-class fields —
-       *  Microsoft Entra ID's `tenantId`, Reddit's `duration`,
-       *  per-provider `prompt` / `accessType` knobs, etc. Merged
-       *  into the provider's config verbatim.
-       *
-       *  Reserved keys are rejected at construction so a stray entry
-       *  can't silently shadow first-class config: `clientId`,
-       *  `clientSecret`, `redirectURI`, `scope`, `mapProfileToUser`.
-       *  Use the first-class fields for those.
-       *
-       *  Note: Apple specifically does NOT accept teamId/keyId/
-       *  privateKey via Better Auth — its `clientSecret` is the
-       *  pre-signed ES256 JWT the adopter generates out-of-band. */
-      readonly extras?: Readonly<Record<string, unknown>>;
-    }
+  | SocialAuthMethodConfig
   | {
       readonly kind: "oauth";
-      /** Better Auth generic OAuth provider id. In 1.7 generic providers use
-       *  the standard social sign-in and `/callback/:id` routes. */
-      readonly providerId: string;
       /** Human label surfaced by `/api/auth/methods` so the admin SPA
        *  can render "Continue with Mantle Platform" without knowing
        *  product-specific provider ids. */
       readonly displayName?: string;
-      readonly clientId: string;
-      readonly clientSecret?: string;
-      /** OIDC discovery document URL. Prefer this over hand-wiring
-       *  authorization/token/userinfo URLs. */
-      readonly discoveryUrl?: string;
-      readonly authorizationUrl?: string;
-      readonly tokenUrl?: string;
-      readonly userInfoUrl?: string;
-      readonly scopes?: ReadonlyArray<string>;
-      readonly redirectURI?: string;
-      readonly pkce?: boolean;
-      readonly authentication?: "basic" | "post";
-      readonly prompt?:
-        | "none"
-        | "login"
-        | "create"
-        | "consent"
-        | "select_account"
-        | "select_account consent"
-        | "login consent";
-      /** RFC 8707 resource indicator. Mantle carries it through the
-       * authorization request, code exchange, and refresh exchange. */
-      readonly resource?: string;
-      /** Maps the validated provider profile into the site-local Better Auth user. */
-      readonly mapProfileToUser?: OAuthProfileMapper;
+      /** Native Better Auth generic OAuth configuration. */
+      readonly options: GenericOAuthConfig;
     }
   | {
       readonly kind: "email-otp";
       /** Transactional-email sender. SDK never owns body templates;
        *  the locale is passed through so the sender can branch. */
       readonly sender: EmailSender;
-      /** OTP length (Better Auth default 6). */
-      readonly otpLength?: number;
-      /** OTP TTL in seconds (Better Auth default 300 = 5 min). */
-      readonly expiresInSeconds?: number;
-      /** Allowed attempts before the OTP locks (Better Auth default 3). */
-      readonly allowedAttempts?: number;
+      /** Native Better Auth options. Mantle owns the sender callback and defaults storage to hashed. */
+      readonly options?: Omit<EmailOTPOptions, "sendVerificationOTP">;
       /** Fallback locale when the request carries no Accept-Language —
        *  typically the site's canonical locale. BCP 47. Defaults to "en". */
       readonly fallbackLocale?: string;
@@ -182,13 +129,8 @@ export type AuthMethodConfig =
        *  clickable URL; Better Auth verifies the token when the user
        *  lands on it. */
       readonly sender: EmailSender;
-      /** Link TTL in seconds. Defaults to 900 (15 min); see
-       *  `MAGIC_LINK_DEFAULT_EXPIRES_SECONDS` for rationale. */
-      readonly expiresInSeconds?: number;
-      /** Allowed verification attempts. Defaults to 3 to survive
-       *  mail-prefetcher URL scans (Outlook Safe Links etc.); see
-       *  `MAGIC_LINK_DEFAULT_ALLOWED_ATTEMPTS`. */
-      readonly allowedAttempts?: number;
+      /** Native Better Auth options. Mantle owns the sender callback and defaults storage to hashed. */
+      readonly options?: Omit<MagicLinkOptions, "sendMagicLink">;
       /** Fallback locale when the request carries no Accept-Language. */
       readonly fallbackLocale?: string;
     };
@@ -316,8 +258,10 @@ export interface CreateAuthConfig {
   /** Same-origin destination for auth failures. Defaults to `/`. */
   readonly errorURL?: string;
   readonly secret: string;
-  /** Registered auth methods. Boot fails fast if empty. */
+  /** Registered auth methods. Boot fails fast when this and `plugins` are both empty. */
   readonly methods: ReadonlyArray<AuthMethodConfig>;
+  /** Native Better Auth plugins for flows whose callbacks and UI are fully adopter-owned. */
+  readonly plugins?: ReadonlyArray<BetterAuthPlugin>;
   /** Sends an English notification after Admin successfully assigns a staff role. */
   readonly staffInvitationSender?: EmailSender;
   /** First-user-becomes-owner rule. Without it, the `owner` role must
@@ -408,29 +352,33 @@ const userAc = ac.newRole({
   session: [],
 });
 
-/**
- * Keys that `extras` MUST NOT contain — they have first-class fields
- * on `AuthMethodConfig` and / or are managed by this adapter (the
- * github `mapProfileToUser` shim). Allowing them through would let a
- * stray entry shadow credentials or break bootstrap promotion.
- */
-const SOCIAL_EXTRAS_RESERVED_KEYS: ReadonlySet<string> = new Set([
-  "clientId",
-  "clientSecret",
-  "redirectURI",
-  "scope",
-  "mapProfileToUser",
-]);
+type GithubSocialOptions = Exclude<
+  NonNullable<SocialProviders["github"]>,
+  () => unknown
+>;
+
+function withGithubLogin(options: NonNullable<SocialProviders["github"]>) {
+  return typeof options === "function"
+    ? async () => withGithubLoginMapper(await options())
+    : withGithubLoginMapper(options);
+}
+
+function withGithubLoginMapper(options: GithubSocialOptions): GithubSocialOptions {
+  const developerMapper = options.mapProfileToUser;
+  return {
+    ...options,
+    mapProfileToUser: async (profile) => ({
+      ...(developerMapper ? await developerMapper(profile) : {}),
+      githubLogin: profile.login,
+    }),
+  };
+}
 
 /** @internal exported for unit tests; not part of the public API. */
 export function buildSocialProviders(
   methods: ReadonlyArray<AuthMethodConfig>,
 ): BetterAuthOptions["socialProviders"] {
-  // Better Auth's typed `socialProviders` shape names every provider
-  // key individually; assigning by computed string requires an index
-  // signature, so we build through a plain map and cast once at the
-  // return. The runtime shape matches Better Auth's expectations.
-  const out: Record<string, Record<string, unknown>> = {};
+  const out: Partial<Record<SocialProviderId, unknown>> = {};
   // Duplicate-provider guard: catch the case where two `social`
   // methods declare the same `provider` id. Better Auth would
   // silently keep the latter (Record overwrite); for SDK adopters —
@@ -449,62 +397,17 @@ export function buildSocialProviders(
       );
     }
     seenProviders.add(method.provider);
-    if (method.extras) {
-      for (const key of Object.keys(method.extras)) {
-        if (SOCIAL_EXTRAS_RESERVED_KEYS.has(key)) {
-          throw new Error(
-            `createAuth: social method '${method.provider}' has reserved key '${key}' in \`extras\`. ` +
-              `Use the first-class field instead — \`extras\` is for provider-specific options only.`,
-          );
-        }
-      }
-    }
-    // GitHub-specific: stash the github login on `user.githubLogin`
-    // so `bootstrapOwner: { match: "github-login" }` keeps working.
-    // Other providers don't need an analogous shim because bootstrap
-    // matches on email for them.
-    const githubProfileMapper =
-      method.provider === "github"
-        ? {
-            mapProfileToUser: (profile: { login?: string }) => ({
-              githubLogin: profile.login,
-            }),
-          }
-        : {};
-    out[method.provider] = {
-      clientId: method.clientId,
-      clientSecret: method.clientSecret,
-      ...(method.redirectURI ? { redirectURI: method.redirectURI } : {}),
-      ...(method.scope ? { scope: [...method.scope] } : {}),
-      ...(method.extras ?? {}),
-      ...githubProfileMapper,
-    };
+    out[method.provider] = method.provider === "github"
+      ? withGithubLogin(method.options)
+      : method.options;
   }
-  return out as BetterAuthOptions["socialProviders"];
+  return out as SocialProviders;
 }
 
 /** @internal exported for unit tests; not part of the public API. */
 export function buildGenericOAuthProviders(
   methods: ReadonlyArray<AuthMethodConfig>,
-): Array<{
-  providerId: string;
-  clientId: string;
-  clientSecret?: string;
-  discoveryUrl?: string;
-  authorizationUrl?: string;
-  tokenUrl?: string;
-  userInfoUrl?: string;
-  scopes?: string[];
-  redirectURI?: string;
-  pkce?: boolean;
-  authentication?: "basic" | "post";
-  prompt?: Extract<AuthMethodConfig, { kind: "oauth" }>["prompt"];
-  resource?: string;
-  mapProfileToUser?: GenericOAuthConfig["mapProfileToUser"];
-  authorizationUrlParams?: Record<string, string>;
-  tokenUrlParams?: Record<string, string>;
-  refreshTokenParams?: Record<string, string>;
-}> {
+): GenericOAuthConfig[] {
   const seenProviderIds = new Set<string>();
   const socialProviderIds: ReadonlySet<string> = new Set(
     methods.flatMap((method) =>
@@ -514,48 +417,24 @@ export function buildGenericOAuthProviders(
   const out: ReturnType<typeof buildGenericOAuthProviders> = [];
   for (const method of methods) {
     if (method.kind !== "oauth") continue;
-    if (socialProviderIds.has(method.providerId)) {
+    if (socialProviderIds.has(method.options.providerId)) {
       throw new Error(
-        `createAuth: OAuth providerId '${method.providerId}' conflicts with a registered social provider id. Provider ids must be unique across methods[].`,
+        `createAuth: OAuth providerId '${method.options.providerId}' conflicts with a registered social provider id. Provider ids must be unique across methods[].`,
       );
     }
-    if (seenProviderIds.has(method.providerId)) {
+    if (seenProviderIds.has(method.options.providerId)) {
       throw new Error(
-        `createAuth: OAuth provider '${method.providerId}' is registered more than once; ` +
+        `createAuth: OAuth provider '${method.options.providerId}' is registered more than once; ` +
           `each providerId can have only one methods[] entry.`,
       );
     }
-    seenProviderIds.add(method.providerId);
-    if (!method.discoveryUrl && !(method.authorizationUrl && method.tokenUrl)) {
+    seenProviderIds.add(method.options.providerId);
+    if (!method.options.discoveryUrl && !(method.options.authorizationUrl && method.options.tokenUrl)) {
       throw new Error(
-        `createAuth: OAuth provider '${method.providerId}' needs either discoveryUrl or both authorizationUrl and tokenUrl.`,
+        `createAuth: OAuth provider '${method.options.providerId}' needs either discoveryUrl or both authorizationUrl and tokenUrl.`,
       );
     }
-    out.push({
-      providerId: method.providerId,
-      clientId: method.clientId,
-      ...(method.clientSecret ? { clientSecret: method.clientSecret } : {}),
-      ...(method.discoveryUrl ? { discoveryUrl: method.discoveryUrl } : {}),
-      ...(method.authorizationUrl ? { authorizationUrl: method.authorizationUrl } : {}),
-      ...(method.tokenUrl ? { tokenUrl: method.tokenUrl } : {}),
-      ...(method.userInfoUrl ? { userInfoUrl: method.userInfoUrl } : {}),
-      ...(method.scopes ? { scopes: [...method.scopes] } : {}),
-      ...(method.redirectURI ? { redirectURI: method.redirectURI } : {}),
-      ...(method.pkce !== undefined ? { pkce: method.pkce } : {}),
-      ...(method.authentication ? { authentication: method.authentication } : {}),
-      ...(method.prompt ? { prompt: method.prompt } : {}),
-      ...(method.mapProfileToUser
-        ? { mapProfileToUser: method.mapProfileToUser as GenericOAuthConfig["mapProfileToUser"] }
-        : {}),
-      ...(method.resource
-        ? {
-            resource: method.resource,
-            authorizationUrlParams: { resource: method.resource },
-            tokenUrlParams: { resource: method.resource },
-            refreshTokenParams: { resource: method.resource },
-          }
-        : {}),
-    });
+    out.push(method.options);
   }
   return out;
 }
@@ -572,25 +451,14 @@ export function pickLocale(req: Request | undefined, fallback: string): string {
   return first && first.length > 0 ? first : fallback;
 }
 
-// Magic-link defaults override Better Auth's tighter built-ins:
-//   - 900s (15 min) link TTL — corporate mail (Outlook + Exchange,
-//     Mimecast, Proofpoint URL Defense) often has 30-60s delivery
-//     lag and users batch-check; 300s shipped too many "expired"
-//     receipts. Industry baseline: Slack 60min, Notion / Vercel
-//     24h. We split the difference and let adopters override.
-//   - 3 allowed verification attempts — mail prefetchers (Outlook
-//     Safe Links, Mimecast URL Protect, Proofpoint URL Defense)
-//     routinely consume URLs once before the user opens the email.
-//     1 attempt is genuinely broken on those inboxes.
 const MAGIC_LINK_DEFAULT_EXPIRES_SECONDS = 900;
-const MAGIC_LINK_DEFAULT_ALLOWED_ATTEMPTS = 3;
 
 function buildMagicLinkPlugin(method: Extract<AuthMethodConfig, { kind: "magic-link" }>) {
   const fallback = method.fallbackLocale ?? "en";
   return magicLink({
     storeToken: "hashed",
-    expiresIn: method.expiresInSeconds ?? MAGIC_LINK_DEFAULT_EXPIRES_SECONDS,
-    allowedAttempts: method.allowedAttempts ?? MAGIC_LINK_DEFAULT_ALLOWED_ATTEMPTS,
+    expiresIn: MAGIC_LINK_DEFAULT_EXPIRES_SECONDS,
+    ...method.options,
     // Returned synchronously — same fire-and-forget contract as
     // email-otp via `advanced.backgroundTasks.handler`. The body
     // carries the click-URL; SDK doesn't ship a template, the
@@ -611,13 +479,7 @@ function buildEmailOTPPlugin(method: Extract<AuthMethodConfig, { kind: "email-ot
   const fallback = method.fallbackLocale ?? "en";
   return emailOTP({
     storeOTP: "hashed",
-    ...(method.otpLength !== undefined ? { otpLength: method.otpLength } : {}),
-    ...(method.expiresInSeconds !== undefined
-      ? { expiresIn: method.expiresInSeconds }
-      : {}),
-    ...(method.allowedAttempts !== undefined
-      ? { allowedAttempts: method.allowedAttempts }
-      : {}),
+    ...method.options,
     // Return synchronously — the promise is fire-and-forget via the
     // `advanced.backgroundTasks.handler` we wire in `buildAuth`. For
     // `email-verification` / `forget-password` types Better Auth only
@@ -657,7 +519,7 @@ export function validateBootstrap(
     const hasGithub = methods.some(
       (method) =>
         (method.kind === "social" && method.provider === "github") ||
-        (method.kind === "oauth" && method.providerId === "github"),
+        (method.kind === "oauth" && method.options.providerId === "github"),
     );
     if (!hasGithub) {
       throw new Error(
@@ -700,8 +562,8 @@ export function guardGithubLoginProfile(
       ? context?.path === "/callback/:id" && method.provider === "github" && providerId === "github"
       : method.kind === "oauth" &&
         context?.path === "/callback/:id" &&
-        method.providerId === providerId &&
-        Boolean(method.mapProfileToUser),
+        method.options.providerId === providerId &&
+        Boolean(method.options.mapProfileToUser),
   );
   return trusted ? undefined : { data: { githubLogin: null } };
 }
@@ -818,9 +680,9 @@ function buildAuth(config: CreateAuthConfig) {
   if (config.hostOnlyCookies && (new URL(config.baseURL).protocol !== "https:" || config.crossSubDomainCookies?.enabled)) {
     throw new Error("createAuth: hostOnlyCookies requires HTTPS and cannot share cookies across subdomains.");
   }
-  if (config.methods.length === 0) {
+  if (config.methods.length === 0 && !config.plugins?.length) {
     throw new Error(
-      "createAuth: methods[] is empty — register at least one AuthMethodConfig so staff can sign in.",
+      "createAuth: methods[] is empty — register an AuthMethodConfig or native Better Auth plugin so staff can sign in.",
     );
   }
   if (config.bootstrapOwner) {
@@ -906,6 +768,16 @@ function buildAuth(config: CreateAuthConfig) {
         ]
       : []),
   ];
+  const plugins = [...sdkPlugins, ...(config.plugins ?? [])];
+  const pluginIds = new Set<string>();
+  for (const plugin of plugins) {
+    if (pluginIds.has(plugin.id)) {
+      throw new Error(
+        `createAuth: Better Auth plugin '${plugin.id}' is registered more than once. Remove the duplicate plugin.`,
+      );
+    }
+    pluginIds.add(plugin.id);
+  }
 
   // `user.additionalFields`: SDK owns `githubLogin` only.
   const userConfig = {
@@ -1062,7 +934,7 @@ function buildAuth(config: CreateAuthConfig) {
     rateLimit,
     trustedOrigins,
     advanced: advancedConfig,
-    plugins: sdkPlugins,
+    plugins,
     databaseHooks,
   });
 }
@@ -1625,7 +1497,7 @@ export function createAuth(config: CreateAuthConfig): Auth {
         case "oauth":
           return {
             kind: "oauth",
-            providerId: m.providerId,
+            providerId: m.options.providerId,
             ...(m.displayName ? { displayName: m.displayName } : {}),
           };
         case "email-otp":

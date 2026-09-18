@@ -23,11 +23,11 @@ A free Mantle site can run every login method the SDK exposes through
 `createAuth()`:
 
 - social OAuth providers supported by Better Auth;
-- generic provider-specific options through the `social.extras` shape;
+- provider-specific options through Better Auth's native `socialProviders` types;
 - email OTP;
 - magic link;
-- passkey or additional Better Auth method support when the SDK adds a
-  curated first-class field for it;
+- passkey or another Better Auth method through the raw `plugins` path when the
+  application owns its callback and UI;
 - first-party same-domain or same-parent-domain SSO when the site owner
   controls every participating subdomain.
 
@@ -143,9 +143,9 @@ the exact public API and four consumer examples.
 
 ## SDK Surface Rule
 
-Mantle should expose Better Auth knobs only as curated first-class
-fields when there is a real Mantle use case. Do not add a generic
-`betterAuthOptions` or `advanced` passthrough.
+Mantle owns only integration fields with a real Mantle use case. Method
+configuration uses Better Auth's official provider/plugin option types; do not
+copy those unions or add a generic `Partial<BetterAuthOptions>` deep merge.
 
 The current first-party SSO use case justifies these optional fields on
 `CreateAuthConfig`:
@@ -154,14 +154,13 @@ The current first-party SSO use case justifies these optional fields on
 - `crossSubDomainCookies`
 - `cookiePrefix`
 
-The cross-site API use case additionally justifies these curated fields and
-facades:
+The cross-site API use case additionally justifies these fields and facades:
 
-- generic OAuth method `resource`
+- native generic OAuth `authorizationUrlParams`, `tokenUrlParams`, and
+  `refreshTokenParams` for RFC 8707 `resource`
 - OAuth provider `resources` and the curated `mcpResource`
 - `Auth.getProviderAccessToken(request, providerId)`
 - `Auth.verifyOAuthAccessToken(tokenOrRequest, { audience, scopes })`
 
-Generic OAuth providers use Better Auth 1.7's standard social sign-in and
-`/api/auth/callback/:id` path. These are not a raw Better Auth options
-passthrough.
+Generic OAuth providers use Better Auth 1.7's official `GenericOAuthConfig`,
+standard social sign-in and `/api/auth/callback/:id` path.

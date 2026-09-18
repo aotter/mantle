@@ -5,6 +5,7 @@ import {
   getRequestStateAsyncLocalStorage,
 } from "@better-auth/core/context";
 import { describe, expect, it, vi } from "vitest";
+import { emailOTP } from "better-auth/plugins";
 import type { EmailSender } from "@aotter/mantle-runtime";
 import {
   buildGenericOAuthProviders,
@@ -33,8 +34,8 @@ import {
  * Unit tests for `createAuth`. Covers the pure helpers (pickLocale,
  * validateBootstrap, shouldPromoteToOwner, buildSocialProviders) and
  * the construction-time invariants `createAuth` enforces (empty
- * methods, bootstrap mismatch, singleton-per-method, reserved-keys
- * in social.extras).
+ * methods, bootstrap mismatch, singleton-per-method, native options,
+ * and duplicate-plugin handling).
  *
  * End-to-end Better Auth flows (sign-in / sign-up / session creation
  * / cookie issuance) need a real HTTP harness against D1 and are not
@@ -50,8 +51,7 @@ const NULL_SENDER: EmailSender = {
 const GITHUB_METHOD_FIXTURE = {
   kind: "social",
   provider: "github",
-  clientId: "g",
-  clientSecret: "g",
+  options: { clientId: "g", clientSecret: "g" },
 } as const satisfies AuthMethodConfig;
 
 it("seeds the async stores actually used by Better Auth outside request I/O", async () => {
@@ -230,10 +230,12 @@ describe("validateBootstrap", () => {
         { match: "github-login", value: "alice" },
         [{
           kind: "oauth",
-          providerId: "github",
-          clientId: "https://auth.example/clients/site-1",
-          authorizationUrl: "https://auth.example/authorize",
-          tokenUrl: "https://auth.example/token",
+          options: {
+            providerId: "github",
+            clientId: "https://auth.example/clients/site-1",
+            authorizationUrl: "https://auth.example/authorize",
+            tokenUrl: "https://auth.example/token",
+          },
         }],
       ),
     ).not.toThrow();
@@ -247,8 +249,7 @@ describe("validateBootstrap", () => {
           {
             kind: "social",
             provider: "google",
-            clientId: "x",
-            clientSecret: "y",
+            options: { clientId: "x", clientSecret: "y" },
           },
         ],
       ),
@@ -336,8 +337,8 @@ describe("buildSocialProviders", () => {
   it("emits per-provider config keyed by provider id", () => {
     const out = asProviderMap(
       buildSocialProviders([
-        { kind: "social", provider: "github", clientId: "g_id", clientSecret: "g_s" },
-        { kind: "social", provider: "google", clientId: "o_id", clientSecret: "o_s" },
+        { kind: "social", provider: "github", options: { clientId: "g_id", clientSecret: "g_s" } },
+        { kind: "social", provider: "google", options: { clientId: "o_id", clientSecret: "o_s" } },
       ]),
     );
     expect(out.github?.clientId).toBe("g_id");
@@ -346,30 +347,33 @@ describe("buildSocialProviders", () => {
     expect(out.google?.clientSecret).toBe("o_s");
   });
 
-  it("injects mapProfileToUser shim only for github", () => {
+  it("injects mapProfileToUser shim only for github", async () => {
     const out = asProviderMap(
       buildSocialProviders([
         GITHUB_METHOD_FIXTURE,
-        { kind: "social", provider: "google", clientId: "o", clientSecret: "o" },
+        { kind: "social", provider: "google", options: { clientId: "o", clientSecret: "o" } },
       ]),
     );
     const ghMap = out.github?.mapProfileToUser as (p: {
       login?: string;
     }) => Record<string, unknown>;
     expect(typeof ghMap).toBe("function");
-    expect(ghMap({ login: "alice" })).toEqual({ githubLogin: "alice" });
+    expect(await ghMap({ login: "alice" })).toEqual({ githubLogin: "alice" });
     expect(out.google?.mapProfileToUser).toBeUndefined();
   });
 
-  it("merges extras into the provider config", () => {
+  it("passes native provider-specific options through", () => {
     const out = asProviderMap(
       buildSocialProviders([
         {
           kind: "social",
           provider: "microsoft-entra-id",
-          clientId: "m",
-          clientSecret: "m",
-          extras: { tenantId: "common", prompt: "select_account" },
+          options: {
+            clientId: "m",
+            clientSecret: "m",
+            tenantId: "common",
+            prompt: "select_account",
+          },
         },
       ]),
     );
@@ -377,60 +381,51 @@ describe("buildSocialProviders", () => {
     expect(out["microsoft-entra-id"]?.prompt).toBe("select_account");
   });
 
-  it("defensively copies the scope array — caller mutation doesn't leak", () => {
-    // `scope: [...method.scope]` in buildSocialProviders. Mutating
-    // the caller-side array must not affect what Better Auth sees.
-    const scopes = ["openid", "profile"];
+  it("passes non-GitHub native options through unchanged", () => {
+    const options = { clientId: "g", clientSecret: "g", accessType: "offline" };
     const out = asProviderMap(
       buildSocialProviders([
         {
           kind: "social",
           provider: "google",
-          clientId: "g",
-          clientSecret: "g",
-          scope: scopes,
+          options,
         },
       ]),
     );
-    scopes.push("email");
-    expect(out.google?.scope).toEqual(["openid", "profile"]);
+    expect(out.google).toBe(options);
   });
 
-  it("includes redirectURI and scope only when set", () => {
+  it("composes the GitHub profile mapper", async () => {
     const out = asProviderMap(
       buildSocialProviders([
         {
           kind: "social",
-          provider: "google",
-          clientId: "g",
-          clientSecret: "g",
-          redirectURI: "https://example.test/cb",
-          scope: ["openid", "profile", "email"],
+          provider: "github",
+          options: {
+            clientId: "g",
+            clientSecret: "g",
+            mapProfileToUser: () => ({ name: "Developer name" }),
+          },
         },
       ]),
     );
-    expect(out.google?.redirectURI).toBe("https://example.test/cb");
-    expect(out.google?.scope).toEqual(["openid", "profile", "email"]);
+    const map = out.github?.mapProfileToUser as (profile: { login: string }) => Promise<Record<string, unknown>>;
+    await expect(map({ login: "alice" })).resolves.toEqual({
+      name: "Developer name",
+      githubLogin: "alice",
+    });
   });
 
-  it.each([
-    "clientId",
-    "clientSecret",
-    "redirectURI",
-    "scope",
-    "mapProfileToUser",
-  ])("throws when extras contains reserved key '%s'", (reserved) => {
-    expect(() =>
-      buildSocialProviders([
-        {
-          kind: "social",
-          provider: "google",
-          clientId: "g",
-          clientSecret: "g",
-          extras: { [reserved]: "shadow" },
-        },
-      ]),
-    ).toThrow(new RegExp(`reserved key.*${reserved}`));
+  it("composes an async GitHub options factory", async () => {
+    const out = buildSocialProviders([{
+      kind: "social",
+      provider: "github",
+      options: async () => ({ clientId: "g", clientSecret: "g" }),
+    }]);
+    const options = await (out.github as () => Promise<Record<string, unknown>>)();
+    expect(options.clientId).toBe("g");
+    await expect((options.mapProfileToUser as (profile: { login: string }) => Promise<Record<string, unknown>>)({ login: "alice" }))
+      .resolves.toEqual({ githubLogin: "alice" });
   });
 
   it("ignores non-social methods", () => {
@@ -451,8 +446,8 @@ describe("buildSocialProviders", () => {
     // failing sign-in alone.
     expect(() =>
       buildSocialProviders([
-        { kind: "social", provider: "github", clientId: "a", clientSecret: "a" },
-        { kind: "social", provider: "github", clientId: "b", clientSecret: "b" },
+        { kind: "social", provider: "github", options: { clientId: "a", clientSecret: "a" } },
+        { kind: "social", provider: "github", options: { clientId: "b", clientSecret: "b" } },
       ]),
     ).toThrow(/'github'.*registered more than once/i);
   });
@@ -460,8 +455,8 @@ describe("buildSocialProviders", () => {
   it("throws for duplicate non-github providers too", () => {
     expect(() =>
       buildSocialProviders([
-        { kind: "social", provider: "google", clientId: "a", clientSecret: "a" },
-        { kind: "social", provider: "google", clientId: "b", clientSecret: "b" },
+        { kind: "social", provider: "google", options: { clientId: "a", clientSecret: "a" } },
+        { kind: "social", provider: "google", options: { clientId: "b", clientSecret: "b" } },
       ]),
     ).toThrow(/'google'.*registered more than once/i);
   });
@@ -471,11 +466,13 @@ describe("guardGithubLoginProfile", () => {
   it("accepts only registered provider callback profiles", () => {
     const hosted = {
       kind: "oauth",
-      providerId: "github",
-      clientId: "client",
-      authorizationUrl: "https://auth.example/authorize",
-      tokenUrl: "https://auth.example/token",
-      mapProfileToUser: () => ({ githubLogin: "owner" }),
+      options: {
+        providerId: "github",
+        clientId: "client",
+        authorizationUrl: "https://auth.example/authorize",
+        tokenUrl: "https://auth.example/token",
+        mapProfileToUser: () => ({ githubLogin: "owner" }),
+      },
     } as const satisfies AuthMethodConfig;
 
     expect(guardGithubLoginProfile(
@@ -509,13 +506,15 @@ describe("buildGenericOAuthProviders", () => {
     const out = buildGenericOAuthProviders([
       {
         kind: "oauth",
-        providerId: "mantle-platform",
         displayName: "Mantle Platform",
-        clientId: "client",
-        clientSecret: "secret",
-        discoveryUrl: "https://platform.mantle.tools/.well-known/openid-configuration",
-        scopes: ["openid", "profile", "email"],
-        pkce: true,
+        options: {
+          providerId: "mantle-platform",
+          clientId: "client",
+          clientSecret: "secret",
+          discoveryUrl: "https://platform.mantle.tools/.well-known/openid-configuration",
+          scopes: ["openid", "profile", "email"],
+          pkce: true,
+        },
       },
     ]);
 
@@ -534,7 +533,7 @@ describe("buildGenericOAuthProviders", () => {
   it("throws when an oauth method has no discoveryUrl or endpoint pair", () => {
     expect(() =>
       buildGenericOAuthProviders([
-        { kind: "oauth", providerId: "broken", clientId: "c" },
+        { kind: "oauth", options: { providerId: "broken", clientId: "c" } },
       ]),
     ).toThrow(/discoveryUrl.*authorizationUrl.*tokenUrl/i);
   });
@@ -543,10 +542,12 @@ describe("buildGenericOAuthProviders", () => {
     const out = buildGenericOAuthProviders([
       {
         kind: "oauth",
-        providerId: "public-client",
-        clientId: "client",
-        discoveryUrl: "https://platform.test/.well-known/openid-configuration",
-        pkce: true,
+        options: {
+          providerId: "public-client",
+          clientId: "client",
+          discoveryUrl: "https://platform.test/.well-known/openid-configuration",
+          pkce: true,
+        },
       },
     ]);
     expect(out[0]).not.toHaveProperty("clientSecret");
@@ -560,10 +561,12 @@ describe("buildGenericOAuthProviders", () => {
     const [provider] = buildGenericOAuthProviders([
       {
         kind: "oauth",
-        providerId: "mantle-hosted-auth",
-        clientId: "client",
-        discoveryUrl: "https://auth.mantle.tools/.well-known/openid-configuration",
-        mapProfileToUser,
+        options: {
+          providerId: "mantle-hosted-auth",
+          clientId: "client",
+          discoveryUrl: "https://auth.mantle.tools/.well-known/openid-configuration",
+          mapProfileToUser,
+        },
       },
     ]);
 
@@ -573,19 +576,22 @@ describe("buildGenericOAuthProviders", () => {
     });
   });
 
-  it("maps an RFC 8707 resource to authorization and token params", () => {
+  it("passes official authorization and token params through", () => {
     const out = buildGenericOAuthProviders([
       {
         kind: "oauth",
-        providerId: "platform",
-        clientId: "client",
-        authorizationUrl: "https://platform.test/authorize",
-        tokenUrl: "https://platform.test/token",
-        resource: "https://api.platform.test",
+        options: {
+          providerId: "platform",
+          clientId: "client",
+          authorizationUrl: "https://platform.test/authorize",
+          tokenUrl: "https://platform.test/token",
+          authorizationUrlParams: { resource: "https://api.platform.test" },
+          tokenUrlParams: { resource: "https://api.platform.test" },
+          refreshTokenParams: { resource: "https://api.platform.test" },
+        },
       },
     ]);
     expect(out[0]).toMatchObject({
-      resource: "https://api.platform.test",
       authorizationUrlParams: { resource: "https://api.platform.test" },
       tokenUrlParams: { resource: "https://api.platform.test" },
       refreshTokenParams: { resource: "https://api.platform.test" },
@@ -597,15 +603,19 @@ describe("buildGenericOAuthProviders", () => {
       buildGenericOAuthProviders([
         {
           kind: "oauth",
-          providerId: "mantle-platform",
-          clientId: "a",
-          discoveryUrl: "https://platform.mantle.tools/.well-known/openid-configuration",
+          options: {
+            providerId: "mantle-platform",
+            clientId: "a",
+            discoveryUrl: "https://platform.mantle.tools/.well-known/openid-configuration",
+          },
         },
         {
           kind: "oauth",
-          providerId: "mantle-platform",
-          clientId: "b",
-          discoveryUrl: "https://platform.mantle.tools/.well-known/openid-configuration",
+          options: {
+            providerId: "mantle-platform",
+            clientId: "b",
+            discoveryUrl: "https://platform.mantle.tools/.well-known/openid-configuration",
+          },
         },
       ]),
     ).toThrow(/mantle-platform.*registered more than once/i);
@@ -617,15 +627,15 @@ describe("buildGenericOAuthProviders", () => {
         {
           kind: "social",
           provider: "github",
-          clientId: "social-client",
-          clientSecret: "social-secret",
+          options: { clientId: "social-client", clientSecret: "social-secret" },
         },
         {
           kind: "oauth",
-          providerId: "github",
-          clientId: "oauth-client",
-          discoveryUrl: "https://issuer.test/.well-known/openid-configuration",
-          resource: "https://api.test",
+          options: {
+            providerId: "github",
+            clientId: "oauth-client",
+            discoveryUrl: "https://issuer.test/.well-known/openid-configuration",
+          },
         },
       ]),
     ).toThrow(/conflicts with a registered social provider id/i);
@@ -846,22 +856,29 @@ describe("createAuth — boot invariants", () => {
     ).toThrow(/magic-link/i);
   });
 
-  it("throws when social.extras contains a reserved key", () => {
-    expect(() =>
-      createAuth(
-        baseConfig({
-          methods: [
-            {
-              kind: "social",
-              provider: "google",
-              clientId: "g",
-              clientSecret: "g",
-              extras: { clientSecret: "shadow" },
-            },
-          ],
-        }),
-      ),
-    ).toThrow(/reserved key.*clientSecret/);
+  it("accepts a raw Better Auth plugin when methods is empty", async () => {
+    const sendVerificationOTP = vi.fn(async () => undefined);
+    const auth = createAuth(baseConfig({
+      methods: [],
+      plugins: [emailOTP({
+        sendVerificationOTP,
+        storeOTP: "encrypted",
+      })],
+    }));
+    expect(auth.methods).toEqual([]);
+    expect((await auth.handler(new Request("https://example.test/api/auth/email-otp/send-verification-otp", {
+      method: "POST",
+      headers: { origin: "https://example.test", "content-type": "application/json" },
+      body: JSON.stringify({ email: "owner@example.test", type: "sign-in" }),
+    }))).status).toBe(200);
+    await vi.waitFor(() => expect(sendVerificationOTP).toHaveBeenCalledOnce());
+  });
+
+  it("rejects duplicate Better Auth plugin ids instead of replacing one", () => {
+    expect(() => createAuth(baseConfig({
+      methods: [{ kind: "email-otp", sender: NULL_SENDER }],
+      plugins: [emailOTP({ sendVerificationOTP: async () => undefined })],
+    }))).toThrow(/plugin 'email-otp'.*more than once/i);
   });
 
   it("returns Auth.methods reflecting the registered methods, in declaration order", () => {
@@ -874,16 +891,17 @@ describe("createAuth — boot invariants", () => {
           {
             kind: "social",
             provider: "google",
-            clientId: "o",
-            clientSecret: "o",
+            options: { clientId: "o", clientSecret: "o" },
           },
           {
             kind: "oauth",
-            providerId: "mantle-platform",
             displayName: "Mantle Platform",
-            clientId: "platform-client",
-            clientSecret: "platform-secret",
-            discoveryUrl: "https://platform.mantle.tools/.well-known/openid-configuration",
+            options: {
+              providerId: "mantle-platform",
+              clientId: "platform-client",
+              clientSecret: "platform-secret",
+              discoveryUrl: "https://platform.mantle.tools/.well-known/openid-configuration",
+            },
           },
         ],
         bootstrapOwner: { match: "email", value: "alice@example.com" },
@@ -991,8 +1009,7 @@ describe("createAuth — boot invariants", () => {
           {
             kind: "social",
             provider: "apple",
-            clientId: "com.example.web",
-            clientSecret: "JWT-placeholder",
+            options: { clientId: "com.example.web", clientSecret: "JWT-placeholder" },
           },
         ],
         bootstrapOwner: { match: "email", value: "owner@example.com" },
@@ -1012,8 +1029,7 @@ describe("createAuth — boot invariants", () => {
           {
             kind: "social",
             provider: "apple",
-            clientId: "com.example.web",
-            clientSecret: "JWT-placeholder",
+            options: { clientId: "com.example.web", clientSecret: "JWT-placeholder" },
           },
         ],
         bootstrapOwner: { match: "email", value: "owner@example.com" },
@@ -1029,8 +1045,7 @@ describe("createAuth — boot invariants", () => {
           {
             kind: "social",
             provider: "apple",
-            clientId: "com.example.web",
-            clientSecret: "JWT-placeholder",
+            options: { clientId: "com.example.web", clientSecret: "JWT-placeholder" },
           },
         ],
         ["https://platform.mantle.tools", "https://landing.mantle.tools"],
@@ -1093,10 +1108,10 @@ describe("AuthMethodConfig — type narrowing smoke", () => {
     const method: AuthMethodConfig = {
       kind: "email-otp",
       sender: NULL_SENDER,
-      otpLength: 6,
+      options: { otpLength: 6 },
     };
     if (method.kind === "email-otp") {
-      expect(method.otpLength).toBe(6);
+      expect(method.options?.otpLength).toBe(6);
     }
   });
 });

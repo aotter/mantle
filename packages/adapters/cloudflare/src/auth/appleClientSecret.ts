@@ -33,8 +33,10 @@
  *   methods: [{
  *     kind: "social",
  *     provider: "apple",
- *     clientId: env.APPLE_SERVICES_ID,
- *     clientSecret: appleSecret,
+ *     options: {
+ *       clientId: env.APPLE_SERVICES_ID,
+ *       clientSecret: appleSecret,
+ *     },
  *   }],
  *   // ...
  * });

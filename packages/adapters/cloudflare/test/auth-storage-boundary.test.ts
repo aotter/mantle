@@ -142,3 +142,44 @@ test("Auth hashes email sign-in secrets at rest", async () => {
     expect((await auth.handler(new Request(magicLink, { headers: { origin } }))).status).toBe(302);
   } finally { sqlite.close(); }
 });
+
+test("Auth honors explicit native Better Auth storage overrides", async () => {
+  const { db, sqlite } = sqliteD1();
+  let otp = "";
+  let magicLink = "";
+  const email = "plain@example.test";
+  try {
+    const auth = createAuth({
+      ...config(db),
+      methods: [
+        {
+          kind: "email-otp",
+          sender: { send: async ({ subject }) => { otp = subject.match(/\d{6}/u)?.[0] ?? ""; } },
+          options: { storeOTP: "plain" },
+        },
+        {
+          kind: "magic-link",
+          sender: { send: async ({ text }) => { magicLink = text.match(/^https:\/\/\S+$/mu)?.[0] ?? ""; } },
+          options: { storeToken: "plain" },
+        },
+      ],
+    });
+
+    await auth.handler(new Request(`${origin}/api/auth/email-otp/send-verification-otp`, {
+      method: "POST", headers: { origin, "content-type": "application/json", "cf-connecting-ip": "192.0.2.20" },
+      body: JSON.stringify({ email, type: "sign-in" }),
+    }));
+    expect(sqlite.prepare("SELECT value FROM verification").get()!.value).toContain(otp);
+    expect((await auth.handler(new Request(`${origin}/api/auth/sign-in/email-otp`, {
+      method: "POST", headers: { origin, "content-type": "application/json", "cf-connecting-ip": "192.0.2.21" },
+      body: JSON.stringify({ email, otp }),
+    }))).status).toBe(200);
+
+    await auth.handler(new Request(`${origin}/api/auth/sign-in/magic-link`, {
+      method: "POST", headers: { origin, "content-type": "application/json", "cf-connecting-ip": "192.0.2.22" },
+      body: JSON.stringify({ email }),
+    }));
+    const token = new URL(magicLink).searchParams.get("token");
+    expect(sqlite.prepare("SELECT identifier FROM verification WHERE identifier NOT LIKE 'sign-in-otp-%'").get()!.identifier).toBe(token);
+  } finally { sqlite.close(); }
+});

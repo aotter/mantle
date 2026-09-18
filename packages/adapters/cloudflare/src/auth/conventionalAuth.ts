@@ -64,18 +64,20 @@ export function createConventionalAuth(env: ConventionalAuthEnv): Auth {
       secret,
       methods: [{
         kind: "oauth",
-        providerId: "github",
         displayName: "GitHub",
-        clientId: hostedClientId,
-        authorizationUrl: `${hostedIssuer}/authorize`,
-        tokenUrl: `${hostedIssuer}/token`,
-        userInfoUrl: `${hostedIssuer}/userinfo`,
-        scopes: ["profile", "email"],
-        redirectURI: `${baseURL}/api/auth/callback/github`,
-        pkce: true,
-        mapProfileToUser: (profile) => {
-          const login = githubLogin(profile.github_login);
-          return login ? { githubLogin: login } : {};
+        options: {
+          providerId: "github",
+          clientId: hostedClientId,
+          authorizationUrl: `${hostedIssuer}/authorize`,
+          tokenUrl: `${hostedIssuer}/token`,
+          userInfoUrl: `${hostedIssuer}/userinfo`,
+          scopes: ["profile", "email"],
+          redirectURI: `${baseURL}/api/auth/callback/github`,
+          pkce: true,
+          mapProfileToUser: (profile) => {
+            const login = githubLogin(profile.github_login);
+            return login ? { githubLogin: login } : {};
+          },
         },
       }],
       bootstrapOwner: { match: "github-login", value: owner },
@@ -102,8 +104,10 @@ export function createConventionalAuth(env: ConventionalAuthEnv): Auth {
       methods: [{
         kind: "social",
         provider: "github",
-        clientId: githubClientId,
-        clientSecret: githubClientSecret,
+        options: {
+          clientId: githubClientId,
+          clientSecret: githubClientSecret,
+        },
       }],
       bootstrapOwner: { match: "github-login", value: owner },
       oauthProvider,

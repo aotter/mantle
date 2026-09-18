@@ -74,7 +74,7 @@ while replacing only construction:
 ```ts
 createMantleWorker({
   plan,
-  auth: (env) => createAuth({ /* curated site-specific methods */ }),
+  auth: (env) => createAuth({ /* site-specific Better Auth methods */ }),
 });
 ```
 
@@ -85,9 +85,10 @@ primitives as the facade, and states which code becomes application-owned.
 
 ## Better Auth Boundaries
 
-`createAuth()` exposes curated Better Auth configuration fields, not a
-generic Better Auth passthrough. The hosted-auth and self-hosted-auth
-product boundary is documented in
+`createAuth()` keeps Mantle-owned integration fields small while each method's
+`options` uses Better Auth's native provider/plugin type. Email callbacks stay
+with Mantle's `EmailSender`; raw `plugins` are available when the application
+must own the callback and UI. The hosted-auth and self-hosted-auth boundary is documented in
 `node_modules/@aotter/mantle/docs/auth-hosting-model.md`.
 
 For trusted first-party apps that share one parent domain, configure
