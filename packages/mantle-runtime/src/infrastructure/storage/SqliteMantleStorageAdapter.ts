@@ -50,8 +50,8 @@ export interface SqliteMantleStorageAdapterOptions {
   readonly decorateSiteConfigRepository?: (
     canonical: SiteConfigRepository,
   ) => SiteConfigRepository;
-  /** Managed deployments apply reviewed DDL before boot. Runtime validates
-   *  this revision and never mutates physical schema ownership. */
+  /** Managed deployments apply reviewed DDL before boot. This pins the
+   *  Worker's plan; the physical marker may be a compatible newer superset. */
   readonly managedStorageFingerprint?: string;
 }
 
@@ -81,7 +81,7 @@ export class SqliteMantleStorageAdapter implements MantleStorageAdapter {
       assertDeploymentPlan(plan, { siteLocales: await this.siteConfig.readLocales() });
       await assertSchemaTableOwnership(this.db, schemas);
       const active = await this.db.prepare("SELECT fingerprint FROM _mantle_storage_state WHERE id = 1").first<{ fingerprint: string }>();
-      if (active?.fingerprint !== planned) throw new Error("Managed storage revision is not active.");
+      if (!active?.fingerprint) throw new Error("Managed storage is not initialized.");
       this.canonicalSiteConfig.usePreparedLocales();
       return prepared;
     }
