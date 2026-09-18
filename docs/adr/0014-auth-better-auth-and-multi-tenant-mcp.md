@@ -3,7 +3,7 @@
 ## Status
 
 Accepted. Amended 2026-05-14, 2026-05-15, 2026-06-30, 2026-07-15,
-2026-08-03, and 2026-08-22.
+2026-08-03, 2026-08-22, and 2026-09-18.
 
 ## Date
 
@@ -725,3 +725,12 @@ the atomic consume or increment operations those paths require. Auth keys use
 the `better-auth:` prefix so the namespace can also hold Mantle projections.
 Session revocation and user updates use Better Auth's cache invalidation and
 therefore follow Workers KV's propagation model.
+
+## 2026-09-18 amendment — one-way email verification storage
+
+The curated Cloudflare auth adapter stores email OTPs and magic-link tokens as
+one-way hashes. This is a fixed security boundary, not adopter configuration;
+`createAuth` does not expose Better Auth's plain or encrypted storage options.
+Deploying this change invalidates any unconsumed codes and links created by an
+older deployment. Users request a new code or link; no database migration is
+needed.

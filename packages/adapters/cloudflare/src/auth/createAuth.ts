@@ -588,6 +588,7 @@ const MAGIC_LINK_DEFAULT_ALLOWED_ATTEMPTS = 3;
 function buildMagicLinkPlugin(method: Extract<AuthMethodConfig, { kind: "magic-link" }>) {
   const fallback = method.fallbackLocale ?? "en";
   return magicLink({
+    storeToken: "hashed",
     expiresIn: method.expiresInSeconds ?? MAGIC_LINK_DEFAULT_EXPIRES_SECONDS,
     allowedAttempts: method.allowedAttempts ?? MAGIC_LINK_DEFAULT_ALLOWED_ATTEMPTS,
     // Returned synchronously — same fire-and-forget contract as
@@ -609,6 +610,7 @@ function buildMagicLinkPlugin(method: Extract<AuthMethodConfig, { kind: "magic-l
 function buildEmailOTPPlugin(method: Extract<AuthMethodConfig, { kind: "email-otp" }>) {
   const fallback = method.fallbackLocale ?? "en";
   return emailOTP({
+    storeOTP: "hashed",
     ...(method.otpLength !== undefined ? { otpLength: method.otpLength } : {}),
     ...(method.expiresInSeconds !== undefined
       ? { expiresIn: method.expiresInSeconds }

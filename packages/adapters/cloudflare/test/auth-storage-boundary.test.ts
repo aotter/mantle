@@ -100,3 +100,45 @@ test("Auth email unknown outcome is observed without resending or leaking provid
     expect(await response.text()).not.toContain("private-email-provider-detail");
   } finally { log.mockRestore(); sqlite.close(); }
 });
+
+test("Auth hashes email sign-in secrets at rest", async () => {
+  const { db, sqlite } = sqliteD1();
+  let otp = "";
+  let magicLink = "";
+  const email = "hashed@example.test";
+  try {
+    const auth = createAuth({
+      ...config(db),
+      methods: [
+        { kind: "email-otp", sender: { send: async ({ subject }) => {
+          otp = subject.match(/\d{6}/u)?.[0] ?? "";
+        } } },
+        { kind: "magic-link", sender: { send: async ({ text }) => {
+          magicLink = text.match(/^https:\/\/\S+$/mu)?.[0] ?? "";
+        } } },
+      ],
+    });
+
+    expect((await auth.handler(new Request(`${origin}/api/auth/email-otp/send-verification-otp`, {
+      method: "POST", headers: { origin, "content-type": "application/json" },
+      body: JSON.stringify({ email, type: "sign-in" }),
+    }))).status).toBe(200);
+    const otpValue = sqlite.prepare("SELECT value FROM verification").get()!.value as string;
+    expect(otp).toMatch(/^\d{6}$/u);
+    expect(otpValue).not.toContain(otp);
+    expect((await auth.handler(new Request(`${origin}/api/auth/sign-in/email-otp`, {
+      method: "POST", headers: { origin, "content-type": "application/json" },
+      body: JSON.stringify({ email, otp }),
+    }))).status).toBe(200);
+
+    expect((await auth.handler(new Request(`${origin}/api/auth/sign-in/magic-link`, {
+      method: "POST", headers: { origin, "content-type": "application/json" },
+      body: JSON.stringify({ email }),
+    }))).status).toBe(200);
+    const token = new URL(magicLink).searchParams.get("token");
+    const magicIdentifier = sqlite.prepare("SELECT identifier FROM verification").get()!.identifier as string;
+    expect(token).toBeTruthy();
+    expect(magicIdentifier).not.toBe(token);
+    expect((await auth.handler(new Request(magicLink, { headers: { origin } }))).status).toBe(302);
+  } finally { sqlite.close(); }
+});
