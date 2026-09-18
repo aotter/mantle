@@ -7,7 +7,7 @@ import type { Migration } from "../../domain/port/DatabaseDriver.js";
 
 const SYSTEM_COLUMNS = ["_mantle_id", "_mantle_status", "_mantle_version", "_mantle_author_id", "_mantle_created_at", "_mantle_updated_at"] as const;
 const RESERVED_TABLES = new Set([
-  "_migrations", "_mantle_boot_state", "_mantle_schema_tables", "_mantle_storage_state",
+  "entries", "_migrations", "_mantle_boot_state", "_mantle_schema_tables", "_mantle_storage_state",
   "site_config", "user", "session", "account", "verification", "jwks", "oauthclient",
   "oauthresource", "oauthclientresource", "oauthrefreshtoken", "oauthaccesstoken", "oauthconsent",
   "oauthclientassertion", "media_assets", "pending_media_uploads",

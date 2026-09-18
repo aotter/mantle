@@ -87,8 +87,8 @@ The native-table storage contract is a pre-beta breaking change. Existing
 generic-`entries` databases are unsupported: rebuild the instance and move any
 required data manually outside Mantle. New native-table instances deploy safe
 additive changes online; destructive changes are rejected and require another
-manual rebuild. Mantle does not ship an in-product migration workflow for this
-unreleased storage format.
+manual rebuild. Any `uniqueIndexes` tuple change is destructive. Mantle does not
+ship an in-product migration workflow for this unreleased storage format.
 
 ## Source
 - [`packages/mantle/README.md`](../../../packages/mantle/README.md)

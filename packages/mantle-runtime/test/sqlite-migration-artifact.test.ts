@@ -67,6 +67,8 @@ describe("SQLite migration artifacts", () => {
   });
 
   it("rejects SQLite namespace collisions before emitting DDL", async () => {
+    await expect(buildSqliteMigrationArtifact([], [{ ...schema({ title: { type: "string" } }), metadata: { name: "entries" } }]))
+      .rejects.toThrow("reserved SQLite table");
     await expect(buildSqliteMigrationArtifact([], [{ ...schema({ title: { type: "string" } }), metadata: { name: "session" } }]))
       .rejects.toThrow("reserved SQLite table");
     await expect(buildSqliteMigrationArtifact([], [schema({ _mantle_id: { type: "string" } })]))
