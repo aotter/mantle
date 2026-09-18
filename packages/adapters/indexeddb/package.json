@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle-indexeddb",
-  "version": "0.1.2-alpha.2",
+  "version": "0.1.2-alpha.3",
   "description": "IndexedDB storage adapter for browser-hosted Mantle Runtime.",
   "license": "Apache-2.0",
   "homepage": "https://mantle.tools/",
