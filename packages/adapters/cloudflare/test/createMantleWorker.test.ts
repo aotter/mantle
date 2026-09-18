@@ -140,7 +140,7 @@ describe("createMantleWorker", () => {
       fetchWorker(fresh, "/mcp/staff", env),
       fresh.getRuntime(env),
     ]);
-    expect(db.executions).toHaveLength(before + 1);
+    expect(db.executions).toHaveLength(before + 2);
     expect(migrations).not.toHaveBeenCalled();
   });
 

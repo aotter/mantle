@@ -398,7 +398,7 @@ function rowFromDb(table: SqliteSchemaTable, row: NativeEntryRow, dataFields?: r
   }
   for (const field of dataFields ?? []) {
     const property = properties[field];
-    if (property && isNullableJsonSchema(property) && !Object.hasOwn(data, field)) data[field] = null;
+    if ((!property || isNullableJsonSchema(property)) && !Object.hasOwn(data, field)) data[field] = null;
   }
   return {
     id: row._mantle_id,
