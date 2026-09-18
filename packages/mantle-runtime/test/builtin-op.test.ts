@@ -136,7 +136,7 @@ function harness(opts: {
   const invokeBuiltin = new InvokeBuiltinUseCase(
     {
       create: (a) => entries.create(a),
-      get: (id) => entries.get(id),
+      get: (key) => entries.get(key),
       update: (a) => entries.update(a),
       delete: (a) => entries.delete(a),
       transitionStatus: (a) => entries.transitionStatus(a),
@@ -382,7 +382,7 @@ describe("InvokeBuiltinUseCase — update / delete / upsert", () => {
       ctx: { user: null, staff: null, env: {} },
     });
     expect(deleted).toMatchObject({ ok: false, diagnostic: { code: "CONFLICT" } });
-    expect(await h.store.get(row.id)).not.toBeNull();
+    expect(await h.store.get({ id: row.id, collection: row.collection })).not.toBeNull();
   });
 
   it("delete cannot cross the Procedure's bound collection", async () => {
@@ -412,7 +412,7 @@ describe("InvokeBuiltinUseCase — update / delete / upsert", () => {
       ctx: { user: null, staff: null, env: {} },
     });
     expect(deleted).toMatchObject({ ok: false, diagnostic: { code: "NOT_FOUND" } });
-    expect(await h.store.get("shared-id")).not.toBeNull();
+    expect(await h.store.get({ id: "shared-id", collection: "comments" })).not.toBeNull();
   });
 
   it("update, id-upsert, and archive cannot cross the Procedure's bound collection", async () => {
@@ -447,7 +447,7 @@ describe("InvokeBuiltinUseCase — update / delete / upsert", () => {
         ctx: { user: null, staff: null, env: {} },
       });
       expect(result).toMatchObject({ ok: false, diagnostic: { code: "NOT_FOUND" } });
-      expect(await h.store.get("shared-id")).toEqual(original);
+      expect(await h.store.get({ id: "shared-id", collection: "comments" })).toEqual(original);
     }
   });
 
@@ -857,7 +857,7 @@ describe("InvokeBuiltinUseCase — matched upsert", () => {
     expect(stale.ok).toBe(false);
     if (stale.ok) return;
     expect(stale.diagnostic.code).toBe("CONFLICT");
-    const stored = await h.store.get(row.id);
+    const stored = await h.store.get({ id: row.id, collection: "site-settings" });
     expect(stored?.data["theme"]).toBe("light");
   });
 
@@ -912,7 +912,7 @@ describe("InvokeBuiltinUseCase — matched upsert", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.diagnostic.code).toBe("INPUT_VALIDATION_FAILED");
-    expect((await h.store.get(row.id))?.data["theme"]).toBe("dark");
+    expect((await h.store.get({ id: row.id, collection: "site-settings" }))?.data["theme"]).toBe("dark");
   });
 
   it("versioned update of a deleted match target is NOT_FOUND and does not recreate", async () => {

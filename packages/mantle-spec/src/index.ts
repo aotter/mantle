@@ -19,7 +19,7 @@
  *  - `domain/service/` — pure stateless algorithms operating on the
  *    domain model: LocaleCanonicalizer, LifecycleStateMachine,
  *    ManifestParser, CrossSchemaChecker, ManifestPathDiagnoser,
- *    EntryDataValidator, SchemaDdlEmitter, SiteDefaultsValidator,
+ *    EntryDataValidator, SchemaIndexChecker, SiteDefaultsValidator,
  *    JsonSchemaToZod.
  *  - `usecase/` — application services: ValidateManifestsUseCase
  *    plus its request/response DTOs.

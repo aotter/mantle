@@ -89,7 +89,7 @@ describe("CreateDraftUseCase", () => {
     expect(row.status).toBe("draft");
     expect(row.version).toBe(1);
     expect(row.data).toEqual({ title: "Hello" });
-    expect(await h.store.get(row.id)).toEqual(row);
+    expect(await h.store.get({ id: row.id, collection: row.collection })).toEqual(row);
   });
 
   it("rejects an unknown collection with NOT_FOUND", async () => {
@@ -110,7 +110,7 @@ describe("CreateDraftUseCase", () => {
     expect(row.status).toBe("draft");
     expect(row.data).toEqual({});
     // Publishing re-validates in full: the missing required field bites here.
-    await expect(h.requestPublish.execute({ id: row.id })).rejects.toMatchObject({
+    await expect(h.requestPublish.execute({ id: row.id, collection: row.collection })).rejects.toMatchObject({
       diagnostic: { code: "INPUT_VALIDATION_FAILED", path: "/title" },
     });
   });
@@ -171,6 +171,7 @@ describe("CreateDraftUseCase", () => {
       });
       const updated = await h.updateDraft.execute({
         id: row.id,
+        collection: row.collection,
         expectedVersion: row.version,
         data: { title: "after" },
       });
@@ -185,10 +186,10 @@ describe("CreateDraftUseCase", () => {
         data: { title: "op-record" },
         authorId: null,
       });
-      await expect(h.requestPublish.execute({ id: row.id })).rejects.toMatchObject({
+      await expect(h.requestPublish.execute({ id: row.id, collection: row.collection })).rejects.toMatchObject({
         diagnostic: { code: "CONFLICT" },
       });
-      await expect(h.unpublish.execute({ id: row.id })).rejects.toMatchObject({
+      await expect(h.unpublish.execute({ id: row.id, collection: row.collection })).rejects.toMatchObject({
         diagnostic: { code: "CONFLICT" },
       });
     });
@@ -200,8 +201,8 @@ describe("CreateDraftUseCase", () => {
         data: { title: "op-record" },
         authorId: null,
       });
-      await expect(h.deleteEntry.execute({ id: row.id })).resolves.toEqual({ removed: true });
-      expect(await h.store.get(row.id)).toBeNull();
+      await expect(h.deleteEntry.execute({ id: row.id, collection: row.collection })).resolves.toEqual({ removed: true });
+      expect(await h.store.get({ id: row.id, collection: row.collection })).toBeNull();
     });
   });
 
@@ -425,6 +426,7 @@ describe("UpdateDraftUseCase", () => {
     });
     const updated = await h.updateDraft.execute({
       id: created.id,
+      collection: created.collection,
       expectedVersion: 1,
       data: { title: "v2", slug: "v2" },
     });
@@ -439,16 +441,16 @@ describe("UpdateDraftUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    await h.requestPublish.execute({ id: created.id });
+    await h.requestPublish.execute({ id: created.id, collection: created.collection });
     await expect(
-      h.updateDraft.execute({ id: created.id, expectedVersion: 2, data: { title: "y" } }),
+      h.updateDraft.execute({ id: created.id, collection: created.collection, expectedVersion: 2, data: { title: "y" } }),
     ).rejects.toMatchObject({ diagnostic: { code: "CONFLICT" } });
   });
 
   it("returns NOT_FOUND for unknown id", async () => {
     const h = harness();
     await expect(
-      h.updateDraft.execute({ id: "missing", expectedVersion: 1, data: {} }),
+      h.updateDraft.execute({ id: "missing", collection: "posts", expectedVersion: 1, data: {} }),
     ).rejects.toMatchObject({ diagnostic: { code: "NOT_FOUND" } });
   });
 
@@ -460,7 +462,7 @@ describe("UpdateDraftUseCase", () => {
       authorId: null,
     });
     await expect(
-      h.updateDraft.execute({ id: created.id, expectedVersion: 99, data: {} }),
+      h.updateDraft.execute({ id: created.id, collection: created.collection, expectedVersion: 99, data: {} }),
     ).rejects.toMatchObject({ diagnostic: { code: "CONFLICT" } });
   });
 
@@ -473,6 +475,7 @@ describe("UpdateDraftUseCase", () => {
     });
     const updated = await h.updateDraft.execute({
       id: created.id,
+      collection: created.collection,
       expectedVersion: 1,
       data: {
         title: "v2",
@@ -499,6 +502,7 @@ describe("UpdateDraftUseCase", () => {
     });
     const updated = await h.updateDraft.execute({
       id: created.id,
+      collection: created.collection,
       expectedVersion: 1,
       data: {
         title: "v2",
@@ -544,6 +548,7 @@ describe("UpdateDraftUseCase", () => {
     await expect(
       h.updateDraft.execute({
         id: first.id,
+        collection: first.collection,
         expectedVersion: 1,
         data: { title: "One updated", slug: "one" },
       }),
@@ -551,6 +556,7 @@ describe("UpdateDraftUseCase", () => {
     await expect(
       h.updateDraft.execute({
         id: second.id,
+        collection: second.collection,
         expectedVersion: 1,
         data: { slug: "one" },
       }),
@@ -568,7 +574,7 @@ describe("RequestPublishUseCase (publishing lifecycle)", () => {
       data: { title: "x" },
       authorId: null,
     });
-    const published = await h.requestPublish.execute({ id: created.id });
+    const published = await h.requestPublish.execute({ id: created.id, collection: created.collection });
     expect(published.status).toBe("published");
     expect(published.version).toBe(2);
   });
@@ -580,8 +586,8 @@ describe("RequestPublishUseCase (publishing lifecycle)", () => {
       data: { title: "x" },
       authorId: null,
     });
-    await h.requestPublish.execute({ id: created.id });
-    await expect(h.requestPublish.execute({ id: created.id })).rejects.toBeInstanceOf(
+    await h.requestPublish.execute({ id: created.id, collection: created.collection });
+    await expect(h.requestPublish.execute({ id: created.id, collection: created.collection })).rejects.toBeInstanceOf(
       DiagnosticError,
     );
   });
@@ -596,6 +602,7 @@ describe("RequestPublishUseCase (publishing lifecycle)", () => {
     expect(created.version).toBe(1);
     await h.updateDraft.execute({
       id: created.id,
+      collection: created.collection,
       expectedVersion: 1,
       data: { title: "v2-unvalidated" },
     });
@@ -662,7 +669,7 @@ describe("RequestPublishUseCase (publishing lifecycle)", () => {
       authorId: null,
     });
 
-    await expect(h.requestPublish.execute({ id: child.id })).rejects.toMatchObject({
+    await expect(h.requestPublish.execute({ id: child.id, collection: child.collection })).rejects.toMatchObject({
       diagnostic: {
         code: "TRANSLATES_PARENT_UNKNOWN",
         value: {
@@ -688,7 +695,7 @@ describe("RequestPublishUseCase (publishing lifecycle)", () => {
       authorId: null,
     });
 
-    await expect(h.requestPublish.execute({ id: child.id })).rejects.toMatchObject({
+    await expect(h.requestPublish.execute({ id: child.id, collection: child.collection })).rejects.toMatchObject({
       diagnostic: { code: "TRANSLATES_PARENT_UNKNOWN" },
     });
   });
@@ -700,14 +707,14 @@ describe("RequestPublishUseCase (publishing lifecycle)", () => {
       data: { title: "Parent", slug: "hello" },
       authorId: null,
     });
-    await h.requestPublish.execute({ id: parent.id });
+    await h.requestPublish.execute({ id: parent.id, collection: parent.collection });
     const child = await h.createDraft.execute({
       collection: "post-translations",
       data: { slug: "hello", locale: "en", title: "Hello", body: "World" },
       authorId: null,
     });
 
-    const published = await h.requestPublish.execute({ id: child.id });
+    const published = await h.requestPublish.execute({ id: child.id, collection: child.collection });
     expect(published.status).toBe("published");
   });
 });
@@ -765,8 +772,8 @@ describe("UnpublishUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    await h.requestPublish.execute({ id: created.id });
-    const reverted = await h.unpublish.execute({ id: created.id });
+    await h.requestPublish.execute({ id: created.id, collection: created.collection });
+    const reverted = await h.unpublish.execute({ id: created.id, collection: created.collection });
     expect(reverted.status).toBe("draft");
   });
 
@@ -777,7 +784,7 @@ describe("UnpublishUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    await expect(h.unpublish.execute({ id: created.id })).rejects.toBeInstanceOf(
+    await expect(h.unpublish.execute({ id: created.id, collection: created.collection })).rejects.toBeInstanceOf(
       DiagnosticError,
     );
   });
@@ -789,8 +796,8 @@ describe("UnpublishUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    const archived = await h.archive.execute({ id: created.id });
-    const reverted = await h.unpublish.execute({ id: created.id });
+    const archived = await h.archive.execute({ id: created.id, collection: created.collection });
+    const reverted = await h.unpublish.execute({ id: created.id, collection: created.collection });
     expect(archived.status).toBe("archived");
     expect(reverted.status).toBe("draft");
   });
@@ -804,7 +811,7 @@ describe("ArchiveUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    const archived = await h.archive.execute({ id: created.id });
+    const archived = await h.archive.execute({ id: created.id, collection: created.collection });
     expect(archived.status).toBe("archived");
   });
 
@@ -815,8 +822,8 @@ describe("ArchiveUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    await h.requestPublish.execute({ id: created.id });
-    const archived = await h.archive.execute({ id: created.id });
+    await h.requestPublish.execute({ id: created.id, collection: created.collection });
+    const archived = await h.archive.execute({ id: created.id, collection: created.collection });
     expect(archived.status).toBe("archived");
   });
 
@@ -830,10 +837,11 @@ describe("ArchiveUseCase", () => {
     expect(created.version).toBe(1);
     await h.updateDraft.execute({
       id: created.id,
+      collection: created.collection,
       expectedVersion: 1,
       data: { title: "y" },
     });
-    const archived = await h.archive.execute({ id: created.id });
+    const archived = await h.archive.execute({ id: created.id, collection: created.collection });
     expect(archived.status).toBe("archived");
   });
 });
@@ -895,7 +903,7 @@ describe("GetEntryUseCase / ListEntriesUseCase / DeleteEntryUseCase", () => {
     const h = harness();
     const a = await h.createDraft.execute({ collection: "posts", data: { title: "a" }, authorId: null });
     await h.createDraft.execute({ collection: "posts", data: { title: "b" }, authorId: null });
-    await h.requestPublish.execute({ id: a.id });
+    await h.requestPublish.execute({ id: a.id, collection: a.collection });
     const drafts = await h.listEntries.execute({ collection: "posts", status: "draft" });
     expect(drafts).toHaveLength(1);
     const published = await h.listEntries.execute({ collection: "posts", status: "published" });
@@ -1116,9 +1124,9 @@ describe("GetEntryUseCase / ListEntriesUseCase / DeleteEntryUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    const result = await h.deleteEntry.execute({ id: created.id });
+    const result = await h.deleteEntry.execute({ id: created.id, collection: created.collection });
     expect(result.removed).toBe(true);
-    expect(await h.store.get(created.id)).toBeNull();
+    expect(await h.store.get({ id: created.id, collection: created.collection })).toBeNull();
   });
 
   it("DeleteEntryUseCase requires published content to be unpublished first", async () => {
@@ -1128,20 +1136,20 @@ describe("GetEntryUseCase / ListEntriesUseCase / DeleteEntryUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    await h.requestPublish.execute({ id: created.id });
+    await h.requestPublish.execute({ id: created.id, collection: created.collection });
 
-    await expect(h.deleteEntry.execute({ id: created.id })).rejects.toMatchObject({
+    await expect(h.deleteEntry.execute({ id: created.id, collection: created.collection })).rejects.toMatchObject({
       diagnostic: {
         code: "CONFLICT",
         message: expect.stringContaining("Unpublish it first"),
       },
     });
-    expect(await h.store.get(created.id)).not.toBeNull();
+    expect(await h.store.get({ id: created.id, collection: created.collection })).not.toBeNull();
   });
 
   it("DeleteEntryUseCase surfaces NOT_FOUND on missing ids", async () => {
     const h = harness();
-    await expect(h.deleteEntry.execute({ id: "ghost" })).rejects.toMatchObject({
+    await expect(h.deleteEntry.execute({ id: "ghost", collection: "posts" })).rejects.toMatchObject({
       diagnostic: { code: "NOT_FOUND" },
     });
   });

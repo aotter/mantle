@@ -198,7 +198,7 @@ export async function requirePublishedLegalDocument(
   ctx: HandlerContext<{ DB: D1Database }>,
 ) {
   const row = await ctx.env.DB.prepare(
-    "SELECT 1 FROM entries WHERE id = ? AND collection = 'legal-documents' AND status = 'published'",
+    'SELECT 1 FROM "legal-documents" WHERE "_mantle_id" = ? AND "_mantle_status" = \'published\'',
   ).bind(documentId).first();
   if (!row) throw new Error("published_legal_document_required");
   return {};

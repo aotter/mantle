@@ -159,7 +159,7 @@ async function seed(env: Env, until: number): Promise<Response> {
   const current = state ??= createState(env);
   await current.worker.getRuntime(env);
   const row = await env.DB
-    .prepare("SELECT COUNT(*) AS count FROM entries WHERE collection = 'posts'")
+    .prepare('SELECT COUNT(*) AS count FROM "posts"')
     .first<{ count: number }>();
   const start = Number(row?.count ?? 0);
   const target = Math.max(start, Math.min(50_000, Math.floor(until)));
@@ -167,33 +167,30 @@ async function seed(env: Env, until: number): Promise<Response> {
     const statements: D1PreparedStatement[] = [];
     for (let index = offset; index < Math.min(offset + 20, target); index += 1) {
       statements.push(env.DB.prepare(
-        `INSERT OR IGNORE INTO entries
-         (id, collection, status, version, data, author_id, created_at, updated_at)
-         VALUES (?, 'posts', ?, 1, ?, NULL, ?, ?)`,
+        `INSERT OR IGNORE INTO "posts"
+         (_mantle_id, _mantle_status, _mantle_version, slug, locale, title, body,
+          _mantle_author_id, _mantle_created_at, _mantle_updated_at)
+         VALUES (?, ?, 1, ?, ?, ?, ?, NULL, ?, ?)`,
       ).bind(
         `post-${index}`,
         index % 5 === 0 ? "published" : "draft",
-        JSON.stringify({
-          slug: `post-${index}`,
-          locale: "en",
-          title: `Post ${index}`,
-          body: `Fixture row ${index}`,
-        }),
+        `post-${index}`,
+        "en",
+        `Post ${index}`,
+        `Fixture row ${index}`,
         Date.now() - (index % 20) * 86_400_000 - 60_000,
         index,
       ));
       for (const collection of ["comments", "reactions", "audits"]) {
         statements.push(env.DB.prepare(
-          `INSERT OR IGNORE INTO entries
-           (id, collection, status, version, data, author_id, created_at, updated_at)
-           VALUES (?, ?, 'published', 1, ?, NULL, ?, ?)`,
+          `INSERT OR IGNORE INTO "${collection}"
+           (_mantle_id, _mantle_status, _mantle_version, "postId", body,
+            _mantle_author_id, _mantle_created_at, _mantle_updated_at)
+           VALUES (?, 'published', 1, ?, ?, NULL, ?, ?)`,
         ).bind(
           `${collection}-${index}`,
-          collection,
-          JSON.stringify({
-            postId: index === 0 ? "post-99" : "post-0",
-            body: `Fixture ${collection} row ${index}`,
-          }),
+          index === 0 ? "post-99" : "post-0",
+          `Fixture ${collection} row ${index}`,
           index,
           index,
         ));

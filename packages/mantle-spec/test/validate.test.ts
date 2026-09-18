@@ -436,6 +436,13 @@ spec:
     expect(parseManifests(yaml("orderState")).diagnostics).toEqual([]);
   });
 
+  it("accepts an array property as a list column", () => {
+    const source = yaml("orderState")
+      .replace("placedAt: { type: integer }", "placedAt: { type: integer }\n      interests: { type: array, items: { type: string } }")
+      .replace("columns: [placedAt]", "columns: [placedAt, interests]");
+    expect(parseManifests(source).diagnostics).toEqual([]);
+  });
+
   it.each([
     ["unknown", "missing", "[orderState, placedAt]"],
     ["not an enum", "placedAt", "[placedAt]"],
@@ -452,13 +459,13 @@ spec:
   it.each([
     ["unknown field", "primaryField: missing\n      columns: [placedAt]"],
     ["duplicate field", "primaryField: orderState\n      columns: [orderState]"],
-    ["non-scalar field", "primaryField: orderState\n      columns: [details]"],
+    ["non-scalar primary field", "primaryField: details\n      columns: [placedAt]"],
   ])("rejects %s in list presentation", (label, listFields) => {
     let source = yaml("orderState").replace(
       "primaryField: orderState\n      columns: [placedAt]",
       listFields,
     );
-    if (label === "non-scalar field") {
+    if (label === "non-scalar primary field") {
       source = source.replace(
         "placedAt: { type: integer }",
         "placedAt: { type: integer }\n      details: { type: object }",

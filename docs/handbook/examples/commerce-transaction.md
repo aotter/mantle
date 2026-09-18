@@ -184,7 +184,7 @@ spec:
     FROM orders AS o
     JOIN json_each(o.items) AS item
     WHERE o.orderStatus = 'paid'
-    ORDER BY o.createdAt ASC, o.orderNumber ASC, item.key ASC
+    ORDER BY o._mantle_created_at ASC, o.orderNumber ASC, item.key ASC
   limit: 200
 ---
 apiVersion: cms.mantle.aotter.net/v1

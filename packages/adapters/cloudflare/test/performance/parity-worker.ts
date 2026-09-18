@@ -34,7 +34,11 @@ function createState(raw: Env, origin: string, observed: boolean) {
   const db = new D1DatabaseDriver(env.DB, observed ? () => {} : undefined); // Native .all metadata for Runtime .first; no second counter.
   const catalog = new KvSiteConfigRepository(new DatabaseSiteConfigRepository(db), { namespace: env.MANTLE_KV, scope: "default" });
   const lookup = async ({ id }: { id: string }) => {
-    const result = await env.DB.prepare("SELECT id, data FROM entries WHERE id = ? AND collection = 'items' AND status = 'published'").bind(id).all();
+    const result = await env.DB.prepare(
+      `SELECT _mantle_id AS id,
+              json_object('slug', slug, 'locale', locale, 'title', title, 'body', body) AS data
+       FROM "items" WHERE _mantle_id = ? AND _mantle_status = 'published'`,
+    ).bind(id).all();
     return { entry: result.results[0] ?? null };
   };
   const templates = new TemplateRegistry();
@@ -199,12 +203,16 @@ export default {
       if (url.pathname === "/__session") { await raw.DB.prepare("UPDATE session SET expiresAt = ? WHERE id = ?").bind(body.expiresAt, body.sessionId).run(); return new Response("ok"); }
       if (url.pathname === "/__seed") {
         await current.worker.getRuntime(current.env);
-        await raw.DB.prepare("DELETE FROM entries").run();
+        await raw.DB.prepare('DELETE FROM "items"').run();
         const rows = Math.min(50_000, Math.max(0, Number(body.rows) || 0)), bytes = Math.min(65_536, Math.max(0, Number(body.bytes) || 0));
         for (let offset = 0; offset < rows; offset += 50) await raw.DB.batch(Array.from({ length: Math.min(50, rows - offset) }, (_, j) => {
           const i = offset + j;
-          return raw.DB.prepare("INSERT INTO entries (id, collection, status, version, data, author_id, created_at, updated_at) VALUES (?, 'items', ?, 1, ?, NULL, ?, ?)")
-            .bind(`item-${i}`, i % 5 === 0 ? "draft" : "published", JSON.stringify({ slug: `item-${i}`, locale: current.locales[i % current.locales.length], title: `Item ${i}`, body: "x".repeat(bytes) }), i, i);
+          return raw.DB.prepare(`INSERT INTO "items"
+            (_mantle_id, _mantle_status, _mantle_version, slug, locale, title, body,
+             _mantle_author_id, _mantle_created_at, _mantle_updated_at)
+            VALUES (?, ?, 1, ?, ?, ?, ?, NULL, ?, ?)`)
+            .bind(`item-${i}`, i % 5 === 0 ? "draft" : "published", `item-${i}`,
+              current.locales[i % current.locales.length], `Item ${i}`, "x".repeat(bytes), i, i);
         }));
         await raw.DB.prepare("ANALYZE").run();
         return Response.json({ rows, bytes, locales: current.locales.length });

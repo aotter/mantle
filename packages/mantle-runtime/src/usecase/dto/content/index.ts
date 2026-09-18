@@ -30,6 +30,7 @@ export interface CreateDraftRequest extends ContentMutationFields {
 
 export interface UpdateDraftRequest extends ContentMutationFields {
   readonly id: string;
+  readonly collection: string;
   readonly expectedVersion: number;
   /** Partial data — merged onto the existing row's `data` blob. */
   readonly data: Record<string, unknown>;
@@ -37,9 +38,7 @@ export interface UpdateDraftRequest extends ContentMutationFields {
 
 export interface GetEntryRequest {
   readonly id: string;
-  /** When set, asserts the row's collection matches; rejects with
-   *  `NOT_FOUND` otherwise. */
-  readonly collection?: string;
+  readonly collection: string;
 }
 
 export interface ListEntriesRequest {
@@ -65,20 +64,22 @@ export interface EntryFilter {
 
 export interface RequestPublishRequest extends ContentMutationFields {
   readonly id: string;
+  readonly collection: string;
 }
 
 export interface UnpublishRequest extends ContentMutationFields {
   readonly id: string;
+  readonly collection: string;
 }
 
 export interface ArchiveRequest extends ContentMutationFields {
   readonly id: string;
+  readonly collection: string;
 }
 
 export interface DeleteEntryRequest extends ContentMutationFields {
   readonly id: string;
-  /** Optional collection assertion for schema-bound callers. */
-  readonly collection?: string;
+  readonly collection: string;
 }
 
 export interface DeleteEntryResponse {

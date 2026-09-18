@@ -39,7 +39,7 @@ test("detects swallowed OCC errors and cleans up every isolated case", async () 
           return await update(args);
         } catch (error) {
           if (!(error instanceof EntryVersionConflict)) throw error;
-          return (await entries.get(args.id))!;
+          return (await entries.get({ id: args.id, collection: args.collection }))!;
         }
       };
       return {
@@ -85,7 +85,7 @@ test("detects persistence fields leaking from a public reader", async () => {
     async create(plan) {
       const fixture = await create(plan);
       const entries = fixture.storage.entries;
-      entries.readById = (id) => entries.get(id);
+      entries.readById = (key) => entries.get(key);
       return fixture;
     },
   });

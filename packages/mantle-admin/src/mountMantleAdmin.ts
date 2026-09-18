@@ -245,8 +245,8 @@ export function mountMantleAdmin<E extends Env>(
       message: `Schema '${schema.metadata.name}' is read-only on generic authoring surfaces; use its declared Procedures.`,
     }));
   };
-  const readMutableEntry = async (runtime: MantleAdminRuntime, id: string, path: string): Promise<Entry> => {
-    const entry = await runtime.getEntry.execute({ id });
+  const readMutableEntry = async (runtime: MantleAdminRuntime, collection: string, id: string, path: string): Promise<Entry> => {
+    const entry = await runtime.getEntry.execute({ id, collection });
     assertMutableSchema(path, schemasByName.get(entry.collection));
     return entry;
   };
@@ -879,7 +879,8 @@ export function mountMantleAdmin<E extends Env>(
     runMantleUseCase(`GET /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
-      const row = await runtime.getEntry.execute({ id });
+      const collection = requiredCollection(c.req.query("collection"), schemasByName, `GET /admin/api/entries/${id}`);
+      const row = await runtime.getEntry.execute({ id, collection });
       return entryEditorPayload(runtime, row, schemas);
     }),
   );
@@ -928,7 +929,8 @@ export function mountMantleAdmin<E extends Env>(
     runMantleUseCase(`PATCH /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
-      const current = await readMutableEntry(runtime, id, `PATCH /admin/api/entries/${id}`);
+      const collection = requiredCollection(c.req.query("collection"), schemasByName, `PATCH /admin/api/entries/${id}`);
+      const current = await readMutableEntry(runtime, collection, id, `PATCH /admin/api/entries/${id}`);
       if (gate.role === "contributor") {
         const lifecycle = schemasByName.get(current.collection)?.spec.lifecycle ?? "publishing";
         if (lifecycle === "operational" || current.status !== "draft") {
@@ -945,6 +947,7 @@ export function mountMantleAdmin<E extends Env>(
       };
       const updated = await runtime.updateDraft.execute({
         id,
+        collection,
         expectedVersion: expectedVersionField(body.expectedVersion, `PATCH /admin/api/entries/${id}#/expectedVersion`),
         data: objectField(body.data),
         ctx: adminHandlerContext(c, gate, ref),
@@ -958,10 +961,12 @@ export function mountMantleAdmin<E extends Env>(
     runMantleUseCase(`POST /admin/api/entries/${c.req.param("id")}/publish`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
-      await readMutableEntry(runtime, id, `POST /admin/api/entries/${id}/publish`);
+      const collection = requiredCollection(c.req.query("collection"), schemasByName, `POST /admin/api/entries/${id}/publish`);
+      await readMutableEntry(runtime, collection, id, `POST /admin/api/entries/${id}/publish`);
       const body = await c.req.raw.json().catch(() => ({}));
       const row = await runtime.requestPublish.execute({
         id,
+        collection,
         ctx: adminHandlerContext(c, gate, ref),
         originalInput: body,
       });
@@ -973,10 +978,12 @@ export function mountMantleAdmin<E extends Env>(
     runMantleUseCase(`POST /admin/api/entries/${c.req.param("id")}/unpublish`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
-      await readMutableEntry(runtime, id, `POST /admin/api/entries/${id}/unpublish`);
+      const collection = requiredCollection(c.req.query("collection"), schemasByName, `POST /admin/api/entries/${id}/unpublish`);
+      await readMutableEntry(runtime, collection, id, `POST /admin/api/entries/${id}/unpublish`);
       const body = await c.req.raw.json().catch(() => ({}));
       const row = await runtime.unpublish.execute({
         id,
+        collection,
         ctx: adminHandlerContext(c, gate, ref),
         originalInput: body,
       });
@@ -988,10 +995,12 @@ export function mountMantleAdmin<E extends Env>(
     runMantleUseCase(`DELETE /admin/api/entries/${c.req.param("id")}`, async () => {
       const runtime = await ref.get();
       const id = c.req.param("id")!;
-      await readMutableEntry(runtime, id, `DELETE /admin/api/entries/${id}`);
+      const collection = requiredCollection(c.req.query("collection"), schemasByName, `DELETE /admin/api/entries/${id}`);
+      await readMutableEntry(runtime, collection, id, `DELETE /admin/api/entries/${id}`);
       const body = await c.req.raw.json().catch(() => ({}));
       return runtime.deleteEntry.execute({
         id,
+        collection,
         ctx: adminHandlerContext(c, gate, ref),
         originalInput: body,
       });
@@ -1802,8 +1811,7 @@ async function parentEntry(
   const value = primitiveJoinValue(childRow.data[parent.childField]);
   if (value === null) return null;
   if (parent.parentField === "id" && typeof value === "string") {
-    const entry = await runtime.getEntry.execute({ id: value });
-    return entry.collection === parent.collection ? entry : null;
+    return runtime.getEntry.execute({ id: value, collection: parent.collection });
   }
   return (await entriesByDataValue(runtime, parent.collection, parent.parentField, value))[0] ?? null;
 }
@@ -1870,6 +1878,23 @@ function expectedVersionField(value: unknown, path: string): number {
 
 function stringField(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function requiredCollection(
+  value: string | undefined,
+  schemas: ReadonlyMap<string, SchemaManifest>,
+  path: string,
+): string {
+  if (value && schemas.has(value)) return value;
+  throw new DiagnosticError(runtimeDiagnostic({
+    code: "INPUT_VALIDATION_FAILED",
+    severity: "error",
+    path: `${path}#/collection`,
+    value,
+    expected: "the name of a declared Schema",
+    candidates: [...schemas.keys()],
+    message: "A valid `collection` query parameter is required.",
+  }));
 }
 
 function objectField(value: unknown): Record<string, unknown> {

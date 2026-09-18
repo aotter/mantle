@@ -1,4 +1,5 @@
 import type { ContentState, Entry } from "@aotter/mantle-spec";
+import type { EntryKey } from "./EntryRepository.js";
 
 export type EntryDataScalar = string | number | boolean;
 
@@ -30,7 +31,7 @@ export interface ReadEntriesByDataFieldInArgs {
 
 export interface ReadPublishedEntriesArgs {
   readonly locale?: string | null;
-  readonly collection?: string;
+  readonly collection: string;
   readonly limit?: number;
 }
 
@@ -81,13 +82,13 @@ export interface CreationStatistics {
 export interface EntryReader {
   /** Optional native aggregation; absence must not trigger a full entry scan in callers. */
   readCreationStatistics?(args: CreationStatisticsArgs): Promise<CreationStatistics>;
-  readById(id: string): Promise<Entry | null>;
+  readById(args: EntryKey): Promise<Entry | null>;
   readBySlug(args: ReadEntryBySlugArgs): Promise<Entry | null>;
   readByDataField(args: ReadEntryByDataFieldArgs): Promise<Entry | null>;
   readByDataFieldIn(args: ReadEntriesByDataFieldInArgs): Promise<readonly Entry[]>;
-  readPublished(args?: ReadPublishedEntriesArgs): Promise<readonly Entry[]>;
+  readPublished(args: ReadPublishedEntriesArgs): Promise<readonly Entry[]>;
   /** At most 2,000 rows and 1 MiB of data JSON per page (default 50 rows).
    * One oversized first entry is returned alone so iteration always advances. */
-  readPublishedPage(args?: ReadPublishedPageArgs): Promise<PublishedEntryPage>;
+  readPublishedPage(args: ReadPublishedPageArgs): Promise<PublishedEntryPage>;
   findManyByDataField(args: FindManyEntriesByDataFieldArgs): Promise<readonly Entry[]>;
 }

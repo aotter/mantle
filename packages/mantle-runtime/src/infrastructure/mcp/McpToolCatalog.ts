@@ -181,8 +181,8 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
     description: "Publish a draft immediately. Not available for operational records.",
     inputSchema: {
       type: "object",
-      properties: { id: { type: "string" } },
-      required: ["id"],
+      properties: { collection: { type: "string" }, id: { type: "string" } },
+      required: ["collection", "id"],
     },
   },
   {
@@ -190,8 +190,8 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
     description: "Unpublish a content entry back to draft before editing. Not available for operational records.",
     inputSchema: {
       type: "object",
-      properties: { id: { type: "string" } },
-      required: ["id"],
+      properties: { collection: { type: "string" }, id: { type: "string" } },
+      required: ["collection", "id"],
     },
   },
   {
@@ -199,8 +199,8 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
     description: "Archive a content entry. Not available for operational records.",
     inputSchema: {
       type: "object",
-      properties: { id: { type: "string" } },
-      required: ["id"],
+      properties: { collection: { type: "string" }, id: { type: "string" } },
+      required: ["collection", "id"],
     },
   },
   {
@@ -208,8 +208,8 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
     description: "Permanently delete an entry. For content lifecycles, prefer archive_entry when reversibility matters.",
     inputSchema: {
       type: "object",
-      properties: { id: { type: "string" } },
-      required: ["id"],
+      properties: { collection: { type: "string" }, id: { type: "string" } },
+      required: ["collection", "id"],
     },
   },
 ];

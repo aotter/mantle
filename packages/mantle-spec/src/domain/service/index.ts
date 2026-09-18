@@ -9,7 +9,7 @@ export * from "./ManifestLocaleTrimmer.js";
 export * from "./ManifestLinker.js";
 export * from "./CrossSchemaChecker.js";
 export * from "./ManifestPathDiagnoser.js";
-export * from "./SchemaDdlEmitter.js";
+export * from "./SchemaIndexChecker.js";
 export * from "./SchemaAdminUiChecker.js";
 export * from "./EntryDataValidator.js";
 export * from "./SiteDefaultsValidator.js";

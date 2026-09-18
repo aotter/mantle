@@ -26,6 +26,29 @@ To upgrade an existing application:
    `skills --check`, `validate`, and the project's TypeScript/tests. Test local
    routes and configured authorization before considering deployment.
 
+## Native Schema-table storage reset
+
+The 0.1.2 pre-beta line replaces the generic `entries` JSON table with one
+native SQLite/D1 table per Manifest Schema. Mantle's row envelope uses
+`_mantle_id`, `_mantle_status`, `_mantle_version`, `_mantle_author_id`,
+`_mantle_created_at`, and `_mantle_updated_at`; authored fields keep their exact
+names as native columns. The old generated columns, projection views and
+compatibility repository were removed.
+
+This is intentionally a storage-format break before beta. Reset and
+re-bootstrap development or internal-alpha content databases that contain the
+old `entries` layout. Move required data manually outside Mantle and Control;
+there is no product migration workflow for this unreleased format. Automatic
+artifacts cover initial and additive changes only. Removed columns and tables
+remain physically present so the previous Worker can still run. Renames, type
+changes and data transforms require the same manual rebuild. The pre-beta Cloud
+path does not accept or execute destructive SQL.
+
+Row APIs are now Schema-qualified. `EntryRepository.get` and
+`EntryReader.readById` accept `{ collection, id }`; Admin entry detail and
+mutation routes require `?collection=<schema>`, and generic MCP entry tools
+require `collection`. Generated `entries.<schema>` bindings supply it for you.
+
 A new project follows [direct authoring](direct-authoring.md). Templates and
 provider setup are not hidden inside `generate`. Future Builder/landing-next
 provisioning is a separate decision; this change does not migrate those hosts.
@@ -74,5 +97,6 @@ Intentional behavior changes:
 
 This alpha changes the Better Auth D1 schema, including required account
 issuer identity and OAuth resource/client tables. Reset and re-bootstrap a
-pre-1.7 alpha auth database; do not guess an issuer backfill. Content tables
-remain portable through the normal application migration/export path.
+pre-1.7 alpha auth database; do not guess an issuer backfill. Reset old generic
+content storage as described above and move required data manually outside
+Mantle.

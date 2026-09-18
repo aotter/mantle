@@ -27,11 +27,11 @@ export class ArchiveUseCase {
 
   async execute(request: ArchiveRequest): Promise<EntryRow> {
     const opPath = `usecase/Archive/${request.id}`;
-    const existing = await this.entries.get(request.id);
+    const existing = await this.entries.get(request);
     if (!existing) {
-      throw new DiagnosticError(notFoundDiagnostic(opPath, "<unknown>", request.id));
+      throw new DiagnosticError(notFoundDiagnostic(opPath, request.collection, request.id));
     }
-    const schema = this.schemas.get(existing.collection);
+    const schema = this.schemas.get(request.collection);
     if (!canTransition(schema, existing.status, "archived")) {
       throw new DiagnosticError(
         illegalTransitionDiagnostic(opPath, existing.status, "archived"),
@@ -42,7 +42,7 @@ export class ArchiveUseCase {
     const archived = await withConflictDiagnostic(opPath, () =>
       this.entries.transitionStatus({
         id: request.id,
-        collection: existing.collection,
+        collection: request.collection,
         to: "archived",
         expectedVersion: existing.version,
         now: this.clock.now(),

@@ -82,8 +82,9 @@ The prepared revision carries its exact plan, but exposes both `plan` and
 capabilities. Omit `handlerNames` only for a read-only embedding that never
 dispatches Procedures.
 
-The official SQLite adapter runs canonical migrations, defaults, indexes, and
-schema-View reconciliation, and skips mutation for an unchanged revision. A
+The official SQLite adapter runs canonical migrations, materializes one native
+table per Schema, prepares indexes and Views, and skips mutation for an
+unchanged storage revision. A
 custom adapter owns its own preparation and returns application-owned semantic
 ports. Unsupported native View dialects fail before the adapter mutates state.
 

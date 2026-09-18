@@ -25,22 +25,22 @@ export class DeleteEntryUseCase {
 
   async execute(request: DeleteEntryRequest): Promise<DeleteEntryResponse> {
     const opPath = `usecase/DeleteEntry/${request.id}`;
-    const existing = await this.entries.get(request.id);
+    const existing = await this.entries.get(request);
     if (!existing) {
       throw new DiagnosticError(
-        notFoundDiagnostic(opPath, request.collection ?? "<unknown>", request.id),
+        notFoundDiagnostic(opPath, request.collection, request.id),
       );
     }
     assertEntryDeletable({
       entry: existing,
-      schema: this.schemas.get(existing.collection),
+      schema: this.schemas.get(request.collection),
       expectedCollection: request.collection,
       opPath,
     });
     return withConflictDiagnostic(opPath, () =>
       this.entries.delete({
         id: request.id,
-        collection: existing.collection,
+        collection: request.collection,
         expectedStatus: existing.status,
         expectedVersion: existing.version,
         hookContext: request.ctx,

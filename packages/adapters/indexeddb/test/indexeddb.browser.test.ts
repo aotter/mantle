@@ -95,9 +95,9 @@ describe("IndexedDbMantleStorageAdapter in Chrome", () => {
     ]);
 
     await first.deleteDatabase();
-    expect(await b.entries.get("same")).toMatchObject({ data: { title: "second" } });
+    expect(await b.entries.get({ id: "same", collection: "posts" })).toMatchObject({ data: { title: "second" } });
     const reopened = await first.prepare(plan());
-    expect(await reopened.entries.get("same")).toBeNull();
+    expect(await reopened.entries.get({ id: "same", collection: "posts" })).toBeNull();
     await Promise.all([first.deleteDatabase(), second.deleteDatabase()]);
   });
 
@@ -126,7 +126,7 @@ describe("IndexedDbMantleStorageAdapter in Chrome", () => {
     expect(updates.filter(({ status }) => status === "rejected")[0]).toMatchObject({
       reason: expect.any(EntryVersionConflict),
     });
-    const committed = await entries.get("post");
+    const committed = await entries.get({ id: "post", collection: "posts" });
     expect(committed).toMatchObject({ version: 2, status: "draft" });
 
     await expect(entries.transitionStatus({
@@ -137,18 +137,18 @@ describe("IndexedDbMantleStorageAdapter in Chrome", () => {
       expectedVersion: 2,
       now: 4,
     })).rejects.toBeInstanceOf(EntryStatusConflict);
-    expect(await entries.get("post")).toEqual(committed);
+    expect(await entries.get({ id: "post", collection: "posts" })).toEqual(committed);
 
     await expect(entries.create({
       ...entry("uncloneable", "bad"),
       data: { callback: (() => undefined) as unknown },
     })).rejects.toMatchObject({ name: "DataCloneError" });
-    expect(await entries.get("uncloneable")).toBeNull();
+    expect(await entries.get({ id: "uncloneable", collection: "posts" })).toBeNull();
 
     const mutable = { title: "stored" };
     await entries.create({ ...entry("clone", "stored"), data: mutable });
     mutable.title = "mutated after commit";
-    expect(await entries.get("clone")).toMatchObject({ data: { title: "stored" } });
+    expect(await entries.get({ id: "clone", collection: "posts" })).toMatchObject({ data: { title: "stored" } });
     await storage.deleteDatabase();
   });
 
@@ -255,7 +255,7 @@ describe("IndexedDbMantleStorageAdapter in Chrome", () => {
     await storage.deleteDatabase();
   });
 
-  it("upgrades non-destructively, unblocks deletion, and reopens", async () => {
+  it("drops the pre-release id-only store, unblocks deletion, and reopens", async () => {
     const name = databaseName("upgrade");
     const legacy = await openDB(name, 1, {
       upgrade(database) {
@@ -272,9 +272,9 @@ describe("IndexedDbMantleStorageAdapter in Chrome", () => {
     const storage = new IndexedDbMantleStorageAdapter({ databaseName: name });
     const prepared = await storage.prepare(plan());
     expect(upgraded).toBe(true);
-    expect(await prepared.entries.get("legacy")).toMatchObject({ data: { title: "preserved" } });
+    expect(await prepared.entries.get({ id: "legacy", collection: "posts" })).toBeNull();
 
-    const blocker = await openDB(name, 2);
+    const blocker = await openDB(name, 3);
     let deleteVersionChange = false;
     blocker.addEventListener("versionchange", () => {
       deleteVersionChange = true;
@@ -282,7 +282,7 @@ describe("IndexedDbMantleStorageAdapter in Chrome", () => {
     });
     await storage.deleteDatabase();
     expect(deleteVersionChange).toBe(true);
-    expect(await (await storage.prepare(plan())).entries.get("legacy")).toBeNull();
+    expect(await (await storage.prepare(plan())).entries.get({ id: "legacy", collection: "posts" })).toBeNull();
     await storage.deleteDatabase();
   });
 
@@ -496,7 +496,7 @@ kind: View
 metadata: { name: native-posts }
 spec:
   surface: public
-  sql: SELECT * FROM entries
+  sql: SELECT _mantle_id FROM posts
 `;
 
 const settingsManifest = `---

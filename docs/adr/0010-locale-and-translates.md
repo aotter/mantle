@@ -1,6 +1,8 @@
 # ADR-0010: Locale three-layer model and parent/child translates pattern
 
-**Status:** Carried over from POC v0.0.x; refreshed for v0.1.0.
+**Status:** Carried over from POC v0.0.x; storage details superseded by
+[ADR-0024](0024-manifest-native-schema-tables.md). Locale semantics remain in
+force, but `locale` is now a native field on each localized Schema table.
 
 **Date**: 2026-05-01 (POC) / refreshed 2026-05-03 (v0.1.0 rebuild)
 
@@ -122,18 +124,18 @@ canonicalize-on-write keeps the cold-start path free of ceremony and
 lets the manifest, the CmsConfig, and the D1 row drift apart safely
 (the runtime gate in Layer 3 is what reconciles them).
 
-### Layer 3 — Per-entry data (`data.locale`)
+### Layer 3 — Per-entry data (`locale`)
 
 ```jsonc
-// entries.data for a localized Schema
+// a localized Schema record
 { "title": "...", "body": "...", "locale": "zh-TW" }
 
-// entries.data for a non-localized Schema
+// a non-localized Schema record
 { "name": "...", "color": "..." }   // no locale field
 ```
 
-- There is no top-level `entries.locale` column. Locale lives inside
-  the `data` JSON.
+- There is no shared `entries.locale` column. `locale` is the authored native
+  field on each localized Schema table.
 - The runtime locale gate (in `mantle-runtime`'s content-ops
   `helpers.ts`) is the **authoritative per-request check**. On every
   read and write the gate validates:
@@ -145,10 +147,8 @@ lets the manifest, the CmsConfig, and the D1 row drift apart safely
   - `localized: false` Schema → `data.locale` MUST be absent
     (`null` is treated as absent and stripped on the read path; any
     other value is rejected to catch typos like `locaIe: en`).
-- Indexed via virtual generated column + partial unique index on
-  `json_extract(data, '$.locale')`, scoped to the Schema's
-  `collection`. Same pattern as `Schema.spec.unique`. Created only
-  for localized Schemas; non-localized Schemas have no locale index.
+- Indexed directly on the localized Schema table. Non-localized Schemas have
+  no locale field or locale index.
 
 The boot/runtime split is the load-bearing change carried over from
 the POC's issue #60 fix (POC PR #71, plus the canonicalize follow-up
@@ -310,10 +310,8 @@ Validation rules introduced:
   must resolve all Schema names before checking `translates.parent`
   references. The two-pass pattern (collect names → check references)
   handles this; it's just one more reference type.
-- **Index pattern adds DDL complexity.** Virtual generated columns +
-  partial unique indexes per Schema means the migration emitter
-  generates more SQL than before. Acceptable given the pattern is
-  already used by `Schema.spec.unique`.
+- **Index pattern adds DDL complexity.** Each localized native Schema table
+  needs its declared locale index. The migration artifact owns that SQL.
 - **Two places define "what locales exist."** Manifest declares
   `localized: true`; D1 declares which actual locales the site
   serves. The runtime gate reconciles them; if they drift, the gate
@@ -444,8 +442,8 @@ for `createCmsRuntime().bootInit()` + `DatabaseSiteConfigRepository.seed`):
 - Grammar in `packages/mantle-spec/src/domain/model/ManifestGrammar.ts`
   + the manifest parser.
 - Cross-Schema validation in the validate + boot phases.
-- D1 schema: no `entries.locale` column; `data.locale` is the
-  authoritative storage; partial unique index per localized Schema.
+- D1 schema: no shared `entries.locale` column; each localized native Schema
+  table owns its `locale` field and declared index.
 - `site_config` key/value table with the `locales` key.
 - Runtime locale gate in `packages/mantle-runtime/src/domain/service/ContentLocaleGate.ts`.
 - `CmsConfig.siteDefaults` consumed by runtime `bootInit()`, with

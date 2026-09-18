@@ -3,6 +3,7 @@ import type { EntryReader } from "@aotter/mantle-runtime";
 import { entryPublicPath } from "../service/PublicPathResolver.js";
 import { serializeSitemap, serializeSitemapIndex } from "../service/SitemapSerializer.js";
 import type { ComposeSitemapRequest } from "../dto/ComposeSitemapRequest.js";
+import { readPublishedAcrossCollections } from "../service/PublishedCollectionPager.js";
 
 /** Entries per sitemap part; the protocol ceiling remains 50,000 URLs. */
 export const SITEMAP_MAX_URLS_DEFAULT = 2000;
@@ -12,7 +13,7 @@ export class ComposeSitemapUseCase {
 
   async execute(request: ComposeSitemapRequest): Promise<{ body: string; nextCursor?: string }> {
     const cap = request.maxUrls ?? SITEMAP_MAX_URLS_DEFAULT;
-    const page = await this.reader.readPublishedPage({
+    const page = await readPublishedAcrossCollections(this.reader, request.collections, {
       limit: cap, cursor: request.cursor,
       dataFields: request.dataFields ?? (request.pathFor ? undefined : ["slug"]),
     });
@@ -45,7 +46,7 @@ export class ComposeSitemapUseCase {
     const paths = [partPath()];
     let cursor: string | undefined;
     do {
-      const page = await this.reader.readPublishedPage({
+      const page = await readPublishedAcrossCollections(this.reader, request.collections, {
         limit: request.maxUrls ?? SITEMAP_MAX_URLS_DEFAULT,
         dataFields: request.dataFields ?? (request.pathFor ? undefined : ["slug"]),
         cursor,

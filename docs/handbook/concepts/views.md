@@ -92,7 +92,10 @@ Every View is also a tool. The name is the View name lowercased with hyphens rep
 
 ## Performance: declare the index the query needs
 
-Schema properties live inside a JSON column. Declared `indexes` and `uniqueIndexes` become generated columns with partial B-tree indexes, and Core-compiled projections, filters and ordering automatically reference the generated column when a field is declared. Undeclared fields fall back to `json_extract` and scan.
+On SQLite and D1, every Schema is a native table and each top-level property is
+a native column. Declared `indexes` and `uniqueIndexes` become B-tree indexes
+over those columns; Core-compiled projections, filters and ordering reference
+the same columns directly.
 
 Declare the **smallest ordered index justified by the measured path**, and respect SQLite's leftmost-prefix rule. An index on `[locale, publishedAt]` serves `WHERE locale = ?`, `WHERE locale = ? AND publishedAt > ?`, and `WHERE locale = ? ORDER BY publishedAt`. It does not serve `WHERE publishedAt > ?` alone. If a second hot path needs a different leading field, that is a second index — not a reason to enumerate every permutation, since each index costs storage and slows every write.
 
@@ -100,7 +103,12 @@ Declare the **smallest ordered index justified by the measured path**, and respe
 pnpm exec mantle-harness indexes --require-public --format text
 ```
 
-The harness applies the real migrations and generated DDL, seeds skewed rows, compiles and executes the actual View SQL, and records `EXPLAIN QUERY PLAN`. A healthy plan contains `SEARCH entries USING INDEX`; an indexed filter-and-order path should not contain `USE TEMP B-TREE FOR ORDER BY`. Findings are advisory unless you opt a View into the gate. Never change user-visible filter or ordering semantics just to make the gate pass.
+The harness applies the real migrations and generated DDL, seeds skewed rows,
+compiles and executes the actual View SQL, and records `EXPLAIN QUERY PLAN`. A
+healthy indexed plan contains `SEARCH <schema-table> USING INDEX`; an indexed
+filter-and-order path should not contain `USE TEMP B-TREE FOR ORDER BY`.
+Findings are advisory unless you opt a View into the gate. Never change
+user-visible filter or ordering semantics just to make the gate pass.
 
 ## Example: a public localized list
 
@@ -146,15 +154,15 @@ spec:
   title: Requests by tag
   surface: staff
   sql: |
-    SELECT r.id AS requestId,
+    SELECT r._mantle_id AS requestId,
            r.subject AS subject,
            r.requestStatus AS requestStatus,
            tag.value AS tag,
-           r.createdAt AS createdAt
+           r._mantle_created_at AS createdAt
     FROM requests AS r
     JOIN json_each(r.tags) AS tag
     WHERE r.requestStatus = :requestStatus
-    ORDER BY r.createdAt DESC
+    ORDER BY r._mantle_created_at DESC
   params:
     type: object
     required: [requestStatus]

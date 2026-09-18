@@ -155,7 +155,7 @@ describe("LifecycleHookingEntryRepository — before_create", () => {
     });
     expect(h.calls).toEqual(["captchaCheck"]);
     expect(row.status).toBe("draft");
-    expect(await h.store.get(row.id)).not.toBeNull();
+    expect(await h.store.get({ id: row.id, collection: row.collection })).not.toBeNull();
   });
 
   it("aborts the create when before_create handler throws (errorPolicy default)", async () => {
@@ -309,7 +309,7 @@ describe("LifecycleHookingEntryRepository — publish + delete", () => {
       authorId: null,
     });
     h.calls.length = 0;
-    await h.requestPublish.execute({ id: created.id });
+    await h.requestPublish.execute({ id: created.id, collection: created.collection });
     expect(h.calls).toEqual(["slackNotify", "slackNotify"]);
   });
 
@@ -376,7 +376,7 @@ describe("LifecycleHookingEntryRepository — publish + delete", () => {
       authorId: null,
     });
     h.calls.length = 0;
-    await h.deleteEntry.execute({ id: created.id });
+    await h.deleteEntry.execute({ id: created.id, collection: created.collection });
     expect(h.calls).toEqual(["slackNotify", "slackNotify"]);
   });
 

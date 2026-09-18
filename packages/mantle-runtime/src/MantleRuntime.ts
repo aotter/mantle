@@ -184,7 +184,7 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
   let entries: EntryRepository;
   const entriesProxy: EntryRepository = {
     create: (request) => entries.create(request),
-    get: (id) => entries.get(id),
+    get: (request) => entries.get(request),
     update: (request) => entries.update(request),
     delete: (request) => entries.delete(request),
     transitionStatus: (request) => entries.transitionStatus(request),
@@ -397,7 +397,7 @@ function invalidateAfterWrites(
       if (affectsPublishingContent(args.collection)) await invalidateBestEffort(invalidate);
       return row;
     },
-    get: (id) => inner.get(id),
+    get: (request) => inner.get(request),
     async update(args) {
       const row = await inner.update(args);
       if (affectsPublishingContent(args.collection)) await invalidateBestEffort(invalidate);

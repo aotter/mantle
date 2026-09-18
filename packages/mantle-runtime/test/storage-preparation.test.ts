@@ -49,6 +49,7 @@ describe("prepareDeployment", () => {
     const before = db.executions.length;
     await prepareDeployment(plan, adapter);
     expect(db.executions.slice(before).map(({ sql }) => sql)).toEqual([
+      "SELECT name FROM sqlite_schema WHERE type = 'table' AND lower(name) = 'entries' LIMIT 1",
       "SELECT fingerprint FROM _mantle_boot_state WHERE id = ? LIMIT 1",
     ]);
   });
@@ -72,11 +73,11 @@ describe("prepareDeployment", () => {
     const prepared = await prepareDeployment(plan, fresh);
     expect(migrations).not.toHaveBeenCalled();
     expect(seed).not.toHaveBeenCalled();
-    expect(db.executions.slice(before)).toHaveLength(1);
+    expect(db.executions.slice(before)).toHaveLength(2);
     for (let i = 0; i < 3; i++) {
       expect(await prepared.storage.localePolicy?.readLocales()).toEqual(["en"]);
     }
-    expect(db.executions.slice(before)).toHaveLength(2);
+    expect(db.executions.slice(before)).toHaveLength(3);
     expect(db.executions.slice(before).every(({ sql }) => sql.startsWith("SELECT"))).toBe(true);
 
     db.siteConfig.set("title", "Edited live");
@@ -185,7 +186,7 @@ describe("prepareDeployment", () => {
     expect((await prepared.storage.views.execute({ view: "published-posts" })).rows).toEqual([
       { id: "app-post", title: "Application table" },
     ]);
-    expect(await prepared.storage.entries.readPublished()).toEqual([
+    expect(await prepared.storage.entries.readPublished({ collection: "posts" })).toEqual([
       expect.objectContaining({ id: "app-post", data: { title: "Application table" } }),
     ]);
   });

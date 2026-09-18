@@ -248,11 +248,11 @@ describe("read-only Admin collections", () => {
       readOnlyManifests(),
     );
 
-    expect((await app.request("/admin/api/entries/managed")).status).toBe(200);
+    expect((await app.request("/admin/api/entries/managed?collection=posts")).status).toBe(200);
     const attempts = await Promise.all([
       app.request("/admin/api/entries", jsonInit("POST", { collection: "posts", data: {} })),
-      app.request("/admin/api/entries/managed", jsonInit("PATCH", { data: { title: "Bypass" }, expectedVersion: 1 })),
-      app.request("/admin/api/entries/managed", { method: "DELETE" }),
+      app.request("/admin/api/entries/managed?collection=posts", jsonInit("PATCH", { data: { title: "Bypass" }, expectedVersion: 1 })),
+      app.request("/admin/api/entries/managed?collection=posts", { method: "DELETE" }),
     ]);
     expect(attempts.map((response) => response.status)).toEqual([409, 409, 409]);
     for (const response of attempts) {
@@ -315,10 +315,9 @@ describe("GET /admin/api/entries?search=", () => {
   });
 
   it("composes with status filtering", async () => {
-    const { app, db } = harness((database) => {
-      database.entries.set("p1", row("p1", { title: "Hello world", slug: "hello" }));
+    const { app } = harness((database) => {
+      database.entries.set("p1", { ...row("p1", { title: "Hello world", slug: "hello" }), status: "published" });
     });
-    db.entries.get("p1")!.status = "published";
     const res = await app.request(
       "/admin/api/entries?collection=posts&search=hello&status=draft",
     );
@@ -363,7 +362,7 @@ describe("GET /admin/api/entries exact list filter", () => {
     expect(body.items.map(({ id }) => id)).toEqual(["o1"]);
     expect(body.items[0]?.title).toBeNull();
     expect(body.items[0]?.data_preview).toEqual({ orderState: "paid", placedAt: 2 });
-    expect(db.executions.at(-1)?.sql).toContain('"m2c_');
+    expect(db.executions.at(-1)?.sql).toContain('"orderState" = ?');
   });
 
   it("rejects incomplete filter parameters", async () => {
@@ -433,7 +432,8 @@ describe("GET /admin/api/entries/export", () => {
       }
     });
     const listQueries = () => db.executions.filter(({ sql }) =>
-      sql.startsWith("SELECT id, collection, status, version, data, author_id, created_at, updated_at FROM entries WHERE collection = ?")
+      sql.startsWith("SELECT") && sql.includes('FROM "posts"') &&
+      sql.includes('ORDER BY "_mantle_updated_at" DESC, "_mantle_id" DESC')
     ).length;
     const before = listQueries();
     const res = await app.request("/admin/api/entries/export?collection=posts");
@@ -495,7 +495,7 @@ describe("GET /admin/api/entries/:id related entries", () => {
       items: [{ id: "article", translation_locales: ["en"] }],
     });
 
-    const editor = await app.request("/admin/api/entries/en");
+    const editor = await app.request("/admin/api/entries/en?collection=article-translations");
     expect(await editor.json()).toMatchObject({
       parentEntryId: "article",
       parentEntryTitle: "hello",
@@ -541,7 +541,7 @@ describe("GET /admin/api/entries/:id related entries", () => {
       );
     }, undefined, relatedManifests());
 
-    const res = await app.request("/admin/api/entries/parent");
+    const res = await app.request("/admin/api/entries/parent?collection=parents");
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       related: Array<{
@@ -571,11 +571,11 @@ describe("GET /admin/api/entries/:id related entries", () => {
       .toBeNull();
     expect(byCollection.has("legacy-children")).toBe(false);
     const relatedReads = db.executions.filter(({ sql }) =>
-      sql.includes("ORDER BY updated_at DESC, id DESC LIMIT 50")
+      sql.includes('ORDER BY "_mantle_updated_at" DESC, "_mantle_id" DESC LIMIT 50')
     );
     expect(relatedReads).toHaveLength(2);
     expect(relatedReads.every(({ sql }) =>
-      sql.includes("json_extract(data, ?) = ?")
+      sql.includes('"parentId" = ?')
     )).toBe(true);
   });
 });

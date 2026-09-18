@@ -30,9 +30,10 @@ The shared comparison bundle intentionally keeps dependencies/configuration equa
 it cannot measure the difference between standalone application bundle sizes.
 
 The planner runs outside workerd. Route/Schema/View axes each use 1/10/100/1,000;
-extra Schemas are unindexed to keep the index-count axis fixed. D1 has a 100-column
-limit, including generated index columns, so this is not a claim that 1,000 indexed
-Schemas fit one entries table. Body/row axes use 64 B/4 KiB and 100/10,000/50,000;
+extra Schemas are unindexed to keep the index-count axis fixed. Each Schema is a
+native table, so the axis is not a claim that 1,000 simultaneous Schema tables
+are an advisable production design. Body/row axes use 64 B/4 KiB and
+100/10,000/50,000;
 locales use 1/3/10, MCP client concurrency uses 1/4/8, R2 uses 1/3/12 variants at
 1/64/256 KiB. Actual simultaneous arrivals can be below client concurrency. The remote fleet
 can add isolates during a batch. A request is repeat-in-isolate only after that

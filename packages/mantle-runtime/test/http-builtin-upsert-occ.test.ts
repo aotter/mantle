@@ -62,7 +62,7 @@ describe("HTTP Trigger + builtin upsert OCC", () => {
     });
     expect(stale.status).toBe(409);
     expect(await stale.json()).toMatchObject({ diagnostic: { code: "CONFLICT" } });
-    expect((await store.get(createdBody.data.id))?.data["theme"]).toBe("light");
+    expect((await store.get({ id: createdBody.data.id, collection: "site-settings" }))?.data["theme"]).toBe("light");
 
     const missingVersion = await post(handle, "/api/settings", { siteKey: "main", theme: "other" });
     expect(missingVersion.status).toBe(400);

@@ -7,9 +7,11 @@ import {
   decodeEntrySortCursor,
   encodeEntrySortCursor,
   liftLocale,
+  materializeNullableFields,
   projectPublicEntry,
   type CreateEntryArgs,
   type DeleteEntryArgs,
+  type EntryKey,
   type EntryReader,
   type EntryRepository,
   type EntryRow,
@@ -36,7 +38,7 @@ import type {
 
 export interface MantleIndexedDbSchema extends DBSchema {
   readonly entries: {
-    readonly key: string;
+    readonly key: [string, string];
     readonly value: EntryRow;
     readonly indexes: {
       readonly byCollection: string;
@@ -59,19 +61,20 @@ export class IndexedDbEntryRepository implements EntryRepository, EntryReader {
   ) {}
 
   async create(args: CreateEntryArgs): Promise<EntryRow> {
+    const data = materializeNullableFields(this.schema(args.collection), args.data);
     const row: EntryRow = {
       id: args.id,
       collection: args.collection,
-      locale: liftLocale(args.data),
+      locale: liftLocale(data),
       status: args.status,
       version: 1,
-      data: args.data,
+      data,
       authorId: args.authorId,
       createdAt: args.now,
       updatedAt: args.now,
     };
     return this.write(async (store) => {
-      await this.assertUniqueIndexes(store, args.collection, args.data);
+      await this.assertUniqueIndexes(store, args.collection, data);
       try {
         await store.add(row);
       } catch (error) {
@@ -84,22 +87,23 @@ export class IndexedDbEntryRepository implements EntryRepository, EntryReader {
     });
   }
 
-  async get(id: string): Promise<EntryRow | null> {
-    return (await (await this.database()).get("entries", id)) ?? null;
+  async get(args: EntryKey): Promise<EntryRow | null> {
+    return (await (await this.database()).get("entries", [args.collection, args.id])) ?? null;
   }
 
   async update(args: UpdateEntryArgs): Promise<EntryRow> {
     return this.write(async (store) => {
-      const row = await store.get(args.id);
+      const row = await store.get([args.collection, args.id]);
       if (!row) throw new EntryVersionConflict(args.id, args.expectedVersion, -1);
       if (row.version !== args.expectedVersion) {
         throw new EntryVersionConflict(args.id, args.expectedVersion, row.version);
       }
-      await this.assertUniqueIndexes(store, row.collection, args.data, args.id);
+      const data = materializeNullableFields(this.schema(row.collection), args.data);
+      await this.assertUniqueIndexes(store, row.collection, data, args.id);
       const next: EntryRow = {
         ...row,
-        locale: liftLocale(args.data),
-        data: args.data,
+        locale: liftLocale(data),
+        data,
         version: row.version + 1,
         updatedAt: args.now,
       };
@@ -110,7 +114,7 @@ export class IndexedDbEntryRepository implements EntryRepository, EntryReader {
 
   async delete(args: DeleteEntryArgs): Promise<{ readonly removed: boolean }> {
     return this.write(async (store) => {
-      const row = await store.get(args.id);
+      const row = await store.get([args.collection, args.id]);
       if (!row || row.collection !== args.collection) return { removed: false };
       if (row.version !== args.expectedVersion) {
         throw new EntryVersionConflict(args.id, args.expectedVersion, row.version);
@@ -118,14 +122,14 @@ export class IndexedDbEntryRepository implements EntryRepository, EntryReader {
       if (row.status !== args.expectedStatus) {
         throw new EntryStatusConflict(args.id, args.expectedStatus, row.status);
       }
-      await store.delete(args.id);
+      await store.delete([args.collection, args.id]);
       return { removed: true };
     });
   }
 
   async transitionStatus(args: TransitionStatusArgs): Promise<EntryRow> {
     return this.write(async (store) => {
-      const row = await store.get(args.id);
+      const row = await store.get([args.collection, args.id]);
       if (!row) {
         throw new EntryStatusConflict(args.id, args.expectedStatus ?? args.to, args.to);
       }
@@ -216,8 +220,8 @@ export class IndexedDbEntryRepository implements EntryRepository, EntryReader {
       .sort(newestFirst)[0] ?? null;
   }
 
-  async readById(id: string): Promise<Entry | null> {
-    const row = await this.get(id);
+  async readById(args: EntryKey): Promise<Entry | null> {
+    const row = await this.get(args);
     return row ? projectPublicEntry(row) : null;
   }
 
@@ -256,7 +260,7 @@ export class IndexedDbEntryRepository implements EntryRepository, EntryReader {
       .map(projectPublicEntry);
   }
 
-  async readPublished(args: ReadPublishedEntriesArgs = {}): Promise<readonly Entry[]> {
+  async readPublished(args: ReadPublishedEntriesArgs): Promise<readonly Entry[]> {
     const rows = (await this.allRows(args.collection))
       .filter((entry) => entry.status === "published")
       .filter((entry) => matchesLocale(entry, args.locale))
@@ -267,7 +271,7 @@ export class IndexedDbEntryRepository implements EntryRepository, EntryReader {
     return rows.slice(0, limit).map(projectPublicEntry);
   }
 
-  async readPublishedPage(args: ReadPublishedPageArgs = {}): Promise<PublishedEntryPage> {
+  async readPublishedPage(args: ReadPublishedPageArgs): Promise<PublishedEntryPage> {
     // ponytail: browser adapter scans its collection; add an IndexedDB compound
     // cursor when browser-local datasets need bounded storage I/O as well as output.
     const rows = await this.readPublished({ collection: args.collection,
@@ -303,6 +307,12 @@ export class IndexedDbEntryRepository implements EntryRepository, EntryReader {
       ...(schema.spec.indexes ?? []),
       ...(schema.spec.uniqueIndexes ?? []),
     ].some((index) => index.includes(field));
+  }
+
+  private schema(collection: string): SchemaManifest {
+    const schema = this.schemas.get(collection);
+    if (!schema) throw new Error(`unknown Schema: ${collection}`);
+    return schema;
   }
 
   private async assertUniqueIndexes(

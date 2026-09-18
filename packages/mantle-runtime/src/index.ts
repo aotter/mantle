@@ -63,6 +63,7 @@ export type {
 } from "./domain/port/DatabaseDriver.js";
 export type {
   EntryRepository,
+  EntryKey,
   CreateEntryArgs,
   UpdateEntryArgs,
   DeleteEntryArgs,
@@ -104,6 +105,7 @@ export {
   EntryUniqueConflict,
   EntryVersionConflict,
   liftLocale,
+  materializeNullableFields,
   projectPublicEntry,
   type EntryRow,
 } from "./domain/model/EntryRow.js";
@@ -118,7 +120,7 @@ export {
   encodeEntrySortCursor,
 } from "./infrastructure/persistence/Pagination.js";
 export type { PreparedMantleRevision } from "./domain/model/PreparedMantleRevision.js";
-export { SqliteMigrationRunner } from "./infrastructure/boot/SqliteMigrationRunner.js";
+export { SqliteMigrationRunner, splitSqlStatements } from "./infrastructure/boot/SqliteMigrationRunner.js";
 export {
   MANTLE_VIEW_ROUTE_PREFIX,
   createMantleRequestHandler,
@@ -136,6 +138,16 @@ export {
   SqliteMantleStorageAdapter,
   type SqliteMantleStorageAdapterOptions,
 } from "./infrastructure/storage/SqliteMantleStorageAdapter.js";
+export {
+  buildSqliteMigrationArtifact,
+  storageFingerprint,
+  verifySqliteMigrationArtifact,
+  type SqliteMigrationArtifact,
+} from "./infrastructure/storage/SqliteMigrationArtifact.js";
+export {
+  isAdditiveSchemaTableChange,
+  mergeSchemaTableProjections,
+} from "./infrastructure/storage/SqliteSchemaTables.js";
 export {
   prepareDeployment,
   type DeploymentPreparationOptions,

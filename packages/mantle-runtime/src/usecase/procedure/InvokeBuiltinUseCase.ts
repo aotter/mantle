@@ -170,8 +170,8 @@ export class InvokeBuiltinUseCase {
     // caller, `now` → this edit) — silent data loss. Mirror
     // UpdateDraftUseCase: merge via `projectUpdateAndStamp` so omitted
     // fields and server-stamped values (author, created-at) survive.
-    const existing = preloaded ?? (await this.entries.get(id));
-    if (!existing || existing.collection !== schema.metadata.name) {
+    const existing = preloaded ?? (await this.entries.get({ id, collection: schema.metadata.name }));
+    if (!existing) {
       throw new DiagnosticError(
         runtimeDiagnostic({
           code: "NOT_FOUND",
@@ -247,7 +247,7 @@ export class InvokeBuiltinUseCase {
 
     const id = typeof input["id"] === "string" ? input["id"] : undefined;
     if (id) {
-      const existing = await this.entries.get(id);
+      const existing = await this.entries.get({ id, collection: schema.metadata.name });
       if (existing) {
         if (callerVersion === undefined) {
           throw missingExpectedVersionOnUpdate(schema.metadata.name);
@@ -283,7 +283,7 @@ export class InvokeBuiltinUseCase {
   ): Promise<{ readonly removed: boolean }> {
     const id = requireField(input, "id", "string");
     const opPath = `usecase/InvokeBuiltin/${schema.metadata.name}/delete/${id}`;
-    const existing = await this.entries.get(id);
+    const existing = await this.entries.get({ id, collection: schema.metadata.name });
     if (!existing) {
       throw new DiagnosticError(notFoundDiagnostic(opPath, schema.metadata.name, id));
     }
@@ -312,8 +312,8 @@ export class InvokeBuiltinUseCase {
     now: number,
   ): Promise<EntryRow> {
     const id = requireField(input, "id", "string");
-    const existing = await this.entries.get(id);
-    if (!existing || existing.collection !== schema.metadata.name) {
+    const existing = await this.entries.get({ id, collection: schema.metadata.name });
+    if (!existing) {
       throw new DiagnosticError(
         runtimeDiagnostic({
           code: "NOT_FOUND",

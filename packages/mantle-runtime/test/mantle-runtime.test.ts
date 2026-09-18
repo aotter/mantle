@@ -61,7 +61,7 @@ describe("createMantleRuntime", () => {
       data: { title: "Embedded" },
       authorId: null,
     });
-    expect(await runtime.entries.readById("post-1"))
+    expect(await runtime.entries.readById({ id: "post-1", collection: "posts" }))
       .toMatchObject({ id: "post-1", data: { title: "Embedded" } });
     expect(lifecycleEvents).toEqual(["after_create:post-1"]);
 

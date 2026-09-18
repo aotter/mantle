@@ -4,11 +4,11 @@ import {
   isCtxUserRef,
   isParamRef,
   runtimeDiagnostic,
-  schemaIndexedFieldSql,
   type FilterAst,
   type SchemaManifest,
   type ViewManifest,
 } from "@aotter/mantle-spec";
+import { fieldSql } from "./SqliteSchemaTables.js";
 import { clampPage, clampShow } from "../../domain/service/Pagination.js";
 import type { ViewQueryOptions } from "../../domain/port/ViewQueryExecutor.js";
 import {
@@ -18,11 +18,9 @@ import {
 
 /**
  * View → SQL compilation. Targets SQLite + JSON1 (D1's dialect).
- * Reserved metadata fields project as native columns. Declared Schema
- * index fields use their generated columns; undeclared fields keep the
- * `json_extract(data, '$.<field>')` fallback. SQL uses positional `?`
- * parameters; field-name escapes are defense-in-depth on top of the
- * Schema validator gate.
+ * Reserved metadata and Schema fields map directly to native columns.
+ * SQL uses positional `?` parameters; identifiers come only from the
+ * linked RuntimePlan.
  *
  * v0.1 filter AST supports comparison operators (`eq`, `gt`, `gte`,
  * `lt`, `lte`) plus `and` / `or`; comparison values may be literals or
@@ -50,12 +48,12 @@ export interface PreparedSqliteView {
 // The compile-time check below ensures the alias set stays in sync —
 // adding to spec without updating here is a type error.
 const RESERVED_COLUMN: Readonly<Record<string, string>> = {
-  id: "id",
-  status: "status",
-  version: "version",
-  createdAt: "created_at",
-  updatedAt: "updated_at",
-  authorId: "author_id",
+  id: "_mantle_id",
+  status: "_mantle_status",
+  version: "_mantle_version",
+  createdAt: "_mantle_created_at",
+  updatedAt: "_mantle_updated_at",
+  authorId: "_mantle_author_id",
 };
 const _aliasCheck: Readonly<Record<(typeof RESERVED_ENTRY_COLUMNS)[number], string>> =
   RESERVED_COLUMN;
@@ -116,8 +114,8 @@ export function prepareSqliteView(
   const filter = view.filter ? prepareFilter(view.filter, schema) : undefined;
   return {
     bind(options = {}) {
-      const sqlParams: unknown[] = [view.from];
-      const whereParts: string[] = ["collection = ?"];
+      const sqlParams: unknown[] = [];
+      const whereParts: string[] = [];
       if (filter) {
         whereParts.push(`(${filter.sql})`);
         sqlParams.push(...filter.bind(options.params ?? {}, options.ctxUserId));
@@ -128,7 +126,7 @@ export function prepareSqliteView(
       const effectiveShow = clampShow(options.show, view.limit);
       const effectivePage = clampPage(options.page);
       return {
-        sql: `SELECT ${selectExpr} FROM entries WHERE ${whereParts.join(" AND ")}${orderBy} LIMIT ${effectiveShow} OFFSET ${pageOffset(effectivePage, effectiveShow)}`,
+        sql: `SELECT ${selectExpr} FROM ${quoteIdent(view.from)}${whereParts.length ? ` WHERE ${whereParts.join(" AND ")}` : ""}${orderBy} LIMIT ${effectiveShow} OFFSET ${pageOffset(effectivePage, effectiveShow)}`,
         params: sqlParams,
         effectivePage,
         effectiveShow,
@@ -276,11 +274,13 @@ function fieldExpr(field: string, schema?: SchemaManifest): string {
 }
 
 function fieldRefExpr(field: string, schema?: SchemaManifest): string {
+  if (schema && Object.hasOwn(schema.spec.schema.properties ?? {}, field)) return quoteIdent(field);
   const reserved = RESERVED_COLUMN[field];
   if (reserved) return reserved;
-  const indexed = schema ? schemaIndexedFieldSql(schema, field) : null;
-  if (indexed) return indexed;
-  return `json_extract(data, ${quotedJsonPath(field)})`;
+  if (!schema) return quoteIdent(field);
+  const column = fieldSql(schema, field);
+  if (!column) throw new Error(`View references unknown Schema field '${field}'.`);
+  return column;
 }
 
 interface PreparedFilter {
@@ -362,51 +362,10 @@ function buildOrderBy(
   return ` ORDER BY ${parts.join(", ")}`;
 }
 
-// Schema JSON property keys can be arbitrary strings per RFC 8259,
-// but SQLite's JSON1 path syntax (`$."key"`) has no documented way
-// to escape an inner `"` or `\` inside a quoted key — doubled-quote
-// escaping is the SQLite identifier convention, NOT a JSON-path
-// convention. So we always quote the path/alias (admitting hyphens,
-// spaces, etc.) but refuse `"`, `\`, and `\0` in field names —
-// those break either the JSON-path resolution or the SQL string
-// literal. Real Schema authors don't use those characters in keys;
-// rejecting them keeps the path always-resolvable.
-
-const FORBIDDEN_FIELD_CHARS = /["\\\0]/;
-
-function assertFieldNameSafe(name: string, callsite: string): void {
-  if (!FORBIDDEN_FIELD_CHARS.test(name)) return;
-  throw new DiagnosticError(
-    runtimeDiagnostic({
-      code: "INTERNAL_ERROR",
-      severity: "error",
-      path: `compileView/${callsite}`,
-      value: name,
-      expected: 'field name without `"`, `\\`, or NUL',
-      message: `field name '${name}' contains an unrepresentable character (\", \\, or NUL); Schema validation should have caught this.`,
-    }),
-  );
-}
-
-/**
- * Emit `'$."<field>"'` — a SQL string literal containing a SQLite
- * JSON path. Doubles single quotes for the surrounding SQL literal
- * (SQLite literal escape). Field name itself is guaranteed free of
- * `"` / `\` / NUL by `assertFieldNameSafe`, so the inner double-
- * quoted key needs no further escape.
- */
-function quotedJsonPath(field: string): string {
-  assertFieldNameSafe(field, "quotedJsonPath");
-  // Only `'` needs escaping for the surrounding SQL literal; field
-  // is guaranteed free of `"` / `\` / NUL.
-  return `'$."${field.replace(/'/g, "''")}"'`;
-}
-
 /**
  * SQLite quoted-identifier alias (`"hero-image"`). Used as the result
  * column name so callers read the field back under its declared key.
  */
 function quoteIdent(name: string): string {
-  assertFieldNameSafe(name, "quoteIdent");
-  return `"${name}"`;
+  return `"${name.replace(/"/g, '""')}"`;
 }

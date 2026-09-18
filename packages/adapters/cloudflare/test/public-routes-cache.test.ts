@@ -40,6 +40,7 @@ function manifests(): Manifest[] {
           locale: { type: "string" },
           title: { type: "string" },
           body: { type: "string" },
+          sections: { type: "array", items: { type: "object" } },
         },
         required: ["slug", "locale", "title"],
       },
@@ -196,7 +197,7 @@ describe("mountPublicRoutes response-cache contract", () => {
     expect(new Set(locations).size).toBe(2023); // Entries plus home and list.
     expect(locations.filter((url) => url.includes("/posts/item-"))).toHaveLength(2021);
     expect(h.db.executions.filter(({ sql }) => sql.includes("WITH candidates"))
-      .every(({ sql }) => sql.includes("json_group_object"))).toBe(true);
+      .every(({ sql }) => sql.includes('"slug"') && !sql.includes('"body"'))).toBe(true);
   });
 
   it("queries list content once for an uncached HTML response", async () => {
@@ -206,7 +207,7 @@ describe("mountPublicRoutes response-cache contract", () => {
     h.db.executions.splice(0);
 
     expect((await h.app.request("/en/posts")).status).toBe(200);
-    expect(h.db.executions.filter(({ sql }) => sql.includes("FROM entries"))).toHaveLength(1);
+    expect(h.db.executions.filter(({ sql }) => sql.includes(`FROM "posts"`))).toHaveLength(1);
   });
 
   it("composes home/list/single discovery surfaces from one public path map", async () => {
@@ -307,7 +308,7 @@ describe("mountPublicRoutes response-cache contract", () => {
     expect((await h.app.request("/zh-tw/posts/missing")).status).toBe(404);
     expect(h.db.executions.map(({ sql }) => sql)).toEqual([
       "SELECT key, value FROM site_config",
-      expect.stringContaining("FROM entries WHERE collection = ?"),
+      expect.stringContaining(`FROM "posts"`),
     ]);
   });
 

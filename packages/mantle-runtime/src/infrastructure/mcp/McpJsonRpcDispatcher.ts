@@ -279,42 +279,46 @@ export class McpJsonRpcDispatcher {
     switch (name) {
       case "request_publish": {
         const id = args["id"];
-        if (typeof id !== "string") return MISSING_ARG;
-        await this.assertEntryMutable(id, name);
+        const collection = args["collection"];
+        if (typeof id !== "string" || typeof collection !== "string") return MISSING_ARG;
+        await this.assertEntryMutable(id, name, collection);
         return this.useCases.requestPublish.execute({
-          id,
+          id, collection,
           ctx,
-          originalInput: args,
+          originalInput: { id },
         });
       }
       case "unpublish_entry": {
         const id = args["id"];
-        if (typeof id !== "string") return MISSING_ARG;
-        await this.assertEntryMutable(id, name);
+        const collection = args["collection"];
+        if (typeof id !== "string" || typeof collection !== "string") return MISSING_ARG;
+        await this.assertEntryMutable(id, name, collection);
         return this.useCases.unpublish.execute({
-          id,
+          id, collection,
           ctx,
-          originalInput: args,
+          originalInput: { id },
         });
       }
       case "archive_entry": {
         const id = args["id"];
-        if (typeof id !== "string") return MISSING_ARG;
-        await this.assertEntryMutable(id, name);
+        const collection = args["collection"];
+        if (typeof id !== "string" || typeof collection !== "string") return MISSING_ARG;
+        await this.assertEntryMutable(id, name, collection);
         return this.useCases.archive.execute({
-          id,
+          id, collection,
           ctx,
-          originalInput: args,
+          originalInput: { id },
         });
       }
       case "delete_entry": {
         const id = args["id"];
-        if (typeof id !== "string") return MISSING_ARG;
-        await this.assertEntryMutable(id, name);
+        const collection = args["collection"];
+        if (typeof id !== "string" || typeof collection !== "string") return MISSING_ARG;
+        await this.assertEntryMutable(id, name, collection);
         return this.useCases.deleteEntry.execute({
-          id,
+          id, collection,
           ctx,
-          originalInput: args,
+          originalInput: { id },
         });
       }
       case "create_media_upload": {
@@ -401,6 +405,7 @@ export class McpJsonRpcDispatcher {
           const data = stripReservedArgs(args);
           return this.useCases.updateDraft.execute({
             id,
+            collection,
             expectedVersion: expected,
             data,
             ctx,
@@ -424,15 +429,8 @@ export class McpJsonRpcDispatcher {
     }));
   }
 
-  private async assertEntryMutable(id: string, toolName: string, collection?: string): Promise<void> {
-    const entry = await this.useCases.getEntry.execute({ id });
-    if (collection !== undefined && entry.collection !== collection) {
-      throw new DiagnosticError(runtimeDiagnostic({
-        code: "NOT_FOUND", severity: "error", path: `MCP ${toolName}`,
-        value: id, expected: `entry in '${collection}'`,
-        message: `No entry with id '${id}' in collection '${collection}'.`,
-      }));
-    }
+  private async assertEntryMutable(id: string, toolName: string, collection: string): Promise<void> {
+    const entry = await this.useCases.getEntry.execute({ id, collection });
     const schema = this.schemas.find((s) => s.metadata.name === entry.collection);
     if (CONTENT_LIFECYCLE_TOOLS.has(toolName) && (!schema || resolveLifecycle(schema) === "operational")) {
       throw new DiagnosticError(runtimeDiagnostic({

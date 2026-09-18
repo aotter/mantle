@@ -1,6 +1,7 @@
 # ADR-0011: Adapter port spec
 
-**Status:** Superseded for Core storage and Admin composition by ADR-0019.
+**Status:** Superseded for Core storage and Admin composition by ADR-0019 and
+for SQLite/D1 physical storage by ADR-0024.
 Retained as the alpha.7 Cloudflare adapter record; `DatabaseDriver` is now an
 implementation detail of the SQLite/D1 `MantleStorageAdapter`, while the asset
 contract belongs to optional `@aotter/mantle-admin`.

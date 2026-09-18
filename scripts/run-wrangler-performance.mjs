@@ -118,7 +118,7 @@ try {
   const adminDetailSparse = await benchmarkHttpRoutes({
     targets: [{
       name: "admin-detail-related-sparse-10000",
-      url: `${baseUrl}/admin/api/entries/post-99`,
+      url: `${baseUrl}/admin/api/entries/post-99?collection=posts`,
     }],
     rounds: 10,
     warmup: 2,
@@ -126,7 +126,7 @@ try {
   const adminDetailDense = await benchmarkHttpRoutes({
     targets: [{
       name: "admin-detail-related-dense-10000",
-      url: `${baseUrl}/admin/api/entries/post-0`,
+      url: `${baseUrl}/admin/api/entries/post-0?collection=posts`,
     }],
     rounds: 10,
     warmup: 2,
@@ -186,13 +186,13 @@ try {
     scaledTriggersKeepOneStatement: routeScaling.every((sample) => metric(sample, "queryCount").max === 1),
     emptyHealthDoesNotPrepare: metric(emptyHealth, "queryCount").max === 0,
     staticRoutesDoNotPrepare: readiness.slice(0, 3).every((sample) => metric(sample, "queryCount").max === 0),
-    challengePreparesOnlyFingerprint: metric(readiness[3], "queryCount").max <= 1,
-    currentDatabaseFirstPageUsesFourQueries: metric(freshStatePage, "queryCount").max <= 4,
+    challengeUsesBootAndAuthQueries: metric(readiness[3], "queryCount").max <= 2,
+    currentDatabaseFirstPageUsesFiveQueries: metric(freshStatePage, "queryCount").max <= 5,
     currentDatabaseWarmPageUsesTwoQueries: metric(warmStatePage, "queryCount").max <= 2,
     crowdedRowsReadBounded: crowdedRows.p95 <= Math.max(100, smallRows.p95 * 4),
     publicApiUsesOneQuery: crowdedQueries.max <= 1,
     pageMissStaysBounded: missQueries.max <= 2 && missRows.p95 <= 10,
-    statisticsUsesOneQuery: metric(statistics, "queryCount").max === 1,
+    statisticsUsesTwoQueries: metric(statistics, "queryCount").max === 2,
     statisticsHasAllRows: statisticsResponse.total === 10_000 && statisticsResponse.buckets.reduce((sum, row) => sum + row.count, 0) === 10_000,
     statisticsReturnsBoundedCounts: JSON.stringify(statisticsResponse).length < 4000,
     adminListUsesOneQuery: adminQueryMax <= 1,

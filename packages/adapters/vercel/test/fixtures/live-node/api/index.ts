@@ -61,7 +61,7 @@ async function seed(request: Request): Promise<Response> {
       authorId: null,
       ctx: context,
     });
-    await runtime.requestPublish.execute({ id: row.id, ctx: context });
+    await runtime.requestPublish.execute({ id: row.id, collection: row.collection, ctx: context });
     return Response.json({ ok: true, id: row.id });
   } catch (error) {
     console.error("[vercel fixture seed] failed", error);

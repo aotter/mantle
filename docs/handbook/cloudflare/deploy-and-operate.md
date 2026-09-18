@@ -34,7 +34,7 @@ Add tests and the frontend build where the project has them, then confirm index 
 pnpm exec mantle-harness indexes --require-public --format text
 ```
 
-A required path fails on an `entries` table scan, a temporary sort or an unindexed data-field predicate. Then dry-run and deploy:
+A required path fails on a required Schema-table scan, a temporary sort or an unindexed data-field predicate. Then dry-run and deploy:
 
 ```sh
 wrangler deploy --dry-run
@@ -82,6 +82,13 @@ Read the migration notes shipped with the target release before changing version
 2. Remove scripts that call retired commands. Keep application source, Worker/D1/KV identity, origins, auth mode and secrets.
 3. Run `mantle generate`, `generate --check`, `skills`, `skills --check`, `validate`, typecheck and tests.
 4. Test local routes and authorization, then deploy.
+
+The native-table storage contract is a pre-beta breaking change. Existing
+generic-`entries` databases are unsupported: rebuild the instance and move any
+required data manually outside Mantle. New native-table instances deploy safe
+additive changes online; destructive changes are rejected and require another
+manual rebuild. Mantle does not ship an in-product migration workflow for this
+unreleased storage format.
 
 ## Source
 - [`packages/mantle/README.md`](../../../packages/mantle/README.md)

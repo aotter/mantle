@@ -21,6 +21,7 @@ import { fieldLabel, propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import {
   entriesQueryOptions,
+  entryApiPath,
   entryEditorQueryOptions,
   entryLandingChildQueryOptions,
   operationsQueryOptions,
@@ -245,7 +246,7 @@ function CollectionList({
 
   const titleMutation = useMutation({
     mutationFn: ({ id, title, version }: { id: string; title: string; version: number }) =>
-      api.patch<EntryEditorPayload>(`/entries/${encodeURIComponent(id)}`, {
+      api.patch<EntryEditorPayload>(entryApiPath(collectionName, id), {
         data: { title },
         expectedVersion: version,
       }),
@@ -253,7 +254,7 @@ function CollectionList({
   });
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
-      api.delete<{ removed: boolean }>(`/entries/${encodeURIComponent(id)}`),
+      api.delete<{ removed: boolean }>(entryApiPath(collectionName, id)),
     onSuccess: refreshEntries,
   });
   // POST an empty draft and land in the schema-driven editor — no
@@ -591,7 +592,7 @@ function BulkActionBar({
       description: t(language, "collection.bulk.deleteConfirm", { count: String(selectedIds.length) }),
     });
     if (!ok) return;
-    void runBulk((id) => api.delete(`/entries/${encodeURIComponent(id)}`));
+    void runBulk((id) => api.delete(entryApiPath(collection?.name ?? "", id)));
   }
 
   return (
@@ -608,7 +609,7 @@ function BulkActionBar({
               size="sm"
               disabled={pending}
               onClick={() =>
-                void runBulk((id) => api.post(`/entries/${encodeURIComponent(id)}/publish`, {}))
+                void runBulk((id) => api.post(entryApiPath(collection!.name, id, "/publish"), {}))
               }
             >
               {t(language, "collection.bulk.publish")}
@@ -619,7 +620,7 @@ function BulkActionBar({
               size="sm"
               disabled={pending}
               onClick={() =>
-                void runBulk((id) => api.post(`/entries/${encodeURIComponent(id)}/unpublish`, {}))
+                void runBulk((id) => api.post(entryApiPath(collection!.name, id, "/unpublish"), {}))
               }
             >
               {t(language, "collection.bulk.unpublish")}
@@ -829,7 +830,7 @@ function ParentScopeFilter({
     : parentName ?? parentField;
   const selected = useQuery<EntryEditorPayload>({
     queryKey: ["entry-editor", selectedId],
-    queryFn: () => api.get<EntryEditorPayload>(`/entries/${encodeURIComponent(selectedId!)}`),
+    queryFn: () => api.get<EntryEditorPayload>(entryApiPath(parentName!, selectedId!)),
     enabled: Boolean(selectedId),
   });
   const options = useQuery<ListEntriesResult>({

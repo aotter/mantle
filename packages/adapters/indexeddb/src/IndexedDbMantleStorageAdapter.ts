@@ -12,7 +12,7 @@ import {
 } from "./IndexedDbEntryRepository.js";
 import { IndexedDbViewQueryExecutor } from "./IndexedDbViewQueryExecutor.js";
 
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 
 export interface IndexedDbMantleStorageOptions {
   readonly databaseName: string;
@@ -59,14 +59,14 @@ export class IndexedDbMantleStorageAdapter implements MantleStorageAdapter {
       DATABASE_VERSION,
       {
         upgrade(database, oldVersion, _newVersion, transaction) {
-          const entries = oldVersion < 1
-            ? database.createObjectStore("entries", { keyPath: "id" })
-            : transaction.objectStore("entries");
-          if (oldVersion < 2) {
-            if (!entries.indexNames.contains("byCollection")) {
-              entries.createIndex("byCollection", "collection");
-            }
+          if (oldVersion < 3 && database.objectStoreNames.contains("entries")) {
+            console.warn("[mantle] Clearing incompatible pre-0.1.2 IndexedDB preview data.");
+            database.deleteObjectStore("entries");
           }
+          const entries = database.objectStoreNames.contains("entries")
+            ? transaction.objectStore("entries")
+            : database.createObjectStore("entries", { keyPath: ["collection", "id"] });
+          if (!entries.indexNames.contains("byCollection")) entries.createIndex("byCollection", "collection");
         },
         blocking() {
           void opening.then((database) => database.close());

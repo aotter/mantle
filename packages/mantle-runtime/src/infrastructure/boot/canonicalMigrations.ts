@@ -1,45 +1,18 @@
-import {
-  buildDdl,
-  buildSchemaSqlView,
-  dropSchemaSqlViewSql,
-  type SchemaManifest,
-} from "@aotter/mantle-spec";
-import type {
-  DatabaseDriver,
-  Migration,
-} from "../../domain/port/DatabaseDriver.js";
+import type { Migration } from "../../domain/port/DatabaseDriver.js";
 
 /**
- * Historical SQLite migration list. The mixed Auth DDL in 0001 stays
- * for existing ledger compatibility; selected Auth owns its own readiness.
- * Custom content storage does not need Auth tables. `id` strings are stable;
- * the `_migrations`
- * tracking table makes subsequent boots idempotent. Append-only from
- * v0.1.0 onwards.
+ * SQLite infrastructure migrations. Schema content tables are compiled from
+ * the RuntimePlan and intentionally live outside this list. This is the
+ * pre-beta native-table baseline; once released, migration ids are append-only.
  */
 export const CANONICAL_MIGRATIONS: readonly Migration[] = [
   {
     id: "0001-init",
     description:
-      "v0.1.0 schema: entries / site_config + Better Auth tables (ADR-0014)",
+      "v0.1.0 infrastructure: site_config + Better Auth tables (ADR-0014)",
     // SQLite: Better Auth serializes Date → ISO 8601 string and
     // boolean → 0/1, so date columns are TEXT and booleans INTEGER.
     sql: `
-      CREATE TABLE IF NOT EXISTS entries (
-        id          TEXT PRIMARY KEY,
-        collection  TEXT NOT NULL,
-        status      TEXT NOT NULL,
-        version     INTEGER NOT NULL DEFAULT 1,
-        data        TEXT NOT NULL,
-        author_id   TEXT,
-        created_at  INTEGER NOT NULL,
-        updated_at  INTEGER NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS entries_by_collection_updated
-        ON entries (collection, updated_at DESC);
-      CREATE INDEX IF NOT EXISTS entries_by_collection_status
-        ON entries (collection, status);
-
       CREATE TABLE IF NOT EXISTS site_config (
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL
@@ -290,242 +263,21 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    id: "0004-published-entry-access-paths",
-    description:
-      "Measured indexes for published collection, locale, sitemap, and llms reads",
-    sql: `
-      ALTER TABLE entries ADD COLUMN entry_locale TEXT
-        GENERATED ALWAYS AS (json_extract(data, '$.locale')) VIRTUAL;
-
-      CREATE INDEX IF NOT EXISTS entries_published_updated
-        ON entries (updated_at DESC, id DESC)
-        WHERE status = 'published';
-      CREATE INDEX IF NOT EXISTS entries_published_locale_updated
-        ON entries (entry_locale, updated_at DESC, id DESC)
-        WHERE status = 'published';
-      CREATE INDEX IF NOT EXISTS entries_published_collection_updated
-        ON entries (collection, updated_at DESC, id DESC)
-        WHERE status = 'published';
-      CREATE INDEX IF NOT EXISTS entries_published_collection_locale_updated
-        ON entries (collection, entry_locale, updated_at DESC, id DESC)
-        WHERE status = 'published';
-    `,
-  },
-  {
-    id: "0005-admin-entry-list-access-paths",
-    description: "Keyset indexes for bounded admin entry listing",
-    sql: `
-      CREATE INDEX IF NOT EXISTS entries_by_collection_updated_id
-        ON entries (collection, updated_at DESC, id DESC);
-      CREATE INDEX IF NOT EXISTS entries_by_collection_status_updated_id
-        ON entries (collection, status, updated_at DESC, id DESC);
-
-      DROP INDEX IF EXISTS entries_by_collection_updated;
-      DROP INDEX IF EXISTS entries_by_collection_status;
-      DROP INDEX IF EXISTS entries_published_collection_updated;
-    `,
-  },
-  {
-    id: "0006-schema-sql-views",
-    description: "Track Schema logical SQL views",
-    sql: `
-      CREATE TABLE IF NOT EXISTS _mantle_schema_views (
-        name TEXT PRIMARY KEY NOT NULL
-      );
-    `,
-  },
-  {
-    id: "0007-boot-state",
-    description: "Skip unchanged boot reconciliation on cold Worker isolates",
+    id: "0004-native-schema-storage",
+    description: "Track the prepared RuntimePlan and native Schema-table storage",
     sql: `
       CREATE TABLE IF NOT EXISTS _mantle_boot_state (
         id          TEXT PRIMARY KEY NOT NULL,
         fingerprint TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS _mantle_schema_tables (
+        name       TEXT PRIMARY KEY NOT NULL,
+        projection TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS _mantle_storage_state (
+        id          INTEGER PRIMARY KEY CHECK (id = 1),
+        fingerprint TEXT NOT NULL
+      );
     `,
   },
-  {
-    id: "0008-entry-creation-statistics",
-    description: "Bound collection creation-time aggregation without loading entry bodies",
-    sql: `CREATE INDEX IF NOT EXISTS entries_by_collection_created ON entries(collection, created_at);`,
-  },
 ];
-
-/** Keep Schema logical tables exact across manifest additions, edits, and removals. */
-export async function reconcileSchemaSqlViews(
-  db: DatabaseDriver,
-  schemas: Iterable<SchemaManifest>,
-): Promise<void> {
-  const views = [...schemas]
-    .sort((a, b) => a.metadata.name.localeCompare(b.metadata.name))
-    .map(buildSchemaSqlView);
-  const desired = new Set(views.map((view) => view.name));
-  const tracked = await db.prepare("SELECT name FROM _mantle_schema_views").all<{ name: string }>();
-
-  for (const { name } of tracked) {
-    if (desired.has(name)) continue;
-    await db.prepare(dropSchemaSqlViewSql(name)).run();
-    await db.prepare("DELETE FROM _mantle_schema_views WHERE name = ?").bind(name).run();
-  }
-  for (const view of views) {
-    await db.prepare(view.dropSql).run();
-    await db.prepare(view.createSql).run();
-    await db.prepare("INSERT OR IGNORE INTO _mantle_schema_views(name) VALUES (?)")
-      .bind(view.name)
-      .run();
-  }
-}
-
-export function schemaIndexMigrations(
-  schemas: Iterable<SchemaManifest>,
-): readonly Migration[] {
-  const migrations: Migration[] = [];
-  const ordered = [...schemas].sort((a, b) =>
-    a.metadata.name.localeCompare(b.metadata.name));
-  for (const schema of ordered) {
-    const ddl = buildDdl(schema);
-    for (const column of ddl.columns) {
-      migrations.push({
-        id: `schema-index-v2:column:${column.name}`,
-        description: `Generated Schema-index column ${column.name}`,
-        sql: column.sql,
-      });
-    }
-    for (const index of ddl.indexes) {
-      migrations.push({
-        id: `schema-index-v2:index:${index.name}`,
-        description: `Manifest Schema index ${index.name}`,
-        sql: index.sql,
-      });
-    }
-  }
-  return migrations;
-}
-
-const SCHEMA_INDEX_V2_PREFIX = "schema-index-v2:index:";
-const LEGACY_UNIQUE_INDEX_PREFIX = "schema-unique-index:";
-const SAFE_SCHEMA_INDEX_V2 = /^m2[uir]_[0-9a-f]+_[0-9a-f]+_[0-9a-f]+(?:__[0-9a-f]+_[0-9a-f]+)*$/;
-const SAFE_LEGACY_UNIQUE_INDEX = /^uq_[a-z0-9_.-]+(?:__[a-z0-9_.-]+)+$/i;
-
-/**
- * Drop generated indexes no longer declared by the current manifests.
- * Keep generated columns: SQLite cannot remove them safely across the
- * D1 versions Mantle supports, and unused virtual columns are harmless.
- */
-export async function reconcileSchemaIndexes(
-  db: DatabaseDriver,
-  current: readonly Migration[],
-  schemas: Iterable<SchemaManifest>,
-): Promise<void> {
-  const desiredV2 = new Set(
-    current
-      .map((migration) => migration.id)
-      .filter((id) => id.startsWith(SCHEMA_INDEX_V2_PREFIX)),
-  );
-  const legacyExpectations = legacyUniqueIndexExpectations(schemas);
-  const appliedV2 = await db
-    .prepare(`SELECT id FROM _migrations WHERE id LIKE 'schema-index-v2:index:%'`)
-    .all<{ id: string }>();
-  const appliedLegacy = await db
-    .prepare(`SELECT id FROM _migrations WHERE id LIKE 'schema-unique-index:%'`)
-    .all<{ id: string }>();
-  const desiredLegacy = await matchingLegacyUniqueIndexes(
-    db,
-    appliedLegacy,
-    legacyExpectations,
-  );
-
-  await dropStaleIndexes(
-    db,
-    appliedV2,
-    desiredV2,
-    SCHEMA_INDEX_V2_PREFIX,
-    SAFE_SCHEMA_INDEX_V2,
-  );
-  await dropStaleIndexes(
-    db,
-    appliedLegacy,
-    desiredLegacy,
-    LEGACY_UNIQUE_INDEX_PREFIX,
-    SAFE_LEGACY_UNIQUE_INDEX,
-  );
-}
-
-function legacyUniqueIndexExpectations(
-  schemas: Iterable<SchemaManifest>,
-): ReadonlyMap<string, readonly string[] | null> {
-  const expectations = new Map<string, readonly string[] | null>();
-  for (const schema of schemas) {
-    for (const fields of schema.spec.uniqueIndexes ?? []) {
-      if (fields.length === 0) continue;
-      const flattened = fields.map((field) => field.replace(/\./g, "_"));
-      const id =
-        `${LEGACY_UNIQUE_INDEX_PREFIX}uq_${schema.metadata.name}__${flattened.join("__")}`;
-      const columns = flattened.map((field) => `${schema.metadata.name}__${field}`);
-      const ambiguous = schema.metadata.name.includes("__") ||
-        fields.some((field) => /[._]/.test(field));
-      const previous = expectations.get(id);
-      if (
-        ambiguous ||
-        previous === null ||
-        (previous !== undefined && !sameStrings(previous, columns))
-      ) {
-        expectations.set(id, null);
-      } else {
-        expectations.set(id, columns);
-      }
-    }
-  }
-  return expectations;
-}
-
-/**
- * Alpha.59 flattened dots and joined tuples with `__`, so migration ids alone
- * cannot prove that a legacy physical index still represents today's tuple.
- * Retain only unambiguous declarations whose ordered physical columns match.
- */
-async function matchingLegacyUniqueIndexes(
-  db: DatabaseDriver,
-  applied: readonly { readonly id: string }[],
-  expectedById: ReadonlyMap<string, readonly string[] | null>,
-): Promise<ReadonlySet<string>> {
-  const matching = new Set<string>();
-  for (const { id } of applied) {
-    const expected = expectedById.get(id);
-    if (!expected) continue;
-    const indexName = id.slice(LEGACY_UNIQUE_INDEX_PREFIX.length);
-    if (!SAFE_LEGACY_UNIQUE_INDEX.test(indexName)) continue;
-    const actual = await db
-      .prepare(`PRAGMA index_info("${indexName}")`)
-      .all<{ seqno: number; name: string }>();
-    const columns = [...actual]
-      .sort((a, b) => a.seqno - b.seqno)
-      .map(({ name }) => name);
-    if (sameStrings(columns, expected)) matching.add(id);
-  }
-  return matching;
-}
-
-function sameStrings(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((value, index) => value === b[index]);
-}
-
-async function dropStaleIndexes(
-  db: DatabaseDriver,
-  applied: readonly { readonly id: string }[],
-  desired: ReadonlySet<string>,
-  prefix: string,
-  safeName: RegExp,
-): Promise<void> {
-  for (const { id } of applied) {
-    if (desired.has(id)) continue;
-    const indexName = id.slice(prefix.length);
-    if (!safeName.test(indexName)) {
-      throw new Error(`unsafe generated Schema-index identifier: ${indexName}`);
-    }
-    await db.batch([
-      db.prepare(`DROP INDEX IF EXISTS "${indexName}"`),
-      db.prepare(`DELETE FROM _migrations WHERE id = ?`).bind(id),
-    ]);
-  }
-}

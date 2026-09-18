@@ -79,7 +79,7 @@ export interface Migration {
   readonly id: string;
   /** Free-form description for boot logs. */
   readonly description: string;
-  /** SQL DDL / DML to apply. Adapters split on `;` if their driver
-   *  doesn't accept multi-statement scripts. */
+  /** SQL DDL / DML to apply. SQLite adapters split statement boundaries
+   *  while respecting quoted strings, identifiers, and comments. */
   readonly sql: string;
 }

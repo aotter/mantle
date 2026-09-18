@@ -1,5 +1,6 @@
 import type { SiteDefaults } from "@aotter/mantle-spec";
 import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
+import type { Migration } from "../../domain/port/DatabaseDriver.js";
 import { CANONICAL_MIGRATIONS } from "./canonicalMigrations.js";
 
 const BOOT_STATE_ID = "runtime";
@@ -7,11 +8,14 @@ const BOOT_STATE_ID = "runtime";
 export async function bootFingerprint(input: {
   readonly semanticFingerprint: string;
   readonly siteDefaults?: SiteDefaults;
+  readonly schemaMigrations?: readonly Migration[];
 }): Promise<string> {
   const bytes = new TextEncoder().encode(JSON.stringify({
     version: 2,
     migrations: CANONICAL_MIGRATIONS.map(({ id, sql }) => [id, sql]),
-    ...input,
+    schemaMigrations: input.schemaMigrations?.map(({ id, sql }) => [id, sql]),
+    semanticFingerprint: input.semanticFingerprint,
+    siteDefaults: input.siteDefaults,
   }));
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");

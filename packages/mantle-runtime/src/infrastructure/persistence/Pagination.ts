@@ -85,7 +85,7 @@ export function publishedPageLimit(limit?: number): number {
 }
 
 /** In-memory adapters share the semantic cursor, projection and byte-budget rules. */
-export function paginatePublishedEntries(entries: readonly Entry[], args: ReadPublishedPageArgs = {}): PublishedEntryPage {
+export function paginatePublishedEntries(entries: readonly Entry[], args: ReadPublishedPageArgs): PublishedEntryPage {
   const cursor = decodeEntryCursor(args.cursor);
   const eligible = entries.filter((entry) => !cursor || entry.updatedAt < cursor[0]
     || (entry.updatedAt === cursor[0] && entry.id < cursor[1]))

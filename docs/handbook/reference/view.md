@@ -77,7 +77,7 @@ spec:
   title: Order lines by status
   surface: staff
   sql: |
-    SELECT o.id AS orderId,
+    SELECT o._mantle_id AS orderId,
            o.orderNumber AS orderNumber,
            json_extract(line.value, '$.sku') AS sku,
            json_extract(line.value, '$.quantity') AS quantity

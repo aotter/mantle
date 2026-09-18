@@ -55,7 +55,7 @@ describe("createBunMantle", () => {
       authorId: "customer-1",
       ctx: context,
     });
-    await runtime.requestPublish.execute({ id: order.id, ctx: context });
+    await runtime.requestPublish.execute({ id: order.id, collection: "orders", ctx: context });
     queries.length = 0;
     const view = await mantle.handle(new Request(
       "http://app.test/api/views/published-orders?customerId=customer-1",
@@ -88,7 +88,7 @@ describe("createBunMantle", () => {
       get(target, property) {
         if (property === "query") {
           return (sql: string) => {
-            if (fail && sql.includes("sqlite_master")) {
+            if (fail && sql.includes("sqlite_schema")) {
               fail = false;
               throw new Error("transient open failure");
             }
