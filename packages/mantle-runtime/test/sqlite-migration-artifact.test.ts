@@ -25,8 +25,22 @@ describe("SQLite migration artifacts", () => {
     const db = new DatabaseSync(":memory:");
     db.exec("CREATE TABLE _migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)");
     apply(db, initial);
+    db.prepare(`INSERT INTO "posts"(
+      _mantle_id, _mantle_status, _mantle_version, _mantle_author_id,
+      _mantle_created_at, _mantle_updated_at, title
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run("post-1", "published", 3, "owner-1", 10, 20, "Keep me");
     apply(db, additive);
     expect(db.prepare('PRAGMA table_info("posts")').all().map((column) => column.name)).toContain("rank");
+    expect(db.prepare('SELECT * FROM "posts" WHERE _mantle_id = ?').get("post-1")).toMatchObject({
+      _mantle_status: "published",
+      _mantle_version: 3,
+      _mantle_author_id: "owner-1",
+      _mantle_created_at: 10,
+      _mantle_updated_at: 20,
+      title: "Keep me",
+      rank: null,
+    });
     expect(db.prepare("SELECT fingerprint FROM _mantle_storage_state WHERE id = 1").get()?.fingerprint)
       .toBe(additive.targetFingerprint);
     expect(db.prepare("PRAGMA quick_check").get()?.quick_check).toBe("ok");
