@@ -177,8 +177,10 @@ const auth = createAuth({
     {
       kind: "social",
       provider: "github",
-      clientId: env.GITHUB_CLIENT_ID,
-      clientSecret: env.GITHUB_CLIENT_SECRET,
+      options: {
+        clientId: env.GITHUB_CLIENT_ID,
+        clientSecret: env.GITHUB_CLIENT_SECRET,
+      },
     },
   ],
   bootstrapOwner: env.ADMIN_GITHUB_LOGIN

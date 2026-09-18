@@ -734,3 +734,24 @@ one-way hashes. This is a fixed security boundary, not adopter configuration;
 Deploying this change invalidates any unconsumed codes and links created by an
 older deployment. Users request a new code or link; no database migration is
 needed.
+
+## 2026-09-18 amendment — native Better Auth method options
+
+Issue #924 supersedes only the preceding amendment's “not adopter
+configuration” restriction. Hashed OTP and magic-link storage remains the
+Mantle default, while an explicit official Better Auth `storeOTP` or
+`storeToken` option may override it, including custom hashers/encryption.
+
+`createAuth` remains the Worker lifecycle and Mantle integration boundary, but
+does not copy Better Auth's method option unions. Social methods use the
+provider-specific official `SocialProviders` option keyed by `provider`,
+including async factories. Generic OAuth uses `GenericOAuthConfig`; email OTP
+and magic link use their official option types minus the sender callback that
+Mantle owns. GitHub's bootstrap mapper composes with an adopter mapper instead
+of replacing it. Admin method metadata contains only kind, provider id and
+display label, never options or secrets.
+
+Applications that need to own an entire callback may pass official plugin
+instances through `plugins`. Those plugins do not synthesize Admin metadata,
+and duplicate plugin ids fail at construction. There is no
+`Partial<BetterAuthOptions>` deep merge and no silent plugin replacement.
