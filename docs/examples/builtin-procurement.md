@@ -117,7 +117,7 @@ spec:
     additionalProperties: false
     required: [id, expectedVersion, requestStatus]
     properties:
-      id: { type: string, x-mantle-ref: purchase-requisitions }
+      id: { type: string }
       expectedVersion: { type: number, minimum: 1 }
       requestStatus: { type: string, enum: [approved, rejected] }
       reviewerNote: { type: string, maxLength: 1000 }
@@ -169,12 +169,11 @@ A missing identity fails with 401; the runtime never drops the filter and never 
 
 `review-requisition` is a builtin `update`. Its input must declare `id` (string) and `expectedVersion` (number) in `required`; the parser rejects the Manifest otherwise. `expectedVersion` is the version the reviewer **read**, not that value plus one. At runtime the row is loaded, the patch is merged over existing data (omitted fields and server stamps survive), and the write is applied only if the stored version equals `expectedVersion`. A stale version fails with `CONFLICT` (HTTP 409) and nothing changes; the reviewer re-reads and decides again. Admin binds and hides `expectedVersion` on row-bound forms. `requestStatus` is narrowed to `approved | rejected`, so this Procedure cannot move a row back to `submitted`.
 
-### Admin row action
+### Review operation
 
-`id` carries `x-mantle-ref: purchase-requisitions`, so Admin lists `review-requisition` in the ⋯ menu of each `purchase-requisitions` row and prefills the referenced field. Admin derives the prefilled value from a same-named Schema property first, then from the Schema's lone single-field unique index, and finally from the entry id.
+`pending-approvals` exposes the entry `id` and `version` required by `review-requisition`. Drive reviews from that View through Staff MCP or `POST /admin/api/operations/review-requisition`.
 
-> **Warning**
-> This Schema declares exactly one single-field unique index, `[requestNumber]`, and no property named `id`, so Admin prefills `id` with the row's `requestNumber`. A builtin `update` expects the entry id there and would answer `NOT_FOUND`. Until that binding is adjusted, drive reviews from the `pending-approvals` View (which exposes `id` and `version`) through Staff MCP or `POST /admin/api/operations/review-requisition`. Declaring a second `uniqueIndexes` tuple or no unique index changes the derivation to the entry id, at the cost of that uniqueness guarantee.
+The Procedure deliberately does not mark `id` with `x-mantle-ref`. This Schema's lone single-field unique index is `[requestNumber]`; a row-bound Admin action would therefore prefill the reference with the request number, while builtin `update` requires the entry id. Leaving the field unbound keeps every advertised path executable instead of publishing a row action that returns `NOT_FOUND`.
 
 See [Authorization](../handbook/concepts/authorization.md) and the [Procedure reference](../handbook/reference/procedure.md).
 

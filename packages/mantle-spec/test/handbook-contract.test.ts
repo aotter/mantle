@@ -195,13 +195,28 @@ describe("examples hub SSOT", () => {
     expect(missing).toEqual([]);
   });
 
-  it("builtin-* Manifest YAML contains no handler.kind: ref", () => {
-    const offenders: string[] = [];
+  it("builtin-* Manifest YAML stays inside the Builder-supported subset", () => {
+    const problems: string[] = [];
     for (const page of hubPages.filter((entry) => entry.rel.startsWith("builtin-"))) {
-      for (const match of page.text.matchAll(/```yaml\n([\s\S]*?)```/g)) {
-        if (/\bkind:\s*ref\b/.test(match[1] ?? "")) offenders.push(page.rel);
+      const blocks = [...page.text.matchAll(/```yaml\n([\s\S]*?)```/g)]
+        .map((match) => match[1] ?? "")
+        .filter((body) => /^\s*apiVersion:/m.test(body));
+      const parsed = parseManifestSources({
+        sources: [{ sourceId: page.rel, text: blocks.join("\n---\n") }],
+      });
+      if (!parsed.ok) {
+        problems.push(`${page.rel}: does not parse`);
+        continue;
+      }
+      for (const { manifest } of parsed.value.entries) {
+        if (manifest.kind === "Procedure" && manifest.spec.handler.kind !== "builtin") {
+          problems.push(`${page.rel}: Procedure '${manifest.metadata.name}' uses handler.kind: ${manifest.spec.handler.kind}`);
+        }
+        if (manifest.kind === "View" && manifest.spec.sql !== undefined) {
+          problems.push(`${page.rel}: View '${manifest.metadata.name}' uses sql`);
+        }
       }
     }
-    expect(offenders).toEqual([]);
+    expect(problems).toEqual([]);
   });
 });
