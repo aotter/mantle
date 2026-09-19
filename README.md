@@ -53,25 +53,26 @@ lifecycle.
 
 ## Author your application
 
-The first mile is local Admin. An agent interviews the human for a bootstrap
-owner email, then this loop opens the Dev UI:
+Mantle scales. Take only the surfaces you need — Admin is opt-in.
 
-```sh
-pnpm install && pnpm generate && pnpm dev
-```
+1. **Minimal — Spec + generate.** Write manifests, then `mantle generate` /
+   `validate`. Embed the typed binding in an existing host. No Admin, no
+   visitor UI.
+2. **Runtime / adapter.** Bind Runtime through a Worker or another adapter.
+   HTTP Views, MCP, and Auth run without a Dev UI. The
+   [minimal Worker reference](docs/examples/minimal-worker/README.md) is
+   this path.
+3. **Opt-in — Admin / Dev UI.** When humans need a console, add
+   `@aotter/mantle-admin` + `@aotter/mantle-admin-ui`, bind wrangler `ASSETS`,
+   and sign in at `/admin/sign-in` with email OTP from wrangler logs. The
+   [local Admin OTP reference](docs/examples/local-admin-otp/README.md) is
+   that optional full path.
 
-Open `/admin/sign-in`, submit that email, and read the one-time code from the
-wrangler log (`ConsoleEmailSender`). The [local Admin OTP reference](docs/examples/local-admin-otp/README.md)
-is the executable path; follow [the walkthrough](docs/handbook/start/quickstart-admin.md)
-or give its version-matched install skill to your coding agent.
+`pnpm exec mantle --help` is the layered overview. Give the version-matched
+install skill to a coding agent; it must interview for required surfaces
+and not assume Admin.
 
-`mantle generate` compiles the manifests and syncs the **prebuilt** Admin SPA.
-There is no separate frontend build. Admin also needs a wrangler `ASSETS`
-binding on `./public`; a missing binding is the white-screen class of bug
-(`/admin` HTML 200, `/_mantle/admin/assets/*` 404).
-
-API-only embedding without Admin remains a [secondary Worker reference](docs/examples/minimal-worker/README.md).
-Other hosts can embed the same [manifest contract](#one-manifest-one-contract).
+Other hosts embed the same [manifest contract](#one-manifest-one-contract).
 
 ## A custom MCP server, without building the server
 
@@ -290,7 +291,7 @@ is cloned or opened. See [`skills/README.md`](skills/README.md) for host details
 ## CLI reference
 
 The umbrella provides one `mantle` command set. Top-level `mantle --help`
-is a layered overview (Minimal compile, then Admin / Dev UI); subcommand
+is a layered overview of optional surfaces (Admin is opt-in); subcommand
 help stays on that layer. There is no `create` / `update` happy path.
 
 | Command | Purpose |

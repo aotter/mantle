@@ -3,7 +3,7 @@ description: The files you own in a Mantle project, every mantle and mantle-harn
 ---
 # Project layout and the CLI loop
 
-This page describes a directly authored Mantle project: which files are yours, what the installed CLI does to them, and the loop you run before every commit. It is for engineers and coding agents working in an existing project. The human first mile is [local Admin](./quickstart-admin.md); the API-only embed is [the minimal Worker](./quickstart-worker.md).
+This page describes a directly authored Mantle project: which files are yours, what the installed CLI does to them, and the loop you run before every commit. Surfaces are optional — take only what you need. [The minimal Worker](./quickstart-worker.md) is Spec + adapter without Admin. [Local Admin](./quickstart-admin.md) is the opt-in Dev UI path when humans need a console.
 
 ## You own the project
 
@@ -33,7 +33,7 @@ The minimal Worker reference keeps `.mantle/`, `.agents/`, `.claude/`, `.wrangle
 
 ## The CLI
 
-The umbrella package installs two binaries, `mantle` and `mantle-harness`. Run them through the package manager, for example `pnpm exec mantle generate`. Defaults shown are the pinned ones. Bare `mantle` / `mantle --help` prints a layered overview (Minimal compile, then Admin / Dev UI); `generate --help` and `validate --help` stay on the compile path. After a successful `generate`, the CLI prints the next layer: Admin steps when `@aotter/mantle-admin-ui` is installed, or an API-only tip that points at `docs/examples/local-admin-otp` when it is not.
+The umbrella package installs two binaries, `mantle` and `mantle-harness`. Run them through the package manager, for example `pnpm exec mantle generate`. Defaults shown are the pinned ones. Bare `mantle` / `mantle --help` prints a layered overview of optional surfaces (Minimal Spec + generate, Runtime / adapter, opt-in Admin). `generate --help` and `validate --help` stay on the compile path. After a successful `generate`, the CLI says Admin is opt-in: next steps when `@aotter/mantle-admin-ui` is installed, otherwise an API-only tip.
 
 | Command | Flags | Does |
 |---|---|---|

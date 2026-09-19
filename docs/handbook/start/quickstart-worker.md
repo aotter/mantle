@@ -3,7 +3,7 @@ description: "Author a minimal Cloudflare Worker from scratch: one Schema, one p
 ---
 # Quickstart: a minimal Worker
 
-This page reproduces Core's API-only Worker reference as a from-scratch walkthrough. It is the embed path: View REST without Admin, Auth or a visitor frontend. The human and agent first mile is [Quickstart: local Admin](./quickstart-admin.md). Pin every `@aotter/mantle*` package to the exact version in this snapshot (`packages/mantle/package.json`); see [Versions](../reference/surface.md#versions).
+This page reproduces Core's API-only Worker reference as a from-scratch walkthrough. It is the embed / adapter path: View REST without Admin, Auth or a visitor frontend. Admin is opt-in when humans need a console — [Quickstart: local Admin](./quickstart-admin.md). Pin every `@aotter/mantle*` package to the exact version in this snapshot (`packages/mantle/package.json`); see [Versions](../reference/surface.md#versions).
 
 ## Prerequisites
 
@@ -174,7 +174,7 @@ curl -i http://localhost:8787/mcp/staff
 
 ## Next steps
 
-- [Quickstart: local Admin](./quickstart-admin.md) — the human first mile: ASSETS, prebuilt Admin, email OTP.
+- [Quickstart: local Admin](./quickstart-admin.md) — opt-in Dev UI: ASSETS, prebuilt Admin, email OTP.
 - [Project layout and the CLI loop](./project-and-cli.md) — the files you own, every CLI flag, the daily check loop.
 - [The four atoms](../concepts/four-atoms.md) — add a Procedure and a Trigger to accept writes.
 - [Authentication](../cloudflare/authentication.md) — complete Auth so Admin and `/mcp/staff` open.

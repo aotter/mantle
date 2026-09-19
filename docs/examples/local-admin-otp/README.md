@@ -1,11 +1,11 @@
 # Local Admin OTP
 
-This is the human and agent first mile: a directly authored Cloudflare
-application that opens Mantle Admin locally with email OTP. It is not a
-Starter or CLI generator. The notes Schema is example business data;
-`mantle generate` never invents it.
+This is the opt-in Dev UI path: a directly authored Cloudflare application
+that opens Mantle Admin locally with email OTP. Admin is not required to
+ship a complete service. It is not a Starter or CLI generator. The notes
+Schema is example business data; `mantle generate` never invents it.
 
-API-only embedding without Admin is a separate reference:
+Spec + adapter without Admin:
 [`docs/examples/minimal-worker`](../minimal-worker/README.md).
 
 Pin every `@aotter/mantle*` package to the exact version in this snapshot

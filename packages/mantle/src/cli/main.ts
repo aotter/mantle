@@ -33,17 +33,23 @@ async function main(): Promise<number> {
 export const MANTLE_OVERVIEW = `mantle — compile manifests into a RuntimePlan and typed binding
 
 Overview
-  Layered authoring. Start at Minimal; open the next surface only when needed.
+  Optional surfaces — take only what you need. Admin is opt-in. You can ship a
+  complete service with no Dev UI, no visitor frontend, and no extra packages.
 
-  Minimal
-    generate + validate compile manifests into a sealed plan and typed binding.
-    API-only. No Admin, no visitor UI.
+  Minimal — Spec + generate
+    validate + generate compile manifests into a sealed plan and typed binding.
+    Embed that binding in an existing host. No Admin, no visitor UI.
 
-  Next — Admin / Dev UI
-    Install @aotter/mantle-admin and @aotter/mantle-admin-ui, re-run generate,
-    bind wrangler ASSETS to ./public, then pnpm dev and open /admin/sign-in.
-    Local email OTP is printed by ConsoleEmailSender. See
-    docs/examples/local-admin-otp and docs/handbook/start/quickstart-admin.md.
+  Runtime / adapter
+    Bind Runtime through an adapter (Cloudflare Worker, Bun, Vercel, or yours).
+    HTTP Views, MCP, and Auth work without Admin.
+    See docs/examples/minimal-worker.
+
+  Opt-in — Admin / Dev UI
+    Add @aotter/mantle-admin and @aotter/mantle-admin-ui only when humans need
+    a console. Then re-run generate, bind wrangler ASSETS, and open
+    /admin/sign-in (local email OTP via ConsoleEmailSender).
+    See docs/examples/local-admin-otp.
 
   Further (ask the subcommand for details)
     skills          project version-matched agent instructions

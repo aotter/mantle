@@ -3,9 +3,9 @@ description: "Open local Admin in one shot: generate the prebuilt SPA, bind ASSE
 ---
 # Quickstart: local Admin
 
-This page reproduces Core's local Admin OTP reference as a from-scratch walkthrough. It is the human and agent first mile: a running Admin / Dev UI on your machine, with no visitor frontend, no GitHub OAuth app, and no Cloudflare account. Pin every `@aotter/mantle*` package to the exact version in this snapshot (`packages/mantle/package.json`); see [Versions](../reference/surface.md#versions).
+This page reproduces Core's local Admin OTP reference as a from-scratch walkthrough. Admin is **opt-in**: use it when humans need a Dev UI. A complete Mantle service does not require this surface. Pin every `@aotter/mantle*` package to the exact version in this snapshot (`packages/mantle/package.json`); see [Versions](../reference/surface.md#versions).
 
-The API-only embed path is [Quickstart: a minimal Worker](./quickstart-worker.md). Use that when you want View REST without Admin.
+The default embed path — Spec + Worker without Admin — is [Quickstart: a minimal Worker](./quickstart-worker.md).
 
 ## Prerequisites
 

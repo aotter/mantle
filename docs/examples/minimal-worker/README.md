@@ -1,8 +1,8 @@
 # Minimal Worker reference
 
 This is a directly authored, API-only application and executable consumer test.
-It is not a Starter, template catalog or CLI generator, and it is not a path
-into Admin / Dev UI. The human first mile is
+It is not a Starter, template catalog or CLI generator. Admin is opt-in; this
+reference has none. When humans need a console, see
 [`docs/examples/local-admin-otp`](../local-admin-otp/README.md). The notes
 Schema/View is example business data; `mantle generate` never invents it.
 

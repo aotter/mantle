@@ -29,10 +29,10 @@ version; never use `develop` branch docs for a versioned consumer project.
 
 ## Existing Examples
 
-Read installed `docs/handbook/start/quickstart-admin.md` and
-`docs/examples/local-admin-otp/` first: that is the human + Admin path.
-`docs/examples/minimal-worker/` is the API-only embed reference. Then
-`docs/handbook/start/project-and-cli.md` and
+Read installed `docs/handbook/start/project-and-cli.md` and
+`docs/examples/minimal-worker/` for Spec + adapter without Admin. Read
+`docs/examples/local-admin-otp/` only when the project already has Admin
+or the human asked for Dev UI — that path is opt-in. Then
 `docs/handbook/examples/commerce-transaction.md` before inventing a pattern.
 References are test/documentation, not a Starter or a fixed application shape.
 
@@ -136,12 +136,14 @@ teaching the project Mantle internals.
 
 ## Auth Composition
 
-The local Admin first mile uses `createMantleWorker({ auth })` with
-`email-otp` and `ConsoleEmailSender`; the OTP is in wrangler logs. That
-override owns Auth construction; Core still owns `/admin` and `/api/auth/*`.
-Admin also requires wrangler `assets.directory=./public` and an `ASSETS`
-binding. A white screen at `/admin` with HTML 200 and `/_mantle/admin/assets/*`
-404 is a missing assets binding, not a missing frontend build.
+Admin is opt-in. A project without `@aotter/mantle-admin-ui` is complete.
+When Admin is installed, `createMantleWorker({ auth })` with `email-otp`
+and `ConsoleEmailSender` is the local human path (OTP in wrangler logs).
+That override owns Auth construction; Core still owns `/admin` and
+`/api/auth/*`. Admin also requires wrangler `assets.directory=./public`
+and an `ASSETS` binding. A white screen at `/admin` with HTML 200 and
+`/_mantle/admin/assets/*` 404 is a missing assets binding, not a missing
+frontend build.
 
 Conventional Cloudflare projects that do not replace Auth declare
 `MANTLE_AUTH_MODE=hosted` or `self-managed`; Core owns that standard

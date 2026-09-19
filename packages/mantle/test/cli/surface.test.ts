@@ -11,7 +11,9 @@ it("ships the authoring CLI without scaffold or bundle-update side effects", () 
   try {
     const help = execFileSync(process.execPath, [cli, "--help"], { cwd: root, encoding: "utf8" });
     expect(help).toContain("Overview");
+    expect(help).toContain("opt-in");
     expect(help).toContain("Minimal");
+    expect(help).toContain("Runtime / adapter");
     expect(help).toContain("Admin / Dev UI");
     expect(help).toContain("generate");
     expect(help).toContain("validate");

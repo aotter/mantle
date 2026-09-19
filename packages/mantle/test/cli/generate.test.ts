@@ -311,7 +311,7 @@ spec: {}
       process.chdir(root);
       const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
       expect(await runGenerate([], coreOnly)).toBe(0);
-      expect(stdout.mock.calls.flat().join("")).toMatch(/API-only/);
+      expect(stdout.mock.calls.flat().join("")).toMatch(/API-only \(Admin is opt-in\)/);
       expect(stdout.mock.calls.flat().join("")).toMatch(/local-admin-otp/);
       stdout.mockClear();
       expect(await runGenerate(["--check"], coreOnly)).toBe(0);
@@ -327,6 +327,7 @@ spec: {}
       notes.push(String(chunk));
       return true;
     });
+    expect(notes.join("")).toMatch(/opt-in/);
     expect(notes.join("")).toMatch(/\/admin\/sign-in/);
     expect(notes.join("")).toMatch(/ConsoleEmailSender/);
     expect(notes.join("")).toMatch(/ASSETS/);

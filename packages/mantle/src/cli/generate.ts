@@ -114,9 +114,9 @@ function printHelp(): void {
 
 Usage: mantle generate [options]
 
-This is the Minimal (API-only) compile path. It writes .mantle/generated/mantle.ts.
-When @aotter/mantle-admin-ui is installed it also syncs the prebuilt Admin SPA.
-See \`mantle --help\` for the Admin / Dev UI layer.
+This is the Minimal compile path (Spec + generate). It writes .mantle/generated/mantle.ts.
+Admin is opt-in: when @aotter/mantle-admin-ui is installed, generate also syncs
+the prebuilt Admin SPA. See \`mantle --help\` for optional surfaces.
 
 Options:
   --manifests <dir>   Manifest directory (default: ./manifests)
@@ -130,8 +130,8 @@ Options:
 export function printGenerateNextSteps(adminUiInstalled: boolean, write = stdout.write.bind(stdout)): void {
   if (adminUiInstalled) {
     write(
-      "Synced public/_mantle/admin/ from @aotter/mantle-admin-ui (prebuilt; do not vite-build).\n" +
-        "Next — local Admin / Dev UI:\n" +
+      "Synced public/_mantle/admin/ from @aotter/mantle-admin-ui (opt-in, prebuilt; do not vite-build).\n" +
+        "Admin / Dev UI next steps:\n" +
         "  1. wrangler assets.directory=./public and binding=ASSETS\n" +
         "  2. pnpm dev  →  open /admin/sign-in\n" +
         "  3. email OTP via ConsoleEmailSender (code in wrangler logs)\n" +
@@ -140,7 +140,8 @@ export function printGenerateNextSteps(adminUiInstalled: boolean, write = stdout
     return;
   }
   write(
-    "API-only. To add Admin / Dev UI: install @aotter/mantle-admin and @aotter/mantle-admin-ui, " +
+    "API-only (Admin is opt-in). A complete service does not require a Dev UI. " +
+      "To add Admin later: install @aotter/mantle-admin and @aotter/mantle-admin-ui, " +
       "re-run generate, configure wrangler ASSETS, and wire local email-otp " +
       "(docs/examples/local-admin-otp).\n",
   );
