@@ -23,17 +23,17 @@
 </p>
 
 <p align="center">
-  <a href="#make-a-world-from-four-atoms">Quick start</a>
+  <a href="#start-with-a-manifest">Quick start</a>
   &middot;
-  <a href="#paste-ready-agent-prompts">Agent prompts</a>
+  <a href="#for-engineers-and-agents">Agent prompts</a>
   &middot;
-  <a href="#a-custom-mcp-server-without-building-the-server">Features</a>
+  <a href="#what-you-can-build">Features</a>
   &middot;
-  <a href="#one-manifest-one-contract">Manifest</a>
+  <a href="docs/examples/README.md">Examples</a>
   &middot;
   <a href="#packages">Packages</a>
   &middot;
-  <a href="#develop-with-mantle">Develop</a>
+  <a href="#choose-how-much-to-use">Adoption</a>
   &middot;
   <a href="#cli-reference">CLI</a>
 </p>
@@ -42,319 +42,102 @@
   <sub><strong>Prerelease:</strong> APIs and manifests may change between alpha releases. Treat the installed package's version-matched docs as the contract and review generated code before production use.</sub>
 </p>
 
-## Make a world from four atoms
+Mantle is an embeddable manifest engine: describe data, queries, actions, and
+triggers in YAML, then use the same contract in your application, APIs, and
+tools for humans and agents.
 
-Paste this into a terminal. It writes one complete Manifest, validates it, and
-generates the typed runtime binding—no repository clone or global install.
+## Start with a Manifest
 
-```sh
-mkdir -p mantle-hello/manifests && cd mantle-hello
-cat > manifests/requests.yaml <<'YAML'
-apiVersion: cms.mantle.aotter.net/v1
-kind: Schema
-metadata: { name: requests }
-spec:
-  title: Requests
-  lifecycle: operational
-  schema:
-    type: object
-    additionalProperties: false
-    required: [name, message]
-    properties:
-      name: { type: string, minLength: 1 }
-      message: { type: string, minLength: 1 }
-      createdAt: { type: number, x-mantle-bind: now }
----
-apiVersion: cms.mantle.aotter.net/v1
-kind: View
-metadata: { name: recent-requests }
-spec:
-  surface: staff
-  from: requests
-  fields: [id, name, message, createdAt]
-  orderBy: [{ field: createdAt, direction: desc }]
-  limit: 50
----
-apiVersion: cms.mantle.aotter.net/v1
-kind: Procedure
-metadata: { name: submit-request }
-spec:
-  input:
-    type: object
-    additionalProperties: false
-    required: [name, message]
-    properties:
-      name: { type: string, minLength: 1 }
-      message: { type: string, minLength: 1 }
-  output: { type: object }
-  handler: { kind: builtin, op: create, schema: requests }
----
-apiVersion: cms.mantle.aotter.net/v1
-kind: Trigger
-metadata: { name: submit-request-http }
-spec:
-  source: { kind: http, method: POST, path: /api/requests }
-  target: { procedure: submit-request }
-YAML
-
-bunx --package @aotter/mantle@alpha mantle validate --no-source --format text
-bunx --package @aotter/mantle@alpha mantle generate
-```
-
-Using npm? The runner is the only difference:
+Put your Manifest ([example](docs/examples/builtin-intake.md#manifest)) in
+`manifests/`, then run from your project root:
 
 ```sh
-npx --yes --package=@aotter/mantle@alpha mantle validate --no-source --format text
+bunx @aotter/mantle@alpha generate
+# or
+npx @aotter/mantle@alpha generate
 ```
 
-# Agent-built. Agent-operated.
+Mantle validates your Manifest and generates `.mantle/generated/mantle.ts`:
+a compiled execution plan, TypeScript types, and typed APIs. Use them to query
+data and run actions inside your application, expose HTTP endpoints and MCP
+tools through supported adapters, or power a publishing site and staff console
+with optional Web and Admin packages. Start with what you need; each surface
+uses the same contract.
 
-AI can build a convincing interface. The harder problem is the contract under
-it—and the operating surface left after launch.
+The [intake example](docs/examples/builtin-intake.md) defines request records,
+a submission action, and a staff inbox—then exposes submission through HTTP
+and MCP when connected to a supporting host. See the
+[minimal Worker](docs/examples/host-minimal-worker/README.md) for a runnable host.
 
-Describe Schema, View, Procedure, and Trigger once. Mantle links and validates
-them into one RuntimePlan for typed TypeScript, REST, OpenAPI, MCP, Web, and
-Admin. Coding agents build with it; operation agents run it through governed
-tools. It stays inside your application, with your storage, auth, queues, and
-lifecycle.
+Generation produces code, not a running service. To use the generated module,
+install `@aotter/mantle` in your application and connect storage and any custom
+handlers. Use an official storage adapter or implement the
+[storage ports](docs/adapter-guide.md). For an ongoing project, pin Mantle
+packages to the same exact version and use their installed documentation.
 
-## Author your application
+## Choose how much to use
 
-Mantle scales. Take only the surfaces you need — Admin is opt-in.
+These are independent adoption choices, not mandatory stages.
 
-1. **Minimal — Spec + generate.** Write manifests, then `mantle generate` /
-   `validate`. Embed the typed binding in an existing host. No Admin, no
-   visitor UI.
-2. **Runtime / adapter.** Bind Runtime through a Worker or another adapter.
-   HTTP Views, MCP, and Auth run without a Dev UI. The
-   [minimal Worker reference](docs/examples/host-minimal-worker/README.md) is
-   this path.
-3. **Opt-in — Admin / Dev UI.** When humans need a console, add
-   `@aotter/mantle-admin` + `@aotter/mantle-admin-ui`, bind wrangler `ASSETS`,
-   and sign in at `/admin/sign-in` with email OTP from wrangler logs. The
-   [local Admin OTP reference](docs/examples/host-local-admin-otp/README.md) is
-   that optional full path.
+| Use what you need | What it gives you |
+|---|---|
+| **Spec only** | Parse, validate, and link definitions inside an existing system. No Runtime or code generation required. [Example](docs/spec-only-host-adoption.md). |
+| **Runtime + typed APIs** | Execute queries and actions with your storage adapter and handlers. Generated `createMantle` and `bindMantle` expose typed entry, View, and Procedure calls. [API guide](packages/mantle/README.md). |
+| **A host adapter** | Run on Bun, Vercel, or Cloudflare and expose the adapter's supported transports. Choose an adapter for the HTTP, MCP, and auth capabilities you need. [Adapter guide](docs/adapter-guide.md). |
+| **Web** | Render public content as HTML and Markdown, with localization and discovery metadata. [Web](packages/mantle-web/README.md). |
+| **Admin** | Give staff a console for content and operational records. Admin API and the prebuilt UI are optional. [Local example](docs/examples/host-local-admin-otp/README.md). |
 
-`bunx --package @aotter/mantle@alpha mantle --help` is the layered overview. Give the version-matched
-install skill to a coding agent; it must interview for required surfaces
-and not assume Admin.
+The plan carries the compiled Schema, View, Procedure, and Trigger definitions.
+Runtime executes them; adapters and optional packages connect them to the
+surfaces you choose. Your application owns its host, storage, and deployment.
 
-Other hosts embed the same [manifest contract](#one-manifest-one-contract).
+## What you can build
 
-## Paste-ready agent prompts
-
-Copy one block into a coding agent. Resolve handbook pages and official
-examples from `docs/` in this checkout, or from
-`node_modules/@aotter/mantle/docs/` after install. If neither tree exists,
-pin `@aotter/mantle` first. `bunx mantle --help` is the layered
-overview. There is no `mantle create`. Admin is opt-in.
-
-### Spec / embed only
-
-```text
-Read handbook/start/project-and-cli.md and bunx mantle --help.
-Pin @aotter/mantle at the exact version we agree, author manifests for
-this existing host, then run mantle generate and mantle validate. Embed
-the typed binding from .mantle/generated/mantle.ts into the current
-system. Do not add Admin, mantle-admin-ui, a visitor frontend, or a
-Cloudflare adapter unless I ask. Do not invent a default Schema.
-```
-
-### Minimal API service locally
-
-```text
-Read handbook/start/quickstart-worker.md and examples/host-minimal-worker/.
-Author a Cloudflare Worker from that official example or from scratch:
-one Schema, one public View (copy the contract, not the tree wholesale).
-Pin every @aotter/mantle* package to the same exact version. Run
-pnpm install && pnpm generate && pnpm dev (or wrangler dev --local).
-Probe GET /api/views/<name> with curl. GET / may 404. Do not install
-Admin or wrangler ASSETS unless I ask.
-```
-
-### Full local Dev UI (opt-in)
-
-```text
-I want the optional Admin / Dev UI. Read handbook/start/quickstart-admin.md
-and examples/host-local-admin-otp/. Interview me for a bootstrap owner email.
-Install @aotter/mantle-admin and @aotter/mantle-admin-ui, run
-mantle generate (it syncs the prebuilt SPA — do not vite-build), and set
-wrangler assets.directory=./public with binding ASSETS (required when
-Admin is installed). Wire createAuth email-otp + ConsoleEmailSender.
-Then pnpm install && pnpm generate && pnpm dev, open /admin/sign-in, and
-read the OTP from wrangler logs. If /admin is a white screen, fetch
-/_mantle/admin/assets/* — 404 means ASSETS is missing, not a missing
-frontend build.
-```
-
-### Interview then build
-
-```text
-Interview me about the service: host, who uses it, whether humans need a
-Dev UI, and whether we only embed Spec/Runtime. Read mantle --help, then
-handbook/start/project-and-cli.md. Use docs/examples/README.md as the
-examples index; copy builtin-* Manifests only (not cf-primitives-*).
-Implement locally first. Take only the surfaces we chose.
-If we skip Admin, follow examples/host-minimal-worker/. If we want Dev UI,
-follow examples/host-local-admin-otp/. No mantle create. Pin all
-@aotter/mantle* packages to one exact version.
-```
-
-### Later layer: MCP or public web (opt-in)
-
-```text
-Do not add Admin unless it is already in this project. Read
-handbook/concepts/mcp-and-agents.md and/or
-handbook/cloudflare/public-web.md. Add only the surface I name: MCP
-Triggers at /mcp or /mcp/staff, or optional @aotter/mantle-web
-composition. Keep Core adapter-neutral. Probe the new route; do not
-claim Auth or Admin works from a public 200.
-```
-
-## A custom MCP server, without building the server
-
-Views become read tools. Procedures backed by your own handlers become typed
-action tools when exposed by MCP Triggers. At `/mcp/staff`, authorized teammates
-can operate queues, Slack, email, ERP, CRM, or anything else your handler can
-reach—without maintaining a second MCP server or schema.
-
-## Agent-discoverable and i18n-ready, built in
-
-Enable the optional Web surface and every public page gets a predictable path
-and Markdown mirror in every locale:
-
-```text
-/en/posts/hello
-/en/posts/hello.md
-/zh-tw/posts/hello
-```
-
-Mantle also emits `llms.txt`, sitemap, canonical links, hreflang, JSON-LD, and
-social metadata from the same published state.
-
-## Application patterns
-
-Compose the four atoms for your actual business flow. Start at the
-[Examples hub](docs/examples/README.md). Durable Object, Queue and payment
-coordination notes live in
-[Commerce inventory](docs/examples/cf-primitives-commerce-inventory.md), without a second
-launch product or a preset catalog.
-
-## Publishing and operations in one Admin
-
-Publishing content gets draft, publish, unpublish, and archive. Operational
-records such as orders, inventory, and reservations stay live without a fake
-publishing state machine. Add the optional Admin API and React SPA when humans
-need the same controls; editorial review and approval are coming soon.
+- **APIs and agent tools.** Views provide reads; Procedures provide actions,
+  using builtin mutations or your own handlers. MCP-capable hosts expose
+  Views and MCP Triggers as tools, with authorization for staff operations.
+  [MCP and agents](docs/handbook/concepts/mcp-and-agents.md).
+- **Publishing and public sites.** Draft, publish, unpublish, and archive
+  content. Add Web for localized HTML and Markdown, `llms.txt`, sitemap,
+  canonical links, hreflang, JSON-LD, and social metadata.
+  [Publication example](docs/examples/builtin-publication.md).
+- **Operational applications.** Keep orders, reservations, and requests live
+  without a publishing workflow. Add Admin when staff need a console.
+  [Commerce](docs/examples/builtin-commerce.md),
+  [reservations](docs/examples/builtin-reservation.md), and
+  [procurement](docs/examples/builtin-procurement.md).
+- **Custom business workflows.** Connect handlers to queues, email, payments,
+  or existing services; use guards and lifecycle hooks where the operation
+  requires them. [Intake hooks](docs/examples/cf-primitives-intake-hooks.md)
+  and [inventory coordination](docs/examples/cf-primitives-commerce-inventory.md).
 
 ![Mantle Admin connects staff agents through MCP while keeping publishing content, live records, reports, and human operators in one console.](docs/assets/mantle-admin-operations.png)
 
-## Open source, host-owned, ready to ship
+The [Examples hub](docs/examples/README.md) contains complete Manifests and
+host references. The [Manifest reference](docs/handbook/reference/manifest.md)
+defines the four atoms and their fields.
 
-Apache-2.0 Core runs inside your process, with the raw Runtime and handler
-context available for transactions, queues, media, and platform capabilities.
-Use Bun, Vercel, Cloudflare, or your own adapter. Small Cloudflare sites can fit
-within its [Workers](https://developers.cloudflare.com/workers/platform/pricing/)
-and [D1](https://developers.cloudflare.com/d1/platform/pricing/) free limits.
+## For engineers and agents
 
-## One manifest, one contract
+Engineers can start with the [installed API guide](packages/mantle/README.md),
+[adapter guide](docs/adapter-guide.md), or
+[direct authoring guide](docs/handbook/start/project-and-cli.md).
 
-1. Describe your project in `manifests/reservations.yml`:
+Coding agents use the same APIs and version-matched
+[skills](skills/README.md). A short starting prompt:
 
-   ```yaml
-   # excerpt — see the complete manifest reference below
-   apiVersion: cms.mantle.aotter.net/v1
-   kind: Schema
-   metadata:
-     name: slots
-   spec:
-     title: Slots
-     lifecycle: operational
-     schema:
-       type: object
-       properties:
-         state: { type: string, enum: [available, reserved] }
-         # ...
-   ---
-   apiVersion: cms.mantle.aotter.net/v1
-   kind: View
-   metadata:
-     name: available-slots
-   spec:
-     surface: public
-     from: slots
-     filter:
-       eq: { field: state, value: available }
-     # ...
-   ---
-   apiVersion: cms.mantle.aotter.net/v1
-   kind: Procedure
-   metadata:
-     name: request-reservation
-   spec:
-     input:
-       type: object
-       required: [slotId, email]
-       properties:
-         slotId: { type: string }
-         email: { type: string, format: email }
-       # ...
-     output:
-       type: object
-       properties:
-         queued: { type: boolean }
-     handler: { kind: ref, ref: queue-reservation-request }
-   ---
-   apiVersion: cms.mantle.aotter.net/v1
-   kind: Trigger
-   metadata:
-     name: request-reservation-mcp
-   spec:
-     source: { kind: mcp, surface: public }
-     target: { procedure: request-reservation }
-   ```
+```text
+Read the installed @aotter/mantle docs and install skill. Ask which host,
+storage, and surfaces this application needs. Preserve the existing
+application, choose an official example, and implement locally.
+Pin all Mantle packages to the same exact version. Verify the selected
+surfaces; add Web, Admin, or MCP only when needed.
+```
 
-   See the [complete manifest reference](docs/handbook/reference/manifest.md) for the full syntax.
-
-2. Install Mantle and generate the typed runtime binding:
-
-   ```bash
-   bun add @aotter/mantle@alpha
-   bunx mantle generate
-   ```
-
-3. Give the generated binding your
-   [storage adapter](docs/adapter-guide.md):
-
-   ```ts
-   import {
-     createMantle,
-     type MantleHandlers,
-   } from "./.mantle/generated/mantle.js";
-
-   interface Env {
-     RESERVATION_QUEUE: {
-       send(message: { slotId: string; email: string }): Promise<void>;
-     };
-   }
-
-   const handlers = {
-     "queue-reservation-request": async ({ slotId, email }, ctx) => {
-       await ctx.env.RESERVATION_QUEUE.send({ slotId, email });
-       return { queued: true };
-     },
-   } satisfies MantleHandlers<Env>;
-
-   const mantle = await createMantle({ storage, handlers });
-
-   // The `available-slots` View becomes a typed lower-camel property.
-   const slots = await mantle.views.availableSlots();
-   ```
-
-4. That's it: the View is a typed query and the Procedure is your typed
-   handler. The Trigger becomes an MCP tool when mounted by an MCP-capable
-   adapter. Platform adapters own lifecycle policy, while `mantle.runtime`
-   keeps lower-level capabilities within reach.
+See [task-specific agent prompts](docs/agent-prompts.md) for embedding,
+Worker, Admin, and later surface additions. The
+[plugin and skills guide](skills/README.md) covers agent integration;
+`mantle skills` projects version-matched application skills after installation.
 
 ## Packages
 
@@ -377,55 +160,6 @@ everything else is opt-in.
 Mantle is named for the living tissue that grows a mollusk's shell: it adds
 structure around the application you already own.
 
-## Develop with Mantle
-
-### Human engineers
-
-Human engineers get the same direct path: ordinary YAML in, ordinary
-TypeScript APIs out.
-
-```bash
-bun add @aotter/mantle@alpha
-```
-
-Author and review manifests directly, use Spec without Runtime, implement
-semantic ports over existing storage, or compose generated bindings and
-optional packages. The [umbrella package README](packages/mantle/README.md) is
-the installed API guide; adapter authors start with the
-[adapter guide](docs/adapter-guide.md).
-
-Keeping an existing framework and CMS? Start with the
-[Spec-only host adoption example](docs/spec-only-host-adoption.md): reuse
-schemas and validation without installing Runtime or replacing your admin UI.
-
-### Coding agents
-
-This repository has a second entrance: it is an installable agent plugin bundle
-for Claude Code, Codex, Cursor, and GitHub Copilot. The plugin carries
-version-matched Mantle workflows; it is an authoring aid, not a Runtime
-dependency.
-
-Use an immutable tag matching the installed package version:
-
-```bash
-# Claude Code — run as two separate prompts
-/plugin marketplace add aotter/mantle@v<installed-version>
-/plugin install mantle@mantle
-
-# Codex
-codex plugin marketplace add aotter/mantle --ref v<installed-version>
-codex plugin add mantle@mantle
-```
-
-Cursor and GitHub Copilot discover their plugin manifests when this repository
-is cloned or opened. See [`skills/README.md`](skills/README.md) for host details.
-
-- **Repository plugin:** teaches an agent to create and maintain Mantle
-  projects.
-- **`mantle skills`:** projects the installed package's exact project-scoped
-  workflows into a consumer repository. Each skill declares its own scope, so
-  destructive and platform-specific ones stay opt-in.
-
 ## CLI reference
 
 The umbrella provides one `mantle` command set. Top-level `mantle --help`
@@ -440,8 +174,9 @@ help stays on that layer. There is no `create` / `update` happy path.
 | `mantle emit-openapi` | Emit OpenAPI 3.1 from HTTP Triggers and View routes. |
 | `mantle skills` | Project version-matched Core skills into the consumer repository. |
 
-Run commands through the project's package manager, for example
-`bunx mantle generate`.
+Run the installed CLI through your project's package manager, for example
+`npx --no-install mantle generate`. `validate` also scans `src/` for handler
+references; use `--no-source` when checking only the Manifest.
 
 Advanced manifest primitives remain in the direct `@aotter/mantle-spec`
 package: `mantle-spec introspect` and `mantle-spec emit-types`.
