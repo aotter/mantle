@@ -82,7 +82,7 @@ BETTER_AUTH_SECRET=local-admin-otp-dev-secret-do-not-use-in-prod
 ADMIN_EMAIL=owner@example.com
 ```
 
-Copy it to `.dev.vars` (the `predev` script does this). Never commit `.dev.vars`.
+Copy it to `.dev.vars` (the `predev` script does this). Never commit `.dev.vars`. `PUBLIC_ORIGIN` must match the origin wrangler prints; a mismatch makes Better Auth reject OTP with `INVALID_ORIGIN`.
 
 ## 3. `manifests/site.yaml`
 

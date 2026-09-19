@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 
 await import("./ensure-dev-vars.mjs");
 
 const ownerEmail = "owner@example.com";
 const port = 18787;
 const origin = `http://127.0.0.1:${port}`;
+writeFileSync(".dev.vars", [
+  `PUBLIC_ORIGIN=${origin}`,
+  "BETTER_AUTH_SECRET=local-admin-otp-dev-secret-do-not-use-in-prod",
+  `ADMIN_EMAIL=${ownerEmail}`,
+  "",
+].join("\n"));
 const logs = [];
 
 const wrangler = spawn("pnpm", [
