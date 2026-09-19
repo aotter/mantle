@@ -196,7 +196,7 @@ pnpm install && pnpm generate && pnpm dev
 
 `mantle generate` writes `.mantle/generated/mantle.ts` and syncs the **prebuilt** Admin SPA from `@aotter/mantle-admin-ui` into `public/_mantle/admin/`. Do not run Vite or otherwise build a frontend unless you are developing `admin-ui` itself.
 
-`pnpm dev` binds `127.0.0.1:8787`. Wrangler prints `Ready on http://127.0.0.1:8787`, the same origin as `PUBLIC_ORIGIN`.
+`pnpm dev` binds `127.0.0.1:8787`. Wrangler prints `Ready on http://127.0.0.1:8787`, the same origin as `PUBLIC_ORIGIN`. Open that Ready-on URL. Browsing `http://localhost:8787` still serves HTML, but the OTP Origin header mismatches `PUBLIC_ORIGIN` and Better Auth returns `INVALID_ORIGIN`.
 
 ## 7. Sign in
 

@@ -272,9 +272,7 @@ function installConsumer(name, dependencies, check, overrides = dependencies) {
         Object.entries(overrides).filter(([name]) => name.startsWith("@aotter/")),
       ),
       peerDependencyRules: {
-        allowedVersions: Object.fromEntries(
-          Object.keys(overrides).filter((name) => name.startsWith("@aotter/")).map((name) => [name, "*"]),
-        ),
+        allowAny: Object.keys(overrides).filter((name) => name.startsWith("@aotter/")),
       },
     },
   }, null, 2)}\n`);

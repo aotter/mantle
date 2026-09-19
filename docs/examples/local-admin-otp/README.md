@@ -23,8 +23,10 @@ pnpm install && pnpm generate && pnpm dev
 
 `predev` copies `.dev.vars.example` to `.dev.vars` when that file is
 missing. `pnpm dev` binds `127.0.0.1:8787` so wrangler's Ready-on origin
-matches `PUBLIC_ORIGIN` (`http://127.0.0.1:8787`). A mismatch makes
-Better Auth reject OTP with `INVALID_ORIGIN`. Then:
+matches `PUBLIC_ORIGIN` (`http://127.0.0.1:8787`). Open that Ready-on
+URL. Browsing `http://localhost:8787` still serves HTML, but the OTP
+Origin header mismatches `PUBLIC_ORIGIN` and Better Auth returns
+`INVALID_ORIGIN`. Then:
 
 1. Open `http://127.0.0.1:8787/admin/sign-in`.
 2. Sign in with the bootstrap owner email from `.dev.vars` (`owner@example.com`
