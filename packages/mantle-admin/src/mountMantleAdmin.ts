@@ -630,8 +630,6 @@ export function mountMantleAdmin<E extends Env>(
         brand: stringField(body.brand),
         title: stringField(body.title),
         description: stringField(body.description),
-        ga4MeasurementId: stringField(body.ga4MeasurementId),
-        facebookPixelId: stringField(body.facebookPixelId),
       });
       return adminSiteSettings(site);
     }),
@@ -1858,8 +1856,6 @@ function adminSiteSettings(site: SiteConfig) {
     brand: site.brand,
     title: site.title,
     description: site.description,
-    ga4MeasurementId: site.ga4MeasurementId ?? "",
-    facebookPixelId: site.facebookPixelId ?? "",
   };
 }
 

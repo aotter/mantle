@@ -10,6 +10,4 @@ export type WebSiteConfig = Pick<
   | "canonicalLocale"
   | "brand"
   | "icons"
-  | "ga4MeasurementId"
-  | "facebookPixelId"
 >;

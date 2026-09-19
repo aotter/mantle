@@ -1,11 +1,10 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Save, Settings2 } from "lucide-react";
+import { Save } from "lucide-react";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import { asRenderable } from "../../lib/errors";
-import { cn } from "../../lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,11 +15,7 @@ interface SiteSettings {
   brand: string;
   title: string;
   description: string;
-  ga4MeasurementId: string;
-  facebookPixelId: string;
 }
-
-type SettingsTab = "brand" | "tracking";
 
 export function SettingsView(): React.ReactElement {
   const { language } = usePreferences();
@@ -30,7 +25,6 @@ export function SettingsView(): React.ReactElement {
     queryFn: () => api.get<SiteSettings>("/site-settings"),
   });
   const [form, setForm] = React.useState<SiteSettings | null>(null);
-  const [activeTab, setActiveTab] = React.useState<SettingsTab>("brand");
   React.useEffect(() => {
     if (query.data) setForm(query.data);
   }, [query.data]);
@@ -62,53 +56,18 @@ export function SettingsView(): React.ReactElement {
       />
       {save.isError ? <OperationErrorBox error={asRenderable(save.error)} /> : null}
 
-      <div
-        role="tablist"
-        aria-label={t(language, "settings.tabsLabel")}
-        className="inline-flex gap-1 rounded-lg border bg-muted/40 p-1"
-      >
-        <TabButton
-          active={activeTab === "brand"}
-          icon={Settings2}
-          label={t(language, "settings.tab.brand")}
-          onClick={() => setActiveTab("brand")}
-        />
-        <TabButton
-          active={activeTab === "tracking"}
-          icon={BarChart3}
-          label={t(language, "settings.tab.tracking")}
-          onClick={() => setActiveTab("tracking")}
-        />
-      </div>
-
-      {activeTab === "brand" ? (
-        <SectionCard className="grid max-w-5xl gap-4">
-          <SectionIntro title={t(language, "settings.brandSection")} body={t(language, "settings.brandSectionBody")} />
-          <Field label={t(language, "settings.siteBrand")} description={t(language, "settings.siteBrandHelp")}>
-            <Input value={form.brand} onChange={(event) => change("brand", event.target.value)} />
-          </Field>
-          <Field label={t(language, "settings.siteTitle")} description={t(language, "settings.siteTitleHelp")}>
-            <Input value={form.title} onChange={(event) => change("title", event.target.value)} />
-          </Field>
-          <Field label={t(language, "settings.siteDescription")} description={t(language, "settings.siteDescriptionHelp")}>
-            <Textarea className="min-h-24" value={form.description} onChange={(event) => change("description", event.target.value)} />
-          </Field>
-        </SectionCard>
-      ) : null}
-
-      {activeTab === "tracking" ? (
-        <SectionCard className="grid max-w-5xl gap-4">
-          <SectionIntro title={t(language, "settings.trackingSection")} body={t(language, "settings.trackingSectionBody")} />
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label={t(language, "settings.ga4MeasurementId")} description={t(language, "settings.ga4MeasurementIdHelp")}>
-              <Input value={form.ga4MeasurementId} placeholder={t(language, "settings.notConfigured")} onChange={(event) => change("ga4MeasurementId", event.target.value)} />
-            </Field>
-            <Field label={t(language, "settings.facebookPixelId")} description={t(language, "settings.facebookPixelIdHelp")}>
-              <Input value={form.facebookPixelId} placeholder={t(language, "settings.notConfigured")} onChange={(event) => change("facebookPixelId", event.target.value)} />
-            </Field>
-          </div>
-        </SectionCard>
-      ) : null}
+      <SectionCard className="grid max-w-5xl gap-4">
+        <SectionIntro title={t(language, "settings.brandSection")} body={t(language, "settings.brandSectionBody")} />
+        <Field label={t(language, "settings.siteBrand")} description={t(language, "settings.siteBrandHelp")}>
+          <Input value={form.brand} onChange={(event) => change("brand", event.target.value)} />
+        </Field>
+        <Field label={t(language, "settings.siteTitle")} description={t(language, "settings.siteTitleHelp")}>
+          <Input value={form.title} onChange={(event) => change("title", event.target.value)} />
+        </Field>
+        <Field label={t(language, "settings.siteDescription")} description={t(language, "settings.siteDescriptionHelp")}>
+          <Textarea className="min-h-24" value={form.description} onChange={(event) => change("description", event.target.value)} />
+        </Field>
+      </SectionCard>
 
       <FormActionBar
         status={save.isPending
@@ -125,36 +84,6 @@ export function SettingsView(): React.ReactElement {
         </Button>
       </FormActionBar>
     </div>
-  );
-}
-
-function TabButton({
-  active,
-  icon: Icon,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
-  label: string;
-  onClick: () => void;
-}): React.ReactElement {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      className={cn(
-        "inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold transition",
-        active
-          ? "bg-primary text-primary-foreground shadow-sm"
-          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-      )}
-      onClick={onClick}
-    >
-      <Icon className="size-4" aria-hidden />
-      {label}
-    </button>
   );
 }
 

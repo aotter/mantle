@@ -305,20 +305,30 @@ describe("SQLite runtime composition", () => {
       brand: "New brand",
       title: "New title",
       description: "",
-      ga4MeasurementId: "G-TEST",
-      facebookPixelId: "PIXEL-TEST",
     });
 
     expect(db.batches).toBe(1);
     expect(db.siteConfig.get("brand")).toBe("New brand");
     expect(db.siteConfig.get("title")).toBe("New title");
     expect(db.siteConfig.get("description")).toBe("");
-    expect(db.siteConfig.get("ga4MeasurementId")).toBe("G-TEST");
-    expect(db.siteConfig.get("facebookPixelId")).toBe("PIXEL-TEST");
     expect(db.siteConfig.get("origin")).toBe("https://example.com");
 
     await repo.updateEditable({});
     expect(db.batches).toBe(1);
+  });
+
+  it("ignores leftover ga4MeasurementId and facebookPixelId rows on load", async () => {
+    const db = new InMemoryDatabase();
+    db.siteConfig.set("brand", "Mantle");
+    db.siteConfig.set("title", "Mantle site");
+    db.siteConfig.set("ga4MeasurementId", "G-LEFTOVER");
+    db.siteConfig.set("facebookPixelId", "1234567890");
+    const site = await new DatabaseSiteConfigRepository(db).load();
+
+    expect(site.brand).toBe("Mantle");
+    expect(site.title).toBe("Mantle site");
+    expect(site).not.toHaveProperty("ga4MeasurementId");
+    expect(site).not.toHaveProperty("facebookPixelId");
   });
 
   it("#441 re-boot syncs mediaPurposes from config even after first boot wrote a different value", async () => {

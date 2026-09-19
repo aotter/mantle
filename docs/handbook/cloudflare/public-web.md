@@ -75,7 +75,7 @@ export default createMantleWorker<Env>({
 });
 ```
 
-Templates return complete HTML strings; the renderer prepends the doctype. Escape every value you interpolate.
+Templates return complete HTML strings; the renderer prepends the doctype. Escape every value you interpolate. Analytics, pixels and verification tags are host chrome — add them in the template or on Cloudflare. See [Site chrome](./site-chrome.md).
 
 ## Template signatures
 

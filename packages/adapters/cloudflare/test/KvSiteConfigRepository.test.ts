@@ -33,7 +33,6 @@ describe("KvSiteConfigRepository", () => {
       brand: "Before",
       title: "Private operator title",
       locales: ["zh-TW", "en"],
-      ga4MeasurementId: "G-PRIVATE",
     }));
 
     expect(events).toEqual(["canonical:seed", "kv:put"]);

@@ -72,7 +72,7 @@ Sign in to Admin with a staff account. Publishing collections (`lifecycle: publi
 
 Operational collections (`lifecycle: operational`) have no publish step; records are edited in place and do not purge the public cache. The same operations are available to agents through Staff MCP; see [MCP and agents](../concepts/mcp-and-agents.md).
 
-Site settings split by owner. Brand, title and description seed once from `siteDefaults` and are then edited in Admin (`owner`); each edit purges the public cache. Origin, icons, locales and media purposes are code-owned and re-sync from `siteDefaults` on every boot, so change them in the Worker and redeploy. See [Site config](../reference/site-config.md).
+Site settings split by owner. Brand, title and description seed once from `siteDefaults` and are then edited in Admin (`owner`); each edit purges the public cache. Origin, icons, locales and media purposes are code-owned and re-sync from `siteDefaults` on every boot, so change them in the Worker and redeploy. Analytics, pixels and search-engine verification are host chrome, not Core settings; see [Site chrome](./site-chrome.md) and [Site config](../reference/site-config.md).
 
 ## Upgrading
 
