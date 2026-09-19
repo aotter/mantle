@@ -1,19 +1,17 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 
 await import("./ensure-dev-vars.mjs");
 
-const require = createRequire(import.meta.url);
-const wranglerBin = require.resolve("wrangler/bin/wrangler.js");
 const ownerEmail = "owner@example.com";
 const port = 18787;
 const origin = `http://127.0.0.1:${port}`;
 const logs = [];
 
-const wrangler = spawn(process.execPath, [
-  wranglerBin,
+const wrangler = spawn("pnpm", [
+  "exec",
+  "wrangler",
   "dev",
   "--local",
   "--ip",
