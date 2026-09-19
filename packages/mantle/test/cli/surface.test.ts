@@ -10,7 +10,13 @@ it("ships the authoring CLI without scaffold or bundle-update side effects", () 
   const root = mkdtempSync(join(tmpdir(), "mantle-cli-surface-"));
   try {
     const help = execFileSync(process.execPath, [cli, "--help"], { cwd: root, encoding: "utf8" });
+    expect(help).toContain("Overview");
+    expect(help).toContain("opt-in");
+    expect(help).toContain("Minimal");
+    expect(help).toContain("Runtime / adapter");
+    expect(help).toContain("Admin / Dev UI");
     expect(help).toContain("generate");
+    expect(help).toContain("validate");
     expect(help).not.toMatch(/\b(create|update|blank|template)\b/);
     for (const args of [["create", "blank", "site"], ["update", "--ref", "v0.1.2"]]) {
       const result = spawnSync(process.execPath, [cli, ...args], { cwd: root, encoding: "utf8" });

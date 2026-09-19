@@ -10,15 +10,7 @@ import { runSkills } from "./skills.js";
 async function main(): Promise<number> {
   const command = argv[2];
   if (!command || command === "--help" || command === "-h") {
-    stdout.write(`mantle - SDK authoring CLI
-
-Usage: mantle <subcommand> [options]
-
-Subcommands:
-  generate       Compile manifests and handler types
-  skills         Project version-matched Core skills
-  validate       Static manifest + handler-source validation
-  emit-openapi   Emit OpenAPI 3.1 from Triggers + Views
+    stdout.write(`${MANTLE_OVERVIEW}
 `);
     return command ? 0 : 2;
   }
@@ -37,6 +29,41 @@ Subcommands:
       return 2;
   }
 }
+
+export const MANTLE_OVERVIEW = `mantle — compile manifests into a RuntimePlan and typed binding
+
+Overview
+  Optional surfaces — take only what you need. Admin is opt-in. You can ship a
+  complete service with no Dev UI, no visitor frontend, and no extra packages.
+
+  Minimal — Spec + generate
+    validate + generate compile manifests into a sealed plan and typed binding.
+    Embed that binding in an existing host. No Admin, no visitor UI.
+
+  Runtime / adapter
+    Bind Runtime through an adapter (Cloudflare Worker, Bun, Vercel, or yours).
+    HTTP Views, MCP, and Auth work without Admin.
+    See docs/examples/minimal-worker.
+
+  Opt-in — Admin / Dev UI
+    Add @aotter/mantle-admin and @aotter/mantle-admin-ui only when humans need
+    a console. Then re-run generate, bind wrangler ASSETS, and open
+    /admin/sign-in (local email OTP via ConsoleEmailSender).
+    See docs/examples/local-admin-otp.
+
+  Further (ask the subcommand for details)
+    skills          project version-matched agent instructions
+    emit-openapi    OpenAPI 3.1 from HTTP Triggers and Views
+    mantle-harness  measure indexes and live HTTP (separate binary)
+
+Usage: mantle <subcommand> [options]
+
+Subcommands:
+  generate       Compile manifests into a typed runtime binding
+  validate       Static manifest and handler-source validation
+  skills         Project version-matched Core skills
+  emit-openapi   Emit OpenAPI 3.1 from Triggers and Views
+`;
 
 main().then(
   (code) => {

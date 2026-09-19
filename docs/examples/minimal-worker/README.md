@@ -1,14 +1,16 @@
 # Minimal Worker reference
 
 This is a directly authored, API-only application and executable consumer test.
-It is not a Starter, template catalog or CLI generator. The notes Schema/View
-is example business data; `mantle generate` never invents it.
+It is not a Starter, template catalog or CLI generator. Admin is opt-in; this
+reference has none. When humans need a console, see
+[`docs/examples/local-admin-otp`](../local-admin-otp/README.md). The notes
+Schema/View is example business data; `mantle generate` never invents it.
 
 For your own project, author package.json, manifests, Worker/provider config
 and TypeScript settings for your requirements. Pin all selected `@aotter/mantle*`
-dependencies to the same intended release. This reference records alpha.17 as
-its last published baseline; Core's test runner substitutes its exact candidate
-in a disposable copy, including during a future release.
+dependencies to the same intended release. This reference records the snapshot
+version in this tree as its published baseline; Core's test runner substitutes
+its exact candidate in a disposable copy.
 
 Outside the SDK workspace, with Node 22+ and pnpm 9+:
 

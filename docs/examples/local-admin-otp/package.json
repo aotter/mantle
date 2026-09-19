@@ -1,16 +1,19 @@
 {
-  "name": "mantle-minimal-consumer",
+  "name": "mantle-local-admin-otp",
   "private": true,
   "type": "module",
   "scripts": {
     "generate": "mantle generate",
     "validate": "mantle validate",
     "typecheck": "tsc --noEmit",
+    "predev": "node ensure-dev-vars.mjs",
     "dev": "wrangler dev --local",
-    "check": "mantle generate && mantle generate --check && mantle validate && mantle skills && mantle skills --check && tsc --noEmit && node smoke.mjs"
+    "check": "node ensure-dev-vars.mjs && mantle generate && mantle generate --check && mantle validate && mantle skills && mantle skills --check && tsc --noEmit && node smoke.mjs"
   },
   "dependencies": {
     "@aotter/mantle": "0.1.2-alpha.6",
+    "@aotter/mantle-admin": "0.1.2-alpha.6",
+    "@aotter/mantle-admin-ui": "0.1.2-alpha.6",
     "@aotter/mantle-cloudflare": "0.1.2-alpha.6",
     "better-auth": "1.7.2",
     "hono": "^4.13.3",

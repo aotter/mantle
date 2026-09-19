@@ -124,14 +124,29 @@ try {
     "@aotter/mantle-runtime": `file:${tarballs["@aotter/mantle-runtime"]}`,
   });
   const umbrella = join(temp, "umbrella-core/node_modules/@aotter/mantle");
-  for (const doc of ["docs/direct-authoring.md", "docs/transaction-patterns.md", "docs/handbook/navigation.json", "docs/handbook/start/project-and-cli.md", "docs/handbook/reference/schema.md", "docs/examples/minimal-worker/package.json"]) {
+  for (const doc of [
+    "docs/direct-authoring.md",
+    "docs/transaction-patterns.md",
+    "docs/handbook/navigation.json",
+    "docs/handbook/start/project-and-cli.md",
+    "docs/handbook/start/quickstart-admin.md",
+    "docs/handbook/reference/schema.md",
+    "docs/examples/minimal-worker/package.json",
+    "docs/examples/local-admin-otp/package.json",
+    "docs/examples/local-admin-otp/.dev.vars.example",
+  ]) {
     if (!existsSync(join(umbrella, doc))) throw new Error(`Packed authoring reference missing: ${doc}`);
   }
   const packedManifest = JSON.parse(readFileSync(join(umbrella, "package.json"), "utf8"));
   if (packedManifest.exports["./provision"]) throw new Error("Retired provision export remains");
   const payload = execFileSync("tar", ["-tf", tarballs["@aotter/mantle"]], { encoding: "utf8" });
-  if (/(?:^|\/)(?:node_modules|\.wrangler|\.env|\.dev\.vars)(?:[/.]|$)/m.test(payload)) {
-    throw new Error("Packed documentation contains local state");
+  const leaked = payload.split("\n").filter((entry) => {
+    const name = entry.split("/").pop()?.replace(/\/$/, "") ?? "";
+    if (!name || name.endsWith(".example")) return false;
+    return /^(?:node_modules|\.wrangler|\.env(?:\..*)?|\.dev\.vars(?:\..*)?)$/.test(name);
+  });
+  if (leaked.length > 0) {
+    throw new Error(`Packed documentation contains local state: ${leaked.join(", ")}`);
   }
   for (const optional of [
     "mantle-web",

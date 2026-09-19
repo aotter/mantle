@@ -25,6 +25,8 @@
 <p align="center">
   <a href="#author-your-application">Quick start</a>
   &middot;
+  <a href="#paste-ready-agent-prompts">Agent prompts</a>
+  &middot;
   <a href="#a-custom-mcp-server-without-building-the-server">Features</a>
   &middot;
   <a href="#one-manifest-one-contract">Manifest</a>
@@ -53,22 +55,95 @@ lifecycle.
 
 ## Author your application
 
-Write the application's manifests, runtime entry and provider configuration,
-then use the installed SDK compiler:
+Mantle scales. Take only the surfaces you need — Admin is opt-in.
 
-```sh
-pnpm exec mantle generate
-pnpm exec mantle validate
+1. **Minimal — Spec + generate.** Write manifests, then `mantle generate` /
+   `validate`. Embed the typed binding in an existing host. No Admin, no
+   visitor UI.
+2. **Runtime / adapter.** Bind Runtime through a Worker or another adapter.
+   HTTP Views, MCP, and Auth run without a Dev UI. The
+   [minimal Worker reference](docs/examples/minimal-worker/README.md) is
+   this path.
+3. **Opt-in — Admin / Dev UI.** When humans need a console, add
+   `@aotter/mantle-admin` + `@aotter/mantle-admin-ui`, bind wrangler `ASSETS`,
+   and sign in at `/admin/sign-in` with email OTP from wrangler logs. The
+   [local Admin OTP reference](docs/examples/local-admin-otp/README.md) is
+   that optional full path.
+
+`pnpm exec mantle --help` is the layered overview. Give the version-matched
+install skill to a coding agent; it must interview for required surfaces
+and not assume Admin.
+
+Other hosts embed the same [manifest contract](#one-manifest-one-contract).
+
+## Paste-ready agent prompts
+
+Copy one block into a coding agent. Resolve handbook pages and official
+examples from `docs/` in this checkout, or from
+`node_modules/@aotter/mantle/docs/` after install. If neither tree exists,
+pin `@aotter/mantle` first. `pnpm exec mantle --help` is the layered
+overview. There is no `mantle create`. Admin is opt-in.
+
+### Spec / embed only
+
+```text
+Read handbook/start/project-and-cli.md and pnpm exec mantle --help.
+Pin @aotter/mantle at the exact version we agree, author manifests for
+this existing host, then run mantle generate and mantle validate. Embed
+the typed binding from .mantle/generated/mantle.ts into the current
+system. Do not add Admin, mantle-admin-ui, a visitor frontend, or a
+Cloudflare adapter unless I ask. Do not invent a default Schema.
 ```
 
-Follow [direct authoring](docs/handbook/start/project-and-cli.md), or give its version-matched
-install skill to your coding agent. The [minimal Worker reference](docs/examples/minimal-worker/README.md)
-shows a tested Cloudflare application without a visitor frontend. Other hosts
-can embed the same [manifest contract](#one-manifest-one-contract).
+### Minimal API service locally
 
-The 0.1.2 line removes Starter scaffolding and the bundle updater. Existing
-Landing/Starters stay on immutable alpha.17; read the
-[migration notes](docs/migration-0.1.2.md) before upgrading.
+```text
+Read handbook/start/quickstart-worker.md and examples/minimal-worker/.
+Author a Cloudflare Worker from that official example or from scratch:
+one Schema, one public View (copy the contract, not the tree wholesale).
+Pin every @aotter/mantle* package to the same exact version. Run
+pnpm install && pnpm generate && pnpm dev (or wrangler dev --local).
+Probe GET /api/views/<name> with curl. GET / may 404. Do not install
+Admin or wrangler ASSETS unless I ask.
+```
+
+### Full local Dev UI (opt-in)
+
+```text
+I want the optional Admin / Dev UI. Read handbook/start/quickstart-admin.md
+and examples/local-admin-otp/. Interview me for a bootstrap owner email.
+Install @aotter/mantle-admin and @aotter/mantle-admin-ui, run
+mantle generate (it syncs the prebuilt SPA — do not vite-build), and set
+wrangler assets.directory=./public with binding ASSETS (required when
+Admin is installed). Wire createAuth email-otp + ConsoleEmailSender.
+Then pnpm install && pnpm generate && pnpm dev, open /admin/sign-in, and
+read the OTP from wrangler logs. If /admin is a white screen, fetch
+/_mantle/admin/assets/* — 404 means ASSETS is missing, not a missing
+frontend build.
+```
+
+### Interview then build
+
+```text
+Interview me about the service: host, who uses it, whether humans need a
+Dev UI, and whether we only embed Spec/Runtime. Read mantle --help, then
+handbook/start/project-and-cli.md. Use handbook/examples/ only as grammar
+inspiration. Implement locally first. Take only the surfaces we chose.
+If we skip Admin, follow examples/minimal-worker/. If we want Dev UI,
+follow examples/local-admin-otp/. No mantle create. Pin all
+@aotter/mantle* packages to one exact version.
+```
+
+### Later layer: MCP or public web (opt-in)
+
+```text
+Do not add Admin unless it is already in this project. Read
+handbook/concepts/mcp-and-agents.md and/or
+handbook/cloudflare/public-web.md. Add only the surface I name: MCP
+Triggers at /mcp or /mcp/staff, or optional @aotter/mantle-web
+composition. Keep Core adapter-neutral. Probe the new route; do not
+claim Auth or Admin works from a public 200.
+```
 
 ## A custom MCP server, without building the server
 
@@ -286,7 +361,9 @@ is cloned or opened. See [`skills/README.md`](skills/README.md) for host details
 
 ## CLI reference
 
-The umbrella provides one `mantle` command set:
+The umbrella provides one `mantle` command set. Top-level `mantle --help`
+is a layered overview of optional surfaces (Admin is opt-in); subcommand
+help stays on that layer. There is no `create` / `update` happy path.
 
 | Command | Purpose |
 |---|---|

@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { cwd, stderr, stdout } from "node:process";
@@ -77,11 +77,13 @@ export async function runGenerate(
     const adminSource = dirname(adminIndex);
     const adminTarget = resolve(cwd(), "public/_mantle/admin");
     stale = !(await syncAdminAssets(adminSource, adminTarget, options.check)) || stale;
+    if (!options.check) warnMissingWranglerAssets(cwd());
   }
   if (stale && options.check) {
     stderr.write("Mantle generated files are stale; run `mantle generate`.\n");
     return 1;
   }
+  if (!options.check) printGenerateNextSteps(adminIndex !== null);
   return 0;
 }
 
@@ -112,6 +114,10 @@ function printHelp(): void {
 
 Usage: mantle generate [options]
 
+This is the Minimal compile path (Spec + generate). It writes .mantle/generated/mantle.ts.
+Admin is opt-in: when @aotter/mantle-admin-ui is installed, generate also syncs
+the prebuilt Admin SPA. See \`mantle --help\` for optional surfaces.
+
 Options:
   --manifests <dir>   Manifest directory (default: ./manifests)
   -o, --output <dir>  Generated root (default: .mantle/generated)
@@ -119,6 +125,26 @@ Options:
   --check             Fail without writing when generated code or Admin assets are stale
   -h, --help          This help
 `);
+}
+
+export function printGenerateNextSteps(adminUiInstalled: boolean, write = stdout.write.bind(stdout)): void {
+  if (adminUiInstalled) {
+    write(
+      "Synced public/_mantle/admin/ from @aotter/mantle-admin-ui (opt-in, prebuilt; do not vite-build).\n" +
+        "Admin / Dev UI next steps:\n" +
+        "  1. wrangler assets.directory=./public and binding=ASSETS\n" +
+        "  2. pnpm dev  →  open /admin/sign-in\n" +
+        "  3. email OTP via ConsoleEmailSender (code in wrangler logs)\n" +
+        "See docs/examples/local-admin-otp.\n",
+    );
+    return;
+  }
+  write(
+    "API-only (Admin is opt-in). A complete service does not require a Dev UI. " +
+      "To add Admin later: install @aotter/mantle-admin and @aotter/mantle-admin-ui, " +
+      "re-run generate, configure wrangler ASSETS, and wire local email-otp " +
+      "(docs/examples/local-admin-otp).\n",
+  );
 }
 
 function printDiagnostics(diagnostics: readonly Diagnostic[]): void {
@@ -134,6 +160,22 @@ async function syncText(path: string, expected: string, check: boolean): Promise
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, expected, "utf8");
   return true;
+}
+
+/** Cheap hint: Admin SPA was synced but wrangler has no ASSETS binding. */
+export function warnMissingWranglerAssets(root: string, write = stderr.write.bind(stderr)): void {
+  const wrangler = ["wrangler.jsonc", "wrangler.json", "wrangler.toml"]
+    .map((name) => join(root, name))
+    .find((path) => existsSync(path));
+  if (!wrangler) return;
+  const text = readFileSync(wrangler, "utf8");
+  if (/["']?binding["']?\s*[:=]\s*["']ASSETS["']/.test(text)) return;
+  write(
+    "warning: @aotter/mantle-admin-ui synced public/_mantle/admin, but wrangler has no ASSETS binding. " +
+      "/admin can return HTML 200 while /_mantle/admin/assets/* 404s (white screen). " +
+      'Add "assets": { "directory": "./public", "binding": "ASSETS" }. ' +
+      "Do not put /_mantle in run_worker_first.\n",
+  );
 }
 
 async function syncAdminAssets(source: string, target: string, check: boolean): Promise<boolean> {

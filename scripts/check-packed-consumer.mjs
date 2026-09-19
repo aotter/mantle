@@ -162,9 +162,10 @@ function findInstalled(directory, names, found = new Map()) {
     for (const name of names) addIfDirectory(found, name, join(path, ...name.split("/")));
     const store = join(path, ".pnpm");
     if (!existsSync(store)) continue;
-    for (const packageEntry of readdirSync(store)) {
+    for (const packageEntry of readdirSync(store, { withFileTypes: true })) {
+      if (!packageEntry.isDirectory()) continue;
       for (const name of names) {
-        addIfDirectory(found, name, join(store, packageEntry, "node_modules", ...name.split("/")));
+        addIfDirectory(found, name, join(store, packageEntry.name, "node_modules", ...name.split("/")));
       }
     }
   }
@@ -172,7 +173,13 @@ function findInstalled(directory, names, found = new Map()) {
 }
 
 function addIfDirectory(found, name, path) {
-  if (!statSync(path, { throwIfNoEntry: false })?.isDirectory()) return;
+  let stats;
+  try {
+    stats = statSync(path, { throwIfNoEntry: false });
+  } catch {
+    return;
+  }
+  if (!stats?.isDirectory()) return;
   const paths = found.get(name) ?? [];
   if (!paths.includes(path)) paths.push(path);
   found.set(name, paths);

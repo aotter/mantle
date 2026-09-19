@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resolveAdminUiIndexHtml, runGenerate } from "../../src/cli/generate.js";
+import { printGenerateNextSteps, resolveAdminUiIndexHtml, runGenerate, warnMissingWranglerAssets } from "../../src/cli/generate.js";
 
 const coreOnly = { resolveAdminUiIndexHtml: () => null };
 
@@ -297,6 +297,78 @@ spec: {}
 
       expect(await runGenerate([], deps)).toBe(0);
       expect(await readFile(adminIndexPath, "utf8")).toBe("<!doctype html><title>Admin</title>\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(adminDist, { recursive: true, force: true });
+    }
+  });
+
+  it("prints the API-only next step when Admin UI is not installed", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mantle-generate-api-only-tip-"));
+    try {
+      await mkdir(join(root, "manifests"));
+      await writeFile(join(root, "manifests", "site.yaml"), fixture);
+      process.chdir(root);
+      const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+      expect(await runGenerate([], coreOnly)).toBe(0);
+      expect(stdout.mock.calls.flat().join("")).toMatch(/API-only \(Admin is opt-in\)/);
+      expect(stdout.mock.calls.flat().join("")).toMatch(/local-admin-otp/);
+      stdout.mockClear();
+      expect(await runGenerate(["--check"], coreOnly)).toBe(0);
+      expect(stdout.mock.calls.flat().join("")).not.toMatch(/API-only/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("prints Admin next steps when Admin UI is synced", async () => {
+    const notes: string[] = [];
+    printGenerateNextSteps(true, (chunk) => {
+      notes.push(String(chunk));
+      return true;
+    });
+    expect(notes.join("")).toMatch(/opt-in/);
+    expect(notes.join("")).toMatch(/\/admin\/sign-in/);
+    expect(notes.join("")).toMatch(/ConsoleEmailSender/);
+    expect(notes.join("")).toMatch(/ASSETS/);
+    notes.length = 0;
+    printGenerateNextSteps(false, (chunk) => {
+      notes.push(String(chunk));
+      return true;
+    });
+    expect(notes.join("")).toMatch(/API-only/);
+    expect(notes.join("")).not.toMatch(/sign-in/);
+  });
+
+  it("warns when Admin UI is synced but wrangler has no ASSETS binding", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mantle-generate-assets-warn-"));
+    const adminDist = await mkdtemp(join(tmpdir(), "mantle-admin-ui-dist-"));
+    try {
+      await mkdir(join(root, "manifests"));
+      await writeFile(join(root, "manifests", "site.yaml"), fixture);
+      await writeFile(join(adminDist, "index.html"), "<!doctype html><title>Admin</title>\n");
+      await writeFile(join(root, "wrangler.jsonc"), "{ \"name\": \"demo\", \"main\": \"src/index.ts\" }\n");
+      process.chdir(root);
+      const deps = { resolveAdminUiIndexHtml: () => join(adminDist, "index.html") };
+      const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      expect(await runGenerate([], deps)).toBe(0);
+      expect(stderr.mock.calls.flat().join("")).toMatch(/no ASSETS binding/);
+      stderr.mockClear();
+      expect(await runGenerate(["--check"], deps)).toBe(0);
+      expect(stderr.mock.calls.flat().join("")).not.toMatch(/ASSETS/);
+      await writeFile(
+        join(root, "wrangler.jsonc"),
+        "{ \"assets\": { \"directory\": \"./public\", \"binding\": \"ASSETS\" } }\n",
+      );
+      stderr.mockClear();
+      expect(await runGenerate([], deps)).toBe(0);
+      expect(stderr.mock.calls.flat().join("")).not.toMatch(/ASSETS/);
+      const notes: string[] = [];
+      warnMissingWranglerAssets(root, (chunk) => {
+        notes.push(String(chunk));
+        return true;
+      });
+      expect(notes.join("")).toBe("");
     } finally {
       await rm(root, { recursive: true, force: true });
       await rm(adminDist, { recursive: true, force: true });

@@ -3,7 +3,7 @@ description: The files you own in a Mantle project, every mantle and mantle-harn
 ---
 # Project layout and the CLI loop
 
-This page describes a directly authored Mantle project: which files are yours, what the installed CLI does to them, and the loop you run before every commit. It is for engineers and coding agents working in an existing project.
+This page describes a directly authored Mantle project: which files are yours, what the installed CLI does to them, and the loop you run before every commit. Surfaces are optional — take only what you need. [The minimal Worker](./quickstart-worker.md) is Spec + adapter without Admin. [Local Admin](./quickstart-admin.md) is the opt-in Dev UI path when humans need a console.
 
 ## You own the project
 
@@ -20,7 +20,7 @@ my-service/
 ├── src/
 │   ├── index.ts              createMantleWorker({ plan, extend })
 │   └── mantle/handlers/      handler refs (a convention; any path under src/)
-├── public/                   ASSETS: your frontend; public/_mantle/admin/ when Admin UI is installed
+├── public/                   required ASSETS root when Admin is installed; generate writes public/_mantle/admin/
 ├── .mantle/generated/
 │   └── mantle.ts             written by mantle generate
 ├── .agents/skills/mantle-*/  written by mantle skills
@@ -33,7 +33,7 @@ The minimal Worker reference keeps `.mantle/`, `.agents/`, `.claude/`, `.wrangle
 
 ## The CLI
 
-The umbrella package installs two binaries, `mantle` and `mantle-harness`. Run them through the package manager, for example `pnpm exec mantle generate`. Defaults shown are the pinned ones.
+The umbrella package installs two binaries, `mantle` and `mantle-harness`. Run them through the package manager, for example `pnpm exec mantle generate`. Defaults shown are the pinned ones. Bare `mantle` / `mantle --help` prints a layered overview of optional surfaces (Minimal Spec + generate, Runtime / adapter, opt-in Admin). `generate --help` and `validate --help` stay on the compile path. After a successful `generate`, the CLI says Admin is opt-in: next steps when `@aotter/mantle-admin-ui` is installed, otherwise an API-only tip.
 
 | Command | Flags | Does |
 |---|---|---|
@@ -48,7 +48,15 @@ Advanced manifest primitives live in the `@aotter/mantle-spec` package's own `ma
 
 ### What `generate` does and does not do
 
-`generate` reads the manifest directory, runs the same validation as `validate` (without the handler-source grep), links the set, and emits one `.mantle/generated/mantle.ts`. When `@aotter/mantle-admin-ui` is installed it also syncs the Admin SPA into `public/_mantle/admin/`, excluding the package's `server.*` exports; Core-only installs skip that copy. Any error diagnostic stops the run with exit 1.
+`generate` reads the manifest directory, runs the same validation as `validate` (without the handler-source grep), links the set, and emits one `.mantle/generated/mantle.ts`. When `@aotter/mantle-admin-ui` is installed it also syncs the **prebuilt** Admin SPA into `public/_mantle/admin/`, excluding the package's `server.*` exports; Core-only installs skip that copy. Any error diagnostic stops the run with exit 1.
+
+Do not Vite-build Admin unless you are developing `@aotter/mantle-admin-ui` itself. A Cloudflare project that serves Admin must declare Static Assets:
+
+```jsonc
+"assets": { "directory": "./public", "binding": "ASSETS" }
+```
+
+That binding is a hard requirement. If `/admin` returns SPA `index.html` (`200`) while `/_mantle/admin/assets/*` is `404`, the page white-screens. Leave `/_mantle` out of `run_worker_first` so those files stay on the assets layer. `generate` warns when it syncs Admin and the local wrangler config has no `ASSETS` binding.
 
 It does not project skills, update packages, change styling, provision providers, or deploy. It does not create manifests: a missing or empty `manifests/` directory is an error, not a prompt.
 
@@ -78,7 +86,7 @@ pnpm exec mantle-harness indexes --require-public --format text
 pnpm exec wrangler dev --local
 ```
 
-Run the harness after any change to a Schema index, View filter or ordering, or public route; declare the smallest ordered index the measured path needs and respect SQLite's leftmost-prefix rule. Before a deploy, run `mantle validate --phase deploy`. Probe at least one declared route on the local origin; a `200` from a public View does not prove Admin or MCP login works.
+Run the harness after any change to a Schema index, View filter or ordering, or public route; declare the smallest ordered index the measured path needs and respect SQLite's leftmost-prefix rule. Before a deploy, run `mantle validate --phase deploy`. Probe at least one declared route on the local origin; a `200` from a public View does not prove Admin or MCP login works. When Admin is installed, also probe `/admin/sign-in` and one `/_mantle/admin/assets/*` URL — both must be `200`. HTML 200 with asset 404 is the white-screen class of bug.
 
 ## Connecting an agent
 
@@ -102,11 +110,13 @@ The projected `develop` skill tells the agent to read `package.json` for the ins
 
 - Pin every `@aotter/mantle*` package to one exact version and move them together. Check that release's peer ranges when you move.
 - This handbook describes the snapshot in this source tree. Use the docs that ship with the version in `package.json`, not a floating branch.
-- The authoring CLI is `generate`, `validate`, `emit-openapi` and `skills`. `mantle-harness` is the measurement binary.
+- The authoring CLI is `generate`, `validate`, `emit-openapi` and `skills`. `mantle-harness` is the measurement binary. There is no `create` / `update` happy path.
 - When you change versions: pin the new exact version and refresh the lockfile; keep the Worker, D1, KV identity, origins, auth mode and secrets; then run `generate`, `generate --check`, `skills`, `skills --check`, `validate`, typecheck and tests before deploying.
 
 ## Source
 - [`docs/direct-authoring.md`](../../../docs/direct-authoring.md)
+- [`docs/examples/local-admin-otp/README.md`](../../../docs/examples/local-admin-otp/README.md)
+- [`docs/examples/local-admin-otp/wrangler.jsonc`](../../../docs/examples/local-admin-otp/wrangler.jsonc)
 - [`docs/examples/minimal-worker/.gitignore`](../../../docs/examples/minimal-worker/.gitignore)
 - [`packages/mantle/README.md`](../../../packages/mantle/README.md)
 - [`packages/mantle/src/cli/main.ts`](../../../packages/mantle/src/cli/main.ts)

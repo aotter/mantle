@@ -27,12 +27,20 @@ turn `generate` into implicit scaffolding.
    version. Install only the adapter/optional packages the application needs.
    If a global scope registry overrides public npmjs, use a project-owned
    `.npmrc` with `@aotter:registry=https://registry.npmjs.org/`.
-3. Read the installed `node_modules/@aotter/mantle/docs/handbook/start/project-and-cli.md`.
-   The version-matched `docs/examples/minimal-worker/` is a runnable Cloudflare
-   reference, not a template to install wholesale. Other hosts use the embedded
-   adapter guides. Author package scripts, manifests, entry and configuration
-   for the user's requirements. No default notes model, home page, icon,
-   launch metadata or frontend is required.
+3. Interview the human for host and required surfaces. Do not assume Admin,
+   public HTML or Cloudflare. Scale:
+   - Spec + generate / embed Runtime — `docs/handbook/start/project-and-cli.md`.
+   - Adapter without Admin — `docs/examples/minimal-worker/`.
+   - Opt-in Admin / Dev UI — only when a human needs a console: interview
+     the bootstrap owner email, then `docs/examples/local-admin-otp/`
+     (`pnpm install && pnpm generate && pnpm dev`, `/admin/sign-in`, OTP
+     in wrangler logs). Admin needs `@aotter/mantle-admin`,
+     `@aotter/mantle-admin-ui`, wrangler `ASSETS` on `./public`, and
+     `createAuth` email-otp + `ConsoleEmailSender`. Do not Vite-build Admin.
+   None of these is a template to install wholesale. Other hosts use the
+   embedded adapter guides. Author package scripts, manifests, entry and
+   configuration for the user's requirements. No default notes model, home
+   page, icon, launch metadata or visitor frontend is required.
 4. Compile and verify using the application's commands. The fundamental CLI
    sequence is:
 
@@ -44,10 +52,14 @@ pnpm exec mantle skills
 pnpm exec mantle skills --check
 ```
 
-Run the project's TypeScript check and start its actual local server. Probe a
-route the application declares; an API-only project may correctly return 404
-at `/`. Auth routes may return `503 setup_incomplete` until the selected auth
-provider is configured. Do not introduce an auth bypass to make smoke pass.
+Run the project's TypeScript check and start its actual local server. Probe
+a route the application declares. An API-only or adapter-only project may
+correctly return 404 at `/` and have no Admin. When Admin was requested,
+probe `/admin/sign-in` and a `/_mantle/admin/assets/*` URL — both must be
+200. A white screen is an assets 404, not a missing frontend build.
+Conventional Auth routes may return `503 setup_incomplete` until that mode
+is configured; the local OTP path replaces construction instead. Do not
+introduce an auth bypass to make smoke pass.
 
 Commit the resolved lockfile in the application's normal workflow; subsequent
 installs use `pnpm install --frozen-lockfile`. Do not initialize/push a remote,

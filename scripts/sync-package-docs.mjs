@@ -16,8 +16,14 @@ for (const dir of ["docs", "skills"]) {
     cpSync(resolve(repoRoot, dir), target, {
       recursive: true,
       // Runnable docs may have been installed locally; never publish that state.
-      filter: (path) => !["node_modules", ".git", ".mantle", ".wrangler", ".agents", ".claude", "pnpm-lock.yaml"].includes(basename(path))
-        && !/^\.(?:env|dev\.vars)(?:\.|$)/.test(basename(path)),
+      filter: (path) => {
+        const name = basename(path);
+        if (["node_modules", ".git", ".mantle", ".wrangler", ".agents", ".claude", "pnpm-lock.yaml"].includes(name)) {
+          return false;
+        }
+        if (name.endsWith(".example")) return true;
+        return !/^\.(?:env|dev\.vars)(?:\.|$)/.test(name);
+      },
     });
   }
 }

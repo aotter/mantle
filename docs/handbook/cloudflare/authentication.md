@@ -5,6 +5,12 @@ description: Configure MANTLE_AUTH_MODE, secrets, the first owner and staff role
 
 Conventional Auth is chosen by one variable, `MANTLE_AUTH_MODE`, and fails closed when its configuration is incomplete. This page covers the two modes, the secrets each needs, first-owner bootstrap, roles, the routes that require a session, and the Better Auth integration surface.
 
+## Local Admin: email OTP
+
+The local human path does not use `MANTLE_AUTH_MODE` or GitHub. Pass `auth` to `createMantleWorker` with `email-otp`, `ConsoleEmailSender`, and `bootstrapOwner.match: "email"`. The one-time code is printed on the wrangler log. See [Quickstart: local Admin](../start/quickstart-admin.md). `ConsoleEmailSender` is for `wrangler dev` only; production needs a real sender.
+
+With `auth` set, the mode matrix below is not read. Core still owns `/admin` and `/api/auth/*`.
+
 ## Mode matrix
 
 | Mode | Non-secret vars | Worker secrets | Must be absent |
@@ -218,4 +224,6 @@ rejected; there is no introspection fallback.
 - [`packages/mantle-admin/src/mountMantleAdmin.ts`](../../../packages/mantle-admin/src/mountMantleAdmin.ts)
 - [`docs/auth-hosting-model.md`](../../../docs/auth-hosting-model.md)
 - [`docs/adapter-guide.md`](../../../docs/adapter-guide.md)
+- [`docs/examples/local-admin-otp/src/index.ts`](../../../docs/examples/local-admin-otp/src/index.ts)
+- [`docs/examples/local-admin-otp/.dev.vars.example`](../../../docs/examples/local-admin-otp/.dev.vars.example)
 - [`docs/examples/minimal-worker/.gitignore`](../../../docs/examples/minimal-worker/.gitignore)

@@ -14,7 +14,7 @@ import { plan } from "../.mantle/generated/mantle.js";
 export default createMantleWorker({ plan, cacheScope: "my-site-production" });
 ```
 
-`plan` is the sealed plan that `mantle generate` writes to `.mantle/generated/mantle.ts`. With only `plan`, the Worker serves public View REST, HTTP Triggers, Admin, Auth, OAuth and MCP. It renders no public pages and `/` is a 404; see [Public web](./public-web.md).
+`plan` is the sealed plan that `mantle generate` writes to `.mantle/generated/mantle.ts`. With only `plan`, the Worker serves public View REST, HTTP Triggers, Admin, Auth, OAuth and MCP. It renders no public pages and `/` is a 404; see [Public web](./public-web.md). Local Admin with email OTP replaces Auth construction; see [Quickstart: local Admin](../start/quickstart-admin.md). Admin still requires the `ASSETS` binding.
 
 ## Options
 
@@ -158,4 +158,5 @@ The conventional set is `{ db, adminAssets, mcpCatalogKv? }`. Never drop `db`.
 - [`packages/adapters/cloudflare/src/worker/createMantleWorker.ts`](../../../packages/adapters/cloudflare/src/worker/createMantleWorker.ts)
 - [`packages/adapters/cloudflare/src/bindings/conventionalBindings.ts`](../../../packages/adapters/cloudflare/src/bindings/conventionalBindings.ts)
 - [`packages/adapters/cloudflare/src/mount/cmsConfig.ts`](../../../packages/adapters/cloudflare/src/mount/cmsConfig.ts)
+- [`docs/examples/local-admin-otp/src/index.ts`](../../../docs/examples/local-admin-otp/src/index.ts)
 - [`docs/examples/minimal-worker/src/index.ts`](../../../docs/examples/minimal-worker/src/index.ts)

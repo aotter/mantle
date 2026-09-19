@@ -17,12 +17,11 @@ docs govern runtime/API behavior.
 ## First Read
 
 1. `package.json` for the installed `@aotter/mantle*` versions.
-2. `manifests/site.yaml`, the active adapter config, and `src/auth.ts` when present. If the project is older, check `src/mantleConfig.ts`.
-3. The active `.mantle/overlays/<type>/seed.json`, when present; generated
-   homepages commonly import visible copy and form structure from it.
-4. Optional local context: `.mantle/launch-state.json`, `.mantle/handoff.md`,
-   `.mantle/plugins.json`, `.mantle/plugins.lock.json`, and `.mantle/recipes/`.
-5. Installed Core docs in `node_modules/@aotter/mantle/docs/`.
+2. `manifests/site.yaml`, the active adapter config (`wrangler.jsonc`), and
+   the Worker entry. Custom Auth lives in that entry's `createAuth` factory.
+3. Optional local context: `.mantle/plugins.json`, `.mantle/plugins.lock.json`,
+   and `.mantle/recipes/`. Legacy launch/handoff files are context only.
+4. Installed Core docs in `node_modules/@aotter/mantle/docs/`.
 
 If `node_modules/` is missing, run `pnpm install --frozen-lockfile` before
 falling back to remote docs. Remote docs must use a tag matching the installed
@@ -30,9 +29,12 @@ version; never use `develop` branch docs for a versioned consumer project.
 
 ## Existing Examples
 
-Read installed `docs/handbook/start/project-and-cli.md`, `docs/examples/minimal-worker/`
-and `docs/handbook/examples/commerce-transaction.md` before inventing a pattern. The reference
-consumer is test/documentation, not a Starter or a fixed application shape.
+Read installed `docs/handbook/start/project-and-cli.md` and
+`docs/examples/minimal-worker/` for Spec + adapter without Admin. Read
+`docs/examples/local-admin-otp/` only when the project already has Admin
+or the human asked for Dev UI — that path is opt-in. Then
+`docs/handbook/examples/commerce-transaction.md` before inventing a pattern.
+References are test/documentation, not a Starter or a fixed application shape.
 
 Public rendering is opt-in consumer wiring: `mountPublicRoutes`, a
 `TemplateRegistry`, and a matching `publicPathResolver` must agree on the
@@ -53,7 +55,8 @@ pnpm validate
 ```
 
 This CLI validates and derives artifacts from application-authored manifests.
-It does not create projects, business schemas or a visitor homepage.
+It does not create projects, business schemas or a visitor homepage. There is
+no `mantle create` / `mantle update` happy path.
 
 ## Core Model
 
@@ -72,11 +75,10 @@ the atoms cannot express the behavior.
 
 ## Content Edits
 
-- If a legacy homepage imports a repo seed, edit it for local/static copy.
-  Otherwise follow the actual frontend content source. Use Admin or Staff MCP
-  for runtime-backed content.
+- Follow the actual frontend content source. Use Admin or Staff MCP for
+  runtime-backed content. Do not invent an overlay/seed homepage.
 - For a new submitted field, update the stored `Schema` and the public
-  `Procedure.spec.input` before the seed/form. Keep public mutation inputs
+  `Procedure.spec.input` before any form UI. Keep public mutation inputs
   `additionalProperties: false`; otherwise JSON Schema's default may strip an
   undeclared field while returning success.
 - Use `lifecycle: operational` for submissions, inquiries, orders, and other
@@ -134,13 +136,20 @@ teaching the project Mantle internals.
 
 ## Auth Composition
 
-Conventional Cloudflare projects declare `MANTLE_AUTH_MODE=hosted` or
-`self-managed`; Core owns that standard Auth composition and rejects partial
-or mixed bindings. Preserve the explicit mode recorded in Worker config
-and any legacy launch state, keep provider secrets out of source, and do not infer a mode
-from whichever credentials happen to be present. A repo with an explicit
-`createMantleWorker({ auth })` override owns that custom composition; follow
-its handoff instead of replacing it with the conventional factory.
+Admin is opt-in. A project without `@aotter/mantle-admin-ui` is complete.
+When Admin is installed, `createMantleWorker({ auth })` with `email-otp`
+and `ConsoleEmailSender` is the local human path (OTP in wrangler logs).
+That override owns Auth construction; Core still owns `/admin` and
+`/api/auth/*`. Admin also requires wrangler `assets.directory=./public`
+and an `ASSETS` binding. A white screen at `/admin` with HTML 200 and
+`/_mantle/admin/assets/*` 404 is a missing assets binding, not a missing
+frontend build.
+
+Conventional Cloudflare projects that do not replace Auth declare
+`MANTLE_AUTH_MODE=hosted` or `self-managed`; Core owns that standard
+composition and rejects partial or mixed bindings. Preserve the explicit
+mode recorded in Worker config, keep provider secrets out of source, and
+do not infer a mode from whichever credentials happen to be present.
 
 ## Performance Loop
 
@@ -213,8 +222,6 @@ cache.
 
 - Keep content models in the configured manifest directory; its immediate
   `.yaml` and `.yml` files are loaded together.
-- Use a generated overlay `seed.json` for the auth-free local first page when
-  it is already imported by `src/web/content/*`.
 - Add TypeScript only for handlers, rendering, adapter wiring, or real behavior.
 - Do not write directly to D1, KV, Postgres, or object storage for content
   authoring. Use runtime use cases, admin APIs, or Staff MCP.
