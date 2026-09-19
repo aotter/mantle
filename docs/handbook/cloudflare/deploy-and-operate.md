@@ -10,7 +10,7 @@ This page is the production checklist for a Mantle Worker on Cloudflare: what to
 - Pin every `@aotter/mantle*` package to one exact version and commit the lockfile. Install with `pnpm install --frozen-lockfile` (or `npm ci`) from then on. See [Project and CLI](../start/project-and-cli.md).
 - Set `PUBLIC_ORIGIN` to the real HTTPS origin, without a trailing slash. It drives canonical URLs, `.md` mirrors, `llms.txt`, the MCP resource and the OAuth callback. If a static documentation build also emits absolute URLs, give it the same value.
 - Set the production D1 `database_id` (and `account_id` if your deployment needs it) in `wrangler.jsonc`. A local `database_name` is not a production identifier, and local D1 is not production data.
-- Choose `MANTLE_AUTH_MODE` and store the secrets with `wrangler secret put`. See [Authentication](./authentication.md).
+- Choose production Auth: replace local console email delivery with a real `EmailSender`, or configure `MANTLE_AUTH_MODE` for GitHub OAuth or hosted Auth. Store secrets with `wrangler secret put`. See [Authentication](./authentication.md).
 - Keep `compatibility_flags: ["nodejs_compat", "global_fetch_strictly_public"]`.
 - Enable observability:
 

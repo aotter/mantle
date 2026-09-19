@@ -11,6 +11,13 @@ The local human path does not use `MANTLE_AUTH_MODE` or GitHub. Pass `auth` to `
 
 With `auth` set, the mode matrix below is not read. Core still owns `/admin` and `/api/auth/*`.
 
+For production email OTP, keep the custom `createAuth()` factory, replace
+`ConsoleEmailSender` with the application's production `EmailSender`, and keep
+`bootstrapOwner: { match: "email", value: <owner email> }`. Store the sender
+credentials and `BETTER_AUTH_SECRET` as Worker secrets. If the application has
+no transactional-email provider, use self-managed GitHub OAuth instead; never
+deploy console delivery.
+
 ## Mode matrix
 
 | Mode | Non-secret vars | Worker secrets | Must be absent |

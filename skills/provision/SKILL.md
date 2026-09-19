@@ -1,6 +1,6 @@
 ---
 name: provision
-description: Ship a local or Mantle landing-generated project to Cloudflare and finish production auth. Use when a Mantle project is ready for GitHub, Cloudflare deployment, self-hosted GitHub OAuth, paid Mantle hosted auth verification, production smoke testing, or operator handoff.
+description: Ship a Mantle project to Cloudflare and finish production auth with email, GitHub OAuth, or hosted auth.
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/provision/SKILL.md
@@ -59,8 +59,8 @@ directly; boot syncs its canonical origin from `PUBLIC_ORIGIN`.
 
 ## Choose Auth
 
-- **Self-hosted — free:** configure the owner's per-site GitHub OAuth App and
-  Worker secrets using the steps below.
+- **Self-hosted email OTP:** use the application's production transactional-email sender. Replace `ConsoleEmailSender`; never deploy it.
+- **Self-hosted GitHub OAuth — free fallback:** use when the application has no email provider. Configure the owner's per-site GitHub OAuth App and Worker secrets using the steps below.
 - **Mantle hosted auth — paid:** use only when the landing handoff records a
   hosted allocation and client configuration. Mantle Platform operates the
   identity provider; do not ask the user for a per-site GitHub OAuth App.
@@ -74,7 +74,17 @@ current Mantle landing flow explicitly supplies that handoff.
 For the exact boundary, read
 `node_modules/@aotter/mantle/docs/auth-hosting-model.md`.
 
-## Self-hosted Auth
+## Self-hosted email OTP
+
+Keep the application's custom `createAuth()` factory, replace
+`ConsoleEmailSender` with its production `EmailSender`, and retain
+`bootstrapOwner: { match: "email", value: <owner email> }`. Store sender
+credentials and `BETTER_AUTH_SECRET` as Worker secrets, put `PUBLIC_ORIGIN` in
+non-secret vars, deploy, then verify that the owner receives an OTP at
+`/admin/sign-in`. If there is no production email provider, use GitHub OAuth
+below instead of deploying console delivery.
+
+## Self-hosted GitHub OAuth
 
 1. Ask the user to create a GitHub OAuth App:
 
