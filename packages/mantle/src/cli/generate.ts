@@ -135,7 +135,8 @@ export function printGenerateNextSteps(adminUiInstalled: boolean, write = stdout
         "  1. wrangler assets.directory=./public and binding=ASSETS\n" +
         "  2. pnpm dev  →  open /admin/sign-in\n" +
         "  3. email OTP via ConsoleEmailSender (code in wrangler logs)\n" +
-        "See docs/examples/local-admin-otp.\n",
+        "PUBLIC_ORIGIN must equal the origin wrangler prints; a mismatch is INVALID_ORIGIN.\n" +
+        "See docs/examples/local-admin-otp or node_modules/@aotter/mantle/docs/examples/local-admin-otp.\n",
     );
     return;
   }
@@ -143,7 +144,7 @@ export function printGenerateNextSteps(adminUiInstalled: boolean, write = stdout
     "API-only (Admin is opt-in). A complete service does not require a Dev UI. " +
       "To add Admin later: install @aotter/mantle-admin and @aotter/mantle-admin-ui, " +
       "re-run generate, configure wrangler ASSETS, and wire local email-otp " +
-      "(docs/examples/local-admin-otp).\n",
+      "(docs/examples/local-admin-otp or node_modules/@aotter/mantle/docs/examples/local-admin-otp).\n",
   );
 }
 

@@ -7,7 +7,7 @@
     "validate": "mantle validate",
     "typecheck": "tsc --noEmit",
     "predev": "node ensure-dev-vars.mjs",
-    "dev": "wrangler dev --local",
+    "dev": "wrangler dev --local --ip 127.0.0.1 --port 8787",
     "check": "node ensure-dev-vars.mjs && mantle generate && mantle generate --check && mantle validate && mantle skills && mantle skills --check && tsc --noEmit && node smoke.mjs"
   },
   "dependencies": {
