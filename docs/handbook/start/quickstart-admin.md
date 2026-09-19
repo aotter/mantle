@@ -29,7 +29,7 @@ Pin every `@aotter/mantle*` package to the same exact release. Admin needs both 
     "validate": "mantle validate",
     "typecheck": "tsc --noEmit",
     "predev": "node ensure-dev-vars.mjs",
-    "dev": "wrangler dev --local"
+    "dev": "wrangler dev --local --ip 127.0.0.1 --port 8787"
   },
   "dependencies": {
     "@aotter/mantle": "0.1.2-alpha.6",
@@ -82,7 +82,7 @@ BETTER_AUTH_SECRET=local-admin-otp-dev-secret-do-not-use-in-prod
 ADMIN_EMAIL=owner@example.com
 ```
 
-Copy it to `.dev.vars` (the `predev` script does this). Never commit `.dev.vars`. `PUBLIC_ORIGIN` must match the origin wrangler prints; a mismatch makes Better Auth reject OTP with `INVALID_ORIGIN`.
+Copy it to `.dev.vars` (the `predev` script does this). Never commit `.dev.vars`. `pnpm dev` binds `127.0.0.1:8787` so wrangler's Ready-on origin matches this `PUBLIC_ORIGIN`. A mismatch makes Better Auth reject OTP with `INVALID_ORIGIN`.
 
 ## 3. `manifests/site.yaml`
 
@@ -196,7 +196,7 @@ pnpm install && pnpm generate && pnpm dev
 
 `mantle generate` writes `.mantle/generated/mantle.ts` and syncs the **prebuilt** Admin SPA from `@aotter/mantle-admin-ui` into `public/_mantle/admin/`. Do not run Vite or otherwise build a frontend unless you are developing `admin-ui` itself.
 
-Wrangler prints the local origin, normally `http://127.0.0.1:8787`.
+`pnpm dev` binds `127.0.0.1:8787`. Wrangler prints `Ready on http://127.0.0.1:8787`, the same origin as `PUBLIC_ORIGIN`.
 
 ## 7. Sign in
 

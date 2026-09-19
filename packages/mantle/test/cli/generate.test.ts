@@ -331,13 +331,25 @@ spec: {}
     expect(notes.join("")).toMatch(/\/admin\/sign-in/);
     expect(notes.join("")).toMatch(/ConsoleEmailSender/);
     expect(notes.join("")).toMatch(/ASSETS/);
+    expect(notes.join("")).toMatch(/PUBLIC_ORIGIN must equal the origin wrangler prints/);
+    expect(notes.join("")).toMatch(/INVALID_ORIGIN/);
+    expect(notes.join("")).toMatch(/docs\/examples\/local-admin-otp/);
+    expect(notes.join("")).toMatch(/node_modules\/@aotter\/mantle\/docs\/examples\/local-admin-otp/);
     notes.length = 0;
     printGenerateNextSteps(false, (chunk) => {
       notes.push(String(chunk));
       return true;
     });
     expect(notes.join("")).toMatch(/API-only/);
+    expect(notes.join("")).toMatch(/docs\/examples\/local-admin-otp/);
+    expect(notes.join("")).toMatch(/node_modules\/@aotter\/mantle\/docs\/examples\/local-admin-otp/);
     expect(notes.join("")).not.toMatch(/sign-in/);
+  });
+
+  it("pins the official Admin OTP example to the same host as PUBLIC_ORIGIN", async () => {
+    const pkg = JSON.parse(await readFile(new URL("../../../../docs/examples/local-admin-otp/package.json", import.meta.url), "utf8"));
+    expect(pkg.scripts.dev).toMatch(/--ip 127\.0\.0\.1/);
+    expect(pkg.scripts.dev).toMatch(/--port 8787/);
   });
 
   it("warns when Admin UI is synced but wrangler has no ASSETS binding", async () => {

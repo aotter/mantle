@@ -137,6 +137,10 @@ try {
   ]) {
     if (!existsSync(join(umbrella, doc))) throw new Error(`Packed authoring reference missing: ${doc}`);
   }
+  const adminOtpPkg = JSON.parse(readFileSync(join(umbrella, "docs/examples/local-admin-otp/package.json"), "utf8"));
+  if (!String(adminOtpPkg.scripts?.dev ?? "").includes("--ip 127.0.0.1")) {
+    throw new Error("Packed local-admin-otp pnpm dev must pin wrangler --ip 127.0.0.1");
+  }
   const packedManifest = JSON.parse(readFileSync(join(umbrella, "package.json"), "utf8"));
   if (packedManifest.exports["./provision"]) throw new Error("Retired provision export remains");
   const payload = execFileSync("tar", ["-tf", tarballs["@aotter/mantle"]], { encoding: "utf8" });

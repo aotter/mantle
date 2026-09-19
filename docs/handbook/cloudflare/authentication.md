@@ -7,7 +7,7 @@ Conventional Auth is chosen by one variable, `MANTLE_AUTH_MODE`, and fails close
 
 ## Local Admin: email OTP
 
-The local human path does not use `MANTLE_AUTH_MODE` or GitHub. Pass `auth` to `createMantleWorker` with `email-otp`, `ConsoleEmailSender`, and `bootstrapOwner.match: "email"`. The one-time code is printed on the wrangler log. See [Quickstart: local Admin](../start/quickstart-admin.md). `ConsoleEmailSender` is for `wrangler dev` only; production needs a real sender.
+The local human path does not use `MANTLE_AUTH_MODE` or GitHub. Pass `auth` to `createMantleWorker` with `email-otp`, `ConsoleEmailSender`, and `bootstrapOwner.match: "email"`. The one-time code is printed on the wrangler log. See [Quickstart: local Admin](../start/quickstart-admin.md). `ConsoleEmailSender` is for `wrangler dev` only; production needs a real sender. The official example binds `127.0.0.1:8787` and sets `PUBLIC_ORIGIN` to that origin; Better Auth rejects OTP with `INVALID_ORIGIN` when they diverge from the origin wrangler prints.
 
 With `auth` set, the mode matrix below is not read. Core still owns `/admin` and `/api/auth/*`.
 
@@ -20,7 +20,7 @@ With `auth` set, the mode matrix below is not read. Core still owns `/admin` and
 
 Validation rules:
 
-- `PUBLIC_ORIGIN` is the site's HTTPS origin without a trailing slash. When unset, the adapter falls back to `http://localhost:8787`.
+- `PUBLIC_ORIGIN` is the site's HTTPS origin without a trailing slash. When unset, the adapter falls back to `http://localhost:8787`. The Admin OTP example uses `http://127.0.0.1:8787`; that value must match wrangler's printed origin.
 - Self-managed uses the site's own GitHub OAuth app. Register its callback URL as `<PUBLIC_ORIGIN>/api/auth/callback/github`.
 - Hosted is a public PKCE client with no client secret. `MANTLE_HOSTED_AUTH_ISSUER` must be an HTTPS root origin (no path, query or fragment; `http` only for loopback). `MANTLE_HOSTED_AUTH_CLIENT_ID` must be a URL on that same origin shaped `/clients/<id>`.
 - `ADMIN_GITHUB_LOGIN` must be a valid GitHub login.

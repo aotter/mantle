@@ -136,7 +136,7 @@ pnpm exec mantle validate
 pnpm exec wrangler dev --local
 ```
 
-`mantle validate` prints `OK  no issues (root: manifests, phase: preview)`. Wrangler prints the local origin, normally `http://localhost:8787`; use whatever it prints in the next step.
+`mantle validate` prints `OK  no issues (root: manifests, phase: preview)`. Wrangler prints the local origin, normally `http://localhost:8787`; use whatever it prints in the next step. The Admin OTP path uses `http://127.0.0.1:8787` in the official example, and `PUBLIC_ORIGIN` must match wrangler's printed origin there.
 
 ## 6. Probe the Worker
 
