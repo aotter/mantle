@@ -44,6 +44,4 @@ export interface UpdateEditableSiteConfigArgs {
   readonly brand?: string;
   readonly title?: string;
   readonly description?: string;
-  readonly ga4MeasurementId?: string;
-  readonly facebookPixelId?: string;
 }

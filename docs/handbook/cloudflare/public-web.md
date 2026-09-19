@@ -75,7 +75,7 @@ export default createMantleWorker<Env>({
 });
 ```
 
-Templates return complete HTML strings; the renderer prepends the doctype. Escape every value you interpolate.
+Templates return complete HTML strings; the renderer prepends the doctype. Escape every value you interpolate. Core does not inject GA4, Meta Pixel or verification tags from `siteConfig`; add those in the host template or on Cloudflare. See [Site chrome](./site-chrome.md).
 
 ## Template signatures
 

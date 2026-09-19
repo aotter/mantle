@@ -173,12 +173,14 @@ describe("GET /admin/api/site", () => {
 });
 
 describe("/admin/api/site-settings", () => {
-  it("loads settings once and keeps missing tracking ids as empty strings", async () => {
+  it("loads settings once without retired tracking fields", async () => {
     const { app, db } = harness({ getSession: sessionAs("owner") });
     db.siteConfig.set("brand", "Mantle");
     db.siteConfig.set("title", "Mantle site");
     db.siteConfig.set("description", "Fast by default");
     db.siteConfig.set("origin", "https://www.example.com");
+    db.siteConfig.set("ga4MeasurementId", "G-LEFTOVER");
+    db.siteConfig.set("facebookPixelId", "123");
 
     const res = await app.request("/admin/api/site-settings");
 
@@ -188,9 +190,9 @@ describe("/admin/api/site-settings", () => {
       brand: "Mantle",
       title: "Mantle site",
       description: "Fast by default",
-      ga4MeasurementId: "",
-      facebookPixelId: "",
     });
+    expect(body).not.toHaveProperty("ga4MeasurementId");
+    expect(body).not.toHaveProperty("facebookPixelId");
     const reads = db.executions.filter(({ sql }) =>
       sql.startsWith("SELECT key, value FROM site_config")
     );
@@ -203,7 +205,6 @@ describe("/admin/api/site-settings", () => {
     db.siteConfig.set("brand", "Old brand");
     db.siteConfig.set("title", "Keep title");
     db.siteConfig.set("description", "Old description");
-    db.siteConfig.set("facebookPixelId", "123");
     const { app } = harness({ getSession: sessionAs("owner") }, { db });
 
     const res = await app.request(
@@ -212,22 +213,18 @@ describe("/admin/api/site-settings", () => {
         brand: "New brand",
         title: 42,
         description: "",
-        ga4MeasurementId: "g-new1",
       }),
     );
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
+    expect(await res.json()).toEqual({
       brand: "New brand",
       title: "Keep title",
       description: "",
-      ga4MeasurementId: "G-NEW1",
-      facebookPixelId: "123",
     });
     expect(db.siteConfig.get("brand")).toBe("New brand");
     expect(db.siteConfig.get("title")).toBe("Keep title");
     expect(db.siteConfig.get("description")).toBe("");
-    expect(db.siteConfig.get("ga4MeasurementId")).toBe("G-NEW1");
     expect(events).toEqual(["write", "read"]);
   });
 
@@ -238,25 +235,26 @@ describe("/admin/api/site-settings", () => {
 
     const res = await app.request(
       "/admin/api/site-settings",
-      jsonInit("PATCH", { title: 42, facebookPixelId: null }),
+      jsonInit("PATCH", { title: 42, ga4MeasurementId: "G-IGNORED" }),
     );
 
     expect(res.status).toBe(200);
     expect(events).toEqual(["read"]);
   });
 
-  it("rejects tracking IDs that would be silently ignored while rendering", async () => {
+  it("ignores retired tracking fields and does not persist them", async () => {
     const { app, db } = harness({ getSession: sessionAs("owner") });
     const res = await app.request(
       "/admin/api/site-settings",
-      jsonInit("PATCH", { ga4MeasurementId: "not-a-ga-id" }),
+      jsonInit("PATCH", { ga4MeasurementId: "G-NEW1", facebookPixelId: "1234567890" }),
     );
 
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      diagnostic: { code: "INPUT_VALIDATION_FAILED" },
-    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).not.toHaveProperty("ga4MeasurementId");
+    expect(body).not.toHaveProperty("facebookPixelId");
     expect(db.siteConfig.has("ga4MeasurementId")).toBe(false);
+    expect(db.siteConfig.has("facebookPixelId")).toBe(false);
   });
 
   it("does not report success after a failed write", async () => {

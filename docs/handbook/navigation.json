@@ -27,6 +27,7 @@
         { "text": "Bindings and primitives", "link": "/cloudflare/bindings" },
         { "text": "Authentication", "link": "/cloudflare/authentication" },
         { "text": "Public web, SEO and cache", "link": "/cloudflare/public-web" },
+        { "text": "Site chrome", "link": "/cloudflare/site-chrome" },
         { "text": "Deferred hooks with Queues", "link": "/cloudflare/deferred-hooks-queues" },
         { "text": "Media uploads with R2", "link": "/cloudflare/media-r2" },
         { "text": "Deploy and operate", "link": "/cloudflare/deploy-and-operate" },

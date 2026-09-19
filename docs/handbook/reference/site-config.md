@@ -3,7 +3,7 @@ description: siteDefaults reference — locales, brand, icons, media purposes, t
 ---
 # Site config
 
-Site config is a sibling of the Manifest grammar, not part of it. The four atoms describe content; `siteDefaults` describes the deployment: the locales the site publishes in, its brand and title, its canonical origin, its icons, its analytics ids and its media taxonomy. The deployment declares it as a TypeScript object and passes it to the adapter; the runtime seeds it into the `site_config` table and every render, MCP catalog build and Admin page reads it back from there.
+Site config is a sibling of the Manifest grammar, not part of it. The four atoms describe content; `siteDefaults` describes the deployment: the locales the site publishes in, its brand and title, its canonical origin, its icons and its media taxonomy. Tracking pixels, search-engine verification tokens and similar site chrome are host responsibility — see [Site chrome](../cloudflare/site-chrome.md). The deployment declares `siteDefaults` as a TypeScript object and passes it to the adapter; the runtime seeds it into the `site_config` table and every render, MCP catalog build and Admin page reads it back from there.
 
 ## `siteDefaults`
 
@@ -15,8 +15,6 @@ Site config is a sibling of the Manifest grammar, not part of it. The four atoms
 | `description` | string | no | Default `<meta name="description">` and `og:description` for entries with none. |
 | `origin` | string | no | Canonical absolute origin, no trailing slash, for example `https://example.com`. Used to build absolute URLs in `/llms.txt`, the `.md` mirrors and `/sitemap.xml`. An empty origin yields relative URLs. |
 | `icons` | `SiteIcon[]` | no | One site identity reused by browser favicons, Admin chrome and MCP `serverInfo.icons`. Declaring an empty array is an error. |
-| `ga4MeasurementId` | string | no | GA4 Measurement ID such as `G-XXXXXXXXXX`. When present the runtime injects the standard gtag snippet into rendered public HTML. |
-| `facebookPixelId` | string | no | Meta Pixel ID. When present the runtime injects the standard Pixel base snippet. |
 | `media.purposes` | `MediaPurposePolicy[]` | no | The upload taxonomy. Omitting the key, or declaring an empty array, keeps first-party media uploads disabled. |
 
 Nothing in this object is validated for length or content beyond the rules above: `brand`, `title`, `description` and `origin` are free strings.
@@ -83,8 +81,6 @@ Slot position does not determine variant role. Per asset the uploading agent pic
 | `locales` | `readonly string[]` | `[]` |
 | `canonicalLocale` | `string \| null` | `locales[0]` or `null` when the list is empty |
 | `icons` | `readonly SiteIcon[]` | `DEFAULT_SITE_ICONS` |
-| `ga4MeasurementId` | `string \| undefined` | `undefined` (an empty stored value also reads as `undefined`) |
-| `facebookPixelId` | `string \| undefined` | `undefined` |
 | `media.purposes` | `readonly MediaPurposePolicy[]` | `[]` |
 
 `canonicalLocale` is computed, never stored. Templates emit `<html lang>` only when it is non-null; silent omission is the correct behaviour for a zero-locale site, not a fabricated default.
@@ -98,8 +94,6 @@ The table is a flat key/value store. Keys fall into two ownership classes, and t
 | `brand` | UI-editable, seed-once | `INSERT … ON CONFLICT DO NOTHING` | The database, once the row exists |
 | `title` | UI-editable, seed-once | `INSERT … ON CONFLICT DO NOTHING` | The database, once the row exists |
 | `description` | UI-editable, seed-once | `INSERT … ON CONFLICT DO NOTHING` | The database, once the row exists |
-| `ga4MeasurementId` | UI-editable, seed-once | `INSERT … ON CONFLICT DO NOTHING` | The database, once the row exists |
-| `facebookPixelId` | UI-editable, seed-once | `INSERT … ON CONFLICT DO NOTHING` | The database, once the row exists |
 | `origin` | Code-canonical, boot-synced | Upsert when the stored value differs | The declaration |
 | `faviconUrl` | Code-canonical, boot-synced | Upsert when the stored value differs; holds the `icons` array as JSON | The declaration |
 | `locales` | Code-canonical, boot-synced | Upsert when the stored value differs; holds the declared list as a comma-separated string | The declaration |
@@ -108,6 +102,9 @@ The table is a flat key/value store. Keys fall into two ownership classes, and t
 Blank values are skipped in both classes: an absent, empty or empty-array field never writes and never clears an existing row, so a partial declaration cannot clobber stored values. The boot-synced keys are read-compared before writing, so an unchanged deployment issues no write.
 
 The seed-once keys have an Admin edit path at `PATCH /admin/api/site-settings` (owner only); the boot-synced keys do not, which is why the declaration wins on every boot. A custom-domain change therefore becomes canonical by editing the code and redeploying, with no manual database edit.
+
+> **Warning**
+> `ga4MeasurementId` and `facebookPixelId` are retired from Core `siteConfig` (#928). Stored rows with those keys are ignored on read and are not injected into public HTML. Re-install analytics, pixels and search-engine verification on the host — Cloudflare-first examples are in [Site chrome](../cloudflare/site-chrome.md).
 
 > **Warning**
 > `mediaPurposes` is JSON. Rows written by pre-`#272` deployments used a CSV form and do not round-trip. Re-run the seed, or delete the row, after upgrading.
@@ -195,7 +192,6 @@ export default createMantleWorker({
       { src: "/site-icon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
       { src: "/site-icon.png", mimeType: "image/png", sizes: ["64x64"] },
     ],
-    ga4MeasurementId: "G-XXXXXXXXXX",
     media: {
       purposes: [
         {

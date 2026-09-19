@@ -16,13 +16,13 @@ import type {
  * `site_config` row read/write. SQLite preparation calls `seed` once per
  * changed revision and treats keys differently depending on who owns them:
  *
- * - **UI-editable, seed-once** (`brand`, `title`, `description`,
- *   `ga4MeasurementId`, `facebookPixelId`):
+ * - **UI-editable, seed-once** (`brand`, `title`, `description`):
  *   written via INSERT … ON CONFLICT DO NOTHING. The admin settings
- *   UI (`/admin/api/site-settings`) can edit a subset of these
- *   directly, and the rest are conceptually the same "operator can
- *   override" bucket — either way, DB wins once the row exists, so a
- *   later `src/mantle/config.ts` edit never clobbers an operator's change.
+ *   UI (`/admin/api/site-settings`) can edit these directly. DB wins
+ *   once the row exists, so a later `src/mantle/config.ts` edit never
+ *   clobbers an operator's change. Leftover `ga4MeasurementId` /
+ *   `facebookPixelId` rows from pre-#928 deployments are ignored on
+ *   read and are not injected into public HTML.
  *
  * - **code-canonical, boot-synced** (`origin`, `icons`, `mediaPurposes`, `locales`):
  *   these have no admin-UI edit path — `src/mantle/config.ts` is the only
@@ -56,8 +56,6 @@ const KEYS = {
   origin: "origin",
   locales: "locales",
   faviconUrl: "faviconUrl",
-  ga4MeasurementId: "ga4MeasurementId",
-  facebookPixelId: "facebookPixelId",
   mediaPurposes: "mediaPurposes",
 } as const;
 
@@ -65,8 +63,6 @@ const EDITABLE_KEYS = [
   KEYS.brand,
   KEYS.title,
   KEYS.description,
-  KEYS.ga4MeasurementId,
-  KEYS.facebookPixelId,
 ] as const;
 
 function splitCsv(raw: string | undefined): string[] {
@@ -121,8 +117,6 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
       [KEYS.brand, defaults.brand],
       [KEYS.title, defaults.title],
       [KEYS.description, defaults.description],
-      [KEYS.ga4MeasurementId, defaults.ga4MeasurementId],
-      [KEYS.facebookPixelId, defaults.facebookPixelId],
     ];
     const insertOnce = (key: string, value: string) =>
       this.db
@@ -198,8 +192,6 @@ export class DatabaseSiteConfigRepository implements SiteConfigRepository {
       canonicalLocale: locales[0] ?? null,
       brand: m.get(KEYS.brand) ?? "AotterMantle",
       icons: parseIcons(m.get(KEYS.faviconUrl)),
-      ga4MeasurementId: m.get(KEYS.ga4MeasurementId) || undefined,
-      facebookPixelId: m.get(KEYS.facebookPixelId) || undefined,
       media: { purposes },
     };
   }

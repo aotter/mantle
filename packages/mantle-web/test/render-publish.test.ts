@@ -46,7 +46,7 @@ async function seedEntry(
 }
 
 describe("RenderEntryLiveUseCase", () => {
-  it("injects configured tracking scripts into rendered entry HTML", async () => {
+  it("renders entry HTML without injecting third-party tracking scripts from site config", async () => {
     const db = new InMemoryDatabase();
     const repository = await seedEntry(db, { id: "p1", data: { title: "Hi", slug: "hi", locale: "en" } });
     const templates = new TemplateRegistry();
@@ -63,18 +63,15 @@ describe("RenderEntryLiveUseCase", () => {
       collection: "posts",
       slug: "hi",
       locale: "en",
-      site: {
-        ...site,
-        ga4MeasurementId: "G-ABC1234567",
-        facebookPixelId: "123456789012345",
-      },
+      site,
     });
 
-    expect(html).toContain("https://www.googletagmanager.com/gtag/js?id=G-ABC1234567");
-    expect(html).toContain("gtag('config','G-ABC1234567')");
-    expect(html).toContain("fbq('init','123456789012345')");
-    expect(html).toContain("https://www.facebook.com/tr?id=123456789012345");
-    expect(html?.indexOf("googletagmanager.com")).toBeLessThan(html?.indexOf("</head>") ?? 0);
+    expect(html).toContain("<title>Hi</title>");
+    expect(html).toContain("<body>Hi</body>");
+    expect(html).not.toContain("googletagmanager.com");
+    expect(html).not.toContain("gtag(");
+    expect(html).not.toContain("fbevents.js");
+    expect(html).not.toContain("facebook.com/tr");
   });
 
   it("threads resolved media assets into live entry templates", async () => {
