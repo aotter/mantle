@@ -205,7 +205,7 @@ pnpm exec mantle validate
 pnpm exec wrangler dev --local
 ```
 
-`mantle validate` prints `OK  no issues (root: manifests, phase: preview)`. Wrangler prints the local origin, normally `http://localhost:8787`; use whatever it prints below. `generate` writes `.mantle/generated/mantle.ts` and syncs the Admin SPA to `public/_mantle/admin/` because `@aotter/mantle-admin-ui` is installed.
+On a TTY, `mantle validate` prints `OK  no issues (root: manifests, phase: preview)`. Without a TTY it prints JSON unless you pass `--format text`. Wrangler prints the local origin, normally `http://localhost:8787`; use whatever it prints below. `generate` writes `.mantle/generated/mantle.ts` and syncs the Admin SPA to `public/_mantle/admin/` because `@aotter/mantle-admin-ui` is installed.
 
 ## 7. Probe the Worker
 

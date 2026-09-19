@@ -46,7 +46,7 @@ Local values:
 
 Open `http://localhost:8787/admin/sign-in`, enter that email, send the code, then open `/admin/dev`. Do not rebuild Admin.
 
-`ConsoleEmailSender` is local-only. A remote deploy needs a real `EmailSender`. Conventional `MANTLE_AUTH_MODE=self-managed` without GitHub credentials is not a local login path: Auth-owned routes return `503 setup_incomplete`.
+`ConsoleEmailSender` is local-only. A remote deploy needs a real `EmailSender`. Conventional `MANTLE_AUTH_MODE=self-managed` without GitHub credentials is not a local login path: Auth-owned routes return `503 setup_incomplete`. Better Auth may log `Expected date but got TEXT` column warnings on first local boot; they do not block OTP send or sign-in.
 
 The file-by-file walkthrough is [Start: a local Worker and Admin](../start/quickstart-worker.md).
 
