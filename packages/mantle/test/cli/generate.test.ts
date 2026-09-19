@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resolveAdminUiIndexHtml, runGenerate, warnMissingWranglerAssets } from "../../src/cli/generate.js";
+import { printGenerateNextSteps, resolveAdminUiIndexHtml, runGenerate, warnMissingWranglerAssets } from "../../src/cli/generate.js";
 
 const coreOnly = { resolveAdminUiIndexHtml: () => null };
 
@@ -301,6 +301,42 @@ spec: {}
       await rm(root, { recursive: true, force: true });
       await rm(adminDist, { recursive: true, force: true });
     }
+  });
+
+  it("prints the API-only next step when Admin UI is not installed", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mantle-generate-api-only-tip-"));
+    try {
+      await mkdir(join(root, "manifests"));
+      await writeFile(join(root, "manifests", "site.yaml"), fixture);
+      process.chdir(root);
+      const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+      expect(await runGenerate([], coreOnly)).toBe(0);
+      expect(stdout.mock.calls.flat().join("")).toMatch(/API-only/);
+      expect(stdout.mock.calls.flat().join("")).toMatch(/local-admin-otp/);
+      stdout.mockClear();
+      expect(await runGenerate(["--check"], coreOnly)).toBe(0);
+      expect(stdout.mock.calls.flat().join("")).not.toMatch(/API-only/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("prints Admin next steps when Admin UI is synced", async () => {
+    const notes: string[] = [];
+    printGenerateNextSteps(true, (chunk) => {
+      notes.push(String(chunk));
+      return true;
+    });
+    expect(notes.join("")).toMatch(/\/admin\/sign-in/);
+    expect(notes.join("")).toMatch(/ConsoleEmailSender/);
+    expect(notes.join("")).toMatch(/ASSETS/);
+    notes.length = 0;
+    printGenerateNextSteps(false, (chunk) => {
+      notes.push(String(chunk));
+      return true;
+    });
+    expect(notes.join("")).toMatch(/API-only/);
+    expect(notes.join("")).not.toMatch(/sign-in/);
   });
 
   it("warns when Admin UI is synced but wrangler has no ASSETS binding", async () => {

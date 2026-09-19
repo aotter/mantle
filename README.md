@@ -289,7 +289,9 @@ is cloned or opened. See [`skills/README.md`](skills/README.md) for host details
 
 ## CLI reference
 
-The umbrella provides one `mantle` command set:
+The umbrella provides one `mantle` command set. Top-level `mantle --help`
+is a layered overview (Minimal compile, then Admin / Dev UI); subcommand
+help stays on that layer. There is no `create` / `update` happy path.
 
 | Command | Purpose |
 |---|---|

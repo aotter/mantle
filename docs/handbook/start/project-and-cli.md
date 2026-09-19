@@ -33,7 +33,7 @@ The minimal Worker reference keeps `.mantle/`, `.agents/`, `.claude/`, `.wrangle
 
 ## The CLI
 
-The umbrella package installs two binaries, `mantle` and `mantle-harness`. Run them through the package manager, for example `pnpm exec mantle generate`. Defaults shown are the pinned ones.
+The umbrella package installs two binaries, `mantle` and `mantle-harness`. Run them through the package manager, for example `pnpm exec mantle generate`. Defaults shown are the pinned ones. Bare `mantle` / `mantle --help` prints a layered overview (Minimal compile, then Admin / Dev UI); `generate --help` and `validate --help` stay on the compile path. After a successful `generate`, the CLI prints the next layer: Admin steps when `@aotter/mantle-admin-ui` is installed, or an API-only tip that points at `docs/examples/local-admin-otp` when it is not.
 
 | Command | Flags | Does |
 |---|---|---|
