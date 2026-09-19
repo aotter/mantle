@@ -7,6 +7,18 @@ Core `siteConfig` stays lean: locales, brand, title, description, origin, icons 
 
 Cloudflare-native platform capabilities are the first-class replacement where they fit. Do not invent a parallel “CDN settings center” inside Mantle.
 
+## Why Core does not inject
+
+The retired path was a post-render `injectTrackingTags` on composed HTML: if `site_config` held a GA4 or Pixel id, the renderer rewrote the first `</head>` (or prepended to `<body>`) and shipped vendor scripts. That is a **one-shape assumption**. Hosts are not one shape.
+
+Frontends are plural. A Mantle consumer may serve SSR full HTML documents, a Vite/React (or other) SPA, a Worker plus static assets, Cloudflare Pages, or a custom wrapper that already owns `<html>`. Only the first of those even has a complete document string that a headless runtime can mutate after the fact — and even then the attach point is the host template, not Core.
+
+SPA, client-routed and hydration hosts usually attach analytics in **their own entry**: GTM or Zaraz, the app bootstrap, or Cloudflare Web Analytics. They do not expect a Runtime or `mantle-web` helper to parse an HTML string and splice tags into it.
+
+Silent injection from `site_config` is then a surprising side effect for any host that did not opt into “I emit a full document and you may rewrite it.” Core must not pretend to know every frontend’s attach point.
+
+Therefore tracking and verification stay **host chrome**. Core `siteConfig` is deployment identity only — locales, brand, title, description, origin, icons, media — not a tag-manager. The tables below say where to put chrome instead.
+
 ## Two layers
 
 | Concern | Prefer | Usually still app / mantle-web |

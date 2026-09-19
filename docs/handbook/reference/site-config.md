@@ -3,7 +3,7 @@ description: siteDefaults reference — locales, brand, icons, media purposes, t
 ---
 # Site config
 
-Site config is a sibling of the Manifest grammar, not part of it. The four atoms describe content; `siteDefaults` describes the deployment: the locales the site publishes in, its brand and title, its canonical origin, its icons and its media taxonomy. Tracking pixels, search-engine verification tokens and similar site chrome are host responsibility — see [Site chrome](../cloudflare/site-chrome.md). The deployment declares `siteDefaults` as a TypeScript object and passes it to the adapter; the runtime seeds it into the `site_config` table and every render, MCP catalog build and Admin page reads it back from there.
+Site config is a sibling of the Manifest grammar, not part of it. The four atoms describe content; `siteDefaults` describes the deployment: the locales the site publishes in, its brand and title, its canonical origin, its icons and its media taxonomy. Tracking pixels, search-engine verification tokens and similar site chrome are host responsibility: consumers ship SSR documents, SPAs, Workers plus assets, Pages and custom wrappers, so Core does not rewrite `</head>` after the fact. See [Why Core does not inject](../cloudflare/site-chrome.md#why-core-does-not-inject). The deployment declares `siteDefaults` as a TypeScript object and passes it to the adapter; the runtime seeds it into the `site_config` table and every render, MCP catalog build and Admin page reads it back from there.
 
 ## `siteDefaults`
 
@@ -104,7 +104,7 @@ Blank values are skipped in both classes: an absent, empty or empty-array field 
 The seed-once keys have an Admin edit path at `PATCH /admin/api/site-settings` (owner only); the boot-synced keys do not, which is why the declaration wins on every boot. A custom-domain change therefore becomes canonical by editing the code and redeploying, with no manual database edit.
 
 > **Warning**
-> `ga4MeasurementId` and `facebookPixelId` are retired from Core `siteConfig` (#928). Stored rows with those keys are ignored on read and are not injected into public HTML. Re-install analytics, pixels and search-engine verification on the host — Cloudflare-first examples are in [Site chrome](../cloudflare/site-chrome.md).
+> `ga4MeasurementId` and `facebookPixelId` are retired from Core `siteConfig` (#928). Stored rows with those keys are ignored on read and are not injected into public HTML — Core cannot know every frontend’s attach point. Re-install analytics, pixels and search-engine verification on the host. Rationale and Cloudflare-first steps: [Site chrome](../cloudflare/site-chrome.md#why-core-does-not-inject).
 
 > **Warning**
 > `mediaPurposes` is JSON. Rows written by pre-`#272` deployments used a CSV form and do not round-trip. Re-run the seed, or delete the row, after upgrading.
