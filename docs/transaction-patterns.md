@@ -1,5 +1,5 @@
 # Transaction patterns
 
-This guide moved into the handbook: [`docs/handbook/examples/commerce-transaction.md`](handbook/examples/commerce-transaction.md).
+This guide lives in the Examples hub: [`docs/examples/cf-primitives-commerce-inventory.md`](examples/cf-primitives-commerce-inventory.md). The Builder-safe catalog is [`docs/examples/builtin-commerce.md`](examples/builtin-commerce.md).
 
-The handbook ships inside the `@aotter/mantle` package under `node_modules/@aotter/mantle/docs/handbook/` and describes the installed release.
+The handbook and examples hub ship inside the `@aotter/mantle` package under `node_modules/@aotter/mantle/docs/` and describe the installed release.

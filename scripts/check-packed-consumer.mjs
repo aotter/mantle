@@ -40,7 +40,7 @@ if (args.length === 1 && args[0] === "--self-test" && command.length === 0) {
   if (!isWithin(source, join(source, "output")) || isWithin(source, join(tmpdir(), "output"))) {
     throw new Error("packed-consumer output boundary self-test failed");
   }
-  const archived = archiveProject(join(root, "docs/examples/minimal-worker"));
+  const archived = archiveProject(join(root, "docs/examples/host-minimal-worker"));
   const entries = execFileSync("tar", ["-tf", "-"], { input: archived.bytes, encoding: "utf8" }).split("\n");
   if (!entries.includes("package.json") || entries.some((entry) => entry.includes("node_modules/"))) {
     throw new Error("packed-consumer committed subtree archive failed");

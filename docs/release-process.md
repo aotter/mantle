@@ -20,7 +20,7 @@ No task implicitly authorizes publication; no manual package/tag writer exists.
 | Channels promoted/preserved newer | GitHub release step | Existing release identity or fail |
 
 The public-registry gate uses a disposable copy of the directly authored
-`docs/examples/minimal-worker` reference, installs the exact candidate, then
+`docs/examples/host-minimal-worker` reference, installs the exact candidate, then
 checks generation, skill projection, TypeScript and real Worker HTTP behavior.
 The same reference is gated against exact tarballs before Core tagging. It is
 a test/example, not a scaffold product or another repository release.

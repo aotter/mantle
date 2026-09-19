@@ -30,10 +30,12 @@ version; never use `develop` branch docs for a versioned consumer project.
 ## Existing Examples
 
 Read installed `docs/handbook/start/project-and-cli.md` and
-`docs/examples/minimal-worker/` for Spec + adapter without Admin. Read
-`docs/examples/local-admin-otp/` only when the project already has Admin
-or the human asked for Dev UI — that path is opt-in. Then
-`docs/handbook/examples/commerce-transaction.md` before inventing a pattern.
+`docs/examples/README.md`. Use `docs/examples/host-minimal-worker/` for Spec +
+adapter without Admin. Read `docs/examples/host-local-admin-otp/` only when the
+project already has Admin or the human asked for Dev UI — that path is opt-in.
+Ingest only `docs/examples/builtin-*.md` Manifests as grammar for new domains.
+Read `docs/examples/cf-primitives-*.md` before inventing Durable Object, Queue,
+cron, or `ref` handler patterns.
 References are test/documentation, not a Starter or a fixed application shape.
 
 Public rendering is opt-in consumer wiring: `mountPublicRoutes`, a

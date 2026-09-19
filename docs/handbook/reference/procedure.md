@@ -241,7 +241,7 @@ Each listed operation carries `name`, `title`, `description`, `input`, `uiSchema
 
 When `input` declares `expectedVersion`, Admin treats that reserved name as magic: it captures the OCC target's current `version` at read time, submits it, and does not render an editable version field. Changing the selected target rebinds version (an organization row must not supply a membership mutation's version). A resolvable OCC target or a row-bound dialog must have that captured version before Run is enabled, including matched upsert where the field is declared but not globally required. If `expectedVersion` is in `input.required` and no target can be resolved, submit stays disabled. Collection create / no-row dialogs may omit it when it is not required. Builtin operations also expose `targetCollection` (the handler schema) so Admin can pick the mutated collection over a contextual parent.
 
-Worked end-to-end examples live in [Commerce transaction](../examples/commerce-transaction.md) and [Procurement approvals](../examples/procurement-approvals.md).
+Worked end-to-end examples live in [Commerce inventory](../../examples/cf-primitives-commerce-inventory.md), [Commerce catalog](../../examples/builtin-commerce.md), and [Procurement approvals](../../examples/builtin-procurement.md).
 
 ## Source
 

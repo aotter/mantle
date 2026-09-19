@@ -19,13 +19,13 @@ import {
 
 const apiVersion = "cms.mantle.aotter.net/v1" as const;
 const MCP_RESOURCE = "https://example.test/mcp";
+const handbookRoot = new URL("../../../../docs/handbook/", import.meta.url);
+const examplesRoot = new URL("../../../../docs/examples/", import.meta.url);
 const guide = [
-  "examples/guarded-api.md",
-  "reference/authorization.md",
-  "cloudflare/authentication.md",
-].map((page) => readFileSync(
-  new URL(`../../../../docs/handbook/${page}`, import.meta.url), "utf8",
-)).join("\n");
+  readFileSync(new URL("cf-primitives-guarded-api.md", examplesRoot), "utf8"),
+  readFileSync(new URL("reference/authorization.md", handbookRoot), "utf8"),
+  readFileSync(new URL("cloudflare/authentication.md", handbookRoot), "utf8"),
+].join("\n");
 
 function manifests(): Manifest[] {
   return [

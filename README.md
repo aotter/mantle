@@ -62,12 +62,12 @@ Mantle scales. Take only the surfaces you need — Admin is opt-in.
    visitor UI.
 2. **Runtime / adapter.** Bind Runtime through a Worker or another adapter.
    HTTP Views, MCP, and Auth run without a Dev UI. The
-   [minimal Worker reference](docs/examples/minimal-worker/README.md) is
+   [minimal Worker reference](docs/examples/host-minimal-worker/README.md) is
    this path.
 3. **Opt-in — Admin / Dev UI.** When humans need a console, add
    `@aotter/mantle-admin` + `@aotter/mantle-admin-ui`, bind wrangler `ASSETS`,
    and sign in at `/admin/sign-in` with email OTP from wrangler logs. The
-   [local Admin OTP reference](docs/examples/local-admin-otp/README.md) is
+   [local Admin OTP reference](docs/examples/host-local-admin-otp/README.md) is
    that optional full path.
 
 `pnpm exec mantle --help` is the layered overview. Give the version-matched
@@ -98,7 +98,7 @@ Cloudflare adapter unless I ask. Do not invent a default Schema.
 ### Minimal API service locally
 
 ```text
-Read handbook/start/quickstart-worker.md and examples/minimal-worker/.
+Read handbook/start/quickstart-worker.md and examples/host-minimal-worker/.
 Author a Cloudflare Worker from that official example or from scratch:
 one Schema, one public View (copy the contract, not the tree wholesale).
 Pin every @aotter/mantle* package to the same exact version. Run
@@ -111,7 +111,7 @@ Admin or wrangler ASSETS unless I ask.
 
 ```text
 I want the optional Admin / Dev UI. Read handbook/start/quickstart-admin.md
-and examples/local-admin-otp/. Interview me for a bootstrap owner email.
+and examples/host-local-admin-otp/. Interview me for a bootstrap owner email.
 Install @aotter/mantle-admin and @aotter/mantle-admin-ui, run
 mantle generate (it syncs the prebuilt SPA — do not vite-build), and set
 wrangler assets.directory=./public with binding ASSETS (required when
@@ -127,10 +127,11 @@ frontend build.
 ```text
 Interview me about the service: host, who uses it, whether humans need a
 Dev UI, and whether we only embed Spec/Runtime. Read mantle --help, then
-handbook/start/project-and-cli.md. Use handbook/examples/ only as grammar
-inspiration. Implement locally first. Take only the surfaces we chose.
-If we skip Admin, follow examples/minimal-worker/. If we want Dev UI,
-follow examples/local-admin-otp/. No mantle create. Pin all
+handbook/start/project-and-cli.md. Use docs/examples/README.md as the
+examples index; copy builtin-* Manifests only (not cf-primitives-*).
+Implement locally first. Take only the surfaces we chose.
+If we skip Admin, follow examples/host-minimal-worker/. If we want Dev UI,
+follow examples/host-local-admin-otp/. No mantle create. Pin all
 @aotter/mantle* packages to one exact version.
 ```
 
@@ -168,9 +169,10 @@ social metadata from the same published state.
 
 ## Application patterns
 
-Compose the four atoms for your actual business flow. Useful transaction
-coordination, idempotency and Queue/DO patterns are retained as
-[worked reference notes](docs/handbook/examples/commerce-transaction.md), without a second
+Compose the four atoms for your actual business flow. Start at the
+[Examples hub](docs/examples/README.md). Durable Object, Queue and payment
+coordination notes live in
+[Commerce inventory](docs/examples/cf-primitives-commerce-inventory.md), without a second
 launch product or a preset catalog.
 
 ## Publishing and operations in one Admin

@@ -187,9 +187,9 @@ internals or rebuilding Mantle's adapters.
 Use the installed install skill and [direct-authoring guide](docs/handbook/start/project-and-cli.md).
 The owner or agent writes the application's manifests, entry and configuration;
 `generate` compiles them and `skills` projects the version-matched instructions.
-The [minimal Worker reference](docs/examples/minimal-worker/README.md) is
+The [minimal Worker reference](docs/examples/host-minimal-worker/README.md) is
 the embed / adapter path without Admin. The
-[local Admin OTP reference](docs/examples/local-admin-otp/README.md) is the
+[local Admin OTP reference](docs/examples/host-local-admin-otp/README.md) is the
 opt-in Dev UI path. Neither is a scaffold command. Admin is optional.
 
 ## Agent marketplace install
@@ -245,12 +245,14 @@ adapter is a port-implementation exercise, not a runtime refactor.
 
 - The handbook is the user documentation and ships inside this npm package:
   `node_modules/@aotter/mantle/docs/handbook/` (start, concepts, Cloudflare
-  guides, examples, reference; `navigation.json` lists every page in order).
+  guides, example redirects, reference; `navigation.json` lists every page in order).
+  Worked Manifests live in `node_modules/@aotter/mantle/docs/examples/`
+  ([index](docs/examples/README.md)).
   The copy in `node_modules` describes the installed release.
 - Embedded docs and agent skills ship inside this npm package for
   generated-site agents:
   - `node_modules/@aotter/mantle/docs/handbook/reference/manifest.md`
-  - `node_modules/@aotter/mantle/docs/handbook/examples/guarded-api.md` (anonymous,
+  - `node_modules/@aotter/mantle/docs/examples/cf-primitives-guarded-api.md` (anonymous,
     API-key, paid guard, personal-token, OAuth, REST, and MCP examples)
   - `node_modules/@aotter/mantle/docs/handbook/cloudflare/media-r2.md` (Cloudflare R2 adapter recipe)
   - `node_modules/@aotter/mantle/docs/handbook/cloudflare/deferred-hooks-queues.md` (versioned
@@ -267,7 +269,7 @@ adapter is a port-implementation exercise, not a runtime refactor.
   - `node_modules/@aotter/mantle/skills/install/SKILL.md`
   - `node_modules/@aotter/mantle/skills/provision/SKILL.md`
 - [4-atom manifest model (ADR-0001)](docs/adr/0001-four-atom-manifest-model.md)
-- [API and MCP authorization](docs/handbook/examples/guarded-api.md)
+- [API and MCP authorization](docs/examples/cf-primitives-guarded-api.md)
 - [Deferred lifecycle Queues](docs/handbook/cloudflare/deferred-hooks-queues.md)
 - [Schema indexes on D1](docs/handbook/reference/schema.md)
 - [Release process](docs/release-process.md)

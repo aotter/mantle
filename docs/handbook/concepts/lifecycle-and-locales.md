@@ -129,7 +129,7 @@ The parent holds what every language shares and stays non-localized. The child s
 
 When you keep parallel locale rows in step, translate display strings only. Field names, option values, step identifiers and result keys must stay identical across locales, or the same View and the same MCP tool stop describing the same thing.
 
-The full worked version of this pattern, with a locale-parameterized public View and its REST response, is [Publication](../examples/publication.md).
+The full worked version of this pattern, with a locale-parameterized public View and its REST response, is [Publication](../../examples/builtin-publication.md).
 
 ## Source
 

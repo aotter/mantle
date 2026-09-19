@@ -30,13 +30,14 @@ turn `generate` into implicit scaffolding.
 3. Interview the human for host and required surfaces. Do not assume Admin,
    public HTML or Cloudflare. Scale:
    - Spec + generate / embed Runtime — `docs/handbook/start/project-and-cli.md`.
-   - Adapter without Admin — `docs/examples/minimal-worker/`.
+   - Adapter without Admin — `docs/examples/host-minimal-worker/`.
    - Opt-in Admin / Dev UI — only when a human needs a console: interview
-     the bootstrap owner email, then `docs/examples/local-admin-otp/`
+     the bootstrap owner email, then `docs/examples/host-local-admin-otp/`
      (`pnpm install && pnpm generate && pnpm dev`, `/admin/sign-in`, OTP
      in wrangler logs). Admin needs `@aotter/mantle-admin`,
      `@aotter/mantle-admin-ui`, wrangler `ASSETS` on `./public`, and
      `createAuth` email-otp + `ConsoleEmailSender`. Do not Vite-build Admin.
+   - Grammar — `docs/examples/README.md`; copy `builtin-*` Manifests only.
    None of these is a template to install wholesale. Other hosts use the
    embedded adapter guides. Author package scripts, manifests, entry and
    configuration for the user's requirements. No default notes model, home

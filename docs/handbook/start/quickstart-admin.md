@@ -231,9 +231,9 @@ If the page is blank, fetch an asset URL from the HTML. A `404` there means `ASS
 - [Quickstart: a minimal Worker](./quickstart-worker.md) — API-only embed without Admin.
 
 ## Source
-- [`docs/examples/local-admin-otp/README.md`](../../../docs/examples/local-admin-otp/README.md)
-- [`docs/examples/local-admin-otp/package.json`](../../../docs/examples/local-admin-otp/package.json)
-- [`docs/examples/local-admin-otp/src/index.ts`](../../../docs/examples/local-admin-otp/src/index.ts)
-- [`docs/examples/local-admin-otp/wrangler.jsonc`](../../../docs/examples/local-admin-otp/wrangler.jsonc)
-- [`docs/examples/local-admin-otp/.dev.vars.example`](../../../docs/examples/local-admin-otp/.dev.vars.example)
-- [`docs/examples/local-admin-otp/smoke.mjs`](../../../docs/examples/local-admin-otp/smoke.mjs)
+- [`docs/examples/host-local-admin-otp/README.md`](../../../docs/examples/host-local-admin-otp/README.md)
+- [`docs/examples/host-local-admin-otp/package.json`](../../../docs/examples/host-local-admin-otp/package.json)
+- [`docs/examples/host-local-admin-otp/src/index.ts`](../../../docs/examples/host-local-admin-otp/src/index.ts)
+- [`docs/examples/host-local-admin-otp/wrangler.jsonc`](../../../docs/examples/host-local-admin-otp/wrangler.jsonc)
+- [`docs/examples/host-local-admin-otp/.dev.vars.example`](../../../docs/examples/host-local-admin-otp/.dev.vars.example)
+- [`docs/examples/host-local-admin-otp/smoke.mjs`](../../../docs/examples/host-local-admin-otp/smoke.mjs)

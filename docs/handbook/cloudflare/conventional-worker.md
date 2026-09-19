@@ -158,5 +158,5 @@ The conventional set is `{ db, adminAssets, mcpCatalogKv? }`. Never drop `db`.
 - [`packages/adapters/cloudflare/src/worker/createMantleWorker.ts`](../../../packages/adapters/cloudflare/src/worker/createMantleWorker.ts)
 - [`packages/adapters/cloudflare/src/bindings/conventionalBindings.ts`](../../../packages/adapters/cloudflare/src/bindings/conventionalBindings.ts)
 - [`packages/adapters/cloudflare/src/mount/cmsConfig.ts`](../../../packages/adapters/cloudflare/src/mount/cmsConfig.ts)
-- [`docs/examples/local-admin-otp/src/index.ts`](../../../docs/examples/local-admin-otp/src/index.ts)
-- [`docs/examples/minimal-worker/src/index.ts`](../../../docs/examples/minimal-worker/src/index.ts)
+- [`docs/examples/host-local-admin-otp/src/index.ts`](../../../docs/examples/host-local-admin-otp/src/index.ts)
+- [`docs/examples/host-minimal-worker/src/index.ts`](../../../docs/examples/host-minimal-worker/src/index.ts)

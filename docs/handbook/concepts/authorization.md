@@ -3,7 +3,7 @@ description: One authorization pipeline for REST, MCP and Admin — identity kin
 ---
 # Authorization
 
-Mantle has one authorization pipeline. A manifest HTTP Trigger, a View over REST, an MCP `tools/call` and an Admin operation all reach the same evaluator, so a rule written once holds on every surface. This page explains the model; the exact `requires` grammar is in the [authorization reference](../reference/authorization.md), and a worked ladder of four access levels is in [Guarded API access](../examples/guarded-api.md).
+Mantle has one authorization pipeline. A manifest HTTP Trigger, a View over REST, an MCP `tools/call` and an Admin operation all reach the same evaluator, so a rule written once holds on every surface. This page explains the model; the exact `requires` grammar is in the [authorization reference](../reference/authorization.md), and a worked ladder of four access levels is in [Guarded API access](../../examples/cf-primitives-guarded-api.md).
 
 ## The fixed order
 
@@ -104,7 +104,7 @@ An MCP `tools/call` runs the identical evaluator, in the identical order, with t
 ## Related
 
 - [Authorization requirements](../reference/authorization.md) — the `requires` shape, predicate forms, guard rules, OpenAPI projection.
-- [Guarded API access](../examples/guarded-api.md) — a full resolver, guards and the REST/MCP outcome tables.
+- [Guarded API access](../../examples/cf-primitives-guarded-api.md) — a full resolver, guards and the REST/MCP outcome tables.
 - [Reads: Views, REST and MCP](./views.md) — the `$ctx.user` identity-View sentinel.
 - [Authentication](../cloudflare/authentication.md) — sessions, first owner, role management routes.
 

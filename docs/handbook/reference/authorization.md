@@ -3,7 +3,7 @@ description: The requires grammar — closed auth predicates, guard Procedures, 
 ---
 # Authorization
 
-`requires` is the whole authorization grammar. It appears on [Procedure](./procedure.md) and [View](./view.md) and nowhere else; Schemas and Triggers carry no `requires`. This page is the field-level contract and the runtime behaviour it produces. The narrative version is [Authorization](../concepts/authorization.md), and a worked deployment is [Guarded API](../examples/guarded-api.md). Diagnostic codes named here are catalogued in [Diagnostics](./diagnostics.md).
+`requires` is the whole authorization grammar. It appears on [Procedure](./procedure.md) and [View](./view.md) and nowhere else; Schemas and Triggers carry no `requires`. This page is the field-level contract and the runtime behaviour it produces. The narrative version is [Authorization](../concepts/authorization.md), and a worked deployment is [Guarded API](../../examples/cf-primitives-guarded-api.md). Diagnostic codes named here are catalogued in [Diagnostics](./diagnostics.md).
 
 ## `requires`
 

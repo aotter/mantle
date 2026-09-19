@@ -43,15 +43,15 @@ Overview
   Runtime / adapter
     Bind Runtime through an adapter (Cloudflare Worker, Bun, Vercel, or yours).
     HTTP Views, MCP, and Auth work without Admin.
-    See docs/examples/minimal-worker or
-    node_modules/@aotter/mantle/docs/examples/minimal-worker.
+    See docs/examples/host-minimal-worker or
+    node_modules/@aotter/mantle/docs/examples/host-minimal-worker.
 
   Opt-in — Admin / Dev UI
     Add @aotter/mantle-admin and @aotter/mantle-admin-ui only when humans need
     a console. Then re-run generate, bind wrangler ASSETS, and open
     /admin/sign-in (local email OTP via ConsoleEmailSender).
-    See docs/examples/local-admin-otp or
-    node_modules/@aotter/mantle/docs/examples/local-admin-otp.
+    See docs/examples/host-local-admin-otp or
+    node_modules/@aotter/mantle/docs/examples/host-local-admin-otp.
 
   Further (ask the subcommand for details)
     skills          project version-matched agent instructions

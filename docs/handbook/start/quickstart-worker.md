@@ -181,12 +181,12 @@ curl -i http://127.0.0.1:8787/mcp/staff
 - [Public web, SEO and cache](../cloudflare/public-web.md) — give the service a rendered public surface.
 
 ## Source
-- [`docs/examples/minimal-worker/README.md`](../../../docs/examples/minimal-worker/README.md)
-- [`docs/examples/minimal-worker/package.json`](../../../docs/examples/minimal-worker/package.json)
-- [`docs/examples/minimal-worker/tsconfig.json`](../../../docs/examples/minimal-worker/tsconfig.json)
-- [`docs/examples/minimal-worker/manifests/site.yaml`](../../../docs/examples/minimal-worker/manifests/site.yaml)
-- [`docs/examples/minimal-worker/src/index.ts`](../../../docs/examples/minimal-worker/src/index.ts)
-- [`docs/examples/minimal-worker/wrangler.jsonc`](../../../docs/examples/minimal-worker/wrangler.jsonc)
-- [`docs/examples/minimal-worker/smoke.mjs`](../../../docs/examples/minimal-worker/smoke.mjs)
+- [`docs/examples/host-minimal-worker/README.md`](../../../docs/examples/host-minimal-worker/README.md)
+- [`docs/examples/host-minimal-worker/package.json`](../../../docs/examples/host-minimal-worker/package.json)
+- [`docs/examples/host-minimal-worker/tsconfig.json`](../../../docs/examples/host-minimal-worker/tsconfig.json)
+- [`docs/examples/host-minimal-worker/manifests/site.yaml`](../../../docs/examples/host-minimal-worker/manifests/site.yaml)
+- [`docs/examples/host-minimal-worker/src/index.ts`](../../../docs/examples/host-minimal-worker/src/index.ts)
+- [`docs/examples/host-minimal-worker/wrangler.jsonc`](../../../docs/examples/host-minimal-worker/wrangler.jsonc)
+- [`docs/examples/host-minimal-worker/smoke.mjs`](../../../docs/examples/host-minimal-worker/smoke.mjs)
 - [`docs/direct-authoring.md`](../../../docs/direct-authoring.md)
 - [`packages/mantle-runtime/src/domain/service/Pagination.ts`](../../../packages/mantle-runtime/src/domain/service/Pagination.ts)

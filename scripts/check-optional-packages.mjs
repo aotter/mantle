@@ -16,7 +16,7 @@ const root = resolve(import.meta.dirname, "..");
 const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
 const temp = mkdtempSync(join(tmpdir(), "mantle-optional-packages-"));
 const artifacts = join(temp, "artifacts");
-const localState = mkdtempSync(join(root, "docs/examples/minimal-worker/.env.pack-check-"));
+const localState = mkdtempSync(join(root, "docs/examples/host-minimal-worker/.env.pack-check-"));
 const zod = `file:${realpathSync(join(root, "packages/mantle-runtime/node_modules/zod"))}`;
 const hono = `file:${realpathSync(join(root, "packages/adapters/cloudflare/node_modules/hono"))}`;
 
@@ -131,17 +131,19 @@ try {
     "docs/handbook/start/project-and-cli.md",
     "docs/handbook/start/quickstart-admin.md",
     "docs/handbook/reference/schema.md",
-    "docs/examples/minimal-worker/package.json",
-    "docs/examples/local-admin-otp/package.json",
-    "docs/examples/local-admin-otp/.dev.vars.example",
+    "docs/examples/host-minimal-worker/package.json",
+    "docs/examples/host-local-admin-otp/package.json",
+    "docs/examples/host-local-admin-otp/.dev.vars.example",
+    "docs/examples/README.md",
+    "docs/examples/builtin-commerce.md",
   ]) {
     if (!existsSync(join(umbrella, doc))) throw new Error(`Packed authoring reference missing: ${doc}`);
   }
-  const adminOtpPkg = JSON.parse(readFileSync(join(umbrella, "docs/examples/local-admin-otp/package.json"), "utf8"));
+  const adminOtpPkg = JSON.parse(readFileSync(join(umbrella, "docs/examples/host-local-admin-otp/package.json"), "utf8"));
   if (!String(adminOtpPkg.scripts?.dev ?? "").includes("--ip 127.0.0.1")) {
     throw new Error("Packed local-admin-otp pnpm dev must pin wrangler --ip 127.0.0.1");
   }
-  const minimalPkg = JSON.parse(readFileSync(join(umbrella, "docs/examples/minimal-worker/package.json"), "utf8"));
+  const minimalPkg = JSON.parse(readFileSync(join(umbrella, "docs/examples/host-minimal-worker/package.json"), "utf8"));
   if (!String(minimalPkg.scripts?.dev ?? "").includes("--ip 127.0.0.1")) {
     throw new Error("Packed minimal-worker pnpm dev must pin wrangler --ip 127.0.0.1");
   }

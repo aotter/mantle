@@ -3,7 +3,8 @@
 This is a directly authored, API-only application and executable consumer test.
 It is not a Starter, template catalog or CLI generator. Admin is opt-in; this
 reference has none. When humans need a console, see
-[`docs/examples/local-admin-otp`](../local-admin-otp/README.md). The notes
+[`docs/examples/host-local-admin-otp`](../host-local-admin-otp/README.md). Business
+Manifests live in the [Examples hub](../README.md). The notes
 Schema/View is example business data; `mantle generate` never invents it.
 
 For your own project, author package.json, manifests, Worker/provider config

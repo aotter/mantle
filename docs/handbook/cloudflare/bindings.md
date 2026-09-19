@@ -159,7 +159,7 @@ Durable Objects are not a Core primitive. Use one as an application-owned coordi
 export { InventoryCoordinator } from "./commerce/InventoryCoordinator.js";
 ```
 
-The coordinator keeps its own state; Mantle entries mirror the result. See [Commerce transaction](../examples/commerce-transaction.md).
+The coordinator keeps its own state; Mantle entries mirror the result. See [Commerce inventory](../../examples/cf-primitives-commerce-inventory.md).
 
 ## Email Service: `[[send_email]]`
 
@@ -221,7 +221,7 @@ extend: ({ env }) => ({
 }),
 ```
 
-Authenticated callers (`ctx.user` set) bypass the check. The literal secret `"dev-stub"` skips the network and rejects only the token `"fail"`. Rejection throws `AUTH_DENIED`, which maps to HTTP `403`. See [Intake form](../examples/intake-form.md).
+Authenticated callers (`ctx.user` set) bypass the check. The literal secret `"dev-stub"` skips the network and rejects only the token `"fail"`. Rejection throws `AUTH_DENIED`, which maps to HTTP `403`. See [Intake Turnstile and email hooks](../../examples/cf-primitives-intake-hooks.md).
 
 ## Source
 - [`packages/adapters/cloudflare/README.md`](../../../packages/adapters/cloudflare/README.md)
@@ -234,5 +234,5 @@ Authenticated callers (`ctx.user` set) bypass the check. The literal secret `"de
 - [`docs/media-uploads.md`](../../../docs/media-uploads.md)
 - [`docs/performance-harness.md`](../../../docs/performance-harness.md)
 - [`docs/cloudflare-low-level-composition.md`](../../../docs/cloudflare-low-level-composition.md)
-- [`docs/examples/local-admin-otp/wrangler.jsonc`](../../../docs/examples/local-admin-otp/wrangler.jsonc)
-- [`docs/examples/minimal-worker/wrangler.jsonc`](../../../docs/examples/minimal-worker/wrangler.jsonc)
+- [`docs/examples/host-local-admin-otp/wrangler.jsonc`](../../../docs/examples/host-local-admin-otp/wrangler.jsonc)
+- [`docs/examples/host-minimal-worker/wrangler.jsonc`](../../../docs/examples/host-minimal-worker/wrangler.jsonc)

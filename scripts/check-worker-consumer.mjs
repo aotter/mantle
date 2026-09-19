@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const reference = join(root, "docs/examples/minimal-worker");
+const reference = join(root, "docs/examples/host-minimal-worker");
 const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
 const registry = process.argv[2] === "--registry" && process.argv[3] === version;
 if (process.argv.length !== 2 && !(registry && process.argv.length === 4)) {
@@ -18,7 +18,7 @@ if (!registry) {
 } else {
   const temp = mkdtempSync(join(tmpdir(), "mantle-registry-consumer-"));
   try {
-    const archive = execFileSync("git", ["archive", "HEAD:docs/examples/minimal-worker"], { cwd: root });
+    const archive = execFileSync("git", ["archive", "HEAD:docs/examples/host-minimal-worker"], { cwd: root });
     execFileSync("tar", ["-x", "-C", temp], { input: archive });
     const path = join(temp, "package.json");
     const pkg = JSON.parse(readFileSync(path, "utf8"));
