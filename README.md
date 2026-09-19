@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <a href="#author-your-application">Quick start</a>
+  <a href="#make-a-world-from-four-atoms">Quick start</a>
   &middot;
   <a href="#paste-ready-agent-prompts">Agent prompts</a>
   &middot;
@@ -41,6 +41,71 @@
 <p>
   <sub><strong>Prerelease:</strong> APIs and manifests may change between alpha releases. Treat the installed package's version-matched docs as the contract and review generated code before production use.</sub>
 </p>
+
+## Make a world from four atoms
+
+Paste this into a terminal. It writes one complete Manifest, validates it, and
+generates the typed runtime binding—no repository clone or global install.
+
+```sh
+mkdir -p mantle-hello/manifests && cd mantle-hello
+cat > manifests/requests.yaml <<'YAML'
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: requests }
+spec:
+  title: Requests
+  lifecycle: operational
+  schema:
+    type: object
+    additionalProperties: false
+    required: [name, message]
+    properties:
+      name: { type: string, minLength: 1 }
+      message: { type: string, minLength: 1 }
+      createdAt: { type: number, x-mantle-bind: now }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: recent-requests }
+spec:
+  surface: staff
+  from: requests
+  fields: [id, name, message, createdAt]
+  orderBy: [{ field: createdAt, direction: desc }]
+  limit: 50
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: submit-request }
+spec:
+  input:
+    type: object
+    additionalProperties: false
+    required: [name, message]
+    properties:
+      name: { type: string, minLength: 1 }
+      message: { type: string, minLength: 1 }
+  output: { type: object }
+  handler: { kind: builtin, op: create, schema: requests }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: submit-request-http }
+spec:
+  source: { kind: http, method: POST, path: /api/requests }
+  target: { procedure: submit-request }
+YAML
+
+bunx --package @aotter/mantle@alpha mantle validate --no-source --format text
+bunx --package @aotter/mantle@alpha mantle generate
+```
+
+Using npm? The runner is the only difference:
+
+```sh
+npx --yes --package=@aotter/mantle@alpha mantle validate --no-source --format text
+```
 
 # Agent-built. Agent-operated.
 
@@ -70,7 +135,7 @@ Mantle scales. Take only the surfaces you need — Admin is opt-in.
    [local Admin OTP reference](docs/examples/host-local-admin-otp/README.md) is
    that optional full path.
 
-`pnpm exec mantle --help` is the layered overview. Give the version-matched
+`bunx --package @aotter/mantle@alpha mantle --help` is the layered overview. Give the version-matched
 install skill to a coding agent; it must interview for required surfaces
 and not assume Admin.
 
@@ -81,13 +146,13 @@ Other hosts embed the same [manifest contract](#one-manifest-one-contract).
 Copy one block into a coding agent. Resolve handbook pages and official
 examples from `docs/` in this checkout, or from
 `node_modules/@aotter/mantle/docs/` after install. If neither tree exists,
-pin `@aotter/mantle` first. `pnpm exec mantle --help` is the layered
+pin `@aotter/mantle` first. `bunx mantle --help` is the layered
 overview. There is no `mantle create`. Admin is opt-in.
 
 ### Spec / embed only
 
 ```text
-Read handbook/start/project-and-cli.md and pnpm exec mantle --help.
+Read handbook/start/project-and-cli.md and bunx mantle --help.
 Pin @aotter/mantle at the exact version we agree, author manifests for
 this existing host, then run mantle generate and mantle validate. Embed
 the typed binding from .mantle/generated/mantle.ts into the current
@@ -254,8 +319,8 @@ and [D1](https://developers.cloudflare.com/d1/platform/pricing/) free limits.
 2. Install Mantle and generate the typed runtime binding:
 
    ```bash
-   pnpm add @aotter/mantle@alpha
-   pnpm exec mantle generate
+   bun add @aotter/mantle@alpha
+   bunx mantle generate
    ```
 
 3. Give the generated binding your
@@ -320,7 +385,7 @@ Human engineers get the same direct path: ordinary YAML in, ordinary
 TypeScript APIs out.
 
 ```bash
-pnpm add @aotter/mantle@alpha
+bun add @aotter/mantle@alpha
 ```
 
 Author and review manifests directly, use Spec without Runtime, implement
@@ -376,7 +441,7 @@ help stays on that layer. There is no `create` / `update` happy path.
 | `mantle skills` | Project version-matched Core skills into the consumer repository. |
 
 Run commands through the project's package manager, for example
-`pnpm exec mantle generate`.
+`bunx mantle generate`.
 
 Advanced manifest primitives remain in the direct `@aotter/mantle-spec`
 package: `mantle-spec introspect` and `mantle-spec emit-types`.
