@@ -25,6 +25,8 @@
 <p align="center">
   <a href="#author-your-application">Quick start</a>
   &middot;
+  <a href="#paste-ready-agent-prompts">Agent prompts</a>
+  &middot;
   <a href="#a-custom-mcp-server-without-building-the-server">Features</a>
   &middot;
   <a href="#one-manifest-one-contract">Manifest</a>
@@ -73,6 +75,72 @@ install skill to a coding agent; it must interview for required surfaces
 and not assume Admin.
 
 Other hosts embed the same [manifest contract](#one-manifest-one-contract).
+
+## Paste-ready agent prompts
+
+Copy one block into a coding agent. Each path uses the installed CLI and
+docs (`mantle --help` is the layered overview). There is no `mantle create`.
+Admin is opt-in.
+
+### Spec / embed only
+
+```text
+Read node_modules/@aotter/mantle/docs/handbook/start/project-and-cli.md
+and pnpm exec mantle --help. Add @aotter/mantle at the exact version we
+agree, author manifests for this existing host, then run mantle generate
+and mantle validate. Embed the typed binding from .mantle/generated/mantle.ts
+into the current system. Do not add Admin, mantle-admin-ui, a visitor
+frontend, or Cloudflare unless I ask. Do not invent a default Schema.
+```
+
+### Minimal API service locally
+
+```text
+Read docs/handbook/start/quickstart-worker.md and
+docs/examples/minimal-worker/. Author a Cloudflare Worker with one Schema
+and one public View (or copy the contract, not the tree wholesale). Pin
+every @aotter/mantle* package to the same exact version. Run
+pnpm install && pnpm generate && pnpm dev. Probe GET /api/views/<name>
+with curl. / may 404. Do not install Admin or ASSETS unless I ask.
+```
+
+### Full local Dev UI (opt-in)
+
+```text
+I want the optional Admin / Dev UI. Read
+docs/handbook/start/quickstart-admin.md and docs/examples/local-admin-otp/.
+Interview me for a bootstrap owner email. Install @aotter/mantle-admin and
+@aotter/mantle-admin-ui, run mantle generate (it syncs the prebuilt SPA —
+do not vite-build), and set wrangler assets.directory=./public with
+binding ASSETS. Wire createAuth email-otp + ConsoleEmailSender. Then
+pnpm install && pnpm generate && pnpm dev, open /admin/sign-in, and read
+the OTP from wrangler logs. If /admin is a white screen, fetch
+/_mantle/admin/assets/* — 404 means ASSETS is missing, not a missing
+frontend build.
+```
+
+### Interview then build
+
+```text
+Interview me about the service: host, who uses it, whether humans need a
+Dev UI, and whether we only embed Spec/Runtime. Read mantle --help, then
+docs/handbook/start/project-and-cli.md. Use handbook examples only as
+grammar inspiration. Implement locally first. Take only the surfaces we
+chose. If we skip Admin, follow docs/examples/minimal-worker/. If we want
+Dev UI, follow docs/examples/local-admin-otp/. No mantle create. Pin all
+@aotter/mantle* packages to one exact version.
+```
+
+### Later layer: MCP or public web (opt-in)
+
+```text
+Do not add Admin unless it is already in this project. Read
+docs/handbook/concepts/mcp-and-agents.md and/or
+docs/handbook/cloudflare/public-web.md. Add only the surface I name:
+MCP Triggers at /mcp or /mcp/staff, or optional @aotter/mantle-web
+composition. Keep Core adapter-neutral. Probe the new route; do not
+claim Auth or Admin works from a public 200.
+```
 
 ## A custom MCP server, without building the server
 
