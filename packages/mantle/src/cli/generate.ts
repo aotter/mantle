@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { cwd, stderr, stdout } from "node:process";
@@ -77,6 +77,7 @@ export async function runGenerate(
     const adminSource = dirname(adminIndex);
     const adminTarget = resolve(cwd(), "public/_mantle/admin");
     stale = !(await syncAdminAssets(adminSource, adminTarget, options.check)) || stale;
+    if (!options.check) warnMissingWranglerAssets(cwd());
   }
   if (stale && options.check) {
     stderr.write("Mantle generated files are stale; run `mantle generate`.\n");
@@ -134,6 +135,22 @@ async function syncText(path: string, expected: string, check: boolean): Promise
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, expected, "utf8");
   return true;
+}
+
+/** Cheap hint: Admin SPA was synced but wrangler has no ASSETS binding. */
+export function warnMissingWranglerAssets(root: string, write = stderr.write.bind(stderr)): void {
+  const wrangler = ["wrangler.jsonc", "wrangler.json", "wrangler.toml"]
+    .map((name) => join(root, name))
+    .find((path) => existsSync(path));
+  if (!wrangler) return;
+  const text = readFileSync(wrangler, "utf8");
+  if (/["']?binding["']?\s*[:=]\s*["']ASSETS["']/.test(text)) return;
+  write(
+    "warning: @aotter/mantle-admin-ui synced public/_mantle/admin, but wrangler has no ASSETS binding. " +
+      "/admin can return HTML 200 while /_mantle/admin/assets/* 404s (white screen). " +
+      'Add "assets": { "directory": "./public", "binding": "ASSETS" }. ' +
+      "Do not put /_mantle in run_worker_first.\n",
+  );
 }
 
 async function syncAdminAssets(source: string, target: string, check: boolean): Promise<boolean> {

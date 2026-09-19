@@ -53,22 +53,25 @@ lifecycle.
 
 ## Author your application
 
-Write the application's manifests, runtime entry and provider configuration,
-then use the installed SDK compiler:
+The first mile is local Admin. An agent interviews the human for a bootstrap
+owner email, then this loop opens the Dev UI:
 
 ```sh
-pnpm exec mantle generate
-pnpm exec mantle validate
+pnpm install && pnpm generate && pnpm dev
 ```
 
-Follow [direct authoring](docs/handbook/start/project-and-cli.md), or give its version-matched
-install skill to your coding agent. The [minimal Worker reference](docs/examples/minimal-worker/README.md)
-shows a tested Cloudflare application without a visitor frontend. Other hosts
-can embed the same [manifest contract](#one-manifest-one-contract).
+Open `/admin/sign-in`, submit that email, and read the one-time code from the
+wrangler log (`ConsoleEmailSender`). The [local Admin OTP reference](docs/examples/local-admin-otp/README.md)
+is the executable path; follow [the walkthrough](docs/handbook/start/quickstart-admin.md)
+or give its version-matched install skill to your coding agent.
 
-The 0.1.2 line removes Starter scaffolding and the bundle updater. Existing
-Landing/Starters stay on immutable alpha.17; read the
-[migration notes](docs/migration-0.1.2.md) before upgrading.
+`mantle generate` compiles the manifests and syncs the **prebuilt** Admin SPA.
+There is no separate frontend build. Admin also needs a wrangler `ASSETS`
+binding on `./public`; a missing binding is the white-screen class of bug
+(`/admin` HTML 200, `/_mantle/admin/assets/*` 404).
+
+API-only embedding without Admin remains a [secondary Worker reference](docs/examples/minimal-worker/README.md).
+Other hosts can embed the same [manifest contract](#one-manifest-one-contract).
 
 ## A custom MCP server, without building the server
 

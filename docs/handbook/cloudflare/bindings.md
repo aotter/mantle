@@ -69,9 +69,11 @@ Omit `database_id` only for local development. Set the production id before any 
 "assets": { "directory": "./public", "binding": "ASSETS" }
 ```
 
-`mantle generate` syncs the Admin SPA into `public/_mantle/admin/` when `@aotter/mantle-admin-ui` is installed. The facade wraps `ASSETS` as the Admin asset server and falls back to `/_mantle/admin/index.html` for client-side Admin routes. The same binding serves your own CSS, JS and icons.
+`ASSETS` is a hard requirement for Admin. `mantle generate` syncs the **prebuilt** Admin SPA into `public/_mantle/admin/` when `@aotter/mantle-admin-ui` is installed — there is no Vite step unless you are developing `admin-ui` itself. The facade wraps `ASSETS` as the Admin asset server and falls back to `/_mantle/admin/index.html` for client-side Admin routes. The same binding serves your own CSS, JS and icons.
 
-When Worker routes and static paths overlap, list Worker-owned paths in `run_worker_first` and keep `not_found_handling` at `"none"` so unmatched requests fall through to the Worker. A production configuration lists `/admin`, `/admin/*`, `/mcp`, `/mcp/*`, `/oauth`, `/oauth/*`, `/.well-known/*`, `/api/*`, `/llms.txt`, `/robots.txt`, `/sitemap.xml`, `/*/llms.txt` and every public content prefix there, so a static file can never shadow a Mantle route.
+Without this binding, `/admin` can still return SPA HTML (`200`) while `/_mantle/admin/assets/*` is `404`. That white-screens the Dev UI.
+
+When Worker routes and static paths overlap, list Worker-owned paths in `run_worker_first` and keep `not_found_handling` at `"none"` so unmatched requests fall through to the Worker. **Leave `/_mantle` out of `run_worker_first`** so hashed Admin JS/CSS stay on the assets layer. A production configuration lists `/admin`, `/admin/*`, `/mcp`, `/mcp/*`, `/oauth`, `/oauth/*`, `/.well-known/*`, `/api/*`, `/llms.txt`, `/robots.txt`, `/sitemap.xml`, `/*/llms.txt` and every public content prefix there, so a static file can never shadow a Mantle route.
 
 ## Workers Cache
 
@@ -232,4 +234,5 @@ Authenticated callers (`ctx.user` set) bypass the check. The literal secret `"de
 - [`docs/media-uploads.md`](../../../docs/media-uploads.md)
 - [`docs/performance-harness.md`](../../../docs/performance-harness.md)
 - [`docs/cloudflare-low-level-composition.md`](../../../docs/cloudflare-low-level-composition.md)
+- [`docs/examples/local-admin-otp/wrangler.jsonc`](../../../docs/examples/local-admin-otp/wrangler.jsonc)
 - [`docs/examples/minimal-worker/wrangler.jsonc`](../../../docs/examples/minimal-worker/wrangler.jsonc)

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resolveAdminUiIndexHtml, runGenerate } from "../../src/cli/generate.js";
+import { resolveAdminUiIndexHtml, runGenerate, warnMissingWranglerAssets } from "../../src/cli/generate.js";
 
 const coreOnly = { resolveAdminUiIndexHtml: () => null };
 
@@ -297,6 +297,41 @@ spec: {}
 
       expect(await runGenerate([], deps)).toBe(0);
       expect(await readFile(adminIndexPath, "utf8")).toBe("<!doctype html><title>Admin</title>\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(adminDist, { recursive: true, force: true });
+    }
+  });
+
+  it("warns when Admin UI is synced but wrangler has no ASSETS binding", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mantle-generate-assets-warn-"));
+    const adminDist = await mkdtemp(join(tmpdir(), "mantle-admin-ui-dist-"));
+    try {
+      await mkdir(join(root, "manifests"));
+      await writeFile(join(root, "manifests", "site.yaml"), fixture);
+      await writeFile(join(adminDist, "index.html"), "<!doctype html><title>Admin</title>\n");
+      await writeFile(join(root, "wrangler.jsonc"), "{ \"name\": \"demo\", \"main\": \"src/index.ts\" }\n");
+      process.chdir(root);
+      const deps = { resolveAdminUiIndexHtml: () => join(adminDist, "index.html") };
+      const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      expect(await runGenerate([], deps)).toBe(0);
+      expect(stderr.mock.calls.flat().join("")).toMatch(/no ASSETS binding/);
+      stderr.mockClear();
+      expect(await runGenerate(["--check"], deps)).toBe(0);
+      expect(stderr.mock.calls.flat().join("")).not.toMatch(/ASSETS/);
+      await writeFile(
+        join(root, "wrangler.jsonc"),
+        "{ \"assets\": { \"directory\": \"./public\", \"binding\": \"ASSETS\" } }\n",
+      );
+      stderr.mockClear();
+      expect(await runGenerate([], deps)).toBe(0);
+      expect(stderr.mock.calls.flat().join("")).not.toMatch(/ASSETS/);
+      const notes: string[] = [];
+      warnMissingWranglerAssets(root, (chunk) => {
+        notes.push(String(chunk));
+        return true;
+      });
+      expect(notes.join("")).toBe("");
     } finally {
       await rm(root, { recursive: true, force: true });
       await rm(adminDist, { recursive: true, force: true });

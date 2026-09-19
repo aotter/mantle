@@ -87,6 +87,7 @@ use generated `bindMantle(runtime)`, or skip code generation and call
 `runtime.executeView({ view: "published-notes" })` directly.
 
 Author the application directly using [the installed guide](docs/handbook/start/project-and-cli.md).
+The human first mile is [local Admin OTP](docs/handbook/start/quickstart-admin.md).
 The CLI has no scaffold/type picker; missing manifests fail without creating
 an application or a visitor home page.
 
@@ -185,9 +186,9 @@ internals or rebuilding Mantle's adapters.
 Use the installed install skill and [direct-authoring guide](docs/handbook/start/project-and-cli.md).
 The owner or agent writes the application's manifests, entry and configuration;
 `generate` compiles them and `skills` projects the version-matched instructions.
-The [minimal Worker reference](docs/examples/minimal-worker/README.md) is an
-executable example, not a scaffold command. Legacy Landing/Starters remain on
-alpha.17 and are not required by new applications.
+The [local Admin OTP reference](docs/examples/local-admin-otp/README.md) is
+the executable first mile. The [minimal Worker reference](docs/examples/minimal-worker/README.md)
+is the API-only embed. Neither is a scaffold command.
 
 ## Agent marketplace install
 
