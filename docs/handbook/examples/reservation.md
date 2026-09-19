@@ -3,7 +3,7 @@ description: Accept public reservation requests and expose the queue to staff, w
 ---
 # Reservation requests
 
-This example accepts reservation requests from the public and lists them for staff. It is the Builder `reservation` preset, fully declarative, plus one optional lifecycle guard. Read it if you take appointments, bookings or table requests and confirm them by hand.
+This example accepts reservation requests from the public and lists them for staff. It is fully declarative, plus one optional lifecycle guard. Read it if you take appointments, bookings or table requests and confirm them by hand.
 
 ## Problem
 
@@ -80,7 +80,7 @@ spec:
   target: { procedure: submit-reservation }
 ```
 
-`createdAt` is stamped by the server (`x-mantle-bind: now`); a caller-supplied value is ignored. `requestedFor` is a free string on purpose: the preset does not impose a calendar model. The staff View orders by `createdAt`, so the newest request is first regardless of the requested slot.
+`createdAt` is stamped by the server (`x-mantle-bind: now`); a caller-supplied value is ignored. `requestedFor` is a free string on purpose: this example does not impose a calendar model. The staff View orders by `createdAt`, so the newest request is first regardless of the requested slot.
 
 ## Worker and handlers
 
@@ -200,8 +200,6 @@ MCP tools:
 | `/mcp` | `submit_reservation` | `submit-reservation-mcp` Trigger |
 | `/mcp/staff` | `query_view_reservation_queue` | `reservation-queue` View |
 | `/mcp/staff` | `create_record_reservations`, `update_record_reservations` | operational Schema `reservations` |
-
-Mantle Builder ships this Manifest as its Reservation preset.
 
 ## What this deliberately leaves out
 

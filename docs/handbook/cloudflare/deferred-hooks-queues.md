@@ -168,4 +168,3 @@ For a site, run `wrangler dev`, submit a mutation that has an `after_*` Trigger,
 - [`packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts`](../../../packages/adapters/cloudflare/src/bindings/WorkersQueueHookDispatcher.ts)
 - [`packages/adapters/cloudflare/src/mount/cmsConfig.ts`](../../../packages/adapters/cloudflare/src/mount/cmsConfig.ts)
 - [`packages/adapters/cloudflare/README.md`](../../../packages/adapters/cloudflare/README.md)
-- Retired-starter pattern: [`overlays/transaction/src/index.ts`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/overlays/transaction/src/index.ts)

@@ -162,7 +162,7 @@ The predicate vocabulary is closed. `ctx.auth` means any adapter-verified creden
 
 ### Credential resolver
 
-The Cloudflare adapter exposes one seam, `ConsumerCredentialResolver`. It answers `not-handled` when the request carries none of the site's credential formats, `invalid` when it carries a recognized but bad or revoked one, and `verified` after checking the site's own record. The table below is application-owned; Mantle has no migration for it.
+The Cloudflare adapter exposes one seam, `ConsumerCredentialResolver`. It answers `not-handled` when the request carries none of the site's credential formats, `invalid` when it carries a recognized but bad or revoked one, and `verified` after checking the site's own record. The table below is application-owned; Mantle does not create or own it.
 
 ```ts
 // src/auth/credentialResolver.ts

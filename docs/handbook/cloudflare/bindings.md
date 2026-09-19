@@ -17,7 +17,7 @@ Every Mantle Worker keeps both flags:
 
 ## The composition-root rule
 
-Bindings appear in two places only: the Worker entry (`createMantleWorker` options and the `bindings` hook) and `wrangler.jsonc`. Procedure handlers receive them through `ctx.env`. An application may own additional tables behind its own repository, but it never queries Mantle-owned tables (`entries`, site settings, media, Auth) outside the runtime. Use `runtime.entries`, generated `bindMantle(runtime)` and Views instead.
+Bindings appear in two places only: the Worker entry (`createMantleWorker` options and the `bindings` hook) and `wrangler.jsonc`. Procedure handlers receive them through `ctx.env`. An application may own additional tables behind its own repository, but it never queries Mantle-owned native Schema tables, site settings, media or Auth tables outside the runtime. Use `runtime.entries`, generated `bindMantle(runtime)` and Views instead.
 
 ## The Env interface
 
@@ -233,4 +233,3 @@ Authenticated callers (`ctx.user` set) bypass the check. The literal secret `"de
 - [`docs/performance-harness.md`](../../../docs/performance-harness.md)
 - [`docs/cloudflare-low-level-composition.md`](../../../docs/cloudflare-low-level-composition.md)
 - [`docs/examples/minimal-worker/wrangler.jsonc`](../../../docs/examples/minimal-worker/wrangler.jsonc)
-- Retired-starter patterns: [`blank/wrangler.toml`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/blank/wrangler.toml), [`overlays/transaction/wrangler.append.toml`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/overlays/transaction/wrangler.append.toml), [`overlays/transaction/src/index.ts`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/overlays/transaction/src/index.ts), [`overlays/transaction/src/mantle/config.ts`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/overlays/transaction/src/mantle/config.ts), [`overlays/intake/src/worker/features/intake/notifyIntake.ts`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/overlays/intake/src/worker/features/intake/notifyIntake.ts), [`overlays/intake/manifests/site.yaml`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/overlays/intake/manifests/site.yaml)

@@ -237,4 +237,3 @@ Related: [Intake form](./intake-form.md) hardens the suggestion box with a bot c
 
 - [Schema reference](../reference/schema.md) and [View reference](../reference/view.md) — `localized`, `translates`, param-driven Views
 - [`packages/mantle-web/src/model/TemplateRegistry.ts`](../../../packages/mantle-web/src/model/TemplateRegistry.ts) — `registerEntryTemplate` and `EntryContext`
-- [`overlays/publication/manifests/site.yaml`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/overlays/publication/manifests/site.yaml) — retired parent/child publication pattern

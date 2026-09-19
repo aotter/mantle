@@ -3,7 +3,7 @@ description: A public intake form with a Turnstile bot check before the write an
 ---
 # Intake form with bot check and notification
 
-This example collects a public request, verifies a Cloudflare Turnstile token before the row is written, and notifies staff after it is written. It extends the Builder `intake` preset with two lifecycle Triggers and two small handlers. Read it if you need any form that anonymous visitors submit.
+This example collects a public request, verifies a Cloudflare Turnstile token before the row is written, and notifies staff after it is written. Two lifecycle Triggers and two small handlers sit on a declarative intake Schema. Read it if you need any form that anonymous visitors submit.
 
 ## Problem
 
@@ -314,6 +314,4 @@ Related: [Reservation requests](./reservation.md) uses the same builtin-create s
 - [`packages/mantle-runtime/src/usecase/lifecycle/RunLifecycleHooksUseCase.ts`](../../../packages/mantle-runtime/src/usecase/lifecycle/RunLifecycleHooksUseCase.ts) — abort propagates the hook's diagnostic
 - [`packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts`](../../../packages/mantle-runtime/src/usecase/procedure/InvokeProcedureUseCase.ts) — `InvokeFailure`
 - [`packages/mantle-spec/src/kernel/diagnostic.ts`](../../../packages/mantle-spec/src/kernel/diagnostic.ts) — `LIFECYCLE_HOOK_REJECTED` → 409
-- [`overlays/presence/manifests/site.yaml`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/overlays/presence/manifests/site.yaml) — retired contact-form pattern
-- [`overlays/presence/src/worker/features/contact/notifyContact.ts`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/overlays/presence/src/worker/features/contact/notifyContact.ts)
-- [`recipes/typed-web/src/worker/lib/turnstile.ts`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/recipes/typed-web/src/worker/lib/turnstile.ts)
+- [`packages/adapters/cloudflare/src/handlers/turnstile.ts`](../../../packages/adapters/cloudflare/src/handlers/turnstile.ts) — Turnstile verification helper

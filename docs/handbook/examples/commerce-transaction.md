@@ -699,7 +699,7 @@ function conflict(path: string, value: unknown, expected: string): DiagnosticErr
 }
 ```
 
-`expirePersistedOrder` records `release` movements and deletes the pending order row from the mirror; the audit trail keeps the trace. `persistSnapshots`, `ensureMovement`, `updateOrder` and `recordStockChange` are the revision-guarded and insert-if-absent helpers described above; the retired implementation in Source shows them in full.
+`expirePersistedOrder` records `release` movements and deletes the pending order row from the mirror; the audit trail keeps the trace. `persistSnapshots`, `ensureMovement`, `updateOrder` and `recordStockChange` are the revision-guarded and insert-if-absent helpers sketched above; expand them in your Worker.
 
 ### Delayed expiry with Queues and a cron sweep
 
@@ -791,7 +791,7 @@ The result is the new snapshot `{ productSlug, available, reserved, revision }`.
 
 - **A real provider SDK.** `verifyProviderEvent` is a placeholder for the chosen provider's signature check.
 - **Tax, shipping, discounts.** `totalMinor` equals the sum of line totals.
-- **Refunds.** No Procedure moves a `paid` order to refunded; `cancel-order` for staff exists in the retired implementation and returns stock, but it does not move money.
+- **Refunds.** No Procedure moves a `paid` order to refunded, and a staff cancel that returns stock still does not move money.
 - **Multi-currency carts.** All lines must share one currency; mixed carts are rejected.
 - **Sharding the Durable Object.** One instance per shop is the right default. Split by SKU only after measured single-shop saturation, and expect a distributed reservation workflow when you do.
 - **Customer accounts.** Orders are guest orders keyed by token; see [Procurement approvals](./procurement-approvals.md) for `ctx.user`-owned rows.
@@ -805,9 +805,3 @@ The DO protects local coordination. It is not a distributed transaction across t
 - [`docs/deferred-lifecycle-queues.md`](../../../docs/deferred-lifecycle-queues.md) — Queue contract and multiplexing
 - [`packages/adapters/cloudflare/src/worker/createMantleWorker.ts`](../../../packages/adapters/cloudflare/src/worker/createMantleWorker.ts) — `extend.mount`, `getRuntime`
 - [`packages/mantle/src/codegen/emitMantleModule.ts`](../../../packages/mantle/src/codegen/emitMantleModule.ts) — `bindMantle(...).procedures`
-- [`overlays/transaction/manifests/site.yaml`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/overlays/transaction/manifests/site.yaml) — retired full Manifest
-- [`overlays/transaction/src/index.ts`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/overlays/transaction/src/index.ts) — queue and scheduled entrypoints
-- [`overlays/transaction/src/commerce/handlers.ts`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/overlays/transaction/src/commerce/handlers.ts) — full handler implementation
-- [`overlays/transaction/src/commerce/InventoryCoordinator.ts`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/overlays/transaction/src/commerce/InventoryCoordinator.ts) — Durable Object
-- [`overlays/transaction/wrangler.append.toml`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/overlays/transaction/wrangler.append.toml)
-- [`overlays/transaction/handoff.md`](https://github.com/aotter/mantle-starters/blob/a66ec0ea3aaefc09a0229b7d8ca35af630f2b55d/overlays/transaction/handoff.md) — "Replacing the demo payment"
