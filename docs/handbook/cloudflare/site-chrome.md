@@ -28,7 +28,7 @@ Therefore tracking and verification stay **host chrome**. Core `siteConfig` is n
 
 Turning on Cloudflare Web Analytics is **not** the same as having an indexable sitemap or `llms.txt`. Analytics answers “who visited”; discovery files answer “what can a crawler or agent list”. Keep those jobs on the layer that owns the data.
 
-Cloud tenant UX for ads.txt / robots / sitemap tools lives on the host product ([mantle-home Site Chrome](https://github.com/aotter/mantle-home/issues/65), [root files](https://github.com/aotter/mantle-home/issues/64)). Core stays injection-free.
+Cloud tenant UX for ads.txt / robots / sitemap tools lives on the host product. Core stays injection-free.
 
 ## Cloudflare-first install
 

@@ -119,7 +119,7 @@ Other standard keywords are not rejected by the parser, but only the recognized 
 | Every `required` entry of `spec.schema` must be declared under `properties`. | `REQUIRED_FIELD_UNKNOWN` |
 | `properties` and `$defs` must be objects; `oneOf` a non-empty array; `additionalProperties` a boolean or a schema. | `INVALID_MANIFEST_ENVELOPE` |
 
-Two compatibility normalizations run at the boundary: `nullable: true` becomes a `type` array that includes `"null"`, and `format: url` becomes `format: uri`. `additionalProperties` keeps standard semantics: omitted or `true` preserves extra keys, `false` rejects them, a schema validates them.
+Two accepted spellings are normalized at the boundary: `nullable: true` becomes a `type` array that includes `"null"`, and `format: url` becomes `format: uri`. `additionalProperties` keeps standard semantics: omitted or `true` preserves extra keys, `false` rejects them, a schema validates them.
 
 ### `x-mantle-bind`
 
@@ -184,7 +184,7 @@ Keep implementation-detail children fold-only. Use `nav.standalone: true` when s
 
 ## Indexes
 
-`uniqueIndexes` and `indexes` are arrays of ordered field tuples. Shape errors are `INVALID_MANIFEST_ENVELOPE`; semantic errors are `SCHEMA_INDEX_INVALID` unless noted. Bare strings and the retired `indexedFields` key are rejected; each index is an array of field names, even when it has one field.
+`uniqueIndexes` and `indexes` are arrays of ordered field tuples. Shape errors are `INVALID_MANIFEST_ENVELOPE`; semantic errors are `SCHEMA_INDEX_INVALID` unless noted. Each index is an array of field names, even when it has one field; a bare string is rejected.
 
 | Rule | Diagnostic |
 |---|---|

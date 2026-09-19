@@ -3,7 +3,7 @@ description: Members submit purchase requisitions they can only see themselves; 
 ---
 # Procurement approvals with member and staff roles
 
-This example separates two audiences: signed-in members who submit and track their own requisitions, and staff who approve or reject them. It is the Builder `procurement` preset converted to YAML and is fully declarative. Read it if you need per-user rows and a staff decision step.
+This example separates two audiences: signed-in members who submit and track their own requisitions, and staff who approve or reject them. It is fully declarative. Read it if you need per-user rows and a staff decision step.
 
 ## Problem
 

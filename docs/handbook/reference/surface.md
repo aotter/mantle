@@ -176,13 +176,11 @@ The umbrella installs Spec and Runtime only. Web, Admin, Admin UI, Bun, Vercel a
 
 ## Versions
 
-This handbook was added on the development branch after `v0.1.0-alpha.17`. It describes that development snapshot and will ship with a future release; it is not included in the published `0.1.0-alpha.17` package. For a registry installation, use the documentation at the matching release tag. For a source-built package, record the source commit as well as the package version: a development checkout can still carry the previous release version.
+This handbook describes the snapshot in this source tree. Pin every `@aotter/mantle*` package to one exact version and keep them together. For a registry installation, use the documentation at the matching release tag. For a source-built package, record the source commit as well as the package version.
 
-The documentation site pins its handbook commit in `docs/handbook.json` and records its vendored SDK source in `vendor/mantle/SOURCE.txt`. Those commits may differ when the intervening changes are behavior-neutral; the site verifies that condition during the build. The site's source-built tarballs are not the npm `alpha.17` artifacts.
+The documentation site pins its handbook commit in `docs/handbook.json` and records its vendored SDK source in `vendor/mantle/SOURCE.txt`. Those commits may differ when the intervening changes are behavior-neutral; the site verifies that condition during the build.
 
-`0.1.0-alpha.17` is immutable and no stable `0.1.0` is planned; the first stable target is `0.1.2`. That line removes the scaffolding path — the `mantle create` command, the bundle-oriented `mantle update` command, and the `@aotter/mantle/provision` subpath — with no aliases and no replacement scaffold command. `generate`, `skills`, `validate` and `emit-openapi` remain, and generation and runtime Web rendering keep their existing responsibilities. New projects are authored directly: write the manifests, run `generate`, wire the Worker. The reasoning is [ADR-0021](../../../docs/adr/0021-retire-starter-scaffolding.md).
-
-Prerelease packages take their exact version from their own `package.json`, which is the authority; APIs may change between prereleases until `0.1.2`.
+Projects are authored directly: write the manifests, run `generate`, `skills`, `validate` and `emit-openapi`, and wire the Worker. There is no project generator. Prerelease packages take their exact version from their own `package.json`; APIs may change between prereleases until a stable line ships.
 
 ## Source
 
@@ -203,5 +201,3 @@ Prerelease packages take their exact version from their own `package.json`, whic
 - [`packages/adapters/cloudflare/src/mount/mountPublicRoutes.ts`](../../../packages/adapters/cloudflare/src/mount/mountPublicRoutes.ts)
 - [`packages/adapters/cloudflare/src/mount/mountMcp.ts`](../../../packages/adapters/cloudflare/src/mount/mountMcp.ts)
 - [`packages/adapters/cloudflare/src/oauth/cachePolicy.ts`](../../../packages/adapters/cloudflare/src/oauth/cachePolicy.ts)
-- [`docs/adr/0021-retire-starter-scaffolding.md`](../../../docs/adr/0021-retire-starter-scaffolding.md)
-- [`docs/migration-0.1.2.md`](../../../docs/migration-0.1.2.md)

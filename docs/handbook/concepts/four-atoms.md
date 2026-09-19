@@ -26,9 +26,9 @@ The consequence for authors: a Procedure that has no Trigger is unreachable from
 
 ## The composition rule
 
-Anything more domain-shaped than these four is not an atom. A Form, Membership, Email, Webhook, Workflow or ScheduledJob is a composition of Schemas, Views, Procedures and Triggers plus your own TypeScript. An earlier iteration of this grammar shipped eleven domain-shaped kinds; authors could not decide whether a contact form was a Form, a Workflow or an Email, and each kind grew to subsume its neighbors.
+Anything more domain-shaped than these four is not an atom. A Form, Membership, Email, Webhook, Workflow or ScheduledJob is a composition of Schemas, Views, Procedures and Triggers plus your own TypeScript. A fifth kind would recreate the same overlap: authors would have to decide whether a contact form was a Form, a Workflow or an Email.
 
-If you find yourself wanting a fifth kind, sketch the same thing as a composition of the four first. Almost always it works.
+If you find yourself wanting another kind, sketch the same thing as a composition of the four first. Almost always it works.
 
 ## The Manifest envelope
 

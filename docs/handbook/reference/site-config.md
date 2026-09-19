@@ -103,9 +103,6 @@ Blank values are skipped in both classes: an absent, empty or empty-array field 
 
 The seed-once keys have an Admin edit path at `PATCH /admin/api/site-settings` (owner only); the boot-synced keys do not, which is why the declaration wins on every boot. A custom-domain change therefore becomes canonical by editing the code and redeploying, with no manual database edit.
 
-> **Warning**
-> `mediaPurposes` is JSON. Rows written by pre-`#272` deployments used a CSV form and do not round-trip. Re-run the seed, or delete the row, after upgrading.
-
 ## Validated at boot
 
 Storage preparation calls `assertSiteDefaultsCanonical(siteDefaults)` synchronously, before the runtime accepts traffic. It throws — it does not return diagnostics — so a typo rejects the deployment rather than corrupting the seed.

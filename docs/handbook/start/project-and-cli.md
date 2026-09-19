@@ -1,5 +1,5 @@
 ---
-description: The files you own in a Mantle project, every mantle and mantle-harness command with its flags, the generated module, the daily check loop, and upgrade rules.
+description: The files you own in a Mantle project, every mantle and mantle-harness command with its flags, the generated module, the daily check loop, and version pins.
 ---
 # Project layout and the CLI loop
 
@@ -7,7 +7,7 @@ This page describes a directly authored Mantle project: which files are yours, w
 
 ## You own the project
 
-Core supplies a manifest compiler and a runtime, not a project generator. Since [ADR-0021](../../../docs/adr/0021-retire-starter-scaffolding.md) there is no scaffolder: you write `package.json`, the manifests, the Worker entry, handlers, TypeScript and provider configuration. `mantle generate` compiles what exists; it never initializes a missing project or invents a default Schema, frontend or home route.
+Core is a manifest compiler and a runtime, not a project generator. You write `package.json`, the manifests, the Worker entry, handlers, TypeScript and provider configuration. `mantle generate` compiles what exists; it never initializes a missing project or invents a default Schema, frontend or home route.
 
 ```txt
 my-service/
@@ -98,17 +98,15 @@ codex plugin add mantle@mantle
 
 The projected `develop` skill tells the agent to read `package.json` for the installed version, the manifests and adapter config, and the docs under `node_modules/@aotter/mantle/docs/` before editing. To connect an MCP client to the running Worker, see [MCP and agents](../concepts/mcp-and-agents.md).
 
-## Upgrade rules
+## Version pins
 
 - Pin every `@aotter/mantle*` package to one exact version and move them together. Check that release's peer ranges when you move.
-- Read the migration notes of the release you are moving to. Docs for a floating branch do not describe your installed version; use a tag that matches `package.json`.
-- The 0.1.2 line removes `mantle create`, the bundle `mantle update` command and `@aotter/mantle/provision`, with no aliases. `generate`, `validate`, `emit-openapi` and `skills` remain. `0.1.0-alpha.17` stays immutable; staying on it requires no migration.
-- When upgrading an existing application: pin the new exact version and refresh the lockfile; remove scripts that invoked the retired scaffolder; keep the Worker, D1, KV identity, origins, auth mode, secrets and legacy `.mantle` metadata; then run `generate`, `generate --check`, `skills`, `skills --check`, `validate`, typecheck and tests before deploying.
+- This handbook describes the snapshot in this source tree. Use the docs that ship with the version in `package.json`, not a floating branch.
+- The authoring CLI is `generate`, `validate`, `emit-openapi` and `skills`. `mantle-harness` is the measurement binary.
+- When you change versions: pin the new exact version and refresh the lockfile; keep the Worker, D1, KV identity, origins, auth mode and secrets; then run `generate`, `generate --check`, `skills`, `skills --check`, `validate`, typecheck and tests before deploying.
 
 ## Source
 - [`docs/direct-authoring.md`](../../../docs/direct-authoring.md)
-- [`docs/adr/0021-retire-starter-scaffolding.md`](../../../docs/adr/0021-retire-starter-scaffolding.md)
-- [`docs/migration-0.1.2.md`](../../../docs/migration-0.1.2.md)
 - [`docs/examples/minimal-worker/.gitignore`](../../../docs/examples/minimal-worker/.gitignore)
 - [`packages/mantle/README.md`](../../../packages/mantle/README.md)
 - [`packages/mantle/src/cli/main.ts`](../../../packages/mantle/src/cli/main.ts)

@@ -1,15 +1,15 @@
 ---
-description: Production checklist, the check loop, deploy and post-deploy probes, day-to-day content operations, and upgrades.
+description: Production checklist, the check loop, deploy and post-deploy probes, day-to-day content operations, and version pins.
 ---
 # Deploy and operate
 
-This page is the production checklist for a Mantle Worker on Cloudflare: what to pin and configure, which checks to run before `wrangler deploy`, how to verify a deployment, how content is operated afterwards, and how to upgrade.
+This page is the production checklist for a Mantle Worker on Cloudflare: what to pin and configure, which checks to run before `wrangler deploy`, how to verify a deployment, how content is operated afterwards, and how to move versions.
 
 ## Before the first deploy
 
 - Pin every `@aotter/mantle*` package to one exact version and commit the lockfile. Install with `pnpm install --frozen-lockfile` (or `npm ci`) from then on. See [Project and CLI](../start/project-and-cli.md).
 - Set `PUBLIC_ORIGIN` to the real HTTPS origin, without a trailing slash. It drives canonical URLs, `.md` mirrors, `llms.txt`, the MCP resource and the OAuth callback. If a static documentation build also emits absolute URLs, give it the same value.
-- Set the production D1 `database_id` (and `account_id` if your deployment needs it) in `wrangler.jsonc`. A local `database_name` is not a production identifier, and local data is not migrated.
+- Set the production D1 `database_id` (and `account_id` if your deployment needs it) in `wrangler.jsonc`. A local `database_name` is not a production identifier, and local D1 is not production data.
 - Choose `MANTLE_AUTH_MODE` and store the secrets with `wrangler secret put`. See [Authentication](./authentication.md).
 - Keep `compatibility_flags: ["nodejs_compat", "global_fetch_strictly_public"]`.
 - Enable observability:
@@ -74,27 +74,21 @@ Operational collections (`lifecycle: operational`) have no publish step; records
 
 Site settings split by owner. Brand, title and description seed once from `siteDefaults` and are then edited in Admin (`owner`); each edit purges the public cache. Origin, icons, locales and media purposes are code-owned and re-sync from `siteDefaults` on every boot, so change them in the Worker and redeploy. Analytics, pixels and search-engine verification are host chrome, not Core settings; see [Site chrome](./site-chrome.md) and [Site config](../reference/site-config.md).
 
-## Upgrading
+## Changing versions
 
-Read the migration notes shipped with the target release before changing versions; docs on the development branch do not describe your installed version. The 0.1.2 line removes `mantle create`, the bundle `mantle update` and `@aotter/mantle/provision`; `generate`, `validate`, `emit-openapi` and `skills` remain. To upgrade:
+Pin every selected `@aotter/mantle*` package to one exact version and keep them together. This handbook describes the snapshot in this source tree; use the docs that ship with the version you install.
 
-1. Pin the new exact release for every selected package and update the lockfile through the package manager; review peer upgrades.
-2. Remove scripts that call retired commands. Keep application source, Worker/D1/KV identity, origins, auth mode and secrets.
+1. Pin the new exact release for every selected package and update the lockfile through the package manager; review peer ranges.
+2. Keep application source, Worker/D1/KV identity, origins, auth mode and secrets.
 3. Run `mantle generate`, `generate --check`, `skills`, `skills --check`, `validate`, typecheck and tests.
 4. Test local routes and authorization, then deploy.
 
-The native-table storage contract is a pre-beta breaking change. Existing
-generic-`entries` databases are unsupported: rebuild the instance and move any
-required data manually outside Mantle. New native-table instances deploy safe
-additive changes online; destructive changes are rejected and require another
-manual rebuild. Any `uniqueIndexes` tuple change is destructive. Mantle does not
-ship an in-product migration workflow for this unreleased storage format.
+Each Manifest Schema is a native table. Safe additive storage changes deploy online. Destructive changes — including any `uniqueIndexes` tuple add, remove, reorder or rewrite — are rejected; rebuild the instance and move required data outside Mantle. There is no in-product data-move workflow.
 
 ## Source
 - [`packages/mantle/README.md`](../../../packages/mantle/README.md)
 - [`packages/adapters/cloudflare/README.md`](../../../packages/adapters/cloudflare/README.md)
 - [`docs/direct-authoring.md`](../../../docs/direct-authoring.md)
-- [`docs/migration-0.1.2.md`](../../../docs/migration-0.1.2.md)
 - [`docs/performance-harness.md`](../../../docs/performance-harness.md)
 - [`docs/examples/minimal-worker/README.md`](../../../docs/examples/minimal-worker/README.md)
 - [`docs/examples/minimal-worker/package.json`](../../../docs/examples/minimal-worker/package.json)

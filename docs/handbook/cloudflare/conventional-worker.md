@@ -159,4 +159,3 @@ The conventional set is `{ db, adminAssets, mcpCatalogKv? }`. Never drop `db`.
 - [`packages/adapters/cloudflare/src/bindings/conventionalBindings.ts`](../../../packages/adapters/cloudflare/src/bindings/conventionalBindings.ts)
 - [`packages/adapters/cloudflare/src/mount/cmsConfig.ts`](../../../packages/adapters/cloudflare/src/mount/cmsConfig.ts)
 - [`docs/examples/minimal-worker/src/index.ts`](../../../docs/examples/minimal-worker/src/index.ts)
-- [`docs/migration-0.1.2.md`](../../../docs/migration-0.1.2.md)

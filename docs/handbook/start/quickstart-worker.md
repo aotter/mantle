@@ -3,10 +3,7 @@ description: "Author a minimal Cloudflare Worker from scratch: one Schema, one p
 ---
 # Quickstart: a minimal Worker
 
-This page reproduces Core's minimal Worker reference as a from-scratch walkthrough. It is for engineers who want a running Mantle service on their machine in a few minutes, with no visitor frontend and no Cloudflare account.
-
-> **Version scope**
-> The install below uses the published `0.1.0-alpha.17` packages. That release supports this minimal Worker flow, but still includes `mantle create` and `mantle update` and does not contain this handbook. The rest of this handbook describes a later development snapshot; see [Versions](../reference/surface.md#versions) before applying its CLI and migration guidance to a registry installation.
+This page reproduces Core's minimal Worker reference as a from-scratch walkthrough. It is for engineers who want a running Mantle service on their machine in a few minutes, with no visitor frontend and no Cloudflare account. Pin every `@aotter/mantle*` package to the exact version in this snapshot (`packages/mantle/package.json`); see [Versions](../reference/surface.md#versions).
 
 ## Prerequisites
 
@@ -31,8 +28,8 @@ Pin every `@aotter/mantle*` package to the same exact release and add the peers 
     "check": "mantle generate && mantle generate --check && mantle validate && mantle skills && mantle skills --check && tsc --noEmit"
   },
   "dependencies": {
-    "@aotter/mantle": "0.1.0-alpha.17",
-    "@aotter/mantle-cloudflare": "0.1.0-alpha.17",
+    "@aotter/mantle": "0.1.2-alpha.6",
+    "@aotter/mantle-cloudflare": "0.1.2-alpha.6",
     "better-auth": "1.7.2",
     "hono": "^4.13.3",
     "zod": "^4.5.4",
@@ -171,8 +168,8 @@ curl -i http://localhost:8787/mcp/staff
 
 `generate` fails on missing or invalid manifests and never creates a project, a default Schema or a home route. `mantle generate --check` reports stale output without writing. The reference keeps `.mantle/`, `.agents/` and `.claude/` out of git and regenerates them in `check`; see [Project layout and the CLI loop](./project-and-cli.md).
 
-> **npm and `ERESOLVE`**
-> With npm 11.16.0 a cold Cloudflare install can fail with `ERESOLVE`: Better Auth/Drizzle selects optional `@libsql/client@0.18.0` while this release declares the tested `^0.17.4` peer. If that exact conflict occurs, merge `{ "overrides": { "@libsql/client": "0.17.4" } }` into `package.json` and rerun `npm install`. Do not use `--force` or `--legacy-peer-deps`. Commit the lockfile and use `npm ci` afterwards. Recheck the peer range when upgrading; the workaround is specific to these versions.
+> **npm and optional peers**
+> A cold npm install can fail with `ERESOLVE` when an Auth peer selects a different optional `@libsql/client` than this snapshot declares. If that happens, pin `@libsql/client` in `overrides` to the range in this checkout's `package.json` and rerun `npm install`. Do not use `--force`. Commit the lockfile and use `npm ci` afterwards.
 
 ## Next steps
 
