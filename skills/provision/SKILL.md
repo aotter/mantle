@@ -1,6 +1,6 @@
 ---
 name: provision
-description: Ship a local or Mantle landing-generated project to Cloudflare and finish production auth. Use when a Mantle project is ready for GitHub, Cloudflare deployment, self-hosted GitHub OAuth, paid Mantle hosted auth verification, production smoke testing, or operator handoff.
+description: Ship a local Mantle project to Cloudflare and finish production auth. Use when a Mantle project is ready for GitHub, Cloudflare deployment, self-hosted GitHub OAuth, hosted auth verification, production smoke testing, or operator handoff.
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/provision/SKILL.md

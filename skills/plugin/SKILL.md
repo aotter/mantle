@@ -10,8 +10,8 @@ metadata:
 
 # Mantle Plugin
 
-Mantle plugins are Core SDK capability packages. They are not starter overlays
-and they are not provider provisioning scripts.
+Mantle plugins are Core SDK capability packages. They are not frontend
+templates and they are not provider provisioning scripts.
 
 A plugin may contribute:
 
@@ -82,8 +82,8 @@ Suggested ledger paths:
 .mantle/plugins.lock.json
 ```
 
-Keep starter launch state separate from plugin state. `.mantle/features.json`
-is launch/starter context, not the Core plugin ledger.
+Keep leftover launch files separate from plugin state. `.mantle/features.json`
+is leftover context, not the Core plugin ledger. Do not create it.
 
 ## Update
 
@@ -114,7 +114,7 @@ Then verify the plugin's declared surfaces:
 
 ## Don't
 
-- Don't treat a starter archetype as a plugin.
+- Don't treat a handbook example or a public frontend as a plugin.
 - Don't assume Cloudflare; inspect the active adapter and capability ports.
-- Don't create a second skill namespace for starter-specific plugins.
+- Don't create a second skill namespace for host-specific plugins.
 - Don't commit secrets. Provider secrets stay in the platform secret store.

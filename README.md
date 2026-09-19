@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <a href="#author-your-application">Quick start</a>
+  <a href="#start-here-an-agent-bringing-a-human">Start here</a>
   &middot;
   <a href="#a-custom-mcp-server-without-building-the-server">Features</a>
   &middot;
@@ -51,24 +51,39 @@ Admin. Coding agents build with it; operation agents run it through governed
 tools. It stays inside your application, with your storage, auth, queues, and
 lifecycle.
 
-## Author your application
+## Start here: an agent bringing a human
 
-Write the application's manifests, runtime entry and provider configuration,
-then use the installed SDK compiler:
+Mantle is not “read this README and scaffold a site.” The CLI has no `create`.
+A new service starts as a conversation, then a local Worker, then a human in
+Admin.
 
-```sh
-pnpm exec mantle generate
-pnpm exec mantle validate
-```
+1. **Learn the grammar.** Read the installed handbook and the
+   [examples](docs/handbook/examples/intake-form.md) for full Schema / View /
+   Procedure / Trigger inspiration. The
+   [minimal Worker reference](docs/examples/minimal-worker/README.md) is a
+   tested API-only Cloudflare shape, not a template to copy wholesale and not
+   a visitor homepage.
+2. **Interview the human.** What service is this? Who uses it? Which records
+   are stored? What can people read or write? Which email should become the
+   first Admin owner?
+3. **Get a Worker running locally.** Author `package.json`, manifests, the
+   Worker entry and `wrangler.jsonc` in the application’s own directory. Use
+   local D1. Run `pnpm exec mantle generate`, `pnpm exec mantle validate`, then
+   `wrangler dev --local`. `GET /` is 404 until the application adds a
+   frontend.
+4. **Sign in locally with email OTP.** Add `@aotter/mantle-admin-ui`, wire
+   `createAuth` with `{ kind: "email-otp" }` and `ConsoleEmailSender`, put
+   `BETTER_AUTH_SECRET` in `.dev.vars`, and open `/admin/sign-in`. The human
+   reads the one-time code from the Wrangler log and lands in Admin / Dev UI.
+   Do not rebuild Admin.
+5. **Refine from use.** The human learns the service by using Dev UI. The
+   agent uses that feedback to change manifests, then generate and validate
+   again.
 
-Follow [direct authoring](docs/handbook/start/project-and-cli.md), or give its version-matched
-install skill to your coding agent. The [minimal Worker reference](docs/examples/minimal-worker/README.md)
-shows a tested Cloudflare application without a visitor frontend. Other hosts
-can embed the same [manifest contract](#one-manifest-one-contract).
-
-The 0.1.2 line removes Starter scaffolding and the bundle updater. Existing
-Landing/Starters stay on immutable alpha.17; read the
-[migration notes](docs/migration-0.1.2.md) before upgrading.
+The walkthrough with exact files is
+[Start: a local Worker and Admin](docs/handbook/start/quickstart-worker.md).
+Give the version-matched `develop` and `install` skills to the coding agent.
+`mantle --help` lists `generate`, `validate`, `skills` and `emit-openapi`.
 
 ## A custom MCP server, without building the server
 
@@ -79,8 +94,9 @@ reach—without maintaining a second MCP server or schema.
 
 ## Agent-discoverable and i18n-ready, built in
 
-Enable the optional Web surface and every public page gets a predictable path
-and Markdown mirror in every locale:
+There is no visitor homepage by default. When you enable the optional Web
+surface, every public page you declare gets a predictable path and Markdown
+mirror in every locale:
 
 ```text
 /en/posts/hello
@@ -111,7 +127,7 @@ need the same controls; editorial review and approval are coming soon.
 
 Apache-2.0 Core runs inside your process, with the raw Runtime and handler
 context available for transactions, queues, media, and platform capabilities.
-Use Bun, Vercel, Cloudflare, or your own adapter. Small Cloudflare sites can fit
+Use Bun, Vercel, Cloudflare, or your own adapter. Small Cloudflare services can fit
 within its [Workers](https://developers.cloudflare.com/workers/platform/pricing/)
 and [D1](https://developers.cloudflare.com/d1/platform/pricing/) free limits.
 
@@ -239,8 +255,8 @@ structure around the application you already own.
 
 ### Human engineers
 
-Human engineers get the same direct path: ordinary YAML in, ordinary
-TypeScript APIs out.
+Human engineers get the same path: interview the service, author ordinary
+YAML, run a local Worker, sign into Admin, then use ordinary TypeScript APIs.
 
 ```bash
 pnpm add @aotter/mantle@alpha
@@ -278,8 +294,8 @@ codex plugin add mantle@mantle
 Cursor and GitHub Copilot discover their plugin manifests when this repository
 is cloned or opened. See [`skills/README.md`](skills/README.md) for host details.
 
-- **Repository plugin:** teaches an agent to create and maintain Mantle
-  projects.
+- **Repository plugin:** teaches an agent to interview a human, run a local
+  Worker, walk them into Admin, and maintain the service.
 - **`mantle skills`:** projects the installed package's exact project-scoped
   workflows into a consumer repository. Each skill declares its own scope, so
   destructive and platform-specific ones stay opt-in.

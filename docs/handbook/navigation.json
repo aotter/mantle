@@ -4,7 +4,7 @@
     {
       "text": "Start here",
       "items": [
-        { "text": "Quickstart: a minimal Worker", "link": "/start/quickstart-worker" },
+        { "text": "Start: a local Worker and Admin", "link": "/start/quickstart-worker" },
         { "text": "Project layout and the CLI loop", "link": "/start/project-and-cli" }
       ]
     },

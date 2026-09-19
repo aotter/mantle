@@ -1,9 +1,15 @@
 ---
-description: The files you own in a Mantle project, every mantle and mantle-harness command with its flags, the generated module, the daily check loop, and version pins.
+description: The start path for an agent bringing a human, the files you own, every mantle and mantle-harness command with its flags, the generated module, the daily check loop, and version pins.
 ---
 # Project layout and the CLI loop
 
-This page describes a directly authored Mantle project: which files are yours, what the installed CLI does to them, and the loop you run before every commit. It is for engineers and coding agents working in an existing project.
+This page describes a directly authored Mantle project: which files are yours, what the installed CLI does to them, and the loop you run before every commit. It is for engineers and coding agents working in an application directory — not the SDK checkout.
+
+## Start path
+
+A human does not learn Mantle by reading this page alone. A coding agent learns the grammar from the installed handbook and examples, interviews the human, gets a Worker running on local D1, then walks the human through email-OTP sign-in to Admin / Dev UI. The human learns the service by using Dev UI; the agent refines manifests from that feedback.
+
+There is no `mantle create`. Ask `pnpm exec mantle --help` for the installed commands: `generate`, `validate`, `skills` and `emit-openapi`. `mantle-harness` is the measurement binary. `GET /` is 404 until the application adds a frontend. The [minimal Worker reference](../../examples/minimal-worker/README.md) is API-only grammar fuel. The first human milestone after `wrangler dev --local` is [local Admin email OTP](../cloudflare/authentication.md#local-admin-sign-in-email-otp). The file-by-file walkthrough is [Start: a local Worker and Admin](./quickstart-worker.md).
 
 ## You own the project
 
@@ -80,6 +86,8 @@ pnpm exec wrangler dev --local
 
 Run the harness after any change to a Schema index, View filter or ordering, or public route; declare the smallest ordered index the measured path needs and respect SQLite's leftmost-prefix rule. Before a deploy, run `mantle validate --phase deploy`. Probe at least one declared route on the local origin; a `200` from a public View does not prove Admin or MCP login works.
 
+After `wrangler dev --local`, the human milestone is Admin: open `/admin/sign-in`, send an email OTP, read the code from the Wrangler log (`ConsoleEmailSender`), and use `/admin/dev`. Conventional `MANTLE_AUTH_MODE=self-managed` without GitHub credentials fails closed with `503 setup_incomplete` and is not the local first path. See [Local Admin sign-in](../cloudflare/authentication.md#local-admin-sign-in-email-otp).
+
 ## Connecting an agent
 
 `mantle skills` projects the skills the installed package marks `projection: project`. At this version those are `develop`, `plugin`, `theme` and `update`; `install`, `media-gc` and `provision` stay opt-in because they create projects, delete remote objects or handle production secrets. Both tool layouts receive identical bytes. Generation never rewrites these files.
@@ -96,13 +104,13 @@ codex plugin marketplace add aotter/mantle --ref v<installed-version>
 codex plugin add mantle@mantle
 ```
 
-The projected `develop` skill tells the agent to read `package.json` for the installed version, the manifests and adapter config, and the docs under `node_modules/@aotter/mantle/docs/` before editing. To connect an MCP client to the running Worker, see [MCP and agents](../concepts/mcp-and-agents.md).
+The projected `develop` skill tells the agent to interview the human, read `package.json` for the installed version, the manifests and adapter config, and the docs under `node_modules/@aotter/mantle/docs/` before editing. Local first means `wrangler dev --local` and Admin email OTP, not Cloud provision. To connect an MCP client to the running Worker, see [MCP and agents](../concepts/mcp-and-agents.md).
 
 ## Version pins
 
 - Pin every `@aotter/mantle*` package to one exact version and move them together. Check that release's peer ranges when you move.
 - This handbook describes the snapshot in this source tree. Use the docs that ship with the version in `package.json`, not a floating branch.
-- The authoring CLI is `generate`, `validate`, `emit-openapi` and `skills`. `mantle-harness` is the measurement binary.
+- The authoring CLI is `generate`, `validate`, `emit-openapi` and `skills`. There is no `create`. `mantle-harness` is the measurement binary.
 - When you change versions: pin the new exact version and refresh the lockfile; keep the Worker, D1, KV identity, origins, auth mode and secrets; then run `generate`, `generate --check`, `skills`, `skills --check`, `validate`, typecheck and tests before deploying.
 
 ## Source

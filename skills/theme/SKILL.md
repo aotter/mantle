@@ -11,15 +11,18 @@ metadata:
 # Mantle Theme
 
 Theme work is project-owned source editing. Use the actual frontend and its
-tokens/recipes; Core does not install a default home page or UI tree.
+tokens; Core does not install a default home page or UI tree. If the
+application has no public frontend, this skill does not apply — do not invent
+a homepage to theme it.
 
 ## First Read
 
-1. `.mantle/handoff.md` and `.mantle/recipes/` if present.
-2. `styles/`, `components/`, `src/web/`, `src/theme*`, and UI-library config
+1. `styles/`, `components/`, `src/web/`, `src/theme*`, and UI-library config
    if present.
-3. A vendored UI palette's manifest and license, if present.
-4. `manifests/site.yaml` to understand which content shape drives the public UI.
+2. A vendored UI palette's manifest and license, if present.
+3. `manifests/` to understand which content shape drives the public UI.
+4. Leftover `.mantle/handoff.md` or `.mantle/recipes/` only if present; they
+   are not required.
 
 ## Ownership
 

@@ -1,9 +1,54 @@
 ---
-description: Configure MANTLE_AUTH_MODE, secrets, the first owner and staff roles; understand which routes need a session.
+description: Local Admin email OTP, then MANTLE_AUTH_MODE, secrets, the first owner and staff roles; understand which routes need a session.
 ---
 # Authentication
 
-Conventional Auth is chosen by one variable, `MANTLE_AUTH_MODE`, and fails closed when its configuration is incomplete. This page covers the two modes, the secrets each needs, first-owner bootstrap, roles, the routes that require a session, and the Better Auth integration surface.
+The local first path is email OTP into Admin, not GitHub and not Cloud-hosted auth. Conventional Auth is chosen by `MANTLE_AUTH_MODE` and fails closed when that configuration is incomplete. This page covers local sign-in, the two conventional modes, the secrets each needs, first-owner bootstrap, roles, the routes that require a session, and the Better Auth integration surface.
+
+## Local Admin sign-in (email OTP)
+
+This is the human milestone after `wrangler dev --local`. Install `@aotter/mantle-admin-ui`, bind `ASSETS` to `./public`, and pass an `auth` factory to `createMantleWorker`. With `auth` set, `MANTLE_AUTH_MODE` is not read.
+
+```ts
+import {
+  ConsoleEmailSender,
+  createAuth,
+  createMantleWorker,
+} from "@aotter/mantle/cloudflare";
+import { plan } from "../.mantle/generated/mantle.js";
+
+export default createMantleWorker({
+  plan,
+  auth: (env) => createAuth({
+    database: env.DB,
+    baseURL: env.PUBLIC_ORIGIN ?? "http://localhost:8787",
+    secret: env.BETTER_AUTH_SECRET!,
+    methods: [{ kind: "email-otp", sender: new ConsoleEmailSender() }],
+    bootstrapOwner: { match: "email", value: "you@example.com" },
+  }),
+});
+```
+
+Local values:
+
+| Name | Where | Purpose |
+|---|---|---|
+| `BETTER_AUTH_SECRET` | `.dev.vars` (never committed) | Required. 32+ random characters (`openssl rand -base64 32`). Without it the factory should refuse to boot. |
+| `PUBLIC_ORIGIN` | optional; defaults to `http://localhost:8787` | Cookie and callback origin. |
+| `bootstrapOwner.value` | Worker source, from the interview | First sign-in with this email becomes `owner`. |
+
+`ConsoleEmailSender` writes the message to `console.log`. In the Wrangler terminal the human copies the six-digit code from:
+
+```text
+[ConsoleEmailSender] auth.email-otp.sign-in → you@example.com (en)
+  subject: Your Mantle sign-in code: 123456
+```
+
+Open `http://localhost:8787/admin/sign-in`, enter that email, send the code, then open `/admin/dev`. Do not rebuild Admin.
+
+`ConsoleEmailSender` is local-only. A remote deploy needs a real `EmailSender`. Conventional `MANTLE_AUTH_MODE=self-managed` without GitHub credentials is not a local login path: Auth-owned routes return `503 setup_incomplete`.
+
+The file-by-file walkthrough is [Start: a local Worker and Admin](../start/quickstart-worker.md).
 
 ## Mode matrix
 
@@ -42,7 +87,7 @@ Non-secret vars go in `wrangler.jsonc` under `vars`. For local development put t
 
 ## First owner
 
-Every new user receives the default role `user`, which has no staff access. The first sign-in whose GitHub login matches `ADMIN_GITHUB_LOGIN` is promoted to `owner`. Promotion is blocked once any staff user exists, so the variable only bootstraps an empty site.
+Every new user receives the default role `user`, which has no staff access. The first sign-in that matches `bootstrapOwner` is promoted to `owner`. Local email OTP uses `{ match: "email", value }`. Conventional GitHub modes use `{ match: "github-login", value: ADMIN_GITHUB_LOGIN }`. Promotion is blocked once any staff user exists, so the rule only bootstraps an empty site.
 
 ## Roles
 

@@ -86,9 +86,10 @@ does not cache or retry. Dynamic and platform hosts can keep their own lifecycle
 use generated `bindMantle(runtime)`, or skip code generation and call
 `runtime.executeView({ view: "published-notes" })` directly.
 
-Author the application directly using [the installed guide](docs/handbook/start/project-and-cli.md).
-The CLI has no scaffold/type picker; missing manifests fail without creating
-an application or a visitor home page.
+Start with [the local Worker and Admin walkthrough](docs/handbook/start/quickstart-worker.md):
+a coding agent interviews the human, authors a local Worker, then walks them
+through email-OTP Admin sign-in. The CLI has no `create` or type picker;
+missing manifests fail without inventing an application or a visitor home page.
 
 `mantle skills` copies every skill the installed package marks
 `projection: project` in its front matter into matching
@@ -101,8 +102,6 @@ generation never rewrites agent instructions.
 
 SDK upgrades use the package manager and the version-matched update skill.
 For npm peer-resolution troubleshooting, see [the authoring guide](docs/handbook/start/project-and-cli.md).
-See [0.1.2 migration](docs/migration-0.1.2.md) for removed bundle APIs and how to
-preserve legacy application source and provider configuration.
 
 ## Conventional Cloudflare Worker
 

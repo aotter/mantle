@@ -11,22 +11,20 @@ metadata:
 # Mantle Update
 
 Upgrade SDK dependencies deliberately; never overwrite application-owned code.
-The old Starter bundle comparison command `mantle update` is removed. This
-skill remains the version-matched upgrade workflow, not a replacement CLI.
+There is no `mantle update` CLI. This skill is the version-matched upgrade
+workflow.
 
 1. Inspect git status, package.json, lockfile, actual project scripts and
    installed versions. Preserve unrelated local changes. Read plugin locks
-   and legacy `.mantle` metadata if present; they are context, not required.
-2. Select an explicit target release and read its migration notes, including
-   `docs/migration-0.1.2.md` when leaving alpha.17. Do not resolve new Starter
-   refs or compare the project to a baseline template.
+   and leftover `.mantle` metadata if present; they are context, not required.
+2. Select an explicit target release and read that release's installed docs.
+   Do not compare the project to a baseline template or invent a homepage.
 3. Update only selected `@aotter/mantle*` dependencies to the same exact target
    version, preserving dependency sections. Use the package manager to update
    the lockfile; inspect the dependency diff and required peer changes.
-4. Remove scripts that invoke retired create/bundle-update commands. Keep all
-   application manifests, handlers, routes, theme, Worker/D1/KV names, origins,
-   provider bindings, secrets, and legacy metadata. Apply API migration edits
-   individually; do not copy the reference consumer over a real application.
+4. Keep all application manifests, handlers, routes, theme, Worker/D1/KV names,
+   origins, provider bindings and secrets. Apply API edits individually; do
+   not copy the reference consumer over a real application.
 5. Use the upgraded package to regenerate machine-owned bindings and project
    its skills, then run the application's validation, types and tests:
 
