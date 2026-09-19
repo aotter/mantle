@@ -61,7 +61,7 @@ diagnostics.
 
 The following pins record the historical sealed-pipeline migration gates.
 ADR-0021 supersedes the Starter/Landing release coupling: current Core CI and
-release use `docs/examples/minimal-worker` from the same reviewed commit.
+release use `docs/examples/host-minimal-worker` from the same reviewed commit.
 Private consumers can still run the exact-tarball checker in their own repos;
 public Core PRs receive no cross-repository credentials:
 

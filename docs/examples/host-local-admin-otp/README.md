@@ -2,11 +2,12 @@
 
 This is the opt-in Dev UI path: a directly authored Cloudflare application
 that opens Mantle Admin locally with email OTP. Admin is not required to
-ship a complete service. It is not a Starter or CLI generator. The notes
+ship a complete service. It is not a Starter or CLI generator. Business
+Manifests live in the [Examples hub](../README.md). The notes
 Schema is example business data; `mantle generate` never invents it.
 
 Spec + adapter without Admin:
-[`docs/examples/minimal-worker`](../minimal-worker/README.md).
+[`docs/examples/host-minimal-worker`](../host-minimal-worker/README.md).
 
 Pin every `@aotter/mantle*` package to the exact version in this snapshot
 (`packages/mantle/package.json`). This reference records that version as

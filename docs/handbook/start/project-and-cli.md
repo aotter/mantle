@@ -115,9 +115,9 @@ The projected `develop` skill tells the agent to read `package.json` for the ins
 
 ## Source
 - [`docs/direct-authoring.md`](../../../docs/direct-authoring.md)
-- [`docs/examples/local-admin-otp/README.md`](../../../docs/examples/local-admin-otp/README.md)
-- [`docs/examples/local-admin-otp/wrangler.jsonc`](../../../docs/examples/local-admin-otp/wrangler.jsonc)
-- [`docs/examples/minimal-worker/.gitignore`](../../../docs/examples/minimal-worker/.gitignore)
+- [`docs/examples/host-local-admin-otp/README.md`](../../../docs/examples/host-local-admin-otp/README.md)
+- [`docs/examples/host-local-admin-otp/wrangler.jsonc`](../../../docs/examples/host-local-admin-otp/wrangler.jsonc)
+- [`docs/examples/host-minimal-worker/.gitignore`](../../../docs/examples/host-minimal-worker/.gitignore)
 - [`packages/mantle/README.md`](../../../packages/mantle/README.md)
 - [`packages/mantle/src/cli/main.ts`](../../../packages/mantle/src/cli/main.ts)
 - [`packages/mantle/src/cli/generate.ts`](../../../packages/mantle/src/cli/generate.ts)

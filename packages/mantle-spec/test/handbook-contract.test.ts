@@ -25,7 +25,7 @@ import {
  *
  * 1. every value of a closed catalog appears in the reference pages;
  * 2. every complete Manifest example parses and passes atom-local
- *    validation, and every `examples/` page also links cleanly;
+ *    validation, and every Examples hub page also links cleanly;
  * 3. `navigation.json` and the page set agree, and relative links resolve.
  *
  * Presence checks only catch omissions. Executing the examples is what
@@ -33,6 +33,7 @@ import {
  */
 
 const HANDBOOK = fileURLToPath(new URL("../../../docs/handbook/", import.meta.url));
+const EXAMPLES = fileURLToPath(new URL("../../../docs/examples/", import.meta.url));
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -48,6 +49,19 @@ const pages = walk(HANDBOOK).map((path) => ({
   rel: relative(HANDBOOK, path),
   text: readFileSync(path, "utf8"),
 }));
+
+const hubPages = readdirSync(EXAMPLES)
+  .filter((name) => name.endsWith(".md"))
+  .sort()
+  .map((name) => ({
+    path: join(EXAMPLES, name),
+    rel: name,
+    text: readFileSync(join(EXAMPLES, name), "utf8"),
+  }));
+const hubHosts = readdirSync(EXAMPLES, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && entry.name.startsWith("host-"))
+  .map((entry) => entry.name)
+  .sort();
 
 const referenceText = pages
   .filter((p) => p.rel.startsWith("reference/"))
@@ -95,8 +109,12 @@ describe("handbook: Manifest examples parse and validate", () => {
     "TRANSLATES_FIELD_NOT_IN_PARENT",
   ]);
   const siteLocales = ["en", "zh-TW"];
+  const catalog = [
+    ...pages,
+    ...hubPages.map((page) => ({ ...page, rel: `examples-hub/${page.rel}` })),
+  ];
 
-  for (const page of pages) {
+  for (const page of catalog) {
     const blocks: string[] = [];
     for (const match of page.text.matchAll(/```yaml\n([\s\S]*?)```/g)) {
       const body = match[1] ?? "";
@@ -106,7 +124,7 @@ describe("handbook: Manifest examples parse and validate", () => {
     }
     if (blocks.length === 0) continue;
 
-    const mustLink = page.rel.startsWith("examples/");
+    const mustLink = page.rel.startsWith("examples/") || page.rel.startsWith("examples-hub/");
     it(`${page.rel} (${blocks.length} manifest block${blocks.length === 1 ? "" : "s"}${mustLink ? ", must link" : ""})`, () => {
       const parsed = parseManifestSources({ sources: [{ sourceId: page.rel, text: blocks.join("\n---\n") }] });
       if (!parsed.ok) {
@@ -151,7 +169,7 @@ describe("handbook: navigation and links", () => {
 
   it("every relative link resolves inside the repository", () => {
     const broken: string[] = [];
-    for (const page of pages) {
+    for (const page of [...pages, ...hubPages]) {
       for (const match of prose(page.text).matchAll(/\]\((\.[^)\s#]+)(?:#[^)]*)?\)/g)) {
         const target = resolve(dirname(page.path), match[1] ?? "");
         try {
@@ -162,5 +180,43 @@ describe("handbook: navigation and links", () => {
       }
     }
     expect(broken).toEqual([]);
+  });
+});
+
+describe("examples hub SSOT", () => {
+  const index = hubPages.find((page) => page.rel === "README.md");
+
+  it("ships an index that lists every hub markdown file and host directory", () => {
+    expect(index, "docs/examples/README.md is required").toBeTruthy();
+    const missing = [
+      ...hubPages.filter((page) => page.rel !== "README.md").map((page) => page.rel),
+      ...hubHosts.map((name) => `${name}/`),
+    ].filter((id) => !index!.text.includes(id));
+    expect(missing).toEqual([]);
+  });
+
+  it("builtin-* Manifest YAML stays inside the Builder-supported subset", () => {
+    const problems: string[] = [];
+    for (const page of hubPages.filter((entry) => entry.rel.startsWith("builtin-"))) {
+      const blocks = [...page.text.matchAll(/```yaml\n([\s\S]*?)```/g)]
+        .map((match) => match[1] ?? "")
+        .filter((body) => /^\s*apiVersion:/m.test(body));
+      const parsed = parseManifestSources({
+        sources: [{ sourceId: page.rel, text: blocks.join("\n---\n") }],
+      });
+      if (!parsed.ok) {
+        problems.push(`${page.rel}: does not parse`);
+        continue;
+      }
+      for (const { manifest } of parsed.value.entries) {
+        if (manifest.kind === "Procedure" && manifest.spec.handler.kind !== "builtin") {
+          problems.push(`${page.rel}: Procedure '${manifest.metadata.name}' uses handler.kind: ${manifest.spec.handler.kind}`);
+        }
+        if (manifest.kind === "View" && manifest.spec.sql !== undefined) {
+          problems.push(`${page.rel}: View '${manifest.metadata.name}' uses sql`);
+        }
+      }
+    }
+    expect(problems).toEqual([]);
   });
 });

@@ -209,7 +209,7 @@ What each piece is doing:
 - `submittedAt` is stamped by the runtime, so it is absent from the Procedure input and from Staff MCP authoring tools.
 - Adding `{ kind: mcp, surface: public }` as a fourth Trigger would publish the same Procedure as an agent tool without touching a handler.
 
-Register the two `ref` keys in the project's handlers map, then run the check loop from [Project layout and the CLI loop](../start/project-and-cli.md). The complete version with real Turnstile and email handlers is [Intake form](../examples/intake-form.md).
+Register the two `ref` keys in the project's handlers map, then run the check loop from [Project layout and the CLI loop](../start/project-and-cli.md). The complete version with real Turnstile and email handlers is [Intake Turnstile and email hooks](../../examples/cf-primitives-intake-hooks.md). The Builder-safe Manifest without those hooks is [Intake form](../../examples/builtin-intake.md).
 
 ## Source
 

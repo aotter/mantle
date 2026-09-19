@@ -136,7 +136,7 @@ adapter. A narrow adapter extension seam may let consumer code verify its own
 API-key or personal-token formats, but credential storage/issuance must not
 become a runtime port. The Cloudflare reference is
 `mount/resolveCaller.ts`; consumer usage is documented in
-[API and MCP authorization](handbook/examples/guarded-api.md).
+[API and MCP authorization](examples/cf-primitives-guarded-api.md).
 
 Minimum HTTP behavior for a full adapter:
 

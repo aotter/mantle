@@ -38,12 +38,15 @@
     {
       "text": "Examples",
       "items": [
-        { "text": "Intake form", "link": "/examples/intake-form" },
+        { "text": "Examples hub", "link": "/examples/hub" },
+        { "text": "Intake form (builtin)", "link": "/examples/intake-form" },
+        { "text": "Intake Turnstile and email hooks", "link": "/examples/intake-hooks" },
         { "text": "Publication", "link": "/examples/publication" },
         { "text": "Legal documents and consent", "link": "/examples/legal-documents" },
         { "text": "Reservation requests", "link": "/examples/reservation" },
         { "text": "Procurement approvals", "link": "/examples/procurement-approvals" },
-        { "text": "Commerce and settlement", "link": "/examples/commerce-transaction" },
+        { "text": "Commerce catalog (builtin)", "link": "/examples/commerce" },
+        { "text": "Commerce inventory (DO/Queue)", "link": "/examples/commerce-transaction" },
         { "text": "Guarded API access", "link": "/examples/guarded-api" }
       ]
     },

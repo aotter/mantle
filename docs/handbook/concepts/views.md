@@ -47,7 +47,7 @@ A View can filter to the calling user's own rows with the closed sentinel `{ "$c
 2. The View must require a signed-in user: `ctx.user` in `requires.auth.all` — otherwise `VIEW_FILTER_CTX_USER_REF_REQUIRES_AUTH`.
 3. The compared field must be the leftmost field of a declared index on the source Schema — otherwise `VIEW_FILTER_CTX_USER_REF_REQUIRES_INDEX`.
 
-This is a filter, not a row-level policy engine. `requires` authorizes the whole query; it does not inject per-row visibility predicates. Membership, payment and entitlement checks belong in a guard Procedure. See [Procurement approvals](../examples/procurement-approvals.md).
+This is a filter, not a row-level policy engine. `requires` authorizes the whole query; it does not inject per-row visibility predicates. Membership, payment and entitlement checks belong in a guard Procedure. See [Procurement approvals](../../examples/builtin-procurement.md).
 
 ## Shared response cache
 
@@ -176,7 +176,7 @@ spec:
   limit: 200
 ```
 
-`tags` is an array property, so `json_each` unnests it and one request appears once per tag. The runtime wraps the whole statement as a subquery before applying pagination, which is why Admin's search and filters attach to the SQL output aliases — `tag` is a real filterable column even though no Schema property is named `tag`. See [Commerce and settlement](../examples/commerce-transaction.md) for the same technique over order lines.
+`tags` is an array property, so `json_each` unnests it and one request appears once per tag. The runtime wraps the whole statement as a subquery before applying pagination, which is why Admin's search and filters attach to the SQL output aliases — `tag` is a real filterable column even though no Schema property is named `tag`. See [Commerce inventory](../../examples/cf-primitives-commerce-inventory.md) for the same technique over order lines.
 
 ## Source
 

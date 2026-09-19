@@ -124,7 +124,7 @@ and MCP OAuth callers into the same runtime auth context. Manifest
 every REST or MCP call.
 
 Core does not create credential or payment tables. See the shipped
-`node_modules/@aotter/mantle/docs/handbook/examples/guarded-api.md` for
+`node_modules/@aotter/mantle/docs/examples/cf-primitives-guarded-api.md` for
 the exact resolver contract, OAuth resource helpers, manifest examples,
 status behavior, OpenAPI reflection, and runnable integration fixture.
 

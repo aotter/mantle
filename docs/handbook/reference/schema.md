@@ -180,7 +180,7 @@ uiSchema:
 
 Every violation is `SCHEMA_UI_INVALID`. Without `primaryField` and `columns`, Admin lists an operational collection with platform metadata only. `nav` is operational Admin navigation only — it does not change runtime, MCP, or publishing validation. Parent autocomplete coexists with `list.filterField` enum tabs as a separate control.
 
-Keep implementation-detail children fold-only. Use `nav.standalone: true` when staff also need a cross-parent list; see the [inventory example](../examples/commerce-transaction.md).
+Keep implementation-detail children fold-only. Use `nav.standalone: true` when staff also need a cross-parent list; see the [inventory example](../../examples/cf-primitives-commerce-inventory.md).
 
 ## Indexes
 
