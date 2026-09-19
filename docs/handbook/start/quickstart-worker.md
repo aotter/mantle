@@ -24,7 +24,7 @@ Pin every `@aotter/mantle*` package to the same exact release and add the peers 
     "generate": "mantle generate",
     "validate": "mantle validate",
     "typecheck": "tsc --noEmit",
-    "dev": "wrangler dev --local",
+    "dev": "wrangler dev --local --ip 127.0.0.1 --port 8787",
     "check": "mantle generate && mantle generate --check && mantle validate && mantle skills && mantle skills --check && tsc --noEmit"
   },
   "dependencies": {
@@ -133,15 +133,15 @@ Both compatibility flags are required by the adapter. `MANTLE_AUTH_MODE` must be
 pnpm install
 pnpm exec mantle generate
 pnpm exec mantle validate
-pnpm exec wrangler dev --local
+pnpm exec wrangler dev --local --ip 127.0.0.1 --port 8787
 ```
 
-`mantle validate` prints `OK  no issues (root: manifests, phase: preview)`. Wrangler prints the local origin, normally `http://localhost:8787`; use whatever it prints in the next step. The Admin OTP path uses `http://127.0.0.1:8787` in the official example, and `PUBLIC_ORIGIN` must match wrangler's printed origin there.
+`mantle validate` prints `OK  no issues (root: manifests, phase: preview)`. Wrangler prints `Ready on http://127.0.0.1:8787`. Use that origin in the next step. The Admin OTP path uses the same pin; `PUBLIC_ORIGIN` must match wrangler's printed origin there.
 
 ## 6. Probe the Worker
 
 ```sh
-curl -s http://localhost:8787/api/views/published-notes
+curl -s http://127.0.0.1:8787/api/views/published-notes
 ```
 
 ```json
@@ -151,13 +151,13 @@ curl -s http://localhost:8787/api/views/published-notes
 The View is served with no data because the local D1 is fresh. `show` follows the View's `limit` when the request carries no `?show=`; `?page=` and `?show=` are the reserved pagination params ([Reads: Views, REST and MCP](../concepts/views.md)).
 
 ```sh
-curl -i http://localhost:8787/
+curl -i http://127.0.0.1:8787/
 ```
 
 `GET /` returns `404`. No visitor frontend is installed or rendered; `mantle-web` is optional composition and never owns an implicit home route. Add your own routes or templates when the product needs them ([Public web, SEO and cache](../cloudflare/public-web.md)).
 
 ```sh
-curl -i http://localhost:8787/mcp/staff
+curl -i http://127.0.0.1:8787/mcp/staff
 ```
 
 `GET /mcp/staff` returns `503` with the error code `setup_incomplete` until `MANTLE_AUTH_MODE` is backed by a complete configuration. This is the expected fail-closed state; a working public endpoint is not evidence of a working Admin or MCP login.

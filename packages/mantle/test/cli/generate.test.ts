@@ -352,6 +352,12 @@ spec: {}
     expect(pkg.scripts.dev).toMatch(/--port 8787/);
   });
 
+  it("pins the official minimal Worker example to the same local host", async () => {
+    const pkg = JSON.parse(await readFile(new URL("../../../../docs/examples/minimal-worker/package.json", import.meta.url), "utf8"));
+    expect(pkg.scripts.dev).toMatch(/--ip 127\.0\.0\.1/);
+    expect(pkg.scripts.dev).toMatch(/--port 8787/);
+  });
+
   it("warns when Admin UI is synced but wrangler has no ASSETS binding", async () => {
     const root = await mkdtemp(join(tmpdir(), "mantle-generate-assets-warn-"));
     const adminDist = await mkdtemp(join(tmpdir(), "mantle-admin-ui-dist-"));

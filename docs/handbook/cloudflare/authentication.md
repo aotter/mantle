@@ -20,7 +20,7 @@ With `auth` set, the mode matrix below is not read. Core still owns `/admin` and
 
 Validation rules:
 
-- `PUBLIC_ORIGIN` is the site's HTTPS origin without a trailing slash. When unset, the adapter falls back to `http://localhost:8787`. The Admin OTP example uses `http://127.0.0.1:8787`; that value must match wrangler's printed origin.
+- `PUBLIC_ORIGIN` is the site's HTTPS origin without a trailing slash. When unset, the adapter falls back to `http://localhost:8787`. That fallback string is not the preferred local Admin pin. The origin wrangler prints is authoritative; the Admin OTP reference binds `127.0.0.1:8787` and sets `PUBLIC_ORIGIN` to the same origin.
 - Self-managed uses the site's own GitHub OAuth app. Register its callback URL as `<PUBLIC_ORIGIN>/api/auth/callback/github`.
 - Hosted is a public PKCE client with no client secret. `MANTLE_HOSTED_AUTH_ISSUER` must be an HTTPS root origin (no path, query or fragment; `http` only for loopback). `MANTLE_HOSTED_AUTH_CLIENT_ID` must be a URL on that same origin shaped `/clients/<id>`.
 - `ADMIN_GITHUB_LOGIN` must be a valid GitHub login.

@@ -45,6 +45,14 @@ if (args.length === 1 && args[0] === "--self-test" && command.length === 0) {
   if (!entries.includes("package.json") || entries.some((entry) => entry.includes("node_modules/"))) {
     throw new Error("packed-consumer committed subtree archive failed");
   }
+  const probe = join(tmpdir(), "packed-consumer-peer-rules.json");
+  writeFileSync(probe, `${JSON.stringify({ name: "probe", private: true }, null, 2)}\n`);
+  addOverrides(probe, new Map([["@aotter/mantle", "/tmp/exact-mantle.tgz"]]));
+  const patched = JSON.parse(readFileSync(probe, "utf8"));
+  rmSync(probe);
+  if (patched.pnpm?.peerDependencyRules?.allowedVersions?.["@aotter/mantle"] !== "*") {
+    throw new Error("packed-consumer peer-rule self-test failed");
+  }
   console.log("packed-consumer provenance and subtree self-test passed");
   process.exit(0);
 }
@@ -139,6 +147,16 @@ function addOverrides(path, tarballs) {
   manifest.pnpm.overrides = {
     ...(manifest.pnpm.overrides ?? {}),
     ...Object.fromEntries([...tarballs].map(([name, path]) => [name, `file:${path}`])),
+  };
+  // file: overrides rewrite peer specifiers to file: paths; pnpm then reports
+  // those peers unmet even when the same version is installed. Allow any packed
+  // Mantle peer on this disposable consumer only — registry peer checks stay.
+  manifest.pnpm.peerDependencyRules = {
+    ...(manifest.pnpm.peerDependencyRules ?? {}),
+    allowedVersions: {
+      ...(manifest.pnpm.peerDependencyRules?.allowedVersions ?? {}),
+      ...Object.fromEntries([...tarballs.keys()].map((name) => [name, "*"])),
+    },
   };
   writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
 }

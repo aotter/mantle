@@ -141,6 +141,10 @@ try {
   if (!String(adminOtpPkg.scripts?.dev ?? "").includes("--ip 127.0.0.1")) {
     throw new Error("Packed local-admin-otp pnpm dev must pin wrangler --ip 127.0.0.1");
   }
+  const minimalPkg = JSON.parse(readFileSync(join(umbrella, "docs/examples/minimal-worker/package.json"), "utf8"));
+  if (!String(minimalPkg.scripts?.dev ?? "").includes("--ip 127.0.0.1")) {
+    throw new Error("Packed minimal-worker pnpm dev must pin wrangler --ip 127.0.0.1");
+  }
   const packedManifest = JSON.parse(readFileSync(join(umbrella, "package.json"), "utf8"));
   if (packedManifest.exports["./provision"]) throw new Error("Retired provision export remains");
   const payload = execFileSync("tar", ["-tf", tarballs["@aotter/mantle"]], { encoding: "utf8" });
@@ -267,6 +271,11 @@ function installConsumer(name, dependencies, check, overrides = dependencies) {
       overrides: Object.fromEntries(
         Object.entries(overrides).filter(([name]) => name.startsWith("@aotter/")),
       ),
+      peerDependencyRules: {
+        allowedVersions: Object.fromEntries(
+          Object.keys(overrides).filter((name) => name.startsWith("@aotter/")).map((name) => [name, "*"]),
+        ),
+      },
     },
   }, null, 2)}\n`);
   execFileSync("pnpm", ["install", "--ignore-scripts"], {
