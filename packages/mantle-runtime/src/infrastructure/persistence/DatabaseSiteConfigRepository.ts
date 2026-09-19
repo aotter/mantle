@@ -20,9 +20,8 @@ import type {
  *   written via INSERT … ON CONFLICT DO NOTHING. The admin settings
  *   UI (`/admin/api/site-settings`) can edit these directly. DB wins
  *   once the row exists, so a later `src/mantle/config.ts` edit never
- *   clobbers an operator's change. Leftover `ga4MeasurementId` /
- *   `facebookPixelId` rows from pre-#928 deployments are ignored on
- *   read and are not injected into public HTML.
+ *   clobbers an operator's change. Load maps only known keys;
+ *   unknown `site_config` rows are ignored.
  *
  * - **code-canonical, boot-synced** (`origin`, `icons`, `mediaPurposes`, `locales`):
  *   these have no admin-UI edit path — `src/mantle/config.ts` is the only
