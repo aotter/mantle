@@ -181,6 +181,8 @@ export interface OAuthProviderConfig {
   readonly cachedTrustedClients?: ReadonlySet<string>;
   /** Protected resources this authorization server may issue tokens for. */
   readonly resources?: ReadonlyArray<string>;
+  /** Resources linked to newly registered public clients. Does not bypass consent. */
+  readonly clientRegistrationDefaultResources?: ReadonlyArray<string>;
   /** Turn this provider into the MCP authorization server for one canonical
    *  resource. Cloudflare deployments must enable
    *  `global_fetch_strictly_public` for CIMD fetches. */
@@ -637,6 +639,9 @@ export function buildOAuthProviderOptions(
     ...(config.scopes ? { scopes: [...config.scopes] } : {}),
     ...(config.resources
       ? { resources: [...config.resources] }
+      : {}),
+    ...(config.clientRegistrationDefaultResources
+      ? { clientRegistrationDefaultResources: [...config.clientRegistrationDefaultResources] }
       : {}),
     ...(config.mcpResource
       ? {
@@ -1238,8 +1243,8 @@ export function createAuth(config: CreateAuthConfig): Auth {
           async () => api.getJwks(),
           localJwksCacheKey,
         );
-        if (audience === config.oauthProvider?.mcpResource) {
-          await assertActiveMcpGrant(config.database, claims, audience);
+        if (config.oauthProvider?.mcpResource && (audience === config.oauthProvider.mcpResource || config.oauthProvider.resources?.includes(audience))) {
+          await assertActiveUserGrant(config.database, claims, audience);
         }
         return claims;
       }
@@ -1839,7 +1844,7 @@ function parseStoredStringArray(value: unknown): string[] | null {
   }
 }
 
-async function assertActiveMcpGrant(
+async function assertActiveUserGrant(
   database: D1Database,
   claims: Record<string, unknown>,
   audience: string,
@@ -1854,7 +1859,7 @@ async function assertActiveMcpGrant(
     typeof sessionId !== "string" ||
     typeof consentId !== "string" || !consentId
   ) {
-    throw new Error("MCP token is not bound to a user session.");
+    throw new Error("OAuth token is not bound to a user session.");
   }
   const result = await database
     .prepare(
@@ -1869,7 +1874,7 @@ async function assertActiveMcpGrant(
   const scopes = parseStoredStringArray(result?.scopes);
   const active = resources?.includes(audience) === true && scopes !== null &&
     tokenScopes.every((scope) => scopes.includes(scope));
-  if (!active) throw new Error("MCP authorization grant is no longer active.");
+  if (!active) throw new Error("OAuth authorization grant is no longer active.");
 }
 
 type LocalJwksFetcher = Exclude<
