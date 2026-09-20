@@ -14,8 +14,12 @@ Prepare a same-repository release PR: prove the new version/tag unused,
 preview native release notes and correct PR metadata, align package/plugin
 versions, inspect the packed docs/skills payload, run `pnpm check` and review
 its exact SHA. The reference consumer gate runs from packed packages outside
-workspace links. Merge into develop for alpha; stable/RC/beta main promotion
-remains explicit. Do not infer permission to publish from an implementation PR.
+workspace links. Merge into develop for every version. Beta, RC and stable
+then follow "Promote to main" in docs/release-process.md: pin
+`promote/<version>` at that develop merge SHA, PR it into main, merge with a
+merge commit, dispatch with `--ref main`. Stable also needs recorded owner
+acceptance on the release-gate issue (#826 for 0.1.2). Do not infer permission
+to publish from an implementation PR.
 
 Dispatch the controller from the reviewed release merge with the version
 without v. Watch all gates, not only publication:
