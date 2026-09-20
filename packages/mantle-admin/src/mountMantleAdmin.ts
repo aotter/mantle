@@ -121,6 +121,8 @@ export interface MantleAdminRef {
   readonly plan: RuntimePlan;
   readonly auth: AdminAuth;
   readonly assets: AdminAssetServer;
+  /** Host-mounted remote MCP paths. Omit for the conventional Worker routes. */
+  readonly mcpEndpoints?: { readonly public: string | null; readonly staff: string | null };
   readonly requestContext?: (context: Context) => {
     readonly env?: unknown;
     readonly waitUntil?: (promise: Promise<unknown>) => void;
@@ -604,10 +606,16 @@ export function mountMantleAdmin<E extends Env>(
     const resolvedRuntime = runtime ?? await ref.get();
     const { origin, ...site } = await resolvedRuntime.siteConfig.load();
     const publicUrl = origin || new URL(c.req.url).origin;
+    const endpoints = ref.mcpEndpoints ?? { public: "/mcp", staff: "/mcp/staff" };
+    const mcpEndpoints = {
+      public: endpoints.public === null ? null : new URL(endpoints.public, publicUrl).href,
+      staff: endpoints.staff === null ? null : new URL(endpoints.staff, publicUrl).href,
+    };
     return {
       ...site,
       publicUrl,
-      mcpUrl: `${publicUrl}/mcp/staff`,
+      mcpEndpoints,
+      mcpUrl: mcpEndpoints.staff,
     };
   };
 

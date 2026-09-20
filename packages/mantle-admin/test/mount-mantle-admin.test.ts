@@ -25,6 +25,23 @@ const auth: AdminAuth = {
 };
 
 describe("mountMantleAdmin", () => {
+  it("reports only MCP endpoints mounted by the host", async () => {
+    const app = new Hono();
+    mountMantleAdmin(app, {
+      plan: compiled.value,
+      auth: { ...auth, getSession: async () => ({ session: { id: "s" }, user: { id: "owner" } }), getUserRole: async () => "owner" },
+      assets: { fetch: async () => null },
+      get: async () => ({ siteConfig: { load: async () => ({ origin: "https://site.test", title: "Site" }) } }) as MantleAdminRuntime,
+      mcpEndpoints: { public: "/api/mcp", staff: null },
+    });
+    const response = await app.request("https://admin.test/admin/api/site");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      mcpEndpoints: { public: "https://site.test/api/mcp", staff: null },
+      mcpUrl: null,
+    });
+  });
+
   it.each([
     { origin: "https://evil.test", "sec-fetch-site": "cross-site" },
     { origin: "https://evil.example.test", "sec-fetch-site": "same-site" },

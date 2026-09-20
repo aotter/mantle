@@ -61,12 +61,11 @@ export function HomeView(): React.ReactElement {
   ].filter((group) => group.items.length > 0);
   const siteInfo = site.data;
   const canonical = siteInfo?.canonicalLocale ?? null;
-  const mcpEndpoint = siteInfo ? new URL(siteInfo.mcpUrl, window.location.href) : null;
-  const mcpOrigin = mcpEndpoint?.origin ?? "";
-  const publicMcpUrl = `${mcpOrigin}/mcp`;
-  const staffMcpUrl = `${mcpOrigin}/mcp/staff`;
+  const publicMcpUrl = siteInfo?.mcpEndpoints?.public ?? null;
+  const staffMcpUrl = siteInfo?.mcpEndpoints?.staff ?? null;
+  const mcpEndpoint = staffMcpUrl ?? publicMcpUrl;
   const isLocalMcp = mcpEndpoint
-    ? ["localhost", "127.0.0.1", "::1"].includes(mcpEndpoint.hostname)
+    ? ["localhost", "127.0.0.1", "::1"].includes(new URL(mcpEndpoint).hostname)
     : false;
 
   return (
@@ -95,7 +94,7 @@ export function HomeView(): React.ReactElement {
         <Skeleton className="h-72 w-full" />
       ) : site.isError ? (
         <ErrorBox error={site.error} />
-      ) : siteInfo ? (
+      ) : siteInfo && (publicMcpUrl || staffMcpUrl) ? (
         <SectionCard className="overflow-hidden p-0">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/70 p-5">
             <div className="flex items-start gap-3">
@@ -113,7 +112,7 @@ export function HomeView(): React.ReactElement {
           </div>
 
           <div className="grid gap-4 p-5 md:grid-cols-2">
-            <div className="rounded-xl border bg-muted/20 p-4">
+            {publicMcpUrl ? <div className="rounded-xl border bg-muted/20 p-4">
               <div className="mb-3 flex items-start gap-3">
                 <Globe className="mt-0.5 size-5 text-muted-foreground" aria-hidden />
                 <div>
@@ -124,9 +123,9 @@ export function HomeView(): React.ReactElement {
                 </div>
               </div>
               <CopyField label={t(language, "console.connector.endpointLabel")} value={publicMcpUrl} />
-            </div>
+            </div> : null}
 
-            <div className="rounded-xl border bg-muted/20 p-4">
+            {staffMcpUrl ? <div className="rounded-xl border bg-muted/20 p-4">
               <div className="mb-3 flex items-start gap-3">
                 <ShieldCheck className="mt-0.5 size-5 text-muted-foreground" aria-hidden />
                 <div>
@@ -137,10 +136,10 @@ export function HomeView(): React.ReactElement {
                 </div>
               </div>
               <CopyField label={t(language, "console.connector.endpointLabel")} value={staffMcpUrl} />
-            </div>
+            </div> : null}
           </div>
 
-          <div className="flex justify-end border-t border-border/70 px-5 py-3">
+          {staffMcpUrl ? <div className="flex justify-end border-t border-border/70 px-5 py-3">
             <Dialog>
               <DialogTrigger asChild>
                 <Button variant="ghost">{t(language, "console.connector.details")}</Button>
@@ -226,7 +225,7 @@ export function HomeView(): React.ReactElement {
                 </Tabs>
               </DialogContent>
             </Dialog>
-          </div>
+          </div> : null}
         </SectionCard>
       ) : null}
 

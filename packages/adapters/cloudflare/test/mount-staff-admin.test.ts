@@ -146,6 +146,7 @@ describe("GET /admin/api/site", () => {
     const body = await res.json();
     expect(body).toMatchObject({
       publicUrl: "https://example.test",
+      mcpEndpoints: { public: "https://example.test/mcp", staff: "https://example.test/mcp/staff" },
       mcpUrl: "https://example.test/mcp/staff",
       icons: [
         { src: "/_mantle/admin/favicon.png", mimeType: "image/png", sizes: ["64x64"] },

@@ -5,9 +5,10 @@ import { ChevronDown, Eye, Search } from "lucide-react";
 import { t } from "../../app/i18n";
 import { usePreferences } from "../../app/preferences";
 import { useAdminLocation } from "../../app/router";
+import { api } from "../../lib/api";
 import { adminWebMcpQueryOptions, developerConsoleQueryOptions } from "../../lib/queries";
 import type { AdminTool } from "../../lib/admin-tools";
-import type { DeveloperCallableCapability, DeveloperHttpOperation, JsonSchema } from "../../lib/types";
+import type { DeveloperCallableCapability, DeveloperHttpOperation, JsonSchema, SiteInfo } from "../../lib/types";
 import { ErrorBox } from "../../ui/page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ export function InterfaceDocsView(): React.ReactElement {
   const { language } = usePreferences();
   const location = useAdminLocation();
   const snapshot = useQuery(developerConsoleQueryOptions());
+  const site = useQuery({ queryKey: ["site"], queryFn: () => api.get<SiteInfo>("/site") });
   const adminWebMcp = useQuery(adminWebMcpQueryOptions());
   const [search, setSearch] = React.useState("");
   const section = location.pathname.split("/").pop();
@@ -37,8 +39,9 @@ export function InterfaceDocsView(): React.ReactElement {
   const matches = (values: readonly (string | null | undefined)[]): boolean => !search || values.some((value) => value?.toLowerCase().includes(search.toLowerCase()));
   const publicServices = http.filter((operation) => operation.kind === "view" && matches([operation.method, operation.path, operation.name, operation.description, operation.target]));
   const httpTriggers = http.filter((operation) => operation.kind === "procedure" && matches([operation.method, operation.path, operation.name, operation.description, operation.target]));
-  const filteredCallable = callable.filter((capability) => matches([capability.name, capability.description, capability.target, capability.trigger, capability.surface, capability.audience]));
-  const webMcp = filteredCallable.filter((capability) => capability.surface === "public" && capability.kind === "view");
+  const matchedCallable = callable.filter((capability) => matches([capability.name, capability.description, capability.target, capability.trigger, capability.surface, capability.audience]));
+  const filteredCallable = matchedCallable.filter((capability) => site.data?.mcpEndpoints?.[capability.surface]);
+  const webMcp = matchedCallable.filter((capability) => capability.surface === "public" && capability.kind === "view");
   return (
     <section className="h-full min-h-0 overflow-y-auto" aria-label={t(language, "docs.title")}>
       {page === "api" ? (
@@ -49,7 +52,7 @@ export function InterfaceDocsView(): React.ReactElement {
           </DocSection>
       ) : null}
       {page === "mcp" ? (
-          <DocSection intro={t(language, "docs.mcpIntro")} search={search} onSearch={setSearch} endpoints={<><Endpoint label={t(language, "docs.publicEndpoint")} value="/mcp" /><Endpoint label={t(language, "docs.staffEndpoint")} value="/mcp/staff" /></>}>
+          <DocSection intro={t(language, "docs.mcpIntro")} search={search} onSearch={setSearch} endpoints={<>{site.data?.mcpEndpoints?.public ? <Endpoint label={t(language, "docs.publicEndpoint")} value={site.data.mcpEndpoints.public} /> : null}{site.data?.mcpEndpoints?.staff ? <Endpoint label={t(language, "docs.staffEndpoint")} value={site.data.mcpEndpoints.staff} /> : null}</>}>
             {(["public", "staff"] as const).map((surface) => {
               const entries = filteredCallable.filter((capability) => capability.surface === surface);
               return entries.length ? <section key={surface} className="space-y-3"><h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{surface}</h2><OperationList>{entries.map((capability) => <CapabilityOperation key={`${surface}:${capability.name}`} capability={capability} />)}</OperationList></section> : null;
