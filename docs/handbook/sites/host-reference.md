@@ -41,17 +41,35 @@ The reference exposes these separate surfaces:
 | Surface | Authentication | Reference support |
 |---|---|---|
 | Admin WebMCP | Current browser Admin session and fresh Mantle staff role | Available within Admin. |
-| Public `/api/mcp` | Anonymous, read-only public Views | Manual HTTPS `initialize`, `tools/list`, and a published View call verified on the deployed integration. |
+| Public MCP (reference path: `/api/mcp`) | Anonymous, read-only public Views | Manual HTTPS `initialize`, `tools/list`, and a published View call verified on the deployed integration. |
 | Remote `/mcp/staff` | OAuth bearer authorization and fresh Mantle staff role | Not mounted; requires a separate integration. |
 | Sites-managed connector registration | Sites MCP declaration and connection configuration | Unverified; do not guess a hosting manifest key. |
 
-The reference chooses `/api/mcp` and passes
-`mcpEndpoints: { public: "/api/mcp", staff: null }` to `mountMantleAdmin`, so
-Admin displays only that mounted endpoint. This path belongs to the reference,
-not Mantle Core. Other hosts may mount different paths and report them through
-the exported `AdminMcpEndpoints` contract. Its smoke test checks that `/mcp`
-and `/mcp/staff` return 404. The earlier deployment's root `/mcp` response is
-not evidence of a globally reserved Sites path.
+Try the conventional `/mcp` path first. If ChatGPT Sites does not route that
+path to the application, mount the MCP handler at another application-owned
+path and report the actual path through `mcpEndpoints`. For example:
+
+```ts
+app.all("/agent/read", publicMcpHandler);
+
+mountMantleAdmin(app, {
+  plan,
+  auth,
+  assets,
+  get,
+  mcpEndpoints: { public: "/agent/read", staff: null },
+});
+```
+
+The reference encountered that condition, chose `/api/mcp`, and passes
+`mcpEndpoints: { public: "/api/mcp", staff: null }`. Admin therefore displays
+only the route that the reference actually mounted. `/api/mcp` is an example,
+not a required fallback or Mantle Core route. Verify the chosen route with
+`initialize`, `tools/list`, and a tool call after every Sites deployment.
+
+The reference smoke test also checks that `/mcp` and `/mcp/staff` return 404.
+The earlier deployment's root `/mcp` response is not evidence of a globally
+reserved Sites path; another Sites deployment may route it differently.
 
 Identity follows the same host-owned design. `@aotter/mantle-admin` exports
 `AdminAuth`; the reference implements it using trusted Sites identity headers
