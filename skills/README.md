@@ -58,8 +58,21 @@ contracts.
 
 ## Source-repository marketplace install
 
-The source repository is also an agent plugin bundle. These manifests are not
-duplicated into the npm package:
+The source repository is also an agent plugin bundle. Install it at the tag
+matching the project's `@aotter/mantle` version:
+
+```bash
+# Claude Code — two separate prompts
+/plugin marketplace add aotter/mantle@v<installed-version>
+/plugin install mantle@mantle
+
+# Codex
+codex plugin marketplace add aotter/mantle --ref v<installed-version>
+codex plugin add mantle@mantle
+```
+
+Cursor and GitHub Copilot read their manifests from the repository directly.
+These manifests are not duplicated into the npm package:
 
 - Claude Code: `.claude-plugin/plugin.json` plus `.claude-plugin/marketplace.json`.
 - Codex: `.codex-plugin/plugin.json` plus `.agents/plugins/marketplace.json`.

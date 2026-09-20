@@ -24,9 +24,7 @@ turn `generate` into implicit scaffolding.
    and pnpm 9+ for these SDK examples. A ChatGPT Site is not a conventional
    Cloudflare Worker deployment; use the installed
    `docs/handbook/sites/index.md` integration guide and
-   `docs/examples/host-chatgpt-sites/` runnable reference when selected. Follow
-   its SDK availability instructions; while support is unreleased, use its
-   packed-checkout workflow rather than an older registry package.
+   `docs/examples/host-chatgpt-sites/` runnable reference when selected.
 2. Choose the requested exact SDK version, or resolve the intended release
    channel once. Pin all selected `@aotter/mantle*` dependencies to that same
    version. Install only the adapter/optional packages the application needs.
@@ -42,12 +40,30 @@ turn `generate` into implicit scaffolding.
      in wrangler logs). Admin needs `@aotter/mantle-admin`,
      `@aotter/mantle-admin-ui`, wrangler `ASSETS` on `./public`, and
      `createAuth` email-otp + `ConsoleEmailSender`. Do not Vite-build Admin.
-   - ChatGPT Sites with Admin/D1/R2 — follow `host-chatgpt-sites/`, not the
-     email-OTP Worker example. Preserve its Sites-owned identity ingress and
-     hosting manifest; author the user's Schema/View/Procedure/Trigger, then
-     review migrations, media policy and the local/production smoke gates.
+   - ChatGPT Sites with Admin/D1/R2 — follow
+     `docs/examples/host-chatgpt-sites/`, not the email-OTP Worker example.
+     Copy it outside the SDK checkout, then `npm ci`,
+     `npx mantle validate --phase deploy`, `npm run generate`, `npm run check`,
+     `npx wrangler d1 migrations apply DB --local`,
+     `npm run dev -- --port 4174`, and `npm test` in a second terminal.
+     Preserve its Sites-owned identity ingress and hosting manifest; author the
+     user's Schema/View/Procedure/Trigger, then review migrations, media policy
+     and the local/production smoke gates. Sites provisions and deploys; never
+     `wrangler deploy` a Site. Request both D1 and R2 when uploads are in scope.
      Browser Admin WebMCP and Sites-session `/api/mcp/staff` do not enable remote staff OAuth MCP.
-   - Grammar — `docs/examples/README.md`; copy `builtin-*` Manifests only.
+   - ChatGPT Sites with custom business rules or an external callback — the
+     runnable reference covers builtin content only. For application-owned
+     operational state, `handler: { kind: ref }` Procedures, staff-only SQL
+     Views, staff MCP Triggers with `requires.auth`, and outbound webhooks
+     called from handler code, follow
+     `docs/handbook/sites/equipment-checkout.md`. It is an implementation
+     guide, not a shipped app: keep Mantle-owned Schema tables and
+     application-owned tables separate, and give every application table a
+     reviewed migration.
+   - Grammar — `docs/examples/README.md`. Copy `builtin-*` Manifests directly.
+     Read `cf-primitives-*` when the request needs Durable Objects, Queues,
+     cron, payment-provider callbacks, or API-key and entitlement guards;
+     those carry `ref` handlers and are not Builder-ingestible.
    None of these is a template to install wholesale. Other hosts use the
    embedded adapter guides. Author package scripts, manifests, entry and
    configuration for the user's requirements. No default notes model, home

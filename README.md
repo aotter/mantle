@@ -40,10 +40,6 @@
   <a href="#cli-reference">CLI</a>
 </p>
 
-<p>
-  <sub><strong>Prerelease:</strong> APIs and manifests may change between alpha releases. Treat the installed package's version-matched docs as the contract and review generated code before production use.</sub>
-</p>
-
 Mantle is an embeddable manifest engine: describe data, queries, actions, and
 triggers in YAML, then use the same contract in your application, APIs, and
 tools for humans and agents.
@@ -87,10 +83,8 @@ with HTML, Markdown, and discovery metadata. The official integration brings
 Sites hosting together with Mantle Admin, D1 content, and R2 media.
 
 [Get started with Mantle on ChatGPT Sites](docs/handbook/sites/index.md),
-then publish your first article using the runnable reference. Host-declared
-MCP endpoints ship starting `0.1.2-rc.1`; install the example's pinned Mantle
-dependencies from the registry as documented. Public read-only MCP is
-included; remote staff OAuth MCP remains a separate integration.
+then publish your first article using the runnable reference. Public
+read-only MCP is included; remote staff OAuth MCP is a separate integration.
 
 ## Choose how much to use
 
@@ -139,6 +133,30 @@ defines the four atoms and their fields.
 Engineers can start with the [installed API guide](packages/mantle/README.md),
 [adapter guide](docs/adapter-guide.md), or
 [direct authoring guide](docs/handbook/start/project-and-cli.md).
+
+### Install the agent plugin
+
+This repository is an installable plugin bundle for Claude Code, Codex,
+Cursor, and GitHub Copilot. It carries version-matched Mantle workflows and is
+an authoring aid, not a Runtime dependency. Install it at the tag matching the
+`@aotter/mantle` version in the project:
+
+```bash
+# Claude Code — two separate prompts
+/plugin marketplace add aotter/mantle@v<installed-version>
+/plugin install mantle@mantle
+
+# Codex
+codex plugin marketplace add aotter/mantle --ref v<installed-version>
+codex plugin add mantle@mantle
+```
+
+Cursor and GitHub Copilot read their manifests from the repository directly.
+`mantle skills` projects the installed package's project-scoped workflows into
+a consumer repository. See [`skills/README.md`](skills/README.md) for host
+details.
+
+### Prompts
 
 Coding agents use the same APIs and version-matched
 [skills](skills/README.md). A short starting prompt:
