@@ -54,6 +54,32 @@ A new project follows [direct authoring](direct-authoring.md). Templates and
 provider setup are not hidden inside `generate`. Future Builder/landing-next
 provisioning is a separate decision; this change does not migrate those hosts.
 
+## Site chrome: GA4 and Meta Pixel leave siteConfig
+
+`SiteConfig.ga4MeasurementId`, `SiteConfig.facebookPixelId`, and their
+`SiteDefaults` seed equivalents are removed. The Admin UI no longer has
+Analytics fields for them, the Runtime site-settings use case no longer
+accepts them, and the Web HTML renderer no longer injects the gtag or Pixel
+base snippet into rendered storefront HTML. This applies to every 0.1.2
+prerelease; it is not staged behind a flag.
+
+Core's `siteConfig` remains deployment identity only (locales, brand, title,
+description, origin, icons, media); tracking and verification tags are host
+chrome because frontends are plural and Core cannot assume one `</head>` to
+rewrite. See [Why Core does not inject](handbook/cloudflare/site-chrome.md#why-core-does-not-inject).
+
+To keep GA4 or Meta Pixel across the upgrade:
+
+1. Read the existing `ga4MeasurementId` / `facebookPixelId` values from the
+   pre-upgrade site settings (Admin API or KV/D1 `SiteConfigRepository`
+   directly) before removing the old columns/fields.
+2. Move the tag injection into host chrome following
+   [Cloudflare-first install > Analytics](handbook/cloudflare/site-chrome.md#analytics):
+   render the snippet in the host's own document/layout, not through Core.
+3. Drop the old fields from any locally stored site-settings payloads; the
+   Runtime `SiteConfig` type no longer declares them, so a TypeScript build
+   against the new types is what surfaces a leftover reference.
+
 ## Earlier alpha.7 compatibility changes
 
 
