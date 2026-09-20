@@ -18,7 +18,7 @@ for (const dir of ["docs", "skills"]) {
       // Runnable docs may have been installed locally; never publish that state.
       filter: (path) => {
         const name = basename(path);
-        if (["node_modules", ".git", ".mantle", ".wrangler", ".agents", ".claude", "pnpm-lock.yaml"].includes(name)) {
+        if (["node_modules", ".git", ".mantle", ".wrangler", ".agents", ".claude", ".sites-runtime", "dist", "_mantle", "pnpm-lock.yaml"].includes(name)) {
           return false;
         }
         if (name.endsWith(".example")) return true;

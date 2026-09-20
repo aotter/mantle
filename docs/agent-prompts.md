@@ -69,5 +69,24 @@ composition. Keep Core adapter-neutral. Probe the new route; do not
 claim Auth or Admin works from a public 200.
 ```
 
+### Mantle on ChatGPT Sites, including media
+
+```text
+Build with ChatGPT Sites; use Mantle for content management and publishing.
+Read the matching SDK docs/handbook/sites/index.md and
+docs/examples/host-chatgpt-sites/README.md. Use that runnable host as a
+reference. Follow its supported installation path, including packed-checkout
+installation while release support is pending. Derive Schema, View,
+Procedure and Trigger from my requirements and check the Admin editor/picker and public
+projections against them. Request both Sites D1 and R2 when my workflow
+includes uploads. Bind the R2 media port, declare media.purposes, and keep
+the same-origin PUT and committed-only public GET checks. Pin every
+@aotter/mantle* dependency to one exact version. Run the local smoke,
+show a draft-to-publish walkthrough, then save and deploy through Sites when
+requested. Verify the deployed owner/member role, R2 upload, published page, and anonymous draft 404. Treat public read-only
+MCP, Admin WebMCP, and staff OAuth MCP as separate acceptance gates; never
+claim staff MCP from a working browser session or connector URL alone.
+```
+
 
 [Back to the Core README](../README.md#for-engineers-and-agents).

@@ -182,7 +182,10 @@ export interface SiteInfo {
   icons: SiteIcon[];
   /** Canonical deployment URL projected by the server. Never derive it from the Admin request origin. */
   publicUrl: string;
-  mcpUrl: string;
+  /** Remote MCP endpoints actually mounted by this host. */
+  mcpEndpoints?: { public: string | null; staff: string | null };
+  /** Deprecated staff endpoint alias. */
+  mcpUrl: string | null;
   media?: {
     purposes?: MediaPurposePolicy[];
   };

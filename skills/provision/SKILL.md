@@ -1,6 +1,6 @@
 ---
 name: provision
-description: Ship a Mantle project to Cloudflare and finish production auth with email, GitHub OAuth, or hosted auth.
+description: Ship a Mantle project through its selected host, routing ChatGPT Sites to its integration guide and conventional Cloudflare Workers to production auth and provisioning.
 metadata:
   source: "@aotter/mantle"
   sourcePath: skills/provision/SKILL.md
@@ -12,7 +12,11 @@ metadata:
 # Provision a Mantle Project
 
 Local cold start deliberately stops before this skill. Provision only after the
-user asks to create remote resources or ship production.
+user asks to create remote resources or ship production. This flow is for
+consumer-owned Cloudflare Workers. For a ChatGPT Site, use the installed
+`docs/handbook/sites/index.md` integration guide and the Sites host's
+publish workflow; do not run `wrangler deploy` or require R2 S3 credentials
+merely because Sites exposes an R2 binding.
 
 ## Source of Truth
 

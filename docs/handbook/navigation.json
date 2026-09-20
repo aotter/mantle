@@ -5,6 +5,7 @@
       "text": "Start here",
       "items": [
         { "text": "Quickstart: a minimal Worker", "link": "/start/quickstart-worker" },
+        { "text": "Build with ChatGPT Sites", "link": "/sites/index" },
         { "text": "Quickstart: local Admin (opt-in)", "link": "/start/quickstart-admin" },
         { "text": "Project layout and the CLI loop", "link": "/start/project-and-cli" }
       ]
@@ -19,6 +20,14 @@
         { "text": "Authorization", "link": "/concepts/authorization" },
         { "text": "MCP and agents", "link": "/concepts/mcp-and-agents" },
         { "text": "Runtime pipeline and adapters", "link": "/concepts/runtime-and-adapters" }
+      ]
+    },
+    {
+      "text": "ChatGPT Sites",
+      "items": [
+        { "text": "Get started", "link": "/sites/index" },
+        { "text": "Host reference", "link": "/sites/host-reference" },
+        { "text": "Earlier guide URL", "link": "/cloudflare/chatgpt-sites" }
       ]
     },
     {

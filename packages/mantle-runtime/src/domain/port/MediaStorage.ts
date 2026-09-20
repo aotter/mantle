@@ -16,8 +16,10 @@
  *
  * # Scope: public bucket only
  *
- * `getPublicUrl()` returns an unconditional public URL; reads bypass
- * the Worker (`MEDIA_PUBLIC_URL_BASE` → CDN → R2). Each variant's
+ * `getPublicUrl()` returns an unconditional public URL. The native R2
+ * adapter serves it directly through a public bucket; hosts with only
+ * an R2 binding may serve it through a cacheable same-origin Worker
+ * route. Each variant's
  * `publicUrl` is frozen at commit time. The asset is persisted to the
  * `media_assets` table by the commit use case; entries reference it
  * by `MediaAsset.id` (`x-mantle-ref: media_assets`) and the renderer
@@ -36,10 +38,10 @@
  * `usecase/dto/media/`.
  */
 export interface MediaStorage {
-  /** Issue presigned direct-upload capabilities for every declared
-   *  variant of one logical asset. The adapter mints storage keys
-   *  (typically under a shared `<uploadGroupId>/` prefix) and signs a
-   *  PUT URL per variant. */
+  /** Issue short-lived PUT capabilities for every declared variant of
+   *  one logical asset. The adapter mints storage keys (typically under
+   *  a shared `<uploadGroupId>/` prefix). `uploadUrl` may be a signed
+   *  R2 URL or an authenticated same-origin Worker route. */
   createUpload(args: CreateUploadArgs): Promise<CreateUploadResult>;
 
   /** Commit a previously-PUT variant bundle. The adapter HEADs every

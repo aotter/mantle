@@ -3,7 +3,7 @@ description: Enable staff media uploads on R2 — presigned PUT flow through Sta
 ---
 # Media uploads with R2
 
-R2-backed media is an optional post-launch capability for Workers whose staff or agents need to upload images and files. This page covers the upload flow, the Cloudflare and Worker configuration it needs, how a Schema references an asset, what a commit costs, and how to clean up.
+R2-backed media is an optional post-launch capability for Workers whose staff or agents need to upload images and files. This page covers the native Cloudflare direct-to-R2 flow, the configuration it needs, how a Schema references an asset, what a commit costs, and how to clean up. For ChatGPT Sites with an R2 binding but no S3 credentials, use [the same-origin Worker flow](../sites/host-reference.md#media-with-only-an-r2-binding).
 
 ## When to enable it
 
@@ -31,7 +31,7 @@ wrangler r2 bucket dev-url enable <project>-media
 
 Then create an R2 S3 API token in the dashboard: open **R2**, open **Manage R2 API Tokens**, create an **Object Read & Write** token, and copy the Access Key ID and Secret Access Key.
 
-The R2 binding alone cannot issue presigned `PUT` URLs: presigning is an S3-protocol operation, so Mantle needs these credentials in addition to the binding. A deployment with the bucket bound but no credentials never registers the upload tools.
+The R2 binding alone cannot issue presigned `PUT` URLs: presigning is an S3-protocol operation, so this **direct-to-R2 adapter** needs these credentials in addition to the binding. This is not a requirement of Mantle's `MediaStorage` port: a host may return an authenticated same-origin Worker `PUT` URL instead. Media tools appear whenever `mediaStorage` and a media purpose are bound, regardless of which transport the adapter uses.
 
 ## Wrangler configuration
 
