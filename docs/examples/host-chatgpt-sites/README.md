@@ -1,6 +1,8 @@
 # Mantle on ChatGPT Sites: runnable reference
 
-This is a **reference consumer application**, not a Mantle starter or a production-ready OAuth server. It reproduces the tested composition: Sites D1 + R2 bindings, Sign in with ChatGPT identity, Mantle Admin and staff roles, same-origin media upload, a published-only article frontend, and anonymous read-only `/api/mcp` for public Views. It uses `@aotter/mantle*` `0.1.2-alpha.6`; pin every Mantle package to the same exact release when updating it. Remote `/mcp/staff` is deliberately **not** claimed or mounted; see [the MCP gate](../../handbook/cloudflare/chatgpt-sites.md#remote-mcp-is-a-separate-gate).
+This is a **reference consumer application**, not a Mantle starter or a production-ready OAuth server. It reproduces the tested composition: Sites D1 + R2 bindings, Sign in with ChatGPT identity, Mantle Admin and staff roles, same-origin media upload, a published-only article frontend, and anonymous read-only `/api/mcp` for public Views. Remote `/mcp/staff` is deliberately **not** claimed or mounted; see [the MCP gate](../../handbook/cloudflare/chatgpt-sites.md#remote-mcp-is-a-separate-gate).
+
+**SDK requirement:** this revision requires the checkout's `mountMantleAdmin.mcpEndpoints` support. Published `0.1.2-alpha.6` does not include it, even though the checkout still carries that version number. Use the exact packed-checkout workflow below; copying this folder and running `npm ci` against the registry is not a supported reproduction of this revision. Build typechecking and the endpoint smoke assertions reject that mismatch. Once a release contains this change, update every Mantle dependency and the lockfile together before switching back to registry installation.
 
 ## Before writing code
 
@@ -8,10 +10,11 @@ Read the user's business request and author the manifest for **their** records a
 
 ## Local reproduction
 
-1. Copy this directory into a new application directory outside the Mantle SDK checkout. Keep `.openai/hosting.json` but do not copy an existing Site's `project_id`.
-2. Run `npm ci`, `npm run build`, then `npx mantle validate --phase deploy` and `npm run check`.
-3. Apply `npx wrangler d1 migrations apply DB --local`. Start `npm run dev -- --port 4174` in another terminal, then run `npm test`. Local test headers simulate Sites' trusted dispatcher; they do **not** prove deployed ChatGPT login.
-4. Review the entire [smoke script](./scripts/check.mjs) before adapting it. It covers D1 CRUD/version conflict, owner/member/role revocation, R2 read/write/delete, media create → PUT → commit → public read, public MCP `initialize`/`tools/list`/View call, draft isolation, published article HTML/Markdown/SEO, and negative auth/Origin/size checks. It creates and deletes only its own test records and objects.
+1. Start from a clean, committed Mantle checkout containing this change. Record its `git rev-parse HEAD`, then run `pnpm install --frozen-lockfile` and `pnpm build` from the repository root.
+2. Run `node scripts/check-packed-consumer.mjs --project docs/examples/host-chatgpt-sites --output /absolute/path/to/new-sites-reproduction -- pnpm build`. The output path must not exist and must be outside the SDK checkout. This existing helper copies the committed example, packs the SDK, installs exact tarball overrides for all Mantle packages, and reports the source SHA and package hashes. Keep the resulting `artifacts/` beside `consumer/` so the lockfile's tarball paths remain valid.
+3. Work in `/absolute/path/to/new-sites-reproduction/consumer`. Run `pnpm exec mantle validate --phase deploy`, `pnpm check`, then `pnpm exec wrangler d1 migrations apply DB --local`. Keep `.openai/hosting.json` but do not copy an existing Site's `project_id`.
+4. Start `pnpm dev --port 4174` in another terminal, then run `pnpm test`. To use another port, also override the Worker's `PUBLIC_ORIGIN` and set `MANTLE_TEST_ORIGIN` for the test to that same localhost origin. Local test headers simulate Sites' trusted dispatcher; they do **not** prove deployed ChatGPT login.
+5. Review the entire [smoke script](./scripts/check.mjs) before adapting it. It covers D1 CRUD/version conflict, owner/member/role revocation, R2 read/write/delete, media create → PUT → commit → public read, advertised MCP URLs (only `/api/mcp`, staff disabled), public MCP `initialize`/`tools/list`/View call, draft isolation, published article HTML/Markdown/SEO, and negative auth/Origin/size checks. It creates and deletes only its own test records and objects.
 
 The checked-in `drizzle/` migrations and `src/storage-fingerprint.json` match the example manifest. `scripts/migration.mjs` shows the one-time generation mechanism; do **not** run it against a deployed database or overwrite an applied migration. For a new business manifest, generate/review an initial migration before the first deployment; for a later change, generate an additive migration from the previous schema state.
 

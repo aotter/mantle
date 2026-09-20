@@ -36,7 +36,7 @@ function assemble(env:Env) {
     await next();
   });
   mountR2Lab(app,auth,env);
-  mountMantleAdmin(app,{plan,auth,get,assets:new AssetsAssetServer(env.ASSETS),requestContext:c=>({env:c.env,waitUntil:p=>c.executionCtx.waitUntil(p)})});
+  mountMantleAdmin(app,{plan,auth,get,assets:new AssetsAssetServer(env.ASSETS),mcpEndpoints:{public:'/api/mcp',staff:null},requestContext:c=>({env:c.env,waitUntil:p=>c.executionCtx.waitUntil(p)})});
   app.get('/site.css',c=>env.ASSETS.fetch(c.req.raw));
   app.get('/_mantle/*',c=>env.ASSETS.fetch(c.req.raw));
   app.onError(error=>{console.error('Mantle request failed',error);return Response.json({error:'internal_error'},{status:500,headers:{'Cache-Control':'private, no-store'}});});

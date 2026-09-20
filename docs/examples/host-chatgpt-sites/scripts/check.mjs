@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 // Only localhost: these headers simulate Sites' trusted dispatcher, never real SIWC.
-const base='http://localhost:4174';
+const base=process.env.MANTLE_TEST_ORIGIN??'http://localhost:4174';
+assert.ok(['localhost','127.0.0.1'].includes(new URL(base).hostname),'Smoke identity headers are local-only');
 const owner={'oai-authenticated-user-id':'local-owner','oai-authenticated-user-email':'owner@example.test'};
 const member={'oai-authenticated-user-id':`test-${Date.now()}`,'oai-authenticated-user-email':`test-${Date.now()}@example.test`};
 const call=(path,headers={},method='GET',body)=>fetch(base+path,{redirect:'manual',method,headers:{...headers,...(body?{'content-type':'application/json',origin:base}:{})},body:body?JSON.stringify(body):undefined});
@@ -16,6 +17,12 @@ assert.equal((await call('/admin/api/me')).status,401);
 assert.equal((await call('/admin/api/me',{'oai-authenticated-user-email':'owner@example.test'})).status,401);
 assert.equal((await call('/admin/api/me',member)).status,403);
 assert.equal((await (await call('/admin/api/me',owner)).json()).role,'owner');
+const siteResponse=await call('/admin/api/site',owner);
+assert.equal(siteResponse.status,200);
+const site=await siteResponse.json();
+assert.deepEqual(site.mcpEndpoints,{public:base+'/api/mcp',staff:null});
+assert.equal(site.mcpUrl,null);
+for(const path of ['/mcp','/mcp/staff'])assert.equal((await call(path,{},'POST',{jsonrpc:'2.0',id:1,method:'initialize'})).status,404);
 assert.equal((await call('/admin/sign-in')).headers.get('location'),'/signin-with-chatgpt?return_to=%2Fadmin');
 assert.equal((await call('/admin',owner)).status,200);
 assert.equal((await call('/admin/lab/r2',member,'POST',{})).status,403);
