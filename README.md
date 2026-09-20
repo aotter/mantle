@@ -138,6 +138,9 @@ See [task-specific agent prompts](docs/agent-prompts.md) for embedding,
 Worker, Admin, and later surface additions. The
 [plugin and skills guide](skills/README.md) covers agent integration;
 `mantle skills` projects version-matched application skills after installation.
+For ChatGPT Sites with D1, R2 media and Admin, start with the
+[runnable Sites host reference](docs/examples/host-chatgpt-sites/README.md)
+and adapt its example manifest to the user's business rules.
 
 ## Packages
 

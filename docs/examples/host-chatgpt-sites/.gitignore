@@ -1,0 +1,8 @@
+node_modules/
+dist/
+public/_mantle/
+.mantle/
+.wrangler/
+.dev.vars*
+.env*
+!.env.example
