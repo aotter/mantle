@@ -45,11 +45,24 @@ is introduced. The runnable release-order check guards these transitions.
 
 ## Branches and channels
 
-- Alpha releases use the reviewed develop merge. Beta/RC/stable use main after
-  explicit promotion; first stable acceptance is tracked by #826.
-- Alpha/beta/RC GitHub releases are prereleases; their npm tags match suffixes.
+| Version | Source branch | npm dist-tag | GitHub release |
+|---|---|---|---|
+| `X.Y.Z-alpha.N` | `develop` | `alpha` | prerelease |
+| `X.Y.Z-beta.N` | `main` | `beta` | prerelease |
+| `X.Y.Z-rc.N` | `main` | `rc` | prerelease |
+| `X.Y.Z` | `main` | `latest` | release |
+
+- The controller derives the source branch from the version: `-alpha` means
+  `develop`, anything else means `main`. It refuses a commit that is not that
+  branch's tip or not the merge commit of exactly one PR into that branch.
+  `scripts/release-tag-order.mjs` rejects any other prerelease identifier.
+- `develop` stays the default integration branch. `main` changes only through
+  promotion PRs and hotfix PRs (below); it is never pushed directly, rebased
+  or force-updated. Both branches share one ruleset: PR, one approval,
+  resolved threads and a current-base `Typecheck + tests` check.
 - Stable publishes latest. Final 0.1.0 alphas only advance alpha, preserving
   existing legacy latest. Historic 0.0 alpha behavior remains recoverable.
+  A prerelease channel keeps its last version when a later stable publishes.
 
 ## Prepare and run
 
@@ -57,13 +70,27 @@ is introduced. The runnable release-order check guards these transitions.
    notes since the previous tag; correct PR metadata and label release-only
    PRs skip-release-notes. Do not duplicate release entries in CHANGELOG.md.
 2. Align every workspace package, plugin and marketplace ref to the version.
+   The controller checks package.json files and plugin manifests only; docs
+   pins and the admin-ui registry dependency are hand-edited, so grep for the
+   old version until only lockfiles and registry-pinned examples remain:
+
+   ```sh
+   OLD=<previous version> NEW=<version>
+   git grep -l "\"version\": \"$OLD\"" -- '*.json' ':!**/package-lock.json' \
+     | xargs perl -pi -e "s/\"version\": \"\Q$OLD\E\"/\"version\": \"$NEW\"/"
+   node scripts/sync-plugin-manifests.mjs
+   git grep -n "$OLD" -- ':!pnpm-lock.yaml' ':!**/package-lock.json'
+   ```
+
 3. Review API compatibility and migration instructions for actual consumers.
    Frozen legacy consumers stay on alpha.17; do not make them follow new Core.
 4. Run `pnpm check`, including exact packed Worker, optional products, Bun,
    Vercel, skills, release invariants, types and tests. Inspect the umbrella
    docs/skills payload: no workspace dependencies, secrets or local state.
-5. Freeze the PR head for self review; CI must pass before merge. Dispatch
-   release.yml from that merge with `version` (without v). It refuses an
+5. Freeze the PR head for self review; CI must pass before merge. Merge into
+   `develop` with a merge commit for every version. For an alpha, dispatch
+   release.yml from that merge with `version` (without v). For beta, RC and
+   stable, continue with the promotion below. The controller refuses an
    untagged source that is no longer the expected branch tip.
 
 The ten public packages remain in dependency order:
@@ -78,6 +105,63 @@ The ten public packages remain in dependency order:
 8. @aotter/mantle-vercel
 9. @aotter/mantle-cloudflare
 10. @aotter/mantle
+
+## Promote to main (beta, RC, stable)
+
+Every non-alpha release is the version PR above, one promotion PR and one
+dispatch. The version PR still merges into `develop`, so `develop` always
+contains what `main` publishes and promotions never conflict.
+
+1. Stable only: the release-gate issue (#826 for 0.1.2) records owner
+   acceptance. Every gate item passes with linked evidence or is explicitly
+   deferred there, and no `release-gate` issue stays open against the version.
+   Beta and RC need the gate defined, not passed.
+2. Merge the version PR into `develop` with a merge commit; note its SHA.
+3. Pin the promotion head at that SHA so later `develop` merges cannot ride
+   along, then open the promotion PR against `main`:
+
+   ```sh
+   git fetch origin
+   git push origin <develop merge SHA>:refs/heads/promote/<version>
+   gh pr create --base main --head promote/<version> \
+     --title "release: promote <version> to main" --label skip-release-notes
+   ```
+
+   The body names the version PR, the pinned SHA and the gate evidence. The
+   usual review and checks apply. An organization-admin bypass merge must be
+   recorded on the PR (see CONTRIBUTING).
+4. Merge with a merge commit, never rebase: the controller needs `main`'s tip
+   to be the PR's merge commit. `main`'s tree now equals the pinned commit.
+5. Dispatch from `main` and watch every gate exactly as for an alpha:
+
+   ```sh
+   gh workflow run release.yml --ref main -f version=<version>
+   ```
+
+6. RC to stable repeats 2–5 with the next version. `rc` keeps pointing at
+   the last RC; stable moves only `latest`.
+
+Hotfix on `main` is for a published non-alpha version that cannot wait for
+the next promotion. Branch from `main`, include the version bump, PR into
+`main`, dispatch as in step 5, then immediately PR `main` back into `develop`
+and resolve version files in favour of `develop`. Until that lands, the next
+promotion conflicts on the version files.
+
+First stable (0.1.2) specifics: `latest` moves from 0.1.0-alpha.16, the last
+`latest` the frozen legacy consumers saw, to 0.1.2. GitHub generates notes
+from the previous release (v0.1.2-alpha.6); to cover the whole 0.1.2 line,
+regenerate from v0.1.0-alpha.17 and edit the release body after the run. The
+body is not an immutable artifact; the tag and packages are.
+
+```sh
+gh api repos/aotter/mantle/releases/generate-notes \
+  -f tag_name=v0.1.2 -f previous_tag_name=v0.1.0-alpha.17 --jq .body > notes.md
+gh release edit v0.1.2 --notes-file notes.md
+```
+
+After publication, move docs/examples that were pinned to a packed checkout
+back to registry installation with an updated lockfile, and close the gate
+issue with the run link and completion evidence.
 
 ## Credentials and verification
 
