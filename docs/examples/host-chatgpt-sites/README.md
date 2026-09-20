@@ -13,13 +13,17 @@ Read the user's business request and author the manifest for **their** records a
 Requires Mantle 0.1.2 or newer. Copy this directory outside the SDK checkout, then:
 
 ```bash
-npm ci                                       # installs the pinned @aotter/mantle* versions
-npx mantle validate --phase deploy
+npm ci                                       # or: bun install
+npx mantle validate --phase deploy           # or: bunx mantle ...
 npm run generate && npm run check
 npx wrangler d1 migrations apply DB --local
 npm run dev -- --port 4174                   # leave running
 npm test                                     # smoke, in a second terminal
 ```
+
+`npm ci` installs the exact pinned `@aotter/mantle*` versions from the
+lockfile. `bun install` works too; it resolves from `package.json` rather than
+the npm lockfile.
 
 Keep `.openai/hosting.json`; do not copy an existing Site's `project_id`. To use another port, also set the Worker's `PUBLIC_ORIGIN` and the test's `MANTLE_TEST_ORIGIN` to that same localhost origin. Local test headers simulate Sites' trusted dispatcher; they do **not** prove deployed ChatGPT login.
 
