@@ -8,7 +8,7 @@ import { createChatGPTAuth, type Env } from './chatgpt-auth';
 import { mountR2Lab } from './r2-lab';
 import { mountWeb } from './web';
 import { SitesR2MediaStorage, mountMedia } from './media';
-import { mountPublicMcp } from './mcp';
+import { mountMcp } from './mcp';
 
 function assemble(env:Env) {
   const auth=createChatGPTAuth(env);
@@ -21,7 +21,7 @@ function assemble(env:Env) {
   const app=new Hono<{Bindings:Env}>();
   app.use('*',async(c,next)=>{await next();if(!c.res.headers.has('Cache-Control'))c.header('Cache-Control','private, no-store');c.header('X-Content-Type-Options','nosniff');});
   mountWeb(app,get);
-  mountPublicMcp(app,get);
+  mountMcp(app,get,auth);
   mountMedia(app,auth,env);
   app.get('/health',async()=>{await get();return Response.json({ok:true,storage:'D1',auth:'ChatGPT Sites',mantle:'0.1.2-alpha.6'});});
   app.get('/admin/sign-in',async c=>{
@@ -36,7 +36,7 @@ function assemble(env:Env) {
     await next();
   });
   mountR2Lab(app,auth,env);
-  mountMantleAdmin(app,{plan,auth,get,assets:new AssetsAssetServer(env.ASSETS),mcpEndpoints:{public:'/api/mcp',staff:null},requestContext:c=>({env:c.env,waitUntil:p=>c.executionCtx.waitUntil(p)})});
+  mountMantleAdmin(app,{plan,auth,get,assets:new AssetsAssetServer(env.ASSETS),mcpEndpoints:{public:'/api/mcp',staff:'/api/mcp/staff'},requestContext:c=>({env:c.env,waitUntil:p=>c.executionCtx.waitUntil(p)})});
   app.get('/site.css',c=>env.ASSETS.fetch(c.req.raw));
   app.get('/_mantle/*',c=>env.ASSETS.fetch(c.req.raw));
   app.onError(error=>{console.error('Mantle request failed',error);return Response.json({error:'internal_error'},{status:500,headers:{'Cache-Control':'private, no-store'}});});

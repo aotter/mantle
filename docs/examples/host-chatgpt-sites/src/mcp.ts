@@ -1,17 +1,21 @@
 import type { Hono } from 'hono';
-import type { MantleAdminRuntime } from '@aotter/mantle/admin';
+import type { AdminAuth, MantleAdminRuntime, StaffRole } from '@aotter/mantle/admin';
 import { McpJsonRpcDispatcher, projectCallableCapabilities } from '@aotter/mantle/runtime';
 import { plan } from '../.mantle/generated/mantle';
 import type { Env } from './chatgpt-auth';
 
-/** Anonymous, read-only public Views. Staff MCP needs a separate OAuth bearer flow. */
-export function mountPublicMcp(app:Hono<{Bindings:Env}>, get:()=>Promise<MantleAdminRuntime>) {
-  const cache=new WeakMap<object,McpJsonRpcDispatcher>();
-  app.all('/api/mcp',async c=>{
+const staffRoles=new Set<string>(['owner','editor','contributor']);
+
+/** Sites-session MCP surfaces. Remote clients still need a separate OAuth bearer flow. */
+export function mountMcp(app:Hono<{Bindings:Env}>, get:()=>Promise<MantleAdminRuntime>, auth:AdminAuth) {
+  const cache=new WeakMap<object,Map<'public'|'staff',McpJsonRpcDispatcher>>();
+  const dispatcher=async(surface:'public'|'staff',origin:string)=>{
     const runtime=await get();
-    let dispatcher=cache.get(runtime);
-    if(!dispatcher) {
-      dispatcher=new McpJsonRpcDispatcher({
+    let dispatchers=cache.get(runtime);
+    if(!dispatchers)cache.set(runtime,dispatchers=new Map());
+    let value=dispatchers.get(surface);
+    if(!value) {
+      value=new McpJsonRpcDispatcher({
         getEntry:runtime.getEntry,
         createDraft:runtime.createDraft,
         updateDraft:runtime.updateDraft,
@@ -22,12 +26,24 @@ export function mountPublicMcp(app:Hono<{Bindings:Env}>, get:()=>Promise<MantleA
         executeView:{execute:request=>runtime.executeView({...request,view:request.view.metadata.name})},
         invokeTrigger:{execute:request=>runtime.invokeTrigger(request)},
       },[...runtime.schemas.values()],{
-        surface:'public',
-        capabilities:projectCallableCapabilities(plan,{surface:'public'}),
-        serverInfo:{name:'aotter.mantle.public',title:'Mantle public articles',websiteUrl:c.env.PUBLIC_ORIGIN},
+        surface,
+        capabilities:projectCallableCapabilities(plan,{surface}),
+        serverInfo:{name:`aotter.mantle.${surface}`,title:`Mantle ${surface}`,websiteUrl:origin},
       });
-      cache.set(runtime,dispatcher);
+      dispatchers.set(surface,value);
     }
-    return dispatcher.dispatch(c.req.raw,{user:null,staff:null,env:c.env,waitUntil:p=>c.executionCtx.waitUntil(p)});
+    return value;
+  };
+  app.all('/api/mcp',async c=>(await dispatcher('public',c.env.PUBLIC_ORIGIN)).dispatch(c.req.raw,{user:null,staff:null,env:c.env,waitUntil:p=>c.executionCtx.waitUntil(p)}));
+  app.all('/api/mcp/staff',async c=>{
+    const session=await auth.getSession(c.req.raw);
+    if(!session)return Response.json({error:'unauthorized'},{status:401});
+    const role=session.user.roleCurrent?session.user.role:await auth.getUserRole(session.user.id);
+    if(!role||!staffRoles.has(role))return Response.json({error:'forbidden'},{status:403});
+    return (await dispatcher('staff',c.env.PUBLIC_ORIGIN)).dispatch(c.req.raw,{
+      user:{id:session.user.id},staff:{id:session.user.id,role:role as StaffRole},
+      auth:{credential:'session',credentialId:session.session.id,clientId:null,scopes:[]},
+      env:c.env,waitUntil:p=>c.executionCtx.waitUntil(p),
+    });
   });
 }

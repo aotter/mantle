@@ -24,10 +24,10 @@ sharing options, see [OpenAI's Sites documentation](https://learn.chatgpt.com/do
 | Staff access | ChatGPT sign-in with Mantle owner, editor, and contributor roles. Site visitor access grants no Mantle staff role. |
 | Images | Admin uploads through the Site's R2 binding, with public URLs for committed images. No R2 S3 credentials required. |
 | Public pages | Published article HTML and Markdown, cover images, canonical metadata, JSON-LD, sitemap, and `llms.txt`. |
-| Agent access | Admin WebMCP through the browser session; anonymous, read-only public Views at `/api/mcp`. |
+| Agent access | Admin WebMCP, anonymous read-only public Views at `/api/mcp`, and Sites-session staff tools at `/api/mcp/staff`. |
 
-Remote staff MCP with OAuth and automatic ChatGPT connector registration are
-outside the reference's current scope. Public media URLs are readable by anyone
+Remote staff OAuth MCP and automatic ChatGPT connector registration are outside
+the reference's current scope. Public media URLs are readable by anyone
 who can reach the Site; this integration does not implement private media.
 See the [host reference](./host-reference.md) for the exact trust and transport
 boundaries.

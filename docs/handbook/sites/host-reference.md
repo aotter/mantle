@@ -42,7 +42,8 @@ The reference exposes these separate surfaces:
 |---|---|---|
 | Admin WebMCP | Current browser Admin session and fresh Mantle staff role | Available within Admin. |
 | Public MCP (reference path: `/api/mcp`) | Anonymous, read-only public Views | Manual HTTPS `initialize`, `tools/list`, and a published View call verified on the deployed integration. |
-| Remote `/mcp/staff` | OAuth bearer authorization and fresh Mantle staff role | Not mounted; requires a separate integration. |
+| Sites-session staff MCP (reference path: `/api/mcp/staff`) | Sites-injected identity plus a fresh Mantle staff role | Mounted and reported to Admin; not usable as a remote OAuth connector. |
+| Remote staff OAuth MCP | OAuth bearer authorization and fresh Mantle staff role | Requires a separate integration. |
 | Sites-managed connector registration | Sites MCP declaration and connection configuration | Unverified; do not guess a hosting manifest key. |
 
 Try the conventional `/mcp` path first. If ChatGPT Sites does not route that
@@ -57,14 +58,14 @@ mountMantleAdmin(app, {
   auth,
   assets,
   get,
-  mcpEndpoints: { public: "/agent/read", staff: null },
+  mcpEndpoints: { public: "/agent/read", staff: "/agent/staff" },
 });
 ```
 
-The reference encountered that condition, chose `/api/mcp`, and passes
-`mcpEndpoints: { public: "/api/mcp", staff: null }`. Admin therefore displays
-only the route that the reference actually mounted. `/api/mcp` is an example,
-not a required fallback or Mantle Core route. Verify the chosen route with
+The reference encountered that condition and chose `/api/mcp` plus
+`/api/mcp/staff`. It mounts both handlers and passes both paths through
+`mcpEndpoints`, so Admin displays the routes that actually exist. These are
+example fallback paths, not Mantle Core routes. Verify each chosen route with
 `initialize`, `tools/list`, and a tool call after every Sites deployment.
 
 The reference smoke test also checks that `/mcp` and `/mcp/staff` return 404.
@@ -82,9 +83,11 @@ registration. A manually configured connector targets the HTTPS endpoint;
 Sites-provisioned connection details (`get_site` with `include_mcp_connection`)
 additionally require a deployed MCP declaration.
 
-Before adding remote staff MCP, implement a standard OAuth authorization
-server or established provider, bearer verification, and a fresh Mantle staff
-role check on each tool request. Verify OAuth protected-resource and
+The reference's staff endpoint trusts only identity injected by the Sites
+ingress, rejects ordinary members, and re-reads the Mantle role on every
+request. Before exposing staff MCP to remote clients, implement a standard
+OAuth authorization server or established provider, bearer verification, and
+a fresh Mantle staff role check on each tool request. Verify OAuth protected-resource and
 authorization metadata as JSON, a standards-compliant unauthenticated `401`
 challenge, and authenticated `tools/list` plus a read-only call. A Sites browser
 session or forwarded identity header is not an OAuth bearer token; a sign-in

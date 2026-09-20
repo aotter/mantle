@@ -46,7 +46,7 @@ turn `generate` into implicit scaffolding.
      email-OTP Worker example. Preserve its Sites-owned identity ingress and
      hosting manifest; author the user's Schema/View/Procedure/Trigger, then
      review migrations, media policy and the local/production smoke gates.
-     Browser Admin WebMCP and public read-only `/api/mcp` do not enable staff OAuth MCP.
+     Browser Admin WebMCP and Sites-session `/api/mcp/staff` do not enable remote staff OAuth MCP.
    - Grammar — `docs/examples/README.md`; copy `builtin-*` Manifests only.
    None of these is a template to install wholesale. Other hosts use the
    embedded adapter guides. Author package scripts, manifests, entry and
