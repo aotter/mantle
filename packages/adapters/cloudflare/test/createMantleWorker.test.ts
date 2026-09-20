@@ -28,6 +28,17 @@ import { StubAssetServer, stubAuth } from "./fakes/runtime-bindings.js";
 type TestEnv = MantleCloudflareEnv & { readonly TEST_NAME?: string };
 
 describe("createMantleWorker", () => {
+  it("isolates frontend fallback from native routes and resolves one request client", async () => {
+    const clients = new Set();
+    const frontend = vi.fn(async (_request, { client }) => { clients.add(client); return new Response('app', { headers: { 'cache-control': 'public, max-age=60' } }); });
+    const worker = createMantleWorker<TestEnv>({ plan: compileTestPlan([]), auth: () => stubAuth, bindings: testBindings, frontend, cacheScope: 'frontend-test' });
+    const env = testEnv();
+    expect(await (await fetchWorker(worker, '/app', env)).text()).toBe('app');
+    expect(await (await fetchWorker(worker, '/another', env)).text()).toBe('app');
+    expect(clients.size).toBe(2);
+    for (const path of ['/admin/missing', '/_mantle/missing', '/api/missing', '/oauth/missing', '/mcp/missing', '/.well-known/oauth-missing']) await fetchWorker(worker, path, env);
+    expect(frontend).toHaveBeenCalledTimes(2);
+  });
   it("uses selected semantic storage for CRUD and builtin writes while preserving reads and deletion", async () => {
     const db = new InMemoryDatabase();
     const sqlite = new SqliteMantleStorageAdapter(db);

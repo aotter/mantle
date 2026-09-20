@@ -26,6 +26,14 @@
     "./webmcp": {
       "types": "./dist/webmcp.d.ts",
       "import": "./dist/webmcp.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js"
+    },
+    "./client-runtime": {
+      "types": "./dist/client-runtime.d.ts",
+      "import": "./dist/client-runtime.js"
     }
   },
   "files": [
