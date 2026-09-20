@@ -96,3 +96,9 @@ deploying through Sites. Keep remote staff OAuth MCP outside this scope.
 - [Host reference](./host-reference.md): identity, migrations, R2 routes, MCP, and deployment checks.
 - [Runnable application](../../examples/host-chatgpt-sites/README.md): installation, build artifacts, and smoke tests.
 - [Conventional Cloudflare Worker](../cloudflare/conventional-worker.md): the separate path for a Worker you deploy directly.
+
+## Source
+
+- [Runnable Sites application](../../examples/host-chatgpt-sites/README.md)
+- [Sites host reference](./host-reference.md)
+- [OpenAI Sites documentation](https://learn.chatgpt.com/docs/sites)

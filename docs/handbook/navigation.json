@@ -26,7 +26,8 @@
       "text": "ChatGPT Sites",
       "items": [
         { "text": "Get started", "link": "/sites/index" },
-        { "text": "Host reference", "link": "/sites/host-reference" }
+        { "text": "Host reference", "link": "/sites/host-reference" },
+        { "text": "Earlier guide URL", "link": "/cloudflare/chatgpt-sites" }
       ]
     },
     {
