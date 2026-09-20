@@ -14,9 +14,11 @@ metadata:
 Local cold start deliberately stops before this skill. Provision only after the
 user asks to create remote resources or ship production. This flow is for
 consumer-owned Cloudflare Workers. For a ChatGPT Site, use the installed
-`docs/handbook/sites/index.md` integration guide and the Sites host's
-publish workflow; do not run `wrangler deploy` or require R2 S3 credentials
-merely because Sites exposes an R2 binding.
+`docs/handbook/sites/index.md` integration guide and the "Publish with Sites"
+steps in `docs/examples/host-chatgpt-sites/README.md`: request D1 and R2 on the
+Site, set `PUBLIC_ORIGIN` and `OWNER_EMAIL` in Sites settings, review the
+migration, then save and deploy a Sites version. Do not run `wrangler deploy`
+or require R2 S3 credentials merely because Sites exposes an R2 binding.
 
 ## Source of Truth
 

@@ -1,9 +1,9 @@
 # Task-specific agent prompts
 
-Copy one block into a coding agent. Resolve handbook pages and official
-examples from `docs/` in this checkout, or from
-`node_modules/@aotter/mantle/docs/` after install. If neither tree exists,
-pin `@aotter/mantle` first. `npx --no-install mantle --help` is the layered
+Copy one block into a coding agent. Paths below are relative to the Mantle
+docs root: `node_modules/@aotter/mantle/docs/` after `@aotter/mantle` is
+installed, or `docs/` in the installed agent plugin. Pin `@aotter/mantle`
+first if neither exists. `npx --no-install mantle --help` is the layered
 overview. There is no `mantle create`. Admin is opt-in.
 
 ### Embed Runtime with typed APIs
@@ -49,7 +49,7 @@ frontend build.
 ```text
 Interview me about the service: host, who uses it, whether humans need a
 Dev UI, and whether we only embed Spec/Runtime. Read mantle --help, then
-handbook/start/project-and-cli.md. Use docs/examples/README.md as the
+handbook/start/project-and-cli.md. Use examples/README.md as the
 examples index; copy builtin-* Manifests only (not cf-primitives-*).
 Implement locally first. Take only the surfaces we chose.
 For Spec-only use, skip Runtime and code generation. For a Worker without
@@ -73,10 +73,9 @@ claim Auth or Admin works from a public 200.
 
 ```text
 Build with ChatGPT Sites; use Mantle for content management and publishing.
-Read the matching SDK docs/handbook/sites/index.md and
-docs/examples/host-chatgpt-sites/README.md. Use that runnable host as a
-reference. Follow its supported installation path, including packed-checkout
-installation while release support is pending. Derive Schema, View,
+Read handbook/sites/index.md and examples/host-chatgpt-sites/README.md.
+Use that runnable host as a reference and install its pinned
+dependencies from the registry. Derive Schema, View,
 Procedure and Trigger from my requirements and check the Admin editor/picker and public
 projections against them. Request both Sites D1 and R2 when my workflow
 includes uploads. Bind the R2 media port, declare media.purposes, and keep
