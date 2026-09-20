@@ -1,17 +1,23 @@
 import {
   DiagnosticError,
+  meetsRole,
+  mcpToolNameSegment,
   redactForWire,
-  type ContentState,
+  runtimeDiagnostic,
+  resolveLifecycle,
+  type Diagnostic,
+  type MediaPurposePolicy,
   type SchemaManifest,
+  type SiteIcon,
   type StaffRole,
-  type ViewManifest,
 } from "@aotter/mantle-spec";
+import type { MediaVariantRole } from "../../domain/port/MediaStorage.js";
+import type { HandlerContext } from "../../domain/model/HandlerContext.js";
 import {
   ArchiveUseCase,
   CreateDraftUseCase,
   DeleteEntryUseCase,
   GetEntryUseCase,
-  ListEntriesUseCase,
   RequestPublishUseCase,
   UnpublishUseCase,
   UpdateDraftUseCase,
@@ -20,12 +26,14 @@ import {
   CommitMediaUploadUseCase,
   CreateMediaUploadUseCase,
 } from "../../usecase/media/index.js";
-import { mcpToolNameSegment } from "../../domain/service/McpToolNaming.js";
 import { ExecuteViewUseCase } from "../../usecase/view/index.js";
+import type { RuntimeCallableCapability } from "../../domain/service/CallableCapabilityProjector.js";
 import {
   CREATE_DRAFT_PREFIX,
-  QUERY_VIEW_PREFIX,
+  CONTENT_LIFECYCLE_TOOLS,
+  CREATE_RECORD_PREFIX,
   UPDATE_DRAFT_PREFIX,
+  UPDATE_RECORD_PREFIX,
   buildMcpToolCatalog,
   extractCollectionSegment,
   type McpToolSurface,
@@ -36,15 +44,22 @@ import {
   jsonRpcOk,
   jsonRpcOkRaw,
 } from "./McpResponses.js";
+import packageJson from "../../../package.json" with { type: "json" };
+import { JsonBodyTooLargeError, readJsonBody } from "../http/readJsonBody.js";
+
+export const MCP_PROTOCOL_VERSION = "2025-11-25";
+
+export interface McpServerInfo {
+  readonly name: string;
+  readonly title?: string;
+  readonly description?: string;
+  readonly websiteUrl?: string;
+  readonly icons?: readonly SiteIcon[];
+}
 
 /** JSON-RPC dispatcher for the MCP transport. Env-agnostic; the
- *  adapter resolves the caller's identity and hands `dispatch` a
- *  `McpAuthContext` plus the use-case bag. */
-export interface McpAuthContext {
-  readonly userId: string;
-  /** Caller's staff role; null for non-staff bearers. */
-  readonly staff: { readonly userId: string; readonly role: StaffRole } | null;
-}
+ *  adapter resolves the caller's identity and hands `dispatch` the same
+ *  normalized `HandlerContext` used by HTTP transports. */
 
 /**
  * The use-case bag the dispatcher needs. Adapter constructs this once
@@ -52,7 +67,6 @@ export interface McpAuthContext {
  * assembly root assembles these alongside everything else).
  */
 export interface McpUseCases {
-  readonly listEntries: ListEntriesUseCase;
   readonly getEntry: GetEntryUseCase;
   readonly createDraft: CreateDraftUseCase;
   readonly updateDraft: UpdateDraftUseCase;
@@ -60,76 +74,122 @@ export interface McpUseCases {
   readonly unpublish: UnpublishUseCase;
   readonly archive: ArchiveUseCase;
   readonly deleteEntry: DeleteEntryUseCase;
-  readonly executeView?: ExecuteViewUseCase;
-  /** Optional. When set, `create_media_upload` and `commit_media_upload`
-   *  appear in the catalog and route here. */
+  readonly executeView?: Pick<ExecuteViewUseCase, "execute">;
+  /** Optional. Trigger-backed callable capabilities route through the
+   *  runtime's shared Trigger invocation chokepoint. */
+  readonly invokeTrigger?: {
+    execute(request: {
+      readonly trigger: string;
+      readonly input: unknown;
+      readonly ctx: HandlerContext;
+      readonly pathPrefix?: string;
+    }): Promise<
+      | { readonly ok: true; readonly data: unknown }
+      | { readonly ok: false; readonly diagnostic: Diagnostic }
+    >;
+  };
+  /** Optional. When set, `create_media_upload` and
+   *  `commit_media_upload` appear in the catalog and route here.
+   *  `purposes` is the declared taxonomy (#272 shape — name +
+   *  required mimes + maxBytes per mime); the catalog inlines the
+   *  policy summary into the create tool's description. */
   readonly media?: {
     readonly createUpload: CreateMediaUploadUseCase;
     readonly commitUpload: CommitMediaUploadUseCase;
-    readonly purposes: readonly string[];
+    readonly purposes: readonly MediaPurposePolicy[];
   };
 }
 
 export class McpJsonRpcDispatcher {
   private readonly catalog: readonly McpToolDefinition[];
   private readonly catalogWireJson: string;
+  private readonly catalogToolNames: ReadonlySet<string>;
   /** segment → original `Schema.metadata.name`. Built once at
    *  construction; the per-collection routing path looks up the
    *  segment from the tool name and recovers the canonical
    *  collection name. */
   private readonly schemaBySegment: ReadonlyMap<string, string>;
-  private readonly viewBySegment: ReadonlyMap<string, ViewManifest>;
+  private readonly readOnlyCollections: ReadonlySet<string>;
+  private readonly capabilityByToolName: ReadonlyMap<string, RuntimeCallableCapability>;
 
   constructor(
     private readonly useCases: McpUseCases,
     private readonly schemas: ReadonlyArray<SchemaManifest>,
     private readonly options: {
       readonly surface?: McpToolSurface;
-      readonly views?: ReadonlyArray<ViewManifest>;
+      readonly capabilities?: readonly RuntimeCallableCapability[];
+      readonly serverInfo?: McpServerInfo;
     } = {},
   ) {
     this.catalog = buildMcpToolCatalog(schemas, {
       surface: options.surface ?? "staff",
       mediaEnabled: useCases.media !== undefined,
       mediaPurposes: useCases.media?.purposes,
-      views: options.views,
+      capabilities: options.capabilities,
     });
     this.catalogWireJson = `{"tools":${JSON.stringify(this.catalog)}}`;
+    this.catalogToolNames = new Set(this.catalog.map((tool) => tool.name));
+    this.readOnlyCollections = new Set(
+      schemas.filter((schema) => schema.spec.schema.readOnly === true).map((schema) => schema.metadata.name),
+    );
     const map = new Map<string, string>();
     for (const s of schemas) map.set(mcpToolNameSegment(s.metadata.name), s.metadata.name);
     this.schemaBySegment = map;
-    const views = new Map<string, ViewManifest>();
-    for (const v of options.views ?? []) views.set(mcpToolNameSegment(v.metadata.name), v);
-    this.viewBySegment = views;
+    this.capabilityByToolName = new Map(
+      (options.capabilities ?? [])
+        .filter((item) => item.surface === (options.surface ?? "staff"))
+        .map((item) => [item.name, item]),
+    );
   }
 
-  async dispatch(req: Request, auth: McpAuthContext): Promise<Response> {
-    if (req.method === "GET") {
-      return new Response("MCP endpoint — POST JSON-RPC here.", { status: 200 });
-    }
+  async dispatch(
+    req: Request,
+    ctx: HandlerContext,
+  ): Promise<Response> {
     if (req.method !== "POST") {
-      return new Response("method not allowed", { status: 405 });
+      return new Response("method not allowed", { status: 405, headers: { allow: "POST" } });
     }
 
-    let body: { id?: number | string | null; method?: string; params?: unknown };
+    let body: { jsonrpc?: string; id?: number | string | null; method?: string; params?: unknown };
     try {
-      body = (await req.json()) as typeof body;
-    } catch {
+      body = (await readJsonBody(req)) as typeof body;
+    } catch (error) {
+      if (error instanceof JsonBodyTooLargeError) {
+        return new Response(error.message, { status: 413 });
+      }
       return jsonRpcError(null, -32700, "parse error");
     }
+    if (
+      !body
+      || typeof body !== "object"
+      || Array.isArray(body)
+      || body.jsonrpc !== "2.0"
+      || typeof body.method !== "string"
+    ) {
+      return jsonRpcError(null, -32600, "invalid request");
+    }
     const { id = null, method, params } = body;
+
+    if (method !== "initialize" && req.headers.get("mcp-protocol-version") !== MCP_PROTOCOL_VERSION) {
+      return new Response(`MCP-Protocol-Version must be ${MCP_PROTOCOL_VERSION}.`, { status: 400 });
+    }
 
     switch (method) {
       case "initialize":
         return jsonRpcOk(id, {
-          protocolVersion: "2025-03-26",
+          protocolVersion: MCP_PROTOCOL_VERSION,
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "@aotter/mantle-runtime/mcp", version: "0.0.7-alpha" },
+          serverInfo: {
+            ...(this.options.serverInfo ?? { name: "aotter.mantle" }),
+            version: packageJson.version,
+          },
         });
+      case "notifications/initialized":
+        return new Response(null, { status: 202 });
       case "tools/list":
         return jsonRpcOkRaw(id, this.catalogWireJson);
       case "tools/call":
-        return this.handleToolCall(id, params, auth);
+        return this.handleToolCall(id, params, ctx);
       default:
         return jsonRpcError(id, -32601, `unknown method: ${method}`);
     }
@@ -138,16 +198,19 @@ export class McpJsonRpcDispatcher {
   private async handleToolCall(
     reqId: unknown,
     params: unknown,
-    auth: McpAuthContext,
+    ctx: HandlerContext,
   ): Promise<Response> {
     const p = params as { name?: string; arguments?: Record<string, unknown> } | undefined;
     if (!p || typeof p.name !== "string") {
       return jsonRpcError(reqId, -32602, "missing tool name");
     }
     const args = (p.arguments ?? {}) as Record<string, unknown>;
+    if (!this.catalogToolNames.has(p.name)) {
+      return jsonRpcError(reqId, -32601, `unknown tool: ${p.name}`);
+    }
 
     try {
-      const result = await this.dispatchToolByName(p.name, args, auth);
+      const result = await this.dispatchToolByName(p.name, args, ctx);
       if (result === UNKNOWN_TOOL) {
         return jsonRpcError(reqId, -32601, `unknown tool: ${p.name}`);
       }
@@ -172,156 +235,249 @@ export class McpJsonRpcDispatcher {
   private async dispatchToolByName(
     name: string,
     args: Record<string, unknown>,
-    auth: McpAuthContext,
+    ctx: HandlerContext,
   ): Promise<unknown | typeof UNKNOWN_TOOL | typeof MISSING_ARG> {
-    if ((this.options.surface ?? "staff") === "public") {
-      const viewSegment = extractCollectionSegment(name, QUERY_VIEW_PREFIX);
-      if (!viewSegment) return UNKNOWN_TOOL;
-      const view = this.viewBySegment.get(viewSegment);
-      if (!view || !this.useCases.executeView) return UNKNOWN_TOOL;
-      // Build ctx from the bearer-derived McpAuthContext so the
-      // executeView use case can evaluate `requires.auth.all`. Without
+    const capability = this.capabilityByToolName.get(name);
+    if (capability?.kind === "procedure") {
+      if (!this.useCases.invokeTrigger) return UNKNOWN_TOOL;
+      const result = await this.useCases.invokeTrigger.execute({
+        trigger: capability.trigger,
+        input: args,
+        ctx,
+        pathPrefix: `MCP ${name}`,
+      });
+      if (!result.ok) throw new DiagnosticError(result.diagnostic);
+      return result.data;
+    }
+    if (capability?.kind === "view") {
+      if (!this.useCases.executeView) return UNKNOWN_TOOL;
+      // Use the adapter-normalized caller so the executeView use case can
+      // evaluate `requires.auth.all`. Without
       // this, every auth-gated public-surface View returned
       // UNAUTHENTICATED for every caller including authenticated staff.
       const result = await this.useCases.executeView.execute({
-        view,
+        view: capability.manifest,
         options: {
           params: stripViewReservedArgs(args),
           page: typeof args["page"] === "number" ? args["page"] : undefined,
           show: typeof args["show"] === "number" ? args["show"] : undefined,
         },
         pathPrefix: `MCP ${name}`,
-        ctx: {
-          user: { id: auth.userId },
-          staff: auth.staff
-            ? { id: auth.staff.userId, role: auth.staff.role }
-            : null,
-          env: {},
-        },
+        ctx,
       });
-      return result;
+      if (!result.ok) throw new DiagnosticError(result.diagnostic);
+      return result.result;
     }
 
+    if ((this.options.surface ?? "staff") === "public") {
+      return UNKNOWN_TOOL;
+    }
+
+    const minimumRole = genericStaffToolMinimumRole(name);
+    if (minimumRole) this.assertStaffRole(name, ctx, minimumRole);
+
     switch (name) {
-      case "list_entries": {
-        const collection = args["collection"];
-        if (typeof collection !== "string") return MISSING_ARG;
-        // MCP exposes the cursored shape so agents can walk pages
-        // through `nextCursor`. App code reaches for `execute()`
-        // instead and gets a flat array.
-        return this.useCases.listEntries.executePage({
-          collection,
-          status: args["status"] as ContentState | undefined,
-          limit: typeof args["limit"] === "number" ? args["limit"] : undefined,
-          cursor: typeof args["cursor"] === "string" ? args["cursor"] : undefined,
-        });
-      }
-      case "get_entry": {
-        const id = args["id"];
-        if (typeof id !== "string") return MISSING_ARG;
-        return this.useCases.getEntry.execute({ id });
-      }
       case "request_publish": {
         const id = args["id"];
-        if (typeof id !== "string") return MISSING_ARG;
-        return this.useCases.requestPublish.execute({ id });
+        const collection = args["collection"];
+        if (typeof id !== "string" || typeof collection !== "string") return MISSING_ARG;
+        await this.assertEntryMutable(id, name, collection);
+        return this.useCases.requestPublish.execute({
+          id, collection,
+          ctx,
+          originalInput: { id },
+        });
       }
       case "unpublish_entry": {
         const id = args["id"];
-        if (typeof id !== "string") return MISSING_ARG;
-        return this.useCases.unpublish.execute({ id });
+        const collection = args["collection"];
+        if (typeof id !== "string" || typeof collection !== "string") return MISSING_ARG;
+        await this.assertEntryMutable(id, name, collection);
+        return this.useCases.unpublish.execute({
+          id, collection,
+          ctx,
+          originalInput: { id },
+        });
       }
       case "archive_entry": {
         const id = args["id"];
-        const expected = args["expected_version"];
-        if (typeof id !== "string" || typeof expected !== "number") return MISSING_ARG;
-        return this.useCases.archive.execute({ id, expectedVersion: expected });
+        const collection = args["collection"];
+        if (typeof id !== "string" || typeof collection !== "string") return MISSING_ARG;
+        await this.assertEntryMutable(id, name, collection);
+        return this.useCases.archive.execute({
+          id, collection,
+          ctx,
+          originalInput: { id },
+        });
       }
       case "delete_entry": {
         const id = args["id"];
-        if (typeof id !== "string") return MISSING_ARG;
-        return this.useCases.deleteEntry.execute({ id });
+        const collection = args["collection"];
+        if (typeof id !== "string" || typeof collection !== "string") return MISSING_ARG;
+        await this.assertEntryMutable(id, name, collection);
+        return this.useCases.deleteEntry.execute({
+          id, collection,
+          ctx,
+          originalInput: { id },
+        });
       }
       case "create_media_upload": {
         if (!this.useCases.media) return UNKNOWN_TOOL;
         const filename = args["filename"];
-        const mimeType = args["mimeType"];
-        const byteSize = args["byteSize"];
+        const purpose = args["purpose"];
+        const rawVariants = args["variants"];
         if (
           typeof filename !== "string" ||
-          typeof mimeType !== "string" ||
-          typeof byteSize !== "number"
+          typeof purpose !== "string" ||
+          !Array.isArray(rawVariants)
         ) {
           return MISSING_ARG;
         }
+        const variants: Array<{
+          mimeType: string;
+          byteSize: number;
+          role: MediaVariantRole;
+        }> = [];
+        for (const raw of rawVariants) {
+          if (raw === null || typeof raw !== "object") return MISSING_ARG;
+          const v = raw as Record<string, unknown>;
+          const mimeType = v["mimeType"];
+          const byteSize = v["byteSize"];
+          const role = v["role"];
+          if (
+            typeof mimeType !== "string" ||
+            typeof byteSize !== "number" ||
+            !Number.isSafeInteger(byteSize) ||
+            byteSize <= 0 ||
+            (role !== "primary" && role !== "alternate" && role !== "fallback")
+          ) {
+            return MISSING_ARG;
+          }
+          variants.push({ mimeType, byteSize, role });
+        }
         return this.useCases.media.createUpload.execute({
           filename,
-          mimeType,
-          byteSize,
+          purpose,
+          variants,
           alt: typeof args["alt"] === "string" ? args["alt"] : undefined,
           caption: typeof args["caption"] === "string" ? args["caption"] : undefined,
-          purpose: typeof args["purpose"] === "string" ? args["purpose"] : undefined,
         });
       }
       case "commit_media_upload": {
         if (!this.useCases.media) return UNKNOWN_TOOL;
-        const uploadId = args["uploadId"];
-        if (typeof uploadId !== "string") return MISSING_ARG;
+        const uploadGroupId = args["uploadGroupId"];
+        if (typeof uploadGroupId !== "string") return MISSING_ARG;
         return this.useCases.media.commitUpload.execute({
-          uploadId,
+          uploadGroupId,
           alt: typeof args["alt"] === "string" ? args["alt"] : undefined,
           caption: typeof args["caption"] === "string" ? args["caption"] : undefined,
-          checksum: typeof args["checksum"] === "string" ? args["checksum"] : undefined,
         });
       }
       default: {
-        // Per-collection authoring tools: `create_draft_<segment>` /
-        // `update_draft_<segment>`. The agent sends Schema fields at
-        // the top level; we rebuild `data` for the chokepoint.
-        // `hookCtx` plumbs the authenticated MCP user into lifecycle
-        // hook context so consumers can branch on `ctx.user` (e.g.
-        // bypass captcha checks for authenticated agents).
-        const hookCtx = {
-          user: { id: auth.userId },
-          staff: auth.staff ? { id: auth.staff.userId, role: auth.staff.role } : null,
-          env: {},
-        };
-        const createSegment = extractCollectionSegment(name, CREATE_DRAFT_PREFIX);
+        // Per-collection content-draft or operational-record tools.
+        // The agent sends Schema fields at the top level; we rebuild
+        // `data` for the chokepoint.
+        const createSegment =
+          extractCollectionSegment(name, CREATE_DRAFT_PREFIX) ??
+          extractCollectionSegment(name, CREATE_RECORD_PREFIX);
         if (createSegment) {
           const collection = this.schemaBySegment.get(createSegment);
           if (!collection) return UNKNOWN_TOOL;
+          const data = stripReservedArgs(args);
           return this.useCases.createDraft.execute({
             collection,
-            data: stripReservedArgs(args),
-            authorId: auth.userId,
-            ctx: hookCtx,
+            data,
+            authorId: ctx.user?.id ?? null,
+            ctx,
+            originalInput: data,
           });
         }
-        const updateSegment = extractCollectionSegment(name, UPDATE_DRAFT_PREFIX);
+        const updateSegment =
+          extractCollectionSegment(name, UPDATE_DRAFT_PREFIX) ??
+          extractCollectionSegment(name, UPDATE_RECORD_PREFIX);
         if (updateSegment) {
           const collection = this.schemaBySegment.get(updateSegment);
           if (!collection) return UNKNOWN_TOOL;
           const id = args["id"];
           const expected = args["expected_version"];
           if (typeof id !== "string" || typeof expected !== "number") return MISSING_ARG;
-          // Caller may also call get_entry separately; we don't need
-          // the collection on the chokepoint args because UpdateDraft
-          // looks it up from the existing row.
+          await this.assertEntryMutable(id, name, collection);
+          const data = stripReservedArgs(args);
           return this.useCases.updateDraft.execute({
             id,
+            collection,
             expectedVersion: expected,
-            data: stripReservedArgs(args),
-            ctx: hookCtx,
+            data,
+            ctx,
+            originalInput: data,
           });
         }
         return UNKNOWN_TOOL;
       }
     }
   }
+
+  private assertStaffRole(toolName: string, ctx: HandlerContext, minimumRole: StaffRole): void {
+    const role = ctx.staff?.role;
+    if (role && meetsRole(role, minimumRole)) return;
+    throw new DiagnosticError(runtimeDiagnostic({
+      code: "AUTH_DENIED",
+      severity: "error",
+      path: `MCP ${toolName}`,
+      expected: `${minimumRole} role or higher for the signed-in staff user`,
+      message: `Tool '${toolName}' requires the ${minimumRole} role.`,
+    }));
+  }
+
+  private async assertEntryMutable(id: string, toolName: string, collection: string): Promise<void> {
+    const entry = await this.useCases.getEntry.execute({ id, collection });
+    const schema = this.schemas.find((s) => s.metadata.name === entry.collection);
+    if (CONTENT_LIFECYCLE_TOOLS.has(toolName) && (!schema || resolveLifecycle(schema) === "operational")) {
+      throw new DiagnosticError(runtimeDiagnostic({
+        code: "CONFLICT", severity: "error", path: `MCP ${toolName}`,
+        value: entry.collection, expected: "a content lifecycle",
+        message: `Tool '${toolName}' requires a content lifecycle; '${entry.collection}' does not support publishing transitions. Use its declared Procedures.`,
+      }));
+    }
+    if (!this.readOnlyCollections.has(entry.collection)) return;
+    throw new DiagnosticError(runtimeDiagnostic({
+      code: "CONFLICT",
+      severity: "error",
+      path: `MCP ${toolName}`,
+      value: entry.collection,
+      expected: "a Schema without root readOnly: true",
+      message: `Schema '${entry.collection}' is read-only on generic authoring surfaces; use its declared Procedures.`,
+    }));
+  }
 }
 
 const UNKNOWN_TOOL = Symbol("unknown-tool");
 const MISSING_ARG = Symbol("missing-arg");
+const EDITOR_GENERIC_TOOLS: ReadonlySet<string> = new Set([
+  "request_publish",
+  "unpublish_entry",
+  "archive_entry",
+  "delete_entry",
+  "create_media_upload",
+  "commit_media_upload",
+]);
+
+function genericStaffToolMinimumRole(name: string): StaffRole | null {
+  if (EDITOR_GENERIC_TOOLS.has(name)) return "editor";
+  if (
+    extractCollectionSegment(name, CREATE_RECORD_PREFIX) ||
+    extractCollectionSegment(name, UPDATE_RECORD_PREFIX)
+  ) {
+    return "editor";
+  }
+  if (
+    extractCollectionSegment(name, CREATE_DRAFT_PREFIX) ||
+    extractCollectionSegment(name, UPDATE_DRAFT_PREFIX)
+  ) {
+    return "contributor";
+  }
+  return null;
+}
 
 /**
  * Strip the `id` + `expected_version` envelope keys before passing

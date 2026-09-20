@@ -1,6 +1,8 @@
 import { stdout, stderr } from "node:process";
+import { parseArgs as parseNodeArgs } from "node:util";
 import { IntrospectManifestsUseCase } from "../../usecase/IntrospectManifestsUseCase.js";
 import { loadManifestsFromRoot } from "./loadManifests.js";
+import { translateParseArgsError } from "./parseArgsError.js";
 
 export interface IntrospectArgs {
   readonly manifests: string;
@@ -9,25 +11,29 @@ export interface IntrospectArgs {
 export type ParseResult = { kind: "args"; args: IntrospectArgs } | { kind: "help" };
 
 export function parseArgs(rawArgs: ReadonlyArray<string>): ParseResult {
-  let manifests = "./manifests";
-  for (let i = 0; i < rawArgs.length; i++) {
-    const a = rawArgs[i];
-    if (a === "--manifests") manifests = rawArgs[++i] ?? manifests;
-    else if (a === "--help" || a === "-h") return { kind: "help" };
-    else if (a !== undefined) {
-      throw new Error(`Unknown argument: ${a}`);
-    }
+  let values;
+  try {
+    ({ values } = parseNodeArgs({
+      args: [...rawArgs],
+      options: {
+        manifests: { type: "string" },
+        help: { type: "boolean", short: "h" },
+      },
+    }));
+  } catch (err) {
+    throw translateParseArgsError(err);
   }
-  return { kind: "args", args: { manifests } };
+  if (values.help) return { kind: "help" };
+  return { kind: "args", args: { manifests: values.manifests ?? "./manifests" } };
 }
 
 function printHelp(): void {
-  stdout.write(`mantle introspect — dump parsed manifest tree as JSON
+  stdout.write(`mantle-spec introspect — dump parsed manifest tree as JSON
 
-Usage: mantle introspect [--manifests <dir>]
+Usage: mantle-spec introspect [--manifests <dir>]
 
 Options:
-  --manifests <dir>   Manifest root (default: ./manifests)
+  --manifests <dir>   Directory containing YAML manifests (default: ./manifests)
   -h, --help          This help
 
 Output: JSON object with keys { schemas, views, procedures, triggers,
@@ -49,8 +55,8 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
     printHelp();
     return 0;
   }
-  const { manifests, parseErrors } = await loadManifestsFromRoot(parsed.args.manifests);
-  const result = IntrospectManifestsUseCase.run({ manifests, parseErrors });
+  const { parsed: manifestSet, parseErrors } = await loadManifestsFromRoot(parsed.args.manifests);
+  const result = IntrospectManifestsUseCase.run({ parsed: manifestSet, parseErrors });
   stdout.write(JSON.stringify(result, null, 2) + "\n");
   return parseErrors.some((d) => d.severity === "error") ? 1 : 0;
 }

@@ -1,45 +1,60 @@
 import {
+  DiagnosticError,
+  firstZodIssueAsJsonPointer,
+  jsonSchemaToZod,
   makeDiagnostic,
+  readJsonPointer,
   runtimeDiagnostic,
   type Diagnostic,
 } from "@aotter/mantle-spec";
-import type { DatabaseDriver } from "../../domain/port/DatabaseDriver.js";
+import type { ZodType } from "zod";
+import type {
+  ViewQueryExecutor,
+  ViewQueryResult,
+} from "../../domain/port/ViewQueryExecutor.js";
 import { evaluateAuthAll } from "../../domain/service/AuthPredicateEvaluator.js";
-import { compileView } from "../../domain/service/ViewSqlCompiler.js";
+import type { RuntimeViewPlan } from "../../domain/service/RuntimePlanCompiler.js";
 import type { ExecuteViewRequest } from "../dto/view/ExecuteViewRequest.js";
+import type { InvokeProcedureResponse } from "../dto/procedure/index.js";
+import type { HandlerContext } from "../../domain/model/HandlerContext.js";
 
 /**
- * Compile a View manifest and run it against `DatabaseDriver`. The
- * use case trusts a pre-coerced param map; per-request validation
- * against `View.spec.params` happens at the adapter (or via
- * `coerceViewParams`) before the request reaches here.
+ * Authorize and bind request values to a prepared View query. REST
+ * adapters coerce query strings and MCP passes typed JSON; this use
+ * case validates the converged param map against `View.spec.params` after
+ * static auth and before an optional guard.
  */
-
-export interface ViewQueryResult<R = Record<string, unknown>> {
-  readonly rows: readonly R[];
-  readonly page: number;
-  readonly show: number;
-  /** True when `rows.length === show` — there *might* be more on the
-   *  next page. False guarantees no more. v0.1.0 takes the cheap
-   *  path: no count query, no limit+1 probe. ADR-0012. */
-  readonly hasMore: boolean;
-}
 
 export type ExecuteViewResponse<R = Record<string, unknown>> =
   | { readonly ok: true; readonly result: ViewQueryResult<R> }
   | { readonly ok: false; readonly diagnostic: Diagnostic };
 
+export type InvokeViewGuard = (request: {
+  readonly procedure: string;
+  readonly input: Record<string, unknown>;
+  readonly ctx: HandlerContext;
+  readonly pathPrefix: string;
+}) => Promise<InvokeProcedureResponse>;
+
 export class ExecuteViewUseCase {
-  constructor(private readonly db: DatabaseDriver) {}
+  private readonly paramsCache = new Map<string, ZodType>();
+
+  constructor(
+    private readonly queries: ViewQueryExecutor,
+    private readonly invokeGuard?: InvokeViewGuard,
+    private readonly views: Readonly<Record<string, RuntimeViewPlan>> = Object.create(null),
+  ) {}
 
   async execute<R = Record<string, unknown>>(
     request: ExecuteViewRequest,
   ): Promise<ExecuteViewResponse<R>> {
-    const viewPath = request.pathPrefix ?? `manifest:View/${request.view.metadata.name}`;
+    const planned = this.views[request.view.metadata.name];
+    const view = planned?.manifest ?? request.view;
+    const viewPath = request.pathPrefix ?? `manifest:View/${view.metadata.name}`;
 
     // Auth — closed predicate vocabulary same as Procedure. When the
     // View has no `requires.auth.all`, evaluateAuthAll returns null.
-    const requires = request.view.spec.requires;
+    const requires = view.spec.requires;
     if (requires?.auth?.all && requires.auth.all.length > 0) {
       if (!request.ctx) {
         return {
@@ -57,38 +72,83 @@ export class ExecuteViewUseCase {
       if (denial) return { ok: false, diagnostic: denial };
     }
 
-    let compiled;
-    try {
-      compiled = compileView(request.view, request.options);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return {
-        ok: false,
-        diagnostic: runtimeDiagnostic({
-          code: "INTERNAL_ERROR",
-          severity: "error",
-          path: viewPath,
-          expected: "View compiles to valid SQL",
-          message: `View compile failed: ${msg}`,
-        }),
-      };
+    // Validate the adapter-coerced map after static auth so protected
+    // Views do not expose parameter-schema details to unauthorized
+    // callers. MCP sends already-typed JSON; REST passes coerced query
+    // values. Both converge here before the dynamic guard.
+    let validatedParams = request.options?.params ?? {};
+    if (view.spec.params) {
+      let validator = this.paramsCache.get(view.metadata.name);
+      if (!validator) {
+        validator = jsonSchemaToZod(view.spec.params);
+        this.paramsCache.set(view.metadata.name, validator);
+      }
+      const parsed = validator.safeParse(validatedParams);
+      if (!parsed.success) {
+        const { instancePath, message } = firstZodIssueAsJsonPointer(parsed.error);
+        return {
+          ok: false,
+          diagnostic: makeDiagnostic({
+            code: "INPUT_VALIDATION_FAILED",
+            phase: "runtime",
+            severity: "error",
+            path: `${viewPath}#/params${instancePath}`,
+            value: readJsonPointer(validatedParams, instancePath),
+            expected: message,
+          }),
+        };
+      }
+      validatedParams = parsed.data as Record<string, unknown>;
+    }
+
+    const guardName = requires?.guard?.procedure;
+    if (guardName) {
+      if (!request.ctx) {
+        return {
+          ok: false,
+          diagnostic: makeDiagnostic({
+            code: "UNAUTHENTICATED",
+            phase: "runtime",
+            severity: "error",
+            path: `${viewPath}#/requires/guard`,
+            expected: "caller context supplied by the adapter for a guarded View",
+          }),
+        };
+      }
+      if (!this.invokeGuard) {
+        return {
+          ok: false,
+          diagnostic: makeDiagnostic({
+            code: "GUARD_PROCEDURE_UNKNOWN",
+            phase: "runtime",
+            severity: "error",
+            path: `${viewPath}#/requires/guard/procedure`,
+            value: guardName,
+            expected: "guard invoker wired into the runtime",
+          }),
+        };
+      }
+      const guarded = await this.invokeGuard({
+        procedure: guardName,
+        input: validatedParams,
+        ctx: request.ctx,
+        pathPrefix: `${viewPath}#/requires/guard/${guardName}`,
+      });
+      if (!guarded.ok) return guarded;
     }
 
     try {
-      const rows = await this.db
-        .prepare(compiled.sql)
-        .bind(...compiled.params)
-        .all<R>();
-      return {
-        ok: true,
-        result: {
-          rows,
-          page: compiled.effectivePage,
-          show: compiled.effectiveShow,
-          hasMore: rows.length === compiled.effectiveShow,
-        },
-      };
+      const result = await this.queries.execute<R>({
+        view: view.metadata.name,
+        ...request.options,
+        params: validatedParams,
+        ctxUserId: request.ctx?.user?.id,
+      });
+      return { ok: true, result };
     } catch (err) {
+      if (err instanceof DiagnosticError) {
+        return { ok: false, diagnostic: err.diagnostic };
+      }
       const msg = err instanceof Error ? err.message : String(err);
       return {
         ok: false,
@@ -96,8 +156,8 @@ export class ExecuteViewUseCase {
           code: "INTERNAL_ERROR",
           severity: "error",
           path: viewPath,
-          expected: "SQL executes without error",
-          message: `View SQL execution failed: ${msg}`,
+          expected: "prepared View query executes successfully",
+          message: `View query failed: ${msg}`,
         }),
       };
     }

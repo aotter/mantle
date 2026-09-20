@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchPath } from "../src/domain/service/PathMatcher.js";
+import { compilePathMatcher, matchPath } from "../src/domain/service/PathMatcher.js";
 
 describe("matchPath", () => {
   it("matches identical paths", () => {
@@ -35,6 +35,12 @@ describe("matchPath", () => {
 
   it("returns null on malformed percent-encoding instead of throwing", () => {
     expect(matchPath("/api/posts/{id}", "/api/posts/%GG")).toBeNull();
+  });
+
+  it("reuses a compiled Trigger path without changing decoding behavior", () => {
+    const match = compilePathMatcher("/api/posts/{id}");
+    expect(match("/api/posts/a%20b")).toEqual({ id: "a b" });
+    expect(match("/api/posts/%GG")).toBeNull();
   });
 
   it("decodes literal segments so `/by%2Dtag` matches trigger `/by-tag`", () => {

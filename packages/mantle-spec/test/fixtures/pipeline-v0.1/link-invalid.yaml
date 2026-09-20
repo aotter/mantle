@@ -1,0 +1,14 @@
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: missing-source }
+spec:
+  surface: public
+  from: unknown-schema
+  fields: [missing]
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: missing-target }
+spec:
+  source: { kind: http, method: POST, path: /outside-core }
+  target: { procedure: unknown-procedure }

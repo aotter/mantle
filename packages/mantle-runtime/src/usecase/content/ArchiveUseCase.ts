@@ -8,17 +8,13 @@ import type { Clock } from "../../domain/port/Clock.js";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
 import type { ArchiveRequest } from "../dto/content/index.js";
 import {
-  unpublishCache,
-  type ContentPublishEffects,
-} from "./ContentPublishEffects.js";
-import {
   illegalTransitionDiagnostic,
   notFoundDiagnostic,
   withConflictDiagnostic,
 } from "./diagnostics.js";
 
 /**
- * `ArchiveUseCase` — flip an entry to `'archived'`. Per the simple-
+ * `ArchiveUseCase` — flip an entry to `'archived'`. Per the publishing-
  * lifecycle state machine, draft and published rows can both be
  * archived; archived rows go back to draft via `Unpublish`.
  */
@@ -27,37 +23,33 @@ export class ArchiveUseCase {
     private readonly entries: EntryRepository,
     private readonly schemas: ReadonlyMap<string, SchemaManifest>,
     private readonly clock: Clock,
-    private readonly effects?: ContentPublishEffects,
   ) {}
 
   async execute(request: ArchiveRequest): Promise<EntryRow> {
     const opPath = `usecase/Archive/${request.id}`;
-    const existing = await this.entries.get(request.id);
+    const existing = await this.entries.get(request);
     if (!existing) {
-      throw new DiagnosticError(notFoundDiagnostic(opPath, "<unknown>", request.id));
+      throw new DiagnosticError(notFoundDiagnostic(opPath, request.collection, request.id));
     }
-    const schema = this.schemas.get(existing.collection);
+    const schema = this.schemas.get(request.collection);
     if (!canTransition(schema, existing.status, "archived")) {
       throw new DiagnosticError(
         illegalTransitionDiagnostic(opPath, existing.status, "archived"),
       );
     }
-    // Pin OCC to the version we just fetched so the guard above
-    // (canTransition against existing.status) and the chokepoint
-    // assertion see the same snapshot. Caller-supplied
-    // request.expectedVersion is deprecated — kept on the DTO for
-    // backwards compat but no longer load-bearing.
+    // Pin OCC to the version we just fetched so the guard above and
+    // the chokepoint assertion see the same snapshot.
     const archived = await withConflictDiagnostic(opPath, () =>
-      this.entries.archive({
+      this.entries.transitionStatus({
         id: request.id,
-        collection: existing.collection,
+        collection: request.collection,
+        to: "archived",
         expectedVersion: existing.version,
         now: this.clock.now(),
         hookContext: request.ctx,
         originalInput: request.originalInput,
       }),
     );
-    await unpublishCache(this.effects, archived.id);
     return archived;
   }
 }

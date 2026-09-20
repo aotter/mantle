@@ -1,0 +1,13 @@
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: bad-envelope }
+unexpected: true
+spec:
+  title: Bad envelope
+  schema: { type: object, properties: {} }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: malformed }
+spec:
+  title: [unterminated

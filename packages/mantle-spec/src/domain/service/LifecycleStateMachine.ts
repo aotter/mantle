@@ -3,14 +3,11 @@ import type { LifecycleMode } from "../model/ManifestGrammar.js";
 
 /**
  * Per-Schema lifecycle state machine. Each Schema declares
- * `spec.lifecycle: 'simple' | 'editorial'` (default `'simple'`); this
- * module translates that into the allowed state transitions and tells
- * callers whether a `requestPublish` should write to the approvals
- * queue or publish directly.
+ * `spec.lifecycle: 'publishing' | 'operational'` (default `'publishing'`);
+ * this module translates that into allowed state transitions.
  *
  * Pure functions — no env, no DB. Feeds the dispatcher's
- * requestPublish branching, the admin SPA sub-nav rendering (via
- * `getLifecycleStatuses`), and runtime state-transition validation.
+ * requestPublish branching and runtime state-transition validation.
  */
 
 /**
@@ -25,19 +22,10 @@ export interface LifecycleSchemaLike {
   };
 }
 
-const DEFAULT_LIFECYCLE: LifecycleMode = "simple";
+const DEFAULT_LIFECYCLE: LifecycleMode = "publishing";
 
 export function resolveLifecycle(schema: LifecycleSchemaLike | undefined): LifecycleMode {
   return schema?.spec.lifecycle ?? DEFAULT_LIFECYCLE;
-}
-
-/**
- * Whether `requestPublish` on an entry of this Schema should write an
- * approval row and flip the entry to `'review'` (editorial) versus
- * publishing immediately and skipping the approval table (simple).
- */
-export function publishRequiresApproval(schema: LifecycleSchemaLike | undefined): boolean {
-  return resolveLifecycle(schema) === "editorial";
 }
 
 /**
@@ -45,17 +33,9 @@ export function publishRequiresApproval(schema: LifecycleSchemaLike | undefined)
  * and admin endpoints to gate operations. Unknown transitions return
  * `false` and the caller should reject with `CONFLICT`.
  *
- * Simple lifecycle:
+ * Publishing lifecycle:
  *   draft → published, draft → archived
  *   published → archived, published → draft (unpublish-as-edit)
- *   archived → draft
- *
- * Editorial lifecycle:
- *   draft → review, draft → archived
- *   review → approved, review → draft (rejected)
- *   approved → scheduled, approved → published
- *   scheduled → published, scheduled → draft
- *   published → archived, published → draft
  *   archived → draft
  */
 export function canTransition(
@@ -67,42 +47,22 @@ export function canTransition(
   return allowed[from]?.has(to) ?? false;
 }
 
-const SIMPLE_TRANSITIONS: Readonly<Record<ContentState, ReadonlySet<ContentState>>> = {
+const PUBLISHING_TRANSITIONS: Readonly<Record<ContentState, ReadonlySet<ContentState>>> = {
   draft: new Set<ContentState>(["published", "archived"]),
-  review: new Set(),
-  approved: new Set(),
-  scheduled: new Set(),
   published: new Set<ContentState>(["archived", "draft"]),
   archived: new Set<ContentState>(["draft"]),
 };
 
-const EDITORIAL_TRANSITIONS: Readonly<Record<ContentState, ReadonlySet<ContentState>>> = {
-  draft: new Set<ContentState>(["review", "archived"]),
-  review: new Set<ContentState>(["approved", "draft"]),
-  approved: new Set<ContentState>(["scheduled", "published"]),
-  scheduled: new Set<ContentState>(["published", "draft"]),
-  published: new Set<ContentState>(["archived", "draft"]),
-  archived: new Set<ContentState>(["draft"]),
+/** `lifecycle: operational` — orders, snapshots, audit
+ *  rows). No content workflow: entries are live on creation, editable
+ *  in place, and never publish/unpublish/archive. */
+const OPERATIONAL_TRANSITIONS: Readonly<Record<ContentState, ReadonlySet<ContentState>>> = {
+  draft: new Set(),
+  published: new Set(),
+  archived: new Set(),
 };
 
 function transitionsFor(mode: LifecycleMode): Readonly<Record<ContentState, ReadonlySet<ContentState>>> {
-  return mode === "editorial" ? EDITORIAL_TRANSITIONS : SIMPLE_TRANSITIONS;
-}
-
-/**
- * The **navigable** subset of statuses an admin user filters by in
- * the per-Schema sub-nav (Drafts / Review / Published / Archived for
- * editorial; same minus Review for simple). This is intentionally a
- * subset of the full state set: `approved` and `scheduled` are
- * intermediate editorial states — entries pass through them but
- * authors don't navigate to them as buckets.
- *
- * Lives in spec for now because the consumer's admin SPA bundles
- * this. v0.1.x may move to `mantle-admin-ui` once the SPA is
- * extracted from the spec dependency graph.
- */
-export function getLifecycleStatuses(mode: LifecycleMode): readonly ContentState[] {
-  return mode === "editorial"
-    ? (["draft", "review", "published", "archived"] as const)
-    : (["draft", "published", "archived"] as const);
+  if (mode === "operational") return OPERATIONAL_TRANSITIONS;
+  return PUBLISHING_TRANSITIONS;
 }

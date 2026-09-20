@@ -1,11 +1,11 @@
+import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { Manifest } from "@aotter/mantle-spec";
-import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
-import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
+import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
+import { mountTestEndpoints } from "./mountTestEndpoints.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
-  InMemoryKv,
   StubAssetServer,
   stubAuth,
 } from "./fakes/runtime-bindings.js";
@@ -31,11 +31,11 @@ function manifests(): Manifest[] {
           properties: {
             name: { type: "string" },
             message: { type: "string" },
-            createdAt: { type: "number", "x-mantle-bind": "now" },
+            submittedAt: { type: "number", "x-mantle-bind": "now" },
           },
           required: ["name", "message"],
         },
-        lifecycle: "simple",
+        lifecycle: "publishing",
       },
     },
     {
@@ -132,8 +132,8 @@ function harness(opts: { captchaPasses: boolean }): Harness {
   const db = new InMemoryDatabase();
   const captchaCalls: Array<unknown> = [];
   const slackCalls: Array<unknown> = [];
-  const ref = createCmsRef({
-    manifests: manifests(),
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan(manifests()),
     handlers: {
       captchaCheck: (input) => {
         captchaCalls.push(input);
@@ -147,17 +147,34 @@ function harness(opts: { captchaPasses: boolean }): Harness {
     },
     bindings: {
       db,
-      kv: new InMemoryKv(),
-      assets: new StubAssetServer(),
+      adminAssets: new StubAssetServer(),
     },
     auth: stubAuth,
   });
   const app = new Hono();
-  mountServerEndpoints(app, ref);
+  mountTestEndpoints(app, ref);
   return { app, db, captchaCalls, slackCalls };
 }
 
 describe("smoke: HTTP Trigger → builtin → lifecycle hooks", () => {
+  it("rejects malformed JSON before invoking the Procedure", async () => {
+    const h = harness({ captchaPasses: true });
+    const res = await h.app.request("/api/contact", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{not-json",
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      ok: false,
+      diagnostic: { code: "INPUT_VALIDATION_FAILED" },
+    });
+    expect(h.captchaCalls).toHaveLength(0);
+    expect(h.slackCalls).toHaveLength(0);
+    expect(h.db.entries.size).toBe(0);
+  });
+
   it("happy path: CAPTCHA passes, row written, Slack fires", async () => {
     const h = harness({ captchaPasses: true });
     const res = await h.app.request("/api/contact", {
@@ -180,7 +197,7 @@ describe("smoke: HTTP Trigger → builtin → lifecycle hooks", () => {
     const data = JSON.parse(entry.data) as Record<string, unknown>;
     expect(data["name"]).toBe("Alice");
     expect(data["message"]).toBe("Hi there");
-    expect(data["createdAt"]).toEqual(expect.any(Number));
+    expect(data["submittedAt"]).toEqual(expect.any(Number));
     expect("recaptchaToken" in data).toBe(false);
   });
 

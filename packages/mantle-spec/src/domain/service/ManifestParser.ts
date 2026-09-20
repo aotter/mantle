@@ -1,16 +1,33 @@
-import { parseAllDocuments } from "yaml";
+import {
+  LineCounter,
+  isMap,
+  isNode,
+  isScalar,
+  isSeq,
+  parseAllDocuments,
+  type Document,
+  type Node,
+} from "yaml";
 import {
   type Diagnostic,
   type DiagnosticCode,
+  type SourceLocation,
+  type SourceSpan,
   validateDiagnostic,
 } from "../../kernel/diagnostic.js";
 import {
   API_VERSION,
   BUILTIN_OPS,
+  MANTLE_BIND_VALUES,
   LIFECYCLE_HOOKS,
+  MCP_TRIGGER_SURFACES,
   STAFF_ROLES,
+  FILTER_COMPARISON_OPS,
   VIEW_PARAMS_RESERVED,
+  RESERVED_PROCEDURE_INPUT_NAMES,
   isParamRef,
+  hasCtxUserRefKey,
+  isCtxUserRef,
   isStaffRole,
   type AuthPredicate,
   type BuiltinOp,
@@ -18,6 +35,7 @@ import {
   type HttpMethod,
   type JsonSchema,
   type LifecycleHook,
+  type LifecycleMode,
   type Manifest,
   type ManifestKind,
   type ProcedureManifest,
@@ -25,30 +43,109 @@ import {
   type TriggerManifest,
   type ViewManifest,
 } from "../model/ManifestGrammar.js";
+import {
+  checkSchemaIndexes,
+  schemaIndexDiagnosticCode,
+} from "./SchemaIndexChecker.js";
+import { checkSchemaSearchableFields } from "./SchemaSearchChecker.js";
+import { checkFormUiSchema, checkSchemaAdminUi, checkViewAdminUi } from "./SchemaAdminUiChecker.js";
+
+/**
+ * Shared shape validator for `LocalizedText` fields (`Schema.spec.title`
+ * / `.description`, `Procedure.spec.title` / `.description` — #430;
+ * `View.spec.title` — #443).
+ * Accepts:
+ *   - a non-empty string, or
+ *   - a plain object (not an array) with at least one own-enumerable
+ *     key, where every key AND every value is a non-empty string.
+ * Rejects everything else — including an empty string, an empty
+ * object, an array (arrays are `typeof "object"` in JS so they need an
+ * explicit `Array.isArray` guard), and any non-string property value.
+ * When `required` is `false` and `value` is `undefined`, this is a
+ * silent no-op (the field is simply absent).
+ */
+function validateLocalizedText(
+  value: unknown,
+  idx: number,
+  pointer: string,
+  fieldLabel: string,
+  required: boolean,
+): void {
+  if (value === undefined) {
+    if (required) {
+      throw new ManifestParseError(
+        `${fieldLabel} is required (non-empty string, or an object mapping locale → non-empty string)`,
+        idx,
+        pointer,
+      );
+    }
+    return;
+  }
+  if (typeof value === "string") {
+    if (value.length === 0) {
+      throw new ManifestParseError(
+        `${fieldLabel} must be a non-empty string when present (or an object mapping locale → non-empty string)`,
+        idx,
+        pointer,
+      );
+    }
+    return;
+  }
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) {
+      throw new ManifestParseError(
+        `${fieldLabel} object form must have at least one locale → string entry; got {}`,
+        idx,
+        pointer,
+      );
+    }
+    for (const [key, entryValue] of entries) {
+      if (key.length === 0) {
+        throw new ManifestParseError(
+          `${fieldLabel} object form keys must be non-empty locale codes; got an empty key`,
+          idx,
+          pointer,
+        );
+      }
+      if (typeof entryValue !== "string" || entryValue.length === 0) {
+        throw new ManifestParseError(
+          `${fieldLabel} object form value for locale '${key}' must be a non-empty string; got ${JSON.stringify(entryValue)}`,
+          idx,
+          `${pointer}/${key}`,
+        );
+      }
+    }
+    return;
+  }
+  throw new ManifestParseError(
+    `${fieldLabel} must be a non-empty string, or an object mapping locale → non-empty string; got ${JSON.stringify(value)}`,
+    idx,
+    pointer,
+  );
+}
 
 /**
  * Day-1 envelope-and-shape parser. Loop 1 (`mantle validate`) does
  * the cross-manifest checks (Trigger.target.procedure exists, View.from
- * is a Schema, etc.) — see ADR-0007 / `docs/authoring-contract.md`.
+ * is a Schema, etc.) — see ADR-0007 and `docs/handbook/reference/manifest.md`.
  *
- * Diagnostics emitted here are intentionally narrow: bad envelope,
- * structurally malformed spec, use of a DRAFT or v0.1.x-not-yet-shipped
- * key the v0.1.0 parser does not accept.
+ * Diagnostics emitted here are intentionally narrow: bad envelope or
+ * structurally malformed shipped grammar.
  *
- * Return shape is `{ manifests, diagnostics }`: parse-fatal docs are
- * skipped (manifest absent from `manifests`) and reported via a
- * `severity: "error"` diagnostic. Per ADR-0008 the caller (the CLI / boot
- * validator / consumer) routes diagnostics; we don't throw.
+ * The canonical API withholds its value when any document fails. The legacy
+ * `{ manifests, diagnostics }` adapter below therefore returns no manifests
+ * on failure rather than exposing a partial graph.
  *
- * Multi-doc YAML support per ADR-0001 § "Authoring shape" — one feature
- * per file, atoms separated by `---`.
+ * Each caller-owned source may contain multiple YAML documents separated by
+ * `---`; source identities and document indexes remain intact.
  */
 
 /**
  * Throwable carrier used by the envelope-shape validators below
  * (`validateEnvelope`, kind-specific `validate*Spec`). Each throw
  * carries a JSON Pointer + diagnostic code; the top-level
- * `parseManifests` catches the throw and converts it to a Diagnostic
+ * The source parser catches the throw and converts it to a Diagnostic
  * for the public `{ manifests, diagnostics }` return shape.
  */
 export class ManifestParseError extends Error {
@@ -58,6 +155,10 @@ export class ManifestParseError extends Error {
     /** JSON Pointer into the manifest (e.g. `/spec/output`). */
     public readonly pointer?: string,
     public readonly code: DiagnosticCode = "INVALID_MANIFEST_ENVELOPE",
+    public readonly details?: Pick<
+      Diagnostic,
+      "value" | "expected" | "candidates" | "suggestion"
+    >,
   ) {
     super(docIndex != null ? `[doc ${docIndex}] ${message}` : message);
     this.name = "ManifestParseError";
@@ -71,11 +172,10 @@ const KNOWN_KINDS: ReadonlySet<ManifestKind> = new Set([
   "Trigger",
 ]);
 
-const V01_TRIGGER_SOURCE_KINDS: ReadonlySet<string> = new Set(["http", "lifecycle"]);
-const DRAFT_TRIGGER_SOURCE_KINDS: ReadonlySet<string> = new Set([
+const V01_TRIGGER_SOURCE_KINDS: ReadonlySet<string> = new Set([
+  "http",
+  "lifecycle",
   "mcp",
-  "cron",
-  "queue",
 ]);
 
 const V01_HTTP_METHODS: ReadonlySet<HttpMethod> = new Set([
@@ -89,81 +189,191 @@ const V01_HANDLER_KINDS: ReadonlySet<string> = new Set(["ref", "builtin"]);
 const V01_BUILTIN_OPS: ReadonlySet<BuiltinOp> = new Set(BUILTIN_OPS);
 const V01_LIFECYCLE_HOOKS: ReadonlySet<LifecycleHook> = new Set(LIFECYCLE_HOOKS);
 const V01_HOOK_ERROR_POLICIES: ReadonlySet<string> = new Set(["abort", "continue"]);
-const DRAFT_FILTER_OPS: ReadonlySet<string> = new Set(["contains", "not", "in", "like"]);
-const V01_LIFECYCLE_MODES: ReadonlySet<string> = new Set(["simple", "editorial"]);
+const V01_MCP_TRIGGER_SURFACES: ReadonlySet<string> = new Set(MCP_TRIGGER_SURFACES);
+const FILTER_COMPARISON_OP_SET: ReadonlySet<string> = new Set(FILTER_COMPARISON_OPS);
+const V01_LIFECYCLE_MODES: ReadonlySet<string> = new Set(["publishing", "operational"]);
 
-/** Result of `parseManifests`. */
-export interface ParseManifestsResult {
-  readonly manifests: Manifest[];
+function rejectUnknownKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+  idx: number,
+  pointer: string,
+): void {
+  const unknown = Object.keys(value).find((key) => !allowed.includes(key));
+  if (unknown !== undefined) {
+    const unknownPointer = pointer === "/" ? `/${unknown}` : `${pointer}/${unknown}`;
+    throw new ManifestParseError(
+      `${unknownPointer.replaceAll("/", ".").slice(1)} is not supported`,
+      idx,
+      unknownPointer,
+    );
+  }
+}
+
+/** One caller-owned manifest source. Core never resolves this ID as a path. */
+export interface ManifestSource {
+  readonly sourceId: string;
+  readonly text: string;
+}
+
+export interface ManifestSourceSet {
+  readonly sources: readonly ManifestSource[];
+}
+
+type ParsedSchemaManifest = Omit<SchemaManifest, "spec"> & {
+  readonly spec: Omit<
+    SchemaManifest["spec"],
+    "uniqueIndexes" | "indexes" | "searchableFields" | "localized" | "lifecycle"
+  > & {
+    readonly uniqueIndexes: ReadonlyArray<ReadonlyArray<string>>;
+    readonly indexes: ReadonlyArray<ReadonlyArray<string>>;
+    readonly searchableFields: readonly string[];
+    readonly localized: boolean;
+    readonly lifecycle: LifecycleMode;
+  };
+};
+
+type ParsedViewManifest = Omit<ViewManifest, "spec"> & {
+  readonly spec: Omit<ViewManifest["spec"], "orderBy"> & {
+    readonly orderBy: ReadonlyArray<{
+      readonly field: string;
+      readonly direction: "asc" | "desc";
+    }>;
+  };
+};
+
+/** Canonical atom value after all static authoring defaults are materialized. */
+export type ParsedManifest =
+  | ParsedSchemaManifest
+  | ParsedViewManifest
+  | ProcedureManifest
+  | TriggerManifest;
+
+export interface ParsedManifestEntry {
+  readonly manifest: ParsedManifest;
+  readonly source: SourceLocation;
+  /** YAML-node spans keyed by JSON Pointer; source identity lives in `source`. */
+  readonly sourceSpans: Readonly<Record<string, SourceSpan>>;
+}
+
+declare const parsedManifestSetBrand: unique symbol;
+
+/** Parser-owned value. Consumers cannot construct it as an ordinary object literal. */
+export interface ParsedManifestSet {
+  readonly entries: readonly ParsedManifestEntry[];
+  readonly [parsedManifestSetBrand]: true;
+}
+
+export type ParseResult<T> =
+  | { readonly ok: true; readonly value: T; readonly diagnostics: readonly Diagnostic[] }
+  | { readonly ok: false; readonly diagnostics: readonly Diagnostic[] };
+
+interface InternalParseResult {
+  readonly entries: ParsedManifestEntry[];
   readonly diagnostics: Diagnostic[];
 }
 
 /**
- * Parse YAML text (single doc, multi-doc, or a list of either) into
- * typed manifests + diagnostics. Per ADR-0001 multi-doc YAML support,
- * `---` separators inside one string yield one manifest per doc.
+ * Pure, source-aware parse boundary. Any error withholds the sealed value so a
+ * later stage cannot consume a partial manifest graph.
  */
-export function parseManifests(input: string | readonly string[]): ParseManifestsResult {
-  const inputs = typeof input === "string" ? [input] : input;
-  const manifests: Manifest[] = [];
+export function parseManifestSources(
+  sourceSet: ManifestSourceSet,
+): ParseResult<ParsedManifestSet> {
+  const parsed = parseManifestSourcesInternal(sourceSet);
+  if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
+    return { ok: false, diagnostics: parsed.diagnostics };
+  }
+  return {
+    ok: true,
+    value: Object.freeze({
+      entries: Object.freeze(parsed.entries),
+    }) as ParsedManifestSet,
+    diagnostics: parsed.diagnostics,
+  };
+}
+
+function parseManifestSourcesInternal(sourceSet: ManifestSourceSet): InternalParseResult {
+  const entries: ParsedManifestEntry[] = [];
   const diagnostics: Diagnostic[] = [];
-  let globalDocIndex = 0;
-  for (const yamlText of inputs) {
-    const docCount = parseOneStream(yamlText, globalDocIndex, manifests, diagnostics);
-    globalDocIndex += docCount;
+  const sources = sourceSet?.sources;
+  if (!Array.isArray(sources)) {
+    diagnostics.push(invalidSourceDiagnostic("/sources", "ManifestSourceSet.sources must be an array"));
+    return { entries, diagnostics };
   }
-  return { manifests, diagnostics };
+  const seenIds = new Set<string>();
+  for (let index = 0; index < sources.length; index++) {
+    const source = sources[index];
+    if (!source || typeof source !== "object") {
+      diagnostics.push(invalidSourceDiagnostic(`/sources/${index}`, "manifest source must be an object"));
+      continue;
+    }
+    if (typeof source.sourceId !== "string" || source.sourceId.length === 0) {
+      diagnostics.push(invalidSourceDiagnostic(
+        `/sources/${index}/sourceId`,
+        "manifest sourceId must be a non-empty string",
+      ));
+      continue;
+    }
+    if (seenIds.has(source.sourceId)) {
+      diagnostics.push(invalidSourceDiagnostic(
+        `/sources/${index}/sourceId`,
+        `manifest sourceId '${source.sourceId}' is duplicated`,
+        source.sourceId,
+      ));
+      continue;
+    }
+    seenIds.add(source.sourceId);
+    if (typeof source.text !== "string") {
+      diagnostics.push(invalidSourceDiagnostic(
+        `/sources/${index}/text`,
+        `manifest source '${source.sourceId}' text must be a string`,
+        source.sourceId,
+      ));
+      continue;
+    }
+    parseOneStream(source, entries, diagnostics);
+  }
+  return { entries, diagnostics };
 }
 
-export interface ParseManifestsOrThrowOptions {
-  /** Optional context label woven into the thrown error message
-   *  (e.g. `"starter manifests"`). Helps multi-source consumers
-   *  identify which call site produced the failure. */
-  readonly context?: string;
-}
-
-/**
- * Convenience wrapper around `parseManifests` for the common case
- * where any diagnostic is fatal (worker module-init, CLI tools).
- * Throws an `Error` with one diagnostic per line —
- * `[CODE] path: message` — when `result.diagnostics.length > 0`.
- *
- * Adapters and starters should prefer this over hand-rolling the
- * "format diagnostics → throw" three-liner so the error envelope
- * stays consistent across consumers (matters for AI authors reading
- * boot failures in `wrangler tail`).
- */
-export function parseManifestsOrThrow(
-  input: string | readonly string[],
-  options?: ParseManifestsOrThrowOptions,
-): readonly Manifest[] {
-  const result = parseManifests(input);
-  if (result.diagnostics.length > 0) {
-    const summary = result.diagnostics
-      .map((d) => `  - [${d.code}] ${d.path}: ${d.message}`)
-      .join("\n");
-    const ctx = options?.context ? ` in ${options.context}` : "";
-    throw new Error(`Manifest parse failed${ctx}:\n${summary}`);
-  }
-  return result.manifests;
+function invalidSourceDiagnostic(path: string, message: string, sourceId?: string): Diagnostic {
+  return validateDiagnostic({
+    code: "INVALID_MANIFEST_ENVELOPE",
+    severity: "error",
+    path,
+    ...(sourceId
+      ? { source: { sourceId, documentIndex: 0, path } }
+      : {}),
+    message,
+  });
 }
 
 function parseOneStream(
-  yamlText: string,
-  baseDocIndex: number,
-  manifests: Manifest[],
+  source: ManifestSource,
+  entries: ParsedManifestEntry[],
   diagnostics: Diagnostic[],
-): number {
-  const docs = parseAllDocuments(yamlText, { merge: false });
+): void {
+  const lineCounter = new LineCounter();
+  const docs = parseAllDocuments(source.text, { merge: false, lineCounter });
   for (let i = 0; i < docs.length; i++) {
     const doc = docs[i]!;
-    const docIndex = baseDocIndex + i;
+    const docIndex = i;
     if (doc.errors.length > 0) {
+      const error = doc.errors[0];
+      const location = sourceLocation(
+        source.sourceId,
+        docIndex,
+        "/",
+        lineCounter,
+        error?.pos ?? doc.range,
+      );
       diagnostics.push(
         validateDiagnostic({
           code: "INVALID_MANIFEST_ENVELOPE",
           severity: "error",
-          path: pointerFor(docIndex, "/"),
+          path: "/",
+          source: location,
           message: `[doc ${docIndex}] YAML parse error: ${doc.errors.map((e) => e.message).join("; ")}`,
         }),
       );
@@ -182,7 +392,8 @@ function parseOneStream(
         validateDiagnostic({
           code: "INVALID_MANIFEST_ENVELOPE",
           severity: "error",
-          path: pointerFor(docIndex, "/"),
+          path: "/",
+          source: sourceLocationForNode(source.sourceId, docIndex, "/", doc, lineCounter),
           message: `[doc ${docIndex}] YAML alias-expansion limit exceeded: ${e instanceof Error ? e.message : String(e)}`,
         }),
       );
@@ -190,14 +401,21 @@ function parseOneStream(
     }
     if (value == null) continue;
     try {
-      manifests.push(validateEnvelope(value, docIndex));
+      entries.push({
+        manifest: normalizeManifest(validateEnvelope(value, docIndex)),
+        source: sourceLocationForNode(source.sourceId, docIndex, "/", doc, lineCounter),
+        sourceSpans: collectSourceSpans(doc.contents, lineCounter),
+      });
     } catch (e) {
       if (e instanceof ManifestParseError) {
+        const path = e.pointer ?? "/";
         diagnostics.push(
           validateDiagnostic({
             code: e.code,
             severity: "error",
-            path: pointerFor(docIndex, e.pointer ?? "/"),
+            path,
+            source: sourceLocationForNode(source.sourceId, docIndex, path, doc, lineCounter),
+            ...e.details,
             message: e.message,
           }),
         );
@@ -206,7 +424,8 @@ function parseOneStream(
           validateDiagnostic({
             code: "INVALID_MANIFEST_ENVELOPE",
             severity: "error",
-            path: pointerFor(docIndex, "/"),
+            path: "/",
+            source: sourceLocationForNode(source.sourceId, docIndex, "/", doc, lineCounter),
             message:
               e instanceof Error
                 ? `[doc ${docIndex}] ${e.message}`
@@ -216,7 +435,130 @@ function parseOneStream(
       }
     }
   }
-  return docs.length;
+}
+
+/** Resolve the narrowest retained authored span for a parsed semantic path. */
+export function sourceLocationAt(
+  entry: ParsedManifestEntry,
+  path: string,
+): SourceLocation {
+  let candidate = path;
+  let span = entry.sourceSpans[candidate];
+  while (!span && candidate !== "/") {
+    const slash = candidate.lastIndexOf("/");
+    candidate = slash <= 0 ? "/" : candidate.slice(0, slash);
+    span = entry.sourceSpans[candidate];
+  }
+  return {
+    sourceId: entry.source.sourceId,
+    documentIndex: entry.source.documentIndex,
+    path,
+    ...(span ? { span } : {}),
+  };
+}
+
+function collectSourceSpans(
+  root: Node | null,
+  lineCounter: LineCounter,
+): Readonly<Record<string, SourceSpan>> {
+  const spans: Record<string, SourceSpan> = {};
+  const visit = (node: Node | null, path: string): void => {
+    if (!node) return;
+    const span = sourceSpan(lineCounter, node.range);
+    if (span) spans[path] = span;
+    if (isMap(node)) {
+      for (const pair of node.items) {
+        if (!isScalar(pair.key)) continue;
+        const key = String(pair.key.value).replace(/~/g, "~0").replace(/\//g, "~1");
+        visit(isNode(pair.value) ? pair.value : null, path === "/" ? `/${key}` : `${path}/${key}`);
+      }
+    } else if (isSeq(node)) {
+      node.items.forEach((item, index) =>
+        visit(isNode(item) ? item : null, path === "/" ? `/${index}` : `${path}/${index}`)
+      );
+    }
+  };
+  visit(root, "/");
+  return Object.freeze(spans);
+}
+
+function sourceLocationForNode(
+  sourceId: string,
+  documentIndex: number,
+  path: string,
+  doc: Document.Parsed,
+  lineCounter: LineCounter,
+): SourceLocation {
+  const parts = path === "/"
+    ? []
+    : path.slice(1).split("/").map((part) => {
+        const decoded = part.replace(/~1/g, "/").replace(/~0/g, "~");
+        return /^\d+$/.test(decoded) ? Number(decoded) : decoded;
+      });
+  let range: readonly number[] | null | undefined;
+  for (let length = parts.length; length >= 0 && !range; length--) {
+    const node = length === 0 ? doc.contents : doc.getIn(parts.slice(0, length), true);
+    if (node && typeof node === "object" && "range" in node) {
+      range = (node as { readonly range?: readonly number[] | null }).range;
+    }
+  }
+  return sourceLocation(sourceId, documentIndex, path, lineCounter, range ?? doc.range);
+}
+
+function sourceLocation(
+  sourceId: string,
+  documentIndex: number,
+  path: string,
+  lineCounter: LineCounter,
+  range?: readonly number[] | null,
+): SourceLocation {
+  const span = sourceSpan(lineCounter, range);
+  return { sourceId, documentIndex, path, ...(span ? { span } : {}) };
+}
+
+function sourceSpan(
+  lineCounter: LineCounter,
+  range?: readonly number[] | null,
+): SourceSpan | undefined {
+  if (!range || range.length < 2) return undefined;
+  const startOffset = range[0];
+  const endOffset = range.length > 2 ? range[2] : range[1];
+  if (startOffset === undefined || endOffset === undefined) return undefined;
+  const start = lineCounter.linePos(startOffset);
+  const end = lineCounter.linePos(endOffset);
+  return {
+    start: { line: start.line, column: start.col, offset: startOffset },
+    end: { line: end.line, column: end.col, offset: endOffset },
+  };
+}
+
+function normalizeManifest(manifest: Manifest): ParsedManifest {
+  if (manifest.kind === "Schema") {
+    return {
+      ...manifest,
+      spec: {
+        ...manifest.spec,
+        uniqueIndexes: manifest.spec.uniqueIndexes ?? [],
+        indexes: manifest.spec.indexes ?? [],
+        searchableFields: manifest.spec.searchableFields ?? [],
+        localized: manifest.spec.localized ?? false,
+        lifecycle: manifest.spec.lifecycle ?? "publishing",
+      },
+    };
+  }
+  if (manifest.kind === "View") {
+    return {
+      ...manifest,
+      spec: {
+        ...manifest.spec,
+        orderBy: (manifest.spec.orderBy ?? []).map((order) => ({
+          ...order,
+          direction: order.direction ?? "asc",
+        })),
+      },
+    };
+  }
+  return manifest;
 }
 
 function pointerFor(docIndex: number, jsonPointer: string): string {
@@ -229,6 +571,7 @@ function validateEnvelope(raw: unknown, docIndex: number): Manifest {
     throw new ManifestParseError("manifest must be a YAML mapping", docIndex);
   }
   const m = raw as Record<string, unknown>;
+  rejectUnknownKeys(m, ["apiVersion", "kind", "metadata", "spec"], docIndex, "/");
 
   if (m["apiVersion"] !== API_VERSION) {
     throw new ManifestParseError(
@@ -250,6 +593,7 @@ function validateEnvelope(raw: unknown, docIndex: number): Manifest {
     throw new ManifestParseError("metadata is required and must be a mapping", docIndex, "/metadata");
   }
   const name = (meta as Record<string, unknown>)["name"];
+  rejectUnknownKeys(meta as Record<string, unknown>, ["name"], docIndex, "/metadata");
   if (typeof name !== "string" || name.length === 0) {
     throw new ManifestParseError("metadata.name is required (non-empty string)", docIndex, "/metadata/name");
   }
@@ -274,14 +618,69 @@ function validateEnvelope(raw: unknown, docIndex: number): Manifest {
 
 function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
   const s = m.spec as unknown as Record<string, unknown>;
+  rejectUnknownKeys(
+    s,
+    [
+      "title",
+      "description",
+      "schema",
+      "uiSchema",
+      "uniqueIndexes",
+      "indexes",
+      "searchableFields",
+      "localized",
+      "translates",
+      "lifecycle",
+    ],
+    idx,
+    "/spec",
+  );
   if (typeof s["schema"] !== "object" || s["schema"] === null) {
     throw new ManifestParseError("Schema.spec.schema is required", idx, "/spec/schema");
   }
-  if (typeof s["title"] !== "string" || (s["title"] as string).length === 0) {
+  validateLocalizedText(
+    s["title"],
+    idx,
+    "/spec/title",
+    "Schema.spec.title",
+    true,
+  );
+  validateLocalizedText(
+    s["description"],
+    idx,
+    "/spec/description",
+    "Schema.spec.description",
+    false,
+  );
+  const indexProblem = checkSchemaIndexes(m).problems[0];
+  if (indexProblem) {
     throw new ManifestParseError(
-      "Schema.spec.title is required (non-empty string). It's the admin UI label — populate it in the user's primary language, not the bare metadata.name.",
+      indexProblem.message,
       idx,
-      "/spec/title",
+      indexProblem.pointer,
+      schemaIndexDiagnosticCode(indexProblem, true),
+    );
+  }
+  const searchProblem = checkSchemaSearchableFields(m)[0];
+  if (searchProblem) {
+    throw new ManifestParseError(
+      searchProblem.message,
+      idx,
+      searchProblem.pointer,
+      searchProblem.category === "shape"
+        ? "INVALID_MANIFEST_ENVELOPE"
+        : searchProblem.category === "field-unknown"
+          ? "SCHEMA_SEARCH_FIELD_UNKNOWN"
+          : "SCHEMA_SEARCH_INVALID",
+    );
+  }
+  const adminUiProblem = checkSchemaAdminUi(m).problems[0];
+  if (adminUiProblem) {
+    throw new ManifestParseError(
+      adminUiProblem.message,
+      idx,
+      adminUiProblem.pointer,
+      "SCHEMA_UI_INVALID",
     );
   }
   if ("localized" in s && typeof s["localized"] !== "boolean") {
@@ -290,6 +689,66 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
       idx,
       "/spec/localized",
     );
+  }
+  const schema = s["schema"] as Record<string, unknown>;
+  const properties = schema["properties"];
+  const propertyNames = properties && typeof properties === "object" && !Array.isArray(properties)
+    ? Object.keys(properties)
+    : [];
+  if (s["localized"] !== true && propertyNames.includes("locale")) {
+    throw new ManifestParseError(
+      "Non-localized Schema must not declare the reserved entry field 'locale'; use a domain name such as 'orderLocale', or set localized: true.",
+      idx,
+      "/spec/schema/properties/locale",
+    );
+  }
+  for (const reserved of RESERVED_PROCEDURE_INPUT_NAMES) {
+    if (!propertyNames.includes(reserved)) continue;
+    throw new ManifestParseError(
+      `Schema '${m.metadata.name}' must not declare reserved Procedure input name '${reserved}' as a data property (ADR-0022). New reserved names need an ADR.`,
+      idx,
+      `/spec/schema/properties/${reserved}`,
+    );
+  }
+  const required = schema["required"];
+  if (Array.isArray(required)) {
+    const unknownIndex = required.findIndex((field) =>
+      typeof field === "string" && !propertyNames.includes(field)
+    );
+    if (unknownIndex >= 0) {
+      const field = required[unknownIndex];
+      throw new ManifestParseError(
+        `Schema '${m.metadata.name}' lists '${String(field)}' in required but never declares it under properties — the constraint is silently unenforced.`,
+        idx,
+        `/spec/schema/required/${unknownIndex}`,
+        "REQUIRED_FIELD_UNKNOWN",
+        {
+          value: field,
+          expected: "name of a property declared in spec.schema.properties",
+          candidates: propertyNames,
+        },
+      );
+    }
+  }
+  validateJsonSchema(s["schema"], idx, "Schema", m.metadata.name, "/spec/schema");
+  if (properties && typeof properties === "object" && !Array.isArray(properties)) {
+    for (const [propertyName, property] of Object.entries(properties)) {
+      if (!property || typeof property !== "object" || Array.isArray(property)) continue;
+      const bind = (property as Record<string, unknown>)["x-mantle-bind"];
+      if (typeof bind === "string" && !(MANTLE_BIND_VALUES as readonly string[]).includes(bind)) {
+        throw new ManifestParseError(
+          `Schema '${m.metadata.name}' property '${propertyName}' has illegal x-mantle-bind value.`,
+          idx,
+          `/spec/schema/properties/${propertyName}/x-mantle-bind`,
+          "BIND_VALUE_NOT_IN_ENUM",
+          {
+            value: bind,
+            expected: `one of ${MANTLE_BIND_VALUES.join(", ")}`,
+            candidates: [...MANTLE_BIND_VALUES],
+          },
+        );
+      }
+    }
   }
   if ("lifecycle" in s) {
     const lc = s["lifecycle"];
@@ -311,6 +770,7 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
       );
     }
     const tr = t as Record<string, unknown>;
+    rejectUnknownKeys(tr, ["parent", "on"], idx, "/spec/translates");
     if (typeof tr["parent"] !== "string" || (tr["parent"] as string).length === 0) {
       throw new ManifestParseError(
         "Schema.spec.translates.parent is required (non-empty Schema name)",
@@ -330,46 +790,205 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
         "Schema.spec.translates requires Schema.spec.localized: true (a non-localized translation table is meaningless)",
         idx,
         "/spec/translates",
+        "TRANSLATES_REQUIRES_LOCALIZED",
       );
     }
-  }
-  if ("policies" in s) {
-    throw new ManifestParseError(
-      "Schema.spec.policies is DRAFT (see ADR-0001 § \"What's DRAFT\" / Schema); not supported in v0.1",
-      idx,
-      "/spec/policies",
-      "DRAFT_KEY_USED",
-    );
+    if (!propertyNames.some((name) => name !== "locale" && name !== tr["on"])) {
+      throw new ManifestParseError(
+        "Schema.spec.translates requires at least one locale-specific field besides 'locale' and the join field",
+        idx,
+        "/spec/schema/properties",
+        "TRANSLATES_REQUIRES_CONTENT_FIELD",
+      );
+    }
+    if (!propertyNames.includes(tr["on"] as string)) {
+      throw new ManifestParseError(
+        `Schema '${m.metadata.name}' translates.on field '${String(tr["on"])}' is not declared on this Schema's own properties.`,
+        idx,
+        "/spec/translates/on",
+        "TRANSLATES_FIELD_NOT_IN_CHILD",
+        {
+          value: tr["on"],
+          expected: `field declared in Schema '${m.metadata.name}' spec.schema.properties`,
+          candidates: propertyNames,
+        },
+      );
+    }
   }
   return m;
 }
 
 function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
   const s = m.spec as unknown as Record<string, unknown>;
-  if (typeof s["from"] !== "string" || (s["from"] as string).length === 0) {
-    throw new ManifestParseError("View.spec.from is required (non-empty string)", idx, "/spec/from");
+  rejectUnknownKeys(
+    s,
+    ["title", "uiSchema", "from", "sql", "surface", "cache", "requires", "filter", "fields", "orderBy", "limit", "params"],
+    idx,
+    "/spec",
+  );
+  validateLocalizedText(
+    s["title"],
+    idx,
+    "/spec/title",
+    "View.spec.title",
+    false,
+  );
+  const hasFrom = typeof s["from"] === "string" && (s["from"] as string).length > 0;
+  const hasSql = typeof s["sql"] === "string" && (s["sql"] as string).trim().length > 0;
+  if (hasFrom === hasSql) {
+    throw new ManifestParseError(
+      "View.spec requires exactly one of `from` or `sql`",
+      idx,
+      "/spec",
+    );
   }
+  const surface = s["surface"];
+  if (typeof surface !== "string" || !V01_MCP_TRIGGER_SURFACES.has(surface)) {
+    throw new ManifestParseError(
+      `View.spec.surface is required and must be one of ${[...V01_MCP_TRIGGER_SURFACES].join(", ")}; got ${JSON.stringify(surface)}`,
+      idx,
+      "/spec/surface",
+    );
+  }
+  if ("cache" in s) validateViewCache(s["cache"], m, idx);
   if ("requires" in s && s["requires"] != null) {
     validateRequires(s["requires"], idx, "View");
+  }
+  const adminUiProblem = checkViewAdminUi(m).problems[0];
+  if (adminUiProblem) {
+    throw new ManifestParseError(
+      adminUiProblem.message,
+      idx,
+      adminUiProblem.pointer,
+      "VIEW_UI_INVALID",
+    );
   }
   let paramSchema: JsonSchema | undefined;
   if ("params" in s && s["params"] != null) {
     paramSchema = validateViewParams(s["params"], idx);
+    validateJsonSchema(paramSchema, idx, "View", m.metadata.name, "/spec/params");
+  }
+  if (hasSql) {
+    validateViewSql(s["sql"] as string, paramSchema, idx);
+    for (const key of ["filter", "fields", "orderBy"] as const) {
+      if (s[key] !== undefined) {
+        throw new ManifestParseError(
+          `View.spec.${key} cannot be combined with View.spec.sql`,
+          idx,
+          `/spec/${key}`,
+        );
+      }
+    }
   }
   if ("filter" in s && s["filter"] != null) {
     validateFilterAst(s["filter"], idx, "View.spec.filter", "/spec/filter", paramSchema);
   }
-  for (const draft of ["recursive", "gatedBy", "join", "policies"] as const) {
-    if (draft in s) {
+  if ("orderBy" in s && s["orderBy"] != null) {
+    validateViewOrderBy(s["orderBy"], idx);
+  }
+  return m;
+}
+
+function validateViewCache(raw: unknown, view: ViewManifest, idx: number): void {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new ManifestParseError("View.spec.cache must be an object", idx, "/spec/cache", "VIEW_CACHE_INVALID");
+  }
+  const cache = raw as Record<string, unknown>;
+  rejectUnknownKeys(cache, ["sharedMaxAge"], idx, "/spec/cache");
+  const maxAge = cache["sharedMaxAge"];
+  if (!Number.isInteger(maxAge) || (maxAge as number) < 1 || (maxAge as number) > 86_400) {
+    throw new ManifestParseError(
+      "View.spec.cache.sharedMaxAge must be an integer from 1 to 86400",
+      idx,
+      "/spec/cache/sharedMaxAge",
+      "VIEW_CACHE_INVALID",
+    );
+  }
+  if (view.spec.surface !== "public" || view.spec.sql || view.spec.requires) {
+    throw new ManifestParseError(
+      "View.spec.cache requires an unguarded public declarative View",
+      idx,
+      "/spec/cache",
+      "VIEW_CACHE_INVALID",
+    );
+  }
+}
+
+function validateViewSql(sql: string, params: JsonSchema | undefined, idx: number): void {
+  const trimmed = sql.trim();
+  if (!/^select\b/i.test(trimmed) || trimmed.includes(";")) {
+    throw new ManifestParseError(
+      "View.spec.sql must be one SELECT statement without a semicolon",
+      idx,
+      "/spec/sql",
+    );
+  }
+  const properties = (params?.properties ?? {}) as Record<string, unknown>;
+  const required = new Set(params?.required ?? []);
+  for (const match of trimmed.matchAll(/:([A-Za-z_][A-Za-z0-9_]*)/g)) {
+    const name = match[1]!;
+    if (!Object.prototype.hasOwnProperty.call(properties, name)) {
       throw new ManifestParseError(
-        `View.spec.${draft} is DRAFT (see ADR-0001 § "What's DRAFT" / View); not supported in v0.1`,
+        `View.spec.sql references unknown param '${name}'; declare it under View.spec.params.properties.`,
         idx,
-        `/spec/${draft}`,
-        "DRAFT_KEY_USED",
+        "/spec/sql",
+        "VIEW_FILTER_PARAM_REF_UNKNOWN",
+      );
+    }
+    if (!required.has(name)) {
+      throw new ManifestParseError(
+        `View.spec.sql references optional param '${name}'; bound SQL params must appear in View.spec.params.required.`,
+        idx,
+        "/spec/sql",
+        "VIEW_FILTER_PARAM_REF_NOT_REQUIRED",
       );
     }
   }
-  return m;
+}
+
+/**
+ * `direction` is typed `"asc" | "desc"`, but manifests are parsed from
+ * YAML so any string can arrive at runtime. The compiler maps it to a
+ * closed set, but an out-of-enum value is an authoring mistake we must
+ * surface as a pre-deploy Diagnostic rather than silently coerce.
+ */
+function validateViewOrderBy(raw: unknown, idx: number): void {
+  if (!Array.isArray(raw)) {
+    throw new ManifestParseError(
+      "View.spec.orderBy must be an array of { field, direction? }",
+      idx,
+      "/spec/orderBy",
+      "VIEW_ORDERBY_INVALID",
+    );
+  }
+  raw.forEach((entry, i) => {
+    if (typeof entry !== "object" || entry === null) {
+      throw new ManifestParseError(
+        "View.spec.orderBy entries must be objects with a `field`",
+        idx,
+        `/spec/orderBy/${i}`,
+        "VIEW_ORDERBY_INVALID",
+      );
+    }
+    const o = entry as Record<string, unknown>;
+    rejectUnknownKeys(o, ["field", "direction"], idx, `/spec/orderBy/${i}`);
+    if (typeof o["field"] !== "string" || (o["field"] as string).length === 0) {
+      throw new ManifestParseError(
+        "View.spec.orderBy[].field is required (non-empty string)",
+        idx,
+        `/spec/orderBy/${i}/field`,
+        "VIEW_ORDERBY_INVALID",
+      );
+    }
+    if (o["direction"] !== undefined && o["direction"] !== "asc" && o["direction"] !== "desc") {
+      throw new ManifestParseError(
+        `View.spec.orderBy[].direction must be "asc" or "desc" (got ${JSON.stringify(o["direction"])})`,
+        idx,
+        `/spec/orderBy/${i}/direction`,
+        "VIEW_ORDERBY_INVALID",
+      );
+    }
+  });
 }
 
 function validateViewParams(raw: unknown, idx: number): JsonSchema {
@@ -421,32 +1040,50 @@ function validateFilterAst(
   paramSchema: JsonSchema | undefined,
 ): void {
   if (typeof node !== "object" || node === null || Array.isArray(node)) {
-    throw new ManifestParseError(`${path} must be an object node (eq | and | or)`, idx, jsonPointer);
+    throw new ManifestParseError(
+      `${path} must be an object node (${FILTER_COMPARISON_OPS.join(" | ")} | and | or)`,
+      idx,
+      jsonPointer,
+    );
   }
   const n = node as Record<string, unknown>;
   const keys = Object.keys(n);
   if (keys.length !== 1) {
     throw new ManifestParseError(
-      `${path} must have exactly one key (eq | and | or); got ${JSON.stringify(keys)}`,
+      `${path} must have exactly one key (${FILTER_COMPARISON_OPS.join(" | ")} | and | or); got ${JSON.stringify(keys)}`,
       idx,
       jsonPointer,
     );
   }
   const op = keys[0]!;
-  if (op === "eq") {
-    const eq = n["eq"];
-    if (typeof eq !== "object" || eq === null) {
-      throw new ManifestParseError(`${path}.eq must be an object`, idx, `${jsonPointer}/eq`);
+  if (FILTER_COMPARISON_OP_SET.has(op)) {
+    const comparison = n[op];
+    if (typeof comparison !== "object" || comparison === null || Array.isArray(comparison)) {
+      throw new ManifestParseError(`${path}.${op} must be an object`, idx, `${jsonPointer}/${op}`);
     }
-    const e = eq as Record<string, unknown>;
+    const e = comparison as Record<string, unknown>;
+    rejectUnknownKeys(e, ["field", "value"], idx, `${jsonPointer}/${op}`);
     if (typeof e["field"] !== "string" || (e["field"] as string).length === 0) {
-      throw new ManifestParseError(`${path}.eq.field is required (non-empty string)`, idx, `${jsonPointer}/eq/field`);
+      throw new ManifestParseError(
+        `${path}.${op}.field is required (non-empty string)`,
+        idx,
+        `${jsonPointer}/${op}/field`,
+      );
     }
     if (!("value" in e)) {
-      throw new ManifestParseError(`${path}.eq.value is required`, idx, `${jsonPointer}/eq/value`);
+      throw new ManifestParseError(`${path}.${op}.value is required`, idx, `${jsonPointer}/${op}/value`);
     }
-    if (isParamRef(e["value"])) {
-      validateParamRef(e["value"].$param, idx, `${jsonPointer}/eq/value/$param`, paramSchema);
+    if (hasCtxUserRefKey(e["value"])) {
+      if (op !== "eq" || !isCtxUserRef(e["value"])) {
+        throw new ManifestParseError(
+          `${path}.${op}.value must use the exact identity sentinel { "$ctx.user": "id" } with eq.`,
+          idx,
+          `${jsonPointer}/${op}/value`,
+          "VIEW_FILTER_CTX_USER_REF_INVALID",
+        );
+      }
+    } else if (isParamRef(e["value"])) {
+      validateParamRef(e["value"].$param, idx, `${jsonPointer}/${op}/value/$param`, paramSchema);
     }
     return;
   }
@@ -460,16 +1097,8 @@ function validateFilterAst(
     }
     return;
   }
-  if (DRAFT_FILTER_OPS.has(op)) {
-    throw new ManifestParseError(
-      `${path} operator '${op}' is DRAFT (see ADR-0001 § "What's DRAFT" / View); not supported in v0.1`,
-      idx,
-      jsonPointer,
-      "DRAFT_KEY_USED",
-    );
-  }
   throw new ManifestParseError(
-    `${path} operator must be one of eq, and, or; got '${op}'`,
+    `${path} operator must be one of ${FILTER_COMPARISON_OPS.join(", ")}, and, or; got '${op}'`,
     idx,
     jsonPointer,
   );
@@ -508,7 +1137,7 @@ function validateParamRef(
   const required = paramSchema.required ?? [];
   if (!required.includes(name)) {
     throw new ManifestParseError(
-      `filter references optional param '${name}'; v0.1.0 requires every param-ref'd name to appear in View.spec.params.required (optional-skip semantics are reserved for v0.1.x).`,
+      `filter references optional param '${name}'; every param-ref'd name must appear in View.spec.params.required.`,
       idx,
       pointer,
       "VIEW_FILTER_PARAM_REF_NOT_REQUIRED",
@@ -518,12 +1147,38 @@ function validateParamRef(
 
 function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureManifest {
   const s = m.spec as unknown as Record<string, unknown>;
+  rejectUnknownKeys(
+    s,
+    ["title", "description", "requires", "input", "uiSchema", "output", "handler"],
+    idx,
+    "/spec",
+  );
+  validateLocalizedText(
+    s["title"],
+    idx,
+    "/spec/title",
+    "Procedure.spec.title",
+    false,
+  );
+  validateLocalizedText(
+    s["description"],
+    idx,
+    "/spec/description",
+    "Procedure.spec.description",
+    false,
+  );
   if (typeof s["input"] !== "object" || s["input"] === null) {
     throw new ManifestParseError("Procedure.spec.input is required (JSON Schema)", idx, "/spec/input");
+  }
+  validateJsonSchema(s["input"], idx, "Procedure", m.metadata.name, "/spec/input");
+  const uiProblem = checkFormUiSchema(s["input"] as JsonSchema, s["uiSchema"], "Procedure")[0];
+  if (uiProblem) {
+    throw new ManifestParseError(uiProblem.message, idx, uiProblem.pointer, "SCHEMA_UI_INVALID");
   }
   if (typeof s["output"] !== "object" || s["output"] === null) {
     throw new ManifestParseError("Procedure.spec.output is required (JSON Schema)", idx, "/spec/output");
   }
+  validateJsonSchema(s["output"], idx, "Procedure", m.metadata.name, "/spec/output");
   const handler = s["handler"] as Record<string, unknown> | undefined;
   if (!handler) {
     throw new ManifestParseError("Procedure.spec.handler is required", idx, "/spec/handler");
@@ -532,17 +1187,168 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
   if ("requires" in s && s["requires"] != null) {
     validateRequires(s["requires"], idx, "Procedure");
   }
-  for (const draft of ["errors", "retry", "idempotency"] as const) {
-    if (draft in s) {
+  return m;
+}
+
+const UNSUPPORTED_JSON_SCHEMA_KEYWORDS = new Set([
+  "anyOf",
+  "allOf",
+  "not",
+  "if",
+  "then",
+  "else",
+  "$anchor",
+  "$dynamicAnchor",
+  "$dynamicRef",
+  "definitions",
+  "patternProperties",
+  "prefixItems",
+  "contains",
+  "dependentSchemas",
+  "propertyNames",
+  "unevaluatedProperties",
+]);
+
+function validateJsonSchema(
+  root: unknown,
+  idx: number,
+  kind: "Schema" | "View" | "Procedure",
+  name: string,
+  basePointer: string,
+): void {
+  if (!root || typeof root !== "object" || Array.isArray(root)) {
+    throw new ManifestParseError(`${kind} '${name}' JSON Schema must be an object`, idx, basePointer);
+  }
+  const rootObject = root as Record<string, unknown>;
+  let nodes = 0;
+  const visit = (node: unknown, pointer: string, depth: number): void => {
+    if (!node || typeof node !== "object" || Array.isArray(node)) {
+      throw new ManifestParseError(`${kind} '${name}' has a non-object JSON Schema at ${pointer}`, idx, pointer);
+    }
+    if (depth > 100 || ++nodes > 10_000) {
       throw new ManifestParseError(
-        `Procedure.spec.${draft} is DRAFT (see ADR-0001 § "What's DRAFT" / Procedure); not supported in v0.1`,
+        `${kind} '${name}' exceeds the JSON Schema complexity limit`,
         idx,
-        `/spec/${draft}`,
-        "DRAFT_KEY_USED",
+        pointer,
+        "JSON_SCHEMA_LIMIT_EXCEEDED",
       );
     }
+    const value = node as Record<string, unknown>;
+    for (const keyword of UNSUPPORTED_JSON_SCHEMA_KEYWORDS) {
+      if (keyword in value) {
+        throw new ManifestParseError(
+          `${kind} '${name}' uses unsupported JSON Schema keyword '${keyword}'`,
+          idx,
+          `${pointer}/${escapeJsonPointerSegment(keyword)}`,
+          "JSON_SCHEMA_UNSUPPORTED",
+        );
+      }
+    }
+    if ("$ref" in value) validateLocalSchemaRef(value["$ref"], rootObject, idx, kind, name, `${pointer}/$ref`);
+    if (typeof value["pattern"] === "string") {
+      try {
+        new RegExp(value["pattern"]);
+      } catch (error) {
+        throw new ManifestParseError(
+          `${kind} '${name}' has an uncompilable regex pattern at ${pointer}: ${error instanceof Error ? error.message : String(error)}`,
+          idx,
+          `${pointer}/pattern`,
+          "INVALID_PATTERN",
+          {
+            value: value["pattern"],
+            expected: "a valid JavaScript regular expression",
+          },
+        );
+      }
+    }
+    const properties = value["properties"];
+    if (properties !== undefined && (!properties || typeof properties !== "object" || Array.isArray(properties))) {
+      throw new ManifestParseError(`${kind} '${name}' properties must be an object`, idx, `${pointer}/properties`);
+    }
+    if (properties && typeof properties === "object") {
+      for (const [property, child] of Object.entries(properties)) {
+        visit(child, `${pointer}/properties/${escapeJsonPointerSegment(property)}`, depth + 1);
+      }
+    }
+    if (value["items"] !== undefined) visit(value["items"], `${pointer}/items`, depth + 1);
+    if (typeof value["additionalProperties"] === "object" && value["additionalProperties"] !== null) {
+      visit(value["additionalProperties"], `${pointer}/additionalProperties`, depth + 1);
+    } else if (
+      value["additionalProperties"] !== undefined &&
+      typeof value["additionalProperties"] !== "boolean"
+    ) {
+      throw new ManifestParseError(
+        `${kind} '${name}' additionalProperties must be a boolean or schema`,
+        idx,
+        `${pointer}/additionalProperties`,
+      );
+    }
+    const defs = value["$defs"];
+    if (defs !== undefined) {
+      if (!defs || typeof defs !== "object" || Array.isArray(defs)) {
+        throw new ManifestParseError(`${kind} '${name}' $defs must be an object`, idx, `${pointer}/$defs`);
+      }
+      for (const [definition, child] of Object.entries(defs)) {
+        visit(child, `${pointer}/$defs/${escapeJsonPointerSegment(definition)}`, depth + 1);
+      }
+    }
+    const oneOf = value["oneOf"];
+    if (oneOf !== undefined) {
+      if (!Array.isArray(oneOf) || oneOf.length === 0) {
+        throw new ManifestParseError(`${kind} '${name}' oneOf must be a non-empty array`, idx, `${pointer}/oneOf`);
+      }
+      oneOf.forEach((child, index) => visit(child, `${pointer}/oneOf/${index}`, depth + 1));
+    }
+  };
+  visit(root, basePointer, 0);
+}
+
+function validateLocalSchemaRef(
+  ref: unknown,
+  root: Record<string, unknown>,
+  idx: number,
+  kind: "Schema" | "View" | "Procedure",
+  name: string,
+  pointer: string,
+): void {
+  if (typeof ref !== "string" || !ref.startsWith("#/$defs/")) {
+    throw new ManifestParseError(
+      `${kind} '${name}' $ref must be a same-document pointer beginning '#/$defs/'`,
+      idx,
+      pointer,
+      "JSON_SCHEMA_REF_INVALID",
+      { value: ref, expected: "#/$defs/<definition>" },
+    );
   }
-  return m;
+  let tokens: string[] | undefined;
+  try {
+    tokens = decodeURIComponent(ref.slice(2)).split("/");
+  } catch {
+    tokens = undefined;
+  }
+  let current: unknown = tokens ? root : undefined;
+  for (const token of tokens ?? []) {
+    if (/~(?:[^01]|$)/.test(token)) current = undefined;
+    else if (current && typeof current === "object") {
+      const key = token.replace(/~1/g, "/").replace(/~0/g, "~");
+      current = Object.prototype.hasOwnProperty.call(current, key)
+        ? (current as Record<string, unknown>)[key]
+        : undefined;
+    } else current = undefined;
+  }
+  if (!current || typeof current !== "object" || Array.isArray(current)) {
+    throw new ManifestParseError(
+      `${kind} '${name}' cannot resolve local $ref '${ref}'`,
+      idx,
+      pointer,
+      "JSON_SCHEMA_REF_INVALID",
+      { value: ref, expected: "a JSON Schema object in this document" },
+    );
+  }
+}
+
+function escapeJsonPointerSegment(value: string): string {
+  return value.replace(/~/g, "~0").replace(/\//g, "~1");
 }
 
 function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
@@ -562,6 +1368,7 @@ function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
     );
   }
   if (kind === "ref") {
+    rejectUnknownKeys(h, ["kind", "ref"], idx, "/spec/handler");
     if (typeof h["ref"] !== "string" || (h["ref"] as string).length === 0) {
       throw new ManifestParseError(
         "Procedure.spec.handler.ref is required (non-empty registration key)",
@@ -571,6 +1378,7 @@ function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
     }
     return;
   }
+  rejectUnknownKeys(h, ["kind", "op", "schema", "match"], idx, "/spec/handler");
   const op = h["op"];
   if (typeof op !== "string" || !V01_BUILTIN_OPS.has(op as BuiltinOp)) {
     throw new ManifestParseError(
@@ -586,6 +1394,42 @@ function validateHandlerBinding(h: Record<string, unknown>, idx: number): void {
       "/spec/handler/schema",
     );
   }
+  if ("match" in h) {
+    if (op !== "upsert") {
+      throw new ManifestParseError(
+        "Procedure.spec.handler.match is only valid when op is 'upsert'",
+        idx,
+        "/spec/handler/match",
+      );
+    }
+    const match = h["match"];
+    if (!Array.isArray(match) || match.length === 0) {
+      throw new ManifestParseError(
+        "Procedure.spec.handler.match must be a non-empty array of field names",
+        idx,
+        "/spec/handler/match",
+      );
+    }
+    const seen = new Set<string>();
+    for (let i = 0; i < match.length; i++) {
+      const field = match[i];
+      if (typeof field !== "string" || field.length === 0) {
+        throw new ManifestParseError(
+          `Procedure.spec.handler.match[${i}] must be a non-empty string`,
+          idx,
+          `/spec/handler/match/${i}`,
+        );
+      }
+      if (seen.has(field)) {
+        throw new ManifestParseError(
+          `Procedure.spec.handler.match contains duplicate field '${field}'`,
+          idx,
+          `/spec/handler/match/${i}`,
+        );
+      }
+      seen.add(field);
+    }
+  }
   if ("ref" in h) {
     throw new ManifestParseError(
       "Procedure.spec.handler.ref is invalid when handler.kind is 'builtin' (ref + builtin are mutually exclusive)",
@@ -600,15 +1444,24 @@ function validateRequires(req: unknown, idx: number, atom: "Procedure" | "View")
     throw new ManifestParseError(`${atom}.spec.requires must be an object`, idx);
   }
   const r = req as Record<string, unknown>;
-  // window / quota are Procedure-only DRAFT keys; reject early on both
-  // atoms so a misplaced key surfaces with a clear diagnostic.
-  for (const draft of ["window", "quota"] as const) {
-    if (draft in r) {
+  rejectUnknownKeys(r, ["auth", "guard"], idx, "/spec/requires");
+  if ("guard" in r) {
+    const guard = r["guard"];
+    if (typeof guard !== "object" || guard === null || Array.isArray(guard)) {
+      throw new ManifestParseError(`${atom}.spec.requires.guard must be an object`, idx);
+    }
+    const g = guard as Record<string, unknown>;
+    if (typeof g["procedure"] !== "string" || g["procedure"].length === 0) {
       throw new ManifestParseError(
-        `${atom}.spec.requires.${draft} is DRAFT (see ADR-0001 § "What's DRAFT" / Procedure); not supported in v0.1`,
+        `${atom}.spec.requires.guard.procedure must be a non-empty Procedure name`,
         idx,
-        undefined,
-        "DRAFT_KEY_USED",
+      );
+    }
+    const extra = Object.keys(g).find((key) => key !== "procedure");
+    if (extra !== undefined) {
+      throw new ManifestParseError(
+        `${atom}.spec.requires.guard.${extra} is not supported; guard accepts only \`procedure\``,
+        idx,
       );
     }
   }
@@ -618,14 +1471,7 @@ function validateRequires(req: unknown, idx: number, atom: "Procedure" | "View")
     throw new ManifestParseError(`${atom}.spec.requires.auth must be an object`, idx);
   }
   const a = auth as Record<string, unknown>;
-  if ("any" in a) {
-    throw new ManifestParseError(
-      `${atom}.spec.requires.auth.any is DRAFT; v0.1 supports only \`all\``,
-      idx,
-      undefined,
-      "DRAFT_KEY_USED",
-    );
-  }
+  rejectUnknownKeys(a, ["all"], idx, "/spec/requires/auth");
   if (!("all" in a)) {
     throw new ManifestParseError(
       `${atom}.spec.requires.auth must declare \`all\` (v0.1)`,
@@ -640,15 +1486,37 @@ function validateRequires(req: unknown, idx: number, atom: "Procedure" | "View")
     );
   }
   for (let i = 0; i < all.length; i++) {
-    validateAuthPredicate(all[i], idx, `${atom}.spec.requires.auth.all[${i}]`);
+    validateAuthPredicate(
+      all[i],
+      idx,
+      `${atom}.spec.requires.auth.all[${i}]`,
+      `/spec/requires/auth/all/${i}`,
+    );
   }
 }
 
-function validateAuthPredicate(p: unknown, idx: number, path: string): asserts p is AuthPredicate {
-  if (p === "ctx.user") return;
+function validateAuthPredicate(
+  p: unknown,
+  idx: number,
+  path: string,
+  pointer: string,
+): asserts p is AuthPredicate {
+  if (p === "ctx.user" || p === "ctx.auth") return;
   if (typeof p === "object" && p !== null && !Array.isArray(p)) {
     const o = p as Record<string, unknown>;
+    if ("ctx.auth.scope" in o) {
+      rejectUnknownKeys(o, ["ctx.auth.scope"], idx, pointer);
+      const scope = o["ctx.auth.scope"];
+      if (typeof scope !== "string" || scope.length === 0) {
+        throw new ManifestParseError(
+          `${path}: 'ctx.auth.scope' value must be a non-empty string`,
+          idx,
+        );
+      }
+      return;
+    }
     if ("ctx.staff" in o) {
+      rejectUnknownKeys(o, ["ctx.staff"], idx, pointer);
       const roles = o["ctx.staff"];
       if (!Array.isArray(roles) || roles.length === 0 || roles.some((r) => typeof r !== "string")) {
         throw new ManifestParseError(
@@ -668,25 +1536,14 @@ function validateAuthPredicate(p: unknown, idx: number, path: string): asserts p
       return;
     }
   }
-  if (typeof p === "object" && p !== null) {
-    const draftKeys = ["owns", "withinMinutes", "contains"];
-    const used = draftKeys.find((k) => k in (p as Record<string, unknown>));
-    if (used) {
-      throw new ManifestParseError(
-        `${path}: predicate '${used}' is DRAFT (see ADR-0001 § "What's DRAFT" / Procedure); not supported in v0.1`,
-        idx,
-        undefined,
-        "DRAFT_KEY_USED",
-      );
-    }
-  }
   throw new ManifestParseError(
-    `${path} must be 'ctx.user' or { 'ctx.staff': [<role>, ...] }; got ${JSON.stringify(p)}`,
+    `${path} must be 'ctx.user', 'ctx.auth', { 'ctx.auth.scope': <scope> }, or { 'ctx.staff': [<role>, ...] }; got ${JSON.stringify(p)}`,
     idx,
   );
 }
 
 function validateHttpSource(source: Record<string, unknown>, idx: number): void {
+  rejectUnknownKeys(source, ["kind", "method", "path"], idx, "/spec/source");
   const method = source["method"];
   if (typeof method !== "string" || !V01_HTTP_METHODS.has(method as HttpMethod)) {
     throw new ManifestParseError(
@@ -706,6 +1563,12 @@ function validateHttpSource(source: Record<string, unknown>, idx: number): void 
 }
 
 function validateLifecycleSource(source: Record<string, unknown>, idx: number): void {
+  rejectUnknownKeys(
+    source,
+    ["kind", "schema", "on", "errorPolicy"],
+    idx,
+    "/spec/source",
+  );
   if (typeof source["schema"] !== "string" || (source["schema"] as string).length === 0) {
     throw new ManifestParseError(
       "Trigger.spec.source.schema is required (Schema metadata.name) when source.kind is 'lifecycle'",
@@ -748,17 +1611,23 @@ function validateLifecycleSource(source: Record<string, unknown>, idx: number): 
       );
     }
   }
-  if ("method" in source || "path" in source) {
+}
+
+function validateMcpSource(source: Record<string, unknown>, idx: number): void {
+  rejectUnknownKeys(source, ["kind", "surface"], idx, "/spec/source");
+  const surface = source["surface"];
+  if (typeof surface !== "string" || !V01_MCP_TRIGGER_SURFACES.has(surface)) {
     throw new ManifestParseError(
-      "Trigger.spec.source.{method,path} are invalid when source.kind is 'lifecycle' (those keys belong to source.kind: 'http')",
+      `Trigger.spec.source.surface must be one of ${[...V01_MCP_TRIGGER_SURFACES].join(", ")}; got ${JSON.stringify(surface)}`,
       idx,
-      "/spec/source",
+      "/spec/source/surface",
     );
   }
 }
 
 function validateTriggerSpec(m: TriggerManifest, idx: number): TriggerManifest {
   const s = m.spec as unknown as Record<string, unknown>;
+  rejectUnknownKeys(s, ["source", "target"], idx, "/spec");
   const source = s["source"] as Record<string, unknown> | undefined;
   if (!source) {
     throw new ManifestParseError("Trigger.spec.source is required", idx, "/spec/source");
@@ -771,14 +1640,6 @@ function validateTriggerSpec(m: TriggerManifest, idx: number): TriggerManifest {
       "/spec/source/kind",
     );
   }
-  if (DRAFT_TRIGGER_SOURCE_KINDS.has(sourceKind)) {
-    throw new ManifestParseError(
-      `Trigger.spec.source.kind '${sourceKind}' is DRAFT (see ADR-0001 § "What's DRAFT" / Trigger); not supported in v0.1`,
-      idx,
-      "/spec/source/kind",
-      "DRAFT_KEY_USED",
-    );
-  }
   if (!V01_TRIGGER_SOURCE_KINDS.has(sourceKind)) {
     throw new ManifestParseError(
       `Trigger.spec.source.kind must be one of ${[...V01_TRIGGER_SOURCE_KINDS].join(", ")}; got '${sourceKind}'`,
@@ -788,51 +1649,14 @@ function validateTriggerSpec(m: TriggerManifest, idx: number): TriggerManifest {
   }
   if (sourceKind === "http") validateHttpSource(source, idx);
   else if (sourceKind === "lifecycle") validateLifecycleSource(source, idx);
+  else if (sourceKind === "mcp") validateMcpSource(source, idx);
   const target = s["target"] as Record<string, unknown> | undefined;
   if (!target || typeof target["procedure"] !== "string") {
     throw new ManifestParseError("Trigger.spec.target.procedure is required (string)", idx, "/spec/target/procedure");
   }
-  if ("project" in target) {
-    throw new ManifestParseError(
-      "Trigger.spec.target.project is DRAFT (see ADR-0001 § \"What's DRAFT\" / Trigger); not supported in v0.1",
-      idx,
-      undefined,
-      "DRAFT_KEY_USED",
-    );
-  }
-  if ("atomicity" in s) {
-    throw new ManifestParseError(
-      "Trigger.spec.atomicity is DRAFT (see ADR-0001 § \"What's DRAFT\" / Trigger); not supported in v0.1",
-      idx,
-      undefined,
-      "DRAFT_KEY_USED",
-    );
-  }
+  rejectUnknownKeys(target, ["procedure"], idx, "/spec/target");
   return m;
 }
 
-/**
- * Bucketize a flat `Manifest[]` (parser output) into typed per-kind
- * arrays. Lives next to the parser because every caller pairs it with
- * `parseManifests` — they're the parser-output pipeline.
- */
-export function partitionManifests(manifests: ReadonlyArray<Manifest>): {
-  schemas: SchemaManifest[];
-  views: ViewManifest[];
-  procedures: ProcedureManifest[];
-  triggers: TriggerManifest[];
-} {
-  const schemas: SchemaManifest[] = [];
-  const views: ViewManifest[] = [];
-  const procedures: ProcedureManifest[] = [];
-  const triggers: TriggerManifest[] = [];
-  for (const m of manifests) {
-    if (m.kind === "Schema") schemas.push(m);
-    else if (m.kind === "View") views.push(m);
-    else if (m.kind === "Procedure") procedures.push(m);
-    else triggers.push(m);
-  }
-  return { schemas, views, procedures, triggers };
-}
 
 export type { FilterAst };

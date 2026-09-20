@@ -1,15 +1,21 @@
-# AGENTS.md
+# Mantle contributor router
 
-This SDK repo's agent entry point is **[CLAUDE.md](./CLAUDE.md)** — read that first.
+- To create or continue a Mantle application, use the version-matched consumer
+  skills under [`skills/`](skills/) and materialize a project outside this SDK
+  checkout.
+- To change or review this SDK, read [`CONTRIBUTING.md`](CONTRIBUTING.md) and
+  the relevant accepted ADRs before editing.
+- To version, publish, or tag a release, additionally read the
+  canonical [release skill](.agent/skills/mantle-release/SKILL.md). Do not
+  release unless the user explicitly asks.
 
-Consumer projects scaffolded via `create-mantle` get a different, mantle-aware `AGENTS.md` templated
-from [`_common/AGENTS.md.template`](https://github.com/aotter/mantle-starters/blob/main/_common/AGENTS.md.template)
-on the starters repo (per [ADR-0016](./docs/adr/0016-agents-md-and-macros.md)). This file at the SDK
-repo root only points you at the right place.
+Repository safety gates:
 
-## Quick links for contributing agents
+- Branch from and open PRs against `develop`; preserve merge commits.
+- Keep Runtime adapter-neutral and the v0.1 manifest grammar closed.
+- Use the narrowest relevant check while editing; run `pnpm check` for broad
+  changes.
 
-- Contribution contract → [CONTRIBUTING.md](./CONTRIBUTING.md)
-- Architecture rules / clean-arch layout → [CLAUDE.md](./CLAUDE.md)
-- Decision history (irreversible choices) → [`docs/adr/`](./docs/adr/)
-- Skills for end-user flows → [`skills/install/SKILL.md`](./skills/install/SKILL.md), [`skills/extend/SKILL.md`](./skills/extend/SKILL.md), [`skills/provision/SKILL.md`](./skills/provision/SKILL.md)
+`CLAUDE.md` is a compatibility pointer, not a second instruction authority.
+Applications project version-matched instructions from their installed Core
+package with `mantle skills`; see [direct authoring](docs/handbook/start/project-and-cli.md).

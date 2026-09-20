@@ -1,33 +1,52 @@
 import * as React from "react";
-import { AlertTriangle, LogOut } from "lucide-react";
-import { Button } from "../../ui/button";
+import type { OAuthConsentInfo, OAuthConsentRequest } from "@aotter/mantle-admin";
+import { useQuery } from "@tanstack/react-query";
+import { AlertTriangle, Loader2Icon, LogOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { AuthCard } from "@/components/auth-card";
+import {
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { OneTimeCodeInput } from "@/components/one-time-code-input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
+import { authMethodsQueryOptions } from "../../lib/queries";
+import type { AuthMethodInfo } from "../../lib/types";
+import { signOut } from "../../lib/auth";
+import { ThemeToggle } from "../../layout/preference-controls";
+import { ErrorBox, PageHeader, SectionCard } from "../../ui/page";
 
 export function GateLoading(): React.ReactElement {
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <div className="glass-card w-full max-w-sm p-6">
-        <div className="mb-4 h-4 w-24 animate-pulse rounded bg-muted" />
-        <div className="space-y-2">
-          <div className="h-3 w-full animate-pulse rounded bg-muted" />
-          <div className="h-3 w-2/3 animate-pulse rounded bg-muted" />
-        </div>
-      </div>
-    </div>
+    <AuthCard action={<ThemeToggle />}>
+      <CardHeader>
+        <Skeleton className="h-4 w-24" />
+      </CardHeader>
+      <CardContent className="space-y-2" aria-busy="true">
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-2/3" />
+      </CardContent>
+    </AuthCard>
   );
 }
 
 export function GateError({ error }: { error: unknown }): React.ReactElement {
   const { language } = usePreferences();
-  const message = error instanceof Error ? error.message : "Unknown error.";
+  const message = error instanceof Error ? error.message : t(language, "common.unknownError");
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <div className="glass-card animate-rise w-full max-w-sm p-8 text-center">
-        <h1 className="mb-2 text-xl">{t(language, "auth.error.title")}</h1>
-        <p className="text-sm text-muted-foreground">{message}</p>
-      </div>
-    </div>
+    <AuthCard action={<ThemeToggle />}>
+      <CardHeader className="text-center">
+        <CardTitle className="text-xl">
+          <h1>{t(language, "auth.error.title")}</h1>
+        </CardTitle>
+        <CardDescription role="alert">{message}</CardDescription>
+      </CardHeader>
+    </AuthCard>
   );
 }
 
@@ -38,52 +57,104 @@ export function AccessDeniedView({
 }): React.ReactElement {
   const { language } = usePreferences();
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <div className="glass-card animate-rise w-full max-w-md p-8 text-center">
+    <AuthCard action={<ThemeToggle />} wide>
+      <CardHeader className="text-center">
         <div className="mx-auto mb-3 inline-flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
           <AlertTriangle className="size-5" aria-hidden />
         </div>
-        <h1 className="mb-2 text-xl">{t(language, "auth.accessDenied.title")}</h1>
+        <CardTitle className="text-xl">
+          <h1>{t(language, "auth.accessDenied.title")}</h1>
+        </CardTitle>
         {login ? (
-          <p className="mb-1 text-sm font-medium text-foreground">
+          <CardDescription className="font-medium text-foreground">
             GitHub: {login}
-          </p>
+          </CardDescription>
         ) : null}
+      </CardHeader>
+      <CardContent className="text-center">
         <p className="mb-1 text-sm text-muted-foreground">
           {t(language, "auth.accessDenied.noStaff")}
         </p>
         <p className="mb-6 text-sm text-muted-foreground">
           {t(language, "auth.accessDenied.askOwner")}
         </p>
+        <Button variant="outline" className="mb-2 w-full" asChild>
+          <a href="/admin/connected-apps">{t(language, "oauth.connectedApps")}</a>
+        </Button>
         <Button variant="outline" className="w-full" onClick={signOut}>
           <LogOut className="me-2 size-4" aria-hidden />
           {t(language, "common.signOut")}
         </Button>
-      </div>
-    </div>
+      </CardContent>
+    </AuthCard>
   );
 }
-
-// Mirrors `AuthMethodInfo` exported from `@aotter/mantle-cloudflare`
-// (see `createAuth.ts`). Duplicated here because the admin SPA is built
-// adapter-agnostic and can't import from the adapter package; the
-// `/api/auth/methods` endpoint is the wire contract between them.
-type AuthMethodInfo =
-  | { kind: "email-otp" }
-  | { kind: "magic-link" }
-  | { kind: "social"; provider: string };
-
-// Shared input styling for the email-otp form. Lives at module scope
-// so we don't reallocate the string on every render and so a future
-// `ui/input` component can swap in by replacing this one constant.
-const INPUT_CLASS =
-  "w-full rounded border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
 // Per-section spacing. `first:` zeroes top spacing for whichever
 // section the server returns first — keeps the spacing rules
 // co-located with the section instead of threading an `isFirst` prop.
 const SECTION_PLAIN = "first:mt-0 mt-4";
 const SECTION_DIVIDED = "first:mt-0 first:border-t-0 first:pt-0 mt-6 border-t border-border pt-4";
+
+/**
+ * Normalize the post-login `?return=` target to a same-origin path.
+ * Accepts only values that start with a single `/` (rejecting absolute
+ * `https://…` and protocol-relative `//host` URLs), falling back to
+ * `/admin`. Prevents an open redirect on the OTP success path, which
+ * navigates client-side with the raw value.
+ */
+export function safeReturnPath(raw: string | null | undefined): string {
+  if (!raw?.startsWith("/")) return "/admin";
+  try {
+    const base = "https://mantle.invalid";
+    const url = new URL(raw, base);
+    return url.origin === base ? `${url.pathname}${url.search}${url.hash}` : "/admin";
+  } catch {
+    return "/admin";
+  }
+}
+
+/** Preserve only the Better Auth-signed OAuth fields while the login UI adds
+ * its own query parameters. Mirrors oauthProviderClient without coupling the
+ * static Admin SPA to a second auth client. */
+export function signedOAuthQuery(search: string): string | undefined {
+  const params = new URLSearchParams(search);
+  if (!params.has("sig")) return undefined;
+  const signedNames = new Set(params.getAll("ba_param"));
+  if (signedNames.size === 0) return undefined;
+  const signed = new URLSearchParams();
+  for (const [key, value] of params) {
+    if (key === "sig" || key === "ba_param" || signedNames.has(key)) {
+      signed.append(key, value);
+    }
+  }
+  return signed.toString();
+}
+
+/**
+ * Same-tick in-flight lock. React `busy` updates are async, so OTP
+ * autocomplete `onComplete` and form Enter can both call verify before
+ * the next render. Claiming the ref here is visible immediately.
+ */
+export function claimInFlight(lock: { current: boolean }): boolean {
+  if (lock.current) return false;
+  lock.current = true;
+  return true;
+}
+
+export function SignInButton({
+  busy,
+  children,
+  disabled,
+  ...props
+}: React.ComponentProps<typeof Button> & { busy: boolean }): React.ReactElement {
+  return (
+    <Button {...props} disabled={busy || disabled} aria-busy={busy || undefined}>
+      {busy ? <Loader2Icon className="animate-spin" aria-hidden /> : null}
+      {children}
+    </Button>
+  );
+}
 
 /**
  * Data-driven sign-in. Fetches `/api/auth/methods` on mount; renders
@@ -98,76 +169,232 @@ const SECTION_DIVIDED = "first:mt-0 first:border-t-0 first:pt-0 mt-6 border-t bo
 export function SignInView(): React.ReactElement {
   const { language } = usePreferences();
   const params = new URLSearchParams(window.location.search);
-  const ret = params.get("return") ?? "/admin";
+  const ret = safeReturnPath(params.get("return"));
+  const oauthQuery = signedOAuthQuery(window.location.search);
 
-  const [methods, setMethods] = React.useState<AuthMethodInfo[] | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    async function load(): Promise<void> {
-      try {
-        const res = await fetch("/api/auth/methods", { credentials: "include" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as { methods?: AuthMethodInfo[] };
-        if (cancelled) return;
-        setMethods(data.methods ?? []);
-      } catch (err: unknown) {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    }
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const methods = useQuery<AuthMethodInfo[]>(authMethodsQueryOptions());
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <div className="glass-card animate-rise w-full max-w-sm p-8">
-        <p className="label-eyebrow mb-2">{t(language, "auth.signIn.eyebrow")}</p>
-        <h1 className="mb-2 text-xl">{t(language, "auth.signIn.title")}</h1>
-
-        {error ? (
-          <p className="mb-4 text-sm text-destructive">
+    <AuthCard action={<ThemeToggle />}>
+      <CardHeader>
+        <CardDescription>{t(language, "auth.signIn.eyebrow")}</CardDescription>
+        <CardTitle className="text-xl">
+          <h1>{t(language, "auth.signIn.title")}</h1>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {methods.isError ? (
+          <p className="mb-4 text-sm text-destructive" role="alert">
             {t(language, "auth.signIn.methodsLoadFailed")}
           </p>
         ) : null}
-        {methods === null && !error ? (
-          <div className="space-y-2">
-            <div className="h-9 w-full animate-pulse rounded bg-muted" />
-          </div>
+        {methods.isLoading ? (
+          <Skeleton className="h-9 w-full" />
         ) : null}
-        {methods && methods.length === 0 ? (
+        {methods.data?.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {t(language, "auth.signIn.noMethods")}
           </p>
         ) : null}
-        {methods && methods.length > 0 ? (
+        {methods.data && methods.data.length > 0 ? (
           // Wrap so each section's `first:` selectors target the first
           // method in the list, not the first child of the card.
           <div>
-            {methods.map((m) => (
+            {methods.data.map((m) => (
               <MethodSection
-                key={m.kind === "social" ? `social:${m.provider}` : m.kind}
+                key={
+                  m.kind === "social"
+                    ? `social:${m.provider}`
+                    : m.kind === "oauth"
+                      ? `oauth:${m.providerId}`
+                      : m.kind
+                }
                 method={m}
                 returnTo={ret}
+                oauthQuery={oauthQuery}
               />
             ))}
           </div>
         ) : null}
-      </div>
+      </CardContent>
+    </AuthCard>
+  );
+}
+
+export function OAuthConsentView(): React.ReactElement {
+  const { language } = usePreferences();
+  const [submitting, setSubmitting] = React.useState<"approve" | "deny" | null>(null);
+  const decision = React.useRef<HTMLInputElement>(null);
+  const consent = useQuery<OAuthConsentRequest | null>({
+    queryKey: ["oauth-consent", window.location.search],
+    queryFn: async () => {
+      const response = await fetch(`/oauth/consent/data${window.location.search}`);
+      if (response.status === 401) return redirectToSignIn();
+      const body = await response.json() as { consent: OAuthConsentRequest | null };
+      if (response.status === 400) return null;
+      if (!response.ok) throw new Error(t(language, "common.failedToLoad"));
+      return body.consent;
+    },
+    retry: false,
+  });
+
+  if (consent.isLoading) return <GateLoading />;
+  if (consent.isError) return <GateError error={consent.error} />;
+  if (!consent.data) {
+    return (
+      <AuthCard action={<ThemeToggle />} wide>
+        <CardHeader>
+          <CardDescription>{t(language, "oauth.consent.eyebrow")}</CardDescription>
+          <CardTitle className="text-xl">
+            <h1>{t(language, "oauth.consent.invalidTitle")}</h1>
+          </CardTitle>
+          <CardDescription>{t(language, "oauth.consent.invalidBody")}</CardDescription>
+        </CardHeader>
+      </AuthCard>
+    );
+  }
+
+  return (
+    <AuthCard action={<ThemeToggle />} wide>
+      <CardHeader>
+        <CardDescription>{t(language, "oauth.consent.eyebrow")}</CardDescription>
+        <CardTitle className="text-xl">
+          <h1>{t(language, "oauth.consent.heading", { client: consent.data.clientName })}</h1>
+        </CardTitle>
+        <CardDescription>{t(language, "oauth.consent.body", { client: consent.data.clientName })}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form
+          method="post"
+          action="/oauth/consent"
+          className="flex gap-2 max-sm:flex-col"
+          aria-busy={submitting !== null || undefined}
+          onSubmit={(event) => {
+            const submitter = event.nativeEvent.submitter as HTMLButtonElement | null;
+            if (submitter?.value !== "approve" && submitter?.value !== "deny") return;
+            if (decision.current) decision.current.value = submitter.value;
+            setSubmitting(submitter.value);
+          }}
+        >
+          <input type="hidden" name="oauth_query" value={consent.data.oauthQuery} />
+          <input ref={decision} type="hidden" name="decision" />
+          <SignInButton
+            type="submit"
+            value="approve"
+            className="flex-1"
+            busy={submitting === "approve"}
+            disabled={submitting !== null}
+          >
+            {t(language, "oauth.consent.approve")}
+          </SignInButton>
+          <SignInButton
+            type="submit"
+            value="deny"
+            variant="secondary"
+            className="flex-1"
+            busy={submitting === "deny"}
+            disabled={submitting !== null}
+          >
+            {t(language, "oauth.consent.deny")}
+          </SignInButton>
+        </form>
+      </CardContent>
+    </AuthCard>
+  );
+}
+
+/** Members can manage their own grants without access to staff Admin APIs. */
+export function ConnectedAppsPage(): React.ReactElement {
+  return (
+    <AuthCard action={<ThemeToggle />} wide>
+      <CardContent className="pt-6">
+        <ConnectedAppsView />
+      </CardContent>
+    </AuthCard>
+  );
+}
+
+export function ConnectedAppsView(): React.ReactElement {
+  const { language } = usePreferences();
+  const [submitting, setSubmitting] = React.useState<string | null>(null);
+  const consents = useQuery<readonly OAuthConsentInfo[]>({
+    queryKey: ["oauth-consents"],
+    queryFn: async () => {
+      const response = await fetch("/oauth/consents/data");
+      if (response.status === 401) return redirectToSignIn();
+      if (!response.ok) throw new Error(t(language, "common.failedToLoad"));
+      return ((await response.json()) as { consents: readonly OAuthConsentInfo[] }).consents;
+    },
+    retry: false,
+  });
+
+  return (
+    <div className="mx-auto max-w-4xl">
+      <PageHeader
+        eyebrow={t(language, "oauth.apps.eyebrow")}
+        title={t(language, "oauth.connectedApps")}
+        description={t(language, "oauth.apps.body")}
+      />
+      {consents.isError ? <ErrorBox error={consents.error} /> : (
+        <SectionCard>
+          {consents.isLoading ? (
+            <div className="space-y-3" aria-busy="true">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          ) : consents.data?.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t(language, "oauth.apps.empty")}</p>
+          ) : (
+            <div className="divide-y">
+              {consents.data?.map((consent) => (
+                <section key={consent.id} className="flex flex-wrap items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
+                  <div className="min-w-0">
+                    <h2 className="font-medium">{consent.clientName}</h2>
+                    <code className="mt-1 block break-all text-xs text-muted-foreground">
+                      {consent.clientId}
+                    </code>
+                  </div>
+                  <form
+                    method="post"
+                    action="/oauth/consents/revoke"
+                    onSubmit={() => setSubmitting(consent.id)}
+                  >
+                    <input type="hidden" name="consent_id" value={consent.id} />
+                    <SignInButton
+                      type="submit"
+                      variant="destructive"
+                      busy={submitting === consent.id}
+                      disabled={submitting !== null}
+                    >
+                      {t(language, "oauth.apps.revoke")}
+                    </SignInButton>
+                  </form>
+                </section>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+      )}
     </div>
   );
+}
+
+function redirectToSignIn(): never {
+  const current = `${window.location.pathname}${window.location.search}`;
+  const params = new URLSearchParams(window.location.search);
+  params.set("return", current);
+  window.location.replace(`/admin/sign-in?${params}`);
+  throw new Error("Redirecting to sign in");
 }
 
 function MethodSection({
   method,
   returnTo,
+  oauthQuery,
 }: {
   method: AuthMethodInfo;
   returnTo: string;
+  oauthQuery?: string;
 }): React.ReactElement {
   // Exhaustive switch — adding a kind to AuthMethodInfo without
   // adding a case here is a TS error. `social` covers all OAuth
@@ -175,11 +402,35 @@ function MethodSection({
   // `provider` discriminator picks the button label.
   switch (method.kind) {
     case "social":
-      return <SocialSignInSection provider={method.provider} returnTo={returnTo} />;
+      return (
+        <RedirectSignInSection
+          endpoint="/api/auth/sign-in/social"
+          body={{
+            provider: method.provider,
+            callbackURL: returnTo,
+            ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
+          }}
+          buttonKey="auth.signIn.method.social.button"
+          displayName={SOCIAL_PROVIDER_DISPLAY_NAME[method.provider] ?? method.provider}
+        />
+      );
+    case "oauth":
+      return (
+        <RedirectSignInSection
+          endpoint="/api/auth/sign-in/social"
+          body={{
+            provider: method.providerId,
+            callbackURL: returnTo,
+            ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
+          }}
+          buttonKey="auth.signIn.method.oauth.button"
+          displayName={method.displayName ?? method.providerId}
+        />
+      );
     case "email-otp":
-      return <EmailOtpSection returnTo={returnTo} />;
+      return <EmailOtpSection returnTo={returnTo} oauthQuery={oauthQuery} />;
     case "magic-link":
-      return <MagicLinkSection returnTo={returnTo} />;
+      return <MagicLinkSection returnTo={returnTo} oauthQuery={oauthQuery} />;
     default: {
       const _exhaustive: never = method;
       return <UnknownMethodSection kind={(_exhaustive as { kind: string }).kind} />;
@@ -241,42 +492,65 @@ const SOCIAL_PROVIDER_DISPLAY_NAME: Readonly<Record<string, string>> = {
  * Unknown ids (a provider Better Auth adds before the SPA rebuilds)
  * render with the raw id as the substitution.
  */
-function SocialSignInSection({
-  provider,
-  returnTo,
+function RedirectSignInSection({
+  endpoint,
+  body,
+  buttonKey,
+  displayName,
 }: {
-  provider: string;
-  returnTo: string;
+  endpoint: string;
+  body: Record<string, string>;
+  buttonKey:
+    | "auth.signIn.method.social.button"
+    | "auth.signIn.method.oauth.button";
+  displayName: string;
 }): React.ReactElement {
   const { language } = usePreferences();
-  const displayName = SOCIAL_PROVIDER_DISPLAY_NAME[provider] ?? provider;
-  const startSocial = async (): Promise<void> => {
-    const res = await fetch("/api/auth/sign-in/social", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider, callbackURL: returnTo }),
-    });
-    if (!res.ok) return;
-    const data = (await res.json()) as { url?: string };
-    if (data.url) window.location.href = data.url;
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const start = async (): Promise<void> => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { url?: string };
+      if (!data.url) throw new Error("Missing sign-in URL");
+      window.location.assign(data.url);
+    } catch {
+      setError(t(language, "auth.signIn.startFailed"));
+      setBusy(false);
+    }
   };
   return (
     <div className={SECTION_PLAIN}>
-      <Button onClick={() => void startSocial()} className="w-full">
-        {t(language, "auth.signIn.method.social.button", { provider: displayName })}
-      </Button>
+      <SignInButton busy={busy} onClick={() => void start()} className="w-full">
+        {t(language, buttonKey, { provider: displayName })}
+      </SignInButton>
+      {error ? <p className="mt-2 text-xs text-destructive" role="alert">{error}</p> : null}
     </div>
   );
 }
 
-function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement {
+function EmailOtpSection({
+  returnTo,
+  oauthQuery,
+}: {
+  returnTo: string;
+  oauthQuery?: string;
+}): React.ReactElement {
   const { language } = usePreferences();
   const [step, setStep] = React.useState<"email" | "otp">("email");
   const [email, setEmail] = React.useState("");
   const [otp, setOtp] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const verifyInFlight = React.useRef(false);
 
   // Wraps an async submit handler so each call site gets identical
   // busy / error-reset bookkeeping. `busy` clears in `finally` even
@@ -287,6 +561,8 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
     setError(null);
     try {
       await run();
+    } catch {
+      setError(t(language, "auth.signIn.requestFailed"));
     } finally {
       setBusy(false);
     }
@@ -300,7 +576,11 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, type: "sign-in" }),
+        body: JSON.stringify({
+          email,
+          type: "sign-in",
+          ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
+        }),
       });
       if (!res.ok) {
         setError(t(language, "auth.signIn.method.email-otp.sendFailed"));
@@ -310,15 +590,19 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
     });
   };
 
-  const verifyOtp = (e: React.FormEvent): void => {
-    e.preventDefault();
-    if (!otp) return;
+  const verifyOtpCode = (code: string): void => {
+    if (code.length !== 6) return;
+    if (!claimInFlight(verifyInFlight)) return;
     void withBusy(async () => {
       const res = await fetch("/api/auth/sign-in/email-otp", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp }),
+        body: JSON.stringify({
+          email,
+          otp: code,
+          ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
+        }),
       });
       if (!res.ok) {
         setError(t(language, "auth.signIn.method.email-otp.verifyFailed"));
@@ -330,8 +614,16 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
       // Plain reload() would land back on /admin/sign-in — the
       // pathname is unchanged, the gate sees us on the sign-in page
       // and renders SignInView again instead of routing through.
-      window.location.assign(returnTo);
+      const data = (await res.json()) as { url?: string };
+      window.location.assign(data.url ?? returnTo);
+    }).finally(() => {
+      verifyInFlight.current = false;
     });
+  };
+
+  const verifyOtp = (e: React.FormEvent): void => {
+    e.preventDefault();
+    verifyOtpCode(otp);
   };
 
   return (
@@ -344,7 +636,7 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
           <label htmlFor="signin-email" className="sr-only">
             {t(language, "auth.signIn.method.email-otp.emailLabel")}
           </label>
-          <input
+          <Input
             id="signin-email"
             type="email"
             value={email}
@@ -352,11 +644,10 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
             placeholder={t(language, "auth.signIn.method.email-otp.emailPlaceholder")}
             required
             autoComplete="email"
-            className={INPUT_CLASS}
           />
-          <Button type="submit" className="w-full" disabled={busy || !email}>
+          <SignInButton type="submit" className="w-full" busy={busy} disabled={!email}>
             {t(language, "auth.signIn.method.email-otp.sendButton")}
-          </Button>
+          </SignInButton>
         </form>
       ) : (
         <form onSubmit={verifyOtp} className="space-y-2">
@@ -366,20 +657,19 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
           <label htmlFor="signin-otp" className="sr-only">
             {t(language, "auth.signIn.method.email-otp.otpLabel")}
           </label>
-          <input
+          <OneTimeCodeInput
             id="signin-otp"
-            type="text"
-            inputMode="numeric"
             autoComplete="one-time-code"
+            autoFocus
+            disabled={busy}
             value={otp}
-            onChange={(e) => setOtp(e.currentTarget.value)}
-            placeholder={t(language, "auth.signIn.method.email-otp.otpPlaceholder")}
+            onChange={setOtp}
+            onComplete={verifyOtpCode}
             required
-            className={INPUT_CLASS}
           />
-          <Button type="submit" className="w-full" disabled={busy || !otp}>
+          <SignInButton type="submit" className="w-full" busy={busy} disabled={otp.length !== 6}>
             {t(language, "auth.signIn.method.email-otp.verifyButton")}
-          </Button>
+          </SignInButton>
           <button
             type="button"
             onClick={() => setStep("email")}
@@ -390,13 +680,19 @@ function EmailOtpSection({ returnTo }: { returnTo: string }): React.ReactElement
         </form>
       )}
       {error ? (
-        <p className="mt-2 text-xs text-destructive">{error}</p>
+        <p className="mt-2 text-xs text-destructive" role="alert">{error}</p>
       ) : null}
     </div>
   );
 }
 
-function MagicLinkSection({ returnTo }: { returnTo: string }): React.ReactElement {
+function MagicLinkSection({
+  returnTo,
+  oauthQuery,
+}: {
+  returnTo: string;
+  oauthQuery?: string;
+}): React.ReactElement {
   const { language } = usePreferences();
   const [email, setEmail] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -413,6 +709,8 @@ function MagicLinkSection({ returnTo }: { returnTo: string }): React.ReactElemen
     setError(null);
     try {
       await run();
+    } catch {
+      setError(t(language, "auth.signIn.requestFailed"));
     } finally {
       setBusy(false);
     }
@@ -426,7 +724,11 @@ function MagicLinkSection({ returnTo }: { returnTo: string }): React.ReactElemen
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, callbackURL: returnTo }),
+        body: JSON.stringify({
+          email,
+          callbackURL: returnTo,
+          ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
+        }),
       });
       if (!res.ok) {
         setError(t(language, "auth.signIn.method.magic-link.sendFailed"));
@@ -465,7 +767,7 @@ function MagicLinkSection({ returnTo }: { returnTo: string }): React.ReactElemen
           <label htmlFor="signin-mlink-email" className="sr-only">
             {t(language, "auth.signIn.method.magic-link.emailLabel")}
           </label>
-          <input
+          <Input
             id="signin-mlink-email"
             type="email"
             value={email}
@@ -473,15 +775,14 @@ function MagicLinkSection({ returnTo }: { returnTo: string }): React.ReactElemen
             placeholder={t(language, "auth.signIn.method.magic-link.emailPlaceholder")}
             required
             autoComplete="email"
-            className={INPUT_CLASS}
           />
-          <Button type="submit" className="w-full" disabled={busy || !email}>
+          <SignInButton type="submit" className="w-full" busy={busy} disabled={!email}>
             {t(language, "auth.signIn.method.magic-link.sendButton")}
-          </Button>
+          </SignInButton>
         </form>
       )}
       {error ? (
-        <p className="mt-2 text-xs text-destructive">{error}</p>
+        <p className="mt-2 text-xs text-destructive" role="alert">{error}</p>
       ) : null}
     </div>
   );
@@ -494,13 +795,4 @@ function UnknownMethodSection({ kind }: { kind: string }): React.ReactElement {
       {t(language, "auth.signIn.unknownMethod", { kind })}
     </p>
   );
-}
-
-function signOut(): void {
-  void fetch("/api/auth/sign-out", {
-    method: "POST",
-    credentials: "include",
-  }).then(() => {
-    window.location.href = "/admin/sign-in";
-  });
 }

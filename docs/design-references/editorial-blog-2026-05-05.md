@@ -5,9 +5,9 @@ This document preserves the visual system from the retired
 it looked like a maintained template, but the design work is still useful as a
 reference for future themes.
 
-Use this as a design specimen, not as implementation guidance. Current starters
-should keep using the maintained theme stack in `starters/blog/src/theme.default`
-and `starters/blog/src/theme`.
+Use this as a design specimen, not as implementation guidance. Apply it through
+the version-matched `mantle:theme` workflow and the generated project's owned
+theme paths, such as `styles/globals.css`, `components/`, and `src/web/`.
 
 ## Design Thesis
 
@@ -209,10 +209,10 @@ will drift from the maintained SDK packages.
 Revive it as one of these:
 
 - A documented visual preset selectable during agent seeding.
-- A `theme.default` variant in the maintained blog starter.
+- A project-owned theme preset applied through `mantle:theme`.
 - A generated design prompt that tells the provisioning agent how to style a
   user's own brand.
 
-Do not bring it back under `starters/_archive`. The repo should not contain
-frozen runnable starters because agents treat runnable code as current product
-surface.
+Do not bring it back as a runnable starter in this SDK repository. Agents treat
+runnable code as current product surface, so the preserved design belongs only
+in this reference.

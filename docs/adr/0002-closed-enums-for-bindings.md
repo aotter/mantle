@@ -1,6 +1,7 @@
 # ADR-0002: Closed enums for identity/time bindings
 
-**Status:** Carried over from POC v0.0.x; refreshed for v0.1.0.
+**Status:** Carried over from POC v0.0.x; refreshed for v0.1.0;
+amended 2026-07-15 for verified credentials and delegated scopes.
 
 **Date**: 2026-04-30 (POC); refreshed 2026-05-03
 
@@ -95,26 +96,19 @@ The vocabulary is exactly:
 
 - `ctx.user` — caller is signed in as an end-user
 - `ctx.staff: [<role>, ...]` — caller is signed in as staff in one of these roles
-
-Anything beyond (`any:` disjunction; `owns:`, `withinMinutes:`,
-`contains:`, quota predicates) is DRAFT — see
-[ADR-0001](0001-four-atom-manifest-model.md) § Future grammar
-discipline.
+- `ctx.auth` — caller supplied an adapter-verified credential
+- `ctx.auth.scope: <scope>` — credential carries the exact scope
 
 ### Adding a new entry is an explicit grammar-revise round
 
-New `x-mantle-bind` values or `ctx.*` predicates do not get added
-ad-hoc. They go through the discipline gate documented in
-[ADR-0001](0001-four-atom-manifest-model.md) § Future grammar
-discipline:
+New `x-mantle-bind` values or `ctx.*` predicates do not get added ad hoc:
 
 1. A documented use case showing the existing closed set cannot
    express the requirement.
 2. A design pass on what the new value's runtime semantics are
    (where does it come from? when is it null? what happens at
    the storage layer?).
-3. A spec doc revision, including the v0.1-vs-DRAFT
-   classification.
+3. A spec doc revision.
 4. Code that updates the validator to accept the new value.
 
 This treats the closed set as load-bearing infrastructure, not
@@ -207,10 +201,8 @@ attributes.
 - New manifest using a value not in the enum: parse error,
   exact diagnostic shape with `candidates` populated. AI authors
   fix in one turn.
-- New use case wanting an entry not in the enum: open a
-  grammar-revise discussion per ADR-0001 § Future grammar
-  discipline. Document the use case in the spec PR; do not
-  fast-track.
+- New use case wanting an entry not in the enum: document the concrete
+  semantics and add validation, runtime behavior, and docs together.
 - Lookups (e.g. "stamp the team_id"): handler-side TS, not
   binding metadata. The Procedure handler has the lookup
   context anyway.
@@ -224,3 +216,38 @@ parser rejects unknown values with the structured diagnostic
 shape. Verify in code review that new manifest grammar
 additions do not quietly widen these enums; widening is a
 grammar-revise, not a code-cleanup.
+
+## Amendment — 2026-07-15: verified credentials and delegated scopes
+
+Epic #467 supplied the required grammar-revise evidence: the existing
+`ctx.user` and `ctx.staff` predicates cannot represent service API keys or
+delegated OAuth/personal-token scopes without coupling Core to a credential
+store. The closed predicate vocabulary is therefore extended by exactly two
+entries:
+
+```yaml
+requires:
+  auth:
+    all:
+      - ctx.auth
+      - { "ctx.auth.scope": "orders:read" }
+```
+
+- `ctx.auth` requires any credential that an adapter has already verified and
+  normalized into `HandlerContext.auth`.
+- `{ "ctx.auth.scope": "<opaque site-owned scope>" }` requires that one exact
+  scope. Multiple scopes are expressed by repeating the predicate under the
+  existing `all` group.
+
+The full v0.1 vocabulary is now `ctx.user`, `ctx.staff`, `ctx.auth`, and
+`ctx.auth.scope`. The latter two do not add a credential-kind expression,
+`any` group, policy array, scope catalog, or entitlement lookup. API keys may
+have no `ctx.user`; OAuth and personal tokens may supply one. Missing identity
+or credential yields `UNAUTHENTICATED` (`401`), while a verified credential
+missing a required role/scope yields `AUTH_DENIED` (`403`).
+
+Current membership, payment, ownership, or transaction state is intentionally
+not a static predicate. A target may name one ordinary Procedure through
+`requires.guard.procedure`; that Procedure performs the site-owned dynamic
+check after target input validation and before target execution. This keeps
+the predicate set closed and preserves the four-atom model.

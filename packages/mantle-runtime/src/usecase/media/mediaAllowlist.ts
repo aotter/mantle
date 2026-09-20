@@ -11,6 +11,7 @@ export const MEDIA_MIME_ALLOWLIST = [
   "image/png",
   "image/jpeg",
   "image/webp",
+  "image/avif",
   "image/gif",
 ] as const;
 
@@ -23,21 +24,8 @@ export function isAllowedMime(mime: string, allowSvg: boolean): boolean {
   return (MEDIA_MIME_ALLOWLIST as readonly string[]).includes(mime);
 }
 
-/** Default upload byte ceiling: 25 MB. Large enough for most cover
- *  images and short-form social posts; small enough to keep R2 free
- *  tier viable. Adapters may pass a different value via the use-case
- *  ctor when they have stricter / looser policies. */
-export const DEFAULT_MAX_BYTES = 25 * 1024 * 1024;
-
 /** Upload-capability TTL: 15 minutes. Bearer URL is short-lived. */
 export const UPLOAD_URL_TTL_SECONDS = 15 * 60;
-
-/** KV record TTL: 1 hour. Outlives the upload URL so slow commits
- *  don't lose the mapping; orphan sweep cleans uncommitted objects
- *  separately. */
-export const PENDING_UPLOAD_KV_TTL_SECONDS = 60 * 60;
-
-export const PENDING_UPLOAD_KV_PREFIX = "media:pending:";
 
 /** Map a mime type to a conventional file extension for object key
  *  construction. Extension is purely cosmetic in R2 — server-side
@@ -50,6 +38,8 @@ export function extensionForMime(mime: string): string {
       return "jpg";
     case "image/webp":
       return "webp";
+    case "image/avif":
+      return "avif";
     case "image/gif":
       return "gif";
     case MEDIA_SVG_MIME:

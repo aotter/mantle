@@ -1,12 +1,13 @@
+import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { Manifest } from "@aotter/mantle-spec";
-import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
-import { mountServerEndpoints } from "../src/mount/mountServerEndpoints.js";
+import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
+import { mountTestEndpoints } from "./mountTestEndpoints.js";
 import type { Auth } from "../src/auth/createAuth.js";
+import type { ConsumerCredentialResolver } from "../src/mount/resolveCaller.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import {
-  InMemoryKv,
   StubAssetServer,
   stubAuth,
 } from "./fakes/runtime-bindings.js";
@@ -35,7 +36,7 @@ function manifests(): Manifest[] {
           required: ["slug"],
         },
         localized: true,
-        lifecycle: "simple",
+        lifecycle: "publishing",
       },
     },
     {
@@ -43,7 +44,9 @@ function manifests(): Manifest[] {
       kind: "View",
       metadata: { name: "postsPublished" },
       spec: {
+        surface: "public",
         from: "posts",
+        cache: { sharedMaxAge: 300 },
         filter: { eq: { field: "status", value: "published" } },
       },
     },
@@ -52,6 +55,7 @@ function manifests(): Manifest[] {
       kind: "View",
       metadata: { name: "postsByLocale" },
       spec: {
+        surface: "public",
         from: "posts",
         params: {
           type: "object",
@@ -70,21 +74,92 @@ function manifests(): Manifest[] {
   ];
 }
 
-function harness(seed?: (db: InMemoryDatabase) => void) {
+function harness(
+  seed?: (db: InMemoryDatabase) => void,
+  credentialResolver?: ConsumerCredentialResolver,
+) {
   const db = new InMemoryDatabase();
   if (seed) seed(db);
-  const ref = createCmsRef({
-    manifests: manifests(),
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan(manifests()),
+    cacheScope: "test-site",
     siteDefaults: { locales: ["en", "zh-TW"] },
     bindings: {
       db,
-      kv: new InMemoryKv(),
-      assets: new StubAssetServer(),
+      adminAssets: new StubAssetServer(),
     },
     auth: stubAuth,
+    credentialResolver,
   });
   const app = new Hono();
-  mountServerEndpoints(app, ref);
+  mountTestEndpoints(app, ref);
+  return { app, db };
+}
+
+/** A staff session (owner) for exercising the `/admin/api/*` gate. */
+const staffAuth: Auth = {
+  ...stubAuth,
+  getSession: async () => ({
+    session: { id: "s", userId: "u", expiresAt: new Date(Date.now() + 60_000) },
+    user: { id: "u", email: "x@y.z", name: "Staff", role: "owner", githubLogin: null },
+  }),
+  getUserRole: async () => "owner",
+};
+
+/** Base fixture + two `surface: staff` Views — `ordersRecent` (titled)
+ *  and `ordersArchive` (untitled, #443 null-fallback coverage) — so the
+ *  same harness exercises both the public surface (`postsPublished`
+ *  stays public) and the staff surface (#433). `auth` defaults to a
+ *  staff session; override to `stubAuth` to test the unauthenticated
+ *  gate. */
+function staffHarness(
+  seed?: (db: InMemoryDatabase) => void,
+  auth: Auth = staffAuth,
+) {
+  const db = new InMemoryDatabase();
+  if (seed) seed(db);
+  const staffViewManifests: Manifest[] = [
+    ...manifests(),
+    {
+      apiVersion: "cms.mantle.aotter.net/v1",
+      kind: "View",
+      metadata: { name: "ordersRecent" },
+      spec: {
+        title: { en: "Recent Orders", "zh-TW": "最新訂單" },
+        from: "posts",
+        surface: "staff",
+        fields: ["id", "slug", "locale"],
+        uiSchema: {
+          list: {
+            columns: ["id", "slug", "locale"],
+            searchFields: ["slug"],
+            filterFields: ["locale"],
+          },
+        },
+      },
+    },
+    // #443 — untitled staff View, alongside the titled one above, so
+    // the views-manifest test can assert the untitled case falls back
+    // to `null` (not to omitting the key) without a second harness.
+    {
+      apiVersion: "cms.mantle.aotter.net/v1",
+      kind: "View",
+      metadata: { name: "ordersArchive" },
+      spec: {
+        from: "posts",
+        surface: "staff",
+      },
+    },
+  ];
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan(staffViewManifests),
+    cacheScope: "test-site",
+    siteDefaults: { locales: ["en", "zh-TW"] },
+    bindings: { db, adminAssets: new StubAssetServer() },
+    auth,
+  });
+  const app = new Hono();
+  mountTestEndpoints(app, ref);
   return { app, db };
 }
 
@@ -102,6 +177,33 @@ function row(id: string, data: Record<string, unknown>, status = "published") {
 }
 
 describe("GET /api/views/<name>", () => {
+  it("publishes a minimal public View catalog for WebMCP", async () => {
+    const res = await staffHarness().app.request("/api/views");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok: boolean;
+      data: Array<Record<string, unknown>>;
+    };
+
+    expect(body.ok).toBe(true);
+    expect(body.data.map((view) => view.name)).toEqual([
+      "query_view_postsbylocale",
+      "query_view_postspublished",
+    ]);
+    expect(body.data[0]).toMatchObject({
+      target: { kind: "view", name: "postsByLocale" },
+      description: "Query public View 'postsByLocale'.",
+      inputSchema: { type: "object" },
+    });
+    expect(Object.keys(body.data[0]!).sort()).toEqual([
+      "description",
+      "inputSchema",
+      "name",
+      "target",
+    ]);
+    expect(JSON.stringify(body.data)).not.toMatch(/orders|manifest|surface/u);
+  });
+
   it("returns matching rows for a static View", async () => {
     const h = harness((db) => {
       db.entries.set("p1", row("p1", { slug: "a", locale: "en" }));
@@ -118,6 +220,31 @@ describe("GET /api/views/<name>", () => {
     expect(body.data.rows).toHaveLength(2);
     expect(body.data.page).toBe(1);
     expect(body.data.hasMore).toBe(false);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
+    expect(res.headers.get("cache-tag")).toBe("mantle-public-test-site");
+  });
+
+  it("does not share a cached View response when credentials are present", async () => {
+    const h = harness((db) => db.entries.set("p1", row("p1", { slug: "a", locale: "en" })));
+    const res = await h.app.request("/api/views/postsPublished", {
+      headers: { cookie: "session=private" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBeNull();
+    expect(res.headers.get("cache-tag")).toBeNull();
+  });
+
+  it("disables shared View caching when the host owns a credential format", async () => {
+    const h = harness(
+      (db) => db.entries.set("p1", row("p1", { slug: "a", locale: "en" })),
+      () => ({ kind: "not-handled" }),
+    );
+    const res = await h.app.request("/api/views/postsPublished");
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBeNull();
+    expect(res.headers.get("cache-tag")).toBeNull();
   });
 
   it("filters by required param via { $param: locale }", async () => {
@@ -191,13 +318,12 @@ describe("GET /api/views/<name>", () => {
     // We validate the plumbing here by registering an auth-gated View
     // and a staff session; the view should resolve.
     const ownerAuth: Auth = {
-      handler: async () => new Response(null, { status: 404 }),
+      ...stubAuth,
       getSession: async () => ({
         session: { id: "s", userId: "u", expiresAt: new Date(Date.now() + 60_000) },
         user: { id: "u", email: "x@y.z", name: "Staff", role: "owner", githubLogin: null },
       }),
       getUserRole: async () => "owner",
-      methods: [],
     };
     const gatedManifests: Manifest[] = [
       ...manifests(),
@@ -206,6 +332,7 @@ describe("GET /api/views/<name>", () => {
         kind: "View",
         metadata: { name: "staffOnly" },
         spec: {
+          surface: "public",
           from: "posts",
           requires: { auth: { all: [{ "ctx.staff": ["owner"] }] } },
         },
@@ -213,14 +340,14 @@ describe("GET /api/views/<name>", () => {
     ];
     const db = new InMemoryDatabase();
     db.entries.set("p1", row("p1", { slug: "hi", locale: "en" }));
-    const ref = createCmsRef({
-      manifests: gatedManifests,
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(gatedManifests),
       siteDefaults: { locales: ["en"] },
-      bindings: { db, kv: new InMemoryKv(), assets: new StubAssetServer() },
+      bindings: { db, adminAssets: new StubAssetServer() },
       auth: ownerAuth,
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
     const res = await app.request("/api/views/staffOnly");
     expect(res.status).toBe(200);
   });
@@ -233,20 +360,21 @@ describe("GET /api/views/<name>", () => {
         kind: "View",
         metadata: { name: "staffOnly2" },
         spec: {
+          surface: "public",
           from: "posts",
           requires: { auth: { all: [{ "ctx.staff": ["owner"] }] } },
         },
       },
     ];
     const db = new InMemoryDatabase();
-    const ref = createCmsRef({
-      manifests: gatedManifests,
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(gatedManifests),
       siteDefaults: { locales: ["en"] },
-      bindings: { db, kv: new InMemoryKv(), assets: new StubAssetServer() },
+      bindings: { db, adminAssets: new StubAssetServer() },
       auth: stubAuth,
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
     const res = await app.request("/api/views/staffOnly2");
     expect(res.status).toBe(401);
     const body = await res.json() as { ok: boolean; diagnostic?: { code: string } };
@@ -256,13 +384,12 @@ describe("GET /api/views/<name>", () => {
 
   it("auth-gated View returns 403 AUTH_DENIED when session exists but role insufficient (#210 PR13)", async () => {
     const customerAuth: Auth = {
-      handler: async () => new Response(null, { status: 404 }),
+      ...stubAuth,
       getSession: async () => ({
         session: { id: "s", userId: "u", expiresAt: new Date(Date.now() + 60_000) },
         user: { id: "u", email: "x@y.z", name: "Customer", role: null, githubLogin: null },
       }),
       getUserRole: async () => null,
-      methods: [],
     };
     const gatedManifests: Manifest[] = [
       ...manifests(),
@@ -271,24 +398,81 @@ describe("GET /api/views/<name>", () => {
         kind: "View",
         metadata: { name: "staffOnly3" },
         spec: {
+          surface: "public",
           from: "posts",
           requires: { auth: { all: [{ "ctx.staff": ["owner"] }] } },
         },
       },
     ];
     const db = new InMemoryDatabase();
-    const ref = createCmsRef({
-      manifests: gatedManifests,
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(gatedManifests),
       siteDefaults: { locales: ["en"] },
-      bindings: { db, kv: new InMemoryKv(), assets: new StubAssetServer() },
+      bindings: { db, adminAssets: new StubAssetServer() },
       auth: customerAuth,
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
     const res = await app.request("/api/views/staffOnly3");
     expect(res.status).toBe(403);
     const body = await res.json() as { diagnostic?: { code: string } };
     expect(body.diagnostic?.code).toBe("AUTH_DENIED");
+  });
+
+  it("authenticates configured OAuth bearer tokens on Views and enforces scope predicates", async () => {
+    let scopes: readonly string[] = ["reports:read"];
+    let verifyCalls = 0;
+    const bearerAuth: Auth = {
+      ...stubAuth,
+      verifyOAuthAccessToken: async () => {
+        verifyCalls++;
+        return {
+          ok: true,
+          userId: "user-1",
+          clientId: "client-1",
+          credentialId: "jti-1",
+          scopes,
+        };
+      },
+    };
+    const gatedManifests: Manifest[] = [
+      ...manifests(),
+      {
+        apiVersion: "cms.mantle.aotter.net/v1",
+        kind: "View",
+        metadata: { name: "scopedReport" },
+        spec: {
+          surface: "public",
+          from: "posts",
+          requires: {
+            auth: {
+              all: ["ctx.auth", { "ctx.auth.scope": "reports:read" }],
+            },
+          },
+        },
+      },
+    ];
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(gatedManifests),
+      siteDefaults: { locales: ["en"] },
+      bindings: {
+        db: new InMemoryDatabase(),
+        adminAssets: new StubAssetServer(),
+      },
+      auth: bearerAuth,
+      jwtBearer: { audience: "https://api.example.test" },
+    });
+    const app = new Hono();
+    mountTestEndpoints(app, ref);
+    const request = () =>
+      app.request("/api/views/scopedReport", {
+        headers: { authorization: "Bearer header.payload.signature" },
+      });
+    expect((await request()).status).toBe(200);
+    expect(verifyCalls).toBe(1);
+    scopes = [];
+    expect((await request()).status).toBe(403);
+    expect(verifyCalls).toBe(2);
   });
 
   it("auth gate runs BEFORE param coercion — anonymous probe doesn't leak the param contract (#210 PR13 CX2)", async () => {
@@ -303,6 +487,7 @@ describe("GET /api/views/<name>", () => {
         kind: "View",
         metadata: { name: "staffOnlyWithParams" },
         spec: {
+          surface: "public",
           from: "posts",
           requires: { auth: { all: ["ctx.user"] } },
           params: {
@@ -315,14 +500,14 @@ describe("GET /api/views/<name>", () => {
       },
     ];
     const db = new InMemoryDatabase();
-    const ref = createCmsRef({
-      manifests: gatedManifests,
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(gatedManifests),
       siteDefaults: { locales: ["en"] },
-      bindings: { db, kv: new InMemoryKv(), assets: new StubAssetServer() },
+      bindings: { db, adminAssets: new StubAssetServer() },
       auth: stubAuth,
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
     // Anonymous probe with NO query params — would have 400'd on
     // missing `secretKey` before the fix.
     const res = await app.request("/api/views/staffOnlyWithParams");
@@ -331,6 +516,22 @@ describe("GET /api/views/<name>", () => {
     expect(body.diagnostic?.code).toBe("UNAUTHENTICATED");
     // The diagnostic must not mention the param name.
     expect(body.diagnostic?.message ?? "").not.toContain("secretKey");
+  });
+
+  it("STAFF SURFACE (#433): a surface:staff View is unmounted at /api/views/<name> (404)", async () => {
+    const h = staffHarness();
+    const res = await h.app.request("/api/views/ordersRecent");
+    expect(res.status).toBe(404);
+  });
+
+  it("STAFF SURFACE (#433): a public View still serves at /api/views/<name>", async () => {
+    const h = staffHarness((db) => {
+      db.entries.set("p1", row("p1", { slug: "a", locale: "en" }));
+    });
+    const res = await h.app.request("/api/views/postsPublished");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(true);
   });
 
   it("auth predicates evaluated BEFORE param coercion — wrong-role user doesn't leak param contract (codex follow-up)", async () => {
@@ -355,6 +556,7 @@ describe("GET /api/views/<name>", () => {
         kind: "View",
         metadata: { name: "staffParamsLeak" },
         spec: {
+          surface: "public",
           from: "posts",
           requires: { auth: { all: [{ "ctx.staff": ["owner"] }] } },
           params: {
@@ -367,18 +569,140 @@ describe("GET /api/views/<name>", () => {
       },
     ];
     const db = new InMemoryDatabase();
-    const ref = createCmsRef({
-      manifests: gatedManifests,
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(gatedManifests),
       siteDefaults: { locales: ["en"] },
-      bindings: { db, kv: new InMemoryKv(), assets: new StubAssetServer() },
+      bindings: { db, adminAssets: new StubAssetServer() },
       auth: customerAuth,
     });
     const app = new Hono();
-    mountServerEndpoints(app, ref);
+    mountTestEndpoints(app, ref);
     const res = await app.request("/api/views/staffParamsLeak");
     expect(res.status).toBe(403);
     const body = await res.json() as { diagnostic?: { code: string; message?: string } };
     expect(body.diagnostic?.code).toBe("AUTH_DENIED");
     expect(body.diagnostic?.message ?? "").not.toContain("secretKey");
+  });
+});
+
+describe("GET /admin/api/views/<name> — staff surface (#433)", () => {
+  it("serves a staff View at the admin path with a staff session (200)", async () => {
+    const h = staffHarness((db) => {
+      db.entries.set("p1", row("p1", { slug: "a", locale: "en" }));
+      db.entries.set("p2", row("p2", { slug: "b", locale: "zh-TW" }));
+    });
+    const res = await h.app.request("/admin/api/views/ordersRecent");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok: boolean;
+      data: { rows: unknown[]; page: number; show: number; hasMore: boolean };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.data.rows).toHaveLength(2);
+  });
+
+  it("returns 401 at the admin path without a session", async () => {
+    const h = staffHarness(undefined, stubAuth);
+    const res = await h.app.request("/admin/api/views/ordersRecent");
+    expect(res.status).toBe(401);
+  });
+
+  it("does NOT mount the staff View at the public path (404)", async () => {
+    const h = staffHarness();
+    const res = await h.app.request("/api/views/ordersRecent");
+    expect(res.status).toBe(404);
+  });
+
+  it("applies declared Admin search and exact filters before pagination", async () => {
+    const h = staffHarness((db) => {
+      db.entries.set("p1", row("p1", { slug: "green-tea", locale: "en" }));
+      db.entries.set("p2", row("p2", { slug: "green-tea", locale: "zh-TW" }));
+      db.entries.set("p3", row("p3", { slug: "cake", locale: "en" }));
+    });
+    const res = await h.app.request(
+      "/admin/api/views/ordersRecent?search=tea&filter.locale=en&show=1",
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { data: { rows: Array<{ id: string }> } };
+    expect(body.data.rows.map((item) => item.id)).toEqual(["p1"]);
+  });
+
+  it("exports every row matching the active View search and filters", async () => {
+    const h = staffHarness((db) => {
+      db.entries.set("p1", row("p1", { slug: "green-tea", locale: "en" }));
+      db.entries.set("p2", row("p2", { slug: "green-tea", locale: "zh-TW" }));
+      db.entries.set("p3", row("p3", { slug: "cake", locale: "en" }));
+    });
+    const res = await h.app.request(
+      "/admin/api/views/ordersRecent/export?search=tea&filter.locale=en",
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-disposition")).toBe(
+      'attachment; filename="ordersRecent.csv"',
+    );
+    const text = await res.text();
+    expect(text.trim().split("\r\n")).toEqual([
+      "id,slug,locale",
+      "p1,green-tea,en",
+    ]);
+  });
+
+  it("streams View export pages instead of collecting the whole report", async () => {
+    const h = staffHarness((db) => {
+      for (let i = 0; i < 55; i++) {
+        db.entries.set(`p${i}`, row(`p${i}`, { slug: `item-${i}`, locale: "en" }));
+      }
+    });
+    const viewQueries = () => h.db.executions.filter(({ sql }) =>
+      sql.startsWith("SELECT") && sql.includes(`FROM "posts"`)
+    ).length;
+    const before = viewQueries();
+    const res = await h.app.request("/admin/api/views/ordersRecent/export");
+    expect(viewQueries() - before).toBe(1);
+    expect((await res.text()).trim().split("\r\n")).toHaveLength(56);
+    expect(viewQueries() - before).toBe(2);
+  });
+});
+
+describe("GET /admin/api/views-manifest — Admin View inspection", () => {
+  it("lists public services and staff reports with their surfaces", async () => {
+    const h = staffHarness();
+    const res = await h.app.request("/admin/api/views-manifest");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { views: Array<{ name: string; surface: string }> };
+    expect(body.views.map(({ name, surface }) => ({ name, surface })).sort((a, b) => a.name.localeCompare(b.name))).toEqual([
+      { name: "ordersArchive", surface: "staff" },
+      { name: "ordersRecent", surface: "staff" },
+      { name: "postsByLocale", surface: "public" },
+      { name: "postsPublished", surface: "public" },
+    ]);
+    expect((await h.app.request("/admin/api/views/postsPublished")).status).toBe(200);
+  });
+
+  it("surfaces View.spec.title (#443) as raw LocalizedText, unresolved", async () => {
+    const h = staffHarness();
+    const res = await h.app.request("/admin/api/views-manifest");
+    const body = (await res.json()) as { views: Array<{ name: string; title: unknown }> };
+    const ordersRecent = body.views.find((v) => v.name === "ordersRecent");
+    expect(ordersRecent?.title).toEqual({ en: "Recent Orders", "zh-TW": "最新訂單" });
+  });
+
+  it("surfaces the validated Admin list query declaration", async () => {
+    const h = staffHarness();
+    const res = await h.app.request("/admin/api/views-manifest");
+    const body = await res.json() as { views: Array<{ name: string; list: unknown }> };
+    expect(body.views.find((view) => view.name === "ordersRecent")?.list).toEqual({
+      columns: ["id", "slug", "locale"],
+      searchFields: ["slug"],
+      filterFields: ["locale"],
+    });
+  });
+
+  it("falls back to null when a View has no title (#443)", async () => {
+    const h = staffHarness();
+    const res = await h.app.request("/admin/api/views-manifest");
+    const body = (await res.json()) as { views: Array<{ name: string; title: unknown }> };
+    const ordersArchive = body.views.find((v) => v.name === "ordersArchive");
+    expect(ordersArchive?.title).toBeNull();
   });
 });

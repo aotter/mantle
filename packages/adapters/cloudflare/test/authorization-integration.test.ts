@@ -1,0 +1,283 @@
+import { compileTestPlan } from "./compileTestPlan.js";
+import { Hono } from "hono";
+import { readFileSync } from "node:fs";
+import { describe, expect, it, vi } from "vitest";
+import {
+  DiagnosticError,
+  runtimeDiagnostic,
+  type Manifest,
+} from "@aotter/mantle-spec";
+import type { HandlerFn } from "@aotter/mantle-runtime";
+import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
+import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
+import { createMcpApiHandler } from "../src/mount/mountMcp.js";
+import { mountTestEndpoints } from "./mountTestEndpoints.js";
+import {
+  StubAssetServer,
+  stubAuth,
+} from "./fakes/runtime-bindings.js";
+
+const apiVersion = "cms.mantle.aotter.net/v1" as const;
+const MCP_RESOURCE = "https://example.test/mcp";
+const handbookRoot = new URL("../../../../docs/handbook/", import.meta.url);
+const examplesRoot = new URL("../../../../docs/examples/", import.meta.url);
+const guide = [
+  readFileSync(new URL("cf-primitives-guarded-api.md", examplesRoot), "utf8"),
+  readFileSync(new URL("reference/authorization.md", handbookRoot), "utf8"),
+  readFileSync(new URL("cloudflare/authentication.md", handbookRoot), "utf8"),
+].join("\n");
+
+function manifests(): Manifest[] {
+  return [
+    {
+      apiVersion,
+      kind: "Procedure",
+      metadata: { name: "require-active-membership" },
+      spec: {
+        input: {
+          type: "object",
+          properties: { accountId: { type: "string" } },
+          required: ["accountId"],
+        },
+        output: { type: "object" },
+        handler: { kind: "ref", ref: "requireActiveMembership" },
+      },
+    },
+    {
+      apiVersion,
+      kind: "Procedure",
+      metadata: { name: "read-account" },
+      spec: {
+        input: {
+          type: "object",
+          properties: { accountId: { type: "string" } },
+          required: ["accountId"],
+        },
+        output: {
+          type: "object",
+          properties: { accountId: { type: "string" } },
+          required: ["accountId"],
+        },
+        requires: {
+          auth: {
+            all: ["ctx.user", "ctx.auth", { "ctx.auth.scope": "accounts:read" }],
+          },
+          guard: { procedure: "require-active-membership" },
+        },
+        handler: { kind: "ref", ref: "readAccount" },
+      },
+    },
+    {
+      apiVersion,
+      kind: "Trigger",
+      metadata: { name: "read-account-http" },
+      spec: {
+        source: { kind: "http", method: "POST", path: "/api/accounts/read" },
+        target: { procedure: "read-account" },
+      },
+    },
+    {
+      apiVersion,
+      kind: "Trigger",
+      metadata: { name: "read-account-staff-mcp" },
+      spec: {
+        source: { kind: "mcp", surface: "staff" },
+        target: { procedure: "read-account" },
+      },
+    },
+    {
+      apiVersion,
+      kind: "Trigger",
+      metadata: { name: "read-account-mcp" },
+      spec: {
+        source: { kind: "mcp", surface: "public" },
+        target: { procedure: "read-account" },
+      },
+    },
+  ];
+}
+
+function mcpCall(): Request {
+  return new Request("https://example.test/mcp", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "mcp-protocol-version": "2025-11-25",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: "read_account",
+        arguments: { accountId: "acct-1" },
+      },
+    }),
+  });
+}
+
+describe("authorization integration: one target across REST and MCP", () => {
+  it("keeps the shipped four-scenario guide aligned with the public seams", () => {
+    for (const text of [
+      "Rung 1, anonymous:",
+      "Rung 2, API key with scope:",
+      "Rung 3, API key plus paid state:",
+      "Rung 4, personal token over REST:",
+      "ConsumerCredentialResolver",
+      "credentialResolver: siteCredentialResolver(env.DB)",
+      "createMantleWorker<Env>({",
+      "jwtBearer: {",
+      "getProviderAccessToken(request, \"mantle-platform\")",
+      "verifyOAuthAccessToken(request",
+      "x-mantle-guard-procedure",
+      "ENTITLEMENT_REQUIRED",
+    ]) {
+      expect(guide, `missing guide contract: ${text}`).toContain(text);
+    }
+  });
+
+  it("re-runs the same mutable site guard after PAT/OAuth caller normalization", async () => {
+    let entitled = true;
+    let targetCalls = 0;
+    let guardCalls = 0;
+    let mcpScopes = ["mcp", "accounts:read"];
+    const mcpWaitUntil = vi.fn<(promise: Promise<unknown>) => void>();
+    const workerEnv = { ENTITLEMENT_SOURCE: "worker-env" };
+    const readAccount: HandlerFn<
+      { accountId: string },
+      { accountId: string },
+      typeof workerEnv
+    > = (input, ctx) => {
+      targetCalls++;
+      expect(ctx.env.ENTITLEMENT_SOURCE).toBe("worker-env");
+      ctx.waitUntil?.(Promise.resolve());
+      return input;
+    };
+    const ref = createMantleRuntimeRef({
+      plan: compileTestPlan(manifests()),
+      handlers: {
+        requireActiveMembership: (_input, ctx) => {
+          guardCalls++;
+          expect(ctx.user?.id).toBe("user-1");
+          expect(ctx.env.ENTITLEMENT_SOURCE).toBe("worker-env");
+          if (!entitled) {
+            throw new DiagnosticError(
+              runtimeDiagnostic({
+                code: "ENTITLEMENT_REQUIRED",
+                severity: "error",
+                path: "site:memberships/user-1",
+                message: "Active membership required.",
+              }),
+            );
+          }
+          return {};
+        },
+        readAccount,
+      },
+      bindings: {
+        db: new InMemoryDatabase(),
+        adminAssets: new StubAssetServer(),
+      },
+      auth: {
+        ...stubAuth,
+        getUserRole: async () => "owner",
+        verifyOAuthAccessToken: async () => ({
+          ok: true,
+          userId: "user-1",
+          clientId: "personal-client",
+          credentialId: "token-1",
+          scopes: mcpScopes,
+        }),
+      },
+      credentialResolver: (request) => {
+        const header = request.headers.get("authorization");
+        if (header === null) return { kind: "not-handled" };
+        if (header !== "Bearer site_pat_1") return { kind: "invalid" };
+        return {
+          kind: "verified",
+          credential: {
+            credential: "personal-token",
+            credentialId: "pat-row-1",
+            userId: "user-1",
+            scopes: ["accounts:read"],
+          },
+        };
+      },
+    });
+    const app = new Hono<{ Bindings: typeof workerEnv }>();
+    mountTestEndpoints(app, ref);
+    const publicMcp = createMcpApiHandler<typeof workerEnv>({
+      ref,
+      surface: "public",
+      resource: MCP_RESOURCE,
+    });
+    const staffMcp = createMcpApiHandler<typeof workerEnv>({
+      ref,
+      surface: "staff",
+      resource: MCP_RESOURCE,
+    });
+    const mcpContext = {
+      props: {
+        userId: "user-1",
+        clientId: "personal-client",
+        scopes: ["mcp", "accounts:read"],
+      },
+      waitUntil: mcpWaitUntil,
+    } as unknown as ExecutionContext;
+
+    const restGranted = await app.request(
+      "/api/accounts/read",
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer site_pat_1",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ accountId: "acct-1" }),
+      },
+      workerEnv,
+    );
+    expect(restGranted.status).toBe(200);
+    for (const mcp of [publicMcp, staffMcp]) {
+      const mcpGranted = await mcp.fetch!(mcpCall(), workerEnv, mcpContext);
+      const mcpGrantedBody = (await mcpGranted.json()) as {
+        result?: { content?: Array<{ text?: string }> };
+      };
+      expect(JSON.parse(mcpGrantedBody.result?.content?.[0]?.text ?? "{}")).toEqual({
+        accountId: "acct-1",
+      });
+    }
+    expect(mcpWaitUntil).toHaveBeenCalledTimes(2);
+    expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 3, targetCalls: 3 });
+
+    mcpScopes = ["mcp"];
+    const downscoped = await publicMcp.fetch!(mcpCall(), workerEnv, mcpContext);
+    const downscopedBody = (await downscoped.json()) as {
+      error?: { data?: { code?: string } };
+    };
+    expect(downscopedBody.error?.data?.code).toBe("AUTH_DENIED");
+    expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 3, targetCalls: 3 });
+    mcpScopes = ["mcp", "accounts:read"];
+
+    entitled = false;
+    const restDenied = await app.request(
+      "/api/accounts/read",
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer site_pat_1",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ accountId: "acct-1" }),
+      },
+      workerEnv,
+    );
+    expect(restDenied.status).toBe(402);
+    const mcpDenied = await publicMcp.fetch!(mcpCall(), workerEnv, mcpContext);
+    const mcpDeniedBody = (await mcpDenied.json()) as {
+      error?: { data?: { code?: string } };
+    };
+    expect(mcpDeniedBody.error?.data?.code).toBe("ENTITLEMENT_REQUIRED");
+    expect({ guardCalls, targetCalls }).toEqual({ guardCalls: 5, targetCalls: 3 });
+  });
+});

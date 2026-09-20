@@ -1,0 +1,15 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "mantle-performance-harness",
+  "main": "./worker.ts",
+  "compatibility_date": "2026-07-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "cache": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mantle-performance",
+      "database_id": "00000000-0000-0000-0000-000000000534"
+    }
+  ]
+}

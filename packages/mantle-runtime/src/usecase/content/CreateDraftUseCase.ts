@@ -1,13 +1,14 @@
 import {
   DiagnosticError,
+  EntryDataValidator,
+  resolveLifecycle,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
-import type { HandlerContext } from "../../domain/model/HandlerContext.js";
 import type { EntryRow } from "../../domain/model/EntryRow.js";
 import type { Clock } from "../../domain/port/Clock.js";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
 import type { IdGenerator } from "../../domain/port/IdGenerator.js";
-import type { SiteConfigRepository } from "../../domain/port/SiteConfigRepository.js";
+import type { LocalePolicyReader } from "../../domain/port/SiteConfigRepository.js";
 import { projectAndStamp } from "../../domain/service/BuiltinProjector.js";
 import type { CreateDraftRequest } from "../dto/content/index.js";
 import {
@@ -15,11 +16,11 @@ import {
   withConflictDiagnostic,
 } from "./diagnostics.js";
 import { assertEntryWritable } from "../../domain/service/io/EntryWriteGuard.js";
+import { authoringContext } from "./AuthoringContext.js";
 
 /**
- * `CreateDraftUseCase` — create a new draft entry. Both `simple` and
- * `editorial` lifecycles start in `'draft'`; the difference shows up
- * at publish time.
+ * `CreateDraftUseCase` — create a draft for content lifecycles, or a
+ * live row for `lifecycle: operational` records.
  */
 export class CreateDraftUseCase {
   constructor(
@@ -27,7 +28,8 @@ export class CreateDraftUseCase {
     private readonly schemas: ReadonlyMap<string, SchemaManifest>,
     private readonly clock: Clock,
     private readonly idgen: IdGenerator,
-    private readonly siteConfig?: SiteConfigRepository,
+    private readonly siteConfig?: LocalePolicyReader,
+    private readonly validator = new EntryDataValidator(),
   ) {}
 
   async execute(request: CreateDraftRequest): Promise<EntryRow> {
@@ -41,19 +43,25 @@ export class CreateDraftUseCase {
     const id = this.idgen.next();
     const now = this.clock.now();
     const ctx = authoringContext(request.ctx, request.authorId);
+    const lifecycle = resolveLifecycle(schema);
     const data = projectAndStamp({ schema, input: request.data, ctx, clockNow: now });
     await assertEntryWritable({
       opPath,
       entries: this.entries,
       schema,
       data,
+      validator: this.validator,
       siteConfig: this.siteConfig,
+      // Real drafts save incomplete; operational records are live immediately.
+      partial: lifecycle !== "operational",
     });
     return withConflictDiagnostic(opPath, () =>
       this.entries.create({
         id,
         collection: request.collection,
-        status: "draft",
+        // Operational records have no publish step —
+        // they are live the moment they exist.
+        status: lifecycle === "operational" ? "published" : "draft",
         data,
         authorId: request.authorId,
         now,
@@ -62,13 +70,4 @@ export class CreateDraftUseCase {
       }),
     );
   }
-}
-
-function authoringContext(ctx: HandlerContext | undefined, authorId: string | null): HandlerContext {
-  if (ctx) return ctx;
-  return {
-    user: authorId ? { id: authorId } : null,
-    staff: null,
-    env: {},
-  };
 }

@@ -2,11 +2,8 @@
  *  `@aotter/mantle-spec`. */
 export * from "./EntryRow.js";
 export * from "./HandlerContext.js";
-export type { SeoMeta } from "./SeoMeta.js";
-export {
-  TemplateRegistry,
-  type EntryContext,
-  type ListContext,
-  type EntryTemplate,
-  type ListTemplate,
-} from "./TemplateRegistry.js";
+export type { PreparedMantleRevision } from "./PreparedMantleRevision.js";
+export type {
+  PendingUploadRecord,
+  PendingUploadVariant,
+} from "./PendingUploadRecord.js";

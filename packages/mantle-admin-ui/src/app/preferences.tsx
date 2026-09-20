@@ -28,18 +28,17 @@ export const ADMIN_LANGUAGES = [
 export type AdminLanguage = (typeof ADMIN_LANGUAGES)[number]["value"];
 export type AdminDirection = "ltr" | "rtl";
 export type AdminTheme = "light" | "dark" | "system";
+export type ResolvedTheme = Exclude<AdminTheme, "system">;
 
 const LANGUAGE_STORAGE_KEY = "cms.preference.language";
-const DIRECTION_STORAGE_KEY = "cms.preference.direction";
 export const THEME_STORAGE_KEY = "cms.preference.theme";
-const LEGACY_THEME_STORAGE_KEY = "cms.theme";
 
 interface PreferencesContextValue {
   language: AdminLanguage;
   direction: AdminDirection;
   theme: AdminTheme;
+  resolvedTheme: ResolvedTheme;
   setLanguage: (language: AdminLanguage) => void;
-  setDirection: (direction: AdminDirection) => void;
   setTheme: (theme: AdminTheme) => void;
 }
 
@@ -51,27 +50,29 @@ export function PreferencesProvider({
   children: React.ReactNode;
 }): React.ReactElement {
   const [language, setLanguageState] = React.useState<AdminLanguage>(readInitialLanguage);
-  const [direction, setDirectionState] =
-    React.useState<AdminDirection>(() => readInitialDirection(readInitialLanguage()));
+  const direction = directionForLanguage(language);
   const [theme, setThemeState] = React.useState<AdminTheme>(readInitialTheme);
+  const [resolvedTheme, setResolvedTheme] = React.useState<ResolvedTheme>(() =>
+    resolveTheme(theme, systemPrefersDark()),
+  );
 
   const setLanguage = React.useCallback((next: AdminLanguage) => {
-    const nextDirection = directionForLanguage(next);
     writeStorage(LANGUAGE_STORAGE_KEY, next);
-    writeStorage(DIRECTION_STORAGE_KEY, nextDirection);
     setLanguageState(next);
-    setDirectionState(nextDirection);
-  }, []);
-
-  const setDirection = React.useCallback((next: AdminDirection) => {
-    writeStorage(DIRECTION_STORAGE_KEY, next);
-    setDirectionState(next);
   }, []);
 
   const setTheme = React.useCallback((next: AdminTheme) => {
     writeStorage(THEME_STORAGE_KEY, next);
-    writeStorage(LEGACY_THEME_STORAGE_KEY, next);
     setThemeState(next);
+  }, []);
+
+  // Embedded hosts may supply a theme without changing the user's saved Admin preference.
+  React.useEffect(() => {
+    const syncHostTheme = () => setThemeState(readInitialTheme());
+    const observer = new MutationObserver(syncHostTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-mantle-theme"] });
+    syncHostTheme();
+    return () => observer.disconnect();
   }, []);
 
   React.useEffect(() => {
@@ -82,13 +83,9 @@ export function PreferencesProvider({
 
   React.useEffect(() => {
     const applyTheme = () => {
-      const systemDark =
-        typeof matchMedia !== "undefined" &&
-        matchMedia("(prefers-color-scheme: dark)").matches;
-      document.documentElement.classList.toggle(
-        "dark",
-        theme === "dark" || (theme === "system" && systemDark),
-      );
+      const resolved = resolveTheme(theme, systemPrefersDark());
+      setResolvedTheme(resolved);
+      document.documentElement.classList.toggle("dark", resolved === "dark");
     };
     applyTheme();
     if (theme !== "system" || typeof matchMedia === "undefined") return;
@@ -102,11 +99,11 @@ export function PreferencesProvider({
       language,
       direction,
       theme,
+      resolvedTheme,
       setLanguage,
-      setDirection,
       setTheme,
     }),
-    [language, direction, theme, setLanguage, setDirection, setTheme],
+    [language, direction, theme, resolvedTheme, setLanguage, setTheme],
   );
 
   return (
@@ -133,16 +130,21 @@ function readInitialLanguage(): AdminLanguage {
   return normalizeLanguage(navigator.language);
 }
 
-function readInitialDirection(language: AdminLanguage): AdminDirection {
-  const stored = readStorage(DIRECTION_STORAGE_KEY);
-  if (stored === "rtl" || stored === "ltr") return stored;
-  return directionForLanguage(language);
-}
-
 function readInitialTheme(): AdminTheme {
-  const stored = readStorage(THEME_STORAGE_KEY) ?? readStorage(LEGACY_THEME_STORAGE_KEY);
+  const hostTheme = typeof document === "undefined" ? undefined : document.documentElement.getAttribute("data-mantle-theme");
+  if (hostTheme === "light" || hostTheme === "dark") return hostTheme;
+  const stored = readStorage(THEME_STORAGE_KEY);
   if (stored === "light" || stored === "dark" || stored === "system") return stored;
   return "system";
+}
+
+function systemPrefersDark(): boolean {
+  return typeof matchMedia !== "undefined" &&
+    matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+export function resolveTheme(theme: AdminTheme, systemDark: boolean): ResolvedTheme {
+  return theme === "system" ? (systemDark ? "dark" : "light") : theme;
 }
 
 function readStorage(key: string): string | null {

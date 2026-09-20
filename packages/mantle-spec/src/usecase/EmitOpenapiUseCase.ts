@@ -1,5 +1,7 @@
-import { partitionManifests } from "../domain/service/ManifestParser.js";
+import { resolveLocalizedText } from "../domain/model/ManifestGrammar.js";
 import type {
+  AuthorizationRequirements,
+  JsonSchema,
   ProcedureManifest,
   TriggerManifest,
   ViewManifest,
@@ -18,7 +20,9 @@ const DEFAULT_SESSION_COOKIE_NAME = "__Secure-better-auth.session_token";
 
 export class EmitOpenapiUseCase {
   execute(request: EmitOpenapiRequest): EmitOpenapiResponse {
-    const { views, procedures, triggers } = partitionManifests(request.manifests);
+    const views = request.linked.views.map((entry) => entry.manifest);
+    const procedures = request.linked.procedures.map((entry) => entry.manifest);
+    const triggers = request.linked.triggers.map((entry) => entry.manifest);
     const procByName = new Map(procedures.map((p) => [p.metadata.name, p]));
     const paths: Record<string, Record<string, unknown>> = {};
 
@@ -29,13 +33,13 @@ export class EmitOpenapiUseCase {
       if (!proc) continue;
       const path = src.path;
       paths[path] ??= {};
-      paths[path]![src.method.toLowerCase()] = httpOperation(t, proc);
+      paths[path]![src.method.toLowerCase()] = httpOperation(t, proc, request);
     }
 
     for (const v of views) {
       const path = `/api/views/${v.metadata.name}`;
       paths[path] ??= {};
-      paths[path]!["get"] = viewOperation(v);
+      paths[path]!["get"] = viewOperation(v, request);
     }
 
     return {
@@ -55,23 +59,7 @@ export class EmitOpenapiUseCase {
               },
             },
           },
-          securitySchemes: {
-            // Bearer for Procedure invocation paths (HTTP Triggers
-            // sit on the MCP-adjacent surface that the OAuth provider
-            // validates bearer tokens for).
-            bearer: { type: "http", scheme: "bearer" },
-            // Cookie for View REST paths — the Cloudflare adapter's
-            // `/api/views/*` resolves identity via `auth.getSession`
-            // (Better Auth cookie). Default to the secure production
-            // cookie name (Better Auth adds `__Secure-` prefix when
-            // baseURL is HTTPS); callers on a non-secure deployment
-            // pass `sessionCookieName: "better-auth.session_token"`.
-            cookieAuth: {
-              type: "apiKey",
-              in: "cookie",
-              name: request.sessionCookieName ?? DEFAULT_SESSION_COOKIE_NAME,
-            },
-          },
+          securitySchemes: securitySchemes(request),
         },
       },
     };
@@ -82,14 +70,36 @@ export class EmitOpenapiUseCase {
   }
 }
 
-function httpOperation(t: TriggerManifest, p: ProcedureManifest): Record<string, unknown> {
-  const method = t.spec.source.kind === "http" ? t.spec.source.method : "POST";
+function httpOperation(
+  t: TriggerManifest,
+  p: ProcedureManifest,
+  request: EmitOpenapiRequest,
+): Record<string, unknown> {
+  const source = t.spec.source;
+  const method = source.kind === "http" ? source.method : "POST";
+  const pathParams = source.kind === "http" ? pathParameterNames(source.path) : [];
   const op: Record<string, unknown> = {
     operationId: `${method.toLowerCase()}_${p.metadata.name.replace(/[^a-z0-9]+/gi, "_")}`,
     summary: `Trigger ${t.metadata.name}`,
+    ...(pathParams.length > 0
+      ? {
+          parameters: pathParams.map((name) => ({
+            name,
+            in: "path",
+            required: true,
+            schema: collapseSchemaDescriptions(
+              p.spec.input.properties?.[name] ?? { type: "string" },
+            ),
+          })),
+        }
+      : {}),
     requestBody: {
       required: true,
-      content: { "application/json": { schema: p.spec.input } },
+      content: {
+        "application/json": {
+          schema: requestBodySchema(p.spec.input, pathParams),
+        },
+      },
     },
     responses: {
       "200": {
@@ -99,7 +109,7 @@ function httpOperation(t: TriggerManifest, p: ProcedureManifest): Record<string,
             schema: {
               type: "object",
               required: ["ok", "data"],
-              properties: { ok: { const: true }, data: p.spec.output },
+              properties: { ok: { const: true }, data: collapseSchemaDescriptions(p.spec.output) },
             },
           },
         },
@@ -110,13 +120,35 @@ function httpOperation(t: TriggerManifest, p: ProcedureManifest): Record<string,
       },
     },
   };
-  if (p.spec.requires?.auth?.all && p.spec.requires.auth.all.length > 0) {
-    op["security"] = [{ bearer: [] }];
-  }
+  reflectAuthorization(op, op["responses"] as Record<string, unknown>, p.spec.requires, request, `Procedure '${p.metadata.name}'`);
   return op;
 }
 
-function viewOperation(v: ViewManifest): Record<string, unknown> {
+function pathParameterNames(path: string): string[] {
+  return [...path.matchAll(/\{([^{}]+)\}/g)].map((match) => match[1]!);
+}
+
+/** Project path-bound fields out of the HTTP body without changing the
+ * Procedure schema used by runtime validation. */
+function requestBodySchema(input: JsonSchema, pathParams: readonly string[]): JsonSchema {
+  if (pathParams.length === 0) return collapseSchemaDescriptions(input);
+  const pathNames = new Set(pathParams);
+  return collapseSchemaDescriptions({
+    ...input,
+    ...(input.properties
+      ? {
+          properties: Object.fromEntries(
+            Object.entries(input.properties).filter(([name]) => !pathNames.has(name)),
+          ),
+        }
+      : {}),
+    ...(input.required
+      ? { required: input.required.filter((name) => !pathNames.has(name)) }
+      : {}),
+  });
+}
+
+function viewOperation(v: ViewManifest, request: EmitOpenapiRequest): Record<string, unknown> {
   const params: Array<Record<string, unknown>> = [
     { name: "page", in: "query", schema: { type: "integer", minimum: 1 }, required: false },
     { name: "show", in: "query", schema: { type: "integer", minimum: 1 }, required: false },
@@ -124,7 +156,7 @@ function viewOperation(v: ViewManifest): Record<string, unknown> {
   if (v.spec.params?.properties) {
     const required = new Set(v.spec.params.required ?? []);
     for (const [name, schema] of Object.entries(v.spec.params.properties)) {
-      params.push({ name, in: "query", required: required.has(name), schema });
+      params.push({ name, in: "query", required: required.has(name), schema: collapseSchemaDescriptions(schema) });
     }
   }
   const responses: Record<string, unknown> = {
@@ -163,26 +195,143 @@ function viewOperation(v: ViewManifest): Record<string, unknown> {
   const op: Record<string, unknown> = {
     operationId: `view_${v.metadata.name.replace(/[^a-z0-9]+/gi, "_")}`,
     summary: `View ${v.metadata.name}`,
+    ...(v.spec.cache ? { "x-mantle-cache": v.spec.cache } : {}),
     parameters: params,
     responses,
   };
-  // When `requires.auth.all` is set, emit cookie-session security +
-  // 401/403 responses. Views ride the `/api/views/*` REST surface
-  // which the Cloudflare adapter gates via Better Auth session cookie
-  // (NOT bearer — bearer is for Procedure HTTP Triggers which sit on
-  // the OAuth-validated MCP surface).
-  if (v.spec.requires?.auth?.all && v.spec.requires.auth.all.length > 0) {
-    op["security"] = [{ cookieAuth: [] }];
-    responses["401"] = {
-      description: "Authentication required",
-      content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } },
-    };
-    responses["403"] = {
-      description: "Auth predicate not satisfied",
-      content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } },
+  reflectAuthorization(op, responses, v.spec.requires, request, `View '${v.metadata.name}'`);
+  return op;
+}
+
+function securitySchemes(request: EmitOpenapiRequest): Record<string, unknown> {
+  const configured = request.security;
+  const out: Record<string, unknown> = {};
+  if (configured?.sessionCookie !== false) {
+    out["sessionCookie"] = {
+      type: "apiKey",
+      in: "cookie",
+      name:
+        configured?.sessionCookie?.name ??
+        request.sessionCookieName ??
+        DEFAULT_SESSION_COOKIE_NAME,
     };
   }
-  return op;
+  if (configured?.oauthBearer) {
+    out["oauthBearer"] = {
+      type: "openIdConnect",
+      openIdConnectUrl: configured.oauthBearer.openIdConnectUrl,
+    };
+  }
+  if (configured?.apiKey) {
+    out["apiKey"] = {
+      type: "apiKey",
+      in: configured.apiKey.in,
+      name: configured.apiKey.name,
+    };
+  }
+  if (configured?.personalToken) {
+    out["personalToken"] = {
+      type: "http",
+      scheme: "bearer",
+      ...(configured.personalToken.bearerFormat
+        ? { bearerFormat: configured.personalToken.bearerFormat }
+        : {}),
+    };
+  }
+  return out;
+}
+
+function reflectAuthorization(
+  operation: Record<string, unknown>,
+  responses: Record<string, unknown>,
+  requires: AuthorizationRequirements | undefined,
+  request: EmitOpenapiRequest,
+  targetLabel: string,
+): void {
+  const predicates = requires?.auth?.all ?? [];
+  const scopes = predicates.flatMap((predicate) =>
+    typeof predicate === "object" && "ctx.auth.scope" in predicate
+      ? [predicate["ctx.auth.scope"]]
+      : [],
+  );
+  if (predicates.length > 0) {
+    const schemes = securitySchemes(request);
+    const security: Array<Record<string, readonly string[]>> = [];
+    if ("sessionCookie" in schemes) security.push({ sessionCookie: [] });
+    if ("oauthBearer" in schemes) security.push({ oauthBearer: scopes });
+    if ("apiKey" in schemes) security.push({ apiKey: [] });
+    if ("personalToken" in schemes) security.push({ personalToken: [] });
+    if (security.length === 0) {
+      throw new Error(
+        `EmitOpenapiUseCase: ${targetLabel} is protected but no security scheme is configured.`,
+      );
+    }
+    operation["security"] = security;
+    operation["x-mantle-auth-predicates"] = predicates;
+    if (scopes.length > 0) operation["x-mantle-required-scopes"] = scopes;
+    responses["401"] = errorResponse("Authentication required");
+    responses["403"] = errorResponse("Verified caller lacks a required role or scope");
+  }
+  const guard = requires?.guard?.procedure;
+  if (guard) {
+    operation["x-mantle-guard-procedure"] = guard;
+    responses["402"] = errorResponse("Dynamic entitlement guard denied the request");
+  }
+}
+
+function errorResponse(description: string): Record<string, unknown> {
+  return {
+    description,
+    content: {
+      "application/json": {
+        schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+      },
+    },
+  };
+}
+
+/**
+ * JSON Schema `description` (#453, same shape as property `title` —
+ * #443) may be a plain string or a `LocalizedText` locale-map for the
+ * admin-UI's benefit. Emitted OpenAPI is plain JSON Schema, so a
+ * locale-map `description` has to collapse to one string before it
+ * goes on the wire — otherwise the emitted doc isn't valid JSON
+ * Schema. Prefers `"en"` (the dev/OpenAPI-doc language per the #453
+ * design note), then whichever locale `resolveLocalizedText` finds
+ * first. Recurses into `properties`/`items` so nested and array field
+ * descriptions collapse too; returns a fresh object rather than
+ * mutating the manifest's schema.
+ */
+function collapseSchemaDescriptions(schema: JsonSchema): JsonSchema {
+  const { description, title, properties, items, $defs, oneOf, additionalProperties, ...rest } = schema;
+  const resolvedDescription = description === undefined ? null : resolveLocalizedText(description, "en");
+  const resolvedTitle = title === undefined ? null : resolveLocalizedText(title, "en");
+  return {
+    ...rest,
+    ...(resolvedDescription !== null ? { description: resolvedDescription } : {}),
+    ...(resolvedTitle !== null ? { title: resolvedTitle } : {}),
+    ...(properties
+      ? {
+          properties: Object.fromEntries(
+            Object.entries(properties).map(([name, propSchema]) => [name, collapseSchemaDescriptions(propSchema)]),
+          ),
+        }
+      : {}),
+    ...(items ? { items: collapseSchemaDescriptions(items) } : {}),
+    ...($defs
+      ? {
+          $defs: Object.fromEntries(
+            Object.entries($defs).map(([name, definition]) => [name, collapseSchemaDescriptions(definition)]),
+          ),
+        }
+      : {}),
+    ...(oneOf ? { oneOf: oneOf.map(collapseSchemaDescriptions) } : {}),
+    ...(typeof additionalProperties === "object"
+      ? { additionalProperties: collapseSchemaDescriptions(additionalProperties) }
+      : additionalProperties !== undefined
+        ? { additionalProperties }
+        : {}),
+  };
 }
 
 function diagnosticSchema(): Record<string, unknown> {
@@ -194,10 +343,39 @@ function diagnosticSchema(): Record<string, unknown> {
       phase: { type: "string", enum: ["validate", "test", "boot", "runtime"] },
       severity: { type: "string", enum: ["error", "warning"] },
       path: { type: "string" },
+      source: {
+        type: "object",
+        required: ["sourceId", "documentIndex", "path"],
+        properties: {
+          sourceId: { type: "string" },
+          documentIndex: { type: "integer", minimum: 0 },
+          path: { type: "string" },
+          span: {
+            type: "object",
+            required: ["start", "end"],
+            properties: {
+              start: sourcePositionSchema(),
+              end: sourcePositionSchema(),
+            },
+          },
+        },
+      },
       message: { type: "string" },
       value: {},
       expected: { type: "string" },
       suggestion: { type: "string" },
+    },
+  };
+}
+
+function sourcePositionSchema(): Record<string, unknown> {
+  return {
+    type: "object",
+    required: ["line", "column", "offset"],
+    properties: {
+      line: { type: "integer", minimum: 1 },
+      column: { type: "integer", minimum: 1 },
+      offset: { type: "integer", minimum: 0 },
     },
   };
 }

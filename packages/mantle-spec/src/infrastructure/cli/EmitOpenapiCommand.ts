@@ -1,42 +1,58 @@
+import { writeFile } from "node:fs/promises";
 import { stdout, stderr } from "node:process";
+import { parseArgs as parseNodeArgs } from "node:util";
 import { EmitOpenapiUseCase } from "../../usecase/EmitOpenapiUseCase.js";
+import { ValidateManifestsUseCase } from "../../usecase/ValidateManifestsUseCase.js";
 import { loadManifestsFromRoot } from "./loadManifests.js";
+import { translateParseArgsError } from "./parseArgsError.js";
 
 export interface EmitOpenapiArgs {
   readonly manifests: string;
   readonly title: string;
   readonly version: string;
   readonly sessionCookieName?: string;
+  readonly output?: string;
 }
 
 export type ParseResult = { kind: "args"; args: EmitOpenapiArgs } | { kind: "help" };
 
 export function parseArgs(rawArgs: ReadonlyArray<string>): ParseResult {
-  let manifests = "./manifests";
-  let title = "mantle";
-  let version = "0.1.0";
-  let sessionCookieName: string | undefined;
-  for (let i = 0; i < rawArgs.length; i++) {
-    const a = rawArgs[i];
-    if (a === "--manifests") manifests = rawArgs[++i] ?? manifests;
-    else if (a === "--title") title = rawArgs[++i] ?? title;
-    else if (a === "--version") version = rawArgs[++i] ?? version;
-    else if (a === "--session-cookie-name") sessionCookieName = rawArgs[++i];
-    else if (a === "--help" || a === "-h") return { kind: "help" };
-    else if (a !== undefined) {
-      throw new Error(`Unknown argument: ${a}`);
-    }
+  let values;
+  try {
+    ({ values } = parseNodeArgs({
+      args: [...rawArgs],
+      options: {
+        manifests: { type: "string" },
+        title: { type: "string" },
+        version: { type: "string" },
+        "session-cookie-name": { type: "string" },
+        output: { type: "string", short: "o" },
+        help: { type: "boolean", short: "h" },
+      },
+    }));
+  } catch (err) {
+    throw translateParseArgsError(err, { "--output": "--output requires a file path" });
   }
-  return { kind: "args", args: { manifests, title, version, sessionCookieName } };
+  if (values.help) return { kind: "help" };
+  return {
+    kind: "args",
+    args: {
+      manifests: values.manifests ?? "./manifests",
+      title: values.title ?? "mantle",
+      version: values.version ?? "0.1.0",
+      sessionCookieName: values["session-cookie-name"],
+      output: values.output,
+    },
+  };
 }
 
 function printHelp(): void {
   stdout.write(`mantle emit-openapi — emit OpenAPI 3.1 from manifests
 
-Usage: mantle emit-openapi [options] > openapi.json
+Usage: mantle emit-openapi [options]
 
 Options:
-  --manifests <dir>            Manifest root (default: ./manifests)
+  --manifests <dir>            Directory containing YAML manifests (default: ./manifests)
   --title <str>                OpenAPI info.title (default: mantle)
   --version <str>              OpenAPI info.version (default: 0.1.0)
   --session-cookie-name <str>  Better Auth session-cookie name used
@@ -46,9 +62,11 @@ Options:
                                (production, HTTPS); pass
                                'better-auth.session_token' for local
                                non-secure deploys.
+  -o, --output <file>          Write UTF-8 JSON to a file. Prefer this
+                               over shell redirection on Windows.
   -h, --help                   This help
 
-Output: OpenAPI 3.1 JSON on stdout.
+Output: OpenAPI 3.1 JSON on stdout unless --output is set.
 
 Covers HTTP Triggers (POST/PUT/PATCH/DELETE) and View REST routes
 (GET /api/views/<name>). MCP is out of scope.
@@ -68,17 +86,33 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
     return 0;
   }
   const args = parsed.args;
-  const { manifests, parseErrors } = await loadManifestsFromRoot(args.manifests);
-  if (parseErrors.some((d) => d.severity === "error")) {
+  const { parsed: manifestSet, parseErrors } = await loadManifestsFromRoot(args.manifests);
+  if (!manifestSet || parseErrors.some((d) => d.severity === "error")) {
     stderr.write(`Manifest parse errors — run \`mantle validate\` to inspect.\n`);
     return 1;
   }
+  // Semantic validation gate. Without it, a method+path collision
+  // between two HTTP Triggers (only caught by ValidateManifests, not
+  // the parser) would silently overwrite one operation and emit a
+  // document missing a real route. (#398)
+  const validation = ValidateManifestsUseCase.run({ parsed: manifestSet });
+  if (validation.errorCount > 0 || !validation.linked) {
+    stderr.write(
+      `Manifest validation errors (e.g. duplicate route) — run \`mantle validate\` to inspect.\n`,
+    );
+    return 1;
+  }
   const { document } = EmitOpenapiUseCase.run({
-    manifests,
+    linked: validation.linked,
     title: args.title,
     version: args.version,
     sessionCookieName: args.sessionCookieName,
   });
-  stdout.write(JSON.stringify(document, null, 2) + "\n");
+  const body = JSON.stringify(document, null, 2) + "\n";
+  if (args.output) {
+    await writeFile(args.output, body, "utf8");
+  } else {
+    stdout.write(body);
+  }
   return 0;
 }

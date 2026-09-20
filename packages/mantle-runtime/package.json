@@ -1,9 +1,9 @@
 {
   "name": "@aotter/mantle-runtime",
-  "version": "0.0.11-alpha.13",
-  "description": "Runtime engine for mantle: dispatcher + entry-writer + view executor + content-ops + render pipeline + auth + MCP. Defines adapter-agnostic ports. MUST NOT import D1Database / KVNamespace types.",
+  "version": "0.1.2-rc.1",
+  "description": "Headless runtime engine for Mantle: entry operations, procedures, views, triggers, lifecycle, and adapter-agnostic ports.",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/aotter/mantle/tree/develop/packages/mantle-runtime",
+  "homepage": "https://mantle.tools/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/aotter/mantle.git",
@@ -22,6 +22,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
+    },
+    "./testing/storage": {
+      "types": "./dist/testing-storage.d.ts",
+      "import": "./dist/testing-storage.js"
     }
   },
   "files": [
@@ -38,12 +46,12 @@
     "@aotter/mantle-spec": "workspace:*"
   },
   "peerDependencies": {
-    "zod": "^4.0.0"
+    "zod": "catalog:peer"
   },
   "devDependencies": {
-    "@types/node": "^25",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.6",
-    "zod": "^4.4.2"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
   }
 }

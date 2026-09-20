@@ -7,11 +7,11 @@
 3. **Bug or feature request** — file an [issue](https://github.com/aotter/mantle/issues/new/choose).
 4. **Security** — do **not** open a public issue. See [SECURITY.md](./SECURITY.md).
 
-## Help wanted on the starters monorepo?
+## Legacy Starters
 
-Starter scaffolds + the `create-mantle` scaffolder live in
-[`aotter/mantle-starters`](https://github.com/aotter/mantle-starters). File issues there for
-archetype bugs, scaffolder fixes, and theme work.
+The retired alpha.17 Starter source and bundles remain in
+[`aotter/mantle-starters`](https://github.com/aotter/mantle-starters). File
+legacy issues there. New applications use [direct authoring](docs/handbook/start/project-and-cli.md).
 
 ## What we don't offer
 

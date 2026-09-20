@@ -29,17 +29,16 @@ body:
         - area:skills
         - area:admin-ui
         - area:docs
+        - area:ci
         - area:adapter
         - unknown
     validations:
       required: true
   - type: textarea
-    id: agent_dx
+    id: authoring_dx
     attributes:
-      label: AI-author DX
-      description: How does this make agent-authored projects safer or clearer?
-    validations:
-      required: true
+      label: Authoring DX impact
+      description: If relevant, how does this affect human or agent authors?
   - type: textarea
     id: alternatives
     attributes:

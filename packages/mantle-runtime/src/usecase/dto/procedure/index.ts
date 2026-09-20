@@ -1,6 +1,5 @@
 import type {
   Diagnostic,
-  Phase,
   ProcedureManifest,
 } from "@aotter/mantle-spec";
 import type { HandlerContext } from "../../../domain/model/HandlerContext.js";
@@ -23,8 +22,6 @@ export interface InvokeProcedureRequest {
    *  e.g. `POST /api/contact`; the test harness passes
    *  `manifest:Procedure/<name>`. */
   readonly pathPrefix?: string;
-  /** Phase to stamp on emitted diagnostics. Default: `"runtime"`. */
-  readonly phase?: Phase;
 }
 
 export type InvokeProcedureResponse<O = unknown> =

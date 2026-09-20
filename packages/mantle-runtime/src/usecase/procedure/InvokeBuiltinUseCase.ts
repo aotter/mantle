@@ -1,7 +1,10 @@
 import {
   canTransition,
   DiagnosticError,
+  EntryDataValidator,
+  resolveLifecycle,
   runtimeDiagnostic,
+  type HandlerBuiltinBinding,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
 import type { EntryRow } from "../../domain/model/EntryRow.js";
@@ -9,8 +12,16 @@ import type { HandlerContext } from "../../domain/model/HandlerContext.js";
 import type { Clock } from "../../domain/port/Clock.js";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
 import type { IdGenerator } from "../../domain/port/IdGenerator.js";
-import type { SiteConfigRepository } from "../../domain/port/SiteConfigRepository.js";
-import { projectAndStamp } from "../../domain/service/BuiltinProjector.js";
+import type { LocalePolicyReader } from "../../domain/port/SiteConfigRepository.js";
+import {
+  projectAndStamp,
+  projectUpdateAndStamp,
+} from "../../domain/service/BuiltinProjector.js";
+import { assertEntryDeletable } from "../../domain/service/io/EntryDeleteGuard.js";
+import {
+  notFoundDiagnostic,
+  withConflictDiagnostic,
+} from "../../domain/service/EntryMutationDiagnostics.js";
 import { assertEntryWritable } from "../../domain/service/io/EntryWriteGuard.js";
 import type { InvokeBuiltinRequest } from "../dto/procedure/index.js";
 
@@ -18,20 +29,27 @@ import type { InvokeBuiltinRequest } from "../dto/procedure/index.js";
  * `InvokeBuiltinUseCase` — executes the `handler.kind: builtin` op
  * (POC ADR-0014). The four ops map 1:1 to the entry-writer chokepoint:
  *
- *   - `create` → `entries.create({ ..., status: 'draft' })` with a
- *     generated id. Input is projected through
+ *   - `create` → `entries.create` with a generated id. Content starts
+ *     as a draft; `lifecycle: operational` records start live.
+ *     Input is projected through
  *     `domain/service/BuiltinProjector.projectAndStamp` so only
  *     Schema-declared keys land in `data` and `x-mantle-bind` fields are
  *     server-stamped from `ctx`.
  *   - `update` → `entries.update`. Caller supplies `id` +
- *     `expectedVersion` in the input; OCC enforced at the chokepoint.
- *   - `upsert` → `update` if `input.id` resolves, else `create`.
- *   - `delete` → `entries.delete({ id })`.
+ *     `expectedVersion` (observed native `entry.version` at read time,
+ *     not version+1); OCC enforced at the chokepoint. A successful write
+ *     still bumps storage to expectedVersion+1.
+ *   - `upsert` → create when no row matches and the caller omitted
+ *     `expectedVersion`; update when a row matches, using the **caller**
+ *     token (never `preloaded.version`). A versioned write for a missing
+ *     row is NOT_FOUND (do not recreate). Create-intent against an
+ *     existing row is INPUT_VALIDATION_FAILED (do not overwrite).
+ *   - `delete` → guarded `entries.delete(...)` over the loaded row snapshot.
  *
  * Pre-projection original input is forwarded to the chokepoint via
- * `originalInput`, so lifecycle hook handlers can read side-channel
- * fields (CAPTCHA tokens, etc.) declared on the Procedure input but
- * not on the Schema.
+ * `originalInput`, so synchronous `before_*` hooks can read side-channel
+ * fields (CAPTCHA tokens, etc.) declared on the Procedure input but not
+ * on the Schema.
  *
  * Auth + input/output validation happen upstream in
  * `InvokeProcedureUseCase`. This use case trusts its `validatedInput`.
@@ -42,7 +60,8 @@ export class InvokeBuiltinUseCase {
     private readonly schemasByName: ReadonlyMap<string, SchemaManifest>,
     private readonly clock: Clock,
     private readonly idgen: IdGenerator,
-    private readonly siteConfig?: SiteConfigRepository,
+    private readonly siteConfig?: LocalePolicyReader,
+    private readonly validator = new EntryDataValidator(),
   ) {}
 
   async run(request: InvokeBuiltinRequest): Promise<unknown> {
@@ -84,7 +103,7 @@ export class InvokeBuiltinUseCase {
       case "update":
         return this.opUpdate(schema, input, request.ctx, now);
       case "upsert":
-        return this.opUpsert(schema, input, request.ctx, now);
+        return this.opUpsert(schema, input, request.ctx, now, handler);
       case "delete":
         return this.opDelete(schema, input, request.ctx);
       case "archive":
@@ -118,18 +137,21 @@ export class InvokeBuiltinUseCase {
       entries: this.entries,
       schema,
       data,
+      validator: this.validator,
       siteConfig: this.siteConfig,
     });
-    return this.entries.create({
-      id: this.idgen.next(),
-      collection: schema.metadata.name,
-      status: "draft",
-      data,
-      authorId: ctx.user?.id ?? null,
-      now,
-      hookContext: ctx,
-      originalInput: input,
-    });
+    return withConflictDiagnostic(opPath, () =>
+      this.entries.create({
+        id: this.idgen.next(),
+        collection: schema.metadata.name,
+        status: resolveLifecycle(schema) === "operational" ? "published" : "draft",
+        data,
+        authorId: ctx.user?.id ?? null,
+        now,
+        hookContext: ctx,
+        originalInput: input,
+      }),
+    );
   }
 
   private async opUpdate(
@@ -137,28 +159,57 @@ export class InvokeBuiltinUseCase {
     input: Record<string, unknown>,
     ctx: HandlerContext,
     now: number,
+    preloaded?: EntryRow,
   ): Promise<EntryRow> {
     const opPath = `usecase/InvokeBuiltin/${schema.metadata.name}/update`;
-    const id = requireField(input, "id", "string");
+    const id = preloaded ? preloaded.id : requireField(input, "id", "string");
     const expectedVersion = requireField(input, "expectedVersion", "number");
-    const data = projectAndStamp({ schema, input, ctx, clockNow: now });
+    // Read the existing row and PATCH it. The create projector
+    // (`projectAndStamp`) would drop every Schema field the caller
+    // omitted and re-stamp `x-mantle-bind` fields (author → current
+    // caller, `now` → this edit) — silent data loss. Mirror
+    // UpdateDraftUseCase: merge via `projectUpdateAndStamp` so omitted
+    // fields and server-stamped values (author, created-at) survive.
+    const existing = preloaded ?? (await this.entries.get({ id, collection: schema.metadata.name }));
+    if (!existing) {
+      throw new DiagnosticError(
+        runtimeDiagnostic({
+          code: "NOT_FOUND",
+          severity: "error",
+          path: `${opPath}/${id}`,
+          value: id,
+          expected: "id of an existing entry",
+          message: `Entry not found: ${id}.`,
+        }),
+      );
+    }
+    const data = projectUpdateAndStamp({
+      schema,
+      existing: existing.data,
+      patch: input,
+      ctx,
+      clockNow: now,
+    });
     await assertEntryWritable({
       opPath,
       entries: this.entries,
       schema,
       data,
+      validator: this.validator,
       excludeId: id,
       siteConfig: this.siteConfig,
     });
-    return this.entries.update({
-      id,
-      collection: schema.metadata.name,
-      expectedVersion,
-      data,
-      now,
-      hookContext: ctx,
-      originalInput: input,
-    });
+    return withConflictDiagnostic(opPath, () =>
+      this.entries.update({
+        id,
+        collection: schema.metadata.name,
+        expectedVersion,
+        data,
+        now,
+        hookContext: ctx,
+        originalInput: input,
+      }),
+    );
   }
 
   private async opUpsert(
@@ -166,11 +217,61 @@ export class InvokeBuiltinUseCase {
     input: Record<string, unknown>,
     ctx: HandlerContext,
     now: number,
+    handler: HandlerBuiltinBinding,
   ): Promise<EntryRow> {
+    const callerVersion = optionalExpectedVersion(input);
+    if (handler.match && handler.match.length > 0) {
+      const fields: Record<string, unknown> = {};
+      for (const field of handler.match) {
+        fields[field] = input[field];
+      }
+      const existing = await this.entries.findByDataFields({
+        collection: schema.metadata.name,
+        fields,
+      });
+      if (existing) {
+        if (callerVersion === undefined) {
+          throw missingExpectedVersionOnUpdate(schema.metadata.name);
+        }
+        return this.opUpdate(schema, input, ctx, now, existing);
+      }
+      if (callerVersion !== undefined) {
+        throw deletedTargetDiagnostic(
+          `usecase/InvokeBuiltin/${schema.metadata.name}/upsert`,
+          schema.metadata.name,
+          matchIdentity(handler.match, fields),
+        );
+      }
+      return this.opCreate(schema, input, ctx, now);
+    }
+
     const id = typeof input["id"] === "string" ? input["id"] : undefined;
     if (id) {
-      const existing = await this.entries.get(id);
-      if (existing) return this.opUpdate(schema, input, ctx, now);
+      const existing = await this.entries.get({ id, collection: schema.metadata.name });
+      if (existing) {
+        if (callerVersion === undefined) {
+          throw missingExpectedVersionOnUpdate(schema.metadata.name);
+        }
+        return this.opUpdate(schema, input, ctx, now, existing);
+      }
+      if (callerVersion !== undefined) {
+        throw deletedTargetDiagnostic(
+          `usecase/InvokeBuiltin/${schema.metadata.name}/upsert/${id}`,
+          schema.metadata.name,
+          id,
+        );
+      }
+    } else if (callerVersion !== undefined) {
+      throw new DiagnosticError(
+        runtimeDiagnostic({
+          code: "INPUT_VALIDATION_FAILED",
+          severity: "error",
+          path: "builtin-input/expectedVersion",
+          value: callerVersion,
+          expected: "omit expectedVersion on create, or supply id / match fields for update",
+          message: "Builtin upsert received expectedVersion without a target identity. Omit expectedVersion to create, or identify the row to update.",
+        }),
+      );
     }
     return this.opCreate(schema, input, ctx, now);
   }
@@ -181,12 +282,27 @@ export class InvokeBuiltinUseCase {
     ctx: HandlerContext,
   ): Promise<{ readonly removed: boolean }> {
     const id = requireField(input, "id", "string");
-    return this.entries.delete({
-      id,
-      collection: schema.metadata.name,
-      hookContext: ctx,
-      originalInput: input,
+    const opPath = `usecase/InvokeBuiltin/${schema.metadata.name}/delete/${id}`;
+    const existing = await this.entries.get({ id, collection: schema.metadata.name });
+    if (!existing) {
+      throw new DiagnosticError(notFoundDiagnostic(opPath, schema.metadata.name, id));
+    }
+    assertEntryDeletable({
+      entry: existing,
+      schema,
+      expectedCollection: schema.metadata.name,
+      opPath,
     });
+    return withConflictDiagnostic(opPath, () =>
+      this.entries.delete({
+        id,
+        collection: existing.collection,
+        expectedStatus: existing.status,
+        expectedVersion: existing.version,
+        hookContext: ctx,
+        originalInput: input,
+      }),
+    );
   }
 
   private async opArchive(
@@ -196,7 +312,7 @@ export class InvokeBuiltinUseCase {
     now: number,
   ): Promise<EntryRow> {
     const id = requireField(input, "id", "string");
-    const existing = await this.entries.get(id);
+    const existing = await this.entries.get({ id, collection: schema.metadata.name });
     if (!existing) {
       throw new DiagnosticError(
         runtimeDiagnostic({
@@ -224,14 +340,18 @@ export class InvokeBuiltinUseCase {
         }),
       );
     }
-    return this.entries.archive({
-      id,
-      collection: schema.metadata.name,
-      expectedVersion: existing.version,
-      now,
-      hookContext: ctx,
-      originalInput: input,
-    });
+    const opPath = `usecase/InvokeBuiltin/${schema.metadata.name}/archive`;
+    return withConflictDiagnostic(opPath, () =>
+      this.entries.transitionStatus({
+        id,
+        collection: schema.metadata.name,
+        to: "archived",
+        expectedVersion: existing.version,
+        now,
+        hookContext: ctx,
+        originalInput: input,
+      }),
+    );
   }
 }
 
@@ -255,4 +375,49 @@ function requireField<T extends "string" | "number">(
     );
   }
   return v as T extends "string" ? string : number;
+}
+
+function optionalExpectedVersion(input: Record<string, unknown>): number | undefined {
+  const value = input["expectedVersion"];
+  if (value === undefined) return undefined;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  throw new DiagnosticError(
+    runtimeDiagnostic({
+      code: "INPUT_VALIDATION_FAILED",
+      severity: "error",
+      path: "builtin-input/expectedVersion",
+      value,
+      expected: "finite number (observed native entry.version at read time, not version+1)",
+      message: "Builtin upsert expectedVersion must be a finite number when provided.",
+    }),
+  );
+}
+
+function missingExpectedVersionOnUpdate(collection: string): DiagnosticError {
+  return new DiagnosticError(
+    runtimeDiagnostic({
+      code: "INPUT_VALIDATION_FAILED",
+      severity: "error",
+      path: "builtin-input/expectedVersion",
+      expected: "number field 'expectedVersion' (observed native entry.version at read time)",
+      message: `Builtin upsert found an existing '${collection}' row; send expectedVersion from that read. Omitting it would overwrite the row.`,
+    }),
+  );
+}
+
+function deletedTargetDiagnostic(path: string, collection: string, identity: string): DiagnosticError {
+  return new DiagnosticError(
+    runtimeDiagnostic({
+      code: "NOT_FOUND",
+      severity: "error",
+      path,
+      value: identity,
+      expected: `existing ${collection} row for a versioned update`,
+      message: `Versioned upsert target not found (${identity}). The row was not created.`,
+    }),
+  );
+}
+
+function matchIdentity(match: readonly string[], fields: Record<string, unknown>): string {
+  return match.map((field) => `${field}=${String(fields[field])}`).join(",");
 }

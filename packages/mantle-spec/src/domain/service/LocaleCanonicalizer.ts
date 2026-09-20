@@ -1,10 +1,10 @@
 import { InvalidLocaleError } from "../model/Locale.js";
 
 /**
- * BCP 47 canonicalization. Single source of truth for locale shape
- * across the SDK: manifest parsing, `site_config.locales` writes,
- * content-ops `data.locale` validation, public router URL segments,
- * boot-time site-config check.
+ * Mantle v0.1 locale canonicalization. This is a deliberately narrow
+ * subset of BCP 47, shared across the SDK: manifest parsing,
+ * `site_config.locales` writes, content-ops `data.locale` validation,
+ * public router URL segments, boot-time site-config check.
  *
  * 2- or 3-letter ISO 639 language (covers `en`, `ja`, plus 3-letter
  * codes like `fil`, `haw`) + optional 2-letter ISO 3166 region. No
@@ -19,6 +19,7 @@ import { InvalidLocaleError } from "../model/Locale.js";
 
 const LANG = /^[a-z]{2,3}$/;
 const REGION = /^[a-z]{2}$/;
+const SCRIPT_SUBTAG_SHAPE = /^[a-z]{2,3}[-_][a-z]{4}(?:[-_][a-z]{2})?$/i;
 
 /**
  * Accepts `zh-TW`, `zh-tw`, `zh_TW`, `zhTW`, `ZH-tw`, `en` etc. Returns
@@ -48,15 +49,6 @@ export function toCanonicalLocale(input: string): string {
 /** Canonical → URL form (always lowercase). */
 export function toUrlLocale(canonical: string): string {
   return canonical.toLowerCase();
-}
-
-/**
- * Parse a URL locale segment back to canonical. Stricter than
- * `toCanonicalLocale`: only accepts `xx` or `xx-yy` (lowercase only),
- * which is what the public router regex matches.
- */
-export function fromUrlLocale(urlSegment: string): string {
-  return toCanonicalLocale(urlSegment);
 }
 
 /**
@@ -99,4 +91,10 @@ export function canonicalizeLocaleList(
     }
   }
   return { valid, invalid };
+}
+
+export function containsScriptSubtagLocale(
+  inputs: ReadonlyArray<string>,
+): boolean {
+  return inputs.some((raw) => SCRIPT_SUBTAG_SHAPE.test(raw));
 }

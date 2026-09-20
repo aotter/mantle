@@ -7,20 +7,48 @@
  *   domain ← usecase ← infrastructure ← runtime.ts (assembly root)
  *
  * Adapters (e.g. `@aotter/mantle-cloudflare`) implement the
- * required port interfaces in `domain/port/` and call `createCmsRuntime`
- * to compose everything. Optional feature ports (for example media
- * hosting) stay adapter-agnostic and are only wired when enabled.
+ * storage and optional port interfaces in `domain/port/`, then call
+ * `createMantleRuntime` with a prepared semantic revision.
  *
  * MUST NOT import `D1Database` / `KVNamespace` / any Cloudflare-
- * specific type. The Netlify stub package exists as a public reminder.
+ * specific type.
  */
 
 // Assembly root.
 export {
-  createCmsRuntime,
-  type CreateCmsRuntimeArgs,
-  type CmsRuntime,
-} from "./runtime.js";
+  bootMantleRuntime,
+  createMantleRuntime,
+  type BootMantleRuntimeArgs,
+  type CreateMantleRuntimeArgs,
+  type MantleRuntime,
+  type MantleMedia,
+  type MantleRuntimePorts,
+  type InvokeMantleProcedureRequest,
+  type ExecuteMantleViewRequest,
+  type InvokeMantleTriggerRequest,
+} from "./MantleRuntime.js";
+export {
+  RUNTIME_PLAN_VERSION,
+  compileRuntimePlan,
+  sealRuntimePlan,
+  type CompileResult,
+  type RuntimePlan,
+  type RuntimePlanData,
+  type RuntimeSchemaPlan,
+  type RuntimeViewPlan,
+  type RuntimeProcedurePlan,
+  type RuntimeTriggerPlan,
+  type LogicalViewPlan,
+  type LifecycleHookPlan,
+  type HttpRoutePlan,
+  type McpToolPlan,
+} from "./domain/service/RuntimePlanCompiler.js";
+export {
+  projectCallableCapabilities,
+  type RuntimeCallableCapability,
+  type ViewCallableCapability,
+  type ProcedureCallableCapability,
+} from "./domain/service/CallableCapabilityProjector.js";
 
 // Adapter-facing ports. These are the stable boundary platform
 // adapters implement; runtime-internal seams remain off the root
@@ -33,17 +61,117 @@ export type {
   MigrationRunner,
   Migration,
 } from "./domain/port/DatabaseDriver.js";
-export type { KvCache, KvPutOptions, KvListResult } from "./domain/port/KvCache.js";
-export type { AssetServer } from "./domain/port/AssetServer.js";
+export type {
+  EntryRepository,
+  EntryKey,
+  CreateEntryArgs,
+  UpdateEntryArgs,
+  DeleteEntryArgs,
+  TransitionStatusArgs,
+  ListEntriesArgs,
+  ListEntriesResult,
+  FindEntryByDataFieldArgs,
+  FindEntryByDataFieldsArgs,
+} from "./domain/port/EntryRepository.js";
+export type {
+  EntryReader,
+  CreationStatisticsArgs,
+  CreationStatistics,
+  EntryDataScalar,
+  ReadEntryBySlugArgs,
+  ReadEntryByDataFieldArgs,
+  ReadEntriesByDataFieldInArgs,
+  ReadPublishedEntriesArgs,
+  ReadPublishedPageArgs,
+  PublishedEntryPage,
+  FindManyEntriesByDataFieldArgs,
+} from "./domain/port/EntryReader.js";
+export {
+  joinParentIfTranslation,
+  joinParentForList,
+} from "./domain/service/io/JoinedEntryReader.js";
+export type {
+  ViewQueryExecutor,
+  ViewQueryOptions,
+  ViewQueryRequest,
+  ViewQueryResult,
+} from "./domain/port/ViewQueryExecutor.js";
+export type {
+  MantleStorageAdapter,
+  PreparedMantleStorage,
+} from "./domain/port/MantleStorageAdapter.js";
+export {
+  EntryStatusConflict,
+  EntryUniqueConflict,
+  EntryVersionConflict,
+  liftLocale,
+  materializeNullableFields,
+  projectPublicEntry,
+  type EntryRow,
+} from "./domain/model/EntryRow.js";
+export {
+  clampLimit,
+  clampPage,
+  clampShow,
+} from "./domain/service/Pagination.js";
+export {
+  paginatePublishedEntries,
+  decodeEntrySortCursor,
+  encodeEntrySortCursor,
+} from "./infrastructure/persistence/Pagination.js";
+export type { PreparedMantleRevision } from "./domain/model/PreparedMantleRevision.js";
+export { SqliteMigrationRunner, splitSqlStatements } from "./infrastructure/boot/SqliteMigrationRunner.js";
+export {
+  MANTLE_VIEW_ROUTE_PREFIX,
+  createMantleRequestHandler,
+  type MantleRequestHandler,
+  type MantleRequestHandlerOptions,
+} from "./infrastructure/http/createMantleRequestHandler.js";
+export type { Clock } from "./domain/port/Clock.js";
+export { MAX_JSON_BODY_BYTES } from "./infrastructure/http/readJsonBody.js";
+export type {
+  SiteConfigRepository,
+  LocalePolicyReader,
+  UpdateEditableSiteConfigArgs,
+} from "./domain/port/SiteConfigRepository.js";
+export {
+  SqliteMantleStorageAdapter,
+  type SqliteMantleStorageAdapterOptions,
+} from "./infrastructure/storage/SqliteMantleStorageAdapter.js";
+export {
+  buildSqliteMigrationArtifact,
+  storageFingerprint,
+  verifySqliteMigrationArtifact,
+  type SqliteMigrationArtifact,
+} from "./infrastructure/storage/SqliteMigrationArtifact.js";
+export {
+  isAdditiveSchemaTableChange,
+  mergeSchemaTableProjections,
+} from "./infrastructure/storage/SqliteSchemaTables.js";
+export {
+  prepareDeployment,
+  type DeploymentPreparationOptions,
+} from "./usecase/boot/ValidateBootUseCase.js";
 export type {
   MediaStorage,
   CreateUploadArgs,
+  CreateUploadVariantSpec,
   CreateUploadResult,
+  UploadCapability,
   CommitUploadArgs,
+  CommitUploadVariantSpec,
   GetPublicUrlArgs,
-  DeleteAssetArgs,
+  DeleteObjectArgs,
   MediaAsset,
+  MediaVariant,
+  MediaVariantRole,
 } from "./domain/port/MediaStorage.js";
+export { pickPrimaryVariant } from "./domain/port/MediaStorage.js";
+export type {
+  MediaAssetRepository,
+  MediaAssetListArgs,
+  MediaAssetListResult,
+} from "./domain/port/MediaAssetRepository.js";
 export type {
   EmailSender,
   EmailSendArgs,
@@ -52,59 +180,32 @@ export { extensionForMime } from "./usecase/media/mediaAllowlist.js";
 export type {
   DeferredHookDispatcher,
   DeferredHookEnvelope,
+  DeferredLifecycleHook,
   CtxSnapshot,
 } from "./domain/port/DeferredHookDispatcher.js";
+export { DEFERRED_HOOK_ENVELOPE_VERSION } from "./domain/port/DeferredHookDispatcher.js";
 
 // ID source — adapters wire this into binding-side helpers that need
 // random IDs. Default `RandomUuidGenerator` (`crypto.randomUUID()`)
 // can be swapped in tests with a deterministic counter.
 export { type IdGenerator, RandomUuidGenerator } from "./domain/port/IdGenerator.js";
 
-// Consumer/starter handler and render contracts.
+// Consumer handler contracts.
 export type {
   AnyHandler,
+  HandlerFn,
   HandlerContext,
+  HandlerAuthContext,
+  HandlerLifecycleEvent,
 } from "./domain/model/HandlerContext.js";
-export type { SeoMeta } from "./domain/model/SeoMeta.js";
-export {
-  TemplateRegistry,
-  type EntryContext,
-  type ListContext,
-  type EntryTemplate,
-  type ListTemplate,
-} from "./domain/model/TemplateRegistry.js";
-export {
-  createPublicPathResolver,
-  type PublicPathResolver,
-  type PublicPathResolverConfig,
-  type CollectionRoute,
-} from "./domain/service/PublicPathResolver.js";
-export {
-  composeEntrySeoMeta,
-  renderSeoTagsHtml,
-  type ComposeEntrySeoMetaArgs,
-  type SiblingTranslation,
-} from "./domain/service/SeoMetaComposer.js";
-
-// Public route / starter fixture helpers. These are intentionally
-// exported one-by-one instead of exposing the whole service barrel.
-export {
-  entryHtmlKey,
-  entryMarkdownKey,
-  entryHtmlKeyFromParts,
-  entryMarkdownKeyFromParts,
-  listHtmlKey,
-  llmsTxtKey,
-} from "./domain/service/PublishKeys.js";
-export { serializeEntryAsMarkdown } from "./domain/service/MarkdownSerializer.js";
-export { readEntryBySlug } from "./domain/service/io/PublishedEntries.js";
+export { readEntryBySlug } from "./infrastructure/persistence/DatabaseEntryRepository.js";
 export {
   inferLocaleFromPath,
   isKnownLocale,
   siteConfigFromDefaults,
   toUrlLocale,
 } from "./domain/service/LocaleNegotiator.js";
-export { matchPath } from "./domain/service/PathMatcher.js";
+export { compilePathMatcher, matchPath } from "./domain/service/PathMatcher.js";
 export { evaluateAuthAll } from "./domain/service/AuthPredicateEvaluator.js";
 export {
   coerceViewParams,
@@ -115,7 +216,6 @@ export {
 // export the whole MCP infrastructure barrel from the root.
 export {
   McpJsonRpcDispatcher,
-  type McpAuthContext,
   type McpUseCases,
 } from "./infrastructure/mcp/McpJsonRpcDispatcher.js";
 
@@ -126,3 +226,5 @@ export { CANONICAL_MIGRATIONS } from "./infrastructure/boot/canonicalMigrations.
 // Procedure handler failure carrier used by platform helper handlers
 // such as Cloudflare Turnstile.
 export { InvokeFailure } from "./usecase/procedure/InvokeProcedureUseCase.js";
+
+export { buildMcpToolCatalog, type McpToolDefinition } from "./infrastructure/mcp/McpToolCatalog.js";

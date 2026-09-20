@@ -8,7 +8,7 @@ Preferred path: open a private GitHub Security Advisory:
 
 https://github.com/aotter/mantle/security/advisories/new
 
-Fallback contact: `phsu@aotter.net`.
+Fallback contact: `security@aotter.net`.
 
 Include:
 

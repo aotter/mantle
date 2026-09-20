@@ -1,0 +1,21 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "mantle",
+  "homepage": "https://mantle.tools",
+  "items": [
+    {
+      "name": "auth-page",
+      "type": "registry:block",
+      "title": "Mantle auth page",
+      "description": "A copy-owned email OTP page with optional legal links.",
+      "dependencies": ["@aotter/mantle-admin-ui@0.1.2-rc.1"],
+      "files": [
+        {
+          "path": "recipes/auth-page.tsx",
+          "type": "registry:component",
+          "target": "components/auth-page.tsx"
+        }
+      ]
+    }
+  ]
+}

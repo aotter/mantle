@@ -1,548 +1,188 @@
 # Release process
 
-mantle is in `0.0.x-alpha` until the v0.1.0 release gate closes. The process below documents the branch, tag, GitHub release, and npm publish discipline for prereleases and stable releases.
+First stable targets 0.1.2 (#826). The last legacy Landing/Starter release is
+0.1.0-alpha.17. Its immutable artifacts and repositories remain available;
+recover that version with its tagged controller/docs. New releases have no
+Starter/Landing checkout, tag, dispatch, credential or deployment dependency.
 
-## Branch model
+## Authority and state transitions
 
-- `develop` is the integration branch for all PRs.
-- `main` is release-only.
-- Release PRs merge `develop -> main`.
-- Hotfixes branch from `main`, merge back to `main`, tag, then merge or cherry-pick back to `develop`.
+`.github/workflows/release.yml` is the only release controller. Humans merge
+a reviewed same-repository release PR, then explicitly dispatch that merge.
+No task implicitly authorizes publication; no manual package/tag writer exists.
 
-## Versioning
-
-- Use semver after v0.1.0.
-- Tag format is `vMAJOR.MINOR.PATCH`, for example `v0.1.0`.
-- Alpha tags may use prerelease suffixes, for example `v0.0.6-alpha`.
-- Package versions must stay aligned unless a future ADR explicitly changes package release policy.
-
-## Release channels
-
-### Alpha
-
-Alpha releases validate dogfood and integration flows. They may include
-new capability, starter changes, and compatibility-breaking pre-v0.1
-behavior. Use alpha for official-site dogfood, provision-path testing,
-and early consumer projects that can tolerate churn.
-
-- Version suffix: `-alpha`, e.g. `0.0.7-alpha`.
-- Git tag: `v0.0.7-alpha`.
-- GitHub Release: mark as prerelease.
-- npm dist-tag: `alpha`.
-- npm `latest` (pre-v0.1.0 policy): `latest` tracks the most
-  user-useful pre-release for default `npm install` (no tag) calls.
-  Concretely: when a beta exists, `latest` follows the most recent
-  beta; otherwise it follows the most recent alpha. Once v0.1.0
-  stable ships, `latest` switches to stable-only and never points
-  at a prerelease again.
-- Required before publish: `pnpm run check`, changelog entry,
-  release PR merged to `main`, tag pushed.
-
-### Beta
-
-Beta means the v0.1 feature shape is close to complete. New feature work
-should be rare and explicitly called out in the release PR.
-
-- Version suffix: `-beta.N` once needed, e.g. `0.1.0-beta.1`.
-- GitHub Release: prerelease.
-- npm dist-tag: `beta`.
-- Focus: bug fixes, docs, provision UX, migration/upgrade path.
-
-### Release candidate
-
-RC means "could become stable if no blocker appears." Only blocker fixes
-should land between RCs.
-
-- Version suffix: `-rc.N`, e.g. `0.1.0-rc.1`.
-- GitHub Release: prerelease.
-- npm dist-tag: `rc`.
-- Focus: release blockers only.
-
-### Stable
-
-Stable releases use no prerelease suffix.
-
-- Version: `0.1.0`, `0.1.1`, ...
-- Git tag: `v0.1.0`.
-- GitHub Release: not prerelease.
-- npm dist-tag: `latest`.
-- Focus: public install path and supported upgrade story.
-
-## Normal release playbook
-
-The release pipeline is automated end-to-end (#191). Pushing a `v*` tag
-fans out: npm publish → starters bump → starters tag → landing bump →
-landing deploy. The human steps are:
-
-1. Confirm the release scope and blocking issues.
-2. Ensure every merged PR has a changelog-worthy note when it affects users, package behavior, public docs, or release mechanics.
-3. **If this release widens any SDK type** (new required field, new closed-enum entry, removed export, broader runtime contract), run the [cross-repo type-shape audit](#cross-repo-type-shape-changes) below BEFORE bumping. CI inside `mantle/` won't catch downstream literal breaks — only the fanout's validate gate will, after publish is irreversible.
-4. Run the full local gate from `develop`:
-
-   ```bash
-   pnpm run check
-   ```
-
-5. **Pre-v0.1 alpha shortcut**: cut the release directly from `develop` — open a release PR with base=`develop` titled `release: publish alpha.N as pre-v1 latest`, merge with a merge commit, tag the develop merge commit, push the tag. Skip steps 6–8. `main` updates less frequently than alphas; promotion happens when an alpha graduates to beta/stable. (Per practice since alpha.7; see [§ Pre-v0.1 alpha cadence](#pre-v01-alpha-cadence) below.)
-6. **Stable / beta / RC**: open a release PR base=`main`, head=`develop`. The PR title MUST contain the literal substring `release: bump @aotter/mantle* to vX.Y.Z` — that exact phrase is the trigger contract for `mantle-starters/.github/workflows/tag-and-dispatch-landing.yml`'s tag job. Anything else and the landing chain skips tagging.
-7. Review the diff for accidental unreleased work.
-8. Merge with a merge commit.
-9. Tag the merge commit:
-
-   ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
-
-10. The release fanout takes over (see § Release fanout below). Watch
-    the Actions tab for the chain; intervene only if a gate fails. See [§ Fix-forward when bump fanout fails](#fix-forward-when-bump-fanout-fails) if validate fails downstream.
-
-### Pre-v0.1 alpha cadence
-
-Through 2026-05-19 (alpha.7, alpha.8, alpha.9), every alpha bump tagged directly from `develop` — no `develop → main` promotion. Codex hand-tagged the develop merge commit; `release.yml` doesn't care which branch the tag points at. `main` updates intentionally lag the alpha cadence so the canonical "released" pointer doesn't churn daily.
-
-This drops steps 6–9 from the playbook above for pre-v0.1 alphas — the PR base stays `develop`, merge with a merge commit, tag the develop merge commit. The release fanout still fires on the tag push because `release.yml` is keyed on `v*` tags, not branch.
-
-Once v0.1.0 ships, switch to the full `develop → main → tag` flow per the steps above.
-
-### Cross-repo type-shape changes
-
-When a release widens an SDK type, downstream literal constructors in `mantle-starters/` and `mantle-landing/` may break the fanout's validate / typecheck gate AFTER npm publish lands. The npm publish itself succeeds (the SDK code compiles fine in isolation); the breakage surfaces in `bump-from-sdk.yml` and `bump-from-starters.yml`'s gate, by which point a hotfix has to chase the broken alpha.
-
-Audit checklist for any release that widens a type — run from the workroot containing all three repos:
-
-```bash
-# Find literal constructors of every SDK-owned type in downstream repos.
-# Extend the type list when adding more SDK-owned exported types.
-for repo in mantle-starters mantle-landing; do
-  echo "=== $repo"
-  git -C "$repo" grep -nE ': (SiteConfig|SiteDefaults|MediaAsset|Entry|Revision)\s*[=:]' -- '*.ts' || true
-done
-```
-
-Concrete examples:
-
-- Adding a required field to `SiteConfig` (e.g. `media: { purposes }` in v0.0.11-alpha.9): every `SiteConfig` literal in starter `test/fixture/data.ts` + `scripts/seed-initial-content.ts` + landing equivalents needs the new field BEFORE the SDK ships, or downstream bump fails. Fix-forward path described below works but it's bumpy.
-- Adding a closed-enum entry: same hazard if downstream `switch` statements are exhaustive.
-- Removing an export: starter `import` statements need migration in the same release PR.
-
-The audit takes ~30 seconds and rules out the most common fanout failure. Do it as part of step 3 above, not after the tag is pushed.
-
-### Fix-forward when bump fanout fails
-
-`bump-from-sdk.yml` / `bump-from-starters.yml` failed at the validate / typecheck gate because the SDK release introduced a code-shape break? Re-firing the workflow won't help — it'll fail the same gate on the same source. The fix-forward path:
-
-1. Branch off `develop` (starters) or `main` (landing): `release/vX.Y.Z`.
-2. Replicate what the bump workflow would have done — bump every `@aotter/mantle*` dep + own `version` in package.json files, refresh lockfile via `pnpm install --no-frozen-lockfile`, update `sources.json.version` (starters only).
-3. Add whatever source-code fixes satisfy the new SDK shape.
-4. Commit subject MUST be `release: bump @aotter/mantle* to vX.Y.Z` (starters) or `release: bump @aotter/mantle to vX.Y.Z` (landing) — `tag-and-dispatch-landing.yml` filters on this in starters; landing has no equivalent filter but the convention keeps history consistent.
-5. Open PR base=`develop` (starters) or base=`main` (landing), CI passes now that lockfile + source are in sync, rebase-merge.
-6. **Don't** re-fire `bump-from-sdk.yml` afterwards — it'll error with `No changes after bump — was the SDK version the same as current?` because your fast-path PR already did the bump. The workflow's only purpose was to produce the same end state your PR did.
-7. If develop→main promote is part of the flow (post-v0.1), reuse the literal `release: bump...` subject from step 4 as the promote PR title so the landing tag job fires.
-
-### Re-spin release for a downstream-content-only fix
-
-Sometimes the SDK npm artifact is fine but the GitHub release tarball — used by `create-mantle` to scaffold starters — is broken (e.g. starter content didn't include a freshly-required field at release time). Per `§ Rollback / yanking policy`, the right path is to publish the next alpha as a no-op SDK bump that re-spins the fanout:
-
-1. Cut alpha.N+1 in `mantle/` with empty SDK diff (versions + CHANGELOG only).
-2. CHANGELOG entry MUST say explicitly: `No SDK code changes. alpha.N+1 re-spins the release fanout to ship starter content that should have been part of alpha.N (see #XXX).`
-3. Tag + push → full fanout produces fresh `mantle-starters` tag + GitHub release tarball with the corrected content.
-
-Don't force-retag the broken alpha. Don't introduce a starter-only sub-tag like `vX.Y.Z-starter.N`. Either breaks the convention that starter version === SDK version.
-
-## Release fanout
-
-`mantle/.github/workflows/release.yml` triggers on `v*` tag push.
-The full chain:
-
-```
-mantle: git push tag v0.0.11-alpha.4
-      │
-      ▼
-release.yml: pnpm install → build → test (gate) → verify package.json
-             versions match the tag → pnpm -r publish (with --tag
-             inferred from prerelease suffix) → GitHub release →
-             repository_dispatch
-             to mantle-starters
-                   │
-                   ▼
-mantle-starters/bump-from-sdk.yml: bump @aotter/mantle* deps
-             + own version + sources.json.version → pnpm install →
-             validate × 5 starters (gate) → typecheck × 5 (gate) →
-             PR onto main → auto-approve + auto-merge
-                   │
-                   ▼ (after PR merges to main)
-mantle-starters/tag-and-dispatch-landing.yml: tag the merge commit
-             vX.Y.Z → repository_dispatch to mantle-landing
-                   │
-                   ▼
-mantle-landing/bump-from-starters.yml: bump @aotter/mantle* dep
-             + own version (so STARTER_VERSION const updates) →
-             pnpm install → typecheck (gate) → wrangler dry build (gate) →
-             PR onto main → auto-approve + auto-merge
-                   │
-                   ▼ (after PR merges to main)
-mantle-landing/deploy.yml (existing): wrangler deploy → production
-```
-
-Every workflow is gated. A failed gate stops the chain at the failing
-PR (left open for human triage). Nothing downstream fires until the
-upstream PR is fixed + merged.
-
-### Operator setup (one-time)
-
-Repo secrets:
-
-| Repo | Secret | Purpose |
+| State | Sole next writer | Retry / invariant |
 |---|---|---|
-| `aotter/mantle` | `NPM_TOKEN` | npm publish access to `@aotter/*` |
-| `aotter/mantle` | `RELEASE_FANOUT_TOKEN` | cross-repo dispatch to `mantle-starters` |
-| `aotter/mantle-starters` | `RELEASE_FANOUT_TOKEN` | open release PR + cross-repo dispatch to `mantle-landing` |
-| `aotter/mantle-landing` | `RELEASE_FANOUT_TOKEN` | open release PR (deploy is `deploy.yml`'s job) |
-
-`RELEASE_FANOUT_TOKEN` is the same fine-grained PAT across all three
-repos — easier to manage than three separate tokens. Required
-permissions: `contents: write`, `pull-requests: write`, `actions: write`
-on the three repos. Token expiration policy is whatever you want;
-rotate when expired.
-
-Long-term recommendation: replace the PAT with a GitHub App
-(`mantle-release-bot`) installed on the three repos and use
-`actions/create-github-app-token` to mint short-lived install
-tokens per workflow run. PAT path works for now.
-
-### Manual fallback
-
-If `RELEASE_FANOUT_TOKEN` is missing or a workflow fails partway:
-
-- npm publish still happens (it doesn't need the fanout token; only
-  `NPM_TOKEN`)
-- Each downstream workflow has a `workflow_dispatch` trigger so the
-  operator can re-fire it manually from the Actions UI with the
-  version as input.
-
-Order of manual re-fires: `mantle-starters/bump-from-sdk.yml` →
-(wait for merge) → `mantle-starters/tag-and-dispatch-landing.yml`
-(fires automatically on merge) → `mantle-landing/bump-from-starters.yml`
-fires automatically via the cross-repo dispatch.
-
-### Channel-specific behavior
-
-`release.yml` infers the npm dist-tag from the version suffix:
-
-| Tag pushed | npm dist-tag | GitHub release marked |
-|---|---|---|
-| `v1.2.3` | `latest` | normal release |
-| `v0.0.11-alpha.4` | `alpha` | prerelease |
-| `v0.1.0-beta.1` | `beta` | prerelease |
-| `v0.1.0-rc.1` | `rc` | prerelease |
-
-Without the inference, every prerelease would land on `latest` and
-break adopters running `npm install @aotter/mantle` without an
-explicit tag. The mapping is in the "Extract version + infer npm tag"
-step of `release.yml`.
-
-## npm publish
-
-Published npm packages are the runtime dependency source for
-agent-provisioned consumer projects (ADR-0013). Starter files may be
-copied from GitHub, but `setup:site` rewrites runtime dependencies to
-the selected npm version.
-
-### Packages published in alpha
-
-For `0.0.x-alpha`, publish SDK packages in dependency order:
-
-1. `@aotter/mantle-spec`
-2. `@aotter/mantle-admin-ui`
-3. `@aotter/mantle-runtime`
-4. `@aotter/mantle-cloudflare`
-5. `@aotter/mantle` (umbrella — depends on all four above; publish last so its exact-pinned `dependencies` resolve)
-
-The umbrella is the adopter-facing entry: a single dep, subpath imports
-`@aotter/mantle/{spec,runtime,cloudflare,admin-ui}`. Sub-packages
-stay individually installable for tooling / alt-adapter authors.
-
-Do **not** publish starter packages during alpha unless a separate PR
-explicitly prepares their package allowlists and verifies the tarballs.
-Current starter install flow downloads starter source tarballs from
-GitHub/template refs, extracts them without preserving the template
-repo remote, and uses npm as the runtime dependency source.
-
-Do **not** publish `@aotter/mantle-netlify` while it is a stub.
-
-`create-mantle` lives in `aotter/mantle-starters`, not here. The
-scaffolder couples to starter content (sources.json, merge layout,
-placeholder macros) and has zero coupling to SDK runtime, so it ships
-from the starters repo as a GitHub release tarball. Releases on this SDK
-repo do not attach a create-mantle tarball and must not publish
-`@aotter/create-mantle`.
-
-`skills/install/SKILL.md` consumes the command composed by the landing
-page. Human-facing direct usage belongs in the `mantle-starters` README,
-not this SDK repo.
-
-### Pre-publish checks
-
-Run the full gate before publishing:
-
-```bash
-pnpm run check
-```
-
-Run `pnpm build` from the workspace root first so `dist/` exists for
-every package — `pnpm publish` does NOT run the build lifecycle scripts
-by default, and a tarball published without `dist/` is a wasted version
-slot (npm forbids republishing the same version, and `npm unpublish`
-needs an OTP not always to hand). Then pack + inspect:
-
-```bash
-pnpm run check                          # boundary + build + typecheck + test
-mkdir -p /tmp/mantle-pack
-pnpm -C packages/mantle-spec       pack --pack-destination /tmp/mantle-pack
-pnpm -C packages/mantle-admin-ui   pack --pack-destination /tmp/mantle-pack
-pnpm -C packages/mantle-runtime    pack --pack-destination /tmp/mantle-pack
-pnpm -C packages/adapters/cloudflare    pack --pack-destination /tmp/mantle-pack
-pnpm -C packages/mantle            pack --pack-destination /tmp/mantle-pack
-tar tzf /tmp/mantle-pack/aotter-mantle-<ver>.tgz | head    # spot-check
-```
-
-Confirm each tarball contains only intended `dist`, `README.md`,
-`LICENSE`, and `package.json` payloads for that package. Do not publish
-tarballs containing local state, `.wrangler/`, secrets, fixtures, or
-workspace-only artifacts.
-
-### Alpha publish command
-
-Publish prerelease packages with the `alpha` dist-tag, in dep order:
-
-```bash
-pnpm publish --filter @aotter/mantle-spec       --no-git-checks --access public
-pnpm publish --filter @aotter/mantle-admin-ui   --no-git-checks --access public
-pnpm publish --filter @aotter/mantle-runtime    --no-git-checks --access public
-pnpm publish --filter @aotter/mantle-cloudflare --no-git-checks --access public
-pnpm publish --filter @aotter/mantle            --no-git-checks --access public
-```
-
-Or one-shot:
-
-```bash
-pnpm -r publish --no-git-checks --access public --tag alpha
-```
-
-`pnpm publish` resolves `workspace:*` deps to the actual published
-version at pack time, so the umbrella's `dependencies` lock to the
-exact `0.0.X-alpha` of each sub-package once the publish completes.
-
-**DO NOT use `npm publish` directly** inside a workspace package.
-`npm publish` (unlike `pnpm publish`) does **not** rewrite `workspace:*`
-specifiers — they ship to the registry verbatim as the literal string
-`"workspace:*"`, which no consumer can resolve. Recovery requires
-bumping past the broken version (see "Rollback / yanking policy") since
-republishing the same version is forbidden. Saw this concretely on the
-0.0.11-alpha rename round: mantle-runtime / cloudflare / umbrella all
-shipped broken via `npm publish` and had to be republished at
-0.0.11-alpha.3 via `pnpm publish`.
-
-Confirm zero `workspace:*` leaked into published deps:
-
-```bash
-for p in @aotter/mantle{-spec,-admin-ui,-runtime,-cloudflare,}; do
-  echo "=== $p"
-  npm view "$p@alpha" dependencies --json | grep -i workspace && echo "  ⚠ LEAK"
-done
-```
-
-`pnpm publish` uses `publishConfig.tag` (set to `alpha` on every
-package) but `npm` also assigns the `latest` dist-tag by default. Per
-the pre-v0.1 `latest` policy above, that's the correct behavior; no
-action needed. Add the `alpha` tag explicitly only if it's missing:
-
-```bash
-npm dist-tag add @aotter/mantle@<ver> alpha
-```
-
-After publishing, verify:
-
-```bash
-for p in @aotter/mantle{-spec,-admin-ui,-runtime,-cloudflare,}; do
-  npm view "$p" version dist-tags --json
-done
-```
-
-Note: `npm view` against a freshly-published name can 404 for 5–15 min
-while the Fastly read-side cache propagates. The write side (and
-`pnpm publish`'s "cannot publish over the previously published
-versions" sanity check) is the authoritative confirmation that the
-publish landed.
-
-**For consumer projects depending on the just-published packages**,
-also smoke-test installability after publish:
-
-```bash
-mkdir -p /tmp/install-smoke && cd /tmp/install-smoke
-echo '{"name":"smoke","private":true}' > package.json
-npm install @aotter/mantle@alpha --no-package-lock --no-save
-ls node_modules/@aotter/mantle  # expect: dist/ package.json README.md
-```
-
-If `npm install` 404s for >15 min despite `pnpm publish` succeeding,
-the metadata doc is likely tombstoned (see Rollback policy below for
-the 24h unpublish cooldown).
-
-### Rollback / yanking policy
-
-Do not use npm unpublish as the normal rollback mechanism. If an alpha
-is broken:
-
-1. Publish the next alpha with a higher version.
-2. Deprecate the broken version with a clear message.
-
-Example:
-
-```bash
-npm deprecate @aotter/mantle-runtime@0.0.7-alpha "Broken alpha; use 0.0.8-alpha"
-```
-
-Only unpublish when the tarball contains secrets, private files, or a
-severely wrong package. Remember:
-
-- npm package versions cannot be reused after unpublish (forever).
-- After unpublishing, the **package's metadata document is tombstoned
-  for 24 hours**. Republishing the SAME version is forbidden, AND new
-  versions you publish during the cooldown can land but the `npm view`
-  / `npm install` read path returns 404 because the metadata doc is in
-  a frozen state. Saw this concretely on 0.0.11-alpha rename:
-  unpublished a workspace-leaked umbrella, republished as
-  0.0.11-alpha.1 and .alpha.2 — both were technically published (the
-  registry refused republish with "previously published versions"
-  errors) but invisible to consumers. Only `0.0.11-alpha.3` (after a
-  version-number "jump") cleared the tombstone.
-
-Safer rollback discipline: skip unpublish entirely. Just bump + deprecate.
-
-## Cross-cutting rename playbook
-
-A "rename" here means a substring-level identifier shift that crosses
-multiple repos / packages (e.g. `mantle` → `mantle` on 2026-05-16).
-These are once-per-product-life events. The rules below cost ~30 minutes
-of pre-flight; skipping them cost a half-day of outage when ignored.
-
-### Step 1 — pre-flight grep for substring false-positives
-
-A naive `sed s/OLD/NEW/g` matches OLD as a **substring** of unrelated
-identifiers. Concrete trap: renaming `mantle` → `mantle` hit
-`aotter-mantle` (the CF worker name) → `aottermantle`. The
-auto-deploy after merge created an orphan worker without secrets;
-`the Mantle landing page` returned 503 for 30 minutes.
-
-Before the sed, search for shapes where OLD could appear as a substring
-of a meaningful different identifier:
-
-```bash
-# Substring of an unrelated infra identifier?
-git grep -E "[a-zA-Z]+-?${OLD_NAME}" -- '*.toml' '*.yaml' '*.yml' '*.json'
-
-# Specifically check Cloudflare worker / D1 / KV / DO names
-git grep -nE "^name|database_name|class_name|queue.*name" -- wrangler.toml '**/wrangler.toml'
-
-# CI workflow names / step IDs
-git grep -nE "name:|id:" -- '.github/workflows/**'
-```
-
-Hand-edit (or use word-boundary regex) any match that should *not* shift.
-
-### Step 2 — post-sed infra-config diff
-
-After the bulk replace, **explicitly diff every infrastructure config
-file** even if the change looks mechanical:
-
-```bash
-git diff --name-only HEAD~1 | grep -E "wrangler|workflow|toml|terraform|kubernetes"
-git diff HEAD~1 -- wrangler.toml '**/wrangler.toml'
-```
-
-Eyeball each line. Worker / DB / queue names that shift mean wrangler
-will deploy to a NEW resource without secrets / bindings — silent
-disaster.
-
-### Step 3 — CI green ≠ deploy OK
-
-The deploy workflow can report success while the live URL is broken.
-Reasons: secrets don't carry to a renamed worker, route bindings
-re-attach to the new (empty) worker, etc.
-
-**Always smoke-test the live URL after a config-touching deploy:**
-
-```bash
-sleep 60   # Let the deploy + DNS propagate
-for path in / /zh-TW /skill/install /admin; do
-  code=$(curl -sIo /dev/null -w "%{http_code}" "https://<your-site>$path")
-  echo "  $path → $code"
-done
-```
-
-5xx without an obvious source-level cause usually means
-infrastructure-config drift, not application bug.
-
-### Step 4 — Cross-repo rename order
-
-For renames spanning SDK + starters + landing (or any
-SDK-depends-on-published-SDK chain):
-
-1. Source-level rename in all repos. Consumer repos may temporarily use
-   npm aliases (for example the new package name pointing at a
-   pre-rename package version) so CI can pass before the
-   first `@aotter/*` SDK release exists.
-2. Merge the starters / landing workflow changes before pushing the SDK
-   release tag, so the fanout understands the new package names.
-3. Merge the SDK rename PR, then push the next `v*` tag. The SDK
-   `release.yml` publishes `@aotter/*` through GitHub Actions using
-   `NPM_TOKEN`; do not publish locally.
-4. Let `bump-from-sdk.yml` replace the temporary consumer aliases with
-   the freshly published real `@aotter/*` version, regenerate lockfiles,
-   and promote through starters → landing.
-5. Smoke-test live URLs.
-6. Deprecate old packages with `npm deprecate` and a message pointing
-   to `@aotter/mantle` (repeat for the subpackages).
-
-GitHub repo renames (`gh repo rename`) and local-dir renames can happen
-anytime — GitHub auto-redirects old URLs to new ones; no consumer
-breakage from this step alone.
-
-## Hotfix process
-
-Use hotfixes only for released `main` defects.
-
-1. Branch from `main`:
-
-   ```bash
-   git checkout -b fix/issue-NN-hotfix origin/main
+| Reviewed source; unused version | Core source/packed-consumer gates, then immutable Core tag | Exact canonical merged PR SHA and version required |
+| Tag exists; registry candidates partial | Existing npm/GPR publication steps | Verify existing artifact identity; publish missing versions only |
+| Registry candidates verified | Public-registry reference consumer gate | No mutation; failure leaves public channels unchanged |
+| Consumer passes | Monotonic npm/GPR channel promotion | Same version is a no-op; older runs cannot move a channel backward |
+| Channels promoted/preserved newer | GitHub release step | Existing release identity or fail |
+
+The public-registry gate uses a disposable copy of the directly authored
+`docs/examples/host-minimal-worker` reference, installs the exact candidate, then
+checks generation, skill projection, TypeScript and real Worker HTTP behavior.
+The same reference is gated against exact tarballs before Core tagging. It is
+a test/example, not a scaffold product or another repository release.
+
+## Changing release automation
+
+Before editing a release workflow, put a finite state table plus its
+invariants and non-goals in a Draft PR. Name the single mutation boundary for
+each external resource; recovery must return through that boundary rather than
+introduce a second writer.
+
+Freeze one commit SHA for review. Every finding must name the affected state
+row, a concrete event interleaving, and the wrong mutation it permits. A clean
+verdict expires when that SHA changes. After two patch rounds, a new
+foundational blocker returns to the state table and the user for a scope
+decision instead of starting another local redesign loop.
+
+Invariants: immutable versions/tags retain their identity; registry integrity
+and the published-consumer gate precede public channel promotion; retries
+cannot move channels backward. No downstream mutation, unpublish or rollback
+is introduced. The runnable release-order check guards these transitions.
+
+## Branches and channels
+
+| Version | Source branch | npm dist-tag | GitHub release |
+|---|---|---|---|
+| `X.Y.Z-alpha.N` | `develop` | `alpha` | prerelease |
+| `X.Y.Z-beta.N` | `main` | `beta` | prerelease |
+| `X.Y.Z-rc.N` | `main` | `rc` | prerelease |
+| `X.Y.Z` | `main` | `latest` | release |
+
+- The controller derives the source branch from the version: `-alpha` means
+  `develop`, anything else means `main`. It refuses a commit that is not that
+  branch's tip or not the merge commit of exactly one PR into that branch.
+  `scripts/release-tag-order.mjs` rejects any other prerelease identifier.
+- `develop` stays the default integration branch. `main` changes only through
+  promotion PRs and hotfix PRs (below); it is never pushed directly, rebased
+  or force-updated. Both branches share one ruleset: PR, one approval,
+  resolved threads and a current-base `Typecheck + tests` check.
+- Stable publishes latest. Final 0.1.0 alphas only advance alpha, preserving
+  existing legacy latest. Historic 0.0 alpha behavior remains recoverable.
+  A prerelease channel keeps its last version when a later stable publishes.
+
+## Prepare and run
+
+1. Fetch Core refs, prove the version and tag unused. Preview GitHub generated
+   notes since the previous tag; correct PR metadata and label release-only
+   PRs skip-release-notes. Do not duplicate release entries in CHANGELOG.md.
+2. Align every workspace package, plugin and marketplace ref to the version.
+   The controller checks package.json files and plugin manifests only; docs
+   pins and the admin-ui registry dependency are hand-edited, so grep for the
+   old version until only lockfiles and registry-pinned examples remain:
+
+   ```sh
+   OLD=<previous version> NEW=<version>
+   git grep -l "\"version\": \"$OLD\"" -- '*.json' ':!**/package-lock.json' \
+     | xargs perl -pi -e "s/\"version\": \"\Q$OLD\E\"/\"version\": \"$NEW\"/"
+   node scripts/sync-plugin-manifests.mjs
+   git grep -n "$OLD" -- ':!pnpm-lock.yaml' ':!**/package-lock.json'
    ```
 
-2. Keep the patch narrow.
-3. Run the relevant tests and the full gate when feasible.
-4. Open the PR against `main`.
-5. Merge, tag a patch release, and update GitHub release notes.
-6. Merge or cherry-pick the hotfix back to `develop`.
+3. Review API compatibility and migration instructions for actual consumers.
+   Frozen legacy consumers stay on alpha.17; do not make them follow new Core.
+4. Run `pnpm check`, including exact packed Worker, optional products, Bun,
+   Vercel, skills, release invariants, types and tests. Inspect the umbrella
+   docs/skills payload: no workspace dependencies, secrets or local state.
+5. Freeze the PR head for self review; CI must pass before merge. Merge into
+   `develop` with a merge commit for every version. For an alpha, dispatch
+   release.yml from that merge with `version` (without v). For beta, RC and
+   stable, continue with the promotion below. The controller refuses an
+   untagged source that is no longer the expected branch tip.
 
-## Pre-flight checklist
+The ten public packages remain in dependency order:
 
-- [ ] PR base is correct for the release type — `develop` for pre-v0.1 alphas, `main` for beta/RC/stable (see [§ Pre-v0.1 alpha cadence](#pre-v01-alpha-cadence)).
-- [ ] `CHANGELOG.md` has the release entry. If it's a no-op SDK bump to re-spin starter content, the entry MUST say so explicitly (see [§ Re-spin release for a downstream-content-only fix](#re-spin-release-for-a-downstream-content-only-fix)).
-- [ ] **Cross-repo type-shape audit ran** if this release widens any SDK type — see [§ Cross-repo type-shape changes](#cross-repo-type-shape-changes). Skipping this is how alpha.9 shipped with broken starter content.
-- [ ] `pnpm run check` passed or failures are documented and accepted.
-- [ ] Package versions and tag name match.
-- [ ] GitHub release notes link the relevant issues and ADRs.
-- [ ] Publish used `pnpm publish` (not `npm publish`) — verify no
-      `workspace:*` leaked into published `dependencies` via the check
-      script in the "Alpha publish command" section.
-- [ ] Cross-repo rename? Pre-flight grep for substring false-positives
-      ran (see "Cross-cutting rename playbook"); infra-config diff
-      explicitly reviewed; consumer-repo lockfiles refreshed after the
-      SDK publish lands.
-- [ ] If promoting `develop → main` (post-v0.1, or first-stable), the promote PR title contains the literal substring `release: bump @aotter/mantle* to vX.Y.Z` so `tag-and-dispatch-landing.yml`'s tag job fires.
-- [ ] Smoke-tested live downstream URL (e.g. `the Mantle landing page`)
-      after consumer-repo deploys — CI green is not enough when infra
-      config (wrangler.toml `name`, D1 / KV / DO bindings) shifted.
-- [ ] npm publish steps are either completed or explicitly not applicable.
+1. @aotter/mantle-spec
+2. @aotter/mantle-admin-ui
+3. @aotter/mantle-runtime
+4. @aotter/mantle-indexeddb
+5. @aotter/mantle-web
+6. @aotter/mantle-admin
+7. @aotter/mantle-bun
+8. @aotter/mantle-vercel
+9. @aotter/mantle-cloudflare
+10. @aotter/mantle
+
+## Promote to main (beta, RC, stable)
+
+Every non-alpha release is the version PR above, one promotion PR and one
+dispatch. The version PR still merges into `develop`, so `develop` always
+contains what `main` publishes and promotions never conflict.
+
+1. Stable only: the release-gate issue (#826 for 0.1.2) records owner
+   acceptance. Every gate item passes with linked evidence or is explicitly
+   deferred there, and no `release-gate` issue stays open against the version.
+   Beta and RC need the gate defined, not passed.
+2. Merge the version PR into `develop` with a merge commit; note its SHA.
+3. Pin the promotion head at that SHA so later `develop` merges cannot ride
+   along, then open the promotion PR against `main`:
+
+   ```sh
+   git fetch origin
+   git push origin <develop merge SHA>:refs/heads/promote/<version>
+   gh pr create --base main --head promote/<version> \
+     --title "release: promote <version> to main" --label skip-release-notes
+   ```
+
+   The body names the version PR, the pinned SHA and the gate evidence. The
+   usual review and checks apply. An organization-admin bypass merge must be
+   recorded on the PR (see CONTRIBUTING).
+4. Merge with a merge commit, never rebase: the controller needs `main`'s tip
+   to be the PR's merge commit. `main`'s tree now equals the pinned commit.
+5. Dispatch from `main` and watch every gate exactly as for an alpha:
+
+   ```sh
+   gh workflow run release.yml --ref main -f version=<version>
+   ```
+
+6. RC to stable repeats 2–5 with the next version. `rc` keeps pointing at
+   the last RC; stable moves only `latest`.
+
+Hotfix on `main` is for a published non-alpha version that cannot wait for
+the next promotion. Branch from `main`, include the version bump, PR into
+`main`, dispatch as in step 5, then immediately PR `main` back into `develop`
+and resolve version files in favour of `develop`. Until that lands, the next
+promotion conflicts on the version files.
+
+First stable (0.1.2) specifics: `latest` moves from 0.1.0-alpha.16, the last
+`latest` the frozen legacy consumers saw, to 0.1.2. GitHub generates notes
+from the previous release (v0.1.2-alpha.6); to cover the whole 0.1.2 line,
+regenerate from v0.1.0-alpha.17 and edit the release body after the run. The
+body is not an immutable artifact; the tag and packages are.
+
+```sh
+gh api repos/aotter/mantle/releases/generate-notes \
+  -f tag_name=v0.1.2 -f previous_tag_name=v0.1.0-alpha.17 --jq .body > notes.md
+gh release edit v0.1.2 --notes-file notes.md
+```
+
+After publication, move docs/examples that were pinned to a packed checkout
+back to registry installation with an updated lockfile, and close the gate
+issue with the run link and completion evidence.
+
+## Credentials and verification
+
+Core needs NPM_TOKEN for npmjs. Its job-scoped GITHUB_TOKEN creates the Core
+tag/release and mirrors GitHub Packages. No cross-repository fanout token is
+needed. Before tagging, verify credentials and new-version absence on both
+registries. Existing artifacts on retry must have matching integrity.
+
+Completion requires the Core tag SHA, all ten npmjs/GPR packages, exact
+integrity, no workspace dependencies, a passing public-registry Worker gate,
+correct channel tags and the GitHub release. Retain run links and gate evidence.
+This does not prove stable production soak or upgrade safety; #826 owns those
+acceptance requirements. A first-stable agent acceptance uses only the
+version-matched authoring instructions, not an SDK checkout or generated site.
+
+## Recovery
+
+Rerun the same controller commit/version for a transient or verified partial
+transition. Existing tags/artifacts must match; newer channels stay put. Fail
+on identity disagreement instead of guessing. A wrong public artifact needs
+a new version; never force-retag, overwrite or reuse a published version.
+Unpublish is reserved for actual secret/private-file exposure, never routine
+fixes. Infrastructure renames require their explicit config diff and live
+smoke; CI alone cannot prove provider identity.

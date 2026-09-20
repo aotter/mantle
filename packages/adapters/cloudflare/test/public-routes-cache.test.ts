@@ -1,23 +1,25 @@
+import { compileTestPlan } from "./compileTestPlan.js";
 import { Hono } from "hono";
+import { html } from "hono/html";
 import { describe, expect, it } from "vitest";
 import type { Manifest } from "@aotter/mantle-spec";
-import { TemplateRegistry } from "@aotter/mantle-runtime";
-import { createCmsRef } from "../src/mount/bootRuntimeOnce.js";
+import {
+  createPublicPathResolver,
+  renderSeoTagsHtml,
+  TemplateRegistry,
+} from "@aotter/mantle-web";
+import type { Auth } from "../src/auth/createAuth.js";
+import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
 import { mountPublicRoutes } from "../src/mount/mountPublicRoutes.js";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
-import type { Auth } from "../src/auth/createAuth.js";
-import {
-  InMemoryKv,
-  StubAssetServer,
-  stubAuth,
-} from "./fakes/runtime-bindings.js";
+import { StubAssetServer, stubAuth } from "./fakes/runtime-bindings.js";
 
-function staffAuth(role: "owner" | "editor" | "contributor" = "owner"): Auth {
+function auth(role: string | null): Auth {
   return {
     handler: async () => new Response(null, { status: 404 }),
     getSession: async () => ({
       session: { id: "s1", userId: "u1", expiresAt: new Date(Date.now() + 60_000) },
-      user: { id: "u1", email: "x@y.z", name: "Staff", role, githubLogin: "staff" },
+      user: { id: "u1", email: "x@y.z", name: "User", role, githubLogin: null },
     }),
     getUserRole: async () => role,
     methods: [],
@@ -25,38 +27,45 @@ function staffAuth(role: "owner" | "editor" | "contributor" = "owner"): Auth {
 }
 
 function manifests(): Manifest[] {
-  return [
-    {
-      apiVersion: "cms.mantle.aotter.net/v1",
-      kind: "Schema",
-      metadata: { name: "posts" },
-      spec: {
-        title: "Posts",
-        schema: {
-          type: "object",
-          properties: {
-            slug: { type: "string" },
-            locale: { type: "string" },
-            title: { type: "string" },
-            body: { type: "string" },
-          },
-          required: ["slug", "locale", "title"],
+  return [{
+    apiVersion: "cms.mantle.aotter.net/v1",
+    kind: "Schema",
+    metadata: { name: "posts" },
+    spec: {
+      title: "Posts",
+      schema: {
+        type: "object",
+        properties: {
+          slug: { type: "string" },
+          locale: { type: "string" },
+          title: { type: "string" },
+          body: { type: "string" },
+          sections: { type: "array", items: { type: "object" } },
         },
-        localized: true,
-        lifecycle: "simple",
+        required: ["slug", "locale", "title"],
       },
+      localized: true,
+      lifecycle: "publishing",
     },
-  ];
+  }];
 }
 
-function harness(locales: readonly string[] = ["en"], opts: { auth?: Auth } = {}) {
+function harness(
+  locales: readonly string[] = ["en"],
+  sessionAuth: Auth = stubAuth,
+) {
   const db = new InMemoryDatabase();
-  const kv = new InMemoryKv();
   const templates = new TemplateRegistry();
-  templates.registerEntryTemplate("posts", ({ entry, site }) => `<article data-brand="${site.brand}"><h1>${entry.data["title"]}</h1></article>`);
-  templates.registerListTemplate("posts", ({ entries, site }) => `<section data-brand="${site.brand}">${entries.map((e) => e.data["title"]).join(",")}</section>`);
-  const ref = createCmsRef({
-    manifests: manifests(),
+  templates.registerEntryTemplate(
+    "posts",
+    ({ entry, site, seo }) => `<html><head>${seo ? renderSeoTagsHtml(seo) : ""}</head><body><article data-brand="${site.brand}"><h1>${entry.data["title"]}</h1></article></body></html>`,
+  );
+  templates.registerListTemplate(
+    "posts",
+    ({ entries, site, seo, nextPageUrl }) => `<html><head>${seo ? renderSeoTagsHtml(seo) : ""}</head><body><section data-brand="${site.brand}">${entries.map((e) => e.data["title"]).join(",")}</section>${nextPageUrl ? html`<nav aria-label="分頁"><a rel="next" href="${nextPageUrl}">更多文章</a></nav>` : ""}</body></html>`,
+  );
+  const ref = createMantleRuntimeRef({
+    plan: compileTestPlan(manifests()),
     templates,
     siteDefaults: {
       title: "Blog",
@@ -64,157 +73,280 @@ function harness(locales: readonly string[] = ["en"], opts: { auth?: Auth } = {}
       origin: "https://example.com",
       locales,
     },
-    bindings: {
-      db,
-      kv,
-      assets: new StubAssetServer(),
-    },
-    auth: opts.auth ?? stubAuth,
+    bindings: { db, adminAssets: new StubAssetServer() },
+    auth: sessionAuth,
+    publicPathResolver: createPublicPathResolver({
+      collectionRoutes: { posts: { segment: "posts", homeSlug: "home" } },
+    }),
   });
   const app = new Hono();
   mountPublicRoutes(app, ref, {
-    collectionRoutes: [{ collection: "posts", segment: "posts", listRoute: true }],
+    collectionRoutes: [{ collection: "posts", segment: "posts", listRoute: true, homeSlug: "home" }],
+    homeRenderer: async ({ locale, seo }) => new Response(
+      `<html lang="${locale}"><head>${renderSeoTagsHtml(seo)}</head><body>Home</body></html>`,
+      { headers: { "content-type": "text/html" } },
+    ),
     notFoundRenderer: async () => new Response("missing", { status: 404 }),
   });
-  return { app, db, kv };
+  return { app, db, ref };
 }
 
 function seedPublishedPost(db: InMemoryDatabase, locale = "en"): void {
-  const id = `p1-${locale}`;
-  db.entries.set(id, {
-    id,
+  db.entries.set(`p1-${locale}`, {
+    id: `p1-${locale}`,
     collection: "posts",
     status: "published",
     version: 1,
-    data: JSON.stringify({
-      slug: "hello",
-      locale,
-      title: "Hello",
-      body: "World",
-    }),
+    data: JSON.stringify({ slug: "hello", locale, title: "Hello", body: "World" }),
     author_id: null,
     created_at: 1,
     updated_at: 2,
   });
 }
 
-describe("mountPublicRoutes read-through cache", () => {
-  it("renders list HTML from D1 on KV miss and populates KV", async () => {
+describe("mountPublicRoutes response-cache contract", () => {
+  it("renders list, entry, and markdown from canonical D1 state", async () => {
     const h = harness();
-    seedPublishedPost(h.db);
-
-    const res = await h.app.request("/en/posts");
-    expect(res.status).toBe(200);
-    await expect(res.text()).resolves.toContain("<section data-brand=\"Blog\">Hello</section>");
-    await expect(h.kv.get("list:html:en/posts")).resolves.toContain("<section data-brand=\"Blog\">Hello</section>");
-  });
-
-  it("renders entry HTML from D1 on KV miss and populates KV", async () => {
-    const h = harness();
-    seedPublishedPost(h.db);
-
-    const res = await h.app.request("/en/posts/hello");
-    expect(res.status).toBe(200);
-    await expect(res.text()).resolves.toContain("<h1>Hello</h1>");
-    await expect(h.kv.get("entry:html:en/posts/hello")).resolves.toContain("<h1>Hello</h1>");
-  });
-
-  it("canonicalizes locale casing before D1 lookup and KV population", async () => {
-    const h = harness(["en", "zh-TW"]);
-    seedPublishedPost(h.db, "zh-TW");
-
-    const list = await h.app.request("/zh-tw/posts");
-    expect(list.status).toBe(200);
-    await expect(list.text()).resolves.toContain("<section data-brand=\"Blog\">Hello</section>");
-    await expect(h.kv.get("list:html:zh-tw/posts")).resolves.toContain("<section data-brand=\"Blog\">Hello</section>");
-
-    const entry = await h.app.request("/zh-tw/posts/hello");
-    expect(entry.status).toBe(200);
-    await expect(entry.text()).resolves.toContain("<h1>Hello</h1>");
-    await expect(h.kv.get("entry:html:zh-tw/posts/hello")).resolves.toContain("<h1>Hello</h1>");
-  });
-
-  it("uses operator-edited site_config for read-through renders", async () => {
-    const h = harness();
-    h.db.siteConfig.set("brand", "Operator Brand");
     seedPublishedPost(h.db);
 
     const list = await h.app.request("/en/posts");
-    expect(list.status).toBe(200);
-    await expect(list.text()).resolves.toContain("data-brand=\"Operator Brand\"");
+    const entry = await h.app.request("/en/posts/hello");
+    const markdown = await h.app.request("/en/posts/hello.md");
+
+    expect(list.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
+    expect(list.headers.get("cache-tag")).toBe("mantle-public");
+    await expect(list.text()).resolves.toContain("Hello");
+    await expect(entry.text()).resolves.toContain("<h1>Hello</h1>");
+    await expect(markdown.text()).resolves.toContain("# Hello");
+  });
+
+  it("exposes every list and llms page, including a last page without continuation", async () => {
+    const h = harness();
+    await h.ref.get();
+    for (let index = 0; index < 103; index++) {
+      h.db.entries.set(`page-${index}`, {
+        id: `page-${index}`, collection: "posts", status: "published", version: 1,
+        data: JSON.stringify({ slug: `item-${index}`, locale: "en", title: `Title-${index}`, body: "Public" }),
+        author_id: "private-author", created_at: 1, updated_at: index,
+      });
+    }
+    for (const path of ["/en/posts", "/en/posts.md", "/en/llms.txt", "/llms.txt"]) {
+      let next: string | undefined = path;
+      const titles: string[] = [];
+      let pages = 0;
+      do {
+        const response = await h.app.request(next!);
+        expect(response.status).toBe(200);
+        const body = await response.text();
+        titles.push(...[...body.matchAll(/Title-\d+/g)].map((match) => match[0]));
+        expect(body).not.toContain("private-author");
+        next = response.headers.get("link")?.match(/^<([^>]+)>; rel="next"$/)?.[1];
+        if (path === "/en/posts") {
+          expect(body).not.toContain('aria-label="Pagination"');
+          expect(body).not.toContain(">Next</a>");
+          expect(body.includes("更多文章")).toBe(Boolean(next));
+          if (next) expect(body).toContain(`href="${next.replace(/&/g, "&amp;")}"`);
+        } else if (next) expect(body).toContain("[Next page]");
+        pages++;
+        expect(pages).toBeLessThan(5);
+      } while (next);
+      expect(pages).toBe(3);
+      expect(titles).toEqual(Array.from({ length: 103 }, (_, index) => `Title-${102 - index}`));
+    }
+  });
+
+  it("keeps an empty final discovery page successful after a visible continuation", async () => {
+    const h = harness();
+    await h.ref.get();
+    for (let index = 0; index < 51; index++) {
+      h.db.entries.set(`empty-${index}`, {
+        id: `empty-${index}`, collection: "posts", status: "published", version: 1,
+        data: JSON.stringify({ slug: `item-${index}`, locale: "en", title: "No markdown" }),
+        author_id: null, created_at: 1, updated_at: index,
+      });
+    }
+    const first = await h.app.request("/llms.txt");
+    expect(first.status).toBe(200);
+    const next = first.headers.get("link")!.match(/^<([^>]+)>/)![1]!;
+    const last = await h.app.request(next);
+    expect(last.status).toBe(200);
+    expect(last.headers.get("link")).toBeNull();
+    await expect(last.text()).resolves.toContain("No further public documents");
+  });
+
+  it("serves a sitemap index with complete metadata-only parts", async () => {
+    const h = harness();
+    await h.ref.get();
+    for (let index = 0; index < 2021; index++) {
+      h.db.entries.set(`map-${index}`, {
+        id: `map-${index}`, collection: "posts", status: "published", version: 1,
+        data: JSON.stringify({ slug: `item-${index}`, locale: "en", body: "not needed" }),
+        author_id: null, created_at: 1, updated_at: index,
+      });
+    }
+    const index = await (await h.app.request("/sitemap.xml")).text();
+    expect(index).toContain("<sitemapindex");
+    const partUrls = [...index.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]!.replace(/&amp;/g, "&"));
+    expect(partUrls).toHaveLength(2);
+    const locations: string[] = [];
+    for (const url of partUrls) {
+      const part = await (await h.app.request(url)).text();
+      expect(part).toContain("<urlset");
+      locations.push(...[...part.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]!));
+    }
+    expect(new Set(locations).size).toBe(2023); // Entries plus home and list.
+    expect(locations.filter((url) => url.includes("/posts/item-"))).toHaveLength(2021);
+    expect(h.db.executions.filter(({ sql }) => sql.includes("WITH candidates"))
+      .every(({ sql }) => sql.includes('"slug"') && !sql.includes('"body"'))).toBe(true);
+  });
+
+  it("queries list content once for an uncached HTML response", async () => {
+    const h = harness();
+    await h.ref.get();
+    seedPublishedPost(h.db);
+    h.db.executions.splice(0);
+
+    expect((await h.app.request("/en/posts")).status).toBe(200);
+    expect(h.db.executions.filter(({ sql }) => sql.includes(`FROM "posts"`))).toHaveLength(1);
+  });
+
+  it("composes home/list/single discovery surfaces from one public path map", async () => {
+    const h = harness(["en", "zh-TW"]);
+    seedPublishedPost(h.db, "en");
+    seedPublishedPost(h.db, "zh-TW");
+    h.db.entries.set("home-en", {
+      id: "home-en",
+      collection: "posts",
+      status: "published",
+      version: 1,
+      data: JSON.stringify({
+        slug: "home",
+        locale: "en",
+        title: "Home",
+        sections: [{ type: "content", title: "Welcome", body: "Ocean home" }],
+      }),
+      author_id: null,
+      created_at: 1,
+      updated_at: 2,
+    });
+
+    const home = await h.app.request("/en");
+    const list = await h.app.request("/en/posts");
+    const single = await h.app.request("/en/posts/hello");
+    const homeMarkdown = await h.app.request("/en.md");
+    const listMarkdown = await h.app.request("/en/posts.md");
+    const sitemap = await (await h.app.request("/sitemap.xml")).text();
+    const robots = await h.app.request("/robots.txt");
+
+    for (const response of [home, list, single]) {
+      const html = await response.text();
+      expect(html).toContain('rel="canonical"');
+      expect(html).toContain('hreflang="zh-TW"');
+      expect(html).toContain('hreflang="x-default"');
+      expect(html).toContain('property="og:title"');
+      expect(html).toContain('name="twitter:card"');
+      expect(html).toContain('type="application/ld+json"');
+    }
+    expect(robots.status).toBe(200);
+    const robotsBody = await robots.text();
+    expect(robotsBody).toContain("User-agent: *");
+    expect(robotsBody).toContain(`Sitemap: ${sitemap.match(/<loc>([^<]*)\//)?.[1] ?? ""}/sitemap.xml`);
+    expect(homeMarkdown.status).toBe(200);
+    await expect(homeMarkdown.text()).resolves.toContain("Ocean home");
+    expect(listMarkdown.status).toBe(200);
+    await expect(listMarkdown.text()).resolves.toContain(
+      "https://example.com/en/posts/hello.md",
+    );
+    expect(sitemap).toContain("<loc>https://example.com/en</loc>");
+    expect(sitemap).toContain("<loc>https://example.com/zh-tw/posts</loc>");
+    expect(sitemap.match(/<loc>https:\/\/example\.com\/en<\/loc>/g)).toHaveLength(1);
+  });
+
+  it("returns a clear 404 for an entry with no markdown payload", async () => {
+    const h = harness();
+    h.db.entries.set("empty", {
+      id: "empty",
+      collection: "posts",
+      status: "published",
+      version: 1,
+      data: JSON.stringify({ slug: "empty", locale: "en", title: "Empty" }),
+      author_id: null,
+      created_at: 1,
+      updated_at: 2,
+    });
+
+    expect((await h.app.request("/en/posts/empty.md")).status).toBe(404);
+    const html = await (await h.app.request("/en/posts/empty")).text();
+    expect(html).not.toContain('type="text/markdown"');
+  });
+
+  it("does not retain rendered artifacts inside the Worker", async () => {
+    const h = harness();
+    seedPublishedPost(h.db);
+    await h.app.request("/en/posts/hello");
+
+    const row = h.db.entries.get("p1-en")!;
+    h.db.entries.set("p1-en", {
+      ...row,
+      version: 2,
+      data: JSON.stringify({ slug: "hello", locale: "en", title: "Updated", body: "World" }),
+      updated_at: 3,
+    });
+    h.db.siteConfig.set("brand", "Updated Brand");
 
     const entry = await h.app.request("/en/posts/hello");
-    expect(entry.status).toBe(200);
-    await expect(entry.text()).resolves.toContain("data-brand=\"Operator Brand\"");
+    await expect(entry.text()).resolves.toContain("data-brand=\"Updated Brand\"><h1>Updated</h1>");
   });
 
-  it("renders markdown from D1 on KV miss and populates KV", async () => {
-    const h = harness();
-    seedPublishedPost(h.db);
+  it("canonicalizes locale casing and returns 404 for missing content", async () => {
+    const h = harness(["en", "zh-TW"]);
+    seedPublishedPost(h.db, "zh-TW");
 
-    const res = await h.app.request("/en/posts/hello.md");
-    expect(res.status).toBe(200);
-    const body = await res.text();
-    expect(body).toContain("# Hello");
-    expect(body).toContain("World");
-    await expect(h.kv.get("entry:md:en/posts/hello")).resolves.toContain("# Hello");
+    expect((await h.app.request("/zh-tw/posts/hello")).status).toBe(200);
+    await h.ref.get();
+    h.db.executions.splice(0);
+    expect((await h.app.request("/zh-tw/posts/missing")).status).toBe(404);
+    expect(h.db.executions.map(({ sql }) => sql)).toEqual([
+      "SELECT key, value FROM site_config",
+      expect.stringContaining(`FROM "posts"`),
+    ]);
   });
 
-  it("returns 404 without populating KV when D1 has no published entry", async () => {
-    const h = harness();
+  it("keeps preview staff-only and prefers the draft", async () => {
+    const denied = harness();
+    seedPublishedPost(denied.db);
+    expect((await denied.app.request("/en/posts/hello?preview=1")).status).toBe(401);
 
-    const res = await h.app.request("/en/posts/ghost");
-    expect(res.status).toBe(404);
-    await expect(h.kv.get("entry:html:en/posts/ghost")).resolves.toBeNull();
+    const customer = harness(["en"], auth(null));
+    seedPublishedPost(customer.db);
+    expect((await customer.app.request("/en/posts/hello?preview=1")).status).toBe(403);
+
+    const staff = harness(["en"], auth("editor"));
+    seedPublishedPost(staff.db);
+    staff.db.entries.set("draft", {
+      ...staff.db.entries.get("p1-en")!,
+      id: "draft",
+      status: "draft",
+      data: JSON.stringify({ slug: "hello", locale: "en", title: "Draft wins", body: "" }),
+      updated_at: 3,
+    });
+    const response = await staff.app.request("/en/posts/hello?preview=1");
+    expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toContain("Draft wins");
   });
 
-  it("preview returns 401 without a session", async () => {
-    const h = harness();
-    seedPublishedPost(h.db);
-    const res = await h.app.request("/en/posts/hello?preview=1");
-    expect(res.status).toBe(401);
-  });
+  it("composes locale and root llms.txt from D1", async () => {
+    const h = harness(["en", "zh-TW"]);
+    seedPublishedPost(h.db, "en");
+    seedPublishedPost(h.db, "zh-TW");
 
-  it("preview returns 403 for a non-staff session", async () => {
-    // stubAuth has getUserRole → null; staffAuth("contributor") still
-    // qualifies as admin, so build a custom auth that returns no role.
-    const customerAuth: Auth = {
-      handler: async () => new Response(null, { status: 404 }),
-      getSession: async () => ({
-        session: { id: "s", userId: "u", expiresAt: new Date(Date.now() + 60_000) },
-        user: { id: "u", email: "x@y.z", name: "Customer", role: null, githubLogin: null },
-      }),
-      getUserRole: async () => null,
-      methods: [],
-    };
-    const h = harness(["en"], { auth: customerAuth });
-    seedPublishedPost(h.db);
-    const res = await h.app.request("/en/posts/hello?preview=1");
-    expect(res.status).toBe(403);
-  });
-
-  it("preview returns 200 for a staff session", async () => {
-    const h = harness(["en"], { auth: staffAuth("editor") });
-    seedPublishedPost(h.db);
-    const res = await h.app.request("/en/posts/hello?preview=1");
-    expect(res.status).toBe(200);
-  });
-
-  it("preview returns 403 when getUserRole returns a non-admin role string", async () => {
-    // Defends against future extension where getUserRole might return
-    // a custom role (e.g. "viewer") not in ADMIN_ROLE_SET.
-    const oddRoleAuth: Auth = {
-      handler: async () => new Response(null, { status: 404 }),
-      getSession: async () => ({
-        session: { id: "s", userId: "u", expiresAt: new Date(Date.now() + 60_000) },
-        user: { id: "u", email: "x@y.z", name: "Viewer", role: null, githubLogin: null },
-      }),
-      getUserRole: async () => "viewer",
-      methods: [],
-    };
-    const h = harness(["en"], { auth: oddRoleAuth });
-    seedPublishedPost(h.db);
-    const res = await h.app.request("/en/posts/hello?preview=1");
-    expect(res.status).toBe(403);
+    const locale = await h.app.request("/en/llms.txt");
+    const root = await h.app.request("/llms.txt");
+    expect(locale.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
+    await expect(locale.text()).resolves.toContain("Locale: en");
+    const rootBody = await root.text();
+    expect(rootBody).toContain("Locale: en");
+    expect(rootBody).toContain("Locale: zh-TW");
+    expect((await h.app.request("/fr/llms.txt")).status).toBe(404);
   });
 });

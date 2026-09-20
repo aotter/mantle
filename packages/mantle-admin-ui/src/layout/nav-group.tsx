@@ -1,10 +1,11 @@
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "../ui/collapsible";
+} from "@/components/ui/collapsible";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +13,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu";
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -23,9 +24,11 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   useSidebar,
-} from "../ui/sidebar";
+} from "@/components/ui/sidebar";
 import { cn } from "../lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePreferences } from "../app/preferences";
+import { entriesQueryArgsFromSearch, entriesQueryOptions } from "../lib/queries";
 import {
   isCollapsible,
   type NavCollapsible,
@@ -47,7 +50,7 @@ export function NavGroup({
 }: NavGroupProps): React.ReactElement {
   return (
     <SidebarGroup>
-      {group.title && <SidebarGroupLabel>{group.title}</SidebarGroupLabel>}
+      {group.title && <SidebarGroupLabel title={group.title}>{group.title}</SidebarGroupLabel>}
       <SidebarMenu>
         {group.items.map((item) => (
           <NavGroupItem
@@ -107,27 +110,24 @@ function NavLinkItem({
   search: string;
 }): React.ReactElement {
   const { setOpenMobile } = useSidebar();
-  const active = isLinkActive(item, pathname, search);
+  const prefetch = useCollectionPrefetch(item.url);
+  const active = isLinkActive(item, pathname, search, true);
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild isActive={active}>
         <a
           href={item.url}
+          title={item.title}
           onClick={() => setOpenMobile(false)}
+          onPointerEnter={prefetch}
+          onFocus={prefetch}
           {...(item.external
             ? { target: "_blank", rel: "noreferrer" }
             : null)}
         >
           {item.icon && <item.icon aria-hidden />}
           <span data-sidebar-label className="flex-1 truncate">{item.title}</span>
-          {item.marker && (
-            <item.marker
-              aria-hidden
-              data-sidebar-label
-              className="size-3.5 text-muted-foreground"
-            />
-          )}
-          {item.badge && <NavBadge sidebarLabel>{item.badge}</NavBadge>}
+          <NavMarker item={item} />
         </a>
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -144,9 +144,14 @@ function NavCollapsibleExpanded({
   search: string;
 }): React.ReactElement {
   const groupActive = isGroupActive(item, pathname, search);
+  const [open, setOpen] = React.useState(groupActive);
+  React.useEffect(() => {
+    if (groupActive) setOpen(true);
+  }, [groupActive]);
   return (
     <Collapsible
-      defaultOpen={groupActive}
+      open={open}
+      onOpenChange={setOpen}
       className="group/collapsible"
       asChild
     >
@@ -154,15 +159,8 @@ function NavCollapsibleExpanded({
         <CollapsibleTrigger asChild>
           <SidebarMenuButton isActive={groupActive}>
             {item.icon && <item.icon aria-hidden />}
-            <span data-sidebar-label className="flex-1 truncate">{item.title}</span>
-            {item.marker && (
-              <item.marker
-                aria-hidden
-                data-sidebar-label
-                className="size-3.5 text-muted-foreground"
-              />
-            )}
-            {item.badge && <NavBadge sidebarLabel>{item.badge}</NavBadge>}
+            <span data-sidebar-label className="flex-1 truncate" title={item.title}>{item.title}</span>
+            <NavMarker item={item} />
             <ChevronRight
               aria-hidden
               data-sidebar-label
@@ -176,6 +174,7 @@ function NavCollapsibleExpanded({
               <NavSubLink
                 key={sub.url}
                 link={sub}
+                siblings={item.items}
                 pathname={pathname}
                 search={search}
               />
@@ -189,22 +188,24 @@ function NavCollapsibleExpanded({
 
 function NavSubLink({
   link,
+  siblings,
   pathname,
   search,
 }: {
   link: NavLink;
+  siblings: ReadonlyArray<NavLink>;
   pathname: string;
   search: string;
 }): React.ReactElement {
   const { setOpenMobile } = useSidebar();
-  const active = isLinkActive(link, pathname, search);
+  const prefetch = useCollectionPrefetch(link.url);
+  const active = isSubLinkActive(link, siblings, pathname, search);
   return (
     <SidebarMenuSubItem>
       <SidebarMenuSubButton asChild isActive={active}>
-        <a href={link.url} onClick={() => setOpenMobile(false)}>
+        <a href={link.url} title={link.title} onClick={() => setOpenMobile(false)} onPointerEnter={prefetch} onFocus={prefetch}>
           {link.icon && <link.icon aria-hidden />}
           <span>{link.title}</span>
-          {link.badge && <NavBadge>{link.badge}</NavBadge>}
         </a>
       </SidebarMenuSubButton>
     </SidebarMenuSubItem>
@@ -226,9 +227,12 @@ function NavCollapsibleDropdown({
     <SidebarMenuItem>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <SidebarMenuButton isActive={groupActive}>
+          <SidebarMenuButton
+            isActive={groupActive}
+            tooltip={item.markerLabel ? `${item.title} · ${item.markerLabel}` : item.title}
+          >
             {item.icon && <item.icon aria-hidden />}
-            <span data-sidebar-label>{item.title}</span>
+            <span data-sidebar-label title={item.title}>{item.title}</span>
             <ChevronRight aria-hidden data-sidebar-label className="ms-auto" />
           </SidebarMenuButton>
         </DropdownMenuTrigger>
@@ -240,16 +244,7 @@ function NavCollapsibleDropdown({
           <DropdownMenuLabel>{item.title}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           {item.items.map((sub) => (
-            <DropdownMenuItem asChild key={sub.url}>
-              <a
-                href={sub.url}
-                className={cn(
-                  isLinkActive(sub, pathname, search) && "font-medium",
-                )}
-              >
-                {sub.title}
-              </a>
-            </DropdownMenuItem>
+            <NavDropdownLink key={sub.url} link={sub} active={isSubLinkActive(sub, item.items, pathname, search)} />
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
@@ -257,30 +252,54 @@ function NavCollapsibleDropdown({
   );
 }
 
-function NavBadge({
-  children,
-  sidebarLabel = false,
-}: {
-  children: React.ReactNode;
-  sidebarLabel?: boolean;
-}): React.ReactElement {
+function NavDropdownLink({ link, active }: { link: NavLink; active: boolean }): React.ReactElement {
+  const prefetch = useCollectionPrefetch(link.url);
   return (
-    <span
-      data-sidebar-label={sidebarLabel || undefined}
-      className="ms-auto rounded-full bg-accent px-2 py-0.5 text-xs text-accent-foreground"
-    >
-      {children}
-    </span>
+    <DropdownMenuItem asChild>
+      <a href={link.url} className={cn(active && "font-medium")} onPointerEnter={prefetch} onFocus={prefetch}>
+        {link.title}
+      </a>
+    </DropdownMenuItem>
   );
 }
 
-function isLinkActive(
+function useCollectionPrefetch(url: string): () => void {
+  const queryClient = useQueryClient();
+  return React.useCallback(() => {
+    const target = new URL(url, "http://admin.local");
+    const match = target.pathname.match(/^\/admin\/c\/([^/]+)\/?$/);
+    if (!match) return;
+    void queryClient.prefetchQuery(entriesQueryOptions(
+      entriesQueryArgsFromSearch(decodeURIComponent(match[1]!), target.searchParams),
+    ));
+  }, [queryClient, url]);
+}
+
+function NavMarker({ item }: { item: NavLink | NavCollapsible }): React.ReactElement | null {
+  if (!item.marker) return null;
+  const Marker = item.marker;
+  const icon = (
+    <span data-sidebar-label className="inline-flex text-primary group-data-[active=true]/menu-button:text-sidebar-accent-foreground">
+      <Marker aria-hidden className="size-3.5" />
+    </span>
+  );
+  if (!item.markerLabel) return icon;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{icon}</TooltipTrigger>
+      <TooltipContent side="right">{item.markerLabel}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+export function isLinkActive(
   link: NavLink,
   pathname: string,
   search: string,
+  collectionDescendant = false,
 ): boolean {
   const url = new URL(link.url, "http://x");
-  if (url.pathname !== pathname) return false;
+  if (url.pathname !== pathname && !(collectionDescendant && url.pathname.startsWith("/admin/c/") && pathname.startsWith(`${url.pathname}/`))) return false;
   // If the link includes any query string, every param it sets must match.
   if (!url.search) return true;
   const want = new URLSearchParams(url.search);
@@ -291,16 +310,30 @@ function isLinkActive(
   return true;
 }
 
+export function isSubLinkActive(
+  link: NavLink,
+  siblings: ReadonlyArray<NavLink>,
+  pathname: string,
+  search: string,
+): boolean {
+  if (!isLinkActive(link, pathname, search, true)) return false;
+  if (new URL(link.url, "http://x").search) return true;
+  return !siblings.some((sibling) => {
+    if (sibling.url === link.url || !new URL(sibling.url, "http://x").search) return false;
+    return isLinkActive(sibling, pathname, search, true);
+  });
+}
+
 // Highlight (and auto-expand) the group whenever the user is on a sub-link's
 // pathname — regardless of query params. Lets a base path like /admin/c/posts
 // (no `?status`) keep its parent group active, even though no individual
 // sub-link with `?status=…` is the exact current URL.
-function isGroupActive(
+export function isGroupActive(
   item: NavCollapsible,
   pathname: string,
   search: string,
 ): boolean {
-  if (item.items.some((sub) => isLinkActive(sub, pathname, search))) return true;
+  if (item.items.some((sub) => isLinkActive(sub, pathname, search, true))) return true;
   return item.items.some((sub) => {
     const url = new URL(sub.url, "http://x");
     return url.pathname === pathname;

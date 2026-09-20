@@ -1,0 +1,477 @@
+import { execFile } from "node:child_process";
+import { createRequire } from "node:module";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { printGenerateNextSteps, resolveAdminUiIndexHtml, runGenerate, warnMissingWranglerAssets } from "../../src/cli/generate.js";
+
+const coreOnly = { resolveAdminUiIndexHtml: () => null };
+
+const originalCwd = process.cwd();
+const execFileAsync = promisify(execFile);
+const tscPath = createRequire(import.meta.url).resolve("typescript/lib/tsc.js");
+
+afterEach(() => {
+  process.chdir(originalCwd);
+  vi.restoreAllMocks();
+});
+
+describe("mantle generate", () => {
+  it("rejects starter types and missing manifests without scaffolding", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mantle-no-scaffold-"));
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      process.chdir(root);
+      expect(await runGenerate(["blank"], coreOnly)).toBe(2);
+      expect(await runGenerate([], coreOnly)).toBe(1);
+      expect(stderr.mock.calls.flat().join("")).toContain("MANIFEST_ROOT_NOT_FOUND");
+      expect(await readdir(root)).toEqual([]);
+    } finally {
+      process.chdir(originalCwd);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an invalid type namespace", async () => {
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    expect(await runGenerate(["--namespace", "not-valid"])).toBe(2);
+    expect(stderr).toHaveBeenCalledWith(
+      '--namespace must be a non-reserved TypeScript identifier; got "not-valid"\n',
+    );
+    expect(await runGenerate(["--namespace", "MantleHandlers"])).toBe(2);
+  });
+
+  it("emits and runs one deterministic typed Mantle module", async () => {
+    const root = await mkdtemp(join(originalCwd, ".mantle-generate-"));
+    try {
+      await mkdir(join(root, "manifests"));
+      await writeFile(join(root, "manifests", "site.yaml"), fixture);
+      process.chdir(root);
+
+      expect(await runGenerate([], coreOnly)).toBe(0);
+      const mantlePath = join(root, ".mantle", "generated", "mantle.ts");
+      const firstMantle = await readFile(mantlePath, "utf8");
+      expect(firstMantle).toContain("export async function createMantle<Env = unknown>");
+      expect(firstMantle).toContain("export function bindMantle(runtime: CoreMantleRuntime)");
+      expect(firstMantle).toContain("export const plan = sealRuntimePlan(");
+      expect(firstMantle).toContain("productsBySku: (request:");
+      expect(firstMantle).toContain('view: "products-by-sku"');
+      expect(firstMantle).toContain("importProduct: (input:");
+      expect(firstMantle).toContain('procedure: "import-product"');
+      expect(firstMantle).toContain("products: {");
+      expect(firstMantle).toContain('collection: "products"');
+      expect(firstMantle.match(/readonly "syncCatalog":/g)).toHaveLength(1);
+      expect(firstMantle).toContain("ProcInput_import_product | Mantle.ProcInput_remove_product");
+      await expect(readFile(join(root, "public", "_mantle", "admin", "index.html")))
+        .rejects.toThrow();
+
+      const consumerPath = join(root, "consumer.ts");
+      await writeFile(consumerPath, `
+import { bindMantle, createMantle, plan } from "./.mantle/generated/mantle.js";
+import type { MantleRuntime, MantleStorageAdapter } from "@aotter/mantle/runtime";
+
+const calls: string[] = [];
+const runtime = {
+  revision: plan.semanticFingerprint,
+  createDraft: { execute: async (request: { collection: string; data: unknown }) => {
+    calls.push("entry:" + request.collection);
+    return request;
+  } },
+  executeView: async (request: { view: string }) => {
+    calls.push("view:" + request.view);
+    return { ok: true as const, result: { rows: [{ id: "1", title: "Typed" }], page: 1, show: 20, hasMore: false } };
+  },
+  invokeProcedure: async (request: { procedure: string }) => {
+    calls.push("procedure:" + request.procedure);
+    return { ok: true as const, data: { imported: true } };
+  },
+} as unknown as MantleRuntime;
+
+const mantle = bindMantle(runtime);
+if (mantle.runtime !== runtime) throw new Error("raw runtime escape hatch changed");
+await mantle.entries.products.createDraft({ data: { sku: "sku-1" }, authorId: null });
+const view = await mantle.views.productsBySku({ params: { sku: "sku-1" } });
+const procedure = await mantle.procedures.importProduct(
+  { sku: "sku-1" },
+  { user: null, staff: null, env: {} },
+);
+if (!view.ok || view.result.rows[0]?.title !== "Typed") throw new Error("typed View failed");
+if (!procedure.ok || procedure.data.imported !== true) throw new Error("typed Procedure failed");
+if (calls.join(",") !== "entry:products,view:products-by-sku,procedure:import-product") {
+  throw new Error("wire names changed: " + calls.join(","));
+}
+
+const storage = {
+  async prepare() {
+    return {
+      entries: {},
+      views: {
+        async execute() {
+          return { rows: [{ id: "2", title: "Created" }], page: 1, show: 20, hasMore: false };
+        },
+      },
+    };
+  },
+} as unknown as MantleStorageAdapter;
+const created = await createMantle({
+  storage,
+  handlers: { syncCatalog: () => ({ imported: true }) },
+});
+const createdView = await created.views.productsBySku({ params: { sku: "sku-2" } });
+if (!createdView.ok || createdView.result.rows[0]?.title !== "Created") {
+  throw new Error("one-step Mantle creation failed");
+}
+if (created.runtime.revision !== plan.semanticFingerprint) throw new Error("created runtime revision changed");
+
+let rejectedMismatch = false;
+try {
+  bindMantle({ ...runtime, revision: "wrong-revision" });
+} catch {
+  rejectedMismatch = true;
+}
+if (!rejectedMismatch) throw new Error("generated binding accepted another revision");
+
+if (false) {
+  // @ts-expect-error Unknown Views are absent from the generated surface.
+  mantle.views.missing();
+  // @ts-expect-error Required View params cannot be omitted.
+  mantle.views.productsBySku();
+  // @ts-expect-error Schema payload is generated from the manifest.
+  await mantle.entries.products.createDraft({ data: { title: "missing sku" }, authorId: null });
+}
+`);
+      const compiled = join(root, "compiled");
+      try {
+        await execFileAsync(process.execPath, [
+          tscPath,
+          "--ignoreConfig",
+          "--strict",
+          "--target", "ES2022",
+          "--module", "NodeNext",
+          "--moduleResolution", "NodeNext",
+          "--skipLibCheck",
+          "--rootDir", root,
+          "--outDir", compiled,
+          consumerPath,
+          mantlePath,
+        ], { cwd: root });
+        await execFileAsync(process.execPath, [join(compiled, "consumer.js")], { cwd: root });
+      } catch (error) {
+        const output = error as { stdout?: string; stderr?: string };
+        throw new Error(output.stderr || output.stdout || String(error));
+      }
+
+      expect(await runGenerate([], coreOnly)).toBe(0);
+      expect(await readFile(mantlePath, "utf8")).toBe(firstMantle);
+      expect(await runGenerate(["--check"], coreOnly)).toBe(0);
+
+      const adminIndexPath = join(root, "public", "_mantle", "admin", "index.html");
+      await mkdir(join(root, "public", "_mantle", "admin"), { recursive: true });
+      await writeFile(adminIndexPath, "owned by the host\n");
+      expect(await runGenerate(["--check"], coreOnly)).toBe(0);
+      expect(await readFile(adminIndexPath, "utf8")).toBe("owned by the host\n");
+
+      await writeFile(mantlePath, "stale\n");
+      const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      expect(await runGenerate(["--check"], coreOnly)).toBe(1);
+      expect(stderr).toHaveBeenCalledWith("Mantle generated files are stale; run `mantle generate`.\n");
+      expect(await readFile(mantlePath, "utf8")).toBe("stale\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails normalized identifier collisions at the authored source", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mantle-generate-collision-"));
+    try {
+      await mkdir(join(root, "manifests"));
+      await writeFile(join(root, "manifests", "site.yaml"), `
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: products }
+spec: { title: Products, schema: { type: object } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: open-orders }
+spec: { surface: public, from: products }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: open.orders }
+spec: { surface: public, from: products }
+`);
+      process.chdir(root);
+      let error = "";
+      vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+        error += String(chunk);
+        return true;
+      });
+
+      expect(await runGenerate([])).toBe(1);
+      expect(error).toContain("CODEGEN_IDENTIFIER_COLLISION");
+      expect(error).toContain("site.yaml#/2/metadata/name");
+      expect(error).toContain("'open-orders' and 'open.orders' both generate 'openOrders'");
+      await expect(readFile(join(root, ".mantle", "generated", "mantle.ts"))).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports the source file and writes nothing for invalid manifests", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mantle-generate-invalid-"));
+    try {
+      await mkdir(join(root, "manifests"));
+      const manifestPath = join(root, "manifests", "site.yaml");
+      await writeFile(manifestPath, `
+apiVersion: wrong
+kind: Schema
+metadata: { name: broken }
+spec: {}
+`);
+      process.chdir(root);
+      let error = "";
+      vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+        error += String(chunk);
+        return true;
+      });
+
+      expect(await runGenerate([])).toBe(1);
+      expect(error).toContain("INVALID_MANIFEST_ENVELOPE");
+      expect(error).toContain("site.yaml#/0/apiVersion");
+      await expect(readFile(join(root, ".mantle", "generated", "mantle.ts"))).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("skips Admin assets when the optional UI package does not resolve", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mantle-generate-core-only-"));
+    try {
+      await mkdir(join(root, "manifests"));
+      await writeFile(join(root, "manifests", "site.yaml"), fixture);
+      process.chdir(root);
+
+      expect(await runGenerate([], coreOnly)).toBe(0);
+      expect(await readFile(join(root, ".mantle", "generated", "mantle.ts"), "utf8"))
+        .toContain("export async function createMantle<Env = unknown>");
+      await expect(readFile(join(root, "public", "_mantle", "admin", "index.html")))
+        .rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("syncs Admin SPA assets when the optional UI package resolves", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mantle-generate-admin-"));
+    const adminDist = await mkdtemp(join(tmpdir(), "mantle-admin-ui-dist-"));
+    try {
+      await mkdir(join(root, "manifests"));
+      await writeFile(join(root, "manifests", "site.yaml"), fixture);
+      await mkdir(join(adminDist, "assets"));
+      await writeFile(join(adminDist, "index.html"), "<!doctype html><title>Admin</title>\n");
+      await writeFile(join(adminDist, "assets", "app.js"), "console.log('admin');\n");
+      await writeFile(join(adminDist, "server.js"), "export const systemTokensCss = '';\n");
+      await writeFile(join(adminDist, "server.d.ts"), "export declare const systemTokensCss: string;\n");
+      process.chdir(root);
+
+      const deps = { resolveAdminUiIndexHtml: () => join(adminDist, "index.html") };
+      expect(await runGenerate([], deps)).toBe(0);
+
+      const adminIndexPath = join(root, "public", "_mantle", "admin", "index.html");
+      expect(await readFile(adminIndexPath, "utf8")).toBe("<!doctype html><title>Admin</title>\n");
+      expect(await readFile(join(root, "public", "_mantle", "admin", "assets", "app.js"), "utf8"))
+        .toBe("console.log('admin');\n");
+      await expect(readFile(join(root, "public", "_mantle", "admin", "server.js"))).rejects.toThrow();
+      await expect(readFile(join(root, "public", "_mantle", "admin", "server.d.ts"))).rejects.toThrow();
+      expect(await runGenerate(["--check"], deps)).toBe(0);
+
+      await writeFile(adminIndexPath, "corrupted\n");
+      const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      expect(await runGenerate(["--check"], deps)).toBe(1);
+      expect(stderr).toHaveBeenCalledWith("Mantle generated files are stale; run `mantle generate`.\n");
+      expect(await readFile(adminIndexPath, "utf8")).toBe("corrupted\n");
+      stderr.mockRestore();
+
+      expect(await runGenerate([], deps)).toBe(0);
+      expect(await readFile(adminIndexPath, "utf8")).toBe("<!doctype html><title>Admin</title>\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(adminDist, { recursive: true, force: true });
+    }
+  });
+
+  it("prints the API-only next step when Admin UI is not installed", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mantle-generate-api-only-tip-"));
+    try {
+      await mkdir(join(root, "manifests"));
+      await writeFile(join(root, "manifests", "site.yaml"), fixture);
+      process.chdir(root);
+      const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+      expect(await runGenerate([], coreOnly)).toBe(0);
+      expect(stdout.mock.calls.flat().join("")).toMatch(/API-only \(Admin is opt-in\)/);
+      expect(stdout.mock.calls.flat().join("")).toMatch(/local-admin-otp/);
+      stdout.mockClear();
+      expect(await runGenerate(["--check"], coreOnly)).toBe(0);
+      expect(stdout.mock.calls.flat().join("")).not.toMatch(/API-only/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("prints Admin next steps when Admin UI is synced", async () => {
+    const notes: string[] = [];
+    printGenerateNextSteps(true, (chunk) => {
+      notes.push(String(chunk));
+      return true;
+    });
+    expect(notes.join("")).toMatch(/opt-in/);
+    expect(notes.join("")).toMatch(/\/admin\/sign-in/);
+    expect(notes.join("")).toMatch(/ConsoleEmailSender/);
+    expect(notes.join("")).toMatch(/ASSETS/);
+    expect(notes.join("")).toMatch(/PUBLIC_ORIGIN must equal the origin wrangler prints/);
+    expect(notes.join("")).toMatch(/INVALID_ORIGIN/);
+    expect(notes.join("")).toMatch(/docs\/examples\/host-local-admin-otp/);
+    expect(notes.join("")).toMatch(/node_modules\/@aotter\/mantle\/docs\/examples\/host-local-admin-otp/);
+    notes.length = 0;
+    printGenerateNextSteps(false, (chunk) => {
+      notes.push(String(chunk));
+      return true;
+    });
+    expect(notes.join("")).toMatch(/API-only/);
+    expect(notes.join("")).toMatch(/docs\/examples\/host-local-admin-otp/);
+    expect(notes.join("")).toMatch(/node_modules\/@aotter\/mantle\/docs\/examples\/host-local-admin-otp/);
+    expect(notes.join("")).not.toMatch(/sign-in/);
+  });
+
+  it("pins the official Admin OTP example to the same host as PUBLIC_ORIGIN", async () => {
+    const pkg = JSON.parse(await readFile(new URL("../../../../docs/examples/host-local-admin-otp/package.json", import.meta.url), "utf8"));
+    expect(pkg.scripts.dev).toMatch(/--ip 127\.0\.0\.1/);
+    expect(pkg.scripts.dev).toMatch(/--port 8787/);
+  });
+
+  it("pins the official minimal Worker example to the same local host", async () => {
+    const pkg = JSON.parse(await readFile(new URL("../../../../docs/examples/host-minimal-worker/package.json", import.meta.url), "utf8"));
+    expect(pkg.scripts.dev).toMatch(/--ip 127\.0\.0\.1/);
+    expect(pkg.scripts.dev).toMatch(/--port 8787/);
+  });
+
+  it("warns when Admin UI is synced but wrangler has no ASSETS binding", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mantle-generate-assets-warn-"));
+    const adminDist = await mkdtemp(join(tmpdir(), "mantle-admin-ui-dist-"));
+    try {
+      await mkdir(join(root, "manifests"));
+      await writeFile(join(root, "manifests", "site.yaml"), fixture);
+      await writeFile(join(adminDist, "index.html"), "<!doctype html><title>Admin</title>\n");
+      await writeFile(join(root, "wrangler.jsonc"), "{ \"name\": \"demo\", \"main\": \"src/index.ts\" }\n");
+      process.chdir(root);
+      const deps = { resolveAdminUiIndexHtml: () => join(adminDist, "index.html") };
+      const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      expect(await runGenerate([], deps)).toBe(0);
+      expect(stderr.mock.calls.flat().join("")).toMatch(/no ASSETS binding/);
+      stderr.mockClear();
+      expect(await runGenerate(["--check"], deps)).toBe(0);
+      expect(stderr.mock.calls.flat().join("")).not.toMatch(/ASSETS/);
+      await writeFile(
+        join(root, "wrangler.jsonc"),
+        "{ \"assets\": { \"directory\": \"./public\", \"binding\": \"ASSETS\" } }\n",
+      );
+      stderr.mockClear();
+      expect(await runGenerate([], deps)).toBe(0);
+      expect(stderr.mock.calls.flat().join("")).not.toMatch(/ASSETS/);
+      const notes: string[] = [];
+      warnMissingWranglerAssets(root, (chunk) => {
+        notes.push(String(chunk));
+        return true;
+      });
+      expect(notes.join("")).toBe("");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(adminDist, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(resolveAdminUiIndexHtml() === null)(
+    "copies the installed Admin UI SPA when generate uses the default resolver",
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), "mantle-generate-installed-admin-"));
+      try {
+        await mkdir(join(root, "manifests"));
+        await writeFile(join(root, "manifests", "site.yaml"), fixture);
+        process.chdir(root);
+
+        expect(await runGenerate([])).toBe(0);
+        const adminIndexPath = join(root, "public", "_mantle", "admin", "index.html");
+        expect(await readFile(adminIndexPath, "utf8")).toContain("/_mantle/admin/");
+        await expect(readFile(join(root, "public", "_mantle", "admin", "server.js")))
+          .rejects.toThrow();
+        expect(await runGenerate(["--check"])).toBe(0);
+
+        await writeFile(adminIndexPath, "corrupted\n");
+        const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+        expect(await runGenerate(["--check"])).toBe(1);
+        expect(stderr).toHaveBeenCalledWith(
+          "Mantle generated files are stale; run `mantle generate`.\n",
+        );
+        expect(await readFile(adminIndexPath, "utf8")).toBe("corrupted\n");
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
+const fixture = `
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: import-product }
+spec:
+  input: { type: object, required: [sku], properties: { sku: { type: string } } }
+  output: { type: object, properties: { imported: { type: boolean } } }
+  handler: { kind: ref, ref: syncCatalog }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: remove-product }
+spec:
+  input: { type: object, properties: { id: { type: string } } }
+  output: { type: object, properties: { removed: { type: boolean } } }
+  handler: { kind: ref, ref: syncCatalog }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: products }
+spec:
+  title: Products
+  schema:
+    type: object
+    required: [sku]
+    properties:
+      sku: { type: string }
+      title: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: products-by-sku }
+spec:
+  surface: public
+  from: products
+  params:
+    type: object
+    required: [sku]
+    properties:
+      sku: { type: string }
+  fields: [id, title]
+  filter: { eq: { field: sku, value: { $param: sku } } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: published-products }
+spec:
+  surface: public
+  from: products
+  fields: [id, title]
+  filter: { eq: { field: status, value: published } }
+`;

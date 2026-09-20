@@ -1,1 +1,0 @@
-Use https://raw.githubusercontent.com/aotter/mantle/{template_ref}/skills/install/SKILL.md and https://raw.githubusercontent.com/aotter/mantle/{template_ref}/skills/install/archetypes/publication.md to build: Publication.

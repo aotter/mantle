@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "pnpm --dir ../../../../../.. install --frozen-lockfile",
+  "buildCommand": "pnpm --dir ../../../../../.. --filter @aotter/mantle-vercel... build",
+  "outputDirectory": "public",
+  "functions": {
+    "api/index.ts": { "maxDuration": 60 }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/api/index" }
+  ]
+}

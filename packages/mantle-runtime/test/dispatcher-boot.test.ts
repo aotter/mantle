@@ -1,3 +1,7 @@
+import {
+  linkManifestSet,
+  parseManifestSources,
+} from "@aotter/mantle-spec";
 import { describe, expect, it } from "vitest";
 import { InMemoryHandlerRegistry } from "../src/domain/port/HandlerRegistry.js";
 import {
@@ -5,170 +9,128 @@ import {
   ValidateBootUseCase,
 } from "../src/usecase/boot/ValidateBootUseCase.js";
 import {
-  makeBuiltinProcedure,
-  makeHttpTrigger,
-  makeLifecycleTrigger,
-  makeProcedure,
-  postsSchema,
-} from "./fakes/manifests.js";
+  compileRuntimePlan,
+  type RuntimePlan,
+} from "../src/domain/service/RuntimePlanCompiler.js";
 
 describe("ValidateBootUseCase", () => {
-  it("passes when every Procedure handler ref is registered", () => {
-    const reg = new InMemoryHandlerRegistry();
-    reg.register("echoHandler", () => ({ ok: true }));
-    const result = new ValidateBootUseCase().execute({
-      manifests: [makeProcedure()],
-      registry: reg,
-    });
-    expect(result.ok).toBe(true);
+  it("accepts linked semantics when every handler ref is registered", () => {
+    const registry = new InMemoryHandlerRegistry();
+    registry.register("echoHandler", () => ({ ok: true }));
+
+    expect(new ValidateBootUseCase().execute({
+      plan: compilePlan(procedure()),
+      registry,
+    })).toEqual({ ok: true });
   });
 
-  it("fails with HANDLER_NOT_REGISTERED when ref is missing", () => {
-    const reg = new InMemoryHandlerRegistry();
+  it("checks handler availability without relinking", () => {
     const result = new ValidateBootUseCase().execute({
-      manifests: [makeProcedure({ handlerRef: "missing" })],
-      registry: reg,
+      plan: compilePlan(procedure("missing")),
+      registry: new InMemoryHandlerRegistry(),
     });
+
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.diagnostics[0]?.code).toBe("HANDLER_NOT_REGISTERED");
-  });
-
-  it("fails with TRIGGER_TARGET_PROCEDURE_UNKNOWN when target doesn't resolve", () => {
-    const reg = new InMemoryHandlerRegistry();
-    reg.register("echoHandler", () => ({ ok: true }));
-    const result = new ValidateBootUseCase().execute({
-      manifests: [
-        makeProcedure(),
-        makeHttpTrigger({ procedure: "ghost", path: "/api/x" }),
-      ],
-      registry: reg,
+    expect(result.diagnostics[0]).toMatchObject({
+      code: "HANDLER_NOT_REGISTERED",
+      phase: "boot",
+      path: "manifest:Procedure/echo#/spec/handler/ref",
     });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    const codes = result.diagnostics.map((d) => d.code);
-    expect(codes).toContain("TRIGGER_TARGET_PROCEDURE_UNKNOWN");
   });
 
-  it("fails with TRIGGER_PATH_COLLISION when two http triggers share method+path", () => {
-    const reg = new InMemoryHandlerRegistry();
-    reg.register("echoHandler", () => ({ ok: true }));
+  it("rejects HTTP Triggers under selected reserved route prefixes", () => {
+    for (const [path, reservedHttpPathPrefixes] of [
+      ["/api/auth/sign-in", ["/api/auth"]],
+      ["/api/views/orders", ["/api/views"]],
+      ["/api/private-auth/callback", ["/api/private-auth"]],
+    ] as const) {
+      const registry = new InMemoryHandlerRegistry();
+      registry.register("echoHandler", () => ({ ok: true }));
+      const result = new ValidateBootUseCase().execute({
+        plan: compilePlan(procedure("echoHandler", path)),
+        registry,
+        reservedHttpPathPrefixes,
+      });
+
+      expect(result.ok, path).toBe(false);
+      if (result.ok) continue;
+      expect(result.diagnostics, path).toContainEqual(expect.objectContaining({
+        code: "TRIGGER_PATH_INVALID",
+        phase: "boot",
+      }));
+    }
+  });
+
+  it("does not reserve an omitted capability route", () => {
+    const registry = new InMemoryHandlerRegistry();
+    registry.register("echoHandler", () => ({ ok: true }));
+
+    expect(new ValidateBootUseCase().execute({
+      plan: compilePlan(procedure("echoHandler", "/api/views/orders")),
+      registry,
+      reservedHttpPathPrefixes: [],
+    })).toEqual({ ok: true });
+  });
+
+  it("checks selected deployment locales", () => {
     const result = new ValidateBootUseCase().execute({
-      manifests: [
-        makeProcedure({ name: "a", handlerRef: "echoHandler" }),
-        makeProcedure({ name: "b", handlerRef: "echoHandler" }),
-        makeHttpTrigger({ name: "ta", procedure: "a", path: "/api/dup" }),
-        makeHttpTrigger({ name: "tb", procedure: "b", path: "/api/dup" }),
-      ],
-      registry: reg,
-    });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    const codes = result.diagnostics.map((d) => d.code);
-    expect(codes).toContain("TRIGGER_PATH_COLLISION");
-  });
-
-  it("fails with TRIGGER_PATH_INVALID when http trigger path lacks /api/ prefix", () => {
-    const reg = new InMemoryHandlerRegistry();
-    reg.register("echoHandler", () => ({ ok: true }));
-    const result = new ValidateBootUseCase().execute({
-      manifests: [
-        makeProcedure(),
-        makeHttpTrigger({ procedure: "echo", path: "/contact" }),
-      ],
-      registry: reg,
-    });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    const codes = result.diagnostics.map((d) => d.code);
-    expect(codes).toContain("TRIGGER_PATH_INVALID");
-  });
-
-  it("assert() throws BootValidationError on failure", () => {
-    const reg = new InMemoryHandlerRegistry();
-    expect(() =>
-      new ValidateBootUseCase().assert({
-        manifests: [makeProcedure({ handlerRef: "missing" })],
-        registry: reg,
-      }),
-    ).toThrow(BootValidationError);
-  });
-
-  it("Schema with localized: true fails when siteLocales is empty", () => {
-    const reg = new InMemoryHandlerRegistry();
-    const localizedSchema = {
-      ...postsSchema(),
-      spec: { ...postsSchema().spec, localized: true },
-    };
-    const result = new ValidateBootUseCase().execute({
-      manifests: [localizedSchema],
-      registry: reg,
+      plan: compilePlan(localizedSchema),
+      registry: new InMemoryHandlerRegistry(),
       siteLocales: [],
     });
+
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    const codes = result.diagnostics.map((d) => d.code);
-    expect(codes).toContain("SCHEMA_LOCALIZED_REQUIRES_SITE_LOCALES");
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "SCHEMA_LOCALIZED_REQUIRES_SITE_LOCALES",
+      phase: "boot",
+    }));
   });
 
-  it("accepts a lifecycle Trigger pointing at a known Schema (4.2 wired)", () => {
-    const reg = new InMemoryHandlerRegistry();
-    reg.register("captchaCheck", () => ({ ok: true }));
-    const result = new ValidateBootUseCase().execute({
-      manifests: [
-        postsSchema(),
-        makeProcedure({ name: "captchaCheck", handlerRef: "captchaCheck" }),
-        makeLifecycleTrigger({
-          procedure: "captchaCheck",
-          schema: "posts",
-          on: ["before_create"],
-          errorPolicy: "abort",
-        }),
-      ],
-      registry: reg,
-    });
-    expect(result.ok).toBe(true);
-  });
-
-  it("emits LIFECYCLE_SCHEMA_UNKNOWN when lifecycle Trigger watches an unknown Schema", () => {
-    const reg = new InMemoryHandlerRegistry();
-    reg.register("captchaCheck", () => ({ ok: true }));
-    const result = new ValidateBootUseCase().execute({
-      manifests: [
-        postsSchema(),
-        makeProcedure({ name: "captchaCheck", handlerRef: "captchaCheck" }),
-        makeLifecycleTrigger({
-          procedure: "captchaCheck",
-          schema: "ghost",
-          on: ["before_create"],
-        }),
-      ],
-      registry: reg,
-    });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    const codes = result.diagnostics.map((d) => d.code);
-    expect(codes).toContain("LIFECYCLE_SCHEMA_UNKNOWN");
-  });
-
-  it("accepts a builtin Procedure pointing at a known Schema (4.3 wired)", () => {
-    const reg = new InMemoryHandlerRegistry();
-    const result = new ValidateBootUseCase().execute({
-      manifests: [postsSchema(), makeBuiltinProcedure({ schema: "posts", op: "create" })],
-      registry: reg,
-    });
-    expect(result.ok).toBe(true);
-  });
-
-  it("emits BUILTIN_HANDLER_SCHEMA_UNKNOWN when builtin targets unknown Schema", () => {
-    const reg = new InMemoryHandlerRegistry();
-    const result = new ValidateBootUseCase().execute({
-      manifests: [postsSchema(), makeBuiltinProcedure({ schema: "ghost", op: "create" })],
-      registry: reg,
-    });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    const codes = result.diagnostics.map((d) => d.code);
-    expect(codes).toContain("BUILTIN_HANDLER_SCHEMA_UNKNOWN");
+  it("assert throws BootValidationError on deployment failure", () => {
+    expect(() => new ValidateBootUseCase().assert({
+      plan: compilePlan(procedure("missing")),
+      registry: new InMemoryHandlerRegistry(),
+    })).toThrow(BootValidationError);
   });
 });
+
+function procedure(handlerRef = "echoHandler", httpPath?: string): string {
+  return `apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: echo }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: ${handlerRef} }
+${httpPath === undefined ? "" : `---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: echo-http }
+spec:
+  source: { kind: http, method: POST, path: ${httpPath} }
+  target: { procedure: echo }
+`}`;
+}
+
+const localizedSchema = `apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: posts }
+spec:
+  title: Posts
+  localized: true
+  schema: { type: object, properties: { locale: { type: string } } }
+`;
+
+function compilePlan(text: string): RuntimePlan {
+  const parsed = parseManifestSources({
+    sources: [{ sourceId: "memory:boot", text }],
+  });
+  if (!parsed.ok) throw new Error("expected valid boot fixture");
+  const result = linkManifestSet(parsed.value);
+  if (!result.ok) throw new Error("expected linked boot fixture");
+  const compiled = compileRuntimePlan(result.value);
+  if (!compiled.ok) throw new Error("expected compiled boot fixture");
+  return compiled.value;
+}

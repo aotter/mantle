@@ -28,7 +28,8 @@ export function postsSchema(): SchemaManifest {
         },
         required: ["title"],
       },
-      lifecycle: "simple",
+      searchableFields: ["title"],
+      lifecycle: "publishing",
     },
   };
 }
@@ -39,6 +40,7 @@ export function recentPostsView(): ViewManifest {
     kind: "View",
     metadata: { name: "recent-posts" },
     spec: {
+      surface: "public",
       from: "posts",
       filter: { eq: { field: "status", value: "published" } },
       orderBy: [{ field: "updatedAt", direction: "desc" }],
@@ -59,6 +61,7 @@ export interface ProcedureOpts {
   readonly authPredicates?: ProcedureManifest["spec"]["requires"]["auth"]["all"] extends infer A
     ? A
     : never;
+  readonly guard?: string;
 }
 
 export function makeProcedure(opts: ProcedureOpts = {}): ProcedureManifest {
@@ -80,10 +83,16 @@ export function makeProcedure(opts: ProcedureOpts = {}): ProcedureManifest {
       handler: opts.handler ?? { kind: "ref", ref: opts.handlerRef ?? "echoHandler" },
     },
   };
-  if (opts.authPredicates) {
+  if (opts.authPredicates || opts.guard) {
     return {
       ...proc,
-      spec: { ...proc.spec, requires: { auth: { all: opts.authPredicates } } },
+      spec: {
+        ...proc.spec,
+        requires: {
+          ...(opts.authPredicates ? { auth: { all: opts.authPredicates } } : {}),
+          ...(opts.guard ? { guard: { procedure: opts.guard } } : {}),
+        },
+      },
     };
   }
   return proc;
@@ -128,6 +137,22 @@ export function makeLifecycleTrigger(opts: {
         on: opts.on ?? ["before_create"],
         ...(opts.errorPolicy ? { errorPolicy: opts.errorPolicy } : {}),
       },
+      target: { procedure: opts.procedure },
+    },
+  };
+}
+
+export function makeMcpTrigger(opts: {
+  readonly name?: string;
+  readonly procedure: string;
+  readonly surface?: "staff" | "public";
+}): TriggerManifest {
+  return {
+    apiVersion: "cms.mantle.aotter.net/v1",
+    kind: "Trigger",
+    metadata: { name: opts.name ?? `${opts.procedure}-mcp` },
+    spec: {
+      source: { kind: "mcp", surface: opts.surface ?? "staff" },
       target: { procedure: opts.procedure },
     },
   };

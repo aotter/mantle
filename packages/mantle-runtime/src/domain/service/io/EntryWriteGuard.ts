@@ -6,15 +6,20 @@ import {
   type SchemaManifest,
 } from "@aotter/mantle-spec";
 import type { EntryRepository } from "../../port/EntryRepository.js";
-import type { SiteConfigRepository } from "../../port/SiteConfigRepository.js";
+import type { LocalePolicyReader } from "../../port/SiteConfigRepository.js";
 
 export interface AssertEntryWritableArgs {
   readonly opPath: string;
   readonly entries: EntryRepository;
   readonly schema: SchemaManifest;
   readonly data: Record<string, unknown>;
+  readonly validator: EntryDataValidator;
   readonly excludeId?: string;
-  readonly siteConfig?: SiteConfigRepository;
+  readonly siteConfig?: LocalePolicyReader;
+  /** Draft mode: skip required-field + locale-presence checks so a
+   *  work-in-progress entry can be saved incomplete. Publish paths
+   *  omit this, so completeness is enforced before an entry goes live. */
+  readonly partial?: boolean;
 }
 
 /** Shared post-projection guard for every authoring path.
@@ -24,8 +29,9 @@ export interface AssertEntryWritableArgs {
  * semantics cannot drift by transport.
  */
 export async function assertEntryWritable(args: AssertEntryWritableArgs): Promise<void> {
-  const validator = new EntryDataValidator();
-  const diagnostics = validator.validate(args.schema, dataForValidation(args.schema, args.data));
+  const diagnostics = args.validator.validate(args.schema, dataForValidation(args.schema, args.data), {
+    partial: args.partial ?? false,
+  });
   if (diagnostics.length > 0) throw new DiagnosticError(diagnostics);
   await assertLocale(args);
   await assertUniqueIndexes(args);
@@ -49,6 +55,8 @@ async function assertLocale(args: AssertEntryWritableArgs): Promise<void> {
   }
 
   if (typeof value !== "string" || value.length === 0) {
+    // Draft may not have picked a locale yet; publish re-checks.
+    if (args.partial) return;
     throw new DiagnosticError(
       runtimeDiagnostic({
         code: "INPUT_VALIDATION_FAILED",
@@ -62,9 +70,7 @@ async function assertLocale(args: AssertEntryWritableArgs): Promise<void> {
   }
   if (!args.siteConfig) return;
   const locales = await args.siteConfig.readLocales();
-  // ADR-0010: empty `site_config.locales` means the locale subsystem
-  // is off site-wide. Pass through so a fresh deploy whose `bootInit`
-  // hasn't seeded locales yet can still accept localized writes.
+  // ADR-0010: empty site locales means the locale subsystem is off.
   if (locales.length === 0) return;
   if (locales.includes(value)) return;
   throw new DiagnosticError(

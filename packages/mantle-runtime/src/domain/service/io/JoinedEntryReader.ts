@@ -1,9 +1,5 @@
 import type { ContentState, Entry, SchemaManifest } from "@aotter/mantle-spec";
-import type { DatabaseDriver } from "../../port/DatabaseDriver.js";
-import {
-  readEntriesByDataFieldIn,
-  readEntryByDataField,
-} from "./PublishedEntries.js";
+import type { EntryReader } from "../../port/EntryReader.js";
 
 /**
  * `joinParentIfTranslation` — when `entry.collection` declares
@@ -21,7 +17,7 @@ import {
  * its already-published parent.
  */
 export async function joinParentIfTranslation(
-  db: DatabaseDriver,
+  reader: EntryReader,
   schemas: ReadonlyMap<string, SchemaManifest>,
   entry: Entry,
   options: { readonly parentStatus?: ContentState } = {},
@@ -33,7 +29,7 @@ export async function joinParentIfTranslation(
   const joinValue = entry.data[translates.on];
   if (typeof joinValue !== "string" || joinValue === "") return entry;
 
-  const parent = await readEntryByDataField(db, {
+  const parent = await reader.readByDataField({
     collection: translates.parent,
     field: translates.on,
     value: joinValue,
@@ -55,12 +51,11 @@ export async function joinParentIfTranslation(
  * parent lookups across the list, deduplicating join values — so a
  * 20-locale list keyed off the same parent slug costs 1 D1 read, not
  * 20. Assumes all entries share a single collection (the contract of
- * `RenderListLiveUseCase` / `HtmlPublishOrchestrator.renderList`); if
- * mixed collections ever land here, fall back path-per-entry would
- * be needed.
+ * `RenderListLiveUseCase`); if mixed collections ever land here, fall
+ * back path-per-entry would be needed.
  */
 export async function joinParentForList(
-  db: DatabaseDriver,
+  reader: EntryReader,
   schemas: ReadonlyMap<string, SchemaManifest>,
   entries: readonly Entry[],
   options: { readonly parentStatus?: ContentState } = {},
@@ -78,16 +73,15 @@ export async function joinParentForList(
   }
   if (joinValues.size === 0) return [...entries];
 
-  const parents = await readEntriesByDataFieldIn(db, {
+  const parents = await reader.readByDataFieldIn({
     collection: translates.parent,
     field: translates.on,
     values: [...joinValues],
+    latestPerValue: true,
     locale: null,
     status: options.parentStatus,
   });
-  // Multiple rows per joinValue are sorted updated_at DESC by the
-  // query; first occurrence wins (matches single-entry path which
-  // does LIMIT 1).
+  // Storage returns only the newest published parent per join value.
   const parentByValue = new Map<string, Entry>();
   for (const parent of parents) {
     const key = parent.data[translates.on];

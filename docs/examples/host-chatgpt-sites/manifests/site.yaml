@@ -1,0 +1,27 @@
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata:
+  name: articles
+spec:
+  title: 文章
+  schema:
+    type: object
+    required: [title]
+    properties:
+      title: { type: string, title: 標題, maxLength: 160 }
+      summary: { type: string, title: 摘要, maxLength: 1000 }
+      body: { type: string, title: 內容, x-mcp-hint: markdown }
+      coverAssetId: { type: string, title: 封面圖片, x-mantle-ref: media_assets, x-mcp-hint: media-image }
+  lifecycle: publishing
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata:
+  name: published-articles
+spec:
+  surface: public
+  from: articles
+  fields: [id, title, summary]
+  filter:
+    eq: { field: status, value: published }
+  limit: 20

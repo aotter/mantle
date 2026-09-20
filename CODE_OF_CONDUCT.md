@@ -40,7 +40,7 @@ This Code of Conduct applies within project spaces and when an individual is off
 
 ## Enforcement
 
-Report conduct concerns to `phsu@aotter.net`.
+Report conduct concerns to `security@aotter.net`.
 
 All complaints will be reviewed and investigated promptly and fairly. Maintainers are obligated to respect the privacy and security of the reporter of any incident.
 

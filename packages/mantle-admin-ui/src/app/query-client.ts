@@ -1,11 +1,17 @@
-import { QueryClient } from "@tanstack/react-query";
+import { MutationCache, QueryClient } from "@tanstack/react-query";
 import { ApiError } from "../lib/api";
 
 export const queryClient = new QueryClient({
+  mutationCache: new MutationCache({
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["collection-statistics"] });
+      void queryClient.invalidateQueries({ queryKey: ["entries"] });
+    },
+  }),
   defaultOptions: {
     queries: {
       retry: (failureCount, error) => {
-        if (error instanceof ApiError && [401, 403].includes(error.status)) {
+        if (error instanceof ApiError && [401, 403, 501].includes(error.status)) {
           return false;
         }
         return failureCount < 2;
@@ -15,3 +21,13 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+for (const key of ["collections", "views-manifest", "operations"]) {
+  queryClient.setQueryDefaults([key], { staleTime: Infinity });
+}
+
+for (const key of ["me", "site", "admin-webmcp"]) {
+  queryClient.setQueryDefaults([key], { staleTime: 300_000, refetchOnWindowFocus: true });
+}
+
+queryClient.setQueryDefaults(["entries"], { staleTime: 300_000 });

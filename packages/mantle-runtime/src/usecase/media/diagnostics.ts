@@ -10,7 +10,7 @@ export function mediaNotConfiguredDiagnostic(opPath: string): Diagnostic {
     path: opPath,
     expected: "media storage adapter bound at runtime",
     message:
-      "Media uploads are not enabled on this deployment. Bind a `mediaStorage` adapter in `createCmsRuntime` to enable.",
+      "Media uploads are not enabled on this deployment. Bind a `mediaStorage` port in `createMantleRuntime` to enable.",
   });
 }
 
@@ -21,7 +21,7 @@ export function mediaMimeRejectedDiagnostic(opPath: string, mime: string): Diagn
     severity: "error",
     path: opPath,
     value: mime,
-    expected: "one of: image/png, image/jpeg, image/webp, image/gif",
+    expected: "one of: image/png, image/jpeg, image/webp, image/avif, image/gif",
   });
 }
 
@@ -52,27 +52,27 @@ export function mediaSizeExceededDiagnostic(
   });
 }
 
-export function mediaUploadExpiredDiagnostic(opPath: string, uploadId: string): Diagnostic {
+export function mediaUploadExpiredDiagnostic(opPath: string, uploadGroupId: string): Diagnostic {
   return makeDiagnostic({
     code: "MEDIA_UPLOAD_EXPIRED",
     phase: PHASE,
     severity: "error",
     path: opPath,
-    value: uploadId,
+    value: uploadGroupId,
     expected: "an active upload capability (TTL elapsed or never created)",
     suggestion: "call create_media_upload again to get a fresh capability",
   });
 }
 
-export function mediaObjectNotFoundDiagnostic(opPath: string, uploadId: string): Diagnostic {
+export function mediaObjectNotFoundDiagnostic(opPath: string, uploadGroupId: string): Diagnostic {
   return makeDiagnostic({
     code: "MEDIA_OBJECT_NOT_FOUND",
     phase: PHASE,
     severity: "error",
     path: opPath,
-    value: uploadId,
-    expected: "an object PUT to the storage backend before commit",
-    suggestion: "PUT the file to the upload URL before calling commit_media_upload",
+    value: uploadGroupId,
+    expected: "every variant object PUT to the storage backend before commit",
+    suggestion: "PUT every variant's bytes to its uploadUrl before calling commit_media_upload",
   });
 }
 
@@ -101,6 +101,87 @@ export function mediaPurposeRejectedDiagnostic(
     suggestion:
       declared.length > 0
         ? "pass one of the declared purposes; starters own the taxonomy"
-        : "add `media.purposes` to `siteDefaults` in mantleConfig.ts to enable uploads",
+        : "add `media.purposes` to `siteDefaults` in `src/mantle/config.ts` to enable uploads",
+  });
+}
+
+/** Caller's variants manifest is missing one or more mimes the
+ *  purpose policy declares as required. The expected field carries
+ *  the declared required set + the supplied set so the agent script
+ *  can self-correct without another round trip. */
+export function mediaVariantsIncompleteDiagnostic(
+  opPath: string,
+  purpose: string,
+  required: readonly string[],
+  supplied: readonly string[],
+): Diagnostic {
+  const missing = required.filter((m) => !supplied.includes(m));
+  return makeDiagnostic({
+    code: "MEDIA_VARIANTS_INCOMPLETE",
+    phase: PHASE,
+    severity: "error",
+    path: opPath,
+    value: supplied,
+    expected:
+      `variants covering every required mime for purpose '${purpose}': ` +
+      `${required.join(", ")}`,
+    suggestion: `add the missing variant(s): ${missing.join(", ")}`,
+  });
+}
+
+export function mediaVariantSizeExceededDiagnostic(
+  opPath: string,
+  mime: string,
+  byteSize: number,
+  maxBytes: number,
+): Diagnostic {
+  return makeDiagnostic({
+    code: "MEDIA_VARIANT_SIZE_EXCEEDED",
+    phase: PHASE,
+    severity: "error",
+    path: opPath,
+    value: { mimeType: mime, byteSize },
+    expected: `${mime} byteSize <= ${maxBytes}`,
+    suggestion:
+      "re-encode this variant with a smaller target size (sharp / libvips quality knob)",
+  });
+}
+
+/**
+ * Variant byte sizes don't match the format hierarchy the uploader
+ * promised — typically avif > webp > jpeg (each modern format
+ * smaller). When the upload manifest claims a modern format that's
+ * larger than the universal-fallback (e.g. `avif` weighing more than
+ * `jpeg`), the uploader almost certainly skipped optimization for
+ * that variant. Fail hard rather than emit a `<picture>` that's
+ * slower than the bare `<img>` fallback.
+ */
+export function mediaVariantsSuspiciousSizeDiagnostic(
+  opPath: string,
+  detail: string,
+): Diagnostic {
+  return makeDiagnostic({
+    code: "MEDIA_VARIANTS_SUSPICIOUS_SIZE",
+    phase: PHASE,
+    severity: "error",
+    path: opPath,
+    expected:
+      "modern formats no larger than their fallback (e.g. avif <= jpeg, webp <= jpeg)",
+    value: detail,
+    suggestion:
+      "optimize this variant in the agent runtime before upload — the modern variant looks unprocessed",
+  });
+}
+
+export function mediaAssetNotFoundDiagnostic(opPath: string, id: string): Diagnostic {
+  return makeDiagnostic({
+    code: "MEDIA_ASSET_NOT_FOUND",
+    phase: PHASE,
+    severity: "error",
+    path: opPath,
+    value: id,
+    expected: "a row in media_assets matching this id",
+    suggestion:
+      "verify the asset id matches a successful commit_media_upload response, and that the asset hasn't been deleted",
   });
 }

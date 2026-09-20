@@ -9,8 +9,6 @@ export function statusLabel(
   switch (status) {
     case "draft":
       return t(language, "status.draft");
-    case "review":
-      return t(language, "status.review");
     case "published":
       return t(language, "status.published");
     case "archived":

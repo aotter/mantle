@@ -1,0 +1,14 @@
+{
+  "name": "mantle",
+  "owner": {
+    "name": "Aotter"
+  },
+  "description": "Build and embed Mantle applications with version-matched Core skills and deterministic examples.",
+  "plugins": [
+    {
+      "name": "mantle",
+      "source": "./",
+      "description": "Build and embed Mantle applications with version-matched Core skills and deterministic examples."
+    }
+  ]
+}

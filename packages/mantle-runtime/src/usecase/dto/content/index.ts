@@ -1,4 +1,5 @@
 import type { ContentState } from "@aotter/mantle-spec";
+import type { EntrySort } from "../../../domain/port/EntryRepository.js";
 import type { HandlerContext } from "../../../domain/model/HandlerContext.js";
 
 /**
@@ -15,11 +16,9 @@ import type { HandlerContext } from "../../../domain/model/HandlerContext.js";
  */
 export interface ContentMutationFields {
   readonly ctx?: HandlerContext;
-  /** Pre-projection original input forwarded to lifecycle hooks
-   *  (`ctx.event.originalInput` on the hook's procedure call). When
-   *  unset, hooks see the row data instead. The builtin Procedure path
-   *  populates this with the full procedure input so hooks can read
-   *  side-channel fields like CAPTCHA tokens. */
+  /** Pre-projection input forwarded only to synchronous `before_*`
+   *  hooks. Deferred `after_*` delivery uses persisted row data and
+   *  never retains side-channel fields such as CAPTCHA tokens. */
   readonly originalInput?: unknown;
 }
 
@@ -31,6 +30,7 @@ export interface CreateDraftRequest extends ContentMutationFields {
 
 export interface UpdateDraftRequest extends ContentMutationFields {
   readonly id: string;
+  readonly collection: string;
   readonly expectedVersion: number;
   /** Partial data — merged onto the existing row's `data` blob. */
   readonly data: Record<string, unknown>;
@@ -38,44 +38,48 @@ export interface UpdateDraftRequest extends ContentMutationFields {
 
 export interface GetEntryRequest {
   readonly id: string;
-  /** When set, asserts the row's collection matches; rejects with
-   *  `NOT_FOUND` otherwise. */
-  readonly collection?: string;
+  readonly collection: string;
 }
 
 export interface ListEntriesRequest {
   readonly collection: string;
   readonly status?: ContentState;
   readonly limit?: number;
-  /** Opaque cursor from a prior `ListEntriesResponse.nextCursor`. */
+  /** Opaque cursor from a prior `ListEntriesResult.nextCursor`. */
   readonly cursor?: string;
+  readonly cursorDirection?: "forward" | "backward";
+  /** Free-text filter matched against id and Schema.searchableFields. */
+  readonly search?: string;
+  /** One exact, indexed enum filter exposed by the Schema. */
+  readonly filter?: EntryFilter;
+  /** Admin parent/child list scope: exact match on a required x-mantle-ref field. */
+  readonly scope?: EntryFilter;
+  readonly sort?: EntrySort;
 }
 
-export interface ListEntriesResponse<R> {
-  readonly rows: readonly R[];
-  /** Present when there may be more rows; pass back as `cursor`. */
-  readonly nextCursor?: string;
+export interface EntryFilter {
+  readonly field: string;
+  readonly value: string;
 }
 
 export interface RequestPublishRequest extends ContentMutationFields {
   readonly id: string;
+  readonly collection: string;
 }
 
 export interface UnpublishRequest extends ContentMutationFields {
   readonly id: string;
+  readonly collection: string;
 }
 
 export interface ArchiveRequest extends ContentMutationFields {
   readonly id: string;
-  /** @deprecated Ignored. `ArchiveUseCase` pins OCC to the version it
-   *  reads internally so the transition guard and the chokepoint
-   *  check see the same snapshot. Field kept optional for backwards
-   *  compat; remove in v0.2. */
-  readonly expectedVersion?: number;
+  readonly collection: string;
 }
 
 export interface DeleteEntryRequest extends ContentMutationFields {
   readonly id: string;
+  readonly collection: string;
 }
 
 export interface DeleteEntryResponse {

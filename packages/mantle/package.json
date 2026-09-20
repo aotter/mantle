@@ -1,9 +1,9 @@
 {
   "name": "@aotter/mantle",
-  "version": "0.0.11-alpha.13",
-  "description": "Umbrella entry for @aotter/mantle. Adopters install this one package and import from subpaths: /spec, /runtime, /cloudflare, /admin-ui. Sub-packages remain individually installable on npm for tooling / alt-adapter authors. The Netlify adapter ships as a private workspace stub in v0.1 — its subpath will be added when the impl lands in v0.2.",
+  "version": "0.1.2-rc.1",
+  "description": "Embeddable Mantle Core umbrella with Spec and Runtime; Web, Admin, Bun, Vercel, Cloudflare, and Admin UI are optional peer packages.",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/aotter/mantle/tree/develop/packages/mantle",
+  "homepage": "https://mantle.tools/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/aotter/mantle.git",
@@ -13,6 +13,10 @@
   "sideEffects": false,
   "main": "./dist/spec.js",
   "types": "./dist/spec.d.ts",
+  "bin": {
+    "mantle": "./dist/cli/main.js",
+    "mantle-harness": "./dist/cli/harness.js"
+  },
   "publishConfig": {
     "access": "public",
     "tag": "alpha",
@@ -31,6 +35,34 @@
       "types": "./dist/runtime.d.ts",
       "import": "./dist/runtime.js"
     },
+    "./runtime/testing": {
+      "types": "./dist/runtime-testing.d.ts",
+      "import": "./dist/runtime-testing.js"
+    },
+    "./codegen": {
+      "types": "./dist/codegen.d.ts",
+      "import": "./dist/codegen.js"
+    },
+    "./web": {
+      "types": "./dist/web.d.ts",
+      "import": "./dist/web.js"
+    },
+    "./admin": {
+      "types": "./dist/admin.d.ts",
+      "import": "./dist/admin.js"
+    },
+    "./bun": {
+      "types": "./dist/bun.d.ts",
+      "import": "./dist/bun.js"
+    },
+    "./vercel": {
+      "types": "./dist/vercel.d.ts",
+      "import": "./dist/vercel.js"
+    },
+    "./vercel/libsql": {
+      "types": "./dist/vercel-libsql.d.ts",
+      "import": "./dist/vercel-libsql.js"
+    },
     "./cloudflare": {
       "types": "./dist/cloudflare.d.ts",
       "import": "./dist/cloudflare.js"
@@ -42,34 +74,82 @@
   },
   "files": [
     "dist",
+    "docs",
+    "skills",
     "README.md"
   ],
   "dependencies": {
-    "@aotter/mantle-admin-ui": "workspace:*",
-    "@aotter/mantle-cloudflare": "workspace:*",
     "@aotter/mantle-runtime": "workspace:*",
     "@aotter/mantle-spec": "workspace:*"
   },
   "peerDependencies": {
-    "@cloudflare/workers-oauth-provider": "^0.6.0",
-    "aws4fetch": "^1.0.20",
-    "better-auth": "^1.6.0",
-    "hono": "^4.12.0",
-    "zod": "^4.0.0"
+    "@aotter/mantle-admin": "workspace:*",
+    "@aotter/mantle-admin-ui": "workspace:*",
+    "@aotter/mantle-bun": "workspace:*",
+    "@aotter/mantle-cloudflare": "workspace:*",
+    "@aotter/mantle-vercel": "workspace:*",
+    "@aotter/mantle-web": "workspace:*",
+    "aws4fetch": "catalog:peer",
+    "better-auth": "catalog:peer",
+    "hono": "catalog:peer",
+    "@libsql/client": "catalog:peer",
+    "zod": "catalog:peer"
+  },
+  "peerDependenciesMeta": {
+    "@aotter/mantle-admin": {
+      "optional": true
+    },
+    "@aotter/mantle-admin-ui": {
+      "optional": true
+    },
+    "@aotter/mantle-bun": {
+      "optional": true
+    },
+    "@aotter/mantle-cloudflare": {
+      "optional": true
+    },
+    "@aotter/mantle-vercel": {
+      "optional": true
+    },
+    "@aotter/mantle-web": {
+      "optional": true
+    },
+    "aws4fetch": {
+      "optional": true
+    },
+    "better-auth": {
+      "optional": true
+    },
+    "hono": {
+      "optional": true
+    },
+    "@libsql/client": {
+      "optional": true
+    }
   },
   "scripts": {
     "prebuild": "rm -rf dist .tsbuildinfo",
     "build": "tsc -b tsconfig.lib.json",
-    "typecheck": "tsc --noEmit -p tsconfig.lib.json"
+    "typecheck": "tsc --noEmit -p tsconfig.lib.json",
+    "test": "vitest run",
+    "prepack": "node ../../scripts/sync-package-docs.mjs .",
+    "postpack": "node ../../scripts/sync-package-docs.mjs . --clean"
   },
   "devDependencies": {
-    "@cloudflare/workers-oauth-provider": "^0.6.0",
-    "@types/node": "^25",
-    "aws4fetch": "^1.0.20",
-    "better-auth": "^1.6.11",
-    "hono": "^4.12.19",
-    "typescript": "^6.0.3",
-    "zod": "^4.4.2"
+    "@aotter/mantle-admin": "workspace:*",
+    "@aotter/mantle-admin-ui": "workspace:*",
+    "@aotter/mantle-bun": "workspace:*",
+    "@aotter/mantle-cloudflare": "workspace:*",
+    "@aotter/mantle-vercel": "workspace:*",
+    "@aotter/mantle-web": "workspace:*",
+    "@types/node": "catalog:",
+    "aws4fetch": "catalog:",
+    "better-auth": "catalog:",
+    "hono": "catalog:",
+    "@libsql/client": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
   },
   "engines": {
     "node": ">=22"

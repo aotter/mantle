@@ -4,13 +4,17 @@ import {
   RandomUuidGenerator,
   extensionForMime,
   type CommitUploadArgs,
+  type CommitUploadVariantSpec,
   type CreateUploadArgs,
   type CreateUploadResult,
-  type DeleteAssetArgs,
+  type CreateUploadVariantSpec,
+  type DeleteObjectArgs,
   type GetPublicUrlArgs,
   type IdGenerator,
   type MediaAsset,
   type MediaStorage,
+  type MediaVariant,
+  type UploadCapability,
 } from "@aotter/mantle-runtime";
 
 /**
@@ -38,6 +42,18 @@ import {
  * account / bucket — the consumer must wire it through the `cmsConfig`
  * env (typically `MEDIA_PUBLIC_URL_BASE`).
  *
+ * # Multi-variant (#272)
+ *
+ * `createUpload` produces one presigned PUT URL per declared variant;
+ * `commitUpload` verifies and streams every object through a metadata rewrite. Storage keys are scoped
+ * under a shared `<uploadGroupId>/` prefix so operators can eyeball
+ * the variant set in R2 dashboards, and the orphan sweeper (#254)
+ * can identify partially-committed groups by listing the prefix.
+ *
+ * Optimization runs agent-side in the MCP client's runtime. The
+ * Worker never decodes / re-encodes bytes — it only verifies content-
+ * type + size from `bucket.get` before streaming the metadata-rewrite PUT.
+ *
  * # Future: private bucket adapter
  *
  * A v0.2 `R2PrivateMediaStorage` will live alongside this class and
@@ -61,12 +77,13 @@ export class R2MediaStorage implements MediaStorage {
      *  domain) or `https://pub-<hash>.r2.dev` (R2 public dev domain).
      *  Trailing slash is normalised away. */
     publicBase: string,
-    /** ID source for `uploadId` and the random portion of `storageKey`.
+    /** ID source for fallback storage-key randomness when an upstream
+     *  caller lands without a usable upload-group prefix (defensive).
      *  Defaults to `RandomUuidGenerator`; tests inject a deterministic
      *  fake to assert exact key strings. **Production must use a
-     *  CSPRNG-backed generator** — `uploadId` is bearer-token-equivalent
-     *  and a predictable storageKey leaks pre-commit object locations.
-     *  See `IdGenerator`'s "Security invariant". */
+     *  CSPRNG-backed generator** — `uploadGroupId` is bearer-token-
+     *  equivalent and a predictable storageKey leaks pre-commit
+     *  object locations. See `IdGenerator`'s "Security invariant". */
     private readonly idgen: IdGenerator = RandomUuidGenerator,
   ) {
     if (!publicBase) {
@@ -86,94 +103,101 @@ export class R2MediaStorage implements MediaStorage {
   private readonly publicBase: string;
 
   async createUpload(args: CreateUploadArgs): Promise<CreateUploadResult> {
-    const uploadId = this.idgen.next();
-    const storageKey = this.buildStorageKey(args.mimeType, args.purpose);
     const ttlSeconds = Math.max(60, Math.floor((args.expiresAt - args.now) / 1000));
-
-    // Sign-as-query: PUT URL with the SigV4 signature in the query
-    // string. Browsers / agents PUT to this URL and we don't ask
-    // them to mint signing headers.
-    //
-    // Why sign nothing else: pinning Content-Type into the signature
-    // forces clients to send EXACTLY that header — browsers will
-    // strip mismatches and produce 403s. Pinning Content-Length is
-    // pointless because it's a forbidden header. The signature
-    // already constrains key + method + expiry; mime + size + etag
-    // are re-verified at commit-time via `bucket.get`.
-    const target = new URL(`${this.s3Endpoint.replace(/\/+$/, "")}/${storageKey}`);
-    target.searchParams.set("X-Amz-Expires", String(ttlSeconds));
-    const signed = await this.s3.sign(target.toString(), {
-      method: "PUT",
-      aws: { signQuery: true, service: "s3" },
-    });
-
+    const capabilities: UploadCapability[] = [];
+    for (const variant of args.variants) {
+      const storageKey = this.buildVariantStorageKey(
+        args.uploadGroupId,
+        args.purpose,
+        variant,
+      );
+      // Sign-as-query: PUT URL with the SigV4 signature in the query
+      // string. Browsers / agents PUT to this URL and we don't ask
+      // them to mint signing headers. Pinning Content-Type into the
+      // signature forces clients to send EXACTLY that header — browsers
+      // strip mismatches and produce 403s; Content-Length is a
+      // forbidden header. The signature already constrains key +
+      // method + expiry; mime + size + etag are re-verified at
+      // commit-time via `bucket.get`.
+      const target = new URL(`${this.s3Endpoint.replace(/\/+$/, "")}/${storageKey}`);
+      target.searchParams.set("X-Amz-Expires", String(ttlSeconds));
+      const signed = await this.s3.sign(target.toString(), {
+        method: "PUT",
+        aws: { signQuery: true, service: "s3" },
+      });
+      capabilities.push({
+        mimeType: variant.mimeType,
+        role: variant.role,
+        method: "PUT",
+        uploadUrl: signed.url,
+        storageKey,
+        publicUrl: `${this.publicBase}/${storageKey}`,
+        requiredHeaders: { "Content-Type": variant.mimeType },
+      });
+    }
     return {
-      uploadId,
-      method: "PUT",
-      uploadUrl: signed.url,
-      storageKey,
+      uploadGroupId: args.uploadGroupId,
+      capabilities,
       expiresAt: args.expiresAt,
-      requiredHeaders: { "Content-Type": args.mimeType },
-      publicUrl: `${this.publicBase}/${storageKey}`,
     };
   }
 
   async commitUpload(args: CommitUploadArgs): Promise<MediaAsset> {
-    // Single `get` covers existence + metadata + body stream for the
-    // metadata-rewrite PUT. R2 has no metadata-only patch; the PUT
-    // streams `existing.body` (a ReadableStream) back without
-    // materialising bytes in Worker memory.
-    const existing = await this.bucket.get(args.storageKey);
-    if (!existing) throw mediaDiagnostic("MEDIA_OBJECT_NOT_FOUND", { value: args.uploadId });
+    // Enforce the asset-shape invariant the renderer depends on. The
+    // use case already validated this at create time; this is a
+    // belt-and-suspenders check at the adapter-side commit path.
+    // Exactly one primary, no duplicated (mime, role) pair (the latter
+    // would have already collided on storage key in createUpload).
+    const primaries = args.variants.filter((v) => v.role === "primary");
+    if (primaries.length !== 1) {
+      throw new DiagnosticError(
+        makeDiagnostic({
+          code: "MEDIA_VARIANTS_INCOMPLETE",
+          phase: "runtime",
+          severity: "error",
+          path: "adapter/R2MediaStorage/commitUpload",
+          expected: "exactly one variant with role='primary'",
+          value: args.variants.map((v) => v.role).join(","),
+        }),
+      );
+    }
+    const seenKey = new Set<string>();
+    for (const v of args.variants) {
+      const key = `${v.mimeType}/${v.role}`;
+      if (seenKey.has(key)) {
+        throw new DiagnosticError(
+          makeDiagnostic({
+            code: "MEDIA_VARIANTS_INCOMPLETE",
+            phase: "runtime",
+            severity: "error",
+            path: "adapter/R2MediaStorage/commitUpload",
+            expected: "unique (mimeType, role) per variant",
+            value: key,
+          }),
+        );
+      }
+      seenKey.add(key);
+    }
 
-    const actualMime = existing.httpMetadata?.contentType ?? "application/octet-stream";
-    if (args.checksum) {
-      // R2 always returns an etag for stored objects, but fail closed
-      // if it's missing for any reason — a supplied checksum that
-      // can't be verified must not silently no-op.
-      const etag = existing.etag?.replace(/^"|"$/g, "") ?? "";
-      if (etag !== args.checksum) {
-        throw mediaDiagnostic("MEDIA_CHECKSUM_MISMATCH", {
-          value: existing.etag ?? "(no etag returned)",
-          expected: args.checksum,
-        });
+    const variants: MediaVariant[] = [];
+    // At most three GET streams and three corresponding PUTs per invocation.
+    // Settle the whole batch before returning an error or starting another.
+    for (let offset = 0; offset < args.variants.length; offset += 3) {
+      const results = await Promise.allSettled(args.variants.slice(offset, offset + 3)
+        .map((spec) => this.verifyAndCommitVariant(args, spec)));
+      for (const result of results) {
+        if (result.status === "rejected") throw result.reason;
+        variants.push(result.value);
       }
     }
-    if (actualMime !== args.expectedMimeType) {
-      throw mediaDiagnostic("MEDIA_MIME_REJECTED", {
-        value: actualMime,
-        expected: args.expectedMimeType,
-      });
-    }
-    if (existing.size > args.maxBytes) {
-      throw mediaDiagnostic("MEDIA_SIZE_EXCEEDED", {
-        value: existing.size,
-        expected: `<= ${args.maxBytes}`,
-      });
-    }
-
-    const customMetadata: Record<string, string> = {
-      ...existing.customMetadata,
-      committedAt: String(args.now),
-    };
-    if (args.alt) customMetadata["alt"] = args.alt;
-    if (args.caption) customMetadata["caption"] = args.caption;
-
-    await this.bucket.put(args.storageKey, existing.body, {
-      httpMetadata: { contentType: actualMime },
-      customMetadata,
-    });
 
     return {
-      id: args.uploadId,
-      storageKey: args.storageKey,
-      publicUrl: `${this.publicBase}/${args.storageKey}`,
-      mimeType: actualMime,
-      byteSize: existing.size,
+      id: args.uploadGroupId,
+      variants,
       alt: args.alt,
       caption: args.caption,
       createdAt: args.now,
-      metadata: customMetadata,
+      metadata: { filename: args.filename },
     };
   }
 
@@ -181,19 +205,88 @@ export class R2MediaStorage implements MediaStorage {
     return `${this.publicBase}/${args.storageKey}`;
   }
 
-  async deleteAsset(args: DeleteAssetArgs): Promise<void> {
+  async deleteObject(args: DeleteObjectArgs): Promise<void> {
     await this.bucket.delete(args.storageKey);
   }
 
-  /** Object keys are server-generated. The mime-derived extension is
-   *  purely cosmetic — server-side serving never infers content-type
-   *  from the key. Purpose, when supplied, becomes a dir-prefix so an
-   *  operator can eyeball "post-cover/abc123.jpg" in R2 dashboards. */
-  private buildStorageKey(mimeType: string, purpose?: string): string {
-    const id = this.idgen.next();
-    const ext = extensionForMime(mimeType);
-    const prefix = purpose && /^[a-z0-9-]+$/.test(purpose) ? `${purpose}/` : "";
-    return `${prefix}${id}.${ext}`;
+
+  private async verifyAndCommitVariant(
+    args: CommitUploadArgs,
+    spec: CommitUploadVariantSpec,
+  ): Promise<MediaVariant> {
+    // Single `get` covers existence + metadata + body stream for the
+    // metadata-rewrite PUT. R2 has no metadata-only patch; the PUT
+    // streams `existing.body` (a ReadableStream) back without
+    // materialising bytes in Worker memory.
+    const existing = await this.bucket.get(spec.storageKey);
+    if (!existing) throw mediaDiagnostic("MEDIA_OBJECT_NOT_FOUND", { value: args.uploadGroupId });
+
+    try {
+      const actualMime = existing.httpMetadata?.contentType ?? "application/octet-stream";
+      if (actualMime !== spec.mimeType) {
+        throw mediaDiagnostic("MEDIA_MIME_REJECTED", {
+          value: actualMime,
+          expected: spec.mimeType,
+        });
+      }
+      if (existing.size > spec.maxBytes) {
+        throw mediaDiagnostic("MEDIA_VARIANT_SIZE_EXCEEDED", {
+          value: { mimeType: spec.mimeType, byteSize: existing.size },
+          expected: `${spec.mimeType} byteSize <= ${spec.maxBytes}`,
+        });
+      }
+
+      const customMetadata: Record<string, string> = {
+        ...existing.customMetadata,
+        committedAt: String(args.now),
+        role: spec.role,
+        uploadGroupId: args.uploadGroupId,
+        filename: args.filename,
+      };
+      if (args.alt) customMetadata["alt"] = args.alt;
+      if (args.caption) customMetadata["caption"] = args.caption;
+
+      const committed = await this.bucket.put(spec.storageKey, existing.body, {
+        httpMetadata: { contentType: actualMime },
+        customMetadata,
+      });
+      if (!committed) throw new Error("R2 metadata commit did not store the object.");
+
+      return {
+        mimeType: actualMime,
+        publicUrl: `${this.publicBase}/${spec.storageKey}`,
+        storageKey: spec.storageKey,
+        byteSize: existing.size,
+        role: spec.role,
+      };
+    } catch (error) {
+      // Validation may reject before PUT takes ownership of the GET stream.
+      // A failed PUT may already have consumed/errored it; preserve the cause.
+      await existing.body.cancel().catch(() => {});
+      throw error;
+    }
+  }
+
+  /** Object keys are server-generated. Layout:
+   *
+   *   <purpose>/<uploadGroupId>/<role>.<ext>
+   *
+   * Purpose is prefixed (when it matches a permissive slug shape) so
+   * operators can eyeball "post-cover/abc123/primary.jpg" in R2
+   * dashboards. The `uploadGroupId/` directory groups every variant
+   * of one logical asset — orphan sweep (#254) lists a prefix to
+   * find partially-committed bundles. */
+  private buildVariantStorageKey(
+    uploadGroupId: string,
+    purpose: string,
+    variant: CreateUploadVariantSpec,
+  ): string {
+    const purposePrefix = /^[a-z0-9-]+$/.test(purpose) ? `${purpose}/` : "";
+    const groupSegment = /^[A-Za-z0-9_-]+$/.test(uploadGroupId)
+      ? uploadGroupId
+      : this.idgen.next();
+    const ext = extensionForMime(variant.mimeType);
+    return `${purposePrefix}${groupSegment}/${variant.role}.${ext}`;
   }
 }
 
@@ -201,8 +294,7 @@ function mediaDiagnostic(
   code:
     | "MEDIA_OBJECT_NOT_FOUND"
     | "MEDIA_MIME_REJECTED"
-    | "MEDIA_SIZE_EXCEEDED"
-    | "MEDIA_CHECKSUM_MISMATCH",
+    | "MEDIA_VARIANT_SIZE_EXCEEDED",
   fields: { value: unknown; expected?: string },
 ): DiagnosticError {
   return new DiagnosticError(

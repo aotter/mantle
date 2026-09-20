@@ -1,3 +1,58 @@
 packages:
   - "packages/*"
   - "packages/adapters/*"
+  - "packages/adapters/vercel/test/fixtures/live-node"
+
+# Catalogs centralize shared third-party version specifiers so
+# dependabot only edits one place per dependency, package.json files
+# stop drifting against each other, and `catalog:` references resolve
+# uniformly across the workspace. Background: pnpm 9.5+ ships
+# catalogs; dependabot supports the protocol as of Feb 2025 (GA).
+#
+# **Two-catalog split**: the `peer` catalog carries loose ranges that
+# go into peerDependencies (what consumers must bring). The default
+# catalog (referenced as `catalog:` without a name) carries tighter
+# ranges for devDependencies (what we test against). Bumping the
+# default catalog tightens the dev side without forcing every
+# downstream consumer to upgrade — only the SDK's CI rebuilds with
+# the new minor. Bumping `peer` is a deliberate consumer-facing
+# act (semver-major-ish even within ^X.Y semver because it raises
+# the floor for users).
+#
+# The `catalog:` protocol is stripped on `pnpm publish` / `pnpm pack`,
+# same as `workspace:`. Downstream consumers see resolved version
+# strings, never `catalog:`. See https://pnpm.io/catalogs.
+catalogs:
+  peer:
+    hono: ^4.12.0
+    zod: ^4.5.0
+    better-auth: 1.7.2
+    aws4fetch: ^1.0.20
+    '@libsql/client': ^0.17.4
+
+catalog:
+  # Shared runtime deps — tracked via lockfile, bumped by dependabot.
+  hono: ^4.13.3
+  zod: ^4.5.4
+  better-auth: 1.7.2
+  '@better-auth/core': 1.7.2
+  '@better-auth/utils': 0.4.2
+  '@better-auth/oauth-provider': 1.7.2
+  '@better-auth/mcp': 1.7.2
+  '@better-auth/cimd': 1.7.2
+  aws4fetch: ^1.0.20
+  '@types/bun': ^1.4.0
+  '@libsql/client': ^0.17.4
+  '@vercel/functions': ^3.9.5
+  idb: ^8.0.3
+  '@vitest/browser-playwright': 4.1.11
+  playwright: ^1.62.1
+  # Shared toolchain — every package's devDeps.
+  typescript: ^6.0.3
+  '@types/node': ^26
+  vitest: ^4.1.11
+
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true

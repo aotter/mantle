@@ -1,0 +1,8 @@
+node_modules/
+.mantle/
+.wrangler/
+.agents/
+.claude/
+.dev.vars*
+.env*
+pnpm-lock.yaml

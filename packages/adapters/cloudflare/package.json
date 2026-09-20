@@ -1,9 +1,9 @@
 {
   "name": "@aotter/mantle-cloudflare",
-  "version": "0.0.11-alpha.13",
-  "description": "Cloudflare Workers adapter for mantle. Hono-based mountServerEndpoints / createMcpApiHandler / mountAuthorize / mountPublicRoutes. Better Auth for staff sign-in; @cloudflare/workers-oauth-provider for the MCP OAuth AS surface.",
+  "version": "0.1.2-rc.1",
+  "description": "Cloudflare Workers adapter for Mantle runtime, Admin, MCP, and public Web mounts.",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/aotter/mantle/tree/develop/packages/adapters/cloudflare",
+  "homepage": "https://mantle.tools/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/aotter/mantle.git",
@@ -22,6 +22,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
     }
   },
   "files": [
@@ -32,30 +36,38 @@
     "prebuild": "rm -rf dist .tsbuildinfo",
     "build": "tsc -b tsconfig.lib.json",
     "typecheck": "tsc --noEmit -p tsconfig.lib.json",
-    "test": "vitest run"
+    "test": "pnpm test:facade-types && vitest run",
+    "test:facade-types": "tsc --ignoreConfig --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --types @cloudflare/workers-types,node test/createMantleWorker.typecheck.ts",
+    "bench:http-dispatch": "vitest bench --run test/http-dispatch.bench.ts",
+    "bench:wrangler": "pnpm --filter '@aotter/mantle-cloudflare^...' build && node ../../../scripts/run-wrangler-performance.mjs && node test/performance/generate-parity-plan.mjs && BENCH_QUICK=1 BENCH_ROUNDS=10 node ../../../scripts/run-wrangler-parity.mjs",
+    "bench:parity": "pnpm --filter '@aotter/mantle-cloudflare^...' build && node test/performance/generate-parity-plan.mjs && node ../../../scripts/run-wrangler-parity.mjs"
   },
   "dependencies": {
-    "@aotter/mantle-admin-ui": "workspace:*",
+    "@aotter/mantle-admin": "workspace:*",
     "@aotter/mantle-runtime": "workspace:*",
-    "@aotter/mantle-spec": "workspace:*"
+    "@aotter/mantle-spec": "workspace:*",
+    "@aotter/mantle-web": "workspace:*",
+    "@better-auth/cimd": "catalog:",
+    "@better-auth/mcp": "catalog:",
+    "@better-auth/oauth-provider": "catalog:"
   },
   "peerDependencies": {
-    "@cloudflare/workers-oauth-provider": "^0.6.0",
-    "aws4fetch": "^1.0.20",
-    "better-auth": "^1.6.0",
-    "hono": "^4.12.0",
-    "zod": "^4.0.0"
+    "aws4fetch": "catalog:peer",
+    "better-auth": "catalog:peer",
+    "hono": "catalog:peer",
+    "zod": "catalog:peer"
   },
   "devDependencies": {
-    "@cloudflare/workers-oauth-provider": "^0.6.0",
-    "@cloudflare/workers-types": "^4.20260518.1",
-    "@types/node": "^25",
-    "aws4fetch": "^1.0.20",
-    "better-auth": "^1.6.11",
-    "hono": "^4.12.19",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.6",
-    "wrangler": "^4.92.0",
-    "zod": "^4.4.2"
+    "@better-auth/core": "catalog:",
+    "@better-auth/utils": "catalog:",
+    "@cloudflare/workers-types": "^5.20260904.1",
+    "@types/node": "catalog:",
+    "aws4fetch": "catalog:",
+    "better-auth": "catalog:",
+    "hono": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "wrangler": "^4.129.0",
+    "zod": "catalog:"
   }
 }

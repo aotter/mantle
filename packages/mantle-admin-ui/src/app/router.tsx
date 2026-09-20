@@ -28,7 +28,6 @@ function isSpaHref(href: string): boolean {
   if (!url.pathname.startsWith("/admin")) return false;
   if (url.pathname.startsWith("/admin/api/")) return false;
   if (url.pathname.startsWith("/admin/auth/")) return false;
-  if (url.pathname === "/admin/logout") return false;
   return true;
 }
 
@@ -45,11 +44,11 @@ export function AdminRouterProvider({
       const url = new URL(href, window.location.href);
       const next = `${url.pathname}${url.search}${url.hash}`;
       const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      const nextLocation = { pathname: url.pathname, search: url.search };
       if (next !== current) {
         if (opts.replace) window.history.replaceState(null, "", next);
         else window.history.pushState(null, "", next);
       }
-      const nextLocation = { pathname: url.pathname, search: url.search };
       flushSync(() => setLocation(nextLocation));
     },
     [],

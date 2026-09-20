@@ -1,13 +1,14 @@
 import {
   DiagnosticError,
+  EntryDataValidator,
+  resolveLifecycle,
   runtimeDiagnostic,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
-import type { HandlerContext } from "../../domain/model/HandlerContext.js";
 import type { EntryRow } from "../../domain/model/EntryRow.js";
 import type { Clock } from "../../domain/port/Clock.js";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
-import type { SiteConfigRepository } from "../../domain/port/SiteConfigRepository.js";
+import type { LocalePolicyReader } from "../../domain/port/SiteConfigRepository.js";
 import { projectUpdateAndStamp } from "../../domain/service/BuiltinProjector.js";
 import type { UpdateDraftRequest } from "../dto/content/index.js";
 import {
@@ -15,6 +16,7 @@ import {
   withConflictDiagnostic,
 } from "./diagnostics.js";
 import { assertEntryWritable } from "../../domain/service/io/EntryWriteGuard.js";
+import { authoringContext } from "./AuthoringContext.js";
 
 /**
  * `UpdateDraftUseCase` — update a draft's data. Only entries in
@@ -26,28 +28,17 @@ export class UpdateDraftUseCase {
     private readonly entries: EntryRepository,
     private readonly schemas: ReadonlyMap<string, SchemaManifest>,
     private readonly clock: Clock,
-    private readonly siteConfig?: SiteConfigRepository,
+    private readonly siteConfig?: LocalePolicyReader,
+    private readonly validator = new EntryDataValidator(),
   ) {}
 
   async execute(request: UpdateDraftRequest): Promise<EntryRow> {
     const opPath = `usecase/UpdateDraft/${request.id}`;
-    const existing = await this.entries.get(request.id);
+    const existing = await this.entries.get(request);
     if (!existing) {
-      throw new DiagnosticError(notFoundDiagnostic(opPath, "<unknown>", request.id));
+      throw new DiagnosticError(notFoundDiagnostic(opPath, request.collection, request.id));
     }
-    if (existing.status !== "draft") {
-      throw new DiagnosticError(
-        runtimeDiagnostic({
-          code: "CONFLICT",
-          severity: "error",
-          path: opPath,
-          value: existing.status,
-          expected: "row.status === 'draft'",
-          message: `Entry '${request.id}' is in status '${existing.status}'; only drafts are editable. Unpublish first.`,
-        }),
-      );
-    }
-    const schema = this.schemas.get(existing.collection);
+    const schema = this.schemas.get(request.collection);
     if (!schema) {
       throw new DiagnosticError(
         runtimeDiagnostic({
@@ -58,6 +49,21 @@ export class UpdateDraftUseCase {
           expected: "name of a declared Schema",
           candidates: [...this.schemas.keys()],
           message: `Entry '${request.id}' belongs to unknown Schema '${existing.collection}'.`,
+        }),
+      );
+    }
+    // Operational records have no draft/published workflow — they
+    // are editable in place regardless of stored status.
+    const lifecycle = resolveLifecycle(schema);
+    if (existing.status !== "draft" && lifecycle !== "operational") {
+      throw new DiagnosticError(
+        runtimeDiagnostic({
+          code: "CONFLICT",
+          severity: "error",
+          path: opPath,
+          value: existing.status,
+          expected: "row.status === 'draft'",
+          message: `Entry '${request.id}' is in status '${existing.status}'; only drafts are editable. Unpublish first.`,
         }),
       );
     }
@@ -75,13 +81,16 @@ export class UpdateDraftUseCase {
       entries: this.entries,
       schema,
       data,
+      validator: this.validator,
       excludeId: existing.id,
       siteConfig: this.siteConfig,
+      // Real drafts save incomplete; operational records are live immediately.
+      partial: lifecycle !== "operational",
     });
     return withConflictDiagnostic(opPath, () =>
       this.entries.update({
         id: request.id,
-        collection: existing.collection,
+        collection: request.collection,
         expectedVersion: request.expectedVersion,
         data,
         now,
@@ -90,13 +99,4 @@ export class UpdateDraftUseCase {
       }),
     );
   }
-}
-
-function authoringContext(ctx: HandlerContext | undefined, authorId: string | null): HandlerContext {
-  if (ctx) return ctx;
-  return {
-    user: authorId ? { id: authorId } : null,
-    staff: null,
-    env: {},
-  };
 }

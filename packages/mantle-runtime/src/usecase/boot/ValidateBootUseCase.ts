@@ -1,253 +1,154 @@
 import {
   bootDiagnostic,
-  partitionManifests,
-  checkLocaleAndTranslates,
+  checkSiteLocales,
   type Diagnostic,
-  type Manifest,
-  type ProcedureManifest,
-  type SchemaManifest,
-  type TriggerManifest,
 } from "@aotter/mantle-spec";
+import {
+  sealPreparedMantleRevision,
+  type PreparedMantleRevision,
+} from "../../domain/model/PreparedMantleRevision.js";
 import type { HandlerRegistry } from "../../domain/port/HandlerRegistry.js";
-import { mcpToolNameSegment } from "../../domain/service/McpToolNaming.js";
+import type { MantleStorageAdapter } from "../../domain/port/MantleStorageAdapter.js";
+import type { RuntimePlan } from "../../domain/service/RuntimePlanCompiler.js";
 
-/**
- * `ValidateBootUseCase` — Loop 3 of the SDK authoring contract (see
- * ADR-0007). Walks the parsed manifest set + in-memory handler
- * registry; refuses to proceed if any load-bearing invariant is
- * violated. Per ADR-0007: "process exit non-zero, do not serve" — a
- * missing handler ref must surface as a deploy failure, not a runtime
- * 500 to a customer.
- *
- * In Cloudflare Workers context "process exit" maps to: throw at
- * runtime module-init so `wrangler tail` reports the init error and
- * subsequent requests get the runtime's generic 500 (instead of
- * unevaluated handlers being exercised).
- *
- * v0.1.0 invariants:
- *   - Every `Procedure.handler.ref` is in the supplied registry.
- *   - Every `Procedure.handler.builtin.schema` resolves to a declared
- *     Schema (`BUILTIN_HANDLER_SCHEMA_UNKNOWN`). Builtin op execution
- *     itself ships in `InvokeBuiltinUseCase`.
- *   - Every `Trigger.target.procedure` resolves to a manifest.
- *   - Every `http` Trigger has a unique `(method, path)` pair and a
- *     `/api/` prefix.
- *   - Every `Trigger.source.kind: lifecycle` watches a declared Schema
- *     (`LIFECYCLE_SCHEMA_UNKNOWN`). The hook runtime is the
- *     `LifecycleHookingEntryRepository` decorator.
- *   - Locale + translates cross-Schema invariants (ADR-0010) hold.
- */
 export type ValidateBootResponse =
   | { readonly ok: true }
   | { readonly ok: false; readonly diagnostics: readonly Diagnostic[] };
 
 export interface ValidateBootRequest {
-  readonly manifests: readonly Manifest[];
+  readonly plan: RuntimePlan;
   readonly registry: HandlerRegistry;
-  /** Site config locales (ADR-0010). Empty/absent enables the
-   *  zero-locale-site path: any localized Schema fails boot with
-   *  `SCHEMA_LOCALIZED_REQUIRES_SITE_LOCALES`. The runtime's
-   *  bootInit reads this from `site_config` before validating. */
+  /** Selected adapter/module route prefixes checked during deployment readiness. */
+  readonly reservedHttpPathPrefixes?: readonly string[];
   readonly siteLocales?: readonly string[];
 }
 
+export interface DeploymentPreparationOptions {
+  /** Registered handlers to validate. Omit when this embedding never dispatches Procedures. */
+  readonly handlerNames?: readonly string[];
+  readonly reservedHttpPathPrefixes?: readonly string[];
+  readonly siteLocales?: readonly string[];
+}
+
+export async function prepareDeployment(
+  plan: RuntimePlan,
+  storage: MantleStorageAdapter,
+  options: DeploymentPreparationOptions = {},
+): Promise<PreparedMantleRevision> {
+  const diagnostics = deploymentDiagnostics(plan, {
+    ...options,
+    nativeViewDialects: storage.nativeViewDialects ?? [],
+  });
+  if (diagnostics.length > 0) throw new BootValidationError(diagnostics);
+  const prepared = await storage.prepare(plan);
+  return sealPreparedMantleRevision(plan, prepared, options.handlerNames);
+}
+
+export function assertDeploymentPlan(
+  plan: RuntimePlan,
+  options: DeploymentPreparationOptions = {},
+): void {
+  const diagnostics = deploymentDiagnostics(plan, options);
+  if (diagnostics.length > 0) throw new BootValidationError(diagnostics);
+}
+
+/** Deployment checks only; all pure graph rules belong to `linkManifestSet`. */
 export class ValidateBootUseCase {
   execute(request: ValidateBootRequest): ValidateBootResponse {
-    const partitioned = partitionManifests([...request.manifests]);
-    const proceduresByName = new Map<string, ProcedureManifest>();
-    for (const p of partitioned.procedures) proceduresByName.set(p.metadata.name, p);
-    const schemasByName = new Map<string, SchemaManifest>();
-    for (const s of partitioned.schemas) schemasByName.set(s.metadata.name, s);
+    const diagnostics = deploymentDiagnostics(request.plan, {
+      handlerNames: request.registry.list(),
+      reservedHttpPathPrefixes: request.reservedHttpPathPrefixes,
+      siteLocales: request.siteLocales,
+    });
 
-    const diagnostics: Diagnostic[] = [];
-    const procedureCandidates = [...proceduresByName.keys()];
-    const schemaCandidates = [...schemasByName.keys()];
-    const handlerCandidates = request.registry.list();
-
-    // 1. Procedure handler refs + builtin schema cross-resolution.
-    for (const p of partitioned.procedures) {
-      const h = p.spec.handler;
-      if (h.kind === "ref" && !request.registry.has(h.ref)) {
-        diagnostics.push(
-          bootDiagnostic({
-            code: "HANDLER_NOT_REGISTERED",
-            severity: "error",
-            path: `manifest:Procedure/${p.metadata.name}#/spec/handler/ref`,
-            value: h.ref,
-            expected: `a function registered via the handlers option / sdk.registerHandler('${h.ref}', fn)`,
-            candidates: handlerCandidates,
-            message: `Procedure '${p.metadata.name}' declares handler.ref '${h.ref}' but no handler is registered for that key. Wire it in your project's handlers map: { '${h.ref}': ... }.`,
-          }),
-        );
-      }
-      if (h.kind === "builtin" && !schemasByName.has(h.schema)) {
-        diagnostics.push(
-          bootDiagnostic({
-            code: "BUILTIN_HANDLER_SCHEMA_UNKNOWN",
-            severity: "error",
-            path: `manifest:Procedure/${p.metadata.name}#/spec/handler/schema`,
-            value: h.schema,
-            expected: "name of a declared Schema",
-            candidates: schemaCandidates,
-            message: `Procedure '${p.metadata.name}' (handler.kind: builtin) targets unknown Schema '${h.schema}'.`,
-          }),
-        );
-      }
-    }
-
-    // 2. Trigger.target.procedure resolves.
-    for (const t of partitioned.triggers) {
-      if (!proceduresByName.has(t.spec.target.procedure)) {
-        diagnostics.push(
-          bootDiagnostic({
-            code: "TRIGGER_TARGET_PROCEDURE_UNKNOWN",
-            severity: "error",
-            path: `manifest:Trigger/${t.metadata.name}#/spec/target/procedure`,
-            value: t.spec.target.procedure,
-            expected: "name of a declared Procedure",
-            candidates: procedureCandidates,
-            message: `Trigger '${t.metadata.name}' targets unknown Procedure '${t.spec.target.procedure}'.`,
-          }),
-        );
-      }
-      if (t.spec.source.kind === "lifecycle") {
-        if (!schemasByName.has(t.spec.source.schema)) {
-          diagnostics.push(
-            bootDiagnostic({
-              code: "LIFECYCLE_SCHEMA_UNKNOWN",
-              severity: "error",
-              path: `manifest:Trigger/${t.metadata.name}#/spec/source/schema`,
-              value: t.spec.source.schema,
-              expected: "name of a declared Schema",
-              candidates: schemaCandidates,
-              message: `Trigger '${t.metadata.name}' watches unknown Schema '${t.spec.source.schema}'.`,
-            }),
-          );
-        }
-      }
-    }
-
-    // 3. HTTP trigger uniqueness + /api/ prefix.
-    diagnostics.push(...checkHttpRouteCollisions(partitioned.triggers));
-    diagnostics.push(...checkHttpRoutePrefix(partitioned.triggers));
-
-    // 4. MCP tool-name collision (POC PR #48): per-collection tool
-    //    emission lowercases + kebab→snake the Schema name; two
-    //    Schemas that mangle to the same suffix would silently
-    //    overwrite each other in `tools/list`.
-    diagnostics.push(...checkMcpToolNameCollisions(partitioned.schemas));
-
-    // 5. Locale + translates cross-Schema invariants.
-    diagnostics.push(
-      ...checkLocaleAndTranslates({
-        schemas: partitioned.schemas,
-        phase: "boot",
-        siteLocales: request.siteLocales,
-      }),
-    );
-
-    if (diagnostics.length === 0) return { ok: true };
-    return { ok: false, diagnostics };
+    return diagnostics.length === 0
+      ? { ok: true }
+      : { ok: false, diagnostics };
   }
 
-  /** Validate; on failure, throw `BootValidationError`. */
   assert(request: ValidateBootRequest): void {
     const result = this.execute(request);
     if (!result.ok) throw new BootValidationError(result.diagnostics);
   }
 }
 
-function checkHttpRouteCollisions(triggers: readonly TriggerManifest[]): Diagnostic[] {
-  const seen = new Map<string, string>();
-  const out: Diagnostic[] = [];
-  for (const t of triggers) {
-    if (t.spec.source.kind !== "http") continue;
-    const key = `${t.spec.source.method} ${t.spec.source.path}`;
-    const prior = seen.get(key);
-    if (prior) {
-      out.push(
-        bootDiagnostic({
-          code: "TRIGGER_PATH_COLLISION",
-          severity: "error",
-          path: `manifest:Trigger/${t.metadata.name}#/spec/source`,
-          value: key,
-          expected: `unique (method, path) across http Triggers (also declared by '${prior}')`,
-          message: `Trigger '${t.metadata.name}' shares route ${key} with Trigger '${prior}'.`,
-        }),
-      );
-    } else {
-      seen.set(key, t.metadata.name);
+function deploymentDiagnostics(
+  plan: RuntimePlan,
+  options: DeploymentPreparationOptions & { readonly nativeViewDialects?: readonly string[] },
+): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+  if (options.handlerNames) {
+    const candidates = [...new Set(options.handlerNames)].sort();
+    const handlerNames = new Set(candidates);
+    for (const procedure of Object.values(plan.procedures)) {
+      const handler = procedure.manifest.spec.handler;
+      if (handler.kind !== "ref" || handlerNames.has(handler.ref)) continue;
+      const path = `manifest:Procedure/${procedure.name}#/spec/handler/ref`;
+      diagnostics.push(bootDiagnostic({
+        code: "HANDLER_NOT_REGISTERED",
+        severity: "error",
+        path,
+        value: handler.ref,
+        expected: `a function passed through the handlers option under key '${handler.ref}'`,
+        candidates,
+        message: `Procedure '${procedure.name}' declares handler.ref '${handler.ref}' but no handler is registered for that key.`,
+      }));
     }
   }
-  return out;
-}
-
-function checkHttpRoutePrefix(triggers: readonly TriggerManifest[]): Diagnostic[] {
-  const out: Diagnostic[] = [];
-  for (const t of triggers) {
-    if (t.spec.source.kind !== "http") continue;
-    const path = t.spec.source.path;
-    if (!path.startsWith("/api/")) {
-      out.push(
-        bootDiagnostic({
-          code: "TRIGGER_PATH_INVALID",
-          severity: "error",
-          path: `manifest:Trigger/${t.metadata.name}#/spec/source/path`,
-          value: path,
-          expected: "path starting with '/api/'",
-          message:
-            `Trigger '${t.metadata.name}' has path '${path}' — http Trigger ` +
-            `paths MUST start with '/api/' so adapters can route public ` +
-            `pages and Procedure endpoints without ambiguity.`,
-        }),
-      );
+  const prefixes = [...new Set(options.reservedHttpPathPrefixes ?? [])].sort();
+  for (const route of plan.httpRoutes) {
+    const prefix = prefixes.find((candidate) =>
+      candidate.length > 0 && hasPathPrefix(route.path, candidate)
+    );
+    if (!prefix) continue;
+    const path = `manifest:Trigger/${route.trigger}#/spec/source/path`;
+    diagnostics.push(bootDiagnostic({
+      code: "TRIGGER_PATH_INVALID",
+      severity: "error",
+      path,
+      value: route.path,
+      expected: `path outside selected reserved prefix '${prefix}'`,
+      message: `Trigger '${route.trigger}' has path '${route.path}', which is reserved under '${prefix}'.`,
+    }));
+  }
+  if (options.siteLocales) {
+    diagnostics.push(...checkSiteLocales({
+      schemas: Object.values(plan.schemas).map((schema) => schema.manifest),
+      phase: "boot",
+      siteLocales: options.siteLocales,
+    }));
+  }
+  if (options.nativeViewDialects) {
+    const supported = new Set(options.nativeViewDialects);
+    for (const view of Object.values(plan.views)) {
+      if (view.query.kind !== "native" || supported.has(view.query.dialect)) continue;
+      diagnostics.push(bootDiagnostic({
+        code: "VIEW_DIALECT_UNSUPPORTED",
+        severity: "error",
+        path: `manifest:View/${view.name}#/spec/sql`,
+        value: view.query.dialect,
+        expected: supported.size > 0
+          ? `one of: ${[...supported].sort().join(", ")}`
+          : "a declarative View",
+        message: `Storage adapter does not support native View dialect '${view.query.dialect}'.`,
+      }));
     }
   }
-  return out;
+  return diagnostics;
 }
 
-function checkMcpToolNameCollisions(schemas: readonly SchemaManifest[]): Diagnostic[] {
-  const seen = new Map<string, string>();
-  const out: Diagnostic[] = [];
-  for (const s of schemas) {
-    const segment = mcpToolNameSegment(s.metadata.name);
-    const prior = seen.get(segment);
-    if (prior && prior !== s.metadata.name) {
-      out.push(
-        bootDiagnostic({
-          code: "MCP_TOOL_NAME_COLLISION",
-          severity: "error",
-          path: `manifest:Schema/${s.metadata.name}#/metadata/name`,
-          value: segment,
-          expected: `Schema name unique after kebab→snake mangling (collides with '${prior}')`,
-          message:
-            `Schema '${s.metadata.name}' mangles to MCP tool suffix '${segment}', ` +
-            `which already comes from Schema '${prior}'. Rename one of the Schemas ` +
-            `(e.g. avoid mixing '${prior}' and '${s.metadata.name}') so per-collection ` +
-            `MCP tool emission stays unambiguous.`,
-        }),
-      );
-    } else if (!prior) {
-      seen.set(segment, s.metadata.name);
-    }
-  }
-  return out;
+function hasPathPrefix(path: string, prefix: string): boolean {
+  return path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}{`);
 }
 
-/**
- * Single Error wrapping every boot diagnostic. The runtime throws this
- * during `bootInit`; adapters surface it in their init logs.
- */
 export class BootValidationError extends Error {
   constructor(public readonly diagnostics: readonly Diagnostic[]) {
     const summary = diagnostics
-      .map((d) => `  - ${d.code} (phase: ${d.phase}) at ${d.path}: ${d.message}`)
+      .map((diagnostic) =>
+        `  - ${diagnostic.code} (phase: ${diagnostic.phase}) at ${diagnostic.path}: ${diagnostic.message}`
+      )
       .join("\n");
-    super(
-      `Runtime boot validation failed (${diagnostics.length} error(s)):\n${summary}\n\n` +
-        `See ADR-0007 (boot-time fail-fast) for context. Diagnostics also ` +
-        `available on the .diagnostics field of this error for programmatic handling.`,
-    );
+    super(`Runtime boot validation failed (${diagnostics.length} error(s)):\n${summary}`);
     this.name = "BootValidationError";
   }
 }

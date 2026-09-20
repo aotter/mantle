@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mantle-reference",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-08",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "MANTLE_AUTH_MODE": "self-managed"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mantle-reference-local"
+    }
+  ]
+}

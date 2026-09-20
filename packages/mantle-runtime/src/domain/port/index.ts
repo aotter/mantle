@@ -3,7 +3,9 @@
  * Concrete implementations live in `infrastructure/` (or in adapter
  * packages like `@aotter/mantle-cloudflare`).
  *
- * Required adapter ports — `DatabaseDriver`, `KvCache`, `AssetServer`.
+ * Portable storage boundary — `MantleStorageAdapter`, which prepares existing
+ * `EntryRepository` / `EntryReader` and `ViewQueryExecutor` semantic ports.
+ * `DatabaseDriver` is the SQLite/D1 implementation seam, not a universal DB API.
  * Optional feature ports — `MediaStorage` (public-bucket media
  * uploads), `EmailSender` (transactional email — passwordless auth,
  * receipts). Dispatcher-internal seams — `Clock`, `IdGenerator`,
@@ -21,14 +23,12 @@ export type {
   MigrationRunner,
   Migration,
 } from "./DatabaseDriver.js";
-export type { KvCache, KvPutOptions, KvListResult } from "./KvCache.js";
-export type { AssetServer } from "./AssetServer.js";
 export type {
   EntryRepository,
+  EntryKey,
   CreateEntryArgs,
   UpdateEntryArgs,
   DeleteEntryArgs,
-  ArchiveEntryArgs,
   TransitionStatusArgs,
   ListEntriesArgs,
   ListEntriesResult,
@@ -36,34 +36,64 @@ export type {
   FindEntryByDataFieldsArgs,
   MutationHookFields,
 } from "./EntryRepository.js";
-export type { SiteConfigRepository } from "./SiteConfigRepository.js";
 export type {
-  PublishOrchestrator,
-  PublishEntryRequest,
-} from "./PublishOrchestrator.js";
+  EntryReader,
+  CreationStatisticsArgs,
+  CreationStatistics,
+  EntryDataScalar,
+  ReadEntryBySlugArgs,
+  ReadEntryByDataFieldArgs,
+  ReadEntriesByDataFieldInArgs,
+  ReadPublishedEntriesArgs,
+  ReadPublishedPageArgs,
+  PublishedEntryPage,
+  FindManyEntriesByDataFieldArgs,
+} from "./EntryReader.js";
+export type {
+  ViewQueryExecutor,
+  ViewQueryOptions,
+  ViewQueryRequest,
+  ViewQueryResult,
+} from "./ViewQueryExecutor.js";
+export type {
+  MantleStorageAdapter,
+  PreparedMantleStorage,
+} from "./MantleStorageAdapter.js";
+export type {
+  SiteConfigRepository,
+  UpdateEditableSiteConfigArgs,
+} from "./SiteConfigRepository.js";
 export type {
   MediaStorage,
   CreateUploadArgs,
+  CreateUploadVariantSpec,
   CreateUploadResult,
+  UploadCapability,
   CommitUploadArgs,
+  CommitUploadVariantSpec,
   GetPublicUrlArgs,
-  DeleteAssetArgs,
+  DeleteObjectArgs,
   MediaAsset,
+  MediaVariant,
+  MediaVariantRole,
 } from "./MediaStorage.js";
+export { pickPrimaryVariant } from "./MediaStorage.js";
+export type { MediaAssetRepository } from "./MediaAssetRepository.js";
+export type { PendingUploadRepository } from "./PendingUploadRepository.js";
 export type {
   EmailSender,
   EmailSendArgs,
 } from "./EmailSender.js";
 export type {
-  LifecycleHookRunner,
-  RunLifecycleHookRequest,
-} from "./LifecycleHookRunner.js";
-export type {
   DeferredHookDispatcher,
   DeferredHookEnvelope,
+  DeferredLifecycleHook,
   CtxSnapshot,
 } from "./DeferredHookDispatcher.js";
-export { ctxSnapshotFrom } from "./DeferredHookDispatcher.js";
+export {
+  DEFERRED_HOOK_ENVELOPE_VERSION,
+  ctxSnapshotFrom,
+} from "./DeferredHookDispatcher.js";
 export { type Clock, SystemClock } from "./Clock.js";
 export { type IdGenerator, RandomUuidGenerator } from "./IdGenerator.js";
 export {

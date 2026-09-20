@@ -1,0 +1,371 @@
+import {
+  DiagnosticError,
+  RESERVED_ENTRY_COLUMNS,
+  isCtxUserRef,
+  isParamRef,
+  runtimeDiagnostic,
+  type FilterAst,
+  type SchemaManifest,
+  type ViewManifest,
+} from "@aotter/mantle-spec";
+import { fieldSql } from "./SqliteSchemaTables.js";
+import { clampPage, clampShow } from "../../domain/service/Pagination.js";
+import type { ViewQueryOptions } from "../../domain/port/ViewQueryExecutor.js";
+import {
+  compileLogicalView,
+  type LogicalViewPlan,
+} from "../../domain/service/RuntimePlanCompiler.js";
+
+/**
+ * View → SQL compilation. Targets SQLite + JSON1 (D1's dialect).
+ * Reserved metadata and Schema fields map directly to native columns.
+ * SQL uses positional `?` parameters; identifiers come only from the
+ * linked RuntimePlan.
+ *
+ * v0.1 filter AST supports comparison operators (`eq`, `gt`, `gte`,
+ * `lt`, `lte`) plus `and` / `or`; comparison values may be literals or
+ * `{ $param: <name> }` sentinels substituted from `options.params`, plus
+ * `{ "$ctx.user": "id" }` bound from the normalized site caller. Pagination
+ * knobs `page` / `show` come in via
+ * `options`; the runtime owns the LIMIT/OFFSET emission.
+ */
+export interface CompiledView {
+  readonly sql: string;
+  readonly params: readonly unknown[];
+  readonly effectivePage: number;
+  readonly effectiveShow: number;
+}
+
+export type CompileViewOptions = ViewQueryOptions;
+
+export interface PreparedSqliteView {
+  bind(options?: CompileViewOptions): CompiledView;
+  normalizeRows<R>(rows: readonly R[]): readonly R[];
+}
+
+// alias → SQL column. Aliases mirror RESERVED_ENTRY_COLUMNS from
+// spec; SQL column shape (snake_case) is local to the storage layout.
+// The compile-time check below ensures the alias set stays in sync —
+// adding to spec without updating here is a type error.
+const RESERVED_COLUMN: Readonly<Record<string, string>> = {
+  id: "_mantle_id",
+  status: "_mantle_status",
+  version: "_mantle_version",
+  createdAt: "_mantle_created_at",
+  updatedAt: "_mantle_updated_at",
+  authorId: "_mantle_author_id",
+};
+const _aliasCheck: Readonly<Record<(typeof RESERVED_ENTRY_COLUMNS)[number], string>> =
+  RESERVED_COLUMN;
+void _aliasCheck;
+
+const DEFAULT_PROJECTION = Object.entries(RESERVED_COLUMN)
+  .map(([alias, col]) => (alias === col ? col : `${col} AS ${alias}`))
+  .join(", ");
+
+type FilterComparisonOp = "eq" | "gt" | "gte" | "lt" | "lte";
+interface FilterComparisonNode {
+  readonly field: string;
+  readonly value: unknown;
+}
+
+const SQL_COMPARISON_OP: Readonly<Record<FilterComparisonOp, string>> = {
+  eq: "=",
+  gt: ">",
+  gte: ">=",
+  lt: "<",
+  lte: "<=",
+};
+
+export function compileView(
+  view: ViewManifest,
+  options: CompileViewOptions = {},
+  schema?: SchemaManifest,
+): CompiledView {
+  return prepareSqliteView(compileLogicalView(view), view.metadata.name, schema).bind(options);
+}
+
+/** Lower one logical View into a reusable SQLite query binder. */
+export function prepareSqliteView(
+  view: LogicalViewPlan,
+  viewName: string,
+  schema?: SchemaManifest,
+): PreparedSqliteView {
+  if (view.kind === "native") {
+    return {
+      bind: prepareSqlView(view),
+      normalizeRows: (rows) => rows,
+    };
+  }
+  if (schema && schema.metadata.name !== view.from) {
+    throw new DiagnosticError(
+      runtimeDiagnostic({
+        code: "INTERNAL_ERROR",
+        severity: "error",
+        path: "compileView/schema",
+        value: schema.metadata.name,
+        expected: `Schema '${view.from}' referenced by View.spec.from`,
+        message: `View '${viewName}' cannot compile against Schema '${schema.metadata.name}'.`,
+      }),
+    );
+  }
+  const selectExpr = buildSelect(view.fields, schema);
+  const orderBy = buildOrderBy(view.orderBy, schema);
+  const filter = view.filter ? prepareFilter(view.filter, schema) : undefined;
+  return {
+    bind(options = {}) {
+      const sqlParams: unknown[] = [];
+      const whereParts: string[] = [];
+      if (filter) {
+        whereParts.push(`(${filter.sql})`);
+        sqlParams.push(...filter.bind(options.params ?? {}, options.ctxUserId));
+      }
+      const listQuery = compileListQuery(options, (field) => fieldRefExpr(field, schema));
+      whereParts.push(...listQuery.conditions);
+      sqlParams.push(...listQuery.params);
+      const effectiveShow = clampShow(options.show, view.limit);
+      const effectivePage = clampPage(options.page);
+      return {
+        sql: `SELECT ${selectExpr} FROM ${quoteIdent(view.from)}${whereParts.length ? ` WHERE ${whereParts.join(" AND ")}` : ""}${orderBy} LIMIT ${effectiveShow} OFFSET ${pageOffset(effectivePage, effectiveShow)}`,
+        params: sqlParams,
+        effectivePage,
+        effectiveShow,
+      };
+    },
+    normalizeRows: prepareRowNormalizer(view.fields, schema),
+  };
+}
+
+function prepareSqlView(
+  view: Extract<LogicalViewPlan, { readonly kind: "native" }>,
+): (options?: CompileViewOptions) => CompiledView {
+  const paramNames: string[] = [];
+  // ponytail: token regex is enough for agent-authored SQL; add a lexer if
+  // quoted SQL literals containing `:name` become a real manifest use case.
+  const statement = view.statement.trim().replace(
+    /:([A-Za-z_][A-Za-z0-9_]*)/g,
+    (_token, name: string) => {
+      paramNames.push(name);
+      return "?";
+    },
+  );
+  return (options = {}) => {
+    const params = paramNames.map((name) => {
+      const value = options.params?.[name];
+      if (value === undefined) throw new Error(`View SQL requires param '${name}'.`);
+      return value;
+    });
+    const effectiveShow = clampShow(options.show, view.limit);
+    const effectivePage = clampPage(options.page);
+    const listQuery = compileListQuery(
+      options,
+      (field) => `"_mantle_view".${quoteIdent(field)}`,
+    );
+    const where = listQuery.conditions.length > 0
+      ? ` WHERE ${listQuery.conditions.join(" AND ")}`
+      : "";
+    return {
+      sql: `SELECT * FROM (${statement}) AS "_mantle_view"${where} LIMIT ${effectiveShow} OFFSET ${pageOffset(effectivePage, effectiveShow)}`,
+      params: [...params, ...listQuery.params],
+      effectivePage,
+      effectiveShow,
+    };
+  };
+}
+
+function pageOffset(page: number, show: number): number {
+  // Prevent exponential notation and stay below SQLite's INT64 ceiling.
+  return Math.min((page - 1) * show, Number.MAX_SAFE_INTEGER);
+}
+
+function prepareRowNormalizer(
+  fields: readonly string[] | undefined,
+  schema: SchemaManifest | undefined,
+): <R>(rows: readonly R[]) => readonly R[] {
+  const properties = schema?.spec.schema.properties;
+  const projectedFields = fields?.flatMap((field) => {
+    const property = properties?.[field];
+    return property && isSqliteNormalizedProperty(property) ? [[field, property] as const] : [];
+  }) ?? [];
+  if (projectedFields.length === 0) return function identity<R>(rows: readonly R[]) {
+    return rows;
+  };
+  return function normalize<R>(rows: readonly R[]): readonly R[] {
+    return rows.map((row) => {
+      if (!row || typeof row !== "object" || Array.isArray(row)) return row;
+      const normalized = { ...row } as Record<string, unknown>;
+      for (const [field, property] of projectedFields) {
+        normalized[field] = normalizeProjectedValue(normalized[field], property);
+      }
+      return normalized as R;
+    });
+  };
+}
+
+function isSqliteNormalizedProperty(
+  property: SchemaManifest["spec"]["schema"],
+): boolean {
+  const types = Array.isArray(property.type) ? property.type : [property.type];
+  return types.some((type) => type === "boolean" || type === "object" || type === "array");
+}
+
+function normalizeProjectedValue(
+  value: unknown,
+  property: SchemaManifest["spec"]["schema"],
+): unknown {
+  const types = Array.isArray(property.type) ? property.type : [property.type];
+  if (types.includes("boolean")) {
+    if (value === 0) return false;
+    if (value === 1) return true;
+  }
+  if (typeof value !== "string" || (!types.includes("object") && !types.includes("array"))) {
+    return value;
+  }
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (types.includes("array") && Array.isArray(parsed)) return parsed;
+    if (types.includes("object") && parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch {
+    return value;
+  }
+  return value;
+}
+
+function compileListQuery(
+  options: CompileViewOptions,
+  fieldRef: (field: string) => string,
+): { readonly conditions: readonly string[]; readonly params: readonly unknown[] } {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  const term = options.search?.term.trim();
+  if (term && options.search?.fields.length) {
+    const escaped = escapeLikeTerm(term);
+    conditions.push(`(${options.search.fields
+      .map((field) => `${fieldRef(field)} LIKE '%'||?||'%' ESCAPE '\\'`)
+      .join(" OR ")})`);
+    params.push(...options.search.fields.map(() => escaped));
+  }
+  for (const filter of options.filters ?? []) {
+    conditions.push(`CAST(${fieldRef(filter.field)} AS TEXT) = ?`);
+    params.push(filter.value);
+  }
+  return { conditions, params };
+}
+
+function escapeLikeTerm(term: string): string {
+  return term.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
+function buildSelect(
+  fields?: readonly string[],
+  schema?: SchemaManifest,
+): string {
+  if (!fields || fields.length === 0) return DEFAULT_PROJECTION;
+  return fields.map((field) => fieldExpr(field, schema)).join(", ");
+}
+
+function fieldExpr(field: string, schema?: SchemaManifest): string {
+  const reserved = RESERVED_COLUMN[field];
+  const expression = fieldRefExpr(field, schema);
+  if (reserved === field) return expression;
+  return `${expression} AS ${reserved ? field : quoteIdent(field)}`;
+}
+
+function fieldRefExpr(field: string, schema?: SchemaManifest): string {
+  if (schema && Object.hasOwn(schema.spec.schema.properties ?? {}, field)) return quoteIdent(field);
+  const reserved = RESERVED_COLUMN[field];
+  if (reserved) return reserved;
+  if (!schema) return quoteIdent(field);
+  const column = fieldSql(schema, field);
+  if (!column) throw new Error(`View references unknown Schema field '${field}'.`);
+  return column;
+}
+
+interface PreparedFilter {
+  readonly sql: string;
+  bind(
+    paramValues: Readonly<Record<string, unknown>>,
+    ctxUserId?: string,
+  ): readonly unknown[];
+}
+
+function prepareFilter(
+  node: FilterAst,
+  schema?: SchemaManifest,
+): PreparedFilter {
+  const comparison = getFilterComparison(node);
+  if (comparison) {
+    const value = comparison.node.value;
+    const bind = isCtxUserRef(value)
+      ? (_params: Readonly<Record<string, unknown>>, ctxUserId?: string) => {
+          if (!ctxUserId) {
+            throw new DiagnosticError(runtimeDiagnostic({
+              code: "UNAUTHENTICATED",
+              severity: "error",
+              path: "compileView/filter",
+              expected: "ctx.user.id for an identity-bound View filter",
+              message: "View filter requires ctx.user.id.",
+            }));
+          }
+          return [ctxUserId];
+        }
+      : isParamRef(value)
+        ? (params: Readonly<Record<string, unknown>>) => {
+            const resolved = params[value.$param];
+            if (resolved === undefined) {
+              throw new Error(`View filter requires param '${value.$param}'.`);
+            }
+            return [resolved];
+          }
+        : () => [value];
+    return {
+      sql: `${fieldRefExpr(comparison.node.field, schema)} ${SQL_COMPARISON_OP[comparison.op]} ?`,
+      bind,
+    };
+  }
+  const op = "and" in node ? "AND" : "OR";
+  const children = "and" in node ? node.and : "or" in node ? node.or : [];
+  const prepared = children.map((child) => prepareFilter(child, schema));
+  return {
+    sql: prepared.map((child) => `(${child.sql})`).join(` ${op} `),
+    bind: (params, ctxUserId) =>
+      prepared.flatMap((child) => child.bind(params, ctxUserId)),
+  };
+}
+
+function getFilterComparison(
+  node: FilterAst,
+): { readonly op: FilterComparisonOp; readonly node: FilterComparisonNode } | null {
+  if ("eq" in node) return { op: "eq", node: node.eq as FilterComparisonNode };
+  if ("gt" in node) return { op: "gt", node: node.gt as FilterComparisonNode };
+  if ("gte" in node) return { op: "gte", node: node.gte as FilterComparisonNode };
+  if ("lt" in node) return { op: "lt", node: node.lt as FilterComparisonNode };
+  if ("lte" in node) return { op: "lte", node: node.lte as FilterComparisonNode };
+  return null;
+}
+
+function buildOrderBy(
+  orderBy?: ReadonlyArray<{ readonly field: string; readonly direction?: "asc" | "desc" }>,
+  schema?: SchemaManifest,
+): string {
+  if (!orderBy || orderBy.length === 0) return "";
+  const parts = orderBy.map((o) => {
+    // Closed-set map, never interpolate the raw value: `direction` is
+    // only a compile-time "asc"|"desc" type, but manifests are parsed
+    // from YAML, so an out-of-enum string (e.g. `DESC LIMIT 0 --`)
+    // could otherwise reach the SQL string verbatim.
+    const dir = o.direction === "desc" ? "DESC" : "ASC";
+    return `${fieldRefExpr(o.field, schema)} ${dir}`;
+  });
+  return ` ORDER BY ${parts.join(", ")}`;
+}
+
+/**
+ * SQLite quoted-identifier alias (`"hero-image"`). Used as the result
+ * column name so callers read the field back under its declared key.
+ */
+function quoteIdent(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}

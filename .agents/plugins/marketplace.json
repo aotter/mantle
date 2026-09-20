@@ -1,0 +1,21 @@
+{
+  "name": "mantle",
+  "interface": {
+    "displayName": "Mantle"
+  },
+  "plugins": [
+    {
+      "name": "mantle",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/aotter/mantle.git",
+        "ref": "v0.1.2-rc.1"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

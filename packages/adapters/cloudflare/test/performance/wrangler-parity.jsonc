@@ -1,0 +1,12 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "mantle-parity-812",
+  "main": "./parity-worker.ts",
+  "compatibility_date": "2026-07-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "cache": { "enabled": true },
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "d1_databases": [{ "binding": "DB", "database_name": "mantle-parity-812", "database_id": "00000000-0000-0000-0000-000000000812" }],
+  "kv_namespaces": [{ "binding": "MANTLE_KV", "id": "00000000000000000000000000000812" }],
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "mantle-parity-812" }]
+}

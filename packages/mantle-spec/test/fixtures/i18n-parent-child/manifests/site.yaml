@@ -1,0 +1,33 @@
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata:
+  name: stories
+spec:
+  title: Stories
+  localized: false
+  schema:
+    type: object
+    required: [slug]
+    properties:
+      slug: { type: string }
+  uniqueIndexes: [[slug]]
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata:
+  name: story-translations
+spec:
+  title: Story translations
+  localized: true
+  translates:
+    parent: stories
+    on: slug
+  schema:
+    type: object
+    required: [slug, locale, title]
+    properties:
+      slug: { type: string }
+      locale: { type: string }
+      title: { type: string }
+      body: { type: string }
+  uniqueIndexes: [[slug, locale]]

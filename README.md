@@ -1,102 +1,220 @@
-# mantle
+<h1 align="center">Mantle</h1>
 
-[![CI](https://github.com/aotter/mantle/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/aotter/mantle/actions/workflows/ci.yml)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
-[![Status: Experimental](https://img.shields.io/badge/status-experimental-orange.svg)](#status)
+<p align="center">
+  <em>Be the dungeon master. Don’t code every corridor.</em>
+</p>
 
-> ⚠️ **Experimental — co-built with AI**
->
-> mantle is co-developed with AI coding agents (Claude Code) and is
-> currently in **0.0.x / pre-1.0**. Treat everything here as experimental:
-> APIs, manifests, schema shapes, and runtime behavior **can break between
-> any two commits** without notice or migration path. Do not deploy this
-> for anything you cannot afford to rebuild from scratch.
->
-> Review the code, run your own tests, and verify generated content before
-> trusting it. Pull requests welcome; bug reports especially welcome.
+<p align="center">
+  <img src="docs/assets/mantle-hero.jpg" width="900" alt="A dungeon master invokes four runes while a living shell labyrinth assembles itself; an unused pickaxe lies nearby.">
+</p>
 
-**Build your content model by prompting, not configuring.**
+<p align="center">
+  <strong>Schema. View. Procedure. Trigger. Four atoms from which your world takes shape.</strong><br>
+  Speak it in plain YAML, and the dungeon wakes—whole, lit from within, and yours to command.
+</p>
 
-Agent-native headless CMS where AI agents are first-class authors — locked-grammar manifests, structured JSON diagnostics, and static `.md` mirrors every agent can crawl without auth. Most CMSes treat AI as a content editor; mantle treats it as the developer.
+<p align="center">
+  <a href="https://github.com/aotter/mantle/actions/workflows/ci.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/aotter/mantle/ci.yml?branch=develop&style=flat-square&label=build"></a>
+  <a href="https://github.com/aotter/mantle/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/aotter/mantle?style=flat-square&color=0b7285&label=stars"></a>
+  <a href="https://www.npmjs.com/package/@aotter/mantle"><img alt="npm alpha" src="https://img.shields.io/npm/v/@aotter/mantle/alpha?style=flat-square&label=npm&color=0b7285"></a>
+  <a href="https://github.com/aotter/mantle/releases"><img alt="GitHub prerelease" src="https://img.shields.io/github/v/release/aotter/mantle?include_prereleases&sort=semver&style=flat-square&label=release&color=0b7285"></a>
+  <a href="https://nodejs.org/"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/node-%3E%3D22-0b7285?style=flat-square&logo=nodedotjs&logoColor=white"></a>
+  <a href="LICENSE"><img alt="Apache-2.0 license" src="https://img.shields.io/badge/license-Apache--2.0-0b7285?style=flat-square"></a>
+</p>
 
-## Try it cold
+<p align="center">
+  <a href="#start-with-a-manifest">Quick start</a>
+  &middot;
+  <a href="#for-engineers-and-agents">Agent prompts</a>
+  &middot;
+  <a href="#what-you-can-build">Features</a>
+  &middot;
+  <a href="docs/handbook/sites/index.md">ChatGPT Sites</a>
+  &middot;
+  <a href="docs/examples/README.md">Examples</a>
+  &middot;
+  <a href="#packages">Packages</a>
+  &middot;
+  <a href="#choose-how-much-to-use">Adoption</a>
+  &middot;
+  <a href="#cli-reference">CLI</a>
+</p>
 
-Recommended path: open the Mantle landing page, pick an archetype and theme, then paste the generated prompt into Claude Code / Cursor / Codex. The install Skill asks the right follow-up questions and then runs the scaffolder for you.
+<p>
+  <sub><strong>Prerelease:</strong> APIs and manifests may change between alpha releases. Treat the installed package's version-matched docs as the contract and review generated code before production use.</sub>
+</p>
 
-Starter source and direct scaffolder usage live in [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters); this repo carries the SDK, runtime, adapter packages, and agent skills.
+Mantle is an embeddable manifest engine: describe data, queries, actions, and
+triggers in YAML, then use the same contract in your application, APIs, and
+tools for humans and agents.
 
-> **Prerelease.** This repo is a clean rebuild of the v0.0.x POC. Until v0.1.0 tags, the API surface is in flux — alpha and beta releases may introduce breaking changes. Current published versions and channel policy are documented in [`docs/release-process.md`](docs/release-process.md). Track the rebuild plan at [#1](https://github.com/aotter/mantle/issues/1).
+## Start with a Manifest
 
-## Part of Mantle
+Put your Manifest ([example](docs/examples/builtin-intake.md#manifest)) in
+`manifests/`, then run from your project root:
 
-**Mantle** (**C**onfig **L**anguage for **A**pps & **M**odeling) is Aotter's family of agent-native config languages. Two halves, one thesis:
+```sh
+bunx @aotter/mantle@alpha generate
+# or
+npx @aotter/mantle@alpha generate
+```
 
-- **Apps (OLTP)** — `mantle` (this repo) and future apps. Build a content-driven web service by declaring atoms in YAML; the runtime ships dispatcher + auth + render + MCP for free.
-- **Modeling (OLAP)** — [`aotter-mantle`](https://github.com/aotter/aotter-mantle) (sibling project). Turn enterprise Excel/CSV files into Kimball-modeled DuckLake warehouses by declaring star-schema configs in YAML.
+Mantle validates your Manifest and generates `.mantle/generated/mantle.ts`:
+a compiled execution plan, TypeScript types, and typed APIs. Use them to query
+data and run actions inside your application, expose HTTP endpoints and MCP
+tools through supported adapters, or power a publishing site and staff console
+with optional Web and Admin packages. Start with what you need; each surface
+uses the same contract.
 
-> Note: the two halves intentionally live as separate repos under the `aotter` org — different release cadences, different licensing posture.
+The [intake example](docs/examples/builtin-intake.md) defines request records,
+a submission action, and a staff inbox—then exposes submission through HTTP
+and MCP when connected to a supporting host. See the
+[minimal Worker](docs/examples/host-minimal-worker/README.md) for a runnable host.
 
-The shared spirit: **agents write config, runtime carries the complexity**. Hard problems — schema validation, cache invalidation, OAuth, locale canonicalization, JSON Schema → zod conversion, transactional state — live in the runtime, where they're written once by people who understand them. The authoring surface is YAML the agent fills in, where mistakes are caught by structured diagnostics before they become production failures. Non-coders get AI leverage safely; the runtime is the load-bearing part.
+Generation produces code, not a running service. To use the generated module,
+install `@aotter/mantle` in your application and connect storage and any custom
+handlers. Use an official storage adapter or implement the
+[storage ports](docs/adapter-guide.md). For an ongoing project, pin Mantle
+packages to the same exact version and use their installed documentation.
 
-This repo is the OLTP side of that thesis applied to web content.
+## Build with ChatGPT Sites
 
-## For AI agents
+**Build with ChatGPT Sites. Manage content and publishing with Mantle.**
 
-You're an agent helping a (likely non-technical) user install or extend a mantle project.
+Turn a Site into a publication your team can maintain: ChatGPT sign-in,
+Mantle staff roles, drafts and publishing, cover uploads, and public articles
+with HTML, Markdown, and discovery metadata. The official integration brings
+Sites hosting together with Mantle Admin, D1 content, and R2 media.
 
-→ **Install a fresh publication/site** — start at [`skills/install/SKILL.md`](skills/install/SKILL.md).
-→ **Add a new atom** (Schema / View / Procedure + http Trigger) to an existing starter — start at [`skills/extend/SKILL.md`](skills/extend/SKILL.md).
-→ **Provision Cloudflare resources** (D1, KV, Turnstile) and deploy — start at [`skills/provision/SKILL.md`](skills/provision/SKILL.md).
+[Get started with Mantle on ChatGPT Sites](docs/handbook/sites/index.md),
+then publish your first article using the runnable reference. This revision
+requires the documented packed-checkout installation until an SDK release
+includes host-declared MCP endpoints; published `0.1.2-alpha.6` is insufficient.
+Public read-only MCP is included; remote staff OAuth MCP remains a separate
+integration.
 
-## For humans
+## Choose how much to use
 
-End state: a Cloudflare Worker at `https://<your-site>.<your-account>.workers.dev` with:
+These are independent adoption choices, not mandatory stages.
 
-- `/admin` — React admin SPA, role-gated after sign-in (GitHub / Google / Apple / 30+ social providers, email-OTP, magic-link — adopter picks the methods)
-- `/mcp/staff` — staff MCP endpoint, owner/editor agents connect here to edit content
-- `/mcp` — end-user/read MCP endpoint for public View tools and future member flows
-- `/<locale>/<collection>/<slug>` — per-entry HTML
-- `/<locale>/<collection>/<slug>.md` — agent-friendly markdown mirror
-- `/<locale>/llms.txt` — per-locale llms.txt index
-- public surface in your taste (the v0.1.0 starter ships Hono + hono/jsx + Tailwind)
+| Use what you need | What it gives you |
+|---|---|
+| **Spec only** | Parse, validate, and link definitions inside an existing system. No Runtime or code generation required. [Example](docs/spec-only-host-adoption.md). |
+| **Runtime + typed APIs** | Execute queries and actions with your storage adapter and handlers. Generated `createMantle` and `bindMantle` expose typed entry, View, and Procedure calls. [API guide](packages/mantle/README.md). |
+| **A host adapter** | Run on Bun, Vercel, or Cloudflare and expose the adapter's supported transports. Choose an adapter for the HTTP, MCP, and auth capabilities you need. [Adapter guide](docs/adapter-guide.md). |
+| **Web** | Render public content as HTML and Markdown, with localization and discovery metadata. [Web](packages/mantle-web/README.md). |
+| **Admin** | Give staff a console for content and operational records. Admin API and the prebuilt UI are optional. [Local example](docs/examples/host-local-admin-otp/README.md). |
 
-For a guided install, follow the steps in [`skills/install/SKILL.md`](skills/install/SKILL.md).
+The plan carries the compiled Schema, View, Procedure, and Trigger definitions.
+Runtime executes them; adapters and optional packages connect them to the
+surfaces you choose. Your application owns its host, storage, and deployment.
+
+## What you can build
+
+- **APIs and agent tools.** Views provide reads; Procedures provide actions,
+  using builtin mutations or your own handlers. MCP-capable hosts expose
+  Views and MCP Triggers as tools, with authorization for staff operations.
+  [MCP and agents](docs/handbook/concepts/mcp-and-agents.md).
+- **Publishing and public sites.** Draft, publish, unpublish, and archive
+  content. Add Web for localized HTML and Markdown, `llms.txt`, sitemap,
+  canonical links, hreflang, JSON-LD, and social metadata.
+  [Publication example](docs/examples/builtin-publication.md).
+- **Operational applications.** Keep orders, reservations, and requests live
+  without a publishing workflow. Add Admin when staff need a console.
+  [Commerce](docs/examples/builtin-commerce.md),
+  [reservations](docs/examples/builtin-reservation.md), and
+  [procurement](docs/examples/builtin-procurement.md).
+- **Custom business workflows.** Connect handlers to queues, email, payments,
+  or existing services; use guards and lifecycle hooks where the operation
+  requires them. [Intake hooks](docs/examples/cf-primitives-intake-hooks.md)
+  and [inventory coordination](docs/examples/cf-primitives-commerce-inventory.md).
+
+![Mantle Admin connects staff agents through MCP while keeping publishing content, live records, reports, and human operators in one console.](docs/assets/mantle-admin-operations.png)
+
+The [Examples hub](docs/examples/README.md) contains complete Manifests and
+host references. The [Manifest reference](docs/handbook/reference/manifest.md)
+defines the four atoms and their fields.
+
+## For engineers and agents
+
+Engineers can start with the [installed API guide](packages/mantle/README.md),
+[adapter guide](docs/adapter-guide.md), or
+[direct authoring guide](docs/handbook/start/project-and-cli.md).
+
+Coding agents use the same APIs and version-matched
+[skills](skills/README.md). A short starting prompt:
+
+```text
+Read the installed @aotter/mantle docs and install skill. Ask which host,
+storage, and surfaces this application needs. Preserve the existing
+application, choose an official example, and implement locally.
+Pin all Mantle packages to the same exact version. Verify the selected
+surfaces; add Web, Admin, or MCP only when needed.
+```
+
+See [task-specific agent prompts](docs/agent-prompts.md) for embedding,
+Worker, Admin, and later surface additions. The
+[plugin and skills guide](skills/README.md) covers agent integration;
+`mantle skills` projects version-matched application skills after installation.
 
 ## Packages
 
-| Package | Role |
+Start with `@aotter/mantle`. Spec and Runtime form the portable Core;
+everything else is opt-in.
+
+| Package | Adds |
 |---|---|
-| `@aotter/mantle-spec` | Spec engine — types + parse + validate + diagnostics + JSON-Schema → zod converter + CLI. Zero env deps. |
-| `@aotter/mantle-runtime` | Runtime engine — dispatcher + entry-writer + view executor + content-ops + render + MCP. Defines required adapter ports plus optional feature ports. |
-| `@aotter/mantle-admin-ui` | Admin SPA — React 19 + Vite + Tailwind v4. In development; ships in v0.1.0. |
-| `@aotter/mantle-cloudflare` | Cloudflare Workers adapter. Implements ports against D1 / KV / ASSETS. Ships `createAuth()` — the Better Auth-backed *default* implementation of the SDK's `Auth` contract (see [ADR-0014](docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md) § "Auth as contract, Better Auth as default"); replace by passing your own `Auth` instance. |
-| `@aotter/mantle-netlify` | **Stub.** Coming v0.2. Engineering forcing function: keeps `mantle-runtime` adapter-agnostic. |
+| `@aotter/mantle` | CLI, codegen, and default exports. |
+| `@aotter/mantle-spec` | Standalone validation and introspection. |
+| `@aotter/mantle-runtime` | Custom runtime and storage integration. |
+| `@aotter/mantle-web` | HTML, Markdown, `llms.txt`, and sitemap. |
+| `@aotter/mantle-admin` | Admin API. |
+| `@aotter/mantle-admin-ui` | Prebuilt React Admin SPA. |
+| `@aotter/mantle-bun` | Bun and `bun:sqlite`. |
+| `@aotter/mantle-indexeddb` | Browser-local IndexedDB storage. |
+| `@aotter/mantle-vercel` | Vercel Functions. |
+| `@aotter/mantle-cloudflare` | Workers, D1, Auth, MCP, Web, and Admin. |
 
-## Starters
+Mantle is named for the living tissue that grows a mollusk's shell: it adds
+structure around the application you already own.
 
-Starter taxonomy. v0.1.0 ships the available rows; the rest are roadmap so agents can pick the closest fit and either fall back to `blank` or wait for the family to land.
+## CLI reference
 
-End-user starters live in the [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters) monorepo. The install Skill invokes the scaffolder distributed by that repo, which downloads a pinned source tarball, merges `_common/` + `<archetype>/` + optional theme overlays, and initializes a fresh user-owned Git repo without `origin` set. See the [starter README](https://github.com/aotter/mantle-starters#readme) for the current archetype/theme keys, direct invocation, and source layout. Premium / per-customer starters live in the private sibling [`aotter/mantle-starters-premium`](https://github.com/aotter/mantle-starters-premium).
+The umbrella provides one `mantle` command set. Top-level `mantle --help`
+is a layered overview of optional surfaces (Admin is opt-in); subcommand
+help stays on that layer. There is no `create` / `update` happy path.
 
-| Starter | Family | Status | What |
-|---|---|---|---|
-| [`mantle-starters/presence`](https://github.com/aotter/mantle-starters/tree/develop/presence) | presence | available | Brand / service presence site with pages and a contact surface. |
-| [`mantle-starters/publication`](https://github.com/aotter/mantle-starters/tree/develop/publication) | publication | available | Owner-published content — landing pages, articles, docs-lite, project updates, basic contact form. Multi-locale posts/pages, Cloudflare Turnstile, per-slug `.md` mirror, llms.txt, SEO/AEO. |
-| [`mantle-starters/intake`](https://github.com/aotter/mantle-starters/tree/develop/intake) | intake | available | Publication shape plus structured `leads` Schema, staff-only lead View, and anonymous lead submission. |
-| [`mantle-starters/transaction`](https://github.com/aotter/mantle-starters/tree/develop/transaction) | transaction | available | Small catalog + cart + checkout/order workflow on Cloudflare primitives; sized for low-volume direct commerce. |
-| [`mantle-starters/blank`](https://github.com/aotter/mantle-starters/tree/develop/blank) | — | available | Headless API + MCP only. Drop-in backend for consumers bringing their own frontend (Next.js / Astro / native / partner). |
-| [`mantle-starters/reservation`](https://github.com/aotter/mantle-starters/tree/develop/reservation) | reservation | roadmap note | Routes users to `intake` as the v0.1 holding pattern until booking primitives land. |
-| `community` | community | roadmap | Member posts, comments, likes, reactions, moderation queue, agent-assisted moderation. Blocks on end-user auth. |
-| `membership` | membership | roadmap | Private posts, paid newsletters, portals, or fan-club style content. Blocks on end-user auth + row-level visibility grammar + provider-backed entitlements. |
+| Command | Purpose |
+|---|---|
+| `mantle generate` | Compile manifests into a sealed plan and typed runtime module. |
+| `mantle generate --check` | Fail without writing when generated code or optional Admin assets are stale. |
+| `mantle validate` | Validate manifests and handler-source references. |
+| `mantle emit-openapi` | Emit OpenAPI 3.1 from HTTP Triggers and View routes. |
+| `mantle skills` | Project version-matched Core skills into the consumer repository. |
 
-## Repo conventions
+Run the installed CLI through your project's package manager, for example
+`npx --no-install mantle generate`. `validate` also scans `src/` for handler
+references; use `--no-source` when checking only the Manifest.
 
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — workflow contract for AI + human contributors (branch prefixes, commit shape, PR template, architecture gates).
-- [`CLAUDE.md`](CLAUDE.md) — in-repo conventions for agents writing code (PR base branch, manifest grammar lock, ADR discipline, clean-architecture rules).
-- [`docs/release-process.md`](docs/release-process.md) — release + publish discipline (channels, dist-tags, deprecation policy, pre-publish checks).
-- [`CHANGELOG.md`](CHANGELOG.md) — versioned change log.
+Advanced manifest primitives remain in the direct `@aotter/mantle-spec`
+package: `mantle-spec introspect` and `mantle-spec emit-types`.
 
-## License
+`generate` writes one `.mantle/generated/mantle.ts` module containing the
+sealed plan, generated types, `createMantle`, and `bindMantle`. When
+`@aotter/mantle-admin-ui` is installed, it also syncs the Admin SPA to
+`public/_mantle/admin/`. It does not change styling, project skills, provision
+providers, or deploy the application.
+
+## Contributing
+
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) is the contributor and architecture
+  authority for humans and agents.
+- [`docs/adr/`](docs/adr/) records accepted, path-dependent decisions.
+- [`docs/release-process.md`](docs/release-process.md) governs releases.
+- [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) defines community behavior.
+- [`SUPPORT.md`](SUPPORT.md) routes questions, bugs, and feature requests.
+- [`SECURITY.md`](SECURITY.md) provides the private vulnerability-reporting path.
+- [GitHub Releases](https://github.com/aotter/mantle/releases) is the canonical
+  public change history.
 
 Apache 2.0. See [`LICENSE`](LICENSE).

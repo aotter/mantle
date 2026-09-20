@@ -1,26 +1,35 @@
-# ADR-0016: Site semantic layer — `AGENTS.md` + `mantle/site.md`
+# ADR-0016: Site semantic layer — `AGENTS.md` + launch state
 
 ## Status
 
-Accepted (slimmed 2026-05-12 per Epic #116; original 2026-05-12).
+Accepted (slimmed 2026-05-12 per Epic #116; `mantle/site.md` letter
+surface suspended 2026-06-19 and removed from first-run scaffolds;
+amended 2026-06-27 for landing provision bundles).
 
 ## Decision
 
-Every agent-authored mantle project carries two files at fixed paths. They serve different audiences, change at different rates, and are filled by `create-mantle` from `_common/*.template` files.
+Every agent-authored mantle project carries a small cross-tool entry file
+and deterministic launch state at fixed paths:
 
 | File | Audience | Size budget | Format |
 |---|---|---|---|
 | `AGENTS.md` | Any cross-tool agent harness (Codex / Cursor / Aider / Amp / Factory / Claude Code) | ~30 lines | Plain markdown |
-| `mantle/site.md` | Mantle (install / customize / deploy persona — Epic #47, scoped per Epic #116) | ~300 lines | Frontmatter + section bodies |
+| `.mantle/launch-state.json` | Install/provision context captured by landing or direct CLI flags | Small JSON record | JSON |
 
-`AGENTS.md` answers "what is this and how do I run it." `mantle/site.md` carries the site's semantic layer:
+`AGENTS.md` answers "what is this and how do I run it." Launch state
+carries install-critical facts such as archetype, brand, description,
+locales, selected features, GitHub owner/admin login, starter ref, and
+repo target.
 
-- Frontmatter: machine-readable (`archetype`, `brand`, `locales`, `site_url`, `revisions[]`, `futures[]`, `dont_touch[]`).
-- Body sections (`## site`, `## voice`, `## welcome` (5 cards), `## editor`, `## history`) each open with a `> purpose:` header so agents can route reads without parsing prose. Mantle reads the whole file on return, edits sections, writes the whole file back. **Atomic replace, not append.**
+The earlier `mantle/site.md` semantic/letter surface and `## welcome`
+5-card letter surface are suspended for the first-run path. Provisioning
+must not block on prose completion; a first deploy should be possible
+from deterministic scaffold state.
 
 ## Placeholder macros
 
-`create-mantle` substitutes these across `_common/*.template` files in a single pass:
+Mantle landing substitutes these across provision-bundle `*.template`
+files in a single pass:
 
 | Macro | Source | Example |
 |---|---|---|
@@ -34,22 +43,27 @@ Every agent-authored mantle project carries two files at fixed paths. They serve
 | `{{INSTALL_TIMESTAMP}}` | ISO 8601 of install run | `2026-05-12T14:03:00Z` |
 | `{{INSTALL_SUMMARY}}` | CLI flag | `bootstrapped publication site for Lab Cafe in zh-TW/en` |
 
-New macros must be added here, to `_common/*.template`, and to the substitution pass in `create-mantle`.
+New macros must be added here, to `mantle-starters` bundle templates,
+and to the landing substitution pass.
 
 ## Update rules
 
-- **Mantle on return**: read whole `mantle/site.md`, edit relevant sections, write whole atomically, append one paragraph to `## history`. Voice rules (Epic #116 scope-narrow) apply only when editing the `## welcome` 5 cards and the closing handoff line.
-- **provision on deploy**: rewrite frontmatter `site_url:` placeholder → real Workers URL; append a `revisions:` entry. Same `Public site:` rewrite in `AGENTS.md`. Single commit at end of provision.
-- **No mid-section staged-and-running mutation.** A section is prose-replaced atomically, or a frontmatter scalar/list is replaced — never partial writes.
+- **Mantle on return**: read `AGENTS.md`, `.mantle/launch-state.json`,
+  and repo-local skills before changing code.
+- **provision on deploy**: rewrite `AGENTS.md` `Public site:`
+  placeholder → real Workers URL. Single commit at end of provision.
+- **No hidden letter gate.** Prose may be added later, but first deploy
+  only depends on deterministic scaffold state and provider configuration.
 
 ## Cross-tool compatibility
 
-`AGENTS.md` lives at repo root because that is where the AGENTS.md ecosystem (`agents.md`) looks. `mantle/` is a mantle-owned subdirectory; the naming is deliberately specific so a generic AGENTS.md reader does not interpret it as its own state.
+`AGENTS.md` lives at repo root because that is where the AGENTS.md ecosystem (`agents.md`) looks. `.mantle/` is for Mantle-owned non-secret state.
 
 ## Implementation
 
-- Templates: `mantle-starters/_common/AGENTS.md.template` and `mantle-starters/_common/mantle/site.md.template`.
-- Substitution: `packages/create-mantle/src/placeholder.ts`.
-- Install handoff: `skills/install/SKILL.md` describes the post-substitution prose-fill (HTML comments → prose drawn from interview).
-- Provision update: `skills/provision/SKILL.md` describes the `site_url:` + `revisions:` write after deploy.
-- Theme overlay merge (Epic #116): `themes/<theme-key>/` overlay applies after the archetype starter and may touch `src/theme/` — never these two files.
+- Templates: `mantle-starters/blank/AGENTS.md.template` and
+  generated `.mantle/*.template` bundle files.
+- Substitution: Mantle landing provision-bundle substitution.
+- Install handoff: `skills/install/SKILL.md` describes how agents continue from the landing-provisioned repo.
+- Provision update: `skills/provision/SKILL.md` describes the `AGENTS.md` public-site rewrite after deploy.
+- Type overlays are applied while building `provision-bundles/<type>.json`; generated repos should not need a second overlay step.

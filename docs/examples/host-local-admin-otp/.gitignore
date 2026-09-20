@@ -1,0 +1,12 @@
+node_modules/
+.mantle/
+.wrangler/
+.agents/
+.claude/
+.dev.vars
+.dev.vars.local
+.env
+.env.*
+!.env.example
+pnpm-lock.yaml
+public/_mantle/

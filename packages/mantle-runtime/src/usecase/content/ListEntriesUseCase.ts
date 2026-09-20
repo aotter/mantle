@@ -1,15 +1,22 @@
 import {
   DiagnosticError,
+  checkSchemaAdminUi,
+  isRequiredMantleRefField,
+  runtimeDiagnostic,
+  schemaSortableFields,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
 import type { EntryRow } from "../../domain/model/EntryRow.js";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
+import type { ListEntriesResult } from "../../domain/port/EntryRepository.js";
 import { clampLimit } from "../../domain/service/Pagination.js";
 import type {
   ListEntriesRequest,
-  ListEntriesResponse,
 } from "../dto/content/index.js";
-import { schemaUnknownDiagnostic } from "./diagnostics.js";
+import {
+  schemaUnknownDiagnostic,
+  sortFieldUnavailableDiagnostic,
+} from "./diagnostics.js";
 
 /**
  * `ListEntriesUseCase` — list entries in a collection, optionally
@@ -23,8 +30,8 @@ import { schemaUnknownDiagnostic } from "./diagnostics.js";
  *    collection has more rows than `limit`, they're silently dropped
  *    — agent authors who care about that reach for `executePage`.
  *
- *  - `executePage(req): ListEntriesResponse<EntryRow>` — what
- *    cursor-aware callers (MCP `list_entries`, admin pagination,
+ *  - `executePage(req): ListEntriesResult` — what
+ *    cursor-aware callers (Admin pagination,
  *    long-tail walkers) want. Returns `{ rows, nextCursor? }`.
  *
  * Why split: the Mantle thesis says the runtime should carry complexity
@@ -51,21 +58,74 @@ export class ListEntriesUseCase {
 
   async executePage(
     request: ListEntriesRequest,
-  ): Promise<ListEntriesResponse<EntryRow>> {
+  ): Promise<ListEntriesResult> {
     const opPath = `usecase/ListEntries/${request.collection}`;
-    if (!this.schemas.has(request.collection)) {
+    const schema = this.schemas.get(request.collection);
+    if (!schema) {
       throw new DiagnosticError(
         schemaUnknownDiagnostic(opPath, request.collection, [...this.schemas.keys()]),
       );
     }
-    // `ListEntriesResult` is structurally identical to
-    // `ListEntriesResponse<EntryRow>` — pass it through rather than
-    // re-spreading field-by-field.
+    if (request.sort && !isSortableField(schema, request.sort.field)) {
+      throw new DiagnosticError(sortFieldUnavailableDiagnostic(opPath, request.sort.field));
+    }
+    const listFilter = checkSchemaAdminUi(schema).filter;
+    if (request.filter && !(
+      listFilter?.field === request.filter.field && listFilter.values.includes(request.filter.value)
+    )) {
+      throw new DiagnosticError(filterUnavailableDiagnostic(opPath, request.filter));
+    }
+    if (request.scope && (
+      typeof request.scope.value !== "string" ||
+      !request.scope.value ||
+      !isRequiredMantleRefField(schema, request.scope.field)
+    )) {
+      throw new DiagnosticError(scopeUnavailableDiagnostic(opPath, request.scope));
+    }
     return this.entries.list({
       collection: request.collection,
       status: request.status,
       limit: clampLimit(request.limit),
       cursor: request.cursor,
+      cursorDirection: request.cursorDirection,
+      search: request.search,
+      searchFields: schema.spec.searchableFields ?? [],
+      filter: request.filter,
+      scope: request.scope,
+      sort: request.sort,
     });
   }
+}
+
+function filterUnavailableDiagnostic(
+  path: string,
+  filter: NonNullable<ListEntriesRequest["filter"]>,
+) {
+  return runtimeDiagnostic({
+    code: "INPUT_VALIDATION_FAILED",
+    severity: "error",
+    path: `${path}/filter`,
+    value: filter,
+    expected: "an indexed string-enum field and one of its declared values",
+    message: `Filter '${filter.field}=${filter.value}' is not available.`,
+  });
+}
+
+function scopeUnavailableDiagnostic(
+  path: string,
+  scope: NonNullable<ListEntriesRequest["scope"]>,
+) {
+  return runtimeDiagnostic({
+    code: "INPUT_VALIDATION_FAILED",
+    severity: "error",
+    path: `${path}/scope`,
+    value: scope,
+    expected: "a required x-mantle-ref field and a non-empty parent id",
+    message: `Scope '${scope.field}=${scope.value}' is not available.`,
+  });
+}
+
+function isSortableField(schema: SchemaManifest, field: string): boolean {
+  if (field === "id" || field === "status" || field === "updatedAt") return true;
+  return schemaSortableFields(schema).includes(field);
 }

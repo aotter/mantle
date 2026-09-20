@@ -11,9 +11,9 @@ import type { HandlerContext } from "../model/HandlerContext.js";
  * and `ExecuteViewUseCase` so the `requires.auth.all` semantics in the
  * manifest grammar produce identical runtime behavior across atoms.
  *
- * The closed predicate vocabulary (`ctx.user`, `{ ctx.staff: [<role>] }`)
- * is enforced at parse time; this evaluator trusts the shape and only
- * checks against the live `HandlerContext`.
+ * The closed `ctx.user` / `ctx.staff` / `ctx.auth` / `ctx.auth.scope`
+ * vocabulary is enforced at parse time; this evaluator trusts the shape
+ * and only checks against the live `HandlerContext`.
  *
  * Domain-pure: no IO, no port deps. Lives in `domain/service/` because
  * both the procedure and view use cases need it; placing it in either
@@ -27,7 +27,7 @@ export interface AuthRequires {
 /**
  * Evaluate `requires.auth.all` against `ctx`. Returns `null` when
  * authorization passes (or no `requires.auth.all` is declared), or an
- * `AUTH_DENIED` Diagnostic naming the first failing predicate.
+ * structured 401/403 Diagnostic naming the first failing predicate.
  */
 export function evaluateAuthAll(
   requires: AuthRequires | undefined,
@@ -40,8 +40,9 @@ export function evaluateAuthAll(
   for (let i = 0; i < all.length; i++) {
     const pred = all[i]!;
     if (!evaluatePredicate(pred, ctx)) {
+      const authenticated = ctx.auth !== undefined || ctx.user !== null || ctx.staff !== null;
       return makeDiagnostic({
-        code: "AUTH_DENIED",
+        code: authenticated ? "AUTH_DENIED" : "UNAUTHENTICATED",
         phase,
         severity: "error",
         path: `${path}#/requires/auth/all/${i}`,
@@ -55,6 +56,10 @@ export function evaluateAuthAll(
 
 export function evaluatePredicate(pred: AuthPredicate, ctx: HandlerContext): boolean {
   if (pred === "ctx.user") return ctx.user !== null;
+  if (pred === "ctx.auth") return ctx.auth !== undefined;
+  if (typeof pred === "object" && pred !== null && "ctx.auth.scope" in pred) {
+    return ctx.auth?.scopes.includes(pred["ctx.auth.scope"]) ?? false;
+  }
   if (typeof pred === "object" && pred !== null && "ctx.staff" in pred) {
     if (!ctx.staff) return false;
     return pred["ctx.staff"].includes(ctx.staff.role);
@@ -64,6 +69,10 @@ export function evaluatePredicate(pred: AuthPredicate, ctx: HandlerContext): boo
 
 export function describePredicate(pred: AuthPredicate): string {
   if (pred === "ctx.user") return "caller is signed in (ctx.user)";
+  if (pred === "ctx.auth") return "caller presents a verified credential (ctx.auth)";
+  if (typeof pred === "object" && pred !== null && "ctx.auth.scope" in pred) {
+    return `caller credential includes scope '${pred["ctx.auth.scope"]}'`;
+  }
   if (typeof pred === "object" && pred !== null && "ctx.staff" in pred) {
     return `caller is staff with role in [${pred["ctx.staff"].join(", ")}]`;
   }

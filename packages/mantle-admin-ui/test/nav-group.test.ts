@@ -1,0 +1,110 @@
+import { describe, expect, it } from "vitest";
+import { isGroupActive, isLinkActive, isSubLinkActive } from "../src/layout/nav-group";
+import { buildDeveloperNavGroups, buildNavGroups } from "../src/layout/authenticated-layout";
+import type { ViewManifestInfo } from "../src/lib/types";
+import type { NavCollapsible, NavLink } from "../src/layout/types";
+
+const links: NavLink[] = [
+  { title: "All", url: "/admin/c/orders" },
+  { title: "Paid", url: "/admin/c/orders?filter_field=state&filter_value=paid" },
+];
+
+describe("sidebar collection filters", () => {
+  it("selects the specific filter without also selecting All", () => {
+    const search = "?filter_field=state&filter_value=paid&page=2";
+    expect(isSubLinkActive(links[0]!, links, "/admin/c/orders", search)).toBe(false);
+    expect(isSubLinkActive(links[1]!, links, "/admin/c/orders", search)).toBe(true);
+  });
+
+  it("keeps All selected for unrelated search and paging params", () => {
+    expect(isSubLinkActive(links[0]!, links, "/admin/c/orders", "?search=86&page=2")).toBe(true);
+  });
+
+  it("keeps the collection and matching filter active on entry detail routes", () => {
+    const group: NavCollapsible = { title: "Orders", items: links };
+    expect(isLinkActive({ title: "Requests", url: "/admin/c/requests" }, "/admin/c/requests/request-1", "", true)).toBe(true);
+    expect(isSubLinkActive(links[0]!, links, "/admin/c/orders/order-1", "")).toBe(true);
+    expect(isSubLinkActive(links[0]!, links, "/admin/c/orders/order-1", "?filter_field=state&filter_value=paid")).toBe(false);
+    expect(isSubLinkActive(links[1]!, links, "/admin/c/orders/order-1", "?filter_field=state&filter_value=paid")).toBe(true);
+    expect(isGroupActive(group, "/admin/c/orders/order-1", "")).toBe(true);
+  });
+});
+
+describe("member navigation", () => {
+  const urlsFor = (role: "owner" | "editor" | "contributor") =>
+    buildNavGroups([], [], "en", null, role)
+      .flatMap(({ items }) => items)
+      .flatMap((item) => "url" in item ? [item.url] : []);
+
+  it("shows members to editors and owners, while team management stays owner-only", () => {
+    expect(urlsFor("editor")).toContain("/admin/members");
+    expect(urlsFor("editor")).not.toContain("/admin/staff");
+    expect(urlsFor("owner")).toEqual(expect.arrayContaining(["/admin/members", "/admin/staff"]));
+    expect(urlsFor("contributor")).not.toContain("/admin/members");
+  });
+
+  it("does not create a standalone operations destination", () => {
+    const groups = buildNavGroups([], [], "en", null, "owner");
+    expect(JSON.stringify(groups)).not.toContain("/admin/ops");
+  });
+
+  it("keeps developer navigation out of Content Admin", () => {
+    expect(JSON.stringify(buildNavGroups([], [], "en", null, "owner"))).not.toContain("/admin/dev");
+    const items = buildDeveloperNavGroups("en")[0]?.items ?? [];
+    expect(items).toEqual([
+      expect.objectContaining({ items: [expect.objectContaining({ url: "/admin/dev/overview/flow" }), expect.objectContaining({ url: "/admin/dev/overview/relationships" })] }),
+      expect.objectContaining({ items: [expect.objectContaining({ url: "/admin/dev/model/schemas" }), expect.objectContaining({ url: "/admin/dev/model/views" })] }),
+      expect.objectContaining({ items: [expect.objectContaining({ url: "/admin/dev/logic/triggers" }), expect.objectContaining({ url: "/admin/dev/logic/procedures" })] }),
+      expect.objectContaining({ items: expect.arrayContaining([
+        expect.objectContaining({ url: "/admin/dev/docs/api" }),
+        expect.objectContaining({ url: "/admin/dev/docs/mcp" }),
+        expect.objectContaining({ url: "/admin/dev/docs/webmcp" }),
+      ]) }),
+    ]);
+  });
+
+  it("keeps public/member views out of Staff Admin", () => {
+    const view = (name: string, surface: ViewManifestInfo["surface"]): ViewManifestInfo => ({ name, surface, title: null, from: null, params: null, fields: null, list: { columns: [], searchFields: [], filterFields: [] } });
+    const groups = buildNavGroups([], [view("public-catalog", "public"), view("staff-queue", "staff")], "en", null, "owner");
+    expect(JSON.stringify(groups)).not.toContain("public-catalog");
+    expect(groups.find(({ title }) => title === "Reports")?.items).toEqual([
+      expect.objectContaining({ url: "/admin/views/staff-queue" }),
+    ]);
+  });
+
+  it("shows Operations only when a global operation exists", () => {
+    expect(JSON.stringify(buildNavGroups([], [], "en", null, "owner"))).not.toContain("/admin/operations");
+    expect(JSON.stringify(buildNavGroups([], [], "en", null, "owner", true))).toContain("/admin/operations");
+  });
+
+  it("includes standalone folded children in main Nav without dropping parent collections", () => {
+    const collection = (
+      name: string,
+      lifecycle: "publishing" | "operational",
+      parent: { collection: string; parentField: string; childField: string } | null = null,
+      nav: { standalone: true; parentField: string; parentCollection: string } | null = null,
+    ) => ({
+      name,
+      title: name,
+      description: null,
+      lifecycle,
+      parent,
+      nav,
+      hasTranslations: false,
+      localized: false,
+    });
+    const groups = buildNavGroups([
+      collection("organizations", "operational"),
+      collection("projects", "operational", { collection: "organizations", parentField: "id", childField: "organizationId" }, {
+        standalone: true,
+        parentField: "organizationId",
+        parentCollection: "organizations",
+      }),
+      collection("members", "operational", { collection: "organizations", parentField: "id", childField: "organizationId" }),
+    ], [], "en", null, "owner");
+    const urls = (groups.find(({ title }) => title === "Records")?.items ?? [])
+      .flatMap((item) => "url" in item ? [item.url] : item.items.map((link) => link.url));
+    expect(urls).toEqual(expect.arrayContaining(["/admin/c/organizations", "/admin/c/projects"]));
+    expect(urls).not.toContain("/admin/c/members");
+  });
+});

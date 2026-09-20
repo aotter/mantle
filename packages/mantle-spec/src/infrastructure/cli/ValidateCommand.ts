@@ -1,12 +1,14 @@
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { join, resolve, relative } from "node:path";
 import { exit, stdout, stderr, cwd } from "node:process";
+import { parseArgs as parseNodeArgs } from "node:util";
 import {
   validateDiagnostic,
   type Diagnostic,
 } from "../../kernel/diagnostic.js";
 import { ValidateManifestsUseCase } from "../../usecase/ValidateManifestsUseCase.js";
 import { loadManifestsFromRoot } from "./loadManifests.js";
+import { translateParseArgsError } from "./parseArgsError.js";
 
 /**
  * `mantle validate` — Loop 1 of the SDK authoring contract
@@ -24,9 +26,9 @@ import { loadManifestsFromRoot } from "./loadManifests.js";
  *   --format json   → JSON array on stdout (default when piped)
  *   --format text   → pretty-print on stdout (default when TTY)
  *
- * Phase (which gates are active — see Phase doc below):
+ * Phase:
  *   --phase preview  → grammar checks only; deploy-only gates skipped (default)
- *   --phase deploy   → all checks including the Mantle welcome letter
+ *   --phase deploy   → production/deploy checks
  *
  * Per the clean-architecture rules this is a thin adapter: it loads
  * files, constructs the request DTO, calls the use case, formats the
@@ -42,43 +44,55 @@ export interface CliArgs {
 }
 
 export function parseArgs(rawArgs: ReadonlyArray<string>): CliArgs {
-  let manifests = "./manifests";
-  let source: string | null = "./src";
-  let format: "json" | "text" | null = null;
-  let phase: Phase = "preview";
-
-  for (let i = 0; i < rawArgs.length; i++) {
-    const a = rawArgs[i];
-    if (a === "--manifests") manifests = rawArgs[++i] ?? manifests;
-    else if (a === "--source") source = rawArgs[++i] ?? source;
-    else if (a === "--no-source") source = null;
-    else if (a === "--format") {
-      const v = rawArgs[++i];
-      if (v !== "json" && v !== "text") {
-        throw new Error(`--format must be 'json' or 'text'; got ${JSON.stringify(v)}`);
-      }
-      format = v;
-    } else if (a === "--json") {
-      format = "json";
-    } else if (a === "--phase") {
-      const v = rawArgs[++i];
-      if (v !== "preview" && v !== "deploy") {
-        throw new Error(`--phase must be 'preview' or 'deploy'; got ${JSON.stringify(v)}`);
-      }
-      phase = v;
-    } else if (a === "--help" || a === "-h") {
-      printHelp();
-      exit(0);
-    } else if (a !== undefined) {
-      throw new Error(`Unknown argument: ${a}`);
-    }
+  let values;
+  try {
+    ({ values } = parseNodeArgs({
+      args: [...rawArgs],
+      options: {
+        manifests: { type: "string" },
+        source: { type: "string" },
+        "no-source": { type: "boolean" },
+        format: { type: "string" },
+        json: { type: "boolean" },
+        phase: { type: "string" },
+        help: { type: "boolean", short: "h" },
+      },
+    }));
+  } catch (err) {
+    throw translateParseArgsError(err, {
+      "--phase": "--phase must be 'preview' or 'deploy'; got undefined",
+      "--format": "--format must be 'json' or 'text'; got undefined",
+    });
   }
 
-  if (format === null) {
+  if (values.help) {
+    printHelp();
+    exit(0);
+  }
+
+  const phase = values.phase ?? "preview";
+  if (phase !== "preview" && phase !== "deploy") {
+    throw new Error(`--phase must be 'preview' or 'deploy'; got ${JSON.stringify(phase)}`);
+  }
+
+  let format: "json" | "text";
+  if (values.format !== undefined) {
+    if (values.format !== "json" && values.format !== "text") {
+      throw new Error(`--format must be 'json' or 'text'; got ${JSON.stringify(values.format)}`);
+    }
+    format = values.format;
+  } else if (values.json) {
+    format = "json";
+  } else {
     format = stdout.isTTY ? "text" : "json";
   }
 
-  return { manifests, source, format, phase };
+  return {
+    manifests: values.manifests ?? "./manifests",
+    source: values["no-source"] ? null : values.source ?? "./src",
+    format,
+    phase,
+  };
 }
 
 function printHelp(): void {
@@ -87,16 +101,15 @@ function printHelp(): void {
 Usage: mantle validate [options]
 
 Options:
-  --manifests <dir>   Manifest root (default: ./manifests)
-  --source <dir>      Handler source root for register-handler grep
+  --manifests <dir>   Directory containing YAML manifests (default: ./manifests)
+  --source <dir>      Handler source root for handlers-map grep
                       (default: ./src)
   --no-source         Skip the handler-source grep entirely
   --phase <phase>     'preview' (default) or 'deploy'.
                         preview: grammar + cross-Schema checks only.
-                                 Suitable right after \`create-mantle\`
+                                 Suitable while authoring application manifests
                                  and during local \`pnpm dev\`.
-                        deploy:  adds the Mantle welcome letter gate
-                                 + any other pre-deploy-only checks.
+                        deploy:  adds any pre-deploy-only checks.
                                  Run this before \`wrangler deploy\`.
   --format <fmt>      'json' or 'text' (default: auto by isTTY)
   --json              Alias for --format json
@@ -107,26 +120,6 @@ Exit codes:
   1  one or more errors
   2  CLI invocation problem
 `);
-}
-
-/**
- * Which diagnostic codes are gated to which phase. Codes not listed
- * here fire in every phase. The list is small on purpose — most
- * grammar checks belong in every phase; only the lifecycle-stage gates
- * (Mantle letter, future production secret checks) live here.
- *
- * "deploy" entries mean: the diagnostic is emitted only when phase
- * === "deploy". In preview the check still runs (cheap) but the
- * diagnostic is dropped before counting + printing.
- */
-const PHASE_GATED_CODES: Readonly<Record<string, Phase>> = {
-  MANTLE_LETTER_NOT_WRITTEN: "deploy",
-};
-
-function isVisibleInPhase(code: string, phase: Phase): boolean {
-  const gate = PHASE_GATED_CODES[code];
-  if (gate === undefined) return true;
-  return gate === phase;
 }
 
 export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
@@ -142,7 +135,7 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
 
   // 1. Load manifests. Loader returns the resolved `root` so we don't
   // re-resolve here and risk drift between the two `cwd()` calls.
-  const { manifests, parseErrors, filePaths, root: manifestsRoot } =
+  const { parsed, parseErrors, root: manifestsRoot } =
     await loadManifestsFromRoot(args.manifests);
 
   // 2. Concatenate handler source (if any).
@@ -157,16 +150,18 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
   }
 
   // 3. Execute the use case.
-  const result = ValidateManifestsUseCase.run({ manifests, handlerSource, filePaths });
+  const result = parsed
+    ? ValidateManifestsUseCase.run({ parsed, handlerSource })
+    : { diagnostics: [], errorCount: 0, warningCount: 0 };
   const cliWarnings: Diagnostic[] = [];
 
   // The CLI can't reach the runtime DB to read site_config, so it
   // can't run the SCHEMA_LOCALIZED_REQUIRES_SITE_LOCALES check —
   // boot does that. Per ADR-0007's leftward-shift principle, surface
   // a warning so the AI author isn't surprised when boot rejects.
-  const hasLocalized = manifests.some(
-    (m) => m.kind === "Schema" && m.spec.localized === true,
-  );
+  const hasLocalized = parsed?.entries.some(
+    ({ manifest }) => manifest.kind === "Schema" && manifest.spec.localized === true,
+  ) ?? false;
   if (hasLocalized) {
     cliWarnings.push(
       validateDiagnostic({
@@ -176,24 +171,15 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
         expected:
           "site_config.locales to declare at least one BCP 47 locale (boot validator will check)",
         message:
-          "One or more Schemas declare localized: true. The CLI cannot read site_config; boot will reject if locales are not configured. Verify your CmsConfig.siteDefaults.locales is set.",
+          "One or more Schemas declare localized: true. The CLI cannot read site_config; deployment will reject if locales are not configured. Verify your adapter siteDefaults.locales is set.",
       }),
     );
   }
 
-  // The Mantle welcome letter check — only fires when mantle/site.md
-  // exists at the cwd (legacy projects predating ADR-0016 skip silently).
-  // See § Mantle letter check below for why this lives here.
-  const mantleDiagnostics = await runMantleLetterCheck();
-
-  const rawDiagnostics = [...parseErrors, ...result.diagnostics, ...cliWarnings, ...mantleDiagnostics];
-
-  // Apply phase gating — diagnostics for codes only valid in another
-  // phase are dropped before counting. Preview hides
-  // `MANTLE_LETTER_NOT_WRITTEN` so a fresh-scaffold `pnpm validate`
-  // exits 0; deploy keeps it.
-  const diagnostics = rawDiagnostics.filter((d) => isVisibleInPhase(d.code, args.phase));
-  const suppressedCount = rawDiagnostics.length - diagnostics.length;
+  // ponytail: no diagnostic code is phase-gated yet, so --phase only
+  // labels the output. Reintroduce filtering here when the first
+  // deploy-only gate lands.
+  const diagnostics = [...parseErrors, ...result.diagnostics, ...cliWarnings];
 
   let errorCount = 0;
   let warningCount = 0;
@@ -206,13 +192,13 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
   if (args.format === "json") {
     stdout.write(
       JSON.stringify(
-        { phase: args.phase, diagnostics, errorCount, warningCount, suppressedCount },
+        { phase: args.phase, diagnostics, errorCount, warningCount },
         null,
         2,
       ) + "\n",
     );
   } else {
-    emitText(diagnostics, errorCount, warningCount, manifestsRoot, args.phase, suppressedCount);
+    emitText(diagnostics, errorCount, warningCount, manifestsRoot, args.phase);
   }
 
   return errorCount > 0 ? 1 : 0;
@@ -221,6 +207,13 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
 async function loadHandlerSource(root: string): Promise<string> {
   const exts = [".ts", ".tsx", ".js", ".mjs", ".cjs"];
   const chunks: string[] = [];
+  // Probe the root explicitly. walk() swallows readdir errors so it can
+  // best-effort skip unreadable SUBdirectories — but that same swallow
+  // turns a missing/unreadable source ROOT into an empty string, which
+  // then makes every `handler.kind: ref` Procedure emit a spurious
+  // HANDLER_NOT_REGISTERED warning instead of a clear "could not read
+  // source root" exit-2. Surface the root error here. (#393)
+  await readdir(root, { withFileTypes: true });
   async function walk(dir: string): Promise<void> {
     let items;
     try {
@@ -246,77 +239,15 @@ async function loadHandlerSource(root: string): Promise<string> {
   return chunks.join("\n");
 }
 
-/**
- * Mantle welcome letter check (ADR-0016).
- *
- * `mantle/site.md` is the agent-memory semantic layer. Its `## welcome`
- * section ships with 5 HTML-comment placeholders (`<!-- Mantle: ... -->`)
- * inside `### card1` … `### card5` that the install agent's Mantle
- * subagent replaces with prose. If those placeholders still exist at
- * validate time, the welcome letter wasn't written — block deploy.
- *
- * Lives in the CLI rather than ValidateManifestsUseCase because it's a
- * filesystem-state check (mantle/site.md presence + contents), not a
- * manifest grammar check.
- *
- * Silently no-ops on projects without `mantle/site.md` (legacy installs
- * predating ADR-0016).
- */
-async function runMantleLetterCheck(): Promise<ReadonlyArray<Diagnostic>> {
-  const path = resolve(cwd(), "mantle", "site.md");
-  try {
-    const s = await stat(path);
-    if (!s.isFile()) return [];
-  } catch {
-    return [];
-  }
-  let content: string;
-  try {
-    content = await readFile(path, "utf8");
-  } catch {
-    return [];
-  }
-  const cardsWithPlaceholder: number[] = [];
-  for (let n = 1; n <= 5; n++) {
-    const cardRe = new RegExp(
-      `### card${n}\\s*\\n([\\s\\S]*?)(?=\\n### card|\\n## |$)`,
-    );
-    const m = content.match(cardRe);
-    if (!m) continue;
-    const body = m[1] ?? "";
-    if (/<!--[\s\S]*?-->/.test(body) || body.trim() === "") {
-      cardsWithPlaceholder.push(n);
-    }
-  }
-  if (cardsWithPlaceholder.length === 0) return [];
-  return [
-    validateDiagnostic({
-      code: "MANTLE_LETTER_NOT_WRITTEN",
-      severity: "error",
-      path: `mantle/site.md#welcome:${cardsWithPlaceholder.map((n) => `card${n}`).join(",")}`,
-      expected: "all 5 ## welcome cards (card1..card5) written in Mantle's voice",
-      suggestion:
-        "Run `pnpm mantle:prompt > /tmp/mantle-letter-prompt.md`, then dispatch the Mantle subagent with that prompt body to fill the cards. See the install Skill for the full flow.",
-      message: `Mantle welcome letter incomplete — card${cardsWithPlaceholder.length === 1 ? "" : "s"} ${cardsWithPlaceholder.join(", ")} still contain template placeholders.`,
-    }),
-  ];
-}
-
 function emitText(
   diagnostics: ReadonlyArray<Diagnostic>,
   errorCount: number,
   warningCount: number,
   root: string,
   phase: Phase,
-  suppressedCount: number,
 ): void {
   if (diagnostics.length === 0) {
     stdout.write(`OK  no issues (root: ${relative(cwd(), root) || root}, phase: ${phase})\n`);
-    if (phase === "preview" && suppressedCount > 0) {
-      stdout.write(
-        `ℹ ${suppressedCount} deploy-only gate(s) skipped — re-run with \`--phase deploy\` before shipping.\n`,
-      );
-    }
     return;
   }
   for (const d of diagnostics) {
@@ -330,11 +261,6 @@ function emitText(
     stdout.write("\n");
   }
   stdout.write(`${errorCount} error(s), ${warningCount} warning(s) (phase: ${phase}).\n`);
-  if (phase === "preview" && suppressedCount > 0) {
-    stdout.write(
-      `ℹ ${suppressedCount} deploy-only gate(s) skipped — re-run with \`--phase deploy\` before shipping.\n`,
-    );
-  }
 }
 
 function formatValue(v: unknown): string {

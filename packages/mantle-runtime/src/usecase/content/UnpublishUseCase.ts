@@ -8,10 +8,6 @@ import type { Clock } from "../../domain/port/Clock.js";
 import type { EntryRepository } from "../../domain/port/EntryRepository.js";
 import type { UnpublishRequest } from "../dto/content/index.js";
 import {
-  unpublishCache,
-  type ContentPublishEffects,
-} from "./ContentPublishEffects.js";
-import {
   illegalTransitionDiagnostic,
   notFoundDiagnostic,
   withConflictDiagnostic,
@@ -26,16 +22,15 @@ export class UnpublishUseCase {
     private readonly entries: EntryRepository,
     private readonly schemas: ReadonlyMap<string, SchemaManifest>,
     private readonly clock: Clock,
-    private readonly effects?: ContentPublishEffects,
   ) {}
 
   async execute(request: UnpublishRequest): Promise<EntryRow> {
     const opPath = `usecase/Unpublish/${request.id}`;
-    const existing = await this.entries.get(request.id);
+    const existing = await this.entries.get(request);
     if (!existing) {
-      throw new DiagnosticError(notFoundDiagnostic(opPath, "<unknown>", request.id));
+      throw new DiagnosticError(notFoundDiagnostic(opPath, request.collection, request.id));
     }
-    const schema = this.schemas.get(existing.collection);
+    const schema = this.schemas.get(request.collection);
     if (!canTransition(schema, existing.status, "draft")) {
       throw new DiagnosticError(
         illegalTransitionDiagnostic(opPath, existing.status, "draft"),
@@ -44,7 +39,7 @@ export class UnpublishUseCase {
     const unpublished = await withConflictDiagnostic(opPath, () =>
       this.entries.transitionStatus({
         id: request.id,
-        collection: existing.collection,
+        collection: request.collection,
         to: "draft",
         expectedStatus: existing.status,
         // Pin the version we read above — a concurrent mutation between
@@ -56,7 +51,6 @@ export class UnpublishUseCase {
         originalInput: request.originalInput,
       }),
     );
-    await unpublishCache(this.effects, unpublished.id);
     return unpublished;
   }
 }

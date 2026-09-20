@@ -1,52 +1,63 @@
 import { DiagnosticError } from "@aotter/mantle-spec";
 import type { Clock } from "../../domain/port/Clock.js";
-import type { KvCache } from "../../domain/port/KvCache.js";
-import type { MediaAsset, MediaStorage } from "../../domain/port/MediaStorage.js";
+import type { MediaAssetRepository } from "../../domain/port/MediaAssetRepository.js";
+import type { PendingUploadRepository } from "../../domain/port/PendingUploadRepository.js";
+import type {
+  CommitUploadVariantSpec,
+  MediaAsset,
+  MediaStorage,
+} from "../../domain/port/MediaStorage.js";
 import type { CommitMediaUploadRequest } from "../dto/media/index.js";
-import {
-  mediaUploadExpiredDiagnostic,
-} from "./diagnostics.js";
-import {
-  DEFAULT_MAX_BYTES,
-  PENDING_UPLOAD_KV_PREFIX,
-} from "./mediaAllowlist.js";
-import type { PendingUploadRecord } from "./PendingUploadRecord.js";
+import { mediaUploadExpiredDiagnostic } from "./diagnostics.js";
 
+/**
+ * Finalise the variant bundle issued by `create_media_upload`. Reads
+ * the canonical `PendingUploadRecord` (each variant's expected
+ * mime + size + storageKey), asks the adapter to verify every
+ * uploaded object (HEAD + bytes), and on success persists the
+ * resulting `MediaAsset` to the `media_assets` table.
+ *
+ * All-or-nothing: any variant failing HEAD-verify rejects the whole
+ * commit. The orphan sweeper (#254) cleans up partially-uploaded
+ * bundles whose pending record expired.
+ */
 export class CommitMediaUploadUseCase {
   constructor(
     private readonly storage: MediaStorage,
-    private readonly kv: KvCache,
+    private readonly pendingUploads: PendingUploadRepository,
     private readonly clock: Clock,
-    private readonly opts: { readonly maxBytes?: number } = {},
+    private readonly assets: MediaAssetRepository,
   ) {}
 
   async execute(request: CommitMediaUploadRequest): Promise<MediaAsset> {
     const opPath = "usecase/CommitMediaUpload";
-    const kvKey = `${PENDING_UPLOAD_KV_PREFIX}${request.uploadId}`;
-    const raw = await this.kv.get(kvKey);
-    if (!raw) {
-      throw new DiagnosticError(mediaUploadExpiredDiagnostic(opPath, request.uploadId));
+    const record = await this.pendingUploads.findById(request.uploadGroupId);
+    if (!record || record.expiresAt <= this.clock.now()) {
+      if (record) await this.pendingUploads.delete(request.uploadGroupId);
+      throw new DiagnosticError(
+        mediaUploadExpiredDiagnostic(opPath, request.uploadGroupId),
+      );
     }
-    const record = JSON.parse(raw) as PendingUploadRecord;
-    const adapterCap = this.opts.maxBytes ?? DEFAULT_MAX_BYTES;
-    // Per-upload ceiling: tighter of (caller-declared at create) vs
-    // (adapter-wide cap). Defends against an adapter that accepted a
-    // larger PUT than the use case minted the URL for.
-    const maxBytes = Math.min(adapterCap, record.expectedSize);
+
+    const variantSpecs: ReadonlyArray<CommitUploadVariantSpec> = record.variants.map((v) => ({
+      mimeType: v.mimeType,
+      role: v.role,
+      storageKey: v.storageKey,
+      maxBytes: Math.min(v.maxBytes, v.expectedSize),
+    }));
 
     const asset = await this.storage.commitUpload({
-      uploadId: request.uploadId,
-      storageKey: record.storageKey,
-      expectedMimeType: record.expectedMimeType,
-      maxBytes,
-      alt: request.alt,
-      caption: request.caption,
-      checksum: request.checksum,
+      uploadGroupId: request.uploadGroupId,
+      filename: record.filename,
+      variants: variantSpecs,
+      alt: request.alt ?? record.alt,
+      caption: request.caption ?? record.caption,
       now: this.clock.now(),
     });
 
-    // Best-effort cleanup. KV TTL covers us if delete fails.
-    await this.kv.delete(kvKey).catch(() => undefined);
+    await this.assets.save(asset);
+
+    await this.pendingUploads.delete(request.uploadGroupId);
 
     return asset;
   }

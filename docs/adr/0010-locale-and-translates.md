@@ -1,12 +1,14 @@
 # ADR-0010: Locale three-layer model and parent/child translates pattern
 
-**Status:** Carried over from POC v0.0.x; refreshed for v0.1.0.
+**Status:** Carried over from POC v0.0.x; storage details superseded by
+[ADR-0024](0024-manifest-native-schema-tables.md). Locale semantics remain in
+force, but `locale` is now a native field on each localized Schema table.
 
 **Date**: 2026-05-01 (POC) / refreshed 2026-05-03 (v0.1.0 rebuild)
 
 **Deciders**: phsu
 
-**Related**: [ADR-0001](0001-four-atom-manifest-model.md) (the Schema atom this extends; §"Future grammar discipline" covers the v0.1-vs-DRAFT window this lands in).
+**Related**: [ADR-0001](0001-four-atom-manifest-model.md) (the Schema atom this extends).
 
 ---
 
@@ -70,7 +72,7 @@ matches the principle that locale is opt-in.
 
 The boot validator only inspects the manifest at this layer. It
 checks shape (every `localized: true` Schema is well-formed, every
-`translates:` block resolves) and rejects DRAFT keys; it does **not**
+`translates:` block resolves) and rejects unsupported keys; it does **not**
 read D1 to confirm that the site actually has any locales configured.
 That cross-check is deferred to runtime (Layer 3).
 
@@ -122,18 +124,18 @@ canonicalize-on-write keeps the cold-start path free of ceremony and
 lets the manifest, the CmsConfig, and the D1 row drift apart safely
 (the runtime gate in Layer 3 is what reconciles them).
 
-### Layer 3 — Per-entry data (`data.locale`)
+### Layer 3 — Per-entry data (`locale`)
 
 ```jsonc
-// entries.data for a localized Schema
+// a localized Schema record
 { "title": "...", "body": "...", "locale": "zh-TW" }
 
-// entries.data for a non-localized Schema
+// a non-localized Schema record
 { "name": "...", "color": "..." }   // no locale field
 ```
 
-- There is no top-level `entries.locale` column. Locale lives inside
-  the `data` JSON.
+- There is no shared `entries.locale` column. `locale` is the authored native
+  field on each localized Schema table.
 - The runtime locale gate (in `mantle-runtime`'s content-ops
   `helpers.ts`) is the **authoritative per-request check**. On every
   read and write the gate validates:
@@ -145,10 +147,8 @@ lets the manifest, the CmsConfig, and the D1 row drift apart safely
   - `localized: false` Schema → `data.locale` MUST be absent
     (`null` is treated as absent and stripped on the read path; any
     other value is rejected to catch typos like `locaIe: en`).
-- Indexed via virtual generated column + partial unique index on
-  `json_extract(data, '$.locale')`, scoped to the Schema's
-  `collection`. Same pattern as `Schema.spec.unique`. Created only
-  for localized Schemas; non-localized Schemas have no locale index.
+- Indexed directly on the localized Schema table. Non-localized Schemas have
+  no locale field or locale index.
 
 The boot/runtime split is the load-bearing change carried over from
 the POC's issue #60 fix (POC PR #71, plus the canonicalize follow-up
@@ -164,10 +164,18 @@ requiring the operator to do it manually.
 
 ### Canonicalization
 
-BCP 47 canonical form is **language case-folded, region uppercased**:
-`en-US`, `zh-TW`, `pt-BR`. The runtime accepts any case on input
-(`en-us`, `EN-US`, `en-US` all match) but stores and compares
-canonically.
+Mantle v0.1 accepts a narrow locale subset: **2/3-letter language,
+optionally followed by a 2-letter region**. Canonical form is language
+case-folded, region uppercased: `en-US`, `zh-TW`, `pt-BR`. The runtime
+accepts any case on input (`en-us`, `EN-US`, `en-US` all match) but
+stores and compares canonically.
+
+Script subtags are intentionally out of scope for v0.1 even though they
+are valid BCP 47. Do not configure `zh-Hant`, `zh-Hans`, `sr-Latn`, or
+`sr-Cyrl`; use the region form instead (`zh-TW` for Traditional
+Chinese, `zh-CN` for Simplified Chinese, and the relevant region tag for
+other languages). Widening to full BCP 47 requires URL routing,
+locale-negotiation, and matching semantics to grow together.
 
 - The URL-form locale (e.g. on a `/zh-tw/posts/...` path) is lowercased
   for cosmetics; the canonical storage form is `zh-TW`. Render-side
@@ -198,29 +206,35 @@ apiVersion: cms.mantle.aotter.net/v1
 kind: Schema
 metadata: { name: products }
 spec:
+  title: Products
+  localized: false
   schema:
+    type: object
     properties:
       slug: { type: string }
       sku:  { type: string }
       price: { type: number }
     required: [slug, sku, price]
-  unique: [slug]
+  uniqueIndexes: [[slug]]
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: Schema
 metadata: { name: product-translations }
 spec:
+  title: Product translations
   localized: true
   translates:
     parent: products
     on: slug
   schema:
+    type: object
     properties:
       slug: { type: string }
+      locale: { type: string }
       title: { type: string }
       description: { type: string }
-    required: [slug, title]
-  unique: [[slug, locale]]
+    required: [slug, locale, title]
+  uniqueIndexes: [[slug, locale]]
 ```
 
 `Schema.spec.translates` declares the parent/child relationship as
@@ -237,9 +251,6 @@ all treat the relation as known structure rather than convention:
 - Admin UI groups parent + per-locale translation entries together.
 - Boot validate enforces parent existence and join-field presence in
   both parent and child JSON Schemas (manifest shape, no D1 reads).
-- View executor (when `View.join` lands per the future-grammar
-  appendix) can auto-join parent + child without per-View
-  configuration.
 - AI authoring an entry against the child knows from the manifest
   that there's a parent it must reference by `slug`.
 
@@ -254,6 +265,8 @@ Validation rules introduced:
 - `TRANSLATES_REQUIRES_LOCALIZED` — `translates: ...` declared on a
   Schema where `localized` isn't `true`. (A non-localized translation
   table makes no sense.)
+- `TRANSLATES_REQUIRES_CONTENT_FIELD` — the child declares only its join
+  field and `locale`, with no locale-specific payload to translate.
 
 ## Consequences
 
@@ -297,10 +310,8 @@ Validation rules introduced:
   must resolve all Schema names before checking `translates.parent`
   references. The two-pass pattern (collect names → check references)
   handles this; it's just one more reference type.
-- **Index pattern adds DDL complexity.** Virtual generated columns +
-  partial unique indexes per Schema means the migration emitter
-  generates more SQL than before. Acceptable given the pattern is
-  already used by `Schema.spec.unique`.
+- **Index pattern adds DDL complexity.** Each localized native Schema table
+  needs its declared locale index. The migration artifact owns that SQL.
 - **Two places define "what locales exist."** Manifest declares
   `localized: true`; D1 declares which actual locales the site
   serves. The runtime gate reconciles them; if they drift, the gate
@@ -408,9 +419,10 @@ intent:
 When configuring a new consumer:
 
 1. If the site has any locales, declare them in
-   `CmsConfig.siteDefaults.locales` in the canonical BCP 47 form
-   (`'en'`, `'zh-TW'`, never `'en-US'` if you mean `'en'`). The boot
-   check rejects malformed tags synchronously.
+   `CmsConfig.siteDefaults.locales` in Mantle's canonical locale form
+   (`'en'`, `'zh-TW'`, never `'en-US'` if you mean `'en'`; never
+   `'zh-Hant'` if you mean Traditional Chinese — use `'zh-TW'`). The
+   boot check rejects malformed or unsupported tags synchronously.
 2. If the site has no locales, omit `siteDefaults.locales` entirely.
    The whole subsystem stays off.
 3. Don't write `site_config` rows manually for the seed —
@@ -430,8 +442,8 @@ for `createCmsRuntime().bootInit()` + `DatabaseSiteConfigRepository.seed`):
 - Grammar in `packages/mantle-spec/src/domain/model/ManifestGrammar.ts`
   + the manifest parser.
 - Cross-Schema validation in the validate + boot phases.
-- D1 schema: no `entries.locale` column; `data.locale` is the
-  authoritative storage; partial unique index per localized Schema.
+- D1 schema: no shared `entries.locale` column; each localized native Schema
+  table owns its `locale` field and declared index.
 - `site_config` key/value table with the `locales` key.
 - Runtime locale gate in `packages/mantle-runtime/src/domain/service/ContentLocaleGate.ts`.
 - `CmsConfig.siteDefaults` consumed by runtime `bootInit()`, with

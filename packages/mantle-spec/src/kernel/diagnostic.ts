@@ -1,7 +1,8 @@
 /**
  * Structured diagnostic shape — see ADR-0008. Used uniformly across
- * static validation, test harness, boot-time, and runtime feedback
- * loops.
+ * static validation, boot-time, and runtime feedback. The public `test`
+ * phase remains reserved for consumer-authored test diagnostics; Core's
+ * shipped performance harnesses emit purpose-shaped reports instead.
  *
  * Codes are unprefixed UPPER_SNAKE strings; the `phase` field
  * disambiguates which loop emitted each diagnostic. The same `code`
@@ -20,13 +21,18 @@ export type Phase = "validate" | "test" | "boot" | "runtime";
  * below are not raised by spec source — they live here because the
  * catalog is the public contract, not the union of what spec happens
  * to throw today. Adding a new code is a grammar-revise event
- * (ADR-0001 § Future grammar discipline).
+ * (ADR-0001).
  *
  * Single source of truth: the const array drives `DiagnosticCode`
- * (type) and `isDiagnosticCode` (guard), so adding a code is one
- * edit and `parseWireDiagnostic` stays in sync automatically.
+ * (type), so adding a code is one edit.
  */
 export const DIAGNOSTIC_CODES = [
+  "RESOURCE_EXHAUSTED",
+  "RESOURCE_UNAVAILABLE",
+  "RATE_LIMITED",
+  "OUTCOME_UNKNOWN",
+  "PARTIAL_FAILURE",
+  "PRECONDITION_FAILED",
   // Validate-only.
   "INVALID_MANIFEST_ENVELOPE",
   "DUPLICATE_NAME",
@@ -37,18 +43,34 @@ export const DIAGNOSTIC_CODES = [
   "VIEW_PARAMS_RESERVED_NAME",
   "VIEW_FILTER_PARAM_REF_UNKNOWN",
   "VIEW_FILTER_PARAM_REF_NOT_REQUIRED",
+  "VIEW_FILTER_CTX_USER_REF_INVALID",
+  "VIEW_FILTER_CTX_USER_REF_REQUIRES_AUTH",
+  "VIEW_FILTER_CTX_USER_REF_REQUIRES_INDEX",
+  "VIEW_ORDERBY_INVALID",
+  "VIEW_CACHE_INVALID",
+  "VIEW_UI_INVALID",
+  "REQUIRED_FIELD_UNKNOWN",
+  "INVALID_PATTERN",
+  "JSON_SCHEMA_UNSUPPORTED",
+  "JSON_SCHEMA_REF_INVALID",
+  "JSON_SCHEMA_LIMIT_EXCEEDED",
   "BIND_VALUE_NOT_IN_ENUM",
   "AUTH_PREDICATE_NOT_IN_ENUM",
+  "GUARD_PROCEDURE_UNKNOWN",
+  "GUARD_SELF_REFERENCE",
+  "GUARD_PROCEDURE_BUILTIN",
+  "GUARD_CHAIN_NOT_ALLOWED",
+  "SCHEMA_INDEX_INVALID",
+  "SCHEMA_INDEX_FIELD_UNKNOWN",
   "UNIQUE_INDEX_FIELD_UNKNOWN",
-  "DRAFT_KEY_USED",
-  // v0.1.x-committed keys present in v0.1.0 manifests are rejected
-  // with a code naming the feature (per ADR-0011 § "boot validator
-  // framing"), distinct from the speculative-DRAFT bucket.
-  "LIFECYCLE_NOT_IN_V010",
+  "SCHEMA_SEARCH_INVALID",
+  "SCHEMA_SEARCH_FIELD_UNKNOWN",
+  "SCHEMA_UI_INVALID",
   "HANDLER_BUILTIN_NOT_IN_V010",
   "MANIFEST_ROOT_NOT_FOUND",
   "MANIFEST_READ_FAILED",
-  // Test-harness only.
+  "CODEGEN_IDENTIFIER_COLLISION",
+  // Reserved for consumer-authored test diagnostics.
   "FIXTURE_SCHEMA_VIOLATION",
   // Cross-phase (validate / boot / runtime as applicable).
   "HANDLER_NOT_REGISTERED",
@@ -59,22 +81,25 @@ export const DIAGNOSTIC_CODES = [
   "PROCEDURE_NOT_FOUND",
   "NOT_FOUND",
   "METHOD_NOT_ALLOWED",
+  "VIEW_DIALECT_UNSUPPORTED",
   // Builtin handlers + lifecycle hooks: validate / boot.
   "BUILTIN_HANDLER_SCHEMA_UNKNOWN",
-  "BUILTIN_HANDLER_SCHEMA_NOT_EDITORIAL",
+  "BUILTIN_HANDLER_CONTRACT_INVALID",
   "LIFECYCLE_SCHEMA_UNKNOWN",
   "LIFECYCLE_HOOK_REJECTED",
   // Locale + translates: validate / boot.
   "SCHEMA_LOCALIZED_REQUIRES_SITE_LOCALES",
   "TRANSLATES_PARENT_UNKNOWN",
   "TRANSLATES_REQUIRES_LOCALIZED",
+  "TRANSLATES_REQUIRES_CONTENT_FIELD",
   "TRANSLATES_FIELD_NOT_IN_PARENT",
   "TRANSLATES_FIELD_NOT_IN_CHILD",
   "TRANSLATES_PARENT_IS_LOCALIZED",
-  // Runtime-only (and test harness when the dispatcher reports them).
+  // Runtime-only. Consumer tests may preserve or restamp the phase.
   "INPUT_VALIDATION_FAILED",
   "UNAUTHENTICATED",
   "AUTH_DENIED",
+  "ENTITLEMENT_REQUIRED",
   "CONFLICT",
   "DISPATCHER_NOT_BUILT",
   "INTERNAL_ERROR",
@@ -91,16 +116,32 @@ export const DIAGNOSTIC_CODES = [
   "MEDIA_SVG_REJECTED",
   "MEDIA_CHECKSUM_MISMATCH",
   "MEDIA_PURPOSE_REJECTED",
-  // Mantle agent-memory layer (ADR-0016). Validate-time CLI check
-  // gates deploy until the install agent's Mantle subagent has
-  // written the 5-card welcome letter into mantle/site.md.
-  "MANTLE_LETTER_NOT_WRITTEN",
+  "MEDIA_VARIANTS_INCOMPLETE",
+  "MEDIA_VARIANT_SIZE_EXCEEDED",
+  "MEDIA_VARIANTS_SUSPICIOUS_SIZE",
+  "MEDIA_ASSET_NOT_FOUND",
 ] as const;
 
 export type DiagnosticCode = (typeof DIAGNOSTIC_CODES)[number];
 
-export function isDiagnosticCode(s: string): s is DiagnosticCode {
-  return (DIAGNOSTIC_CODES as readonly string[]).includes(s);
+export interface SourcePosition {
+  readonly line: number;
+  readonly column: number;
+  readonly offset: number;
+}
+
+export interface SourceSpan {
+  readonly start: SourcePosition;
+  readonly end: SourcePosition;
+}
+
+/** Authored location retained independently from a rendered diagnostic path. */
+export interface SourceLocation {
+  readonly sourceId: string;
+  readonly documentIndex: number;
+  /** JSON Pointer inside the YAML document. */
+  readonly path: string;
+  readonly span?: SourceSpan;
 }
 
 export interface Diagnostic {
@@ -108,11 +149,18 @@ export interface Diagnostic {
   readonly phase: Phase;
   readonly severity: "error" | "warning";
   readonly path: string;
+  readonly source?: SourceLocation;
   readonly value?: unknown;
   readonly expected?: string;
   readonly candidates?: readonly string[];
   readonly suggestion?: string;
   readonly message: string;
+  /** Safe effect/retry facts supplied by a port; never provider payloads. */
+  readonly failure?: {
+    readonly outcome: "not-applied" | "partial" | "unknown";
+    readonly retry: "never" | "after-change" | "safe" | "reconcile";
+    readonly resource?: string;
+  };
 }
 
 /**
@@ -124,13 +172,20 @@ export interface Diagnostic {
  * Narrowed to a status-literal union so adding a code with a status
  * outside the v0.1 set fails compile.
  */
-export type RuntimeHttpStatus = 400 | 401 | 403 | 404 | 405 | 409 | 410 | 500 | 501;
+export type RuntimeHttpStatus = 400 | 401 | 402 | 403 | 404 | 405 | 409 | 410 | 412 | 429 | 500 | 501 | 503 | 507;
 
 export const HTTP_STATUS_BY_CODE: Readonly<Partial<Record<DiagnosticCode, RuntimeHttpStatus>>> = {
+  RESOURCE_EXHAUSTED: 507,
+  RESOURCE_UNAVAILABLE: 503,
+  RATE_LIMITED: 429,
+  OUTCOME_UNKNOWN: 503,
+  PARTIAL_FAILURE: 503,
+  PRECONDITION_FAILED: 412,
   INPUT_VALIDATION_FAILED: 400,
   INVALID_LOCALE: 400,
   UNAUTHENTICATED: 401,
   AUTH_DENIED: 403,
+  ENTITLEMENT_REQUIRED: 402,
   NOT_FOUND: 404,
   METHOD_NOT_ALLOWED: 405,
   CONFLICT: 409,
@@ -152,6 +207,10 @@ export const HTTP_STATUS_BY_CODE: Readonly<Partial<Record<DiagnosticCode, Runtim
   MEDIA_SVG_REJECTED: 400,
   MEDIA_CHECKSUM_MISMATCH: 409,
   MEDIA_PURPOSE_REJECTED: 400,
+  MEDIA_VARIANTS_INCOMPLETE: 400,
+  MEDIA_VARIANT_SIZE_EXCEEDED: 400,
+  MEDIA_VARIANTS_SUSPICIOUS_SIZE: 400,
+  MEDIA_ASSET_NOT_FOUND: 404,
 };
 
 /** Resolve a Diagnostic's HTTP status for wire egress; unknown codes
@@ -162,14 +221,13 @@ export function httpStatusFor(d: Diagnostic): RuntimeHttpStatus {
 }
 
 /**
- * Build a Diagnostic with a derived `message`. Call sites populate
- * the structured fields; `message` is generated from them so prose
- * cannot drift from structure.
+ * Build a Diagnostic with a derived default `message`. Call sites may supply
+ * contextual prose, but the structured fields remain authoritative.
  */
 export function makeDiagnostic(
   input: Omit<Diagnostic, "message"> & { message?: string },
 ): Diagnostic {
-  const { code, phase, severity, path, value, expected, candidates, suggestion } = input;
+  const { code, phase, severity, path, source, value, expected, candidates, suggestion } = input;
   let msg = input.message;
   if (!msg) {
     const parts: string[] = [`[${phase}/${code}] at ${path}`];
@@ -178,19 +236,26 @@ export function makeDiagnostic(
     if (suggestion) parts.push(`(did you mean ${suggestion}?)`);
     msg = parts.join("; ");
   }
-  return { code, phase, severity, path, value, expected, candidates, suggestion, message: msg };
+  return {
+    code,
+    phase,
+    severity,
+    path,
+    ...(source ? { source } : {}),
+    value,
+    expected,
+    candidates,
+    suggestion,
+    message: msg,
+    ...(input.failure ? { failure: input.failure } : {}),
+  };
 }
 
 /** Phase-stamping helpers — equivalent to `makeDiagnostic({...input, phase})`
- *  but read cleaner at call sites.
- *
- *  `testDiagnostic` ships with no spec-side caller today — the test
- *  harness referenced in ADR-0007 is the planned consumer; `phase: "test"`
- *  is part of the public Diagnostic contract per ADR-0008 regardless of
- *  whether spec emits it directly. Don't drop the helper or the phase
- *  value before the harness lands. */
+ *  but read cleaner at call sites. `phase: "test"` has no Core helper because
+ *  the shipped performance harnesses emit purpose-shaped reports; the phase
+ *  remains part of the public Diagnostic contract for consumer tests. */
 export const validateDiagnostic = (input: PhaselessInput): Diagnostic => makeDiagnostic({ ...input, phase: "validate" });
-export const testDiagnostic = (input: PhaselessInput): Diagnostic => makeDiagnostic({ ...input, phase: "test" });
 export const bootDiagnostic = (input: PhaselessInput): Diagnostic => makeDiagnostic({ ...input, phase: "boot" });
 export const runtimeDiagnostic = (input: PhaselessInput): Diagnostic => makeDiagnostic({ ...input, phase: "runtime" });
 
@@ -219,10 +284,10 @@ function formatValue(v: unknown): string {
  */
 export class DiagnosticError extends Error {
   readonly diagnostics: readonly Diagnostic[];
-  constructor(diagnostic: Diagnostic | readonly Diagnostic[]) {
+  constructor(diagnostic: Diagnostic | readonly Diagnostic[], options?: ErrorOptions) {
     const list = Array.isArray(diagnostic) ? diagnostic : [diagnostic as Diagnostic];
     const head = list[0];
-    super(head ? head.message : "DiagnosticError");
+    super(head ? head.message : "DiagnosticError", options);
     this.name = "DiagnosticError";
     this.diagnostics = list;
   }
@@ -245,36 +310,6 @@ export function redactForWire(d: Diagnostic): Diagnostic {
   if (d.candidates === undefined) return d;
   const { candidates: _omit, ...rest } = d;
   return rest;
-}
-
-/**
- * Inverse of `redactForWire`: tolerantly parse a JSON string into a
- * Diagnostic, returning `null` on anything that isn't a Diagnostic
- * (non-JSON, missing required fields, etc.). Intended for consumers
- * receiving HTTP error bodies — runtime egress, MCP `error.data`,
- * any future SDK adapter.
- */
-export function parseWireDiagnostic(text: string): Diagnostic | null {
-  if (!text) return null;
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch {
-    return null;
-  }
-  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const parsed = raw as Record<string, unknown>;
-  const code = parsed["code"];
-  if (typeof code !== "string" || !isDiagnosticCode(code)) return null;
-  if (typeof parsed["message"] !== "string") return null;
-  if (typeof parsed["path"] !== "string") return null;
-  const phase = parsed["phase"];
-  if (phase !== "validate" && phase !== "test" && phase !== "boot" && phase !== "runtime") {
-    return null;
-  }
-  const severity = parsed["severity"];
-  if (severity !== "error" && severity !== "warning") return null;
-  return parsed as unknown as Diagnostic;
 }
 
 /**

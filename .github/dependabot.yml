@@ -8,6 +8,21 @@ updates:
     open-pull-requests-limit: 8
     labels:
       - dependencies
+    # Supply-chain buffer: dependabot skips releases newer than the
+    # cooldown window, letting the npm community surface attacks /
+    # serious regressions before our bots react. 14 days is the
+    # default; majors get 21 days because the blast radius is bigger
+    # and bad major releases tend to be discovered slower.
+    #
+    # We don't carve out per-package exceptions yet — every dep on
+    # this list (hono, zod, better-auth, etc.) sees the same buffer.
+    # If a critical CVE lands inside the cooldown window, the manual
+    # path is `gh workflow run` of the dependabot rebase or a
+    # one-off `pnpm up` PR; cooldown is for the steady-state churn,
+    # not emergencies.
+    cooldown:
+      default-days: 14
+      semver-major-days: 21
     groups:
       typescript-toolchain:
         patterns:
@@ -54,6 +69,13 @@ updates:
     labels:
       - area:ci
       - dependencies
+    # github-actions ecosystem does NOT accept `semver-major-days` —
+    # GitHub's dependabot config validator rejects it. Only the
+    # `default-days` key is supported here. The npm block above uses
+    # the full pair (default + semver-major) since both keys are
+    # supported there.
+    cooldown:
+      default-days: 14
     groups:
       actions:
         patterns: ["*"]

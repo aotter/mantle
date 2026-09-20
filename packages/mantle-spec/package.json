@@ -1,9 +1,9 @@
 {
   "name": "@aotter/mantle-spec",
-  "version": "0.0.11-alpha.13",
+  "version": "0.1.2-rc.1",
   "description": "Spec engine for mantle: types + manifest YAML parse + validate + diagnostics + JSON-Schema → zod converter + CLI. Zero env / adapter deps.",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/aotter/mantle/tree/develop/packages/mantle-spec",
+  "homepage": "https://mantle.tools/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/aotter/mantle.git",
@@ -19,12 +19,16 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "mantle": "./dist/infrastructure/cli/MantleCli.js"
+    "mantle-spec": "./dist/infrastructure/cli/MantleCli.js"
   },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./dist/infrastructure/cli/index.d.ts",
+      "import": "./dist/infrastructure/cli/index.js"
     }
   },
   "files": [
@@ -41,12 +45,12 @@
     "yaml": "^2.9.0"
   },
   "peerDependencies": {
-    "zod": "^4.0.0"
+    "zod": "catalog:peer"
   },
   "devDependencies": {
-    "@types/node": "^25",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.6",
-    "zod": "^4.4.2"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
   }
 }

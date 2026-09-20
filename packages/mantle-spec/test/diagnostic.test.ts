@@ -6,11 +6,9 @@ import {
   httpStatusFor,
   HTTP_STATUS_BY_CODE,
   makeDiagnostic,
-  parseWireDiagnostic,
   readJsonPointer,
   redactForWire,
   runtimeDiagnostic,
-  testDiagnostic,
   validateDiagnostic,
 } from "../src/kernel/diagnostic.js";
 
@@ -43,15 +41,6 @@ describe("phase-tagging helpers", () => {
       path: "/body/email",
     });
     expect(d.phase).toBe("runtime");
-  });
-
-  it("testDiagnostic stamps phase: 'test'", () => {
-    const d = testDiagnostic({
-      code: "FIXTURE_SCHEMA_VIOLATION",
-      severity: "error",
-      path: "/fixtures/0/data",
-    });
-    expect(d.phase).toBe("test");
   });
 });
 
@@ -162,63 +151,6 @@ describe("redactForWire", () => {
       path: "/entries/missing",
     });
     expect(redactForWire(d)).toBe(d);
-  });
-});
-
-describe("parseWireDiagnostic", () => {
-  it("roundtrips via JSON.stringify ↔ parseWireDiagnostic", () => {
-    const d = redactForWire(
-      runtimeDiagnostic({
-        code: "INPUT_VALIDATION_FAILED",
-        severity: "error",
-        path: "/body/email",
-      }),
-    );
-    const text = JSON.stringify(d);
-    const back = parseWireDiagnostic(text);
-    expect(back).not.toBeNull();
-    expect(back!.code).toBe("INPUT_VALIDATION_FAILED");
-    expect(back!.phase).toBe("runtime");
-    expect(back!.path).toBe("/body/email");
-  });
-
-  it("returns null on non-JSON", () => {
-    expect(parseWireDiagnostic("not json")).toBeNull();
-    expect(parseWireDiagnostic("")).toBeNull();
-  });
-
-  it("returns null on JSON missing required fields", () => {
-    expect(parseWireDiagnostic('{"code":"X"}')).toBeNull();
-    expect(parseWireDiagnostic('{"code":"X","message":"m","path":"/"}')).toBeNull();
-    expect(
-      parseWireDiagnostic('{"code":"X","message":"m","path":"/","phase":"bogus","severity":"error"}'),
-    ).toBeNull();
-    expect(
-      parseWireDiagnostic('{"code":"X","message":"m","path":"/","phase":"runtime","severity":"meh"}'),
-    ).toBeNull();
-  });
-
-  it("returns null on JSON primitives (does not crash on null/array/number/string)", () => {
-    // Regression: typeof null === "object" but null["code"] throws.
-    // Covers HTTP error bodies that come back as a bare null / array /
-    // number; the function must tolerate any JSON.parse-able input.
-    expect(parseWireDiagnostic("null")).toBeNull();
-    expect(parseWireDiagnostic("[]")).toBeNull();
-    expect(parseWireDiagnostic('["code","X"]')).toBeNull();
-    expect(parseWireDiagnostic("42")).toBeNull();
-    expect(parseWireDiagnostic('"a string"')).toBeNull();
-    expect(parseWireDiagnostic("true")).toBeNull();
-  });
-
-  it("returns null when code is not in DIAGNOSTIC_CODES", () => {
-    // Wire-level safety: a misbehaving peer cannot smuggle an unknown
-    // code through the closed catalog by sending a JSON body with all
-    // other fields shaped correctly.
-    expect(
-      parseWireDiagnostic(
-        '{"code":"MADE_UP_CODE","message":"m","path":"/","phase":"runtime","severity":"error"}',
-      ),
-    ).toBeNull();
   });
 });
 

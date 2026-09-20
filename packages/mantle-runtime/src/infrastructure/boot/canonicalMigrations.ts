@@ -1,59 +1,18 @@
 import type { Migration } from "../../domain/port/DatabaseDriver.js";
 
 /**
- * Canonical migration list — the runtime owns the schema; adapters
- * just execute. `id` strings are stable forever; the `_migrations`
- * tracking table makes subsequent boots idempotent. Append-only from
- * v0.1.0 onwards.
+ * SQLite infrastructure migrations. Schema content tables are compiled from
+ * the RuntimePlan and intentionally live outside this list. This is the
+ * pre-beta native-table baseline; once released, migration ids are append-only.
  */
 export const CANONICAL_MIGRATIONS: readonly Migration[] = [
   {
     id: "0001-init",
     description:
-      "v0.1.0 schema: entries / revisions / approvals / site_config + Better Auth tables (ADR-0014)",
+      "v0.1.0 infrastructure: site_config + Better Auth tables (ADR-0014)",
     // SQLite: Better Auth serializes Date → ISO 8601 string and
     // boolean → 0/1, so date columns are TEXT and booleans INTEGER.
     sql: `
-      CREATE TABLE IF NOT EXISTS entries (
-        id          TEXT PRIMARY KEY,
-        collection  TEXT NOT NULL,
-        status      TEXT NOT NULL,
-        version     INTEGER NOT NULL DEFAULT 1,
-        data        TEXT NOT NULL,
-        author_id   TEXT,
-        created_at  INTEGER NOT NULL,
-        updated_at  INTEGER NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS entries_by_collection_updated
-        ON entries (collection, updated_at DESC);
-      CREATE INDEX IF NOT EXISTS entries_by_collection_status
-        ON entries (collection, status);
-
-      CREATE TABLE IF NOT EXISTS revisions (
-        id          TEXT PRIMARY KEY,
-        entry_id    TEXT NOT NULL,
-        version     INTEGER NOT NULL,
-        data        TEXT NOT NULL,
-        created_at  INTEGER NOT NULL,
-        author_id   TEXT,
-        note        TEXT
-      );
-      CREATE INDEX IF NOT EXISTS revisions_by_entry_version
-        ON revisions (entry_id, version DESC);
-
-      CREATE TABLE IF NOT EXISTS approvals (
-        id            TEXT PRIMARY KEY,
-        entry_id      TEXT NOT NULL,
-        requested_by  TEXT NOT NULL,
-        requested_at  INTEGER NOT NULL,
-        note          TEXT,
-        status        TEXT NOT NULL,
-        resolved_by   TEXT,
-        resolved_at   INTEGER
-      );
-      CREATE INDEX IF NOT EXISTS approvals_by_entry
-        ON approvals (entry_id);
-
       CREATE TABLE IF NOT EXISTS site_config (
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL
@@ -92,6 +51,7 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
 
       CREATE TABLE IF NOT EXISTS account (
         id                       TEXT PRIMARY KEY NOT NULL,
+        issuer                   TEXT NOT NULL,
         accountId                TEXT NOT NULL,
         providerId               TEXT NOT NULL,
         userId                   TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
@@ -103,7 +63,8 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
         scope                    TEXT,
         password                 TEXT,
         createdAt                TEXT NOT NULL,
-        updatedAt                TEXT NOT NULL
+        updatedAt                TEXT NOT NULL,
+        UNIQUE (issuer, accountId)
       );
       CREATE INDEX IF NOT EXISTS account_userId_idx ON account (userId);
 
@@ -117,48 +78,206 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
       );
       CREATE INDEX IF NOT EXISTS verification_identifier_idx ON verification (identifier);
 
-      CREATE TABLE IF NOT EXISTS oauthApplication (
-        id            TEXT PRIMARY KEY NOT NULL,
-        name          TEXT NOT NULL,
-        icon          TEXT,
-        metadata      TEXT,
-        clientId      TEXT NOT NULL UNIQUE,
-        clientSecret  TEXT,
-        redirectUrls  TEXT NOT NULL,
-        type          TEXT NOT NULL,
-        disabled      INTEGER DEFAULT 0,
-        userId        TEXT REFERENCES user(id) ON DELETE CASCADE,
-        createdAt     TEXT NOT NULL,
-        updatedAt     TEXT NOT NULL
+      CREATE TABLE IF NOT EXISTS jwks (
+        id         TEXT PRIMARY KEY NOT NULL,
+        publicKey  TEXT NOT NULL,
+        privateKey TEXT NOT NULL,
+        createdAt  TEXT NOT NULL,
+        expiresAt  TEXT,
+        alg        TEXT,
+        crv        TEXT
       );
-      CREATE INDEX IF NOT EXISTS oauthApplication_userId_idx ON oauthApplication (userId);
+
+      CREATE TABLE IF NOT EXISTS oauthClient (
+        id                               TEXT PRIMARY KEY NOT NULL,
+        clientId                         TEXT NOT NULL UNIQUE,
+        clientSecret                     TEXT,
+        clientDiscoveryId                TEXT,
+        disabled                         INTEGER DEFAULT 0,
+        skipConsent                      INTEGER,
+        enableEndSession                 INTEGER,
+        subjectType                      TEXT,
+        scopes                           TEXT,
+        clientCredentialsScopes          TEXT DEFAULT '[]',
+        userId                           TEXT REFERENCES user(id) ON DELETE CASCADE,
+        createdAt                        TEXT,
+        updatedAt                        TEXT,
+        name                             TEXT,
+        uri                              TEXT,
+        icon                             TEXT,
+        contacts                         TEXT,
+        tos                              TEXT,
+        policy                           TEXT,
+        softwareId                       TEXT,
+        softwareVersion                  TEXT,
+        softwareStatement                TEXT,
+        redirectUris                     TEXT NOT NULL,
+        postLogoutRedirectUris           TEXT,
+        backchannelLogoutUri             TEXT,
+        backchannelLogoutSessionRequired INTEGER,
+        tokenEndpointAuthMethod          TEXT,
+        applicationType                  TEXT,
+        jwks                             TEXT,
+        jwksUri                          TEXT,
+        grantTypes                       TEXT,
+        responseTypes                    TEXT,
+        requirePKCE                      INTEGER,
+        dpopBoundAccessTokens            INTEGER DEFAULT 0,
+        referenceId                      TEXT,
+        metadata                         TEXT
+      );
+      CREATE INDEX IF NOT EXISTS oauthClient_userId_idx ON oauthClient (userId);
+
+      CREATE TABLE IF NOT EXISTS oauthResource (
+        id                              TEXT PRIMARY KEY NOT NULL,
+        identifier                      TEXT NOT NULL UNIQUE,
+        name                            TEXT NOT NULL,
+        accessTokenTtl                  INTEGER,
+        refreshTokenTtl                 INTEGER,
+        signingAlgorithm                TEXT,
+        signingKeyId                    TEXT,
+        allowedScopes                   TEXT,
+        customClaims                    TEXT,
+        dpopBoundAccessTokensRequired   INTEGER DEFAULT 0,
+        disabled                        INTEGER DEFAULT 0,
+        createdAt                       TEXT,
+        updatedAt                       TEXT,
+        policyVersion                   INTEGER DEFAULT 1,
+        metadata                        TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS oauthClientResource (
+        id         TEXT PRIMARY KEY NOT NULL,
+        clientId   TEXT NOT NULL REFERENCES oauthClient(clientId) ON DELETE CASCADE,
+        resourceId TEXT NOT NULL REFERENCES oauthResource(identifier) ON DELETE CASCADE,
+        metadata   TEXT,
+        createdAt  TEXT,
+        UNIQUE (clientId, resourceId)
+      );
+      CREATE INDEX IF NOT EXISTS oauthClientResource_clientId_idx
+        ON oauthClientResource (clientId);
+      CREATE INDEX IF NOT EXISTS oauthClientResource_resourceId_idx
+        ON oauthClientResource (resourceId);
+
+      CREATE TABLE IF NOT EXISTS oauthRefreshToken (
+        id                    TEXT PRIMARY KEY NOT NULL,
+        token                 TEXT NOT NULL UNIQUE,
+        clientId              TEXT NOT NULL REFERENCES oauthClient(clientId) ON DELETE CASCADE,
+        sessionId             TEXT REFERENCES session(id) ON DELETE SET NULL,
+        userId                TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+        referenceId           TEXT,
+        authorizationCodeId   TEXT,
+        resources             TEXT,
+        requestedUserInfoClaims TEXT,
+        expiresAt             TEXT NOT NULL,
+        createdAt             TEXT NOT NULL,
+        revoked               TEXT,
+        rotatedAt             TEXT,
+        rotationReplayResponse TEXT,
+        rotationReplayExpiresAt TEXT,
+        authTime              TEXT,
+        confirmation          TEXT,
+        scopes                TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS oauthRefreshToken_clientId_idx ON oauthRefreshToken (clientId);
+      CREATE INDEX IF NOT EXISTS oauthRefreshToken_sessionId_idx ON oauthRefreshToken (sessionId);
+      CREATE INDEX IF NOT EXISTS oauthRefreshToken_userId_idx ON oauthRefreshToken (userId);
+      CREATE INDEX IF NOT EXISTS oauthRefreshToken_authorizationCodeId_idx
+        ON oauthRefreshToken (authorizationCodeId);
 
       CREATE TABLE IF NOT EXISTS oauthAccessToken (
-        id                     TEXT PRIMARY KEY NOT NULL,
-        accessToken            TEXT NOT NULL UNIQUE,
-        refreshToken           TEXT NOT NULL UNIQUE,
-        accessTokenExpiresAt   TEXT NOT NULL,
-        refreshTokenExpiresAt  TEXT NOT NULL,
-        clientId               TEXT NOT NULL REFERENCES oauthApplication(clientId) ON DELETE CASCADE,
-        userId                 TEXT REFERENCES user(id) ON DELETE CASCADE,
-        scopes                 TEXT NOT NULL,
-        createdAt              TEXT NOT NULL,
-        updatedAt              TEXT NOT NULL
+        id                      TEXT PRIMARY KEY NOT NULL,
+        token                   TEXT NOT NULL UNIQUE,
+        clientId                TEXT NOT NULL REFERENCES oauthClient(clientId) ON DELETE CASCADE,
+        sessionId               TEXT REFERENCES session(id) ON DELETE SET NULL,
+        userId                  TEXT REFERENCES user(id) ON DELETE CASCADE,
+        referenceId             TEXT,
+        authorizationCodeId     TEXT,
+        resources               TEXT,
+        requestedUserInfoClaims TEXT,
+        refreshId               TEXT REFERENCES oauthRefreshToken(id) ON DELETE CASCADE,
+        expiresAt               TEXT NOT NULL,
+        createdAt               TEXT NOT NULL,
+        revoked                 TEXT,
+        confirmation            TEXT,
+        scopes                  TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS oauthAccessToken_clientId_idx ON oauthAccessToken (clientId);
+      CREATE INDEX IF NOT EXISTS oauthAccessToken_sessionId_idx ON oauthAccessToken (sessionId);
       CREATE INDEX IF NOT EXISTS oauthAccessToken_userId_idx ON oauthAccessToken (userId);
+      CREATE INDEX IF NOT EXISTS oauthAccessToken_refreshId_idx ON oauthAccessToken (refreshId);
+      CREATE INDEX IF NOT EXISTS oauthAccessToken_authorizationCodeId_idx
+        ON oauthAccessToken (authorizationCodeId);
 
       CREATE TABLE IF NOT EXISTS oauthConsent (
-        id           TEXT PRIMARY KEY NOT NULL,
-        clientId     TEXT NOT NULL REFERENCES oauthApplication(clientId) ON DELETE CASCADE,
-        userId       TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
-        scopes       TEXT NOT NULL,
-        createdAt    TEXT NOT NULL,
-        updatedAt    TEXT NOT NULL,
-        consentGiven INTEGER NOT NULL
+        id                      TEXT PRIMARY KEY NOT NULL,
+        clientId                TEXT NOT NULL REFERENCES oauthClient(clientId) ON DELETE CASCADE,
+        userId                  TEXT REFERENCES user(id) ON DELETE CASCADE,
+        referenceId             TEXT,
+        resources               TEXT,
+        requestedUserInfoClaims TEXT,
+        scopes                  TEXT NOT NULL,
+        createdAt               TEXT NOT NULL,
+        updatedAt               TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS oauthConsent_clientId_idx ON oauthConsent (clientId);
       CREATE INDEX IF NOT EXISTS oauthConsent_userId_idx ON oauthConsent (userId);
+
+      CREATE TABLE IF NOT EXISTS oauthClientAssertion (
+        id        TEXT PRIMARY KEY NOT NULL,
+        expiresAt TEXT NOT NULL
+      );
+    `,
+  },
+  {
+    id: "0002-media-assets",
+    description:
+      "media_assets table — committed MediaAsset rows for #272 multi-variant uploads. Entry data references rows by id (x-mantle-ref: media_assets); runtime.media.resolve materialises the variants set at render time.",
+    sql: `
+      CREATE TABLE IF NOT EXISTS media_assets (
+        id          TEXT PRIMARY KEY,
+        created_at  INTEGER NOT NULL,
+        owner_id    TEXT,
+        alt         TEXT,
+        caption     TEXT,
+        variants    TEXT NOT NULL,
+        metadata    TEXT
+      );
+      CREATE INDEX IF NOT EXISTS media_assets_by_owner_created
+        ON media_assets (owner_id, created_at DESC);
+    `,
+  },
+  {
+    id: "0003-pending-media-uploads",
+    description:
+      "Strongly-consistent create-to-commit media upload state; Workers KV remains derivative-only",
+    sql: `
+      CREATE TABLE IF NOT EXISTS pending_media_uploads (
+        id          TEXT PRIMARY KEY,
+        record      TEXT NOT NULL,
+        expires_at  INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS pending_media_uploads_expires_at
+        ON pending_media_uploads (expires_at);
+    `,
+  },
+  {
+    id: "0004-native-schema-storage",
+    description: "Track the prepared RuntimePlan and native Schema-table storage",
+    sql: `
+      CREATE TABLE IF NOT EXISTS _mantle_boot_state (
+        id          TEXT PRIMARY KEY NOT NULL,
+        fingerprint TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS _mantle_schema_tables (
+        name       TEXT PRIMARY KEY NOT NULL,
+        projection TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS _mantle_storage_state (
+        id          INTEGER PRIMARY KEY CHECK (id = 1),
+        fingerprint TEXT NOT NULL
+      );
     `,
   },
 ];

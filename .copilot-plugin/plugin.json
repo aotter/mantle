@@ -1,0 +1,19 @@
+{
+  "name": "mantle",
+  "description": "Build and embed Mantle applications with version-matched Core skills and deterministic examples.",
+  "version": "0.1.2-rc.1",
+  "author": {
+    "name": "Aotter"
+  },
+  "homepage": "https://mantle.tools/",
+  "repository": "https://github.com/aotter/mantle",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mantle",
+    "cms",
+    "agent-skills",
+    "marketplace",
+    "sdk"
+  ],
+  "skills": "./skills/"
+}

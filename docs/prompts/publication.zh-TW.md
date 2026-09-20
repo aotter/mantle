@@ -1,1 +1,0 @@
-用 https://raw.githubusercontent.com/aotter/mantle/{template_ref}/skills/install/SKILL.md 跟 https://raw.githubusercontent.com/aotter/mantle/{template_ref}/skills/install/archetypes/publication.md 架設：Publication 網站。

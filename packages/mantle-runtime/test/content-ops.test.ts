@@ -11,10 +11,12 @@ import {
   UpdateDraftUseCase,
 } from "../src/usecase/content/index.js";
 import type { Clock } from "../src/domain/port/Clock.js";
-import type { EntryRepository } from "../src/domain/port/EntryRepository.js";
+import type {
+  EntryRepository,
+  ListEntriesResult,
+} from "../src/domain/port/EntryRepository.js";
 import type { IdGenerator } from "../src/domain/port/IdGenerator.js";
 import type { SiteConfigRepository } from "../src/domain/port/SiteConfigRepository.js";
-import type { ListEntriesResponse } from "../src/usecase/dto/content/index.js";
 import { EntryVersionConflict, type EntryRow } from "../src/domain/model/EntryRow.js";
 import { InMemoryEntryRepository } from "./fakes/in-memory-store.js";
 import { postsSchema } from "./fakes/manifests.js";
@@ -69,10 +71,10 @@ function harness(opts: {
     updateDraft: new UpdateDraftUseCase(store, schemas, clock, opts.siteConfig),
     getEntry: new GetEntryUseCase(store),
     listEntries: new ListEntriesUseCase(store, schemas),
-    requestPublish: new RequestPublishUseCase(store, schemas, clock, undefined, opts.siteConfig),
+    requestPublish: new RequestPublishUseCase(store, schemas, clock, opts.siteConfig),
     unpublish: new UnpublishUseCase(store, schemas, clock),
     archive: new ArchiveUseCase(store, schemas, clock),
-    deleteEntry: new DeleteEntryUseCase(store),
+    deleteEntry: new DeleteEntryUseCase(store, schemas),
   };
 }
 
@@ -87,7 +89,7 @@ describe("CreateDraftUseCase", () => {
     expect(row.status).toBe("draft");
     expect(row.version).toBe(1);
     expect(row.data).toEqual({ title: "Hello" });
-    expect(await h.store.get(row.id)).toEqual(row);
+    expect(await h.store.get({ id: row.id, collection: row.collection })).toEqual(row);
   });
 
   it("rejects an unknown collection with NOT_FOUND", async () => {
@@ -95,6 +97,113 @@ describe("CreateDraftUseCase", () => {
     await expect(
       h.createDraft.execute({ collection: "ghost", data: {}, authorId: null }),
     ).rejects.toBeInstanceOf(DiagnosticError);
+  });
+
+  it("saves an incomplete draft but blocks publishing it (required enforced at publish)", async () => {
+    const h = harness(); // postsSchema requires `title`
+    // Empty draft is allowed — a work-in-progress entry with `title` blank.
+    const row = await h.createDraft.execute({
+      collection: "posts",
+      data: {},
+      authorId: "user-1",
+    });
+    expect(row.status).toBe("draft");
+    expect(row.data).toEqual({});
+    // Publishing re-validates in full: the missing required field bites here.
+    await expect(h.requestPublish.execute({ id: row.id, collection: row.collection })).rejects.toMatchObject({
+      diagnostic: { code: "INPUT_VALIDATION_FAILED", path: "/title" },
+    });
+  });
+
+  it("still type-checks present fields on an incomplete draft", async () => {
+    const h = harness();
+    // partial drops `required`, not type-safety: a wrong-typed value is rejected.
+    await expect(
+      h.createDraft.execute({
+        collection: "posts",
+        data: { title: 123 },
+        authorId: null,
+      }),
+    ).rejects.toMatchObject({
+      diagnostic: { code: "INPUT_VALIDATION_FAILED", path: "/title" },
+    });
+  });
+
+  describe("lifecycle: operational (operational records)", () => {
+    const operationalSchema = () => {
+      const base = postsSchema();
+      return { ...base, spec: { ...base.spec, lifecycle: "operational" as const } };
+    };
+    const noneHarness = () => {
+      const schema = operationalSchema();
+      return harness({ schemas: new Map([[schema.metadata.name, schema]]) });
+    };
+
+    it("creates entries live (published) — no draft step", async () => {
+      const h = noneHarness();
+      const row = await h.createDraft.execute({
+        collection: "posts",
+        data: { title: "op-record" },
+        authorId: null,
+      });
+      expect(row.status).toBe("published");
+    });
+
+    it("requires complete data because operational records are live immediately", async () => {
+      const h = noneHarness();
+      await expect(
+        h.createDraft.execute({
+          collection: "posts",
+          data: {},
+          authorId: null,
+        }),
+      ).rejects.toMatchObject({
+        diagnostic: { code: "INPUT_VALIDATION_FAILED", path: "/title" },
+      });
+    });
+
+    it("updates in place regardless of status", async () => {
+      const h = noneHarness();
+      const row = await h.createDraft.execute({
+        collection: "posts",
+        data: { title: "before" },
+        authorId: null,
+      });
+      const updated = await h.updateDraft.execute({
+        id: row.id,
+        collection: row.collection,
+        expectedVersion: row.version,
+        data: { title: "after" },
+      });
+      expect(updated.data["title"]).toBe("after");
+      expect(updated.status).toBe("published");
+    });
+
+    it("rejects publish/unpublish — no content transitions exist", async () => {
+      const h = noneHarness();
+      const row = await h.createDraft.execute({
+        collection: "posts",
+        data: { title: "op-record" },
+        authorId: null,
+      });
+      await expect(h.requestPublish.execute({ id: row.id, collection: row.collection })).rejects.toMatchObject({
+        diagnostic: { code: "CONFLICT" },
+      });
+      await expect(h.unpublish.execute({ id: row.id, collection: row.collection })).rejects.toMatchObject({
+        diagnostic: { code: "CONFLICT" },
+      });
+    });
+
+    it("deletes published operational records without an impossible unpublish step", async () => {
+      const h = noneHarness();
+      const row = await h.createDraft.execute({
+        collection: "posts",
+        data: { title: "op-record" },
+        authorId: null,
+      });
+      await expect(h.deleteEntry.execute({ id: row.id, collection: row.collection })).resolves.toEqual({ removed: true });
+      expect(await h.store.get({ id: row.id, collection: row.collection })).toBeNull();
+    });
   });
 
   it("strips reserved metadata keys from caller-supplied data", async () => {
@@ -185,7 +294,7 @@ describe("CreateDraftUseCase", () => {
           },
           required: ["name", "email", "message"],
         },
-        lifecycle: "simple",
+        lifecycle: "publishing",
       },
     };
     const h = harness({ schemas: new Map([[schema.metadata.name, schema]]) });
@@ -251,7 +360,7 @@ describe("CreateDraftUseCase", () => {
           },
           required: ["slug", "locale", "title", "body"],
         },
-        lifecycle: "simple",
+        lifecycle: "publishing",
       },
     };
     const h = harness({
@@ -290,7 +399,7 @@ describe("CreateDraftUseCase", () => {
           },
           required: ["slug", "locale", "title", "body"],
         },
-        lifecycle: "simple",
+        lifecycle: "publishing",
       },
     };
     const h = harness({
@@ -317,6 +426,7 @@ describe("UpdateDraftUseCase", () => {
     });
     const updated = await h.updateDraft.execute({
       id: created.id,
+      collection: created.collection,
       expectedVersion: 1,
       data: { title: "v2", slug: "v2" },
     });
@@ -331,16 +441,16 @@ describe("UpdateDraftUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    await h.requestPublish.execute({ id: created.id });
+    await h.requestPublish.execute({ id: created.id, collection: created.collection });
     await expect(
-      h.updateDraft.execute({ id: created.id, expectedVersion: 2, data: { title: "y" } }),
+      h.updateDraft.execute({ id: created.id, collection: created.collection, expectedVersion: 2, data: { title: "y" } }),
     ).rejects.toMatchObject({ diagnostic: { code: "CONFLICT" } });
   });
 
   it("returns NOT_FOUND for unknown id", async () => {
     const h = harness();
     await expect(
-      h.updateDraft.execute({ id: "missing", expectedVersion: 1, data: {} }),
+      h.updateDraft.execute({ id: "missing", collection: "posts", expectedVersion: 1, data: {} }),
     ).rejects.toMatchObject({ diagnostic: { code: "NOT_FOUND" } });
   });
 
@@ -352,7 +462,7 @@ describe("UpdateDraftUseCase", () => {
       authorId: null,
     });
     await expect(
-      h.updateDraft.execute({ id: created.id, expectedVersion: 99, data: {} }),
+      h.updateDraft.execute({ id: created.id, collection: created.collection, expectedVersion: 99, data: {} }),
     ).rejects.toMatchObject({ diagnostic: { code: "CONFLICT" } });
   });
 
@@ -365,6 +475,7 @@ describe("UpdateDraftUseCase", () => {
     });
     const updated = await h.updateDraft.execute({
       id: created.id,
+      collection: created.collection,
       expectedVersion: 1,
       data: {
         title: "v2",
@@ -391,6 +502,7 @@ describe("UpdateDraftUseCase", () => {
     });
     const updated = await h.updateDraft.execute({
       id: created.id,
+      collection: created.collection,
       expectedVersion: 1,
       data: {
         title: "v2",
@@ -436,6 +548,7 @@ describe("UpdateDraftUseCase", () => {
     await expect(
       h.updateDraft.execute({
         id: first.id,
+        collection: first.collection,
         expectedVersion: 1,
         data: { title: "One updated", slug: "one" },
       }),
@@ -443,6 +556,7 @@ describe("UpdateDraftUseCase", () => {
     await expect(
       h.updateDraft.execute({
         id: second.id,
+        collection: second.collection,
         expectedVersion: 1,
         data: { slug: "one" },
       }),
@@ -452,7 +566,7 @@ describe("UpdateDraftUseCase", () => {
   });
 });
 
-describe("RequestPublishUseCase (simple lifecycle)", () => {
+describe("RequestPublishUseCase (publishing lifecycle)", () => {
   it("flips draft → published with status guard", async () => {
     const h = harness();
     const created = await h.createDraft.execute({
@@ -460,7 +574,7 @@ describe("RequestPublishUseCase (simple lifecycle)", () => {
       data: { title: "x" },
       authorId: null,
     });
-    const published = await h.requestPublish.execute({ id: created.id });
+    const published = await h.requestPublish.execute({ id: created.id, collection: created.collection });
     expect(published.status).toBe("published");
     expect(published.version).toBe(2);
   });
@@ -472,8 +586,8 @@ describe("RequestPublishUseCase (simple lifecycle)", () => {
       data: { title: "x" },
       authorId: null,
     });
-    await h.requestPublish.execute({ id: created.id });
-    await expect(h.requestPublish.execute({ id: created.id })).rejects.toBeInstanceOf(
+    await h.requestPublish.execute({ id: created.id, collection: created.collection });
+    await expect(h.requestPublish.execute({ id: created.id, collection: created.collection })).rejects.toBeInstanceOf(
       DiagnosticError,
     );
   });
@@ -488,6 +602,7 @@ describe("RequestPublishUseCase (simple lifecycle)", () => {
     expect(created.version).toBe(1);
     await h.updateDraft.execute({
       id: created.id,
+      collection: created.collection,
       expectedVersion: 1,
       data: { title: "v2-unvalidated" },
     });
@@ -522,7 +637,6 @@ describe("RequestPublishUseCase (simple lifecycle)", () => {
       create: inner.create.bind(inner),
       update: inner.update.bind(inner),
       delete: inner.delete.bind(inner),
-      archive: inner.archive.bind(inner),
       list: inner.list.bind(inner),
       findByDataField: inner.findByDataField.bind(inner),
       findByDataFields: inner.findByDataFields.bind(inner),
@@ -547,24 +661,6 @@ describe("RequestPublishUseCase (simple lifecycle)", () => {
     );
   });
 
-  it("LIFECYCLE_NOT_IN_V010 if Schema is editorial", async () => {
-    const editorialSchema: SchemaManifest = {
-      ...postsSchema(),
-      spec: { ...postsSchema().spec, lifecycle: "editorial" as const },
-    };
-    const h = harness({
-      schemas: new Map([[editorialSchema.metadata.name, editorialSchema]]),
-    });
-    const created = await h.createDraft.execute({
-      collection: "posts",
-      data: { title: "x" },
-      authorId: null,
-    });
-    await expect(h.requestPublish.execute({ id: created.id })).rejects.toMatchObject({
-      diagnostic: { code: "LIFECYCLE_NOT_IN_V010" },
-    });
-  });
-
   it("rejects publishing a translated child without a published parent", async () => {
     const h = harness({ schemas: translatedSchemas() });
     const child = await h.createDraft.execute({
@@ -573,7 +669,7 @@ describe("RequestPublishUseCase (simple lifecycle)", () => {
       authorId: null,
     });
 
-    await expect(h.requestPublish.execute({ id: child.id })).rejects.toMatchObject({
+    await expect(h.requestPublish.execute({ id: child.id, collection: child.collection })).rejects.toMatchObject({
       diagnostic: {
         code: "TRANSLATES_PARENT_UNKNOWN",
         value: {
@@ -599,7 +695,7 @@ describe("RequestPublishUseCase (simple lifecycle)", () => {
       authorId: null,
     });
 
-    await expect(h.requestPublish.execute({ id: child.id })).rejects.toMatchObject({
+    await expect(h.requestPublish.execute({ id: child.id, collection: child.collection })).rejects.toMatchObject({
       diagnostic: { code: "TRANSLATES_PARENT_UNKNOWN" },
     });
   });
@@ -611,14 +707,14 @@ describe("RequestPublishUseCase (simple lifecycle)", () => {
       data: { title: "Parent", slug: "hello" },
       authorId: null,
     });
-    await h.requestPublish.execute({ id: parent.id });
+    await h.requestPublish.execute({ id: parent.id, collection: parent.collection });
     const child = await h.createDraft.execute({
       collection: "post-translations",
       data: { slug: "hello", locale: "en", title: "Hello", body: "World" },
       authorId: null,
     });
 
-    const published = await h.requestPublish.execute({ id: child.id });
+    const published = await h.requestPublish.execute({ id: child.id, collection: child.collection });
     expect(published.status).toBe("published");
   });
 });
@@ -643,7 +739,7 @@ function translatedSchemas(): ReadonlyMap<string, SchemaManifest> {
         },
         required: ["slug", "locale", "title", "body"],
       },
-      lifecycle: "simple",
+      lifecycle: "publishing",
     },
   };
   return new Map([
@@ -662,7 +758,9 @@ function fakeSiteConfig(locales: readonly string[]): SiteConfigRepository {
       origin: "https://example.com",
       locales,
     }),
+    updateEditable: async () => undefined,
     readLocales: async () => locales,
+    readMediaPurposes: async () => [],
   };
 }
 
@@ -674,8 +772,8 @@ describe("UnpublishUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    await h.requestPublish.execute({ id: created.id });
-    const reverted = await h.unpublish.execute({ id: created.id });
+    await h.requestPublish.execute({ id: created.id, collection: created.collection });
+    const reverted = await h.unpublish.execute({ id: created.id, collection: created.collection });
     expect(reverted.status).toBe("draft");
   });
 
@@ -686,7 +784,7 @@ describe("UnpublishUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    await expect(h.unpublish.execute({ id: created.id })).rejects.toBeInstanceOf(
+    await expect(h.unpublish.execute({ id: created.id, collection: created.collection })).rejects.toBeInstanceOf(
       DiagnosticError,
     );
   });
@@ -698,22 +796,22 @@ describe("UnpublishUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    const archived = await h.archive.execute({ id: created.id, expectedVersion: 1 });
-    const reverted = await h.unpublish.execute({ id: created.id });
+    const archived = await h.archive.execute({ id: created.id, collection: created.collection });
+    const reverted = await h.unpublish.execute({ id: created.id, collection: created.collection });
     expect(archived.status).toBe("archived");
     expect(reverted.status).toBe("draft");
   });
 });
 
 describe("ArchiveUseCase", () => {
-  it("flips draft → archived (simple lifecycle allows direct archive)", async () => {
+  it("flips draft → archived (publishing lifecycle allows direct archive)", async () => {
     const h = harness();
     const created = await h.createDraft.execute({
       collection: "posts",
       data: { title: "x" },
       authorId: null,
     });
-    const archived = await h.archive.execute({ id: created.id, expectedVersion: 1 });
+    const archived = await h.archive.execute({ id: created.id, collection: created.collection });
     expect(archived.status).toBe("archived");
   });
 
@@ -724,19 +822,12 @@ describe("ArchiveUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    const published = await h.requestPublish.execute({ id: created.id });
-    const archived = await h.archive.execute({
-      id: created.id,
-      expectedVersion: published.version,
-    });
+    await h.requestPublish.execute({ id: created.id, collection: created.collection });
+    const archived = await h.archive.execute({ id: created.id, collection: created.collection });
     expect(archived.status).toBe("archived");
   });
 
-  it("ignores caller-supplied stale expectedVersion (OCC pinned to internal read; #210 PR12 H3)", async () => {
-    // PR12: ArchiveUseCase now pins OCC to existing.version (the row
-    // it just read), not request.expectedVersion. A caller supplying
-    // a stale version still succeeds as long as no concurrent write
-    // raced — because the guard and chokepoint check the same snapshot.
+  it("pins OCC to its internal read after an earlier update", async () => {
     const h = harness();
     const created = await h.createDraft.execute({
       collection: "posts",
@@ -744,15 +835,13 @@ describe("ArchiveUseCase", () => {
       authorId: null,
     });
     expect(created.version).toBe(1);
-    // Bump the version via update so caller's view of version=1 is stale.
     await h.updateDraft.execute({
       id: created.id,
+      collection: created.collection,
       expectedVersion: 1,
       data: { title: "y" },
     });
-    // request.expectedVersion is now ignored — archive picks up the
-    // real version internally and succeeds.
-    const archived = await h.archive.execute({ id: created.id, expectedVersion: 1 });
+    const archived = await h.archive.execute({ id: created.id, collection: created.collection });
     expect(archived.status).toBe("archived");
   });
 });
@@ -795,7 +884,7 @@ describe("GetEntryUseCase / ListEntriesUseCase / DeleteEntryUseCase", () => {
     expectTypeOf(h.listEntries.executePage)
       .returns
       .resolves
-      .toEqualTypeOf<ListEntriesResponse<EntryRow>>();
+      .toEqualTypeOf<ListEntriesResult>();
   });
 
   it("ListEntriesUseCase.execute() returns a flat readonly array (app-code shape)", async () => {
@@ -814,11 +903,63 @@ describe("GetEntryUseCase / ListEntriesUseCase / DeleteEntryUseCase", () => {
     const h = harness();
     const a = await h.createDraft.execute({ collection: "posts", data: { title: "a" }, authorId: null });
     await h.createDraft.execute({ collection: "posts", data: { title: "b" }, authorId: null });
-    await h.requestPublish.execute({ id: a.id });
+    await h.requestPublish.execute({ id: a.id, collection: a.collection });
     const drafts = await h.listEntries.execute({ collection: "posts", status: "draft" });
     expect(drafts).toHaveLength(1);
     const published = await h.listEntries.execute({ collection: "posts", status: "published" });
     expect(published).toHaveLength(1);
+  });
+
+  it("scopes lists by a required x-mantle-ref field without dropping enum filters", async () => {
+    const schema = (name: string, spec: SchemaManifest["spec"]): SchemaManifest => ({
+      apiVersion: "cms.mantle.aotter.net/v1", kind: "Schema", metadata: { name }, spec,
+    });
+    const h = harness({
+      schemas: new Map([
+        ["organizations", schema("organizations", {
+          title: "Organizations",
+          lifecycle: "operational",
+          schema: { type: "object", required: ["name"], properties: { name: { type: "string" } } },
+        })],
+        ["projects", schema("projects", {
+          title: "Projects",
+          lifecycle: "operational",
+          schema: {
+            type: "object",
+            required: ["name", "organizationId", "kind"],
+            properties: {
+              name: { type: "string" },
+              organizationId: { type: "string", "x-mantle-ref": "organizations" },
+              kind: { type: "string", enum: ["app", "lib"] },
+            },
+          },
+          indexes: [["kind"]],
+          uiSchema: { list: { filterField: "kind", primaryField: "name" }, nav: { standalone: true } },
+        })],
+      ]),
+    });
+    for (const data of [
+      { name: "one", organizationId: "org-a", kind: "app" },
+      { name: "two", organizationId: "org-b", kind: "app" },
+      { name: "three", organizationId: "org-a", kind: "lib" },
+    ]) {
+      await h.createDraft.execute({ collection: "projects", data, authorId: null });
+    }
+    const scoped = await h.listEntries.execute({
+      collection: "projects",
+      scope: { field: "organizationId", value: "org-a" },
+    });
+    expect(scoped.map((row) => row.data["name"])).toEqual(["three", "one"]);
+    const both = await h.listEntries.execute({
+      collection: "projects",
+      filter: { field: "kind", value: "app" },
+      scope: { field: "organizationId", value: "org-a" },
+    });
+    expect(both.map((row) => row.data["name"])).toEqual(["one"]);
+    await expect(h.listEntries.execute({
+      collection: "projects",
+      scope: { field: "name", value: "one" },
+    })).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
   });
 
   it("ListEntriesUseCase.executePage() returns nextCursor when there are more rows", async () => {
@@ -846,6 +987,106 @@ describe("GetEntryUseCase / ListEntriesUseCase / DeleteEntryUseCase", () => {
     // Pages should not overlap.
     const allIds = [...first.rows, ...second.rows, ...third.rows].map((r) => r.id);
     expect(new Set(allIds).size).toBe(5);
+  });
+
+  it("sorts indexed fields and walks cursor pages in both directions", async () => {
+    const indexedPosts: SchemaManifest = {
+      ...postsSchema(),
+      spec: { ...postsSchema().spec, indexes: [["title"]] },
+    };
+    const h = harness({ schemas: new Map([["posts", indexedPosts]]) });
+    for (const title of ["C", "A", "B"]) {
+      await h.createDraft.execute({ collection: "posts", data: { title }, authorId: null });
+    }
+    const first = await h.listEntries.executePage({
+      collection: "posts",
+      limit: 2,
+      sort: { field: "title", direction: "asc" },
+    });
+    expect(first.rows.map((row) => row.data.title)).toEqual(["A", "B"]);
+    expect(first.previousCursor).toBeUndefined();
+    expect(first.nextCursor).toBeDefined();
+
+    const second = await h.listEntries.executePage({
+      collection: "posts",
+      limit: 2,
+      cursor: first.nextCursor,
+      sort: { field: "title", direction: "asc" },
+    });
+    expect(second.rows.map((row) => row.data.title)).toEqual(["C"]);
+    expect(second.previousCursor).toBeDefined();
+
+    const back = await h.listEntries.executePage({
+      collection: "posts",
+      limit: 2,
+      cursor: second.previousCursor,
+      cursorDirection: "backward",
+      sort: { field: "title", direction: "asc" },
+    });
+    expect(back.rows.map((row) => row.data.title)).toEqual(["A", "B"]);
+  });
+
+  it("sorts indexed booleans with cursor pagination", async () => {
+    const base = postsSchema();
+    const indexedPosts: SchemaManifest = {
+      ...base,
+      spec: {
+        ...base.spec,
+        indexes: [["active"]],
+        schema: {
+          ...base.spec.schema,
+          properties: { ...base.spec.schema.properties, active: { type: "boolean" } },
+          required: [...(base.spec.schema.required ?? []), "active"],
+        },
+      },
+    };
+    const h = harness({ schemas: new Map([["posts", indexedPosts]]) });
+    for (const [title, active] of [["A", false], ["B", true], ["C", true]] as const) {
+      await h.createDraft.execute({ collection: "posts", data: { title, active }, authorId: null });
+    }
+
+    const first = await h.listEntries.executePage({
+      collection: "posts",
+      limit: 2,
+      sort: { field: "active", direction: "asc" },
+    });
+    expect(first.rows.map((row) => row.data.active)).toEqual([false, true]);
+    expect(first.nextCursor).toBeDefined();
+    const second = await h.listEntries.executePage({
+      collection: "posts",
+      limit: 2,
+      cursor: first.nextCursor,
+      sort: { field: "active", direction: "asc" },
+    });
+    expect(second.rows.map((row) => row.data.active)).toEqual([true]);
+  });
+
+  it("does not sort by a non-left-prefix composite index field", async () => {
+    const base = postsSchema();
+    const indexedPosts: SchemaManifest = {
+      ...base,
+      spec: {
+        ...base.spec,
+        indexes: [["title", "slug"]],
+        schema: {
+          ...base.spec.schema,
+          required: ["title", "slug"],
+        },
+      },
+    };
+    const h = harness({ schemas: new Map([["posts", indexedPosts]]) });
+    await expect(h.listEntries.executePage({
+      collection: "posts",
+      sort: { field: "slug", direction: "asc" },
+    })).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
+  });
+
+  it("rejects sorting on an unindexed data field", async () => {
+    const h = harness();
+    await expect(h.listEntries.executePage({
+      collection: "posts",
+      sort: { field: "title", direction: "asc" },
+    })).rejects.toMatchObject({ diagnostic: { code: "INPUT_VALIDATION_FAILED" } });
   });
 
   it("ListEntriesUseCase.execute() only returns the first page (silent cap)", async () => {
@@ -883,14 +1124,32 @@ describe("GetEntryUseCase / ListEntriesUseCase / DeleteEntryUseCase", () => {
       data: { title: "x" },
       authorId: null,
     });
-    const result = await h.deleteEntry.execute({ id: created.id });
+    const result = await h.deleteEntry.execute({ id: created.id, collection: created.collection });
     expect(result.removed).toBe(true);
-    expect(await h.store.get(created.id)).toBeNull();
+    expect(await h.store.get({ id: created.id, collection: created.collection })).toBeNull();
+  });
+
+  it("DeleteEntryUseCase requires published content to be unpublished first", async () => {
+    const h = harness();
+    const created = await h.createDraft.execute({
+      collection: "posts",
+      data: { title: "x" },
+      authorId: null,
+    });
+    await h.requestPublish.execute({ id: created.id, collection: created.collection });
+
+    await expect(h.deleteEntry.execute({ id: created.id, collection: created.collection })).rejects.toMatchObject({
+      diagnostic: {
+        code: "CONFLICT",
+        message: expect.stringContaining("Unpublish it first"),
+      },
+    });
+    expect(await h.store.get({ id: created.id, collection: created.collection })).not.toBeNull();
   });
 
   it("DeleteEntryUseCase surfaces NOT_FOUND on missing ids", async () => {
     const h = harness();
-    await expect(h.deleteEntry.execute({ id: "ghost" })).rejects.toMatchObject({
+    await expect(h.deleteEntry.execute({ id: "ghost", collection: "posts" })).rejects.toMatchObject({
       diagnostic: { code: "NOT_FOUND" },
     });
   });

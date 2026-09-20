@@ -18,13 +18,10 @@ import type { HandlerContext } from "../model/HandlerContext.js";
  */
 export interface EntryRepository {
   create(args: CreateEntryArgs): Promise<EntryRow>;
-  get(id: string): Promise<EntryRow | null>;
+  get(args: EntryKey): Promise<EntryRow | null>;
   /** Throws `EntryVersionConflict` on OCC mismatch. */
   update(args: UpdateEntryArgs): Promise<EntryRow>;
-  /** Cascades to revisions + approvals child rows for the entry id. */
   delete(args: DeleteEntryArgs): Promise<{ readonly removed: boolean }>;
-  /** Throws `EntryVersionConflict` on OCC mismatch. */
-  archive(args: ArchiveEntryArgs): Promise<EntryRow>;
   /** Status flip without data update. `expectedStatus`, when set,
    *  atomically asserts pre-flip status to prevent races (e.g. a
    *  concurrent publish while we try to archive). Bumps version.
@@ -45,21 +42,25 @@ export interface EntryRepository {
   findByDataFields(args: FindEntryByDataFieldsArgs): Promise<EntryRow | null>;
 }
 
+export interface EntryKey {
+  readonly id: string;
+  readonly collection: string;
+}
+
 /**
  * Hook-related fields shared by every mutating chokepoint args type.
  * The persistence-layer impl ignores these; the
  * `LifecycleHookingEntryRepository` decorator reads them to fire
- * before_/after_ Triggers with the right ctx + original input.
+ * before_/after_ Triggers with the right context. Only synchronous
+ * `before_*` handlers receive the original input.
  *
  * `hookContext` defaults to an anonymous `HandlerContext` in the
  * decorator when callers don't supply one (test paths, internal
  * boot-time writes).
  *
- * `collection` is required on every mutation other than `create` so
- * the decorator can short-circuit hook firing on no-hook Schemas
- * without paying an extra `inner.get(id)` round-trip just to learn
- * the row's collection. Callers always know the collection at write
- * time (use cases hold the schema; MCP carries it in the request).
+ * `collection` is required on every operation so native-table adapters
+ * address one Schema table directly. Callers know the collection from the
+ * compiled handler, route, or generated Schema binding.
  */
 export interface MutationHookFields {
   readonly hookContext?: HandlerContext;
@@ -86,13 +87,10 @@ export interface UpdateEntryArgs extends MutationHookFields {
 export interface DeleteEntryArgs extends MutationHookFields {
   readonly id: string;
   readonly collection: string;
-}
-
-export interface ArchiveEntryArgs extends MutationHookFields {
-  readonly id: string;
-  readonly collection: string;
+  /** Atomic snapshot guards. Delete cascades must remove children only
+   *  when the parent still matches this exact state. */
+  readonly expectedStatus: ContentState;
   readonly expectedVersion: number;
-  readonly now: number;
 }
 
 export interface TransitionStatusArgs extends MutationHookFields {
@@ -115,10 +113,30 @@ export interface ListEntriesArgs {
   /** Opaque continuation token from a prior `ListEntriesResult.nextCursor`.
    *  Caller must round-trip without interpreting; format is impl-defined. */
   readonly cursor?: string;
+  /** Fetch the page before `cursor`; default is the page after it. */
+  readonly cursorDirection?: "forward" | "backward";
+  /** Free-text filter matched against `id` and `searchFields`
+   *  (substring, case-insensitive for ASCII per SQLite `LIKE`). */
+  readonly search?: string;
+  /** Trusted top-level string fields resolved from Schema.searchableFields. */
+  readonly searchFields?: readonly string[];
+  /** Trusted exact enum filter resolved from the Schema's indexed fields. */
+  readonly filter?: { readonly field: string; readonly value: string };
+  /** Trusted exact match on a required `x-mantle-ref` field (Admin parent scope). */
+  readonly scope?: { readonly field: string; readonly value: string };
+  /** Native fields or Schema-indexed scalar data fields only. */
+  readonly sort?: EntrySort;
+}
+
+export interface EntrySort {
+  readonly field: string;
+  readonly direction: "asc" | "desc";
 }
 
 export interface ListEntriesResult {
   readonly rows: readonly EntryRow[];
+  /** Pass back with `cursorDirection: "backward"`. */
+  readonly previousCursor?: string;
   /** Present when there may be more rows beyond this page. Undefined
    *  signals "this is the last page". Pass back as `cursor` to
    *  continue. */

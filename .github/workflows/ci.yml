@@ -16,42 +16,59 @@ permissions:
   contents: read
 
 jobs:
-  # Fast checks that fail the PR quickly. Runs on every push + PR.
+  # Deterministic checks required before merge. Platform performance sampling
+  # runs separately in cloudflare-bench.yml for relevant paths.
   lint:
     name: Typecheck + tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: pnpm
 
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
       - run: pnpm install --frozen-lockfile
 
-      - name: Build dist (typecheck + emit) for spec / runtime / admin-ui / cloudflare
+      - name: Build dist
         # Vitest tests for cloudflare import runtime/admin UI via dist/,
-        # so build before test. Spec + runtime tests use src/ directly.
-        run: pnpm -r --filter '@aotter/mantle-spec' --filter '@aotter/mantle-runtime' --filter '@aotter/mantle-admin-ui' --filter '@aotter/mantle-cloudflare' build
-
-      - name: Re-link bins now that dist/ exists
-        # First `pnpm install` runs before SDK build, so spec's
-        # `bin: ./dist/.../MantleCli.js` target doesn't exist and pnpm
-        # silently skips bin linking (logs WARN: "Failed to create bin
-        # ... ENOENT"). Re-running install (idempotent) after build
-        # creates the symlink before starter validation.
-        run: pnpm install --frozen-lockfile
+        # so build before test.
+        run: pnpm build
 
       - name: Check package boundaries
         run: pnpm run check:boundaries
 
+      - name: Check skill disclosure audit
+        run: pnpm run check:skills
+
+      - name: Check generated plugin manifests
+        run: pnpm run check:plugin-manifests
+
+      - name: Check release controller
+        run: pnpm run check:release
+
+      - name: Check packed Core and optional product consumers
+        run: pnpm run check:optional-packages
+
+      - name: Check packed Bun adapter
+        run: pnpm run check:bun-package
+
+      - name: Check packed Vercel adapter
+        run: pnpm run check:vercel-package
+
       - name: Typecheck workspace
-        # Starter typecheck/validate moved out with PR #108 (blank
-        # migrated to aotter/mantle-starters); run there now.
         run: pnpm typecheck
 
       - run: pnpm test
+
+      - name: Check packed-consumer provenance rejection
+        run: node scripts/check-packed-consumer.mjs --self-test
+
+      - name: Test packed Core in the reference Worker
+        run: pnpm check:worker-consumer

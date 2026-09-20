@@ -1,0 +1,25 @@
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata:
+  name: notes
+spec:
+  title: Notes
+  schema:
+    type: object
+    required: [title]
+    properties:
+      title: { type: string }
+  lifecycle: publishing
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata:
+  name: published-notes
+spec:
+  surface: public
+  from: notes
+  cache: { sharedMaxAge: 3600 }
+  fields: [id, title]
+  filter:
+    eq: { field: status, value: published }
+  limit: 20

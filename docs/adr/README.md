@@ -6,29 +6,37 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 
 | # | Title | Status |
 |---|---|---|
-| [0001](0001-four-atom-manifest-model.md) | Four-atom manifest model (Schema / View / Procedure / Trigger). Folds POC ADR-0005 (grammar discipline) and POC ADR-0006 (multi-doc YAML). | Accepted (refreshed) |
+| [0001](0001-four-atom-manifest-model.md) | Four-atom manifest model (Schema / View / Procedure / Trigger). Folds POC ADR-0005 (grammar discipline) and POC ADR-0006 (multi-doc YAML). | Accepted; fixed-file contract superseded |
 | [0002](0002-closed-enums-for-bindings.md) | Closed enums for `x-mantle-bind` and `ctx.*` predicates. | Accepted (refreshed) |
-| [0007](0007-ai-as-primary-author.md) | AI is the primary author of consumer projects; SDK contract is the three feedback loops + structured diagnostics. Folds POC ADR-0013 (role-split surfaces). | Accepted (refreshed) |
-| [0008](0008-structured-diagnostic-shape.md) | Diagnostic shape: code, phase, severity, path, value, expected, message, candidates, suggestion. zod-translation per PR #81. | Accepted (refreshed) |
-| [0009](0009-consumer-supplied-manifests.md) | Consumers ship their own manifest YAML. SDK parses + caches; never embeds. | Accepted (refreshed) |
+| [0007](0007-ai-as-primary-author.md) | AI is the primary author of consumer projects; SDK contract is three pre-serve feedback loops, runtime diagnostics, and coder/operator role surfaces. | Accepted + amended |
+| [0008](0008-structured-diagnostic-shape.md) | Diagnostic shape for validate/boot/runtime failures, with a reserved consumer-test phase; measured harnesses keep purpose-shaped reports. | Accepted + amended |
+| [0009](0009-consumer-supplied-manifests.md) | Historical generated-array workflow; consumer source ownership continues in ADR-0019. | Superseded by 0019 |
 | [0010](0010-locale-and-translates.md) | Locale 3-layer (manifest / D1 site_config / data field) + translates pattern. Boot decoupled from `site_config` (issue #60 fix). | Accepted (refreshed) |
-| [0011](0011-adapter-port-spec.md) | Adapter port spec. Required runtime ports plus optional feature ports. CF impl + Netlify stub. | Accepted (new) |
-| [0012](0012-views-as-public-rest.md) | Views auto-expose `GET /api/views/<name>` as the public REST read surface. Schemas never get a public REST endpoint. Filter `eq.value` accepts a `{ $param: <name> }` sentinel; `?page=&show=` reserved for pagination. | Accepted (new) |
-| [0013](0013-agent-provisioned-consumer-projects.md) | Agent-provisioned consumer projects: website prompt → Skill → npm packages → starter setup → first-run provision/seed → owner/MCP handoff. | Accepted (new) |
-| [0014](0014-auth-better-auth-and-multi-tenant-mcp.md) | Better Auth for staff sign-in (D1 session); the MCP OAuth surface carves out to `@cloudflare/workers-oauth-provider` (KV grant store) at top level. The two meet at `/oauth/authorize` where the consent handler reads the Better Auth session. MCP splits into `/mcp/staff` (write, admin-role) and `/mcp` (read, any signed-in). Scope advertised as `["mcp"]` (single non-colon) because claude.ai rejects colon-shaped scopes. Auth port disappears; runtime takes Better Auth instance directly. See § "Amendment 2026-05-15". | Accepted + amended |
-| [0016](0016-site-semantic-layer.md) | Site semantic layer: `AGENTS.md` (cross-tool entry, ~30 lines) + `mantle/site.md` (Mantle's frontmatter + section bodies, ~300 lines). Both ship as `{{PLACEHOLDER}}` templates filled by `create-mantle`; Mantle reads whole, edits sections, writes whole atomically. Slimmed 2026-05-12 per Epic #116. | Accepted (slimmed) |
+| [0011](0011-adapter-port-spec.md) | Adapter port spec. Required runtime ports plus optional feature ports. | Accepted (new) |
+| [0012](0012-views-as-public-rest.md) | Views auto-expose matching REST and `query_view_*` MCP reads on their declared `public` or `staff` surface. Schemas never get a public REST endpoint. | Accepted + amended |
+| [0013](0013-agent-provisioned-consumer-projects.md) | Historical agent-provisioned consumer projects path. Superseded for first launch by landing provision bundles. | Superseded |
+| [0014](0014-auth-better-auth-and-multi-tenant-mcp.md) | The Cloudflare adapter owns one Better Auth 1.7 identity/OAuth/MCP authority with native method options and CIMD discovery. Verified callers are normalized into runtime context; mutable staff role and target authorization are re-evaluated per call. | Accepted + amended |
+| [0016](0016-site-semantic-layer.md) | Site semantic layer: `AGENTS.md` (cross-tool entry) + `.mantle/launch-state.json` (deterministic install context). The older `mantle/site.md` letter surface is suspended from first-run scaffolds. | Accepted (slimmed) |
+| [0017](0017-media-multi-variant-agent-side-optimization.md) | Multi-variant media assets with agent-side optimization and asset-id entry references. | Accepted |
+| [0018](0018-core-starters-repository-boundary.md) | Core produces published SDK artifacts; the separate starters repository validates them as an external consumer. Revisit after release-contract simplification. | Superseded by 0021 |
+| [0019](0019-sealed-manifest-runtime-pipeline.md) | One sealed source-to-runtime pipeline, semantic storage seam, and optional Web/Admin/platform dependency direction. | Accepted |
+| [0020](0020-builtin-handler-contracts-and-matched-upsert.md) | Static builtin handler contracts and natural-key matched upsert (`handler.match`). | Accepted + amended by 0022 |
+| [0021](0021-retire-starter-scaffolding.md) | Direct authoring; retire Starter scaffolding. | Accepted; supersedes 0018 |
+| [0022](0022-caller-observed-version-occ.md) | Caller-observed `expectedVersion` for Admin bind and builtin upsert OCC. | Accepted |
+| [0024](0024-manifest-native-schema-tables.md) | Materialize each Schema as a native storage table and deploy reviewed migration artifacts. | Accepted |
 
 ## Reading order
 
 If you're new to the codebase:
 
 1. **0001** — what the 4 atoms are.
-2. **0009** — how consumers wire them in.
-3. **0007** — what running the SDK feels like as an AI author (and as the operator agent).
-4. **0011** — the boundary between the runtime and the adapter (most load-bearing for the rebuild).
-5. **0010** — how locale flows through the system.
-6. **0013** — how the website prompt, Skills, npm packages, starters, seed, provision, and handoff fit together.
-7. **0002, 0008** — the two ADRs that touch every diagnostic and every binding.
+2. **0019** — the sealed source-to-runtime pipeline and optional product boundaries.
+3. **0009** — historical context for consumer-owned manifests.
+4. **0007** — what running the SDK feels like as an AI author (and as the operator agent).
+5. **0011** — the boundary between the runtime and the adapter.
+6. **0010** — how locale flows through the system.
+7. **0021** — current direct-authoring boundary; **0013** is historical install-session context.
+8. **0002, 0008** — the two ADRs that touch every diagnostic and every binding.
 
 ## What's NOT here (and why)
 
@@ -37,12 +45,12 @@ for new v0.1.0 boundaries, and folds / drops the rest:
 
 - **POC ADR-0003** OpenAPI emission → folded into `mantle-spec` README (the *what* is implementation; the *why* was already captured by ADR-0001's grammar lock).
 - **POC ADR-0004** D1 today, Hyperdrive PG tomorrow → folded into `mantle-cloudflare` README (now a v0.2 roadmap item, not an architectural decision).
-- **POC ADR-0005** v0.1 minimum vs DRAFT discipline → folded into ADR-0001 §"Future grammar discipline."
+- **POC ADR-0005** v0.1 minimum grammar → folded into ADR-0001's fail-closed grammar policy.
 - **POC ADR-0006** multi-doc YAML → folded into ADR-0001 §"Authoring shape: multi-doc YAML."
-- **POC ADR-0011** lifecycle binary opt-in → distilled to a §"Lifecycle" subsection in `docs/design-atoms.md`. v0.1.0 ships `simple` only; `editorial` is a v0.1.x feature.
+- **POC ADR-0011** lifecycle binary opt-in → distilled to a §"Lifecycle" subsection in `docs/design-atoms.md`. v0.1.0 ships `publishing` and `operational`.
 - **POC ADR-0012** strategic posture vs adjacent CMS designs → strategic / marketing material, lives in `README.md` if anywhere.
 - **POC ADR-0013** role-split surfaces (coder agent vs operator agent) → folded into ADR-0007 (Part B).
-- **POC ADR-0014** builtin handlers and lifecycle Triggers → promoted to v0.1.0 and implemented in the rebuild via `LifecycleHookingEntryRepository` and `InvokeBuiltinUseCase`. Editorial lifecycle remains v0.1.x-gated. Full shape spec lives in `docs/design-atoms.md`.
+- **POC ADR-0014** builtin handlers and lifecycle Triggers → promoted to v0.1.0 and implemented in the rebuild via `LifecycleHookingEntryRepository` and `InvokeBuiltinUseCase`. Full shape spec lives in `docs/design-atoms.md`.
 - **POC ADR-0015** cms-astro internal seam discipline → POC-specific to a package that no longer exists; replaced by ADR-0011 (adapter port spec).
 - **POC ADR-0029** drop Astro from cms-cloudflare → POC-specific historical record; the rebuild starts post-Astro.
 
@@ -50,8 +58,20 @@ The rebuild's ADR-0011 (new) is the most load-bearing addition — the POC accum
 
 ## Contributing a new ADR
 
-1. Pick the next number (currently 0017).
+1. Pick the next unused number after the highest existing ADR.
 2. File: `docs/adr/<NNNN>-<kebab-title>.md`.
 3. Sections: Status, Date, Context, Decision, Consequences, Alternatives, How to apply, Implementation status.
 4. Link from this README's table.
 5. Land it in a PR alongside (or before) the implementation it documents — ADR-as-design-artifact, not ADR-as-archaeology.
+
+## ADR-lite records
+
+These retain their issue-based filenames and original decision status.
+
+| Record | Status |
+|---|---|
+| [#803 Request diagnostics](adr-lite-803-request-diagnostics.md) | Implemented |
+| [#808 Route readiness](adr-lite-808-route-readiness.md) | Accepted |
+| [#809 Bounded public content](adr-lite-809-bounded-public-content.md) | Implemented |
+| [#812 Native parity](adr-lite-812-native-parity.md) | Implemented; deployment evidence linked in record |
+| [#823 Home statistics](adr-lite-823-home-statistics.md) | Proposed; unmerged demo |

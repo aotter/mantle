@@ -4,8 +4,11 @@ import {
   joinParentForList,
   joinParentIfTranslation,
 } from "../src/domain/service/io/JoinedEntryReader.js";
+import { DatabaseEntryRepository } from "../src/infrastructure/persistence/DatabaseEntryRepository.js";
 import { InMemoryDatabase } from "./fakes/database.js";
 import { postsSchema } from "./fakes/manifests.js";
+import { CANONICAL_MIGRATIONS } from "../src/infrastructure/boot/index.js";
+import { schemaTableMigrations } from "../src/infrastructure/storage/SqliteSchemaTables.js";
 
 function translationsSchema(): SchemaManifest {
   return {
@@ -26,30 +29,37 @@ function translationsSchema(): SchemaManifest {
       },
       localized: true,
       translates: { parent: "posts", on: "slug" },
-      lifecycle: "simple",
+      lifecycle: "publishing",
     },
   };
 }
 
-function seedEntry(
+async function prepareRepository(
   db: InMemoryDatabase,
+  schemas: ReadonlyMap<string, SchemaManifest>,
+): Promise<DatabaseEntryRepository> {
+  await db.migrations.runAll(CANONICAL_MIGRATIONS);
+  await db.migrations.runAll(schemaTableMigrations(schemas.values()));
+  return new DatabaseEntryRepository(db, schemas);
+}
+
+async function seedEntry(
+  repository: DatabaseEntryRepository,
   args: {
     id: string;
     collection: string;
     data: Record<string, unknown>;
-    status?: string;
+    status?: "draft" | "published" | "archived";
     updated_at?: number;
   },
-): void {
-  db.entries.set(args.id, {
+): Promise<void> {
+  await repository.create({
     id: args.id,
     collection: args.collection,
     status: args.status ?? "published",
-    version: 1,
-    data: JSON.stringify(args.data),
-    author_id: null,
-    created_at: 1,
-    updated_at: args.updated_at ?? 2,
+    data: args.data,
+    authorId: null,
+    now: args.updated_at ?? 2,
   });
 }
 
@@ -61,14 +71,13 @@ describe("joinParentIfTranslation", () => {
 
   it("merges parent posts data into the translation", async () => {
     const db = new InMemoryDatabase();
-    seedEntry(db, {
+    const repository = await prepareRepository(db, schemas);
+    await seedEntry(repository, {
       id: "p1",
       collection: "posts",
       data: {
         slug: "hi",
         coverUrl: "https://example.com/cover.jpg",
-        authorId: "u1",
-        publishedAt: 1000,
       },
     });
     const translation = {
@@ -82,7 +91,7 @@ describe("joinParentIfTranslation", () => {
       updatedAt: 2,
     };
 
-    const merged = await joinParentIfTranslation(db, schemas, translation, {
+    const merged = await joinParentIfTranslation(repository, schemas, translation, {
       parentStatus: "published",
     });
 
@@ -92,8 +101,6 @@ describe("joinParentIfTranslation", () => {
       title: "Hi",
       body: "world",
       coverUrl: "https://example.com/cover.jpg",
-      authorId: "u1",
-      publishedAt: 1000,
     });
     // Identity of non-data fields preserved
     expect(merged.id).toBe("pt1");
@@ -103,7 +110,8 @@ describe("joinParentIfTranslation", () => {
 
   it("translation values override parent on key conflicts", async () => {
     const db = new InMemoryDatabase();
-    seedEntry(db, {
+    const repository = await prepareRepository(db, schemas);
+    await seedEntry(repository, {
       id: "p1",
       collection: "posts",
       data: { slug: "hi", title: "PARENT-TITLE", coverUrl: "p.jpg" },
@@ -119,7 +127,7 @@ describe("joinParentIfTranslation", () => {
       updatedAt: 2,
     };
 
-    const merged = await joinParentIfTranslation(db, schemas, translation, {
+    const merged = await joinParentIfTranslation(repository, schemas, translation, {
       parentStatus: "published",
     });
 
@@ -129,6 +137,7 @@ describe("joinParentIfTranslation", () => {
 
   it("returns entry unchanged when its schema has no translates declaration", async () => {
     const db = new InMemoryDatabase();
+    const repository = await prepareRepository(db, schemas);
     const standalone = {
       id: "p1",
       collection: "posts",
@@ -139,13 +148,14 @@ describe("joinParentIfTranslation", () => {
       updatedAt: 2,
     };
 
-    const result = await joinParentIfTranslation(db, schemas, standalone);
+    const result = await joinParentIfTranslation(repository, schemas, standalone);
 
     expect(result).toBe(standalone);
   });
 
   it("returns translation unchanged when parent is missing", async () => {
     const db = new InMemoryDatabase();
+    const repository = await prepareRepository(db, schemas);
     const translation = {
       id: "pt1",
       collection: "post-translations",
@@ -157,7 +167,7 @@ describe("joinParentIfTranslation", () => {
       updatedAt: 2,
     };
 
-    const result = await joinParentIfTranslation(db, schemas, translation, {
+    const result = await joinParentIfTranslation(repository, schemas, translation, {
       parentStatus: "published",
     });
 
@@ -166,7 +176,8 @@ describe("joinParentIfTranslation", () => {
 
   it("returns translation unchanged when join field is missing or empty", async () => {
     const db = new InMemoryDatabase();
-    seedEntry(db, {
+    const repository = await prepareRepository(db, schemas);
+    await seedEntry(repository, {
       id: "p1",
       collection: "posts",
       data: { slug: "hi", coverUrl: "p.jpg" },
@@ -182,7 +193,7 @@ describe("joinParentIfTranslation", () => {
       updatedAt: 2,
     };
 
-    const result = await joinParentIfTranslation(db, schemas, translation);
+    const result = await joinParentIfTranslation(repository, schemas, translation);
     expect(result).toBe(translation);
   });
 });
@@ -208,12 +219,13 @@ describe("joinParentForList", () => {
 
   it("dedups parent reads when many translations share a slug", async () => {
     const db = new InMemoryDatabase();
-    seedEntry(db, {
+    const repository = await prepareRepository(db, schemas);
+    await seedEntry(repository, {
       id: "p1",
       collection: "posts",
       data: { slug: "shared", coverUrl: "shared.jpg" },
     });
-    seedEntry(db, {
+    await seedEntry(repository, {
       id: "p2",
       collection: "posts",
       data: { slug: "other", coverUrl: "other.jpg" },
@@ -225,7 +237,7 @@ describe("joinParentForList", () => {
       makeTranslation({ id: "t-other", slug: "other", locale: "en" }),
     ];
 
-    const merged = await joinParentForList(db, schemas, translations, {
+    const merged = await joinParentForList(repository, schemas, translations, {
       parentStatus: "published",
     });
 
@@ -238,12 +250,14 @@ describe("joinParentForList", () => {
 
   it("returns empty list for empty input", async () => {
     const db = new InMemoryDatabase();
-    const result = await joinParentForList(db, schemas, []);
+    const repository = await prepareRepository(db, schemas);
+    const result = await joinParentForList(repository, schemas, []);
     expect(result).toEqual([]);
   });
 
   it("returns entries unchanged when collection has no translates declaration", async () => {
     const db = new InMemoryDatabase();
+    const repository = await prepareRepository(db, schemas);
     const standalone: Entry[] = [
       {
         id: "p1",
@@ -255,7 +269,7 @@ describe("joinParentForList", () => {
         updatedAt: 2,
       },
     ];
-    const result = await joinParentForList(db, schemas, standalone);
+    const result = await joinParentForList(repository, schemas, standalone);
     expect(result).toEqual(standalone);
   });
 });

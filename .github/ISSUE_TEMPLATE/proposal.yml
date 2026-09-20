@@ -50,6 +50,7 @@ body:
         - area:skills
         - area:admin-ui
         - area:docs
+        - area:ci
         - area:adapter
         - unknown
     validations:

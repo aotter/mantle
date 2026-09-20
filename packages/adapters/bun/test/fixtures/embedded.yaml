@@ -1,0 +1,45 @@
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: orders }
+spec:
+  title: Orders
+  schema:
+    type: object
+    required: [customerId, title]
+    properties:
+      customerId: { type: string }
+      title: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: published-orders }
+spec:
+  surface: public
+  from: orders
+  fields: [id, customerId, title]
+  params:
+    type: object
+    required: [customerId]
+    properties: { customerId: { type: string } }
+  filter:
+    and:
+      - eq: { field: customerId, value: { $param: customerId } }
+      - eq: { field: status, value: published }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: echo-order }
+spec:
+  input:
+    type: object
+    required: [customerId]
+    properties: { customerId: { type: string } }
+  output: { type: object }
+  handler: { kind: ref, ref: echoOrder }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: echo-order-http }
+spec:
+  source: { kind: http, method: POST, path: "/api/orders/{customerId}" }
+  target: { procedure: echo-order }
