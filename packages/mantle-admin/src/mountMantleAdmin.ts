@@ -116,13 +116,20 @@ export interface AdminAuth {
   readonly revokeInvite: (userId: string) => Promise<boolean>;
 }
 
+/** Remote MCP endpoints actually mounted by the host. Mantle Admin advertises
+ * these URLs; the host remains responsible for mounting their handlers. */
+export interface AdminMcpEndpoints {
+  readonly public: string | null;
+  readonly staff: string | null;
+}
+
 export interface MantleAdminRef {
   get(): Promise<MantleAdminRuntime>;
   readonly plan: RuntimePlan;
   readonly auth: AdminAuth;
   readonly assets: AdminAssetServer;
   /** Host-mounted remote MCP paths. Omit for the conventional Worker routes. */
-  readonly mcpEndpoints?: { readonly public: string | null; readonly staff: string | null };
+  readonly mcpEndpoints?: AdminMcpEndpoints;
   readonly requestContext?: (context: Context) => {
     readonly env?: unknown;
     readonly waitUntil?: (promise: Promise<unknown>) => void;

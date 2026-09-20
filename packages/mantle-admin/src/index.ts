@@ -8,6 +8,7 @@ export {
   type AdminListMembersArgs,
   type AdminMember,
   type AdminMemberList,
+  type AdminMcpEndpoints,
   type AdminStaffUser,
   type MantleAdminRef,
   type MantleAdminRuntime,

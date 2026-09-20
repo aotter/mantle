@@ -45,11 +45,19 @@ The reference exposes these separate surfaces:
 | Remote `/mcp/staff` | OAuth bearer authorization and fresh Mantle staff role | Not mounted; requires a separate integration. |
 | Sites-managed connector registration | Sites MCP declaration and connection configuration | Unverified; do not guess a hosting manifest key. |
 
-The reference passes `mcpEndpoints: { public: "/api/mcp", staff: null }` to
-`mountMantleAdmin`, so Admin displays only the mounted endpoint. Its smoke test
-checks that `/mcp` and `/mcp/staff` return 404. Use `/api/mcp` for the public
-transport; the earlier deployment's root `/mcp` response is not evidence of a
-globally reserved Sites path.
+The reference chooses `/api/mcp` and passes
+`mcpEndpoints: { public: "/api/mcp", staff: null }` to `mountMantleAdmin`, so
+Admin displays only that mounted endpoint. This path belongs to the reference,
+not Mantle Core. Other hosts may mount different paths and report them through
+the exported `AdminMcpEndpoints` contract. Its smoke test checks that `/mcp`
+and `/mcp/staff` return 404. The earlier deployment's root `/mcp` response is
+not evidence of a globally reserved Sites path.
+
+Identity follows the same host-owned design. `@aotter/mantle-admin` exports
+`AdminAuth`; the reference implements it using trusted Sites identity headers
+and a D1 staff table. A host may implement the interface with another identity
+system or wrap Mantle's Better Auth adapter. Core does not contain a ChatGPT
+login implementation or require Better Auth for Sites.
 
 A successful public MCP call verifies that endpoint, not ChatGPT connector
 registration. A manually configured connector targets the HTTPS endpoint;
