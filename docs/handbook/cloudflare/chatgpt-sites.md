@@ -28,7 +28,9 @@ The browser route above uses the Sites session and therefore does **not** automa
 
 ## Remote MCP is a separate gate
 
-Admin's in-browser WebMCP tools are not a remote `/mcp/staff` server. Before telling a client to connect, verify that Sites publishes an MCP declaration, the HTTP handler exists, OAuth protected-resource and authorization metadata return JSON at the expected URLs, an unauthenticated request gets a standards-compliant `401` challenge, and an authenticated client can run `tools/list` plus a read-only call. A Site sign-in HTML page returned to an OAuth JSON request is a failed integration, not a valid challenge. Do not infer remote MCP support from an installed connector name or from working Admin WebMCP.
+Admin's in-browser WebMCP tools are not a remote `/mcp/staff` server. There are two distinct connection paths: Sites-provisioned connection details (`get_site` with `include_mcp_connection`) require a deployed MCP declaration, while a manually configured remote connector targets the HTTPS endpoint directly. Do not treat failure of the former as proof that the latter is impossible.
+
+For either path, first verify that the HTTP handler exists, OAuth protected-resource and authorization metadata return JSON at the expected URLs, an unauthenticated request gets a standards-compliant `401` challenge, and an authenticated client can run `tools/list` plus a read-only call. The Sites browser session is not an MCP bearer token; re-check the Mantle staff role on each authenticated tool request. A Site sign-in HTML page returned to an OAuth JSON request is a failed integration, not a valid challenge. Do not infer remote MCP support from an installed connector name or from working Admin WebMCP. Sites-managed MCP declaration syntax and ingress behavior remain unverified; do not guess a hosting manifest key.
 
 ## Capability boundaries
 
@@ -43,3 +45,4 @@ See [native R2 direct upload](./media-r2.md), [authentication](./authentication.
 - [Cloudflare R2 Workers binding API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)
 - [Cloudflare R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)
 - [OpenAI Sites](https://learn.chatgpt.com/docs/sites)
+- [OpenAI MCP server authentication](https://developers.openai.com/plugins/build/auth)
