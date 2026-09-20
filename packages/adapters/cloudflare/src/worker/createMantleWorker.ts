@@ -9,6 +9,7 @@ import type {
   RuntimePlan,
 } from "@aotter/mantle-runtime";
 import type { PublicPathResolver, TemplateRegistry } from "@aotter/mantle-web";
+import { createRuntimeClient } from "@aotter/mantle-web/client-runtime";
 import type { SiteDefaults } from "@aotter/mantle-spec";
 import { mountMantleOAuth } from "@aotter/mantle-admin";
 import {
@@ -30,8 +31,9 @@ import {
 import type { MantleCloudflareConfig } from "../mount/cmsConfig.js";
 import { createMcpApiHandler } from "../mount/mountMcp.js";
 import { mountAdmin } from "../mount/mountAdmin.js";
+import { withFrontendCors } from "../mount/frontendCors.js";
 import { mountRuntimeEndpoints } from "../mount/mountRuntimeEndpoints.js";
-import type { ConsumerCredentialResolver } from "../mount/resolveCaller.js";
+import { resolveCaller, type ConsumerCredentialResolver } from "../mount/resolveCaller.js";
 import {
   applyCachePolicy,
   normalizeCacheScope,
@@ -142,6 +144,14 @@ export interface CreateMantleWorkerOptions<Env extends MantleCloudflareEnv> {
   readonly siteDefaults?: SiteDefaults | ((env: Env) => SiteDefaults);
   /** Stable deployment/site identifier used by public cache tags and optional KV. */
   readonly cacheScope?: string | ((env: Env) => string);
+  /** Exact external browser origins. Never grants a principal or cookie access. */
+  readonly frontendOrigins?: readonly string[] | ((env: Env) => readonly string[]);
+  /** Fallback for app-owned paths after native routes; one authorized client per request. */
+  readonly frontend?: (request: Request, context: {
+    readonly env: Env;
+    readonly client: ReturnType<typeof createRuntimeClient>;
+    readonly executionCtx: ExecutionContext;
+  }) => Response | Promise<Response>;
   readonly templates?: TemplateRegistry;
   readonly publicPathResolver?: PublicPathResolver;
   readonly mediaAllowSvg?: boolean | ((env: Env) => boolean);
@@ -284,6 +294,16 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
       return c.redirect(icon.src);
     });
 
+    if (options.frontend) app.notFound(async c => {
+      if (isMantleReservedPath(c.req.path, auth.basePath) || hasOwnedPrefix(c.req.path, "/api")) return new Response("Not found", { status: 404 });
+      const request = c.req.raw;
+      if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && request.headers.has("cookie") && !request.headers.has("authorization") && request.headers.get("origin") !== new URL(request.url).origin) return new Response("Forbidden", { status: 403 });
+      const caller = await resolveCaller(request, { auth, env: c.env, credentialResolver: extension.credentialResolver, jwtBearer: extension.jwtBearer, waitUntil: promise => c.executionCtx.waitUntil(promise) });
+      if (caller.kind === "invalid") return Response.json({ ok: false, diagnostic: caller.diagnostic }, { status: caller.status });
+      return options.frontend!(request, { env: c.env, executionCtx: c.executionCtx as ExecutionContext,
+        client: createRuntimeClient({ origin: new URL(request.url).origin, plan: options.plan, getRuntime, context: caller.context }) });
+    });
+
     const next: AssembledWorker<Env> = {
       auth,
       getRuntime,
@@ -309,7 +329,10 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
         if (worker.auth.ready) ctx.waitUntil(worker.auth.ready);
         const setupIncomplete = await setupIncompleteAuthResponse(request, worker.auth);
         if (setupIncomplete) return setupIncomplete;
-        return worker.fetch(request, env, ctx);
+        const origins = resolve(options.frontendOrigins, env);
+        return origins && new URL(request.url).pathname.startsWith("/api/")
+          ? withFrontendCors(request, origins, () => worker.fetch(request, env, ctx))
+          : worker.fetch(request, env, ctx);
       });
     },
   };
@@ -348,7 +371,7 @@ function assertExtensionRoutes<Env extends object>(
 ): void {
   const standard = app.routes.slice(0, standardRouteCount);
   for (const route of app.routes.slice(standardRouteCount)) {
-    if (isReservedPath(route.path, authBasePath)) {
+    if (isMantleReservedPath(route.path, authBasePath)) {
       throw new Error(`Mantle extension route '${route.path}' is reserved by Core.`);
     }
     const duplicate = standard.some(
@@ -360,7 +383,7 @@ function assertExtensionRoutes<Env extends object>(
   }
 }
 
-function isReservedPath(path: string, authBasePath: string): boolean {
+export function isMantleReservedPath(path: string, authBasePath = "/api/auth"): boolean {
   return MANTLE_RESERVED_EXACT_PATHS.some((owned) => path === owned)
     || MANTLE_RESERVED_PATH_PREFIXES.some((owned) => hasOwnedPrefix(path, owned))
     || path.startsWith(MANTLE_RESERVED_WELL_KNOWN_PREFIX)

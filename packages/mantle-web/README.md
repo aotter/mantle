@@ -24,7 +24,37 @@ const html = await web.renderEntryLive.execute({
 Omit this package when an application only needs Mantle parsing, planning, or
 headless runtime operations.
 
-## Public content pages
+## Frontend client
+
+`@aotter/mantle-web/client` is browser safe. Pass an origin and the contract
+projected by `projectFrontendContract(plan)` from `@aotter/mantle-web/client-runtime`:
+
+```ts
+import { createMantleClient } from '@aotter/mantle-web/client';
+const client = createMantleClient({ origin, contract, accessToken: () => accessToken });
+const page = await client.view('published-posts', {}, { page: 1, show: 20 });
+await client.call('submit-comment-http', { postId, text });
+```
+
+Calls use HTTP Trigger names, not internal Procedure names. Runtime owns validation,
+authorization and diagnostics. `MantleClientError` preserves status, diagnostic and
+WWW-Authenticate; mutation retries are the caller's explicit decision. DELETE follows
+the existing HTTP dispatcher contract (path parameters only).
+
+For same-Worker SSR, `createMantleWorker({ frontend(request, { client, env,
+executionCtx }) { ... } })` supplies a client bound to the current caller. It
+dispatches locally through the same runtime HTTP handlers, without network traffic.
+Native routes win and reserved paths never reach the frontend fallback. Never retain
+this client between SSR requests. Set an explicit public Cache-Control only for public
+pages; the Worker strips public caching from credentialed and private responses.
+
+External browsers use OAuth authorization code + PKCE and bearer credentials with
+exact configured `frontendOrigins`. This client does not implement login, persist
+tokens, or grant Cloud members tenant staff access. External SSR supplies its own
+request-local token resolver. Start external page caches with `private, no-store`;
+any separate cache needs an explicit bounded freshness or invalidation contract.
+
+## Public document operations
 
 `renderListLive.execute` returns `{ html, nextCursor? } | null`.
 `composeLlmsTxt.execute` returns `{ body, nextCursor? } | null`, where `body`
