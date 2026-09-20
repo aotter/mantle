@@ -1,8 +1,10 @@
 # Mantle on ChatGPT Sites: runnable reference
 
-This is a **reference consumer application**, not a Mantle starter or a production-ready OAuth server. It reproduces the tested composition: Sites D1 + R2 bindings, Sign in with ChatGPT identity, Mantle Admin and staff roles, same-origin media upload, a published-only article frontend, and anonymous read-only `/api/mcp` for public Views. Remote `/mcp/staff` is deliberately **not** claimed or mounted; see [the MCP gate](../../handbook/cloudflare/chatgpt-sites.md#remote-mcp-is-a-separate-gate).
+The runnable application for [Mantle on ChatGPT Sites](../../handbook/sites/index.md) connects Sites D1 + R2 bindings, Sign in with ChatGPT identity, Mantle Admin and staff roles, same-origin media upload, a published-only article frontend, and anonymous read-only `/api/mcp` for public Views. Remote `/mcp/staff` is deliberately **not** claimed or mounted; see [MCP support](../../handbook/sites/host-reference.md#remote-mcp-is-a-separate-gate).
 
 **SDK requirement:** this revision requires the checkout's `mountMantleAdmin.mcpEndpoints` support. Published `0.1.2-alpha.6` does not include it, even though the checkout still carries that version number. Use the exact packed-checkout workflow below; copying this folder and running `npm ci` against the registry is not a supported reproduction of this revision. Build typechecking and the endpoint smoke assertions reject that mismatch. Once a release contains this change, update every Mantle dependency and the lockfile together before switching back to registry installation.
+
+After setup, follow [Publish your first article](../../handbook/sites/index.md#publish-your-first-article) to verify the editorial workflow in Admin.
 
 ## Before writing code
 
@@ -34,4 +36,4 @@ The media path uses only the R2 binding: `ports.mediaStorage` + `media.purposes`
 - `/mcp/staff` returns 404: this example has no remote staff MCP handler. Admin WebMCP is a different surface. Do not register this URL as an authenticated ChatGPT connector until its OAuth discovery, 401 challenge, bearer verification and staff role checks are implemented and tested.
 - OAuth discovery returns sign-in HTML: Sites' page session is not an OAuth bearer challenge. Do not bypass Sites auth or trust browser cookies as remote MCP credentials.
 
-See the [Sites host checklist](../../handbook/cloudflare/chatgpt-sites.md) and [OpenAI Sites documentation](https://learn.chatgpt.com/docs/sites).
+See the [Sites host reference](../../handbook/sites/host-reference.md) and [OpenAI Sites documentation](https://learn.chatgpt.com/docs/sites).

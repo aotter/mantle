@@ -5,6 +5,7 @@
       "text": "Start here",
       "items": [
         { "text": "Quickstart: a minimal Worker", "link": "/start/quickstart-worker" },
+        { "text": "Build with ChatGPT Sites", "link": "/sites/index" },
         { "text": "Quickstart: local Admin (opt-in)", "link": "/start/quickstart-admin" },
         { "text": "Project layout and the CLI loop", "link": "/start/project-and-cli" }
       ]
@@ -22,6 +23,13 @@
       ]
     },
     {
+      "text": "ChatGPT Sites",
+      "items": [
+        { "text": "Get started", "link": "/sites/index" },
+        { "text": "Host reference", "link": "/sites/host-reference" }
+      ]
+    },
+    {
       "text": "Cloudflare",
       "items": [
         { "text": "The conventional Worker", "link": "/cloudflare/conventional-worker" },
@@ -31,7 +39,6 @@
         { "text": "Site chrome", "link": "/cloudflare/site-chrome" },
         { "text": "Deferred hooks with Queues", "link": "/cloudflare/deferred-hooks-queues" },
         { "text": "Media uploads with R2", "link": "/cloudflare/media-r2" },
-        { "text": "ChatGPT Sites (experimental)", "link": "/cloudflare/chatgpt-sites" },
         { "text": "Deploy and operate", "link": "/cloudflare/deploy-and-operate" },
         { "text": "Low-level composition", "link": "/cloudflare/low-level-composition" }
       ]

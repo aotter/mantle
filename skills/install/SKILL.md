@@ -23,8 +23,10 @@ turn `generate` into implicit scaffolding.
    Do not assume Cloudflare, public HTML or Admin is required. Check Node 22+
    and pnpm 9+ for these SDK examples. A ChatGPT Site is not a conventional
    Cloudflare Worker deployment; use the installed
-   `docs/handbook/cloudflare/chatgpt-sites.md` host checklist and
-   `docs/examples/host-chatgpt-sites/` runnable reference when selected.
+   `docs/handbook/sites/index.md` integration guide and
+   `docs/examples/host-chatgpt-sites/` runnable reference when selected. Follow
+   its SDK availability instructions; while support is unreleased, use its
+   packed-checkout workflow rather than an older registry package.
 2. Choose the requested exact SDK version, or resolve the intended release
    channel once. Pin all selected `@aotter/mantle*` dependencies to that same
    version. Install only the adapter/optional packages the application needs.
@@ -44,7 +46,7 @@ turn `generate` into implicit scaffolding.
      email-OTP Worker example. Preserve its Sites-owned identity ingress and
      hosting manifest; author the user's Schema/View/Procedure/Trigger, then
      review migrations, media policy and the local/production smoke gates.
-     Browser Admin WebMCP and public read-only `/mcp` do not enable staff OAuth MCP.
+     Browser Admin WebMCP and public read-only `/api/mcp` do not enable staff OAuth MCP.
    - Grammar — `docs/examples/README.md`; copy `builtin-*` Manifests only.
    None of these is a template to install wholesale. Other hosts use the
    embedded adapter guides. Author package scripts, manifests, entry and

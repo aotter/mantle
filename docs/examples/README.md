@@ -19,4 +19,4 @@ Drop a `builtin-*` YAML block into `host-local-admin-otp/manifests/` (or `host-m
 | [`cf-primitives-guarded-api.md`](./cf-primitives-guarded-api.md) | API keys, scopes, live entitlement `ref` guards over REST and MCP | cf-primitives | no | none | `host-minimal-worker` plus credential resolver |
 | [`host-minimal-worker/`](./host-minimal-worker/README.md) | Executable Spec + adapter without Admin | host | no | none | itself |
 | [`host-local-admin-otp/`](./host-local-admin-otp/README.md) | Executable opt-in Admin / Dev UI with email OTP | host | no | required | itself |
-| [`host-chatgpt-sites/`](./host-chatgpt-sites/README.md) | Runnable Sites D1/R2, ChatGPT identity, Admin media, published web and public read-only MCP | host | no | required | itself |
+| [Mantle on ChatGPT Sites](../handbook/sites/index.md) · [runnable reference](./host-chatgpt-sites/README.md) | Runnable Sites D1/R2, ChatGPT identity, Admin media, published web and public read-only MCP | host | no | required | itself |

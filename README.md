@@ -29,6 +29,8 @@
   &middot;
   <a href="#what-you-can-build">Features</a>
   &middot;
+  <a href="docs/handbook/sites/index.md">ChatGPT Sites</a>
+  &middot;
   <a href="docs/examples/README.md">Examples</a>
   &middot;
   <a href="#packages">Packages</a>
@@ -74,6 +76,22 @@ install `@aotter/mantle` in your application and connect storage and any custom
 handlers. Use an official storage adapter or implement the
 [storage ports](docs/adapter-guide.md). For an ongoing project, pin Mantle
 packages to the same exact version and use their installed documentation.
+
+## Build with ChatGPT Sites
+
+**Build with ChatGPT Sites. Manage content and publishing with Mantle.**
+
+Turn a Site into a publication your team can maintain: ChatGPT sign-in,
+Mantle staff roles, drafts and publishing, cover uploads, and public articles
+with HTML, Markdown, and discovery metadata. The official integration brings
+Sites hosting together with Mantle Admin, D1 content, and R2 media.
+
+[Get started with Mantle on ChatGPT Sites](docs/handbook/sites/index.md),
+then publish your first article using the runnable reference. This revision
+requires the documented packed-checkout installation until an SDK release
+includes host-declared MCP endpoints; published `0.1.2-alpha.6` is insufficient.
+Public read-only MCP is included; remote staff OAuth MCP remains a separate
+integration.
 
 ## Choose how much to use
 
@@ -138,9 +156,6 @@ See [task-specific agent prompts](docs/agent-prompts.md) for embedding,
 Worker, Admin, and later surface additions. The
 [plugin and skills guide](skills/README.md) covers agent integration;
 `mantle skills` projects version-matched application skills after installation.
-For ChatGPT Sites with D1, R2 media and Admin, start with the
-[runnable Sites host reference](docs/examples/host-chatgpt-sites/README.md)
-and adapt its example manifest to the user's business rules.
 
 ## Packages
 
