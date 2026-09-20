@@ -99,6 +99,13 @@ Native Cloudflare deployments can configure R2 public domains, S3 credentials, Q
 
 See [native R2 direct upload](../cloudflare/media-r2.md), [authentication](../cloudflare/authentication.md), and [public web](../cloudflare/public-web.md).
 
+For custom business rules and external API calls, see the
+[equipment checkout guide](./equipment-checkout.md). It keeps transactional
+application state separate from notification delivery and documents the
+deployment experiment's limits. Sites' [unsupported uses](https://learn.chatgpt.com/docs/sites#understand-limits-and-unsupported-uses)
+include financial transactions; a successful sandbox experiment is not support
+for live payments.
+
 ## Source
 
 - [`MediaStorage` port](../../../packages/mantle-runtime/src/domain/port/MediaStorage.ts)

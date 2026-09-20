@@ -27,6 +27,7 @@
       "items": [
         { "text": "Get started", "link": "/sites/index" },
         { "text": "Host reference", "link": "/sites/host-reference" },
+        { "text": "Equipment checkout and external APIs", "link": "/sites/equipment-checkout" },
         { "text": "Earlier guide URL", "link": "/cloudflare/chatgpt-sites" }
       ]
     },
