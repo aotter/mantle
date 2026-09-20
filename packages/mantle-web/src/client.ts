@@ -39,7 +39,9 @@ export function createMantleClient(options: MantleClientOptions) {
     const token = await options.accessToken?.();
     const headers = new Headers(init.headers);
     if (token) headers.set("authorization", `Bearer ${token}`);
-    const response = await (options.fetch ?? globalThis.fetch)(new Request(url, { ...init, headers, credentials: token ? "omit" : "same-origin", redirect: "error" }));
+    const response = await (options.fetch ?? globalThis.fetch)(new Request(url, { ...init, headers, credentials: token ? "omit" : "same-origin", redirect: "manual" }));
+    // Workers supports manual redirects; browsers expose them as opaque redirects.
+    if (response.type === "opaqueredirect" || response.status >= 300 && response.status < 400) throw new MantleClientError(response.status, { code: "UNEXPECTED_REDIRECT" }, null);
     let body: { ok?: boolean; data?: T; diagnostic?: unknown };
     try { body = await response.json() as typeof body; }
     catch { throw new MantleClientError(response.status, null, response.headers.get("www-authenticate")); }

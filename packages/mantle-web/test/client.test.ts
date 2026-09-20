@@ -24,6 +24,16 @@ async function fixture() {
 }
 
 describe("frontend client", () => {
+  it("rejects redirects without forwarding a bearer token or retrying", async () => {
+    const { plan } = await fixture();
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      expect((input as Request).redirect).toBe("manual");
+      return Response.redirect("https://foreign.test", 302);
+    });
+    const client = createMantleClient({ origin: "https://tenant.test", contract: projectFrontendContract(plan), fetch: fetcher, accessToken: () => "private" });
+    await expect(client.call("echo-http", { text: "hello" })).rejects.toMatchObject({ diagnostic: { code: "UNEXPECTED_REDIRECT" } });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
   it("uses the same authorized Trigger and business errors locally and over HTTP", async () => {
     const options = await fixture();
     const context = { user: { id: "alice" }, staff: null, env: {} };
