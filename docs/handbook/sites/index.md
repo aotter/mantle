@@ -91,9 +91,22 @@ Run the local checks and show me a draft-to-publish walkthrough before
 deploying through Sites. Keep remote staff OAuth MCP outside this scope.
 ```
 
+## Beyond content: operational workflows
+
+Custom handlers can connect typed Mantle operations to application-owned
+business rules and external services. See [Equipment checkout and external
+notifications](./equipment-checkout.md) for a non-payment scenario: staff
+approve equipment loans, atomically reserve a kit, and notify an equipment desk
+in Slack without making approval depend on notification delivery.
+
+This is an implementation guide and acceptance checklist, not an additional
+feature installed by the article reference. It separates deployed integration
+evidence from the equipment and Slack work still required in your application.
+
 ## Integration details
 
 - [Host reference](./host-reference.md): identity, migrations, R2 routes, MCP, and deployment checks.
+- [Equipment checkout](./equipment-checkout.md): custom business rules and external API delivery without payments.
 - [Runnable application](../../examples/host-chatgpt-sites/README.md): installation, build artifacts, and smoke tests.
 - [Conventional Cloudflare Worker](../cloudflare/conventional-worker.md): the separate path for a Worker you deploy directly.
 
