@@ -549,8 +549,10 @@ describe("McpJsonRpcDispatcher", () => {
     expect(mediaTool?.description).toContain("not always JPEG");
     expect(mediaTool?.description).toContain("maxBytes is a hard safety cap");
     expect(mediaTool?.description).toContain("ask the user in chat before uploading whether to optimize");
-    expect(mediaTool?.description).toContain("harness blocks direct HTTP PUT");
+    expect(mediaTool?.description).toContain("harness blocks HTTP PUT requests");
     expect(mediaTool?.description).toContain("agent/runtime that allows outbound HTTP file uploads");
+    expect(mediaTool?.description).toContain("authenticated same-origin Worker routes");
+    expect(mediaTool?.description).toContain("for same-origin URLs, the authenticated session");
     expect(mediaTool?.description).toContain("transparent PNG");
     expect(mediaTool?.description).toContain("animated GIFs must stay animated");
     expect(mediaTool?.description).toContain("does not expose a base64 upload tool");

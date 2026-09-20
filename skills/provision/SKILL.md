@@ -12,7 +12,11 @@ metadata:
 # Provision a Mantle Project
 
 Local cold start deliberately stops before this skill. Provision only after the
-user asks to create remote resources or ship production.
+user asks to create remote resources or ship production. This flow is for
+consumer-owned Cloudflare Workers. For a ChatGPT Site, use the installed
+`docs/handbook/cloudflare/chatgpt-sites.md` checklist and the Sites host's
+publish workflow; do not run `wrangler deploy` or require R2 S3 credentials
+merely because Sites exposes an R2 binding.
 
 ## Source of Truth
 

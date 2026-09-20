@@ -31,6 +31,7 @@
         { "text": "Site chrome", "link": "/cloudflare/site-chrome" },
         { "text": "Deferred hooks with Queues", "link": "/cloudflare/deferred-hooks-queues" },
         { "text": "Media uploads with R2", "link": "/cloudflare/media-r2" },
+        { "text": "ChatGPT Sites (experimental)", "link": "/cloudflare/chatgpt-sites" },
         { "text": "Deploy and operate", "link": "/cloudflare/deploy-and-operate" },
         { "text": "Low-level composition", "link": "/cloudflare/low-level-composition" }
       ]

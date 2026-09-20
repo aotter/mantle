@@ -35,7 +35,7 @@ import type {
 } from "../../domain/model/PendingUploadRecord.js";
 
 /**
- * Issue presigned upload capabilities for every variant the agent
+ * Issue PUT upload capabilities for every variant the agent
  * declares for one logical media asset (#272). The asset's `id` is
  * minted here and surfaces as `uploadGroupId` in the response — the
  * caller passes it back to `commit_media_upload`.
@@ -207,14 +207,14 @@ export class CreateMediaUploadUseCase {
   }
 
   /** Enforce per-mime byte caps from the purpose policy BEFORE the
-   *  adapter signs presigned PUT URLs. Mantle docs / ADR-0017
+   *  adapter issues PUT URLs. Mantle docs / ADR-0017
    *  promise this gate at create time — without it, oversized
    *  variants only fail after R2 has accepted the bytes (wasted
    *  upload + potential bill).
    *
    *  Also gates on positive-integer byteSize. JSON-RPC and HTTP
    *  validation only narrow to `typeof === "number"`, so 0, -1, or
-   *  0.5 can reach here and produce signed URLs against a maxBytes
+   *  0.5 can reach here and produce upload URLs against a maxBytes
    *  comparison that accepts them. */
   private assertVariantSizesUnderCap(
     opPath: string,

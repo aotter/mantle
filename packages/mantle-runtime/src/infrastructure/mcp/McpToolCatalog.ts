@@ -121,13 +121,13 @@ function buildCreateMediaUploadTool(
   return {
     name: "create_media_upload",
     description:
-      "Issue short-lived direct-upload capabilities for every variant of one logical media asset. " +
+      "Issue short-lived PUT capabilities for every variant of one logical media asset. " +
       "If the user provides an image in chat or the current session, the MCP client/agent must handle it directly: read the attachment bytes in the agent runtime, prepare the required variants locally, call create_media_upload with the variant manifest and byte sizes, HTTP PUT each returned uploadUrl using requiredHeaders, then call commit_media_upload. Do not ask the user to open a terminal. Do not send image bytes through MCP; this server intentionally does not expose a base64 upload tool. " +
-      "Multi-variant by default (#272): one call yields N presigned PUTs (one per declared slot). " +
+      "Multi-variant by default (#272): one call yields N upload URLs (one per declared slot); the host may use presigned R2 URLs or authenticated same-origin Worker routes. " +
       "Per-asset, the agent picks ONE mime per slot from that slot's acceptable set (#282); a " +
       "single purpose declared with slot 0 = `image/jpeg,image/png,image/gif` accepts jpeg photo primary, png alpha/logo primary, or gif primary when animation is preserved. The primary/fallback variant is not always JPEG. Do NOT default to JPEG just because it appears in the policy: read the upload rules below and choose the mime that preserves the source. " +
       "Preserve source semantics while preparing variants: opaque photos may use JPEG primary plus WebP/AVIF alternates; transparent PNG/logo artwork must keep alpha using PNG primary plus alpha-preserving WebP/AVIF; animated GIFs must stay animated in every generated variant. If the available processor would flatten animation or drop transparency, stop and report that limitation instead of uploading degraded media. maxBytes is a hard safety cap, not a web-performance target. If the source or prepared variants are obviously wasteful for website delivery, ask the user in chat before uploading whether to optimize/compress/resize for faster page loads while preserving alpha/animation semantics. " +
-      "Optimization runs agent-side with whatever image processor the MCP client has available; prefer an already-installed dependency, otherwise install a standard image processing package in the agent workspace if the host permits package installs. Node agents should prefer sharp; Python agents should prefer Pillow. If the host supports reusable agent memory or skills, remember this media-variant workflow for reuse. If the current MCP host/runtime harness blocks direct HTTP PUT requests to the presigned uploadUrl, tell the user this host cannot complete the media upload and suggest retrying from an agent/runtime that allows outbound HTTP file uploads; do not ask the user to run terminal upload commands. The Worker only verifies policy. After uploading every variant, call commit_media_upload with the returned uploadGroupId. Only registered when the runtime " +
+      "Optimization runs agent-side with whatever image processor the MCP client has available; prefer an already-installed dependency, otherwise install a standard image processing package in the agent workspace if the host permits package installs. Node agents should prefer sharp; Python agents should prefer Pillow. If the host supports reusable agent memory or skills, remember this media-variant workflow for reuse. If the current MCP host/runtime harness blocks HTTP PUT requests to the returned uploadUrl, tell the user this host cannot complete the media upload and suggest retrying from an agent/runtime that allows outbound HTTP file uploads; do not ask the user to run terminal upload commands. Send requiredHeaders and, for same-origin URLs, the authenticated session. The Worker enforces policy and may relay the bytes to storage. After uploading every variant, call commit_media_upload with the returned uploadGroupId. Only registered when the runtime " +
       "has a media storage adapter bound and a media.purposes taxonomy declared." +
       (policySummary ? `\n\n${policySummary}` : ""),
     inputSchema: {
@@ -155,7 +155,7 @@ function buildCreateMediaUploadTool(
               byteSize: {
                 type: "number",
                 description:
-                  "Caller-declared payload size. Verified against the purpose's `maxBytes[mimeType]` before a presigned URL is minted.",
+                  "Caller-declared payload size. Verified against the purpose's `maxBytes[mimeType]` before an upload URL is issued.",
               },
               role: {
                 type: "string",

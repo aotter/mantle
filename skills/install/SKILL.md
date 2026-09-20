@@ -21,7 +21,9 @@ turn `generate` into implicit scaffolding.
 1. Determine the actual host and required surfaces from the request. Reuse an
    existing application when available; otherwise work in its own directory.
    Do not assume Cloudflare, public HTML or Admin is required. Check Node 22+
-   and pnpm 9+ for these SDK examples.
+   and pnpm 9+ for these SDK examples. A ChatGPT Site is not a conventional
+   Cloudflare Worker deployment; use the installed
+   `docs/handbook/cloudflare/chatgpt-sites.md` host checklist when selected.
 2. Choose the requested exact SDK version, or resolve the intended release
    channel once. Pin all selected `@aotter/mantle*` dependencies to that same
    version. Install only the adapter/optional packages the application needs.
