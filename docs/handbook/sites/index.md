@@ -34,13 +34,10 @@ boundaries.
 
 ## Start with the supported SDK
 
-**Release status:** this revision needs the new host-declared MCP endpoint
-support. Published `0.1.2-alpha.6` does not contain it. Use the
-[packed-checkout installation](../../examples/host-chatgpt-sites/README.md#local-reproduction)
-to build this exact SDK and its reference application together. It records the
-source commit and package hashes. A registry-only installation becomes the
-starting path after a release includes this support and the example's dependency
-versions and lockfile are updated together.
+This revision needs the host-declared MCP endpoint support published starting
+`0.1.2-rc.1`; install the reference's pinned Mantle dependencies from the
+registry as documented in its
+[README](../../examples/host-chatgpt-sites/README.md#local-reproduction).
 
 You need Node.js 22+, pnpm 9+, and Sites access with D1 and R2 available for your
 project. Follow the reference's local build and smoke test before deployment.

@@ -28,8 +28,8 @@ Pin every `@aotter/mantle*` package to the same exact release and add the peers 
     "check": "mantle generate && mantle generate --check && mantle validate && mantle skills && mantle skills --check && tsc --noEmit"
   },
   "dependencies": {
-    "@aotter/mantle": "0.1.2-alpha.6",
-    "@aotter/mantle-cloudflare": "0.1.2-alpha.6",
+    "@aotter/mantle": "0.1.2-rc.1",
+    "@aotter/mantle-cloudflare": "0.1.2-rc.1",
     "better-auth": "1.7.2",
     "hono": "^4.13.3",
     "zod": "^4.5.4",

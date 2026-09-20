@@ -23,7 +23,7 @@ function assemble(env:Env) {
   mountWeb(app,get);
   mountMcp(app,get,auth);
   mountMedia(app,auth,env);
-  app.get('/health',async()=>{await get();return Response.json({ok:true,storage:'D1',auth:'ChatGPT Sites',mantle:'0.1.2-alpha.6'});});
+  app.get('/health',async()=>{await get();return Response.json({ok:true,storage:'D1',auth:'ChatGPT Sites',mantle:'0.1.2-rc.1'});});
   app.get('/admin/sign-in',async c=>{
     if(c.req.header('cookie')?.split(';').some(v=>v.trim()==='mantle-sites-signout=1')) {
       c.header('Set-Cookie','mantle-sites-signout=; Path=/admin/sign-in; HttpOnly; SameSite=Strict; Max-Age=0'+(env.PUBLIC_ORIGIN.startsWith('https:')?'; Secure':''));
