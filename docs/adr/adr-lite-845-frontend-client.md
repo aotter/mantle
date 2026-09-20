@@ -25,6 +25,12 @@ and configured bearer issuer/audience/scope checks remain the same. Host-owned
 OAuth/connection policy is independent of application revision. Existing Better
 Auth PKCE registration, consent and revocation remain the authority.
 
+In a provider composed with MCP, user grants for additional configured resources
+carry the same consent lineage and session binding as MCP grants. Verification
+reuses the current-consent/session check for those resources too; API JWTs cannot
+outlive revocation or become valid again on reconnect. OAuth discovery responses
+also receive the configured exact-origin CORS policy for public browser clients.
+
 Existing native public cache tags and purge handle same-Worker invalidation.
 External consumers start with private/no-store, or explicitly bound TTL; durable
 remote invalidation delivery remains the parent #792 contract and must be proven

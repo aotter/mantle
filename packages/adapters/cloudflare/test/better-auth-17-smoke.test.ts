@@ -143,7 +143,7 @@ describe("Better Auth 1.7 MCP smoke", () => {
     sqlite.close();
   });
 
-  it("discovers CIMD clients, retains their metadata, and prunes only expired DCR rows", async () => {
+  it.each([RESOURCE, `${ORIGIN}/api`])("discovers clients and enforces current user grants for %s", async (resource) => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const { db, sqlite } = sqliteD1();
     for (const migration of CANONICAL_MIGRATIONS) sqlite.exec(migration.sql);
@@ -204,6 +204,8 @@ describe("Better Auth 1.7 MCP smoke", () => {
         clientRegistrationDefaultScopes: ["mcp"],
         clientRegistrationAllowedScopes: ["mcp", "offline_access"],
         mcpResource: RESOURCE,
+        resources: [resource],
+        clientRegistrationDefaultResources: [resource],
       },
     });
     expect(auth.mcpResource).toBe(RESOURCE);
@@ -234,14 +236,14 @@ describe("Better Auth 1.7 MCP smoke", () => {
       redirect_uri: metadata.redirect_uris[0],
       code_challenge: await pkceChallenge(verifier),
       code_challenge_method: "S256",
-      resource: RESOURCE,
+      resource: resource,
       scope: "mcp offline_access",
       state: "state-1",
     }).toString();
     const response = await auth.handler(new Request(authorize));
     expect(response.status).toBe(302);
     const login = new URL(response.headers.get("location")!, ORIGIN);
-    expect(login.pathname).toBe("/admin/sign-in");
+    expect(login.pathname, login.searchParams.get("error_description") ?? login.searchParams.get("error") ?? "").toBe("/admin/sign-in");
     expect(metadataFetch).toHaveBeenCalledTimes(1);
 
     let cookies = mergeCookies("", response);
@@ -308,7 +310,7 @@ describe("Better Auth 1.7 MCP smoke", () => {
         redirect_uri: metadata.redirect_uris[0],
         code: code!,
         code_verifier: verifier,
-        resource: RESOURCE,
+        resource: resource,
       }),
     }));
     expect(token.status).toBe(200);
@@ -316,8 +318,8 @@ describe("Better Auth 1.7 MCP smoke", () => {
     const accessToken = tokens.access_token;
     expect(tokens.refresh_token).toEqual(expect.any(String));
     const verification = await auth.verifyOAuthAccessToken(
-      new Request(RESOURCE, { headers: { authorization: `Bearer ${accessToken}` } }),
-      { audience: RESOURCE, scopes: ["mcp"] },
+      new Request(resource, { headers: { authorization: `Bearer ${accessToken}` } }),
+      { audience: resource, scopes: ["mcp"] },
     );
     expect(verification).toMatchObject({
       ok: true,
@@ -329,7 +331,7 @@ describe("Better Auth 1.7 MCP smoke", () => {
 
     // Warm JWKS: exactly one native grant statement, then a fresh role read.
     const queries = vi.spyOn(db, "prepare");
-    expect(await auth.verifyOAuthAccessToken(accessToken, { audience: RESOURCE, scopes: ["mcp"] }))
+    expect(await auth.verifyOAuthAccessToken(accessToken, { audience: resource, scopes: ["mcp"] }))
       .toMatchObject({ ok: true });
     expect(queries).toHaveBeenCalledTimes(1);
     const grantSql = queries.mock.calls[0]![0];
@@ -366,14 +368,14 @@ describe("Better Auth 1.7 MCP smoke", () => {
     ] as const) {
       const original = sqlite.prepare(`SELECT ${field} AS value FROM ${table} WHERE id = ?`).get(id)!.value;
       sqlite.prepare(`UPDATE ${table} SET ${field} = ? WHERE id = ?`).run(invalid, id);
-      await expect(auth.verifyOAuthAccessToken(accessToken, { audience: RESOURCE, scopes: ["mcp"] }))
+      await expect(auth.verifyOAuthAccessToken(accessToken, { audience: resource, scopes: ["mcp"] }))
         .resolves.toEqual({ ok: false, status: 401, reason: "invalid-token" });
       sqlite.prepare(`UPDATE ${table} SET ${field} = ? WHERE id = ?`)
         .run(original, field === "id" ? invalid : id);
     }
     sqlite.exec("RELEASE grant_predicates; PRAGMA defer_foreign_keys = OFF;");
     queries.mockImplementationOnce(() => { throw new Error("D1 unavailable"); });
-    await expect(auth.verifyOAuthAccessToken(accessToken, { audience: RESOURCE, scopes: ["mcp"] }))
+    await expect(auth.verifyOAuthAccessToken(accessToken, { audience: resource, scopes: ["mcp"] }))
       .resolves.toEqual({ ok: false, status: 401, reason: "invalid-token" });
     queries.mockRestore();
 
@@ -469,8 +471,8 @@ describe("Better Auth 1.7 MCP smoke", () => {
 
     expect(await auth.revokeOAuthConsent!(verification.userId, consents[0]!.id)).toBe(true);
     await expect(auth.verifyOAuthAccessToken(
-      new Request(RESOURCE, { headers: { authorization: `Bearer ${accessToken}` } }),
-      { audience: RESOURCE, scopes: ["mcp"] },
+      new Request(resource, { headers: { authorization: `Bearer ${accessToken}` } }),
+      { audience: resource, scopes: ["mcp"] },
     )).resolves.toEqual({ ok: false, status: 401, reason: "invalid-token" });
     expect(await auth.listOAuthConsents!(verification.userId)).toEqual([]);
     expect(sqlite.prepare(
@@ -519,7 +521,7 @@ describe("Better Auth 1.7 MCP smoke", () => {
         redirect_uri: metadata.redirect_uris[0],
         code: reconnected.searchParams.get("code")!,
         code_verifier: verifier,
-        resource: RESOURCE,
+        resource: resource,
       }),
     }));
     expect(newToken.status).toBe(200);
@@ -529,11 +531,11 @@ describe("Better Auth 1.7 MCP smoke", () => {
     expect(JSON.parse(Buffer.from(newAccessToken.split(".")[1]!, "base64url").toString()))
       .toMatchObject({ mantle_consent_id: newConsents[0]!.id });
     await expect(auth.verifyOAuthAccessToken(newAccessToken, {
-      audience: RESOURCE, scopes: ["mcp"],
+      audience: resource, scopes: ["mcp"],
     })).resolves.toMatchObject({ ok: true, userId: verification.userId });
     await expect(auth.verifyOAuthAccessToken(
-      new Request(RESOURCE, { headers: { authorization: `Bearer ${accessToken}` } }),
-      { audience: RESOURCE, scopes: ["mcp"] },
+      new Request(resource, { headers: { authorization: `Bearer ${accessToken}` } }),
+      { audience: resource, scopes: ["mcp"] },
     )).resolves.toEqual({ ok: false, status: 401, reason: "invalid-token" });
 
     sqlite.exec("INSERT INTO oauthRefreshToken SELECT * FROM delayed_refresh; DROP TABLE delayed_refresh;");
@@ -548,7 +550,7 @@ describe("Better Auth 1.7 MCP smoke", () => {
     expect(JSON.parse(Buffer.from(delayedAccessToken.split(".")[1]!, "base64url").toString()))
       .toMatchObject({ mantle_consent_id: originalConsentId });
     await expect(auth.verifyOAuthAccessToken(delayedAccessToken, {
-      audience: RESOURCE, scopes: ["mcp"],
+      audience: resource, scopes: ["mcp"],
     })).resolves.toEqual({ ok: false, status: 401, reason: "invalid-token" });
 
     const rotatedRefresh = await auth.handler(new Request(`${ORIGIN}/api/auth/oauth2/token`, {
@@ -561,13 +563,13 @@ describe("Better Auth 1.7 MCP smoke", () => {
     expect(JSON.parse(Buffer.from(rotatedAccessToken.split(".")[1]!, "base64url").toString()))
       .toMatchObject({ mantle_consent_id: originalConsentId });
     await expect(auth.verifyOAuthAccessToken(rotatedAccessToken, {
-      audience: RESOURCE, scopes: ["mcp"],
+      audience: resource, scopes: ["mcp"],
     })).resolves.toEqual({ ok: false, status: 401, reason: "invalid-token" });
 
     sqlite.prepare("UPDATE session SET expiresAt = ? WHERE userId = ?")
       .run(new Date(Date.now() - 1_000).toISOString(), verification.userId);
     await expect(auth.verifyOAuthAccessToken(newAccessToken, {
-      audience: RESOURCE, scopes: ["mcp"],
+      audience: resource, scopes: ["mcp"],
     })).resolves.toEqual({ ok: false, status: 401, reason: "invalid-token" });
 
     sqlite.prepare("UPDATE session SET expiresAt = ? WHERE userId = ?")
@@ -575,7 +577,7 @@ describe("Better Auth 1.7 MCP smoke", () => {
     const signOut = await auth.handler(jsonRequest(`${ORIGIN}/api/auth/sign-out`, {}, cookies));
     expect(signOut.status).toBe(200);
     await expect(auth.verifyOAuthAccessToken(newAccessToken, {
-      audience: RESOURCE, scopes: ["mcp"],
+      audience: resource, scopes: ["mcp"],
     })).resolves.toEqual({ ok: false, status: 401, reason: "invalid-token" });
 
     metadataFetch.mockResolvedValueOnce(new Response(null, {

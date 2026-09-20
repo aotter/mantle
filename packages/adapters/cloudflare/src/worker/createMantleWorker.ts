@@ -330,7 +330,8 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
         const setupIncomplete = await setupIncompleteAuthResponse(request, worker.auth);
         if (setupIncomplete) return setupIncomplete;
         const origins = resolve(options.frontendOrigins, env);
-        return origins && new URL(request.url).pathname.startsWith("/api/")
+        const pathname = new URL(request.url).pathname;
+        return origins && (pathname.startsWith("/api/") || pathname.startsWith(MANTLE_RESERVED_WELL_KNOWN_PREFIX))
           ? withFrontendCors(request, origins, () => worker.fetch(request, env, ctx))
           : worker.fetch(request, env, ctx);
       });
