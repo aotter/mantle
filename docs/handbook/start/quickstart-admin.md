@@ -32,10 +32,10 @@ Pin every `@aotter/mantle*` package to the same exact release. Admin needs both 
     "dev": "wrangler dev --local --ip 127.0.0.1 --port 8787"
   },
   "dependencies": {
-    "@aotter/mantle": "0.1.2-alpha.6",
-    "@aotter/mantle-admin": "0.1.2-alpha.6",
-    "@aotter/mantle-admin-ui": "0.1.2-alpha.6",
-    "@aotter/mantle-cloudflare": "0.1.2-alpha.6",
+    "@aotter/mantle": "0.1.2-rc.1",
+    "@aotter/mantle-admin": "0.1.2-rc.1",
+    "@aotter/mantle-admin-ui": "0.1.2-rc.1",
+    "@aotter/mantle-cloudflare": "0.1.2-rc.1",
     "better-auth": "1.7.2",
     "hono": "^4.13.3",
     "zod": "^4.5.4",

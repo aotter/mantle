@@ -2,7 +2,7 @@
 
 The runnable application for [Mantle on ChatGPT Sites](../../handbook/sites/index.md) connects Sites D1 + R2 bindings, Sign in with ChatGPT identity, Mantle Admin and staff roles, same-origin media upload, a published-only article frontend, anonymous read-only `/api/mcp`, and Sites-session staff tools at `/api/mcp/staff`. Remote OAuth MCP remains a separate integration; see [MCP support](../../handbook/sites/host-reference.md#remote-mcp-is-a-separate-gate).
 
-**SDK requirement:** this revision requires the checkout's `mountMantleAdmin.mcpEndpoints` support. Published `0.1.2-alpha.6` does not include it, even though the checkout still carries that version number. Use the exact packed-checkout workflow below; copying this folder and running `npm ci` against the registry is not a supported reproduction of this revision. Build typechecking and the endpoint smoke assertions reject that mismatch. Once a release contains this change, update every Mantle dependency and the lockfile together before switching back to registry installation.
+**SDK requirement:** this revision needs `mountMantleAdmin.mcpEndpoints` support, published starting `0.1.2-rc.1`. A registry install with `npm ci` against the pinned dependencies above is a supported reproduction of this revision; use the packed-checkout workflow below only when developing against an unreleased Mantle checkout instead.
 
 After setup, follow [Publish your first article](../../handbook/sites/index.md#publish-your-first-article) to verify the editorial workflow in Admin.
 

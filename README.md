@@ -87,11 +87,10 @@ with HTML, Markdown, and discovery metadata. The official integration brings
 Sites hosting together with Mantle Admin, D1 content, and R2 media.
 
 [Get started with Mantle on ChatGPT Sites](docs/handbook/sites/index.md),
-then publish your first article using the runnable reference. This revision
-requires the documented packed-checkout installation until an SDK release
-includes host-declared MCP endpoints; published `0.1.2-alpha.6` is insufficient.
-Public read-only MCP is included; remote staff OAuth MCP remains a separate
-integration.
+then publish your first article using the runnable reference. Host-declared
+MCP endpoints ship starting `0.1.2-rc.1`; install the example's pinned Mantle
+dependencies from the registry as documented. Public read-only MCP is
+included; remote staff OAuth MCP remains a separate integration.
 
 ## Choose how much to use
 
