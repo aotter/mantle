@@ -62,8 +62,8 @@ describe("mantle generate", () => {
       expect(firstMantle).toContain('procedure: "import-product"');
       expect(firstMantle).toContain("products: {");
       expect(firstMantle).toContain('collection: "products"');
-      expect(firstMantle).toContain("findManyByDataField: <F extends keyof Mantle.Entry_products & string>");
-      expect(firstMantle).toContain("readByDataFieldIn: <F extends keyof Mantle.Entry_products & string>");
+      expect(firstMantle).toContain('findManyByDataField: <F extends ("sku" | "title") & keyof Mantle.Entry_products>');
+      expect(firstMantle).toContain('readByDataFieldIn: <F extends ("code" | "seats") & keyof Mantle.Entry_members>');
       expect(firstMantle.match(/readonly "syncCatalog":/g)).toHaveLength(1);
       expect(firstMantle).toContain("ProcInput_import_product | Mantle.ProcInput_remove_product");
       await expect(readFile(join(root, "public", "_mantle", "admin", "index.html")))
@@ -151,10 +151,15 @@ if (false) {
   mantle.views.productsBySku();
   // @ts-expect-error Schema payload is generated from the manifest.
   await mantle.entries.products.createDraft({ data: { title: "missing sku" }, authorId: null });
-  // @ts-expect-error Field reads only accept declared Schema fields.
-  await mantle.entries.products.findManyByDataField({ field: "price", value: 1, limit: 1 });
+  // @ts-expect-error Field reads only accept declared Schema fields, even when the Schema allows extra properties.
+  await mantle.entries.products.findManyByDataField({ field: "price", value: "1", limit: 1 });
   // @ts-expect-error A field's value must match its declared scalar type.
   await mantle.entries.products.readByDataField({ field: "sku", value: 42 });
+  // A closed Schema (additionalProperties: false) generates a plain interface; the accessors still compile.
+  const closed: Promise<readonly { data: { code: string; seats?: number } }[]> = mantle.entries.members.findManyByDataField({ field: "seats", value: 2, limit: 1 });
+  void closed;
+  // @ts-expect-error Undeclared fields on a closed Schema are rejected on the field name.
+  await mantle.entries.members.readByDataField({ field: "email", value: "x" });
 }
 `);
       const compiled = join(root, "compiled");
@@ -466,6 +471,19 @@ spec:
     properties:
       sku: { type: string }
       title: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: members }
+spec:
+  title: Members
+  schema:
+    type: object
+    additionalProperties: false
+    required: [code]
+    properties:
+      code: { type: string }
+      seats: { type: number }
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: View
