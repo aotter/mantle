@@ -592,6 +592,7 @@ function checkRepositoryGuidance() {
   }
 
   for (const stalePath of [
+    "starters",
     "starters/blank/README.md",
     "packages/adapters/netlify/README.md",
     "packages/adapters/netlify/package.json",

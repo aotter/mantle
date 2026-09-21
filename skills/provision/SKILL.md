@@ -13,18 +13,22 @@ metadata:
 
 Local cold start deliberately stops before this skill. Provision only after the
 user asks to create remote resources or ship production. This flow is for
-consumer-owned Cloudflare Workers. For a ChatGPT Site, use the installed
-`docs/handbook/sites/index.md` integration guide and the "Publish with Sites"
-steps in `docs/examples/host-chatgpt-sites/README.md`: request D1 and R2 on the
-Site, set `PUBLIC_ORIGIN` and `OWNER_EMAIL` in Sites settings, review the
-migration, then save and deploy a Sites version. Do not run `wrangler deploy`
-or require R2 S3 credentials merely because Sites exposes an R2 binding.
+consumer-owned Cloudflare Workers. New direct-authored apps do not need Landing
+artifacts (`.mantle/launch-state.json`, `.mantle/handoff.md`, or a hosted-auth
+allocation). Treat any Landing handoff as **legacy/optional**. For a ChatGPT
+Site, use the installed `docs/handbook/sites/index.md` integration guide and
+the "Publish with Sites" steps in `docs/examples/host-chatgpt-sites/README.md`:
+request D1 and R2 on the Site, set `PUBLIC_ORIGIN` and `OWNER_EMAIL` in Sites
+settings, review the migration, then save and deploy a Sites version. Do not
+run `wrangler deploy` or require R2 S3 credentials merely because Sites exposes
+an R2 binding.
 
 ## Source of Truth
 
 1. Read the actual provider config (`wrangler.jsonc` or `wrangler.toml`),
    application entry and git remotes. Read legacy `.mantle/launch-state.json`
-   and `.mantle/handoff.md` only when present; do not create them as prerequisites.
+   and `.mantle/handoff.md` only when present; they are optional leftovers from
+   Landing and must not be created as prerequisites for a new app.
 2. Read installed `@aotter/mantle*` versions from `package.json`.
 3. Use matching embedded docs under `node_modules/@aotter/mantle/docs/`.
 4. Never infer provider authority from launch state. Confirm the active GitHub
@@ -56,8 +60,9 @@ account, prefer an available connector, or use `pnpm exec wrangler login` with
 the user's agreement, then run `pnpm deploy`.
 
 Capture the live URL in `PUBLIC_ORIGIN` and `Public site:` in `AGENTS.md`, then
-commit and push non-secret changes. Reuse any repo or Worker already created
-by landing. Workers Builds is optional after a direct deploy.
+commit and push non-secret changes. Reuse any repo or Worker already created.
+Do not recreate Landing artifacts for a new direct-authored app. Workers Builds
+is optional after a direct deploy.
 
 When the owner later adopts a custom domain, update `PUBLIC_ORIGIN` and the
 provider's OAuth callback together, then redeploy. Do not patch `site_config`
@@ -67,15 +72,17 @@ directly; boot syncs its canonical origin from `PUBLIC_ORIGIN`.
 
 - **Self-hosted email OTP:** use the application's production transactional-email sender. Replace `ConsoleEmailSender`; never deploy it.
 - **Self-hosted GitHub OAuth — free fallback:** use when the application has no email provider. Configure the owner's per-site GitHub OAuth App and Worker secrets using the steps below.
-- **Mantle hosted auth — paid:** use only when the landing handoff records a
-  hosted allocation and client configuration. Mantle Platform operates the
-  identity provider; do not ask the user for a per-site GitHub OAuth App.
+- **Mantle hosted auth — paid, legacy/optional:** use only when a **legacy
+  Landing handoff** already records a hosted allocation and client
+  configuration. New direct-authored apps do not get this from Core. Mantle
+  Platform operates the identity provider; do not ask the user for a per-site
+  GitHub OAuth App.
 
 Configure only the selected mode. Core deliberately rejects partial or mixed
 hosted/self-managed bindings with `503 setup_incomplete`.
 
-Do not claim that hosted auth can attach to an arbitrary local repo unless the
-current Mantle landing flow explicitly supplies that handoff.
+Do not claim that hosted auth can attach to an arbitrary local repo unless a
+legacy Landing handoff already supplies that configuration.
 
 For the exact boundary, read
 `node_modules/@aotter/mantle/docs/auth-hosting-model.md`.
@@ -131,10 +138,13 @@ git push
 pnpm deploy
 ```
 
-## Hosted Auth
+## Hosted Auth (legacy Landing)
 
-Follow the landing handoff and generated client configuration. Hosted
-configuration remains in landing-managed Cloudflare Worker bindings. Verify:
+Skip this section unless a legacy Landing handoff is already present. New
+direct-authored apps use self-hosted email OTP or GitHub OAuth above.
+
+Follow that handoff and its client configuration. Hosted configuration remains
+in landing-managed Cloudflare Worker bindings. Verify:
 
 - `MANTLE_AUTH_MODE = "hosted"`;
 - `MANTLE_HOSTED_AUTH_ISSUER` is the HTTPS root issuer;
