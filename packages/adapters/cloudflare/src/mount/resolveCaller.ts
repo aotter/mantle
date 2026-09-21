@@ -99,7 +99,9 @@ export async function resolveCaller(
 
   const authorization = request.headers.get("authorization");
   if (authorization !== null) {
-    const token = /^Bearer ([^\s]+)$/i.exec(authorization)?.[1];
+    // Bearer or DPoP (sender-constrained) access tokens; the verifier checks
+    // the proof. MCP clients use DPoP, so the shared gate must admit it.
+    const token = /^(?:Bearer|DPoP) ([^\s]+)$/i.exec(authorization)?.[1];
     if (!token) {
       return invalidCredential(401);
     }
