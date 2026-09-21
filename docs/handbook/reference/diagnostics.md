@@ -110,7 +110,7 @@ Named by the same code in validate, boot or runtime, depending on where the cond
 | Code | Meaning | HTTP |
 |---|---|---|
 | `BUILTIN_HANDLER_SCHEMA_UNKNOWN` | `handler.schema` names no declared Schema. | — |
-| `BUILTIN_HANDLER_CONTRACT_INVALID` | The Procedure's `input` breaks the builtin op's contract, such as a missing `expectedVersion` on `update` or a `match` tuple that is not exactly one `uniqueIndexes` entry. | — |
+| `BUILTIN_HANDLER_CONTRACT_INVALID` | The Procedure's `input` breaks the builtin op's contract, such as a missing `expectedVersion` on `update` or a `match` tuple that is not exactly one `uniqueIndexes` entry; or `spec.mcp` contradicts the op (`readOnlyHint: true` on any builtin, `destructiveHint: false` on `op: delete`). | — |
 | `LIFECYCLE_SCHEMA_UNKNOWN` | A lifecycle Trigger's `source.schema` names no declared Schema. | — |
 | `LIFECYCLE_HOOK_REJECTED` | A `before_*` hook aborted the mutation. The diagnostic names the rejecting hook. | `409` |
 

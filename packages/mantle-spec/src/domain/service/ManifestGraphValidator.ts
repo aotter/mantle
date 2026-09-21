@@ -466,6 +466,33 @@ function checkBuiltinHandler(
   const h = p.spec.handler;
   if (h.kind !== "builtin") return [];
   const out: Diagnostic[] = [];
+  // Declared annotations must not contradict what the builtin op proves (#972):
+  // every op writes, and delete destroys. A false hint would tell a client to
+  // skip the confirmation the MCP spec defaults to.
+  if (p.spec.mcp?.readOnlyHint === true) {
+    out.push(
+      validateDiagnostic({
+        code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+        severity: "error",
+        path: manifestPath("Procedure", p.metadata.name, "/spec/mcp/readOnlyHint", filePaths),
+        value: true,
+        expected: "no readOnlyHint, or readOnlyHint: false, on a builtin handler",
+        message: `Procedure '${p.metadata.name}' declares mcp.readOnlyHint: true but its builtin handler (op: ${h.op}) writes.`,
+      }),
+    );
+  }
+  if (h.op === "delete" && p.spec.mcp?.destructiveHint === false) {
+    out.push(
+      validateDiagnostic({
+        code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+        severity: "error",
+        path: manifestPath("Procedure", p.metadata.name, "/spec/mcp/destructiveHint", filePaths),
+        value: false,
+        expected: "no destructiveHint, or destructiveHint: true, on a builtin delete",
+        message: `Procedure '${p.metadata.name}' declares mcp.destructiveHint: false but its builtin handler deletes.`,
+      }),
+    );
+  }
   const target = schemasByName.get(h.schema);
   if (!target) {
     out.push(
@@ -481,21 +508,6 @@ function checkBuiltinHandler(
       }),
     );
     return out;
-  }
-
-  if (p.spec.mcp?.readOnlyHint === true) {
-    // Every builtin op writes; a read-only claim over one would be a false
-    // safety statement on the MCP wire (#972).
-    out.push(
-      validateDiagnostic({
-        code: "BUILTIN_HANDLER_CONTRACT_INVALID",
-        severity: "error",
-        path: manifestPath("Procedure", p.metadata.name, "/spec/mcp/readOnlyHint", filePaths),
-        value: true,
-        expected: "no readOnlyHint, or readOnlyHint: false, on a builtin handler",
-        message: `Procedure '${p.metadata.name}' declares mcp.readOnlyHint: true but its builtin handler (op: ${h.op}) writes.`,
-      }),
-    );
   }
 
   const inputSchema = p.spec.input as JsonSchema;

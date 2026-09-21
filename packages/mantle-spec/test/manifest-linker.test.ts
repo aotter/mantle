@@ -340,6 +340,7 @@ spec:
 
     expect(linked.ok).toBe(true);
     expect(linked.diagnostics.filter((d) => d.code === "MCP_TOOL_INPUT_UNREACHABLE")).toEqual([]);
+  });
 
   it("accepts declared MCP tool annotations and rejects a read-only claim over a writing builtin", () => {
     const declared = linkManifestSet(parse(`
@@ -400,6 +401,39 @@ spec:
       code: "BUILTIN_HANDLER_CONTRACT_INVALID",
       path: "/spec/mcp/readOnlyHint",
     }));
+
+    const gentle = linkManifestSet(parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: quotas }
+spec:
+  title: Quotas
+  lifecycle: operational
+  schema: { type: object, properties: { limit: { type: number } } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: drop-quota }
+spec:
+  mcp: { destructiveHint: false }
+  input: { type: object, required: [id], properties: { id: { type: string } } }
+  output: { type: object }
+  handler: { kind: builtin, op: delete, schema: quotas }
+`));
+    expect(gentle.diagnostics).toContainEqual(expect.objectContaining({
+      code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+      path: "/spec/mcp/destructiveHint",
+    }));
+    expect(() => parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: both }
+spec:
+  mcp: { readOnlyHint: true, destructiveHint: true }
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: both }
+`)).toThrow(/both readOnlyHint/);
   });
 
   it("allows manifests to define the removed generic read tool names", () => {

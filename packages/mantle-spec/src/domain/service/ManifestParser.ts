@@ -1166,6 +1166,10 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
         throw new ManifestParseError(`Procedure.spec.mcp.${key} must be a boolean`, idx, `/spec/mcp/${key}`);
       }
     }
+    const hints = mcp as { readOnlyHint?: boolean; destructiveHint?: boolean };
+    if (hints.readOnlyHint === true && hints.destructiveHint === true) {
+      throw new ManifestParseError("Procedure.spec.mcp cannot be both readOnlyHint: true and destructiveHint: true", idx, "/spec/mcp");
+    }
   }
   validateLocalizedText(
     s["title"],

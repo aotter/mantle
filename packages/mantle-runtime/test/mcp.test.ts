@@ -478,9 +478,9 @@ describe("McpJsonRpcDispatcher", () => {
     expect(catalogFor(builtin)?.annotations).toEqual({ readOnlyHint: false });
     const remove = { ...procedure, spec: { ...procedure.spec, handler: { kind: "builtin" as const, op: "delete" as const, schema: "posts" } } };
     expect(catalogFor(remove)?.annotations).toEqual({ readOnlyHint: false, destructiveHint: true });
-    // A declared destructiveHint wins over inference; readOnlyHint stays inferred.
-    expect(catalogFor({ ...remove, spec: { ...remove.spec, mcp: { destructiveHint: false } } })?.annotations)
-      .toEqual({ readOnlyHint: false, destructiveHint: false });
+    // A declared openWorldHint merges with the inferred facts.
+    expect(catalogFor({ ...remove, spec: { ...remove.spec, mcp: { openWorldHint: true } } })?.annotations)
+      .toEqual({ readOnlyHint: false, destructiveHint: true, openWorldHint: true });
 
     // An idempotency-key input is the one thing inferable for a ref handler.
     const keyed = { ...procedure, spec: { ...procedure.spec, input: {
