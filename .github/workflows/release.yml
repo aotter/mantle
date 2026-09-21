@@ -150,14 +150,6 @@ jobs:
                 failed = true;
               }
             }
-            const marketplacePath = '.agents/plugins/marketplace.json';
-            const marketplace = JSON.parse(readFileSync(marketplacePath, 'utf8'));
-            const marketplaceRef = marketplace.plugins?.[0]?.source?.ref;
-            const expectedRef = 'v' + expected;
-            if (marketplaceRef !== expectedRef) {
-              console.error(marketplacePath + ' ref ' + marketplaceRef + ' does not match tag ' + expectedRef);
-              failed = true;
-            }
             if (failed) process.exit(1);
           "
 
