@@ -56,6 +56,23 @@ betterAuthGlobal.context.requestStateAsyncStorage ??= new AsyncLocalStorage();
 betterAuthGlobal.context.endpointContextAsyncStorage ??= new AsyncLocalStorage();
 betterAuthGlobal.context.adapterAsyncStorage ??= new AsyncLocalStorage();
 
+/**
+ * Request-scoped retention for Better Auth's fire-and-forget work. Better Auth
+ * hands `advanced.backgroundTasks.handler` a bare promise with no request in
+ * sight; the handler reads the retainer the current `handler()` call stored
+ * here and registers the promise with it. On Workers that retainer is
+ * `ExecutionContext.waitUntil` — without it the OTP send and the rate-limit
+ * cleanup can be cancelled the moment the response is returned (#976).
+ */
+const backgroundTaskRetention = new AsyncLocalStorage<BackgroundTaskRetainer>();
+type BackgroundTaskRetainer = (promise: Promise<unknown>) => void;
+
+/** Per-request platform hooks a host passes into `MantleAuth.handler`. */
+export interface MantleAuthRequestContext {
+  /** Keeps Better Auth background work alive past the response, e.g. `ctx.waitUntil`. */
+  readonly waitUntil?: BackgroundTaskRetainer;
+}
+
 interface BetterAuthGlobal {
   version: string;
   epoch: number;
@@ -892,10 +909,13 @@ function buildAuth(config: CreateMantleAuthOptions) {
     // on OTP send — see § "Auth as contract" notes in ADR-0014.
     backgroundTasks: {
       handler: (p: Promise<unknown>) => {
-        p.catch((err) => {
+        const settled = p.then(() => undefined, (err) => {
           // eslint-disable-next-line no-console
           console.error("[better-auth backgroundTask]", err);
         });
+        // Registered with the request's retainer when the host supplied one;
+        // otherwise the work simply runs detached as before.
+        backgroundTaskRetention.getStore()?.(settled);
       },
     },
   };
@@ -1124,7 +1144,9 @@ export interface MantleAuth {
   readonly ready?: Promise<void>;
   /** Canonical MCP protected resource when this Auth owns one. */
   readonly mcpResource?: string;
-  readonly handler: (request: Request) => Promise<Response>;
+  /** Serve one Better Auth request. Pass `waitUntil` so background work
+   *  (OTP send, rate-limit cleanup) survives the response on Workers. */
+  readonly handler: (request: Request, context?: MantleAuthRequestContext) => Promise<Response>;
   readonly getSession: (request: Request) => Promise<{
     session: { id: string; userId: string; expiresAt: Date };
     user: {
@@ -1342,13 +1364,17 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
     ...(config.oauthProvider?.mcpResource
       ? { mcpResource: config.oauthProvider.mcpResource }
       : {}),
-    handler: async (request) => {
-      await prepareAuth();
-      const pathname = new URL(request.url).pathname;
-      if (pathname.startsWith(`${basePath}/oauth2/`)) {
-        await pruneExpiredDynamicClients();
-      }
-      return normalizeAuthResponseCookies(await auth.handler(request));
+    handler: (request, context) => {
+      const serve = async (): Promise<Response> => {
+        await prepareAuth();
+        const pathname = new URL(request.url).pathname;
+        if (pathname.startsWith(`${basePath}/oauth2/`)) {
+          await pruneExpiredDynamicClients();
+        }
+        return normalizeAuthResponseCookies(await auth.handler(request));
+      };
+      const retain = context?.waitUntil;
+      return retain ? backgroundTaskRetention.run(retain, serve) : serve();
     },
     getSession: async (request) => {
       let session;

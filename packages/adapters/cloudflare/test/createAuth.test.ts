@@ -863,6 +863,31 @@ describe("createAuth — boot invariants", () => {
     ).toThrow(/magic-link/i);
   });
 
+  it("retains fire-and-forget auth work through the request's waitUntil", async () => {
+    let releaseSend!: () => void;
+    const sent = new Promise<void>((resolve) => { releaseSend = resolve; });
+    const send = vi.fn(() => sent);
+    const auth = createAuth(baseConfig({ methods: [{ kind: "email-otp", sender: { send } }] }));
+    const retained: Promise<unknown>[] = [];
+    const response = await auth.handler(new Request("https://example.test/api/auth/email-otp/send-verification-otp", {
+      method: "POST",
+      headers: { origin: "https://example.test", "content-type": "application/json" },
+      body: JSON.stringify({ email: "owner@example.test", type: "sign-in" }),
+    }), { waitUntil: (promise) => retained.push(promise) });
+    expect(response.status).toBe(200);
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    // The OTP send was handed to waitUntil, and the retained promise does not
+    // settle before the sender does — Workers keep the isolate alive for it.
+    expect(retained).toHaveLength(1);
+    let settled = false;
+    void retained[0]!.then(() => { settled = true; });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+    releaseSend();
+    await retained[0];
+    expect(settled).toBe(true);
+  });
+
   it("accepts a raw Better Auth plugin when methods is empty", async () => {
     const sendVerificationOTP = vi.fn(async () => undefined);
     const auth = createAuth(baseConfig({

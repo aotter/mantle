@@ -48,6 +48,7 @@ export type {
   LinkedAccountInfo,
   ListMembersArgs,
   MantleAuth,
+  MantleAuthRequestContext,
   MemberListResult,
   MemberUserInfo,
   OAuthAccessTokenVerification,
