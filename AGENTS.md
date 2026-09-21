@@ -6,7 +6,7 @@
 - To change or review this SDK, read [`CONTRIBUTING.md`](CONTRIBUTING.md) and
   the relevant accepted ADRs before editing.
 - To version, publish, or tag a release, additionally read the
-  canonical [release skill](.agent/skills/mantle-release/SKILL.md). Do not
+  canonical [release skill](.agents/skills/mantle-release/SKILL.md). Do not
   release unless the user explicitly asks.
 
 Repository safety gates:
