@@ -1,8 +1,11 @@
 export { mountRuntimeEndpoints } from "./mountRuntimeEndpoints.js";
 export { mountAdmin } from "./mountAdmin.js";
 export {
+  gateCaller,
   resolveCaller,
+  type CallerGate,
   type CallerResolution,
+  type SurfacePolicy,
   type ConsumerCredentialResolution,
   type ConsumerCredentialResolver,
   type ResolveCallerOptions,

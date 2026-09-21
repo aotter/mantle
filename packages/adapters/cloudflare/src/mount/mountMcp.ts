@@ -4,8 +4,7 @@ import {
 } from "@aotter/mantle-runtime";
 import { DPOP_SIGNING_ALGORITHMS } from "better-auth/oauth2";
 import type { MantleRuntimeRef } from "./bootRuntimeOnce.js";
-import { contextForVerifiedUser } from "./resolveCaller.js";
-import { rejectCrossOriginMutation } from "@aotter/mantle-admin";
+import { gateCaller } from "./resolveCaller.js";
 
 import { beginDiagnosticPhase, diagnosticPhase, requestDiagnosticContext } from "../requestDiagnostics.js";
 
@@ -48,32 +47,23 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
 
   return {
     async fetch(request, env, ctx) {
-      const rejected = rejectCrossOriginMutation(request);
-      if (rejected) return rejected;
-      const verified = await diagnosticPhase("oauth", () => ref.auth.verifyOAuthAccessToken(request, {
-        audience: resource,
-        scopes: requiredScopes,
-      }));
-      if (!verified.ok) return oauthDenied(resource, requiredScopes, verified);
-      const grantedScopes = verified.scopes;
       const waitUntil = typeof ctx.waitUntil === "function" ? ctx.waitUntil.bind(ctx) : undefined;
-      const handlerContext = await diagnosticPhase("role", () => contextForVerifiedUser(
-        verified.userId,
-        {
-          credential: "oauth",
-          credentialId: verified.credentialId,
-          clientId: verified.clientId,
-          scopes: grantedScopes,
-        },
-        ref.auth,
-        { env, ...(waitUntil ? { waitUntil } : {}) },
-      ));
-      if (surface === "staff" && !handlerContext.staff) {
-        return oauthDenied(resource, requiredScopes, {
-          status: 403,
-          reason: "insufficient-scope",
-        });
-      }
+      // One gate for every transport (#977): consumer credential, OAuth bearer
+      // or cookie session, in that order, then the surface's single rule.
+      // `public` admits anonymous callers and leaves enforcement to each
+      // tool's `requires`; `staff` needs `ctx.staff`. Denials keep the OAuth
+      // challenge so a client without a token knows where to get one.
+      const gate = await gateCaller(request, {
+        auth: ref.auth,
+        credentialResolver: ref.credentialResolver,
+        jwtBearer: { audience: resource, scopes: requiredScopes },
+        env,
+        ...(waitUntil ? { waitUntil } : {}),
+        phase: diagnosticPhase,
+        surface,
+      });
+      if (gate.kind === "deny") return oauthDenied(resource, requiredScopes, gate);
+      const handlerContext = gate.context;
       const runtime = await ref.get();
       // Media tools require BOTH a storage adapter AND a declared
       // `media.purposes` taxonomy (#262). Empty purposes →
@@ -149,16 +139,17 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
         }
         selectedDispatcher = cached.dispatcher;
       } finally { stopBuild(); }
-      return diagnosticPhase("dispatch", () => selectedDispatcher.dispatch(request, handlerContext));
+      const response = await diagnosticPhase("dispatch", () => selectedDispatcher.dispatch(request, handlerContext));
+      return withChallenge(response, resource, requiredScopes);
     },
   };
 }
 
-function oauthDenied(
+function challengeHeaders(
   resource: string,
   requiredScopes: readonly string[],
-  denied: { readonly status: 401 | 403; readonly reason: string },
-): Response {
+  denied: { readonly status: 401 | 403; readonly reason?: string },
+): Record<string, string> {
   const scope = requiredScopes.join(" ");
   const resourceUrl = new URL(resource);
   const resourcePath = resourceUrl.pathname.replace(/\/$/u, "");
@@ -170,6 +161,17 @@ function oauthDenied(
   const challenge = denied.reason === "invalid-dpop-proof"
     ? `DPoP error="invalid_dpop_proof", algs="${DPOP_SIGNING_ALGORITHMS.join(" ")}"`
     : `Bearer realm="mcp", error="${error}", scope="${scope}", resource_metadata="${metadata}"`;
+  return {
+    "www-authenticate": challenge,
+    "access-control-expose-headers": "WWW-Authenticate",
+  };
+}
+
+function oauthDenied(
+  resource: string,
+  requiredScopes: readonly string[],
+  denied: { readonly status: 401 | 403; readonly reason: string },
+): Response {
   return Response.json({
     jsonrpc: "2.0",
     error: {
@@ -179,10 +181,20 @@ function oauthDenied(
     id: null,
   }, {
     status: denied.status,
-    headers: {
-      "www-authenticate":
-        challenge,
-      "access-control-expose-headers": "WWW-Authenticate",
-    },
+    headers: challengeHeaders(resource, requiredScopes, denied),
   });
+}
+
+/** A tool that needs identity the caller lacks answers 401/403 from the
+ *  dispatcher; add the OAuth challenge so the client can authenticate and
+ *  retry instead of surfacing a dead JSON-RPC error. */
+function withChallenge(response: Response, resource: string, requiredScopes: readonly string[]): Response {
+  if ((response.status !== 401 && response.status !== 403) || response.headers.has("www-authenticate")) {
+    return response;
+  }
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(challengeHeaders(resource, requiredScopes, { status: response.status }))) {
+    headers.set(name, value);
+  }
+  return new Response(response.body, { status: response.status, headers });
 }

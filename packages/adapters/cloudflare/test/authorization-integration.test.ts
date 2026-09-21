@@ -103,6 +103,9 @@ function mcpCall(): Request {
     headers: {
       "content-type": "application/json",
       "mcp-protocol-version": "2025-11-25",
+      // An OAuth bearer, not the site PAT: the shared gate hands it to
+      // verifyOAuthAccessToken after the credential resolver declines it.
+      authorization: "Bearer oauth-access-token",
     },
     body: JSON.stringify({
       jsonrpc: "2.0",
@@ -191,7 +194,9 @@ describe("authorization integration: one target across REST and MCP", () => {
       },
       credentialResolver: (request) => {
         const header = request.headers.get("authorization");
-        if (header === null) return { kind: "not-handled" };
+        // Only site PATs are this resolver's format; anything else falls
+        // through to OAuth verification. A malformed PAT is still invalid.
+        if (header === null || !header.startsWith("Bearer site_pat_")) return { kind: "not-handled" };
         if (header !== "Bearer site_pat_1") return { kind: "invalid" };
         return {
           kind: "verified",

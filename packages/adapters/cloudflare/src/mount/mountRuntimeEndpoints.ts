@@ -3,9 +3,8 @@ import {
   createMantleRequestHandler,
   projectCallableCapabilities,
 } from "@aotter/mantle-runtime";
-import { rejectCrossOriginMutation } from "@aotter/mantle-admin";
 import type { MantleRuntimeRef } from "./bootRuntimeOnce.js";
-import { resolveCaller } from "./resolveCaller.js";
+import { gateCaller } from "./resolveCaller.js";
 
 /** Mount manifest-declared HTTP Triggers and public Views only. */
 export function mountRuntimeEndpoints<E extends Env>(
@@ -22,24 +21,20 @@ export function mountRuntimeEndpoints<E extends Env>(
     // Credential resolvers and fresh roles may use the same canonical database.
     await ref.get();
     const waitUntil = readWaitUntil(c);
-    const caller = await resolveCaller(c.req.raw, {
+    const gate = await gateCaller(c.req.raw, {
       auth: ref.auth,
       credentialResolver: ref.credentialResolver,
       jwtBearer: ref.jwtBearer,
       env: c.env,
       waitUntil,
     });
-    if (caller.kind === "invalid") {
+    if (gate.kind === "deny") {
       return Response.json(
-        { ok: false, diagnostic: caller.diagnostic },
-        { status: caller.status },
+        { ok: false, diagnostic: gate.diagnostic },
+        { status: gate.status },
       );
     }
-    if (caller.context.auth?.credential === "session" && c.req.method !== "GET") {
-      const rejected = rejectCrossOriginMutation(c.req.raw);
-      if (rejected) return rejected;
-    }
-    return await handle(c.req.raw, caller.context)
+    return await handle(c.req.raw, gate.context)
       ?? new Response("not found", { status: 404 });
   };
 

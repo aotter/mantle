@@ -818,3 +818,32 @@ on, `trustedProviders` empty. A consequence worth stating, because the
 `inviteUser` contract above implies otherwise: an invitation row is written
 `emailVerified: 0`, so a social sign-in cannot claim it until the invitee
 verifies by email once.
+
+## 2026-09-21 amendment — one caller gate; surface selects the staff rule only
+
+Sections 3 and 5 above describe `/mcp` and `/mcp/staff` as bearer-only routes
+that answer every unauthenticated request with a `401` challenge, while the
+HTTP Trigger and `/api/views/*` routes resolve callers through `resolveCaller`
+(consumer credential, then OAuth bearer, then cookie session, then anonymous)
+and leave enforcement to each target's `requires`. Issue #977 removes that
+split. Both transports now run the same gate (`gateCaller`):
+
+- Identity resolution is `resolveCaller` for every transport. A cookie session
+  may drive `/mcp` same-origin; the cross-origin guard applies only when the
+  credential is a session, as it already did for HTTP mutations.
+- `surface` decides exactly one thing: `staff` requires `ctx.staff`; `public`
+  admits anonymous callers. Each tool's `requires.auth` and guard still run on
+  every `tools/call`, so a public View with no `requires` is reachable
+  anonymously over MCP exactly as it is over REST, and the handbook's
+  "the same View is safe on REST and on public MCP" holds.
+- The OAuth bootstrap is preserved where it matters. Invalid credentials and
+  anonymous callers on the staff surface still receive `401`/`403` with the
+  RFC 9728 `WWW-Authenticate` challenge. On the public surface an anonymous
+  `initialize` or `tools/list` succeeds (the catalog is caller-independent), and
+  the first `tools/call` whose target requires identity answers HTTP `401` with
+  the same challenge instead of an HTTP `200` JSON-RPC error, so a client can
+  authenticate mid-session and retry. `AUTH_DENIED` maps to `403` the same way.
+
+The fresh-role rule (section 5) and the MCP grant check are unchanged: both
+run inside `resolveCaller`'s bearer path. What changed is only where the
+surface rule sits and that it is the *only* rule the surface adds.

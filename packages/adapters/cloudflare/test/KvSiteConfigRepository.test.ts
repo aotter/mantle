@@ -337,7 +337,7 @@ describe("KvSiteConfigRepository", () => {
     const handler = createMcpApiHandler({ ref, surface: "staff", resource });
     const call = () => handler.fetch!(new Request(resource, {
       method: "POST",
-      headers: { "content-type": "application/json", "mcp-protocol-version": "2025-11-25" },
+      headers: { "content-type": "application/json", "mcp-protocol-version": "2025-11-25", authorization: "Bearer test-token" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
     }), {}, {} as ExecutionContext);
     expect((await call()).status).toBe(200);

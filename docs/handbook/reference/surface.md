@@ -52,7 +52,7 @@ All `/admin/api/*` routes require a staff session, carry a 1 MiB JSON body limit
 | `ALL /mcp` | Public MCP surface. JSON-RPC. | `private, no-store` |
 | `ALL /mcp/staff` | Staff MCP surface. Rejects a verified caller with no staff row using `403` and `insufficient_scope`. | `private, no-store` |
 
-Both MCP surfaces verify an OAuth access token against one canonical resource, `${PUBLIC_ORIGIN}/mcp`, and one scope, `mcp`. A missing or invalid token is `401` with a `Bearer` challenge naming the resource metadata URL; DPoP failures answer with a `DPoP` challenge. Misconfigured or partial auth environment variables keep public routes serving and return `503 setup_incomplete` from every Auth-owned route above — see [Authentication](../cloudflare/authentication.md).
+Both MCP surfaces resolve the caller exactly as the HTTP routes do — consumer credential, then an OAuth access token against one canonical resource, `${PUBLIC_ORIGIN}/mcp`, and one scope, `mcp`, then a same-origin cookie session, then anonymous. The surface adds one rule: `/mcp/staff` requires a staff caller. An invalid token, or an anonymous caller on the staff surface, is `401` with a `Bearer` challenge naming the resource metadata URL; DPoP failures answer with a `DPoP` challenge; on `/mcp` an anonymous `tools/call` whose target requires identity answers the same `401` challenge. Misconfigured or partial auth environment variables keep public routes serving and return `503 setup_incomplete` from every Auth-owned route above — see [Authentication](../cloudflare/authentication.md).
 
 ### Public pages
 

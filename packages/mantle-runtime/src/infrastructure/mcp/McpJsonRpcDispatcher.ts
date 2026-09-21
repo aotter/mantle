@@ -1,5 +1,6 @@
 import {
   DiagnosticError,
+  HTTP_STATUS_BY_CODE,
   meetsRole,
   mcpToolNameSegment,
   redactForWire,
@@ -222,7 +223,13 @@ export class McpJsonRpcDispatcher {
       });
     } catch (e) {
       if (e instanceof DiagnosticError) {
-        return jsonRpcError(reqId, -32000, e.diagnostic.message, redactForWire(e.diagnostic));
+        // Identity failures are HTTP facts too: an anonymous caller on a tool
+        // that requires one must see 401 so it can authenticate and retry,
+        // and the adapter can attach its OAuth challenge (#977).
+        const status = e.diagnostic.code === "UNAUTHENTICATED" || e.diagnostic.code === "AUTH_DENIED"
+          ? HTTP_STATUS_BY_CODE[e.diagnostic.code]
+          : undefined;
+        return jsonRpcError(reqId, -32000, e.diagnostic.message, redactForWire(e.diagnostic), status);
       }
       // Don't leak raw exception strings to MCP clients — adapter
       // exceptions can carry binding / driver detail. Real cause goes

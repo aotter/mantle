@@ -77,7 +77,7 @@ The staff role is re-read from D1 on every protected REST and MCP call; a revoke
 |---|---|
 | `/admin`, `/admin/api/*` | Staff session; role gates per route |
 | `/api/auth/*`, `/oauth/*`, `/.well-known/oauth*` | Auth-owned; public endpoints of the OAuth flow |
-| `/mcp` | Any authenticated OAuth caller; anonymous requests get `401` with a `WWW-Authenticate` challenge |
+| `/mcp` | Same caller resolution as HTTP routes (bearer, same-origin cookie session, or anonymous); each tool's `requires` gates the call, and a call that needs identity answers `401` with a `WWW-Authenticate` challenge |
 | `/mcp/staff` | Authenticated caller with a staff role |
 | `/<locale>/<segment>/<slug>?preview=1` | Staff session (`401` without a session, `403` without a staff role) |
 | Public Views, public HTTP Triggers, public pages, `.md`, `llms.txt`, sitemap | None, unless the manifest declares `requires` |

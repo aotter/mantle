@@ -9,7 +9,7 @@ import { DPOP_SIGNING_ALGORITHMS } from "better-auth/oauth2";
 import { createMantleWorker, D1DatabaseDriver, mountPublicRoutes, R2MediaStorage } from "../../src/index.js";
 import { instrumentD1, instrumentKv, instrumentR2, runWithRequestDiagnostics, type RequestDiagnosticRecord } from "../../src/testing.js";
 import { diagnosticPhase } from "../../src/requestDiagnostics.js";
-import { contextForVerifiedUser, resolveCaller } from "../../src/mount/resolveCaller.js";
+import { gateCaller, resolveCaller } from "../../src/mount/resolveCaller.js";
 import { KvSiteConfigRepository } from "../../src/bindings/KvSiteConfigRepository.js";
 import { applyCachePolicy } from "../../src/oauth/cachePolicy.js";
 import { DatabaseSiteConfigRepository } from "../../../../mantle-runtime/src/infrastructure/persistence/DatabaseSiteConfigRepository.js";
@@ -80,13 +80,11 @@ function createState(raw: Env, origin: string, observed: boolean) {
   }
   let dispatcher: { key: string; value: McpJsonRpcDispatcher } | undefined;
   async function nativeMcp(request: Request, ctx: ExecutionContext) {
-    const rejected = rejectCrossOriginMutation(request);
-    if (rejected) return rejected;
-    const verified = await diagnosticPhase("oauth", () => auth.verifyOAuthAccessToken(request, { audience: `${origin}/mcp`, scopes: ["mcp"] }));
-    if (!verified.ok) return denied(verified.status, verified.reason);
-    const caller = await diagnosticPhase("role", () => contextForVerifiedUser(verified.userId, { credential: "oauth", credentialId: null, clientId: verified.clientId, scopes: verified.scopes }, auth, { env, waitUntil: ctx.waitUntil.bind(ctx) }));
     const surface = new URL(request.url).pathname.endsWith("/staff") ? "staff" : "public";
-    if (surface === "staff" && !caller.staff) return denied(403, "insufficient-scope");
+    // Mirrors mountMcp: one shared gate, surface decides only the staff rule (#977).
+    const gate = await gateCaller(request, { auth, jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] }, env, waitUntil: ctx.waitUntil.bind(ctx), phase: diagnosticPhase, surface });
+    if (gate.kind === "deny") return denied(gate.status, gate.reason);
+    const caller = gate.context;
     const site = await diagnosticPhase("catalog", () => catalog.loadCatalogSite(worker));
     const serverInfo = { name: `aotter.mantle.${surface}`, title: site.brand, description: site.description || undefined,
       websiteUrl: site.origin, icons: site.icons.filter((icon) => URL.canParse(icon.src, `${site.origin}/`)).map((icon) => ({ ...icon, src: new URL(icon.src, `${site.origin}/`).href })) };
@@ -99,7 +97,10 @@ function createState(raw: Env, origin: string, observed: boolean) {
       dispatcher = { key, value: new McpJsonRpcDispatcher(cases as unknown as McpUseCases,
         Object.values(plan.schemas).map((schema) => schema.manifest), { surface, capabilities: projectCallableCapabilities(plan, { surface }), serverInfo }) };
     }
-    return diagnosticPhase("dispatch", () => dispatcher!.value.dispatch(request, caller));
+    const response = await diagnosticPhase("dispatch", () => dispatcher!.value.dispatch(request, caller));
+    if ((response.status !== 401 && response.status !== 403) || response.headers.has("www-authenticate")) return response;
+    const challenged = denied(response.status, "unauthenticated");
+    return new Response(response.body, { status: response.status, headers: { ...Object.fromEntries(response.headers), ...Object.fromEntries(challenged.headers) } });
   }
   function denied(status: 401 | 403, reason: string) {
     return Response.json({ jsonrpc: "2.0", error: { code: -32000, message: status === 403 ? "insufficient scope" : "unauthorized" }, id: null }, {
