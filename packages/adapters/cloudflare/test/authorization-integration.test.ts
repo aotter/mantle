@@ -103,6 +103,9 @@ function mcpCall(): Request {
     headers: {
       "content-type": "application/json",
       "mcp-protocol-version": "2025-11-25",
+      // An OAuth bearer, not the site PAT: the shared gate hands it to
+      // verifyOAuthAccessToken after the credential resolver declines it.
+      authorization: "Bearer oauth-access-token",
     },
     body: JSON.stringify({
       jsonrpc: "2.0",
@@ -191,7 +194,9 @@ describe("authorization integration: one target across REST and MCP", () => {
       },
       credentialResolver: (request) => {
         const header = request.headers.get("authorization");
-        if (header === null) return { kind: "not-handled" };
+        // Only site PATs are this resolver's format; anything else falls
+        // through to OAuth verification. A malformed PAT is still invalid.
+        if (header === null || !header.startsWith("Bearer site_pat_")) return { kind: "not-handled" };
         if (header !== "Bearer site_pat_1") return { kind: "invalid" };
         return {
           kind: "verified",
@@ -238,6 +243,9 @@ describe("authorization integration: one target across REST and MCP", () => {
       workerEnv,
     );
     expect(restGranted.status).toBe(200);
+    // A malformed site PAT is still refused outright by the resolver, on MCP as on REST.
+    const badPat = new Request(mcpCall(), { headers: { ...Object.fromEntries(mcpCall().headers), authorization: "Bearer site_pat_2" } });
+    expect((await publicMcp.fetch!(badPat, workerEnv, mcpContext)).status).toBe(401);
     for (const mcp of [publicMcp, staffMcp]) {
       const mcpGranted = await mcp.fetch!(mcpCall(), workerEnv, mcpContext);
       const mcpGrantedBody = (await mcpGranted.json()) as {

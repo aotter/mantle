@@ -1,5 +1,6 @@
 import {
   DiagnosticError,
+  HTTP_STATUS_BY_CODE,
   meetsRole,
   mcpToolNameSegment,
   redactForWire,
@@ -150,6 +151,13 @@ export class McpJsonRpcDispatcher {
       return new Response("method not allowed", { status: 405, headers: { allow: "POST" } });
     }
 
+    // JSON-RPC over HTTP is application/json. Refusing other types keeps a
+    // cookie-session caller safe from HTML form POSTs, whose enctypes cannot
+    // produce this header (#977).
+    const contentType = req.headers.get("content-type") ?? "";
+    if (!/^application\/json\b/iu.test(contentType.trim())) {
+      return new Response("Content-Type must be application/json.", { status: 415 });
+    }
     let body: { jsonrpc?: string; id?: number | string | null; method?: string; params?: unknown };
     try {
       body = (await readJsonBody(req)) as typeof body;
@@ -222,7 +230,13 @@ export class McpJsonRpcDispatcher {
       });
     } catch (e) {
       if (e instanceof DiagnosticError) {
-        return jsonRpcError(reqId, -32000, e.diagnostic.message, redactForWire(e.diagnostic));
+        // Identity failures are HTTP facts too: an anonymous caller on a tool
+        // that requires one must see 401 so it can authenticate and retry,
+        // and the adapter can attach its OAuth challenge (#977).
+        const status = e.diagnostic.code === "UNAUTHENTICATED" || e.diagnostic.code === "AUTH_DENIED"
+          ? HTTP_STATUS_BY_CODE[e.diagnostic.code]
+          : undefined;
+        return jsonRpcError(reqId, -32000, e.diagnostic.message, redactForWire(e.diagnostic), status);
       }
       // Don't leak raw exception strings to MCP clients — adapter
       // exceptions can carry binding / driver detail. Real cause goes

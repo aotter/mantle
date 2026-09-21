@@ -11,10 +11,18 @@ export function jsonRpcOkRaw(id: unknown, resultJson: string): Response {
   });
 }
 
-export function jsonRpcError(id: unknown, code: number, message: string, data?: unknown): Response {
+export function jsonRpcError(
+  id: unknown,
+  code: number,
+  message: string,
+  data?: unknown,
+  /** HTTP status when the error is also a transport-level fact (401/403). */
+  status?: number,
+): Response {
   const error: { code: number; message: string; data?: unknown } = { code, message };
   if (data !== undefined) error.data = data;
   return new Response(JSON.stringify({ jsonrpc: "2.0", id, error }), {
+    ...(status ? { status } : {}),
     headers: { "content-type": "application/json" },
   });
 }
