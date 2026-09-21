@@ -3,7 +3,10 @@ import {
   type JsonSchema,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
+import { isNullableJsonSchema } from "../../domain/model/EntryRow.js";
 import type { Migration } from "../../domain/port/DatabaseDriver.js";
+
+export { isNullableJsonSchema };
 
 const SYSTEM_COLUMNS = ["_mantle_id", "_mantle_status", "_mantle_version", "_mantle_author_id", "_mantle_created_at", "_mantle_updated_at"] as const;
 const RESERVED_TABLES = new Set([
@@ -211,14 +214,14 @@ export function decodeField(value: unknown, property: JsonSchema): unknown {
   if (value === undefined) return undefined;
   const codec = fieldDescriptor(property)[1];
   if (codec === "boolean") return value === 1 || value === true;
-  if (codec === "json" && typeof value === "string") return JSON.parse(value);
+  if (codec === "json" && typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      throw new Error("Invalid JSON for a native Schema field.");
+    }
+  }
   return value;
-}
-
-export function isNullableJsonSchema(property: JsonSchema): boolean {
-  if (property.nullable === true) return true;
-  const types = typeof property.type === "string" ? [property.type] : property.type ?? [];
-  return types.includes("null") || property.oneOf?.some(isNullableJsonSchema) === true;
 }
 
 function fieldDescriptor(property: JsonSchema): readonly [SqliteAffinity, FieldCodec, boolean] {

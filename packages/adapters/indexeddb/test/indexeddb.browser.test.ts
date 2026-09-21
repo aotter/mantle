@@ -334,6 +334,25 @@ describe("IndexedDbMantleStorageAdapter in Chrome", () => {
     await storage.deleteDatabase();
   });
 
+  it("materializes omitted nullable:true fields as null on get", async () => {
+    const storage = new IndexedDbMantleStorageAdapter({
+      databaseName: databaseName("nullable"),
+    });
+    const { entries } = await storage.prepare(plan(nullableNotesManifest));
+    await entries.create({
+      id: "n1",
+      collection: "notes",
+      status: "draft",
+      data: { title: "Hi" },
+      authorId: null,
+      now: 1,
+    });
+    expect(await entries.get({ id: "n1", collection: "notes" })).toMatchObject({
+      data: { title: "Hi", note: null },
+    });
+    await storage.deleteDatabase();
+  });
+
   it("records the O(n) declarative View scan baseline", async () => {
     const storage = new IndexedDbMantleStorageAdapter({ databaseName: databaseName("baseline") });
     const prepared = await storage.prepare(plan());
@@ -514,4 +533,19 @@ spec:
       code: { type: string }
       theme: { type: string }
   uniqueIndexes: [[siteKey], [code]]
+`;
+
+const nullableNotesManifest = `---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: notes }
+spec:
+  title: Notes
+  lifecycle: operational
+  schema:
+    type: object
+    required: [title]
+    properties:
+      title: { type: string }
+      note: { type: string, nullable: true }
 `;

@@ -90,6 +90,26 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
     expect((await flexibleRepo.get({ id: "two", collection: "flexible" }))?.data).toEqual({ value: "123", note: null });
   });
 
+  it("materializes omitted nullable:true fields as null on SQLite get", async () => {
+    const notes: SchemaManifest = {
+      ...schema,
+      metadata: { name: "notes" },
+      spec: { title: "Notes", schema: { type: "object", properties: {
+        title: { type: "string" },
+        note: { type: "string", nullable: true },
+      } } },
+    };
+    await db.migrations.runAll(schemaTableMigrations([notes]));
+    const notesRepo = new DatabaseEntryRepository(db, new Map([["notes", notes]]));
+    await notesRepo.create({
+      id: "n1", collection: "notes", status: "draft",
+      data: { title: "Hi" }, authorId: null, now: 1,
+    });
+    expect((await notesRepo.get({ id: "n1", collection: "notes" }))?.data).toEqual({
+      title: "Hi", note: null,
+    });
+  });
+
   it("uses the authored id column for both ordering and cursor values", async () => {
     const authored: SchemaManifest = {
       ...schema,

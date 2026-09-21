@@ -565,6 +565,60 @@ describe("ExecuteViewUseCase", () => {
     ]);
   });
 
+  it("round-trips union and oneOf View projections without changing JSON type", async () => {
+    const db = new InMemoryDatabase();
+    const items = nativeSchema("items", {
+      value: { type: ["string", "integer"] },
+      flag: { oneOf: [{ type: "string" }, { type: "integer" }] },
+    });
+    await seed(db, items, [
+      { id: "n", status: "published", data: { value: 123, flag: 456 }, now: 1 },
+      { id: "s", status: "published", data: { value: "123", flag: "456" }, now: 2 },
+    ]);
+    const repository = new DatabaseEntryRepository(db, new Map([["items", items]]));
+    expect((await repository.get({ id: "n", collection: "items" }))?.data).toEqual({
+      value: 123, flag: 456,
+    });
+    expect((await repository.get({ id: "s", collection: "items" }))?.data).toEqual({
+      value: "123", flag: "456",
+    });
+    const manifest = view({
+      from: "items",
+      fields: ["id", "value", "flag"],
+      orderBy: [{ field: "id", direction: "asc" }],
+    });
+    const result = await sqliteUseCase(db, manifest, undefined, [items]).execute({
+      view: manifest,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.result.rows).toEqual([
+      { id: "n", value: 123, flag: 456 },
+      { id: "s", value: "123", flag: "456" },
+    ]);
+  });
+
+  it("fails closed when a json-codec View field is not valid JSON", async () => {
+    const db = {
+      prepare: () => ({
+        bind: () => ({
+          all: async () => [{ value: "{" }],
+        }),
+      }),
+    } as unknown as DatabaseDriver;
+    const schema = nativeSchema("items", {
+      value: { type: ["string", "integer"] },
+    });
+    const manifest = view({ from: "items", fields: ["value"] });
+    const result = await sqliteUseCase(db, manifest, undefined, [schema]).execute({
+      view: manifest,
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      diagnostic: { code: "INTERNAL_ERROR", message: expect.stringContaining("Invalid JSON") },
+    });
+  });
+
   it("returns published entries for a status=published filter", async () => {
     const db = new InMemoryDatabase();
     const posts = nativeSchema("posts", { title: { type: "string" } });
