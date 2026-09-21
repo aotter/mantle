@@ -11,6 +11,7 @@ import {
   SignInButton,
   claimInFlight,
 } from "../src/features/auth/auth-views";
+import { SignInFlow } from "../src/kit";
 import { signOut } from "../src/lib/auth";
 import { PreferencesProvider, resolveTheme } from "../src/app/preferences";
 
@@ -107,6 +108,30 @@ describe("sign-in", () => {
     expect(html).toContain('aria-busy="true"');
     expect(html).toContain("animate-spin");
     expect(html).toContain("Continue with GitHub");
+  });
+
+  it("offers the two-step email-OTP flow through the kit, code screen not yet shown", () => {
+    const html = renderToStaticMarkup(
+      createElement(SignInFlow, {
+        labels: {
+          description: "Sign in with a one-time code.",
+          emailLabel: "Email address",
+          emailPlaceholder: "you@example.com",
+          sendButton: "Send code",
+          sentTo: (email: string) => `We sent a code to ${email}.`,
+          otpLabel: "One-time code",
+          verifyButton: "Verify and sign in",
+          useAnotherEmail: "Use a different email",
+          requestFailed: "Something went wrong.",
+        },
+        onSendCode: () => Promise.resolve(),
+        onVerifyCode: () => Promise.resolve(),
+      }),
+    );
+
+    expect(html).toContain('id="signin-email"');
+    expect(html).toContain("Send code");
+    expect(html).not.toContain('autocomplete="one-time-code"');
   });
 
   it("rejects a second OTP verify in the same tick before busy state updates", () => {
