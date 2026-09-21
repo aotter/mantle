@@ -8,7 +8,7 @@ import {
   type SchemaManifest,
   type ViewManifest,
 } from "@aotter/mantle-spec";
-import { fieldSql } from "./SqliteSchemaTables.js";
+import { decodeField, fieldSql } from "./SqliteSchemaTables.js";
 import { clampPage, clampShow } from "../../domain/service/Pagination.js";
 import type { ViewQueryOptions } from "../../domain/port/ViewQueryExecutor.js";
 import {
@@ -185,7 +185,7 @@ function prepareRowNormalizer(
   const properties = schema?.spec.schema.properties;
   const projectedFields = fields?.flatMap((field) => {
     const property = properties?.[field];
-    return property && isSqliteNormalizedProperty(property) ? [[field, property] as const] : [];
+    return property ? [[field, property] as const] : [];
   }) ?? [];
   if (projectedFields.length === 0) return function identity<R>(rows: readonly R[]) {
     return rows;
@@ -195,42 +195,11 @@ function prepareRowNormalizer(
       if (!row || typeof row !== "object" || Array.isArray(row)) return row;
       const normalized = { ...row } as Record<string, unknown>;
       for (const [field, property] of projectedFields) {
-        normalized[field] = normalizeProjectedValue(normalized[field], property);
+        normalized[field] = decodeField(normalized[field], property);
       }
       return normalized as R;
     });
   };
-}
-
-function isSqliteNormalizedProperty(
-  property: SchemaManifest["spec"]["schema"],
-): boolean {
-  const types = Array.isArray(property.type) ? property.type : [property.type];
-  return types.some((type) => type === "boolean" || type === "object" || type === "array");
-}
-
-function normalizeProjectedValue(
-  value: unknown,
-  property: SchemaManifest["spec"]["schema"],
-): unknown {
-  const types = Array.isArray(property.type) ? property.type : [property.type];
-  if (types.includes("boolean")) {
-    if (value === 0) return false;
-    if (value === 1) return true;
-  }
-  if (typeof value !== "string" || (!types.includes("object") && !types.includes("array"))) {
-    return value;
-  }
-  try {
-    const parsed: unknown = JSON.parse(value);
-    if (types.includes("array") && Array.isArray(parsed)) return parsed;
-    if (types.includes("object") && parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed;
-    }
-  } catch {
-    return value;
-  }
-  return value;
 }
 
 function compileListQuery(
