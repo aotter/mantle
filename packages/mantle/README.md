@@ -9,10 +9,10 @@ where agents write config and the runtime carries the complexity.
 
 ## Install
 
-Cold start for a new application is the pinned skill, not a bare npm add:
+Cold start for a new application is the install skill, not a bare npm add:
 
 ```sh
-npx skills add aotter/mantle@v0.1.2 --skill install
+npx skills add aotter/mantle --skill install
 ```
 
 To depend on this package in an existing project, pin the exact version
@@ -197,7 +197,7 @@ internals or rebuilding Mantle's adapters.
 Cold start from GitHub or a marketplace host:
 
 ```sh
-npx skills add aotter/mantle@v0.1.2 --skill install
+npx skills add aotter/mantle --skill install
 ```
 
 That skill interviews, pins this package, then uses the CLI and the
@@ -215,26 +215,28 @@ Install the Mantle Core skill bundle before authoring or maintaining a
 consumer application. The canonical command is:
 
 ```sh
-npx skills add aotter/mantle@v0.1.2 --skill install
+npx skills add aotter/mantle --skill install
 ```
 
-Claude Code and Codex can install the same pinned plugin, then run that skill:
+Claude Code and Codex can install the plugin, then run that skill:
 
 ```bash
 # Claude Code
-/plugin marketplace add aotter/mantle@v0.1.2
+/plugin marketplace add aotter/mantle
 /plugin install mantle@mantle
 
 # Codex
-codex plugin marketplace add aotter/mantle --ref v0.1.2
+codex plugin marketplace add aotter/mantle
 codex plugin add mantle@mantle
 ```
 
 Cursor and VS Code Copilot can auto-discover the GitHub repo through
 `.cursor-plugin/plugin.json` and `.copilot-plugin/plugin.json` after the repo
 is cloned or opened. Still start from the `npx skills add` sentence (or open
-`skills/install/SKILL.md` at tag `v0.1.2`). Do not point a versioned consumer
-at a mutable branch.
+`skills/install/SKILL.md`). Untagged `aotter/mantle` resolves to `main`, which
+only advances at a release, so it is always the latest published version. Add
+`@vX.Y.Z` only to reproduce an older project; never point a consumer at
+`develop` or another moving branch.
 
 ## Marketplace capability installs
 

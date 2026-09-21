@@ -65,6 +65,11 @@ Subcommands:
   validate       Static manifest and handler-source validation
   skills         Project version-matched Core skills
   emit-openapi   Emit OpenAPI 3.1 from Triggers and Views
+
+Documentation:
+  Handbook:      node_modules/@aotter/mantle/docs/handbook/ (or docs/handbook/)
+  Online:        https://mantle.tools/
+  Install skill: npx skills add aotter/mantle --skill install
 `;
 
 main().then(
