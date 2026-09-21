@@ -25,17 +25,17 @@
 <p align="center">
   <a href="#start-with-a-manifest">Quick start</a>
   &middot;
-  <a href="#for-engineers-and-agents">Agent prompts</a>
+  <a href="#install-the-agent-plugin">Agent plugin</a>
   &middot;
   <a href="#what-you-can-build">Features</a>
+  &middot;
+  <a href="#choose-how-much-to-use">Adoption</a>
   &middot;
   <a href="docs/handbook/sites/index.md">ChatGPT Sites</a>
   &middot;
   <a href="docs/examples/README.md">Examples</a>
   &middot;
   <a href="#packages">Packages</a>
-  &middot;
-  <a href="#choose-how-much-to-use">Adoption</a>
   &middot;
   <a href="#cli-reference">CLI</a>
 </p>
@@ -73,34 +73,53 @@ handlers. Use an official storage adapter or implement the
 [storage ports](docs/adapter-guide.md). For an ongoing project, pin Mantle
 packages to the same exact version and use their installed documentation.
 
-## Build with ChatGPT Sites
+## For engineers and agents
 
-**Build with ChatGPT Sites. Manage content and publishing with Mantle.**
+Engineers can start with the [installed API guide](packages/mantle/README.md),
+[adapter guide](docs/adapter-guide.md), or
+[direct authoring guide](docs/handbook/start/project-and-cli.md).
 
-Turn a Site into a publication your team can maintain: ChatGPT sign-in,
-Mantle staff roles, drafts and publishing, cover uploads, and public articles
-with HTML, Markdown, and discovery metadata. The official integration brings
-Sites hosting together with Mantle Admin, D1 content, and R2 media.
+### Install the agent plugin
 
-[Get started with Mantle on ChatGPT Sites](docs/handbook/sites/index.md),
-then publish your first article using the runnable reference. Public
-read-only MCP is included; remote staff OAuth MCP is a separate integration.
+This repository is an installable plugin bundle for Claude Code, Codex,
+Cursor, and GitHub Copilot. It teaches an agent how to author and maintain
+Mantle projects; it is not a Runtime dependency.
 
-## Choose how much to use
+```bash
+# Claude Code — two separate prompts
+/plugin marketplace add aotter/mantle
+/plugin install mantle@mantle
 
-These are independent adoption choices, not mandatory stages.
+# Codex
+codex plugin marketplace add aotter/mantle
+codex plugin add mantle@mantle
+```
 
-| Use what you need | What it gives you |
-|---|---|
-| **Spec only** | Parse, validate, and link definitions inside an existing system. No Runtime or code generation required. [Example](docs/spec-only-host-adoption.md). |
-| **Runtime + typed APIs** | Execute queries and actions with your storage adapter and handlers. Generated `createMantle` and `bindMantle` expose typed entry, View, and Procedure calls. [API guide](packages/mantle/README.md). |
-| **A host adapter** | Run on Bun, Vercel, or Cloudflare and expose the adapter's supported transports. Choose an adapter for the HTTP, MCP, and auth capabilities you need. [Adapter guide](docs/adapter-guide.md). |
-| **Web** | Render public content as HTML and Markdown, with localization and discovery metadata. [Web](packages/mantle-web/README.md). |
-| **Admin** | Give staff a console for content and operational records. Admin API and the prebuilt UI are optional. [Local example](docs/examples/host-local-admin-otp/README.md). |
+Cursor and GitHub Copilot read their manifests from the repository directly.
 
-The plan carries the compiled Schema, View, Procedure, and Trigger definitions.
-Runtime executes them; adapters and optional packages connect them to the
-surfaces you choose. Your application owns its host, storage, and deployment.
+The plugin carries authoring workflows, which do not need to track a release.
+What must match your installed version is the project's own skills: run
+`mantle skills` to project them from the installed package, and
+`mantle skills --check` to fail on drift. See
+[`skills/README.md`](skills/README.md) for host details.
+
+### Prompts
+
+Coding agents use the same APIs and version-matched
+[skills](skills/README.md). A short starting prompt:
+
+```text
+Read the installed @aotter/mantle docs and install skill. Ask which host,
+storage, and surfaces this application needs. Preserve the existing
+application, choose an official example, and implement locally.
+Pin all Mantle packages to the same exact version. Verify the selected
+surfaces; add Web, Admin, or MCP only when needed.
+```
+
+See [task-specific agent prompts](docs/agent-prompts.md) for embedding,
+Worker, Admin, and later surface additions. The
+[plugin and skills guide](skills/README.md) covers agent integration;
+`mantle skills` projects version-matched application skills after installation.
 
 ## What you can build
 
@@ -128,51 +147,34 @@ The [Examples hub](docs/examples/README.md) contains complete Manifests and
 host references. The [Manifest reference](docs/handbook/reference/manifest.md)
 defines the four atoms and their fields.
 
-## For engineers and agents
+## Choose how much to use
 
-Engineers can start with the [installed API guide](packages/mantle/README.md),
-[adapter guide](docs/adapter-guide.md), or
-[direct authoring guide](docs/handbook/start/project-and-cli.md).
+These are independent adoption choices, not mandatory stages.
 
-### Install the agent plugin
+| Use what you need | What it gives you |
+|---|---|
+| **Spec only** | Parse, validate, and link definitions inside an existing system. No Runtime or code generation required. [Example](docs/spec-only-host-adoption.md). |
+| **Runtime + typed APIs** | Execute queries and actions with your storage adapter and handlers. Generated `createMantle` and `bindMantle` expose typed entry, View, and Procedure calls. [API guide](packages/mantle/README.md). |
+| **A host adapter** | Run on Bun, Vercel, or Cloudflare and expose the adapter's supported transports. Choose an adapter for the HTTP, MCP, and auth capabilities you need. [Adapter guide](docs/adapter-guide.md). |
+| **Web** | Render public content as HTML and Markdown, with localization and discovery metadata. [Web](packages/mantle-web/README.md). |
+| **Admin** | Give staff a console for content and operational records. Admin API and the prebuilt UI are optional. [Local example](docs/examples/host-local-admin-otp/README.md). |
 
-This repository is an installable plugin bundle for Claude Code, Codex,
-Cursor, and GitHub Copilot. It carries version-matched Mantle workflows and is
-an authoring aid, not a Runtime dependency. Install it at the tag matching the
-`@aotter/mantle` version in the project:
+The plan carries the compiled Schema, View, Procedure, and Trigger definitions.
+Runtime executes them; adapters and optional packages connect them to the
+surfaces you choose. Your application owns its host, storage, and deployment.
 
-```bash
-# Claude Code — two separate prompts
-/plugin marketplace add aotter/mantle@v<installed-version>
-/plugin install mantle@mantle
+## Build with ChatGPT Sites
 
-# Codex
-codex plugin marketplace add aotter/mantle --ref v<installed-version>
-codex plugin add mantle@mantle
-```
+**Build with ChatGPT Sites. Manage content and publishing with Mantle.**
 
-Cursor and GitHub Copilot read their manifests from the repository directly.
-`mantle skills` projects the installed package's project-scoped workflows into
-a consumer repository. See [`skills/README.md`](skills/README.md) for host
-details.
+Turn a Site into a publication your team can maintain: ChatGPT sign-in,
+Mantle staff roles, drafts and publishing, cover uploads, and public articles
+with HTML, Markdown, and discovery metadata. The official integration brings
+Sites hosting together with Mantle Admin, D1 content, and R2 media.
 
-### Prompts
-
-Coding agents use the same APIs and version-matched
-[skills](skills/README.md). A short starting prompt:
-
-```text
-Read the installed @aotter/mantle docs and install skill. Ask which host,
-storage, and surfaces this application needs. Preserve the existing
-application, choose an official example, and implement locally.
-Pin all Mantle packages to the same exact version. Verify the selected
-surfaces; add Web, Admin, or MCP only when needed.
-```
-
-See [task-specific agent prompts](docs/agent-prompts.md) for embedding,
-Worker, Admin, and later surface additions. The
-[plugin and skills guide](skills/README.md) covers agent integration;
-`mantle skills` projects version-matched application skills after installation.
+[Get started with Mantle on ChatGPT Sites](docs/handbook/sites/index.md),
+then publish your first article using the runnable reference. Public
+read-only MCP is included; remote staff OAuth MCP is a separate integration.
 
 ## Packages
 
@@ -187,10 +189,15 @@ everything else is opt-in.
 | `@aotter/mantle-web` | HTML, Markdown, `llms.txt`, and sitemap. |
 | `@aotter/mantle-admin` | Admin API. |
 | `@aotter/mantle-admin-ui` | Prebuilt React Admin SPA. |
-| `@aotter/mantle-bun` | Bun and `bun:sqlite`. |
 | `@aotter/mantle-indexeddb` | Browser-local IndexedDB storage. |
-| `@aotter/mantle-vercel` | Vercel Functions. |
 | `@aotter/mantle-cloudflare` | Workers, D1, Auth, MCP, Web, and Admin. |
+| `@aotter/mantle-bun` | Bun and `bun:sqlite`. **Experimental.** |
+| `@aotter/mantle-vercel` | Vercel Functions. **Experimental.** |
+
+Cloudflare is the supported host. The Bun and Vercel adapters are
+experimental and may change in a minor release. They cover public Views and
+HTTP Triggers; the host owns authentication and CSRF, and Auth, Admin and MCP
+are Cloudflare-only today.
 
 Mantle is named for the living tissue that grows a mollusk's shell: it adds
 structure around the application you already own.
