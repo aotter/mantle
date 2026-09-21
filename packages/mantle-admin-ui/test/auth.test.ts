@@ -6,6 +6,7 @@ import { AdminApp } from "../src/app/admin-app";
 import { AdminRouterProvider } from "../src/app/router";
 import { ApiError } from "../src/lib/api";
 import {
+  AccessDeniedView,
   safeReturnPath,
   signedOAuthQuery,
   SignInButton,
@@ -43,6 +44,42 @@ describe("sign-in", () => {
       vi.stubGlobal("window", { self: {}, top: {}, location: { pathname, search: "" } });
       expect(renderToStaticMarkup(createElement(AdminRouterProvider, null, createElement(AdminApp)))).toBe("");
     }
+  });
+
+  it("shows a provider-neutral signed-in name on access denied", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false } } });
+    await client.fetchQuery({
+      queryKey: ["me"],
+      queryFn: () => Promise.reject(new ApiError("forbidden", 403, { login: "MrCorn" })),
+    }).catch(() => undefined);
+    vi.stubGlobal("window", { location: { pathname: "/admin", search: "" } });
+    const html = renderToStaticMarkup(createElement(QueryClientProvider, { client },
+      createElement(PreferencesProvider, null,
+        createElement(AdminRouterProvider, null, createElement(AdminApp))),
+    ));
+    expect(html).toContain("User: MrCorn");
+    expect(html).not.toContain("GitHub:");
+    client.clear();
+  });
+
+  it("labels the denied account as a user, not GitHub", () => {
+    const html = renderToStaticMarkup(
+      createElement(PreferencesProvider, null, createElement(AccessDeniedView, { login: "MrCorn" })),
+    );
+    expect(html).toContain("User: MrCorn");
+    expect(html).not.toContain("GitHub:");
+  });
+
+  it("uses Traditional Chinese user copy when that language is stored", () => {
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => key === "cms.preference.language" ? "zh-TW" : null,
+      setItem: () => undefined,
+    });
+    const html = renderToStaticMarkup(
+      createElement(PreferencesProvider, null, createElement(AccessDeniedView, { login: "MrCorn" })),
+    );
+    expect(html).toContain("使用者：MrCorn");
+    expect(html).not.toContain("GitHub:");
   });
 
   it("lets members disconnect their own apps without granting staff access", async () => {
