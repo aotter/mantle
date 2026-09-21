@@ -23,9 +23,7 @@
 </p>
 
 <p align="center">
-  <a href="#start-with-a-manifest">Quick start</a>
-  &middot;
-  <a href="#install-the-agent-plugin">Agent plugin</a>
+  <a href="#install">Install</a>
   &middot;
   <a href="#what-you-can-build">Features</a>
   &middot;
@@ -44,10 +42,74 @@ Mantle is an embeddable manifest engine: describe data, queries, actions, and
 triggers in YAML, then use the same contract in your application, APIs, and
 tools for humans and agents.
 
-## Start with a Manifest
+## Install
 
-Put your Manifest ([example](docs/examples/builtin-intake.md#manifest)) in
-`manifests/`, then run from your project root:
+Cold start is one pinned skill. The skill then pins the CLI and opens the
+handbook. That is the only official entry.
+
+```sh
+npx skills add aotter/mantle@v0.1.2 --skill install
+```
+
+Follow the [`install` skill](skills/install/SKILL.md): it interviews for host
+and surfaces, pins `@aotter/mantle@0.1.2`, then uses the CLI and the
+[direct authoring handbook](docs/handbook/start/project-and-cli.md). There is
+no `mantle create`, no Starter, and no generate-first empty project.
+
+Claude Code and Codex can install the same pinned plugin instead, then run
+that skill:
+
+```bash
+# Claude Code — two separate prompts
+/plugin marketplace add aotter/mantle@v0.1.2
+/plugin install mantle@mantle
+
+# Codex
+codex plugin marketplace add aotter/mantle --ref v0.1.2
+codex plugin add mantle@mantle
+```
+
+Cursor and GitHub Copilot read plugin manifests from this repository; still
+start from the same `npx skills add` sentence, or open
+[`skills/install/SKILL.md`](skills/install/SKILL.md) at tag `v0.1.2`.
+
+Authoring SSOT is the pinned `@aotter/mantle` package docs, the `mantle` CLI,
+and the projected skills. After a live app is deployed, `/mcp` and `/mcp/staff`
+are the Manifest → RuntimePlan catalog for that app — callable verbs, not a
+how-to-learn-Mantle manual. MCP mirrors the Manifest and RuntimePlan. The CLI
+mirrors the authoring docs. They do not mirror each other.
+
+## For engineers and agents
+
+Start from the [pinned install skill](#install). After that skill has pinned
+the packages, engineers use the [installed API guide](packages/mantle/README.md),
+[adapter guide](docs/adapter-guide.md), and
+[direct authoring guide](docs/handbook/start/project-and-cli.md). Agents stay
+on the skill, then [task-specific prompts](docs/agent-prompts.md).
+
+Coding agents use the same APIs and version-matched
+[skills](skills/README.md). A short starting prompt:
+
+```text
+Run npx skills add aotter/mantle@v0.1.2 --skill install. Read
+skills/install/SKILL.md and docs/agent-prompts.md. Interview me about
+host, storage, and surfaces before writing files. Preserve any existing
+application; otherwise author locally from an official example. There is
+no mantle create; empty generate fails until manifests exist. Pin all
+Mantle packages to the same exact version. Verify the selected surfaces;
+add Web, Admin, or MCP only when needed.
+```
+
+See [task-specific agent prompts](docs/agent-prompts.md) for embedding,
+Worker, Admin, and later surface additions. The
+[plugin and skills guide](skills/README.md) covers agent integration;
+`mantle skills` projects version-matched application skills after installation.
+
+## Compile a Manifest
+
+Once the install skill (or an existing project) has Manifests on disk
+([example](docs/examples/builtin-intake.md#manifest)), compile from the
+project root:
 
 ```sh
 bunx @aotter/mantle generate
@@ -76,60 +138,6 @@ install `@aotter/mantle` in your application and connect storage and any custom
 handlers. Use an official storage adapter or implement the
 [storage ports](docs/adapter-guide.md). For an ongoing project, pin Mantle
 packages to the same exact version and use their installed documentation.
-
-## For engineers and agents
-
-Engineers can start with the [installed API guide](packages/mantle/README.md),
-[adapter guide](docs/adapter-guide.md), or
-[direct authoring guide](docs/handbook/start/project-and-cli.md).
-
-Agents interview first: read the [`install` skill](skills/install/SKILL.md)
-and [task-specific prompts](docs/agent-prompts.md), ask which host, storage,
-and surfaces this application needs, then author locally from an official
-example. Do not run `generate` in an empty directory.
-
-### Install the agent plugin
-
-This repository is an installable plugin bundle for Claude Code, Codex,
-Cursor, and GitHub Copilot. It teaches an agent how to author and maintain
-Mantle projects; it is not a Runtime dependency.
-
-```bash
-# Claude Code — two separate prompts
-/plugin marketplace add aotter/mantle
-/plugin install mantle@mantle
-
-# Codex
-codex plugin marketplace add aotter/mantle
-codex plugin add mantle@mantle
-```
-
-Cursor and GitHub Copilot read their manifests from the repository directly.
-
-The plugin carries authoring workflows, which do not need to track a release.
-What must match your installed version is the project's own skills: run
-`mantle skills` to project them from the installed package, and
-`mantle skills --check` to fail on drift. See
-[`skills/README.md`](skills/README.md) for host details.
-
-### Prompts
-
-Coding agents use the same APIs and version-matched
-[skills](skills/README.md). A short starting prompt:
-
-```text
-Read skills/install/SKILL.md and docs/agent-prompts.md. Interview me about
-host, storage, and surfaces before writing files. Preserve any existing
-application; otherwise author locally from an official example. There is
-no mantle create; empty generate fails until manifests exist. Pin all
-Mantle packages to the same exact version. Verify the selected surfaces;
-add Web, Admin, or MCP only when needed.
-```
-
-See [task-specific agent prompts](docs/agent-prompts.md) for embedding,
-Worker, Admin, and later surface additions. The
-[plugin and skills guide](skills/README.md) covers agent integration;
-`mantle skills` projects version-matched application skills after installation.
 
 ## What you can build
 

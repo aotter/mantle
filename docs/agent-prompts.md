@@ -1,10 +1,17 @@
 # Task-specific agent prompts
 
-Copy one block into a coding agent. Paths below are relative to the Mantle
-docs root: `node_modules/@aotter/mantle/docs/` after `@aotter/mantle` is
-installed, or `docs/` in the installed agent plugin. Pin `@aotter/mantle`
-first if neither exists. `npx --no-install mantle --help` is the layered
-overview. Interview first. Worker is the default host unless the user names
+Cold start from GitHub or a marketplace host is one pinned skill:
+
+```sh
+npx skills add aotter/mantle@v0.1.2 --skill install
+```
+
+Copy one block into a coding agent after that skill is present. Paths below
+are relative to the Mantle docs root: `node_modules/@aotter/mantle/docs/`
+after `@aotter/mantle` is installed, or `docs/` in the installed agent plugin.
+`npx --no-install mantle --help` is the layered CLI overview; it mirrors the
+authoring docs. A live `/mcp` catalog mirrors the Manifest → RuntimePlan, not
+the CLI. Interview first. Worker is the default host unless the user names
 ChatGPT Sites. There is no `mantle create`. Empty `generate` fails until
 manifests exist. Admin is opt-in.
 
@@ -12,8 +19,10 @@ manifests exist. Admin is opt-in.
 
 ```text
 Interview me about the service: host, who uses it, whether humans need a
-Dev UI, and whether we only embed Spec/Runtime. Read the install skill and
-npx --no-install mantle --help, then handbook/start/project-and-cli.md.
+Dev UI, and whether we only embed Spec/Runtime. If the install skill is
+missing, run npx skills add aotter/mantle@v0.1.2 --skill install. Read the
+install skill and npx --no-install mantle --help, then
+handbook/start/project-and-cli.md.
 Use examples/README.md as the examples index; copy builtin-* Manifests only
 (not cf-primitives-*). Implement locally first. Take only the surfaces we
 chose. For Spec-only use, skip Runtime and code generation. For a Worker
