@@ -610,7 +610,6 @@ function checkRepositoryGuidance() {
     ...listFiles(join(ROOT, "docs"), (path) =>
       path.endsWith(".md") &&
       !path.includes(`${sep}adr${sep}`) &&
-      !path.endsWith("migration-0.1.2.md") &&
       !path.endsWith("sealed-pipeline-ownership.md")
     ),
   ];

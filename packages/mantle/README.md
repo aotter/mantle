@@ -103,8 +103,8 @@ generation never rewrites agent instructions.
 
 SDK upgrades use the package manager and the version-matched update skill.
 For npm peer-resolution troubleshooting, see [the authoring guide](docs/handbook/start/project-and-cli.md).
-See [0.1.2 migration](docs/migration-0.1.2.md) for removed bundle APIs and how to
-preserve legacy application source and provider configuration.
+See [Releases](docs/handbook/releases/index.md) for what each stable version
+contains and what it requires.
 
 ## Conventional Cloudflare Worker
 

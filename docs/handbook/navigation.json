@@ -73,6 +73,12 @@
         { "text": "Diagnostic codes", "link": "/reference/diagnostics" },
         { "text": "HTTP, MCP, CLI and packages", "link": "/reference/surface" }
       ]
+    },
+    {
+      "text": "Releases",
+      "items": [
+        { "text": "Stable releases", "link": "/releases/index" }
+      ]
     }
   ]
 }

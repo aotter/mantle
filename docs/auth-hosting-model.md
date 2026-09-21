@@ -8,7 +8,7 @@ basic login. The split is:
 - **Mantle's conventional Cloudflare adapter** runs the generated site's
   selected self-hosted or Mantle Platform hosted client configuration.
 - **The application owner/host** declares the explicit auth mode and provider
-  configuration; legacy Landing/Starters remain on alpha.17.
+  configuration.
 - **Mantle Platform** can sell hosted identity, provider setup, email,
   and billing convenience for site owners who do not want to operate
   those pieces.

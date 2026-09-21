@@ -141,7 +141,7 @@ async function assertNoLegacyStorage(db: DatabaseDriver): Promise<void> {
   const legacy = await db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND lower(name) = 'entries' LIMIT 1")
     .first<{ name: string }>();
   if (legacy) {
-    throw new Error("LEGACY_STORAGE_RESET_REQUIRED: rebuild this pre-native-table database before upgrading; see docs/migration-0.1.2.md.");
+    throw new Error("LEGACY_STORAGE_RESET_REQUIRED: rebuild this pre-native-table database before upgrading.");
   }
 }
 

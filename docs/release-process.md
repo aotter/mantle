@@ -1,9 +1,9 @@
 # Release process
 
-First stable targets 0.1.2 (#826). The last legacy Landing/Starter release is
-0.1.0-alpha.17. Its immutable artifacts and repositories remain available;
-recover that version with its tagged controller/docs. New releases have no
-Starter/Landing checkout, tag, dispatch, credential or deployment dependency.
+How a version reaches npm. What each shipped stable contains is
+[Releases](handbook/releases/index.md); this document is the procedure only.
+A release has no Starter/Landing checkout, tag, dispatch, credential or
+deployment dependency.
 
 ## Authority and state transitions
 
@@ -61,10 +61,8 @@ is introduced. The runnable release-order check guards these transitions.
   changes only through promotion PRs and hotfix PRs (below); it is never pushed
   directly, rebased or force-updated. Both branches share one ruleset: PR, one
   approval, resolved threads and a current-base `Typecheck + tests` check.
-- Stable publishes latest. Final 0.1.0 alphas only advance alpha, preserving
-  existing legacy latest. No prerelease moves latest; the 0.0 alpha rule that
-  also advanced it was removed once 0.0 became unreachable.
-  A prerelease channel keeps its last version when a later stable publishes.
+- Stable is the only release that moves `latest`. A prerelease channel keeps
+  its last version when a later stable publishes.
 
 ## Prepare and run
 
@@ -85,7 +83,8 @@ is introduced. The runnable release-order check guards these transitions.
    ```
 
 3. Review API compatibility and migration instructions for actual consumers.
-   Frozen legacy consumers stay on alpha.17; do not make them follow new Core.
+   Frozen legacy consumers stay on their pinned version; do not make them
+   follow new Core.
 4. Run `pnpm check`, including exact packed Worker, optional products, Bun,
    Vercel, skills, release invariants, types and tests. Inspect the umbrella
    docs/skills payload: no workspace dependencies, secrets or local state.
@@ -114,9 +113,9 @@ Every non-alpha release is the version PR above, one promotion PR and one
 dispatch. The version PR still merges into `develop`, so `develop` always
 contains what `main` publishes and promotions never conflict.
 
-1. Stable only: the release-gate issue (#826 for 0.1.2) records owner
-   acceptance. Every gate item passes with linked evidence or is explicitly
-   deferred there, and no `release-gate` issue stays open against the version.
+1. Stable only: the version's release-gate issue records owner acceptance.
+   Every gate item passes with linked evidence or is explicitly deferred
+   there, and no `release-gate` issue stays open against the version.
    Beta and RC need the gate defined, not passed.
 2. Merge the version PR into `develop` with a merge commit; note its SHA.
 3. Pin the promotion head at that SHA so later `develop` merges cannot ride
@@ -149,17 +148,19 @@ the next promotion. Branch from `main`, include the version bump, PR into
 and resolve version files in favour of `develop`. Until that lands, the next
 promotion conflicts on the version files.
 
-First stable (0.1.2) specifics: `latest` moves from 0.1.0-alpha.16, the last
-`latest` the frozen legacy consumers saw, to 0.1.2. GitHub generates notes
-from the previous release (v0.1.2-alpha.6); to cover the whole 0.1.2 line,
-regenerate from v0.1.0-alpha.17 and edit the release body after the run. The
-body is not an immutable artifact; the tag and packages are.
+GitHub generates notes from the immediately previous tag, which for a stable
+is usually its own last RC. To cover the whole line instead, regenerate from
+the previous stable and edit the release body after the run. The body is not
+an immutable artifact; the tag and packages are.
 
 ```sh
 gh api repos/aotter/mantle/releases/generate-notes \
-  -f tag_name=v0.1.2 -f previous_tag_name=v0.1.0-alpha.17 --jq .body > notes.md
-gh release edit v0.1.2 --notes-file notes.md
+  -f tag_name=v<version> -f previous_tag_name=v<previous stable> --jq .body > notes.md
+gh release edit v<version> --notes-file notes.md
 ```
+
+Add the version's entry to [Releases](handbook/releases/index.md) in the same
+pass, so the handbook and the GitHub release describe the same thing.
 
 After publication, move docs/examples that were pinned to a packed checkout
 back to registry installation with an updated lockfile, and close the gate
@@ -175,9 +176,10 @@ registries. Existing artifacts on retry must have matching integrity.
 Completion requires the Core tag SHA, all ten npmjs/GPR packages, exact
 integrity, no workspace dependencies, a passing public-registry Worker gate,
 correct channel tags and the GitHub release. Retain run links and gate evidence.
-This does not prove stable production soak or upgrade safety; #826 owns those
-acceptance requirements. A first-stable agent acceptance uses only the
-version-matched authoring instructions, not an SDK checkout or generated site.
+This does not prove stable production soak or upgrade safety; the version's
+release-gate issue owns those acceptance requirements. An agent acceptance run
+uses only the version-matched authoring instructions, not an SDK checkout or
+generated site.
 
 ## Recovery
 
