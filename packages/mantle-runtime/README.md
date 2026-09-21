@@ -114,8 +114,8 @@ Queue-backed `after_*` lifecycle delivery is optional and at-least-once. See
 for the strict envelope, idempotency key, Cloudflare bindings, retry/DLQ
 behavior, and upgrade procedure.
 
-This package is prerelease software. Its `package.json` is the exact version
-authority; the API surface may change until the first stable `0.1.2` release.
+`0.1.2` is this package's first stable release. Its `package.json` is the
+exact version installed.
 
 ## Port failures
 

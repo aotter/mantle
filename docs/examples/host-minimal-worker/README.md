@@ -9,9 +9,10 @@ Schema/View is example business data; `mantle generate` never invents it.
 
 For your own project, author package.json, manifests, Worker/provider config
 and TypeScript settings for your requirements. Pin all selected `@aotter/mantle*`
-dependencies to the same intended release. This reference records the snapshot
-version in this tree as its published baseline; Core's test runner substitutes
-its exact candidate in a disposable copy.
+dependencies to the same intended release. This reference depends on them via
+the `latest` dist-tag instead, so a fresh install always resolves the current
+stable release; Core's test runner substitutes its exact candidate in a
+disposable copy.
 
 Outside the SDK workspace, with Node 22+ and pnpm 9+:
 
