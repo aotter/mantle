@@ -825,6 +825,8 @@ function checkTriggerRefs(
 ): Diagnostic[] {
   const out: Diagnostic[] = [];
   const httpRoutes = new Map<string, string>();
+  // One description warning per Procedure, not per surface it is exposed on.
+  const undescribedMcpProcedures = new Set<string>();
 
   for (const t of triggers) {
     const procName = t.spec.target.procedure;
@@ -889,7 +891,9 @@ function checkTriggerRefs(
       // absent, which reads like a description and hides the gap; the
       // authoring gate is the one place that can still see it (#970).
       const target = proceduresByName.get(procName);
-      if (target && !resolveLocalizedText(target.spec.description, "en")?.trim()) {
+      if (target && !undescribedMcpProcedures.has(procName)
+        && !resolveLocalizedText(target.spec.description, "en")?.trim()) {
+        undescribedMcpProcedures.add(procName);
         out.push(
           validateDiagnostic({
             code: "MCP_TOOL_DESCRIPTION_MISSING",

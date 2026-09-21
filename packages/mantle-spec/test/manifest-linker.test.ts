@@ -171,6 +171,13 @@ spec:
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: Trigger
+metadata: { name: suspend-tenant-public }
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: suspend-tenant }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
 metadata: { name: measure-usage-staff }
 spec:
   source: { kind: mcp, surface: staff }
