@@ -112,8 +112,10 @@ methods: [
 ]
 ```
 
-Email OTP and magic-link storage defaults to `hashed`. Explicit official
-overrides remain available, including custom hashing/encryption:
+Email OTP storage defaults to a keyed HMAC-SHA-256 of the code using
+`BETTER_AUTH_SECRET`. Magic-link tokens remain `hashed` (high-entropy).
+Explicit official overrides remain available, including `plain` and custom
+hashing/encryption:
 
 ```ts
 { kind: "email-otp", sender, options: {

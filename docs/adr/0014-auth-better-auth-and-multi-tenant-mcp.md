@@ -3,7 +3,7 @@
 ## Status
 
 Accepted. Amended 2026-05-14, 2026-05-15, 2026-06-30, 2026-07-15,
-2026-08-03, 2026-08-22, and 2026-09-18.
+2026-08-03, 2026-08-22, 2026-09-18, and 2026-09-21.
 
 ## Date
 
@@ -755,3 +755,20 @@ Applications that need to own an entire callback may pass official plugin
 instances through `plugins`. Those plugins do not synthesize Admin metadata,
 and duplicate plugin ids fail at construction. There is no
 `Partial<BetterAuthOptions>` deep merge and no silent plugin replacement.
+
+## 2026-09-21 amendment — keyed default email OTP storage
+
+Issue #989 changes only the Mantle default for email OTP storage. Better Auth
+`storeOTP: "hashed"` is unsalted SHA-256 of the OTP. For the default 6-digit
+alphabet that makes a `verification` table dump a sign-in oracle without
+`BETTER_AUTH_SECRET`. The Cloudflare `createAuth` default is now HMAC-SHA-256
+of the OTP keyed by `BETTER_AUTH_SECRET` (unpadded base64url), so D1 alone is
+not enough.
+
+Magic-link tokens remain Better Auth `hashed`; they are high-entropy. Explicit
+official `storeOTP` / `storeToken` overrides, including `plain`, remain adopter
+configuration (2026-09-18 native-options amendment / #925). `createAuth` does
+not hard-reject those overrides.
+
+Deploying this change invalidates unconsumed OTPs created by an older
+deployment. Users request a new code; no database migration is needed.

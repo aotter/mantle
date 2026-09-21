@@ -117,7 +117,8 @@ export type AuthMethodConfig =
       /** Transactional-email sender. SDK never owns body templates;
        *  the locale is passed through so the sender can branch. */
       readonly sender: EmailSender;
-      /** Native Better Auth options. Mantle owns the sender callback and defaults storage to hashed. */
+      /** Native Better Auth options. Mantle owns the sender callback and
+       *  defaults OTP storage to a keyed HMAC of the code. */
       readonly options?: Omit<EmailOTPOptions, "sendVerificationOTP">;
       /** Fallback locale when the request carries no Accept-Language —
        *  typically the site's canonical locale. BCP 47. Defaults to "en". */
@@ -477,10 +478,13 @@ function buildMagicLinkPlugin(method: Extract<AuthMethodConfig, { kind: "magic-l
   });
 }
 
-function buildEmailOTPPlugin(method: Extract<AuthMethodConfig, { kind: "email-otp" }>) {
+function buildEmailOTPPlugin(
+  method: Extract<AuthMethodConfig, { kind: "email-otp" }>,
+  secret: string,
+) {
   const fallback = method.fallbackLocale ?? "en";
   return emailOTP({
-    storeOTP: "hashed",
+    storeOTP: { hash: (otp) => hashEmailOtp(secret, otp) },
     ...method.options,
     // Return synchronously — the promise is fire-and-forget via the
     // `advanced.backgroundTasks.handler` we wire in `buildAuth`. For
@@ -498,6 +502,32 @@ function buildEmailOTPPlugin(method: Extract<AuthMethodConfig, { kind: "email-ot
       });
     },
   });
+}
+
+const EMAIL_AUTH_PLUGIN_IDS = new Set(["email-otp", "magic-link"]);
+
+/** @internal exported for unit tests; not part of the public API. */
+export function hasEmailAuthSurface(
+  methods: ReadonlyArray<AuthMethodConfig>,
+  plugins: ReadonlyArray<{ readonly id: string }> = [],
+): boolean {
+  return methods.some((method) => method.kind === "email-otp" || method.kind === "magic-link")
+    || plugins.some((plugin) => EMAIL_AUTH_PLUGIN_IDS.has(plugin.id));
+}
+
+/** @internal HMAC-SHA-256(secret, otp) as unpadded base64url. */
+export async function hashEmailOtp(secret: string, otp: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(otp)));
+  let binary = "";
+  for (const byte of mac) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/u, "");
 }
 
 /**
@@ -706,7 +736,7 @@ function buildAuth(config: CreateAuthConfig) {
   // limits too (notably anonymous DCR: 5/minute).
   // ponytail: memory limits are per isolate; use an ingress rate-limit rule
   // when a deployment needs a distributed abuse quota.
-  const hasEmailMethod = !!(emailOtpMethod || magicLinkMethod);
+  const hasEmailMethod = hasEmailAuthSurface(config.methods, config.plugins);
   const rateLimit = {
     window: 60,
     max: hasEmailMethod ? 10 : 100,
@@ -739,7 +769,7 @@ function buildAuth(config: CreateAuthConfig) {
           }),
         ]
       : []),
-    ...(emailOtpMethod ? [buildEmailOTPPlugin(emailOtpMethod)] : []),
+    ...(emailOtpMethod ? [buildEmailOTPPlugin(emailOtpMethod, config.secret)] : []),
     ...(magicLinkMethod ? [buildMagicLinkPlugin(magicLinkMethod)] : []),
     ...(config.oauthProvider && providerOptions
       ? [
