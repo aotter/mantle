@@ -152,6 +152,45 @@ const auth = createAuth({
 });
 ```
 
+### Account linking across providers
+
+One person signing in with Google, then with GitHub, may land on one user row
+or be refused — Better Auth decides this, and `createAuth()` does not override
+it. Left unconfigured, Better Auth's own defaults apply: implicit linking is
+on, so a social sign-in whose provider reports a verified email attaches to the
+existing row carrying that email. It never creates a second row for the same
+address; when linking is not permitted the sign-in fails with
+`account not linked`.
+
+Two defaults are worth knowing before you change anything. `requireLocalEmailVerified`
+is on, so linking is refused while the *local* row is still unverified — this is
+what stops someone pre-registering an unverified row at your user's address and
+having that user's Google identity attach to it. It is also why a staff invitation
+(`inviteUser` writes `emailVerified: 0`) cannot be claimed by a social sign-in
+until the invitee verifies by email once. Separately, `trustedProviders` is
+empty, so every provider must supply `email_verified` to link at all.
+
+Pass `accountLinking` to scope this. It is forwarded verbatim:
+
+```ts
+const auth = createAuth({
+  database: env.DB,
+  baseURL: env.PUBLIC_ORIGIN,
+  secret: env.BETTER_AUTH_SECRET,
+  methods,
+  accountLinking: {
+    // Accept these providers' word without an `email_verified` claim.
+    trustedProviders: ["google", "github"],
+  },
+});
+```
+
+Listing a provider in `trustedProviders` asserts that it verifies the addresses
+it returns; a provider that does not turns the list into an account-takeover
+path. To go the other way and keep every identity separate, set
+`disableImplicitLinking: true` (users may still link deliberately via
+`linkSocial()` while signed in) or `enabled: false` to refuse linking outright.
+
 Shared cookies do not cross registrable domains. A browser never sends an `example.com` cookie to `customer.com`. For a customer-owned domain, use an OAuth/OIDC broker flow: the customer site redirects to the identity provider's authorize endpoint, receives the callback, verifies the response and creates its own local session. The broker returns identity; the customer site remains the authority for its members and grants.
 
 ## Self-hosted and hosted
