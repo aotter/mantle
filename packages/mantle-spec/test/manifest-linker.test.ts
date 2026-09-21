@@ -299,6 +299,49 @@ spec:
     expect(warnings[0]?.message).toContain("staff");
   });
 
+  it("treats a SQL View that aliases _mantle_version as exposing version", () => {
+    const linked = linkManifestSet(parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: notes }
+spec:
+  title: Notes
+  lifecycle: operational
+  schema: { type: object, readOnly: true, properties: { body: { type: string } } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: archive-note }
+spec:
+  description: Archive a note.
+  input:
+    type: object
+    required: [id, expectedVersion]
+    properties:
+      id: { type: string, x-mantle-ref: notes }
+      expectedVersion: { type: number }
+  output: { type: object }
+  handler: { kind: builtin, op: update, schema: notes }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: platform-notes }
+spec:
+  surface: staff
+  sql: "SELECT n._mantle_id AS noteId, n._mantle_version AS noteVersion FROM notes n"
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: archive-note-staff }
+spec:
+  source: { kind: mcp, surface: staff }
+  target: { procedure: archive-note }
+`));
+
+    expect(linked.ok).toBe(true);
+    expect(linked.diagnostics.filter((d) => d.code === "MCP_TOOL_INPUT_UNREACHABLE")).toEqual([]);
+  });
+
   it("allows manifests to define the removed generic read tool names", () => {
     const linked = linkManifestSet(parse(`
 apiVersion: cms.mantle.aotter.net/v1

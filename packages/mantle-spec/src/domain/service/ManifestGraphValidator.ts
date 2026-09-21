@@ -1070,8 +1070,8 @@ function checkMcpExpectedVersionReachability(
       expected: `a '${source.surface}' View over '${collection}' that exposes 'version'`,
       message:
         `MCP tool '${tool}' on the ${source.surface} surface requires '${EXPECTED_VERSION_PROPERTY}' of ` +
-        `'${collection}', but no ${source.surface} View reads that collection's 'version'; an agent cannot ` +
-        `obtain the value it must send.`,
+        `'${collection}'${procedure.spec.handler.kind === "ref" ? " (inferred from its x-mantle-ref input)" : ""}, ` +
+        `but no ${source.surface} View reads that collection's 'version'; an agent cannot obtain the value it must send.`,
     }));
   }
   return out;
@@ -1092,16 +1092,15 @@ function lockedCollection(procedure: ProcedureManifest): string | null {
 
 function viewExposesVersion(view: ViewManifest, collection: string): boolean {
   if (view.spec.sql) {
-    // ponytail: SQL Views declare no output columns; a word-boundary token scan
-    // can only ever silence the warning, never invent one.
-    return /\bversion\b/iu.test(view.spec.sql) && new RegExp(`\\b${escapeRegExp(collection)}\\b`, "u").test(view.spec.sql);
+    // SQL Views declare no output columns. The column is spelled
+    // `_mantle_version` in SQL and any alias may carry the word, so a plain
+    // case-insensitive substring (or a `SELECT *`) counts as exposing. This
+    // can only silence the warning, never invent one; the collection is not
+    // matched because CTEs, quoting and aliases hide the table name.
+    return /version/iu.test(view.spec.sql) || /select\s+(?:\w+\.)?\*/iu.test(view.spec.sql);
   }
   if (view.spec.from !== collection) return false;
   return !view.spec.fields || view.spec.fields.includes("version");
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function sameOwner(
