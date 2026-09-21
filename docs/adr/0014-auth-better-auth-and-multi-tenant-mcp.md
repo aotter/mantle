@@ -7,7 +7,7 @@ Accepted. Amended 2026-05-14, 2026-05-15, 2026-06-30, 2026-07-15,
 
 ## Date
 
-2026-05-09 (last amended 2026-08-22)
+2026-05-09 (last amended 2026-09-21)
 
 > **Current authority:** the original decision below records the rejected
 > Better-Auth-for-MCP design. The 2026-08-22 Better Auth 1.7 amendment is
