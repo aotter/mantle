@@ -397,7 +397,20 @@ export interface ProcedureManifestSpec {
    *  a handler map) and `kind: "builtin"` (5-op CRUD shortcut over
    *  the entry-writer chokepoint). */
   readonly handler: HandlerBinding;
+  /** MCP tool annotations the author declares because Core cannot infer
+   *  them for a `ref` handler (#972). Emitted verbatim on the tool;
+   *  `idempotentHint` is inferred from an `x-mcp-hint: idempotency-key`
+   *  input and is not declarable. A `readOnlyHint: true` on a writing
+   *  builtin handler is rejected at validation. */
+  readonly mcp?: ProcedureMcpAnnotations;
 }
+
+export interface ProcedureMcpAnnotations {
+  readonly readOnlyHint?: boolean;
+  readonly destructiveHint?: boolean;
+  readonly openWorldHint?: boolean;
+}
+export const PROCEDURE_MCP_ANNOTATION_KEYS = ["readOnlyHint", "destructiveHint", "openWorldHint"] as const;
 
 export type HandlerBinding = HandlerRefBinding | HandlerBuiltinBinding;
 export interface HandlerRefBinding {

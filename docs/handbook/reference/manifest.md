@@ -38,7 +38,7 @@ The parser rejects keys outside the shipped grammar at every level it knows. The
 | `/metadata` | `name` |
 | `/spec` (Schema) | `title`, `description`, `schema`, `uiSchema`, `uniqueIndexes`, `indexes`, `searchableFields`, `localized`, `translates`, `lifecycle` |
 | `/spec` (View) | `title`, `uiSchema`, `from`, `sql`, `surface`, `requires`, `filter`, `fields`, `orderBy`, `limit`, `params` |
-| `/spec` (Procedure) | `title`, `description`, `requires`, `input`, `uiSchema`, `output`, `handler` |
+| `/spec` (Procedure) | `title`, `description`, `requires`, `input`, `uiSchema`, `output`, `handler`, `mcp` |
 | `/spec` (Trigger) | `source`, `target` |
 | `/spec/translates` | `parent`, `on` |
 | `/spec/requires` | `auth`, `guard` |

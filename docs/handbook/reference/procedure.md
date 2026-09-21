@@ -16,6 +16,7 @@ A Procedure is a typed callable: input schema, output schema, authorization requ
 | `uiSchema` | object | no | Admin-only. Accepts `collectionAction` and `fields`. Violations are `SCHEMA_UI_INVALID`. |
 | `output` | JSON Schema | yes | Checked after the handler returns. Failure is `OUTPUT_VALIDATION_FAILED` (500). |
 | `handler` | `ref` \| `builtin` | yes | Exactly one binding shape; see below. |
+| `mcp` | object | no | MCP tool annotations the author asserts: `readOnlyHint`, `destructiveHint`, `openWorldHint` (booleans). Core infers what it can prove — every builtin handler writes, `op: delete` destroys, an `x-mcp-hint: idempotency-key` input makes the tool idempotent — and emits nothing else, so absent hints keep the MCP spec's conservative defaults. `readOnlyHint: true` on a builtin handler is `BUILTIN_HANDLER_CONTRACT_INVALID`. |
 
 Both `input` and `output` are walked by the [JSON Schema subset](./schema.md#json-schema-subset) validator, so the same recognized and rejected keywords apply.
 

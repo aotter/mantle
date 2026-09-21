@@ -52,13 +52,22 @@ export interface McpToolDefinition {
   readonly title?: string;
   readonly description: string;
   readonly inputSchema: Record<string, unknown>;
-  readonly annotations?: {
-    readonly readOnlyHint?: boolean;
-  };
+  /** MCP tool annotations (spec: absent hints default to the conservative
+   *  `destructiveHint: true` / `openWorldHint: true`). Only provable or
+   *  author-declared values are emitted (#972). */
+  readonly annotations?: McpToolAnnotations;
+}
+
+export interface McpToolAnnotations {
+  readonly readOnlyHint?: boolean;
+  readonly destructiveHint?: boolean;
+  readonly idempotentHint?: boolean;
+  readonly openWorldHint?: boolean;
 }
 
 export const COMMIT_MEDIA_UPLOAD_TOOL: McpToolDefinition = {
   name: "commit_media_upload",
+  annotations: { readOnlyHint: false },
   description:
     "Commit a previously-PUT variant bundle. Verifies every variant landed at the storage backend (HEAD + bytes per declared mime) and writes the committed MediaAsset to the media_assets table. Returns the asset with its variants populated; write the returned MediaAsset.id into the relevant media asset id field via the authoring tools. Only registered when the runtime has a media storage adapter bound and a media.purposes taxonomy declared.",
   inputSchema: {
@@ -120,6 +129,7 @@ function buildCreateMediaUploadTool(
 
   return {
     name: "create_media_upload",
+    annotations: { readOnlyHint: false },
     description:
       "Issue short-lived PUT capabilities for every variant of one logical media asset. " +
       "If the user provides an image in chat or the current session, the MCP client/agent must handle it directly: read the attachment bytes in the agent runtime, prepare the required variants locally, call create_media_upload with the variant manifest and byte sizes, HTTP PUT each returned uploadUrl using requiredHeaders, then call commit_media_upload. Do not ask the user to open a terminal. Do not send image bytes through MCP; this server intentionally does not expose a base64 upload tool. " +
@@ -178,6 +188,7 @@ function buildCreateMediaUploadTool(
 export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   {
     name: "request_publish",
+    annotations: { readOnlyHint: false },
     description: "Publish a draft immediately. Not available for operational records.",
     inputSchema: {
       type: "object",
@@ -187,6 +198,7 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
   {
     name: "unpublish_entry",
+    annotations: { readOnlyHint: false },
     description: "Unpublish a content entry back to draft before editing. Not available for operational records.",
     inputSchema: {
       type: "object",
@@ -196,6 +208,7 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
   {
     name: "archive_entry",
+    annotations: { readOnlyHint: false },
     description: "Archive a content entry. Not available for operational records.",
     inputSchema: {
       type: "object",
@@ -205,6 +218,7 @@ export const GENERIC_TOOLS: readonly McpToolDefinition[] = [
   },
   {
     name: "delete_entry",
+    annotations: { readOnlyHint: false, destructiveHint: true },
     description: "Permanently delete an entry. For content lifecycles, prefer archive_entry when reversibility matters.",
     inputSchema: {
       type: "object",
@@ -353,13 +367,17 @@ const OBSERVED_VERSION_DESCRIPTION =
  *  The hint lives on the raw inputSchema, but nothing there says a retry must
  *  reuse the value — and a fresh uuid re-executes the operation. */
 function idempotencySummary(inputSchema: unknown): string {
-  const properties = isRecord(inputSchema) ? inputSchema["properties"] : undefined;
-  if (!isRecord(properties)) return "";
-  const keys = Object.entries(properties)
-    .filter(([, property]) => isRecord(property) && property["x-mcp-hint"] === "idempotency-key")
-    .map(([name]) => name);
+  const keys = idempotencyKeys(inputSchema);
   if (keys.length === 0) return "";
   return ` Idempotency: retries must reuse the same ${keys.join(" / ")}; a new value is a new operation.`;
+}
+
+function idempotencyKeys(inputSchema: unknown): string[] {
+  const properties = isRecord(inputSchema) ? inputSchema["properties"] : undefined;
+  if (!isRecord(properties)) return [];
+  return Object.entries(properties)
+    .filter(([, property]) => isRecord(property) && property["x-mcp-hint"] === "idempotency-key")
+    .map(([name]) => name);
 }
 
 function annotateExpectedVersion(
@@ -404,6 +422,7 @@ function buildCreateTool(schema: SchemaManifest): McpToolDefinition {
     name: `${resolveLifecycle(schema) === "operational" ? CREATE_RECORD_PREFIX : CREATE_DRAFT_PREFIX}${mcpToolNameSegment(schema.metadata.name)}`,
     description: describeCreateTool(schema),
     inputSchema,
+    annotations: { readOnlyHint: false },
   };
 }
 
@@ -426,6 +445,7 @@ function buildUpdateTool(schema: SchemaManifest): McpToolDefinition {
     name: `${resolveLifecycle(schema) === "operational" ? UPDATE_RECORD_PREFIX : UPDATE_DRAFT_PREFIX}${mcpToolNameSegment(schema.metadata.name)}`,
     description: describeUpdateTool(schema),
     inputSchema,
+    annotations: { readOnlyHint: false },
   };
 }
 
@@ -448,6 +468,7 @@ function buildCallableTool(capability: RuntimeCallableCapability): McpToolDefini
 }
 
 function buildProcedureTool(capability: ProcedureCallableCapability): McpToolDefinition {
+  const annotations = procedureAnnotations(capability);
   return {
     name: capability.name,
     ...(capability.title ? { title: capability.title } : {}),
@@ -455,7 +476,30 @@ function buildProcedureTool(capability: ProcedureCallableCapability): McpToolDef
     inputSchema: annotateExpectedVersion(
       capability.inputSchema as Record<string, unknown>,
     ),
+    ...(annotations ? { annotations } : {}),
   };
+}
+
+/**
+ * Only what is provable, plus what the author declared (#972). A `ref`
+ * handler is a black box, so nothing is inferred for it beyond the
+ * idempotency key; a builtin handler always writes, and `delete` destroys.
+ * Absent hints keep the MCP spec's conservative defaults.
+ */
+function procedureAnnotations(capability: ProcedureCallableCapability): McpToolAnnotations | undefined {
+  const spec = capability.manifest.spec;
+  const inferred: Record<string, boolean> = {};
+  if (spec.handler.kind === "builtin") {
+    inferred["readOnlyHint"] = false;
+    if (spec.handler.op === "delete") inferred["destructiveHint"] = true;
+  }
+  if (idempotencyKeys(capability.inputSchema).length > 0) inferred["idempotentHint"] = true;
+  const declared = spec.mcp ?? {};
+  const merged: Record<string, boolean> = { ...inferred };
+  for (const key of ["readOnlyHint", "destructiveHint", "openWorldHint"] as const) {
+    if (declared[key] !== undefined) merged[key] = declared[key];
+  }
+  return Object.keys(merged).length > 0 ? (merged as McpToolAnnotations) : undefined;
 }
 
 function buildQueryViewTool(capability: ViewCallableCapability): McpToolDefinition {
