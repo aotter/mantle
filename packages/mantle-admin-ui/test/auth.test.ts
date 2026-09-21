@@ -11,7 +11,8 @@ import {
   SignInButton,
   claimInFlight,
 } from "../src/features/auth/auth-views";
-import { SignInFlow } from "../src/kit";
+import { SignInFlow, SIGN_IN_FLOW_INITIAL, signInFlowReducer } from "../src/kit";
+import { OneTimeCodeInput } from "../src/components/one-time-code-input";
 import { signOut } from "../src/lib/auth";
 import { PreferencesProvider, resolveTheme } from "../src/app/preferences";
 
@@ -140,5 +141,36 @@ describe("sign-in", () => {
     expect(claimInFlight(lock)).toBe(false);
     lock.current = false;
     expect(claimInFlight(lock)).toBe(true);
+  });
+});
+
+describe("SignInFlow step machine", () => {
+  const start = { ...SIGN_IN_FLOW_INITIAL, email: "me@example.com" };
+
+  it("advances to the code screen only after a successful send", () => {
+    const busy = signInFlowReducer(start, { type: "start" });
+    expect(busy).toMatchObject({ busy: true, error: null, step: "email" });
+    expect(signInFlowReducer(busy, { type: "sent", error: "nope" })).toMatchObject({ busy: false, error: "nope", step: "email" });
+    expect(signInFlowReducer(busy, { type: "sent" })).toMatchObject({ busy: false, error: null, step: "otp" });
+  });
+
+  it("keeps the form locked after a successful verify so the consumed code is not resubmitted", () => {
+    const verifying = signInFlowReducer({ ...start, step: "otp", otp: "123456" }, { type: "start" });
+    expect(signInFlowReducer(verifying, { type: "verified" })).toMatchObject({ busy: true, step: "otp" });
+    expect(signInFlowReducer(verifying, { type: "verified", error: "wrong code" })).toMatchObject({ busy: false, error: "wrong code", step: "otp" });
+    expect(signInFlowReducer(verifying, { type: "failed", error: "offline" })).toMatchObject({ busy: false, error: "offline" });
+  });
+
+  it("clears the code and any error when going back to the email screen", () => {
+    const errored = { ...start, step: "otp" as const, otp: "123456", error: "wrong code" };
+    expect(signInFlowReducer(errored, { type: "back" })).toEqual({ ...start, step: "email", otp: "", error: null, busy: false });
+  });
+
+  it("labels the code input for screen readers with the host's copy", () => {
+    const html = renderToStaticMarkup(
+      createElement(OneTimeCodeInput, { "aria-label": "驗證碼", value: "", onChange: () => undefined }),
+    );
+    expect(html).toContain('aria-label="驗證碼"');
+    expect(html).not.toContain('aria-label="One-time code"');
   });
 });

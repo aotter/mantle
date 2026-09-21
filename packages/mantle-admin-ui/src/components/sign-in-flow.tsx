@@ -61,6 +61,58 @@ export type SignInFlowProps = {
   idPrefix?: string;
 };
 
+export type SignInFlowState = {
+  step: "email" | "otp";
+  email: string;
+  otp: string;
+  busy: boolean;
+  error: string | null;
+};
+
+export type SignInFlowEvent =
+  | { type: "email"; value: string }
+  | { type: "otp"; value: string }
+  | { type: "start" }
+  | { type: "sent"; error?: string }
+  | { type: "verified"; error?: string }
+  | { type: "failed"; error: string }
+  | { type: "back" };
+
+export const SIGN_IN_FLOW_INITIAL: SignInFlowState = {
+  step: "email",
+  email: "",
+  otp: "",
+  busy: false,
+  error: null,
+};
+
+/**
+ * Pure step machine behind `SignInFlow`, exported so the transitions are
+ * testable without a DOM. A verify that succeeds keeps `busy` — the host
+ * navigates away next, and re-enabling the form in the meantime would let
+ * a second submit spend the already-consumed code.
+ */
+export function signInFlowReducer(state: SignInFlowState, event: SignInFlowEvent): SignInFlowState {
+  switch (event.type) {
+    case "email":
+      return { ...state, email: event.value };
+    case "otp":
+      return { ...state, otp: event.value };
+    case "start":
+      return { ...state, busy: true, error: null };
+    case "sent":
+      return event.error
+        ? { ...state, busy: false, error: event.error }
+        : { ...state, busy: false, step: "otp" };
+    case "verified":
+      return event.error ? { ...state, busy: false, error: event.error } : state;
+    case "failed":
+      return { ...state, busy: false, error: event.error };
+    case "back":
+      return { ...state, step: "email", otp: "", error: null, busy: false };
+  }
+}
+
 /**
  * Two-step email-OTP sign-in: an email screen that swaps for a
  * six-digit code screen once a code is on its way. Owns the step, busy
@@ -76,51 +128,41 @@ export function SignInFlow({
   className,
   idPrefix = "signin",
 }: SignInFlowProps): React.ReactElement {
-  const [step, setStep] = React.useState<"email" | "otp">("email");
-  const [email, setEmail] = React.useState("");
-  const [otp, setOtp] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const verifyInFlight = React.useRef(false);
+  const [state, dispatch] = React.useReducer(signInFlowReducer, SIGN_IN_FLOW_INITIAL);
+  const { step, email, otp, busy, error } = state;
+  // One lock for both steps: a double-click or autocomplete + Enter in the
+  // same tick must not dispatch two sends or two verifies.
+  const inFlight = React.useRef(false);
 
-  // Wraps an async submit handler so each call site gets identical
-  // busy / error-reset bookkeeping. `busy` clears in `finally` even
-  // when the caller navigates away on success — the unmount that
-  // follows nav discards the queued state update.
-  const withBusy = async (run: () => Promise<void>): Promise<void> => {
-    setBusy(true);
-    setError(null);
-    try {
-      await run();
-    } catch {
-      setError(labels.requestFailed);
-    } finally {
-      setBusy(false);
-    }
+  const run = (
+    request: () => Promise<SignInFlowStepResult>,
+    done: "sent" | "verified",
+  ): void => {
+    if (busy || !claimInFlight(inFlight)) return;
+    dispatch({ type: "start" });
+    void request()
+      .then((result) => {
+        dispatch(result?.error ? { type: done, error: result.error } : { type: done });
+        // A successful verify hands off to host navigation; keep the lock so
+        // the consumed code cannot be resubmitted while the page unloads.
+        if (done === "verified" && !result?.error) return;
+        inFlight.current = false;
+      })
+      .catch(() => {
+        dispatch({ type: "failed", error: labels.requestFailed });
+        inFlight.current = false;
+      });
   };
 
   const sendCode = (e: React.FormEvent): void => {
     e.preventDefault();
     if (!email) return;
-    void withBusy(async () => {
-      const result = await onSendCode(email);
-      if (result?.error) {
-        setError(result.error);
-        return;
-      }
-      setStep("otp");
-    });
+    run(() => onSendCode(email), "sent");
   };
 
   const verifyCode = (code: string): void => {
     if (code.length !== 6) return;
-    if (!claimInFlight(verifyInFlight)) return;
-    void withBusy(async () => {
-      const result = await onVerifyCode(email, code);
-      if (result?.error) setError(result.error);
-    }).finally(() => {
-      verifyInFlight.current = false;
-    });
+    run(() => onVerifyCode(email, code), "verified");
   };
 
   return (
@@ -135,7 +177,7 @@ export function SignInFlow({
             id={`${idPrefix}-email`}
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.currentTarget.value)}
+            onChange={(e) => dispatch({ type: "email", value: e.currentTarget.value })}
             placeholder={labels.emailPlaceholder}
             required
             autoComplete="email"
@@ -158,11 +200,12 @@ export function SignInFlow({
           </label>
           <OneTimeCodeInput
             id={`${idPrefix}-otp`}
+            aria-label={labels.otpLabel}
             autoComplete="one-time-code"
             autoFocus
             disabled={busy}
             value={otp}
-            onChange={setOtp}
+            onChange={(value) => dispatch({ type: "otp", value })}
             onComplete={verifyCode}
             required
           />
@@ -171,7 +214,11 @@ export function SignInFlow({
           </SignInButton>
           <button
             type="button"
-            onClick={() => setStep("email")}
+            disabled={busy}
+            onClick={() => {
+              inFlight.current = false;
+              dispatch({ type: "back" });
+            }}
             className="text-xs text-muted-foreground underline-offset-2 hover:underline"
           >
             {labels.useAnotherEmail}
