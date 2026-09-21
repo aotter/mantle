@@ -233,8 +233,10 @@ codex plugin add mantle@mantle
 Cursor and VS Code Copilot can auto-discover the GitHub repo through
 `.cursor-plugin/plugin.json` and `.copilot-plugin/plugin.json` after the repo
 is cloned or opened. Still start from the `npx skills add` sentence (or open
-`skills/install/SKILL.md`). Do not point a versioned consumer
-at a mutable branch.
+`skills/install/SKILL.md`). Untagged `aotter/mantle` resolves to `main`, which
+only advances at a release, so it is always the latest published version. Add
+`@vX.Y.Z` only to reproduce an older project; never point a consumer at
+`develop` or another moving branch.
 
 ## Marketplace capability installs
 
