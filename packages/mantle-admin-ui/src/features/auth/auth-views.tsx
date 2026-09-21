@@ -67,7 +67,7 @@ export function AccessDeniedView({
         </CardTitle>
         {login ? (
           <CardDescription className="font-medium text-foreground">
-            GitHub: {login}
+            {t(language, "auth.accessDenied.user", { name: login })}
           </CardDescription>
         ) : null}
       </CardHeader>
