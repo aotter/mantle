@@ -25,7 +25,7 @@
 
 # Agent surface
 /skills/                        @guyspy
-/.agent/skills/                 @guyspy
+/.agents/skills/                 @guyspy
 /.claude/skills/                @guyspy
 
 # CI / release plumbing
