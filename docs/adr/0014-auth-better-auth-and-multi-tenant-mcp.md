@@ -789,3 +789,32 @@ change; when that wiring lands they must supply their own trusted ingress
 header(s) and driver. The portable package never defaults to a Cloudflare
 header or to client-controlled `X-Forwarded-For`. Missing or empty
 `ipAddressHeaders` fails closed.
+
+## 2026-09-21 amendment — instance-level `accountLinking`
+
+Issue #952 adds `accountLinking` to `CreateMantleAuthOptions` in the host-neutral
+`@aotter/mantle-auth` package, forwarded verbatim to Better Auth's
+`account.accountLinking`; the Cloudflare `CreateAuthConfig` and every future
+host wrapper inherit it.
+
+Issue #924 deferred instance-level control to "a separate low-level instance
+adapter". That deferral is kept for *general* control; this is a single named
+passthrough in the shape `trustedOrigins`, `cookiePrefix` and
+`crossSubDomainCookies` already use, not the option-bag merge #924 rejected.
+The distinction that matters is ambiguity, not nesting depth: a named field
+has one owner and one meaning, while a merged `Partial<BetterAuthOptions>`
+would let an adopter silently overwrite session, cookie and rate-limit
+invariants Mantle enforces.
+
+`accountLinking` earned a field ahead of the low-level adapter because it
+decides whether two sign-ins are one person. Mantle cannot pick that default
+on an adopter's behalf — only the adopter knows which providers verify the
+addresses they return — and until now adopters had no way to express it, in
+either direction.
+
+Mantle sets no default. Omitted, no `account` key is constructed at all and
+Better Auth's defaults govern: implicit linking on, `requireLocalEmailVerified`
+on, `trustedProviders` empty. A consequence worth stating, because the
+`inviteUser` contract above implies otherwise: an invitation row is written
+`emailVerified: 0`, so a social sign-in cannot claim it until the invitee
+verifies by email once.
