@@ -91,6 +91,12 @@ with Mantle's `EmailSender`; raw `plugins` are available when the application
 must own the callback and UI. The hosted-auth and self-hosted-auth boundary is documented in
 `node_modules/@aotter/mantle/docs/auth-hosting-model.md`.
 
+Rate-limit identity uses `CF-Connecting-IP` only. `createAuth` always passes
+`ipAddressHeaders: ["cf-connecting-ip"]` into `@aotter/mantle-auth`. The
+portable package has no Cloudflare default and will not boot without a
+host-trusted header list; do not fall back to client-controlled
+`X-Forwarded-For`.
+
 For trusted first-party apps that share one parent domain, configure
 same-parent-domain cookies explicitly:
 

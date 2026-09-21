@@ -44,12 +44,10 @@
   },
   "dependencies": {
     "@aotter/mantle-admin": "workspace:*",
+    "@aotter/mantle-auth": "workspace:*",
     "@aotter/mantle-runtime": "workspace:*",
     "@aotter/mantle-spec": "workspace:*",
-    "@aotter/mantle-web": "workspace:*",
-    "@better-auth/cimd": "catalog:",
-    "@better-auth/mcp": "catalog:",
-    "@better-auth/oauth-provider": "catalog:"
+    "@aotter/mantle-web": "workspace:*"
   },
   "peerDependencies": {
     "aws4fetch": "catalog:peer",

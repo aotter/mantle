@@ -1,9 +1,9 @@
 import {
-  createAuth,
   createSetupIncompleteAuth,
   isSetupIncompleteAuth,
-  type Auth,
-} from "./createAuth.js";
+  type MantleAuth as Auth,
+} from "@aotter/mantle-auth";
+import { createAuth } from "./createAuth.js";
 import { applyCachePolicy } from "../oauth/cachePolicy.js";
 
 export interface ConventionalAuthEnv {

@@ -156,7 +156,7 @@ await mantle.runtime.archive.execute({ id, ctx });
 
 ## Packages
 
-The umbrella installs Spec and Runtime only. Web, Admin, Admin UI, Bun, Vercel and Cloudflare are optional peers; install one before importing its subpath. Every sub-package is also directly installable.
+The umbrella installs Spec and Runtime only. Web, Admin, Auth, Admin UI, Bun, Vercel and Cloudflare are optional peers; install one before importing its subpath. Every sub-package is also directly installable.
 
 | Package | Umbrella subpath | Holds |
 |---|---|---|
@@ -167,6 +167,7 @@ The umbrella installs Spec and Runtime only. Web, Admin, Admin UI, Bun, Vercel a
 | — | `/codegen` | The pure linked-manifests to typed-module emitter, with no IO. |
 | `@aotter/mantle-web` | `/web` | HTML, Markdown, `llms.txt`, sitemap, SEO and preview composition. No routes, no platform dependencies. |
 | `@aotter/mantle-admin` | `/admin` | Admin API, auth route mounting, OAuth pages, static-asset composition. |
+| `@aotter/mantle-auth` | `/auth` | Host-neutral Better Auth identity, staff roles, and OAuth 2.1 / MCP authorization. Adapters own IP headers and storage bindings. |
 | `@aotter/mantle-admin-ui` | `/admin-ui` | Pre-built React 19 Admin SPA bundle. |
 | `@aotter/mantle-bun` | `/bun` | Bun adapter over a caller-owned `bun:sqlite` database. |
 | `@aotter/mantle-vercel` | `/vercel` | Vercel Functions adapter with injected durable storage and platform `waitUntil`. |

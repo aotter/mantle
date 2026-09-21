@@ -18,7 +18,7 @@ import {
   setupIncompleteAuthResponse,
   type ConventionalAuthEnv,
 } from "../auth/conventionalAuth.js";
-import type { Auth } from "../auth/createAuth.js";
+import type { MantleAuth as Auth } from "@aotter/mantle-auth";
 import {
   createConventionalBindings,
   type MantleWorkerBindings,

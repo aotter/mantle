@@ -4,7 +4,7 @@ import {
   type Diagnostic,
   type StaffRole,
 } from "@aotter/mantle-spec";
-import { STAFF_ROLE_SET, type Auth } from "../auth/createAuth.js";
+import { STAFF_ROLE_SET, type MantleAuth as Auth } from "@aotter/mantle-auth";
 
 export type ConsumerCredentialResolution =
   | { readonly kind: "not-handled" }
