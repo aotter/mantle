@@ -4,15 +4,15 @@ Umbrella entry for the embeddable Mantle SDK — a manifest-driven application
 engine built around a 4-atom YAML model (Schema / View / Procedure / Trigger)
 where agents write config and the runtime carries the complexity.
 
-> Mantle is prerelease software. Use this package's `package.json` as the exact
-> installed version; APIs may change between prereleases until the first stable 0.1.2 release.
+> Mantle's first stable release is `0.1.2`. Use this package's `package.json`
+> as the exact installed version.
 
 ## Install
 
 ```bash
-npm install @aotter/mantle@alpha
+npm install @aotter/mantle
 # or
-pnpm add @aotter/mantle@alpha
+pnpm add @aotter/mantle
 ```
 
 ## What's inside

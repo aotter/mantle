@@ -9,10 +9,9 @@ Schema is example business data; `mantle generate` never invents it.
 Spec + adapter without Admin:
 [`docs/examples/host-minimal-worker`](../host-minimal-worker/README.md).
 
-Pin every `@aotter/mantle*` package to the exact version in this snapshot
-(`packages/mantle/package.json`). This reference records that version as
-its published baseline; Core's test runner substitutes its exact candidate
-in a disposable copy.
+This reference depends on every `@aotter/mantle*` package via the `latest`
+dist-tag, so a fresh install always resolves the current stable release.
+Core's test runner substitutes its exact candidate in a disposable copy.
 
 ## One-shot
 

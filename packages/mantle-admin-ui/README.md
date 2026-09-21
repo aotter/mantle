@@ -29,8 +29,8 @@ the markup and flow without forking this package. The recipe accepts optional
 Privacy Policy and Terms of Use links; their discovery and enforcement remain
 the application's responsibility.
 
-This package is prerelease software. Its `package.json` is the exact version
-authority; the API surface may change until `v0.1.0`.
+`0.1.2` is this package's first stable release. Its `package.json` is the
+exact version installed.
 
 ## Same-origin sandbox preview
 

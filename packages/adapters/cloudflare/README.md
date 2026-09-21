@@ -10,8 +10,8 @@ This package mounts the runtime on Hono, implements the runtime ports against
 Cloudflare D1 / KV / Workers assets, and owns curated identity/session wiring
 plus MCP OAuth/CIMD. Legacy DCR remains a bounded compatibility path.
 
-This package is prerelease software. Its `package.json` is the exact version
-authority; the API surface may change until the first stable `0.1.2` release.
+`0.1.2` is this package's first stable release. Its `package.json` is the
+exact version installed.
 
 ## Conventional Worker Facade
 
