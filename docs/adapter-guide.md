@@ -90,6 +90,11 @@ ports. Unsupported native View dialects fail before the adapter mutates state.
 
 ### Bun embedding
 
+> **Experimental.** The Bun and Vercel adapters may change in a minor
+> release. They cover public Views and HTTP Triggers; the host owns
+> authentication and CSRF, and Auth, Admin and MCP are Cloudflare-only today.
+> Cloudflare is the supported host.
+
 `@aotter/mantle-bun` is the minimal SQLite reference: pass an application-owned
 `bun:sqlite` `Database` and a compiled `RuntimePlan` to `createBunMantle()`.
 Its `handle()` returns `null` for sibling routes and a Web-standard `Response`

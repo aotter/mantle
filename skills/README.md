@@ -58,18 +58,21 @@ contracts.
 
 ## Source-repository marketplace install
 
-The source repository is also an agent plugin bundle. Install it at the tag
-matching the project's `@aotter/mantle` version:
+The source repository is also an agent plugin bundle:
 
 ```bash
 # Claude Code — two separate prompts
-/plugin marketplace add aotter/mantle@v<installed-version>
+/plugin marketplace add aotter/mantle
 /plugin install mantle@mantle
 
 # Codex
-codex plugin marketplace add aotter/mantle --ref v<installed-version>
+codex plugin marketplace add aotter/mantle
 codex plugin add mantle@mantle
 ```
+
+These are authoring workflows and do not track a release. Version matching is
+the job of `mantle skills`, which projects the installed package's own skills
+into the project, and `mantle skills --check`, which fails on drift.
 
 Cursor and GitHub Copilot read their manifests from the repository directly.
 These manifests are not duplicated into the npm package:

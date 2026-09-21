@@ -112,7 +112,7 @@ Bun, with the server and SQLite handle staying yours:
 
 ```ts
 import { Database } from "bun:sqlite";
-import { createBunMantle } from "@aotter/mantle-bun";
+import { createBunMantle } from "@aotter/mantle-bun";  // experimental
 
 const database = new Database("app.sqlite");
 const mantle = createBunMantle({ plan, database, handlers });
@@ -128,7 +128,7 @@ Vercel Functions, with storage injected:
 
 ```ts
 import { SqliteMantleStorageAdapter } from "@aotter/mantle-runtime";
-import { createVercelMantle } from "@aotter/mantle-vercel";
+import { createVercelMantle } from "@aotter/mantle-vercel";  // experimental
 import { LibsqlDatabaseDriver } from "@aotter/mantle-vercel/libsql";
 
 const mantle = createVercelMantle({
