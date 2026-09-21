@@ -35,24 +35,25 @@ body:
     id: scope
     attributes:
       label: Scope of impact
-      description: Packages, docs, starters, Skills, runtime behavior, auth, storage, or public API surfaces affected.
+      description: Packages, docs, Skills, runtime behavior, auth, storage, or public API surfaces affected. Legacy mantle-starters work only when the change is retirement or migration notes.
     validations:
       required: true
   - type: dropdown
     id: area
     attributes:
       label: Primary area
+      description: Use area:starters only for retired mantle-starters source or migration notes.
       options:
         - area:runtime
         - area:spec
         - area:cf
-        - area:starters
         - area:skills
         - area:admin-ui
         - area:docs
         - area:ci
         - area:adapter
         - unknown
+        - area:starters
     validations:
       required: true
   - type: checkboxes

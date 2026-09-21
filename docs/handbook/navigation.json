@@ -4,10 +4,10 @@
     {
       "text": "Start here",
       "items": [
+        { "text": "Project layout and the CLI loop", "link": "/start/project-and-cli" },
         { "text": "Quickstart: a minimal Worker", "link": "/start/quickstart-worker" },
-        { "text": "Build with ChatGPT Sites", "link": "/sites/index" },
         { "text": "Quickstart: local Admin (opt-in)", "link": "/start/quickstart-admin" },
-        { "text": "Project layout and the CLI loop", "link": "/start/project-and-cli" }
+        { "text": "When the host is ChatGPT Sites", "link": "/sites/index" }
       ]
     },
     {

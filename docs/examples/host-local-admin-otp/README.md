@@ -58,6 +58,16 @@ paths must fall through to Static Assets.
 
 `ConsoleEmailSender` is the local path only. Do not wire it in production.
 
+## Local traps
+
+- Prefer `http://127.0.0.1:8787` over `http://localhost:8787`. Wrangler still
+  serves HTML on localhost, but the OTP `Origin` header will not match
+  `PUBLIC_ORIGIN` and Better Auth returns `INVALID_ORIGIN`.
+- `pnpm check` runs `smoke.mjs`, which rewrites `.dev.vars` to a smoke-only
+  port (`18787`). Restore `.dev.vars` from `.dev.vars.example` (or delete it
+  and let `predev` recopy) before `pnpm dev`, or OTP will fail with
+  `INVALID_ORIGIN` against the Ready-on `8787` origin.
+
 ## What this project does not do
 
 `/` is `404`: no visitor frontend is installed. Public GET

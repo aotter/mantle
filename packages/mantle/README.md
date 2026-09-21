@@ -194,7 +194,8 @@ opt-in Dev UI path. Neither is a scaffold command. Admin is optional.
 
 ## Agent marketplace install
 
-Install the Mantle Core skill bundle before working on generated repos:
+Install the Mantle Core skill bundle before authoring or maintaining a
+consumer application:
 
 Replace `<installed-version>` with the exact version from this package's
 `package.json`. Do not point a versioned consumer at a mutable branch.
@@ -215,7 +216,7 @@ is cloned or opened.
 
 ## Marketplace capability installs
 
-In a generated repo, tell your coding agent:
+In a consumer application, tell your coding agent:
 
 ```txt
 Use repo-local mantle:plugin to install <plugin slug or recipe URL> in this repo.
@@ -250,7 +251,7 @@ adapter is a port-implementation exercise, not a runtime refactor.
   ([index](docs/examples/README.md)).
   The copy in `node_modules` describes the installed release.
 - Embedded docs and agent skills ship inside this npm package for
-  generated-site agents:
+  agents working from the installed package:
   - `node_modules/@aotter/mantle/docs/handbook/reference/manifest.md`
   - `node_modules/@aotter/mantle/docs/examples/cf-primitives-guarded-api.md` (anonymous,
     API-key, paid guard, personal-token, OAuth, REST, and MCP examples)

@@ -20,7 +20,7 @@
   "interface": {
     "displayName": "Mantle",
     "shortDescription": "Build and embed Mantle apps",
-    "longDescription": "Embed Mantle Core in an existing application or start from a deterministic example, then compose only the Web, Admin, Bun, Vercel, or Cloudflare modules the host needs.",
+    "longDescription": "Embed Mantle Core in an existing application or author from an official example, then compose only the Web, Admin, Bun, Vercel, or Cloudflare modules the host needs.",
     "developerName": "Aotter",
     "category": "Developer Tools",
     "capabilities": [
@@ -30,7 +30,7 @@
     "websiteURL": "https://mantle.tools/",
     "defaultPrompt": [
       "Embed Mantle Core in this application",
-      "Create a Mantle example from a deterministic Starter",
+      "Author a Mantle application from an official example",
       "Compose Mantle modules for this host"
     ],
     "brandColor": "#0F766E",

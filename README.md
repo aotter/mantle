@@ -55,6 +55,10 @@ bunx @aotter/mantle generate
 npx @aotter/mantle generate
 ```
 
+`generate` compiles manifests that already exist. An empty directory fails with
+`MANIFEST_ROOT_NOT_FOUND` by design — it does not scaffold a project, invent a
+Schema, or add a home route. There is no `mantle create`.
+
 Mantle validates your Manifest and generates `.mantle/generated/mantle.ts`:
 a compiled execution plan, TypeScript types, and typed APIs. Use them to query
 data and run actions inside your application, expose HTTP endpoints and MCP
@@ -78,6 +82,11 @@ packages to the same exact version and use their installed documentation.
 Engineers can start with the [installed API guide](packages/mantle/README.md),
 [adapter guide](docs/adapter-guide.md), or
 [direct authoring guide](docs/handbook/start/project-and-cli.md).
+
+Agents interview first: read the [`install` skill](skills/install/SKILL.md)
+and [task-specific prompts](docs/agent-prompts.md), ask which host, storage,
+and surfaces this application needs, then author locally from an official
+example. Do not run `generate` in an empty directory.
 
 ### Install the agent plugin
 
@@ -109,11 +118,12 @@ Coding agents use the same APIs and version-matched
 [skills](skills/README.md). A short starting prompt:
 
 ```text
-Read the installed @aotter/mantle docs and install skill. Ask which host,
-storage, and surfaces this application needs. Preserve the existing
-application, choose an official example, and implement locally.
-Pin all Mantle packages to the same exact version. Verify the selected
-surfaces; add Web, Admin, or MCP only when needed.
+Read skills/install/SKILL.md and docs/agent-prompts.md. Interview me about
+host, storage, and surfaces before writing files. Preserve any existing
+application; otherwise author locally from an official example. There is
+no mantle create; empty generate fails until manifests exist. Pin all
+Mantle packages to the same exact version. Verify the selected surfaces;
+add Web, Admin, or MCP only when needed.
 ```
 
 See [task-specific agent prompts](docs/agent-prompts.md) for embedding,
