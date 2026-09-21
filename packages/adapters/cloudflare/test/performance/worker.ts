@@ -14,18 +14,24 @@ interface Env {
   readonly DB: D1Database;
 }
 
+const performanceSession = {
+  session: { id: "performance-session", userId: "performance-user", expiresAt: new Date(0) },
+  user: {
+    id: "performance-user",
+    email: "performance@example.test",
+    name: "Performance",
+    role: "owner",
+    githubLogin: null,
+  },
+};
 const staffAuth = {
   ...stubAuth,
-  getSession: async () => ({
-    session: { id: "performance-session", userId: "performance-user", expiresAt: new Date(0) },
-    user: {
-      id: "performance-user",
-      email: "performance@example.test",
-      name: "Performance",
-      role: "owner",
-      githubLogin: null,
-    },
-  }),
+  // Admin probes run as an implicit staff session so the harness needs no
+  // cookie plumbing. MCP resolves callers through the same gate as HTTP
+  // (#977), so the anonymous challenge probe must actually be anonymous
+  // there: only a presented cookie signs an /mcp request in.
+  getSession: async (request: Request) =>
+    new URL(request.url).pathname.startsWith("/mcp") && !request.headers.get("cookie") ? null : performanceSession,
   getUserRole: async () => "owner",
 };
 
