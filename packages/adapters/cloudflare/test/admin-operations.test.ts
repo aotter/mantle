@@ -560,19 +560,19 @@ describe("POST /admin/api/operations/:name", () => {
     expect(res.status).toBe(401);
   });
 
-  it("surfaces the DiagnosticError shape when the procedure's own auth denies the caller", async () => {
-    // reindex-catalog requires ctx.staff role owner|editor; a
-    // contributor session should be denied by InvokeProcedureUseCase
-    // itself, surfaced the same way other admin routes do.
+  it("404s, like the listing, when the caller's predicates exclude the operation", async () => {
+    // reindex-catalog requires ctx.staff role owner|editor. GET filters it
+    // out for a contributor, so POST must not reveal it either (#877 L3);
+    // the same NOT_FOUND diagnostic shape as an unknown name.
     const { app } = harness({ getSession: sessionAsStaff("contributor") });
     const res = await app.request("/admin/api/operations/reindex-catalog", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({}),
     });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
     const body = (await res.json()) as { ok: boolean; diagnostic?: { code: string } };
     expect(body.ok).toBe(false);
-    expect(body.diagnostic?.code).toBe("AUTH_DENIED");
+    expect(body.diagnostic?.code).toBe("NOT_FOUND");
   });
 });
