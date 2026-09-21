@@ -46,14 +46,15 @@ const manifests = {
   },
   ".cursor-plugin/plugin.json": { ...shared, displayName: presentation.interface.displayName, skills: "./skills/" },
   ".copilot-plugin/plugin.json": { ...shared, skills: "./skills/" },
-  // The marketplace ref is derived from the package version: this is the file
-  // that used to need a hand-edit on every release.
+  // Resolved from the marketplace checkout itself, matching the Claude manifest's
+  // "./". The plugin carries authoring workflows, which do not track a release,
+  // so nothing here pins a version or names a branch.
   ".agents/plugins/marketplace.json": {
     name: shared.name,
     interface: { displayName: presentation.interface.displayName },
     plugins: [{
       name: shared.name,
-      source: { source: "url", url: `${shared.repository}.git`, ref: `v${version}` },
+      source: { source: "local", path: "./" },
       policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
       category: presentation.interface.category,
     }],
