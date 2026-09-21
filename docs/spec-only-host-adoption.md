@@ -6,9 +6,8 @@ Runtime. This Spec-only path is allowed by
 [ADR-0019](adr/0019-sealed-manifest-runtime-pipeline.md), not a new adapter,
 manifest grammar, or fork of Core.
 
-This recipe targets `0.1.0-alpha.16`. Its public APIs and peer requirements are
-prerelease contracts: pin the package, record the tested version, and rerun
-compatibility checks when upgrading.
+This recipe targets `0.1.2`. Pin the package, record the tested version, and
+rerun compatibility checks when upgrading.
 
 ## What stays with the host
 
@@ -51,7 +50,7 @@ validation semantics. Do not hand-maintain a second field list for the graph.
 Install the exact Spec package and its supported peer, without Runtime:
 
 ```sh
-npm install --save-exact @aotter/mantle-spec@0.1.0-alpha.16 zod@4.5.4
+npm install --save-exact @aotter/mantle-spec zod@4.5.4
 ```
 
 The [synthetic fixture](../packages/mantle-spec/test/fixtures/spec-only-host.yaml)

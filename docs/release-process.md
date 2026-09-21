@@ -61,7 +61,8 @@ is introduced. The runnable release-order check guards these transitions.
   or force-updated. Both branches share one ruleset: PR, one approval,
   resolved threads and a current-base `Typecheck + tests` check.
 - Stable publishes latest. Final 0.1.0 alphas only advance alpha, preserving
-  existing legacy latest. Historic 0.0 alpha behavior remains recoverable.
+  existing legacy latest. No prerelease moves latest; the 0.0 alpha rule that
+  also advanced it was removed once 0.0 became unreachable.
   A prerelease channel keeps its last version when a later stable publishes.
 
 ## Prepare and run

@@ -7,8 +7,8 @@ locale helpers, JSON-Schema to zod conversion, and the CLI primitives used by
 the umbrella package. Direct installs expose the fallback `mantle-spec` binary;
 adopter projects use `mantle` from `@aotter/mantle`.
 
-This package is prerelease software. Its `package.json` is the exact version
-authority; the API surface may change until `v0.1.0`.
+`0.1.2` is this package's first stable release. Its `package.json` is the
+exact version installed.
 
 ## Embed the parser
 

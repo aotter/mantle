@@ -9,8 +9,6 @@ integration connects Sites hosting and sign-in to Mantle content, staff roles,
 Admin, media, and public web. Keep the application outside the Mantle SDK
 checkout and use matching SDK packages.
 
-The current reference requires unreleased host-declared MCP endpoint support. Follow its [packed-checkout installation](../../examples/host-chatgpt-sites/README.md#local-reproduction); published `0.1.2-alpha.6` does not provide that contract. The build and smoke checks verify the installed SDK rather than relying on its version string alone.
-
 Start from the [runnable Sites host reference](../../examples/host-chatgpt-sites/README.md), then replace its **example** manifest with the user's business contract. It contains the matching D1 migrations/fingerprint, R2 upload adapter, local smoke test and build layout. Its browser-backed staff identity is not an OAuth resource-server credential.
 
 ## First deployment
@@ -108,8 +106,7 @@ for live payments.
 
 ## Source
 
-- [`MediaStorage` port](../../../packages/mantle-runtime/src/domain/port/MediaStorage.ts)
-- [Media upload use case](../../../packages/mantle-runtime/src/usecase/media/CreateMediaUploadUseCase.ts)
+- `MediaStorage` port and the media upload use case in `@aotter/mantle-runtime`
 - [Cloudflare R2 Workers binding API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)
 - [Cloudflare R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)
 - [OpenAI Sites](https://learn.chatgpt.com/docs/sites)

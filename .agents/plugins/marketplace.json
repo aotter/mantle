@@ -7,9 +7,8 @@
     {
       "name": "mantle",
       "source": {
-        "source": "url",
-        "url": "https://github.com/aotter/mantle.git",
-        "ref": "v0.1.2-rc.1"
+        "source": "local",
+        "path": "./"
       },
       "policy": {
         "installation": "AVAILABLE",

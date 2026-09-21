@@ -3,7 +3,7 @@ description: "Author a minimal Cloudflare Worker from scratch: one Schema, one p
 ---
 # Quickstart: a minimal Worker
 
-This page reproduces Core's API-only Worker reference as a from-scratch walkthrough. It is the embed / adapter path: View REST without Admin, Auth or a visitor frontend. Admin is opt-in when humans need a console — [Quickstart: local Admin](./quickstart-admin.md). Pin every `@aotter/mantle*` package to the exact version in this snapshot (`packages/mantle/package.json`); see [Versions](../reference/surface.md#versions).
+This page reproduces Core's API-only Worker reference as a from-scratch walkthrough. It is the embed / adapter path: View REST without Admin, Auth or a visitor frontend. Admin is opt-in when humans need a console — [Quickstart: local Admin](./quickstart-admin.md). Install every `@aotter/mantle*` package from the `latest` dist-tag; see [Versions](../reference/surface.md#versions).
 
 ## Prerequisites
 
@@ -13,7 +13,7 @@ This page reproduces Core's API-only Worker reference as a from-scratch walkthro
 
 ## 1. `package.json`
 
-Pin every `@aotter/mantle*` package to the same exact release and add the peers the Cloudflare adapter needs.
+Install every `@aotter/mantle*` package from the `latest` dist-tag and add the peers the Cloudflare adapter needs.
 
 ```json
 {
@@ -28,8 +28,8 @@ Pin every `@aotter/mantle*` package to the same exact release and add the peers 
     "check": "mantle generate && mantle generate --check && mantle validate && mantle skills && mantle skills --check && tsc --noEmit"
   },
   "dependencies": {
-    "@aotter/mantle": "0.1.2-alpha.6",
-    "@aotter/mantle-cloudflare": "0.1.2-alpha.6",
+    "@aotter/mantle": "latest",
+    "@aotter/mantle-cloudflare": "latest",
     "better-auth": "1.7.2",
     "hono": "^4.13.3",
     "zod": "^4.5.4",

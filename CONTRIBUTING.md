@@ -40,7 +40,7 @@ The package topology is:
 | `@aotter/mantle-cloudflare` | Cloudflare Workers adapter over D1 and selected platform services. |
 
 `skills/*` are versioned consumer product artifacts. Maintainer instructions
-live at the repository root and in `.agent/skills`; do not merge the two
+live at the repository root and in `.agents/skills`; do not merge the two
 audiences or copy maintainer policy into shipped skills.
 
 ## Hard invariants
@@ -132,7 +132,7 @@ metadata through `.github/release.yml`. Do not add version entries to
 ## Release and security
 
 Release mechanics are governed by [`docs/release-process.md`](docs/release-process.md)
-and the canonical [maintainer release skill](.agent/skills/mantle-release/SKILL.md).
+and the canonical [maintainer release skill](.agents/skills/mantle-release/SKILL.md).
 No task implies permission to publish.
 
 The organization-admin ruleset bypass exists only for repository or release

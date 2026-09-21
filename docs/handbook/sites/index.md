@@ -34,14 +34,6 @@ boundaries.
 
 ## Start with the supported SDK
 
-**Release status:** this revision needs the new host-declared MCP endpoint
-support. Published `0.1.2-alpha.6` does not contain it. Use the
-[packed-checkout installation](../../examples/host-chatgpt-sites/README.md#local-reproduction)
-to build this exact SDK and its reference application together. It records the
-source commit and package hashes. A registry-only installation becomes the
-starting path after a release includes this support and the example's dependency
-versions and lockfile are updated together.
-
 You need Node.js 22+, pnpm 9+, and Sites access with D1 and R2 available for your
 project. Follow the reference's local build and smoke test before deployment.
 Keep your application outside the SDK checkout. The included article schema is
@@ -50,7 +42,7 @@ a working example; adapt its fields and lifecycle to your team's content.
 ## Publish your first article
 
 1. **Prepare the application.** Follow the
-   [runnable reference](../../examples/host-chatgpt-sites/README.md#local-reproduction).
+   [runnable reference](../../examples/host-chatgpt-sites/README.md#install-and-run).
    Its local test verifies content, roles, images, public pages, and MCP together.
 2. **Connect Sites.** Follow [Publish with Sites](../../examples/host-chatgpt-sites/README.md#publish-with-sites)
    to provision D1 and R2, set the production origin and first owner's email,
@@ -77,19 +69,21 @@ deployment workflow.
 
 ## Ask your agent to set it up
 
-Give your agent the SDK checkout containing this integration and describe your
+Install the Mantle agent plugin, or `@aotter/mantle` itself, then describe your
 audience and content requirements:
 
 ```text
 Build a content site with ChatGPT Sites and Mantle. Read
-docs/handbook/sites/index.md and docs/examples/host-chatgpt-sites/README.md
-from the matching Mantle SDK. Follow the documented installation path,
-including packed-checkout installation while release support is pending.
+handbook/sites/index.md and examples/host-chatgpt-sites/README.md from the
+installed Mantle docs, and follow that reference's install and run steps.
 Adapt the article example to my content requirements. Include ChatGPT
 sign-in, Mantle staff roles, cover uploads, and published article pages.
 Run the local checks and show me a draft-to-publish walkthrough before
 deploying through Sites. Keep remote staff OAuth MCP outside this scope.
 ```
+
+For business rules beyond content, add: "use custom `ref` handlers and
+application-owned tables as described in handbook/sites/equipment-checkout.md."
 
 ## Beyond content: operational workflows
 

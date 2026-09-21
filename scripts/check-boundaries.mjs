@@ -553,7 +553,7 @@ function checkRepositoryGuidance() {
   const agentsPath = join(ROOT, "AGENTS.md");
   const claudePath = join(ROOT, "CLAUDE.md");
   const contributingPath = join(ROOT, "CONTRIBUTING.md");
-  const releaseSkillPath = join(ROOT, ".agent/skills/mantle-release/SKILL.md");
+  const releaseSkillPath = join(ROOT, ".agents/skills/mantle-release/SKILL.md");
   const claudeReleasePath = join(ROOT, ".claude/skills/mantle-release/SKILL.md");
   const agents = readFileSync(agentsPath, "utf8");
   const claude = readFileSync(claudePath, "utf8");
@@ -585,7 +585,7 @@ function checkRepositoryGuidance() {
   if (!releaseSkill.includes("All ten npmjs artifacts")) {
     fail(releaseSkillPath, "canonical release skill must match the ten-package topology");
   }
-  if (!claudeRelease.includes("../../../.agent/skills/mantle-release/SKILL.md") ||
+  if (!claudeRelease.includes("../../../.agents/skills/mantle-release/SKILL.md") ||
       claudeRelease.split("\n").length > 8 ||
       /^## (?:Contract|Prepare|Run|Recovery)/m.test(claudeRelease)) {
     fail(claudeReleasePath, "Claude release entry must only point to the canonical skill");

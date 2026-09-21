@@ -3,7 +3,7 @@ description: "Open local Admin in one shot: generate the prebuilt SPA, bind ASSE
 ---
 # Quickstart: local Admin
 
-This page reproduces Core's local Admin OTP reference as a from-scratch walkthrough. Admin is **opt-in**: use it when humans need a Dev UI. A complete Mantle service does not require this surface. Pin every `@aotter/mantle*` package to the exact version in this snapshot (`packages/mantle/package.json`); see [Versions](../reference/surface.md#versions).
+This page reproduces Core's local Admin OTP reference as a from-scratch walkthrough. Admin is **opt-in**: use it when humans need a Dev UI. A complete Mantle service does not require this surface. Install every `@aotter/mantle*` package from the `latest` dist-tag; see [Versions](../reference/surface.md#versions).
 
 The default embed path — Spec + Worker without Admin — is [Quickstart: a minimal Worker](./quickstart-worker.md).
 
@@ -17,7 +17,7 @@ An agent interviews the human for one value before writing files: the bootstrap 
 
 ## 1. `package.json`
 
-Pin every `@aotter/mantle*` package to the same exact release. Admin needs both `@aotter/mantle-admin` and `@aotter/mantle-admin-ui` plus the Cloudflare adapter peers.
+Install every `@aotter/mantle*` package from the `latest` dist-tag. Admin needs both `@aotter/mantle-admin` and `@aotter/mantle-admin-ui` plus the Cloudflare adapter peers.
 
 ```json
 {
@@ -32,10 +32,10 @@ Pin every `@aotter/mantle*` package to the same exact release. Admin needs both 
     "dev": "wrangler dev --local --ip 127.0.0.1 --port 8787"
   },
   "dependencies": {
-    "@aotter/mantle": "0.1.2-alpha.6",
-    "@aotter/mantle-admin": "0.1.2-alpha.6",
-    "@aotter/mantle-admin-ui": "0.1.2-alpha.6",
-    "@aotter/mantle-cloudflare": "0.1.2-alpha.6",
+    "@aotter/mantle": "latest",
+    "@aotter/mantle-admin": "latest",
+    "@aotter/mantle-admin-ui": "latest",
+    "@aotter/mantle-cloudflare": "latest",
     "better-auth": "1.7.2",
     "hono": "^4.13.3",
     "zod": "^4.5.4",

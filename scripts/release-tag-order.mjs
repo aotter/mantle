@@ -9,7 +9,7 @@ if (process.argv[2] === "--channels") {
 }
 
 if (process.argv[2] === "--self-test") {
-  assert.deepEqual(releaseChannels("0.0.11-alpha.63"), ["alpha", "latest"]);
+  assert.deepEqual(releaseChannels("0.0.11-alpha.63"), ["alpha"]);
   assert.deepEqual(releaseChannels("0.1.0-alpha.17"), ["alpha"]);
   assert.deepEqual(releaseChannels("0.1.2-alpha.1"), ["alpha"]);
   assert.deepEqual(releaseChannels("0.1.2-beta.1"), ["beta"]);
@@ -78,5 +78,5 @@ function releaseChannels(version) {
   const prerelease = version.match(/-(alpha|beta|rc)(?:\.|$)/)?.[1];
   if (version.includes("-") && !prerelease) throw new Error(`Unsupported prerelease channel: ${version}`);
   const channel = prerelease ?? "latest";
-  return /^0\.0\.\d+-alpha(?:\.|$)/.test(version) ? [channel, "latest"] : [channel];
+  return [channel];
 }

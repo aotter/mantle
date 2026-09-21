@@ -97,5 +97,5 @@ consumers; they do not duplicate the suite under new names.
 
 Issue #674 leaves `CONTRIBUTING.md` plus accepted ADRs as the contributor
 authority. `AGENTS.md`, `CLAUDE.md`, and the Claude release-skill entry are
-small routers; `.agent/skills/mantle-release/SKILL.md` is the only maintainer
+small routers; `.agents/skills/mantle-release/SKILL.md` is the only maintainer
 release procedure. Shipped `skills/*` remain separate consumer artifacts.
