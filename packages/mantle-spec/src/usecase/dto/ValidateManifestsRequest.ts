@@ -22,8 +22,8 @@ export interface ValidateManifestsRequest {
 }
 
 export interface McpInputCheckOptions {
-  /** Warn on a top-level `oneOf` / `anyOf` whose branches require more
-   *  than the advertised top-level `required` (default `true`). */
+  /** Warn on a top-level `oneOf` input; the message names any branch-only
+   *  required fields hidden behind the advertised `required` (default `true`). */
   readonly unionAmbiguity?: boolean;
   /** Warn on array inputs whose `maxItems` exceeds this bound or is
    *  undeclared, and on free-form object inputs (default `100`;

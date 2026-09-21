@@ -101,34 +101,36 @@ function checkMcpToolInputShapes(
         message,
       });
 
-    if (unionAmbiguity) {
-      for (const keyword of ["oneOf", "anyOf"] as const) {
-        const branches = input[keyword];
-        if (!Array.isArray(branches) || branches.length === 0) continue;
-        const advertised = new Set(input.required ?? []);
-        const hidden = new Set<string>();
-        for (const branch of branches as JsonSchema[]) {
-          for (const field of branch.required ?? []) if (!advertised.has(field)) hidden.add(field);
-        }
-        const path = `/spec/input/${keyword}`;
-        out.push(diagnostic(
-          "MCP_TOOL_INPUT_UNION_AMBIGUOUS",
-          path,
-          [...hidden].sort(),
-          "one MCP tool per branch, or a top-level required set that is true for every branch",
-          `Procedure '${name}' is an MCP tool whose input is a top-level ${keyword}; its advertised required set ` +
-            `[${[...advertised].sort().join(", ")}] hides ${hidden.size ? `[${[...hidden].sort().join(", ")}]` : "branch-specific fields"} ` +
-            `that some branch needs, so a caller satisfying the schema can still be rejected. MCP clients render ${keyword} poorly; ` +
-            `prefer separate tools (e.g. create/update).`,
-        ));
+    // The v0.1 grammar accepts `oneOf` only (`anyOf` is rejected at parse), so
+    // that is the one union keyword to inspect.
+    if (unionAmbiguity && Array.isArray(input.oneOf) && input.oneOf.length > 0) {
+      const advertised = new Set(input.required ?? []);
+      const hidden = new Set<string>();
+      for (const branch of input.oneOf) {
+        for (const field of branch.required ?? []) if (!advertised.has(field)) hidden.add(field);
       }
+      const path = "/spec/input/oneOf";
+      const advertisedText = `[${[...advertised].sort().join(", ")}]`;
+      out.push(diagnostic(
+        "MCP_TOOL_INPUT_UNION_AMBIGUOUS",
+        path,
+        [...hidden].sort(),
+        "one MCP tool per branch, or a top-level required set that is true for every branch",
+        hidden.size
+          ? `Procedure '${name}' is an MCP tool whose input is a top-level oneOf; its advertised required set ` +
+            `${advertisedText} hides [${[...hidden].sort().join(", ")}], which some branch needs, so a caller satisfying ` +
+            `the schema can still be rejected. MCP clients render oneOf poorly; prefer separate tools (e.g. create/update).`
+          : `Procedure '${name}' is an MCP tool whose input is a top-level oneOf. MCP clients render oneOf poorly and ` +
+            `cannot tell an agent which branch it is filling; prefer separate tools (e.g. create/update).`,
+      ));
     }
 
     if (maxArrayItems !== null) {
       for (const [field, property] of Object.entries(input.properties ?? {})) {
         const schema = property as JsonSchema;
         const path = `/spec/input/properties/${field}`;
-        if (schema.type === "array") {
+        const types = new Set(Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : []);
+        if (types.has("array")) {
           const bound = typeof schema.maxItems === "number" ? schema.maxItems : undefined;
           if (bound === undefined || bound > maxArrayItems) {
             out.push(diagnostic(
@@ -140,7 +142,10 @@ function checkMcpToolInputShapes(
                 `an agent must serialise the whole array into one tools/call.`,
             ));
           }
-        } else if (schema.type === "object" && schema.additionalProperties !== false
+        } else if (types.has("object")
+          // Free-form means no declared shape at all: a typed map
+          // (`additionalProperties: { type: string }`) declares its values.
+          && (schema.additionalProperties === undefined || schema.additionalProperties === true)
           && Object.keys(schema.properties ?? {}).length === 0) {
           out.push(diagnostic(
             "MCP_TOOL_INPUT_UNBOUNDED",

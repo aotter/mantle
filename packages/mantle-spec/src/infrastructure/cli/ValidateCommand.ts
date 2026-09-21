@@ -41,6 +41,7 @@ export interface CliArgs {
   readonly source: string | null;
   readonly format: "json" | "text";
   readonly phase: Phase;
+  readonly mcpInputChecks: boolean;
 }
 
 export function parseArgs(rawArgs: ReadonlyArray<string>): CliArgs {
@@ -55,6 +56,7 @@ export function parseArgs(rawArgs: ReadonlyArray<string>): CliArgs {
         format: { type: "string" },
         json: { type: "boolean" },
         phase: { type: "string" },
+        "no-mcp-input-checks": { type: "boolean" },
         help: { type: "boolean", short: "h" },
       },
     }));
@@ -92,6 +94,7 @@ export function parseArgs(rawArgs: ReadonlyArray<string>): CliArgs {
     source: values["no-source"] ? null : values.source ?? "./src",
     format,
     phase,
+    mcpInputChecks: !values["no-mcp-input-checks"],
   };
 }
 
@@ -105,6 +108,8 @@ Options:
   --source <dir>      Handler source root for handlers-map grep
                       (default: ./src)
   --no-source         Skip the handler-source grep entirely
+  --no-mcp-input-checks
+                      Skip the advisory MCP tool input-shape warnings
   --phase <phase>     'preview' (default) or 'deploy'.
                         preview: grammar + cross-Schema checks only.
                                  Suitable while authoring application manifests
@@ -151,7 +156,7 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
 
   // 3. Execute the use case.
   const result = parsed
-    ? ValidateManifestsUseCase.run({ parsed, handlerSource })
+    ? ValidateManifestsUseCase.run({ parsed, handlerSource, ...(args.mcpInputChecks ? {} : { mcpInput: false as const }) })
     : { diagnostics: [], errorCount: 0, warningCount: 0 };
   const cliWarnings: Diagnostic[] = [];
 

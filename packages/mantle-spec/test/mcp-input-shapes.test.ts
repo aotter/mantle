@@ -45,6 +45,8 @@ spec:
       sandbox: { type: array, maxItems: 5000, items: { type: object } }
       tags: { type: array, items: { type: string } }
       ids: { type: array, maxItems: 20, items: { type: string } }
+      labels: { type: object, additionalProperties: { type: string } }
+      notes: { type: [array, "null"], items: { type: string } }
   output: { type: object }
   handler: { kind: ref, ref: upsertProject }
 ---
@@ -109,16 +111,18 @@ describe("MCP-surfaced input shape warnings (#971)", () => {
 
   it("warns on unbounded arrays and free-form objects, not on bounded ones", () => {
     const unbounded = shapes().filter((d) => d.code === "MCP_TOOL_INPUT_UNBOUNDED").map((d) => d.path).sort();
+    // `labels` is a typed map, not free-form; `notes` is array-or-null and still unbounded.
     expect(unbounded).toEqual([
       "/spec/input/properties/document",
+      "/spec/input/properties/notes",
       "/spec/input/properties/sandbox",
       "/spec/input/properties/tags",
     ]);
   });
 
   it("lets a downstream tune or disable the checks through the request", () => {
-    expect(shapes({ maxArrayItems: 5000 }).filter((d) => d.code === "MCP_TOOL_INPUT_UNBOUNDED").map((d) => d.path))
-      .toEqual(["/spec/input/properties/document", "/spec/input/properties/tags"]);
+    expect(shapes({ maxArrayItems: 5000 }).filter((d) => d.code === "MCP_TOOL_INPUT_UNBOUNDED").map((d) => d.path).sort())
+      .toEqual(["/spec/input/properties/document", "/spec/input/properties/notes", "/spec/input/properties/tags"]);
     expect(shapes({ maxArrayItems: null }).filter((d) => d.code === "MCP_TOOL_INPUT_UNBOUNDED")).toEqual([]);
     expect(shapes({ unionAmbiguity: false }).filter((d) => d.code === "MCP_TOOL_INPUT_UNION_AMBIGUOUS")).toEqual([]);
     expect(shapes(false)).toEqual([]);
