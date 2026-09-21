@@ -17,9 +17,10 @@ skill remains the version-matched upgrade workflow, not a replacement CLI.
 1. Inspect git status, package.json, lockfile, actual project scripts and
    installed versions. Preserve unrelated local changes. Read plugin locks
    and legacy `.mantle` metadata if present; they are context, not required.
-2. Select an explicit target release and read its migration notes, including
-   `docs/migration-0.1.2.md` when leaving alpha.17. Do not resolve new Starter
-   refs or compare the project to a baseline template.
+2. Select an explicit target release and read its entry in
+   `docs/handbook/releases/index.md` plus that version's GitHub release notes.
+   Do not resolve new Starter refs or compare the project to a baseline
+   template.
 3. Update only selected `@aotter/mantle*` dependencies to the same exact target
    version, preserving dependency sections. Use the package manager to update
    the lockfile; inspect the dependency diff and required peer changes.

@@ -101,15 +101,15 @@ Install the frozen dependency graph, project installed Core skills, then read
 those skills and embedded docs. Never apply develop docs to an older package.
 Use the installed `mantle --help` and the project's scripts as authority.
 
-For legacy alpha.17 projects, retain their pinned behavior until an explicit
-upgrade is requested; read `docs/migration-0.1.2.md` before upgrading. Do not
-rewrite provider identities, delete metadata or fetch a nonexistent new Starter
-tag. SDK upgrades follow the update skill, not a bundle comparison command.
+For a legacy pre-stable project, retain its pinned behavior until an explicit
+upgrade is requested. Do not rewrite provider identities, delete metadata or
+fetch a nonexistent new Starter tag. SDK upgrades follow the update skill, not
+a bundle comparison command.
 
 ## Ship and report
 
 When deployment is requested, follow the installed provision skill and the
-observed host configuration. Legacy Landing remains an alpha.17 product; it
+observed host configuration. Legacy Landing remains a pre-stable product; it
 is not a launch dependency for new Core projects.
 
 Report the project path, exact SDK version, local URL/HTTP result and checks,
