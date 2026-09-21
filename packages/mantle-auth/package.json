@@ -1,0 +1,59 @@
+{
+  "name": "@aotter/mantle-auth",
+  "version": "0.1.2",
+  "description": "Optional Better Auth identity for Mantle: staff roles, email OTP, social sign-in, and the OAuth 2.1 / MCP authorization surface, over a SQLite-shaped DatabaseDriver wrapping the same store Better Auth uses.",
+  "license": "Apache-2.0",
+  "homepage": "https://mantle.tools/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aotter/mantle.git",
+    "directory": "packages/mantle-auth"
+  },
+  "type": "module",
+  "sideEffects": [
+    "./dist/createMantleAuth.js"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha",
+    "registry": "https://registry.npmjs.org"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "prebuild": "rm -rf dist .tsbuildinfo",
+    "build": "tsc -b tsconfig.lib.json",
+    "typecheck": "tsc --noEmit -p tsconfig.lib.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aotter/mantle-admin": "workspace:*",
+    "@aotter/mantle-runtime": "workspace:*",
+    "@aotter/mantle-spec": "workspace:*",
+    "@better-auth/cimd": "catalog:",
+    "@better-auth/mcp": "catalog:",
+    "@better-auth/oauth-provider": "catalog:"
+  },
+  "peerDependencies": {
+    "better-auth": "catalog:peer",
+    "zod": "catalog:peer"
+  },
+  "devDependencies": {
+    "@better-auth/core": "catalog:",
+    "@better-auth/utils": "catalog:",
+    "@types/node": "catalog:",
+    "better-auth": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -18,7 +18,7 @@ pnpm add @aotter/mantle
 ## What's inside
 
 The umbrella provides Spec and Runtime by default. Install an optional package
-before importing its matching Web, Admin, Bun, Vercel, Cloudflare, or Admin UI
+before importing its matching Web, Admin, Auth, Bun, Vercel, Cloudflare, or Admin UI
 subpath. Every sub-package also remains directly installable.
 
 | Subpath | Re-exports |
@@ -29,6 +29,7 @@ subpath. Every sub-package also remains directly installable.
 | `@aotter/mantle/codegen` | Pure linked manifests → typed runtime module emitter (no IO) |
 | `@aotter/mantle/web` | Optional HTML, Markdown, `llms.txt`, sitemap, SEO, and preview composition (no routes or platform deps) |
 | `@aotter/mantle/admin` | Optional Admin API, auth routes, and static-asset composition |
+| `@aotter/mantle/auth` | Optional host-neutral Better Auth identity; adapters own IP headers and storage bindings |
 | `@aotter/mantle/bun` | Bun adapter — caller-owned `bun:sqlite` and Web-standard View/Trigger transport |
 | `@aotter/mantle/vercel` | Vercel Functions adapter — injected durable storage and platform `waitUntil` |
 | `@aotter/mantle/vercel/libsql` | Optional application-owned Turso/libSQL driver |
@@ -42,7 +43,7 @@ import { createMantleWeb } from "@aotter/mantle/web";
 import { mountRuntimeEndpoints } from "@aotter/mantle/cloudflare";
 ```
 
-The umbrella installs only Spec and Runtime. Web, Admin, Admin UI, Bun,
+The umbrella installs only Spec and Runtime. Web, Admin, Auth, Admin UI, Bun,
 Vercel, and Cloudflare are optional peers; install only the subpaths selected
 by the application.
 

@@ -772,3 +772,20 @@ not hard-reject those overrides.
 
 Deploying this change invalidates unconsumed OTPs created by an older
 deployment. Users request a new code; no database migration is needed.
+
+## Amendment — 2026-09-21: host-neutral `@aotter/mantle-auth`
+
+Identity remains adapter-owned: there is still no Core auth port. The Better
+Auth surface is extracted into `@aotter/mantle-auth` (not
+`mantle-better-auth`) ahead of a second-host adapter, because the
+implementation was already host-neutral except for ingress IP headers and
+D1/KV bindings.
+
+`createMantleAuth` is the portable constructor. Adapters still own host
+wiring. Cloudflare `createAuth` keeps its existing signature, supplies
+`cf-connecting-ip`, constructs `D1DatabaseDriver`, and optionally wraps
+Workers KV as `AuthSessionCache`. Bun and Vercel have no auth adapter in this
+change; when that wiring lands they must supply their own trusted ingress
+header(s) and driver. The portable package never defaults to a Cloudflare
+header or to client-controlled `X-Forwarded-For`. Missing or empty
+`ipAddressHeaders` fails closed.

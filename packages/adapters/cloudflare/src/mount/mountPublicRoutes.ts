@@ -16,7 +16,7 @@ import type {
   CloudflareMantleRuntime,
   MantleRuntimeRef,
 } from "./bootRuntimeOnce.js";
-import { STAFF_ROLE_SET } from "../auth/createAuth.js";
+import { STAFF_ROLE_SET } from "@aotter/mantle-auth";
 import { PUBLIC_CACHE_TAG } from "../oauth/cachePolicy.js";
 
 /**

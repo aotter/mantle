@@ -12,6 +12,7 @@ import {
   buildOAuthProviderOptions,
   buildSocialProviders,
   buildTrustedOriginsFor,
+  CLOUDFLARE_CLIENT_IP_HEADERS,
   createAuth,
   createSetupIncompleteAuth,
   decodeMemberCursor,
@@ -787,6 +788,11 @@ describe("registered OAuth client mapping", () => {
 });
 
 describe("createAuth — boot invariants", () => {
+  it("supplies the Cloudflare ingress IP header without a caller override", () => {
+    expect(CLOUDFLARE_CLIENT_IP_HEADERS).toEqual(["cf-connecting-ip"]);
+    expect(createAuth(baseConfig()).basePath).toBe("/api/auth");
+  });
+
   it("throws when methods[] is empty", () => {
     expect(() => createAuth(baseConfig({ methods: [] }))).toThrow(/empty/i);
   });

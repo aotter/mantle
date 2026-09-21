@@ -32,6 +32,7 @@ try {
     ["@aotter/mantle-indexeddb", "packages/adapters/indexeddb"],
     ["@aotter/mantle-admin-ui", "packages/mantle-admin-ui"],
     ["@aotter/mantle-admin", "packages/mantle-admin"],
+    ["@aotter/mantle-auth", "packages/mantle-auth"],
   ].map(([name, directory]) => {
     execFileSync("pnpm", ["-C", directory, "pack", "--pack-destination", artifacts], {
       cwd: root,
@@ -99,6 +100,7 @@ try {
     "mantle-web",
     "mantle-admin",
     "mantle-admin-ui",
+    "mantle-auth",
     "mantle-bun",
     "mantle-indexeddb",
     "mantle-vercel",
@@ -150,6 +152,16 @@ try {
   }
   const packedManifest = JSON.parse(readFileSync(join(umbrella, "package.json"), "utf8"));
   if (packedManifest.exports["./provision"]) throw new Error("Retired provision export remains");
+  if (!packedManifest.exports["./auth"]) throw new Error("Umbrella is missing the ./auth optional export");
+  if (!packedManifest.peerDependenciesMeta?.["@aotter/mantle-auth"]?.optional) {
+    throw new Error("Umbrella must list @aotter/mantle-auth as an optional peer");
+  }
+  const authPacked = JSON.parse(execFileSync("tar", ["-xOf", tarballs["@aotter/mantle-auth"], "package/package.json"], {
+    encoding: "utf8",
+  }));
+  if (authPacked.name !== "@aotter/mantle-auth" || !authPacked.exports?.["."]) {
+    throw new Error("Packed @aotter/mantle-auth manifest is incomplete");
+  }
   const payload = execFileSync("tar", ["-tf", tarballs["@aotter/mantle"]], { encoding: "utf8" });
   const leaked = payload.split("\n").filter((entry) => {
     const name = entry.split("/").pop()?.replace(/\/$/, "") ?? "";
@@ -163,6 +175,7 @@ try {
     "mantle-web",
     "mantle-admin",
     "mantle-admin-ui",
+    "mantle-auth",
     "mantle-bun",
     "mantle-cloudflare",
     "mantle-indexeddb",
@@ -257,7 +270,7 @@ try {
     throw new Error("Admin API consumer installed the optional Admin UI");
   }
 
-  console.log("Packed spec-only, Core-only, umbrella Core, Core+Web, Core+IndexedDB, and Core+Admin consumers passed.");
+  console.log("Packed spec-only, Core-only, umbrella Core, Core+Web, Core+IndexedDB, Core+Admin, and Auth packing consumers passed.");
 } finally {
   rmSync(localState, { recursive: true, force: true });
   rmSync(temp, { recursive: true, force: true });

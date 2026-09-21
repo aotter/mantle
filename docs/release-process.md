@@ -94,7 +94,7 @@ is introduced. The runnable release-order check guards these transitions.
    stable, continue with the promotion below. The controller refuses an
    untagged source that is no longer the expected branch tip.
 
-The ten public packages remain in dependency order:
+The eleven public packages remain in dependency order:
 
 1. @aotter/mantle-spec
 2. @aotter/mantle-admin-ui
@@ -102,10 +102,11 @@ The ten public packages remain in dependency order:
 4. @aotter/mantle-indexeddb
 5. @aotter/mantle-web
 6. @aotter/mantle-admin
-7. @aotter/mantle-bun
-8. @aotter/mantle-vercel
-9. @aotter/mantle-cloudflare
-10. @aotter/mantle
+7. @aotter/mantle-auth
+8. @aotter/mantle-bun
+9. @aotter/mantle-vercel
+10. @aotter/mantle-cloudflare
+11. @aotter/mantle
 
 ## Promote to main (beta, RC, stable)
 
@@ -173,7 +174,7 @@ tag/release and mirrors GitHub Packages. No cross-repository fanout token is
 needed. Before tagging, verify credentials and new-version absence on both
 registries. Existing artifacts on retry must have matching integrity.
 
-Completion requires the Core tag SHA, all ten npmjs/GPR packages, exact
+Completion requires the Core tag SHA, all eleven npmjs/GPR packages, exact
 integrity, no workspace dependencies, a passing public-registry Worker gate,
 correct channel tags and the GitHub release. Retain run links and gate evidence.
 This does not prove stable production soak or upgrade safety; the version's

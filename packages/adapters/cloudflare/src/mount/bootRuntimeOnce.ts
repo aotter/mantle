@@ -7,7 +7,7 @@ import {
 } from "@aotter/mantle-runtime";
 import { createMantleWeb, type MantleWeb } from "@aotter/mantle-web";
 import type { AdminAssetServer } from "@aotter/mantle-admin";
-import type { Auth } from "../auth/createAuth.js";
+import type { MantleAuth as Auth } from "@aotter/mantle-auth";
 import type { MantleCloudflareConfig } from "./cmsConfig.js";
 import type { ConsumerCredentialResolver } from "./resolveCaller.js";
 import {

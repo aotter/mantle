@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appleClientSecret } from "../src/auth/appleClientSecret.js";
+import { appleClientSecret } from "../src/appleClientSecret.js";
 
 /**
  * Tests `appleClientSecret` end-to-end against a real ECDSA P-256

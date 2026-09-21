@@ -26,7 +26,7 @@ Dispatch the controller from the reviewed release merge with the version
 without v. Watch all gates, not only publication:
 
 1. Core tag resolves to that canonical merge.
-2. All ten npmjs artifacts exist with matching integrity and no workspace:*.
+2. All eleven npmjs artifacts exist with matching integrity and no workspace:*.
 3. GitHub Packages mirrors verify the same candidate.
 4. The reference Worker installs exact public packages, generates/types/checks
    successfully and serves its declared HTTP route before channel promotion.

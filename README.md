@@ -198,6 +198,7 @@ everything else is opt-in.
 | `@aotter/mantle-runtime` | Custom runtime and storage integration. |
 | `@aotter/mantle-web` | HTML, Markdown, `llms.txt`, and sitemap. |
 | `@aotter/mantle-admin` | Admin API. |
+| `@aotter/mantle-auth` | Better Auth identity, staff roles, and OAuth 2.1 / MCP authorization. |
 | `@aotter/mantle-admin-ui` | Prebuilt React Admin SPA. |
 | `@aotter/mantle-indexeddb` | Browser-local IndexedDB storage. |
 | `@aotter/mantle-cloudflare` | Workers, D1, Auth, MCP, Web, and Admin. |

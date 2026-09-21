@@ -10,8 +10,10 @@ export * from "./oauth/index.js";
 export * from "./worker/index.js";
 export * from "./auth/createAuth.js";
 export * from "./auth/conventionalAuth.js";
-export { ConsoleEmailSender } from "./auth/ConsoleEmailSender.js";
+// Re-exported so existing Cloudflare consumers keep one import path while the
+// implementation lives in the host-neutral @aotter/mantle-auth.
 export {
+  ConsoleEmailSender,
   appleClientSecret,
   type AppleClientSecretArgs,
-} from "./auth/appleClientSecret.js";
+} from "@aotter/mantle-auth";

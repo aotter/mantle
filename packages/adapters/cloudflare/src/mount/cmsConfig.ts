@@ -9,7 +9,7 @@ import type {
 import type { AdminAssetServer } from "@aotter/mantle-admin";
 import type { PublicPathResolver, TemplateRegistry } from "@aotter/mantle-web";
 import type { SiteDefaults } from "@aotter/mantle-spec";
-import type { Auth } from "../auth/createAuth.js";
+import type { MantleAuth as Auth } from "@aotter/mantle-auth";
 import type { ConsumerCredentialResolver } from "./resolveCaller.js";
 import type { McpCatalogKvBinding } from "../bindings/KvSiteConfigRepository.js";
 
