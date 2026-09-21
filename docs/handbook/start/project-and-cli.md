@@ -71,7 +71,7 @@ It does not project skills, update packages, change styling, provision providers
 | `createMantle({ storage, handlers, ports })` | Prepares storage eagerly once and returns the typed binding. No caching or retry. |
 | `bindMantle(runtime)` | The same typed binding over a runtime whose lifecycle the host already owns. |
 
-The binding exposes `mantle.views.<lowerCamelName>()`, `mantle.procedures.<name>(input, ctx)`, `mantle.entries.<collection>.createDraft({ data, authorId })` and the underlying `mantle.runtime`. Generated property names are deterministic lower-camel identifiers; calls keep the authored wire names internally. Details are in [HTTP, MCP, CLI and packages](../reference/surface.md).
+The binding exposes `mantle.views.<lowerCamelName>()`, `mantle.procedures.<name>(input, ctx)`, `mantle.entries.<collection>.createDraft({ data, authorId })`, typed indexed field reads such as `mantle.entries.<collection>.findManyByDataField({ field, value, limit })`, and the underlying `mantle.runtime`. Generated property names are deterministic lower-camel identifiers; calls keep the authored wire names internally. Details are in [HTTP, MCP, CLI and packages](../reference/surface.md).
 
 ## The daily loop
 

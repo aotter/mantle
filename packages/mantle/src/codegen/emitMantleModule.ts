@@ -21,6 +21,8 @@ const GENERATED_NAMES = new Set([
   "CoreMantleRuntime",
   "CreateMantleOptions",
   "RuntimePlanData",
+  "MantleEntry",
+  "MantleFieldValue",
   "MantleHandlers",
   "MantleViewOptions",
   "RuntimeHandlerContext",
@@ -64,11 +66,28 @@ export function emitMantleModule(request: EmitMantleModuleRequest): EmitMantleMo
       "import { bootMantleRuntime, sealRuntimePlan } from \"@aotter/mantle/runtime\";",
       "import type {",
       "  BootMantleRuntimeArgs,",
+      ...(schemas.length > 0 ? [
+        "  EntryDataScalar,",
+        "  FindManyEntriesByDataFieldArgs,",
+      ] : []),
       "  HandlerContext as RuntimeHandlerContext,",
       "  HandlerFn as RuntimeHandlerFn,",
       "  MantleRuntime as CoreMantleRuntime,",
+      ...(schemas.length > 0 ? [
+        "  ReadEntriesByDataFieldInArgs,",
+        "  ReadEntryByDataFieldArgs,",
+        "  ReadEntryBySlugArgs,",
+      ] : []),
       "  RuntimePlanData,",
       "} from \"@aotter/mantle/runtime\";",
+      ...(schemas.length > 0 ? [
+        "import type { Entry as CoreEntry } from \"@aotter/mantle/spec\";",
+        "",
+        "/** A stored entry whose `data` is the Schema's generated shape. */",
+        "export type MantleEntry<TData> = CoreEntry<TData>;",
+        "/** Scalar members of one declared Schema field, the only values field reads accept. */",
+        "export type MantleFieldValue<TData, F extends keyof TData> = Extract<TData[F], EntryDataScalar>;",
+      ] : []),
       "",
       `export const plan = sealRuntimePlan(${JSON.stringify(plan, null, 2)} as const satisfies RuntimePlanData);`,
       "",
@@ -101,7 +120,7 @@ export function emitMantleModule(request: EmitMantleModuleRequest): EmitMantleMo
       "  return {",
       "    runtime,",
       "    entries: {",
-      ...schemas.flatMap((schema) => schemaLines(schema.name, namespace)),
+      ...schemas.flatMap((schema) => schemaLines(schema.name, namespace, Object.keys(schema.manifest.spec.schema.properties ?? {}))),
       "    },",
       "    views: {",
       ...views.flatMap((view) => viewLines(view.manifest, namespace)),
@@ -127,9 +146,15 @@ export function emitMantleModule(request: EmitMantleModuleRequest): EmitMantleMo
   };
 }
 
-function schemaLines(name: string, namespace: string): string[] {
+function schemaLines(name: string, namespace: string, fieldNames: readonly string[]): string[] {
   const id = codegenIdentifier(name);
   const data = `${namespace}.Entry_${manifestTypeIdentifier(name)}`;
+  // Declared field names only. `keyof` would collapse to `string` whenever the
+  // Schema allows additional properties, and an undeclared field has no index.
+  const fields = fieldNames.length
+    ? [...fieldNames].sort(compareText).map((field) => JSON.stringify(field)).join(" | ")
+    : "never";
+  const field = `F extends (${fields}) & keyof ${data}`;
   return [
     `      ${id}: {`,
     `        createDraft: (request: Omit<Parameters<CoreMantleRuntime["createDraft"]["execute"]>[0], "collection" | "data"> & { readonly data: ${data} }) =>`,
@@ -146,6 +171,17 @@ function schemaLines(name: string, namespace: string): string[] {
     `          runtime.archive.execute({ ...request, collection: ${JSON.stringify(name)} }),`,
     `        list: (request: Omit<Parameters<CoreMantleRuntime["listEntries"]["execute"]>[0], "collection"> = {}) =>`,
     `          runtime.listEntries.execute({ ...request, collection: ${JSON.stringify(name)} }),`,
+    // Indexed field reads, typed from the Schema (#974). `field` is a key of the
+    // generated entry shape and `value` its scalar members, so the indexed path
+    // is as easy to reach as \`list\` and the row comes back with typed \`data\`.
+    `        readBySlug: (request: Omit<ReadEntryBySlugArgs, "collection">) =>`,
+    `          runtime.entries.readBySlug({ ...request, collection: ${JSON.stringify(name)} }) as unknown as Promise<MantleEntry<${data}> | null>,`,
+    `        readByDataField: <${field}>(request: Omit<ReadEntryByDataFieldArgs, "collection" | "field" | "value"> & { readonly field: F; readonly value: MantleFieldValue<${data}, F> }) =>`,
+    `          runtime.entries.readByDataField({ ...request, collection: ${JSON.stringify(name)} }) as unknown as Promise<MantleEntry<${data}> | null>,`,
+    `        readByDataFieldIn: <${field}>(request: Omit<ReadEntriesByDataFieldInArgs, "collection" | "field" | "values"> & { readonly field: F; readonly values: readonly MantleFieldValue<${data}, F>[] }) =>`,
+    `          runtime.entries.readByDataFieldIn({ ...request, collection: ${JSON.stringify(name)} }) as unknown as Promise<readonly MantleEntry<${data}>[]>,`,
+    `        findManyByDataField: <${field}>(request: Omit<FindManyEntriesByDataFieldArgs, "collection" | "field" | "value"> & { readonly field: F; readonly value: MantleFieldValue<${data}, F> }) =>`,
+    `          runtime.entries.findManyByDataField({ ...request, collection: ${JSON.stringify(name)} }) as unknown as Promise<readonly MantleEntry<${data}>[]>,`,
     `        delete: (request: Omit<Parameters<CoreMantleRuntime["deleteEntry"]["execute"]>[0], "collection">) =>`,
     `          runtime.deleteEntry.execute({ ...request, collection: ${JSON.stringify(name)} }),`,
     "      },",

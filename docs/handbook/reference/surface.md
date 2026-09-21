@@ -153,7 +153,7 @@ mantle.triggers.expireOrderHttp;   // { name, source, target }
 await mantle.runtime.archive.execute({ id, ctx });
 ```
 
-`entries.<collection>` exposes `createDraft`, `get`, `list` and `delete`, supplying the required collection identity to Core. Generic MCP entry tools require a `collection` argument. `runtime` is the underlying Core runtime, so the typed projection never hides it. A host that owns its own lifecycle can skip generation entirely and call `runtime.executeView({ view: "published-notes" })` directly.
+`entries.<collection>` exposes `createDraft`, `get`, `list`, `delete`, and the indexed field reads `readBySlug`, `readByDataField`, `readByDataFieldIn` and `findManyByDataField`, supplying the required collection identity to Core. The field reads accept only declared Schema fields and their scalar types, and return entries whose `data` is the generated Schema shape, so an author never has to drop to an untyped `runtime.entries` call or scan `list` to find rows by an indexed field. Generic MCP entry tools require a `collection` argument. `runtime` is the underlying Core runtime, so the typed projection never hides it. A host that owns its own lifecycle can skip generation entirely and call `runtime.executeView({ view: "published-notes" })` directly.
 
 ## Packages
 
