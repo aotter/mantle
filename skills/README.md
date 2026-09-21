@@ -58,21 +58,27 @@ contracts.
 
 ## Source-repository marketplace install
 
-The source repository is also an agent plugin bundle:
+Cold start is the pinned install skill. Other marketplace hosts are pointers
+to the same pin:
+
+```sh
+npx skills add aotter/mantle@v0.1.2 --skill install
+```
 
 ```bash
 # Claude Code — two separate prompts
-/plugin marketplace add aotter/mantle
+/plugin marketplace add aotter/mantle@v0.1.2
 /plugin install mantle@mantle
 
 # Codex
-codex plugin marketplace add aotter/mantle
+codex plugin marketplace add aotter/mantle --ref v0.1.2
 codex plugin add mantle@mantle
 ```
 
-These are authoring workflows and do not track a release. Version matching is
-the job of `mantle skills`, which projects the installed package's own skills
-into the project, and `mantle skills --check`, which fails on drift.
+Then follow the install skill to the CLI and handbook. Do not use an untagged
+`aotter/mantle` marketplace add as the official entry. After packages are
+pinned, `mantle skills` projects the installed package's own skills into the
+project, and `mantle skills --check` fails on drift.
 
 Cursor and GitHub Copilot read their manifests from the repository directly.
 These manifests are not duplicated into the npm package:
@@ -91,7 +97,7 @@ package. Two audiences, two artifacts.
 
 ## Discoverability
 
-The skills target ADR-0007's "AI as primary author" thesis: agents reach these files by URL when the user invokes them by intent ("install mantle", "develop my Mantle site", "deploy"). No `/skill install` slash command is required — point the agent at a version tag or pass the version-matched markdown content directly.
+The skills target ADR-0007's "AI as primary author" thesis: agents reach these files by URL when the user invokes them by intent ("install mantle", "develop my Mantle site", "deploy"). Official cold start is `npx skills add aotter/mantle@v0.1.2 --skill install`. Point the agent at tag `v0.1.2` or pass the version-matched markdown content directly.
 
 ## Conventions
 

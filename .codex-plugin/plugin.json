@@ -1,6 +1,6 @@
 {
   "name": "mantle",
-  "description": "Build and embed Mantle applications with version-matched Core skills and deterministic examples.",
+  "description": "Build and embed Mantle applications. Cold start: npx skills add aotter/mantle@v0.1.2 --skill install.",
   "version": "0.1.2",
   "author": {
     "name": "Aotter",
@@ -20,7 +20,7 @@
   "interface": {
     "displayName": "Mantle",
     "shortDescription": "Build and embed Mantle apps",
-    "longDescription": "Embed Mantle Core in an existing application or author from an official example, then compose only the Web, Admin, Bun, Vercel, or Cloudflare modules the host needs.",
+    "longDescription": "Cold start with npx skills add aotter/mantle@v0.1.2 --skill install. Follow that skill to the pinned CLI and handbook, then compose only the modules the host needs.",
     "developerName": "Aotter",
     "category": "Developer Tools",
     "capabilities": [
@@ -29,9 +29,9 @@
     ],
     "websiteURL": "https://mantle.tools/",
     "defaultPrompt": [
-      "Embed Mantle Core in this application",
-      "Author a Mantle application from an official example",
-      "Compose Mantle modules for this host"
+      "Run npx skills add aotter/mantle@v0.1.2 --skill install, then follow skills/install/SKILL.md",
+      "Follow the Mantle install skill: interview for host and surfaces before writing files",
+      "Author a Mantle application from the install skill and an official example"
     ],
     "brandColor": "#0F766E",
     "screenshots": []

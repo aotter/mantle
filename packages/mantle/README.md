@@ -9,6 +9,15 @@ where agents write config and the runtime carries the complexity.
 
 ## Install
 
+Cold start for a new application is the pinned skill, not a bare npm add:
+
+```sh
+npx skills add aotter/mantle@v0.1.2 --skill install
+```
+
+To depend on this package in an existing project, pin the exact version
+from `package.json` (currently `0.1.2`):
+
 ```bash
 npm install @aotter/mantle
 # or
@@ -185,7 +194,14 @@ internals or rebuilding Mantle's adapters.
 
 ## Getting started
 
-Use the installed install skill and [direct-authoring guide](docs/handbook/start/project-and-cli.md).
+Cold start from GitHub or a marketplace host:
+
+```sh
+npx skills add aotter/mantle@v0.1.2 --skill install
+```
+
+That skill interviews, pins this package, then uses the CLI and the
+[direct-authoring guide](docs/handbook/start/project-and-cli.md).
 The owner or agent writes the application's manifests, entry and configuration;
 `generate` compiles them and `skills` projects the version-matched instructions.
 The [minimal Worker reference](docs/examples/host-minimal-worker/README.md) is
@@ -196,24 +212,29 @@ opt-in Dev UI path. Neither is a scaffold command. Admin is optional.
 ## Agent marketplace install
 
 Install the Mantle Core skill bundle before authoring or maintaining a
-consumer application:
+consumer application. The canonical command is:
 
-Replace `<installed-version>` with the exact version from this package's
-`package.json`. Do not point a versioned consumer at a mutable branch.
+```sh
+npx skills add aotter/mantle@v0.1.2 --skill install
+```
+
+Claude Code and Codex can install the same pinned plugin, then run that skill:
 
 ```bash
 # Claude Code
-/plugin marketplace add aotter/mantle@v<installed-version>
+/plugin marketplace add aotter/mantle@v0.1.2
 /plugin install mantle@mantle
 
 # Codex
-codex plugin marketplace add aotter/mantle --ref v<installed-version>
+codex plugin marketplace add aotter/mantle --ref v0.1.2
 codex plugin add mantle@mantle
 ```
 
 Cursor and VS Code Copilot can auto-discover the GitHub repo through
 `.cursor-plugin/plugin.json` and `.copilot-plugin/plugin.json` after the repo
-is cloned or opened.
+is cloned or opened. Still start from the `npx skills add` sentence (or open
+`skills/install/SKILL.md` at tag `v0.1.2`). Do not point a versioned consumer
+at a mutable branch.
 
 ## Marketplace capability installs
 

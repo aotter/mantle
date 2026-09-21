@@ -3,7 +3,7 @@ description: Mantle serves /mcp and /mcp/staff from the same Manifest — tool n
 ---
 # MCP and agents
 
-Mantle is an MCP server out of the box. Nothing is registered, exported or annotated to make it one: the same compiled plan that produces REST and Admin also produces the tool catalog, so an agent and a browser reach identical behavior through different transports. This page covers the two surfaces, how tools are named, how a client authenticates, and the rest of the agent-facing surface area.
+Mantle is an MCP server out of the box. Nothing is registered, exported or annotated to make it one: the same compiled plan that produces REST and Admin also produces the tool catalog, so an agent and a browser reach identical behavior through different transports. `/mcp` and `/mcp/staff` are that live-app catalog — Manifest → RuntimePlan verbs — not a how-to-author-Mantle manual. The CLI and pinned package docs are the authoring SSOT; MCP does not mirror the CLI. This page covers the two surfaces, how tools are named, how a client authenticates, and the rest of the agent-facing surface area.
 
 ## Two surfaces
 
@@ -91,10 +91,15 @@ pnpm exec mantle skills --check
 
 This copies every skill the installed package marks `projection: project` — the develop skill among them — into matching `.agents/skills/mantle-*` and `.claude/skills/mantle-*` paths. Both layouts receive identical bytes; `--check` detects drift without writing. Skills that act destructively or target one platform stay out of that set and are opt-in. Manifest generation never rewrites agent instructions.
 
-For Claude Code, the same bundle is installable from the plugin marketplace at the exact installed version:
+The same pinned bundle is installable from the plugin marketplace at the published pin (or the exact version in `package.json`):
 
 ```sh
-/plugin marketplace add aotter/mantle@v<installed-version>
+# Canonical
+npx skills add aotter/mantle@v0.1.2 --skill install
+
+# Claude Code — two separate prompts
+/plugin marketplace add aotter/mantle@v0.1.2
+/plugin install mantle@mantle
 ```
 
 Never point a versioned project at a mutable branch. See [Project layout and the CLI loop](../start/project-and-cli.md).

@@ -5,6 +5,12 @@ description: The files you own in a Mantle project, every mantle and mantle-harn
 
 This page describes a directly authored Mantle project: which files are yours, what the installed CLI does to them, and the loop you run before every commit. Surfaces are optional — take only what you need. [The minimal Worker](./quickstart-worker.md) is Spec + adapter without Admin. [Local Admin](./quickstart-admin.md) is the opt-in Dev UI path when humans need a console.
 
+Cold start from GitHub or a marketplace host is the pinned install skill, not this page:
+
+```sh
+npx skills add aotter/mantle@v0.1.2 --skill install
+```
+
 ## You own the project
 
 Core is a manifest compiler and a runtime, not a project generator. You write `package.json`, the manifests, the Worker entry, handlers, TypeScript and provider configuration. `mantle generate` compiles what exists; it never initializes a missing project or invents a default Schema, frontend or home route.
@@ -92,15 +98,20 @@ Run the harness after any change to a Schema index, View filter or ordering, or 
 
 `mantle skills` projects the skills the installed package marks `projection: project`. At this version those are `develop`, `plugin`, `theme` and `update`; `install`, `media-gc` and `provision` stay opt-in because they create projects, delete remote objects or handle production secrets. Both tool layouts receive identical bytes. Generation never rewrites these files.
 
-Install the version-matched plugin bundle in the agent host, using the exact version from `package.json`:
+Install the version-matched plugin bundle in the agent host. Cold start uses
+the published pin; an already-installed project uses the exact version from
+`package.json` (currently `0.1.2`):
 
 ```sh
+# Canonical
+npx skills add aotter/mantle@v0.1.2 --skill install
+
 # Claude Code — two separate prompts
-/plugin marketplace add aotter/mantle@v<installed-version>
+/plugin marketplace add aotter/mantle@v0.1.2
 /plugin install mantle@mantle
 
 # Codex
-codex plugin marketplace add aotter/mantle --ref v<installed-version>
+codex plugin marketplace add aotter/mantle --ref v0.1.2
 codex plugin add mantle@mantle
 ```
 
