@@ -575,7 +575,16 @@ export function mountMantleAdmin<E extends Env>(
   guarded("post", "/admin/api/operations/:name", async (c, gate) => {
     const name = c.req.param("name") ?? "";
     const op = operationsByName.get(name);
-    if (!op) {
+    // Match the GET listing: an operation this caller's predicates exclude
+    // is not there for them, so POST answers 404 too and cannot be used to
+    // probe operation names (#877 L3). The invoke still re-evaluates.
+    const visible = op && evaluateAuthAll(
+      op.procedure.spec.requires,
+      adminHandlerContext(c, gate, ref),
+      `POST /admin/api/operations/${name}`,
+      "runtime",
+    ) === null;
+    if (!op || !visible) {
       return Response.json({
         ok: false,
         diagnostic: runtimeDiagnostic({

@@ -338,6 +338,10 @@ export function OperationDialog({
     targetCollection: operation.targetCollection,
   });
   const capturedVersion = React.useRef<{ id: string; version: number } | null>(null);
+  // The expectedVersion a successful run consumed. Re-running with the same
+  // bound version can only 409 (#877 L2); a rebind to another target or a
+  // re-read clears it and Run comes back.
+  const consumedVersion = React.useRef<unknown>(undefined);
   const [needsReread, setNeedsReread] = React.useState(false);
 
   React.useEffect(() => {
@@ -374,6 +378,7 @@ export function OperationDialog({
     if (!hasExpectedVersion || !occTargetId || !occEntry || occEntry.id !== occTargetId) return;
     if (capturedVersion.current?.id === occTargetId) return;
     capturedVersion.current = { id: occTargetId, version: occEntry.version };
+    consumedVersion.current = undefined;
     setFormValue((prev) => ({ ...prev, [EXPECTED_VERSION_PROPERTY]: occEntry.version }));
   }, [hasExpectedVersion, occTargetId, occEntry, observedQuery.isSuccess, observedQuery.isFetchedAfterMount, observedQuery.isFetching]);
 
@@ -393,8 +398,10 @@ export function OperationDialog({
     : null;
 
   const invoke = useMutation({
-    mutationFn: (body: Record<string, unknown>) =>
-      api.post<{ ok: true; output: unknown }>(`/operations/${encodeURIComponent(operation.name)}`, body),
+    mutationFn: (body: Record<string, unknown>) => {
+      consumedVersion.current = hasExpectedVersion ? body[EXPECTED_VERSION_PROPERTY] : undefined;
+      return api.post<{ ok: true; output: unknown }>(`/operations/${encodeURIComponent(operation.name)}`, body);
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["entry-editor"] });
       toast.success(t(language, "ops.success", { name: title }));
@@ -415,6 +422,7 @@ export function OperationDialog({
     onSuccess: (entry) => {
       if (activeTarget.current !== entry.id) return;
       capturedVersion.current = { id: entry.id, version: entry.version };
+      consumedVersion.current = undefined;
       setFormValue((prev) => ({ ...prev, [EXPECTED_VERSION_PROPERTY]: entry.version }));
       setNeedsReread(false);
       invoke.reset();
@@ -493,7 +501,9 @@ export function OperationDialog({
           <Button
             type="button"
             onClick={() => invoke.mutate(formValue)}
-            disabled={invoke.isPending || !canSubmit}
+            disabled={invoke.isPending || !canSubmit
+              || (hasExpectedVersion && invoke.isSuccess && consumedVersion.current !== undefined
+                && formValue[EXPECTED_VERSION_PROPERTY] === consumedVersion.current)}
           >
             {invoke.isPending ? t(language, "ops.running") : t(language, "ops.run")}
           </Button>
