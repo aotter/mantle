@@ -324,6 +324,18 @@ export interface CreateMantleAuthOptions {
    *  Consumer sites should use `methods: [{ kind: "oauth", ... }]`
    *  against its discovery document. */
   readonly oauthProvider?: OAuthProviderConfig;
+  /** Forwarded to Better Auth's `account.accountLinking`. Omitted here,
+   *  Better Auth's own defaults apply: implicit linking is ON, so a social
+   *  sign-in whose provider reports a verified email lands on the existing
+   *  row with that email instead of creating a second one, and
+   *  `requireLocalEmailVerified` keeps that from happening while the local
+   *  row is still unverified. Set this to scope linking — `enabled: false`
+   *  or `disableImplicitLinking` to refuse it, `trustedProviders` to accept
+   *  a provider's word without `email_verified`. Listing a provider asserts
+   *  it verifies the addresses it returns. */
+  readonly accountLinking?: NonNullable<
+    NonNullable<BetterAuthOptions["account"]>["accountLinking"]
+  >;
   /**
    * Host-trusted ingress headers used as Better Auth's rate-limit identity.
    * Required and fail-closed: empty or missing refuses to boot. Pass only
@@ -1022,6 +1034,9 @@ function buildAuth(config: CreateMantleAuthOptions) {
     basePath: normalizeAuthBasePath(config.basePath),
     onAPIError: { errorURL: normalizeAuthErrorURL(config.errorURL, config.baseURL) },
     socialProviders,
+    ...(config.accountLinking
+      ? { account: { accountLinking: config.accountLinking } }
+      : {}),
     user: userConfig,
     rateLimit,
     trustedOrigins,
@@ -1248,11 +1263,14 @@ export interface MantleAuth {
    *  (`emailVerified: 0`) with the role already assigned, so the
    *  invitee's FIRST sign-in with that email lands with the role in
    *  effect — no second assignment step. Magic-link / email-OTP
-   *  sign-ins match the row by email; social sign-ins with the same
-   *  email link onto it only when the provider is listed in
-   *  `accountLinking.trustedProviders` (document this to operators).
-   *  Email is normalized (trim + lowercase). Returns `exists` instead
-   *  of throwing when the email already has a row. */
+   *  sign-ins match the row by email. A social sign-in does NOT: the
+   *  row is unverified, and Better Auth's `requireLocalEmailVerified`
+   *  defaults to on, so linking is refused with `account not linked`
+   *  regardless of `accountLinking.trustedProviders` — an invitee whose
+   *  only credential is a social provider must verify by email once
+   *  before that provider attaches. Email is normalized (trim +
+   *  lowercase). Returns `exists` instead of throwing when the email
+   *  already has a row. */
   readonly inviteUser: (
     email: string,
     role: StaffRole,
