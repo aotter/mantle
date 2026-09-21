@@ -206,7 +206,7 @@ export function mountMantleAdmin<E extends Env>(
   // so consumers don't have to wire — and can't accidentally register a
   // catch-all BEFORE the specific routes above and silently swallow
   // them. Hono matches in registration order; this catch-all sits last.
-  app.all(`${authBasePath}/*`, (c) => auth.handler(c.req.raw, requestRetention(c)));
+  app.all(`${authBasePath}/*`, (c) => auth.handler(c.req.raw, requestRetention(c, options.requestContext)));
 
   // Better Auth's provider serves discovery outside its base path. Keep these
   // explicit so a consumer catch-all cannot swallow RFC 8414/9728 metadata.
@@ -215,7 +215,7 @@ export function mountMantleAdmin<E extends Env>(
     "/.well-known/oauth-protected-resource",
     "/.well-known/oauth-protected-resource/*",
   ]) {
-    app.all(path, (c) => auth.handler(c.req.raw, requestRetention(c)));
+    app.all(path, (c) => auth.handler(c.req.raw, requestRetention(c, options.requestContext)));
   }
 
   for (const path of [
@@ -2595,9 +2595,14 @@ function mediaNotConfiguredResponse(path: string): Response {
 /** Hand the platform's `waitUntil` to Auth so its background work outlives the
  *  response. Hono throws when no ExecutionContext exists (Node, tests); that
  *  host has nothing to retain with, so the work runs detached as before. */
-function requestRetention(c: { readonly executionCtx: { waitUntil(promise: Promise<unknown>): void } }): {
-  readonly waitUntil?: (promise: Promise<unknown>) => void;
-} {
+function requestRetention(
+  c: { readonly executionCtx: { waitUntil(promise: Promise<unknown>): void } },
+  requestContext?: (c: never) => { readonly waitUntil?: (promise: Promise<unknown>) => void } | undefined,
+): { readonly waitUntil?: (promise: Promise<unknown>) => void } {
+  // Prefer the host's own seam (Vercel, Bun and tests can supply a retainer
+  // without a Hono ExecutionContext); fall back to probing the getter.
+  const supplied = requestContext?.(c as never)?.waitUntil;
+  if (supplied) return { waitUntil: supplied };
   try {
     const ctx = c.executionCtx;
     return { waitUntil: (promise) => ctx.waitUntil(promise) };

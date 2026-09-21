@@ -45,9 +45,11 @@ package, and provide `better-auth` yourself.
 
 ## Background work and `waitUntil`
 
-Better Auth sends the OTP e-mail and prunes expired rate-limit rows as
-fire-and-forget work so response latency cannot reveal whether an account
-exists. Pass the platform's retainer so that work outlives the response:
+Better Auth sends the OTP and other sign-in e-mails as fire-and-forget work
+so response latency cannot reveal whether an account exists (its rate limiter
+would do the same for expired-row cleanup, but Mantle keeps that store in
+memory, so no such work exists today). Pass the platform's retainer so that
+work outlives the response:
 
 ```ts
 auth.handler(request, { waitUntil: (promise) => ctx.waitUntil(promise) });
