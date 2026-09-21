@@ -13,7 +13,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
+const rootManifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const version = rootManifest.version;
 const temp = mkdtempSync(join(tmpdir(), "mantle-optional-packages-"));
 const artifacts = join(temp, "artifacts");
 const localState = mkdtempSync(join(root, "docs/examples/host-minimal-worker/.env.pack-check-"));
@@ -268,6 +269,10 @@ function installConsumer(name, dependencies, check, overrides = dependencies) {
   writeFileSync(join(directory, "package.json"), `${JSON.stringify({
     private: true,
     type: "module",
+    // Without this, corepack has nothing to pin against here and falls back to
+    // whatever pnpm is globally installed; a pnpm major other than the repo's
+    // silently ignores the pnpm.overrides below and resolves @aotter/* from the registry.
+    packageManager: rootManifest.packageManager,
     dependencies,
     pnpm: {
       overrides: Object.fromEntries(
