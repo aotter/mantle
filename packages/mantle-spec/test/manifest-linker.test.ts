@@ -340,6 +340,66 @@ spec:
 
     expect(linked.ok).toBe(true);
     expect(linked.diagnostics.filter((d) => d.code === "MCP_TOOL_INPUT_UNREACHABLE")).toEqual([]);
+
+  it("accepts declared MCP tool annotations and rejects a read-only claim over a writing builtin", () => {
+    const declared = linkManifestSet(parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: measure-usage }
+spec:
+  description: Measure usage.
+  mcp: { readOnlyHint: true, openWorldHint: true }
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: measure-usage }
+`));
+    expect(declared.ok).toBe(true);
+    expect(declared.value?.procedures[0]?.manifest.spec.mcp).toEqual({ readOnlyHint: true, openWorldHint: true });
+
+    expect(() => parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: bad-hint }
+spec:
+  mcp: { readOnlyHint: "yes" }
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: bad-hint }
+`)).toThrow(/mcp\.readOnlyHint must be a boolean/);
+    expect(() => parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: bad-key }
+spec:
+  mcp: { idempotentHint: true }
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: bad-key }
+`)).toThrow(/idempotentHint/);
+
+    const lying = linkManifestSet(parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: quotas }
+spec:
+  title: Quotas
+  lifecycle: operational
+  schema: { type: object, properties: { limit: { type: number } } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: set-quota }
+spec:
+  mcp: { readOnlyHint: true }
+  input: { type: object, required: [id, expectedVersion], properties: { id: { type: string }, expectedVersion: { type: number }, limit: { type: number } } }
+  output: { type: object }
+  handler: { kind: builtin, op: update, schema: quotas }
+`));
+    expect(lying.ok).toBe(false);
+    expect(lying.diagnostics).toContainEqual(expect.objectContaining({
+      code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+      path: "/spec/mcp/readOnlyHint",
+    }));
   });
 
   it("allows manifests to define the removed generic read tool names", () => {

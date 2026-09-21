@@ -463,6 +463,38 @@ describe("McpJsonRpcDispatcher", () => {
     expect(names).toEqual(["query_view_recent_posts"]);
   });
 
+  it("emits only provable or declared tool annotations", () => {
+    const procedure = makeProcedure();
+    const catalogFor = (manifest: ReturnType<typeof makeProcedure>) =>
+      buildMcpToolCatalog([], { surface: "staff", capabilities: [procedureCapability(manifest)] })[0];
+
+    // A ref handler is a black box: nothing inferred, declarations pass through.
+    expect(catalogFor(procedure)?.annotations).toBeUndefined();
+    expect(catalogFor({ ...procedure, spec: { ...procedure.spec, mcp: { readOnlyHint: true, openWorldHint: true } } })?.annotations)
+      .toEqual({ readOnlyHint: true, openWorldHint: true });
+
+    // Every builtin op writes; delete destroys.
+    const builtin = { ...procedure, spec: { ...procedure.spec, handler: { kind: "builtin" as const, op: "update" as const, schema: "posts" } } };
+    expect(catalogFor(builtin)?.annotations).toEqual({ readOnlyHint: false });
+    const remove = { ...procedure, spec: { ...procedure.spec, handler: { kind: "builtin" as const, op: "delete" as const, schema: "posts" } } };
+    expect(catalogFor(remove)?.annotations).toEqual({ readOnlyHint: false, destructiveHint: true });
+    // A declared destructiveHint wins over inference; readOnlyHint stays inferred.
+    expect(catalogFor({ ...remove, spec: { ...remove.spec, mcp: { destructiveHint: false } } })?.annotations)
+      .toEqual({ readOnlyHint: false, destructiveHint: false });
+
+    // An idempotency-key input is the one thing inferable for a ref handler.
+    const keyed = { ...procedure, spec: { ...procedure.spec, input: {
+      type: "object", properties: { operationId: { type: "string", "x-mcp-hint": "idempotency-key" } }, required: ["operationId"],
+    } } };
+    expect(catalogFor(keyed)?.annotations).toEqual({ idempotentHint: true });
+
+    // Generic tools carry their fixed facts.
+    const generic = buildMcpToolCatalog([postsSchema()], { surface: "staff" });
+    expect(generic.find((tool) => tool.name === "delete_entry")?.annotations).toEqual({ readOnlyHint: false, destructiveHint: true });
+    expect(generic.find((tool) => tool.name === "request_publish")?.annotations).toEqual({ readOnlyHint: false });
+    expect(generic.find((tool) => tool.name === "create_draft_posts")?.annotations).toEqual({ readOnlyHint: false });
+  });
+
   it("tells agents in the description that an idempotency-key input must be reused on retry", () => {
     const procedure = makeProcedure();
     const withKey = {

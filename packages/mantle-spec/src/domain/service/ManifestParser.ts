@@ -24,6 +24,7 @@ import {
   STAFF_ROLES,
   FILTER_COMPARISON_OPS,
   VIEW_PARAMS_RESERVED,
+  PROCEDURE_MCP_ANNOTATION_KEYS,
   RESERVED_PROCEDURE_INPUT_NAMES,
   isParamRef,
   hasCtxUserRefKey,
@@ -1149,10 +1150,23 @@ function validateProcedureSpec(m: ProcedureManifest, idx: number): ProcedureMani
   const s = m.spec as unknown as Record<string, unknown>;
   rejectUnknownKeys(
     s,
-    ["title", "description", "requires", "input", "uiSchema", "output", "handler"],
+    ["title", "description", "requires", "input", "uiSchema", "output", "handler", "mcp"],
     idx,
     "/spec",
   );
+  if (s["mcp"] !== undefined) {
+    const mcp = s["mcp"];
+    if (typeof mcp !== "object" || mcp === null || Array.isArray(mcp)) {
+      throw new ManifestParseError("Procedure.spec.mcp must be an object of boolean tool annotations", idx, "/spec/mcp");
+    }
+    rejectUnknownKeys(mcp as Record<string, unknown>, [...PROCEDURE_MCP_ANNOTATION_KEYS], idx, "/spec/mcp");
+    for (const key of PROCEDURE_MCP_ANNOTATION_KEYS) {
+      const value = (mcp as Record<string, unknown>)[key];
+      if (value !== undefined && typeof value !== "boolean") {
+        throw new ManifestParseError(`Procedure.spec.mcp.${key} must be a boolean`, idx, `/spec/mcp/${key}`);
+      }
+    }
+  }
   validateLocalizedText(
     s["title"],
     idx,

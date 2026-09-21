@@ -483,6 +483,21 @@ function checkBuiltinHandler(
     return out;
   }
 
+  if (p.spec.mcp?.readOnlyHint === true) {
+    // Every builtin op writes; a read-only claim over one would be a false
+    // safety statement on the MCP wire (#972).
+    out.push(
+      validateDiagnostic({
+        code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+        severity: "error",
+        path: manifestPath("Procedure", p.metadata.name, "/spec/mcp/readOnlyHint", filePaths),
+        value: true,
+        expected: "no readOnlyHint, or readOnlyHint: false, on a builtin handler",
+        message: `Procedure '${p.metadata.name}' declares mcp.readOnlyHint: true but its builtin handler (op: ${h.op}) writes.`,
+      }),
+    );
+  }
+
   const inputSchema = p.spec.input as JsonSchema;
   if (!isObjectSchema(inputSchema)) {
     out.push(
