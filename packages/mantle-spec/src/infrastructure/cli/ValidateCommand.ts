@@ -120,6 +120,9 @@ Options:
   --json              Alias for --format json
   -h, --help          This help
 
+Documentation:
+  Handbook: docs/handbook/reference/manifest.md or https://mantle.tools/
+
 Exit codes:
   0  no errors (warnings OK)
   1  one or more errors

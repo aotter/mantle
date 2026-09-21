@@ -124,6 +124,9 @@ Options:
   --namespace <name>  Generated type namespace (default: Mantle)
   --check             Fail without writing when generated code or Admin assets are stale
   -h, --help          This help
+
+Documentation:
+  Handbook: docs/handbook/start/project-and-cli.md or https://mantle.tools/
 `);
 }
 

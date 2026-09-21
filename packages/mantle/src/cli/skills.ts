@@ -78,6 +78,9 @@ ${PROJECT_SKILL_DIRECTORIES.map((dir) => `${dir}/skills/`).join(" and ")}.
 Options:
   --check     Fail without writing when projected skills are stale
   -h, --help  This help
+
+Documentation:
+  Handbook: docs/handbook/concepts/mcp-and-agents.md or https://mantle.tools/
 `);
 }
 
