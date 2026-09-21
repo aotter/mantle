@@ -1112,6 +1112,7 @@ export const STRINGS = {
 
     "admin.consoleTitle": "管理后台",
     "developer.workspaceTitle": "开发",
+    "auth.accessDenied.title": "无法访问",
     "auth.accessDenied.user": "用户：{name}",
     "auth.accessDenied.noStaff": "你已登录，但这个账号没有管理后台权限。",
     "auth.accessDenied.askOwner": "请网站所有者将你加入团队，或登出改用其他账号。",
