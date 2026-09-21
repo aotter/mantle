@@ -11,6 +11,7 @@ import {
   SignInButton,
   claimInFlight,
 } from "../src/features/auth/auth-views";
+import { SignInFlow, SIGN_IN_FLOW_INITIAL, signInFlowReducer } from "../src/kit";
 import { signOut } from "../src/lib/auth";
 import { PreferencesProvider, resolveTheme } from "../src/app/preferences";
 
@@ -109,6 +110,30 @@ describe("sign-in", () => {
     expect(html).toContain("Continue with GitHub");
   });
 
+  it("offers the two-step email-OTP flow through the kit, code screen not yet shown", () => {
+    const html = renderToStaticMarkup(
+      createElement(SignInFlow, {
+        labels: {
+          description: "Sign in with a one-time code.",
+          emailLabel: "Email address",
+          emailPlaceholder: "you@example.com",
+          sendButton: "Send code",
+          sentTo: (email: string) => `We sent a code to ${email}.`,
+          otpLabel: "One-time code",
+          verifyButton: "Verify and sign in",
+          useAnotherEmail: "Use a different email",
+          requestFailed: "Something went wrong.",
+        },
+        onSendCode: () => Promise.resolve(),
+        onVerifyCode: () => Promise.resolve(),
+      }),
+    );
+
+    expect(html).toContain('id="signin-email"');
+    expect(html).toContain("Send code");
+    expect(html).not.toContain('autocomplete="one-time-code"');
+  });
+
   it("rejects a second OTP verify in the same tick before busy state updates", () => {
     const lock = { current: false };
     expect(claimInFlight(lock)).toBe(true);
@@ -116,4 +141,28 @@ describe("sign-in", () => {
     lock.current = false;
     expect(claimInFlight(lock)).toBe(true);
   });
+});
+
+describe("SignInFlow step machine", () => {
+  const start = { ...SIGN_IN_FLOW_INITIAL, email: "me@example.com" };
+
+  it("advances to the code screen only after a successful send", () => {
+    const busy = signInFlowReducer(start, { type: "start" });
+    expect(busy).toMatchObject({ busy: true, error: null, step: "email" });
+    expect(signInFlowReducer(busy, { type: "sent", error: "nope" })).toMatchObject({ busy: false, error: "nope", step: "email" });
+    expect(signInFlowReducer(busy, { type: "sent" })).toMatchObject({ busy: false, error: null, step: "otp" });
+  });
+
+  it("keeps the form locked after a successful verify so the consumed code is not resubmitted", () => {
+    const verifying = signInFlowReducer({ ...start, step: "otp", otp: "123456" }, { type: "start" });
+    expect(signInFlowReducer(verifying, { type: "verified" })).toMatchObject({ busy: true, step: "otp" });
+    expect(signInFlowReducer(verifying, { type: "verified", error: "wrong code" })).toMatchObject({ busy: false, error: "wrong code", step: "otp" });
+    expect(signInFlowReducer(verifying, { type: "failed", error: "offline" })).toMatchObject({ busy: false, error: "offline" });
+  });
+
+  it("clears the code and any error when going back to the email screen", () => {
+    const errored = { ...start, step: "otp" as const, otp: "123456", error: "wrong code" };
+    expect(signInFlowReducer(errored, { type: "back" })).toEqual({ ...start, step: "email", otp: "", error: null, busy: false });
+  });
+
 });
