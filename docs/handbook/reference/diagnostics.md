@@ -98,6 +98,7 @@ Named by the same code in validate, boot or runtime, depending on where the cond
 | `TRIGGER_PATH_COLLISION` | Two HTTP Triggers claim the same `(method, path)`. | — |
 | `TRIGGER_PATH_INVALID` | An HTTP Trigger path does not start `/api/` (validate), or falls under an adapter-reserved prefix (boot). | — |
 | `MCP_TOOL_NAME_COLLISION` | Two atoms mangle to the same MCP tool name, a Procedure takes a reserved generic name or prefix, or two MCP Triggers share a `(surface, tool name)`. | — |
+| `MCP_TOOL_DESCRIPTION_MISSING` | Warning. A Procedure reached by an MCP Trigger has no `spec.description`; `tools/list` would show a generated placeholder instead of something an agent can choose by. | — |
 | `PROCEDURE_NOT_FOUND` | An invocation names a Procedure that is not in the compiled plan. | — |
 | `NOT_FOUND` | The addressed resource does not exist: an entry id, a View name, a media asset, an operation name. | `404` |
 | `METHOD_NOT_ALLOWED` | The path exists but the method is not bound. | `405` |

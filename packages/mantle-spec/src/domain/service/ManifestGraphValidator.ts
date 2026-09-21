@@ -9,6 +9,7 @@ import {
   RESERVED_PROCEDURE_INPUT_NAMES,
   hasCtxUserRefKey,
   isCtxUserRef,
+  resolveLocalizedText,
   type FilterAst,
   type JsonSchema,
   type Manifest,
@@ -879,6 +880,29 @@ function checkTriggerRefs(
         );
       } else if (isValidPrefix) {
         httpRoutes.set(key, t.metadata.name);
+      }
+    }
+
+    if (t.spec.source.kind === "mcp") {
+      // An MCP tool is described to a cold agent by `spec.description`.
+      // The catalog falls back to "Invoke Procedure '<name>'." when it is
+      // absent, which reads like a description and hides the gap; the
+      // authoring gate is the one place that can still see it (#970).
+      const target = proceduresByName.get(procName);
+      if (target && !resolveLocalizedText(target.spec.description, "en")?.trim()) {
+        out.push(
+          validateDiagnostic({
+            code: "MCP_TOOL_DESCRIPTION_MISSING",
+            severity: "warning",
+            path: manifestPath("Procedure", procName, "/spec/description", filePaths),
+            value: null,
+            expected: "a description an agent can choose the tool by",
+            message:
+              `Procedure '${procName}' is exposed as an MCP tool on the ${t.spec.source.surface} ` +
+              `surface by Trigger '${t.metadata.name}' but has no spec.description; ` +
+              `tools/list will show a generated placeholder.`,
+          }),
+        );
       }
     }
 
