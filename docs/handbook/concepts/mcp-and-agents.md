@@ -91,11 +91,15 @@ pnpm exec mantle skills --check
 
 This copies every skill the installed package marks `projection: project` — the develop skill among them — into matching `.agents/skills/mantle-*` and `.claude/skills/mantle-*` paths. Both layouts receive identical bytes; `--check` detects drift without writing. Skills that act destructively or target one platform stay out of that set and are opt-in. Manifest generation never rewrites agent instructions.
 
-For Claude Code, the same bundle is installable from the plugin marketplace at the published pin (or the exact version in `package.json`):
+The same pinned bundle is installable from the plugin marketplace at the published pin (or the exact version in `package.json`):
 
 ```sh
+# Canonical
 npx skills add aotter/mantle@v0.1.2 --skill install
+
+# Claude Code — two separate prompts
 /plugin marketplace add aotter/mantle@v0.1.2
+/plugin install mantle@mantle
 ```
 
 Never point a versioned project at a mutable branch. See [Project layout and the CLI loop](../start/project-and-cli.md).
