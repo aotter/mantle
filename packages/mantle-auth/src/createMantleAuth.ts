@@ -331,8 +331,9 @@ export interface CreateMantleAuthOptions {
    *  `requireLocalEmailVerified` keeps that from happening while the local
    *  row is still unverified. Set this to scope linking — `enabled: false`
    *  or `disableImplicitLinking` to refuse it, `trustedProviders` to accept
-   *  a provider's word without `email_verified`. Listing a provider asserts
-   *  it verifies the addresses it returns. */
+   *  a provider's word without `email_verified` (it does not bypass
+   *  `requireLocalEmailVerified`). Listing a provider asserts it verifies
+   *  the addresses it returns. */
   readonly accountLinking?: NonNullable<
     NonNullable<BetterAuthOptions["account"]>["accountLinking"]
   >;
@@ -1266,8 +1267,9 @@ export interface MantleAuth {
    *  sign-ins match the row by email. A social sign-in does NOT: the
    *  row is unverified, and Better Auth's `requireLocalEmailVerified`
    *  defaults to on, so linking is refused with `account not linked`
-   *  regardless of `accountLinking.trustedProviders` — an invitee whose
-   *  only credential is a social provider must verify by email once
+   *  regardless of `accountLinking.trustedProviders` (unless the adopter
+   *  sets `accountLinking.requireLocalEmailVerified: false`) — an invitee
+   *  whose only credential is a social provider must verify by email once
    *  before that provider attaches. Email is normalized (trim +
    *  lowercase). Returns `exists` instead of throwing when the email
    *  already has a row. */

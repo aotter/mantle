@@ -154,6 +154,8 @@ const auth = createAuth({
 });
 ```
 
+Shared cookies do not cross registrable domains. A browser never sends an `example.com` cookie to `customer.com`. For a customer-owned domain, use an OAuth/OIDC broker flow: the customer site redirects to the identity provider's authorize endpoint, receives the callback, verifies the response and creates its own local session. The broker returns identity; the customer site remains the authority for its members and grants.
+
 ### Account linking across providers
 
 One person signing in with Google, then with GitHub, may land on one user row
@@ -192,8 +194,6 @@ it returns; a provider that does not turns the list into an account-takeover
 path. To go the other way and keep every identity separate, set
 `disableImplicitLinking: true` (users may still link deliberately via
 `linkSocial()` while signed in) or `enabled: false` to refuse linking outright.
-
-Shared cookies do not cross registrable domains. A browser never sends an `example.com` cookie to `customer.com`. For a customer-owned domain, use an OAuth/OIDC broker flow: the customer site redirects to the identity provider's authorize endpoint, receives the callback, verifies the response and creates its own local session. The broker returns identity; the customer site remains the authority for its members and grants.
 
 ## Self-hosted and hosted
 
