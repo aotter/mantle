@@ -62,6 +62,8 @@ describe("mantle generate", () => {
       expect(firstMantle).toContain('procedure: "import-product"');
       expect(firstMantle).toContain("products: {");
       expect(firstMantle).toContain('collection: "products"');
+      expect(firstMantle).toContain("findManyByDataField: <F extends keyof Mantle.Entry_products & string>");
+      expect(firstMantle).toContain("readByDataFieldIn: <F extends keyof Mantle.Entry_products & string>");
       expect(firstMantle.match(/readonly "syncCatalog":/g)).toHaveLength(1);
       expect(firstMantle).toContain("ProcInput_import_product | Mantle.ProcInput_remove_product");
       await expect(readFile(join(root, "public", "_mantle", "admin", "index.html")))
@@ -87,6 +89,12 @@ const runtime = {
     calls.push("procedure:" + request.procedure);
     return { ok: true as const, data: { imported: true } };
   },
+  entries: {
+    findManyByDataField: async (request: { collection: string; field: string; value: unknown; limit: number }) => {
+      calls.push("find:" + request.collection + "." + request.field);
+      return [{ id: "3", collection: request.collection, status: "published", version: 1, data: { sku: String(request.value), title: "Found" }, createdAt: 0, updatedAt: 0 }];
+    },
+  },
 } as unknown as MantleRuntime;
 
 const mantle = bindMantle(runtime);
@@ -99,7 +107,10 @@ const procedure = await mantle.procedures.importProduct(
 );
 if (!view.ok || view.result.rows[0]?.title !== "Typed") throw new Error("typed View failed");
 if (!procedure.ok || procedure.data.imported !== true) throw new Error("typed Procedure failed");
-if (calls.join(",") !== "entry:products,view:products-by-sku,procedure:import-product") {
+const found = await mantle.entries.products.findManyByDataField({ field: "sku", value: "sku-1", limit: 10 });
+const title: string | undefined = found[0]?.data.title;
+if (found[0]?.data.sku !== "sku-1" || title !== "Found") throw new Error("typed field read failed");
+if (calls.join(",") !== "entry:products,view:products-by-sku,procedure:import-product,find:products.sku") {
   throw new Error("wire names changed: " + calls.join(","));
 }
 
@@ -140,6 +151,10 @@ if (false) {
   mantle.views.productsBySku();
   // @ts-expect-error Schema payload is generated from the manifest.
   await mantle.entries.products.createDraft({ data: { title: "missing sku" }, authorId: null });
+  // @ts-expect-error Field reads only accept declared Schema fields.
+  await mantle.entries.products.findManyByDataField({ field: "price", value: 1, limit: 1 });
+  // @ts-expect-error A field's value must match its declared scalar type.
+  await mantle.entries.products.readByDataField({ field: "sku", value: 42 });
 }
 `);
       const compiled = join(root, "compiled");

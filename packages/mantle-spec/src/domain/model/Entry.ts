@@ -1,6 +1,6 @@
 import type { ContentState } from "./ContentState.js";
 
-export interface Entry {
+export interface Entry<TData extends Record<string, unknown> = Record<string, unknown>> {
   readonly id: string;
   readonly collection: string;
   /** Per-row locale, lifted from `data.locale` for ergonomic access.
@@ -12,7 +12,7 @@ export interface Entry {
   readonly status: ContentState;
   /** Optimistic-locking version. Increments on every persisted update. */
   readonly version: number;
-  readonly data: Record<string, unknown>;
+  readonly data: TData;
   readonly createdAt: number;
   readonly updatedAt: number;
 }
