@@ -58,25 +58,26 @@ contracts.
 
 ## Source-repository marketplace install
 
-Cold start is the install skill. Other marketplace hosts are pointers
-to the same entry:
+Cold start is the pinned install skill. Other marketplace hosts are pointers
+to the same pin:
 
 ```sh
-npx skills add aotter/mantle --skill install
+npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install
 ```
 
 ```bash
 # Claude Code — two separate prompts
-/plugin marketplace add aotter/mantle
+/plugin marketplace add aotter/mantle@v0.1.3-alpha.1
 /plugin install mantle@mantle
 
 # Codex
-codex plugin marketplace add aotter/mantle
+codex plugin marketplace add aotter/mantle --ref v0.1.3-alpha.1
 codex plugin add mantle@mantle
 ```
 
-Then follow the install skill to the CLI and handbook. After packages are
-installed, `mantle skills` projects the installed package's own skills into the
+Then follow the install skill to the CLI and handbook. Do not use an untagged
+`aotter/mantle` marketplace add as the official entry. After packages are
+pinned, `mantle skills` projects the installed package's own skills into the
 project, and `mantle skills --check` fails on drift.
 
 Cursor and GitHub Copilot read their manifests from the repository directly.
@@ -96,7 +97,7 @@ package. Two audiences, two artifacts.
 
 ## Discoverability
 
-The skills target ADR-0007's "AI as primary author" thesis: agents reach these files by URL when the user invokes them by intent ("install mantle", "develop my Mantle site", "deploy"). Official cold start is `npx skills add aotter/mantle --skill install`. Point the agent at the repository or pass the version-matched markdown content directly.
+The skills target ADR-0007's "AI as primary author" thesis: agents reach these files by URL when the user invokes them by intent ("install mantle", "develop my Mantle site", "deploy"). Official cold start is `npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install`. Point the agent at tag `v0.1.3-alpha.1` or pass the version-matched markdown content directly.
 
 ## Conventions
 

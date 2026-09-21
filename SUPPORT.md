@@ -10,10 +10,10 @@
 ## For AI agents
 
 **Consumers** (authoring or embedding a Mantle application): start with the
-install skill, then the CLI and handbook.
+pinned install skill, then the CLI and handbook.
 
 ```sh
-npx skills add aotter/mantle --skill install
+npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install
 ```
 
 Follow [`skills/install/SKILL.md`](skills/install/SKILL.md) and

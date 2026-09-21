@@ -5,10 +5,10 @@ description: The files you own in a Mantle project, every mantle and mantle-harn
 
 This page describes a directly authored Mantle project: which files are yours, what the installed CLI does to them, and the loop you run before every commit. Surfaces are optional — take only what you need. [The minimal Worker](./quickstart-worker.md) is Spec + adapter without Admin. [Local Admin](./quickstart-admin.md) is the opt-in Dev UI path when humans need a console.
 
-Cold start from GitHub or a marketplace host is the install skill, not this page:
+Cold start from GitHub or a marketplace host is the pinned install skill, not this page:
 
 ```sh
-npx skills add aotter/mantle --skill install
+npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install
 ```
 
 ## You own the project
@@ -98,19 +98,20 @@ Run the harness after any change to a Schema index, View filter or ordering, or 
 
 `mantle skills` projects the skills the installed package marks `projection: project`. At this version those are `develop`, `plugin`, `theme` and `update`; `install`, `media-gc` and `provision` stay opt-in because they create projects, delete remote objects or handle production secrets. Both tool layouts receive identical bytes. Generation never rewrites these files.
 
-Install the plugin bundle in the agent host. Cold start uses
-the install skill; an already-installed project pins packages from `package.json`:
+Install the version-matched plugin bundle in the agent host. Cold start uses
+the published pin; an already-installed project uses the exact version from
+`package.json` (currently `0.1.3-alpha.1`):
 
 ```sh
 # Canonical
-npx skills add aotter/mantle --skill install
+npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install
 
 # Claude Code — two separate prompts
-/plugin marketplace add aotter/mantle
+/plugin marketplace add aotter/mantle@v0.1.3-alpha.1
 /plugin install mantle@mantle
 
 # Codex
-codex plugin marketplace add aotter/mantle
+codex plugin marketplace add aotter/mantle --ref v0.1.3-alpha.1
 codex plugin add mantle@mantle
 ```
 

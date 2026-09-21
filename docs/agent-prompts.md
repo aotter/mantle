@@ -1,9 +1,9 @@
 # Task-specific agent prompts
 
-Cold start from GitHub or a marketplace host is the install skill:
+Cold start from GitHub or a marketplace host is one pinned skill:
 
 ```sh
-npx skills add aotter/mantle --skill install
+npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install
 ```
 
 Copy one block into a coding agent after that skill is present. Paths below
@@ -20,7 +20,7 @@ manifests exist. Admin is opt-in.
 ```text
 Interview me about the service: host, who uses it, whether humans need a
 Dev UI, and whether we only embed Spec/Runtime. If the install skill is
-missing, run npx skills add aotter/mantle --skill install. Read the
+missing, run npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install. Read the
 install skill and npx --no-install mantle --help, then
 handbook/start/project-and-cli.md.
 Use examples/README.md as the examples index; copy builtin-* Manifests only
