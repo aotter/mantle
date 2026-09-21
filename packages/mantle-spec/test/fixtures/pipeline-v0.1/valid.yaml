@@ -60,7 +60,6 @@ kind: Procedure
 metadata:
   name: place-order
 spec:
-  description: Place an order for the signed-in customer.
   input:
     type: object
     required: [customerId]

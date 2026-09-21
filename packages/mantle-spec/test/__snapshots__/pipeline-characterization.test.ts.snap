@@ -321,7 +321,6 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "name": "place-order",
         },
         "spec": {
-          "description": "Place an order for the signed-in customer.",
           "handler": {
             "kind": "ref",
             "ref": "placeOrder",
@@ -357,8 +356,8 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
         "span": {
           "end": {
             "column": 1,
-            "line": 74,
-            "offset": 1840,
+            "line": 73,
+            "offset": 1782,
           },
           "start": {
             "column": 1,
@@ -393,13 +392,13 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
         "span": {
           "end": {
             "column": 1,
-            "line": 82,
-            "offset": 2031,
+            "line": 81,
+            "offset": 1973,
           },
           "start": {
             "column": 1,
-            "line": 75,
-            "offset": 1844,
+            "line": 74,
+            "offset": 1786,
           },
         },
       },
@@ -428,13 +427,13 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
         "span": {
           "end": {
             "column": 1,
-            "line": 90,
-            "offset": 2204,
+            "line": 89,
+            "offset": 2146,
           },
           "start": {
             "column": 1,
-            "line": 83,
-            "offset": 2035,
+            "line": 82,
+            "offset": 1977,
           },
         },
       },
@@ -467,13 +466,13 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
         "span": {
           "end": {
             "column": 1,
-            "line": 102,
-            "offset": 2432,
+            "line": 101,
+            "offset": 2374,
           },
           "start": {
             "column": 1,
-            "line": 91,
-            "offset": 2208,
+            "line": 90,
+            "offset": 2150,
           },
         },
       },
