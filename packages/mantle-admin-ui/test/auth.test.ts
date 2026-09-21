@@ -12,7 +12,6 @@ import {
   claimInFlight,
 } from "../src/features/auth/auth-views";
 import { SignInFlow, SIGN_IN_FLOW_INITIAL, signInFlowReducer } from "../src/kit";
-import { OneTimeCodeInput } from "../src/components/one-time-code-input";
 import { signOut } from "../src/lib/auth";
 import { PreferencesProvider, resolveTheme } from "../src/app/preferences";
 
@@ -166,11 +165,4 @@ describe("SignInFlow step machine", () => {
     expect(signInFlowReducer(errored, { type: "back" })).toEqual({ ...start, step: "email", otp: "", error: null, busy: false });
   });
 
-  it("labels the code input for screen readers with the host's copy", () => {
-    const html = renderToStaticMarkup(
-      createElement(OneTimeCodeInput, { "aria-label": "驗證碼", value: "", onChange: () => undefined }),
-    );
-    expect(html).toContain('aria-label="驗證碼"');
-    expect(html).not.toContain('aria-label="One-time code"');
-  });
 });

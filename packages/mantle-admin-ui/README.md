@@ -21,8 +21,11 @@ import "@aotter/mantle-admin-ui/kit.css";
 `SignInFlow` exports Admin's own two-step email-OTP form (email screen, then
 six-digit code screen). The host injects transport (`onSendCode`,
 `onVerifyCode`), whatever navigation follows a successful verify, and all copy;
-the component owns only the step, busy, and error state. Admin renders the same
-component, so a host's sign-in cannot drift from it.
+the component owns only the step, busy, and error state. A verify that resolves
+without an error is terminal: the form stays busy and locked so the consumed
+code cannot be resubmitted, and the host must navigate or unmount it (Admin
+does `window.location.assign`). Admin renders the same component, so a host's
+sign-in cannot drift from it.
 
 Use `@aotter/mantle-admin-ui/tokens.css` when an application only needs the
 Mantle color, radius, background, and sidebar variables. The kit intentionally

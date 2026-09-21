@@ -55,6 +55,12 @@ export type SignInFlowLabels = {
 export type SignInFlowProps = {
   labels: SignInFlowLabels;
   onSendCode: (email: string) => Promise<SignInFlowStepResult>;
+  /**
+   * Resolving without an error is terminal: the flow stays busy and locked so
+   * the consumed code cannot be resubmitted. The host must then navigate or
+   * unmount the flow (Admin does `window.location.assign`). Resolve with
+   * `{ error }` to stay on the code screen instead.
+   */
   onVerifyCode: (email: string, code: string) => Promise<SignInFlowStepResult>;
   className?: string;
   /** Namespaces the field ids and their labels when a page mounts more than one flow. */
@@ -78,13 +84,13 @@ export type SignInFlowEvent =
   | { type: "failed"; error: string }
   | { type: "back" };
 
-export const SIGN_IN_FLOW_INITIAL: SignInFlowState = {
+export const SIGN_IN_FLOW_INITIAL: SignInFlowState = Object.freeze({
   step: "email",
   email: "",
   otp: "",
   busy: false,
   error: null,
-};
+});
 
 /**
  * Pure step machine behind `SignInFlow`, exported so the transitions are
@@ -140,7 +146,10 @@ export function SignInFlow({
   ): void => {
     if (busy || !claimInFlight(inFlight)) return;
     dispatch({ type: "start" });
-    void request()
+    // Promise.resolve().then(request) turns a synchronous throw from the host
+    // callback into a rejection; otherwise busy and the lock would stick.
+    void Promise.resolve()
+      .then(request)
       .then((result) => {
         dispatch(result?.error ? { type: done, error: result.error } : { type: done });
         // A successful verify hands off to host navigation; keep the lock so
@@ -195,9 +204,6 @@ export function SignInFlow({
           className="space-y-2"
         >
           <p className="text-xs text-muted-foreground">{labels.sentTo(email)}</p>
-          <label htmlFor={`${idPrefix}-otp`} className="sr-only">
-            {labels.otpLabel}
-          </label>
           <OneTimeCodeInput
             id={`${idPrefix}-otp`}
             aria-label={labels.otpLabel}
@@ -214,7 +220,6 @@ export function SignInFlow({
           </SignInButton>
           <button
             type="button"
-            disabled={busy}
             onClick={() => {
               inFlight.current = false;
               dispatch({ type: "back" });
