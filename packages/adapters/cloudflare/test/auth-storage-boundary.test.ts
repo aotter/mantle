@@ -1,8 +1,9 @@
 import { DiagnosticError, runtimeDiagnostic } from "@aotter/mantle-spec";
+import { createHash } from "node:crypto";
 import { expect, test, vi } from "vitest";
 import { SqliteMantleStorageAdapter } from "@aotter/mantle-runtime";
 import { createMantleWorker } from "../src/worker/createMantleWorker.js";
-import { createAuth, type CreateAuthConfig } from "../src/auth/createAuth.js";
+import { createAuth, hashEmailOtp, type CreateAuthConfig } from "../src/auth/createAuth.js";
 import { D1DatabaseDriver } from "../src/bindings/D1DatabaseDriver.js";
 import { compileTestPlan } from "./compileTestPlan.js";
 import { sqliteD1 } from "./fakes/sqlite-d1.js";
@@ -101,20 +102,18 @@ test("Auth email unknown outcome is observed without resending or leaking provid
   } finally { log.mockRestore(); sqlite.close(); }
 });
 
-test("Auth hashes email sign-in secrets at rest", async () => {
+test("Auth stores email OTPs as a keyed digest, not unkeyed SHA-256", async () => {
   const { db, sqlite } = sqliteD1();
   let otp = "";
-  let magicLink = "";
   const email = "hashed@example.test";
+  const secret = "x".repeat(40);
   try {
     const auth = createAuth({
       ...config(db),
+      secret,
       methods: [
         { kind: "email-otp", sender: { send: async ({ subject }) => {
           otp = subject.match(/\d{6}/u)?.[0] ?? "";
-        } } },
-        { kind: "magic-link", sender: { send: async ({ text }) => {
-          magicLink = text.match(/^https:\/\/\S+$/mu)?.[0] ?? "";
         } } },
       ],
     });
@@ -124,12 +123,32 @@ test("Auth hashes email sign-in secrets at rest", async () => {
       body: JSON.stringify({ email, type: "sign-in" }),
     }))).status).toBe(200);
     const otpValue = sqlite.prepare("SELECT value FROM verification").get()!.value as string;
+    const digest = storedDigest(otpValue);
     expect(otp).toMatch(/^\d{6}$/u);
     expect(otpValue).not.toContain(otp);
+    expect(digest).toBe(await hashEmailOtp(secret, otp));
+    expect(digest).not.toBe(unkeyedSha256(otp));
+    expect(isUnkeyedSha256OfSixDigitAlphabet(digest)).toBe(false);
     expect((await auth.handler(new Request(`${origin}/api/auth/sign-in/email-otp`, {
       method: "POST", headers: { origin, "content-type": "application/json" },
       body: JSON.stringify({ email, otp }),
     }))).status).toBe(200);
+  } finally { sqlite.close(); }
+});
+
+test("Auth hashes magic-link tokens at rest", async () => {
+  const { db, sqlite } = sqliteD1();
+  let magicLink = "";
+  const email = "magic@example.test";
+  try {
+    const auth = createAuth({
+      ...config(db),
+      methods: [
+        { kind: "magic-link", sender: { send: async ({ text }) => {
+          magicLink = text.match(/^https:\/\/\S+$/mu)?.[0] ?? "";
+        } } },
+      ],
+    });
 
     expect((await auth.handler(new Request(`${origin}/api/auth/sign-in/magic-link`, {
       method: "POST", headers: { origin, "content-type": "application/json" },
@@ -183,3 +202,19 @@ test("Auth honors explicit native Better Auth storage overrides", async () => {
     expect(sqlite.prepare("SELECT identifier FROM verification WHERE identifier NOT LIKE 'sign-in-otp-%'").get()!.identifier).toBe(token);
   } finally { sqlite.close(); }
 });
+
+function storedDigest(value: string): string {
+  const idx = value.lastIndexOf(":");
+  return idx === -1 ? value : value.slice(0, idx);
+}
+
+function unkeyedSha256(otp: string): string {
+  return createHash("sha256").update(otp).digest("base64url");
+}
+
+function isUnkeyedSha256OfSixDigitAlphabet(digest: string): boolean {
+  for (let i = 0; i < 1_000_000; i++) {
+    if (unkeyedSha256(String(i).padStart(6, "0")) === digest) return true;
+  }
+  return false;
+}

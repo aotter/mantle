@@ -17,6 +17,7 @@ import {
   decodeMemberCursor,
   getProviderAccessTokenForRequest,
   guardGithubLoginProfile,
+  hasEmailAuthSurface,
   mapRegisteredOAuthClient,
   normalizeAuthResponseCookies,
   pickLocale,
@@ -872,6 +873,16 @@ describe("createAuth — boot invariants", () => {
       body: JSON.stringify({ email: "owner@example.test", type: "sign-in" }),
     }))).status).toBe(200);
     await vi.waitFor(() => expect(sendVerificationOTP).toHaveBeenCalledOnce());
+  });
+
+  it("treats email-otp and magic-link plugin ids as email methods for the rate-limit cap", () => {
+    expect(hasEmailAuthSurface([])).toBe(false);
+    expect(hasEmailAuthSurface([], [{ id: "admin" }])).toBe(false);
+    expect(hasEmailAuthSurface([{ kind: "email-otp", sender: NULL_SENDER }])).toBe(true);
+    expect(hasEmailAuthSurface([{ kind: "magic-link", sender: NULL_SENDER }])).toBe(true);
+    expect(hasEmailAuthSurface([], [{ id: "email-otp" }])).toBe(true);
+    expect(hasEmailAuthSurface([], [{ id: "magic-link" }])).toBe(true);
+    expect(hasEmailAuthSurface([GITHUB_METHOD_FIXTURE], [{ id: "email-otp" }])).toBe(true);
   });
 
   it("rejects duplicate Better Auth plugin ids instead of replacing one", () => {
