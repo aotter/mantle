@@ -112,7 +112,10 @@ while iterating. Changes to Cloudflare request/storage performance must also run
   `fix/issue-N-topic`, `docs/issue-N-topic`, or `chore/issue-N-topic`.
 - Use conventional commit subjects. Keep each commit and PR coherent and
   reviewable.
-- Open PRs against `develop`. Human-authored PRs merge with a merge commit.
+- Open PRs against `develop`. `main` is the repository's default branch, so
+  GitHub's pull-request prompt and a bare `gh pr create` target `main` instead;
+  pass `--base develop` and check the base before you open. Only promotion and
+  hotfix PRs target `main`. Human-authored PRs merge with a merge commit.
   Dependabot patch and digest updates are the only rebase-merge exception;
   minor and major dependency updates require human review. Do not squash.
 - Before merge, update the branch with its base and pass the required checks on
@@ -135,8 +138,13 @@ Release mechanics are governed by [`docs/release-process.md`](docs/release-proce
 and the canonical [maintainer release skill](.agents/skills/mantle-release/SKILL.md).
 No task implies permission to publish.
 
-The organization-admin ruleset bypass exists only for repository or release
-recovery. If it is used, record the reason and resulting state in an issue or
-PR so the bypass remains auditable.
+Both branches require one approving review, and while `@guyspy` is the sole
+owner in `.github/CODEOWNERS`, every release PR is authored by the account that
+administers the repository. GitHub does not permit self-approval, so no
+reviewer is obtainable and the organization-admin ruleset bypass is the normal
+merge path for version and promotion PRs, not an exception. Record the reason
+and the resulting state on each bypassed PR so it stays auditable. Outside the
+release sequence, prefer a reviewed merge; the bypass is for cases where review
+is genuinely unavailable or the repository needs recovery.
 
 Do not file public vulnerability issues. Follow [`SECURITY.md`](SECURITY.md).
