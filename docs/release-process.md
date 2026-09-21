@@ -56,10 +56,11 @@ is introduced. The runnable release-order check guards these transitions.
   `develop`, anything else means `main`. It refuses a commit that is not that
   branch's tip or not the merge commit of exactly one PR into that branch.
   `scripts/release-tag-order.mjs` rejects any other prerelease identifier.
-- `develop` stays the default integration branch. `main` changes only through
-  promotion PRs and hotfix PRs (below); it is never pushed directly, rebased
-  or force-updated. Both branches share one ruleset: PR, one approval,
-  resolved threads and a current-base `Typecheck + tests` check.
+- `develop` is where every change integrates first, so it is the base for all
+  work despite `main` being the repository's default branch on GitHub. `main`
+  changes only through promotion PRs and hotfix PRs (below); it is never pushed
+  directly, rebased or force-updated. Both branches share one ruleset: PR, one
+  approval, resolved threads and a current-base `Typecheck + tests` check.
 - Stable publishes latest. Final 0.1.0 alphas only advance alpha, preserving
   existing legacy latest. No prerelease moves latest; the 0.0 alpha rule that
   also advanced it was removed once 0.0 became unreachable.
