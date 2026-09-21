@@ -4,12 +4,11 @@ import { AwsClient } from "aws4fetch";
 import { McpJsonRpcDispatcher, projectCallableCapabilities, sealRuntimePlan, type RuntimePlanData, type McpUseCases } from "@aotter/mantle-runtime";
 import { jsonSchemaToZod, redactForWire, type SiteDefaults } from "@aotter/mantle-spec";
 import { TemplateRegistry, createPublicPathResolver } from "@aotter/mantle-web";
-import { rejectCrossOriginMutation } from "@aotter/mantle-admin";
 import { DPOP_SIGNING_ALGORITHMS } from "better-auth/oauth2";
 import { createMantleWorker, D1DatabaseDriver, mountPublicRoutes, R2MediaStorage } from "../../src/index.js";
 import { instrumentD1, instrumentKv, instrumentR2, runWithRequestDiagnostics, type RequestDiagnosticRecord } from "../../src/testing.js";
 import { diagnosticPhase } from "../../src/requestDiagnostics.js";
-import { gateCaller, resolveCaller } from "../../src/mount/resolveCaller.js";
+import { gateCaller } from "../../src/mount/resolveCaller.js";
 import { KvSiteConfigRepository } from "../../src/bindings/KvSiteConfigRepository.js";
 import { applyCachePolicy } from "../../src/oauth/cachePolicy.js";
 import { DatabaseSiteConfigRepository } from "../../../../mantle-runtime/src/infrastructure/persistence/DatabaseSiteConfigRepository.js";
@@ -114,11 +113,9 @@ function createState(raw: Env, origin: string, observed: boolean) {
     const path = new URL(request.url).pathname;
     if (path.startsWith("/mcp")) return nativeMcp(request, ctx);
     if (path === "/health") return new Response("ok");
-    const caller = await resolveCaller(request, { auth, jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] }, env, waitUntil: ctx.waitUntil.bind(ctx) });
-    if (caller.kind === "invalid") return Response.json({ ok: false, diagnostic: caller.diagnostic }, { status: caller.status });
-    if (caller.context.auth?.credential === "session" && request.method !== "GET") {
-      const rejected = rejectCrossOriginMutation(request); if (rejected) return rejected;
-    }
+    const gate = await gateCaller(request, { auth, jwtBearer: { audience: `${origin}/mcp`, scopes: ["mcp"] }, env, waitUntil: ctx.waitUntil.bind(ctx) });
+    if (gate.kind === "deny") return Response.json({ ok: false, diagnostic: gate.diagnostic }, { status: gate.status });
+    const caller = gate;
     if (httpRoutes.has(`${request.method} ${path}`)) return procedure(request);
     const name = path.slice("/api/views/".length), view = plan.views[name];
     if (path.startsWith("/api/views/") && view && request.method === "GET") {

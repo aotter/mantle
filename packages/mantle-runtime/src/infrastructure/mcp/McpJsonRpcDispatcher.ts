@@ -151,6 +151,13 @@ export class McpJsonRpcDispatcher {
       return new Response("method not allowed", { status: 405, headers: { allow: "POST" } });
     }
 
+    // JSON-RPC over HTTP is application/json. Refusing other types keeps a
+    // cookie-session caller safe from HTML form POSTs, whose enctypes cannot
+    // produce this header (#977).
+    const contentType = req.headers.get("content-type") ?? "";
+    if (!/^application\/json\b/iu.test(contentType.trim())) {
+      return new Response("Content-Type must be application/json.", { status: 415 });
+    }
     let body: { jsonrpc?: string; id?: number | string | null; method?: string; params?: unknown };
     try {
       body = (await readJsonBody(req)) as typeof body;

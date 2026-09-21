@@ -243,6 +243,9 @@ describe("authorization integration: one target across REST and MCP", () => {
       workerEnv,
     );
     expect(restGranted.status).toBe(200);
+    // A malformed site PAT is still refused outright by the resolver, on MCP as on REST.
+    const badPat = new Request(mcpCall(), { headers: { ...Object.fromEntries(mcpCall().headers), authorization: "Bearer site_pat_2" } });
+    expect((await publicMcp.fetch!(badPat, workerEnv, mcpContext)).status).toBe(401);
     for (const mcp of [publicMcp, staffMcp]) {
       const mcpGranted = await mcp.fetch!(mcpCall(), workerEnv, mcpContext);
       const mcpGrantedBody = (await mcpGranted.json()) as {

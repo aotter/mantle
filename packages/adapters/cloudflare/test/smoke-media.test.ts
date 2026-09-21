@@ -923,8 +923,8 @@ describe("MCP View surface gating (#438)", () => {
       props as unknown as ExecutionContext,
     );
     expect(res.status).toBe(401);
-    expect(res.headers.get("www-authenticate")).toContain('error="invalid_token"');
-    expect(res.headers.get("www-authenticate")).toContain("resource_metadata=");
+    // RFC 6750: no `error` attribute when the caller presented no token.
+    expect(res.headers.get("www-authenticate")).toMatch(/^Bearer realm="mcp", scope="mcp", resource_metadata=/u);
     const body = await res.json() as { error: { data: { code: string } } };
     expect(body.error.data.code).toBe("UNAUTHENTICATED");
   });
@@ -937,7 +937,8 @@ describe("MCP View surface gating (#438)", () => {
     });
     const res = await handler.fetch!(jsonRpcReq("tools/list", undefined, {}), {}, props as unknown as ExecutionContext);
     expect(res.status).toBe(401);
-    expect(res.headers.get("www-authenticate")).toContain('error="invalid_token"');
+    // No token was presented, so RFC 6750 says no `error` attribute — just the challenge.
+    expect(res.headers.get("www-authenticate")).toMatch(/^Bearer realm="mcp", scope="mcp", resource_metadata=/u);
   });
 
   it("accepts a same-origin cookie session and rejects it cross-origin", async () => {
@@ -958,6 +959,39 @@ describe("MCP View surface gating (#438)", () => {
       props as unknown as ExecutionContext,
     );
     expect(crossOrigin.status).toBe(403);
+  });
+
+  it("keeps the mcp scope floor for presented credentials other than a cookie session", async () => {
+    const handler = createMcpApiHandler({
+      ref: createMantleRuntimeRef({
+        plan: compileTestPlan(viewManifests()),
+        siteDefaults: { brand: "Example Shop", origin: "https://shop.example", media: { purposes: [postCoverPolicy()] } },
+        bindings: { db: new InMemoryDatabase(), adminAssets: new StubAssetServer() },
+        auth: staffAuth(),
+        credentialResolver: (request) => request.headers.get("authorization") === "Bearer site_pat_narrow"
+          ? { kind: "verified", credential: { credential: "personal-token", credentialId: "pat-1", userId: STAFF_USER.id, scopes: ["accounts:read"] } }
+          : { kind: "not-handled" },
+      }),
+      surface: "staff",
+      resource: MCP_RESOURCE,
+    });
+    const narrow = await handler.fetch!(
+      jsonRpcReq("tools/list", undefined, { authorization: "Bearer site_pat_narrow" }),
+      {},
+      props as unknown as ExecutionContext,
+    );
+    expect(narrow.status).toBe(403);
+    expect(narrow.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
+  });
+
+  it("refuses non-JSON bodies so a form POST cannot drive a cookie session", async () => {
+    const handler = createMcpApiHandler({ ref: viewRef(staffAuth()), surface: "staff", resource: MCP_RESOURCE });
+    const res = await handler.fetch!(new Request("https://example.test/mcp/staff", {
+      method: "POST",
+      headers: { "content-type": "text/plain", "mcp-protocol-version": "2025-11-25", cookie: "session=1" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    }), {}, props as unknown as ExecutionContext);
+    expect(res.status).toBe(415);
   });
 
   it("does not trust identity injected through legacy ExecutionContext props", async () => {

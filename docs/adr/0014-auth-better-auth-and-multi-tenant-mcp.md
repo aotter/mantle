@@ -847,3 +847,18 @@ split. Both transports now run the same gate (`gateCaller`):
 The fresh-role rule (section 5) and the MCP grant check are unchanged: both
 run inside `resolveCaller`'s bearer path. What changed is only where the
 surface rule sits and that it is the *only* rule the surface adds.
+
+Two invariants that the shared gate must keep, stated so they are not lost
+in a later refactor:
+
+- **The `mcp` scope floor applies to every presented credential.** Bearer
+  tokens are checked inside `resolveCaller`; a consumer credential (site PAT,
+  API key) is checked by the MCP handler after the gate, and a PAT minted for
+  a narrow integration is refused with `403 insufficient_scope` even when its
+  owner is staff. A cookie session carries no scopes and is the same browser
+  identity Admin already trusts, so it is exempt. Anonymous callers present
+  nothing to check; each tool's `requires` governs them.
+- **JSON-RPC over HTTP is `application/json` only.** The dispatcher answers
+  `415` to anything else, so an HTML form (whose enctypes cannot produce that
+  header) can never drive a cookie session on `/mcp`; the same-origin guard
+  remains the second layer.
