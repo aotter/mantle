@@ -15,4 +15,18 @@ export interface ValidateManifestsRequest {
    *  check (ADR-0010). Validate-from-CLI flows leave this absent
    *  (CLI can't reach the runtime DB); boot always passes it. */
   readonly siteLocales?: ReadonlyArray<string>;
+  /** Advisory checks on MCP-surfaced Procedure inputs (#971). Core ships
+   *  the defaults; a downstream decides its own thresholds. `false`
+   *  disables the whole group. */
+  readonly mcpInput?: false | McpInputCheckOptions;
+}
+
+export interface McpInputCheckOptions {
+  /** Warn on a top-level `oneOf` / `anyOf` whose branches require more
+   *  than the advertised top-level `required` (default `true`). */
+  readonly unionAmbiguity?: boolean;
+  /** Warn on array inputs whose `maxItems` exceeds this bound or is
+   *  undeclared, and on free-form object inputs (default `100`;
+   *  `null` disables the size check). */
+  readonly maxArrayItems?: number | null;
 }
