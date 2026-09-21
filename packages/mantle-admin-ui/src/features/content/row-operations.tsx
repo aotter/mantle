@@ -493,7 +493,9 @@ export function OperationDialog({
           <Button
             type="button"
             onClick={() => invoke.mutate(formValue)}
-            disabled={invoke.isPending || !canSubmit}
+            // After a success the bound expectedVersion is stale; a second
+            // submit would 409, so require a re-read instead (#877 L2).
+            disabled={invoke.isPending || invoke.isSuccess || !canSubmit}
           >
             {invoke.isPending ? t(language, "ops.running") : t(language, "ops.run")}
           </Button>
