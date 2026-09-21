@@ -202,6 +202,103 @@ spec:
     expect(warnings[0]?.message).toContain("'suspend-tenant-staff'");
   });
 
+  it("warns when an MCP write tool's expectedVersion cannot be read from any View on its surface", () => {
+    const linked = linkManifestSet(parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: tenants }
+spec:
+  title: Tenants
+  lifecycle: operational
+  schema: { type: object, readOnly: true, properties: { slug: { type: string }, enabled: { type: boolean } } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: organizations }
+spec:
+  title: Organizations
+  lifecycle: operational
+  schema: { type: object, readOnly: true, properties: { name: { type: string }, projectLimit: { type: number } } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: suspend-tenant }
+spec:
+  description: Suspend one tenant.
+  input:
+    type: object
+    required: [tenantId, expectedVersion]
+    properties:
+      tenantId: { type: string, x-mantle-ref: tenants }
+      expectedVersion: { type: number }
+  output: { type: object }
+  handler: { kind: ref, ref: suspend-tenant }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: set-organization-quotas }
+spec:
+  description: Set quotas.
+  input:
+    type: object
+    required: [id, expectedVersion, projectLimit]
+    properties:
+      id: { type: string, x-mantle-ref: organizations }
+      expectedVersion: { type: number }
+      projectLimit: { type: number }
+  output: { type: object }
+  handler: { kind: builtin, op: update, schema: organizations }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: platform-tenant-status }
+spec:
+  surface: staff
+  sql: "SELECT t._mantle_id AS tenantId, t.slug FROM tenants t"
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: platform-organizations }
+spec:
+  surface: staff
+  from: organizations
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: member-tenant }
+spec:
+  surface: public
+  from: tenants
+  fields: [id, slug, version]
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: suspend-tenant-staff }
+spec:
+  source: { kind: mcp, surface: staff }
+  target: { procedure: suspend-tenant }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: set-organization-quotas-staff }
+spec:
+  source: { kind: mcp, surface: staff }
+  target: { procedure: set-organization-quotas }
+`));
+
+    expect(linked.ok).toBe(true);
+    const warnings = linked.diagnostics.filter((d) => d.code === "MCP_TOOL_INPUT_UNREACHABLE");
+    // The staff SQL View over tenants selects no version column, so suspend-tenant
+    // is unreachable there even though the public member-tenant View exposes it.
+    // platform-organizations omits `fields`, so the default projection carries
+    // version and set-organization-quotas is reachable.
+    expect(warnings.map((d) => [d.severity, d.value, d.path])).toEqual([
+      ["warning", "tenants", "/spec/input/properties/expectedVersion"],
+    ]);
+    expect(warnings[0]?.message).toContain("suspend_tenant");
+    expect(warnings[0]?.message).toContain("staff");
+  });
+
   it("allows manifests to define the removed generic read tool names", () => {
     const linked = linkManifestSet(parse(`
 apiVersion: cms.mantle.aotter.net/v1
