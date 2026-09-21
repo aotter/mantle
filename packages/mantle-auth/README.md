@@ -42,3 +42,19 @@ takes the D1 binding and an optional KV session cache, constructs
 
 Install it alongside the exact same version as every other `@aotter/mantle*`
 package, and provide `better-auth` yourself.
+
+## Background work and `waitUntil`
+
+Better Auth sends the OTP and other sign-in e-mails as fire-and-forget work
+so response latency cannot reveal whether an account exists (its rate limiter
+would do the same for expired-row cleanup, but Mantle keeps that store in
+memory, so no such work exists today). Pass the platform's retainer so that
+work outlives the response:
+
+```ts
+auth.handler(request, { waitUntil: (promise) => ctx.waitUntil(promise) });
+```
+
+`@aotter/mantle-admin`'s mount does this for Hono contexts that carry an
+`ExecutionContext`. Without a retainer the work runs detached, which Node
+tolerates and Workers may cancel.

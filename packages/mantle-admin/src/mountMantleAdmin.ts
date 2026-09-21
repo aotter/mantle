@@ -90,7 +90,7 @@ export interface AdminMemberList {
 
 export interface AdminAuth {
   readonly basePath: string;
-  readonly handler: (request: Request) => Promise<Response>;
+  readonly handler: (request: Request, context?: { readonly waitUntil?: (promise: Promise<unknown>) => void }) => Promise<Response>;
   readonly methods: readonly AdminAuthMethod[];
   readonly getSession: (request: Request) => Promise<{
     session: { id: string };
@@ -206,7 +206,7 @@ export function mountMantleAdmin<E extends Env>(
   // so consumers don't have to wire — and can't accidentally register a
   // catch-all BEFORE the specific routes above and silently swallow
   // them. Hono matches in registration order; this catch-all sits last.
-  app.all(`${authBasePath}/*`, (c) => auth.handler(c.req.raw));
+  app.all(`${authBasePath}/*`, (c) => auth.handler(c.req.raw, requestRetention(c, ref.requestContext)));
 
   // Better Auth's provider serves discovery outside its base path. Keep these
   // explicit so a consumer catch-all cannot swallow RFC 8414/9728 metadata.
@@ -215,7 +215,7 @@ export function mountMantleAdmin<E extends Env>(
     "/.well-known/oauth-protected-resource",
     "/.well-known/oauth-protected-resource/*",
   ]) {
-    app.all(path, (c) => auth.handler(c.req.raw));
+    app.all(path, (c) => auth.handler(c.req.raw, requestRetention(c, ref.requestContext)));
   }
 
   for (const path of [
@@ -2590,4 +2590,23 @@ function mediaNotConfiguredResponse(path: string): Response {
         "Media uploads are not enabled on this deployment. Bind a `mediaStorage` port in `createMantleRuntime` to enable.",
     }),
   }, { status: 501 });
+}
+
+/** Hand the platform's `waitUntil` to Auth so its background work outlives the
+ *  response. Hono throws when no ExecutionContext exists (Node, tests); that
+ *  host has nothing to retain with, so the work runs detached as before. */
+function requestRetention(
+  c: Context,
+  requestContext: MantleAdminRef["requestContext"],
+): { readonly waitUntil?: (promise: Promise<unknown>) => void } {
+  // Prefer the host's own seam (Vercel, Bun and tests can supply a retainer
+  // without a Hono ExecutionContext); fall back to probing the getter.
+  const supplied = requestContext?.(c)?.waitUntil;
+  if (supplied) return { waitUntil: supplied };
+  try {
+    const ctx = c.executionCtx;
+    return { waitUntil: (promise) => ctx.waitUntil(promise) };
+  } catch {
+    return {};
+  }
 }
