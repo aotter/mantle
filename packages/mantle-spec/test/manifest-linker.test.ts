@@ -135,6 +135,73 @@ spec: { surface: public, from: orders }
     }));
   });
 
+  it("warns when an MCP-exposed Procedure has no description, without withholding the link", () => {
+    const linked = linkManifestSet(parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: suspend-tenant }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: suspend-tenant }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: measure-usage }
+spec:
+  description: { en: "Measure D1/R2 usage for one tenant.", zh-TW: "量測單一租戶用量。" }
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: measure-usage }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: http-only }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: http-only }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: suspend-tenant-staff }
+spec:
+  source: { kind: mcp, surface: staff }
+  target: { procedure: suspend-tenant }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: suspend-tenant-public }
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: suspend-tenant }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: measure-usage-staff }
+spec:
+  source: { kind: mcp, surface: staff }
+  target: { procedure: measure-usage }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: http-only-http }
+spec:
+  source: { kind: http, method: POST, path: /api/http-only }
+  target: { procedure: http-only }
+`));
+
+    expect(linked.ok).toBe(true);
+    const warnings = linked.diagnostics.filter((d) => d.code === "MCP_TOOL_DESCRIPTION_MISSING");
+    expect(warnings).toEqual([expect.objectContaining({
+      severity: "warning",
+      path: "/spec/description",
+      message: expect.stringContaining("'suspend-tenant'"),
+    })]);
+    expect(warnings[0]?.message).toContain("staff surface");
+    expect(warnings[0]?.message).toContain("'suspend-tenant-staff'");
+  });
+
   it("allows manifests to define the removed generic read tool names", () => {
     const linked = linkManifestSet(parse(`
 apiVersion: cms.mantle.aotter.net/v1

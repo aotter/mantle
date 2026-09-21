@@ -349,6 +349,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const OBSERVED_VERSION_DESCRIPTION =
   "Observed native entry.version at read time (not version+1). A successful write still bumps storage to this value + 1. First-party Admin/SDK bind this field automatically; other callers must send the version they read.";
 
+/** Surface `x-mcp-hint: idempotency-key` where an agent reads: the description.
+ *  The hint lives on the raw inputSchema, but nothing there says a retry must
+ *  reuse the value — and a fresh uuid re-executes the operation. */
+function idempotencySummary(inputSchema: unknown): string {
+  const properties = isRecord(inputSchema) ? inputSchema["properties"] : undefined;
+  if (!isRecord(properties)) return "";
+  const keys = Object.entries(properties)
+    .filter(([, property]) => isRecord(property) && property["x-mcp-hint"] === "idempotency-key")
+    .map(([name]) => name);
+  if (keys.length === 0) return "";
+  return ` Idempotency: retries must reuse the same ${keys.join(" / ")}; a new value is a new operation.`;
+}
+
 function annotateExpectedVersion(
   schema: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -438,7 +451,7 @@ function buildProcedureTool(capability: ProcedureCallableCapability): McpToolDef
   return {
     name: capability.name,
     ...(capability.title ? { title: capability.title } : {}),
-    description: `${capability.description}${authorizationSummary(capability.manifest.spec.requires)}`,
+    description: `${capability.description}${idempotencySummary(capability.inputSchema)}${authorizationSummary(capability.manifest.spec.requires)}`,
     inputSchema: annotateExpectedVersion(
       capability.inputSchema as Record<string, unknown>,
     ),

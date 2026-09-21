@@ -463,6 +463,34 @@ describe("McpJsonRpcDispatcher", () => {
     expect(names).toEqual(["query_view_recent_posts"]);
   });
 
+  it("tells agents in the description that an idempotency-key input must be reused on retry", () => {
+    const procedure = makeProcedure();
+    const withKey = {
+      ...procedure,
+      spec: {
+        ...procedure.spec,
+        input: {
+          type: "object",
+          properties: {
+            tenantId: { type: "string" },
+            operationId: { type: "string", format: "uuid", "x-mcp-hint": "idempotency-key" },
+          },
+          required: ["tenantId", "operationId"],
+        },
+      },
+    };
+    const [tool] = buildMcpToolCatalog([], {
+      surface: "staff",
+      capabilities: [procedureCapability(withKey)],
+    });
+    expect(tool?.description).toContain("retries must reuse the same operationId");
+    const [plain] = buildMcpToolCatalog([], {
+      surface: "staff",
+      capabilities: [procedureCapability(procedure)],
+    });
+    expect(plain?.description).not.toContain("Idempotency");
+  });
+
   it("tools/list preserves media x-mcp-hint metadata for agents", async () => {
     const { dispatcher } = buildHarness();
     const res = await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext());
