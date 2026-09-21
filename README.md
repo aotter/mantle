@@ -44,34 +44,34 @@ tools for humans and agents.
 
 ## Install
 
-Cold start is one pinned skill. The skill then pins the CLI and opens the
+Cold start is the install skill. The skill then pins the CLI and opens the
 handbook. That is the only official entry.
 
 ```sh
-npx skills add aotter/mantle@v0.1.2 --skill install
+npx skills add aotter/mantle --skill install
 ```
 
 Follow the [`install` skill](skills/install/SKILL.md): it interviews for host
-and surfaces, pins `@aotter/mantle@0.1.2`, then uses the CLI and the
+and surfaces, pins `@aotter/mantle` (latest published version), then uses the CLI and the
 [direct authoring handbook](docs/handbook/start/project-and-cli.md). There is
 no `mantle create`, no Starter, and no generate-first empty project.
 
-Claude Code and Codex can install the same pinned plugin instead, then run
+Claude Code and Codex can install the plugin directly, then run
 that skill:
 
 ```bash
 # Claude Code — two separate prompts
-/plugin marketplace add aotter/mantle@v0.1.2
+/plugin marketplace add aotter/mantle
 /plugin install mantle@mantle
 
 # Codex
-codex plugin marketplace add aotter/mantle --ref v0.1.2
+codex plugin marketplace add aotter/mantle
 codex plugin add mantle@mantle
 ```
 
 Cursor and GitHub Copilot read plugin manifests from this repository; still
 start from the same `npx skills add` sentence, or open
-[`skills/install/SKILL.md`](skills/install/SKILL.md) at tag `v0.1.2`.
+[`skills/install/SKILL.md`](skills/install/SKILL.md).
 
 Authoring SSOT is the pinned `@aotter/mantle` package docs, the `mantle` CLI,
 and the projected skills. After a live app is deployed, `/mcp` and `/mcp/staff`
@@ -81,7 +81,7 @@ mirrors the authoring docs. They do not mirror each other.
 
 ## For engineers and agents
 
-Start from the [pinned install skill](#install). After that skill has pinned
+Start from the [install skill](#install). After that skill has pinned
 the packages, engineers use the [installed API guide](packages/mantle/README.md),
 [adapter guide](docs/adapter-guide.md), and
 [direct authoring guide](docs/handbook/start/project-and-cli.md). Agents stay
@@ -91,7 +91,7 @@ Coding agents use the same APIs and version-matched
 [skills](skills/README.md). A short starting prompt:
 
 ```text
-Run npx skills add aotter/mantle@v0.1.2 --skill install. Read
+Run npx skills add aotter/mantle --skill install. Read
 skills/install/SKILL.md and docs/agent-prompts.md. Interview me about
 host, storage, and surfaces before writing files. Preserve any existing
 application; otherwise author locally from an official example. There is

@@ -3,12 +3,12 @@
   "owner": {
     "name": "Aotter"
   },
-  "description": "Build and embed Mantle applications. Cold start: npx skills add aotter/mantle@v0.1.2 --skill install.",
+  "description": "Build and embed Mantle applications. Cold start: npx skills add aotter/mantle --skill install.",
   "plugins": [
     {
       "name": "mantle",
       "source": "./",
-      "description": "Build and embed Mantle applications. Cold start: npx skills add aotter/mantle@v0.1.2 --skill install."
+      "description": "Build and embed Mantle applications. Cold start: npx skills add aotter/mantle --skill install."
     }
   ]
 }
