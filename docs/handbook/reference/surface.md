@@ -30,7 +30,7 @@ All `/admin/api/*` routes require a staff session, carry a 1 MiB JSON body limit
 | `GET /admin/api/views/<name>/export` | The same query as CSV, covering every matching row rather than one page. |
 | `GET /admin/api/views-manifest` | `{ views: … }` — the View manifest projection the SPA renders from. |
 | `GET /admin/api/operations` | `{ operations: [ { name, title, description, input, uiSchema, triggers, rowBindings } ] }`, filtered per caller by re-evaluating each Procedure's `requires.auth.all`. |
-| `POST /admin/api/operations/:name` | Invokes a staff-operable Procedure through the same use case the staff MCP surface uses. `404` when the name is not staff-operable. |
+| `POST /admin/api/operations/:name` | Invokes a staff-operable Procedure through the same use case the staff MCP surface uses. `404` when the name is not staff-operable or when the caller's `requires.auth.all` predicates exclude it — the same filter the listing applies, so names cannot be probed. |
 | `GET /admin/api/me`, `/collections`, `/collections/:name/statistics`, `/entries`, `/entries/export`, `/entries/:id`, `/site` | Session, catalog and entry reads. Entry detail requires `?collection=<schema>`. |
 | `POST /admin/api/entries`, `PATCH /admin/api/entries/:id` | Create and edit. Entry mutation routes require `?collection=<schema>`; contributors are limited to drafts on publishing Schemas. |
 | `POST /admin/api/entries/:id/publish`, `/unpublish`, `DELETE /admin/api/entries/:id` | Lifecycle. Requires `?collection=<schema>` and editor or above. |
