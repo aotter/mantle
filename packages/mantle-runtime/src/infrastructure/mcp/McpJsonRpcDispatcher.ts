@@ -40,7 +40,6 @@ import {
   extractCollectionSegment,
   type McpToolSurface,
   type McpToolDefinition,
-  idempotencyKeys,
 } from "./McpToolCatalog.js";
 import {
   jsonRpcError,
@@ -114,9 +113,6 @@ export class McpJsonRpcDispatcher {
   private readonly schemaBySegment: ReadonlyMap<string, string>;
   private readonly readOnlyCollections: ReadonlySet<string>;
   private readonly capabilityByToolName: ReadonlyMap<string, RuntimeCallableCapability>;
-  /** tool → the input property that carries its idempotency key, for audit
-   *  correlation. Tools without a declared key fall back to `operationId`. */
-  private readonly operationKeyByTool: ReadonlyMap<string, string>;
 
   constructor(
     private readonly useCases: McpUseCases,
@@ -136,9 +132,6 @@ export class McpJsonRpcDispatcher {
       capabilities: options.capabilities,
     });
     this.catalogWireJson = `{"tools":${JSON.stringify(this.catalog)}}`;
-    this.operationKeyByTool = new Map(
-      this.catalog.map((tool) => [tool.name, idempotencyKeys(tool.inputSchema)[0] ?? "operationId"]),
-    );
     this.catalogToolNames = new Set(this.catalog.map((tool) => tool.name));
     this.readOnlyCollections = new Set(
       schemas.filter((schema) => schema.spec.schema.readOnly === true).map((schema) => schema.metadata.name),
@@ -225,9 +218,9 @@ export class McpJsonRpcDispatcher {
     const args = (p.arguments ?? {}) as Record<string, unknown>;
     // Probing for tools that do not exist is audited like any other call.
     const startedAt = Date.now();
-    const operationKey = this.operationKeyByTool.get(p.name) ?? "operationId";
-    const operationValue = args[operationKey];
-    const operationId = typeof operationValue === "string" ? operationValue : null;
+    // Audit correlation reads the conventional `operationId` argument only;
+    // resolving a tool's declared idempotency-key hint is a separate issue.
+    const operationId = typeof args["operationId"] === "string" ? args["operationId"] : null;
     let outcome = "ok";
     try {
       if (!this.catalogToolNames.has(p.name)) {

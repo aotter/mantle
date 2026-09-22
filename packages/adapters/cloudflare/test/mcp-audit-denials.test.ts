@@ -5,7 +5,7 @@ import type { Manifest } from "@aotter/mantle-spec";
 import type { McpToolCallAuditEvent } from "@aotter/mantle-runtime";
 import { InMemoryDatabase } from "../../../mantle-runtime/test/fakes/database.js";
 import { createMantleRuntimeRef } from "../src/mount/bootRuntimeOnce.js";
-import { createMcpApiHandler } from "../src/mount/mountMcp.js";
+import { AUDIT_UNREADABLE_TOOL, createMcpApiHandler } from "../src/mount/mountMcp.js";
 import { compileTestPlan } from "./compileTestPlan.js";
 import { StubAssetServer, stubAuth } from "./fakes/runtime-bindings.js";
 
@@ -71,7 +71,7 @@ describe("MCP audit: gate denials", () => {
     })]);
   });
 
-  it("reads a denied body through the 1 MiB bounded reader, so an unauthenticated caller cannot make the Worker buffer more", async () => {
+  it("reads a denied body through the 1 MiB bounded reader and still records the denial", async () => {
     events.length = 0;
     // A chunked body with no trustworthy Content-Length: 2 MiB in 64 KiB pieces.
     const chunk = new TextEncoder().encode(" ".repeat(64 * 1024));
@@ -92,7 +92,9 @@ describe("MCP audit: gate denials", () => {
     });
     const response = await run(pub, request);
     expect(response.status).toBe(401);
-    expect(events).toEqual([]);
+    // Padding the body does not hide the probe: the denial is recorded with
+    // the tool marked unreadable.
+    expect(events).toEqual([expect.objectContaining({ tool: AUDIT_UNREADABLE_TOOL, operationId: null, outcome: "INVALID_TOKEN", callerId: null })]);
     // The reader stopped at the limit instead of draining the producer.
     expect(pulled).toBeLessThan(32);
   });

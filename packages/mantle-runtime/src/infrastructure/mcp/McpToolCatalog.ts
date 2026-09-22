@@ -372,7 +372,7 @@ function idempotencySummary(inputSchema: unknown): string {
   return ` Idempotency: retries must reuse the same ${keys.join(" / ")}; a new value is a new operation.`;
 }
 
-export function idempotencyKeys(inputSchema: unknown): string[] {
+function idempotencyKeys(inputSchema: unknown): string[] {
   const properties = isRecord(inputSchema) ? inputSchema["properties"] : undefined;
   if (!isRecord(properties)) return [];
   return Object.entries(properties)

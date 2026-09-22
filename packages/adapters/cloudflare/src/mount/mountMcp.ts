@@ -191,6 +191,10 @@ function challengeHeaders(
   };
 }
 
+/** `tool` recorded for a denied request whose body could not be read within
+ *  the JSON limit or was not JSON. */
+export const AUDIT_UNREADABLE_TOOL = "(unreadable)";
+
 /** Record a gate denial for `tools/call` only; discovery methods carry no
  *  tool and are not audited. `reason` is normalised to the dispatcher's
  *  UPPER_SNAKE outcome vocabulary (`INSUFFICIENT_ROLE`, `INVALID_TOKEN`…). */
@@ -206,24 +210,30 @@ function auditDenial(
   const at = Date.now();
   // The same 1 MiB bounded reader the dispatcher uses: an unauthenticated
   // caller must not be able to make the Worker buffer an unbounded body just
-  // because auditing is on. Oversized or malformed bodies leave no record.
+  // because auditing is on. A body that is oversized or not JSON is still a
+  // denied request and is recorded with `tool: AUDIT_UNREADABLE_TOOL`, so
+  // padding the body cannot hide a credential probe from the trail.
   const settled = readJsonBody(request.clone())
-    .catch(() => null)
     .then((body: unknown) => {
       const message = body as {
         method?: unknown;
         params?: { name?: unknown; arguments?: { operationId?: unknown } };
       } | null;
-      if (!message || message.method !== "tools/call" || typeof message.params?.name !== "string") return;
+      if (!message || typeof message !== "object") return { tool: AUDIT_UNREADABLE_TOOL, operationId: null };
+      if (message.method !== "tools/call" || typeof message.params?.name !== "string") return null;
       const operationId = message.params.arguments?.operationId;
+      return { tool: message.params.name, operationId: typeof operationId === "string" ? operationId : null };
+    }, () => ({ tool: AUDIT_UNREADABLE_TOOL, operationId: null }))
+    .then((call) => {
+      if (!call) return;
       return audit.record({
         at,
         surface,
         callerId: ctx?.user?.id ?? null,
         clientId: ctx?.auth?.clientId ?? null,
         credential: ctx?.auth?.credential ?? null,
-        tool: message.params.name,
-        operationId: typeof operationId === "string" ? operationId : null,
+        tool: call.tool,
+        operationId: call.operationId,
         outcome: reason.toUpperCase().replaceAll("-", "_"),
         durationMs: Date.now() - at,
       });
