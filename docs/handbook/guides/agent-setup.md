@@ -9,12 +9,12 @@ application's SDK. Installing one does not install the other.
 ## 1. Install the bootstrap skill
 
 ```sh
-npx skills add aotter/mantle --skill install
+npx skills add aotter/mantle
 ```
 
-The installer selects the repository's `install` skill. Read its printed
+The installer selects the repository's `mantle` skill. Read its printed
 installation path. In a project-local Codex installation that is
-`.agents/skills/install/SKILL.md`, not `skills/install/SKILL.md` (the latter is
+`.agents/skills/mantle/SKILL.md`, not `skills/mantle/SKILL.md` (the latter is
 its source-repository path). Other agent selections and global installation
 can use different locations.
 
@@ -36,15 +36,16 @@ packages locally.
 Then read:
 
 ```text
-node_modules/@aotter/mantle/skills/install/SKILL.md
+node_modules/@aotter/mantle/skills/mantle/SKILL.md
 node_modules/@aotter/mantle/docs/handbook/start/overview.md
 node_modules/@aotter/mantle/docs/handbook/reference/features.md
 ```
 
 These files are in the npm tarball. They are the version-matched authority,
-including when the bootstrap skill came from a different Git ref. Every
-`docs/...` path in the skill resolves under the installed package, not under
-`.agents/skills/install/`. Keep using that SDK's docs for host examples and CLI
+including when the bootstrap skill came from a different Git ref. In the
+published 0.1.3 package, the first path is `skills/install/SKILL.md`.
+Every `docs/...` path in the skill resolves under the installed package, not under
+`.agents/skills/mantle/`. Keep using that SDK's docs for host examples and CLI
 behavior. No local `mantle` binary is available before package installation.
 
 ## 3. Project the ongoing workflows
@@ -61,7 +62,7 @@ pnpm exec mantle skills --check
 |---|---|
 | `.agents/skills/mantle-{develop,plugin,theme,update}/SKILL.md` | The installed package's four project-scoped workflows. |
 | `.claude/skills/mantle-{develop,plugin,theme,update}/SKILL.md` | Identical bytes for Claude compatibility. |
-| `node_modules/@aotter/mantle/skills/` | All seven shipped skills, including opt-in `install`, `provision` and `media-gc`. |
+| `node_modules/@aotter/mantle/skills/` | All seven shipped skills, including opt-in `mantle`, `provision` and `media-gc`. |
 | `node_modules/@aotter/mantle/docs/` | Handbook and examples matched to the package. |
 
 `mantle skills` overwrites these four generated projections. Keep project-specific
@@ -80,7 +81,7 @@ It does not prove a server, login, Admin assets or MCP connection works.
 
 | Symptom | Cause and next step |
 |---|---|
-| `skills/install/SKILL.md` is missing | That is source provenance. Read the installer's destination instead. |
+| `skills/mantle/SKILL.md` is missing | That is source provenance. Read the installer's destination instead. |
 | `docs/...` is missing after `skills add` | The skill does not carry the handbook. Install the pinned SDK and read its embedded docs. |
 | `mantle` is missing | Install local `@aotter/mantle`; run its binary through the project package manager. |
 | `MANIFEST_ROOT_NOT_FOUND` | Author manifests in the configured directory; `generate` is not a scaffold command. |
@@ -90,7 +91,7 @@ It does not prove a server, login, Admin assets or MCP connection works.
 
 ## Source
 
-- [Bootstrap install skill](../../../skills/install/SKILL.md)
+- [Bootstrap install skill](../../../skills/mantle/SKILL.md)
 - [Projection implementation](../../../packages/mantle/src/cli/skills.ts)
 - [Package file list](../../../packages/mantle/package.json)
 - [Package docs and skills copying](../../../scripts/sync-package-docs.mjs)

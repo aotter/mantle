@@ -1,15 +1,15 @@
 ---
-name: install
+name: mantle
 description: Author a new Mantle application directly from version-matched SDK docs, or continue an existing project. Use when asked to install Mantle, build a Mantle application, or open a Mantle repository.
 metadata:
   source: "@aotter/mantle"
-  sourcePath: skills/install/SKILL.md
+  sourcePath: skills/mantle/SKILL.md
   applies_to: mantle grammar v0.1
   projection: plugin
   projectionReason: Creates a new project; nothing to project into an existing one.
 ---
 
-# Mantle Install
+# Mantle
 
 Mantle is an embeddable manifest engine. The application owns its source and
 provider configuration. There is no Starter/type picker or `mantle create`.
@@ -18,9 +18,9 @@ turn `generate` into implicit scaffolding.
 
 ## Locate the version-matched instructions
 
-`npx skills add aotter/mantle --skill install` installs this brief, not the SDK,
+`npx skills add aotter/mantle` installs this brief, not the SDK,
 a project, or the handbook. Read the path printed by the installer (Codex's
-project-local path is `.agents/skills/install/SKILL.md`); `metadata.sourcePath`
+project-local path is `.agents/skills/mantle/SKILL.md`); `metadata.sourcePath`
 is repository provenance, not a consumer path. A repository install follows
 the selected Git ref and does not pin an npm release.
 
@@ -28,7 +28,8 @@ After selecting the host and exact version, install `@aotter/mantle` locally
 with the selected optional packages. All `docs/...` paths below then mean
 `node_modules/@aotter/mantle/docs/...`; package skills are under
 `node_modules/@aotter/mantle/skills/`. Read that package's
-`skills/install/SKILL.md` before authoring: it supersedes this bootstrap copy.
+`skills/mantle/SKILL.md` before authoring (`skills/install/SKILL.md` in
+published 0.1.3): it supersedes this bootstrap copy.
 If the user requested a prerelease, resolve that channel explicitly; `latest`
 need not contain prerelease features. Never mix versioned npm code with branch
 docs. No local CLI exists until the package is installed.

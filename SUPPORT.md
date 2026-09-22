@@ -13,10 +13,10 @@
 install skill, then the CLI and handbook.
 
 ```sh
-npx skills add aotter/mantle --skill install
+npx skills add aotter/mantle
 ```
 
-Follow [`skills/install/SKILL.md`](skills/install/SKILL.md) and
+Follow [`skills/mantle/SKILL.md`](skills/mantle/SKILL.md) and
 [task-specific agent prompts](docs/agent-prompts.md). After
 `@aotter/mantle` is installed, the same files live under
 `node_modules/@aotter/mantle/`. Interview for host and surfaces before writing
