@@ -43,9 +43,17 @@ if (process.argv[2] === "--self-test") {
   }
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   assert(pkg.scripts.check.includes("pnpm check:worker-consumer"));
-  assert.match(workflow, /- name: Check Core source\n        run: pnpm check/);
+  assert.match(
+    workflow,
+    /- name: Check Core source\n        if: steps\.ver\.outputs\.tag_exists != 'true'\n        run: pnpm check/,
+  );
+  assert.match(workflow, /CORE_SHA=\$TAG_SHA/);
   assert.doesNotMatch(workflow, /mantle-starters|mantle-landing|RELEASE_FANOUT_TOKEN|deploy_landing/);
-  assert.match(workflow, /run: node scripts\/check-worker-consumer\.mjs --registry "\$VERSION"/);
+  assert.match(workflow, /node scripts\/check-worker-consumer\.mjs --registry "\$VERSION"/);
+  assert.match(
+    workflow,
+    /if \[ "\$TAG_EXISTS" = true \]; then[\s\S]*skipping the public-registry Worker gate/,
+  );
   assert.doesNotMatch(workflow, /continue-on-error:/);
 
   const gate = workflow.indexOf("Verify public-registry Core in the reference Worker");

@@ -221,6 +221,10 @@ After a controller-only fix lands on the tip, re-dispatch the same version
 from the source branch. Resolve recovers using the existing tag SHA when
 that commit is an ancestor of the tip and package versions on the tip still
 match. The tag owns the release SHA; the tip only carries controller fixes.
+Tagged recovery skips the Core source check because that tree was already
+released from the immutable tag. When `tag_exists` and all eleven npmjs
+packages already exist at that version, the public-registry Worker gate is
+skipped as well; the first run already passed that gate before promotion.
 
 Unpublish is reserved for actual secret/private-file exposure, never routine
 fixes. Infrastructure renames require their explicit config diff and live

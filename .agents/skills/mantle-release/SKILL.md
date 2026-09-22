@@ -48,6 +48,8 @@ Wrong public artifacts require a new version; never overwrite or force-retag.
 After a controller-only fix lands on the tip, re-dispatch the same version
 from the source branch. Resolve recovers using the existing tag SHA when
 that commit is an ancestor of the tip and package versions still match.
+Tagged recovery skips the Core source check because that tree was already
+released from the immutable tag.
 
 Legacy recovery follows the controller and docs at that version's immutable
 tag, not the current release workflow. No legacy repositories or deployments
