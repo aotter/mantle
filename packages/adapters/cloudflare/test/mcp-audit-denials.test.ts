@@ -13,9 +13,13 @@ const apiVersion = "cms.mantle.aotter.net/v1" as const;
 const RESOURCE = "https://example.test/mcp";
 
 function manifests(): Manifest[] {
-  const io = { type: "object", properties: {} } as const;
+  const input = {
+    type: "object",
+    properties: { requestKey: { type: "string", "x-mcp-hint": "idempotency-key" } },
+  } as const;
+  const output = { type: "object", properties: {} } as const;
   return [
-    { apiVersion, kind: "Procedure", metadata: { name: "hello" }, spec: { input: io, output: io, handler: { kind: "ref", ref: "hello" } } },
+    { apiVersion, kind: "Procedure", metadata: { name: "hello" }, spec: { input, output, handler: { kind: "ref", ref: "hello" } } },
     { apiVersion, kind: "Trigger", metadata: { name: "hello-staff-mcp" }, spec: { source: { kind: "mcp", surface: "staff" }, target: { procedure: "hello" } } },
     { apiVersion, kind: "Trigger", metadata: { name: "hello-public-mcp" }, spec: { source: { kind: "mcp", surface: "public" }, target: { procedure: "hello" } } },
   ];
@@ -64,7 +68,7 @@ describe("MCP audit: gate denials", () => {
 
   it("records a member refused on the staff surface, with the identity the gate established", async () => {
     events.length = 0;
-    const response = await run(staff, call("/mcp/staff", "member", "tools/call", { name: "hello", arguments: { operationId: "op-9" } }));
+    const response = await run(staff, call("/mcp/staff", "member", "tools/call", { name: "hello", arguments: { requestKey: "op-9" } }));
     expect(response.status).toBe(403);
     expect(events).toEqual([expect.objectContaining({
       surface: "staff", callerId: "member-1", clientId: "claude", credential: "oauth", tool: "hello", operationId: "op-9", outcome: "INSUFFICIENT_ROLE",
@@ -101,8 +105,12 @@ describe("MCP audit: gate denials", () => {
 
   it("records an invalid token and an insufficient scope", async () => {
     events.length = 0;
-    expect((await run(pub, call("/mcp", "garbage"))).status).toBe(401);
+    expect((await run(pub, call("/mcp", "garbage", "tools/call", {
+      name: "unknown-tool",
+      arguments: { operationId: "probe-1" },
+    }))).status).toBe(401);
     expect((await run(pub, call("/mcp", "narrow"))).status).toBe(403);
+    expect(events[0]?.operationId).toBe("probe-1");
     expect(events.map((event) => [event.callerId, event.outcome])).toEqual([
       [null, "INVALID_TOKEN"],
       ["member-1", "INSUFFICIENT_SCOPE"],

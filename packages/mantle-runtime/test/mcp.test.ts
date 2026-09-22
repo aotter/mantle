@@ -1232,6 +1232,17 @@ describe("McpJsonRpcDispatcher — tools/call audit sink", () => {
   ) {
     const store = new InMemoryEntryRepository();
     const schemas = new Map([["posts", postsSchema()]]);
+    const view = recentPostsView();
+    const correlatedView = {
+      ...view,
+      spec: {
+        ...view.spec,
+        params: {
+          type: "object" as const,
+          properties: { requestKey: { type: "string" as const, "x-mcp-hint": "idempotency-key" as const } },
+        },
+      },
+    };
     return new McpJsonRpcDispatcher(
       {
         getEntry: new GetEntryUseCase(store),
@@ -1244,7 +1255,7 @@ describe("McpJsonRpcDispatcher — tools/call audit sink", () => {
         executeView: { execute: executeView },
       },
       [postsSchema()],
-      { surface: "public", capabilities: [viewCapability(recentPostsView())], audit },
+      { surface: "public", capabilities: [viewCapability(correlatedView)], audit },
     );
   }
 
@@ -1260,7 +1271,7 @@ describe("McpJsonRpcDispatcher — tools/call audit sink", () => {
     const deferred: Promise<unknown>[] = [];
     const ctx: HandlerContext = { ...mcpContext("u1", null, { clientId: "claude" }), waitUntil: (p) => { deferred.push(p); } };
 
-    const ok = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "query_view_recent_posts", arguments: { operationId: "op-1" } }), ctx);
+    const ok = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "query_view_recent_posts", arguments: { requestKey: "op-1" } }), ctx);
     fail = true;
     const denied = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "query_view_recent_posts", arguments: {} }), ctx);
     expect(ok.status).toBe(200);
@@ -1293,9 +1304,9 @@ describe("McpJsonRpcDispatcher — tools/call audit sink", () => {
   it("records probes for tools that do not exist", async () => {
     const events: unknown[] = [];
     const dispatcher = auditedDispatcher({ record: (e) => { events.push(e); } }, async () => ({ ok: true, result: {} }));
-    const res = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "nope", arguments: {} }), mcpContext());
+    const res = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "nope", arguments: { operationId: "probe-1" } }), mcpContext());
     expect(((await res.json()) as { error: { code: number } }).error.code).toBe(-32601);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(events).toEqual([expect.objectContaining({ tool: "nope", outcome: "UNKNOWN_TOOL" })]);
+    expect(events).toEqual([expect.objectContaining({ tool: "nope", operationId: "probe-1", outcome: "UNKNOWN_TOOL" })]);
   });
 });

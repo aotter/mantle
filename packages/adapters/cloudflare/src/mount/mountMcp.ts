@@ -1,5 +1,7 @@
 import {
   McpJsonRpcDispatcher,
+  buildMcpAuditOperationIdResolver,
+  buildMcpToolCatalog,
   projectCallableCapabilities,
   readJsonBody,
 } from "@aotter/mantle-runtime";
@@ -37,6 +39,11 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
 ): ExportedHandler<Env> {
   const { ref, surface, resource } = options;
   const requiredScopes = options.requiredScopes ?? ["mcp"];
+  const capabilities = projectCallableCapabilities(ref.plan, { surface });
+  const auditOperationId = buildMcpAuditOperationIdResolver(buildMcpToolCatalog(
+    Object.values(ref.plan.schemas).map(({ manifest }) => manifest),
+    { surface, capabilities },
+  ));
   // Key the cached dispatcher to the runtime identity. Without this,
   // if `ref.get()` rejects + resets and the next call returns a new
   // runtime instance, the cached dispatcher would silently keep
@@ -69,7 +76,7 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
       // Denials are audit events too: a probing token never reaches the
       // dispatcher, so the trail is written here, with the same event shape.
       const denied = (denial: { readonly status: 401 | 403; readonly reason: string }, ctx?: HandlerContext) => {
-        auditDenial(ref.audit, request, surface, denial.reason, ctx, waitUntil);
+        auditDenial(ref.audit, request, surface, denial.reason, ctx, waitUntil, auditOperationId);
         return oauthDenied(resource, requiredScopes, denial);
       };
       if (gate.kind === "deny") return denied(gate, gate.context);
@@ -149,7 +156,7 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
             [...runtime.schemas.values()],
             {
               surface,
-              capabilities: projectCallableCapabilities(ref.plan, { surface }),
+              capabilities,
               serverInfo,
               audit: ref.audit,
             },
@@ -205,6 +212,7 @@ function auditDenial(
   reason: string,
   ctx: HandlerContext | undefined,
   waitUntil: ((promise: Promise<unknown>) => void) | undefined,
+  auditOperationId: ReturnType<typeof buildMcpAuditOperationIdResolver>,
 ): void {
   if (!audit) return;
   const at = Date.now();
@@ -217,12 +225,14 @@ function auditDenial(
     .then((body: unknown) => {
       const message = body as {
         method?: unknown;
-        params?: { name?: unknown; arguments?: { operationId?: unknown } };
+        params?: { name?: unknown; arguments?: Record<string, unknown> };
       } | null;
       if (!message || typeof message !== "object") return { tool: AUDIT_UNREADABLE_TOOL, operationId: null };
       if (message.method !== "tools/call" || typeof message.params?.name !== "string") return null;
-      const operationId = message.params.arguments?.operationId;
-      return { tool: message.params.name, operationId: typeof operationId === "string" ? operationId : null };
+      return {
+        tool: message.params.name,
+        operationId: auditOperationId(message.params.name, message.params.arguments ?? {}),
+      };
     }, () => ({ tool: AUDIT_UNREADABLE_TOOL, operationId: null }))
     .then((call) => {
       if (!call) return;
