@@ -29,6 +29,7 @@ if (process.argv[2] === "--self-test") {
   const steps = [...workflow.matchAll(/^      - name: (.+)$/gm)].map((match) => match[1]);
   const ordered = [
     "Check Core source",
+    "Record published packages",
     "Pack release tarballs", "Verify release credentials", "Create immutable Core tag",
     "Publish to npmjs", "Verify immutable npm artifacts", "Mirror to GitHub Packages",
     "Verify public-registry Core in the reference Worker",
@@ -52,8 +53,22 @@ if (process.argv[2] === "--self-test") {
   assert.match(workflow, /node scripts\/check-worker-consumer\.mjs --registry "\$VERSION"/);
   assert.match(
     workflow,
-    /if \[ "\$TAG_EXISTS" = true \]; then[\s\S]*skipping the public-registry Worker gate/,
+    /- name: Record published packages\n        id: pkgs\n[\s\S]*if \[ "\$TAG_EXISTS" = true \]; then\n\s+missing=0\n\s+for pkg in \$PKG_NAMES; do\n\s+npm view "\$pkg@\$VERSION" version --registry https:\/\/registry\.npmjs\.org/,
   );
+  assert.match(
+    workflow,
+    /- name: Pack release tarballs\n        if: steps\.pkgs\.outputs\.published != 'true'/,
+  );
+  assert.match(
+    workflow,
+    /- name: Verify immutable npm artifacts\n        if: steps\.pkgs\.outputs\.published != 'true'/,
+  );
+  assert.match(
+    workflow,
+    /if \[ "\$PACKAGES_PUBLISHED" = true \]; then\n\s+echo "Tagged recovery: all packages already exist on npmjs at \$VERSION; skipping the public-registry Worker gate\."/,
+  );
+  assert.match(workflow, /tagged recovery will not pack a replacement from the controller tip/);
+  assert.doesNotMatch(workflow, /git checkout "\$CORE_SHA"/);
   assert.doesNotMatch(workflow, /continue-on-error:/);
 
   const gate = workflow.indexOf("Verify public-registry Core in the reference Worker");
