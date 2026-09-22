@@ -48,6 +48,28 @@ if (process.argv[2] === "--self-test") {
   assert.match(workflow, /run: node scripts\/check-worker-consumer\.mjs --registry "\$VERSION"/);
   assert.doesNotMatch(workflow, /continue-on-error:/);
 
+  const gate = workflow.indexOf("Verify public-registry Core in the reference Worker");
+  const npmPromote = workflow.indexOf("- name: Promote npmjs channel tags");
+  const gprPromote = workflow.indexOf("- name: Promote GitHub Packages channel tags");
+  const githubRelease = workflow.indexOf("- name: Create GitHub release");
+  const removals = [...workflow.matchAll(/(?:gpr_npm |npm )dist-tag rm[^\n]*/g)];
+  assert.equal(removals.length, 2);
+  assert.match(removals[0][0], /^npm dist-tag rm "\$pkg" mantle-release /);
+  assert.match(removals[1][0], /^gpr_npm dist-tag rm "\$pkg" mantle-release$/);
+  assert.ok(removals[0].index > npmPromote && removals[0].index < gprPromote);
+  assert.ok(removals[1].index > gprPromote && removals[1].index < githubRelease);
+  assert.ok(workflow.indexOf("dist-tag add", npmPromote) < removals[0].index);
+  assert.ok(workflow.indexOf("dist-tag add", gprPromote) < removals[1].index);
+  assert.equal(workflow.slice(0, gate).includes("dist-tag rm"), false);
+  const publishTags = [...workflow.matchAll(/--tag mantle-release/g)];
+  assert.equal(publishTags.length, 2);
+  assert.ok(publishTags[0].index < gate && publishTags[1].index < gate);
+  const dropAfterPromote = [...workflow.matchAll(
+    /for pkg in \$PKG_NAMES; do\n {12}for channel in \$\(node scripts\/release-tag-order\.mjs --channels "\$VERSION"\); do\n {14}promote "\$pkg" "\$channel"\n {12}done\n {12}drop_temp_tag "\$pkg"\n {10}done/g,
+  )];
+  assert.equal(dropAfterPromote.length, 2);
+  assert.doesNotMatch(workflow, /npm unpublish|dist-tag rm "\$pkg" (?!mantle-release\b)/);
+
   console.log("release self-test passed");
   process.exit(0);
 }

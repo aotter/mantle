@@ -15,9 +15,9 @@ No task implicitly authorizes publication; no manual package/tag writer exists.
 |---|---|---|
 | Reviewed source; unused version | Core source/packed-consumer gates, then immutable Core tag | Exact canonical merged PR SHA and version required |
 | Tag exists; registry candidates partial | Existing npm/GPR publication steps | Verify existing artifact identity; publish missing versions only |
-| Registry candidates verified | Public-registry reference consumer gate | No mutation; failure leaves public channels unchanged |
-| Consumer passes | Monotonic npm/GPR channel promotion | Same version is a no-op; older runs cannot move a channel backward |
-| Channels promoted/preserved newer | GitHub release step | Existing release identity or fail |
+| Registry candidates verified | Public-registry reference consumer gate | No mutation; failure leaves public channels and `mantle-release` unchanged |
+| Consumer passes | That registry's promote step: monotonic channel add, then `dist-tag rm` of `mantle-release` only | Same version is a no-op; older runs cannot move a channel backward. Removal runs only after that package's promote loop, and only when `mantle-release` points at this version. A missing tag is a no-op. A tag pointing at another version is left for that version's promote step. `alpha` / `beta` / `rc` / `latest` are never removed |
+| Channels promoted or preserved, and the temp tag cleared or left | GitHub release step | Existing release identity or fail |
 
 The public-registry gate uses a disposable copy of the directly authored
 `docs/examples/host-minimal-worker` reference, installs the exact candidate, then
@@ -39,9 +39,18 @@ foundational blocker returns to the state table and the user for a scope
 decision instead of starting another local redesign loop.
 
 Invariants: immutable versions/tags retain their identity; registry integrity
-and the published-consumer gate precede public channel promotion; retries
-cannot move channels backward. No downstream mutation, unpublish or rollback
-is introduced. The runnable release-order check guards these transitions.
+and the published-consumer gate precede public channel promotion and any
+removal of `mantle-release`; retries cannot move channels backward. No
+downstream mutation, unpublish or rollback is introduced. The runnable
+release-order check guards these transitions.
+
+Mutation boundaries for dist-tags: `Publish to npmjs` and `Mirror to GitHub
+Packages` may attach `mantle-release` while publishing a version. `Promote
+npmjs channel tags` is the only step that moves npmjs channels or removes
+that tag. `Promote GitHub Packages channel tags` is the only step that does
+the same for GitHub Packages. Recovery of a partial promotion or a leftover
+temp tag reruns that same promote step for the same version. It does not add
+another writer.
 
 ## Branches and channels
 
@@ -63,6 +72,10 @@ is introduced. The runnable release-order check guards these transitions.
   approval, resolved threads and a current-base `Typecheck + tests` check.
 - Stable is the only release that moves `latest`. A prerelease channel keeps
   its last version when a later stable publishes.
+- Publish uses `--tag mantle-release`, so publication does not move
+  `alpha`, `beta`, `rc`, or `latest`. After the public-registry consumer
+  gate, each registry's promote step moves the real channel and then removes
+  `mantle-release` when that tag points at this version.
 
 ## Prepare and run
 
@@ -176,7 +189,8 @@ registries. Existing artifacts on retry must have matching integrity.
 
 Completion requires the Core tag SHA, all eleven npmjs/GPR packages, exact
 integrity, no workspace dependencies, a passing public-registry Worker gate,
-correct channel tags and the GitHub release. Retain run links and gate evidence.
+correct channel tags, no `mantle-release` tag left on this version, and the
+GitHub release. Retain run links and gate evidence.
 This does not prove stable production soak or upgrade safety; the version's
 release-gate issue owns those acceptance requirements. An agent acceptance run
 uses only the version-matched authoring instructions, not an SDK checkout or
