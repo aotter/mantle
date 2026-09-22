@@ -97,7 +97,7 @@ a native column. Declared `indexes` and `uniqueIndexes` become B-tree indexes
 over those columns; Core-compiled projections, filters and ordering reference
 the same columns directly.
 
-Declare the **smallest ordered index justified by the measured path**, and respect SQLite's leftmost-prefix rule. An index on `[locale, publishedAt]` serves `WHERE locale = ?`, `WHERE locale = ? AND publishedAt > ?`, and `WHERE locale = ? ORDER BY publishedAt`. It does not serve `WHERE publishedAt > ?` alone. If a second hot path needs a different leading field, that is a second index — not a reason to enumerate every permutation, since each index costs storage and slows every write.
+Declare the **smallest ordered index justified by the measured path**, and respect SQLite's leftmost-prefix rule. Equality columns go first, the ordered column last. A public View over a publishing Schema always carries `status = published`, so its index leads with `status`: `[status, locale, publishedAt]` serves `WHERE status = ? AND locale = ?`, `… AND publishedAt > ?`, and `… ORDER BY publishedAt`. It does not serve `WHERE publishedAt > ?` alone, and `[publishedAt]` alone does not serve the published list — without planner statistics SQLite prefers the status equality and sorts in a temporary B-tree. If a second hot path needs a different leading field, that is a second index — not a reason to enumerate every permutation, since each index costs storage and slows every write.
 
 ```sh
 pnpm exec mantle-harness indexes --require-public --format text
@@ -139,7 +139,7 @@ spec:
   limit: 50
 ```
 
-The source Schema declares `indexes: [[locale, publishedAt]]`. The `gte publishedAt 0` clause is what keeps the ordered column inside the indexed range rather than forcing a sort. Omitting `locale` returns 400.
+The source Schema declares `indexes: [[status, locale, publishedAt]]`; the `status` predicate is present whether or not the View writes it. The `gte publishedAt 0` clause is what keeps the ordered column inside the indexed range rather than forcing a sort. Omitting `locale` returns 400.
 
 ## Example: a staff SQL report
 

@@ -14,7 +14,7 @@ A Schema declares one collection: the JSON Schema for each entry's `data`, its i
 | `schema` | JSON Schema 2020-12 | yes | — | Must be an object. Walked by the [subset validator](#json-schema-subset). |
 | `uiSchema` | object | no | — | Accepts `fields`, `list`, and `nav`. Violations are `SCHEMA_UI_INVALID`. |
 | `uniqueIndexes` | `string[][]` | no | `[]` | Ordered tuples of top-level scalar fields. See [Indexes](#indexes). |
-| `indexes` | `string[][]` | no | `[]` | Ordered non-unique tuples. Must not repeat a `uniqueIndexes` tuple. |
+| `indexes` | `string[][]` | no | `[]` | Ordered non-unique tuples of data fields and native entry columns. Must not repeat a `uniqueIndexes` tuple. |
 | `searchableFields` | `string[]` | no | `[]` | Top-level string fields for Admin and Staff MCP substring search. |
 | `localized` | boolean | no | `false` | When `false`, a `locale` property is rejected. Must be a boolean. |
 | `translates` | `{ parent, on }` | no | — | Marks a translation child. Requires `localized: true`. |
@@ -22,7 +22,7 @@ A Schema declares one collection: the JSON Schema for each entry's `data`, its i
 
 ### Reserved entry columns
 
-Every entry carries `id`, `status`, `version`, `createdAt`, `updatedAt` and `authorId` as native columns outside `data`. They cannot be indexed (`SCHEMA_INDEX_INVALID`) but are valid in View `fields`, `filter`, `orderBy` and `uiSchema.list`. `locale` is a reserved data field: only a localized Schema may declare it, and the runtime requires it on writes to a localized Schema. Do not name data properties after the native columns; SQL Views project the native column. Do not declare `expectedVersion` under `spec.schema.properties` — that name is the reserved Procedure OCC token; validate fails closed with `INVALID_MANIFEST_ENVELOPE` (ADR-0022). New reserved Procedure input names need an ADR.
+Every entry carries `id`, `status`, `version`, `createdAt`, `updatedAt` and `authorId` as native columns outside `data`. They are valid in View `fields`, `filter`, `orderBy` and `uiSchema.list`, and `indexes` may include them (`uniqueIndexes` may not). A data property may not reuse one of these names: validate fails closed with `INVALID_MANIFEST_ENVELOPE` at `/spec/schema/properties/<name>`, because SQLite-family and IndexedDB storage would otherwise resolve the name differently and an index declared today could change meaning when a same-named property is added later. Use a domain name instead (`submittedAt`, `orderStatus`, `submittedBy`); the native column is still there and still readable. `locale` is a reserved data field: only a localized Schema may declare it, and the runtime requires it on writes to a localized Schema. Do not name data properties after the native columns; SQL Views project the native column. Do not declare `expectedVersion` under `spec.schema.properties` — that name is the reserved Procedure OCC token; validate fails closed with `INVALID_MANIFEST_ENVELOPE` (ADR-0022). New reserved Procedure input names need an ADR.
 
 ## Example
 
@@ -191,13 +191,21 @@ Keep implementation-detail children fold-only. Use `nav.standalone: true` when s
 | When any index is declared, `metadata.name` matches `/^[A-Za-z][A-Za-z0-9_.-]*$/`. | `SCHEMA_INDEX_INVALID` at `/metadata/name` |
 | Each tuple is a non-empty array of strings. | `INVALID_MANIFEST_ENVELOPE` (shape) or `SCHEMA_INDEX_INVALID` (empty) |
 | No field repeats within a tuple; field names match the same safe pattern. | `SCHEMA_INDEX_INVALID` |
-| Fields are not reserved entry columns. | `SCHEMA_INDEX_INVALID` |
-| Fields are exact top-level keys of `properties`. | `UNIQUE_INDEX_FIELD_UNKNOWN` or `SCHEMA_INDEX_FIELD_UNKNOWN` |
+| `uniqueIndexes` fields are data properties. `indexes` fields may also be the native columns `id`, `status`, `version`, `createdAt`, `updatedAt`, `authorId`, which map to their `_mantle_*` columns. | `SCHEMA_INDEX_INVALID` |
+| Data fields are exact top-level keys of `properties`. | `UNIQUE_INDEX_FIELD_UNKNOWN` or `SCHEMA_INDEX_FIELD_UNKNOWN` |
 | Fields are indexable scalars: exactly one non-null type, optionally nullable. `string` maps to TEXT, `integer` and `boolean` to INTEGER, `number` to REAL. | `SCHEMA_INDEX_INVALID` |
 | No tuple repeats within a list; `indexes` does not repeat a `uniqueIndexes` tuple. | `SCHEMA_INDEX_INVALID` |
 
 On SQLite storage each Schema is a native table and every tuple becomes an
 index over its native field columns; queries benefit from a leftmost prefix.
+
+A public View over a `publishing` Schema is compiled with `status = published`
+whether or not the manifest writes it ([View surfaces](./view.md#surfaces)), so
+its hot path always starts with an equality on `status`. Lead the index with
+it, then the ordered field: `indexes: [[status, publishedAt]]`. A bare
+`[[publishedAt]]` does not serve that query on production SQLite (no planner
+statistics), which sorts every published row in a temporary B-tree instead
+(#962). Declare the index the query needs; Mantle does not derive one.
 Unique indexes are also checked before every write; a conflicting row is
 `CONFLICT`. After the first deployment, adding, removing, reordering, or changing
 any `uniqueIndexes` tuple is destructive and requires rebuilding the instance

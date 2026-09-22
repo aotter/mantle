@@ -243,9 +243,11 @@ function fieldExpr(field: string, schema?: SchemaManifest): string {
 }
 
 function fieldRefExpr(field: string, schema?: SchemaManifest): string {
-  if (schema && Object.hasOwn(schema.spec.schema.properties ?? {}, field)) return quoteIdent(field);
+  // Native columns win, matching IndexedDB and the index DDL; the parser
+  // rejects data properties with these names, so nothing is shadowed (#1008).
   const reserved = RESERVED_COLUMN[field];
   if (reserved) return reserved;
+  if (schema && Object.hasOwn(schema.spec.schema.properties ?? {}, field)) return quoteIdent(field);
   if (!schema) return quoteIdent(field);
   const column = fieldSql(schema, field);
   if (!column) throw new Error(`View references unknown Schema field '${field}'.`);

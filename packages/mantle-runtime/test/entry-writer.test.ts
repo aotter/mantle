@@ -110,22 +110,6 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
     });
   });
 
-  it("uses the authored id column for both ordering and cursor values", async () => {
-    const authored: SchemaManifest = {
-      ...schema,
-      metadata: { name: "authored_ids" },
-      spec: { ...schema.spec, schema: { type: "object", properties: { id: { type: "string" } } } },
-    };
-    await db.migrations.runAll(schemaTableMigrations([authored]));
-    const authoredRepo = new DatabaseEntryRepository(db, new Map([["authored_ids", authored]]));
-    await authoredRepo.create({ id: "a", collection: "authored_ids", status: "draft", data: { id: "z" }, authorId: null, now: 1 });
-    await authoredRepo.create({ id: "b", collection: "authored_ids", status: "draft", data: { id: "y" }, authorId: null, now: 2 });
-    const first = await authoredRepo.list({ collection: "authored_ids", limit: 1, sort: { field: "id", direction: "asc" } });
-    const second = await authoredRepo.list({ collection: "authored_ids", limit: 1, sort: { field: "id", direction: "asc" }, cursor: first.nextCursor });
-    expect(first.rows.map((row) => row.data.id)).toEqual(["y"]);
-    expect(second.rows.map((row) => row.data.id)).toEqual(["z"]);
-  });
-
   it("update bumps version + persists data", async () => {
     await repo.create({
       id: "p1",

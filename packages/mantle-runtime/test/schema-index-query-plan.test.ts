@@ -79,6 +79,52 @@ describe("native Schema tables", () => {
     }
   });
 
+  it("serves a public publishing list from a status-led composite index without a temp sort (#1008)", () => {
+    const posts: SchemaManifest = {
+      apiVersion: "cms.mantle.aotter.net/v1",
+      kind: "Schema",
+      metadata: { name: "posts" },
+      spec: {
+        title: "Posts",
+        schema: { type: "object", properties: { slug: { type: "string" }, publishedAt: { type: "number" } } },
+        uniqueIndexes: [["slug"]],
+        indexes: [["status", "publishedAt"]],
+      },
+    };
+    const db = new DatabaseSync(":memory:");
+    try {
+      for (const migration of CANONICAL_MIGRATIONS) db.exec(migration.sql);
+      const migrations = schemaTableMigrations([posts]);
+      for (const migration of migrations) db.exec(migration.sql);
+      expect(migrations.map((m) => m.sql).join("\n")).toContain(`ON "posts"("_mantle_status", "publishedAt")`);
+      const insert = db.prepare(`INSERT INTO posts (_mantle_id, _mantle_status, _mantle_version, _mantle_author_id, _mantle_created_at, _mantle_updated_at, slug, publishedAt) VALUES (?, ?, 1, NULL, ?, ?, ?, ?)`);
+      for (let index = 0; index < 5000; index += 1) insert.run(`p${index}`, "published", index, index, `s${index}`, index);
+      // Deliberately no ANALYZE: production SQLite-family storage never runs it (#962).
+      const manifest: ViewManifest = {
+        apiVersion: "cms.mantle.aotter.net/v1",
+        kind: "View",
+        metadata: { name: "published-posts" },
+        spec: {
+          surface: "public",
+          from: "posts",
+          fields: ["id", "slug", "publishedAt"],
+          filter: { gte: { field: "publishedAt", value: 0 } },
+          orderBy: [{ field: "publishedAt", direction: "desc" }],
+          limit: 50,
+        },
+      };
+      const compiled = compileView(manifest, {}, posts);
+      expect(compiled.sql).toContain("_mantle_status = ?");
+      const plan = db.prepare(`EXPLAIN QUERY PLAN ${compiled.sql}`)
+        .all(...compiled.params as SQLInputValue[]) as Array<{ detail: string }>;
+      const details = plan.map(({ detail }) => detail).join(" | ");
+      expect(details).toMatch(/SEARCH posts USING INDEX m_[0-9a-f]+_index_[0-9a-f_]+ \(_mantle_status=\? AND publishedAt>\?\)/);
+      expect(details).not.toContain("USE TEMP B-TREE");
+    } finally {
+      db.close();
+    }
+  });
+
   it("enforces declared native unique indexes", () => {
     const db = new DatabaseSync(":memory:");
     try {

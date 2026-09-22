@@ -234,7 +234,7 @@ function rowBindingManifests(): Manifest[] {
       metadata: { name: "orders" },
       spec: {
         title: "Orders",
-        schema: { type: "object", properties: { id: { type: "string" } } },
+        schema: { type: "object", properties: { note: { type: "string" } } },
         // No uniqueIndexes declared — rowField must fall back to "id".
       },
     },

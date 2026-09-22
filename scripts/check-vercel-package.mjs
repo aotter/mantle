@@ -117,7 +117,7 @@ import { createVercelMantle } from "@aotter/mantle-vercel";
 import { LibsqlDatabaseDriver } from "@aotter/mantle-vercel/libsql";
 
 const fingerprintPlan = compile(${JSON.stringify(sharedFixture)});
-if (fingerprintPlan.semanticFingerprint !== "fnv1a64:fafc0e7fca1393f6") {
+if (fingerprintPlan.semanticFingerprint !== "fnv1a64:4f7d14946ee0a45b") {
   throw new Error("semantic fingerprint drifted");
 }
 const plan = compile(${JSON.stringify(runtimeFixture)});

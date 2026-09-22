@@ -334,16 +334,26 @@ ${indexYaml}
     ["duplicate field", "  indexes: [[slug, slug]]"],
     ["duplicate tuple", "  indexes: [[slug], [slug]]"],
     ["cross-kind duplicate", "  uniqueIndexes: [[slug]]\n  indexes: [[slug]]"],
-    ["reserved native alias", "  indexes: [[id]]"],
+    ["native column in uniqueIndexes", "  uniqueIndexes: [[status]]"],
     ["unsafe identifier", "  indexes: [['_slug']]"],
   ])("rejects semantic error: %s", (_label, declaration) => {
-    const extra = declaration.includes("[[id]]")
-      ? "slug: { type: string }, id: { type: string }"
-      : declaration.includes("_slug")
+    const extra = declaration.includes("_slug")
         ? "slug: { type: string }, _slug: { type: string }"
         : "slug: { type: string }";
     const result = parseSchema(declaration, extra);
     expect(result.diagnostics[0]?.code).toBe("SCHEMA_INDEX_INVALID");
+  });
+
+  it("indexes may lead with native entry columns; data properties may not reuse their names (#1008)", () => {
+    const accepted = parseSchema("  indexes: [[status, publishedAt], [createdAt], [authorId, updatedAt, id]]", "slug: { type: string }, publishedAt: { type: number }");
+    expect(accepted.diagnostics).toEqual([]);
+    for (const reserved of ["id", "status", "version", "createdAt", "updatedAt", "authorId"]) {
+      const shadowed = parseSchema("", `slug: { type: string }, ${reserved}: { type: string }`);
+      expect(shadowed.diagnostics[0]).toMatchObject({
+        code: "INVALID_MANIFEST_ENVELOPE",
+        path: expect.stringContaining(`/spec/schema/properties/${reserved}`),
+      });
+    }
   });
 
   it("preserves the legacy unique unknown-field diagnostic code", () => {
@@ -1123,7 +1133,7 @@ spec:
         schema("orders", { schema: { type: "object", properties: { status: { type: "string" } } } }),
         view("orders-public", "orders"),
       ],
-    }).diagnostics.map((diagnostic) => diagnostic.code)).toContain("VIEW_PUBLIC_STATUS_INVALID");
+    }).diagnostics.map((diagnostic) => diagnostic.code)).toContain("INVALID_MANIFEST_ENVELOPE"); // a data `status` is rejected at parse (#1008)
     expect(validateManifests({
       manifests: [
         schema("posts"),

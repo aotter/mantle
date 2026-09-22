@@ -140,10 +140,6 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
           "localized": false,
           "schema": {
             "properties": {
-              "createdAt": {
-                "type": "number",
-                "x-mantle-bind": "now",
-              },
               "customerId": {
                 "minLength": 1,
                 "type": "string",
@@ -158,6 +154,10 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
                   "closed",
                 ],
                 "type": "string",
+              },
+              "placedAt": {
+                "type": "number",
+                "x-mantle-bind": "now",
               },
             },
             "required": [
@@ -174,7 +174,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
       "name": "orders",
     },
   },
-  "semanticFingerprint": "fnv1a64:fafc0e7fca1393f6",
+  "semanticFingerprint": "fnv1a64:4f7d14946ee0a45b",
   "triggers": {
     "order-created": {
       "lifecycleSchema": "orders",
@@ -264,7 +264,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
             "id",
             "customerId",
             "orderStatus",
-            "createdAt",
+            "placedAt",
           ],
           "filter": {
             "and": [
@@ -289,7 +289,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
           "orderBy": [
             {
               "direction": "desc",
-              "field": "createdAt",
+              "field": "placedAt",
             },
           ],
           "params": {
@@ -323,7 +323,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
           "id",
           "customerId",
           "orderStatus",
-          "createdAt",
+          "placedAt",
         ],
         "filter": {
           "and": [
@@ -359,7 +359,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
         "orderBy": [
           {
             "direction": "desc",
-            "field": "createdAt",
+            "field": "placedAt",
           },
         ],
         "params": {
