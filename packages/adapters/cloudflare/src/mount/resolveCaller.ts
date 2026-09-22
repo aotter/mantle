@@ -4,7 +4,8 @@ import {
   type Diagnostic,
   type StaffRole,
 } from "@aotter/mantle-spec";
-import { STAFF_ROLE_SET, type Auth } from "../auth/createAuth.js";
+import { STAFF_ROLE_SET, type MantleAuth as Auth } from "@aotter/mantle-auth";
+import { rejectCrossOriginMutation } from "@aotter/mantle-admin";
 
 export type ConsumerCredentialResolution =
   | { readonly kind: "not-handled" }
@@ -38,7 +39,13 @@ export interface ResolveCallerOptions {
   };
   readonly env?: unknown;
   readonly waitUntil?: (promise: Promise<unknown>) => void;
+  /** Optional observability wrapper around the two I/O steps: bearer
+   *  verification (`oauth`) and the fresh role read (`role`). */
+  readonly phase?: PhaseHook;
 }
+
+export type PhaseHook = <T>(phase: "oauth" | "role", run: () => Promise<T>) => Promise<T>;
+const runDirect: PhaseHook = (_phase, run) => run();
 
 export type CallerResolution =
   | {
@@ -49,6 +56,8 @@ export type CallerResolution =
       readonly kind: "invalid";
       readonly status: 401 | 403;
       readonly diagnostic: Diagnostic;
+      /** Verifier reason (e.g. `invalid-dpop-proof`) for transports that render a challenge. */
+      readonly reason: string;
     };
 
 /** Normalize consumer credentials, OAuth bearer, or cookie session in
@@ -62,6 +71,7 @@ export async function resolveCaller(
     env: options.env ?? {},
     ...(options.waitUntil ? { waitUntil: options.waitUntil } : {}),
   };
+  const phase = options.phase ?? runDirect;
 
   if (options.credentialResolver) {
     const resolved = await options.credentialResolver(request);
@@ -80,6 +90,8 @@ export async function resolveCaller(
           },
           options.auth,
           base,
+          undefined,
+          phase,
         ),
       };
     }
@@ -87,16 +99,19 @@ export async function resolveCaller(
 
   const authorization = request.headers.get("authorization");
   if (authorization !== null) {
-    const token = /^Bearer ([^\s]+)$/i.exec(authorization)?.[1];
+    // Bearer or DPoP (sender-constrained) access tokens; the verifier checks
+    // the proof. MCP clients use DPoP, so the shared gate must admit it.
+    const token = /^(?:Bearer|DPoP) ([^\s]+)$/i.exec(authorization)?.[1];
     if (!token) {
       return invalidCredential(401);
     }
     if (!options.jwtBearer) return invalidCredential(401);
-    const verified = await options.auth.verifyOAuthAccessToken(request, {
-      audience: options.jwtBearer.audience,
-      scopes: options.jwtBearer.scopes,
-    });
-    if (!verified.ok) return invalidCredential(verified.status);
+    const jwtBearer = options.jwtBearer;
+    const verified = await phase("oauth", () => options.auth.verifyOAuthAccessToken(request, {
+      audience: jwtBearer.audience,
+      scopes: jwtBearer.scopes,
+    }));
+    if (!verified.ok) return invalidCredential(verified.status, verified.reason);
     return {
       kind: "authenticated",
       context: await contextForVerifiedUser(
@@ -109,6 +124,8 @@ export async function resolveCaller(
         },
         options.auth,
         base,
+        undefined,
+        phase,
       ),
     };
   }
@@ -133,6 +150,7 @@ export async function resolveCaller(
       options.auth,
       base,
       session.user.roleCurrent ? session.user.role ?? null : undefined,
+      phase,
     ),
   };
 }
@@ -143,10 +161,11 @@ export async function contextForVerifiedUser(
   auth: Auth,
   base: Pick<HandlerContext, "env" | "waitUntil">,
   currentRole?: string | null,
+  phase: PhaseHook = runDirect,
 ): Promise<HandlerContext> {
   const role = currentRole !== undefined
     ? currentRole
-    : userId ? await auth.getUserRole(userId) : null;
+    : userId ? await phase("role", () => auth.getUserRole(userId)) : null;
   const staff =
     userId && role && STAFF_ROLE_SET.has(role)
       ? { id: userId, role: role as StaffRole }
@@ -159,10 +178,11 @@ export async function contextForVerifiedUser(
   };
 }
 
-function invalidCredential(status: 401 | 403): CallerResolution {
+function invalidCredential(status: 401 | 403, reason?: string): CallerResolution {
   return {
     kind: "invalid",
     status,
+    reason: reason ?? (status === 403 ? "insufficient-scope" : "invalid-credential"),
     diagnostic: runtimeDiagnostic({
       code: status === 401 ? "UNAUTHENTICATED" : "AUTH_DENIED",
       severity: "error",
@@ -177,4 +197,78 @@ function invalidCredential(status: 401 | 403): CallerResolution {
           : "The verified credential lacks a required server scope.",
     }),
   };
+}
+
+/** Which callers a transport surface admits before the target's own `requires` runs. */
+export type SurfacePolicy = "public" | "staff";
+
+export type CallerGate =
+  | { readonly kind: "allow"; readonly context: HandlerContext }
+  | {
+      readonly kind: "deny";
+      readonly status: 401 | 403;
+      readonly diagnostic: Diagnostic;
+      /** `invalid-credential`, `invalid-dpop-proof`, `insufficient-scope`, `cross-origin`, `unauthenticated` or `insufficient-role`. */
+      readonly reason: string;
+      /** The identity the gate did establish before refusing (role and
+       *  origin denials). Absent when the credential itself was invalid. */
+      readonly context?: HandlerContext;
+    };
+
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * The one caller gate every transport shares (#977). It resolves identity
+ * through `resolveCaller`, applies the cross-origin guard only when the
+ * credential is a cookie session, and lets `surface` decide exactly one
+ * thing: whether `ctx.staff` is required. `public` admits anonymous callers;
+ * the target's `requires.auth` and guard still run on every invocation, so
+ * enforcement stays where the manifest declares it rather than at the
+ * transport. Transports differ only in how they render a denial.
+ */
+export async function gateCaller(
+  request: Request,
+  options: ResolveCallerOptions & { readonly surface?: SurfacePolicy },
+): Promise<CallerGate> {
+  const caller = await resolveCaller(request, options);
+  if (caller.kind === "invalid") {
+    return { kind: "deny", status: caller.status, diagnostic: caller.diagnostic, reason: caller.reason };
+  }
+  if (caller.context.auth?.credential === "session" && !SAFE_METHODS.has(request.method)) {
+    const rejected = rejectCrossOriginMutation(request);
+    if (rejected) {
+      return {
+        kind: "deny",
+        status: 403,
+        reason: "cross-origin",
+        context: caller.context,
+        diagnostic: runtimeDiagnostic({
+          code: "AUTH_DENIED",
+          severity: "error",
+          path: "request:origin",
+          expected: "a same-origin request when the credential is a cookie session",
+          message: "Cross-origin session mutation rejected.",
+        }),
+      };
+    }
+  }
+  if (options.surface === "staff" && !caller.context.staff) {
+    const anonymous = caller.kind === "anonymous";
+    return {
+      kind: "deny",
+      status: anonymous ? 401 : 403,
+      reason: anonymous ? "unauthenticated" : "insufficient-role",
+      context: caller.context,
+      diagnostic: runtimeDiagnostic({
+        code: anonymous ? "UNAUTHENTICATED" : "AUTH_DENIED",
+        severity: "error",
+        path: "request:surface",
+        expected: "a staff caller on the staff surface",
+        message: anonymous
+          ? "The staff surface requires a signed-in staff caller."
+          : "The caller is signed in but holds no staff role.",
+      }),
+    };
+  }
+  return { kind: "allow", context: caller.context };
 }

@@ -1,6 +1,7 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import {
   RESERVED_ENTRY_COLUMNS,
+  resolveLifecycle,
   type FilterAst,
   type SchemaManifest,
   type ViewManifest,
@@ -71,13 +72,12 @@ export function inspectIndexCoverage(
     for (const migration of CANONICAL_MIGRATIONS) db.exec(migration.sql);
     for (const migration of schemaTableMigrations(schemas)) db.exec(migration.sql);
     seedSchemas(db, schemas, rowsPerSchema);
-    db.exec("ANALYZE");
 
     const paths = views.map((view) => inspectView(
       db,
       view,
       view.spec.from ? schemasByName.get(view.spec.from) : undefined,
-      (options.requirePublic === true && view.spec.surface !== "staff") ||
+      (options.requirePublic === true && view.spec.surface === "public") ||
         requiredNames.has(view.metadata.name),
     ));
     const viewNames = new Set(views.map((view) => view.metadata.name));
@@ -183,6 +183,7 @@ function seedSchemas(
   rowsPerSchema: number,
 ): void {
   for (const schema of schemas) {
+    const operational = resolveLifecycle(schema) === "operational";
     const fields = Object.keys(schema.spec.schema.properties ?? {});
     const insert = db.prepare(
       `INSERT OR IGNORE INTO ${quoteIdent(schema.metadata.name)}
@@ -198,7 +199,7 @@ function seedSchemas(
       const data = sampleData(schema, index, singleUnique);
       insert.run(
         `${schema.metadata.name}-${index}`,
-        index % 5 === 0 ? "published" : "draft",
+        operational || index % 5 === 0 ? "published" : "draft",
         1,
         null,
         index,

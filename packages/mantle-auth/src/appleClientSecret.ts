@@ -29,7 +29,10 @@
  *   privateKey: env.APPLE_PRIVATE_KEY,  // contents of the .p8 file
  *   audience: env.APPLE_SERVICES_ID,    // your Services ID
  * });
- * const auth = createAuth({
+ * const auth = createMantleAuth({
+ *   // Host-trusted ingress header(s). Cloudflare createAuth() wraps this
+ *   // constructor and supplies the platform header automatically.
+ *   ipAddressHeaders: ["x-real-ip"],
  *   methods: [{
  *     kind: "social",
  *     provider: "apple",
@@ -129,7 +132,7 @@ async function importApplePrivateKey(input: string): Promise<CryptoKey> {
   );
 }
 
-function decodePrivateKeyToDer(input: string): Uint8Array {
+function decodePrivateKeyToDer(input: string): Uint8Array<ArrayBuffer> {
   // Strip PEM markers + all whitespace; tolerate the bare-base64 path too.
   const body = input.replace(PEM_MARKERS_RE, "").replace(/\s+/g, "");
   if (body.length === 0) {
@@ -152,7 +155,7 @@ function base64UrlEncode(bytes: Uint8Array): string {
   return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function base64ToBytes(b64: string): Uint8Array {
+function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);

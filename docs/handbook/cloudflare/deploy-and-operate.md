@@ -36,6 +36,10 @@ pnpm exec mantle-harness indexes --require-public --format text
 
 A required path fails on a required Schema-table scan, a temporary sort or an unindexed data-field predicate. Then dry-run and deploy:
 
+This local SQLite check intentionally runs without planner statistics. Treat it
+as a conservative preflight; use post-deploy D1 metrics for production cost and
+latency claims.
+
 ```sh
 wrangler deploy --dry-run
 wrangler deploy

@@ -7,6 +7,26 @@
 3. **Bug or feature request** — file an [issue](https://github.com/aotter/mantle/issues/new/choose).
 4. **Security** — do **not** open a public issue. See [SECURITY.md](./SECURITY.md).
 
+## For AI agents
+
+**Consumers** (authoring or embedding a Mantle application): start with the
+install skill, then the CLI and handbook.
+
+```sh
+npx skills add aotter/mantle --skill install
+```
+
+Follow [`skills/install/SKILL.md`](skills/install/SKILL.md) and
+[task-specific agent prompts](docs/agent-prompts.md). After
+`@aotter/mantle` is installed, the same files live under
+`node_modules/@aotter/mantle/`. Interview for host and surfaces before writing
+files. Authoring docs and the CLI are how you learn Mantle; a deployed
+`/mcp` catalog is the live app's Manifest → RuntimePlan verbs, not a second
+getting-started guide.
+
+**Contributors** (changing this SDK): [`AGENTS.md`](./AGENTS.md) is the
+contributor router. It is not shipped in the npm tarball.
+
 ## Legacy Starters
 
 The retired alpha.17 Starter source and bundles remain in
@@ -17,8 +37,3 @@ legacy issues there. New applications use [direct authoring](docs/handbook/start
 
 No paid support tier today. Aotter does not provide commercial SLA or production on-call for community
 users. For commercial engagement, contact `phsu@aotter.net`.
-
-## AI-agent tip
-
-If you're an AI agent (Claude / Codex / Cursor) helping a user with this project, see
-[`AGENTS.md`](./AGENTS.md) for the agent entry point.

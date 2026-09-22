@@ -7,6 +7,20 @@
 #
 # Duplicate dispatches verify the same immutable state and skip existing
 # registry/tag/release mutations. No downstream repository is mutated.
+#
+# Publish attaches the internal candidate dist-tag mantle-release. That tag
+# is an intentional leftover pointing at the last published candidate and is
+# not cleared. Consumers must not install it. Official channels are only
+# alpha, beta, rc, and latest.
+#
+# If v$VERSION already points at an ancestor of the dispatched tip and
+# package versions on the tip still match, Resolve keeps that tag SHA as
+# the release identity. A controller-only fix on the tip can finish
+# promotion without retagging. Tagged recovery skips the Core source
+# check because that tree was already released from the immutable tag.
+# When that tag exists and every npmjs package at the version is already
+# published, skip pack and immutable tarball compare. The controller tip
+# must not rebuild published artifact identity.
 
 name: release
 
@@ -30,7 +44,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Single source of truth for the ten public packages, in dependency order.
+    # Single source of truth for the eleven public packages, in dependency order.
     # Names are read from these package.json files during packing.
     env:
       PKG_DIRS: >-
@@ -40,6 +54,7 @@ jobs:
         packages/adapters/indexeddb
         packages/mantle-web
         packages/mantle-admin
+        packages/mantle-auth
         packages/adapters/bun
         packages/adapters/vercel
         packages/adapters/cloudflare
@@ -72,14 +87,41 @@ jobs:
             exit 1
           }
           TAG="v$VERSION"
-          CORE_SHA=$(git rev-parse HEAD)
+          HEAD_SHA=$(git rev-parse HEAD)
+          CORE_SHA=$HEAD_SHA
           SOURCE_BRANCH=main
           [[ "$VERSION" =~ -alpha(\.|$) ]] && SOURCE_BRANCH=develop
           git fetch origin --tags
           TAG_SHA=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" || true)
-          if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$CORE_SHA" ]; then
-            echo "::error::$TAG already points to $TAG_SHA, not controller commit $CORE_SHA"
-            exit 1
+          # Partial-release recovery. The version tag already owns the release
+          # SHA; this tip only carries controller fixes. Do not retag.
+          if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$HEAD_SHA" ]; then
+            ROOT_VERSION=$(node -p "require('./package.json').version")
+            [ "$ROOT_VERSION" = "$VERSION" ] || {
+              echo "::error::Root package.json version $ROOT_VERSION does not match $VERSION"
+              exit 1
+            }
+            git merge-base --is-ancestor "$TAG_SHA" "$HEAD_SHA" || {
+              echo "::error::$TAG at $TAG_SHA is not an ancestor of controller tip $HEAD_SHA"
+              exit 1
+            }
+            node --input-type=module -e "
+              import { globSync, readFileSync } from 'node:fs';
+              const expected = process.env.VERSION;
+              let failed = false;
+              for (const path of globSync('packages/**/package.json', {
+                exclude: ['packages/**/node_modules/**'],
+              })) {
+                const pkg = JSON.parse(readFileSync(path, 'utf8'));
+                if (pkg.version !== expected) {
+                  console.error('::error::' + path + ' version ' + pkg.version + ' does not match tagged version ' + expected);
+                  failed = true;
+                }
+              }
+              if (failed) process.exit(1);
+            "
+            echo "::warning::Recovering $TAG: tag owns the release SHA $TAG_SHA; tip $HEAD_SHA only carries controller fixes"
+            CORE_SHA=$TAG_SHA
           fi
           if [ -z "$TAG_SHA" ]; then
             git fetch origin "refs/heads/$SOURCE_BRANCH:refs/remotes/origin/$SOURCE_BRANCH"
@@ -116,6 +158,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check Core source
+        if: steps.ver.outputs.tag_exists != 'true'
         run: pnpm check
 
       - name: Verify package, plugin, and marketplace versions match ${{ steps.ver.outputs.version }}
@@ -153,19 +196,46 @@ jobs:
             if (failed) process.exit(1);
           "
 
+      - name: Record published packages
+        id: pkgs
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          TAG_EXISTS: ${{ steps.ver.outputs.tag_exists }}
+        run: |
+          set -euo pipefail
+          PKG_NAMES=""
+          for dir in $PKG_DIRS; do
+            name=$(node -p "require('./$dir/package.json').name")
+            PKG_NAMES="${PKG_NAMES:+$PKG_NAMES }$name"
+          done
+          [ -n "$PKG_NAMES" ] || {
+            echo "::error::No public packages resolved"
+            exit 1
+          }
+          echo "PKG_NAMES=$PKG_NAMES" >> "$GITHUB_ENV"
+          published=false
+          if [ "$TAG_EXISTS" = true ]; then
+            missing=0
+            for pkg in $PKG_NAMES; do
+              npm view "$pkg@$VERSION" version --registry https://registry.npmjs.org >/dev/null 2>&1 || missing=1
+            done
+            if [ "$missing" = 0 ]; then
+              published=true
+              echo "Tagged recovery: all packages already exist on npmjs at $VERSION."
+            fi
+          fi
+          echo "published=$published" >> "$GITHUB_OUTPUT"
+
       - name: Pack release tarballs
+        if: steps.pkgs.outputs.published != 'true'
         run: |
           set -euo pipefail
           node scripts/verify-release-artifact.mjs --self-test
           VERSION="${{ steps.ver.outputs.version }}"
           mkdir -p .release-tarballs
-          PKG_NAMES=""
           for dir in $PKG_DIRS; do
             pnpm -C "$dir" pack --pack-destination "$PWD/.release-tarballs"
-            name=$(node -p "require('./$dir/package.json').name")
-            PKG_NAMES="${PKG_NAMES:+$PKG_NAMES }$name"
           done
-          echo "PKG_NAMES=$PKG_NAMES" >> "$GITHUB_ENV"
 
           # Version lockstep: pnpm pack names tarballs <name>-<version>.tgz,
           # so a package whose version drifted from the tag fails here.
@@ -318,6 +388,7 @@ jobs:
           exit 1
 
       - name: Verify immutable npm artifacts
+        if: steps.pkgs.outputs.published != 'true'
         run: |
           set -euo pipefail
           VERSION="${{ steps.ver.outputs.version }}"
@@ -341,6 +412,7 @@ jobs:
       - name: Mirror to GitHub Packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGES_PUBLISHED: ${{ steps.pkgs.outputs.published }}
         run: |
           set -euo pipefail
           GPR_NPMRC="$RUNNER_TEMP/github-packages.npmrc"
@@ -361,6 +433,14 @@ jobs:
           for pkg in $PKG_NAMES; do
             base="${pkg#@}"
             tgz=".release-tarballs/${base//\//-}-$VERSION.tgz"
+            if [ "$PACKAGES_PUBLISHED" = true ]; then
+              if gpr_npm view "$pkg@$VERSION" version >/dev/null 2>&1; then
+                echo "$pkg@$VERSION already exists on GitHub Packages; skipping mirror"
+                continue
+              fi
+              echo "::error::$pkg@$VERSION is missing on GitHub Packages; tagged recovery will not pack a replacement from the controller tip"
+              exit 1
+            fi
             work="$(mktemp -d)"
             tar -xzf "$tgz" -C "$work"
             node -e "const fs=require('node:fs'); const path=process.argv[1]; const pkg=JSON.parse(fs.readFileSync(path,'utf8')); pkg.publishConfig={...(pkg.publishConfig||{}), registry:'https://npm.pkg.github.com'}; fs.writeFileSync(path, JSON.stringify(pkg,null,2)+'\n');" "$work/package/package.json"
@@ -387,7 +467,14 @@ jobs:
       - name: Verify public-registry Core in the reference Worker
         env:
           VERSION: ${{ steps.ver.outputs.version }}
-        run: node scripts/check-worker-consumer.mjs --registry "$VERSION"
+          PACKAGES_PUBLISHED: ${{ steps.pkgs.outputs.published }}
+        run: |
+          set -euo pipefail
+          if [ "$PACKAGES_PUBLISHED" = true ]; then
+            echo "Tagged recovery: all packages already exist on npmjs at $VERSION; skipping the public-registry Worker gate."
+            exit 0
+          fi
+          node scripts/check-worker-consumer.mjs --registry "$VERSION"
 
       - name: Promote npmjs channel tags
         env:
@@ -423,6 +510,11 @@ jobs:
             npm dist-tag add "$pkg@$VERSION" "$tag" --userconfig "$NPMRC" \
               --registry https://registry.npmjs.org
           }
+
+          # Publish attaches mantle-release so publication does not move a
+          # public channel. This step promotes every package onto alpha,
+          # beta, rc, or latest only. mantle-release stays pointed at the
+          # last published candidate.
 
           for pkg in $PKG_NAMES; do
             for channel in $(node scripts/release-tag-order.mjs --channels "$VERSION"); do
@@ -467,6 +559,10 @@ jobs:
             fi
             gpr_npm dist-tag add "$pkg@$VERSION" "$tag"
           }
+
+          # Same boundary as npmjs: promote every package's public channel
+          # only. mantle-release stays pointed at the last published
+          # candidate.
 
           for pkg in $PKG_NAMES; do
             for channel in $(node scripts/release-tag-order.mjs --channels "$VERSION"); do

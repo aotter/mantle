@@ -3,13 +3,13 @@ description: Mantle serves /mcp and /mcp/staff from the same Manifest — tool n
 ---
 # MCP and agents
 
-Mantle is an MCP server out of the box. Nothing is registered, exported or annotated to make it one: the same compiled plan that produces REST and Admin also produces the tool catalog, so an agent and a browser reach identical behavior through different transports. This page covers the two surfaces, how tools are named, how a client authenticates, and the rest of the agent-facing surface area.
+Mantle is an MCP server out of the box. Nothing is registered, exported or annotated to make it one: the same compiled plan that produces REST and Admin also produces the tool catalog, so an agent and a browser reach identical behavior through different transports. `/mcp` and `/mcp/staff` are that live-app catalog — Manifest → RuntimePlan verbs — not a how-to-author-Mantle manual. The CLI and pinned package docs are the authoring SSOT; MCP does not mirror the CLI. This page covers the two surfaces, how tools are named, how a client authenticates, and the rest of the agent-facing surface area.
 
 ## Two surfaces
 
 | Mount | Caller | Exposes |
 |---|---|---|
-| `/mcp` | Any authenticated OAuth caller; anonymous requests get `401` | Views with `surface: public`, and Procedures reached by an MCP Trigger with `surface: public` |
+| `/mcp` | Any caller the site's HTTP routes would accept: OAuth bearer, same-origin cookie session, or anonymous. Each tool's `requires` decides; a `tools/call` that needs identity answers `401` with the OAuth challenge | Views with `surface: public`, and Procedures reached by an MCP Trigger with `surface: public` |
 | `/mcp/staff` | Authenticated caller holding a staff role | Views with `surface: staff`, the generic authoring tools (rank-gated at `tools/call`), Procedures reached by an MCP Trigger with `surface: staff` |
 
 Both accept tokens for one canonical protected resource, `${PUBLIC_ORIGIN}/mcp`. `/mcp/staff` is a stricter server-side role projection, not a second OAuth audience.
@@ -20,7 +20,7 @@ A tool name is derived from a manifest name by `mcpToolNameSegment`: lowercased,
 
 | Tool | Produced by | Surface |
 |---|---|---|
-| `query_view_<segment>` | Any View | The View's own `surface` |
+| `query_view_<segment>` | Public or staff View (never internal) | The View's own `surface` |
 | `create_draft_<schema>`, `update_draft_<schema>` | A Schema with `lifecycle: publishing` | Staff |
 | `create_record_<schema>`, `update_record_<schema>` | A Schema with `lifecycle: operational` | Staff |
 | `request_publish`, `unpublish_entry`, `archive_entry`, `delete_entry` | Present when an applicable Schema exists | Staff |
@@ -33,7 +33,7 @@ Procedures are never exposed on their own. A Procedure becomes a tool only throu
 
 ## The OAuth model
 
-The Cloudflare adapter runs one Better Auth 1.7 instance for staff identity, authorization, consent, client registration and MCP resource verification. Client identity is CIMD-first — the MCP 2026-07-28 Client ID Metadata Document profile, which is why the Worker needs the `global_fetch_strictly_public` flag to fetch client metadata across the public Internet boundary. Unauthenticated Dynamic Client Registration remains available as a bounded path with a 90-day default lifetime for clients that do not present CIMD. One non-colon scope, `mcp`, is advertised in `scopes_supported`, because clients such as claude.ai reject colon-shaped scopes; per-surface enforcement then happens server-side, not through scope strings. Authorization is session-bound: the JWT's originating Better Auth session must still exist and be unexpired, so signing out of Admin also ends that session's MCP access, and a refresh token is not an independent authorization. Unauthenticated requests to either mount answer `401` with a `WWW-Authenticate` challenge pointing at the RFC 9728 protected-resource metadata document served under the auth mount. Authorization endpoints live under `/api/auth/oauth2/*` and are discovered from the advertised metadata, never hard-coded.
+The Cloudflare adapter runs one Better Auth 1.7 instance for staff identity, authorization, consent, client registration and MCP resource verification. Client identity is CIMD-first — the MCP 2026-07-28 Client ID Metadata Document profile, which is why the Worker needs the `global_fetch_strictly_public` flag to fetch client metadata across the public Internet boundary. Unauthenticated Dynamic Client Registration remains available as a bounded path with a 90-day default lifetime for clients that do not present CIMD. One non-colon scope, `mcp`, is advertised in `scopes_supported`, because clients such as claude.ai reject colon-shaped scopes; per-surface enforcement then happens server-side, not through scope strings. Authorization is session-bound: the JWT's originating Better Auth session must still exist and be unexpired, so signing out of Admin also ends that session's MCP access, and a refresh token is not an independent authorization. Invalid credentials on either mount, and anonymous requests to `/mcp/staff`, answer `401` with a `WWW-Authenticate` challenge pointing at the RFC 9728 protected-resource metadata document served under the auth mount; on `/mcp` an anonymous caller can list tools and call anonymous ones, and receives the same `401` challenge from the first `tools/call` whose target requires identity. Authorization endpoints live under `/api/auth/oauth2/*` and are discovered from the advertised metadata, never hard-coded.
 
 ## Connecting a local client
 
@@ -91,10 +91,15 @@ pnpm exec mantle skills --check
 
 This copies every skill the installed package marks `projection: project` — the develop skill among them — into matching `.agents/skills/mantle-*` and `.claude/skills/mantle-*` paths. Both layouts receive identical bytes; `--check` detects drift without writing. Skills that act destructively or target one platform stay out of that set and are opt-in. Manifest generation never rewrites agent instructions.
 
-For Claude Code, the same bundle is installable from the plugin marketplace at the exact installed version:
+The same bundle is installable from the plugin marketplace:
 
 ```sh
-/plugin marketplace add aotter/mantle@v<installed-version>
+# Canonical
+npx skills add aotter/mantle --skill install
+
+# Claude Code — two separate prompts
+/plugin marketplace add aotter/mantle
+/plugin install mantle@mantle
 ```
 
 Never point a versioned project at a mutable branch. See [Project layout and the CLI loop](../start/project-and-cli.md).

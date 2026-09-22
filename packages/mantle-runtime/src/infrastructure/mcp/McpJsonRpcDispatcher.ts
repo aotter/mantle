@@ -1,5 +1,6 @@
 import {
   DiagnosticError,
+  HTTP_STATUS_BY_CODE,
   meetsRole,
   mcpToolNameSegment,
   redactForWire,
@@ -13,6 +14,7 @@ import {
 } from "@aotter/mantle-spec";
 import type { MediaVariantRole } from "../../domain/port/MediaStorage.js";
 import type { HandlerContext } from "../../domain/model/HandlerContext.js";
+import type { AuditSink } from "../../domain/port/AuditSink.js";
 import {
   ArchiveUseCase,
   CreateDraftUseCase,
@@ -35,6 +37,7 @@ import {
   UPDATE_DRAFT_PREFIX,
   UPDATE_RECORD_PREFIX,
   buildMcpToolCatalog,
+  buildMcpAuditOperationIdResolver,
   extractCollectionSegment,
   type McpToolSurface,
   type McpToolDefinition,
@@ -104,6 +107,7 @@ export class McpJsonRpcDispatcher {
   private readonly catalog: readonly McpToolDefinition[];
   private readonly catalogWireJson: string;
   private readonly catalogToolNames: ReadonlySet<string>;
+  private readonly auditOperationId: ReturnType<typeof buildMcpAuditOperationIdResolver>;
   /** segment → original `Schema.metadata.name`. Built once at
    *  construction; the per-collection routing path looks up the
    *  segment from the tool name and recovers the canonical
@@ -119,6 +123,8 @@ export class McpJsonRpcDispatcher {
       readonly surface?: McpToolSurface;
       readonly capabilities?: readonly RuntimeCallableCapability[];
       readonly serverInfo?: McpServerInfo;
+      /** Optional tools/call audit trail. See `AuditSink`. */
+      readonly audit?: AuditSink;
     } = {},
   ) {
     this.catalog = buildMcpToolCatalog(schemas, {
@@ -129,6 +135,7 @@ export class McpJsonRpcDispatcher {
     });
     this.catalogWireJson = `{"tools":${JSON.stringify(this.catalog)}}`;
     this.catalogToolNames = new Set(this.catalog.map((tool) => tool.name));
+    this.auditOperationId = buildMcpAuditOperationIdResolver(this.catalog);
     this.readOnlyCollections = new Set(
       schemas.filter((schema) => schema.spec.schema.readOnly === true).map((schema) => schema.metadata.name),
     );
@@ -150,6 +157,13 @@ export class McpJsonRpcDispatcher {
       return new Response("method not allowed", { status: 405, headers: { allow: "POST" } });
     }
 
+    // JSON-RPC over HTTP is application/json. Refusing other types keeps a
+    // cookie-session caller safe from HTML form POSTs, whose enctypes cannot
+    // produce this header (#977).
+    const contentType = req.headers.get("content-type") ?? "";
+    if (!/^application\/json\b/iu.test(contentType.trim())) {
+      return new Response("Content-Type must be application/json.", { status: 415 });
+    }
     let body: { jsonrpc?: string; id?: number | string | null; method?: string; params?: unknown };
     try {
       body = (await readJsonBody(req)) as typeof body;
@@ -205,16 +219,22 @@ export class McpJsonRpcDispatcher {
       return jsonRpcError(reqId, -32602, "missing tool name");
     }
     const args = (p.arguments ?? {}) as Record<string, unknown>;
-    if (!this.catalogToolNames.has(p.name)) {
-      return jsonRpcError(reqId, -32601, `unknown tool: ${p.name}`);
-    }
-
+    // Probing for tools that do not exist is audited like any other call.
+    const startedAt = Date.now();
+    const operationId = this.auditOperationId(p.name, args);
+    let outcome = "ok";
     try {
+      if (!this.catalogToolNames.has(p.name)) {
+        outcome = "UNKNOWN_TOOL";
+        return jsonRpcError(reqId, -32601, `unknown tool: ${p.name}`);
+      }
       const result = await this.dispatchToolByName(p.name, args, ctx);
       if (result === UNKNOWN_TOOL) {
+        outcome = "UNKNOWN_TOOL";
         return jsonRpcError(reqId, -32601, `unknown tool: ${p.name}`);
       }
       if (result === MISSING_ARG) {
+        outcome = "INVALID_PARAMS";
         return jsonRpcError(reqId, -32602, "missing required arg");
       }
       return jsonRpcOk(reqId, {
@@ -222,14 +242,54 @@ export class McpJsonRpcDispatcher {
       });
     } catch (e) {
       if (e instanceof DiagnosticError) {
-        return jsonRpcError(reqId, -32000, e.diagnostic.message, redactForWire(e.diagnostic));
+        outcome = e.diagnostic.code;
+        // Identity failures are HTTP facts too: an anonymous caller on a tool
+        // that requires one must see 401 so it can authenticate and retry,
+        // and the adapter can attach its OAuth challenge (#977).
+        const status = e.diagnostic.code === "UNAUTHENTICATED" || e.diagnostic.code === "AUTH_DENIED"
+          ? HTTP_STATUS_BY_CODE[e.diagnostic.code]
+          : undefined;
+        return jsonRpcError(reqId, -32000, e.diagnostic.message, redactForWire(e.diagnostic), status);
       }
       // Don't leak raw exception strings to MCP clients — adapter
       // exceptions can carry binding / driver detail. Real cause goes
       // to server-side logs; the wire stays opaque.
+      outcome = "INTERNAL";
       console.error("[McpJsonRpcDispatcher] unhandled tool-call error", e);
       return jsonRpcError(reqId, -32000, "Internal error.");
+    } finally {
+      this.recordAudit(ctx, p.name, operationId, outcome, startedAt);
     }
+  }
+
+  /** The single audit write point. Off the response path: the sink's promise
+   *  goes to the platform's `waitUntil` when present, and a failing sink is
+   *  logged rather than turned into a tool error. */
+  private recordAudit(
+    ctx: HandlerContext,
+    tool: string,
+    operationId: string | null,
+    outcome: string,
+    startedAt: number,
+  ): void {
+    const audit = this.options.audit;
+    if (!audit) return;
+    const settled = Promise.resolve()
+      .then(() => audit.record({
+        at: startedAt,
+        surface: this.options.surface ?? "staff",
+        callerId: ctx.user?.id ?? null,
+        clientId: ctx.auth?.clientId ?? null,
+        credential: ctx.auth?.credential ?? null,
+        tool,
+        operationId,
+        outcome,
+        durationMs: Date.now() - startedAt,
+      }))
+      .catch((error: unknown) => {
+        console.error("[McpJsonRpcDispatcher] audit sink failed", error);
+      });
+    ctx.waitUntil?.(settled);
   }
 
   private async dispatchToolByName(

@@ -334,16 +334,36 @@ ${indexYaml}
     ["duplicate field", "  indexes: [[slug, slug]]"],
     ["duplicate tuple", "  indexes: [[slug], [slug]]"],
     ["cross-kind duplicate", "  uniqueIndexes: [[slug]]\n  indexes: [[slug]]"],
-    ["reserved native alias", "  indexes: [[id]]"],
+    ["native column in uniqueIndexes", "  uniqueIndexes: [[status]]"],
     ["unsafe identifier", "  indexes: [['_slug']]"],
   ])("rejects semantic error: %s", (_label, declaration) => {
-    const extra = declaration.includes("[[id]]")
-      ? "slug: { type: string }, id: { type: string }"
-      : declaration.includes("_slug")
+    const extra = declaration.includes("_slug")
         ? "slug: { type: string }, _slug: { type: string }"
         : "slug: { type: string }";
     const result = parseSchema(declaration, extra);
     expect(result.diagnostics[0]?.code).toBe("SCHEMA_INDEX_INVALID");
+  });
+
+  it("indexes may lead with native entry columns; data properties may not reuse their names (#1008)", () => {
+    const accepted = parseSchema("  indexes: [[status, publishedAt], [createdAt], [authorId, updatedAt, id]]", "slug: { type: string }, publishedAt: { type: number }");
+    expect(accepted.diagnostics).toEqual([]);
+    for (const reserved of ["id", "status", "version", "createdAt", "updatedAt", "authorId"]) {
+      const shadowed = parseSchema("", `slug: { type: string }, ${reserved}: { type: string }`);
+      expect(shadowed.diagnostics[0]).toMatchObject({
+        code: "INVALID_MANIFEST_ENVELOPE",
+        path: expect.stringContaining(`/spec/schema/properties/${reserved}`),
+      });
+    }
+  });
+
+  it("accepts native entry columns as list columns but not as the primaryField (#1008 follow-up)", () => {
+    const ui = (list: string) => parseSchema(`  lifecycle: operational\n  uiSchema:\n    list:\n${list}`, "slug: { type: string }");
+    expect(ui("      primaryField: slug\n      columns: [createdAt, updatedAt, status]").diagnostics).toEqual([]);
+    expect(ui("      primaryField: createdAt\n      columns: [slug]").diagnostics[0]).toMatchObject({
+      code: "SCHEMA_UI_INVALID",
+      path: expect.stringContaining("/spec/uiSchema/list/primaryField"),
+    });
+    expect(ui("      primaryField: slug\n      columns: [nope]").diagnostics[0]?.code).toBe("SCHEMA_UI_INVALID");
   });
 
   it("preserves the legacy unique unknown-field diagnostic code", () => {
@@ -1110,6 +1130,30 @@ spec:
     expect(result.diagnostics.length).toBeGreaterThan(0);
   });
 
+  it("rejects a public View over a publishing Schema that compares status to anything but published (#1007)", () => {
+    const codes = (filter: ViewManifest["spec"]["filter"]) => validateManifests({
+      manifests: [schema("posts"), view("posts-by-status", "posts", { filter })],
+    }).diagnostics.map((diagnostic) => diagnostic.code);
+    expect(codes({ eq: { field: "status", value: "draft" } })).toContain("VIEW_PUBLIC_STATUS_INVALID");
+    expect(codes({ and: [{ eq: { field: "slug", value: "a" } }, { gt: { field: "status", value: "a" } }] })).toContain("VIEW_PUBLIC_STATUS_INVALID");
+    expect(codes({ eq: { field: "status", value: "published" } })).not.toContain("VIEW_PUBLIC_STATUS_INVALID");
+    expect(codes(undefined)).not.toContain("VIEW_PUBLIC_STATUS_INVALID");
+    expect(validateManifests({
+      manifests: [
+        schema("orders", { schema: { type: "object", properties: { status: { type: "string" } } } }),
+        view("orders-public", "orders"),
+      ],
+    }).diagnostics.map((diagnostic) => diagnostic.code)).toContain("INVALID_MANIFEST_ENVELOPE"); // a data `status` is rejected at parse (#1008)
+    expect(validateManifests({
+      manifests: [
+        schema("posts"),
+        view("all-posts", "posts", { surface: "staff", filter: { eq: { field: "status", value: "draft" } } }),
+        schema("orders", { lifecycle: "operational" }),
+        view("open-orders", "orders", { filter: { eq: { field: "status", value: "draft" } } }),
+      ],
+    }).diagnostics.map((diagnostic) => diagnostic.code)).not.toContain("VIEW_PUBLIC_STATUS_INVALID");
+  });
+
   it("rejects shared cache over an operational Schema", () => {
     const result = validateManifests({
       manifests: [
@@ -1162,6 +1206,35 @@ spec:
     expect(result.diagnostics).toEqual([]);
     const view = result.manifests[0] as ViewManifest;
     expect(view.spec.surface).toBe("staff");
+  });
+
+  it("accepts surface: internal and rejects shared caching", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: internalView }
+spec:
+  from: posts
+  surface: internal
+`;
+    expect(parseManifests(yaml).diagnostics).toEqual([]);
+    expect(parseManifests(`${yaml}  cache: { sharedMaxAge: 60 }\n`).diagnostics)
+      .toEqual([expect.objectContaining({
+        code: "VIEW_CACHE_INVALID",
+        source: expect.objectContaining({ path: "/spec/cache" }),
+      })]);
+  });
+
+  it("does not reserve MCP tool names for internal Views", () => {
+    expect(parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: report-a }
+spec: { surface: internal, sql: SELECT 1 }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: report_a }
+spec: { surface: internal, sql: SELECT 2 }
+`).diagnostics).toEqual([]);
   });
 
   it("accepts the minimal staff View Admin list uiSchema", () => {

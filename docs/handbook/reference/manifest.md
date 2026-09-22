@@ -5,6 +5,8 @@ description: Envelope fields, unknown-key policy, multi-document YAML, Localized
 
 This page covers the rules that apply to every Manifest document before kind-specific validation runs. Read it once; the four atom pages ([Schema](./schema.md), [View](./view.md), [Procedure](./procedure.md), [Trigger](./trigger.md)) assume it. Diagnostic codes named here are catalogued in [Diagnostics](./diagnostics.md).
 
+For a task-to-field table covering all four atoms, see the [Manifest feature reference](./features.md). For the resulting console, see [Customize Admin](../guides/admin-ui.md).
+
 ## Envelope
 
 Every document is a YAML mapping with exactly four top-level keys.
@@ -37,8 +39,8 @@ The parser rejects keys outside the shipped grammar at every level it knows. The
 | `/` | `apiVersion`, `kind`, `metadata`, `spec` |
 | `/metadata` | `name` |
 | `/spec` (Schema) | `title`, `description`, `schema`, `uiSchema`, `uniqueIndexes`, `indexes`, `searchableFields`, `localized`, `translates`, `lifecycle` |
-| `/spec` (View) | `title`, `uiSchema`, `from`, `sql`, `surface`, `requires`, `filter`, `fields`, `orderBy`, `limit`, `params` |
-| `/spec` (Procedure) | `title`, `description`, `requires`, `input`, `uiSchema`, `output`, `handler` |
+| `/spec` (View) | `title`, `uiSchema`, `from`, `sql`, `surface`, `cache`, `requires`, `filter`, `fields`, `orderBy`, `limit`, `params` |
+| `/spec` (Procedure) | `title`, `description`, `requires`, `input`, `uiSchema`, `output`, `handler`, `mcp` |
 | `/spec` (Trigger) | `source`, `target` |
 | `/spec/translates` | `parent`, `on` |
 | `/spec/requires` | `auth`, `guard` |
@@ -108,7 +110,7 @@ Names containing `-` must be double-quoted when used as tables in a `sql` View (
 
 | Namespace | Reserved | Effect |
 |---|---|---|
-| Entry columns | `id`, `status`, `version`, `createdAt`, `updatedAt`, `authorId` | Native on every Schema. Cannot appear in `indexes` or `uniqueIndexes` (`SCHEMA_INDEX_INVALID`). Valid in View `fields`, `filter`, `orderBy` and `uiSchema.list`. Avoid declaring data properties with these names; SQL Views project the native column, not the data field. |
+| Entry columns | `id`, `status`, `version`, `createdAt`, `updatedAt`, `authorId` | Native on every Schema; a data property may not reuse the name (`INVALID_MANIFEST_ENVELOPE`). Where they may appear in Views and indexes: [Schema reference](./schema.md#reserved-entry-columns) (ADR-0025). |
 | Data field | `locale` | A non-localized Schema that declares `properties.locale` is rejected; use a domain name such as `orderLocale`. On a localized Schema the runtime requires `data.locale` on writes. |
 | Data field | `expectedVersion` | Reserved Procedure OCC wire name. A Schema that declares `spec.schema.properties.expectedVersion` is `INVALID_MANIFEST_ENVELOPE` (ADR-0022). New reserved names need an ADR. |
 | View params | `page`, `show`, `cursor` | Owned by the runtime for pagination. Declaring them under `params.properties` is `VIEW_PARAMS_RESERVED_NAME`. |

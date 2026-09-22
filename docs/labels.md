@@ -29,12 +29,12 @@ For package README or package-local docs changes, prefer the package area label 
 | `area:runtime` | `packages/mantle-runtime` behavior, ports, use cases, dispatcher, and MCP runtime. |
 | `area:spec` | `packages/mantle-spec`, manifest parsing, validation, diagnostics, CLI, spec types. |
 | `area:cf` | `packages/adapters/cloudflare`, Workers adapter, D1/KV/ASSETS wiring, Cloudflare deploy behavior. |
-| `area:starters` | Legacy `aotter/mantle-starters` source and retirement migration. |
 | `area:skills` | `skills/*` agent briefs and install/extend/provision workflows. |
 | `area:admin-ui` | `packages/mantle-admin-ui` React admin SPA. |
 | `area:docs` | Repo-wide human docs, governance docs, ADR text, release docs, root README content, and cross-cutting documentation work. |
 | `area:adapter` | Adapter boundary work spanning Cloudflare or future adapters. |
 | `area:ci` | GitHub Actions, dependency automation, and repository checks. |
+| `area:starters` | **Legacy only.** Retired `aotter/mantle-starters` source and migration notes. Do not use for new Core work. |
 
 ## Release and review gates
 
@@ -45,7 +45,7 @@ For package README or package-local docs changes, prefer the package area label 
 | `breaking-change` | Semver-relevant breaking change. | Generated release notes must call it out. | The change is redesigned to be non-breaking. |
 | `skip-release-notes` | Release bookkeeping with no user-facing change. | Excluded from generated GitHub Release notes. | The PR contains a user-facing change. |
 | `needs-adr` | Architecture, trust boundary, package boundary, or long-lived decision needs an ADR or ADR-lite proposal. | Do not merge implementation until the decision is captured. | ADR/proposal lands or maintainer confirms an existing ADR covers it. |
-| `needs-grammar-revise` | Manifest grammar or closed-enum change. | Requires grammar-revise round before code/types/starters change. | Grammar decision lands or the change no longer affects grammar. |
+| `needs-grammar-revise` | Manifest grammar or closed-enum change. | Requires grammar-revise round before code/types change. | Grammar decision lands or the change no longer affects grammar. |
 | `needs-discussion` | Not converged enough for implementation. | Do not start coding from this issue. | Closing criteria are met and scope is concrete. |
 
 ## Creating missing labels
@@ -56,12 +56,12 @@ Use these commands from a checked-out repo:
 gh label create "area:runtime" --description "Runtime package, ports, use cases, dispatcher, render, MCP runtime" --color "1d76db"
 gh label create "area:spec" --description "Spec package, manifest parsing, validation, diagnostics, CLI, types" --color "1d76db"
 gh label create "area:cf" --description "Cloudflare Workers adapter and bindings" --color "1d76db"
-gh label create "area:starters" --description "Starter templates and starter validation" --color "1d76db"
 gh label create "area:skills" --description "Agent Skills and install/extend/provision workflows" --color "1d76db"
 gh label create "area:admin-ui" --description "React admin UI" --color "1d76db"
 gh label create "area:docs" --description "Documentation and governance" --color "1d76db"
 gh label create "area:adapter" --description "Adapter boundary and future adapter work" --color "1d76db"
 gh label create "area:ci" --description "CI, dependency automation, and repository checks" --color "1d76db"
+gh label create "area:starters" --description "Legacy only: retired mantle-starters source and migration" --color "cfd3d7"
 gh label create "breaking-change" --description "Semver-relevant breaking change" --color "b60205"
 gh label create "skip-release-notes" --description "Release bookkeeping only; omit from generated GitHub notes" --color "ededed"
 gh label create "needs-adr" --description "Requires an ADR or ADR-lite decision before merge" --color "d93f0b"

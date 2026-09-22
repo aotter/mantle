@@ -59,7 +59,7 @@ export async function runSkills(rawArgs: readonly string[]): Promise<number> {
       stderr.write("Mantle skills are stale; run `mantle skills`.\n");
       return 1;
     }
-    if (!check) stdout.write(`Mantle skills projected: ${skills.join(", ")}.\n`);
+    if (!check) stdout.write(`Mantle skills projected: ${skills.join(", ")}.\nRead .agents/skills/mantle-develop/SKILL.md and node_modules/@aotter/mantle/docs/handbook/start/overview.md.\n`);
     return 0;
   } catch (error) {
     stderr.write(`mantle skills: ${message(error)}\n`);
@@ -78,6 +78,9 @@ ${PROJECT_SKILL_DIRECTORIES.map((dir) => `${dir}/skills/`).join(" and ")}.
 Options:
   --check     Fail without writing when projected skills are stale
   -h, --help  This help
+
+Documentation:
+  Handbook: docs/handbook/concepts/mcp-and-agents.md or https://mantle.tools/
 `);
 }
 

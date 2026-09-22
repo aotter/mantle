@@ -135,6 +135,307 @@ spec: { surface: public, from: orders }
     }));
   });
 
+  it("warns when an MCP-exposed Procedure has no description, without withholding the link", () => {
+    const linked = linkManifestSet(parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: suspend-tenant }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: suspend-tenant }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: measure-usage }
+spec:
+  description: { en: "Measure D1/R2 usage for one tenant.", zh-TW: "量測單一租戶用量。" }
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: measure-usage }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: http-only }
+spec:
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: http-only }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: suspend-tenant-staff }
+spec:
+  source: { kind: mcp, surface: staff }
+  target: { procedure: suspend-tenant }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: suspend-tenant-public }
+spec:
+  source: { kind: mcp, surface: public }
+  target: { procedure: suspend-tenant }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: measure-usage-staff }
+spec:
+  source: { kind: mcp, surface: staff }
+  target: { procedure: measure-usage }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: http-only-http }
+spec:
+  source: { kind: http, method: POST, path: /api/http-only }
+  target: { procedure: http-only }
+`));
+
+    expect(linked.ok).toBe(true);
+    const warnings = linked.diagnostics.filter((d) => d.code === "MCP_TOOL_DESCRIPTION_MISSING");
+    expect(warnings).toEqual([expect.objectContaining({
+      severity: "warning",
+      path: "/spec/description",
+      message: expect.stringContaining("'suspend-tenant'"),
+    })]);
+    expect(warnings[0]?.message).toContain("staff surface");
+    expect(warnings[0]?.message).toContain("'suspend-tenant-staff'");
+  });
+
+  it("warns when an MCP write tool's expectedVersion cannot be read from any View on its surface", () => {
+    const linked = linkManifestSet(parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: tenants }
+spec:
+  title: Tenants
+  lifecycle: operational
+  schema: { type: object, readOnly: true, properties: { slug: { type: string }, enabled: { type: boolean } } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: organizations }
+spec:
+  title: Organizations
+  lifecycle: operational
+  schema: { type: object, readOnly: true, properties: { name: { type: string }, projectLimit: { type: number } } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: suspend-tenant }
+spec:
+  description: Suspend one tenant.
+  input:
+    type: object
+    required: [tenantId, expectedVersion]
+    properties:
+      tenantId: { type: string, x-mantle-ref: tenants }
+      expectedVersion: { type: number }
+  output: { type: object }
+  handler: { kind: ref, ref: suspend-tenant }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: set-organization-quotas }
+spec:
+  description: Set quotas.
+  input:
+    type: object
+    required: [id, expectedVersion, projectLimit]
+    properties:
+      id: { type: string, x-mantle-ref: organizations }
+      expectedVersion: { type: number }
+      projectLimit: { type: number }
+  output: { type: object }
+  handler: { kind: builtin, op: update, schema: organizations }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: platform-tenant-status }
+spec:
+  surface: staff
+  sql: "SELECT t._mantle_id AS tenantId, t.slug FROM tenants t"
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: platform-organizations }
+spec:
+  surface: staff
+  from: organizations
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: member-tenant }
+spec:
+  surface: public
+  from: tenants
+  fields: [id, slug, version]
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: suspend-tenant-staff }
+spec:
+  source: { kind: mcp, surface: staff }
+  target: { procedure: suspend-tenant }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: set-organization-quotas-staff }
+spec:
+  source: { kind: mcp, surface: staff }
+  target: { procedure: set-organization-quotas }
+`));
+
+    expect(linked.ok).toBe(true);
+    const warnings = linked.diagnostics.filter((d) => d.code === "MCP_TOOL_INPUT_UNREACHABLE");
+    // The staff SQL View over tenants selects no version column, so suspend-tenant
+    // is unreachable there even though the public member-tenant View exposes it.
+    // platform-organizations omits `fields`, so the default projection carries
+    // version and set-organization-quotas is reachable.
+    expect(warnings.map((d) => [d.severity, d.value, d.path])).toEqual([
+      ["warning", "tenants", "/spec/input/properties/expectedVersion"],
+    ]);
+    expect(warnings[0]?.message).toContain("suspend_tenant");
+    expect(warnings[0]?.message).toContain("staff");
+  });
+
+  it("treats a SQL View that aliases _mantle_version as exposing version", () => {
+    const linked = linkManifestSet(parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: notes }
+spec:
+  title: Notes
+  lifecycle: operational
+  schema: { type: object, readOnly: true, properties: { body: { type: string } } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: archive-note }
+spec:
+  description: Archive a note.
+  input:
+    type: object
+    required: [id, expectedVersion]
+    properties:
+      id: { type: string, x-mantle-ref: notes }
+      expectedVersion: { type: number }
+  output: { type: object }
+  handler: { kind: builtin, op: update, schema: notes }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: platform-notes }
+spec:
+  surface: staff
+  sql: "SELECT n._mantle_id AS noteId, n._mantle_version AS noteVersion FROM notes n"
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Trigger
+metadata: { name: archive-note-staff }
+spec:
+  source: { kind: mcp, surface: staff }
+  target: { procedure: archive-note }
+`));
+
+    expect(linked.ok).toBe(true);
+    expect(linked.diagnostics.filter((d) => d.code === "MCP_TOOL_INPUT_UNREACHABLE")).toEqual([]);
+  });
+
+  it("accepts declared MCP tool annotations and rejects a read-only claim over a writing builtin", () => {
+    const declared = linkManifestSet(parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: measure-usage }
+spec:
+  description: Measure usage.
+  mcp: { readOnlyHint: true, openWorldHint: true }
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: measure-usage }
+`));
+    expect(declared.ok).toBe(true);
+    expect(declared.value?.procedures[0]?.manifest.spec.mcp).toEqual({ readOnlyHint: true, openWorldHint: true });
+
+    expect(() => parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: bad-hint }
+spec:
+  mcp: { readOnlyHint: "yes" }
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: bad-hint }
+`)).toThrow(/mcp\.readOnlyHint must be a boolean/);
+    expect(() => parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: bad-key }
+spec:
+  mcp: { idempotentHint: true }
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: bad-key }
+`)).toThrow(/idempotentHint/);
+
+    const lying = linkManifestSet(parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: quotas }
+spec:
+  title: Quotas
+  lifecycle: operational
+  schema: { type: object, properties: { limit: { type: number } } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: set-quota }
+spec:
+  mcp: { readOnlyHint: true }
+  input: { type: object, required: [id, expectedVersion], properties: { id: { type: string }, expectedVersion: { type: number }, limit: { type: number } } }
+  output: { type: object }
+  handler: { kind: builtin, op: update, schema: quotas }
+`));
+    expect(lying.ok).toBe(false);
+    expect(lying.diagnostics).toContainEqual(expect.objectContaining({
+      code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+      path: "/spec/mcp/readOnlyHint",
+    }));
+
+    const gentle = linkManifestSet(parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: quotas }
+spec:
+  title: Quotas
+  lifecycle: operational
+  schema: { type: object, properties: { limit: { type: number } } }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: drop-quota }
+spec:
+  mcp: { destructiveHint: false }
+  input: { type: object, required: [id], properties: { id: { type: string } } }
+  output: { type: object }
+  handler: { kind: builtin, op: delete, schema: quotas }
+`));
+    expect(gentle.diagnostics).toContainEqual(expect.objectContaining({
+      code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+      path: "/spec/mcp/destructiveHint",
+    }));
+    expect(() => parse(`
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: both }
+spec:
+  mcp: { readOnlyHint: true, destructiveHint: true }
+  input: { type: object }
+  output: { type: object }
+  handler: { kind: ref, ref: both }
+`)).toThrow(/both readOnlyHint/);
+  });
+
   it("allows manifests to define the removed generic read tool names", () => {
     const linked = linkManifestSet(parse(`
 apiVersion: cms.mantle.aotter.net/v1

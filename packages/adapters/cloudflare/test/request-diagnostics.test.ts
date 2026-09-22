@@ -42,7 +42,9 @@ function fixture() {
   });
   const env = { DB: db, MANTLE_KV: namespace };
   const request = (authorized = true) => new Request("https://example.test/mcp/staff", {
-    method: "POST", headers: { "content-type": "application/json", "mcp-protocol-version": "2025-11-25", ...(authorized ? { authorization: "Bearer PRIVATE_TOKEN" } : {}) },
+    // An invalid bearer, not an anonymous request: anonymous callers never reach
+    // token verification, so the denied path under test must present a token.
+    method: "POST", headers: { "content-type": "application/json", "mcp-protocol-version": "2025-11-25", authorization: authorized ? "Bearer PRIVATE_TOKEN" : "Bearer PRIVATE_WRONG" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
   });
   return { sqlite, db, values, worker, env, request,

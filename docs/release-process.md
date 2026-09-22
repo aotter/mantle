@@ -1,9 +1,9 @@
 # Release process
 
-First stable targets 0.1.2 (#826). The last legacy Landing/Starter release is
-0.1.0-alpha.17. Its immutable artifacts and repositories remain available;
-recover that version with its tagged controller/docs. New releases have no
-Starter/Landing checkout, tag, dispatch, credential or deployment dependency.
+How a version reaches npm. What each shipped stable contains is
+[Releases](handbook/releases/index.md); this document is the procedure only.
+A release has no Starter/Landing checkout, tag, dispatch, credential or
+deployment dependency.
 
 ## Authority and state transitions
 
@@ -15,9 +15,11 @@ No task implicitly authorizes publication; no manual package/tag writer exists.
 |---|---|---|
 | Reviewed source; unused version | Core source/packed-consumer gates, then immutable Core tag | Exact canonical merged PR SHA and version required |
 | Tag exists; registry candidates partial | Existing npm/GPR publication steps | Verify existing artifact identity; publish missing versions only |
-| Registry candidates verified | Public-registry reference consumer gate | No mutation; failure leaves public channels unchanged |
-| Consumer passes | Monotonic npm/GPR channel promotion | Same version is a no-op; older runs cannot move a channel backward |
-| Channels promoted/preserved newer | GitHub release step | Existing release identity or fail |
+| Tag exists and all eleven npmjs packages already exist | Metadata verify, then channel promote and the GitHub release | Skip pack and immutable tarball compare. The controller tip must not rebuild published artifact identity. npm integrity metadata still has to be `sha512`. The public-registry Worker gate stays skipped |
+| Tag exists on an ancestor of the dispatched tip; tip package versions still match | Resolve binds release identity to the tag SHA; later steps stay the existing writers | Controller-only recovery. Do not retag. The canonical merged-PR check uses the tag SHA. Fail when the tip version differs or the tag commit is not an ancestor |
+| Registry candidates verified | Public-registry reference consumer gate | No mutation; failure leaves public channels and `mantle-release` unchanged |
+| Consumer passes | That registry's promote step: monotonic channel add for every package | Same version is a no-op; older runs cannot move a channel backward. Public channels are only `alpha`, `beta`, `rc`, and `latest`. `mantle-release` is never removed |
+| Channels promoted or preserved | GitHub release step | Existing release identity or fail. Leftover `mantle-release` pointing at the last published candidate is expected |
 
 The public-registry gate uses a disposable copy of the directly authored
 `docs/examples/host-minimal-worker` reference, installs the exact candidate, then
@@ -40,8 +42,24 @@ decision instead of starting another local redesign loop.
 
 Invariants: immutable versions/tags retain their identity; registry integrity
 and the published-consumer gate precede public channel promotion; retries
-cannot move channels backward. No downstream mutation, unpublish or rollback
-is introduced. The runnable release-order check guards these transitions.
+cannot move channels backward. No downstream mutation, unpublish, dist-tag
+removal, or rollback is introduced. The runnable release-order check guards
+these transitions.
+
+Mutation boundaries during a release: `Publish to npmjs` and `Mirror to
+GitHub Packages` attach the internal candidate dist-tag `mantle-release`
+while publishing a version. `Promote npmjs channel tags` is the only
+release step that moves npmjs public channels. `Promote GitHub Packages
+channel tags` is the only release step that moves GitHub Packages public
+channels. Neither step removes `mantle-release`. Recovery of a partial
+release reruns that same controller and version.
+
+`mantle-release` is not a public channel. It stays forever as an internal
+candidate tag pointing at the last published candidate. Official channels
+are only `alpha`, `beta`, `rc`, and `latest`. Consumers must not install
+`mantle-release`. Deleting it after promotion is not part of the release:
+dist-tag DELETE only added failure and re-run state, and Actions
+`NPM_TOKEN` 403s on that DELETE.
 
 ## Branches and channels
 
@@ -53,18 +71,25 @@ is introduced. The runnable release-order check guards these transitions.
 | `X.Y.Z` | `main` | `latest` | release |
 
 - The controller derives the source branch from the version: `-alpha` means
-  `develop`, anything else means `main`. It refuses a commit that is not that
-  branch's tip or not the merge commit of exactly one PR into that branch.
+  `develop`, anything else means `main`. An untagged dispatch must be that
+  branch's tip and the merge commit of exactly one PR into that branch.
+  When the version tag already exists on an ancestor of the tip, Resolve
+  recovers from that tag SHA; see Recovery.
   `scripts/release-tag-order.mjs` rejects any other prerelease identifier.
 - `develop` is where every change integrates first, so it is the base for all
   work despite `main` being the repository's default branch on GitHub. `main`
   changes only through promotion PRs and hotfix PRs (below); it is never pushed
   directly, rebased or force-updated. Both branches share one ruleset: PR, one
   approval, resolved threads and a current-base `Typecheck + tests` check.
-- Stable publishes latest. Final 0.1.0 alphas only advance alpha, preserving
-  existing legacy latest. No prerelease moves latest; the 0.0 alpha rule that
-  also advanced it was removed once 0.0 became unreachable.
-  A prerelease channel keeps its last version when a later stable publishes.
+- Stable is the only release that moves `latest`. A prerelease channel keeps
+  its last version when a later stable publishes.
+- Publish uses `--tag mantle-release`. `mantle-release` is an internal
+  candidate dist-tag, not a public channel. Consumers must not install it.
+  Official channels are only `alpha`, `beta`, `rc`, and `latest`.
+  Publication does not move those channels. After the public-registry
+  consumer gate, each registry's promote step moves every package's real
+  channel and leaves `mantle-release` pointing at the last published
+  candidate.
 
 ## Prepare and run
 
@@ -84,8 +109,17 @@ is introduced. The runnable release-order check guards these transitions.
    git grep -n "$OLD" -- ':!pnpm-lock.yaml' ':!**/package-lock.json'
    ```
 
+   Leave the consumer cold-start entry **untagged**: `npx skills add
+   aotter/mantle --skill install`, `/plugin marketplace add aotter/mantle`,
+   `codex plugin marketplace add aotter/mantle` and the plugin-manifest
+   descriptions carry no `@v…` / `--ref`. Untagged resolves to `main`, which
+   only moves at a release, so it is always the latest published version
+   (#995, #998). Only "installed version" statements such as
+   `(currently \`X.Y.Z\`)` are bumped.
+
 3. Review API compatibility and migration instructions for actual consumers.
-   Frozen legacy consumers stay on alpha.17; do not make them follow new Core.
+   Frozen legacy consumers stay on their pinned version; do not make them
+   follow new Core.
 4. Run `pnpm check`, including exact packed Worker, optional products, Bun,
    Vercel, skills, release invariants, types and tests. Inspect the umbrella
    docs/skills payload: no workspace dependencies, secrets or local state.
@@ -95,7 +129,7 @@ is introduced. The runnable release-order check guards these transitions.
    stable, continue with the promotion below. The controller refuses an
    untagged source that is no longer the expected branch tip.
 
-The ten public packages remain in dependency order:
+The eleven public packages remain in dependency order:
 
 1. @aotter/mantle-spec
 2. @aotter/mantle-admin-ui
@@ -103,10 +137,11 @@ The ten public packages remain in dependency order:
 4. @aotter/mantle-indexeddb
 5. @aotter/mantle-web
 6. @aotter/mantle-admin
-7. @aotter/mantle-bun
-8. @aotter/mantle-vercel
-9. @aotter/mantle-cloudflare
-10. @aotter/mantle
+7. @aotter/mantle-auth
+8. @aotter/mantle-bun
+9. @aotter/mantle-vercel
+10. @aotter/mantle-cloudflare
+11. @aotter/mantle
 
 ## Promote to main (beta, RC, stable)
 
@@ -114,9 +149,9 @@ Every non-alpha release is the version PR above, one promotion PR and one
 dispatch. The version PR still merges into `develop`, so `develop` always
 contains what `main` publishes and promotions never conflict.
 
-1. Stable only: the release-gate issue (#826 for 0.1.2) records owner
-   acceptance. Every gate item passes with linked evidence or is explicitly
-   deferred there, and no `release-gate` issue stays open against the version.
+1. Stable only: the version's release-gate issue records owner acceptance.
+   Every gate item passes with linked evidence or is explicitly deferred
+   there, and no `release-gate` issue stays open against the version.
    Beta and RC need the gate defined, not passed.
 2. Merge the version PR into `develop` with a merge commit; note its SHA.
 3. Pin the promotion head at that SHA so later `develop` merges cannot ride
@@ -149,17 +184,19 @@ the next promotion. Branch from `main`, include the version bump, PR into
 and resolve version files in favour of `develop`. Until that lands, the next
 promotion conflicts on the version files.
 
-First stable (0.1.2) specifics: `latest` moves from 0.1.0-alpha.16, the last
-`latest` the frozen legacy consumers saw, to 0.1.2. GitHub generates notes
-from the previous release (v0.1.2-alpha.6); to cover the whole 0.1.2 line,
-regenerate from v0.1.0-alpha.17 and edit the release body after the run. The
-body is not an immutable artifact; the tag and packages are.
+GitHub generates notes from the immediately previous tag, which for a stable
+is usually its own last RC. To cover the whole line instead, regenerate from
+the previous stable and edit the release body after the run. The body is not
+an immutable artifact; the tag and packages are.
 
 ```sh
 gh api repos/aotter/mantle/releases/generate-notes \
-  -f tag_name=v0.1.2 -f previous_tag_name=v0.1.0-alpha.17 --jq .body > notes.md
-gh release edit v0.1.2 --notes-file notes.md
+  -f tag_name=v<version> -f previous_tag_name=v<previous stable> --jq .body > notes.md
+gh release edit v<version> --notes-file notes.md
 ```
+
+Add the version's entry to [Releases](handbook/releases/index.md) in the same
+pass, so the handbook and the GitHub release describe the same thing.
 
 After publication, move docs/examples that were pinned to a packed checkout
 back to registry installation with an updated lockfile, and close the gate
@@ -172,12 +209,15 @@ tag/release and mirrors GitHub Packages. No cross-repository fanout token is
 needed. Before tagging, verify credentials and new-version absence on both
 registries. Existing artifacts on retry must have matching integrity.
 
-Completion requires the Core tag SHA, all ten npmjs/GPR packages, exact
+Completion requires the Core tag SHA, all eleven npmjs/GPR packages, exact
 integrity, no workspace dependencies, a passing public-registry Worker gate,
-correct channel tags and the GitHub release. Retain run links and gate evidence.
-This does not prove stable production soak or upgrade safety; #826 owns those
-acceptance requirements. A first-stable agent acceptance uses only the
-version-matched authoring instructions, not an SDK checkout or generated site.
+correct channel tags, and the GitHub release. Leftover `mantle-release`
+pointing at the last published candidate is expected. Retain run links and
+gate evidence.
+This does not prove stable production soak or upgrade safety; the version's
+release-gate issue owns those acceptance requirements. An agent acceptance run
+uses only the version-matched authoring instructions, not an SDK checkout or
+generated site.
 
 ## Recovery
 
@@ -185,6 +225,19 @@ Rerun the same controller commit/version for a transient or verified partial
 transition. Existing tags/artifacts must match; newer channels stay put. Fail
 on identity disagreement instead of guessing. A wrong public artifact needs
 a new version; never force-retag, overwrite or reuse a published version.
+
+After a controller-only fix lands on the tip, re-dispatch the same version
+from the source branch. Resolve recovers using the existing tag SHA when
+that commit is an ancestor of the tip and package versions on the tip still
+match. The tag owns the release SHA; the tip only carries controller fixes.
+Tagged recovery skips the Core source check because that tree was already
+released from the immutable tag. When `tag_exists` and all eleven npmjs
+packages already exist at that version, that same existence check skips
+packing, immutable tarball comparison, and the public-registry Worker gate.
+The controller tip must not rebuild an artifact whose identity is already
+published. Verify npm metadata still runs. The Worker gate stays skipped
+because the first run already passed it before promotion.
+
 Unpublish is reserved for actual secret/private-file exposure, never routine
 fixes. Infrastructure renames require their explicit config diff and live
 smoke; CI alone cannot prove provider identity.

@@ -33,7 +33,16 @@ export interface SchemaIndexCheckResult {
 }
 
 const SAFE_INDEX_NAME = /^[A-Za-z][A-Za-z0-9_.-]*$/;
-const RESERVED_INDEX_FIELDS: ReadonlySet<string> = new Set(RESERVED_ENTRY_COLUMNS);
+/** Native entry columns and their SQLite affinity; `indexes` may reference them, `uniqueIndexes` may not (#1008). */
+const NATIVE_INDEX_AFFINITY = {
+  id: "TEXT",
+  status: "TEXT",
+  version: "INTEGER",
+  createdAt: "INTEGER",
+  updatedAt: "INTEGER",
+  authorId: "TEXT",
+} satisfies Readonly<Record<(typeof RESERVED_ENTRY_COLUMNS)[number], SchemaIndexAffinity>>;
+const NATIVE_INDEX_FIELDS: ReadonlyMap<string, SchemaIndexAffinity> = new Map(Object.entries(NATIVE_INDEX_AFFINITY));
 const SOURCES = ["uniqueIndexes", "indexes"] as const;
 
 /**
@@ -148,16 +157,23 @@ export function checkSchemaIndexes(manifest: SchemaManifest): SchemaIndexCheckRe
           });
           continue;
         }
-        if (RESERVED_INDEX_FIELDS.has(rawField)) {
-          valid = false;
-          problems.push({
-            category: "invalid",
-            source,
-            pointer: fieldPointer,
-            value: rawField,
-            expected: "a non-reserved Schema data field",
-            message: `Schema.spec.${source} cannot index reserved native field '${rawField}'.`,
-          });
+        const nativeAffinity = NATIVE_INDEX_FIELDS.get(rawField);
+        if (nativeAffinity !== undefined) {
+          if (source === "uniqueIndexes") {
+            valid = false;
+            problems.push({
+              category: "invalid",
+              source,
+              pointer: fieldPointer,
+              value: rawField,
+              expected: "a Schema data field; native columns carry no domain uniqueness",
+              message: `Schema.spec.uniqueIndexes cannot include native entry column '${rawField}'; declare it under spec.indexes instead.`,
+            });
+            continue;
+          }
+          // Native columns are always present and never shadowed by a data
+          // property (the parser rejects that), so the tuple is unambiguous.
+          fields.push({ name: rawField, affinity: nativeAffinity });
           continue;
         }
         if (!Object.hasOwn(properties, rawField)) {

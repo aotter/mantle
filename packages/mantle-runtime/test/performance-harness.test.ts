@@ -87,6 +87,17 @@ describe("performance harness", () => {
         dataAccessFields: ["note", "tenantId"],
       });
 
+    const baseInternal = publicView("internal-orders", undefined);
+    const internal: ViewManifest = {
+      ...baseInternal,
+      spec: { ...baseInternal.spec, surface: "internal" },
+    };
+    const internalReport = await inspectIndexCoverage(compilePlan([schema, internal]), {
+      requirePublic: true,
+      rowsPerSchema: 100,
+    });
+    expect(internalReport.summary.required).toBe(0);
+
     const typo = await inspectIndexCoverage(compilePlan(manifests), {
       requiredViews: ["missing-view"],
       rowsPerSchema: 100,
@@ -131,8 +142,58 @@ describe("performance harness", () => {
     expect(report.paths[0]).toMatchObject({
       temporarySort: true,
       passed: false,
-      findings: ["temporary ORDER BY B-tree"],
+      // Newer SQLite planners add a second, index-choice finding; this test
+      // owns only the temporary-sort detection.
+      findings: expect.arrayContaining(["temporary ORDER BY B-tree"]),
     });
+  });
+
+  it("does not add planner statistics that production has not created", async () => {
+    const publishing: SchemaManifest = {
+      ...schema,
+      spec: {
+        ...schema.spec,
+        indexes: [["state"]],
+      },
+    };
+    const baseOrdered = publicView("orders-by-state", {
+      gte: { field: "state", value: "state-1" },
+    });
+    const ordered: ViewManifest = {
+      ...baseOrdered,
+      spec: { ...baseOrdered.spec, orderBy: [{ field: "state", direction: "desc" }] },
+    };
+
+    const report = await inspectIndexCoverage(compilePlan([publishing, ordered]), {
+      requirePublic: true,
+      rowsPerSchema: 2_000,
+    });
+
+    expect(report.paths[0]).toMatchObject({ passed: false, temporarySort: true });
+    expect(report.paths[0]?.plan).toContainEqual(expect.stringMatching(/USE TEMP B-TREE.*ORDER BY/u));
+  });
+
+  it("seeds operational Schemas with only published rows", async () => {
+    const operational: SchemaManifest = {
+      ...schema,
+      metadata: { name: "events" },
+      spec: { ...schema.spec, lifecycle: "operational" },
+    };
+    const drafts: ViewManifest = {
+      apiVersion: "cms.mantle.aotter.net/v1",
+      kind: "View",
+      metadata: { name: "draft-events" },
+      spec: {
+        surface: "staff",
+        sql: 'SELECT _mantle_id FROM "events" WHERE _mantle_status = \'draft\'',
+      },
+    };
+
+    const report = await inspectIndexCoverage(compilePlan([operational, drafts]), {
+      rowsPerSchema: 100,
+    });
+
+    expect(report.paths[0]?.resultCount).toBe(0);
   });
 
   it("reports HTTP percentiles and optional D1 metric headers", async () => {

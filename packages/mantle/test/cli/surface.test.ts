@@ -19,6 +19,9 @@ it("ships the authoring CLI without scaffold or bundle-update side effects", () 
     expect(help).toContain("docs/examples/host-local-admin-otp");
     expect(help).toContain("node_modules/@aotter/mantle/docs/examples/host-minimal-worker");
     expect(help).toContain("node_modules/@aotter/mantle/docs/examples/host-local-admin-otp");
+    expect(help).toContain("docs/handbook/start/overview.md");
+    expect(help).toContain("docs/handbook/reference/features.md");
+    expect(help).toContain("docs/handbook/guides/admin-ui.md");
     expect(help).toContain("generate");
     expect(help).toContain("validate");
     expect(help).not.toMatch(/\b(create|update|blank|template)\b/);

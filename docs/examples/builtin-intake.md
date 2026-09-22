@@ -30,7 +30,7 @@ spec:
       name: { type: string, minLength: 1, maxLength: 120 }
       email: { type: string, format: email }
       message: { type: string, minLength: 1, maxLength: 2000 }
-      createdAt: { type: number, x-mcp-hint: timestamp-ms, x-mantle-bind: now }
+      submittedAt: { type: number, x-mcp-hint: timestamp-ms, x-mantle-bind: now }
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: View
@@ -40,9 +40,9 @@ spec:
   title: Recent requests
   surface: staff
   from: requests
-  fields: [id, name, email, message, createdAt]
+  fields: [id, name, email, message, submittedAt]
   orderBy:
-    - { field: createdAt, direction: desc }
+    - { field: submittedAt, direction: desc }
   limit: 50
 ---
 apiVersion: cms.mantle.aotter.net/v1
@@ -80,7 +80,7 @@ spec:
   target: { procedure: submit-request }
 ```
 
-`createdAt` is stamped by the server (`x-mantle-bind: now`); a caller-supplied value is ignored. The builtin `create` projects `input ∩ Schema.properties`.
+`submittedAt` is stamped by the server (`x-mantle-bind: now`); a caller-supplied value is ignored. It lives in `data` next to the native `createdAt` column so the timestamp travels with the record through MCP output and exports; data properties may not reuse the native column names. The builtin `create` projects `input ∩ Schema.properties`.
 
 ## Worker and handlers
 
@@ -109,7 +109,7 @@ curl -sS -X POST http://localhost:8787/api/requests \
     "collection": "requests",
     "status": "published",
     "version": 1,
-    "data": { "name": "Ada", "email": "ada@example.test", "message": "Please call me back.", "createdAt": 1788879363492 },
+    "data": { "name": "Ada", "email": "ada@example.test", "message": "Please call me back.", "submittedAt": 1788879363492 },
     "authorId": null,
     "createdAt": 1788879363492,
     "updatedAt": 1788879363492

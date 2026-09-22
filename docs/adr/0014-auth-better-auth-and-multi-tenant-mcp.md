@@ -3,11 +3,11 @@
 ## Status
 
 Accepted. Amended 2026-05-14, 2026-05-15, 2026-06-30, 2026-07-15,
-2026-08-03, 2026-08-22, and 2026-09-18.
+2026-08-03, 2026-08-22, 2026-09-18, 2026-09-21, and 2026-09-22.
 
 ## Date
 
-2026-05-09 (last amended 2026-08-22)
+2026-05-09 (last amended 2026-09-22)
 
 > **Current authority:** the original decision below records the rejected
 > Better-Auth-for-MCP design. The 2026-08-22 Better Auth 1.7 amendment is
@@ -167,6 +167,8 @@ The internal consumers of `Auth` (post-#193: `mountServerEndpoints`, `createMcpA
 **Adopters who want a different backend implement `Auth` directly and bypass `createAuth`.** Lucia, Auth.js, a custom hand-roll — all valid. The seam already works today; the `/api/auth/*` URL convention (which Better Auth picks for its mounted endpoints) is a second-tier contract that affects the admin SPA. `auth-views.tsx` hard-codes six paths today (`/api/auth/methods`, `/api/auth/sign-in/social`, `/api/auth/email-otp/send-verification-otp`, `/api/auth/sign-in/email-otp`, `/api/auth/sign-in/magic-link`, `/api/auth/sign-out`); replacing the backend means matching the URL convention OR forking `auth-views.tsx`.
 
 **Anti-pattern to refuse in review: Better Auth-field pass-through.**
+
+> **Narrowed by the 2026-09-22 amendment** for `OAuthProviderConfig.extensions`, Better Auth's declared OAuth-provider composition point. See § "2026-09-22 amendment" below.
 
 If a future PR's only effect is to rename a Better Auth field into our `CreateAuthConfig` and forward it verbatim, refuse it. **Picking a different literal default for an existing Better Auth field does NOT, by itself, justify a new field on `CreateAuthConfig` — that's the same pass-through dressed up.** The SDK adds load-bearing surface area only when the new field exists for at least one of these concrete reasons:
 
@@ -722,7 +724,8 @@ Cloudflare deployments may pass their deployment-owned KV namespace as
 keeping the canonical session row in D1. OTP verification remains D1-backed
 and rate limiting remains isolate-local because Workers KV does not provide
 the atomic consume or increment operations those paths require. Auth keys use
-the `better-auth:` prefix so the namespace can also hold Mantle projections.
+the `better-auth:<store-instance-id>:` prefix so replacing D1 makes the old
+store's cached sessions unreachable while the namespace can still hold Mantle projections.
 Session revocation and user updates use Better Auth's cache invalidation and
 therefore follow Workers KV's propagation model.
 
@@ -755,3 +758,143 @@ Applications that need to own an entire callback may pass official plugin
 instances through `plugins`. Those plugins do not synthesize Admin metadata,
 and duplicate plugin ids fail at construction. There is no
 `Partial<BetterAuthOptions>` deep merge and no silent plugin replacement.
+
+## 2026-09-21 amendment — keyed default email OTP storage
+
+Issue #989 changes only the Mantle default for email OTP storage. Better Auth
+`storeOTP: "hashed"` is unsalted SHA-256 of the OTP. For the default 6-digit
+alphabet that makes a `verification` table dump a sign-in oracle without
+`BETTER_AUTH_SECRET`. The Cloudflare `createAuth` default is now HMAC-SHA-256
+of the OTP keyed by `BETTER_AUTH_SECRET` (unpadded base64url), so D1 alone is
+not enough.
+
+Magic-link tokens remain Better Auth `hashed`; they are high-entropy. Explicit
+official `storeOTP` / `storeToken` overrides, including `plain`, remain adopter
+configuration (2026-09-18 native-options amendment / #925). `createAuth` does
+not hard-reject those overrides.
+
+Deploying this change invalidates unconsumed OTPs created by an older
+deployment. Users request a new code; no database migration is needed.
+
+## Amendment — 2026-09-21: host-neutral `@aotter/mantle-auth`
+
+Identity remains adapter-owned: there is still no Core auth port. The Better
+Auth surface is extracted into `@aotter/mantle-auth` (not
+`mantle-better-auth`) ahead of a second-host adapter, because the
+implementation was already host-neutral except for ingress IP headers and
+D1/KV bindings.
+
+`createMantleAuth` is the portable constructor. Adapters still own host
+wiring. Cloudflare `createAuth` keeps its existing signature, supplies
+`cf-connecting-ip`, constructs `D1DatabaseDriver`, and optionally wraps
+Workers KV as `AuthSessionCache`. Bun and Vercel have no auth adapter in this
+change; when that wiring lands they must supply their own trusted ingress
+header(s) and driver. The portable package never defaults to a Cloudflare
+header or to client-controlled `X-Forwarded-For`. Missing or empty
+`ipAddressHeaders` fails closed.
+
+## 2026-09-21 amendment — instance-level `accountLinking`
+
+Issue #952 adds `accountLinking` to `CreateMantleAuthOptions` in the host-neutral
+`@aotter/mantle-auth` package, forwarded verbatim to Better Auth's
+`account.accountLinking`; the Cloudflare `CreateAuthConfig` and every future
+host wrapper inherit it.
+
+Issue #924 deferred instance-level control to "a separate low-level instance
+adapter". That deferral is kept for *general* control; this is a single named
+passthrough in the shape `trustedOrigins`, `cookiePrefix` and
+`crossSubDomainCookies` already use, not the option-bag merge #924 rejected.
+The distinction that matters is ambiguity, not nesting depth: a named field
+has one owner and one meaning, while a merged `Partial<BetterAuthOptions>`
+would let an adopter silently overwrite session, cookie and rate-limit
+invariants Mantle enforces.
+
+`accountLinking` earned a field ahead of the low-level adapter because it
+decides whether two sign-ins are one person. Mantle cannot pick that default
+on an adopter's behalf — only the adopter knows which providers verify the
+addresses they return — and until now adopters had no way to express it, in
+either direction.
+
+Mantle sets no default. Omitted, no `account` key is constructed at all and
+Better Auth's defaults govern: implicit linking on, `requireLocalEmailVerified`
+on, `trustedProviders` empty. A consequence worth stating, because the
+`inviteUser` contract above implies otherwise: an invitation row is written
+`emailVerified: 0`, so a social sign-in cannot claim it until the invitee
+verifies by email once.
+
+## 2026-09-21 amendment — one caller gate; surface selects the staff rule only
+
+Sections 3 and 5 above describe `/mcp` and `/mcp/staff` as bearer-only routes
+that answer every unauthenticated request with a `401` challenge, while the
+HTTP Trigger and `/api/views/*` routes resolve callers through `resolveCaller`
+(consumer credential, then OAuth bearer, then cookie session, then anonymous)
+and leave enforcement to each target's `requires`. Issue #977 removes that
+split. Both transports now run the same gate (`gateCaller`):
+
+- Identity resolution is `resolveCaller` for every transport. A cookie session
+  may drive `/mcp` same-origin; the cross-origin guard applies only when the
+  credential is a session, as it already did for HTTP mutations.
+- `surface` decides exactly one thing: `staff` requires `ctx.staff`; `public`
+  admits anonymous callers. Each tool's `requires.auth` and guard still run on
+  every `tools/call`, so a public View with no `requires` is reachable
+  anonymously over MCP exactly as it is over REST, and the handbook's
+  "the same View is safe on REST and on public MCP" holds.
+- The OAuth bootstrap is preserved where it matters. Invalid credentials and
+  anonymous callers on the staff surface still receive `401`/`403` with the
+  RFC 9728 `WWW-Authenticate` challenge. On the public surface an anonymous
+  `initialize` or `tools/list` succeeds (the catalog is caller-independent), and
+  the first `tools/call` whose target requires identity answers HTTP `401` with
+  the same challenge instead of an HTTP `200` JSON-RPC error, so a client can
+  authenticate mid-session and retry. `AUTH_DENIED` maps to `403` the same way.
+
+The fresh-role rule (section 5) and the MCP grant check are unchanged: both
+run inside `resolveCaller`'s bearer path. What changed is only where the
+surface rule sits and that it is the *only* rule the surface adds.
+
+Two invariants that the shared gate must keep, stated so they are not lost
+in a later refactor:
+
+- **The `mcp` scope floor applies to every presented credential.** Bearer
+  tokens are checked inside `resolveCaller`; a consumer credential (site PAT,
+  API key) is checked by the MCP handler after the gate, and a PAT minted for
+  a narrow integration is refused with `403 insufficient_scope` even when its
+  owner is staff. A cookie session carries no scopes and is the same browser
+  identity Admin already trusts, so it is exempt. Anonymous callers present
+  nothing to check; each tool's `requires` governs them.
+- **JSON-RPC over HTTP is `application/json` only.** The dispatcher answers
+  `415` to anything else, so an HTML form (whose enctypes cannot produce that
+  header) can never drive a cookie session on `/mcp`; the same-origin guard
+  remains the second layer.
+
+## 2026-09-22 amendment — OAuth provider extensions are an adopter seam
+
+Issue #1016 supersedes the 2026-05-14 "Better Auth-field pass-through"
+prohibition for one field: `OAuthProviderConfig.extensions`, forwarded to
+`@better-auth/oauth-provider`'s `extensions` option. It follows the 2026-09-18
+line that already exposes official Better Auth options and plugin instances
+rather than copying them.
+
+Why this is not the refused pattern: an `OAuthProviderExtension` is Better
+Auth's declared composition point for token grants, client-authentication
+strategies, discovery metadata and additional claims. MCP Enterprise-Managed
+Authorization needs a `jwt-bearer` (ID-JAG) grant whose issuer and JWKS belong
+to one enterprise IdP; that is adopter configuration, not an SDK default, and
+Core has no business knowing the issuer. Curating a first-class
+`enterpriseIdp` field would put an IdP contract inside Core and still forward
+it verbatim underneath. The reference implementation lives outside Core
+(`@aotterclam/id-jag`).
+
+Boundaries that stay:
+
+- Core's own claims extension (`mantle_consent_id`) is always first on the
+  `mcpResource` branch; adopter extensions append after it and cannot replace
+  it. Better Auth's contract makes claims contributors additive, so an
+  extension cannot overwrite identity or AS-owned claims either way.
+- `createMantleAuth` still owns login and consent pages, CIMD/DCR policy,
+  `mcpResource`, scopes and resources. `extensions` adds grants and strategies
+  beside those; it is not a `Partial<OAuthOptions>` merge and cannot change
+  them.
+- Tokens an extension issues go through the provider's shared token path, so
+  `verifyOAuthAccessToken`, DPoP binding and the MCP challenge are unchanged.
+- No other Better Auth field gains a passthrough by this amendment. The
+  2026-05-14 test still applies to the next proposal.

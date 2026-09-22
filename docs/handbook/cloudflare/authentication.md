@@ -77,12 +77,28 @@ The staff role is re-read from D1 on every protected REST and MCP call; a revoke
 |---|---|
 | `/admin`, `/admin/api/*` | Staff session; role gates per route |
 | `/api/auth/*`, `/oauth/*`, `/.well-known/oauth*` | Auth-owned; public endpoints of the OAuth flow |
-| `/mcp` | Any authenticated OAuth caller; anonymous requests get `401` with a `WWW-Authenticate` challenge |
+| `/mcp` | Same caller resolution as HTTP routes (bearer, same-origin cookie session, or anonymous); each tool's `requires` gates the call, and a call that needs identity answers `401` with a `WWW-Authenticate` challenge |
 | `/mcp/staff` | Authenticated caller with a staff role |
 | `/<locale>/<segment>/<slug>?preview=1` | Staff session (`401` without a session, `403` without a staff role) |
 | Public Views, public HTTP Triggers, public pages, `.md`, `llms.txt`, sitemap | None, unless the manifest declares `requires` |
 
 MCP tokens are session-bound: signing out of Admin ends MCP access. See [MCP and agents](../concepts/mcp-and-agents.md).
+
+## Session cache and database replacement
+
+When optional session caching is enabled, the cache is derived from the
+canonical store, not a second identity authority. Auth prefixes keys with
+`better-auth:<store-instance-id>:`. Preparing a new store gives it a distinct
+identity, so reusing the same KV namespace after replacing D1 cannot resurrect
+the previous store's cached sessions. Ordinary preparation of the same store
+preserves its identity.
+
+Custom low-level Auth composition must prepare the Mantle store before cached
+Auth operations; do not construct cache keys or seed the identity yourself.
+OTP verification remains in the primary database and rate limiting remains
+isolate-local. Revocation/user-update cache invalidation still follows KV
+propagation; the namespace change is isolation across stores, not a promise of
+instant global invalidation. See the [Auth decision](../../adr/0014-auth-better-auth-and-multi-tenant-mcp.md).
 
 ## Better Auth configuration
 
@@ -112,8 +128,10 @@ methods: [
 ]
 ```
 
-Email OTP and magic-link storage defaults to `hashed`. Explicit official
-overrides remain available, including custom hashing/encryption:
+Email OTP storage defaults to a keyed HMAC-SHA-256 of the code using
+`BETTER_AUTH_SECRET`. Magic-link tokens remain `hashed` (high-entropy).
+Explicit official overrides remain available, including `plain` and custom
+hashing/encryption:
 
 ```ts
 { kind: "email-otp", sender, options: {
@@ -153,6 +171,45 @@ const auth = createAuth({
 ```
 
 Shared cookies do not cross registrable domains. A browser never sends an `example.com` cookie to `customer.com`. For a customer-owned domain, use an OAuth/OIDC broker flow: the customer site redirects to the identity provider's authorize endpoint, receives the callback, verifies the response and creates its own local session. The broker returns identity; the customer site remains the authority for its members and grants.
+
+### Account linking across providers
+
+One person signing in with Google, then with GitHub, may land on one user row
+or be refused — Better Auth decides this, and `createAuth()` does not override
+it. Left unconfigured, Better Auth's own defaults apply: implicit linking is
+on, so a social sign-in whose provider reports a verified email attaches to the
+existing row carrying that email. It never creates a second row for the same
+address; when linking is not permitted the sign-in fails with
+`account not linked`.
+
+Two defaults are worth knowing before you change anything. `requireLocalEmailVerified`
+is on, so linking is refused while the *local* row is still unverified — this is
+what stops someone pre-registering an unverified row at your user's address and
+having that user's Google identity attach to it. It is also why a staff invitation
+(`inviteUser` writes `emailVerified: 0`) cannot be claimed by a social sign-in
+until the invitee verifies by email once. Separately, `trustedProviders` is
+empty, so every provider must supply `email_verified` to link at all.
+
+Pass `accountLinking` to scope this. It is forwarded verbatim:
+
+```ts
+const auth = createAuth({
+  database: env.DB,
+  baseURL: env.PUBLIC_ORIGIN,
+  secret: env.BETTER_AUTH_SECRET,
+  methods,
+  accountLinking: {
+    // Accept these providers' word without an `email_verified` claim.
+    trustedProviders: ["google", "github"],
+  },
+});
+```
+
+Listing a provider in `trustedProviders` asserts that it verifies the addresses
+it returns; a provider that does not turns the list into an account-takeover
+path. To go the other way and keep every identity separate, set
+`disableImplicitLinking: true` (users may still link deliberately via
+`linkSocial()` while signed in) or `enabled: false` to refuse linking outright.
 
 ## Self-hosted and hosted
 
@@ -220,6 +277,51 @@ JWKS/signature, audience, time claims, required scopes, and—when passed the
 request—DPoP proof binding with database-backed replay protection. It returns
 only `userId`, `clientId`, `credentialId`, and scopes. Opaque tokens are
 rejected; there is no introspection fallback.
+
+## Enterprise-Managed Authorization
+
+MCP's [Enterprise-Managed Authorization](https://modelcontextprotocol.io/extensions/auth/enterprise-managed-authorization)
+extension lets an enterprise IdP decide which employees may reach an MCP
+server. The MCP client exchanges the user's IdP login for an ID-JAG (identity
+assertion authorization grant) and presents it to the server's token endpoint
+as `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`; no consent page
+is shown. Everything after that is an ordinary access token.
+
+Core does not know any issuer or JWKS. The token grant is a
+`@better-auth/oauth-provider` extension supplied by the adopter through
+`oauthProvider.extensions`, appended after Core's own claims extension:
+
+```ts
+import { identityAssertionAuthorizationGrant } from "@aotterclam/id-jag";
+
+const auth = createAuth({
+  // database, baseURL, secret, methods...
+  oauthProvider: {
+    loginPage: "/admin/sign-in",
+    consentPage: "/oauth/consent",
+    scopes: ["mcp", "offline_access"],
+    mcpResource: env.PUBLIC_ORIGIN + "/mcp",
+    extensions: [
+      identityAssertionAuthorizationGrant({
+        issuer: env.ENTERPRISE_IDP_ISSUER,
+        jwksUrl: env.ENTERPRISE_IDP_JWKS_URL,
+        authorizationServer: env.PUBLIC_ORIGIN,
+        resource: env.PUBLIC_ORIGIN + "/mcp",
+        scopes: ["mcp"],
+        fetchJwks: (input, init) => fetch(input, { ...init, redirect: "manual" }),
+      }),
+    ],
+  },
+});
+```
+
+The extension validates the assertion's signature, issuer, audience and
+lifetime, maps its subject to a user, and issues tokens through the provider's
+shared token path, so `verifyOAuthAccessToken`, DPoP and the MCP challenge
+behave exactly as for interactive grants. `@aotterclam/id-jag` is a reference
+implementation, not a Core dependency; any `OAuthProviderExtension` works.
+Extensions may also add client-authentication strategies, discovery metadata
+and additional claims. The same passthrough applies without `mcpResource`.
 
 ## Source
 - [`packages/adapters/cloudflare/README.md`](../../../packages/adapters/cloudflare/README.md)

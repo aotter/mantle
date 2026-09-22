@@ -23,7 +23,13 @@ describe("v0.1 sealed-pipeline characterization", () => {
     expect(parsed.diagnostics).toEqual([]);
     if (!parsed.ok) throw new Error("expected valid characterization fixture");
     const linked = linkManifestSet(parsed.value);
-    expect(linked.diagnostics).toEqual([]);
+    // The fixture's MCP-exposed Procedure has no description on purpose: its
+    // semantic fingerprint is pinned by the Bun and Vercel package checks, so
+    // the advisory warning is asserted here instead of edited away.
+    expect(linked.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+    expect(linked.diagnostics.map((d) => [d.code, d.severity, d.path])).toEqual([
+      ["MCP_TOOL_DESCRIPTION_MISSING", "warning", "/spec/description"],
+    ]);
     if (!linked.ok) throw new Error("expected linked characterization fixture");
     expect({
       parsed: parsed.value.entries.map(({ manifest, source }) => ({ manifest, source })),

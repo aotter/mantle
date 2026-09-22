@@ -25,6 +25,19 @@ const auth: AdminAuth = {
 };
 
 describe("mountMantleAdmin", () => {
+  it("does not project or mount internal Views", async () => {
+    const app = mounted({
+      getSession: async () => ({ session: { id: "s" }, user: { id: "owner", role: "owner", roleCurrent: true as const } }),
+    }, compilePlan(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: host-report }
+spec: { surface: internal, sql: SELECT 1 AS value }
+`));
+    const manifest = await app.request("https://example.test/admin/api/views-manifest");
+    expect(await manifest.json()).toEqual({ views: [] });
+    expect((await app.request("https://example.test/admin/api/views/host-report")).status).toBe(404);
+  });
+
   it("reports only MCP endpoints mounted by the host", async () => {
     const app = new Hono();
     mountMantleAdmin(app, {

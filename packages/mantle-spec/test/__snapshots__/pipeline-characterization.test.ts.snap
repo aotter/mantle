@@ -135,10 +135,6 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "localized": false,
           "schema": {
             "properties": {
-              "createdAt": {
-                "type": "number",
-                "x-mantle-bind": "now",
-              },
               "customerId": {
                 "minLength": 1,
                 "type": "string",
@@ -147,17 +143,21 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
                 "minLength": 1,
                 "type": "string",
               },
-              "status": {
+              "orderStatus": {
                 "enum": [
                   "open",
                   "closed",
                 ],
                 "type": "string",
               },
+              "placedAt": {
+                "type": "number",
+                "x-mantle-bind": "now",
+              },
             },
             "required": [
               "customerId",
-              "status",
+              "orderStatus",
             ],
             "type": "object",
           },
@@ -174,7 +174,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 18,
-            "offset": 550,
+            "offset": 559,
           },
           "start": {
             "column": 1,
@@ -195,8 +195,8 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "fields": [
             "id",
             "customerId",
-            "status",
-            "createdAt",
+            "orderStatus",
+            "placedAt",
           ],
           "filter": {
             "and": [
@@ -210,7 +210,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
               },
               {
                 "eq": {
-                  "field": "status",
+                  "field": "orderStatus",
                   "value": "open",
                 },
               },
@@ -221,7 +221,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "orderBy": [
             {
               "direction": "desc",
-              "field": "createdAt",
+              "field": "placedAt",
             },
           ],
           "params": {
@@ -257,12 +257,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 44,
-            "offset": 1188,
+            "offset": 1205,
           },
           "start": {
             "column": 1,
             "line": 21,
-            "offset": 634,
+            "offset": 643,
           },
         },
       },
@@ -303,12 +303,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 57,
-            "offset": 1462,
+            "offset": 1479,
           },
           "start": {
             "column": 1,
             "line": 45,
-            "offset": 1192,
+            "offset": 1209,
           },
         },
       },
@@ -357,12 +357,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 73,
-            "offset": 1782,
+            "offset": 1799,
           },
           "start": {
             "column": 1,
             "line": 58,
-            "offset": 1466,
+            "offset": 1483,
           },
         },
       },
@@ -393,12 +393,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 81,
-            "offset": 1973,
+            "offset": 1990,
           },
           "start": {
             "column": 1,
             "line": 74,
-            "offset": 1786,
+            "offset": 1803,
           },
         },
       },
@@ -428,12 +428,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 89,
-            "offset": 2146,
+            "offset": 2163,
           },
           "start": {
             "column": 1,
             "line": 82,
-            "offset": 1977,
+            "offset": 1994,
           },
         },
       },
@@ -467,12 +467,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 101,
-            "offset": 2374,
+            "offset": 2391,
           },
           "start": {
             "column": 1,
             "line": 90,
-            "offset": 2150,
+            "offset": 2167,
           },
         },
       },

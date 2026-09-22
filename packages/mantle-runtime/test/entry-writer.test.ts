@@ -90,20 +90,24 @@ describe("DatabaseEntryRepository against in-memory DatabaseDriver", () => {
     expect((await flexibleRepo.get({ id: "two", collection: "flexible" }))?.data).toEqual({ value: "123", note: null });
   });
 
-  it("uses the authored id column for both ordering and cursor values", async () => {
-    const authored: SchemaManifest = {
+  it("materializes omitted nullable:true fields as null on SQLite get", async () => {
+    const notes: SchemaManifest = {
       ...schema,
-      metadata: { name: "authored_ids" },
-      spec: { ...schema.spec, schema: { type: "object", properties: { id: { type: "string" } } } },
+      metadata: { name: "notes" },
+      spec: { title: "Notes", schema: { type: "object", properties: {
+        title: { type: "string" },
+        note: { type: "string", nullable: true },
+      } } },
     };
-    await db.migrations.runAll(schemaTableMigrations([authored]));
-    const authoredRepo = new DatabaseEntryRepository(db, new Map([["authored_ids", authored]]));
-    await authoredRepo.create({ id: "a", collection: "authored_ids", status: "draft", data: { id: "z" }, authorId: null, now: 1 });
-    await authoredRepo.create({ id: "b", collection: "authored_ids", status: "draft", data: { id: "y" }, authorId: null, now: 2 });
-    const first = await authoredRepo.list({ collection: "authored_ids", limit: 1, sort: { field: "id", direction: "asc" } });
-    const second = await authoredRepo.list({ collection: "authored_ids", limit: 1, sort: { field: "id", direction: "asc" }, cursor: first.nextCursor });
-    expect(first.rows.map((row) => row.data.id)).toEqual(["y"]);
-    expect(second.rows.map((row) => row.data.id)).toEqual(["z"]);
+    await db.migrations.runAll(schemaTableMigrations([notes]));
+    const notesRepo = new DatabaseEntryRepository(db, new Map([["notes", notes]]));
+    await notesRepo.create({
+      id: "n1", collection: "notes", status: "draft",
+      data: { title: "Hi" }, authorId: null, now: 1,
+    });
+    expect((await notesRepo.get({ id: "n1", collection: "notes" }))?.data).toEqual({
+      title: "Hi", note: null,
+    });
   });
 
   it("update bumps version + persists data", async () => {

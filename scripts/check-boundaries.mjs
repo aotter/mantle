@@ -124,6 +124,7 @@ function checkPackageDirection() {
         "@aotter/mantle-web",
         "@aotter/mantle-admin",
         "@aotter/mantle-admin-ui",
+        "@aotter/mantle-auth",
         "@aotter/mantle-bun",
         "@aotter/mantle-vercel",
       ],
@@ -136,6 +137,7 @@ function checkPackageDirection() {
         "@aotter/mantle-admin-ui",
         "@aotter/mantle-web",
         "@aotter/mantle-admin",
+        "@aotter/mantle-auth",
         "@aotter/mantle-admin-ui",
         "@aotter/mantle-bun",
         "@aotter/mantle-vercel",
@@ -148,6 +150,7 @@ function checkPackageDirection() {
         "@aotter/mantle-cloudflare",
         "@aotter/mantle-admin",
         "@aotter/mantle-admin-ui",
+        "@aotter/mantle-auth",
         "@aotter/mantle-bun",
         "@aotter/mantle-vercel",
         "D1Database",
@@ -160,6 +163,7 @@ function checkPackageDirection() {
       dir: "packages/mantle-admin/src",
       forbidden: [
         "@aotter/mantle-cloudflare",
+        "@aotter/mantle-auth",
         "@aotter/mantle-bun",
         "@aotter/mantle-vercel",
         "D1Database",
@@ -167,6 +171,23 @@ function checkPackageDirection() {
         "ExecutionContext",
       ],
       message: "admin must not import platform packages and types",
+    },
+    {
+      dir: "packages/mantle-auth/src",
+      forbidden: [
+        "@aotter/mantle-cloudflare",
+        "@aotter/mantle-bun",
+        "@aotter/mantle-vercel",
+        "@aotter/mantle-admin-ui",
+        "@aotter/mantle-web",
+        "D1Database",
+        "KVNamespace",
+        "ExecutionContext",
+        "@cloudflare/",
+        "cf-connecting-ip",
+        "CF-Connecting-IP",
+      ],
+      message: "auth must not import platform packages, Cloudflare types, or a Cloudflare IP-header default",
     },
   ];
 
@@ -271,6 +292,9 @@ function checkAdminPackageBoundary() {
   if (!cloudflare.dependencies?.["@aotter/mantle-admin"]) {
     fail(cloudflarePath, "Cloudflare must select Mantle Admin explicitly");
   }
+  if (!cloudflare.dependencies?.["@aotter/mantle-auth"]) {
+    fail(cloudflarePath, "Cloudflare must select Mantle Auth explicitly");
+  }
   if (cloudflare.dependencies?.["@aotter/mantle-admin-ui"]) {
     fail(cloudflarePath, "Cloudflare must select Mantle Admin, not depend on its UI directly");
   }
@@ -285,9 +309,36 @@ function checkAdminPackageBoundary() {
     join(ROOT, "packages/mantle-admin/src"),
     (path) => path.endsWith(".ts"),
   ).map((path) => stripComments(readFileSync(path, "utf8"))).join("\n");
-  if (/from\s+["'][^"']*mantle-(?:cloudflare|bun|vercel)[^"']*["']/.test(adminSource) ||
+  if (/from\s+["'][^"']*mantle-(?:auth|cloudflare|bun|vercel)[^"']*["']/.test(adminSource) ||
       /\b(?:D1Database|ExecutionContext)\b/.test(adminSource)) {
     fail(adminPath, "Mantle Admin cannot import platform packages or types");
+  }
+}
+
+function checkAuthPackageBoundary() {
+  const runtimePath = join(ROOT, "packages/mantle-runtime/package.json");
+  const authPath = join(ROOT, "packages/mantle-auth/package.json");
+  const runtime = JSON.parse(readFileSync(runtimePath, "utf8"));
+  const auth = JSON.parse(readFileSync(authPath, "utf8"));
+  const runtimeDeps = { ...runtime.dependencies, ...runtime.optionalDependencies };
+  if (runtimeDeps["@aotter/mantle-auth"]) {
+    fail(runtimePath, "runtime must stay installable without Mantle Auth");
+  }
+  if (!auth.dependencies?.["@aotter/mantle-admin"] ||
+      !auth.dependencies?.["@aotter/mantle-runtime"] ||
+      !auth.dependencies?.["@aotter/mantle-spec"]) {
+    fail(authPath, "Mantle Auth must compose downstream from Admin, Runtime, and Spec");
+  }
+  for (const dependency of [
+    "@aotter/mantle-admin-ui",
+    "@aotter/mantle-bun",
+    "@aotter/mantle-cloudflare",
+    "@aotter/mantle-vercel",
+    "@aotter/mantle-web",
+  ]) {
+    if (auth.dependencies?.[dependency]) {
+      fail(authPath, `Auth must not depend on platform or optional package '${dependency}'`);
+    }
   }
 }
 
@@ -302,6 +353,7 @@ function checkUmbrellaPackageBoundary() {
   for (const name of [
     "@aotter/mantle-admin",
     "@aotter/mantle-admin-ui",
+    "@aotter/mantle-auth",
     "@aotter/mantle-bun",
     "@aotter/mantle-cloudflare",
     "@aotter/mantle-vercel",
@@ -319,6 +371,7 @@ function checkLegacyStackDeleted() {
     "packages/mantle/src",
     "packages/mantle-admin/src",
     "packages/mantle-web/src",
+    "packages/mantle-auth/src",
     "packages/adapters/bun/src",
     "packages/adapters/vercel/src",
     "packages/adapters/cloudflare/src",
@@ -496,15 +549,15 @@ function checkMantleRuntimeBoundary() {
   if (/\b(?:manifests?|sources?)\s*:\s*readonly\b/.test(source)) {
     fail(file, "MantleRuntime cannot accept raw manifests or authored sources");
   }
-  if (/from\s+["'][^"']*(?:mantle-web|mantle-admin|mantle-bun|mantle-cloudflare|mantle-vercel)[^"']*["']/.test(source)) {
-    fail(file, "MantleRuntime cannot import Web, Admin, or platform packages");
+  if (/from\s+["'][^"']*(?:mantle-web|mantle-admin|mantle-auth|mantle-bun|mantle-cloudflare|mantle-vercel)[^"']*["']/.test(source)) {
+    fail(file, "MantleRuntime cannot import Web, Admin, Auth, or platform packages");
   }
 }
 
 function checkCodegenBoundary() {
   const file = join(ROOT, "packages/mantle/src/codegen/emitMantleModule.ts");
   const source = stripComments(readFileSync(file, "utf8"));
-  for (const token of ["node:", "mantle-admin", "mantle-cloudflare", "mantle-web"]) {
+  for (const token of ["node:", "mantle-admin", "mantle-auth", "mantle-cloudflare", "mantle-web"]) {
     if (source.includes(token)) {
       fail(file, `the pure codegen emitter cannot reference '${token}'`);
     }
@@ -582,8 +635,8 @@ function checkRepositoryGuidance() {
       fail(contributingPath, `contributor authority is missing '${text}'`);
     }
   }
-  if (!releaseSkill.includes("All ten npmjs artifacts")) {
-    fail(releaseSkillPath, "canonical release skill must match the ten-package topology");
+  if (!releaseSkill.includes("All eleven npmjs artifacts")) {
+    fail(releaseSkillPath, "canonical release skill must match the eleven-package topology");
   }
   if (!claudeRelease.includes("../../../.agents/skills/mantle-release/SKILL.md") ||
       claudeRelease.split("\n").length > 8 ||
@@ -592,6 +645,7 @@ function checkRepositoryGuidance() {
   }
 
   for (const stalePath of [
+    "starters",
     "starters/blank/README.md",
     "packages/adapters/netlify/README.md",
     "packages/adapters/netlify/package.json",
@@ -610,7 +664,6 @@ function checkRepositoryGuidance() {
     ...listFiles(join(ROOT, "docs"), (path) =>
       path.endsWith(".md") &&
       !path.includes(`${sep}adr${sep}`) &&
-      !path.endsWith("migration-0.1.2.md") &&
       !path.endsWith("sealed-pipeline-ownership.md")
     ),
   ];
@@ -679,6 +732,7 @@ checkPackageDirection();
 checkEntryReadOwnership();
 checkWebPackageBoundary();
 checkAdminPackageBoundary();
+checkAuthPackageBoundary();
 checkUmbrellaPackageBoundary();
 checkBunPackageBoundary();
 checkVercelPackageBoundary();

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync, spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 if (process.argv[2] === "--channels") {
   console.log(releaseChannels(process.argv[3]).join(" "));
@@ -29,6 +29,7 @@ if (process.argv[2] === "--self-test") {
   const steps = [...workflow.matchAll(/^      - name: (.+)$/gm)].map((match) => match[1]);
   const ordered = [
     "Check Core source",
+    "Record published packages",
     "Pack release tarballs", "Verify release credentials", "Create immutable Core tag",
     "Publish to npmjs", "Verify immutable npm artifacts", "Mirror to GitHub Packages",
     "Verify public-registry Core in the reference Worker",
@@ -43,10 +44,57 @@ if (process.argv[2] === "--self-test") {
   }
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   assert(pkg.scripts.check.includes("pnpm check:worker-consumer"));
-  assert.match(workflow, /- name: Check Core source\n        run: pnpm check/);
+  assert.match(
+    workflow,
+    /- name: Check Core source\n        if: steps\.ver\.outputs\.tag_exists != 'true'\n        run: pnpm check/,
+  );
+  assert.match(workflow, /CORE_SHA=\$TAG_SHA/);
   assert.doesNotMatch(workflow, /mantle-starters|mantle-landing|RELEASE_FANOUT_TOKEN|deploy_landing/);
-  assert.match(workflow, /run: node scripts\/check-worker-consumer\.mjs --registry "\$VERSION"/);
+  assert.match(workflow, /node scripts\/check-worker-consumer\.mjs --registry "\$VERSION"/);
+  assert.match(
+    workflow,
+    /- name: Record published packages\n        id: pkgs\n[\s\S]*if \[ "\$TAG_EXISTS" = true \]; then\n\s+missing=0\n\s+for pkg in \$PKG_NAMES; do\n\s+npm view "\$pkg@\$VERSION" version --registry https:\/\/registry\.npmjs\.org/,
+  );
+  assert.match(
+    workflow,
+    /- name: Pack release tarballs\n        if: steps\.pkgs\.outputs\.published != 'true'/,
+  );
+  assert.match(
+    workflow,
+    /- name: Verify immutable npm artifacts\n        if: steps\.pkgs\.outputs\.published != 'true'/,
+  );
+  assert.match(
+    workflow,
+    /if \[ "\$PACKAGES_PUBLISHED" = true \]; then\n\s+echo "Tagged recovery: all packages already exist on npmjs at \$VERSION; skipping the public-registry Worker gate\."/,
+  );
+  assert.match(workflow, /tagged recovery will not pack a replacement from the controller tip/);
+  assert.doesNotMatch(workflow, /git checkout "\$CORE_SHA"/);
   assert.doesNotMatch(workflow, /continue-on-error:/);
+
+  const gate = workflow.indexOf("Verify public-registry Core in the reference Worker");
+  const npmPromote = workflow.indexOf("- name: Promote npmjs channel tags");
+  const gprPromote = workflow.indexOf("- name: Promote GitHub Packages channel tags");
+  const githubRelease = workflow.indexOf("- name: Create GitHub release");
+  assert.ok(gate < npmPromote && npmPromote < gprPromote && gprPromote < githubRelease);
+  const publishTags = [...workflow.matchAll(/--tag mantle-release/g)];
+  assert.equal(publishTags.length, 2);
+  assert.ok(publishTags[0].index < gate && publishTags[1].index < gate);
+  const promoteOnly = [...workflow.matchAll(
+    /for pkg in \$PKG_NAMES; do\n {12}for channel in \$\(node scripts\/release-tag-order\.mjs --channels "\$VERSION"\); do\n {14}promote "\$pkg" "\$channel"\n {12}done\n {10}done/g,
+  )];
+  assert.equal(promoteOnly.length, 2);
+  assert.ok(promoteOnly[0].index > npmPromote && promoteOnly[0].index < gprPromote);
+  assert.ok(promoteOnly[1].index > gprPromote && promoteOnly[1].index < githubRelease);
+  const npmStep = workflow.slice(npmPromote, gprPromote);
+  const gprStep = workflow.slice(gprPromote, githubRelease);
+  assert.match(npmStep, /dist-tag add/);
+  assert.match(gprStep, /dist-tag add/);
+  assert.doesNotMatch(workflow, /drop_temp_tag|dist-tag rm|npm unpublish/);
+  assert.doesNotMatch(workflow, /remove-mantle-release|workflow_call/);
+  assert.equal(
+    existsSync(new URL("../.github/workflows/remove-mantle-release-dist-tag.yml", import.meta.url)),
+    false,
+  );
 
   console.log("release self-test passed");
   process.exit(0);

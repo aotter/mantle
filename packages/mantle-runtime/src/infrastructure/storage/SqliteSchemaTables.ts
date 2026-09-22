@@ -3,7 +3,10 @@ import {
   type JsonSchema,
   type SchemaManifest,
 } from "@aotter/mantle-spec";
+import { isNullableJsonSchema } from "../../domain/model/EntryRow.js";
 import type { Migration } from "../../domain/port/DatabaseDriver.js";
+
+export { isNullableJsonSchema };
 
 const SYSTEM_COLUMNS = ["_mantle_id", "_mantle_status", "_mantle_version", "_mantle_author_id", "_mantle_created_at", "_mantle_updated_at"] as const;
 const RESERVED_TABLES = new Set([
@@ -116,7 +119,8 @@ export function schemaTableMigrations(schemas: Iterable<SchemaManifest>): readon
     const problem = checked.problems[0];
     if (problem) throw new Error(`invalid Schema index declaration at ${problem.pointer}: ${problem.message}`);
     for (const declaration of checked.declarations) {
-      const fields = declaration.fields.map(({ name }) => quoteIdent(name));
+      // Native columns (`status`, `createdAt`, …) map to their `_mantle_*` column (#1008).
+      const fields = declaration.fields.map(({ name }) => quoteIdent(NATIVE_COLUMN[name] ?? name));
       const relationship = !declaration.unique && declaration.fields.length === 1 &&
         (schema.spec.translates?.on === declaration.fields[0]!.name ||
           typeof schema.spec.schema.properties?.[declaration.fields[0]!.name]?.["x-mantle-ref"] === "string");
@@ -182,14 +186,21 @@ export function mergeSchemaTableProjections(previous: string | undefined, next: 
   } satisfies SchemaTableProjection);
 }
 
+/** Logical entry column name → physical SQLite column. The parser rejects
+ *  data properties with these names, so the mapping never shadows data. */
+export const NATIVE_COLUMN: Readonly<Record<string, string>> = Object.freeze({
+  id: "_mantle_id",
+  status: "_mantle_status",
+  version: "_mantle_version",
+  createdAt: "_mantle_created_at",
+  updatedAt: "_mantle_updated_at",
+  authorId: "_mantle_author_id",
+});
+
 export function fieldColumn(schema: SchemaManifest, field: string): string | null {
-  return Object.hasOwn(schema.spec.schema.properties ?? {}, field) ? field
-    : field === "id" ? "_mantle_id"
-      : field === "status" ? "_mantle_status"
-        : field === "version" ? "_mantle_version"
-          : field === "createdAt" ? "_mantle_created_at"
-            : field === "updatedAt" ? "_mantle_updated_at"
-              : field === "authorId" ? "_mantle_author_id" : null;
+  const native = NATIVE_COLUMN[field];
+  if (native) return native;
+  return Object.hasOwn(schema.spec.schema.properties ?? {}, field) ? field : null;
 }
 
 export function fieldSql(schema: SchemaManifest, field: string, alias?: string): string | null {
@@ -211,14 +222,14 @@ export function decodeField(value: unknown, property: JsonSchema): unknown {
   if (value === undefined) return undefined;
   const codec = fieldDescriptor(property)[1];
   if (codec === "boolean") return value === 1 || value === true;
-  if (codec === "json" && typeof value === "string") return JSON.parse(value);
+  if (codec === "json" && typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      throw new Error("Invalid JSON for a native Schema field.");
+    }
+  }
   return value;
-}
-
-export function isNullableJsonSchema(property: JsonSchema): boolean {
-  if (property.nullable === true) return true;
-  const types = typeof property.type === "string" ? [property.type] : property.type ?? [];
-  return types.includes("null") || property.oneOf?.some(isNullableJsonSchema) === true;
 }
 
 function fieldDescriptor(property: JsonSchema): readonly [SqliteAffinity, FieldCodec, boolean] {

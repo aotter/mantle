@@ -10,8 +10,8 @@ metadata:
 
 # Mantle Plugin
 
-Mantle plugins are Core SDK capability packages. They are not starter overlays
-and they are not provider provisioning scripts.
+Mantle plugins are Core SDK capability packages. They are not application
+scaffolds (retired in ADR-0021) and they are not provider provisioning scripts.
 
 A plugin may contribute:
 
@@ -50,10 +50,16 @@ stop and ask for the recipe instead of guessing.
 ## First Read
 
 1. `package.json` for Mantle version and adapter package.
-2. `manifests/site.yaml` for current atom names and route/tool collisions.
-3. `src/mantle/config.ts` and `src/mantle/handlers/` for registered handlers, templates, and optional ports. Older projects may use `src/mantleConfig.ts`.
+2. The manifest directory selected by project scripts for current atom names
+   and route/tool collisions.
+3. The actual host entry and its handler, template and port registrations;
+   `src/mantle/config.ts` and `src/mantle/handlers/` are conventions, not required paths.
 4. `.mantle/plugins.json` and `.mantle/plugins.lock.json` if present.
 5. `.mantle/launch-state.json` only as context, not as plugin authority.
+
+Read version-matched contracts under `node_modules/@aotter/mantle/docs/`,
+starting with `handbook/reference/features.md`. Plugin recipes cannot override
+the installed grammar.
 
 ## Plan First
 
@@ -82,8 +88,8 @@ Suggested ledger paths:
 .mantle/plugins.lock.json
 ```
 
-Keep starter launch state separate from plugin state. `.mantle/features.json`
-is launch/starter context, not the Core plugin ledger.
+Keep optional legacy launch files such as `.mantle/features.json` separate from
+plugin state. They are not the Core plugin ledger.
 
 ## Update
 
@@ -100,21 +106,27 @@ and report the dependency instead of deleting through it.
 
 ## Verify
 
+Use the project's validation and typecheck scripts when present. Regenerate
+the plan after manifest changes before probing the running host:
+
 ```bash
-pnpm validate
-pnpm typecheck
+pnpm exec mantle validate
+pnpm exec mantle generate
+pnpm exec mantle generate --check
+# Run the project's TypeScript check and restart its local server.
 ```
 
 Then verify the plugin's declared surfaces:
 
-- `GET /api/views/<name>` for View reads;
+- public Views via `GET /api/views/<name>`, staff Views via authenticated
+  Admin/staff MCP, and internal Views through the host binding;
 - HTTP Trigger path for public writes;
 - Staff/Public MCP `tools/list` for MCP Trigger or Schema-derived tools;
 - adapter resource presence when the plugin requires optional ports.
 
 ## Don't
 
-- Don't treat a starter archetype as a plugin.
+- Don't treat an application template as a plugin.
 - Don't assume Cloudflare; inspect the active adapter and capability ports.
-- Don't create a second skill namespace for starter-specific plugins.
+- Don't create a second skill namespace for host-specific plugins.
 - Don't commit secrets. Provider secrets stay in the platform secret store.

@@ -13,13 +13,20 @@ metadata:
 Theme work is project-owned source editing. Use the actual frontend and its
 tokens/recipes; Core does not install a default home page or UI tree.
 
+For requests to change the Admin console, first read installed
+`node_modules/@aotter/mantle/docs/handbook/guides/admin-ui.md` and use the
+develop skill. Labels, widgets, list columns, filters and actions may already
+be manifest-driven. Visitor CSS does not style the prebuilt Admin SPA, and
+`uiSchema` does not accept arbitrary CSS, components or layout keys.
+
 ## First Read
 
 1. `.mantle/handoff.md` and `.mantle/recipes/` if present.
 2. `styles/`, `components/`, `src/web/`, `src/theme*`, and UI-library config
    if present.
 3. A vendored UI palette's manifest and license, if present.
-4. `manifests/site.yaml` to understand which content shape drives the public UI.
+4. The manifest directory selected by project scripts to understand which
+   content shape drives the public UI.
 
 ## Ownership
 

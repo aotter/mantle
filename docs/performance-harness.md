@@ -55,6 +55,13 @@ data-field predicate/order that does not use a declared Schema index.
 Projection alone does not require an index. `mantle validate` remains a pure
 correctness check; no performance grammar or manifest atom was added.
 
+The fixture follows each Schema lifecycle: operational rows are immediately
+published, while publishing Schemas contain both draft and published rows. The
+harness deliberately does not run `ANALYZE` or `PRAGMA optimize`, so it cannot
+turn an unprepared production plan into a local pass. This is a conservative
+SQLite preflight, not proof of D1 rows-read, Worker CPU, or IndexedDB behavior;
+measure those on the target backend before making a performance claim.
+
 Use the machine report in CI. It includes the compiled SQL and parameters,
 query-plan details, named indexes, scan/sort flags, result count, SQLite
 version, fixture row count, and required-failure summary.

@@ -3,24 +3,25 @@ description: Views are the only public read surface — surfaces, declarative ve
 ---
 # Reads: Views, REST and MCP
 
-Every read that leaves the runtime goes through a View. This page explains why, how a View is shaped, and what it costs at query time. Field-level rules are in the [View reference](../reference/view.md).
+Views declare reusable queries and their transport visibility. This page explains why, how a View is shaped, and what it costs at query time. Field-level rules are in the [View reference](../reference/view.md).
 
 ## One read surface, not two
 
-A View is a named, read-only query over Schemas. Declaring one is enough: it mounts on its surface with no [Trigger](./procedures-and-triggers.md) involved. Schemas are never publicly readable on their own.
+A View is a named, read-only query over Schemas. Public and staff Views mount on supported transports with no [Trigger](./procedures-and-triggers.md) involved. Schemas are never publicly readable on their own.
 
 Exposing collections directly — a `Schema.spec.expose.rest` flag, or a `GET /api/<collection>` shortcut — was considered and rejected. A Schema declares the storage shape. Its entries carry drafts, internal status, server-stamped fields and per-row data the author never intended to publish; `contact-messages` is the canonical example, where a direct collection route would be a privacy bug by default. A View already has the right semantics — a named query with explicit fields, filter, ordering and limit — so auto-exposing it only ratifies what the manifest already says.
 
-There is no internal-only View surface either. A query that should not be externally callable stays a TypeScript helper.
+Use `surface: internal` for a named query callable only by host code. It remains in the plan and generated bindings, but is absent from REST, MCP, WebMCP and Admin reports. Its `requires` and guards still run. See [Typed queries](../guides/typed-queries.md).
 
 ## Surfaces
 
-`spec.surface` is required and closed to two values.
+`spec.surface` is required and closed to three values.
 
 | `surface` | REST | MCP | Extra |
 |---|---|---|---|
 | `public` | `GET /api/views/<name>` | `query_view_<segment>` on `/mcp` | Listed by `GET /api/views` |
 | `staff` | `GET /admin/api/views/<name>` | `query_view_<segment>` on `/mcp/staff` | `GET /admin/api/views/<name>/export`, Admin report sidebar |
+| `internal` | None | None | Host calls through `executeView` or generated `views` bindings |
 
 The adapter filters the View set before building each MCP dispatcher, so a guessed public tool call cannot reach a staff View. Surface decides transport visibility; `spec.requires` decides whether the verified caller may execute the View, on REST and MCP alike. See [Authorization](./authorization.md).
 
@@ -31,7 +32,7 @@ A View declares exactly one of `from` or `sql`; declaring both or neither is rej
 - **`from`** names a Schema and pairs with `fields`, `filter`, `orderBy` and `limit`. The filter is a closed AST: `eq`, `gt`, `gte`, `lt`, `lte`, combined with `and` and `or`. Field-to-field comparison and arithmetic are not expressible.
 - **`sql`** is a single `SELECT` with no semicolon. Every Schema is available as a logical table named after its `metadata.name`, with data properties projected as columns; quote names containing hyphens (`"post-translations"`). Combining `sql` with `fields`, `filter` or `orderBy` is rejected.
 
-**New Views should use one `SELECT`.** The declarative form remains accepted for existing manifests. SQL Views compile to native SQLite; a storage adapter that cannot run them fails at boot with `VIEW_DIALECT_UNSUPPORTED`, and static validation never executes the statement — run it against the selected adapter or through `mantle-harness indexes`.
+Use `from` for portable single-Schema queries, typed result rows and eligible public caching. Use `sql` for joins, aggregation or JSON expansion that the declarative form cannot express. SQL Views require a SQLite-capable adapter (`VIEW_DIALECT_UNSUPPORTED` otherwise), and generated SQL row types are `unknown`. The CLI validates SQL against an empty database of declared Schema tables; programmatic validation needs the `sqlViewSandbox` port for the same check. Exercise data-dependent behavior on your adapter or with `mantle-harness indexes`.
 
 ## Params
 
@@ -88,7 +89,7 @@ These names are output field names — SQL aliases for a `sql` View, Schema prop
 
 ## The MCP mirror
 
-Every View is also a tool. The name is the View name lowercased with hyphens replaced by underscores, prefixed `query_view_`. Its input schema is `params.properties` plus `page` and `show`, and it is annotated `readOnlyHint: true`. One executor and one response shape serve REST and MCP, so an agent and a downstream service read exactly the same rows. See [MCP and agents](./mcp-and-agents.md).
+Every public or staff View is also a tool on its matching MCP surface; internal Views are never tools. The name is the View name lowercased with hyphens replaced by underscores, prefixed `query_view_`. Its input schema is `params.properties` plus `page` and `show`, and it is annotated `readOnlyHint: true`. One executor and one response shape serve REST and MCP, so an agent and a downstream service read exactly the same rows. See [MCP and agents](./mcp-and-agents.md).
 
 ## Performance: declare the index the query needs
 
@@ -97,7 +98,7 @@ a native column. Declared `indexes` and `uniqueIndexes` become B-tree indexes
 over those columns; Core-compiled projections, filters and ordering reference
 the same columns directly.
 
-Declare the **smallest ordered index justified by the measured path**, and respect SQLite's leftmost-prefix rule. An index on `[locale, publishedAt]` serves `WHERE locale = ?`, `WHERE locale = ? AND publishedAt > ?`, and `WHERE locale = ? ORDER BY publishedAt`. It does not serve `WHERE publishedAt > ?` alone. If a second hot path needs a different leading field, that is a second index — not a reason to enumerate every permutation, since each index costs storage and slows every write.
+Declare the **smallest ordered index justified by the measured path**, and respect SQLite's leftmost-prefix rule. Equality columns go first, the ordered column last. A public declarative View over a publishing Schema always carries `status = published`, so its index leads with `status`: `[status, locale, publishedAt]` serves `WHERE status = ? AND locale = ?`, `… AND publishedAt > ?`, and `… ORDER BY publishedAt`. It does not serve `WHERE publishedAt > ?` alone, and `[publishedAt]` alone does not serve the published list — without planner statistics SQLite prefers the status equality and sorts in a temporary B-tree. If a second hot path needs a different leading field, that is a second index — not a reason to enumerate every permutation, since each index costs storage and slows every write.
 
 ```sh
 pnpm exec mantle-harness indexes --require-public --format text
@@ -139,7 +140,7 @@ spec:
   limit: 50
 ```
 
-The source Schema declares `indexes: [[locale, publishedAt]]`. The `gte publishedAt 0` clause is what keeps the ordered column inside the indexed range rather than forcing a sort. Omitting `locale` returns 400.
+The source Schema declares `indexes: [[status, locale, publishedAt]]`; the `status` predicate is present whether or not the View writes it. The `gte publishedAt 0` clause is what keeps the ordered column inside the indexed range rather than forcing a sort. Omitting `locale` returns 400.
 
 ## Example: a staff SQL report
 

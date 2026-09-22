@@ -1,7 +1,7 @@
 import * as React from "react";
 import type { OAuthConsentInfo, OAuthConsentRequest } from "@aotter/mantle-admin";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Loader2Icon, LogOut } from "lucide-react";
+import { AlertTriangle, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AuthCard } from "@/components/auth-card";
 import {
@@ -11,7 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { OneTimeCodeInput } from "@/components/one-time-code-input";
+import { SignInButton, SignInFlow } from "@/components/sign-in-flow";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
@@ -67,7 +67,7 @@ export function AccessDeniedView({
         </CardTitle>
         {login ? (
           <CardDescription className="font-medium text-foreground">
-            GitHub: {login}
+            {t(language, "auth.accessDenied.user", { name: login })}
           </CardDescription>
         ) : null}
       </CardHeader>
@@ -131,30 +131,9 @@ export function signedOAuthQuery(search: string): string | undefined {
   return signed.toString();
 }
 
-/**
- * Same-tick in-flight lock. React `busy` updates are async, so OTP
- * autocomplete `onComplete` and form Enter can both call verify before
- * the next render. Claiming the ref here is visible immediately.
- */
-export function claimInFlight(lock: { current: boolean }): boolean {
-  if (lock.current) return false;
-  lock.current = true;
-  return true;
-}
-
-export function SignInButton({
-  busy,
-  children,
-  disabled,
-  ...props
-}: React.ComponentProps<typeof Button> & { busy: boolean }): React.ReactElement {
-  return (
-    <Button {...props} disabled={busy || disabled} aria-busy={busy || undefined}>
-      {busy ? <Loader2Icon className="animate-spin" aria-hidden /> : null}
-      {children}
-    </Button>
-  );
-}
+// Both moved to the kit component that now owns the email-OTP flow;
+// re-exported here so Admin call sites and tests keep one import path.
+export { claimInFlight, SignInButton } from "@/components/sign-in-flow";
 
 /**
  * Data-driven sign-in. Fetches `/api/auth/methods` on mount; renders
@@ -545,144 +524,59 @@ function EmailOtpSection({
   oauthQuery?: string;
 }): React.ReactElement {
   const { language } = usePreferences();
-  const [step, setStep] = React.useState<"email" | "otp">("email");
-  const [email, setEmail] = React.useState("");
-  const [otp, setOtp] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const verifyInFlight = React.useRef(false);
-
-  // Wraps an async submit handler so each call site gets identical
-  // busy / error-reset bookkeeping. `busy` clears in `finally` even
-  // when the verify path reloads — the unmount that follows nav
-  // discards the queued state update.
-  const withBusy = async (run: () => Promise<void>): Promise<void> => {
-    setBusy(true);
-    setError(null);
-    try {
-      await run();
-    } catch {
-      setError(t(language, "auth.signIn.requestFailed"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const sendOtp = (e: React.FormEvent): void => {
-    e.preventDefault();
-    if (!email) return;
-    void withBusy(async () => {
-      const res = await fetch("/api/auth/email-otp/send-verification-otp", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          type: "sign-in",
-          ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
-        }),
-      });
-      if (!res.ok) {
-        setError(t(language, "auth.signIn.method.email-otp.sendFailed"));
-        return;
-      }
-      setStep("otp");
-    });
-  };
-
-  const verifyOtpCode = (code: string): void => {
-    if (code.length !== 6) return;
-    if (!claimInFlight(verifyInFlight)) return;
-    void withBusy(async () => {
-      const res = await fetch("/api/auth/sign-in/email-otp", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          otp: code,
-          ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
-        }),
-      });
-      if (!res.ok) {
-        setError(t(language, "auth.signIn.method.email-otp.verifyFailed"));
-        return;
-      }
-      // Navigate to the original return URL. The session cookie is
-      // already set on the response, so the next request to
-      // `returnTo` is authenticated and the gate routes accordingly.
-      // Plain reload() would land back on /admin/sign-in — the
-      // pathname is unchanged, the gate sees us on the sign-in page
-      // and renders SignInView again instead of routing through.
-      const data = (await res.json()) as { url?: string };
-      window.location.assign(data.url ?? returnTo);
-    }).finally(() => {
-      verifyInFlight.current = false;
-    });
-  };
-
-  const verifyOtp = (e: React.FormEvent): void => {
-    e.preventDefault();
-    verifyOtpCode(otp);
-  };
-
   return (
-    <div className={SECTION_DIVIDED}>
-      <p className="mb-2 text-sm text-muted-foreground">
-        {t(language, "auth.signIn.method.email-otp.body")}
-      </p>
-      {step === "email" ? (
-        <form onSubmit={sendOtp} className="space-y-2">
-          <label htmlFor="signin-email" className="sr-only">
-            {t(language, "auth.signIn.method.email-otp.emailLabel")}
-          </label>
-          <Input
-            id="signin-email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.currentTarget.value)}
-            placeholder={t(language, "auth.signIn.method.email-otp.emailPlaceholder")}
-            required
-            autoComplete="email"
-          />
-          <SignInButton type="submit" className="w-full" busy={busy} disabled={!email}>
-            {t(language, "auth.signIn.method.email-otp.sendButton")}
-          </SignInButton>
-        </form>
-      ) : (
-        <form onSubmit={verifyOtp} className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            {t(language, "auth.signIn.method.email-otp.sentTo", { email })}
-          </p>
-          <label htmlFor="signin-otp" className="sr-only">
-            {t(language, "auth.signIn.method.email-otp.otpLabel")}
-          </label>
-          <OneTimeCodeInput
-            id="signin-otp"
-            autoComplete="one-time-code"
-            autoFocus
-            disabled={busy}
-            value={otp}
-            onChange={setOtp}
-            onComplete={verifyOtpCode}
-            required
-          />
-          <SignInButton type="submit" className="w-full" busy={busy} disabled={otp.length !== 6}>
-            {t(language, "auth.signIn.method.email-otp.verifyButton")}
-          </SignInButton>
-          <button
-            type="button"
-            onClick={() => setStep("email")}
-            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-          >
-            {t(language, "auth.signIn.method.email-otp.back")}
-          </button>
-        </form>
-      )}
-      {error ? (
-        <p className="mt-2 text-xs text-destructive" role="alert">{error}</p>
-      ) : null}
-    </div>
+    <SignInFlow
+      className={SECTION_DIVIDED}
+      labels={{
+        description: t(language, "auth.signIn.method.email-otp.body"),
+        emailLabel: t(language, "auth.signIn.method.email-otp.emailLabel"),
+        emailPlaceholder: t(language, "auth.signIn.method.email-otp.emailPlaceholder"),
+        sendButton: t(language, "auth.signIn.method.email-otp.sendButton"),
+        sentTo: (email) => t(language, "auth.signIn.method.email-otp.sentTo", { email }),
+        otpLabel: t(language, "auth.signIn.method.email-otp.otpLabel"),
+        verifyButton: t(language, "auth.signIn.method.email-otp.verifyButton"),
+        useAnotherEmail: t(language, "auth.signIn.method.email-otp.back"),
+        requestFailed: t(language, "auth.signIn.requestFailed"),
+      }}
+      onSendCode={async (email) => {
+        const res = await fetch("/api/auth/email-otp/send-verification-otp", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            type: "sign-in",
+            ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
+          }),
+        });
+        if (!res.ok) {
+          return { error: t(language, "auth.signIn.method.email-otp.sendFailed") };
+        }
+      }}
+      onVerifyCode={async (email, code) => {
+        const res = await fetch("/api/auth/sign-in/email-otp", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            otp: code,
+            ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
+          }),
+        });
+        if (!res.ok) {
+          return { error: t(language, "auth.signIn.method.email-otp.verifyFailed") };
+        }
+        // Navigate to the original return URL. The session cookie is
+        // already set on the response, so the next request to
+        // `returnTo` is authenticated and the gate routes accordingly.
+        // Plain reload() would land back on /admin/sign-in — the
+        // pathname is unchanged, the gate sees us on the sign-in page
+        // and renders SignInView again instead of routing through.
+        const data = (await res.json()) as { url?: string };
+        window.location.assign(data.url ?? returnTo);
+      }}
+    />
   );
 }
 
@@ -699,11 +593,10 @@ function MagicLinkSection({
   const [sent, setSent] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Mirrors EmailOtpSection's withBusy: identical busy / error-reset
-  // bookkeeping per submit. Kept inline (not module-scope) because the
-  // two sections have independent state setters; lifting it would
-  // require passing setBusy/setError in, which is more wiring than
-  // duplication saved.
+  // Mirrors SignInFlow's withBusy: identical busy / error-reset
+  // bookkeeping per submit. Kept inline (not module-scope) because each
+  // owner has its own state setters; lifting it would require passing
+  // setBusy/setError in, which is more wiring than duplication saved.
   const withBusy = async (run: () => Promise<void>): Promise<void> => {
     setBusy(true);
     setError(null);

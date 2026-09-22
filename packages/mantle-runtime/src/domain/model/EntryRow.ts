@@ -41,15 +41,18 @@ export function materializeNullableFields(
 ): Record<string, unknown> {
   let output: Record<string, unknown> | undefined;
   for (const [name, property] of Object.entries(schema.spec.schema.properties ?? {})) {
-    if (Object.hasOwn(data, name) || !allowsNull(property)) continue;
+    if (Object.hasOwn(data, name) || !isNullableJsonSchema(property)) continue;
     output ??= { ...data };
     output[name] = null;
   }
   return output ?? data;
 }
 
-function allowsNull(property: JsonSchema): boolean {
-  return Array.isArray(property.type) && property.type.includes("null");
+/** `nullable: true` and `type`/`oneOf` that include `null` are the same persistence spelling. */
+export function isNullableJsonSchema(property: JsonSchema): boolean {
+  if (property.nullable === true) return true;
+  const types = typeof property.type === "string" ? [property.type] : property.type ?? [];
+  return types.includes("null") || property.oneOf?.some(isNullableJsonSchema) === true;
 }
 
 /** Explicit public projection. Keep this field-by-field so adding another

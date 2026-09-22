@@ -9,6 +9,15 @@ where agents write config and the runtime carries the complexity.
 
 ## Install
 
+Cold start for a new application is the install skill, not a bare npm add:
+
+```sh
+npx skills add aotter/mantle --skill install
+```
+
+To depend on this package in an existing project, pin the exact version
+from `package.json` (currently `0.1.3`):
+
 ```bash
 npm install @aotter/mantle
 # or
@@ -18,7 +27,7 @@ pnpm add @aotter/mantle
 ## What's inside
 
 The umbrella provides Spec and Runtime by default. Install an optional package
-before importing its matching Web, Admin, Bun, Vercel, Cloudflare, or Admin UI
+before importing its matching Web, Admin, Auth, Bun, Vercel, Cloudflare, or Admin UI
 subpath. Every sub-package also remains directly installable.
 
 | Subpath | Re-exports |
@@ -26,9 +35,10 @@ subpath. Every sub-package also remains directly installable.
 | `@aotter/mantle/spec` (or root) | Manifest grammar, validators, JSON-Schema→Zod, diagnostic catalog (no env / no IO) |
 | `@aotter/mantle/runtime` | Hexagonal runtime: domain ports, use cases, infrastructure helpers (no adapter deps) |
 | `@aotter/mantle/runtime/testing` | Node-only crowded SQLite planner and HTTP sampling helpers |
-| `@aotter/mantle/codegen` | Pure linked manifests → typed runtime module emitter (no IO) |
+| `@aotter/mantle/codegen` | Pure linked manifests or compiled plan → typed runtime module emitter (no IO) |
 | `@aotter/mantle/web` | Optional HTML, Markdown, `llms.txt`, sitemap, SEO, and preview composition (no routes or platform deps) |
 | `@aotter/mantle/admin` | Optional Admin API, auth routes, and static-asset composition |
+| `@aotter/mantle/auth` | Optional host-neutral Better Auth identity; adapters own IP headers and storage bindings |
 | `@aotter/mantle/bun` | Bun adapter — caller-owned `bun:sqlite` and Web-standard View/Trigger transport |
 | `@aotter/mantle/vercel` | Vercel Functions adapter — injected durable storage and platform `waitUntil` |
 | `@aotter/mantle/vercel/libsql` | Optional application-owned Turso/libSQL driver |
@@ -42,7 +52,7 @@ import { createMantleWeb } from "@aotter/mantle/web";
 import { mountRuntimeEndpoints } from "@aotter/mantle/cloudflare";
 ```
 
-The umbrella installs only Spec and Runtime. Web, Admin, Admin UI, Bun,
+The umbrella installs only Spec and Runtime. Web, Admin, Auth, Admin UI, Bun,
 Vercel, and Cloudflare are optional peers; install only the subpaths selected
 by the application.
 
@@ -63,7 +73,15 @@ installed, it also syncs the Admin SPA to `public/_mantle/admin/` (excluding
 `server.*` package exports). Core-only installs skip that copy. It performs no
 skill sync, package update, styling, provisioning, or deployment.
 The same pure emitter is available from `@aotter/mantle/codegen` when a host
-wants to own parsing and filesystem IO.
+wants to own parsing and filesystem IO. TypeScript-authored manifests can pass
+their already-compiled `plan` directly:
+
+```ts
+import { emitMantleModule } from "@aotter/mantle/codegen";
+
+const emitted = emitMantleModule({ plan });
+if (!emitted.ok) throw new Error(emitted.diagnostics.map(({ message }) => message).join("\n"));
+```
 
 ```ts
 import { createMantle } from "../.mantle/generated/mantle.js";
@@ -103,8 +121,8 @@ generation never rewrites agent instructions.
 
 SDK upgrades use the package manager and the version-matched update skill.
 For npm peer-resolution troubleshooting, see [the authoring guide](docs/handbook/start/project-and-cli.md).
-See [0.1.2 migration](docs/migration-0.1.2.md) for removed bundle APIs and how to
-preserve legacy application source and provider configuration.
+See [Releases](docs/handbook/releases/index.md) for what each stable version
+contains and what it requires.
 
 ## Conventional Cloudflare Worker
 
@@ -184,7 +202,14 @@ internals or rebuilding Mantle's adapters.
 
 ## Getting started
 
-Use the installed install skill and [direct-authoring guide](docs/handbook/start/project-and-cli.md).
+Cold start from GitHub or a marketplace host:
+
+```sh
+npx skills add aotter/mantle --skill install
+```
+
+That skill interviews, pins this package, then uses the CLI and the
+[direct-authoring guide](docs/handbook/start/project-and-cli.md).
 The owner or agent writes the application's manifests, entry and configuration;
 `generate` compiles them and `skills` projects the version-matched instructions.
 The [minimal Worker reference](docs/examples/host-minimal-worker/README.md) is
@@ -194,28 +219,36 @@ opt-in Dev UI path. Neither is a scaffold command. Admin is optional.
 
 ## Agent marketplace install
 
-Install the Mantle Core skill bundle before working on generated repos:
+Install the Mantle Core skill bundle before authoring or maintaining a
+consumer application. The canonical command is:
 
-Replace `<installed-version>` with the exact version from this package's
-`package.json`. Do not point a versioned consumer at a mutable branch.
+```sh
+npx skills add aotter/mantle --skill install
+```
+
+Claude Code and Codex can install the plugin, then run that skill:
 
 ```bash
 # Claude Code
-/plugin marketplace add aotter/mantle@v<installed-version>
+/plugin marketplace add aotter/mantle
 /plugin install mantle@mantle
 
 # Codex
-codex plugin marketplace add aotter/mantle --ref v<installed-version>
+codex plugin marketplace add aotter/mantle
 codex plugin add mantle@mantle
 ```
 
 Cursor and VS Code Copilot can auto-discover the GitHub repo through
 `.cursor-plugin/plugin.json` and `.copilot-plugin/plugin.json` after the repo
-is cloned or opened.
+is cloned or opened. Still start from the `npx skills add` sentence (or open
+`skills/install/SKILL.md`). Untagged `aotter/mantle` resolves to `main`, which
+only advances at a release, so it is always the latest published version. Add
+`@vX.Y.Z` only to reproduce an older project; never point a consumer at
+`develop` or another moving branch.
 
 ## Marketplace capability installs
 
-In a generated repo, tell your coding agent:
+In a consumer application, tell your coding agent:
 
 ```txt
 Use repo-local mantle:plugin to install <plugin slug or recipe URL> in this repo.
@@ -250,7 +283,7 @@ adapter is a port-implementation exercise, not a runtime refactor.
   ([index](docs/examples/README.md)).
   The copy in `node_modules` describes the installed release.
 - Embedded docs and agent skills ship inside this npm package for
-  generated-site agents:
+  agents working from the installed package:
   - `node_modules/@aotter/mantle/docs/handbook/reference/manifest.md`
   - `node_modules/@aotter/mantle/docs/examples/cf-primitives-guarded-api.md` (anonymous,
     API-key, paid guard, personal-token, OAuth, REST, and MCP examples)

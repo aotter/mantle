@@ -5,6 +5,12 @@ description: The files you own in a Mantle project, every mantle and mantle-harn
 
 This page describes a directly authored Mantle project: which files are yours, what the installed CLI does to them, and the loop you run before every commit. Surfaces are optional — take only what you need. [The minimal Worker](./quickstart-worker.md) is Spec + adapter without Admin. [Local Admin](./quickstart-admin.md) is the opt-in Dev UI path when humans need a console.
 
+Agents can bootstrap with the install skill; human authors can follow this guide directly. For installation paths and the pinned-package handoff, see [Agent setup](../guides/agent-setup.md):
+
+```sh
+npx skills add aotter/mantle --skill install
+```
+
 ## You own the project
 
 Core is a manifest compiler and a runtime, not a project generator. You write `package.json`, the manifests, the Worker entry, handlers, TypeScript and provider configuration. `mantle generate` compiles what exists; it never initializes a missing project or invents a default Schema, frontend or home route.
@@ -71,7 +77,7 @@ It does not project skills, update packages, change styling, provision providers
 | `createMantle({ storage, handlers, ports })` | Prepares storage eagerly once and returns the typed binding. No caching or retry. |
 | `bindMantle(runtime)` | The same typed binding over a runtime whose lifecycle the host already owns. |
 
-The binding exposes `mantle.views.<lowerCamelName>()`, `mantle.procedures.<name>(input, ctx)`, `mantle.entries.<collection>.createDraft({ data, authorId })` and the underlying `mantle.runtime`. Generated property names are deterministic lower-camel identifiers; calls keep the authored wire names internally. Details are in [HTTP, MCP, CLI and packages](../reference/surface.md).
+The binding exposes `mantle.views.<lowerCamelName>()`, `mantle.procedures.<name>(input, ctx)`, `mantle.entries.<collection>.createDraft({ data, authorId })`, typed indexed field reads such as `mantle.entries.<collection>.findManyByDataField({ field, value, limit })`, and the underlying `mantle.runtime`. Generated property names are deterministic lower-camel identifiers; calls keep the authored wire names internally. See [Typed queries](../guides/typed-queries.md) for internal Views and entry-reader examples. Details are in [HTTP, MCP, CLI and packages](../reference/surface.md).
 
 ## The daily loop
 
@@ -92,15 +98,19 @@ Run the harness after any change to a Schema index, View filter or ordering, or 
 
 `mantle skills` projects the skills the installed package marks `projection: project`. At this version those are `develop`, `plugin`, `theme` and `update`; `install`, `media-gc` and `provision` stay opt-in because they create projects, delete remote objects or handle production secrets. Both tool layouts receive identical bytes. Generation never rewrites these files.
 
-Install the version-matched plugin bundle in the agent host, using the exact version from `package.json`:
+Install the plugin bundle in the agent host. Cold start uses
+the install skill; an already-installed project pins packages from `package.json`:
 
 ```sh
+# Canonical
+npx skills add aotter/mantle --skill install
+
 # Claude Code — two separate prompts
-/plugin marketplace add aotter/mantle@v<installed-version>
+/plugin marketplace add aotter/mantle
 /plugin install mantle@mantle
 
 # Codex
-codex plugin marketplace add aotter/mantle --ref v<installed-version>
+codex plugin marketplace add aotter/mantle
 codex plugin add mantle@mantle
 ```
 

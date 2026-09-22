@@ -6,9 +6,11 @@ import {
   FILTER_COMPARISON_OPS,
   RESERVED_ENTRY_COLUMNS,
   EXPECTED_VERSION_PROPERTY,
+  MANTLE_REF_KEYWORD,
   RESERVED_PROCEDURE_INPUT_NAMES,
   hasCtxUserRefKey,
   isCtxUserRef,
+  resolveLocalizedText,
   type FilterAst,
   type JsonSchema,
   type Manifest,
@@ -81,6 +83,12 @@ export function validateManifestGraph(
     partitioned.schemas,
     partitioned.views,
     partitioned.procedures,
+    partitioned.triggers,
+    filePaths,
+  ));
+  diags.push(...checkMcpExpectedVersionReachability(
+    partitioned.views,
+    proceduresByName,
     partitioned.triggers,
     filePaths,
   ));
@@ -226,6 +234,22 @@ function checkViewRefs(
       expected: "a View over a publishing Schema",
       message: `View '${v.metadata.name}' cannot cache operational Schema '${fromName}'.`,
     }));
+  }
+  const publicPublishing = v.spec.surface === "public"
+    && (schema.spec.lifecycle ?? "publishing") === "publishing";
+  if (publicPublishing && v.spec.filter) {
+    // The runtime injects `status = published` into this View's plan (#1007);
+    // any other status comparison can only contradict it and return nothing.
+    for (const found of collectStatusComparisons(v.spec.filter, "/spec/filter")) {
+      out.push(validateDiagnostic({
+        code: "VIEW_PUBLIC_STATUS_INVALID",
+        severity: "error",
+        path: manifestPath("View", v.metadata.name, found.pointer, filePaths),
+        value: found.value,
+        expected: "eq status published, or no status comparison at all",
+        message: `View '${v.metadata.name}' is public over publishing Schema '${fromName}'; it always reads published rows only, so its status filter must be 'eq published' or omitted (handbook: reference/view.md#surfaces).`,
+      }));
+    }
   }
   if (v.spec.cache && v.spec.filter && collectCtxUserFilters(v.spec.filter, "/spec/filter").length > 0) {
     out.push(validateDiagnostic({
@@ -439,6 +463,22 @@ function checkFilterFields(
   return [];
 }
 
+/** Status comparisons other than `eq status published`, with their JSON pointers. */
+function collectStatusComparisons(
+  node: FilterAst,
+  pointer: string,
+): Array<{ readonly pointer: string; readonly value: unknown }> {
+  const comparison = getFilterComparison(node);
+  if (comparison) {
+    if (comparison.node.field !== "status") return [];
+    if (comparison.op === "eq" && comparison.node.value === "published") return [];
+    return [{ pointer: `${pointer}/${comparison.op}/value`, value: comparison.node.value }];
+  }
+  const children = "and" in node ? node.and : "or" in node ? node.or : [];
+  const key = "and" in node ? "and" : "or";
+  return children.flatMap((child, index) => collectStatusComparisons(child, `${pointer}/${key}/${index}`));
+}
+
 function getFilterComparison(
   node: FilterAst,
 ): { readonly op: (typeof FILTER_COMPARISON_OPS)[number]; readonly node: { readonly field: string; readonly value: unknown } } | null {
@@ -458,6 +498,33 @@ function checkBuiltinHandler(
   const h = p.spec.handler;
   if (h.kind !== "builtin") return [];
   const out: Diagnostic[] = [];
+  // Declared annotations must not contradict what the builtin op proves (#972):
+  // every op writes, and delete destroys. A false hint would tell a client to
+  // skip the confirmation the MCP spec defaults to.
+  if (p.spec.mcp?.readOnlyHint === true) {
+    out.push(
+      validateDiagnostic({
+        code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+        severity: "error",
+        path: manifestPath("Procedure", p.metadata.name, "/spec/mcp/readOnlyHint", filePaths),
+        value: true,
+        expected: "no readOnlyHint, or readOnlyHint: false, on a builtin handler",
+        message: `Procedure '${p.metadata.name}' declares mcp.readOnlyHint: true but its builtin handler (op: ${h.op}) writes.`,
+      }),
+    );
+  }
+  if (h.op === "delete" && p.spec.mcp?.destructiveHint === false) {
+    out.push(
+      validateDiagnostic({
+        code: "BUILTIN_HANDLER_CONTRACT_INVALID",
+        severity: "error",
+        path: manifestPath("Procedure", p.metadata.name, "/spec/mcp/destructiveHint", filePaths),
+        value: false,
+        expected: "no destructiveHint, or destructiveHint: true, on a builtin delete",
+        message: `Procedure '${p.metadata.name}' declares mcp.destructiveHint: false but its builtin handler deletes.`,
+      }),
+    );
+  }
   const target = schemasByName.get(h.schema);
   if (!target) {
     out.push(
@@ -824,6 +891,8 @@ function checkTriggerRefs(
 ): Diagnostic[] {
   const out: Diagnostic[] = [];
   const httpRoutes = new Map<string, string>();
+  // One description warning per Procedure, not per surface it is exposed on.
+  const undescribedMcpProcedures = new Set<string>();
 
   for (const t of triggers) {
     const procName = t.spec.target.procedure;
@@ -882,6 +951,31 @@ function checkTriggerRefs(
       }
     }
 
+    if (t.spec.source.kind === "mcp") {
+      // An MCP tool is described to a cold agent by `spec.description`.
+      // The catalog falls back to "Invoke Procedure '<name>'." when it is
+      // absent, which reads like a description and hides the gap; the
+      // authoring gate is the one place that can still see it (#970).
+      const target = proceduresByName.get(procName);
+      if (target && !undescribedMcpProcedures.has(procName)
+        && !resolveLocalizedText(target.spec.description, "en")?.trim()) {
+        undescribedMcpProcedures.add(procName);
+        out.push(
+          validateDiagnostic({
+            code: "MCP_TOOL_DESCRIPTION_MISSING",
+            severity: "warning",
+            path: manifestPath("Procedure", procName, "/spec/description", filePaths),
+            value: null,
+            expected: "a description an agent can choose the tool by",
+            message:
+              `Procedure '${procName}' is exposed as an MCP tool on the ${t.spec.source.surface} ` +
+              `surface by Trigger '${t.metadata.name}' but has no spec.description; ` +
+              `tools/list will show a generated placeholder.`,
+          }),
+        );
+      }
+    }
+
     if (t.spec.source.kind === "lifecycle" && schemasByName && !schemasByName.has(t.spec.source.schema)) {
       const schemaName = t.spec.source.schema;
       out.push(
@@ -933,6 +1027,7 @@ function checkMcpToolNameCollisions(
   }
   const viewNames = new Map<string, string>();
   for (const view of views) {
+    if (view.spec.surface === "internal") continue;
     const segment = mcpToolNameSegment(view.metadata.name);
     const prior = viewNames.get(segment);
     if (prior && prior !== view.metadata.name) {
@@ -997,6 +1092,75 @@ function checkMcpToolNameCollisions(
     }
   }
   return out;
+}
+
+/**
+ * An MCP write tool that requires `expectedVersion` is only callable when some
+ * View on the same surface lets the agent read that collection's `version`.
+ * Otherwise the tool is listed, compiles and is dead on arrival (#973).
+ * Warning only: the value can still arrive from outside MCP.
+ */
+function checkMcpExpectedVersionReachability(
+  views: readonly ViewManifest[],
+  proceduresByName: ReadonlyMap<string, ProcedureManifest>,
+  triggers: readonly TriggerManifest[],
+  filePaths?: ManifestFilePaths,
+): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  const warned = new Set<string>();
+  for (const trigger of triggers) {
+    const source = trigger.spec.source;
+    if (source.kind !== "mcp") continue;
+    const procedure = proceduresByName.get(trigger.spec.target.procedure);
+    if (!procedure) continue;
+    const input = procedure.spec.input;
+    if (!input.required?.includes(EXPECTED_VERSION_PROPERTY)) continue;
+    const collection = lockedCollection(procedure);
+    if (!collection) continue;
+    const key = `${source.surface}\0${procedure.metadata.name}`;
+    if (warned.has(key)) continue;
+    if (views.some((view) => view.spec.surface === source.surface && viewExposesVersion(view, collection))) continue;
+    warned.add(key);
+    const tool = mcpToolNameSegment(procedure.metadata.name);
+    out.push(validateDiagnostic({
+      code: "MCP_TOOL_INPUT_UNREACHABLE",
+      severity: "warning",
+      path: manifestPath("Procedure", procedure.metadata.name, `/spec/input/properties/${EXPECTED_VERSION_PROPERTY}`, filePaths),
+      value: collection,
+      expected: `a '${source.surface}' View over '${collection}' that exposes 'version'`,
+      message:
+        `MCP tool '${tool}' on the ${source.surface} surface requires '${EXPECTED_VERSION_PROPERTY}' of ` +
+        `'${collection}'${procedure.spec.handler.kind === "ref" ? " (inferred from its x-mantle-ref input)" : ""}, ` +
+        `but no ${source.surface} View reads that collection's 'version'; an agent cannot obtain the value it must send.`,
+    }));
+  }
+  return out;
+}
+
+/** The collection whose `version` an OCC write locks, or null when it cannot be told statically. */
+function lockedCollection(procedure: ProcedureManifest): string | null {
+  const handler = procedure.spec.handler;
+  if (handler.kind === "builtin") return handler.schema;
+  const input = procedure.spec.input;
+  const refs = (input.required ?? []).flatMap((name) => {
+    const property = input.properties?.[name];
+    const ref = property?.[MANTLE_REF_KEYWORD];
+    return typeof ref === "string" ? [ref] : [];
+  });
+  return refs.length === 1 ? refs[0]! : null;
+}
+
+function viewExposesVersion(view: ViewManifest, collection: string): boolean {
+  if (view.spec.sql) {
+    // SQL Views declare no output columns. The column is spelled
+    // `_mantle_version` in SQL and any alias may carry the word, so a plain
+    // case-insensitive substring (or a `SELECT *`) counts as exposing. This
+    // can only silence the warning, never invent one; the collection is not
+    // matched because CTEs, quoting and aliases hide the table name.
+    return /version/iu.test(view.spec.sql) || /select\s+(?:\w+\.)?\*/iu.test(view.spec.sql);
+  }
+  if (view.spec.from !== collection) return false;
+  return !view.spec.fields || view.spec.fields.includes("version");
 }
 
 function sameOwner(

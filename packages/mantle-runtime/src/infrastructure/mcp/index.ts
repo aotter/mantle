@@ -3,6 +3,7 @@ export {
   CREATE_DRAFT_PREFIX,
   UPDATE_DRAFT_PREFIX,
   buildMcpToolCatalog,
+  buildMcpAuditOperationIdResolver,
   extractCollectionSegment,
   type McpToolDefinition,
 } from "./McpToolCatalog.js";

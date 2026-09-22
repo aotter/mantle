@@ -50,7 +50,7 @@ Raised by the parser, the graph validator and the code generator. `mantle valida
 
 | Code | Meaning | HTTP |
 |---|---|---|
-| `INVALID_MANIFEST_ENVELOPE` | Wrong `apiVersion`, unknown key at a known level, wrong value shape, a YAML syntax or alias-limit failure, or a Schema data property named `expectedVersion` (reserved Procedure OCC token; ADR-0022). | — |
+| `INVALID_MANIFEST_ENVELOPE` | Wrong `apiVersion`, unknown key at a known level, wrong value shape, a YAML syntax or alias-limit failure, a Schema data property named `expectedVersion` (reserved Procedure OCC token; ADR-0022), or a Schema data property named after a native entry column (`id`, `status`, `version`, `createdAt`, `updatedAt`, `authorId`). | — |
 | `DUPLICATE_NAME` | Two documents of the same kind declare the same `metadata.name`. | — |
 | `VIEW_FROM_UNKNOWN_SCHEMA` | `spec.from` names no declared Schema. | — |
 | `VIEW_FIELD_NOT_IN_SCHEMA` | A `fields` entry or `orderBy[i].field` is neither a Schema property nor a reserved entry column. | — |
@@ -64,6 +64,7 @@ Raised by the parser, the graph validator and the code generator. `mantle valida
 | `VIEW_FILTER_CTX_USER_REF_REQUIRES_INDEX` | The bound field is not the leftmost field of a declared index. | — |
 | `VIEW_ORDERBY_INVALID` | An `orderBy` entry has the wrong shape or an unknown `direction`. | — |
 | `VIEW_UI_INVALID` | A View `uiSchema` key is unknown, used on a public View, or names an unknown output field. | — |
+| `VIEW_PUBLIC_STATUS_INVALID` | A public View over a `publishing` Schema compares `status` to anything but `published`. The runtime always reads published rows only on that surface, so the filter can only contradict it. | — |
 | `REQUIRED_FIELD_UNKNOWN` | A `required` entry of `spec.schema` is not declared under `properties`. | — |
 | `INVALID_PATTERN` | A `pattern` does not compile as a JavaScript regular expression. | — |
 | `JSON_SCHEMA_UNSUPPORTED` | A JSON Schema keyword outside the accepted subset. | — |
@@ -98,6 +99,10 @@ Named by the same code in validate, boot or runtime, depending on where the cond
 | `TRIGGER_PATH_COLLISION` | Two HTTP Triggers claim the same `(method, path)`. | — |
 | `TRIGGER_PATH_INVALID` | An HTTP Trigger path does not start `/api/` (validate), or falls under an adapter-reserved prefix (boot). | — |
 | `MCP_TOOL_NAME_COLLISION` | Two atoms mangle to the same MCP tool name, a Procedure takes a reserved generic name or prefix, or two MCP Triggers share a `(surface, tool name)`. | — |
+| `MCP_TOOL_DESCRIPTION_MISSING` | Warning. A Procedure reached by an MCP Trigger has no `spec.description`; `tools/list` would show a generated placeholder instead of something an agent can choose by. | — |
+| `MCP_TOOL_INPUT_UNREACHABLE` | Warning. An MCP write tool requires `expectedVersion` for a collection that no View on the same surface exposes `version` for, so an agent cannot read the value it must send. SQL Views are checked only by a conservative token scan. | — |
+| `MCP_TOOL_INPUT_UNION_AMBIGUOUS` | Warning. An MCP-surfaced Procedure input is a top-level `oneOf`; MCP clients render it poorly, and when its branches require fields the advertised `required` omits a caller satisfying the schema can still be rejected. Prefer one tool per branch. Disable or tune through `ValidateManifestsRequest.mcpInput`, or `mantle validate --no-mcp-input-checks`. | — |
+| `MCP_TOOL_INPUT_UNBOUNDED` | Warning. An MCP-surfaced Procedure input has an array without `maxItems` (or above the configured bound) or a free-form object with no declared properties, so an agent must serialise an unbounded payload into one `tools/call`. Typed maps (`additionalProperties: { type: … }`) do not count as free-form. | — |
 | `PROCEDURE_NOT_FOUND` | An invocation names a Procedure that is not in the compiled plan. | — |
 | `NOT_FOUND` | The addressed resource does not exist: an entry id, a View name, a media asset, an operation name. | `404` |
 | `METHOD_NOT_ALLOWED` | The path exists but the method is not bound. | `405` |
@@ -108,7 +113,7 @@ Named by the same code in validate, boot or runtime, depending on where the cond
 | Code | Meaning | HTTP |
 |---|---|---|
 | `BUILTIN_HANDLER_SCHEMA_UNKNOWN` | `handler.schema` names no declared Schema. | — |
-| `BUILTIN_HANDLER_CONTRACT_INVALID` | The Procedure's `input` breaks the builtin op's contract, such as a missing `expectedVersion` on `update` or a `match` tuple that is not exactly one `uniqueIndexes` entry. | — |
+| `BUILTIN_HANDLER_CONTRACT_INVALID` | The Procedure's `input` breaks the builtin op's contract, such as a missing `expectedVersion` on `update` or a `match` tuple that is not exactly one `uniqueIndexes` entry; or `spec.mcp` contradicts the op (`readOnlyHint: true` on any builtin, `destructiveHint: false` on `op: delete`). | — |
 | `LIFECYCLE_SCHEMA_UNKNOWN` | A lifecycle Trigger's `source.schema` names no declared Schema. | — |
 | `LIFECYCLE_HOOK_REJECTED` | A `before_*` hook aborted the mutation. The diagnostic names the rejecting hook. | `409` |
 

@@ -91,6 +91,12 @@ with Mantle's `EmailSender`; raw `plugins` are available when the application
 must own the callback and UI. The hosted-auth and self-hosted-auth boundary is documented in
 `node_modules/@aotter/mantle/docs/auth-hosting-model.md`.
 
+Rate-limit identity uses `CF-Connecting-IP` only. `createAuth` always passes
+`ipAddressHeaders: ["cf-connecting-ip"]` into `@aotter/mantle-auth`. The
+portable package has no Cloudflare default and will not boot without a
+host-trusted header list; do not fall back to client-controlled
+`X-Forwarded-For`.
+
 For trusted first-party apps that share one parent domain, configure
 same-parent-domain cookies explicitly:
 
@@ -146,7 +152,7 @@ icons, and media-purpose policy) to KV after the D1 write commits. Missing,
 invalid, or expired snapshots are repaired from D1; KV failures do not turn a
 committed setting change into a failed request. That projection never stores
 tokens, sessions, caller data, operator-only settings, or content. Better Auth
-session values use a separate `better-auth:` key prefix; D1 remains canonical,
+session values use a store-bound `better-auth:<store-instance-id>:` key prefix; D1 remains canonical,
 including for OTP verification.
 All Cloudflare locations follow Workers KV's eventual-consistency model while
 a write propagates; the one-hour repair deadline prevents an observation from

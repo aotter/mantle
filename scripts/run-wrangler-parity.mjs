@@ -119,7 +119,11 @@ try {
     }
   }
   for (const layer of (process.env.BENCH_ORDER === "reverse" ? ["M", "F2"] : ["F2", "M"])) {
-    await measure(`mcp-missing-${layer}`, "/mcp", { layer, json: rpc, status: 401, rounds: 3 });
+    // Anonymous is not invalid on the public surface (#977): tools/list serves the
+    // caller-independent catalog; the staff surface still challenges.
+    const anonymous = await measure(`mcp-anonymous-${layer}`, "/mcp", { layer, json: rpc, rounds: 3 });
+    assert(anonymous.records.every(({ record }) => record.rpcOutcome === "result"));
+    await measure(`mcp-missing-${layer}`, "/mcp/staff", { layer, json: rpc, status: 401, rounds: 3 });
     await measure(`mcp-invalid-${layer}`, "/mcp", { layer, token: "invalid", json: rpc, status: 401, rounds: 3 });
     await measure(`mcp-no-dpop-proof-${layer}`, "/mcp", { layer, token: dpopCredentials.accessToken, json: rpc, status: 401, rounds: 3 });
     const invalid = await measure(`mcp-invalid-params-${layer}`, "/mcp", { layer, token: true, json: { ...call, params: { ...call.params, arguments: { unexpected: true } } }, rounds: 3 });

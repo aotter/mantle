@@ -39,16 +39,17 @@ body:
     id: area
     attributes:
       label: Area
+      description: Use area:starters only for retired mantle-starters source or migration notes.
       options:
         - area:runtime
         - area:spec
         - area:cf
-        - area:starters
         - area:skills
         - area:admin-ui
         - area:docs
         - area:ci
         - area:adapter
         - unknown
+        - area:starters
     validations:
       required: true

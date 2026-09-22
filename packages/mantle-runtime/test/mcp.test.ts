@@ -463,6 +463,66 @@ describe("McpJsonRpcDispatcher", () => {
     expect(names).toEqual(["query_view_recent_posts"]);
   });
 
+  it("emits only provable or declared tool annotations", () => {
+    const procedure = makeProcedure();
+    const catalogFor = (manifest: ReturnType<typeof makeProcedure>) =>
+      buildMcpToolCatalog([], { surface: "staff", capabilities: [procedureCapability(manifest)] })[0];
+
+    // A ref handler is a black box: nothing inferred, declarations pass through.
+    expect(catalogFor(procedure)?.annotations).toBeUndefined();
+    expect(catalogFor({ ...procedure, spec: { ...procedure.spec, mcp: { readOnlyHint: true, openWorldHint: true } } })?.annotations)
+      .toEqual({ readOnlyHint: true, openWorldHint: true });
+
+    // Every builtin op writes; delete destroys.
+    const builtin = { ...procedure, spec: { ...procedure.spec, handler: { kind: "builtin" as const, op: "update" as const, schema: "posts" } } };
+    expect(catalogFor(builtin)?.annotations).toEqual({ readOnlyHint: false });
+    const remove = { ...procedure, spec: { ...procedure.spec, handler: { kind: "builtin" as const, op: "delete" as const, schema: "posts" } } };
+    expect(catalogFor(remove)?.annotations).toEqual({ readOnlyHint: false, destructiveHint: true });
+    // A declared openWorldHint merges with the inferred facts.
+    expect(catalogFor({ ...remove, spec: { ...remove.spec, mcp: { openWorldHint: true } } })?.annotations)
+      .toEqual({ readOnlyHint: false, destructiveHint: true, openWorldHint: true });
+
+    // An idempotency-key input is the one thing inferable for a ref handler.
+    const keyed = { ...procedure, spec: { ...procedure.spec, input: {
+      type: "object", properties: { operationId: { type: "string", "x-mcp-hint": "idempotency-key" } }, required: ["operationId"],
+    } } };
+    expect(catalogFor(keyed)?.annotations).toEqual({ idempotentHint: true });
+
+    // Generic tools carry their fixed facts.
+    const generic = buildMcpToolCatalog([postsSchema()], { surface: "staff" });
+    expect(generic.find((tool) => tool.name === "delete_entry")?.annotations).toEqual({ readOnlyHint: false, destructiveHint: true });
+    expect(generic.find((tool) => tool.name === "request_publish")?.annotations).toEqual({ readOnlyHint: false });
+    expect(generic.find((tool) => tool.name === "create_draft_posts")?.annotations).toEqual({ readOnlyHint: false });
+  });
+
+  it("tells agents in the description that an idempotency-key input must be reused on retry", () => {
+    const procedure = makeProcedure();
+    const withKey = {
+      ...procedure,
+      spec: {
+        ...procedure.spec,
+        input: {
+          type: "object",
+          properties: {
+            tenantId: { type: "string" },
+            operationId: { type: "string", format: "uuid", "x-mcp-hint": "idempotency-key" },
+          },
+          required: ["tenantId", "operationId"],
+        },
+      },
+    };
+    const [tool] = buildMcpToolCatalog([], {
+      surface: "staff",
+      capabilities: [procedureCapability(withKey)],
+    });
+    expect(tool?.description).toContain("retries must reuse the same operationId");
+    const [plain] = buildMcpToolCatalog([], {
+      surface: "staff",
+      capabilities: [procedureCapability(procedure)],
+    });
+    expect(plain?.description).not.toContain("Idempotency");
+  });
+
   it("tools/list preserves media x-mcp-hint metadata for agents", async () => {
     const { dispatcher } = buildHarness();
     const res = await dispatcher.dispatch(jsonRpcReq("tools/list"), mcpContext());
@@ -1164,3 +1224,89 @@ function translatedSchemas() {
     },
   ];
 }
+
+describe("McpJsonRpcDispatcher — tools/call audit sink", () => {
+  function auditedDispatcher(
+    audit: { record: (event: unknown) => void | Promise<void> },
+    executeView: NonNullable<McpUseCases["executeView"]>["execute"],
+  ) {
+    const store = new InMemoryEntryRepository();
+    const schemas = new Map([["posts", postsSchema()]]);
+    const view = recentPostsView();
+    const correlatedView = {
+      ...view,
+      spec: {
+        ...view.spec,
+        params: {
+          type: "object" as const,
+          properties: { requestKey: { type: "string" as const, "x-mcp-hint": "idempotency-key" as const } },
+        },
+      },
+    };
+    return new McpJsonRpcDispatcher(
+      {
+        getEntry: new GetEntryUseCase(store),
+        createDraft: new CreateDraftUseCase(store, schemas, { now: () => 0 }, { next: () => "x" }),
+        updateDraft: new UpdateDraftUseCase(store, schemas, { now: () => 0 }),
+        requestPublish: new RequestPublishUseCase(store, schemas, { now: () => 0 }),
+        unpublish: new UnpublishUseCase(store, schemas, { now: () => 0 }),
+        archive: new ArchiveUseCase(store, schemas, { now: () => 0 }),
+        deleteEntry: new DeleteEntryUseCase(store, schemas),
+        executeView: { execute: executeView },
+      },
+      [postsSchema()],
+      { surface: "public", capabilities: [viewCapability(correlatedView)], audit },
+    );
+  }
+
+  it("records one event per call with the outcome, off the response path", async () => {
+    const events: unknown[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const audit = { record: async (event: unknown) => { await gate; events.push(event); } };
+    let fail = false;
+    const dispatcher = auditedDispatcher(audit, async () => fail
+      ? { ok: false, diagnostic: runtimeDiagnostic({ code: "UNAUTHENTICATED", severity: "error", path: "view", message: "Sign in." }) }
+      : { ok: true, result: { items: [] } });
+    const deferred: Promise<unknown>[] = [];
+    const ctx: HandlerContext = { ...mcpContext("u1", null, { clientId: "claude" }), waitUntil: (p) => { deferred.push(p); } };
+
+    const ok = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "query_view_recent_posts", arguments: { requestKey: "op-1" } }), ctx);
+    fail = true;
+    const denied = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "query_view_recent_posts", arguments: {} }), ctx);
+    expect(ok.status).toBe(200);
+    expect(denied.status).toBe(401);
+    // Both responses were sent while the sink was still blocked.
+    expect(events).toEqual([]);
+    expect(deferred).toHaveLength(2);
+    release();
+    await Promise.all(deferred);
+    expect(events).toEqual([
+      expect.objectContaining({ surface: "public", callerId: "u1", clientId: "claude", credential: "oauth", tool: "query_view_recent_posts", operationId: "op-1", outcome: "ok" }),
+      expect.objectContaining({ tool: "query_view_recent_posts", operationId: null, outcome: "UNAUTHENTICATED" }),
+    ]);
+    for (const event of events as { at: number; durationMs: number }[]) {
+      expect(event.at).toBeGreaterThan(0);
+      expect(event.durationMs).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("never turns a failing sink into a tool error", async () => {
+    const dispatcher = auditedDispatcher(
+      { record: () => { throw new Error("dataset down"); } },
+      async () => ({ ok: true, result: { items: [] } }),
+    );
+    const res = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "query_view_recent_posts", arguments: {} }), mcpContext());
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { result: unknown }).result).toBeDefined();
+  });
+
+  it("records probes for tools that do not exist", async () => {
+    const events: unknown[] = [];
+    const dispatcher = auditedDispatcher({ record: (e) => { events.push(e); } }, async () => ({ ok: true, result: {} }));
+    const res = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "nope", arguments: { operationId: "probe-1" } }), mcpContext());
+    expect(((await res.json()) as { error: { code: number } }).error.code).toBe(-32601);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events).toEqual([expect.objectContaining({ tool: "nope", operationId: "probe-1", outcome: "UNKNOWN_TOOL" })]);
+  });
+});

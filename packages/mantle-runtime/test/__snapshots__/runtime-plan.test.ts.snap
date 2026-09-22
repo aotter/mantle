@@ -140,10 +140,6 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
           "localized": false,
           "schema": {
             "properties": {
-              "createdAt": {
-                "type": "number",
-                "x-mantle-bind": "now",
-              },
               "customerId": {
                 "minLength": 1,
                 "type": "string",
@@ -152,17 +148,21 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
                 "minLength": 1,
                 "type": "string",
               },
-              "status": {
+              "orderStatus": {
                 "enum": [
                   "open",
                   "closed",
                 ],
                 "type": "string",
               },
+              "placedAt": {
+                "type": "number",
+                "x-mantle-bind": "now",
+              },
             },
             "required": [
               "customerId",
-              "status",
+              "orderStatus",
             ],
             "type": "object",
           },
@@ -174,7 +174,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
       "name": "orders",
     },
   },
-  "semanticFingerprint": "fnv1a64:38f4e5d9cf49b5c8",
+  "semanticFingerprint": "fnv1a64:e8dea4bda72d8a32",
   "triggers": {
     "order-created": {
       "lifecycleSchema": "orders",
@@ -243,7 +243,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
       "target": "place-order",
     },
   },
-  "version": 1,
+  "version": 2,
   "views": {
     "open-orders": {
       "authorization": {
@@ -263,8 +263,8 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
           "fields": [
             "id",
             "customerId",
-            "status",
-            "createdAt",
+            "orderStatus",
+            "placedAt",
           ],
           "filter": {
             "and": [
@@ -278,7 +278,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
               },
               {
                 "eq": {
-                  "field": "status",
+                  "field": "orderStatus",
                   "value": "open",
                 },
               },
@@ -289,7 +289,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
           "orderBy": [
             {
               "direction": "desc",
-              "field": "createdAt",
+              "field": "placedAt",
             },
           ],
           "params": {
@@ -322,24 +322,34 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
         "fields": [
           "id",
           "customerId",
-          "status",
-          "createdAt",
+          "orderStatus",
+          "placedAt",
         ],
         "filter": {
           "and": [
             {
               "eq": {
-                "field": "customerId",
-                "value": {
-                  "$param": "customerId",
-                },
+                "field": "status",
+                "value": "published",
               },
             },
             {
-              "eq": {
-                "field": "status",
-                "value": "open",
-              },
+              "and": [
+                {
+                  "eq": {
+                    "field": "customerId",
+                    "value": {
+                      "$param": "customerId",
+                    },
+                  },
+                },
+                {
+                  "eq": {
+                    "field": "orderStatus",
+                    "value": "open",
+                  },
+                },
+              ],
             },
           ],
         },
@@ -349,7 +359,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
         "orderBy": [
           {
             "direction": "desc",
-            "field": "createdAt",
+            "field": "placedAt",
           },
         ],
         "params": {

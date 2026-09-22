@@ -34,8 +34,8 @@ const postsSchemaWithBindings: SchemaManifest = {
       properties: {
         title: { type: "string" },
         body: { type: "string" },
-        authorId: { type: "string", "x-mantle-bind": "ctx.user" },
-        createdAt: { type: "number", "x-mantle-bind": "now" },
+        submittedBy: { type: "string", "x-mantle-bind": "ctx.user" },
+        submittedAt: { type: "number", "x-mantle-bind": "now" },
       },
     },
     lifecycle: "publishing",
@@ -55,8 +55,8 @@ const siteSettingsSchema: SchemaManifest = {
         variant: { type: "string" },
         theme: { type: "string" },
         title: { type: "string" },
-        authorId: { type: "string", "x-mantle-bind": "ctx.user" },
-        createdAt: { type: "number", "x-mantle-bind": "now" },
+        submittedBy: { type: "string", "x-mantle-bind": "ctx.user" },
+        submittedAt: { type: "number", "x-mantle-bind": "now" },
       },
     },
     uniqueIndexes: [["siteKey"], ["siteKey", "variant"]],
@@ -164,8 +164,8 @@ const createPostFullInput = builtinProcedure({
   inputProperties: {
     title: { type: "string" },
     body: { type: "string" },
-    authorId: { type: "string" },
-    createdAt: { type: "number" },
+    submittedBy: { type: "string" },
+    submittedAt: { type: "number" },
     recaptchaToken: { type: "string" },
   },
 });
@@ -188,8 +188,8 @@ describe("InvokeBuiltinUseCase — create", () => {
     expect(row.data).toEqual({
       title: "Hello",
       body: "World",
-      authorId: "u-1", // server-stamped
-      createdAt: NOW, // server-stamped
+      submittedBy: "u-1", // server-stamped
+      submittedAt: NOW, // server-stamped
     });
     expect("recaptchaToken" in row.data).toBe(false);
   });
@@ -200,16 +200,16 @@ describe("InvokeBuiltinUseCase — create", () => {
       procedure: createPostFullInput,
       input: {
         title: "x",
-        authorId: "spoofed-by-caller",
-        createdAt: 0,
+        submittedBy: "spoofed-by-caller",
+        submittedAt: 0,
       },
       ctx: { user: { id: "u-1" }, staff: null, env: {} },
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const row = result.data as { data: Record<string, unknown> };
-    expect(row.data["authorId"]).toBe("u-1");
-    expect(row.data["createdAt"]).toBe(NOW);
+    expect(row.data["submittedBy"]).toBe("u-1");
+    expect(row.data["submittedAt"]).toBe(NOW);
   });
 
   it("anonymous ctx → x-mantle-bind: ctx.user stamps null", async () => {
@@ -221,7 +221,7 @@ describe("InvokeBuiltinUseCase — create", () => {
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect((result.data as { data: { authorId: unknown } }).data.authorId).toBeNull();
+    expect((result.data as { data: { submittedBy: unknown } }).data.submittedBy).toBeNull();
   });
 
   it("creates lifecycle: operational operational records live", async () => {
@@ -283,7 +283,7 @@ describe("InvokeBuiltinUseCase — update / delete / upsert", () => {
     const row = created.data as { id: string; version: number };
 
     // User B updates ONLY the title. Pre-#390 this routed through the
-    // create projector: `body` would be wiped and `authorId` re-stamped
+    // create projector: `body` would be wiped and `submittedBy` re-stamped
     // to user-B. The PATCH path must preserve both.
     const updated = await h.invoke.execute({
       procedure: builtinProcedure({
@@ -304,7 +304,7 @@ describe("InvokeBuiltinUseCase — update / delete / upsert", () => {
     const data = (updated.data as { data: Record<string, unknown> }).data;
     expect(data["title"]).toBe("v2");
     expect(data["body"]).toBe("original body"); // not wiped
-    expect(data["authorId"]).toBe("user-A"); // not re-stamped to user-B
+    expect(data["submittedBy"]).toBe("user-A"); // not re-stamped to user-B
   });
 
   it("update on unknown id returns NOT_FOUND (regression #390)", async () => {
@@ -690,8 +690,8 @@ describe("InvokeBuiltinUseCase — matched upsert", () => {
       siteKey: "main",
       theme: "dark",
       title: "Main Site",
-      authorId: "u-1",
-      createdAt: NOW,
+      submittedBy: "u-1",
+      submittedAt: NOW,
     });
     const list = await h.store.list({ collection: "site-settings" });
     expect(list.rows).toHaveLength(1);

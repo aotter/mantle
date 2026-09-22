@@ -36,6 +36,7 @@ describe("mantle skills", () => {
       await writeFile(legacy, "user edited this", "utf8");
 
       expect(await runSkills([])).toBe(0);
+      expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining(".agents/skills/mantle-develop/SKILL.md"));
 
       const source = await readFile(join(skillsRoot, "develop", "SKILL.md"), "utf8");
       for (const tool of [".agents", ".claude"]) {

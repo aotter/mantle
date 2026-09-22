@@ -105,6 +105,21 @@ describe("EmitOpenapiUseCase", () => {
     expect(paths["/api/views/posts-by-locale"]?.get?.["x-mantle-cache"]).toEqual({ sharedMaxAge: 300 });
   });
 
+  it("omits internal Views", () => {
+    const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: host-report }
+spec: { surface: internal, sql: SELECT 1 AS value }
+`);
+    expect(parsed.diagnostics).toEqual([]);
+    const { document } = EmitOpenapiUseCase.run({
+      linked: parsed.linked!,
+      title: "Test",
+      version: "0.1.0",
+    });
+    expect(document["paths"]).toEqual({});
+  });
+
   it("projects HTTP path fields out of the body without changing the Procedure schema (#531)", () => {
     const parsed = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure

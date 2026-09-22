@@ -76,7 +76,7 @@ Parsing is all-or-nothing: one error in one document means no `ParsedManifestSet
 
 ## Schema — the entity
 
-A Schema declares one collection: the JSON Schema for each entry's `data`, its indexes, its Admin presentation and its [lifecycle mode](./lifecycle-and-locales.md). Entries also carry the native columns `id`, `status`, `version`, `createdAt`, `updatedAt` and `authorId` outside `data`.
+A Schema declares one collection: the JSON Schema for each entry's `data`, its indexes, its Admin presentation and its [lifecycle mode](./lifecycle-and-locales.md). Entries also carry six [native columns](../reference/schema.md#reserved-entry-columns) outside `data`.
 
 ```yaml
 apiVersion: cms.mantle.aotter.net/v1

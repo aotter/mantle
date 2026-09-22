@@ -2,6 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { join, resolve, relative } from "node:path";
 import { exit, stdout, stderr, cwd } from "node:process";
 import { parseArgs as parseNodeArgs } from "node:util";
+import { DatabaseSync } from "node:sqlite";
 import {
   validateDiagnostic,
   type Diagnostic,
@@ -41,6 +42,7 @@ export interface CliArgs {
   readonly source: string | null;
   readonly format: "json" | "text";
   readonly phase: Phase;
+  readonly mcpInputChecks: boolean;
 }
 
 export function parseArgs(rawArgs: ReadonlyArray<string>): CliArgs {
@@ -55,6 +57,7 @@ export function parseArgs(rawArgs: ReadonlyArray<string>): CliArgs {
         format: { type: "string" },
         json: { type: "boolean" },
         phase: { type: "string" },
+        "no-mcp-input-checks": { type: "boolean" },
         help: { type: "boolean", short: "h" },
       },
     }));
@@ -92,6 +95,7 @@ export function parseArgs(rawArgs: ReadonlyArray<string>): CliArgs {
     source: values["no-source"] ? null : values.source ?? "./src",
     format,
     phase,
+    mcpInputChecks: !values["no-mcp-input-checks"],
   };
 }
 
@@ -105,6 +109,8 @@ Options:
   --source <dir>      Handler source root for handlers-map grep
                       (default: ./src)
   --no-source         Skip the handler-source grep entirely
+  --no-mcp-input-checks
+                      Skip the advisory MCP tool input-shape warnings
   --phase <phase>     'preview' (default) or 'deploy'.
                         preview: grammar + cross-Schema checks only.
                                  Suitable while authoring application manifests
@@ -114,6 +120,9 @@ Options:
   --format <fmt>      'json' or 'text' (default: auto by isTTY)
   --json              Alias for --format json
   -h, --help          This help
+
+Documentation:
+  Handbook: docs/handbook/reference/manifest.md or https://mantle.tools/
 
 Exit codes:
   0  no errors (warnings OK)
@@ -150,9 +159,22 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
   }
 
   // 3. Execute the use case.
-  const result = parsed
-    ? ValidateManifestsUseCase.run({ parsed, handlerSource })
-    : { diagnostics: [], errorCount: 0, warningCount: 0 };
+  const sandbox = new DatabaseSync(":memory:");
+  let result;
+  try {
+    result = parsed
+      ? ValidateManifestsUseCase.run({
+          parsed,
+          handlerSource,
+          ...(args.mcpInputChecks ? {} : { mcpInput: false as const }),
+          sqlViewSandbox: {
+            exec: (sql) => sandbox.exec(sql),
+          },
+        })
+      : { diagnostics: [], errorCount: 0, warningCount: 0 };
+  } finally {
+    sandbox.close();
+  }
   const cliWarnings: Diagnostic[] = [];
 
   // The CLI can't reach the runtime DB to read site_config, so it

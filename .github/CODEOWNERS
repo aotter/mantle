@@ -11,6 +11,7 @@
 /packages/mantle-web/           @guyspy
 /packages/mantle-admin/         @guyspy
 /packages/mantle-admin-ui/      @guyspy
+/packages/mantle-auth/          @guyspy
 /packages/mantle/               @guyspy
 /packages/adapters/bun/         @guyspy
 /packages/adapters/indexeddb/   @guyspy

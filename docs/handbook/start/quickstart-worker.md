@@ -3,7 +3,7 @@ description: "Author a minimal Cloudflare Worker from scratch: one Schema, one p
 ---
 # Quickstart: a minimal Worker
 
-This page reproduces Core's API-only Worker reference as a from-scratch walkthrough. It is the embed / adapter path: View REST without Admin, Auth or a visitor frontend. Admin is opt-in when humans need a console — [Quickstart: local Admin](./quickstart-admin.md). Install every `@aotter/mantle*` package from the `latest` dist-tag; see [Versions](../reference/surface.md#versions).
+This page reproduces Core's API-only Worker reference as a from-scratch walkthrough. It is the embed / adapter path: View REST without Admin, Auth or a visitor frontend. Admin is opt-in when humans need a console — [Quickstart: local Admin](./quickstart-admin.md). Resolve the intended release once and pin every `@aotter/mantle*` package to it; see [Versions](../reference/surface.md#versions).
 
 ## Prerequisites
 
@@ -13,7 +13,10 @@ This page reproduces Core's API-only Worker reference as a from-scratch walkthro
 
 ## 1. `package.json`
 
-Install every `@aotter/mantle*` package from the `latest` dist-tag and add the peers the Cloudflare adapter needs.
+The `latest` entries below are bootstrap placeholders. Step 5 replaces both
+with one exact version before the first build. For a prerelease evaluation,
+select its exact version explicitly rather than mixing channels. The other
+entries are the peers and tools used by this reference.
 
 ```json
 {
@@ -130,7 +133,9 @@ Both compatibility flags are required by the adapter. `MANTLE_AUTH_MODE` must be
 ## 5. Install, generate, validate, run
 
 ```sh
-pnpm install
+# Resolve once; for a requested prerelease, set its exact version instead.
+MANTLE_VERSION=$(pnpm view @aotter/mantle@latest version)
+pnpm add --save-exact "@aotter/mantle@$MANTLE_VERSION" "@aotter/mantle-cloudflare@$MANTLE_VERSION"
 pnpm exec mantle generate
 pnpm exec mantle validate
 pnpm exec wrangler dev --local --ip 127.0.0.1 --port 8787

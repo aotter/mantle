@@ -32,6 +32,7 @@ try {
     ["@aotter/mantle-indexeddb", "packages/adapters/indexeddb"],
     ["@aotter/mantle-admin-ui", "packages/mantle-admin-ui"],
     ["@aotter/mantle-admin", "packages/mantle-admin"],
+    ["@aotter/mantle-auth", "packages/mantle-auth"],
   ].map(([name, directory]) => {
     execFileSync("pnpm", ["-C", directory, "pack", "--pack-destination", artifacts], {
       cwd: root,
@@ -99,6 +100,7 @@ try {
     "mantle-web",
     "mantle-admin",
     "mantle-admin-ui",
+    "mantle-auth",
     "mantle-bun",
     "mantle-indexeddb",
     "mantle-vercel",
@@ -126,9 +128,17 @@ try {
   });
   const umbrella = join(temp, "umbrella-core/node_modules/@aotter/mantle");
   for (const doc of [
+    "skills/install/SKILL.md",
+    "skills/develop/SKILL.md",
+    "skills/theme/SKILL.md",
     "docs/direct-authoring.md",
     "docs/transaction-patterns.md",
     "docs/handbook/navigation.json",
+    "docs/handbook/start/overview.md",
+    "docs/handbook/reference/features.md",
+    "docs/handbook/guides/agent-setup.md",
+    "docs/handbook/guides/typed-queries.md",
+    "docs/handbook/guides/admin-ui.md",
     "docs/handbook/start/project-and-cli.md",
     "docs/handbook/start/quickstart-admin.md",
     "docs/handbook/reference/schema.md",
@@ -140,6 +150,18 @@ try {
   ]) {
     if (!existsSync(join(umbrella, doc))) throw new Error(`Packed authoring reference missing: ${doc}`);
   }
+  const packedCli = join(umbrella, "dist/cli/main.js");
+  const consumerRoot = join(temp, "umbrella-core");
+  execFileSync(process.execPath, [packedCli, "skills"], { cwd: consumerRoot, stdio: "pipe" });
+  execFileSync(process.execPath, [packedCli, "skills", "--check"], { cwd: consumerRoot, stdio: "pipe" });
+  for (const skill of ["develop", "plugin", "theme", "update"]) {
+    for (const agent of [".agents", ".claude"]) {
+      const projected = readFileSync(join(consumerRoot, agent, "skills", `mantle-${skill}`, "SKILL.md"), "utf8");
+      if (projected !== readFileSync(join(umbrella, "skills", skill, "SKILL.md"), "utf8")) {
+        throw new Error(`Packed skill projection differs: ${agent}/${skill}`);
+      }
+    }
+  }
   const adminOtpPkg = JSON.parse(readFileSync(join(umbrella, "docs/examples/host-local-admin-otp/package.json"), "utf8"));
   if (!String(adminOtpPkg.scripts?.dev ?? "").includes("--ip 127.0.0.1")) {
     throw new Error("Packed local-admin-otp pnpm dev must pin wrangler --ip 127.0.0.1");
@@ -150,6 +172,16 @@ try {
   }
   const packedManifest = JSON.parse(readFileSync(join(umbrella, "package.json"), "utf8"));
   if (packedManifest.exports["./provision"]) throw new Error("Retired provision export remains");
+  if (!packedManifest.exports["./auth"]) throw new Error("Umbrella is missing the ./auth optional export");
+  if (!packedManifest.peerDependenciesMeta?.["@aotter/mantle-auth"]?.optional) {
+    throw new Error("Umbrella must list @aotter/mantle-auth as an optional peer");
+  }
+  const authPacked = JSON.parse(execFileSync("tar", ["-xOf", tarballs["@aotter/mantle-auth"], "package/package.json"], {
+    encoding: "utf8",
+  }));
+  if (authPacked.name !== "@aotter/mantle-auth" || !authPacked.exports?.["."]) {
+    throw new Error("Packed @aotter/mantle-auth manifest is incomplete");
+  }
   const payload = execFileSync("tar", ["-tf", tarballs["@aotter/mantle"]], { encoding: "utf8" });
   const leaked = payload.split("\n").filter((entry) => {
     const name = entry.split("/").pop()?.replace(/\/$/, "") ?? "";
@@ -163,6 +195,7 @@ try {
     "mantle-web",
     "mantle-admin",
     "mantle-admin-ui",
+    "mantle-auth",
     "mantle-bun",
     "mantle-cloudflare",
     "mantle-indexeddb",
@@ -257,7 +290,7 @@ try {
     throw new Error("Admin API consumer installed the optional Admin UI");
   }
 
-  console.log("Packed spec-only, Core-only, umbrella Core, Core+Web, Core+IndexedDB, and Core+Admin consumers passed.");
+  console.log("Packed spec-only, Core-only, umbrella Core, Core+Web, Core+IndexedDB, Core+Admin, and Auth packing consumers passed.");
 } finally {
   rmSync(localState, { recursive: true, force: true });
   rmSync(temp, { recursive: true, force: true });

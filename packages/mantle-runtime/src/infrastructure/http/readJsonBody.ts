@@ -8,8 +8,11 @@ export class JsonBodyTooLargeError extends Error {
   }
 }
 
-/** Count actual bytes, including requests without a trustworthy Content-Length. */
-export async function readJsonBody(request: Request): Promise<unknown> {
+/** Count actual bytes, including requests without a trustworthy Content-Length.
+ *  Structural parameter: DOM and Workers `Request` types both satisfy it. */
+export async function readJsonBody(
+  request: { readonly body: ReadableStream<Uint8Array> | null },
+): Promise<unknown> {
   if (!request.body) return JSON.parse("");
   const reader = request.body.getReader();
   const decoder = new TextDecoder();

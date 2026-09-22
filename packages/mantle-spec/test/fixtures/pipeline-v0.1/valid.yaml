@@ -8,12 +8,12 @@ spec:
   title: Orders
   schema:
     type: object
-    required: [customerId, status]
+    required: [customerId, orderStatus]
     properties:
       customerId: &identifier { type: string, minLength: 1 }
       externalId: *identifier
-      status: { type: string, enum: [open, closed] }
-      createdAt: { type: number, x-mantle-bind: now }
+      orderStatus: { type: string, enum: [open, closed] }
+      placedAt: { type: number, x-mantle-bind: now }
   indexes: [[customerId]]
 ---
 # Empty documents are ignored but count toward diagnostic document indexes.
@@ -25,7 +25,7 @@ metadata:
 spec:
   surface: public
   from: orders
-  fields: [id, customerId, status, createdAt]
+  fields: [id, customerId, orderStatus, placedAt]
   params:
     type: object
     required: [customerId]
@@ -34,8 +34,8 @@ spec:
   filter:
     and:
       - eq: { field: customerId, value: { $param: customerId } }
-      - eq: { field: status, value: open }
-  orderBy: [{ field: createdAt, direction: desc }]
+      - eq: { field: orderStatus, value: open }
+  orderBy: [{ field: placedAt, direction: desc }]
   limit: 20
   requires:
     auth:

@@ -30,7 +30,7 @@ All `/admin/api/*` routes require a staff session, carry a 1 MiB JSON body limit
 | `GET /admin/api/views/<name>/export` | The same query as CSV, covering every matching row rather than one page. |
 | `GET /admin/api/views-manifest` | `{ views: … }` — the View manifest projection the SPA renders from. |
 | `GET /admin/api/operations` | `{ operations: [ { name, title, description, input, uiSchema, triggers, rowBindings } ] }`, filtered per caller by re-evaluating each Procedure's `requires.auth.all`. |
-| `POST /admin/api/operations/:name` | Invokes a staff-operable Procedure through the same use case the staff MCP surface uses. `404` when the name is not staff-operable. |
+| `POST /admin/api/operations/:name` | Invokes a staff-operable Procedure through the same use case the staff MCP surface uses. `404` when the name is not staff-operable or when the caller's `requires.auth.all` predicates exclude it — the same filter the listing applies, so names cannot be probed. |
 | `GET /admin/api/me`, `/collections`, `/collections/:name/statistics`, `/entries`, `/entries/export`, `/entries/:id`, `/site` | Session, catalog and entry reads. Entry detail requires `?collection=<schema>`. |
 | `POST /admin/api/entries`, `PATCH /admin/api/entries/:id` | Create and edit. Entry mutation routes require `?collection=<schema>`; contributors are limited to drafts on publishing Schemas. |
 | `POST /admin/api/entries/:id/publish`, `/unpublish`, `DELETE /admin/api/entries/:id` | Lifecycle. Requires `?collection=<schema>` and editor or above. |
@@ -52,7 +52,7 @@ All `/admin/api/*` routes require a staff session, carry a 1 MiB JSON body limit
 | `ALL /mcp` | Public MCP surface. JSON-RPC. | `private, no-store` |
 | `ALL /mcp/staff` | Staff MCP surface. Rejects a verified caller with no staff row using `403` and `insufficient_scope`. | `private, no-store` |
 
-Both MCP surfaces verify an OAuth access token against one canonical resource, `${PUBLIC_ORIGIN}/mcp`, and one scope, `mcp`. A missing or invalid token is `401` with a `Bearer` challenge naming the resource metadata URL; DPoP failures answer with a `DPoP` challenge. Misconfigured or partial auth environment variables keep public routes serving and return `503 setup_incomplete` from every Auth-owned route above — see [Authentication](../cloudflare/authentication.md).
+Both MCP surfaces resolve the caller exactly as the HTTP routes do — consumer credential, then an OAuth access token against one canonical resource, `${PUBLIC_ORIGIN}/mcp`, and one scope, `mcp`, then a same-origin cookie session, then anonymous. The surface adds one rule: `/mcp/staff` requires a staff caller. An invalid token, or an anonymous caller on the staff surface, is `401` with a `Bearer` challenge naming the resource metadata URL; DPoP failures answer with a `DPoP` challenge; on `/mcp` an anonymous `tools/call` whose target requires identity answers the same `401` challenge. Misconfigured or partial auth environment variables keep public routes serving and return `503 setup_incomplete` from every Auth-owned route above — see [Authentication](../cloudflare/authentication.md).
 
 ### Public pages
 
@@ -97,7 +97,8 @@ Tool names are the mangled `metadata.name`: lower-cased, with `-` replaced by `_
 
 | Tool | Surface | Registered when |
 |---|---|---|
-| `query_view_<segment>` | The View's own `surface` | One per declared View. `annotations.readOnlyHint` is `true`; the input schema is the View's `params.properties` plus `page` and `show`. |
+| `query_view_<segment>` | The View's own `surface` | One per public or staff View; internal Views have no tool. `annotations.readOnlyHint` is `true`; the input schema is the View's `params.properties` plus `page` and `show`. |
+| `<procedure_segment>` | The MCP Trigger's `surface` | One per `mcp` Trigger. `annotations` carry what Core can prove (`readOnlyHint: false` for every builtin handler, `destructiveHint: true` for `op: delete`, `idempotentHint: true` when an input carries `x-mcp-hint: idempotency-key`) plus whatever the Procedure declares under `spec.mcp`; `ref` handlers get nothing inferred beyond the idempotency key. Generic authoring, lifecycle and media tools are `readOnlyHint: false`; `delete_entry` is also `destructiveHint: true`. |
 | `<procedure segment>` | The Trigger's `surface` | One per `Trigger.source.kind: mcp`. A Procedure with no MCP Trigger is not exposed. |
 | `request_publish` | staff | Always. Rejected at call time for an operational Schema. |
 | `unpublish_entry` | staff | Always. Same restriction. |
@@ -152,11 +153,11 @@ mantle.triggers.expireOrderHttp;   // { name, source, target }
 await mantle.runtime.archive.execute({ id, ctx });
 ```
 
-`entries.<collection>` exposes `createDraft`, `get`, `list` and `delete`, supplying the required collection identity to Core. Generic MCP entry tools require a `collection` argument. `runtime` is the underlying Core runtime, so the typed projection never hides it. A host that owns its own lifecycle can skip generation entirely and call `runtime.executeView({ view: "published-notes" })` directly.
+`entries.<collection>` exposes `createDraft`, `get`, `list`, `delete`, and the indexed field reads `readBySlug`, `readByDataField`, `readByDataFieldIn` and `findManyByDataField`, supplying the required collection identity to Core. The field reads accept only declared Schema fields and their scalar types, and return entries whose `data` is the generated Schema shape, so an author never has to drop to an untyped `runtime.entries` call or scan `list` to find rows by an indexed field. Generic MCP entry tools require a `collection` argument. `runtime` is the underlying Core runtime, so the typed projection never hides it. A host that owns its own lifecycle can skip generation entirely and call `runtime.executeView({ view: "published-notes" })` directly.
 
 ## Packages
 
-The umbrella installs Spec and Runtime only. Web, Admin, Admin UI, Bun, Vercel and Cloudflare are optional peers; install one before importing its subpath. Every sub-package is also directly installable.
+The umbrella installs Spec and Runtime only. Web, Admin, Auth, Admin UI, Bun, Vercel and Cloudflare are optional peers; install one before importing its subpath. Every sub-package is also directly installable.
 
 | Package | Umbrella subpath | Holds |
 |---|---|---|
@@ -164,9 +165,10 @@ The umbrella installs Spec and Runtime only. Web, Admin, Admin UI, Bun, Vercel a
 | `@aotter/mantle-spec` | `/spec` | Manifest grammar, parser, validators, JSON Schema to zod, site-config contract, diagnostic catalog. No environment, no IO. |
 | `@aotter/mantle-runtime` | `/runtime` | Hexagonal runtime: domain ports, use cases, MCP catalog, storage helpers. No adapter dependencies. |
 | — | `/runtime/testing` | Node-only crowded-SQLite planner and HTTP sampling helpers used by `mantle-harness`. |
-| — | `/codegen` | The pure linked-manifests to typed-module emitter, with no IO. |
+| — | `/codegen` | The pure linked-manifests or compiled-plan to typed-module emitter, with no IO. |
 | `@aotter/mantle-web` | `/web` | HTML, Markdown, `llms.txt`, sitemap, SEO and preview composition. No routes, no platform dependencies. |
 | `@aotter/mantle-admin` | `/admin` | Admin API, auth route mounting, OAuth pages, static-asset composition. |
+| `@aotter/mantle-auth` | `/auth` | Host-neutral Better Auth identity, staff roles, and OAuth 2.1 / MCP authorization. Adapters own IP headers and storage bindings. |
 | `@aotter/mantle-admin-ui` | `/admin-ui` | Pre-built React 19 Admin SPA bundle. |
 | `@aotter/mantle-bun` | `/bun` | Bun adapter over a caller-owned `bun:sqlite` database. |
 | `@aotter/mantle-vercel` | `/vercel` | Vercel Functions adapter with injected durable storage and platform `waitUntil`. |

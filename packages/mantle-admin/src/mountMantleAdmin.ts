@@ -90,7 +90,7 @@ export interface AdminMemberList {
 
 export interface AdminAuth {
   readonly basePath: string;
-  readonly handler: (request: Request) => Promise<Response>;
+  readonly handler: (request: Request, context?: { readonly waitUntil?: (promise: Promise<unknown>) => void }) => Promise<Response>;
   readonly methods: readonly AdminAuthMethod[];
   readonly getSession: (request: Request) => Promise<{
     session: { id: string };
@@ -206,7 +206,7 @@ export function mountMantleAdmin<E extends Env>(
   // so consumers don't have to wire — and can't accidentally register a
   // catch-all BEFORE the specific routes above and silently swallow
   // them. Hono matches in registration order; this catch-all sits last.
-  app.all(`${authBasePath}/*`, (c) => auth.handler(c.req.raw));
+  app.all(`${authBasePath}/*`, (c) => auth.handler(c.req.raw, requestRetention(c, ref.requestContext)));
 
   // Better Auth's provider serves discovery outside its base path. Keep these
   // explicit so a consumer catch-all cannot swallow RFC 8414/9728 metadata.
@@ -215,7 +215,7 @@ export function mountMantleAdmin<E extends Env>(
     "/.well-known/oauth-protected-resource",
     "/.well-known/oauth-protected-resource/*",
   ]) {
-    app.all(path, (c) => auth.handler(c.req.raw));
+    app.all(path, (c) => auth.handler(c.req.raw, requestRetention(c, ref.requestContext)));
   }
 
   for (const path of [
@@ -281,7 +281,9 @@ export function mountMantleAdmin<E extends Env>(
   // `/admin/api/collections` precedent exactly (same shape of
   // "precompute at mount from ref.plan, list on GET") and needs
   // no changes to the `SiteInfo` type or its query key.
-  const views = Object.values(ref.plan.views).map(({ manifest }) => manifest);
+  const views = Object.values(ref.plan.views)
+    .map(({ manifest }) => manifest)
+    .filter(({ spec }) => spec.surface !== "internal");
   const viewsManifest = views.map((v) => ({
     name: v.metadata.name,
     title: v.spec.title ?? null,
@@ -575,7 +577,16 @@ export function mountMantleAdmin<E extends Env>(
   guarded("post", "/admin/api/operations/:name", async (c, gate) => {
     const name = c.req.param("name") ?? "";
     const op = operationsByName.get(name);
-    if (!op) {
+    // Match the GET listing: an operation this caller's predicates exclude
+    // is not there for them, so POST answers 404 too and cannot be used to
+    // probe operation names (#877 L3). The invoke still re-evaluates.
+    const visible = op && evaluateAuthAll(
+      op.procedure.spec.requires,
+      adminHandlerContext(c, gate, ref),
+      `POST /admin/api/operations/${name}`,
+      "runtime",
+    ) === null;
+    if (!op || !visible) {
       return Response.json({
         ok: false,
         diagnostic: runtimeDiagnostic({
@@ -1424,8 +1435,18 @@ function titleFieldKey(data: Record<string, unknown>, schema?: JsonSchema): stri
 
 /** Operational previews contain exactly the manifest-declared list
  *  fields. Undeclared lists stay metadata-only. */
+/** Native entry columns live on the row, not in `data`; a list column may name one. */
+const NATIVE_ROW_VALUE: Readonly<Record<string, (row: AdminEntryRow) => unknown>> = {
+  id: (row) => row.id,
+  status: (row) => row.status,
+  version: (row) => row.version,
+  createdAt: (row) => row.createdAt,
+  updatedAt: (row) => row.updatedAt,
+  authorId: (row) => row.authorId,
+};
+
 function adminDataPreview(
-  data: Record<string, unknown>,
+  row: AdminEntryRow,
   manifest?: SchemaManifest,
 ): Record<string, unknown> | undefined {
   if (!manifest || manifest.spec.lifecycle !== "operational") return undefined;
@@ -1433,7 +1454,10 @@ function adminDataPreview(
   const fields = [...(list.primaryField ? [list.primaryField] : []), ...list.columns];
   if (fields.length === 0) return undefined;
   const preview: Record<string, unknown> = {};
-  for (const key of fields) preview[key] = data[key];
+  for (const key of fields) {
+    const native = NATIVE_ROW_VALUE[key];
+    preview[key] = native ? native(row) : row.data[key];
+  }
   return preview;
 }
 
@@ -1470,7 +1494,7 @@ function adminListItem(
       : adminEntryTitle(row.data, manifest?.spec.schema),
     updated_at: row.updatedAt,
     translation_locales: translationLocales,
-    data_preview: adminDataPreview(row.data, manifest),
+    data_preview: adminDataPreview(row, manifest),
   };
 }
 
@@ -2233,7 +2257,7 @@ function projectDeveloperConsole(plan: RuntimePlan): {
     readonly views: ReadonlyArray<{
       readonly name: string;
       readonly title: LocalizedText | null;
-      readonly surface: "public" | "staff";
+      readonly surface: ViewManifest["spec"]["surface"];
       readonly query: RuntimePlan["views"][string]["query"];
       readonly authorization: NonNullable<RuntimePlan["views"][string]["authorization"]>["all"];
       readonly guard: string | null;
@@ -2291,10 +2315,12 @@ function projectDeveloperConsole(plan: RuntimePlan): {
       manifest,
     };
   }).sort((a, b) => a.name.localeCompare(b.name));
+  const views = Object.values(plan.views)
+    .filter(({ manifest }) => manifest.spec.surface !== "internal");
   const graph = {
     atoms: [
       ...Object.values(plan.schemas).map(({ name, manifest }) => ({ id: `Schema:${name}`, kind: "Schema" as const, name, title: manifest.spec.title })),
-      ...Object.values(plan.views).map(({ name, manifest, authorization }) => ({
+      ...views.map(({ name, manifest, authorization }) => ({
         id: `View:${name}`,
         kind: "View" as const,
         name,
@@ -2342,7 +2368,7 @@ function projectDeveloperConsole(plan: RuntimePlan): {
           )];
         }),
       ]),
-      ...Object.values(plan.views).flatMap(({ name, query, guard }) => [
+      ...views.flatMap(({ name, query, guard }) => [
         ...(query.kind === "declarative" ? [developerRelation(`View:${name}:from:${query.from}`, "view-source", `View:${name}`, `Schema:${query.from}`, "/spec/from", query.from)] : []),
         ...(guard ? [developerRelation(`View:${name}:guard:${guard}`, "authorization-guard", `View:${name}`, `Procedure:${guard}`, "/spec/requires/guard/procedure", guard)] : []),
       ]),
@@ -2380,7 +2406,7 @@ function projectDeveloperConsole(plan: RuntimePlan): {
         searchableFields: manifest.spec.searchableFields ?? [],
         manifest,
       })).sort((a, b) => a.name.localeCompare(b.name)),
-      views: Object.values(plan.views).map(({ name, manifest, query, authorization, guard }) => ({
+      views: views.map(({ name, manifest, query, authorization, guard }) => ({
         name,
         title: manifest.spec.title ?? null,
         surface: manifest.spec.surface,
@@ -2581,4 +2607,23 @@ function mediaNotConfiguredResponse(path: string): Response {
         "Media uploads are not enabled on this deployment. Bind a `mediaStorage` port in `createMantleRuntime` to enable.",
     }),
   }, { status: 501 });
+}
+
+/** Hand the platform's `waitUntil` to Auth so its background work outlives the
+ *  response. Hono throws when no ExecutionContext exists (Node, tests); that
+ *  host has nothing to retain with, so the work runs detached as before. */
+function requestRetention(
+  c: Context,
+  requestContext: MantleAdminRef["requestContext"],
+): { readonly waitUntil?: (promise: Promise<unknown>) => void } {
+  // Prefer the host's own seam (Vercel, Bun and tests can supply a retainer
+  // without a Hono ExecutionContext); fall back to probing the getter.
+  const supplied = requestContext?.(c)?.waitUntil;
+  if (supplied) return { waitUntil: supplied };
+  try {
+    const ctx = c.executionCtx;
+    return { waitUntil: (promise) => ctx.waitUntil(promise) };
+  } catch {
+    return {};
+  }
 }

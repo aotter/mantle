@@ -51,7 +51,7 @@ const bound = bindMantle(runtime);
 await bound.runtime.archive.execute({ id, ctx });
 ```
 
-Generated property names are deterministic lower-camel identifiers; calls keep the authored wire names internally, and a collision is an error (`CODEGEN_IDENTIFIER_COLLISION`). Code generation is a pure projection: it never caches, retries, mounts routes or owns host lifecycle, and the typed API keeps its raw `runtime` so it hides nothing. Skipping generation is valid — call `runtime.executeView({ view: "published-notes" })` by name.
+Generated property names are deterministic lower-camel identifiers; calls keep the authored wire names internally, and a collision is an error (`CODEGEN_IDENTIFIER_COLLISION`). The emitter accepts either `emitMantleModule({ linked })` or `emitMantleModule({ plan })` for hosts that already compiled the plan; see [Typed queries](../guides/typed-queries.md). Code generation is a pure projection: it never caches, retries, mounts routes or owns host lifecycle, and the typed API keeps its raw `runtime` so it hides nothing. Skipping generation is valid — call `runtime.executeView({ view: "published-notes" })` by name.
 
 ## Core, optional products, adapters
 
