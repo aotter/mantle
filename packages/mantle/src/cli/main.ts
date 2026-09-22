@@ -71,7 +71,7 @@ Documentation:
   Features:      node_modules/@aotter/mantle/docs/handbook/reference/features.md
   Admin UI:      node_modules/@aotter/mantle/docs/handbook/guides/admin-ui.md
   Online:        https://mantle.tools/
-  Install skill: npx skills add aotter/mantle --skill install
+  Install skill: npx skills add aotter/mantle
 `;
 
 main().then(

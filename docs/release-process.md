@@ -110,10 +110,11 @@ dist-tag DELETE only added failure and re-run state, and Actions
    ```
 
    Leave the consumer cold-start entry **untagged**: `npx skills add
-   aotter/mantle --skill install`, `/plugin marketplace add aotter/mantle`,
+   aotter/mantle`, `/plugin marketplace add aotter/mantle`,
    `codex plugin marketplace add aotter/mantle` and the plugin-manifest
    descriptions carry no `@v…` / `--ref`. Untagged resolves to `main`, which
-   only moves at a release, so it is always the latest published version
+   normally moves at a release but may contain a source-only hotfix; the
+   installed npm package remains the version authority
    (#995, #998). Only "installed version" statements such as
    `(currently \`X.Y.Z\`)` are bumped.
 

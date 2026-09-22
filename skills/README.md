@@ -9,7 +9,7 @@ Agent-readable skill briefs for consumers of `@aotter/mantle-*`. Discoverable by
 | [`plugin`](plugin/SKILL.md) | `mantle:plugin`: Core-owned marketplace workflow for plan-first capability installs across applications and adapters. |
 | [`theme`](theme/SKILL.md) | `mantle:theme`: Core-owned visual workflow. Reads project-owned theme and UI contracts. |
 | [`update`](update/SKILL.md) | `mantle:update`: Core-owned drift check workflow for SDK dependencies, local skills, and plugin lockfiles. |
-| [`install`](install/SKILL.md) | User wants to author a local Mantle application or continue an existing project. |
+| [`mantle`](mantle/SKILL.md) | User wants to author a local Mantle application or continue an existing project. |
 | [`provision`](provision/SKILL.md) | User wants a local project shipped to Cloudflare with production auth and operator handoff. |
 
 The skills target Mantle's v0.1 grammar. The installed package version, not
@@ -29,7 +29,7 @@ enforces the columns below.
 | `plugin` | user wants an installable capability | plan before apply; lock entry is the removal manifest; delete only plugin-owned files and atoms | apply; remove | project, plugin | — |
 | `theme` | brand or visual direction in a project | repo-owned theme and UI contracts | — | project, plugin | — |
 | `update` | SDK upgrade or plugin lock review | never blindly overwrite user-owned code | — | project, plugin | — |
-| `install` | new application, or opening an existing project | do not use the SDK checkout as the application; no push/deploy/provider config during cold start | author local project; continue existing project | plugin | Creates a new project; nothing to project into an existing one. |
+| `mantle` | new application, or opening an existing project | do not use the SDK checkout as the application; no push/deploy/provider config during cold start | author local project; continue existing project | plugin | Creates a new project; nothing to project into an existing one. |
 | `provision` | ship to Cloudflare and finish production auth | secrets never enter source or logs; explicit auth mode | hosted auth; self-managed auth | plugin | Platform-specific deploy that handles production secrets; opt-in only. |
 | `media-gc` | audit or remove stale uncommitted media objects | audit by default; confirm exact account, bucket, cutoff, and candidate digest; re-audit before applying; never prefix-delete; never print keys | apply | plugin | Destructive remote object deletion and Cloudflare-specific; opt-in only. |
 
@@ -58,11 +58,14 @@ contracts.
 
 ## Source-repository marketplace install
 
-Cold start is the install skill. Other marketplace hosts are pointers
-to the same entry:
+The root `SKILL.md` is an exact copy of `skills/mantle/SKILL.md`. It makes
+the no-flag command install just Mantle; plugin hosts still discover the full
+set in `skills/`. `check-skills` guards the copy against drift.
+
+Other marketplace hosts point to the same entry:
 
 ```sh
-npx skills add aotter/mantle --skill install
+npx skills add aotter/mantle
 ```
 
 ```bash
@@ -76,9 +79,10 @@ codex plugin add mantle@mantle
 ```
 
 Read the path printed by the installer (for project-local Codex,
-`.agents/skills/install/SKILL.md`). Only the selected brief is installed, not
+`.agents/skills/mantle/SKILL.md`). Only the selected brief is installed, not
 the SDK or handbook. After choosing and installing an exact SDK version, read
-`node_modules/@aotter/mantle/skills/install/SKILL.md` and its embedded docs;
+`node_modules/@aotter/mantle/skills/mantle/SKILL.md` (or
+`skills/install/SKILL.md` in published 0.1.3) and its embedded docs;
 that package supersedes the bootstrap Git-ref instructions. After packages are
 installed, `mantle skills` projects the installed package's own skills into the
 project, and `mantle skills --check` fails on drift.
@@ -100,7 +104,7 @@ package. Two audiences, two artifacts.
 
 ## Discoverability
 
-The skills target ADR-0007's "AI as primary author" thesis: agents reach these files by URL when the user invokes them by intent ("install mantle", "develop my Mantle site", "deploy"). Official cold start is `npx skills add aotter/mantle --skill install`. Point the agent at the repository or pass the version-matched markdown content directly.
+The skills target ADR-0007's "AI as primary author" thesis: agents reach these files by URL when the user invokes them by intent ("install mantle", "develop my Mantle site", "deploy"). Official cold start is `npx skills add aotter/mantle`. Point the agent at the repository or pass the version-matched markdown content directly.
 
 ## Conventions
 

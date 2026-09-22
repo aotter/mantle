@@ -114,7 +114,7 @@ The same bundle is installable from the plugin marketplace:
 
 ```sh
 # Canonical
-npx skills add aotter/mantle --skill install
+npx skills add aotter/mantle
 
 # Claude Code — two separate prompts
 /plugin marketplace add aotter/mantle

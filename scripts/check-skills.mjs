@@ -14,6 +14,10 @@ const failures = [];
 
 const fail = (where, message) => failures.push(`${where}: ${message}`);
 
+if (readFileSync(join(repoRoot, "SKILL.md"), "utf8") !== readFileSync(join(skillsRoot, "mantle", "SKILL.md"), "utf8")) {
+  fail("SKILL.md", "root skill must match skills/mantle/SKILL.md");
+}
+
 // ponytail: front matter here is a fixed flat shape, so one regex beats a YAML
 // dependency in a repo-root script. `projectionScopes` in
 // packages/mantle/src/cli/skills.ts reads the same field the same way — keep the
