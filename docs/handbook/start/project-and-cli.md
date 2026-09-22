@@ -8,7 +8,7 @@ This page describes a directly authored Mantle project: which files are yours, w
 Cold start from GitHub or a marketplace host is the pinned install skill, not this page:
 
 ```sh
-npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install
+npx skills add aotter/mantle@v0.1.3-alpha.2 --skill install
 ```
 
 ## You own the project
@@ -100,18 +100,18 @@ Run the harness after any change to a Schema index, View filter or ordering, or 
 
 Install the version-matched plugin bundle in the agent host. Cold start uses
 the published pin; an already-installed project uses the exact version from
-`package.json` (currently `0.1.3-alpha.1`):
+`package.json` (currently `0.1.3-alpha.2`):
 
 ```sh
 # Canonical
-npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install
+npx skills add aotter/mantle@v0.1.3-alpha.2 --skill install
 
 # Claude Code — two separate prompts
-/plugin marketplace add aotter/mantle@v0.1.3-alpha.1
+/plugin marketplace add aotter/mantle@v0.1.3-alpha.2
 /plugin install mantle@mantle
 
 # Codex
-codex plugin marketplace add aotter/mantle --ref v0.1.3-alpha.1
+codex plugin marketplace add aotter/mantle --ref v0.1.3-alpha.2
 codex plugin add mantle@mantle
 ```
 

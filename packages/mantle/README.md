@@ -12,11 +12,11 @@ where agents write config and the runtime carries the complexity.
 Cold start for a new application is the pinned skill, not a bare npm add:
 
 ```sh
-npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install
+npx skills add aotter/mantle@v0.1.3-alpha.2 --skill install
 ```
 
 To depend on this package in an existing project, pin the exact version
-from `package.json` (currently `0.1.3-alpha.1`):
+from `package.json` (currently `0.1.3-alpha.2`):
 
 ```bash
 npm install @aotter/mantle
@@ -197,7 +197,7 @@ internals or rebuilding Mantle's adapters.
 Cold start from GitHub or a marketplace host:
 
 ```sh
-npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install
+npx skills add aotter/mantle@v0.1.3-alpha.2 --skill install
 ```
 
 That skill interviews, pins this package, then uses the CLI and the
@@ -215,25 +215,25 @@ Install the Mantle Core skill bundle before authoring or maintaining a
 consumer application. The canonical command is:
 
 ```sh
-npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install
+npx skills add aotter/mantle@v0.1.3-alpha.2 --skill install
 ```
 
 Claude Code and Codex can install the same pinned plugin, then run that skill:
 
 ```bash
 # Claude Code
-/plugin marketplace add aotter/mantle@v0.1.3-alpha.1
+/plugin marketplace add aotter/mantle@v0.1.3-alpha.2
 /plugin install mantle@mantle
 
 # Codex
-codex plugin marketplace add aotter/mantle --ref v0.1.3-alpha.1
+codex plugin marketplace add aotter/mantle --ref v0.1.3-alpha.2
 codex plugin add mantle@mantle
 ```
 
 Cursor and VS Code Copilot can auto-discover the GitHub repo through
 `.cursor-plugin/plugin.json` and `.copilot-plugin/plugin.json` after the repo
 is cloned or opened. Still start from the `npx skills add` sentence (or open
-`skills/install/SKILL.md` at tag `v0.1.3-alpha.1`). Do not point a versioned consumer
+`skills/install/SKILL.md` at tag `v0.1.3-alpha.2`). Do not point a versioned consumer
 at a mutable branch.
 
 ## Marketplace capability installs
