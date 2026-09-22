@@ -31,7 +31,7 @@ spec:
       requestedFor: { type: string, description: Requested date, time, or slot. }
       partySize: { type: integer, minimum: 1 }
       note: { type: string, maxLength: 1000 }
-      createdAt: { type: number, x-mcp-hint: timestamp-ms, x-mantle-bind: now }
+      submittedAt: { type: number, x-mcp-hint: timestamp-ms, x-mantle-bind: now }
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: View
@@ -41,9 +41,9 @@ spec:
   title: Reservation queue
   surface: staff
   from: reservations
-  fields: [id, name, email, requestedFor, partySize, note, createdAt]
+  fields: [id, name, email, requestedFor, partySize, note, submittedAt]
   orderBy:
-    - { field: createdAt, direction: desc }
+    - { field: submittedAt, direction: desc }
   limit: 50
 ---
 apiVersion: cms.mantle.aotter.net/v1
@@ -82,7 +82,7 @@ spec:
   target: { procedure: submit-reservation }
 ```
 
-`createdAt` is stamped by the server (`x-mantle-bind: now`); a caller-supplied value is ignored. `requestedFor` is a free string on purpose: this example does not impose a calendar model. The staff View orders by `createdAt`, so the newest request is first regardless of the requested slot.
+`submittedAt` is stamped by the server (`x-mantle-bind: now`); a caller-supplied value is ignored. `requestedFor` is a free string on purpose: this example does not impose a calendar model. The staff View orders by `submittedAt`, so the newest request is first regardless of the requested slot.
 
 ## Worker and handlers
 
@@ -113,7 +113,7 @@ curl -sS -X POST http://localhost:8787/api/reservations \
     "collection": "reservations",
     "status": "published",
     "version": 1,
-    "data": { "name": "Ada", "email": "ada@example.test", "requestedFor": "2026-10-03T19:00:00+08:00", "partySize": 4, "createdAt": 1788879363492 },
+    "data": { "name": "Ada", "email": "ada@example.test", "requestedFor": "2026-10-03T19:00:00+08:00", "partySize": 4, "submittedAt": 1788879363492 },
     "authorId": null,
     "createdAt": 1788879363492,
     "updatedAt": 1788879363492

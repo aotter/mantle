@@ -30,7 +30,7 @@ const postsSchemaWithBindings: SchemaManifest = {
       properties: {
         title: { type: "string" },
         slug: { type: "string" },
-        authorId: { type: "string", "x-mantle-bind": "ctx.user" },
+        submittedBy: { type: "string", "x-mantle-bind": "ctx.user" },
         publishedAt: { type: "number", "x-mantle-bind": "now" },
       },
       required: ["title"],
@@ -238,7 +238,7 @@ describe("CreateDraftUseCase", () => {
         title: "Hello",
         slug: "hello",
         unknown: "drop-me",
-        authorId: "spoofed-author",
+        submittedBy: "spoofed-author",
         publishedAt: 123,
       },
       authorId: "user-1",
@@ -246,7 +246,7 @@ describe("CreateDraftUseCase", () => {
     expect(row.data).toEqual({
       title: "Hello",
       slug: "hello",
-      authorId: "user-1",
+      submittedBy: "user-1",
       publishedAt: 1_000_000_000_000,
     });
   });
@@ -506,14 +506,14 @@ describe("UpdateDraftUseCase", () => {
       expectedVersion: 1,
       data: {
         title: "v2",
-        authorId: "spoofed-author",
+        submittedBy: "spoofed-author",
         publishedAt: 123,
       },
     });
     expect(updated.data).toEqual({
       title: "v2",
       slug: "v1",
-      authorId: "user-1",
+      submittedBy: "user-1",
       publishedAt: 1_000_000_000_000,
     });
   });
