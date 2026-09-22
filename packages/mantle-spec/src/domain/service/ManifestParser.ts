@@ -21,6 +21,7 @@ import {
   MANTLE_BIND_VALUES,
   LIFECYCLE_HOOKS,
   MCP_TRIGGER_SURFACES,
+  VIEW_SURFACES,
   STAFF_ROLES,
   FILTER_COMPARISON_OPS,
   VIEW_PARAMS_RESERVED,
@@ -192,6 +193,7 @@ const V01_BUILTIN_OPS: ReadonlySet<BuiltinOp> = new Set(BUILTIN_OPS);
 const V01_LIFECYCLE_HOOKS: ReadonlySet<LifecycleHook> = new Set(LIFECYCLE_HOOKS);
 const V01_HOOK_ERROR_POLICIES: ReadonlySet<string> = new Set(["abort", "continue"]);
 const V01_MCP_TRIGGER_SURFACES: ReadonlySet<string> = new Set(MCP_TRIGGER_SURFACES);
+const V01_VIEW_SURFACES: ReadonlySet<string> = new Set(VIEW_SURFACES);
 const FILTER_COMPARISON_OP_SET: ReadonlySet<string> = new Set(FILTER_COMPARISON_OPS);
 const V01_LIFECYCLE_MODES: ReadonlySet<string> = new Set(["publishing", "operational"]);
 
@@ -853,9 +855,9 @@ function validateViewSpec(m: ViewManifest, idx: number): ViewManifest {
     );
   }
   const surface = s["surface"];
-  if (typeof surface !== "string" || !V01_MCP_TRIGGER_SURFACES.has(surface)) {
+  if (typeof surface !== "string" || !V01_VIEW_SURFACES.has(surface)) {
     throw new ManifestParseError(
-      `View.spec.surface is required and must be one of ${[...V01_MCP_TRIGGER_SURFACES].join(", ")}; got ${JSON.stringify(surface)}`,
+      `View.spec.surface is required and must be one of ${[...V01_VIEW_SURFACES].join(", ")}; got ${JSON.stringify(surface)}`,
       idx,
       "/spec/surface",
     );

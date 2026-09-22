@@ -205,6 +205,9 @@ Admin applies search and filters before pagination, rejecting a search term or f
 |---|---|---|---|
 | `public` | `GET /api/views/<name>`, plus a catalog at `GET /api/views` | `query_view_<segment>` on `/mcp` | Also mounted at `GET /admin/api/views/<name>` and `/export` behind the staff gate |
 | `staff` | `GET /admin/api/views/<name>` and `/admin/api/views/<name>/export` — not mounted publicly | `query_view_<segment>` on `/mcp/staff` | Report sidebar |
+| `internal` | Not mounted | Not mounted | Not listed or mounted |
+
+An `internal` View remains in the compiled plan for host code to call through `MantleRuntime.executeView`. It is an exposure policy, not an authorization bypass: `requires` and guards still evaluate against the `ctx` supplied by the host. Shared HTTP caching is invalid because no adapter owns an HTTP response for the View.
 
 A `public` declarative View over a `publishing` Schema reads **published rows only**, on every transport. The runtime adds `status = published` to the compiled query whether or not the filter spells it out; writing it is allowed and redundant, and comparing `status` to any other value is rejected at validate time (`VIEW_PUBLIC_STATUS_INVALID`). Staff Views see every status. `operational` Schemas create rows as `published`, so nothing is added. SQL Views (`spec.sql`) are the author's own statement and receive no injected predicate. Decision record: ADR-0025.
 
