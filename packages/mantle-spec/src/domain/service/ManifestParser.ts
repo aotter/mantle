@@ -25,6 +25,7 @@ import {
   FILTER_COMPARISON_OPS,
   VIEW_PARAMS_RESERVED,
   PROCEDURE_MCP_ANNOTATION_KEYS,
+  RESERVED_ENTRY_COLUMNS,
   RESERVED_PROCEDURE_INPUT_NAMES,
   isParamRef,
   hasCtxUserRefKey,
@@ -701,6 +702,14 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
       "Non-localized Schema must not declare the reserved entry field 'locale'; use a domain name such as 'orderLocale', or set localized: true.",
       idx,
       "/spec/schema/properties/locale",
+    );
+  }
+  for (const reserved of RESERVED_ENTRY_COLUMNS) {
+    if (!propertyNames.includes(reserved)) continue;
+    throw new ManifestParseError(
+      `Schema '${m.metadata.name}' must not declare the native entry column '${reserved}' as a data property; use a domain name such as 'submittedAt' or 'orderStatus'. Native columns are readable in Views and indexable through spec.indexes without being declared.`,
+      idx,
+      `/spec/schema/properties/${reserved}`,
     );
   }
   for (const reserved of RESERVED_PROCEDURE_INPUT_NAMES) {

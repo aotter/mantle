@@ -135,10 +135,6 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "localized": false,
           "schema": {
             "properties": {
-              "createdAt": {
-                "type": "number",
-                "x-mantle-bind": "now",
-              },
               "customerId": {
                 "minLength": 1,
                 "type": "string",
@@ -153,6 +149,10 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
                   "closed",
                 ],
                 "type": "string",
+              },
+              "placedAt": {
+                "type": "number",
+                "x-mantle-bind": "now",
               },
             },
             "required": [
@@ -174,7 +174,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 18,
-            "offset": 560,
+            "offset": 559,
           },
           "start": {
             "column": 1,
@@ -196,7 +196,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
             "id",
             "customerId",
             "orderStatus",
-            "createdAt",
+            "placedAt",
           ],
           "filter": {
             "and": [
@@ -221,7 +221,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "orderBy": [
             {
               "direction": "desc",
-              "field": "createdAt",
+              "field": "placedAt",
             },
           ],
           "params": {
@@ -257,12 +257,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 44,
-            "offset": 1208,
+            "offset": 1205,
           },
           "start": {
             "column": 1,
             "line": 21,
-            "offset": 644,
+            "offset": 643,
           },
         },
       },
@@ -303,12 +303,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 57,
-            "offset": 1482,
+            "offset": 1479,
           },
           "start": {
             "column": 1,
             "line": 45,
-            "offset": 1212,
+            "offset": 1209,
           },
         },
       },
@@ -357,12 +357,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 73,
-            "offset": 1802,
+            "offset": 1799,
           },
           "start": {
             "column": 1,
             "line": 58,
-            "offset": 1486,
+            "offset": 1483,
           },
         },
       },
@@ -393,12 +393,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 81,
-            "offset": 1993,
+            "offset": 1990,
           },
           "start": {
             "column": 1,
             "line": 74,
-            "offset": 1806,
+            "offset": 1803,
           },
         },
       },
@@ -428,12 +428,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 89,
-            "offset": 2166,
+            "offset": 2163,
           },
           "start": {
             "column": 1,
             "line": 82,
-            "offset": 1997,
+            "offset": 1994,
           },
         },
       },
@@ -467,12 +467,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 101,
-            "offset": 2394,
+            "offset": 2391,
           },
           "start": {
             "column": 1,
             "line": 90,
-            "offset": 2170,
+            "offset": 2167,
           },
         },
       },

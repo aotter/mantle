@@ -237,16 +237,7 @@ function checkViewRefs(
   }
   const publicPublishing = v.spec.surface === "public"
     && (schema.spec.lifecycle ?? "publishing") === "publishing";
-  if (publicPublishing && Object.hasOwn(schema.spec.schema.properties ?? {}, "status")) {
-    out.push(validateDiagnostic({
-      code: "VIEW_PUBLIC_STATUS_INVALID",
-      severity: "error",
-      path: manifestPath("View", v.metadata.name, "/spec/from", filePaths),
-      value: fromName,
-      expected: "a publishing Schema whose data properties do not shadow the native status column",
-      message: `View '${v.metadata.name}' is public over publishing Schema '${fromName}', which declares a data property named 'status'; the runtime cannot restrict this View to published rows. Rename the property (for example 'orderStatus').`,
-    }));
-  } else if (publicPublishing && v.spec.filter) {
+  if (publicPublishing && v.spec.filter) {
     // The runtime injects `status = published` into this View's plan (#1007);
     // any other status comparison can only contradict it and return nothing.
     for (const found of collectStatusComparisons(v.spec.filter, "/spec/filter")) {
