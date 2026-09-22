@@ -1,5 +1,5 @@
 import type { JsonSchema, SchemaManifest, ViewManifest } from "../model/ManifestGrammar.js";
-import { MANTLE_REF_KEYWORD } from "../model/ManifestGrammar.js";
+import { MANTLE_REF_KEYWORD, RESERVED_ENTRY_COLUMNS } from "../model/ManifestGrammar.js";
 import { checkSchemaIndexes } from "./SchemaIndexChecker.js";
 
 export interface SchemaListFilter {
@@ -227,12 +227,16 @@ export function checkSchemaAdminUi(schema: SchemaManifest): {
     ));
   }
   for (const field of fields) {
+    // Native entry columns carry no `properties` entry but are listable, so a
+    // column may name one. `primaryField` is the entry title and stays a
+    // declared data property: a native column would render no useful title.
+    if (field !== normalizedPrimary && NATIVE_LIST_FIELDS.has(field)) continue;
     const property = schema.spec.schema.properties?.[field];
     if (!property) {
       return invalid(problem(
         `/spec/uiSchema/list/${field === normalizedPrimary ? "primaryField" : "columns"}`,
         field,
-        "an exact top-level key in spec.schema.properties",
+        "a top-level key in spec.schema.properties or a native entry column",
         `Schema '${schema.metadata.name}' list presentation references unknown field '${field}'.`,
       ));
     }
@@ -590,6 +594,8 @@ export function checkSchemaNavTargets(
   }
   return null;
 }
+
+const NATIVE_LIST_FIELDS: ReadonlySet<string> = new Set(RESERVED_ENTRY_COLUMNS);
 
 function isScalar(schema: JsonSchema): boolean {
   const types = Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : [];
