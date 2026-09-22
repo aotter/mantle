@@ -6,7 +6,7 @@ Runtime. This Spec-only path is allowed by
 [ADR-0019](adr/0019-sealed-manifest-runtime-pipeline.md), not a new adapter,
 manifest grammar, or fork of Core.
 
-This recipe targets `0.1.3-alpha.4`. Pin the package, record the tested version, and
+This recipe targets `0.1.3-alpha.5`. Pin the package, record the tested version, and
 rerun compatibility checks when upgrading.
 
 ## What stays with the host
