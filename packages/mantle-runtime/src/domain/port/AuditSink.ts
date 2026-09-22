@@ -13,7 +13,10 @@ export interface McpToolCallAuditEvent {
   readonly clientId: string | null;
   readonly credential: CredentialKind | null;
   readonly tool: string;
-  /** `ok`, a runtime Diagnostic code, `INVALID_PARAMS`, or `INTERNAL`. */
+  /** `ok`, a runtime Diagnostic code, `UNKNOWN_TOOL`, `INVALID_PARAMS`, `INTERNAL`, or an
+   *  adapter gate denial in the same UPPER_SNAKE vocabulary
+   *  (`UNAUTHENTICATED`, `INVALID_TOKEN`, `INVALID_DPOP_PROOF`, `INSUFFICIENT_SCOPE`,
+   *  `INSUFFICIENT_ROLE`). */
   readonly outcome: string;
   readonly durationMs: number;
 }

@@ -135,7 +135,10 @@ origin, the only column Analytics Engine filters cheaply. Columns, in order:
 | `double1`, `double2` | `at` (epoch ms), `durationMs` |
 
 `outcome` is `ok`, a runtime Diagnostic code such as `UNAUTHENTICATED` or
-`AUTH_DENIED`, `INVALID_PARAMS`, or `INTERNAL`. Read it with the
+`AUTH_DENIED`, `UNKNOWN_TOOL`, `INVALID_PARAMS`, `INTERNAL`, or a transport gate denial
+(`INVALID_TOKEN`, `INSUFFICIENT_SCOPE`, `INSUFFICIENT_ROLE`, `CROSS_ORIGIN`): a
+`tools/call` refused before it reaches the dispatcher is recorded too, with
+whatever identity the gate established. Read it with the
 [SQL API](https://developers.cloudflare.com/analytics/analytics-engine/sql-api/):
 
 ```sql

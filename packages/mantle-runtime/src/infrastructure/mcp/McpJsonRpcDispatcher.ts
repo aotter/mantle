@@ -216,13 +216,14 @@ export class McpJsonRpcDispatcher {
       return jsonRpcError(reqId, -32602, "missing tool name");
     }
     const args = (p.arguments ?? {}) as Record<string, unknown>;
-    if (!this.catalogToolNames.has(p.name)) {
-      return jsonRpcError(reqId, -32601, `unknown tool: ${p.name}`);
-    }
-
+    // Probing for tools that do not exist is audited like any other call.
     const startedAt = Date.now();
     let outcome = "ok";
     try {
+      if (!this.catalogToolNames.has(p.name)) {
+        outcome = "UNKNOWN_TOOL";
+        return jsonRpcError(reqId, -32601, `unknown tool: ${p.name}`);
+      }
       const result = await this.dispatchToolByName(p.name, args, ctx);
       if (result === UNKNOWN_TOOL) {
         outcome = "UNKNOWN_TOOL";

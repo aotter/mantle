@@ -65,7 +65,13 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
         phase: diagnosticPhase,
         surface,
       });
-      if (gate.kind === "deny") return oauthDenied(resource, requiredScopes, gate);
+      // Denials are audit events too: a probing token never reaches the
+      // dispatcher, so the trail is written here, with the same event shape.
+      const denied = (denial: { readonly status: 401 | 403; readonly reason: string }, ctx?: HandlerContext) => {
+        auditDenial(ref.audit, request, surface, denial.reason, ctx, waitUntil);
+        return oauthDenied(resource, requiredScopes, denial);
+      };
+      if (gate.kind === "deny") return denied(gate, gate.context);
       const handlerContext = gate.context;
       // The scope floor applies to every presented credential, not only the
       // bearer path: a host PAT minted for a narrow integration must not reach
@@ -75,7 +81,7 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
       const credential = handlerContext.auth;
       if (credential && credential.credential !== "session"
         && requiredScopes.some((scope) => !credential.scopes.includes(scope))) {
-        return oauthDenied(resource, requiredScopes, { status: 403, reason: "insufficient-scope" });
+        return denied({ status: 403, reason: "insufficient-scope" }, handlerContext);
       }
       // Media tools require BOTH a storage adapter AND a declared
       // `media.purposes` taxonomy (#262). Empty purposes →
@@ -182,6 +188,41 @@ function challengeHeaders(
     "www-authenticate": challenge,
     "access-control-expose-headers": "WWW-Authenticate",
   };
+}
+
+/** Record a gate denial for `tools/call` only; discovery methods carry no
+ *  tool and are not audited. `reason` is normalised to the dispatcher's
+ *  UPPER_SNAKE outcome vocabulary (`INSUFFICIENT_ROLE`, `INVALID_TOKEN`…). */
+function auditDenial(
+  audit: MantleRuntimeRef["audit"],
+  request: Request,
+  surface: "public" | "staff",
+  reason: string,
+  ctx: HandlerContext | undefined,
+  waitUntil: ((promise: Promise<unknown>) => void) | undefined,
+): void {
+  if (!audit) return;
+  const at = Date.now();
+  const settled = request.clone().json()
+    .catch(() => null)
+    .then((body: unknown) => {
+      const message = body as { method?: unknown; params?: { name?: unknown } } | null;
+      if (!message || message.method !== "tools/call" || typeof message.params?.name !== "string") return;
+      return audit.record({
+        at,
+        surface,
+        callerId: ctx?.user?.id ?? null,
+        clientId: ctx?.auth?.clientId ?? null,
+        credential: ctx?.auth?.credential ?? null,
+        tool: message.params.name,
+        outcome: reason.toUpperCase().replaceAll("-", "_"),
+        durationMs: Date.now() - at,
+      });
+    })
+    .catch((error: unknown) => {
+      console.error("[mountMcp] audit sink failed", error);
+    });
+  waitUntil?.(settled);
 }
 
 function oauthDenied(

@@ -1290,11 +1290,12 @@ describe("McpJsonRpcDispatcher — tools/call audit sink", () => {
     expect(((await res.json()) as { result: unknown }).result).toBeDefined();
   });
 
-  it("does not record unknown tools", async () => {
+  it("records probes for tools that do not exist", async () => {
     const events: unknown[] = [];
     const dispatcher = auditedDispatcher({ record: (e) => { events.push(e); } }, async () => ({ ok: true, result: {} }));
     const res = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "nope", arguments: {} }), mcpContext());
     expect(((await res.json()) as { error: { code: number } }).error.code).toBe(-32601);
-    expect(events).toEqual([]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events).toEqual([expect.objectContaining({ tool: "nope", outcome: "UNKNOWN_TOOL" })]);
   });
 });
