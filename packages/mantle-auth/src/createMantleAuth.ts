@@ -207,8 +207,9 @@ export interface OAuthProviderConfig {
    *  `global_fetch_strictly_public` for CIMD fetches. */
   readonly mcpResource?: string;
   /** Additional `@better-auth/oauth-provider` extensions (token grants,
-   *  client authentication, metadata, claims). Appended after Core's own
-   *  claims extension; Core never inspects them. This is the seam for MCP
+   *  client authentication, metadata, claims). On the `mcpResource` branch
+   *  they follow Core's own claims extension; on the plain provider branch
+   *  they are the whole list. Core never inspects them. This is the seam for MCP
    *  Enterprise-Managed Authorization: an ID-JAG extension such as
    *  `@aotterclam/id-jag` plugs in here with the adopter's issuer and JWKS. */
   readonly extensions?: ReadonlyArray<OAuthProviderExtension>;
