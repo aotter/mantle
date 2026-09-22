@@ -14,6 +14,11 @@
 # Actions NPM_TOKEN currently 403s on dist-tag DELETE. A failed
 # mantle-release rm warns and continues; leftover mantle-release is known
 # until npm token permissions are fixed.
+#
+# If v$VERSION already points at an ancestor of the dispatched tip and
+# package versions on the tip still match, Resolve keeps that tag SHA as
+# the release identity. A controller-only fix on the tip can finish
+# promotion without retagging.
 
 name: release
 
@@ -80,14 +85,41 @@ jobs:
             exit 1
           }
           TAG="v$VERSION"
-          CORE_SHA=$(git rev-parse HEAD)
+          HEAD_SHA=$(git rev-parse HEAD)
+          CORE_SHA=$HEAD_SHA
           SOURCE_BRANCH=main
           [[ "$VERSION" =~ -alpha(\.|$) ]] && SOURCE_BRANCH=develop
           git fetch origin --tags
           TAG_SHA=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" || true)
-          if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$CORE_SHA" ]; then
-            echo "::error::$TAG already points to $TAG_SHA, not controller commit $CORE_SHA"
-            exit 1
+          # Partial-release recovery. The version tag already owns the release
+          # SHA; this tip only carries controller fixes. Do not retag.
+          if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$HEAD_SHA" ]; then
+            ROOT_VERSION=$(node -p "require('./package.json').version")
+            [ "$ROOT_VERSION" = "$VERSION" ] || {
+              echo "::error::Root package.json version $ROOT_VERSION does not match $VERSION"
+              exit 1
+            }
+            git merge-base --is-ancestor "$TAG_SHA" "$HEAD_SHA" || {
+              echo "::error::$TAG at $TAG_SHA is not an ancestor of controller tip $HEAD_SHA"
+              exit 1
+            }
+            node --input-type=module -e "
+              import { globSync, readFileSync } from 'node:fs';
+              const expected = process.env.VERSION;
+              let failed = false;
+              for (const path of globSync('packages/**/package.json', {
+                exclude: ['packages/**/node_modules/**'],
+              })) {
+                const pkg = JSON.parse(readFileSync(path, 'utf8'));
+                if (pkg.version !== expected) {
+                  console.error('::error::' + path + ' version ' + pkg.version + ' does not match tagged version ' + expected);
+                  failed = true;
+                }
+              }
+              if (failed) process.exit(1);
+            "
+            echo "::warning::Recovering $TAG: tag owns the release SHA $TAG_SHA; tip $HEAD_SHA only carries controller fixes"
+            CORE_SHA=$TAG_SHA
           fi
           if [ -z "$TAG_SHA" ]; then
             git fetch origin "refs/heads/$SOURCE_BRANCH:refs/remotes/origin/$SOURCE_BRANCH"
