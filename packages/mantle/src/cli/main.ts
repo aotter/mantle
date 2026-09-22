@@ -69,7 +69,7 @@ Subcommands:
 Documentation:
   Handbook:      node_modules/@aotter/mantle/docs/handbook/ (or docs/handbook/)
   Online:        https://mantle.tools/
-  Install skill: npx skills add aotter/mantle@v0.1.3-alpha.2 --skill install
+  Install skill: npx skills add aotter/mantle --skill install
 `;
 
 main().then(

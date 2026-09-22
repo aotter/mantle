@@ -24,6 +24,7 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0021](0021-retire-starter-scaffolding.md) | Direct authoring; retire Starter scaffolding. | Accepted; supersedes 0018 |
 | [0022](0022-caller-observed-version-occ.md) | Caller-observed `expectedVersion` for Admin bind and builtin upsert OCC. | Accepted |
 | [0024](0024-manifest-native-schema-tables.md) | Materialize each Schema as a native storage table and deploy reviewed migration artifacts. | Accepted |
+| [0025](0025-reserved-native-columns-and-published-only-public-views.md) | Reserve the six native column names, let `indexes` reference them, and compile public publishing Views published-only. | Accepted |
 
 ## Reading order
 

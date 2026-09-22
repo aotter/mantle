@@ -707,7 +707,7 @@ function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
   for (const reserved of RESERVED_ENTRY_COLUMNS) {
     if (!propertyNames.includes(reserved)) continue;
     throw new ManifestParseError(
-      `Schema '${m.metadata.name}' must not declare the native entry column '${reserved}' as a data property; use a domain name such as 'submittedAt' or 'orderStatus'. Native columns are readable in Views and indexable through spec.indexes without being declared.`,
+      `Schema '${m.metadata.name}' must not declare the native entry column '${reserved}' as a data property; use a domain name such as 'submittedAt' or 'orderStatus'. Native columns are readable in Views and indexable through spec.indexes without being declared (handbook: reference/schema.md#reserved-entry-columns).`,
       idx,
       `/spec/schema/properties/${reserved}`,
     );

@@ -108,7 +108,7 @@ Names containing `-` must be double-quoted when used as tables in a `sql` View (
 
 | Namespace | Reserved | Effect |
 |---|---|---|
-| Entry columns | `id`, `status`, `version`, `createdAt`, `updatedAt`, `authorId` | Native on every Schema. Cannot appear in `indexes` or `uniqueIndexes` (`SCHEMA_INDEX_INVALID`). Valid in View `fields`, `filter`, `orderBy` and `uiSchema.list`. Avoid declaring data properties with these names; SQL Views project the native column, not the data field. |
+| Entry columns | `id`, `status`, `version`, `createdAt`, `updatedAt`, `authorId` | Native on every Schema; a data property may not reuse the name (`INVALID_MANIFEST_ENVELOPE`). Where they may appear in Views and indexes: [Schema reference](./schema.md#reserved-entry-columns) (ADR-0025). |
 | Data field | `locale` | A non-localized Schema that declares `properties.locale` is rejected; use a domain name such as `orderLocale`. On a localized Schema the runtime requires `data.locale` on writes. |
 | Data field | `expectedVersion` | Reserved Procedure OCC wire name. A Schema that declares `spec.schema.properties.expectedVersion` is `INVALID_MANIFEST_ENVELOPE` (ADR-0022). New reserved names need an ADR. |
 | View params | `page`, `show`, `cursor` | Owned by the runtime for pagination. Declaring them under `params.properties` is `VIEW_PARAMS_RESERVED_NAME`. |

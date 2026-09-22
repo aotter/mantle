@@ -166,11 +166,9 @@ pnpm exec mantle-harness indexes --require-public --format text
 The check uses crowded real SQLite and the shipped compiler. It complements
 `pnpm validate`; it does not replace correctness validation. Declare the
 smallest ordered index justified by the measured path and respect SQLite's
-leftmost-prefix rule. A public View over a publishing Schema is compiled with
-`status = published`, so declare its index on the source Schema as
-`indexes: [[status, <orderedField>]]`; native columns (`status`, `createdAt`,
-`updatedAt`, `authorId`, `id`) are valid in `indexes`, and data properties may
-not reuse their names. Do not change user-visible filter or ordering semantics
+leftmost-prefix rule; which columns an index may name and how a public View's
+status predicate shapes it is in the handbook (`reference/schema.md#indexes`).
+Do not change user-visible filter or ordering semantics
 just to make the gate pass. Do not add every permutation or cache every read.
 
 For relevant Cloudflare serving changes, start the project and sample the
