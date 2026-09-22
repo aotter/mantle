@@ -128,7 +128,7 @@ try {
   });
   const umbrella = join(temp, "umbrella-core/node_modules/@aotter/mantle");
   for (const doc of [
-    "skills/mantle/SKILL.md",
+    "skills/install/SKILL.md",
     "skills/develop/SKILL.md",
     "skills/theme/SKILL.md",
     "docs/direct-authoring.md",

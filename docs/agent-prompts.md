@@ -22,7 +22,7 @@ Interview me about the service: host, who uses it, whether humans need a
 Dev UI, and whether we only embed Spec/Runtime. If the install skill is
 missing, run npx skills add aotter/mantle. Read the
 installer-reported skill, choose and install an exact SDK version, then read
-its embedded skills/mantle/SKILL.md (skills/install/SKILL.md in 0.1.3),
+its embedded skills/install/SKILL.md,
 run npx --no-install mantle --help, and
 read handbook/start/overview.md.
 Use examples/README.md as the examples index; copy builtin-* Manifests only

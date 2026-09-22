@@ -241,7 +241,7 @@ codex plugin add mantle@mantle
 Cursor and VS Code Copilot can auto-discover the GitHub repo through
 `.cursor-plugin/plugin.json` and `.copilot-plugin/plugin.json` after the repo
 is cloned or opened. Still start from the `npx skills add` sentence (or open
-`skills/mantle/SKILL.md`). Untagged `aotter/mantle` resolves to `main`, which
+`skills/install/SKILL.md`). Untagged `aotter/mantle` resolves to `main`, which
 can contain a source-only hotfix ahead of the latest npm release. Add
 `@vX.Y.Z` only to reproduce an older project; never point a consumer at
 `develop` or another moving branch.
@@ -299,7 +299,7 @@ adapter is a port-implementation exercise, not a runtime refactor.
   - `node_modules/@aotter/mantle/skills/plugin/SKILL.md`
   - `node_modules/@aotter/mantle/skills/theme/SKILL.md`
   - `node_modules/@aotter/mantle/skills/update/SKILL.md`
-  - `node_modules/@aotter/mantle/skills/mantle/SKILL.md`
+  - `node_modules/@aotter/mantle/skills/install/SKILL.md`
   - `node_modules/@aotter/mantle/skills/provision/SKILL.md`
 - [4-atom manifest model (ADR-0001)](docs/adr/0001-four-atom-manifest-model.md)
 - [API and MCP authorization](docs/examples/cf-primitives-guarded-api.md)

@@ -3,9 +3,9 @@ name: theme
 description: Apply brand and visual direction in a Mantle application using its repo-owned theme and UI contracts.
 metadata:
   source: "@aotter/mantle"
-  sourcePath: skills/theme/SKILL.md
+  sourcePath: docs/skills/theme/SKILL.md
   applies_to: mantle grammar v0.1
-  projection: project, plugin
+  projection: project
 ---
 
 # Mantle Theme

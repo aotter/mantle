@@ -110,7 +110,8 @@ pnpm exec mantle skills --check
 
 This copies every skill the installed package marks `projection: project` — the develop skill among them — into matching `.agents/skills/mantle-*` and `.claude/skills/mantle-*` paths. Both layouts receive identical bytes; `--check` detects drift without writing. Skills that act destructively or target one platform stay out of that set and are opt-in. Manifest generation never rewrites agent instructions.
 
-The same bundle is installable from the plugin marketplace:
+The bootstrap `mantle` skill is also available from the plugin marketplace.
+The ongoing workflows come from the installed SDK through `mantle skills`:
 
 ```sh
 # Canonical
@@ -130,4 +131,4 @@ Never point a versioned project at a mutable branch. See [Project layout and the
 - [`packages/mantle-web/README.md`](../../../packages/mantle-web/README.md)
 - [`packages/mantle/README.md`](../../../packages/mantle/README.md)
 - [`packages/adapters/cloudflare/README.md`](../../../packages/adapters/cloudflare/README.md)
-- [`skills/develop/SKILL.md`](../../../skills/develop/SKILL.md)
+- [`docs/skills/develop/SKILL.md`](../../skills/develop/SKILL.md)

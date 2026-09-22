@@ -9,7 +9,7 @@ const clean = process.argv.includes("--clean");
 // Invoked by packages/mantle pre/postpack with cwd = the package dir.
 const packageRoot = process.cwd();
 
-for (const dir of ["docs", "skills"]) {
+for (const dir of ["docs"]) {
   const target = resolve(packageRoot, dir);
   rmSync(target, { recursive: true, force: true });
   if (!clean) {
@@ -26,4 +26,12 @@ for (const dir of ["docs", "skills"]) {
       },
     });
   }
+}
+
+const skillsTarget = resolve(packageRoot, "skills");
+rmSync(skillsTarget, { recursive: true, force: true });
+if (!clean) {
+  cpSync(resolve(repoRoot, "docs/skills"), skillsTarget, { recursive: true });
+  cpSync(resolve(repoRoot, "skills/install"), resolve(skillsTarget, "install"), { recursive: true });
+  cpSync(resolve(repoRoot, "skills/README.md"), resolve(skillsTarget, "README.md"));
 }

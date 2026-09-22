@@ -174,4 +174,4 @@ If a normal feature cannot be expressed through a purpose-shaped surface, treat 
 - [`packages/adapters/bun/README.md`](../../../packages/adapters/bun/README.md)
 - [`packages/adapters/vercel/README.md`](../../../packages/adapters/vercel/README.md)
 - [`packages/adapters/indexeddb/README.md`](../../../packages/adapters/indexeddb/README.md)
-- [`skills/develop/SKILL.md`](../../../skills/develop/SKILL.md)
+- [`docs/skills/develop/SKILL.md`](../../skills/develop/SKILL.md)

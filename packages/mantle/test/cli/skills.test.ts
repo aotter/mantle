@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { projectionScopes, runSkills } from "../../src/cli/skills.js";
 
 const originalCwd = process.cwd();
-const skillsRoot = join(originalCwd, "../../skills");
+const skillsRoot = join(originalCwd, "../../docs/skills");
 
 afterEach(() => {
   process.chdir(originalCwd);

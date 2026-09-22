@@ -213,4 +213,4 @@ The full catalog is in [Diagnostic codes](../reference/diagnostics.md).
 - [`packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts`](../../../packages/mantle-spec/src/domain/service/SiteDefaultsValidator.ts)
 - [`packages/mantle-spec/src/kernel/diagnostic.ts`](../../../packages/mantle-spec/src/kernel/diagnostic.ts)
 - [`packages/adapters/cloudflare/README.md`](../../../packages/adapters/cloudflare/README.md)
-- [`skills/media-gc/SKILL.md`](../../../skills/media-gc/SKILL.md)
+- [`docs/skills/media-gc/SKILL.md`](../../skills/media-gc/SKILL.md)
