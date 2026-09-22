@@ -1224,6 +1224,19 @@ spec:
       })]);
   });
 
+  it("does not reserve MCP tool names for internal Views", () => {
+    expect(parseManifests(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: report-a }
+spec: { surface: internal, sql: SELECT 1 }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: report_a }
+spec: { surface: internal, sql: SELECT 2 }
+`).diagnostics).toEqual([]);
+  });
+
   it("accepts the minimal staff View Admin list uiSchema", () => {
     const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
 kind: View

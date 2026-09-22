@@ -1027,6 +1027,7 @@ function checkMcpToolNameCollisions(
   }
   const viewNames = new Map<string, string>();
   for (const view of views) {
+    if (view.spec.surface === "internal") continue;
     const segment = mcpToolNameSegment(view.metadata.name);
     const prior = viewNames.get(segment);
     if (prior && prior !== view.metadata.name) {
