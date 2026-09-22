@@ -29,6 +29,9 @@ export class ValidateManifestsUseCase {
     if (linked.ok && request.mcpInput !== false) {
       diagnostics.push(...checkMcpToolInputShapes(linked.value, request.mcpInput ?? {}));
     }
+    if (linked.ok && request.sqlViewSandbox) {
+      diagnostics.push(...checkSqlViewTables(linked.value, request.sqlViewSandbox));
+    }
     const errorCount = diagnostics.filter((diagnostic) => diagnostic.severity === "error").length;
     return {
       diagnostics,
@@ -41,6 +44,47 @@ export class ValidateManifestsUseCase {
   static run(request: ValidateManifestsRequest): ValidateManifestsResponse {
     return new ValidateManifestsUseCase().execute(request);
   }
+}
+
+const NATIVE_COLUMNS = [
+  "_mantle_id", "_mantle_status", "_mantle_version",
+  "_mantle_created_at", "_mantle_updated_at", "_mantle_author_id",
+] as const;
+
+function checkSqlViewTables(
+  linked: LinkedManifestSet,
+  sandbox: NonNullable<ValidateManifestsRequest["sqlViewSandbox"]>,
+): Diagnostic[] {
+  for (const { manifest } of linked.schemas) {
+    const columns = [...NATIVE_COLUMNS, ...Object.keys(manifest.spec.schema.properties ?? {})];
+    sandbox.exec(`CREATE TABLE ${quoteSqlIdentifier(manifest.metadata.name)} (${columns.map((name) => `${quoteSqlIdentifier(name)} BLOB`).join(", ")})`);
+  }
+  return linked.views.flatMap((view) => {
+    const sql = view.manifest.spec.sql;
+    if (!sql) return [];
+    try {
+      if (/\bsqlite_/iu.test(sql)) {
+        throw new Error("SQLite internal tables are not declared Schema tables");
+      }
+      sandbox.exec(`SELECT * FROM (${sql}) AS "_mantle_sql_view_check" LIMIT 0`);
+      return [];
+    } catch (error) {
+      const path = "/spec/sql";
+      return [validateDiagnostic({
+        code: "INVALID_MANIFEST_ENVELOPE",
+        severity: "error",
+        path,
+        source: { ...view.source, path },
+        value: sql,
+        expected: "one read-only SELECT over tables declared by a Schema in this manifest",
+        message: `View '${view.manifest.metadata.name}' SQL is not valid against the declared Schema tables: ${error instanceof Error ? error.message : String(error)}`,
+      })];
+    }
+  });
+}
+
+function quoteSqlIdentifier(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
 }
 
 function checkHandlerRefsInSource(
