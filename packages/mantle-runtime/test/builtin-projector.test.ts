@@ -13,9 +13,9 @@ const schema: SchemaManifest = {
       properties: {
         title: { type: "string" },
         body: { type: "string" },
-        authorId: { type: "string", "x-mantle-bind": "ctx.user" },
+        submittedBy: { type: "string", "x-mantle-bind": "ctx.user" },
         editorId: { type: "string", "x-mantle-bind": "ctx.staff" },
-        createdAt: { type: "number", "x-mantle-bind": "now" },
+        submittedAt: { type: "number", "x-mantle-bind": "now" },
       },
     },
     lifecycle: "publishing",
@@ -33,9 +33,9 @@ describe("projectAndStamp", () => {
     expect(out).toEqual({
       title: "x",
       body: "y",
-      authorId: "u",
+      submittedBy: "u",
       editorId: null,
-      createdAt: 1,
+      submittedAt: 1,
     });
     expect("recaptchaToken" in out).toBe(false);
   });
@@ -43,13 +43,13 @@ describe("projectAndStamp", () => {
   it("server-stamps x-mantle-bind keys regardless of caller-supplied value", () => {
     const out = projectAndStamp({
       schema,
-      input: { title: "x", authorId: "spoofed", createdAt: 0 },
+      input: { title: "x", submittedBy: "spoofed", submittedAt: 0 },
       ctx: { user: { id: "u" }, staff: { id: "u", role: "editor" }, env: {} },
       clockNow: 999,
     });
-    expect(out["authorId"]).toBe("u");
+    expect(out["submittedBy"]).toBe("u");
     expect(out["editorId"]).toBe("u");
-    expect(out["createdAt"]).toBe(999);
+    expect(out["submittedAt"]).toBe(999);
   });
 
   it("ctx.user / ctx.staff bind to null when ctx has no user / staff", () => {
@@ -59,7 +59,7 @@ describe("projectAndStamp", () => {
       ctx: { user: null, staff: null, env: {} },
       clockNow: 0,
     });
-    expect(out["authorId"]).toBeNull();
+    expect(out["submittedBy"]).toBeNull();
     expect(out["editorId"]).toBeNull();
   });
 

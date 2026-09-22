@@ -97,7 +97,7 @@ spec:
       title: { type: string }
       email: { type: string, format: email }
       note: { type: string }
-      createdAt: { type: integer, x-mcp-hint: timestamp-ms, x-mantle-bind: now }
+      suggestedAt: { type: integer, x-mcp-hint: timestamp-ms, x-mantle-bind: now }
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure

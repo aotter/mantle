@@ -202,7 +202,7 @@ spec:
     type: object
     properties:
       title: { type: string }
-      createdAt: { type: number }
+      submittedAt: { type: number }
 ---
 apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure

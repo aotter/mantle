@@ -7,9 +7,9 @@ describe("flattenSchemaFields", () => {
   it("keeps nested paths, required flags, and exact constraints", () => {
     expect(flattenSchemaFields({
       type: "object",
-      required: ["status", "items"],
+      required: ["orderStatus", "items"],
       properties: {
-        status: { type: "string", enum: ["draft", "paid"] },
+        orderStatus: { type: "string", enum: ["draft", "paid"] },
         items: {
           type: "array",
           items: {
@@ -22,7 +22,7 @@ describe("flattenSchemaFields", () => {
         },
       },
     })).toEqual([
-      { path: "status", pointer: "/spec/schema/properties/status", type: "string", required: true, constraints: ["enum: draft | paid"], reference: null },
+      { path: "orderStatus", pointer: "/spec/schema/properties/orderStatus", type: "string", required: true, constraints: ["enum: draft | paid"], reference: null },
       { path: "items", pointer: "/spec/schema/properties/items", type: "array", required: true, constraints: [], reference: null },
       { path: "items[].productSlug", pointer: "/spec/schema/properties/items/items/properties/productSlug", type: "string", required: true, constraints: [], reference: "products.slug" },
     ]);
