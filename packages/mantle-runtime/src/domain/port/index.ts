@@ -101,3 +101,4 @@ export {
   InMemoryHandlerRegistry,
   buildHandlerRegistry,
 } from "./HandlerRegistry.js";
+export type { AuditSink, McpToolCallAuditEvent } from "./AuditSink.js";

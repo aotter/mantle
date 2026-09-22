@@ -40,6 +40,7 @@ export interface Env extends MantleCloudflareEnv {
   readonly R2_ACCESS_KEY_ID?: string;
   readonly R2_SECRET_ACCESS_KEY?: string;
   readonly MEDIA_PUBLIC_URL_BASE?: string;
+  readonly AUDIT?: AnalyticsEngineDataset;                 // optional MCP tools/call audit trail
   readonly MANTLE_INTERNAL_QUEUE?: Queue<DeferredHookEnvelope>;  // optional deferred hooks
   readonly ORDER_EXPIRY_QUEUE?: Queue<{ type: "expire-order"; orderToken: string }>;  // application queue
   readonly INVENTORY_COORDINATOR?: DurableObjectNamespace;  // application-owned
@@ -100,6 +101,63 @@ A deployment-owned namespace that caches the caller-independent MCP catalog proj
 ```
 
 Staff media uploads through Staff MCP presigned PUT. The binding alone cannot sign URLs; you also need `R2_ACCOUNT_ID`, `MEDIA_PUBLIC_URL_BASE` and the two S3 credential secrets. See [Media uploads with R2](./media-r2.md).
+
+## Analytics Engine: `AUDIT` (optional)
+
+```jsonc
+"analytics_engine_datasets": [{ "binding": "AUDIT", "dataset": "mantle_mcp_audit" }]
+```
+
+An MCP `tools/call` audit trail: who called which tool on which surface, with
+what outcome and how long it took. The runtime's `McpJsonRpcDispatcher` is the
+single write point; it records nothing unless the composition root passes an
+`AuditSink`, and the write happens through `waitUntil`, off the response path.
+Request and response payloads are never recorded.
+
+```ts
+import { analyticsEngineAuditSink, createMantleWorker } from "@aotter/mantle/cloudflare";
+
+export default createMantleWorker<Env>({
+  plan,
+  audit: (env) => env.AUDIT
+    ? analyticsEngineAuditSink(env.AUDIT, { index: env.PUBLIC_ORIGIN })
+    : undefined,
+});
+```
+
+One dataset may hold many deployments: `index` is the deployment's public
+origin, the only column Analytics Engine filters cheaply. Columns, in order:
+
+| Column | Field |
+|---|---|
+| `index1` | the configured `index` |
+| `blob1` … `blob7` | `surface`, `callerId`, `clientId`, `credential`, `tool`, `outcome`, `operationId` |
+| `double1`, `double2` | `at` (epoch ms), `durationMs` |
+
+`outcome` is `ok`, a runtime Diagnostic code such as `UNAUTHENTICATED` or
+`AUTH_DENIED`, `UNKNOWN_TOOL`, `INVALID_PARAMS`, `INTERNAL`, or a transport gate denial
+(`INVALID_TOKEN`, `INSUFFICIENT_SCOPE`, `INSUFFICIENT_ROLE`, `CROSS_ORIGIN`): a
+`tools/call` refused before it reaches the dispatcher is recorded too, with
+whatever identity the gate established. Its body goes through the same 1 MiB
+bounded reader as an admitted call; a denied request whose body is oversized
+or not JSON is still recorded, with `tool` set to `(unreadable)`, so padding a
+body cannot hide a credential probe. `operationId` is the call's `operationId`
+argument when present, else empty; it correlates retries of one mutation and
+is read the same way on admitted and denied calls. Read it with the
+[SQL API](https://developers.cloudflare.com/analytics/analytics-engine/sql-api/):
+
+```sql
+SELECT timestamp, blob2 AS caller, blob5 AS tool, blob6 AS outcome, double2 AS ms
+FROM mantle_mcp_audit
+WHERE index1 IN ('https://site-a.example', 'https://site-b.example')
+  AND timestamp > NOW() - INTERVAL '7' DAY
+ORDER BY timestamp DESC
+```
+
+Analytics Engine keeps data for a bounded window and samples under very high
+write rates. Longer retention or a tamper-evident trail is an export job on top
+of this dataset. Self-hosted runtimes may implement `AuditSink` over any store;
+the interface is one `record(event)` method.
 
 ## Queues
 

@@ -7,6 +7,7 @@ import {
 import type {
   AnyHandler,
   RuntimePlan,
+  AuditSink,
 } from "@aotter/mantle-runtime";
 import type { PublicPathResolver, TemplateRegistry } from "@aotter/mantle-web";
 import { createRuntimeClient } from "@aotter/mantle-web/client-runtime";
@@ -157,6 +158,8 @@ export interface CreateMantleWorkerOptions<Env extends MantleCloudflareEnv> {
   readonly mediaAllowSvg?: boolean | ((env: Env) => boolean);
   /** Replace only Auth construction; standard Auth routes remain Core-owned. */
   readonly auth?: (env: Env) => Auth;
+  /** MCP tools/call audit trail, e.g. `env => analyticsEngineAuditSink(env.AUDIT, { index: env.PUBLIC_ORIGIN })`. */
+  readonly audit?: AuditSink | ((env: Env) => AuditSink | undefined);
   /** Augment conventional adapters for a proven capability such as R2 media. */
   readonly bindings?: (
     env: Env,
@@ -224,6 +227,7 @@ export function createMantleWorker<Env extends MantleCloudflareEnv = MantleCloud
       auth,
       credentialResolver: extension.credentialResolver,
       jwtBearer: extension.jwtBearer,
+      audit: resolve(options.audit, env),
       onPublicChange: () => purgePublicCache(sharedPublicCacheTag),
     });
 

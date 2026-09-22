@@ -210,6 +210,9 @@ export type CallerGate =
       readonly diagnostic: Diagnostic;
       /** `invalid-credential`, `invalid-dpop-proof`, `insufficient-scope`, `cross-origin`, `unauthenticated` or `insufficient-role`. */
       readonly reason: string;
+      /** The identity the gate did establish before refusing (role and
+       *  origin denials). Absent when the credential itself was invalid. */
+      readonly context?: HandlerContext;
     };
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -238,6 +241,7 @@ export async function gateCaller(
         kind: "deny",
         status: 403,
         reason: "cross-origin",
+        context: caller.context,
         diagnostic: runtimeDiagnostic({
           code: "AUTH_DENIED",
           severity: "error",
@@ -254,6 +258,7 @@ export async function gateCaller(
       kind: "deny",
       status: anonymous ? 401 : 403,
       reason: anonymous ? "unauthenticated" : "insufficient-role",
+      context: caller.context,
       diagnostic: runtimeDiagnostic({
         code: anonymous ? "UNAUTHENTICATED" : "AUTH_DENIED",
         severity: "error",

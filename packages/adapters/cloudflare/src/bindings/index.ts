@@ -20,3 +20,9 @@ export {
   WorkersQueueHookDispatcher,
   createQueueHandler,
 } from "./WorkersQueueHookDispatcher.js";
+export {
+  ANALYTICS_ENGINE_AUDIT_BLOBS,
+  ANALYTICS_ENGINE_AUDIT_DOUBLES,
+  analyticsEngineAuditSink,
+  type AnalyticsEngineAuditSinkOptions,
+} from "./AnalyticsEngineAuditSink.js";

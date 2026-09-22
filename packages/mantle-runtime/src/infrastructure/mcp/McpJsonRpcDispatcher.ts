@@ -14,6 +14,7 @@ import {
 } from "@aotter/mantle-spec";
 import type { MediaVariantRole } from "../../domain/port/MediaStorage.js";
 import type { HandlerContext } from "../../domain/model/HandlerContext.js";
+import type { AuditSink } from "../../domain/port/AuditSink.js";
 import {
   ArchiveUseCase,
   CreateDraftUseCase,
@@ -120,6 +121,8 @@ export class McpJsonRpcDispatcher {
       readonly surface?: McpToolSurface;
       readonly capabilities?: readonly RuntimeCallableCapability[];
       readonly serverInfo?: McpServerInfo;
+      /** Optional tools/call audit trail. See `AuditSink`. */
+      readonly audit?: AuditSink;
     } = {},
   ) {
     this.catalog = buildMcpToolCatalog(schemas, {
@@ -213,16 +216,24 @@ export class McpJsonRpcDispatcher {
       return jsonRpcError(reqId, -32602, "missing tool name");
     }
     const args = (p.arguments ?? {}) as Record<string, unknown>;
-    if (!this.catalogToolNames.has(p.name)) {
-      return jsonRpcError(reqId, -32601, `unknown tool: ${p.name}`);
-    }
-
+    // Probing for tools that do not exist is audited like any other call.
+    const startedAt = Date.now();
+    // Audit correlation reads the conventional `operationId` argument only;
+    // resolving a tool's declared idempotency-key hint is a separate issue.
+    const operationId = typeof args["operationId"] === "string" ? args["operationId"] : null;
+    let outcome = "ok";
     try {
+      if (!this.catalogToolNames.has(p.name)) {
+        outcome = "UNKNOWN_TOOL";
+        return jsonRpcError(reqId, -32601, `unknown tool: ${p.name}`);
+      }
       const result = await this.dispatchToolByName(p.name, args, ctx);
       if (result === UNKNOWN_TOOL) {
+        outcome = "UNKNOWN_TOOL";
         return jsonRpcError(reqId, -32601, `unknown tool: ${p.name}`);
       }
       if (result === MISSING_ARG) {
+        outcome = "INVALID_PARAMS";
         return jsonRpcError(reqId, -32602, "missing required arg");
       }
       return jsonRpcOk(reqId, {
@@ -230,6 +241,7 @@ export class McpJsonRpcDispatcher {
       });
     } catch (e) {
       if (e instanceof DiagnosticError) {
+        outcome = e.diagnostic.code;
         // Identity failures are HTTP facts too: an anonymous caller on a tool
         // that requires one must see 401 so it can authenticate and retry,
         // and the adapter can attach its OAuth challenge (#977).
@@ -241,9 +253,42 @@ export class McpJsonRpcDispatcher {
       // Don't leak raw exception strings to MCP clients — adapter
       // exceptions can carry binding / driver detail. Real cause goes
       // to server-side logs; the wire stays opaque.
+      outcome = "INTERNAL";
       console.error("[McpJsonRpcDispatcher] unhandled tool-call error", e);
       return jsonRpcError(reqId, -32000, "Internal error.");
+    } finally {
+      this.recordAudit(ctx, p.name, operationId, outcome, startedAt);
     }
+  }
+
+  /** The single audit write point. Off the response path: the sink's promise
+   *  goes to the platform's `waitUntil` when present, and a failing sink is
+   *  logged rather than turned into a tool error. */
+  private recordAudit(
+    ctx: HandlerContext,
+    tool: string,
+    operationId: string | null,
+    outcome: string,
+    startedAt: number,
+  ): void {
+    const audit = this.options.audit;
+    if (!audit) return;
+    const settled = Promise.resolve()
+      .then(() => audit.record({
+        at: startedAt,
+        surface: this.options.surface ?? "staff",
+        callerId: ctx.user?.id ?? null,
+        clientId: ctx.auth?.clientId ?? null,
+        credential: ctx.auth?.credential ?? null,
+        tool,
+        operationId,
+        outcome,
+        durationMs: Date.now() - startedAt,
+      }))
+      .catch((error: unknown) => {
+        console.error("[McpJsonRpcDispatcher] audit sink failed", error);
+      });
+    ctx.waitUntil?.(settled);
   }
 
   private async dispatchToolByName(

@@ -1,6 +1,7 @@
 import {
   McpJsonRpcDispatcher,
   projectCallableCapabilities,
+  readJsonBody,
 } from "@aotter/mantle-runtime";
 import { DPOP_SIGNING_ALGORITHMS } from "better-auth/oauth2";
 import type { MantleRuntimeRef } from "./bootRuntimeOnce.js";
@@ -65,7 +66,13 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
         phase: diagnosticPhase,
         surface,
       });
-      if (gate.kind === "deny") return oauthDenied(resource, requiredScopes, gate);
+      // Denials are audit events too: a probing token never reaches the
+      // dispatcher, so the trail is written here, with the same event shape.
+      const denied = (denial: { readonly status: 401 | 403; readonly reason: string }, ctx?: HandlerContext) => {
+        auditDenial(ref.audit, request, surface, denial.reason, ctx, waitUntil);
+        return oauthDenied(resource, requiredScopes, denial);
+      };
+      if (gate.kind === "deny") return denied(gate, gate.context);
       const handlerContext = gate.context;
       // The scope floor applies to every presented credential, not only the
       // bearer path: a host PAT minted for a narrow integration must not reach
@@ -75,7 +82,7 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
       const credential = handlerContext.auth;
       if (credential && credential.credential !== "session"
         && requiredScopes.some((scope) => !credential.scopes.includes(scope))) {
-        return oauthDenied(resource, requiredScopes, { status: 403, reason: "insufficient-scope" });
+        return denied({ status: 403, reason: "insufficient-scope" }, handlerContext);
       }
       // Media tools require BOTH a storage adapter AND a declared
       // `media.purposes` taxonomy (#262). Empty purposes →
@@ -144,6 +151,7 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
               surface,
               capabilities: projectCallableCapabilities(ref.plan, { surface }),
               serverInfo,
+              audit: ref.audit,
             },
           );
           cached = { configKey, dispatcher };
@@ -181,6 +189,59 @@ function challengeHeaders(
     "www-authenticate": challenge,
     "access-control-expose-headers": "WWW-Authenticate",
   };
+}
+
+/** `tool` recorded for a denied request whose body could not be read within
+ *  the JSON limit or was not JSON. */
+export const AUDIT_UNREADABLE_TOOL = "(unreadable)";
+
+/** Record a gate denial for `tools/call` only; discovery methods carry no
+ *  tool and are not audited. `reason` is normalised to the dispatcher's
+ *  UPPER_SNAKE outcome vocabulary (`INSUFFICIENT_ROLE`, `INVALID_TOKEN`…). */
+function auditDenial(
+  audit: MantleRuntimeRef["audit"],
+  request: Request,
+  surface: "public" | "staff",
+  reason: string,
+  ctx: HandlerContext | undefined,
+  waitUntil: ((promise: Promise<unknown>) => void) | undefined,
+): void {
+  if (!audit) return;
+  const at = Date.now();
+  // The same 1 MiB bounded reader the dispatcher uses: an unauthenticated
+  // caller must not be able to make the Worker buffer an unbounded body just
+  // because auditing is on. A body that is oversized or not JSON is still a
+  // denied request and is recorded with `tool: AUDIT_UNREADABLE_TOOL`, so
+  // padding the body cannot hide a credential probe from the trail.
+  const settled = readJsonBody(request.clone())
+    .then((body: unknown) => {
+      const message = body as {
+        method?: unknown;
+        params?: { name?: unknown; arguments?: { operationId?: unknown } };
+      } | null;
+      if (!message || typeof message !== "object") return { tool: AUDIT_UNREADABLE_TOOL, operationId: null };
+      if (message.method !== "tools/call" || typeof message.params?.name !== "string") return null;
+      const operationId = message.params.arguments?.operationId;
+      return { tool: message.params.name, operationId: typeof operationId === "string" ? operationId : null };
+    }, () => ({ tool: AUDIT_UNREADABLE_TOOL, operationId: null }))
+    .then((call) => {
+      if (!call) return;
+      return audit.record({
+        at,
+        surface,
+        callerId: ctx?.user?.id ?? null,
+        clientId: ctx?.auth?.clientId ?? null,
+        credential: ctx?.auth?.credential ?? null,
+        tool: call.tool,
+        operationId: call.operationId,
+        outcome: reason.toUpperCase().replaceAll("-", "_"),
+        durationMs: Date.now() - at,
+      });
+    })
+    .catch((error: unknown) => {
+      console.error("[mountMcp] audit sink failed", error);
+    });
+  waitUntil?.(settled);
 }
 
 function oauthDenied(
