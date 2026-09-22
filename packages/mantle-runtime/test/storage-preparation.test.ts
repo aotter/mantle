@@ -16,6 +16,8 @@ import {
 } from "../src/domain/service/RuntimePlanCompiler.js";
 import { SqliteMantleStorageAdapter } from "../src/infrastructure/storage/SqliteMantleStorageAdapter.js";
 import { CANONICAL_MIGRATIONS } from "../src/infrastructure/boot/canonicalMigrations.js";
+import { readStoreInstanceId } from "../src/infrastructure/boot/bootState.js";
+import { buildSqliteMigrationArtifact } from "../src/infrastructure/storage/SqliteMigrationArtifact.js";
 import { createMantleRuntime } from "../src/MantleRuntime.js";
 import {
   BootValidationError,
@@ -70,6 +72,30 @@ describe("prepareDeployment", () => {
 
     expect(db.native().prepare("SELECT store_instance_id FROM _mantle_boot_state WHERE id = ?")
       .get("runtime")!.store_instance_id).toMatch(/^[0-9a-f-]{36}$/u);
+  });
+
+  it("mints a store identity for externally migrated managed storage", async () => {
+    const db = new InMemoryDatabase();
+    const plan = compilePlan(declarativeManifest);
+    const schemas = Object.values(plan.schemas).map(({ manifest }) => manifest);
+    const artifact = await buildSqliteMigrationArtifact([], schemas);
+    await db.migrations.runAll(artifact.migrations);
+    for (const { name, projection } of artifact.projections) {
+      await db.prepare("INSERT INTO _mantle_schema_tables(name, projection) VALUES (?, ?)")
+        .bind(name, projection).run();
+    }
+    await db.prepare("INSERT INTO _mantle_storage_state(id, fingerprint) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET fingerprint = excluded.fingerprint")
+      .bind(artifact.targetFingerprint).run();
+
+    const adapter = new SqliteMantleStorageAdapter(db, undefined, {
+      managedStorageFingerprint: artifact.targetFingerprint,
+    });
+    await prepareDeployment(plan, adapter);
+
+    const storeInstanceId = await readStoreInstanceId(db);
+    expect(storeInstanceId).toMatch(/^[0-9a-f-]{36}$/u);
+    await prepareDeployment(plan, adapter);
+    await expect(readStoreInstanceId(db)).resolves.toBe(storeInstanceId);
   });
 
   it("activates locales on a new adapter over a current database without reseeding", async () => {
