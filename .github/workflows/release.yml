@@ -14,6 +14,8 @@
 # Actions NPM_TOKEN currently 403s on dist-tag DELETE. A failed
 # mantle-release rm warns and continues; leftover mantle-release is known
 # until npm token permissions are fixed.
+# A later source-branch tip may retry an existing tag. The tag is not moved.
+# That retry packs the tagged commit, then promotes with this workflow.
 
 name: release
 
@@ -80,32 +82,47 @@ jobs:
             exit 1
           }
           TAG="v$VERSION"
-          CORE_SHA=$(git rev-parse HEAD)
+          # HEAD is the dispatched workflow commit. An existing tag keeps its
+          # own commit: a later tip may carry a workflow fix, but it must not
+          # move the tag or pack a different tree.
+          HEAD_SHA=$(git rev-parse HEAD)
           SOURCE_BRANCH=main
           [[ "$VERSION" =~ -alpha(\.|$) ]] && SOURCE_BRANCH=develop
           git fetch origin --tags
+          git fetch origin "refs/heads/$SOURCE_BRANCH:refs/remotes/origin/$SOURCE_BRANCH"
+          SOURCE_SHA=$(git rev-parse "refs/remotes/origin/$SOURCE_BRANCH")
           TAG_SHA=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" || true)
-          if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$CORE_SHA" ]; then
-            echo "::error::$TAG already points to $TAG_SHA, not controller commit $CORE_SHA"
-            exit 1
-          fi
-          if [ -z "$TAG_SHA" ]; then
-            git fetch origin "refs/heads/$SOURCE_BRANCH:refs/remotes/origin/$SOURCE_BRANCH"
-            SOURCE_SHA=$(git rev-parse "refs/remotes/origin/$SOURCE_BRANCH")
-            [ "$CORE_SHA" = "$SOURCE_SHA" ] || {
-              echo "::error::Untagged release commit $CORE_SHA is not the current $SOURCE_BRANCH tip $SOURCE_SHA"
+          RESTORE_TAG_TREE=false
+          if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$HEAD_SHA" ]; then
+            git merge-base --is-ancestor "$TAG_SHA" "$HEAD_SHA" || {
+              echo "::error::$TAG points to $TAG_SHA, which is not an ancestor of controller commit $HEAD_SHA"
               exit 1
             }
+            [ "$HEAD_SHA" = "$SOURCE_SHA" ] || {
+              echo "::error::Retry of existing $TAG must run from the current $SOURCE_BRANCH tip $SOURCE_SHA, not $HEAD_SHA"
+              exit 1
+            }
+            echo "$TAG already points to $TAG_SHA; leaving the tag and packing that commit."
+            CORE_SHA=$TAG_SHA
+            RESTORE_TAG_TREE=true
+          elif [ -z "$TAG_SHA" ]; then
+            [ "$HEAD_SHA" = "$SOURCE_SHA" ] || {
+              echo "::error::Untagged release commit $HEAD_SHA is not the current $SOURCE_BRANCH tip $SOURCE_SHA"
+              exit 1
+            }
+            CORE_SHA=$HEAD_SHA
+          else
+            CORE_SHA=$HEAD_SHA
           fi
-          PULLS=$(gh api "repos/$GITHUB_REPOSITORY/commits/$CORE_SHA/pulls")
+          PULLS=$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/pulls")
           MERGED_PR_COUNT=$(jq \
             --arg base "$SOURCE_BRANCH" \
             --arg repo "$GITHUB_REPOSITORY" \
-            --arg sha "$CORE_SHA" \
+            --arg sha "$HEAD_SHA" \
             '[.[] | select(.merged_at != null and .base.ref == $base and .head.repo.full_name == $repo and .merge_commit_sha == $sha)] | length' \
             <<< "$PULLS")
           [ "$MERGED_PR_COUNT" = 1 ] || {
-            echo "::error::Release commit $CORE_SHA is not one canonical merged PR commit on $SOURCE_BRANCH"
+            echo "::error::Release commit $HEAD_SHA is not one canonical merged PR commit on $SOURCE_BRANCH"
             exit 1
           }
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -119,6 +136,9 @@ jobs:
           CHANNELS=$(node scripts/release-tag-order.mjs --channels "$VERSION")
           NPM_TAG=${CHANNELS%% *}
           echo "npm_tag=$NPM_TAG" >> "$GITHUB_OUTPUT"
+          if [ "$RESTORE_TAG_TREE" = true ]; then
+            git checkout "$TAG_SHA" -- .
+          fi
 
       - name: Install
         run: pnpm install --frozen-lockfile
@@ -257,6 +277,8 @@ jobs:
           set -euo pipefail
           TAG_SHA=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" || true)
           if [ -n "$TAG_SHA" ]; then
+            # core_sha is the existing tag commit, including when this
+            # workflow was dispatched from a later descendant. Never move it.
             [ "$TAG_SHA" = "$CORE_SHA" ] || {
               echo "::error::$TAG points to $TAG_SHA, not $CORE_SHA"
               exit 1

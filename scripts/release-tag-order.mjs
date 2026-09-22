@@ -77,6 +77,9 @@ if (process.argv[2] === "--self-test") {
   assert.match(npmStep, /::warning::Could not remove npmjs dist-tag mantle-release/);
   assert.match(gprStep, /::warning::Could not remove GitHub Packages dist-tag mantle-release/);
   assert.match(workflow, /Actions NPM_TOKEN currently 403s on dist-tag DELETE/);
+  assert.match(workflow, /git merge-base --is-ancestor "\$TAG_SHA" "\$HEAD_SHA"/);
+  assert.match(workflow, /git checkout "\$TAG_SHA" -- \./);
+  assert.doesNotMatch(workflow, /git tag -f|git push(?: origin)? --force|git push --force origin/);
   assert.doesNotMatch(workflow, /npm unpublish|dist-tag rm "\$pkg" (?!mantle-release\b)/);
   assert.doesNotMatch(workflow, /gh workflow run remove-mantle-release|workflow_call/);
 

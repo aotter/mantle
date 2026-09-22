@@ -52,8 +52,11 @@ It needs a token that can `rm`; the current Actions token does not. After
 gh workflow run remove-mantle-release-dist-tag --ref develop -f confirm=remove-mantle-release
 ```
 
-Transient/partial failures rerun the same controller commit/version. Verify
-existing state, preserve newer channels, and fail on identity disagreement.
+Transient/partial failures rerun the same controller commit/version. A
+workflow fix can instead be dispatched from the current source-branch tip:
+the existing tag is not moved, and the job packs that tagged commit before
+promoting. Verify existing state, preserve newer channels, and fail on
+identity disagreement.
 Wrong public artifacts require a new version; never overwrite or force-retag.
 Legacy recovery follows the controller and docs at that version's immutable
 tag, not the current release workflow. No legacy repositories or deployments
