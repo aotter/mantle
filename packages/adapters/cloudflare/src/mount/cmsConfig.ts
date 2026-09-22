@@ -5,6 +5,7 @@ import type {
   MediaStorage,
   MantleStorageAdapter,
   RuntimePlan,
+  AuditSink,
 } from "@aotter/mantle-runtime";
 import type { AdminAssetServer } from "@aotter/mantle-admin";
 import type { PublicPathResolver, TemplateRegistry } from "@aotter/mantle-web";
@@ -58,6 +59,9 @@ export interface MantleCloudflareConfig {
    *  normalization and orchestration; storage and issuance stay in
    *  consumer code. */
   readonly credentialResolver?: ConsumerCredentialResolver;
+  /** Optional MCP tools/call audit trail. `analyticsEngineAuditSink` is the
+   *  Workers implementation; nothing is recorded when absent. */
+  readonly audit?: AuditSink;
   /** Enable OAuth JWT bearer authentication on manifest REST routes. */
   readonly jwtBearer?: {
     readonly audience: string;

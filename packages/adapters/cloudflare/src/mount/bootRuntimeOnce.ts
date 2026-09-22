@@ -32,6 +32,7 @@ export interface MantleRuntimeRef {
   readonly adminAssets?: AdminAssetServer;
   readonly credentialResolver?: ConsumerCredentialResolver;
   readonly jwtBearer?: MantleCloudflareConfig["jwtBearer"];
+  readonly audit?: MantleCloudflareConfig["audit"];
   /** Caller-independent catalog reader. MCP invokes this only after auth. */
   readonly mcpCatalogSiteConfig?: McpCatalogSiteConfigReader;
   readonly publicCacheTag?: string;
@@ -66,6 +67,7 @@ export function createMantleRuntimeRef(config: MantleCloudflareConfig): MantleRu
     adminAssets: config.bindings.adminAssets,
     credentialResolver: config.credentialResolver,
     jwtBearer: config.jwtBearer,
+    audit: config.audit,
     get mcpCatalogSiteConfig() {
       return mcpCatalogSiteConfig;
     },

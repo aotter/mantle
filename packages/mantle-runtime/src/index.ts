@@ -218,6 +218,7 @@ export {
   McpJsonRpcDispatcher,
   type McpUseCases,
 } from "./infrastructure/mcp/McpJsonRpcDispatcher.js";
+export type { AuditSink, McpToolCallAuditEvent } from "./domain/port/AuditSink.js";
 
 // Starter fixture support. Kept explicit so persistence/http
 // infrastructure do not become root public API by accident.

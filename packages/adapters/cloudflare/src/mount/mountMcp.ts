@@ -144,6 +144,7 @@ export function createMcpApiHandler<Env = Record<string, unknown>>(
               surface,
               capabilities: projectCallableCapabilities(ref.plan, { surface }),
               serverInfo,
+              audit: ref.audit,
             },
           );
           cached = { configKey, dispatcher };
