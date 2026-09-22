@@ -69,6 +69,25 @@ if (process.argv[2] === "--self-test") {
   )];
   assert.equal(dropAfterPromote.length, 2);
   assert.doesNotMatch(workflow, /npm unpublish|dist-tag rm "\$pkg" (?!mantle-release\b)/);
+  assert.doesNotMatch(workflow, /gh workflow run remove-mantle-release|workflow_call/);
+
+  const cleanup = readFileSync(
+    new URL("../.github/workflows/remove-mantle-release-dist-tag.yml", import.meta.url),
+    "utf8",
+  );
+  assert.equal(cleanup.includes("name: remove-mantle-release-dist-tag"), true);
+  assert.match(cleanup, /\[ "\$CONFIRM" = "remove-mantle-release" \]/);
+  assert.ok(cleanup.indexOf('"$CONFIRM" = "remove-mantle-release"') < cleanup.indexOf("dist-tag rm"));
+  assert.match(cleanup, /group: release-controller\n {2}cancel-in-progress: false/);
+  assert.equal(pkgDirs(cleanup).join("\n"), pkgDirs(workflow).join("\n"));
+  assert.equal(pkgDirs(cleanup).length, 11);
+  const cleanupRemovals = [...cleanup.matchAll(/(?:gpr_npm |npm[^\n]* )dist-tag rm[^\n]*/g)];
+  assert.equal(cleanupRemovals.length, 2);
+  assert.match(cleanupRemovals[0][0], /dist-tag rm "\$pkg" mantle-release$/);
+  assert.match(cleanupRemovals[1][0], /gpr_npm dist-tag rm "\$pkg" mantle-release$/);
+  assert.doesNotMatch(cleanup, /dist-tag add|npm publish|npm unpublish|dist-tag rm "\$pkg" (?!mantle-release\b)/);
+  assert.match(cleanup, /before: \$before/);
+  assert.match(cleanup, /after: \$after/);
 
   console.log("release self-test passed");
   process.exit(0);
@@ -94,6 +113,19 @@ function isAncestor(left, right) {
 
 function git(...args) {
   return execFileSync("git", args, { encoding: "utf8" }).trim();
+}
+
+function pkgDirs(source) {
+  const lines = source.split("\n");
+  const start = lines.findIndex((line) => line.includes("PKG_DIRS: >-"));
+  assert(start >= 0, "PKG_DIRS missing");
+  const dirs = [];
+  for (const line of lines.slice(start + 1)) {
+    const match = line.match(/^ {8}(\S+)$/);
+    if (!match) break;
+    dirs.push(match[1]);
+  }
+  return dirs;
 }
 
 function releaseChannels(version) {

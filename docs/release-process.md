@@ -40,17 +40,40 @@ decision instead of starting another local redesign loop.
 
 Invariants: immutable versions/tags retain their identity; registry integrity
 and the published-consumer gate precede public channel promotion and any
-removal of `mantle-release`; retries cannot move channels backward. No
-downstream mutation, unpublish or rollback is introduced. The runnable
-release-order check guards these transitions.
+removal of `mantle-release` by the release controller; retries cannot move
+channels backward. No downstream mutation, unpublish or rollback is
+introduced. The runnable release-order check guards these transitions.
 
-Mutation boundaries for dist-tags: `Publish to npmjs` and `Mirror to GitHub
-Packages` may attach `mantle-release` while publishing a version. `Promote
-npmjs channel tags` is the only step that moves npmjs channels or removes
-that tag. `Promote GitHub Packages channel tags` is the only step that does
-the same for GitHub Packages. Recovery of a partial promotion or a leftover
-temp tag reruns that same promote step for the same version. It does not add
-another writer.
+Mutation boundaries during a release: `Publish to npmjs` and `Mirror to
+GitHub Packages` may attach `mantle-release` while publishing a version.
+`Promote npmjs channel tags` is the only release step that moves npmjs
+channels or removes that tag for the version being released. `Promote
+GitHub Packages channel tags` is the only release step that does the same
+for GitHub Packages. Recovery of a partial release reruns that same
+controller and version. It does not call the cleanup workflow.
+
+The cleanup workflow is a separate writer for one case the controller
+cannot cover: a release commit that predates temp-tag removal still leaves
+`mantle-release` behind, and a personal npm token that is `read-write` on
+`npm access` can still receive 403 on dist-tag DELETE.
+`.github/workflows/remove-mantle-release-dist-tag.yml` uses the Actions
+`NPM_TOKEN` and `GITHUB_TOKEN`. It is not a release controller and not a
+recovery path.
+
+| State | Sole next writer | Retry / invariant |
+|---|---|---|
+| Leftover `mantle-release` after `alpha`, `beta`, `rc`, or `latest` already points at that version | `remove-mantle-release-dist-tag`, only when `confirm` is `remove-mantle-release` | Missing tag is a no-op. Only `mantle-release` is removed. Before and after dist-tags are printed and compared; every other tag is unchanged |
+| `mantle-release` points at a version no consumer channel has | No deletion | The job fails and leaves the tag. Channel moves stay on the release promote step |
+| Confirm string is anything else | No registry call | The job fails before reading or editing tags |
+
+It shares the `release-controller` concurrency group with
+`cancel-in-progress: false`, so it waits out an in-progress release instead
+of deleting `mantle-release` between publish and channel promotion. After
+this file is on `develop`:
+
+```sh
+gh workflow run remove-mantle-release-dist-tag --ref develop -f confirm=remove-mantle-release
+```
 
 ## Branches and channels
 

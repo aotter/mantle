@@ -39,6 +39,17 @@ For stable acceptance, give an agent only the version-matched consumer
 instructions and confirm a directly authored application reaches a running
 Worker. No SDK checkout or scaffold command is required.
 
+A leftover `mantle-release` tag from a commit that predates removal is not
+cleared by retrying that commit, and a personal npm token can 403 on
+dist-tag DELETE. After `remove-mantle-release-dist-tag.yml` is on develop,
+dispatch it with `confirm=remove-mantle-release`. It is not a release: it
+deletes only that tag, and only when a consumer channel already points at
+the same version.
+
+```sh
+gh workflow run remove-mantle-release-dist-tag --ref develop -f confirm=remove-mantle-release
+```
+
 Transient/partial failures rerun the same controller commit/version. Verify
 existing state, preserve newer channels, and fail on identity disagreement.
 Wrong public artifacts require a new version; never overwrite or force-retag.

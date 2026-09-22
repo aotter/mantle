@@ -1,0 +1,182 @@
+# Confirm-gated cleanup for a leftover `mantle-release` dist-tag.
+#
+# Not a release controller: it does not publish, move alpha/beta/rc/latest,
+# unpublish, or create tags. Release recovery stays in release.yml.
+# A personal npm token can be read-write on `npm access` and still 403 on
+# dist-tag DELETE, so this job uses the Actions NPM_TOKEN and GITHUB_TOKEN.
+#
+# Dispatch from develop after this file is on that branch:
+#   gh workflow run remove-mantle-release-dist-tag --ref develop -f confirm=remove-mantle-release
+
+name: remove-mantle-release-dist-tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type remove-mantle-release. Deletes only that dist-tag.'
+        required: true
+        type: string
+
+# Same group as release.yml so this cannot delete mantle-release between
+# publish and channel promotion. Neither workflow cancels a running job.
+concurrency:
+  group: release-controller
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  remove-mantle-release-dist-tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CONFIRM: ${{ inputs.confirm }}
+      PKG_DIRS: >-
+        packages/mantle-spec
+        packages/mantle-admin-ui
+        packages/mantle-runtime
+        packages/adapters/indexeddb
+        packages/mantle-web
+        packages/mantle-admin
+        packages/mantle-auth
+        packages/adapters/bun
+        packages/adapters/vercel
+        packages/adapters/cloudflare
+        packages/mantle
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Remove mantle-release dist-tags
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GPR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [ "$CONFIRM" = "remove-mantle-release" ] || {
+            echo "::error::Refusing to edit dist-tags. Re-run with confirm=remove-mantle-release"
+            exit 1
+          }
+          [ -n "${NODE_AUTH_TOKEN:-}" ] || {
+            echo "::error::NPM_TOKEN is required"
+            exit 1
+          }
+
+          NPMRC="$RUNNER_TEMP/npmjs-rm-tag.npmrc"
+          GPR_NPMRC="$RUNNER_TEMP/github-packages-rm-tag.npmrc"
+          trap 'rm -f "$NPMRC" "$GPR_NPMRC"' EXIT
+          {
+            echo "registry=https://registry.npmjs.org/"
+            echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}"
+            echo "always-auth=true"
+          } > "$NPMRC"
+          {
+            echo "@aotter:registry=https://npm.pkg.github.com"
+            echo "//npm.pkg.github.com/:_authToken=${GPR_TOKEN}"
+            echo "always-auth=true"
+          } > "$GPR_NPMRC"
+          npm whoami --userconfig "$NPMRC" --registry https://registry.npmjs.org >/dev/null
+          gpr_npm() {
+            npm --userconfig "$GPR_NPMRC" \
+              --registry https://npm.pkg.github.com \
+              --@aotter:registry=https://npm.pkg.github.com "$@"
+          }
+
+          PKG_NAMES=""
+          for dir in $PKG_DIRS; do
+            name=$(node -p "require('./$dir/package.json').name")
+            PKG_NAMES="${PKG_NAMES:+$PKG_NAMES }$name"
+          done
+
+          classify() {
+            node --input-type=module -e '
+              const tags = JSON.parse(process.argv[1]);
+              if (tags === null || typeof tags !== "object" || Array.isArray(tags)) process.exit(1);
+              const version = tags["mantle-release"];
+              if (!version) {
+                console.log("absent");
+              } else if (["alpha", "beta", "rc", "latest"].some((channel) => tags[channel] === version)) {
+                console.log("owned");
+              } else {
+                console.log("inflight");
+              }
+            ' "$1"
+          }
+
+          assert_only_temp_tag_removed() {
+            node --input-type=module -e '
+              const before = JSON.parse(process.argv[1]);
+              const after = JSON.parse(process.argv[2]);
+              if (Object.hasOwn(after, "mantle-release")) {
+                console.error("mantle-release is still present");
+                process.exit(1);
+              }
+              const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+              for (const key of keys) {
+                if (key === "mantle-release") continue;
+                if ((before[key] ?? null) !== (after[key] ?? null)) {
+                  console.error(key + " changed from " + before[key] + " to " + after[key]);
+                  process.exit(1);
+                }
+              }
+            ' "$1" "$2"
+          }
+
+          fetch_tags() {
+            pkg="$1"
+            mode="$2"
+            view_status=0
+            if [ "$mode" = "npmjs" ]; then
+              json=$(npm --userconfig "$NPMRC" --registry https://registry.npmjs.org view "$pkg" dist-tags --json 2>"$RUNNER_TEMP/dist-tags.err") || view_status=$?
+            else
+              json=$(gpr_npm view "$pkg" dist-tags --json 2>"$RUNNER_TEMP/dist-tags.err") || view_status=$?
+            fi
+            if [ "$view_status" != 0 ] || [ -z "$json" ]; then
+              echo "::error::Could not read $mode dist-tags for $pkg" >&2
+              cat "$RUNNER_TEMP/dist-tags.err" >&2
+              return 1
+            fi
+            printf '%s\n' "$json"
+          }
+
+          drop_registry() {
+            pkg="$1"
+            mode="$2"
+            before=$(fetch_tags "$pkg" "$mode") || exit 1
+            echo "$mode $pkg before: $before"
+            decision=$(classify "$before") || exit 1
+            case "$decision" in
+              absent)
+                echo "$mode $pkg has no dist-tag mantle-release; no-op."
+                ;;
+              inflight)
+                echo "::error::$mode $pkg mantle-release is not on alpha, beta, rc, or latest. Leaving it for the release promote step."
+                exit 1
+                ;;
+              owned)
+                if [ "$mode" = "npmjs" ]; then
+                  npm --userconfig "$NPMRC" --registry https://registry.npmjs.org dist-tag rm "$pkg" mantle-release
+                else
+                  gpr_npm dist-tag rm "$pkg" mantle-release
+                fi
+                ;;
+              *)
+                echo "::error::Unexpected dist-tag decision for $mode $pkg: $decision"
+                exit 1
+                ;;
+            esac
+            after=$(fetch_tags "$pkg" "$mode") || exit 1
+            echo "$mode $pkg after: $after"
+            assert_only_temp_tag_removed "$before" "$after"
+          }
+
+          for pkg in $PKG_NAMES; do
+            drop_registry "$pkg" npmjs
+            drop_registry "$pkg" gpr
+          done

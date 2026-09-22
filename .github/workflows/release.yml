@@ -7,6 +7,10 @@
 #
 # Duplicate dispatches verify the same immutable state and skip existing
 # registry/tag/release mutations. No downstream repository is mutated.
+#
+# A release commit that predates the promote-step removal cannot drop
+# mantle-release on retry. That leftover is removed by
+# remove-mantle-release-dist-tag.yml, which is not a release controller.
 
 name: release
 
