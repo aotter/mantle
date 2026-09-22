@@ -281,7 +281,9 @@ export function mountMantleAdmin<E extends Env>(
   // `/admin/api/collections` precedent exactly (same shape of
   // "precompute at mount from ref.plan, list on GET") and needs
   // no changes to the `SiteInfo` type or its query key.
-  const views = Object.values(ref.plan.views).map(({ manifest }) => manifest);
+  const views = Object.values(ref.plan.views)
+    .map(({ manifest }) => manifest)
+    .filter(({ spec }) => spec.surface !== "internal");
   const viewsManifest = views.map((v) => ({
     name: v.metadata.name,
     title: v.spec.title ?? null,
@@ -2255,7 +2257,7 @@ function projectDeveloperConsole(plan: RuntimePlan): {
     readonly views: ReadonlyArray<{
       readonly name: string;
       readonly title: LocalizedText | null;
-      readonly surface: "public" | "staff";
+      readonly surface: ViewManifest["spec"]["surface"];
       readonly query: RuntimePlan["views"][string]["query"];
       readonly authorization: NonNullable<RuntimePlan["views"][string]["authorization"]>["all"];
       readonly guard: string | null;
@@ -2313,10 +2315,12 @@ function projectDeveloperConsole(plan: RuntimePlan): {
       manifest,
     };
   }).sort((a, b) => a.name.localeCompare(b.name));
+  const views = Object.values(plan.views)
+    .filter(({ manifest }) => manifest.spec.surface !== "internal");
   const graph = {
     atoms: [
       ...Object.values(plan.schemas).map(({ name, manifest }) => ({ id: `Schema:${name}`, kind: "Schema" as const, name, title: manifest.spec.title })),
-      ...Object.values(plan.views).map(({ name, manifest, authorization }) => ({
+      ...views.map(({ name, manifest, authorization }) => ({
         id: `View:${name}`,
         kind: "View" as const,
         name,
@@ -2364,7 +2368,7 @@ function projectDeveloperConsole(plan: RuntimePlan): {
           )];
         }),
       ]),
-      ...Object.values(plan.views).flatMap(({ name, query, guard }) => [
+      ...views.flatMap(({ name, query, guard }) => [
         ...(query.kind === "declarative" ? [developerRelation(`View:${name}:from:${query.from}`, "view-source", `View:${name}`, `Schema:${query.from}`, "/spec/from", query.from)] : []),
         ...(guard ? [developerRelation(`View:${name}:guard:${guard}`, "authorization-guard", `View:${name}`, `Procedure:${guard}`, "/spec/requires/guard/procedure", guard)] : []),
       ]),
@@ -2402,7 +2406,7 @@ function projectDeveloperConsole(plan: RuntimePlan): {
         searchableFields: manifest.spec.searchableFields ?? [],
         manifest,
       })).sort((a, b) => a.name.localeCompare(b.name)),
-      views: Object.values(plan.views).map(({ name, manifest, query, authorization, guard }) => ({
+      views: views.map(({ name, manifest, query, authorization, guard }) => ({
         name,
         title: manifest.spec.title ?? null,
         surface: manifest.spec.surface,

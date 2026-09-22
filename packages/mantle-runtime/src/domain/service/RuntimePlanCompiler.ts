@@ -340,6 +340,7 @@ function compileMcpTools(
     );
   }
   for (const view of Object.values(views)) {
+    if (view.manifest.spec.surface === "internal") continue;
     tools.push({
       name: `${MCP_QUERY_VIEW_PREFIX}${mcpToolNameSegment(view.name)}`,
       ownerKind: "View",

@@ -37,6 +37,7 @@ export class EmitOpenapiUseCase {
     }
 
     for (const v of views) {
+      if (v.spec.surface === "internal") continue;
       const path = `/api/views/${v.metadata.name}`;
       paths[path] ??= {};
       paths[path]!["get"] = viewOperation(v, request);

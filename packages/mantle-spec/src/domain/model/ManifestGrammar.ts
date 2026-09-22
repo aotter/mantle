@@ -229,6 +229,9 @@ export interface ViewCachePolicy {
   readonly sharedMaxAge: number;
 }
 
+export const VIEW_SURFACES = ["public", "staff", "internal"] as const;
+export type ViewSurface = (typeof VIEW_SURFACES)[number];
+
 export interface ViewManifestSpec {
   /** Human-readable label for the admin UI's report sidebar / report
    *  page (#443). Same string-or-locale-map `LocalizedText` shape as
@@ -247,16 +250,16 @@ export interface ViewManifestSpec {
   /** A single read-only SQLite SELECT over Schema logical tables.
    *  Named `:params` are declared by `params` and bound by the runtime. */
   readonly sql?: string;
-  /** REST-surface visibility. Reuses the `"public" | "staff"`
-   *  vocabulary of `McpTriggerSurface` (see `MCP_TRIGGER_SURFACES`).
+  /** Adapter exposure policy.
    *  `"public"` auto-mounts at the public
    *  `GET /api/views/<name>` (v0.1 default; `requires` may still gate
    *  the call). When `"staff"` the View is
    *  NOT mounted on the public path — it mounts at
    *  `GET /admin/api/views/<name>` behind the staff gate and becomes
    *  the report-sidebar source. Guards data behind a staff session; use
-   *  it for any View over sensitive rows. */
-  readonly surface: McpTriggerSurface;
+   *  it for any View over sensitive rows. `"internal"` mounts on no
+   *  adapter and is callable only through `MantleRuntime.executeView`. */
+  readonly surface: ViewSurface;
   /** Optional anonymous REST response-cache policy. Validation limits this
    *  to caller-independent public declarative Views over publishing Schemas. */
   readonly cache?: ViewCachePolicy;

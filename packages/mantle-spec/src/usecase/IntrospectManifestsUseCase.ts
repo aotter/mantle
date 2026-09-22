@@ -42,7 +42,7 @@ export class IntrospectManifestsUseCase {
       orderBy: v.spec.orderBy ?? [],
       fields: v.spec.fields ?? null,
       limit: v.spec.limit ?? null,
-      restPath: `/api/views/${v.metadata.name}`,
+      restPath: v.spec.surface === "internal" ? null : `/api/views/${v.metadata.name}`,
       auth: v.spec.requires?.auth ?? null,
       guard: v.spec.requires?.guard ?? null,
     }));

@@ -87,6 +87,17 @@ describe("performance harness", () => {
         dataAccessFields: ["note", "tenantId"],
       });
 
+    const baseInternal = publicView("internal-orders", undefined);
+    const internal: ViewManifest = {
+      ...baseInternal,
+      spec: { ...baseInternal.spec, surface: "internal" },
+    };
+    const internalReport = await inspectIndexCoverage(compilePlan([schema, internal]), {
+      requirePublic: true,
+      rowsPerSchema: 100,
+    });
+    expect(internalReport.summary.required).toBe(0);
+
     const typo = await inspectIndexCoverage(compilePlan(manifests), {
       requiredViews: ["missing-view"],
       rowsPerSchema: 100,

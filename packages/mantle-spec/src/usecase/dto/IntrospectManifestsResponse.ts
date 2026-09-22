@@ -26,14 +26,14 @@ export interface IntrospectedView {
   readonly name: string;
   readonly from: string | null;
   readonly sql: string | null;
-  readonly surface: "public" | "staff";
+  readonly surface: "public" | "staff" | "internal";
   readonly cache: { readonly sharedMaxAge: number } | null;
   readonly params: JsonSchema | null;
   readonly filter: FilterAst | null;
   readonly orderBy: ReadonlyArray<{ readonly field: string; readonly direction?: "asc" | "desc" }>;
   readonly fields: ReadonlyArray<string> | null;
   readonly limit: number | null;
-  readonly restPath: string;
+  readonly restPath: string | null;
   readonly auth: { readonly all: ReadonlyArray<AuthPredicate> } | null;
   readonly guard: { readonly procedure: string } | null;
 }

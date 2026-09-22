@@ -159,6 +159,17 @@ spec:
     expect(capabilities.every(Object.isFrozen)).toBe(true);
   });
 
+  it("retains internal Views without projecting an MCP tool", () => {
+    const plan = compile(parse(`apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: host-report }
+spec: { surface: internal, sql: SELECT 1 AS value }
+`));
+    expect(plan.views["host-report"]?.query).toMatchObject({ kind: "native" });
+    expect(plan.mcpTools).toEqual([]);
+    expect(projectCallableCapabilities(plan)).toEqual([]);
+  });
+
   it("takes Procedure presentation and schemas from the Procedure contract", () => {
     const plan = compile(parse(`apiVersion: cms.mantle.aotter.net/v1
 kind: Procedure

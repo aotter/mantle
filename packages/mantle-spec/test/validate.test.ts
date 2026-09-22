@@ -1208,6 +1208,22 @@ spec:
     expect(view.spec.surface).toBe("staff");
   });
 
+  it("accepts surface: internal and rejects shared caching", () => {
+    const yaml = `apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: internalView }
+spec:
+  from: posts
+  surface: internal
+`;
+    expect(parseManifests(yaml).diagnostics).toEqual([]);
+    expect(parseManifests(`${yaml}  cache: { sharedMaxAge: 60 }\n`).diagnostics)
+      .toEqual([expect.objectContaining({
+        code: "VIEW_CACHE_INVALID",
+        source: expect.objectContaining({ path: "/spec/cache" }),
+      })]);
+  });
+
   it("accepts the minimal staff View Admin list uiSchema", () => {
     const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v1
 kind: View

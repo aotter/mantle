@@ -77,7 +77,7 @@ export function inspectIndexCoverage(
       db,
       view,
       view.spec.from ? schemasByName.get(view.spec.from) : undefined,
-      (options.requirePublic === true && view.spec.surface !== "staff") ||
+      (options.requirePublic === true && view.spec.surface === "public") ||
         requiredNames.has(view.metadata.name),
     ));
     const viewNames = new Set(views.map((view) => view.metadata.name));
