@@ -18,6 +18,9 @@
 # the release identity. A controller-only fix on the tip can finish
 # promotion without retagging. Tagged recovery skips the Core source
 # check because that tree was already released from the immutable tag.
+# When that tag exists and every npmjs package at the version is already
+# published, skip pack and immutable tarball compare. The controller tip
+# must not rebuild published artifact identity.
 
 name: release
 
@@ -193,19 +196,46 @@ jobs:
             if (failed) process.exit(1);
           "
 
+      - name: Record published packages
+        id: pkgs
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          TAG_EXISTS: ${{ steps.ver.outputs.tag_exists }}
+        run: |
+          set -euo pipefail
+          PKG_NAMES=""
+          for dir in $PKG_DIRS; do
+            name=$(node -p "require('./$dir/package.json').name")
+            PKG_NAMES="${PKG_NAMES:+$PKG_NAMES }$name"
+          done
+          [ -n "$PKG_NAMES" ] || {
+            echo "::error::No public packages resolved"
+            exit 1
+          }
+          echo "PKG_NAMES=$PKG_NAMES" >> "$GITHUB_ENV"
+          published=false
+          if [ "$TAG_EXISTS" = true ]; then
+            missing=0
+            for pkg in $PKG_NAMES; do
+              npm view "$pkg@$VERSION" version --registry https://registry.npmjs.org >/dev/null 2>&1 || missing=1
+            done
+            if [ "$missing" = 0 ]; then
+              published=true
+              echo "Tagged recovery: all packages already exist on npmjs at $VERSION."
+            fi
+          fi
+          echo "published=$published" >> "$GITHUB_OUTPUT"
+
       - name: Pack release tarballs
+        if: steps.pkgs.outputs.published != 'true'
         run: |
           set -euo pipefail
           node scripts/verify-release-artifact.mjs --self-test
           VERSION="${{ steps.ver.outputs.version }}"
           mkdir -p .release-tarballs
-          PKG_NAMES=""
           for dir in $PKG_DIRS; do
             pnpm -C "$dir" pack --pack-destination "$PWD/.release-tarballs"
-            name=$(node -p "require('./$dir/package.json').name")
-            PKG_NAMES="${PKG_NAMES:+$PKG_NAMES }$name"
           done
-          echo "PKG_NAMES=$PKG_NAMES" >> "$GITHUB_ENV"
 
           # Version lockstep: pnpm pack names tarballs <name>-<version>.tgz,
           # so a package whose version drifted from the tag fails here.
@@ -358,6 +388,7 @@ jobs:
           exit 1
 
       - name: Verify immutable npm artifacts
+        if: steps.pkgs.outputs.published != 'true'
         run: |
           set -euo pipefail
           VERSION="${{ steps.ver.outputs.version }}"
@@ -381,6 +412,7 @@ jobs:
       - name: Mirror to GitHub Packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGES_PUBLISHED: ${{ steps.pkgs.outputs.published }}
         run: |
           set -euo pipefail
           GPR_NPMRC="$RUNNER_TEMP/github-packages.npmrc"
@@ -401,6 +433,14 @@ jobs:
           for pkg in $PKG_NAMES; do
             base="${pkg#@}"
             tgz=".release-tarballs/${base//\//-}-$VERSION.tgz"
+            if [ "$PACKAGES_PUBLISHED" = true ]; then
+              if gpr_npm view "$pkg@$VERSION" version >/dev/null 2>&1; then
+                echo "$pkg@$VERSION already exists on GitHub Packages; skipping mirror"
+                continue
+              fi
+              echo "::error::$pkg@$VERSION is missing on GitHub Packages; tagged recovery will not pack a replacement from the controller tip"
+              exit 1
+            fi
             work="$(mktemp -d)"
             tar -xzf "$tgz" -C "$work"
             node -e "const fs=require('node:fs'); const path=process.argv[1]; const pkg=JSON.parse(fs.readFileSync(path,'utf8')); pkg.publishConfig={...(pkg.publishConfig||{}), registry:'https://npm.pkg.github.com'}; fs.writeFileSync(path, JSON.stringify(pkg,null,2)+'\n');" "$work/package/package.json"
@@ -427,18 +467,12 @@ jobs:
       - name: Verify public-registry Core in the reference Worker
         env:
           VERSION: ${{ steps.ver.outputs.version }}
-          TAG_EXISTS: ${{ steps.ver.outputs.tag_exists }}
+          PACKAGES_PUBLISHED: ${{ steps.pkgs.outputs.published }}
         run: |
           set -euo pipefail
-          if [ "$TAG_EXISTS" = true ]; then
-            missing=0
-            for pkg in $PKG_NAMES; do
-              npm view "$pkg@$VERSION" version --registry https://registry.npmjs.org >/dev/null 2>&1 || missing=1
-            done
-            if [ "$missing" = 0 ]; then
-              echo "Tagged recovery: all packages already exist on npmjs at $VERSION; skipping the public-registry Worker gate."
-              exit 0
-            fi
+          if [ "$PACKAGES_PUBLISHED" = true ]; then
+            echo "Tagged recovery: all packages already exist on npmjs at $VERSION; skipping the public-registry Worker gate."
+            exit 0
           fi
           node scripts/check-worker-consumer.mjs --registry "$VERSION"
 
