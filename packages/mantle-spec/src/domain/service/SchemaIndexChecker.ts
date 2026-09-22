@@ -34,16 +34,15 @@ export interface SchemaIndexCheckResult {
 
 const SAFE_INDEX_NAME = /^[A-Za-z][A-Za-z0-9_.-]*$/;
 /** Native entry columns and their SQLite affinity; `indexes` may reference them, `uniqueIndexes` may not (#1008). */
-const NATIVE_INDEX_FIELDS: ReadonlyMap<string, SchemaIndexAffinity> = new Map<string, SchemaIndexAffinity>([
-  ["id", "TEXT"],
-  ["status", "TEXT"],
-  ["version", "INTEGER"],
-  ["createdAt", "INTEGER"],
-  ["updatedAt", "INTEGER"],
-  ["authorId", "TEXT"],
-]);
-const _nativeCoverage: readonly (typeof RESERVED_ENTRY_COLUMNS)[number][] = [...NATIVE_INDEX_FIELDS.keys()] as (typeof RESERVED_ENTRY_COLUMNS)[number][];
-void _nativeCoverage;
+const NATIVE_INDEX_AFFINITY = {
+  id: "TEXT",
+  status: "TEXT",
+  version: "INTEGER",
+  createdAt: "INTEGER",
+  updatedAt: "INTEGER",
+  authorId: "TEXT",
+} satisfies Readonly<Record<(typeof RESERVED_ENTRY_COLUMNS)[number], SchemaIndexAffinity>>;
+const NATIVE_INDEX_FIELDS: ReadonlyMap<string, SchemaIndexAffinity> = new Map(Object.entries(NATIVE_INDEX_AFFINITY));
 const SOURCES = ["uniqueIndexes", "indexes"] as const;
 
 /**

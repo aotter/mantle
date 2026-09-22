@@ -10,7 +10,7 @@
 [#1009](https://github.com/aotter/mantle/issues/1009),
 [#1010](https://github.com/aotter/mantle/issues/1010),
 [ADR-0022](0022-caller-observed-version-occ.md),
-[ADR-0024](0024-manifest-native-schema-tables.md)
+[ADR-0024](0024-manifest-native-schema-tables.md) (partially superseded: its clauses allowing authored `id`, `status`, `createdAt`)
 
 ## Context
 
@@ -80,6 +80,10 @@ hex) kept the old physical index.
    Views are untouched.
 
 ## Consequences
+
+- ADR-0024's statement that authored data may legitimately use `id`, `status`
+  or `createdAt` no longer holds; its `_mantle_` physical prefix is unchanged
+  and still guards every other authored name.
 
 - Breaking for manifests that declared a data property with one of the six
   names; the official examples and tests were renamed (#1009). Storage is

@@ -174,7 +174,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
       "name": "orders",
     },
   },
-  "semanticFingerprint": "fnv1a64:4f7d14946ee0a45b",
+  "semanticFingerprint": "fnv1a64:e8dea4bda72d8a32",
   "triggers": {
     "order-created": {
       "lifecycleSchema": "orders",
@@ -243,7 +243,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
       "target": "place-order",
     },
   },
-  "version": 1,
+  "version": 2,
   "views": {
     "open-orders": {
       "authorization": {

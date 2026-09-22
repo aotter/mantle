@@ -131,7 +131,9 @@ describe("performance harness", () => {
     expect(report.paths[0]).toMatchObject({
       temporarySort: true,
       passed: false,
-      findings: ["temporary ORDER BY B-tree"],
+      // Newer SQLite planners add a second, index-choice finding; this test
+      // owns only the temporary-sort detection.
+      findings: expect.arrayContaining(["temporary ORDER BY B-tree"]),
     });
   });
 
