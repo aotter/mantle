@@ -2,6 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { join, resolve, relative } from "node:path";
 import { exit, stdout, stderr, cwd } from "node:process";
 import { parseArgs as parseNodeArgs } from "node:util";
+import { DatabaseSync } from "node:sqlite";
 import {
   validateDiagnostic,
   type Diagnostic,
@@ -158,9 +159,22 @@ export async function run(rawArgs: ReadonlyArray<string>): Promise<number> {
   }
 
   // 3. Execute the use case.
-  const result = parsed
-    ? ValidateManifestsUseCase.run({ parsed, handlerSource, ...(args.mcpInputChecks ? {} : { mcpInput: false as const }) })
-    : { diagnostics: [], errorCount: 0, warningCount: 0 };
+  const sandbox = new DatabaseSync(":memory:");
+  let result;
+  try {
+    result = parsed
+      ? ValidateManifestsUseCase.run({
+          parsed,
+          handlerSource,
+          ...(args.mcpInputChecks ? {} : { mcpInput: false as const }),
+          sqlViewSandbox: {
+            exec: (sql) => sandbox.exec(sql),
+          },
+        })
+      : { diagnostics: [], errorCount: 0, warningCount: 0 };
+  } finally {
+    sandbox.close();
+  }
   const cliWarnings: Diagnostic[] = [];
 
   // The CLI can't reach the runtime DB to read site_config, so it

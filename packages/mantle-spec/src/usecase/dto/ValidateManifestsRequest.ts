@@ -1,5 +1,10 @@
 import type { ParsedManifestSet } from "../../domain/service/ManifestParser.js";
 
+/** A fresh, empty SQLite connection supplied by platform code. */
+export interface SqlViewSandbox {
+  exec(sql: string): void;
+}
+
 /**
  * Input to the manifest validation use case (Loop 1 of the SDK
  * authoring contract — ADR-0007). Loose primitives stay out per the
@@ -19,6 +24,9 @@ export interface ValidateManifestsRequest {
    *  the defaults; a downstream decides its own thresholds. `false`
    *  disables the whole group. */
   readonly mcpInput?: false | McpInputCheckOptions;
+  /** Empty SQLite supplied by the caller. When absent, SQL View table
+   *  confinement is deferred to an admission gate that can supply one. */
+  readonly sqlViewSandbox?: SqlViewSandbox;
 }
 
 export interface McpInputCheckOptions {

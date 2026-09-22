@@ -154,7 +154,7 @@ One statement, read-only, compiled and bound by the runtime.
 Bound params are passed as positional values; caller input is never interpolated into the statement. SQLite JSON functions are available, so `json_each` and `json_extract` can unnest and project array or object members of `data` — the SQL example above does both.
 
 > **Warning**
-> `sql` Views are native SQLite. Static validation never executes the statement, so a syntax or column error surfaces only when the View runs. On a storage adapter that does not support the native dialect the View fails at prepare time with `VIEW_DIALECT_UNSUPPORTED`, naming the dialects that adapter does support.
+> `sql` Views are native SQLite. `mantle validate` prepares each statement against an empty SQLite database containing only the declared Schema tables; an undeclared table, syntax error or unknown column is `INVALID_MANIFEST_ENVELOPE` at `/spec/sql`. Programmatic validation runs the same check when the host supplies `sqlViewSandbox`; without that port it is deferred to the host's admission gate. On a storage adapter that does not support the native dialect the View fails at prepare time with `VIEW_DIALECT_UNSUPPORTED`, naming the dialects that adapter does support.
 
 ## `params`
 
