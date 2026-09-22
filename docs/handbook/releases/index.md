@@ -17,9 +17,53 @@ stable candidate cut from `main`. Installing a prerelease means opting into an
 exact version, not a channel. [GitHub Releases](https://github.com/aotter/mantle/releases)
 is the canonical, immutable change history; this chapter is the narrative one.
 
-All ten packages share a single version and are published together, so mixed
+All eleven packages share a single version and are published together, so mixed
 versions across `@aotter/mantle*` are never a supported combination. Pin the
 version you install and upgrade the whole set at once.
+
+## 0.1.3 — 2026-09-23
+
+0.1.3 tightens the contract between Manifests, generated TypeScript, agent
+skills and the optional Admin surface. To upgrade from 0.1.2, pin every
+selected `@aotter/mantle*` package to `0.1.3`, refresh the lockfile, then run
+`mantle generate`, `mantle skills` and the matching `--check` commands.
+
+**Private and typed reads.** Views may use `surface: internal` to stay out of
+REST, MCP, WebMCP, OpenAPI and Admin while remaining callable from host code.
+Generated bindings type declarative View params and rows, expose typed indexed
+field reads for Schemas, and can be emitted from an already compiled plan. SQL
+Views remain SQLite-native and deliberately return an `unknown` row type.
+
+**Safer View storage and validation.** Public declarative Views over publishing
+Schemas always enforce published status. Native entry columns (`id`, `status`,
+`version`, `createdAt`, `updatedAt`, `authorId`) are reserved consistently and
+may be used in the supported View/index positions. SQL validation is confined
+to declared Schema tables, and the local index harness now uses production-
+shaped planner and fixture state instead of reporting an artificial pass.
+
+**MCP and authorization.** Tool schemas have agent-shaped inputs and standard
+read-only, destructive, open-world and idempotency annotations. Calls carry
+expected-version data through optimistic concurrency checks, enforce the
+caller gate, and can emit audit records keyed by a declared idempotency input.
+OAuth provider extensions, account linking and sign-in-link flows are owned by
+the extracted optional `@aotter/mantle-auth` package. Session cache keys bind
+to the prepared store identity so replacing D1 cannot revive stale sessions.
+
+**Admin and authoring.** Manifest `uiSchema` can select operational collection
+columns/tabs, staff report search/filter/CSV fields and collection or row
+actions. Native columns render correctly in lists, and operation dialogs reset
+their optimistic-concurrency state between actions. The handbook now starts
+with a task-oriented overview, a complete Manifest feature table, typed-query
+and Admin-rendering guides, and an explicit skill-install → pinned SDK →
+project-skill handoff. The CLI points to those installed, version-matched docs.
+
+**Upgrade note.** Regeneration is required because generated bindings and
+projected skills gained APIs and instructions. Applications that declared one
+of the newly reserved native column names as business data must rename that
+field before upgrading. Backend-specific D1/IndexedDB cost inspectors and
+server-side soak budgets remain deferred to
+[#1040](https://github.com/aotter/mantle/issues/1040); the conservative local
+harness is a preflight, not production cost evidence.
 
 ## 0.1.2 — 2026-09-21
 
