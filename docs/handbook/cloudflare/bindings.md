@@ -141,9 +141,11 @@ origin, the only column Analytics Engine filters cheaply. Columns, in order:
 whatever identity the gate established. Its body goes through the same 1 MiB
 bounded reader as an admitted call; a denied request whose body is oversized
 or not JSON is still recorded, with `tool` set to `(unreadable)`, so padding a
-body cannot hide a credential probe. `operationId` is the call's `operationId`
-argument when present, else empty; it correlates retries of one mutation and
-is read the same way on admitted and denied calls. Read it with the
+body cannot hide a credential probe. `operationId` is the string argument whose
+schema declares `x-mcp-hint: idempotency-key`, falling back to the conventional
+`operationId` argument when the tool declares no hint. It is empty when that
+argument is absent and is resolved the same way on admitted and denied calls.
+Read it with the
 [SQL API](https://developers.cloudflare.com/analytics/analytics-engine/sql-api/):
 
 ```sql

@@ -13,9 +13,9 @@ export interface McpToolCallAuditEvent {
   readonly clientId: string | null;
   readonly credential: CredentialKind | null;
   readonly tool: string;
-  /** The `operationId` argument when the call carries one as a string;
-   *  correlates retries of one mutation across outcomes. Read the same way
-   *  on admitted and denied calls. */
+  /** The string argument declared with `x-mcp-hint: idempotency-key`, or the
+   *  conventional `operationId` when no hint is declared. Correlates retries
+   *  across admitted and denied outcomes. */
   readonly operationId: string | null;
   /** `ok`, a runtime Diagnostic code, `UNKNOWN_TOOL`, `INVALID_PARAMS`, `INTERNAL`, or an
    *  adapter gate denial in the same UPPER_SNAKE vocabulary

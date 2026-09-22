@@ -229,4 +229,8 @@ export { readStoreInstanceId } from "./infrastructure/boot/bootState.js";
 // such as Cloudflare Turnstile.
 export { InvokeFailure } from "./usecase/procedure/InvokeProcedureUseCase.js";
 
-export { buildMcpToolCatalog, type McpToolDefinition } from "./infrastructure/mcp/McpToolCatalog.js";
+export {
+  buildMcpAuditOperationIdResolver,
+  buildMcpToolCatalog,
+  type McpToolDefinition,
+} from "./infrastructure/mcp/McpToolCatalog.js";

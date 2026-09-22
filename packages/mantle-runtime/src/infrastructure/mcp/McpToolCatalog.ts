@@ -65,6 +65,20 @@ export interface McpToolAnnotations {
   readonly openWorldHint?: boolean;
 }
 
+/** Resolve each tool's declared correlation argument once at catalog build. */
+export function buildMcpAuditOperationIdResolver(
+  tools: readonly McpToolDefinition[],
+): (tool: string, args: Readonly<Record<string, unknown>>) => string | null {
+  const argumentsByTool = new Map(tools.map((tool) => [
+    tool.name,
+    idempotencyKeys(tool.inputSchema)[0] ?? "operationId",
+  ]));
+  return (tool, args) => {
+    const value = args[argumentsByTool.get(tool) ?? "operationId"];
+    return typeof value === "string" ? value : null;
+  };
+}
+
 export const COMMIT_MEDIA_UPLOAD_TOOL: McpToolDefinition = {
   name: "commit_media_upload",
   annotations: { readOnlyHint: false },

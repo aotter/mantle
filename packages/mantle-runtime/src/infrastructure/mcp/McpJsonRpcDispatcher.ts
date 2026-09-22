@@ -37,6 +37,7 @@ import {
   UPDATE_DRAFT_PREFIX,
   UPDATE_RECORD_PREFIX,
   buildMcpToolCatalog,
+  buildMcpAuditOperationIdResolver,
   extractCollectionSegment,
   type McpToolSurface,
   type McpToolDefinition,
@@ -106,6 +107,7 @@ export class McpJsonRpcDispatcher {
   private readonly catalog: readonly McpToolDefinition[];
   private readonly catalogWireJson: string;
   private readonly catalogToolNames: ReadonlySet<string>;
+  private readonly auditOperationId: ReturnType<typeof buildMcpAuditOperationIdResolver>;
   /** segment → original `Schema.metadata.name`. Built once at
    *  construction; the per-collection routing path looks up the
    *  segment from the tool name and recovers the canonical
@@ -133,6 +135,7 @@ export class McpJsonRpcDispatcher {
     });
     this.catalogWireJson = `{"tools":${JSON.stringify(this.catalog)}}`;
     this.catalogToolNames = new Set(this.catalog.map((tool) => tool.name));
+    this.auditOperationId = buildMcpAuditOperationIdResolver(this.catalog);
     this.readOnlyCollections = new Set(
       schemas.filter((schema) => schema.spec.schema.readOnly === true).map((schema) => schema.metadata.name),
     );
@@ -218,9 +221,7 @@ export class McpJsonRpcDispatcher {
     const args = (p.arguments ?? {}) as Record<string, unknown>;
     // Probing for tools that do not exist is audited like any other call.
     const startedAt = Date.now();
-    // Audit correlation reads the conventional `operationId` argument only;
-    // resolving a tool's declared idempotency-key hint is a separate issue.
-    const operationId = typeof args["operationId"] === "string" ? args["operationId"] : null;
+    const operationId = this.auditOperationId(p.name, args);
     let outcome = "ok";
     try {
       if (!this.catalogToolNames.has(p.name)) {
