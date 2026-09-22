@@ -55,32 +55,140 @@ function checkSqlViewTables(
   linked: LinkedManifestSet,
   sandbox: NonNullable<ValidateManifestsRequest["sqlViewSandbox"]>,
 ): Diagnostic[] {
-  for (const { manifest } of linked.schemas) {
-    const columns = [...NATIVE_COLUMNS, ...Object.keys(manifest.spec.schema.properties ?? {})];
-    sandbox.exec(`CREATE TABLE ${quoteSqlIdentifier(manifest.metadata.name)} (${columns.map((name) => `${quoteSqlIdentifier(name)} BLOB`).join(", ")})`);
+  const views = linked.views.filter((view) => view.manifest.spec.sql);
+  if (views.length === 0) return [];
+  try {
+    for (const { manifest } of linked.schemas) {
+      const columns = [...NATIVE_COLUMNS, ...Object.keys(manifest.spec.schema.properties ?? {})];
+      sandbox.exec(`CREATE TABLE ${quoteSqlIdentifier(manifest.metadata.name)} (${columns.map((name) => `${quoteSqlIdentifier(name)} BLOB`).join(", ")})`);
+    }
+  } catch (error) {
+    return views.map((view) => sqlViewDiagnostic(view, error));
   }
-  return linked.views.flatMap((view) => {
-    const sql = view.manifest.spec.sql;
-    if (!sql) return [];
+  return views.flatMap((view) => {
+    const sql = view.manifest.spec.sql!;
     try {
-      if (/\bsqlite_/iu.test(sql)) {
+      if (referencesSqliteInternalSource(sql)) {
         throw new Error("SQLite internal tables are not declared Schema tables");
       }
       sandbox.exec(`SELECT * FROM (${sql}) AS "_mantle_sql_view_check" LIMIT 0`);
       return [];
     } catch (error) {
-      const path = "/spec/sql";
-      return [validateDiagnostic({
-        code: "INVALID_MANIFEST_ENVELOPE",
-        severity: "error",
-        path,
-        source: { ...view.source, path },
-        value: sql,
-        expected: "one read-only SELECT over tables declared by a Schema in this manifest",
-        message: `View '${view.manifest.metadata.name}' SQL is not valid against the declared Schema tables: ${error instanceof Error ? error.message : String(error)}`,
-      })];
+      return [sqlViewDiagnostic(view, error)];
     }
   });
+}
+
+function sqlViewDiagnostic(
+  view: LinkedManifestSet["views"][number],
+  error: unknown,
+): Diagnostic {
+  const path = "/spec/sql";
+  return validateDiagnostic({
+    code: "INVALID_MANIFEST_ENVELOPE",
+    severity: "error",
+    path,
+    source: { ...view.source, path },
+    value: view.manifest.spec.sql,
+    expected: "one read-only SELECT over tables declared by a Schema in this manifest",
+    message: `View '${view.manifest.metadata.name}' SQL is not valid against the declared Schema tables: ${error instanceof Error ? error.message : String(error)}`,
+  });
+}
+
+interface SqlToken {
+  readonly kind: "identifier" | "quotedIdentifier" | "punctuation";
+  readonly value: string;
+}
+
+function referencesSqliteInternalSource(sql: string): boolean {
+  const tokens = tokenizeSql(sql);
+  const sourceDepths = new Set<number>();
+  const expectingSource = new Set<number>();
+  let depth = 0;
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]!;
+    if (token.kind === "punctuation") {
+      if (token.value === "(") {
+        expectingSource.delete(depth);
+        depth += 1;
+      } else if (token.value === ")") {
+        sourceDepths.delete(depth);
+        expectingSource.delete(depth);
+        depth = Math.max(0, depth - 1);
+      } else if (token.value === "," && sourceDepths.has(depth)) {
+        expectingSource.add(depth);
+      }
+      continue;
+    }
+    const word = token.value.toLowerCase();
+    if (token.kind === "identifier" && (word === "from" || word === "join")) {
+      sourceDepths.add(depth);
+      expectingSource.add(depth);
+      continue;
+    }
+    if (token.kind === "identifier" && ["where", "group", "having", "order", "limit", "union", "intersect", "except", "window"].includes(word)) {
+      sourceDepths.delete(depth);
+      expectingSource.delete(depth);
+      continue;
+    }
+    if (!expectingSource.has(depth)) continue;
+    const qualified = tokens[index + 1]?.value === "." ? tokens[index + 2]?.value : undefined;
+    if (isSqliteInternalSource(word) || (qualified && isSqliteInternalSource(qualified.toLowerCase()))) {
+      return true;
+    }
+    expectingSource.delete(depth);
+  }
+  return false;
+}
+
+function isSqliteInternalSource(name: string): boolean {
+  return name.startsWith("pragma_") || [
+    "dbstat", "sqlite_schema", "sqlite_master", "sqlite_temp_schema", "sqlite_temp_master",
+  ].includes(name);
+}
+
+function tokenizeSql(sql: string): SqlToken[] {
+  const tokens: SqlToken[] = [];
+  for (let index = 0; index < sql.length;) {
+    const char = sql[index]!;
+    if (/\s/u.test(char)) {
+      index += 1;
+    } else if (sql.startsWith("--", index)) {
+      index = sql.indexOf("\n", index + 2);
+      if (index < 0) break;
+    } else if (sql.startsWith("/*", index)) {
+      const end = sql.indexOf("*/", index + 2);
+      index = end < 0 ? sql.length : end + 2;
+    } else if (char === "'") {
+      index = quotedSqlEnd(sql, index, "'", "'");
+    } else if (char === '"' || char === "`" || char === "[") {
+      const close = char === "[" ? "]" : char;
+      const end = quotedSqlEnd(sql, index, close, close);
+      tokens.push({ kind: "quotedIdentifier", value: sql.slice(index + 1, end - 1).replaceAll(close + close, close) });
+      index = end;
+    } else if (/[A-Za-z_]/u.test(char)) {
+      let end = index + 1;
+      while (end < sql.length && /[A-Za-z0-9_$]/u.test(sql[end]!)) end += 1;
+      tokens.push({ kind: "identifier", value: sql.slice(index, end) });
+      index = end;
+    } else {
+      if ("(),.".includes(char)) tokens.push({ kind: "punctuation", value: char });
+      index += 1;
+    }
+  }
+  return tokens;
+}
+
+function quotedSqlEnd(sql: string, start: number, close: string, escape: string): number {
+  for (let index = start + 1; index < sql.length; index += 1) {
+    if (sql[index] !== close) continue;
+    if (sql[index + 1] === escape) {
+      index += 1;
+      continue;
+    }
+    return index + 1;
+  }
+  return sql.length;
 }
 
 function quoteSqlIdentifier(value: string): string {
