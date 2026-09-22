@@ -55,6 +55,7 @@ export type {
   OAuthConsentInfo,
   OAuthConsentRequest,
   OAuthProviderConfig,
+  OAuthProviderExtension,
   ProviderAccessToken,
   RegisterOAuthClientInput,
   RegisteredOAuthClient,
