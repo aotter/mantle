@@ -16,17 +16,18 @@ describe("analyticsEngineAuditSink", () => {
       clientId: null,
       credential: "oauth",
       tool: "query_view_recent_posts",
+      operationId: "op-7",
       outcome: "ok",
       durationMs: 12,
     });
     expect(writeDataPoint).toHaveBeenCalledTimes(1);
     expect(writeDataPoint).toHaveBeenCalledWith({
       indexes: ["https://site.example"],
-      blobs: ["public", "user-1", "", "oauth", "query_view_recent_posts", "ok"],
+      blobs: ["public", "user-1", "", "oauth", "query_view_recent_posts", "ok", "op-7"],
       doubles: [1_700_000_000_000, 12],
     });
     // The handbook names blob1…blobN / double1…doubleN by these arrays.
-    expect(ANALYTICS_ENGINE_AUDIT_BLOBS).toEqual(["surface", "callerId", "clientId", "credential", "tool", "outcome"]);
+    expect(ANALYTICS_ENGINE_AUDIT_BLOBS).toEqual(["surface", "callerId", "clientId", "credential", "tool", "outcome", "operationId"]);
     expect(ANALYTICS_ENGINE_AUDIT_DOUBLES).toEqual(["at", "durationMs"]);
   });
 });

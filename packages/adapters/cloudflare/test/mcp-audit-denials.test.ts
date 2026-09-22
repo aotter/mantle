@@ -64,11 +64,37 @@ describe("MCP audit: gate denials", () => {
 
   it("records a member refused on the staff surface, with the identity the gate established", async () => {
     events.length = 0;
-    const response = await run(staff, call("/mcp/staff", "member"));
+    const response = await run(staff, call("/mcp/staff", "member", "tools/call", { name: "hello", arguments: { operationId: "op-9" } }));
     expect(response.status).toBe(403);
     expect(events).toEqual([expect.objectContaining({
-      surface: "staff", callerId: "member-1", clientId: "claude", credential: "oauth", tool: "hello", outcome: "INSUFFICIENT_ROLE",
+      surface: "staff", callerId: "member-1", clientId: "claude", credential: "oauth", tool: "hello", operationId: "op-9", outcome: "INSUFFICIENT_ROLE",
     })]);
+  });
+
+  it("reads a denied body through the 1 MiB bounded reader, so an unauthenticated caller cannot make the Worker buffer more", async () => {
+    events.length = 0;
+    // A chunked body with no trustworthy Content-Length: 2 MiB in 64 KiB pieces.
+    const chunk = new TextEncoder().encode(" ".repeat(64 * 1024));
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled === 32) return controller.close();
+        pulled++;
+        controller.enqueue(chunk);
+      },
+    });
+    const request = new Request("https://example.test/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json", "mcp-protocol-version": "2025-11-25", authorization: "Bearer garbage" },
+      body,
+      // @ts-expect-error duplex is required by undici for streamed bodies
+      duplex: "half",
+    });
+    const response = await run(pub, request);
+    expect(response.status).toBe(401);
+    expect(events).toEqual([]);
+    // The reader stopped at the limit instead of draining the producer.
+    expect(pulled).toBeLessThan(32);
   });
 
   it("records an invalid token and an insufficient scope", async () => {

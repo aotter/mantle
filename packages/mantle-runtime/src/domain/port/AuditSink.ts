@@ -13,6 +13,10 @@ export interface McpToolCallAuditEvent {
   readonly clientId: string | null;
   readonly credential: CredentialKind | null;
   readonly tool: string;
+  /** The call's idempotency key when the tool declares one
+   *  (`x-mcp-hint: idempotency-key`, conventionally `operationId`), else the
+   *  `operationId` argument if present. Correlates retries of one mutation. */
+  readonly operationId: string | null;
   /** `ok`, a runtime Diagnostic code, `UNKNOWN_TOOL`, `INVALID_PARAMS`, `INTERNAL`, or an
    *  adapter gate denial in the same UPPER_SNAKE vocabulary
    *  (`UNAUTHENTICATED`, `INVALID_TOKEN`, `INVALID_DPOP_PROOF`, `INSUFFICIENT_SCOPE`,

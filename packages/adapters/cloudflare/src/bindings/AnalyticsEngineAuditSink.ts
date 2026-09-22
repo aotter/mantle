@@ -1,7 +1,7 @@
 import type { AuditSink, McpToolCallAuditEvent } from "@aotter/mantle-runtime";
 
 /** Column order of one data point. Documented in the handbook so SQL API
- *  readers can name `blob1…blob6` / `double1…double2`; change both together. */
+ *  readers can name `blob1…blob7` / `double1…double2`; change both together. */
 export const ANALYTICS_ENGINE_AUDIT_BLOBS = [
   "surface",
   "callerId",
@@ -9,6 +9,7 @@ export const ANALYTICS_ENGINE_AUDIT_BLOBS = [
   "credential",
   "tool",
   "outcome",
+  "operationId",
 ] as const satisfies ReadonlyArray<keyof McpToolCallAuditEvent>;
 export const ANALYTICS_ENGINE_AUDIT_DOUBLES = ["at", "durationMs"] as const satisfies ReadonlyArray<
   keyof McpToolCallAuditEvent

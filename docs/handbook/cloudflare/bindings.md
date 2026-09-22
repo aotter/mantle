@@ -131,14 +131,18 @@ origin, the only column Analytics Engine filters cheaply. Columns, in order:
 | Column | Field |
 |---|---|
 | `index1` | the configured `index` |
-| `blob1` … `blob6` | `surface`, `callerId`, `clientId`, `credential`, `tool`, `outcome` |
+| `blob1` … `blob7` | `surface`, `callerId`, `clientId`, `credential`, `tool`, `outcome`, `operationId` |
 | `double1`, `double2` | `at` (epoch ms), `durationMs` |
 
 `outcome` is `ok`, a runtime Diagnostic code such as `UNAUTHENTICATED` or
 `AUTH_DENIED`, `UNKNOWN_TOOL`, `INVALID_PARAMS`, `INTERNAL`, or a transport gate denial
 (`INVALID_TOKEN`, `INSUFFICIENT_SCOPE`, `INSUFFICIENT_ROLE`, `CROSS_ORIGIN`): a
 `tools/call` refused before it reaches the dispatcher is recorded too, with
-whatever identity the gate established. Read it with the
+whatever identity the gate established; its body goes through the same 1 MiB
+bounded reader as an admitted call. `operationId` is the call's idempotency
+key when the tool declares one (`x-mcp-hint: idempotency-key`), else the
+`operationId` argument, else empty; it correlates retries of one mutation.
+Read it with the
 [SQL API](https://developers.cloudflare.com/analytics/analytics-engine/sql-api/):
 
 ```sql

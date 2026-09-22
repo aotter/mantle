@@ -1,6 +1,7 @@
 import {
   McpJsonRpcDispatcher,
   projectCallableCapabilities,
+  readJsonBody,
 } from "@aotter/mantle-runtime";
 import { DPOP_SIGNING_ALGORITHMS } from "better-auth/oauth2";
 import type { MantleRuntimeRef } from "./bootRuntimeOnce.js";
@@ -203,11 +204,18 @@ function auditDenial(
 ): void {
   if (!audit) return;
   const at = Date.now();
-  const settled = request.clone().json()
+  // The same 1 MiB bounded reader the dispatcher uses: an unauthenticated
+  // caller must not be able to make the Worker buffer an unbounded body just
+  // because auditing is on. Oversized or malformed bodies leave no record.
+  const settled = readJsonBody(request.clone())
     .catch(() => null)
     .then((body: unknown) => {
-      const message = body as { method?: unknown; params?: { name?: unknown } } | null;
+      const message = body as {
+        method?: unknown;
+        params?: { name?: unknown; arguments?: { operationId?: unknown } };
+      } | null;
       if (!message || message.method !== "tools/call" || typeof message.params?.name !== "string") return;
+      const operationId = message.params.arguments?.operationId;
       return audit.record({
         at,
         surface,
@@ -215,6 +223,7 @@ function auditDenial(
         clientId: ctx?.auth?.clientId ?? null,
         credential: ctx?.auth?.credential ?? null,
         tool: message.params.name,
+        operationId: typeof operationId === "string" ? operationId : null,
         outcome: reason.toUpperCase().replaceAll("-", "_"),
         durationMs: Date.now() - at,
       });

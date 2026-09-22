@@ -1260,7 +1260,7 @@ describe("McpJsonRpcDispatcher — tools/call audit sink", () => {
     const deferred: Promise<unknown>[] = [];
     const ctx: HandlerContext = { ...mcpContext("u1", null, { clientId: "claude" }), waitUntil: (p) => { deferred.push(p); } };
 
-    const ok = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "query_view_recent_posts", arguments: {} }), ctx);
+    const ok = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "query_view_recent_posts", arguments: { operationId: "op-1" } }), ctx);
     fail = true;
     const denied = await dispatcher.dispatch(jsonRpcReq("tools/call", { name: "query_view_recent_posts", arguments: {} }), ctx);
     expect(ok.status).toBe(200);
@@ -1271,8 +1271,8 @@ describe("McpJsonRpcDispatcher — tools/call audit sink", () => {
     release();
     await Promise.all(deferred);
     expect(events).toEqual([
-      expect.objectContaining({ surface: "public", callerId: "u1", clientId: "claude", credential: "oauth", tool: "query_view_recent_posts", outcome: "ok" }),
-      expect.objectContaining({ tool: "query_view_recent_posts", outcome: "UNAUTHENTICATED" }),
+      expect.objectContaining({ surface: "public", callerId: "u1", clientId: "claude", credential: "oauth", tool: "query_view_recent_posts", operationId: "op-1", outcome: "ok" }),
+      expect.objectContaining({ tool: "query_view_recent_posts", operationId: null, outcome: "UNAUTHENTICATED" }),
     ]);
     for (const event of events as { at: number; durationMs: number }[]) {
       expect(event.at).toBeGreaterThan(0);

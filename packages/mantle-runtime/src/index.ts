@@ -128,7 +128,7 @@ export {
   type MantleRequestHandlerOptions,
 } from "./infrastructure/http/createMantleRequestHandler.js";
 export type { Clock } from "./domain/port/Clock.js";
-export { MAX_JSON_BODY_BYTES } from "./infrastructure/http/readJsonBody.js";
+export { JsonBodyTooLargeError, MAX_JSON_BODY_BYTES, readJsonBody } from "./infrastructure/http/readJsonBody.js";
 export type {
   SiteConfigRepository,
   LocalePolicyReader,
