@@ -24,10 +24,10 @@ export async function bootFingerprint(input: {
 export async function isBootCurrent(db: DatabaseDriver, fingerprint: string): Promise<boolean> {
   try {
     const row = await db
-      .prepare("SELECT fingerprint FROM _mantle_boot_state WHERE id = ? LIMIT 1")
+      .prepare("SELECT fingerprint, store_instance_id FROM _mantle_boot_state WHERE id = ? LIMIT 1")
       .bind(BOOT_STATE_ID)
-      .first<{ fingerprint: string }>();
-    return row?.fingerprint === fingerprint;
+      .first<{ fingerprint: string; store_instance_id: string | null }>();
+    return row?.fingerprint === fingerprint && Boolean(row.store_instance_id);
   } catch {
     // First boot and pre-alpha.5 databases do not have the marker table yet.
     return false;
@@ -37,9 +37,20 @@ export async function isBootCurrent(db: DatabaseDriver, fingerprint: string): Pr
 export async function markBootCurrent(db: DatabaseDriver, fingerprint: string): Promise<void> {
   await db
     .prepare(
-      "INSERT INTO _mantle_boot_state (id, fingerprint) VALUES (?, ?) " +
-        "ON CONFLICT(id) DO UPDATE SET fingerprint = excluded.fingerprint",
+      "INSERT INTO _mantle_boot_state (id, fingerprint, store_instance_id) VALUES (?, ?, ?) " +
+        "ON CONFLICT(id) DO UPDATE SET fingerprint = excluded.fingerprint, " +
+        "store_instance_id = COALESCE(_mantle_boot_state.store_instance_id, excluded.store_instance_id)",
     )
-    .bind(BOOT_STATE_ID, fingerprint)
+    .bind(BOOT_STATE_ID, fingerprint, crypto.randomUUID())
     .run();
+}
+
+/** Identity minted by the store itself; derivative caches use it as a namespace. */
+export async function readStoreInstanceId(db: DatabaseDriver): Promise<string> {
+  const row = await db
+    .prepare("SELECT store_instance_id FROM _mantle_boot_state WHERE id = ? LIMIT 1")
+    .bind(BOOT_STATE_ID)
+    .first<{ store_instance_id: string | null }>();
+  if (!row?.store_instance_id) throw new Error("Mantle storage must be prepared before using derivative storage.");
+  return row.store_instance_id;
 }

@@ -280,4 +280,9 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
       );
     `,
   },
+  {
+    id: "0005-store-instance-id",
+    description: "Bind derivative storage keys to one physical store instance",
+    sql: "ALTER TABLE _mantle_boot_state ADD COLUMN store_instance_id TEXT;",
+  },
 ];

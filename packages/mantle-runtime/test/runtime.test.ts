@@ -57,7 +57,7 @@ describe("SQLite runtime composition", () => {
 
     expect(db.executions.slice(firstBootQueries).map(({ sql }) => sql)).toEqual([
       "SELECT name FROM sqlite_schema WHERE type = 'table' AND lower(name) = 'entries' LIMIT 1",
-      "SELECT fingerprint FROM _mantle_boot_state WHERE id = ? LIMIT 1",
+      "SELECT fingerprint, store_instance_id FROM _mantle_boot_state WHERE id = ? LIMIT 1",
     ]);
   });
 

@@ -38,7 +38,7 @@ import {
   type OAuthConsentInfo,
   type OAuthConsentRequest,
 } from "@aotter/mantle-admin";
-import type { DatabaseDriver, EmailSender } from "@aotter/mantle-runtime";
+import { readStoreInstanceId, type DatabaseDriver, type EmailSender } from "@aotter/mantle-runtime";
 import { signInCodeEmail, signInLinkEmail, staffInvitationEmail } from "./emailTemplates.js";
 import { STAFF_ROLES, type StaffRole } from "@aotter/mantle-spec";
 
@@ -296,6 +296,8 @@ export interface CreateMantleAuthOptions {
   /** Mantle's port over that same store. Carries this package's own SQL and the
    * Better Auth schema migration. */
   readonly driver: DatabaseDriver;
+  /** Optional derivative session storage. The Mantle store must be prepared
+   * before cached Auth operations so keys can bind to its instance identity. */
   readonly sessionCache?: AuthSessionCache;
   readonly baseURL: string;
   /** Better Auth route prefix. Defaults to `/api/auth`. Set this when
@@ -1022,20 +1024,26 @@ function buildAuth(config: CreateMantleAuthOptions) {
   };
 
   const sessionCache = config.sessionCache;
+  let storeInstanceId: Promise<string> | undefined;
+  const cacheKey = async (key: string): Promise<string> => {
+    storeInstanceId ??= readStoreInstanceId(config.driver)
+      .catch((error) => { storeInstanceId = undefined; throw error; });
+    return `better-auth:${await storeInstanceId}:${key}`;
+  };
   const secondaryStorage = sessionCache ? {
-    get: (key: string) => key.startsWith("verification:")
+    get: async (key: string) => key.startsWith("verification:")
       ? Promise.resolve(null)
-      : sessionCache.get(`better-auth:${key}`),
-    set: (key: string, value: string, ttl?: number) => key.startsWith("verification:")
+      : sessionCache.get(await cacheKey(key)),
+    set: async (key: string, value: string, ttl?: number) => key.startsWith("verification:")
       ? Promise.resolve()
       : sessionCache.set(
-          `better-auth:${key}`,
+          await cacheKey(key),
           value,
           ttl ? Math.max(60, Math.ceil(ttl)) : undefined,
         ),
-    delete: (key: string) => key.startsWith("verification:")
+    delete: async (key: string) => key.startsWith("verification:")
       ? Promise.resolve()
-      : sessionCache.delete(`better-auth:${key}`),
+      : sessionCache.delete(await cacheKey(key)),
     // Verification and rate limiting stay in the primary store / memory below. Fail loudly if
     // Better Auth starts routing either atomic operation through this adapter.
     getAndDelete: async () => { throw new Error("Better Auth KV getAndDelete is disabled"); },
@@ -1428,9 +1436,7 @@ export function createMantleAuth(config: CreateMantleAuthOptions): MantleAuth {
             ...session,
             user: {
               ...session.user,
-              // Secondary storage can outlive or be shared across a store replacement.
-              // Its user snapshot is therefore not authoritative for staff access.
-              ...(!config.sessionCache && Object.hasOwn(session.user, "role")
+              ...(Object.hasOwn(session.user, "role")
                 ? { roleCurrent: true as const }
                 : {}),
             },
