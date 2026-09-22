@@ -1,6 +1,6 @@
 # ADR-0024: Materialize each Schema as a native storage table
 
-**Status:** Accepted
+**Status:** Accepted; the clauses allowing authored data to use `id`, `status` or `createdAt` are superseded by [ADR-0025](0025-reserved-native-columns-and-published-only-public-views.md) (2026-09-22)
 
 **Date:** 2026-09-18
 
@@ -58,9 +58,11 @@ identifier quoted. A Schema table uses its authored Schema name. SQLite
 preparation rejects collisions with selected infrastructure tables or views,
 including auth tables; this check belongs to the concrete deployment because
 the portable Manifest cannot know which optional infrastructure a host binds.
-Internal Mantle tables and columns use the reserved `_mantle_` prefix. The
-prefix prevents Mantle metadata from stealing ordinary authored names such as
-`id`, `status`, or `createdAt`.
+Internal Mantle tables and columns use the reserved `_mantle_` prefix, so
+Mantle metadata never collides with authored column names. *Superseded in
+part by ADR-0025:* authored data may no longer use the six native column
+names (`id`, `status`, `version`, `createdAt`, `updatedAt`, `authorId`); the
+prefix remains for every other authored name.
 
 The SQLite adapter no longer creates `entries`, generated field columns, or
 Schema projection views. There is no dual write, compatibility view, or
@@ -247,8 +249,9 @@ Reviewed after implementation against ADR-0019, the semantic storage ports,
 Builder preview persistence, and Mantle Cloud's retryable deployment state.
 The review found and corrected three boundary mistakes before acceptance:
 
-- authored data may legitimately contain `id`, `status`, or `createdAt`, so
-  physical envelope columns require the `_mantle_` prefix;
+- authored data was allowed to contain `id`, `status`, or `createdAt`, so
+  physical envelope columns require the `_mantle_` prefix (the prefix stays;
+  ADR-0025 later reserved those names for authored data as well);
 - Builder should expose draft storage risk without pretending it knows the
   deployed baseline; Cloud shows the exact immutable artifact, while CI and
   Cloud/D1 own executable DDL verification and preview stays on IndexedDB;

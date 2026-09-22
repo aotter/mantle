@@ -6,6 +6,8 @@ import {
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  RUNTIME_PLAN_VERSION,
+  semanticFingerprint,
   compileRuntimePlan,
   sealRuntimePlan,
   type RuntimePlan,
@@ -20,6 +22,22 @@ describe("compileRuntimePlan", () => {
     );
 
     expect(compile(parse(source, "ignored/source.yaml"))).toMatchSnapshot();
+  });
+
+  it("refuses a generated plan from an older runtime version instead of running stale semantics (#1012 review)", () => {
+    const source = readFileSync(
+      new URL("../../mantle-spec/test/fixtures/pipeline-v0.1/valid.yaml", import.meta.url),
+      "utf8",
+    );
+    const current = compile(parse(source, "ignored/source.yaml"));
+    expect(current.version).toBe(RUNTIME_PLAN_VERSION);
+    // A v1 artifact whose fingerprint was valid for v1 semantics (no injected
+    // published-only predicate, no reserved-name check) must not seal.
+    const { semanticFingerprint: _declared, ...semantics } = { ...current, version: 1 };
+    const stale = { ...semantics, semanticFingerprint: semanticFingerprint(semantics) };
+    expect(() => sealRuntimePlan(stale as unknown as Parameters<typeof sealRuntimePlan>[0]))
+      .toThrow(/version 1 but this runtime requires version 2; run `mantle generate` again/);
+    expect(() => sealRuntimePlan(current)).not.toThrow();
   });
 
   it("has a stable semantic fingerprint across formatting and source identity", () => {
@@ -59,7 +77,7 @@ spec:
   it("compiles resolved lookups, auth, routes, MCP, lifecycle, and logical Views once", () => {
     const plan = compile(parse(richManifest));
 
-    expect(plan.version).toBe(1);
+    expect(plan.version).toBe(RUNTIME_PLAN_VERSION);
     expect(Object.keys(plan.schemas)).toEqual(["posts"]);
     expect(plan.procedures["write"]?.guard).toBe("authorize");
     expect(plan.procedures["write"]?.builtinSchema).toBe("posts");
