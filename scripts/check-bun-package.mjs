@@ -74,7 +74,7 @@ import { compileRuntimePlan } from "@aotter/mantle-runtime";
 import { createBunMantle } from "@aotter/mantle-bun";
 
 const fingerprintPlan = compile(${JSON.stringify(fingerprintFixture)});
-if (fingerprintPlan.semanticFingerprint !== "fnv1a64:38f4e5d9cf49b5c8") {
+if (fingerprintPlan.semanticFingerprint !== "fnv1a64:fafc0e7fca1393f6") {
   throw new Error("semantic fingerprint drifted");
 }
 const plan = compile(${JSON.stringify(runtimeFixture)});

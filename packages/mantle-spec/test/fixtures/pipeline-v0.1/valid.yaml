@@ -8,11 +8,11 @@ spec:
   title: Orders
   schema:
     type: object
-    required: [customerId, status]
+    required: [customerId, orderStatus]
     properties:
       customerId: &identifier { type: string, minLength: 1 }
       externalId: *identifier
-      status: { type: string, enum: [open, closed] }
+      orderStatus: { type: string, enum: [open, closed] }
       createdAt: { type: number, x-mantle-bind: now }
   indexes: [[customerId]]
 ---
@@ -25,7 +25,7 @@ metadata:
 spec:
   surface: public
   from: orders
-  fields: [id, customerId, status, createdAt]
+  fields: [id, customerId, orderStatus, createdAt]
   params:
     type: object
     required: [customerId]
@@ -34,7 +34,7 @@ spec:
   filter:
     and:
       - eq: { field: customerId, value: { $param: customerId } }
-      - eq: { field: status, value: open }
+      - eq: { field: orderStatus, value: open }
   orderBy: [{ field: createdAt, direction: desc }]
   limit: 20
   requires:

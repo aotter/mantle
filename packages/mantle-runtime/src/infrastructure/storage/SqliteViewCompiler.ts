@@ -82,7 +82,7 @@ export function compileView(
   options: CompileViewOptions = {},
   schema?: SchemaManifest,
 ): CompiledView {
-  return prepareSqliteView(compileLogicalView(view), view.metadata.name, schema).bind(options);
+  return prepareSqliteView(compileLogicalView(view, schema), view.metadata.name, schema).bind(options);
 }
 
 /** Lower one logical View into a reusable SQLite query binder. */

@@ -206,6 +206,8 @@ Admin applies search and filters before pagination, rejecting a search term or f
 | `public` | `GET /api/views/<name>`, plus a catalog at `GET /api/views` | `query_view_<segment>` on `/mcp` | Also mounted at `GET /admin/api/views/<name>` and `/export` behind the staff gate |
 | `staff` | `GET /admin/api/views/<name>` and `/admin/api/views/<name>/export` — not mounted publicly | `query_view_<segment>` on `/mcp/staff` | Report sidebar |
 
+A `public` declarative View over a `publishing` Schema reads **published rows only**, on every transport. The runtime adds `status = published` to the compiled query whether or not the filter spells it out; writing it is allowed and redundant, and comparing `status` to any other value is rejected at validate time (`VIEW_PUBLIC_STATUS_INVALID`). Staff Views see every status. `operational` Schemas create rows as `published`, so nothing is added. SQL Views (`spec.sql`) are the author's own statement and receive no injected predicate.
+
 `<segment>` is `metadata.name` lower-cased with `-` replaced by `_`. Two Views that mangle to the same segment collide with `MCP_TOOL_NAME_COLLISION`. Admin also serves the manifest listing `GET /admin/api/views-manifest`. Surface choice is visibility, not authorization: `requires` still gates every call on both transports. See [Surfaces](./surface.md) and [MCP and agents](../concepts/mcp-and-agents.md).
 
 The MCP `inputSchema` is `params.properties` plus `page` and `show` as optional numbers, carrying `params.required` through unchanged; the tool is annotated `readOnlyHint: true`.

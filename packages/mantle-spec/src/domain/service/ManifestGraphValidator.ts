@@ -235,6 +235,31 @@ function checkViewRefs(
       message: `View '${v.metadata.name}' cannot cache operational Schema '${fromName}'.`,
     }));
   }
+  const publicPublishing = v.spec.surface === "public"
+    && (schema.spec.lifecycle ?? "publishing") === "publishing";
+  if (publicPublishing && Object.hasOwn(schema.spec.schema.properties ?? {}, "status")) {
+    out.push(validateDiagnostic({
+      code: "VIEW_PUBLIC_STATUS_INVALID",
+      severity: "error",
+      path: manifestPath("View", v.metadata.name, "/spec/from", filePaths),
+      value: fromName,
+      expected: "a publishing Schema whose data properties do not shadow the native status column",
+      message: `View '${v.metadata.name}' is public over publishing Schema '${fromName}', which declares a data property named 'status'; the runtime cannot restrict this View to published rows. Rename the property (for example 'orderStatus').`,
+    }));
+  } else if (publicPublishing && v.spec.filter) {
+    // The runtime injects `status = published` into this View's plan (#1007);
+    // any other status comparison can only contradict it and return nothing.
+    for (const found of collectStatusComparisons(v.spec.filter, "/spec/filter")) {
+      out.push(validateDiagnostic({
+        code: "VIEW_PUBLIC_STATUS_INVALID",
+        severity: "error",
+        path: manifestPath("View", v.metadata.name, found.pointer, filePaths),
+        value: found.value,
+        expected: "eq status published, or no status comparison at all",
+        message: `View '${v.metadata.name}' is public over publishing Schema '${fromName}'; it always reads published rows only, so its status filter must be 'eq published' or omitted.`,
+      }));
+    }
+  }
   if (v.spec.cache && v.spec.filter && collectCtxUserFilters(v.spec.filter, "/spec/filter").length > 0) {
     out.push(validateDiagnostic({
       code: "VIEW_CACHE_INVALID",
@@ -445,6 +470,22 @@ function checkFilterFields(
     );
   }
   return [];
+}
+
+/** Status comparisons other than `eq status published`, with their JSON pointers. */
+function collectStatusComparisons(
+  node: FilterAst,
+  pointer: string,
+): Array<{ readonly pointer: string; readonly value: unknown }> {
+  const comparison = getFilterComparison(node);
+  if (comparison) {
+    if (comparison.node.field !== "status") return [];
+    if (comparison.op === "eq" && comparison.node.value === "published") return [];
+    return [{ pointer: `${pointer}/${comparison.op}/value`, value: comparison.node.value }];
+  }
+  const children = "and" in node ? node.and : "or" in node ? node.or : [];
+  const key = "and" in node ? "and" : "or";
+  return children.flatMap((child, index) => collectStatusComparisons(child, `${pointer}/${key}/${index}`));
 }
 
 function getFilterComparison(

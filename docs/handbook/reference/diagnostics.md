@@ -64,6 +64,7 @@ Raised by the parser, the graph validator and the code generator. `mantle valida
 | `VIEW_FILTER_CTX_USER_REF_REQUIRES_INDEX` | The bound field is not the leftmost field of a declared index. | — |
 | `VIEW_ORDERBY_INVALID` | An `orderBy` entry has the wrong shape or an unknown `direction`. | — |
 | `VIEW_UI_INVALID` | A View `uiSchema` key is unknown, used on a public View, or names an unknown output field. | — |
+| `VIEW_PUBLIC_STATUS_INVALID` | A public View over a `publishing` Schema compares `status` to anything but `published`. The runtime always reads published rows only on that surface, so the filter can only contradict it. | — |
 | `REQUIRED_FIELD_UNKNOWN` | A `required` entry of `spec.schema` is not declared under `properties`. | — |
 | `INVALID_PATTERN` | A `pattern` does not compile as a JavaScript regular expression. | — |
 | `JSON_SCHEMA_UNSUPPORTED` | A JSON Schema keyword outside the accepted subset. | — |

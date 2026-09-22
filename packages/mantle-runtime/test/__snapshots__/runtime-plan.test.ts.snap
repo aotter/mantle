@@ -152,7 +152,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
                 "minLength": 1,
                 "type": "string",
               },
-              "status": {
+              "orderStatus": {
                 "enum": [
                   "open",
                   "closed",
@@ -162,7 +162,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
             },
             "required": [
               "customerId",
-              "status",
+              "orderStatus",
             ],
             "type": "object",
           },
@@ -174,7 +174,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
       "name": "orders",
     },
   },
-  "semanticFingerprint": "fnv1a64:38f4e5d9cf49b5c8",
+  "semanticFingerprint": "fnv1a64:fafc0e7fca1393f6",
   "triggers": {
     "order-created": {
       "lifecycleSchema": "orders",
@@ -263,7 +263,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
           "fields": [
             "id",
             "customerId",
-            "status",
+            "orderStatus",
             "createdAt",
           ],
           "filter": {
@@ -278,7 +278,7 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
               },
               {
                 "eq": {
-                  "field": "status",
+                  "field": "orderStatus",
                   "value": "open",
                 },
               },
@@ -322,24 +322,34 @@ exports[`compileRuntimePlan > snapshots the #662 characterization corpus 1`] = `
         "fields": [
           "id",
           "customerId",
-          "status",
+          "orderStatus",
           "createdAt",
         ],
         "filter": {
           "and": [
             {
               "eq": {
-                "field": "customerId",
-                "value": {
-                  "$param": "customerId",
-                },
+                "field": "status",
+                "value": "published",
               },
             },
             {
-              "eq": {
-                "field": "status",
-                "value": "open",
-              },
+              "and": [
+                {
+                  "eq": {
+                    "field": "customerId",
+                    "value": {
+                      "$param": "customerId",
+                    },
+                  },
+                },
+                {
+                  "eq": {
+                    "field": "orderStatus",
+                    "value": "open",
+                  },
+                },
+              ],
             },
           ],
         },
