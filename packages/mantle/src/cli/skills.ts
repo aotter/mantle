@@ -59,7 +59,7 @@ export async function runSkills(rawArgs: readonly string[]): Promise<number> {
       stderr.write("Mantle skills are stale; run `mantle skills`.\n");
       return 1;
     }
-    if (!check) stdout.write(`Mantle skills projected: ${skills.join(", ")}.\n`);
+    if (!check) stdout.write(`Mantle skills projected: ${skills.join(", ")}.\nRead .agents/skills/mantle-develop/SKILL.md and node_modules/@aotter/mantle/docs/handbook/start/overview.md.\n`);
     return 0;
   } catch (error) {
     stderr.write(`mantle skills: ${message(error)}\n`);

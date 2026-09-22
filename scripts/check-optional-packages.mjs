@@ -128,9 +128,17 @@ try {
   });
   const umbrella = join(temp, "umbrella-core/node_modules/@aotter/mantle");
   for (const doc of [
+    "skills/install/SKILL.md",
+    "skills/develop/SKILL.md",
+    "skills/theme/SKILL.md",
     "docs/direct-authoring.md",
     "docs/transaction-patterns.md",
     "docs/handbook/navigation.json",
+    "docs/handbook/start/overview.md",
+    "docs/handbook/reference/features.md",
+    "docs/handbook/guides/agent-setup.md",
+    "docs/handbook/guides/typed-queries.md",
+    "docs/handbook/guides/admin-ui.md",
     "docs/handbook/start/project-and-cli.md",
     "docs/handbook/start/quickstart-admin.md",
     "docs/handbook/reference/schema.md",
@@ -141,6 +149,18 @@ try {
     "docs/examples/builtin-commerce.md",
   ]) {
     if (!existsSync(join(umbrella, doc))) throw new Error(`Packed authoring reference missing: ${doc}`);
+  }
+  const packedCli = join(umbrella, "dist/cli/main.js");
+  const consumerRoot = join(temp, "umbrella-core");
+  execFileSync(process.execPath, [packedCli, "skills"], { cwd: consumerRoot, stdio: "pipe" });
+  execFileSync(process.execPath, [packedCli, "skills", "--check"], { cwd: consumerRoot, stdio: "pipe" });
+  for (const skill of ["develop", "plugin", "theme", "update"]) {
+    for (const agent of [".agents", ".claude"]) {
+      const projected = readFileSync(join(consumerRoot, agent, "skills", `mantle-${skill}`, "SKILL.md"), "utf8");
+      if (projected !== readFileSync(join(umbrella, "skills", skill, "SKILL.md"), "utf8")) {
+        throw new Error(`Packed skill projection differs: ${agent}/${skill}`);
+      }
+    }
   }
   const adminOtpPkg = JSON.parse(readFileSync(join(umbrella, "docs/examples/host-local-admin-otp/package.json"), "utf8"));
   if (!String(adminOtpPkg.scripts?.dev ?? "").includes("--ip 127.0.0.1")) {

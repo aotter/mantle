@@ -84,6 +84,22 @@ The staff role is re-read from D1 on every protected REST and MCP call; a revoke
 
 MCP tokens are session-bound: signing out of Admin ends MCP access. See [MCP and agents](../concepts/mcp-and-agents.md).
 
+## Session cache and database replacement
+
+When optional session caching is enabled, the cache is derived from the
+canonical store, not a second identity authority. Auth prefixes keys with
+`better-auth:<store-instance-id>:`. Preparing a new store gives it a distinct
+identity, so reusing the same KV namespace after replacing D1 cannot resurrect
+the previous store's cached sessions. Ordinary preparation of the same store
+preserves its identity.
+
+Custom low-level Auth composition must prepare the Mantle store before cached
+Auth operations; do not construct cache keys or seed the identity yourself.
+OTP verification remains in the primary database and rate limiting remains
+isolate-local. Revocation/user-update cache invalidation still follows KV
+propagation; the namespace change is isolation across stores, not a promise of
+instant global invalidation. See the [Auth decision](../../adr/0014-auth-better-auth-and-multi-tenant-mcp.md).
+
 ## Better Auth configuration
 
 `createAuth()` owns the Worker lifecycle, Admin metadata, sender integration,

@@ -97,7 +97,7 @@ Tool names are the mangled `metadata.name`: lower-cased, with `-` replaced by `_
 
 | Tool | Surface | Registered when |
 |---|---|---|
-| `query_view_<segment>` | The View's own `surface` | One per declared View. `annotations.readOnlyHint` is `true`; the input schema is the View's `params.properties` plus `page` and `show`. |
+| `query_view_<segment>` | The View's own `surface` | One per public or staff View; internal Views have no tool. `annotations.readOnlyHint` is `true`; the input schema is the View's `params.properties` plus `page` and `show`. |
 | `<procedure_segment>` | The MCP Trigger's `surface` | One per `mcp` Trigger. `annotations` carry what Core can prove (`readOnlyHint: false` for every builtin handler, `destructiveHint: true` for `op: delete`, `idempotentHint: true` when an input carries `x-mcp-hint: idempotency-key`) plus whatever the Procedure declares under `spec.mcp`; `ref` handlers get nothing inferred beyond the idempotency key. Generic authoring, lifecycle and media tools are `readOnlyHint: false`; `delete_entry` is also `destructiveHint: true`. |
 | `<procedure segment>` | The Trigger's `surface` | One per `Trigger.source.kind: mcp`. A Procedure with no MCP Trigger is not exposed. |
 | `request_publish` | staff | Always. Rejected at call time for an operational Schema. |

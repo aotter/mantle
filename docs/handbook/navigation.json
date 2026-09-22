@@ -4,10 +4,19 @@
     {
       "text": "Start here",
       "items": [
+        { "text": "Handbook overview", "link": "/start/overview" },
         { "text": "Project layout and the CLI loop", "link": "/start/project-and-cli" },
         { "text": "Quickstart: a minimal Worker", "link": "/start/quickstart-worker" },
         { "text": "Quickstart: local Admin (opt-in)", "link": "/start/quickstart-admin" },
         { "text": "When the host is ChatGPT Sites", "link": "/sites/index" }
+      ]
+    },
+    {
+      "text": "Task guides",
+      "items": [
+        { "text": "Agent installation and handoff", "link": "/guides/agent-setup" },
+        { "text": "Typed queries and internal Views", "link": "/guides/typed-queries" },
+        { "text": "Customize Admin from manifests", "link": "/guides/admin-ui" }
       ]
     },
     {
@@ -20,6 +29,21 @@
         { "text": "Authorization", "link": "/concepts/authorization" },
         { "text": "MCP and agents", "link": "/concepts/mcp-and-agents" },
         { "text": "Runtime pipeline and adapters", "link": "/concepts/runtime-and-adapters" }
+      ]
+    },
+    {
+      "text": "Reference",
+      "items": [
+        { "text": "Manifest feature table", "link": "/reference/features" },
+        { "text": "Manifest envelope", "link": "/reference/manifest" },
+        { "text": "Schema", "link": "/reference/schema" },
+        { "text": "View", "link": "/reference/view" },
+        { "text": "Procedure", "link": "/reference/procedure" },
+        { "text": "Trigger", "link": "/reference/trigger" },
+        { "text": "Authorization requirements", "link": "/reference/authorization" },
+        { "text": "Site defaults and site_config", "link": "/reference/site-config" },
+        { "text": "Diagnostic codes", "link": "/reference/diagnostics" },
+        { "text": "HTTP, MCP, CLI and packages", "link": "/reference/surface" }
       ]
     },
     {
@@ -58,20 +82,6 @@
         { "text": "Commerce catalog (builtin)", "link": "/examples/commerce" },
         { "text": "Commerce inventory (DO/Queue)", "link": "/examples/commerce-transaction" },
         { "text": "Guarded API access", "link": "/examples/guarded-api" }
-      ]
-    },
-    {
-      "text": "Reference",
-      "items": [
-        { "text": "Manifest envelope", "link": "/reference/manifest" },
-        { "text": "Schema", "link": "/reference/schema" },
-        { "text": "View", "link": "/reference/view" },
-        { "text": "Procedure", "link": "/reference/procedure" },
-        { "text": "Trigger", "link": "/reference/trigger" },
-        { "text": "Authorization requirements", "link": "/reference/authorization" },
-        { "text": "Site defaults and site_config", "link": "/reference/site-config" },
-        { "text": "Diagnostic codes", "link": "/reference/diagnostics" },
-        { "text": "HTTP, MCP, CLI and packages", "link": "/reference/surface" }
       ]
     },
     {

@@ -75,7 +75,11 @@ codex plugin marketplace add aotter/mantle
 codex plugin add mantle@mantle
 ```
 
-Then follow the install skill to the CLI and handbook. After packages are
+Read the path printed by the installer (for project-local Codex,
+`.agents/skills/install/SKILL.md`). Only the selected brief is installed, not
+the SDK or handbook. After choosing and installing an exact SDK version, read
+`node_modules/@aotter/mantle/skills/install/SKILL.md` and its embedded docs;
+that package supersedes the bootstrap Git-ref instructions. After packages are
 installed, `mantle skills` projects the installed package's own skills into the
 project, and `mantle skills --check` fails on drift.
 

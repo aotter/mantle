@@ -16,6 +16,23 @@ provider configuration. There is no Starter/type picker or `mantle create`.
 Do not use the SDK checkout as the application, copy an old Starter tree, or
 turn `generate` into implicit scaffolding.
 
+## Locate the version-matched instructions
+
+`npx skills add aotter/mantle --skill install` installs this brief, not the SDK,
+a project, or the handbook. Read the path printed by the installer (Codex's
+project-local path is `.agents/skills/install/SKILL.md`); `metadata.sourcePath`
+is repository provenance, not a consumer path. A repository install follows
+the selected Git ref and does not pin an npm release.
+
+After selecting the host and exact version, install `@aotter/mantle` locally
+with the selected optional packages. All `docs/...` paths below then mean
+`node_modules/@aotter/mantle/docs/...`; package skills are under
+`node_modules/@aotter/mantle/skills/`. Read that package's
+`skills/install/SKILL.md` before authoring: it supersedes this bootstrap copy.
+If the user requested a prerelease, resolve that channel explicitly; `latest`
+need not contain prerelease features. Never mix versioned npm code with branch
+docs. No local CLI exists until the package is installed.
+
 ## New application
 
 1. Determine the actual host and required surfaces from the request. Reuse an
@@ -30,8 +47,9 @@ turn `generate` into implicit scaffolding.
    version. Install only the adapter/optional packages the application needs.
    If a global scope registry overrides public npmjs, use a project-owned
    `.npmrc` with `@aotter:registry=https://registry.npmjs.org/`.
-3. Interview the human for host and required surfaces. Do not assume Admin,
-   public HTML or Cloudflare. Scale:
+3. Use the host and surfaces already established in step 1; ask only for
+   information still missing. Read `docs/handbook/start/overview.md` and
+   `docs/handbook/reference/features.md`, then select the matching path:
    - Spec + generate / embed Runtime — `docs/handbook/start/project-and-cli.md`.
    - Adapter without Admin — `docs/examples/host-minimal-worker/`.
    - Opt-in Admin / Dev UI — only when a human needs a console: interview
@@ -108,7 +126,9 @@ a bundle comparison command.
 
 ## Ship and report
 
-When deployment is requested, follow the installed provision skill and the
+When deployment is requested, read
+`node_modules/@aotter/mantle/skills/provision/SKILL.md` (not projected by
+`mantle skills`) and follow that version-matched skill and the
 observed host configuration. Legacy Landing remains a pre-stable product; it
 is not a launch dependency for new Core projects.
 

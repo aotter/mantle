@@ -17,8 +17,10 @@ skill remains the version-matched upgrade workflow, not a replacement CLI.
 1. Inspect git status, package.json, lockfile, actual project scripts and
    installed versions. Preserve unrelated local changes. Read plugin locks
    and legacy `.mantle` metadata if present; they are context, not required.
-2. Select an explicit target release and read its entry in
-   `docs/handbook/releases/index.md` plus that version's GitHub release notes.
+2. Select an explicit target release and read that version's GitHub release
+   notes. Installed docs live under `node_modules/@aotter/mantle/docs/`;
+   `handbook/releases/index.md` is a stable-release index, so a prerelease
+   need not appear there. Do not use the old package's docs as the new API contract.
    Do not resolve new Starter refs or compare the project to a baseline
    template.
 3. Update only selected `@aotter/mantle*` dependencies to the same exact target
@@ -38,6 +40,9 @@ pnpm exec mantle skills
 pnpm exec mantle skills --check
 pnpm exec mantle validate
 ```
+
+Read the refreshed `mantle-develop` skill and the upgraded package's embedded
+docs before continuing application edits.
 
 Start the local application and test its actual routes, including configured
 auth behavior. Review the final source/lockfile/generated diff; unexpected

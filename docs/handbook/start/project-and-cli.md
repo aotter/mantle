@@ -5,7 +5,7 @@ description: The files you own in a Mantle project, every mantle and mantle-harn
 
 This page describes a directly authored Mantle project: which files are yours, what the installed CLI does to them, and the loop you run before every commit. Surfaces are optional — take only what you need. [The minimal Worker](./quickstart-worker.md) is Spec + adapter without Admin. [Local Admin](./quickstart-admin.md) is the opt-in Dev UI path when humans need a console.
 
-Cold start from GitHub or a marketplace host is the install skill, not this page:
+Agents can bootstrap with the install skill; human authors can follow this guide directly. For installation paths and the pinned-package handoff, see [Agent setup](../guides/agent-setup.md):
 
 ```sh
 npx skills add aotter/mantle --skill install
@@ -77,7 +77,7 @@ It does not project skills, update packages, change styling, provision providers
 | `createMantle({ storage, handlers, ports })` | Prepares storage eagerly once and returns the typed binding. No caching or retry. |
 | `bindMantle(runtime)` | The same typed binding over a runtime whose lifecycle the host already owns. |
 
-The binding exposes `mantle.views.<lowerCamelName>()`, `mantle.procedures.<name>(input, ctx)`, `mantle.entries.<collection>.createDraft({ data, authorId })`, typed indexed field reads such as `mantle.entries.<collection>.findManyByDataField({ field, value, limit })`, and the underlying `mantle.runtime`. Generated property names are deterministic lower-camel identifiers; calls keep the authored wire names internally. Details are in [HTTP, MCP, CLI and packages](../reference/surface.md).
+The binding exposes `mantle.views.<lowerCamelName>()`, `mantle.procedures.<name>(input, ctx)`, `mantle.entries.<collection>.createDraft({ data, authorId })`, typed indexed field reads such as `mantle.entries.<collection>.findManyByDataField({ field, value, limit })`, and the underlying `mantle.runtime`. Generated property names are deterministic lower-camel identifiers; calls keep the authored wire names internally. See [Typed queries](../guides/typed-queries.md) for internal Views and entry-reader examples. Details are in [HTTP, MCP, CLI and packages](../reference/surface.md).
 
 ## The daily loop
 

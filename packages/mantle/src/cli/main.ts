@@ -67,7 +67,9 @@ Subcommands:
   emit-openapi   Emit OpenAPI 3.1 from Triggers and Views
 
 Documentation:
-  Handbook:      node_modules/@aotter/mantle/docs/handbook/ (or docs/handbook/)
+  Start:         node_modules/@aotter/mantle/docs/handbook/start/overview.md
+  Features:      node_modules/@aotter/mantle/docs/handbook/reference/features.md
+  Admin UI:      node_modules/@aotter/mantle/docs/handbook/guides/admin-ui.md
   Online:        https://mantle.tools/
   Install skill: npx skills add aotter/mantle --skill install
 `;

@@ -17,8 +17,9 @@ docs govern runtime/API behavior.
 ## First Read
 
 1. `package.json` for the installed `@aotter/mantle*` versions.
-2. `manifests/site.yaml`, the active adapter config (`wrangler.jsonc`), and
-   the Worker entry. Custom Auth lives in that entry's `createAuth` factory.
+2. The manifest directory selected by the project scripts, the actual host
+   entry and adapter config (for example `wrangler.jsonc` on Cloudflare).
+   Read custom Auth construction there when present.
 3. Optional local context: `.mantle/plugins.json`, `.mantle/plugins.lock.json`,
    and `.mantle/recipes/`. Legacy launch/handoff files are context only.
 4. Installed Core docs in `node_modules/@aotter/mantle/docs/`.
@@ -74,6 +75,22 @@ Mantle exposes exactly four declarative atoms:
 Do not invent manifest kinds such as `Form`, `Feature`, `Workflow`, or
 `Membership`. Compose those from the four atoms plus TypeScript only where
 the atoms cannot express the behavior.
+
+## Choose the manifest feature first
+
+Read installed `docs/handbook/reference/features.md` to map the requested
+behavior to fields before adding handlers or a custom UI. For host-only reads,
+`surface: internal` keeps a View out of REST/MCP/Admin while preserving its
+`requires` checks. Read `docs/handbook/guides/typed-queries.md` for generated
+View params/results, indexed entry reads, and their authorization boundary.
+Use `from` for portable typed projections; SQL is for queries needing native
+SQLite and produces `unknown` row types.
+
+For Admin labels, inputs, collection columns/tabs, reports or action buttons,
+read `docs/handbook/guides/admin-ui.md`. Prefer supported Schema/Procedure/View
+metadata and `uiSchema` before custom frontend code. These control the Admin
+console, not the visitor frontend. Regenerate and verify the actual console;
+never edit generated `public/_mantle/admin/` assets.
 
 ## Content Edits
 
