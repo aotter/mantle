@@ -30,27 +30,16 @@ without v. Watch all gates, not only publication:
 3. GitHub Packages mirrors verify the same candidate.
 4. The reference Worker installs exact public packages, generates/types/checks
    successfully and serves its declared HTTP route before channel promotion.
-5. Monotonic channel promotion succeeds for every package. Each promote
-   step then attempts to remove the temporary `mantle-release` dist-tag on
-   npmjs and GitHub Packages when it points at this version. A failed
-   removal warns and continues. The GitHub prerelease or release succeeds.
-   `alpha` / `beta` / `rc` / `latest` are never removed.
+5. Monotonic channel promotion succeeds for every package on `alpha`,
+   `beta`, `rc`, or `latest`. Those are the only official channels and are
+   never removed. `mantle-release` is an internal candidate dist-tag:
+   publish attaches it, promote leaves it pointing at the last published
+   candidate, and consumers must not install it. The GitHub prerelease or
+   release succeeds.
 
 For stable acceptance, give an agent only the version-matched consumer
 instructions and confirm a directly authored application reaches a running
 Worker. No SDK checkout or scaffold command is required.
-
-A leftover `mantle-release` tag from a commit that predates removal is not
-cleared by retrying that commit. Actions `NPM_TOKEN` currently 403s on
-dist-tag DELETE, so the release controller warns and continues. The cleanup
-workflow stays a strict DELETE and is not a release: it deletes only that
-tag, and only when a consumer channel already points at the same version.
-It needs a token that can `rm`; the current Actions token does not. After
-`remove-mantle-release-dist-tag.yml` is on develop:
-
-```sh
-gh workflow run remove-mantle-release-dist-tag --ref develop -f confirm=remove-mantle-release
-```
 
 Transient/partial failures rerun the same controller commit/version. Verify
 existing state, preserve newer channels, and fail on identity disagreement.
@@ -59,6 +48,8 @@ Wrong public artifacts require a new version; never overwrite or force-retag.
 After a controller-only fix lands on the tip, re-dispatch the same version
 from the source branch. Resolve recovers using the existing tag SHA when
 that commit is an ancestor of the tip and package versions still match.
+Tagged recovery skips the Core source check because that tree was already
+released from the immutable tag.
 
 Legacy recovery follows the controller and docs at that version's immutable
 tag, not the current release workflow. No legacy repositories or deployments

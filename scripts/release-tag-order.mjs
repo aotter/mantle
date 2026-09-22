@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync, spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 if (process.argv[2] === "--channels") {
   console.log(releaseChannels(process.argv[3]).join(" "));
@@ -43,60 +43,43 @@ if (process.argv[2] === "--self-test") {
   }
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   assert(pkg.scripts.check.includes("pnpm check:worker-consumer"));
-  assert.match(workflow, /- name: Check Core source\n        run: pnpm check/);
+  assert.match(
+    workflow,
+    /- name: Check Core source\n        if: steps\.ver\.outputs\.tag_exists != 'true'\n        run: pnpm check/,
+  );
+  assert.match(workflow, /CORE_SHA=\$TAG_SHA/);
   assert.doesNotMatch(workflow, /mantle-starters|mantle-landing|RELEASE_FANOUT_TOKEN|deploy_landing/);
-  assert.match(workflow, /run: node scripts\/check-worker-consumer\.mjs --registry "\$VERSION"/);
+  assert.match(workflow, /node scripts\/check-worker-consumer\.mjs --registry "\$VERSION"/);
+  assert.match(
+    workflow,
+    /if \[ "\$TAG_EXISTS" = true \]; then[\s\S]*skipping the public-registry Worker gate/,
+  );
   assert.doesNotMatch(workflow, /continue-on-error:/);
 
   const gate = workflow.indexOf("Verify public-registry Core in the reference Worker");
   const npmPromote = workflow.indexOf("- name: Promote npmjs channel tags");
   const gprPromote = workflow.indexOf("- name: Promote GitHub Packages channel tags");
   const githubRelease = workflow.indexOf("- name: Create GitHub release");
-  const removals = [...workflow.matchAll(/(?:gpr_npm |npm )dist-tag rm[^\n]*/g)];
-  assert.equal(removals.length, 2);
-  assert.match(removals[0][0], /^npm dist-tag rm "\$pkg" mantle-release /);
-  assert.match(removals[1][0], /^gpr_npm dist-tag rm "\$pkg" mantle-release\b/);
-  assert.ok(removals[0].index > npmPromote && removals[0].index < gprPromote);
-  assert.ok(removals[1].index > gprPromote && removals[1].index < githubRelease);
-  assert.ok(workflow.indexOf("dist-tag add", npmPromote) < removals[0].index);
-  assert.ok(workflow.indexOf("dist-tag add", gprPromote) < removals[1].index);
-  assert.equal(workflow.slice(0, gate).includes("dist-tag rm"), false);
+  assert.ok(gate < npmPromote && npmPromote < gprPromote && gprPromote < githubRelease);
   const publishTags = [...workflow.matchAll(/--tag mantle-release/g)];
   assert.equal(publishTags.length, 2);
   assert.ok(publishTags[0].index < gate && publishTags[1].index < gate);
-  const promoteThenDrop = [...workflow.matchAll(
-    /for pkg in \$PKG_NAMES; do\n {12}for channel in \$\(node scripts\/release-tag-order\.mjs --channels "\$VERSION"\); do\n {14}promote "\$pkg" "\$channel"\n {12}done\n {10}done\n {10}for pkg in \$PKG_NAMES; do\n {12}drop_temp_tag "\$pkg"\n {10}done/g,
+  const promoteOnly = [...workflow.matchAll(
+    /for pkg in \$PKG_NAMES; do\n {12}for channel in \$\(node scripts\/release-tag-order\.mjs --channels "\$VERSION"\); do\n {14}promote "\$pkg" "\$channel"\n {12}done\n {10}done/g,
   )];
-  assert.equal(promoteThenDrop.length, 2);
+  assert.equal(promoteOnly.length, 2);
+  assert.ok(promoteOnly[0].index > npmPromote && promoteOnly[0].index < gprPromote);
+  assert.ok(promoteOnly[1].index > gprPromote && promoteOnly[1].index < githubRelease);
   const npmStep = workflow.slice(npmPromote, gprPromote);
   const gprStep = workflow.slice(gprPromote, githubRelease);
-  assert.equal(npmStep.includes("exit 1"), false);
-  assert.equal(gprStep.includes("exit 1"), false);
-  assert.match(npmStep, /::warning::Could not read npmjs dist-tag mantle-release/);
-  assert.match(gprStep, /::warning::Could not read GitHub Packages dist-tag mantle-release/);
-  assert.match(npmStep, /::warning::Could not remove npmjs dist-tag mantle-release/);
-  assert.match(gprStep, /::warning::Could not remove GitHub Packages dist-tag mantle-release/);
-  assert.match(workflow, /Actions NPM_TOKEN currently 403s on dist-tag DELETE/);
-  assert.doesNotMatch(workflow, /npm unpublish|dist-tag rm "\$pkg" (?!mantle-release\b)/);
-  assert.doesNotMatch(workflow, /gh workflow run remove-mantle-release|workflow_call/);
-
-  const cleanup = readFileSync(
-    new URL("../.github/workflows/remove-mantle-release-dist-tag.yml", import.meta.url),
-    "utf8",
+  assert.match(npmStep, /dist-tag add/);
+  assert.match(gprStep, /dist-tag add/);
+  assert.doesNotMatch(workflow, /drop_temp_tag|dist-tag rm|npm unpublish/);
+  assert.doesNotMatch(workflow, /remove-mantle-release|workflow_call/);
+  assert.equal(
+    existsSync(new URL("../.github/workflows/remove-mantle-release-dist-tag.yml", import.meta.url)),
+    false,
   );
-  assert.equal(cleanup.includes("name: remove-mantle-release-dist-tag"), true);
-  assert.match(cleanup, /\[ "\$CONFIRM" = "remove-mantle-release" \]/);
-  assert.ok(cleanup.indexOf('"$CONFIRM" = "remove-mantle-release"') < cleanup.indexOf("dist-tag rm"));
-  assert.match(cleanup, /group: release-controller\n {2}cancel-in-progress: false/);
-  assert.equal(pkgDirs(cleanup).join("\n"), pkgDirs(workflow).join("\n"));
-  assert.equal(pkgDirs(cleanup).length, 11);
-  const cleanupRemovals = [...cleanup.matchAll(/(?:gpr_npm |npm[^\n]* )dist-tag rm[^\n]*/g)];
-  assert.equal(cleanupRemovals.length, 2);
-  assert.match(cleanupRemovals[0][0], /dist-tag rm "\$pkg" mantle-release$/);
-  assert.match(cleanupRemovals[1][0], /gpr_npm dist-tag rm "\$pkg" mantle-release$/);
-  assert.doesNotMatch(cleanup, /dist-tag add|npm publish|npm unpublish|dist-tag rm "\$pkg" (?!mantle-release\b)/);
-  assert.match(cleanup, /before: \$before/);
-  assert.match(cleanup, /after: \$after/);
 
   console.log("release self-test passed");
   process.exit(0);
@@ -122,19 +105,6 @@ function isAncestor(left, right) {
 
 function git(...args) {
   return execFileSync("git", args, { encoding: "utf8" }).trim();
-}
-
-function pkgDirs(source) {
-  const lines = source.split("\n");
-  const start = lines.findIndex((line) => line.includes("PKG_DIRS: >-"));
-  assert(start >= 0, "PKG_DIRS missing");
-  const dirs = [];
-  for (const line of lines.slice(start + 1)) {
-    const match = line.match(/^ {8}(\S+)$/);
-    if (!match) break;
-    dirs.push(match[1]);
-  }
-  return dirs;
 }
 
 function releaseChannels(version) {
