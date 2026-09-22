@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { DatabaseDriver } from "@aotter/mantle-runtime";
 import {
   buildGenericOAuthProviders,
@@ -140,5 +140,47 @@ describe("provider conflict helpers", () => {
         },
       ]),
     ).toThrow(/createMantleAuth:.*conflicts with a registered social provider id/);
+  });
+});
+
+describe("createMantleAuth — oauthProvider.extensions passthrough", () => {
+  const GRANT = "urn:example:grant-type:test";
+  function tokenRequest() {
+    return new Request("https://example.test/api/auth/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: GRANT, assertion: "opaque" }),
+    });
+  }
+  const provider = {
+    loginPage: "/admin/sign-in",
+    consentPage: "/oauth/consent",
+    scopes: ["mcp"],
+  } as const;
+
+  for (const mcpResource of [undefined, "https://example.test/mcp"]) {
+    it(`dispatches an extension grant_type to the adopter's handler (mcpResource=${mcpResource ?? "none"})`, async () => {
+      const grant = vi.fn(async () => ({
+        access_token: "issued-by-extension",
+        token_type: "Bearer" as const,
+        expires_in: 60,
+      }));
+      const auth = createMantleAuth(
+        baseOptions({
+          oauthProvider: { ...provider, mcpResource, extensions: [{ grants: { [GRANT]: grant } }] },
+        }),
+      );
+      const response = await auth.handler(tokenRequest());
+      expect(grant).toHaveBeenCalledTimes(1);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ access_token: "issued-by-extension" });
+    });
+  }
+
+  it("rejects an extension grant_type that no extension declared", async () => {
+    const auth = createMantleAuth(baseOptions({ oauthProvider: provider }));
+    const response = await auth.handler(tokenRequest());
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: "unsupported_grant_type" });
   });
 });

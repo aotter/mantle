@@ -262,6 +262,51 @@ request—DPoP proof binding with database-backed replay protection. It returns
 only `userId`, `clientId`, `credentialId`, and scopes. Opaque tokens are
 rejected; there is no introspection fallback.
 
+## Enterprise-Managed Authorization
+
+MCP's [Enterprise-Managed Authorization](https://modelcontextprotocol.io/extensions/auth/enterprise-managed-authorization)
+extension lets an enterprise IdP decide which employees may reach an MCP
+server. The MCP client exchanges the user's IdP login for an ID-JAG (identity
+assertion authorization grant) and presents it to the server's token endpoint
+as `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`; no consent page
+is shown. Everything after that is an ordinary access token.
+
+Core does not know any issuer or JWKS. The token grant is a
+`@better-auth/oauth-provider` extension supplied by the adopter through
+`oauthProvider.extensions`, appended after Core's own claims extension:
+
+```ts
+import { identityAssertionAuthorizationGrant } from "@aotterclam/id-jag";
+
+const auth = createAuth({
+  // database, baseURL, secret, methods...
+  oauthProvider: {
+    loginPage: "/admin/sign-in",
+    consentPage: "/oauth/consent",
+    scopes: ["mcp", "offline_access"],
+    mcpResource: env.PUBLIC_ORIGIN + "/mcp",
+    extensions: [
+      identityAssertionAuthorizationGrant({
+        issuer: env.ENTERPRISE_IDP_ISSUER,
+        jwksUrl: env.ENTERPRISE_IDP_JWKS_URL,
+        authorizationServer: env.PUBLIC_ORIGIN,
+        resource: env.PUBLIC_ORIGIN + "/mcp",
+        scopes: ["mcp"],
+        fetchJwks: (input, init) => fetch(input, { ...init, redirect: "manual" }),
+      }),
+    ],
+  },
+});
+```
+
+The extension validates the assertion's signature, issuer, audience and
+lifetime, maps its subject to a user, and issues tokens through the provider's
+shared token path, so `verifyOAuthAccessToken`, DPoP and the MCP challenge
+behave exactly as for interactive grants. `@aotterclam/id-jag` is a reference
+implementation, not a Core dependency; any `OAuthProviderExtension` works.
+Extensions may also add client-authentication strategies, discovery metadata
+and additional claims. The same passthrough applies without `mcpResource`.
+
 ## Source
 - [`packages/adapters/cloudflare/README.md`](../../../packages/adapters/cloudflare/README.md)
 - [`packages/adapters/cloudflare/src/auth/conventionalAuth.ts`](../../../packages/adapters/cloudflare/src/auth/conventionalAuth.ts)

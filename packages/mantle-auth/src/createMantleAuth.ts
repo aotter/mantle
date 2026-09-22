@@ -27,7 +27,9 @@ import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import { splitSetCookieHeader } from "better-auth/cookies";
-import { oauthProvider, type Scope } from "@better-auth/oauth-provider";
+import { oauthProvider, type OAuthProviderExtension, type Scope } from "@better-auth/oauth-provider";
+
+export type { OAuthProviderExtension } from "@better-auth/oauth-provider";
 import { mcp } from "@better-auth/mcp";
 import { cimd } from "@better-auth/cimd";
 import {
@@ -204,6 +206,13 @@ export interface OAuthProviderConfig {
    *  resource. Cloudflare deployments must enable
    *  `global_fetch_strictly_public` for CIMD fetches. */
   readonly mcpResource?: string;
+  /** Additional `@better-auth/oauth-provider` extensions (token grants,
+   *  client authentication, metadata, claims). On the `mcpResource` branch
+   *  they follow Core's own claims extension; on the plain provider branch
+   *  they are the whole list. Core never inspects them. This is the seam for MCP
+   *  Enterprise-Managed Authorization: an ID-JAG extension such as
+   *  `@aotterclam/id-jag` plugs in here with the adopter's issuer and JWKS. */
+  readonly extensions?: ReadonlyArray<OAuthProviderExtension>;
   readonly clientPrivileges?: (context: {
     readonly headers: Headers;
     readonly action:
@@ -844,13 +853,21 @@ function buildAuth(config: CreateMantleAuthOptions) {
             ? mcp({
                 ...providerOptions,
                 resource: config.oauthProvider.mcpResource,
-                extensions: [{
-                  claims: {
-                    accessToken: ({ referenceId }) => ({ mantle_consent_id: referenceId ?? null }),
+                extensions: [
+                  {
+                    claims: {
+                      accessToken: ({ referenceId }) => ({ mantle_consent_id: referenceId ?? null }),
+                    },
                   },
-                }],
+                  ...(config.oauthProvider.extensions ?? []),
+                ],
               })
-            : oauthProvider(providerOptions),
+            : oauthProvider({
+                ...providerOptions,
+                ...(config.oauthProvider.extensions
+                  ? { extensions: [...config.oauthProvider.extensions] }
+                  : {}),
+              }),
           ...(config.oauthProvider.mcpResource
             ? [
                 cimd({
