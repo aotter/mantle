@@ -30,9 +30,10 @@ without v. Watch all gates, not only publication:
 3. GitHub Packages mirrors verify the same candidate.
 4. The reference Worker installs exact public packages, generates/types/checks
    successfully and serves its declared HTTP route before channel promotion.
-5. Monotonic channel promotion succeeds. Each promote step then removes the
-   temporary `mantle-release` dist-tag on npmjs and GitHub Packages when it
-   points at this version. The GitHub prerelease or release succeeds.
+5. Monotonic channel promotion succeeds for every package. Each promote
+   step then attempts to remove the temporary `mantle-release` dist-tag on
+   npmjs and GitHub Packages when it points at this version. A failed
+   removal warns and continues. The GitHub prerelease or release succeeds.
    `alpha` / `beta` / `rc` / `latest` are never removed.
 
 For stable acceptance, give an agent only the version-matched consumer
@@ -40,11 +41,12 @@ instructions and confirm a directly authored application reaches a running
 Worker. No SDK checkout or scaffold command is required.
 
 A leftover `mantle-release` tag from a commit that predates removal is not
-cleared by retrying that commit, and a personal npm token can 403 on
-dist-tag DELETE. After `remove-mantle-release-dist-tag.yml` is on develop,
-dispatch it with `confirm=remove-mantle-release`. It is not a release: it
-deletes only that tag, and only when a consumer channel already points at
-the same version.
+cleared by retrying that commit. Actions `NPM_TOKEN` currently 403s on
+dist-tag DELETE, so the release controller warns and continues. The cleanup
+workflow stays a strict DELETE and is not a release: it deletes only that
+tag, and only when a consumer channel already points at the same version.
+It needs a token that can `rm`; the current Actions token does not. After
+`remove-mantle-release-dist-tag.yml` is on develop:
 
 ```sh
 gh workflow run remove-mantle-release-dist-tag --ref develop -f confirm=remove-mantle-release

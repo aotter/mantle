@@ -9,8 +9,11 @@
 # registry/tag/release mutations. No downstream repository is mutated.
 #
 # A release commit that predates the promote-step removal cannot drop
-# mantle-release on retry. That leftover is removed by
-# remove-mantle-release-dist-tag.yml, which is not a release controller.
+# mantle-release on retry. remove-mantle-release-dist-tag.yml is a strict
+# DELETE for that leftover and is not a release controller.
+# Actions NPM_TOKEN currently 403s on dist-tag DELETE. A failed
+# mantle-release rm warns and continues; leftover mantle-release is known
+# until npm token permissions are fixed.
 
 name: release
 
@@ -430,35 +433,48 @@ jobs:
           }
 
           # Publish attaches mantle-release so this step can move the real
-          # channel afterwards. Remove it only once that loop has succeeded,
-          # and only when it still points at this version. A missing tag is a
-          # no-op. Never remove alpha, beta, rc, or latest.
+          # channel afterwards. Promote every package first, then attempt to
+          # remove mantle-release only when it still points at this version.
+          # A missing tag is a no-op. A tag pointing at another version is
+          # left. Never remove alpha, beta, rc, or latest.
+          # Actions NPM_TOKEN currently 403s on dist-tag DELETE. A failed rm
+          # or view warns and continues; leftover mantle-release is known
+          # until npm token permissions are fixed.
+          # remove-mantle-release-dist-tag.yml stays strict.
           drop_temp_tag() {
             pkg="$1"
             view_status=0
             current=$(npm view "$pkg" dist-tags.mantle-release --userconfig "$NPMRC" \
               --registry https://registry.npmjs.org 2>"$RUNNER_TEMP/dist-tag-view.err") || view_status=$?
             if [ "$view_status" != 0 ]; then
-              echo "::error::Could not read npmjs dist-tag mantle-release for $pkg"
-              cat "$RUNNER_TEMP/dist-tag-view.err" >&2
-              exit 1
+              view_err=$(tr '\n' ' ' < "$RUNNER_TEMP/dist-tag-view.err")
+              echo "::warning::Could not read npmjs dist-tag mantle-release for $pkg: ${view_err}"
+              return 0
             fi
             if [ -z "$current" ]; then
               echo "$pkg has no npmjs dist-tag mantle-release; no-op."
-              return
+              return 0
             fi
             if [ "$current" != "$VERSION" ]; then
               echo "$pkg npmjs dist-tag mantle-release points at $current, not $VERSION; leaving it."
-              return
+              return 0
             fi
+            rm_status=0
             npm dist-tag rm "$pkg" mantle-release --userconfig "$NPMRC" \
-              --registry https://registry.npmjs.org
+              --registry https://registry.npmjs.org >"$RUNNER_TEMP/dist-tag-rm.err" 2>&1 || rm_status=$?
+            if [ "$rm_status" != 0 ]; then
+              rm_err=$(tr '\n' ' ' < "$RUNNER_TEMP/dist-tag-rm.err")
+              echo "::warning::Could not remove npmjs dist-tag mantle-release for $pkg: ${rm_err}"
+              return 0
+            fi
           }
 
           for pkg in $PKG_NAMES; do
             for channel in $(node scripts/release-tag-order.mjs --channels "$VERSION"); do
               promote "$pkg" "$channel"
             done
+          done
+          for pkg in $PKG_NAMES; do
             drop_temp_tag "$pkg"
           done
 
@@ -500,32 +516,42 @@ jobs:
             gpr_npm dist-tag add "$pkg@$VERSION" "$tag"
           }
 
-          # Same boundary as npmjs: drop mantle-release only after this
-          # package's channel loop, and only when the tag points at VERSION.
+          # Same boundary as npmjs: drop mantle-release only after every
+          # package's channel promotion, and only when the tag points at
+          # VERSION. A failed rm or view warns and continues. Never remove
+          # alpha, beta, rc, or latest.
           drop_temp_tag() {
             pkg="$1"
             view_status=0
             current=$(gpr_npm view "$pkg" dist-tags.mantle-release 2>"$RUNNER_TEMP/dist-tag-view.err") || view_status=$?
             if [ "$view_status" != 0 ]; then
-              echo "::error::Could not read GitHub Packages dist-tag mantle-release for $pkg"
-              cat "$RUNNER_TEMP/dist-tag-view.err" >&2
-              exit 1
+              view_err=$(tr '\n' ' ' < "$RUNNER_TEMP/dist-tag-view.err")
+              echo "::warning::Could not read GitHub Packages dist-tag mantle-release for $pkg: ${view_err}"
+              return 0
             fi
             if [ -z "$current" ]; then
               echo "$pkg has no GitHub Packages dist-tag mantle-release; no-op."
-              return
+              return 0
             fi
             if [ "$current" != "$VERSION" ]; then
               echo "$pkg GitHub Packages dist-tag mantle-release points at $current, not $VERSION; leaving it."
-              return
+              return 0
             fi
-            gpr_npm dist-tag rm "$pkg" mantle-release
+            rm_status=0
+            gpr_npm dist-tag rm "$pkg" mantle-release >"$RUNNER_TEMP/dist-tag-rm.err" 2>&1 || rm_status=$?
+            if [ "$rm_status" != 0 ]; then
+              rm_err=$(tr '\n' ' ' < "$RUNNER_TEMP/dist-tag-rm.err")
+              echo "::warning::Could not remove GitHub Packages dist-tag mantle-release for $pkg: ${rm_err}"
+              return 0
+            fi
           }
 
           for pkg in $PKG_NAMES; do
             for channel in $(node scripts/release-tag-order.mjs --channels "$VERSION"); do
               promote "$pkg" "$channel"
             done
+          done
+          for pkg in $PKG_NAMES; do
             drop_temp_tag "$pkg"
           done
 
