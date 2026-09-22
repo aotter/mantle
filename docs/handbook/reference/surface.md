@@ -165,7 +165,7 @@ The umbrella installs Spec and Runtime only. Web, Admin, Auth, Admin UI, Bun, Ve
 | `@aotter/mantle-spec` | `/spec` | Manifest grammar, parser, validators, JSON Schema to zod, site-config contract, diagnostic catalog. No environment, no IO. |
 | `@aotter/mantle-runtime` | `/runtime` | Hexagonal runtime: domain ports, use cases, MCP catalog, storage helpers. No adapter dependencies. |
 | — | `/runtime/testing` | Node-only crowded-SQLite planner and HTTP sampling helpers used by `mantle-harness`. |
-| — | `/codegen` | The pure linked-manifests to typed-module emitter, with no IO. |
+| — | `/codegen` | The pure linked-manifests or compiled-plan to typed-module emitter, with no IO. |
 | `@aotter/mantle-web` | `/web` | HTML, Markdown, `llms.txt`, sitemap, SEO and preview composition. No routes, no platform dependencies. |
 | `@aotter/mantle-admin` | `/admin` | Admin API, auth route mounting, OAuth pages, static-asset composition. |
 | `@aotter/mantle-auth` | `/auth` | Host-neutral Better Auth identity, staff roles, and OAuth 2.1 / MCP authorization. Adapters own IP headers and storage bindings. |

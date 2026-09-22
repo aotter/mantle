@@ -35,7 +35,7 @@ subpath. Every sub-package also remains directly installable.
 | `@aotter/mantle/spec` (or root) | Manifest grammar, validators, JSON-Schema→Zod, diagnostic catalog (no env / no IO) |
 | `@aotter/mantle/runtime` | Hexagonal runtime: domain ports, use cases, infrastructure helpers (no adapter deps) |
 | `@aotter/mantle/runtime/testing` | Node-only crowded SQLite planner and HTTP sampling helpers |
-| `@aotter/mantle/codegen` | Pure linked manifests → typed runtime module emitter (no IO) |
+| `@aotter/mantle/codegen` | Pure linked manifests or compiled plan → typed runtime module emitter (no IO) |
 | `@aotter/mantle/web` | Optional HTML, Markdown, `llms.txt`, sitemap, SEO, and preview composition (no routes or platform deps) |
 | `@aotter/mantle/admin` | Optional Admin API, auth routes, and static-asset composition |
 | `@aotter/mantle/auth` | Optional host-neutral Better Auth identity; adapters own IP headers and storage bindings |
@@ -73,7 +73,15 @@ installed, it also syncs the Admin SPA to `public/_mantle/admin/` (excluding
 `server.*` package exports). Core-only installs skip that copy. It performs no
 skill sync, package update, styling, provisioning, or deployment.
 The same pure emitter is available from `@aotter/mantle/codegen` when a host
-wants to own parsing and filesystem IO.
+wants to own parsing and filesystem IO. TypeScript-authored manifests can pass
+their already-compiled `plan` directly:
+
+```ts
+import { emitMantleModule } from "@aotter/mantle/codegen";
+
+const emitted = emitMantleModule({ plan });
+if (!emitted.ok) throw new Error(emitted.diagnostics.map(({ message }) => message).join("\n"));
+```
 
 ```ts
 import { createMantle } from "../.mantle/generated/mantle.js";
