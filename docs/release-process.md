@@ -17,8 +17,8 @@ No task implicitly authorizes publication; no manual package/tag writer exists.
 | Tag exists; registry candidates partial | Existing npm/GPR publication steps | Verify existing artifact identity; publish missing versions only |
 | Tag exists on an ancestor of the dispatched tip; tip package versions still match | Resolve binds release identity to the tag SHA; later steps stay the existing writers | Controller-only recovery. Do not retag. The canonical merged-PR check uses the tag SHA. Fail when the tip version differs or the tag commit is not an ancestor |
 | Registry candidates verified | Public-registry reference consumer gate | No mutation; failure leaves public channels and `mantle-release` unchanged |
-| Consumer passes | That registry's promote step: monotonic channel add for every package, then `dist-tag rm` of `mantle-release` only | Same version is a no-op; older runs cannot move a channel backward. Removal runs only after every package's channel promotion, and only when `mantle-release` points at this version. A missing tag is a no-op. A tag pointing at another version is left for that version's promote step. `alpha` / `beta` / `rc` / `latest` are never removed. A failed `dist-tag rm` or a failed read of `mantle-release` warns and continues, so a 403 cannot abort the remaining channels or the GitHub release |
-| Channels promoted or preserved, and the temp tag cleared or left | GitHub release step | Existing release identity or fail |
+| Consumer passes | That registry's promote step: monotonic channel add for every package | Same version is a no-op; older runs cannot move a channel backward. Public channels are only `alpha`, `beta`, `rc`, and `latest`. `mantle-release` is never removed |
+| Channels promoted or preserved | GitHub release step | Existing release identity or fail. Leftover `mantle-release` pointing at the last published candidate is expected |
 
 The public-registry gate uses a disposable copy of the directly authored
 `docs/examples/host-minimal-worker` reference, installs the exact candidate, then
@@ -40,43 +40,25 @@ foundational blocker returns to the state table and the user for a scope
 decision instead of starting another local redesign loop.
 
 Invariants: immutable versions/tags retain their identity; registry integrity
-and the published-consumer gate precede public channel promotion and any
-removal of `mantle-release` by the release controller; retries cannot move
-channels backward. No downstream mutation, unpublish or rollback is
-introduced. The runnable release-order check guards these transitions.
+and the published-consumer gate precede public channel promotion; retries
+cannot move channels backward. No downstream mutation, unpublish, dist-tag
+removal, or rollback is introduced. The runnable release-order check guards
+these transitions.
 
 Mutation boundaries during a release: `Publish to npmjs` and `Mirror to
-GitHub Packages` may attach `mantle-release` while publishing a version.
-`Promote npmjs channel tags` is the only release step that moves npmjs
-channels or removes that tag for the version being released. `Promote
-GitHub Packages channel tags` is the only release step that does the same
-for GitHub Packages. Recovery of a partial release reruns that same
-controller and version. It does not call the cleanup workflow.
+GitHub Packages` attach the internal candidate dist-tag `mantle-release`
+while publishing a version. `Promote npmjs channel tags` is the only
+release step that moves npmjs public channels. `Promote GitHub Packages
+channel tags` is the only release step that moves GitHub Packages public
+channels. Neither step removes `mantle-release`. Recovery of a partial
+release reruns that same controller and version.
 
-The cleanup workflow is a separate writer for leftover `mantle-release`
-after the consumer channels already point at that version. A release
-commit that predates temp-tag removal leaves the tag behind. Actions
-`NPM_TOKEN` currently 403s on dist-tag DELETE as well, including when
-`npm access` reports read-write. The release controller warns and
-continues. `.github/workflows/remove-mantle-release-dist-tag.yml` stays a
-strict DELETE with that same Actions `NPM_TOKEN` and `GITHUB_TOKEN`, so
-it still fails until the token can `rm`. It is not a release controller
-and not a recovery path.
-
-| State | Sole next writer | Retry / invariant |
-|---|---|---|
-| Leftover `mantle-release` after `alpha`, `beta`, `rc`, or `latest` already points at that version | `remove-mantle-release-dist-tag`, only when `confirm` is `remove-mantle-release` | Missing tag is a no-op. Only `mantle-release` is removed. Before and after dist-tags are printed and compared; every other tag is unchanged |
-| `mantle-release` points at a version no consumer channel has | No deletion | The job fails and leaves the tag. Channel moves stay on the release promote step |
-| Confirm string is anything else | No registry call | The job fails before reading or editing tags |
-
-It shares the `release-controller` concurrency group with
-`cancel-in-progress: false`, so it waits out an in-progress release instead
-of deleting `mantle-release` between publish and channel promotion. After
-this file is on `develop`:
-
-```sh
-gh workflow run remove-mantle-release-dist-tag --ref develop -f confirm=remove-mantle-release
-```
+`mantle-release` is not a public channel. It stays forever as an internal
+candidate tag pointing at the last published candidate. Official channels
+are only `alpha`, `beta`, `rc`, and `latest`. Consumers must not install
+`mantle-release`. Deleting it after promotion is not part of the release:
+dist-tag DELETE only added failure and re-run state, and Actions
+`NPM_TOKEN` 403s on that DELETE.
 
 ## Branches and channels
 
@@ -100,13 +82,13 @@ gh workflow run remove-mantle-release-dist-tag --ref develop -f confirm=remove-m
   approval, resolved threads and a current-base `Typecheck + tests` check.
 - Stable is the only release that moves `latest`. A prerelease channel keeps
   its last version when a later stable publishes.
-- Publish uses `--tag mantle-release`, so publication does not move
-  `alpha`, `beta`, `rc`, or `latest`. After the public-registry consumer
-  gate, each registry's promote step moves every package's real channel,
-  then attempts to remove `mantle-release` when that tag points at this
-  version. Actions `NPM_TOKEN` currently 403s on dist-tag DELETE; that
-  failure is a warning. Leftover `mantle-release` is known until the token
-  can delete tags. `remove-mantle-release-dist-tag.yml` stays strict.
+- Publish uses `--tag mantle-release`. `mantle-release` is an internal
+  candidate dist-tag, not a public channel. Consumers must not install it.
+  Official channels are only `alpha`, `beta`, `rc`, and `latest`.
+  Publication does not move those channels. After the public-registry
+  consumer gate, each registry's promote step moves every package's real
+  channel and leaves `mantle-release` pointing at the last published
+  candidate.
 
 ## Prepare and run
 
@@ -220,9 +202,9 @@ registries. Existing artifacts on retry must have matching integrity.
 
 Completion requires the Core tag SHA, all eleven npmjs/GPR packages, exact
 integrity, no workspace dependencies, a passing public-registry Worker gate,
-correct channel tags, and the GitHub release. A leftover `mantle-release`
-tag is a known warning while Actions `NPM_TOKEN` 403s on DELETE; it does
-not block the release. Retain run links and gate evidence.
+correct channel tags, and the GitHub release. Leftover `mantle-release`
+pointing at the last published candidate is expected. Retain run links and
+gate evidence.
 This does not prove stable production soak or upgrade safety; the version's
 release-gate issue owns those acceptance requirements. An agent acceptance run
 uses only the version-matched authoring instructions, not an SDK checkout or

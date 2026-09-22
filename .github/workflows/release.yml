@@ -3,17 +3,15 @@
 # Manually dispatched from the merged release commit. It owns the order:
 #
 #   source + exact packed consumer -> Core tag -> verified candidate registries ->
-#   public-registry consumer -> public channels, then drop mantle-release -> release
+#   public-registry consumer -> public channels -> release
 #
 # Duplicate dispatches verify the same immutable state and skip existing
 # registry/tag/release mutations. No downstream repository is mutated.
 #
-# A release commit that predates the promote-step removal cannot drop
-# mantle-release on retry. remove-mantle-release-dist-tag.yml is a strict
-# DELETE for that leftover and is not a release controller.
-# Actions NPM_TOKEN currently 403s on dist-tag DELETE. A failed
-# mantle-release rm warns and continues; leftover mantle-release is known
-# until npm token permissions are fixed.
+# Publish attaches the internal candidate dist-tag mantle-release. That tag
+# is an intentional leftover pointing at the last published candidate and is
+# not cleared. Consumers must not install it. Official channels are only
+# alpha, beta, rc, and latest.
 #
 # If v$VERSION already points at an ancestor of the dispatched tip and
 # package versions on the tip still match, Resolve keeps that tag SHA as
@@ -464,50 +462,15 @@ jobs:
               --registry https://registry.npmjs.org
           }
 
-          # Publish attaches mantle-release so this step can move the real
-          # channel afterwards. Promote every package first, then attempt to
-          # remove mantle-release only when it still points at this version.
-          # A missing tag is a no-op. A tag pointing at another version is
-          # left. Never remove alpha, beta, rc, or latest.
-          # Actions NPM_TOKEN currently 403s on dist-tag DELETE. A failed rm
-          # or view warns and continues; leftover mantle-release is known
-          # until npm token permissions are fixed.
-          # remove-mantle-release-dist-tag.yml stays strict.
-          drop_temp_tag() {
-            pkg="$1"
-            view_status=0
-            current=$(npm view "$pkg" dist-tags.mantle-release --userconfig "$NPMRC" \
-              --registry https://registry.npmjs.org 2>"$RUNNER_TEMP/dist-tag-view.err") || view_status=$?
-            if [ "$view_status" != 0 ]; then
-              view_err=$(tr '\n' ' ' < "$RUNNER_TEMP/dist-tag-view.err")
-              echo "::warning::Could not read npmjs dist-tag mantle-release for $pkg: ${view_err}"
-              return 0
-            fi
-            if [ -z "$current" ]; then
-              echo "$pkg has no npmjs dist-tag mantle-release; no-op."
-              return 0
-            fi
-            if [ "$current" != "$VERSION" ]; then
-              echo "$pkg npmjs dist-tag mantle-release points at $current, not $VERSION; leaving it."
-              return 0
-            fi
-            rm_status=0
-            npm dist-tag rm "$pkg" mantle-release --userconfig "$NPMRC" \
-              --registry https://registry.npmjs.org >"$RUNNER_TEMP/dist-tag-rm.err" 2>&1 || rm_status=$?
-            if [ "$rm_status" != 0 ]; then
-              rm_err=$(tr '\n' ' ' < "$RUNNER_TEMP/dist-tag-rm.err")
-              echo "::warning::Could not remove npmjs dist-tag mantle-release for $pkg: ${rm_err}"
-              return 0
-            fi
-          }
+          # Publish attaches mantle-release so publication does not move a
+          # public channel. This step promotes every package onto alpha,
+          # beta, rc, or latest only. mantle-release stays pointed at the
+          # last published candidate.
 
           for pkg in $PKG_NAMES; do
             for channel in $(node scripts/release-tag-order.mjs --channels "$VERSION"); do
               promote "$pkg" "$channel"
             done
-          done
-          for pkg in $PKG_NAMES; do
-            drop_temp_tag "$pkg"
           done
 
       - name: Promote GitHub Packages channel tags
@@ -548,43 +511,14 @@ jobs:
             gpr_npm dist-tag add "$pkg@$VERSION" "$tag"
           }
 
-          # Same boundary as npmjs: drop mantle-release only after every
-          # package's channel promotion, and only when the tag points at
-          # VERSION. A failed rm or view warns and continues. Never remove
-          # alpha, beta, rc, or latest.
-          drop_temp_tag() {
-            pkg="$1"
-            view_status=0
-            current=$(gpr_npm view "$pkg" dist-tags.mantle-release 2>"$RUNNER_TEMP/dist-tag-view.err") || view_status=$?
-            if [ "$view_status" != 0 ]; then
-              view_err=$(tr '\n' ' ' < "$RUNNER_TEMP/dist-tag-view.err")
-              echo "::warning::Could not read GitHub Packages dist-tag mantle-release for $pkg: ${view_err}"
-              return 0
-            fi
-            if [ -z "$current" ]; then
-              echo "$pkg has no GitHub Packages dist-tag mantle-release; no-op."
-              return 0
-            fi
-            if [ "$current" != "$VERSION" ]; then
-              echo "$pkg GitHub Packages dist-tag mantle-release points at $current, not $VERSION; leaving it."
-              return 0
-            fi
-            rm_status=0
-            gpr_npm dist-tag rm "$pkg" mantle-release >"$RUNNER_TEMP/dist-tag-rm.err" 2>&1 || rm_status=$?
-            if [ "$rm_status" != 0 ]; then
-              rm_err=$(tr '\n' ' ' < "$RUNNER_TEMP/dist-tag-rm.err")
-              echo "::warning::Could not remove GitHub Packages dist-tag mantle-release for $pkg: ${rm_err}"
-              return 0
-            fi
-          }
+          # Same boundary as npmjs: promote every package's public channel
+          # only. mantle-release stays pointed at the last published
+          # candidate.
 
           for pkg in $PKG_NAMES; do
             for channel in $(node scripts/release-tag-order.mjs --channels "$VERSION"); do
               promote "$pkg" "$channel"
             done
-          done
-          for pkg in $PKG_NAMES; do
-            drop_temp_tag "$pkg"
           done
 
       - name: Create GitHub release
