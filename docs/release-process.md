@@ -15,6 +15,7 @@ No task implicitly authorizes publication; no manual package/tag writer exists.
 |---|---|---|
 | Reviewed source; unused version | Core source/packed-consumer gates, then immutable Core tag | Exact canonical merged PR SHA and version required |
 | Tag exists; registry candidates partial | Existing npm/GPR publication steps | Verify existing artifact identity; publish missing versions only |
+| Tag exists on an ancestor of the dispatched tip; tip package versions still match | Resolve binds release identity to the tag SHA; later steps stay the existing writers | Controller-only recovery. Do not retag. The canonical merged-PR check uses the tag SHA. Fail when the tip version differs or the tag commit is not an ancestor |
 | Registry candidates verified | Public-registry reference consumer gate | No mutation; failure leaves public channels and `mantle-release` unchanged |
 | Consumer passes | That registry's promote step: monotonic channel add for every package, then `dist-tag rm` of `mantle-release` only | Same version is a no-op; older runs cannot move a channel backward. Removal runs only after every package's channel promotion, and only when `mantle-release` points at this version. A missing tag is a no-op. A tag pointing at another version is left for that version's promote step. `alpha` / `beta` / `rc` / `latest` are never removed. A failed `dist-tag rm` or a failed read of `mantle-release` warns and continues, so a 403 cannot abort the remaining channels or the GitHub release |
 | Channels promoted or preserved, and the temp tag cleared or left | GitHub release step | Existing release identity or fail |
@@ -87,8 +88,10 @@ gh workflow run remove-mantle-release-dist-tag --ref develop -f confirm=remove-m
 | `X.Y.Z` | `main` | `latest` | release |
 
 - The controller derives the source branch from the version: `-alpha` means
-  `develop`, anything else means `main`. It refuses a commit that is not that
-  branch's tip or not the merge commit of exactly one PR into that branch.
+  `develop`, anything else means `main`. An untagged dispatch must be that
+  branch's tip and the merge commit of exactly one PR into that branch.
+  When the version tag already exists on an ancestor of the tip, Resolve
+  recovers from that tag SHA; see Recovery.
   `scripts/release-tag-order.mjs` rejects any other prerelease identifier.
 - `develop` is where every change integrates first, so it is the base for all
   work despite `main` being the repository's default branch on GitHub. `main`
@@ -231,6 +234,12 @@ Rerun the same controller commit/version for a transient or verified partial
 transition. Existing tags/artifacts must match; newer channels stay put. Fail
 on identity disagreement instead of guessing. A wrong public artifact needs
 a new version; never force-retag, overwrite or reuse a published version.
+
+After a controller-only fix lands on the tip, re-dispatch the same version
+from the source branch. Resolve recovers using the existing tag SHA when
+that commit is an ancestor of the tip and package versions on the tip still
+match. The tag owns the release SHA; the tip only carries controller fixes.
+
 Unpublish is reserved for actual secret/private-file exposure, never routine
 fixes. Infrastructure renames require their explicit config diff and live
 smoke; CI alone cannot prove provider identity.
