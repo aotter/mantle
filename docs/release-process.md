@@ -109,6 +109,14 @@ dist-tag DELETE only added failure and re-run state, and Actions
    git grep -n "$OLD" -- ':!pnpm-lock.yaml' ':!**/package-lock.json'
    ```
 
+   Leave the consumer cold-start entry **untagged**: `npx skills add
+   aotter/mantle --skill install`, `/plugin marketplace add aotter/mantle`,
+   `codex plugin marketplace add aotter/mantle` and the plugin-manifest
+   descriptions carry no `@v…` / `--ref`. Untagged resolves to `main`, which
+   only moves at a release, so it is always the latest published version
+   (#995, #998). Only "installed version" statements such as
+   `(currently \`X.Y.Z\`)` are bumped.
+
 3. Review API compatibility and migration instructions for actual consumers.
    Frozen legacy consumers stay on their pinned version; do not make them
    follow new Core.

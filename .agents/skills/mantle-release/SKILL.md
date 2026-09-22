@@ -12,7 +12,8 @@ checkout dependency; the frozen legacy line is never changed by one.
 
 Prepare a same-repository release PR: prove the new version/tag unused,
 preview native release notes and correct PR metadata, align package/plugin
-versions, inspect the packed docs/skills payload, run `pnpm check` and review
+versions (the consumer cold-start commands stay untagged — see
+docs/release-process.md step 2), inspect the packed docs/skills payload, run `pnpm check` and review
 its exact SHA. The reference consumer gate runs from packed packages outside
 workspace links. Merge into develop for every version. Beta, RC and stable
 then follow "Promote to main" in docs/release-process.md: pin

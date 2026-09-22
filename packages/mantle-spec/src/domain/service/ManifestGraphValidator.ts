@@ -247,7 +247,7 @@ function checkViewRefs(
         path: manifestPath("View", v.metadata.name, found.pointer, filePaths),
         value: found.value,
         expected: "eq status published, or no status comparison at all",
-        message: `View '${v.metadata.name}' is public over publishing Schema '${fromName}'; it always reads published rows only, so its status filter must be 'eq published' or omitted.`,
+        message: `View '${v.metadata.name}' is public over publishing Schema '${fromName}'; it always reads published rows only, so its status filter must be 'eq published' or omitted (handbook: reference/view.md#surfaces).`,
       }));
     }
   }

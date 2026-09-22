@@ -22,7 +22,7 @@ A Schema declares one collection: the JSON Schema for each entry's `data`, its i
 
 ### Reserved entry columns
 
-Every entry carries `id`, `status`, `version`, `createdAt`, `updatedAt` and `authorId` as native columns outside `data`. They are valid in View `fields`, `filter`, `orderBy` and `uiSchema.list`, and `indexes` may include them (`uniqueIndexes` may not). A data property may not reuse one of these names: validate fails closed with `INVALID_MANIFEST_ENVELOPE` at `/spec/schema/properties/<name>`, because SQLite-family and IndexedDB storage would otherwise resolve the name differently and an index declared today could change meaning when a same-named property is added later. Use a domain name instead (`submittedAt`, `orderStatus`, `submittedBy`); the native column is still there and still readable. `locale` is a reserved data field: only a localized Schema may declare it, and the runtime requires it on writes to a localized Schema. Do not name data properties after the native columns; SQL Views project the native column. Do not declare `expectedVersion` under `spec.schema.properties` — that name is the reserved Procedure OCC token; validate fails closed with `INVALID_MANIFEST_ENVELOPE` (ADR-0022). New reserved Procedure input names need an ADR.
+Every entry carries `id`, `status`, `version`, `createdAt`, `updatedAt` and `authorId` as native columns outside `data`. They are valid in View `fields`, `filter`, `orderBy` and `uiSchema.list`, and `indexes` may include them (`uniqueIndexes` may not). A data property may not reuse one of these names: validate fails closed with `INVALID_MANIFEST_ENVELOPE` at `/spec/schema/properties/<name>`, because SQLite-family and IndexedDB storage would otherwise resolve the name differently and an index declared today could change meaning when a same-named property is added later. Use a domain name instead (`submittedAt`, `orderStatus`, `submittedBy`); the native column is still there and still readable (ADR-0025). `locale` is a reserved data field: only a localized Schema may declare it, and the runtime requires it on writes to a localized Schema. SQL Views project the native column. Do not declare `expectedVersion` under `spec.schema.properties` — that name is the reserved Procedure OCC token; validate fails closed with `INVALID_MANIFEST_ENVELOPE` (ADR-0022). New reserved Procedure input names need an ADR.
 
 ## Example
 
@@ -205,7 +205,7 @@ its hot path always starts with an equality on `status`. Lead the index with
 it, then the ordered field: `indexes: [[status, publishedAt]]`. A bare
 `[[publishedAt]]` does not serve that query on production SQLite (no planner
 statistics), which sorts every published row in a temporary B-tree instead
-(#962). Declare the index the query needs; Mantle does not derive one.
+(#962). Declare the index the query needs; Mantle does not derive one (ADR-0025).
 Unique indexes are also checked before every write; a conflicting row is
 `CONFLICT`. After the first deployment, adding, removing, reordering, or changing
 any `uniqueIndexes` tuple is destructive and requires rebuilding the instance
