@@ -1,7 +1,10 @@
 import {
   RESERVED_ENTRY_COLUMNS,
   type JsonSchema,
+  type ProcedureManifest,
   type ReservedEntryColumn,
+  type SchemaManifest,
+  type ViewManifest,
 } from "../domain/model/ManifestGrammar.js";
 import type { EmitTypesRequest } from "./dto/EmitTypesRequest.js";
 import type { EmitTypesResponse } from "./dto/EmitTypesResponse.js";
@@ -28,9 +31,26 @@ const RESERVED_COLUMN_TYPES: Record<ReservedEntryColumn, string> = {
 
 export class EmitTypesUseCase {
   execute(request: EmitTypesRequest): EmitTypesResponse {
-    const schemas = request.linked.schemas.map((entry) => entry.manifest);
-    const procedures = request.linked.procedures.map((entry) => entry.manifest);
-    const views = request.linked.views.map((entry) => entry.manifest);
+    return emitTypesFromManifests({
+      schemas: request.linked.schemas.map((entry) => entry.manifest),
+      procedures: request.linked.procedures.map((entry) => entry.manifest),
+      views: request.linked.views.map((entry) => entry.manifest),
+      namespace: request.namespace,
+    });
+  }
+
+  static run(request: EmitTypesRequest): EmitTypesResponse {
+    return new EmitTypesUseCase().execute(request);
+  }
+}
+
+export function emitTypesFromManifests(request: {
+  readonly schemas: readonly SchemaManifest[];
+  readonly procedures: readonly ProcedureManifest[];
+  readonly views: readonly ViewManifest[];
+  readonly namespace: string;
+}): EmitTypesResponse {
+    const { schemas, procedures, views } = request;
     const schemaByName = new Map(schemas.map((s) => [s.metadata.name, s]));
 
     const out: string[] = [];
@@ -91,11 +111,6 @@ export class EmitTypesUseCase {
 
     out.push(`}`);
     return { source: out.join("\n") + "\n" };
-  }
-
-  static run(request: EmitTypesRequest): EmitTypesResponse {
-    return new EmitTypesUseCase().execute(request);
-  }
 }
 
 export function manifestTypeIdentifier(name: string): string {
