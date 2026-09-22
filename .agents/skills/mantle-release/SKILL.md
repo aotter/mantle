@@ -30,11 +30,25 @@ without v. Watch all gates, not only publication:
 3. GitHub Packages mirrors verify the same candidate.
 4. The reference Worker installs exact public packages, generates/types/checks
    successfully and serves its declared HTTP route before channel promotion.
-5. Monotonic channel promotion and the GitHub prerelease/release succeed.
+5. Monotonic channel promotion succeeds. Each promote step then removes the
+   temporary `mantle-release` dist-tag on npmjs and GitHub Packages when it
+   points at this version. The GitHub prerelease or release succeeds.
+   `alpha` / `beta` / `rc` / `latest` are never removed.
 
 For stable acceptance, give an agent only the version-matched consumer
 instructions and confirm a directly authored application reaches a running
 Worker. No SDK checkout or scaffold command is required.
+
+A leftover `mantle-release` tag from a commit that predates removal is not
+cleared by retrying that commit, and a personal npm token can 403 on
+dist-tag DELETE. After `remove-mantle-release-dist-tag.yml` is on develop,
+dispatch it with `confirm=remove-mantle-release`. It is not a release: it
+deletes only that tag, and only when a consumer channel already points at
+the same version.
+
+```sh
+gh workflow run remove-mantle-release-dist-tag --ref develop -f confirm=remove-mantle-release
+```
 
 Transient/partial failures rerun the same controller commit/version. Verify
 existing state, preserve newer channels, and fail on identity disagreement.
