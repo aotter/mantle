@@ -217,6 +217,7 @@ export function RowOperationsMenu({
       </DropdownMenu>
       {activeOperation ? (
         <OperationDialog
+          key={activeOperation.name}
           operation={activeOperation}
           binding={activeOperation.rowBindings.find((b) => b.collection === row.collection)}
           row={row}
@@ -255,6 +256,7 @@ export function CollectionOperations({
       ))}
       {activeOperation ? (
         <OperationDialog
+          key={activeOperation.name}
           operation={activeOperation}
           language={language}
           canonical={canonical}

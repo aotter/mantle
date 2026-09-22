@@ -22,7 +22,7 @@ it("binds observed entry.version on row operations and does not reuse it after t
     operations: [quotaOperation(), memberOperation()],
   });
   try {
-    const { page, quotaBodies, memberBodies } = session;
+    const { page, quotaBodies, memberBodies, memberReads } = session;
     await page.getByRole("button", { name: "Row operations" }).click();
     await page.getByRole("menuitem", { name: "Set quota" }).click();
     const quotaDialog = page.getByRole("dialog");
@@ -42,7 +42,10 @@ it("binds observed entry.version on row operations and does not reuse it after t
     const memberDialog = page.getByRole("dialog");
     await memberDialog.getByRole("textbox", { name: "Id" }).fill("member-1");
     await memberDialog.getByRole("textbox", { name: "Role" }).fill("owner");
-    await memberDialog.getByRole("button", { name: "Run", exact: true }).click();
+    const memberRun = memberDialog.getByRole("button", { name: "Run", exact: true });
+    await expect.poll(() => memberReads.includes("member-1")).toBe(true);
+    await expect.poll(() => memberRun.isEnabled()).toBe(true);
+    await memberRun.click();
     await memberDialog.getByRole("region", { name: "Result" }).waitFor();
     await expect.poll(() => memberBodies[0]).toEqual({
       organizationId: "org-1",
@@ -51,7 +54,9 @@ it("binds observed entry.version on row operations and does not reuse it after t
       expectedVersion: 7,
     });
     await memberDialog.getByRole("textbox", { name: "Id" }).fill("member-2");
-    await memberDialog.getByRole("button", { name: "Run", exact: true }).click();
+    await expect.poll(() => memberReads.includes("member-2")).toBe(true);
+    await expect.poll(() => memberRun.isEnabled()).toBe(true);
+    await memberRun.click();
     await expect.poll(() => memberBodies[1]).toEqual({
       organizationId: "org-1",
       id: "member-2",
@@ -160,6 +165,7 @@ async function bootAdmin(args: { operations: unknown[]; unchangedConflict?: bool
   upsertBodies: unknown[];
   createBodies: unknown[];
   entryReads: string[];
+  memberReads: string[];
   close: () => Promise<void>;
 }> {
   const server = await createServer({ configFile: resolve("vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
@@ -176,6 +182,7 @@ async function bootAdmin(args: { operations: unknown[]; unchangedConflict?: bool
   const upsertBodies: unknown[] = [];
   const createBodies: unknown[] = [];
   const entryReads: string[] = [];
+  const memberReads: string[] = [];
   const orgVersion = { current: 4 };
   await page.route("**/admin/api/**", async (route) => {
     const url = new URL(route.request().url());
@@ -213,9 +220,11 @@ async function bootAdmin(args: { operations: unknown[]; unchangedConflict?: bool
       return route.fulfill({ json: orgEditor(orgVersion.current) });
     }
     if (path === "/entries/member-1" && method === "GET") {
+      memberReads.push("member-1");
       return route.fulfill({ json: memberEditor(7) });
     }
     if (path === "/entries/member-2" && method === "GET") {
+      memberReads.push("member-2");
       return route.fulfill({ json: memberEditor(11, "member-2") });
     }
     if (path === "/operations/set-quota" && method === "POST") {
@@ -253,6 +262,7 @@ async function bootAdmin(args: { operations: unknown[]; unchangedConflict?: bool
     upsertBodies,
     createBodies,
     entryReads,
+    memberReads,
     close: async () => {
       await browser.close();
       await server.close();
