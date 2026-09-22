@@ -152,7 +152,7 @@ icons, and media-purpose policy) to KV after the D1 write commits. Missing,
 invalid, or expired snapshots are repaired from D1; KV failures do not turn a
 committed setting change into a failed request. That projection never stores
 tokens, sessions, caller data, operator-only settings, or content. Better Auth
-session values use a separate `better-auth:` key prefix; D1 remains canonical,
+session values use a store-bound `better-auth:<store-instance-id>:` key prefix; D1 remains canonical,
 including for OTP verification.
 All Cloudflare locations follow Workers KV's eventual-consistency model while
 a write propagates; the one-hour repair deadline prevents an observation from

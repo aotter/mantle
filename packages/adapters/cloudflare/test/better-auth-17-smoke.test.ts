@@ -18,6 +18,7 @@ afterEach(() => {
 describe("Better Auth 1.7 MCP smoke", () => {
   it("stores sessions in deployment KV while keeping OTP verification in D1", async () => {
     const { db, sqlite } = sqliteD1();
+    prepareStore(sqlite);
     const values = new Map<string, string>();
     const kv = {
       get: async (key: string) => values.get(key) ?? null,
@@ -67,11 +68,13 @@ describe("Better Auth 1.7 MCP smoke", () => {
       });
       const cachedSession = await cachedAuth.getSession(new Request(ORIGIN, { headers: { cookie: cookies } }));
       expect(cachedSession?.user.role).toBe("owner");
-      expect(cachedSession?.user.roleCurrent).toBeUndefined();
+      expect(cachedSession?.user.roleCurrent).toBe(true);
       expect(prepare.mock.calls.some(([sql]) => String(sql).includes("_migrations"))).toBe(false);
+      expect(prepare.mock.calls.some(([sql]) => String(sql).includes("SELECT role FROM user"))).toBe(false);
 
       const replacement = sqliteD1();
       try {
+        prepareStore(replacement.sqlite);
         const replacementAuth = createAuth({
           database: replacement.db,
           sessionCacheKv: kv,
@@ -80,9 +83,7 @@ describe("Better Auth 1.7 MCP smoke", () => {
           methods: [{ kind: "email-otp", sender: { send: async () => {} } }],
         });
         const staleSession = await replacementAuth.getSession(new Request(ORIGIN, { headers: { cookie: cookies } }));
-        expect(staleSession?.user.role).toBe("owner");
-        expect(staleSession?.user.roleCurrent).toBeUndefined();
-        expect(await replacementAuth.getUserRole(staleSession!.user.id)).toBeNull();
+        expect(staleSession).toBeNull();
       } finally {
         replacement.sqlite.close();
       }
@@ -593,6 +594,12 @@ describe("Better Auth 1.7 MCP smoke", () => {
     sqlite.close();
   });
 });
+
+function prepareStore(sqlite: import("node:sqlite").DatabaseSync): void {
+  for (const migration of CANONICAL_MIGRATIONS) sqlite.exec(migration.sql);
+  sqlite.prepare("INSERT INTO _mantle_boot_state(id, fingerprint, store_instance_id) VALUES (?, ?, ?)")
+    .run("runtime", "test", crypto.randomUUID());
+}
 
 async function pkceChallenge(verifier: string): Promise<string> {
   const digest = await crypto.subtle.digest(

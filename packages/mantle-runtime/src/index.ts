@@ -223,6 +223,7 @@ export type { AuditSink, McpToolCallAuditEvent } from "./domain/port/AuditSink.j
 // Starter fixture support. Kept explicit so persistence/http
 // infrastructure do not become root public API by accident.
 export { CANONICAL_MIGRATIONS } from "./infrastructure/boot/canonicalMigrations.js";
+export { readStoreInstanceId } from "./infrastructure/boot/bootState.js";
 
 // Procedure handler failure carrier used by platform helper handlers
 // such as Cloudflare Turnstile.
