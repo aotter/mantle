@@ -43,6 +43,33 @@ describe("mantle generate", () => {
     expect(await runGenerate(["--namespace", "MantleHandlers"])).toBe(2);
   });
 
+  it("typechecks the handbook internal View example against generated bindings", async () => {
+    const guide = await readFile(join(originalCwd, "../../docs/handbook/guides/typed-queries.md"), "utf8");
+    const yaml = /```yaml\n([\s\S]*?)```/.exec(guide)?.[1];
+    const source = /```ts\n([\s\S]*?)```/.exec(guide)?.[1];
+    expect(yaml).toBeTruthy();
+    expect(source).toBeTruthy();
+    const root = await mkdtemp(join(originalCwd, ".mantle-handbook-"));
+    try {
+      await mkdir(join(root, "manifests"));
+      await mkdir(join(root, "src"));
+      await writeFile(join(root, "manifests/tickets.yaml"), yaml!);
+      await writeFile(join(root, "src/queries.ts"), source!);
+      process.chdir(root);
+      expect(await runGenerate([], coreOnly)).toBe(0);
+      try {
+        await execFileAsync(process.execPath, [tscPath, "--ignoreConfig", "--noEmit",
+          "--strict", "--target", "ES2022", "--module", "NodeNext",
+          "--moduleResolution", "NodeNext", "--skipLibCheck", "src/queries.ts"], { cwd: root });
+      } catch (error) {
+        throw new Error((error as { stdout?: string }).stdout || String(error));
+      }
+    } finally {
+      process.chdir(originalCwd);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("emits and runs one deterministic typed Mantle module", async () => {
     const root = await mkdtemp(join(originalCwd, ".mantle-generate-"));
     try {

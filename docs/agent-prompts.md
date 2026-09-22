@@ -8,11 +8,11 @@ npx skills add aotter/mantle --skill install
 
 Copy one block into a coding agent after that skill is present. Paths below
 are relative to the Mantle docs root: `node_modules/@aotter/mantle/docs/`
-after `@aotter/mantle` is installed, or `docs/` in the installed agent plugin.
+after `@aotter/mantle` is installed. A standalone `skills add` installation
+contains only the selected skill, not these docs.
 `npx --no-install mantle --help` is the layered CLI overview; it mirrors the
 authoring docs. A live `/mcp` catalog mirrors the Manifest → RuntimePlan, not
-the CLI. Interview first. Worker is the default host unless the user names
-ChatGPT Sites. There is no `mantle create`. Empty `generate` fails until
+the CLI. Resolve only missing requirements first; do not assume a host. There is no `mantle create`. Empty `generate` fails until
 manifests exist. Admin is opt-in.
 
 ### Interview then build
@@ -21,8 +21,9 @@ manifests exist. Admin is opt-in.
 Interview me about the service: host, who uses it, whether humans need a
 Dev UI, and whether we only embed Spec/Runtime. If the install skill is
 missing, run npx skills add aotter/mantle --skill install. Read the
-install skill and npx --no-install mantle --help, then
-handbook/start/project-and-cli.md.
+installer-reported skill, choose and install an exact SDK version, then read
+its embedded skills/install/SKILL.md, run npx --no-install mantle --help, and
+read handbook/start/overview.md.
 Use examples/README.md as the examples index; copy builtin-* Manifests only
 (not cf-primitives-*). Implement locally first. Take only the surfaces we
 chose. For Spec-only use, skip Runtime and code generation. For a Worker

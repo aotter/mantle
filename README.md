@@ -79,10 +79,14 @@ are the Manifest → RuntimePlan catalog for that app — callable verbs, not a
 how-to-learn-Mantle manual. MCP mirrors the Manifest and RuntimePlan. The CLI
 mirrors the authoring docs. They do not mirror each other.
 
+Human readers can start directly with the [handbook](docs/handbook/start/overview.md)
+and [Manifest feature reference](docs/handbook/reference/features.md).
+
 ## For engineers and agents
 
-Start from the [install skill](#install). After that skill has pinned
-the packages, engineers use the [installed API guide](packages/mantle/README.md),
+Engineers can follow the [handbook](docs/handbook/start/overview.md) directly;
+agents start from the [install skill](#install). Once packages are pinned,
+use the [installed API guide](packages/mantle/README.md),
 [adapter guide](docs/adapter-guide.md), and
 [direct authoring guide](docs/handbook/start/project-and-cli.md). Agents stay
 on the skill, then [task-specific prompts](docs/agent-prompts.md).
@@ -92,7 +96,8 @@ Coding agents use the same APIs and version-matched
 
 ```text
 Run npx skills add aotter/mantle --skill install. Read
-skills/install/SKILL.md and docs/agent-prompts.md. Interview me about
+the installer-reported SKILL.md. After installing the pinned SDK, read
+node_modules/@aotter/mantle/docs/agent-prompts.md. Ask me only for missing
 host, storage, and surfaces before writing files. Preserve any existing
 application; otherwise author locally from an official example. There is
 no mantle create; empty generate fails until manifests exist. Pin all

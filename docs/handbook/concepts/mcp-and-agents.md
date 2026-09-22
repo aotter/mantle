@@ -20,7 +20,7 @@ A tool name is derived from a manifest name by `mcpToolNameSegment`: lowercased,
 
 | Tool | Produced by | Surface |
 |---|---|---|
-| `query_view_<segment>` | Any View | The View's own `surface` |
+| `query_view_<segment>` | Public or staff View (never internal) | The View's own `surface` |
 | `create_draft_<schema>`, `update_draft_<schema>` | A Schema with `lifecycle: publishing` | Staff |
 | `create_record_<schema>`, `update_record_<schema>` | A Schema with `lifecycle: operational` | Staff |
 | `request_publish`, `unpublish_entry`, `archive_entry`, `delete_entry` | Present when an applicable Schema exists | Staff |

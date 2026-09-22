@@ -5,6 +5,8 @@ description: Envelope fields, unknown-key policy, multi-document YAML, Localized
 
 This page covers the rules that apply to every Manifest document before kind-specific validation runs. Read it once; the four atom pages ([Schema](./schema.md), [View](./view.md), [Procedure](./procedure.md), [Trigger](./trigger.md)) assume it. Diagnostic codes named here are catalogued in [Diagnostics](./diagnostics.md).
 
+For a task-to-field table covering all four atoms, see the [Manifest feature reference](./features.md). For the resulting console, see [Customize Admin](../guides/admin-ui.md).
+
 ## Envelope
 
 Every document is a YAML mapping with exactly four top-level keys.
@@ -37,7 +39,7 @@ The parser rejects keys outside the shipped grammar at every level it knows. The
 | `/` | `apiVersion`, `kind`, `metadata`, `spec` |
 | `/metadata` | `name` |
 | `/spec` (Schema) | `title`, `description`, `schema`, `uiSchema`, `uniqueIndexes`, `indexes`, `searchableFields`, `localized`, `translates`, `lifecycle` |
-| `/spec` (View) | `title`, `uiSchema`, `from`, `sql`, `surface`, `requires`, `filter`, `fields`, `orderBy`, `limit`, `params` |
+| `/spec` (View) | `title`, `uiSchema`, `from`, `sql`, `surface`, `cache`, `requires`, `filter`, `fields`, `orderBy`, `limit`, `params` |
 | `/spec` (Procedure) | `title`, `description`, `requires`, `input`, `uiSchema`, `output`, `handler`, `mcp` |
 | `/spec` (Trigger) | `source`, `target` |
 | `/spec/translates` | `parent`, `on` |

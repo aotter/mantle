@@ -3,7 +3,7 @@ description: View field reference — declarative and SQL forms, filter AST, par
 ---
 # View
 
-A View is a named read-only query over Schemas. It is the only atom that needs no [Trigger](./trigger.md): declaring `surface` mounts it. This page is the field-level contract; the concepts are in [Views](../concepts/views.md) and [The four atoms](../concepts/four-atoms.md). Envelope rules are in [Manifest envelope and conventions](./manifest.md), and every diagnostic code named here is catalogued in [Diagnostics](./diagnostics.md).
+A View is a named read-only query over Schemas. It is the only atom that needs no [Trigger](./trigger.md): `surface: public` or `staff` exposes it on supported transports; `internal` keeps it host-only. This page is the field-level contract; the concepts are in [Views](../concepts/views.md) and [The four atoms](../concepts/four-atoms.md). Envelope rules are in [Manifest envelope and conventions](./manifest.md), and every diagnostic code named here is catalogued in [Diagnostics](./diagnostics.md).
 
 ## Fields
 
@@ -13,7 +13,7 @@ A View is a named read-only query over Schemas. It is the only atom that needs n
 | `uiSchema` | object | no | — | Only on `surface: staff`; only the key `list`. Violations are `VIEW_UI_INVALID`. |
 | `from` | string | exactly one of `from` / `sql` | — | Name of a declared Schema (`VIEW_FROM_UNKNOWN_SCHEMA`). The declarative form. |
 | `sql` | string | exactly one of `from` / `sql` | — | One SQLite `SELECT`. See [`sql`](#sql). |
-| `surface` | `public` \| `staff` | yes | — | Decides where the View mounts. See [Surfaces](#surfaces). |
+| `surface` | `public` \| `staff` \| `internal` | yes | — | Decides where the View mounts. See [Surfaces](#surfaces). |
 | `cache` | `{ sharedMaxAge }` | no | — | Anonymous REST shared-cache hint. `sharedMaxAge` is an integer from 1 to 86400. Only an unguarded, declarative public View over a publishing Schema may declare it. |
 | `requires` | AuthorizationRequirements | no | — | `auth.all` predicates plus one optional `guard.procedure`. See [Authorization](./authorization.md). |
 | `filter` | FilterAst | no | — | `from` form only. See [Filter AST](#filter-ast). |
@@ -206,6 +206,8 @@ Admin applies search and filters before pagination, rejecting a search term or f
 | `public` | `GET /api/views/<name>`, plus a catalog at `GET /api/views` | `query_view_<segment>` on `/mcp` | Also mounted at `GET /admin/api/views/<name>` and `/export` behind the staff gate |
 | `staff` | `GET /admin/api/views/<name>` and `/admin/api/views/<name>/export` — not mounted publicly | `query_view_<segment>` on `/mcp/staff` | Report sidebar |
 | `internal` | Not mounted | Not mounted | Not listed or mounted |
+
+For a complete generated-binding example, see [Typed queries](../guides/typed-queries.md).
 
 An `internal` View remains in the compiled plan for host code to call through `MantleRuntime.executeView`. It is an exposure policy, not an authorization bypass: `requires` and guards still evaluate against the `ctx` supplied by the host. Shared HTTP caching is invalid because no adapter owns an HTTP response for the View.
 
