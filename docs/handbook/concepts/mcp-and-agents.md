@@ -68,6 +68,25 @@ Only `status: published` entries appear anywhere in that set. Details are in [Pu
 
 ## WebMCP in the browser
 
+### Admin: tools for the signed-in staff member
+
+Admin UI registers staff tools in browsers supporting `document.modelContext`.
+The catalog comes from `GET /admin/api/webmcp`; calls use
+`POST /admin/api/mcp` with the current staff session. Server-side role checks,
+Procedure authorization, and optimistic concurrency remain in force.
+`admin_get_context` and `admin_navigate` add page context and navigation.
+The WebMCP control appears after registration succeeds; unsupported browsers
+can continue using the regular Admin UI.
+
+Owners can explore application API documentation in Developer UI:
+`/admin/dev/docs/api` for HTTP, `/admin/dev/docs/mcp` for remote MCP, and
+`/admin/dev/docs/webmcp` for the Admin catalog and public-page capabilities.
+These pages show projected definitions. Remote clients connect to the host's
+advertised MCP endpoints using the authentication described above.
+See the [Admin API guide](../../../packages/mantle-admin/README.md#admin-webmcp).
+
+### Public pages: opt-in registration
+
 `@aotter/mantle-web/webmcp` exposes public capabilities as tools inside a page, for browsers implementing the draft imperative WebMCP API. Importing the subpath has no side effect; registration starts only when `bindWebMcp()` is called.
 
 ```ts
@@ -78,7 +97,7 @@ const binding = await bindWebMcp();
 binding.dispose();
 ```
 
-It feature-detects `document.modelContext` and returns `{ supported: false }` on browsers without it. Only public capabilities are registered — staff capabilities never leave the server. Existing host tool names are inspected and skipped, never replaced. A server-backed page discovers the safe descriptors published at `GET /api/views` and calls the same-origin `GET /api/views/<name>` routes; a browser-local SPA passes `projectCallableCapabilities(plan, { surface: "public" })` and its own invoker. Procedure tools must still originate from an explicit public MCP Trigger, and invocation enters the runtime through that Trigger, so browser tools cannot bypass validation or authorization. See [Runtime pipeline and adapters](./runtime-and-adapters.md).
+It feature-detects `document.modelContext` and returns `{ supported: false }` on browsers without it. This public-page binding registers only public capabilities. Staff tools use the separate authenticated Admin integration above. Existing host tool names are inspected and skipped, never replaced. A server-backed page discovers the safe descriptors published at `GET /api/views` and calls the same-origin `GET /api/views/<name>` routes; a browser-local SPA passes `projectCallableCapabilities(plan, { surface: "public" })` and its own invoker. Procedure tools must still originate from an explicit public MCP Trigger, and invocation enters the runtime through that Trigger, so browser tools cannot bypass validation or authorization. See [Runtime pipeline and adapters](./runtime-and-adapters.md).
 
 ## Skills for your coding agent
 
