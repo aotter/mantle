@@ -55,7 +55,7 @@ if (process.argv[2] === "--self-test") {
   const removals = [...workflow.matchAll(/(?:gpr_npm |npm )dist-tag rm[^\n]*/g)];
   assert.equal(removals.length, 2);
   assert.match(removals[0][0], /^npm dist-tag rm "\$pkg" mantle-release /);
-  assert.match(removals[1][0], /^gpr_npm dist-tag rm "\$pkg" mantle-release$/);
+  assert.match(removals[1][0], /^gpr_npm dist-tag rm "\$pkg" mantle-release\b/);
   assert.ok(removals[0].index > npmPromote && removals[0].index < gprPromote);
   assert.ok(removals[1].index > gprPromote && removals[1].index < githubRelease);
   assert.ok(workflow.indexOf("dist-tag add", npmPromote) < removals[0].index);
@@ -64,10 +64,19 @@ if (process.argv[2] === "--self-test") {
   const publishTags = [...workflow.matchAll(/--tag mantle-release/g)];
   assert.equal(publishTags.length, 2);
   assert.ok(publishTags[0].index < gate && publishTags[1].index < gate);
-  const dropAfterPromote = [...workflow.matchAll(
-    /for pkg in \$PKG_NAMES; do\n {12}for channel in \$\(node scripts\/release-tag-order\.mjs --channels "\$VERSION"\); do\n {14}promote "\$pkg" "\$channel"\n {12}done\n {12}drop_temp_tag "\$pkg"\n {10}done/g,
+  const promoteThenDrop = [...workflow.matchAll(
+    /for pkg in \$PKG_NAMES; do\n {12}for channel in \$\(node scripts\/release-tag-order\.mjs --channels "\$VERSION"\); do\n {14}promote "\$pkg" "\$channel"\n {12}done\n {10}done\n {10}for pkg in \$PKG_NAMES; do\n {12}drop_temp_tag "\$pkg"\n {10}done/g,
   )];
-  assert.equal(dropAfterPromote.length, 2);
+  assert.equal(promoteThenDrop.length, 2);
+  const npmStep = workflow.slice(npmPromote, gprPromote);
+  const gprStep = workflow.slice(gprPromote, githubRelease);
+  assert.equal(npmStep.includes("exit 1"), false);
+  assert.equal(gprStep.includes("exit 1"), false);
+  assert.match(npmStep, /::warning::Could not read npmjs dist-tag mantle-release/);
+  assert.match(gprStep, /::warning::Could not read GitHub Packages dist-tag mantle-release/);
+  assert.match(npmStep, /::warning::Could not remove npmjs dist-tag mantle-release/);
+  assert.match(gprStep, /::warning::Could not remove GitHub Packages dist-tag mantle-release/);
+  assert.match(workflow, /Actions NPM_TOKEN currently 403s on dist-tag DELETE/);
   assert.doesNotMatch(workflow, /npm unpublish|dist-tag rm "\$pkg" (?!mantle-release\b)/);
   assert.doesNotMatch(workflow, /gh workflow run remove-mantle-release|workflow_call/);
 
