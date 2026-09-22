@@ -147,7 +147,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
                 "minLength": 1,
                 "type": "string",
               },
-              "status": {
+              "orderStatus": {
                 "enum": [
                   "open",
                   "closed",
@@ -157,7 +157,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
             },
             "required": [
               "customerId",
-              "status",
+              "orderStatus",
             ],
             "type": "object",
           },
@@ -174,7 +174,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 18,
-            "offset": 550,
+            "offset": 560,
           },
           "start": {
             "column": 1,
@@ -195,7 +195,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "fields": [
             "id",
             "customerId",
-            "status",
+            "orderStatus",
             "createdAt",
           ],
           "filter": {
@@ -210,7 +210,7 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
               },
               {
                 "eq": {
-                  "field": "status",
+                  "field": "orderStatus",
                   "value": "open",
                 },
               },
@@ -257,12 +257,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 44,
-            "offset": 1188,
+            "offset": 1208,
           },
           "start": {
             "column": 1,
             "line": 21,
-            "offset": 634,
+            "offset": 644,
           },
         },
       },
@@ -303,12 +303,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 57,
-            "offset": 1462,
+            "offset": 1482,
           },
           "start": {
             "column": 1,
             "line": 45,
-            "offset": 1192,
+            "offset": 1212,
           },
         },
       },
@@ -357,12 +357,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 73,
-            "offset": 1782,
+            "offset": 1802,
           },
           "start": {
             "column": 1,
             "line": 58,
-            "offset": 1466,
+            "offset": 1486,
           },
         },
       },
@@ -393,12 +393,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 81,
-            "offset": 1973,
+            "offset": 1993,
           },
           "start": {
             "column": 1,
             "line": 74,
-            "offset": 1786,
+            "offset": 1806,
           },
         },
       },
@@ -428,12 +428,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 89,
-            "offset": 2146,
+            "offset": 2166,
           },
           "start": {
             "column": 1,
             "line": 82,
-            "offset": 1977,
+            "offset": 1997,
           },
         },
       },
@@ -467,12 +467,12 @@ exports[`v0.1 sealed-pipeline characterization > freezes successful parse and se
           "end": {
             "column": 1,
             "line": 101,
-            "offset": 2374,
+            "offset": 2394,
           },
           "start": {
             "column": 1,
             "line": 90,
-            "offset": 2150,
+            "offset": 2170,
           },
         },
       },

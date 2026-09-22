@@ -9,7 +9,7 @@ Two per-Schema decisions shape how an entry behaves for its whole life: which st
 
 `spec.lifecycle` is `publishing` (the default) or `operational`. The modes mix freely inside one site.
 
-**`publishing`** is for content a person stages and then releases: posts, pages, announcements, product copy. The point of the mode is that a draft exists and is not readable by the public until someone publishes it.
+**`publishing`** is for content a person stages and then releases: posts, pages, announcements, product copy. The point of the mode is that a draft exists and is not readable by the public until someone publishes it. The runtime enforces this: a public declarative View over a publishing Schema is compiled with `status = published` even when the manifest omits the filter ([View reference](../reference/view.md#surfaces)).
 
 **`operational`** is for records written as a side effect rather than drafted: submissions, inquiries, orders, inventory snapshots, grant and audit rows. The point of the mode is that the row is real the moment it is created. Declare it on any Schema whose rows a human should inspect and correct, never stage and publish.
 

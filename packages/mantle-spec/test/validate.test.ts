@@ -1110,6 +1110,30 @@ spec:
     expect(result.diagnostics.length).toBeGreaterThan(0);
   });
 
+  it("rejects a public View over a publishing Schema that compares status to anything but published (#1007)", () => {
+    const codes = (filter: ViewManifest["spec"]["filter"]) => validateManifests({
+      manifests: [schema("posts"), view("posts-by-status", "posts", { filter })],
+    }).diagnostics.map((diagnostic) => diagnostic.code);
+    expect(codes({ eq: { field: "status", value: "draft" } })).toContain("VIEW_PUBLIC_STATUS_INVALID");
+    expect(codes({ and: [{ eq: { field: "slug", value: "a" } }, { gt: { field: "status", value: "a" } }] })).toContain("VIEW_PUBLIC_STATUS_INVALID");
+    expect(codes({ eq: { field: "status", value: "published" } })).not.toContain("VIEW_PUBLIC_STATUS_INVALID");
+    expect(codes(undefined)).not.toContain("VIEW_PUBLIC_STATUS_INVALID");
+    expect(validateManifests({
+      manifests: [
+        schema("orders", { schema: { type: "object", properties: { status: { type: "string" } } } }),
+        view("orders-public", "orders"),
+      ],
+    }).diagnostics.map((diagnostic) => diagnostic.code)).toContain("VIEW_PUBLIC_STATUS_INVALID");
+    expect(validateManifests({
+      manifests: [
+        schema("posts"),
+        view("all-posts", "posts", { surface: "staff", filter: { eq: { field: "status", value: "draft" } } }),
+        schema("orders", { lifecycle: "operational" }),
+        view("open-orders", "orders", { filter: { eq: { field: "status", value: "draft" } } }),
+      ],
+    }).diagnostics.map((diagnostic) => diagnostic.code)).not.toContain("VIEW_PUBLIC_STATUS_INVALID");
+  });
+
   it("rejects shared cache over an operational Schema", () => {
     const result = validateManifests({
       manifests: [

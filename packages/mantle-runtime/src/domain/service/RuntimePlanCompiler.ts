@@ -154,7 +154,7 @@ export function compileRuntimePlan(
     return {
       name: manifest.metadata.name,
       manifest,
-      query: compileLogicalView(manifest),
+      query: compileLogicalView(manifest, view.from?.manifest),
       ...authorization(manifest.spec.requires?.auth?.all),
       ...(view.guard ? { guard: view.guard.manifest.metadata.name } : {}),
     };
@@ -212,7 +212,22 @@ export function sealRuntimePlan(data: RuntimePlanData): RuntimePlan {
   return deepFreeze(copy) as RuntimePlan;
 }
 
-export function compileLogicalView(view: ViewManifest): LogicalViewPlan {
+/** The predicate a public View over a `publishing` Schema always carries. */
+export const PUBLISHED_ONLY_FILTER: FilterAst = Object.freeze({
+  eq: Object.freeze({ field: "status", value: "published" }),
+}) as FilterAst;
+
+/**
+ * Compile a View manifest into the storage-neutral query plan every adapter
+ * executes. `from` is the View's source Schema when it is declarative.
+ *
+ * Public Views over a `publishing` Schema are fail-closed: the plan carries
+ * `status = published` whether or not the author wrote it (#1007). The
+ * handbook promises drafts are unreadable until published; that promise
+ * cannot depend on an author remembering a filter. Staff Views and
+ * `operational` Schemas (rows are created published) are untouched.
+ */
+export function compileLogicalView(view: ViewManifest, from?: SchemaManifest): LogicalViewPlan {
   if (view.spec.sql) {
     return {
       kind: "native",
@@ -226,7 +241,7 @@ export function compileLogicalView(view: ViewManifest): LogicalViewPlan {
     kind: "declarative",
     from: view.spec.from!,
     ...(view.spec.fields === undefined ? {} : { fields: view.spec.fields }),
-    ...(view.spec.filter === undefined ? {} : { filter: view.spec.filter }),
+    ...publicViewFilter(view, from),
     orderBy: (view.spec.orderBy ?? []).map((order) => ({
       field: order.field,
       direction: order.direction ?? "asc",
@@ -234,6 +249,28 @@ export function compileLogicalView(view: ViewManifest): LogicalViewPlan {
     ...(view.spec.limit === undefined ? {} : { limit: view.spec.limit }),
     ...(view.spec.params === undefined ? {} : { params: view.spec.params }),
   };
+}
+
+function publicViewFilter(
+  view: ViewManifest,
+  from: SchemaManifest | undefined,
+): { readonly filter?: FilterAst } {
+  const authored = view.spec.filter;
+  // A data property named `status` would make the injected field name resolve
+  // to the data column on SQLite; the validator rejects that manifest instead.
+  const publishedOnly = view.spec.surface === "public"
+    && from !== undefined
+    && (from.spec.lifecycle ?? "publishing") === "publishing"
+    && !Object.hasOwn(from.spec.schema.properties ?? {}, "status");
+  if (!publishedOnly) return authored === undefined ? {} : { filter: authored };
+  if (authored === undefined) return { filter: PUBLISHED_ONLY_FILTER };
+  if (isPublishedOnly(authored)) return { filter: authored };
+  if ("and" in authored && authored.and.some(isPublishedOnly)) return { filter: authored };
+  return { filter: { and: [PUBLISHED_ONLY_FILTER, authored] } };
+}
+
+function isPublishedOnly(node: FilterAst): boolean {
+  return "eq" in node && node.eq.field === "status" && node.eq.value === "published";
 }
 
 function authorization(all: readonly AuthPredicate[] | undefined): {

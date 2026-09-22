@@ -42,7 +42,7 @@ function sqliteUseCase(
   const planned: RuntimeViewPlan = {
     name: manifest.metadata.name,
     manifest,
-    query: compileLogicalView(manifest),
+    query: compileLogicalView(manifest, schemas.find((schema) => schema.metadata.name === manifest.spec.from)),
   };
   const plan = {
     views: { [planned.name]: planned },
@@ -256,7 +256,8 @@ describe("compileView", () => {
     try {
       const posts: SchemaManifest = {
         apiVersion: "cms.mantle.aotter.net/v1", kind: "Schema", metadata: { name: "posts" },
-        spec: { title: "Posts", schema: { type: "object", properties: { locale: { type: "string" } } } },
+        // Mirrors the IndexedDB fixture: operational, so no published-only injection (#1007).
+        spec: { title: "Posts", lifecycle: "operational", schema: { type: "object", properties: { locale: { type: "string" } } } },
       };
       for (const migration of CANONICAL_MIGRATIONS) db.exec(migration.sql);
       for (const migration of schemaTableMigrations([posts])) db.exec(migration.sql);
@@ -617,6 +618,50 @@ describe("ExecuteViewUseCase", () => {
       ok: false,
       diagnostic: { code: "INTERNAL_ERROR", message: expect.stringContaining("Invalid JSON") },
     });
+  });
+
+  it("hides drafts from a public View over a publishing Schema even when the filter is omitted (#1007)", async () => {
+    const db = new InMemoryDatabase();
+    const posts = nativeSchema("posts", { title: { type: "string" } });
+    await seed(db, posts, [
+      { id: "p1", status: "published", data: { title: "Hi" }, now: 2 },
+      { id: "p2", status: "draft", data: { title: "Drafty" }, now: 3 },
+    ]);
+    const unfiltered = view({ from: "posts" });
+    const result = await sqliteUseCase(db, unfiltered, undefined, [posts]).execute({ view: unfiltered });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.result.rows.map((row) => (row as { id: string }).id)).toEqual(["p1"]);
+
+    const withOwnFilter = view({ from: "posts", filter: { gte: { field: "createdAt", value: 0 } } });
+    const filtered = await sqliteUseCase(db, withOwnFilter, undefined, [posts]).execute({ view: withOwnFilter });
+    expect(filtered.ok).toBe(true);
+    if (!filtered.ok) return;
+    expect(filtered.result.rows.map((row) => (row as { id: string }).id)).toEqual(["p1"]);
+  });
+
+  it("leaves staff Views and operational Schemas alone (#1007)", async () => {
+    const db = new InMemoryDatabase();
+    const posts = nativeSchema("posts", { title: { type: "string" } });
+    const orders = { ...nativeSchema("orders", { total: { type: "number" } }) };
+    orders.spec = { ...orders.spec, lifecycle: "operational" };
+    await seed(db, posts, [
+      { id: "p1", status: "published", data: { title: "Hi" }, now: 2 },
+      { id: "p2", status: "draft", data: { title: "Drafty" }, now: 3 },
+    ]);
+    await seed(db, orders, [
+      { id: "o1", status: "published", data: { total: 1 }, now: 2 },
+      { id: "o2", status: "draft", data: { total: 2 }, now: 3 },
+    ]);
+    const staff = view({ from: "posts", surface: "staff" });
+    const staffResult = await sqliteUseCase(db, staff, undefined, [posts]).execute({ view: staff });
+    expect(staffResult.ok && staffResult.result.rows.length).toBe(2);
+    const operational = view({ from: "orders" });
+    const operationalResult = await sqliteUseCase(db, operational, undefined, [orders]).execute({ view: operational });
+    expect(operationalResult.ok && operationalResult.result.rows.length).toBe(2);
+    expect(compileLogicalView(staff, posts)).not.toHaveProperty("filter");
+    expect(compileLogicalView(view({ from: "posts", filter: { eq: { field: "status", value: "published" } } }), posts))
+      .toMatchObject({ filter: { eq: { field: "status", value: "published" } } });
   });
 
   it("returns published entries for a status=published filter", async () => {
