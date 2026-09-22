@@ -8,7 +8,7 @@
       "type": "registry:block",
       "title": "Mantle auth page",
       "description": "A copy-owned email OTP page with optional legal links.",
-      "dependencies": ["@aotter/mantle-admin-ui@0.1.3-alpha.3"],
+      "dependencies": ["@aotter/mantle-admin-ui@0.1.3-alpha.4"],
       "files": [
         {
           "path": "recipes/auth-page.tsx",
