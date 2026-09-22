@@ -82,6 +82,7 @@ export class SqliteMantleStorageAdapter implements MantleStorageAdapter {
       await assertSchemaTableOwnership(this.db, schemas);
       const active = await this.db.prepare("SELECT fingerprint FROM _mantle_storage_state WHERE id = 1").first<{ fingerprint: string }>();
       if (!active?.fingerprint) throw new Error("Managed storage is not initialized.");
+      await markBootCurrent(this.db, active.fingerprint);
       this.canonicalSiteConfig.usePreparedLocales();
       return prepared;
     }
