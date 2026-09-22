@@ -3,11 +3,11 @@
 ## Status
 
 Accepted. Amended 2026-05-14, 2026-05-15, 2026-06-30, 2026-07-15,
-2026-08-03, 2026-08-22, 2026-09-18, and 2026-09-21.
+2026-08-03, 2026-08-22, 2026-09-18, 2026-09-21, and 2026-09-22.
 
 ## Date
 
-2026-05-09 (last amended 2026-09-21)
+2026-05-09 (last amended 2026-09-22)
 
 > **Current authority:** the original decision below records the rejected
 > Better-Auth-for-MCP design. The 2026-08-22 Better Auth 1.7 amendment is
@@ -167,6 +167,8 @@ The internal consumers of `Auth` (post-#193: `mountServerEndpoints`, `createMcpA
 **Adopters who want a different backend implement `Auth` directly and bypass `createAuth`.** Lucia, Auth.js, a custom hand-roll — all valid. The seam already works today; the `/api/auth/*` URL convention (which Better Auth picks for its mounted endpoints) is a second-tier contract that affects the admin SPA. `auth-views.tsx` hard-codes six paths today (`/api/auth/methods`, `/api/auth/sign-in/social`, `/api/auth/email-otp/send-verification-otp`, `/api/auth/sign-in/email-otp`, `/api/auth/sign-in/magic-link`, `/api/auth/sign-out`); replacing the backend means matching the URL convention OR forking `auth-views.tsx`.
 
 **Anti-pattern to refuse in review: Better Auth-field pass-through.**
+
+> **Narrowed by the 2026-09-22 amendment** for `OAuthProviderConfig.extensions`, Better Auth's declared OAuth-provider composition point. See § "2026-09-22 amendment" below.
 
 If a future PR's only effect is to rename a Better Auth field into our `CreateAuthConfig` and forward it verbatim, refuse it. **Picking a different literal default for an existing Better Auth field does NOT, by itself, justify a new field on `CreateAuthConfig` — that's the same pass-through dressed up.** The SDK adds load-bearing surface area only when the new field exists for at least one of these concrete reasons:
 
@@ -862,3 +864,36 @@ in a later refactor:
   `415` to anything else, so an HTML form (whose enctypes cannot produce that
   header) can never drive a cookie session on `/mcp`; the same-origin guard
   remains the second layer.
+
+## 2026-09-22 amendment — OAuth provider extensions are an adopter seam
+
+Issue #1016 supersedes the 2026-05-14 "Better Auth-field pass-through"
+prohibition for one field: `OAuthProviderConfig.extensions`, forwarded to
+`@better-auth/oauth-provider`'s `extensions` option. It follows the 2026-09-18
+line that already exposes official Better Auth options and plugin instances
+rather than copying them.
+
+Why this is not the refused pattern: an `OAuthProviderExtension` is Better
+Auth's declared composition point for token grants, client-authentication
+strategies, discovery metadata and additional claims. MCP Enterprise-Managed
+Authorization needs a `jwt-bearer` (ID-JAG) grant whose issuer and JWKS belong
+to one enterprise IdP; that is adopter configuration, not an SDK default, and
+Core has no business knowing the issuer. Curating a first-class
+`enterpriseIdp` field would put an IdP contract inside Core and still forward
+it verbatim underneath. The reference implementation lives outside Core
+(`@aotterclam/id-jag`).
+
+Boundaries that stay:
+
+- Core's own claims extension (`mantle_consent_id`) is always first on the
+  `mcpResource` branch; adopter extensions append after it and cannot replace
+  it. Better Auth's contract makes claims contributors additive, so an
+  extension cannot overwrite identity or AS-owned claims either way.
+- `createMantleAuth` still owns login and consent pages, CIMD/DCR policy,
+  `mcpResource`, scopes and resources. `extensions` adds grants and strategies
+  beside those; it is not a `Partial<OAuthOptions>` merge and cannot change
+  them.
+- Tokens an extension issues go through the provider's shared token path, so
+  `verifyOAuthAccessToken`, DPoP binding and the MCP challenge are unchanged.
+- No other Better Auth field gains a passthrough by this amendment. The
+  2026-05-14 test still applies to the next proposal.
