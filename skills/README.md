@@ -62,16 +62,16 @@ Cold start is the pinned install skill. Other marketplace hosts are pointers
 to the same pin:
 
 ```sh
-npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install
+npx skills add aotter/mantle@v0.1.3-alpha.2 --skill install
 ```
 
 ```bash
 # Claude Code — two separate prompts
-/plugin marketplace add aotter/mantle@v0.1.3-alpha.1
+/plugin marketplace add aotter/mantle@v0.1.3-alpha.2
 /plugin install mantle@mantle
 
 # Codex
-codex plugin marketplace add aotter/mantle --ref v0.1.3-alpha.1
+codex plugin marketplace add aotter/mantle --ref v0.1.3-alpha.2
 codex plugin add mantle@mantle
 ```
 
@@ -97,7 +97,7 @@ package. Two audiences, two artifacts.
 
 ## Discoverability
 
-The skills target ADR-0007's "AI as primary author" thesis: agents reach these files by URL when the user invokes them by intent ("install mantle", "develop my Mantle site", "deploy"). Official cold start is `npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install`. Point the agent at tag `v0.1.3-alpha.1` or pass the version-matched markdown content directly.
+The skills target ADR-0007's "AI as primary author" thesis: agents reach these files by URL when the user invokes them by intent ("install mantle", "develop my Mantle site", "deploy"). Official cold start is `npx skills add aotter/mantle@v0.1.3-alpha.2 --skill install`. Point the agent at tag `v0.1.3-alpha.2` or pass the version-matched markdown content directly.
 
 ## Conventions
 

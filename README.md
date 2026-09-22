@@ -48,11 +48,11 @@ Cold start is one pinned skill. The skill then pins the CLI and opens the
 handbook. That is the only official entry.
 
 ```sh
-npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install
+npx skills add aotter/mantle@v0.1.3-alpha.2 --skill install
 ```
 
 Follow the [`install` skill](skills/install/SKILL.md): it interviews for host
-and surfaces, pins `@aotter/mantle@0.1.3-alpha.1`, then uses the CLI and the
+and surfaces, pins `@aotter/mantle@0.1.3-alpha.2`, then uses the CLI and the
 [direct authoring handbook](docs/handbook/start/project-and-cli.md). There is
 no `mantle create`, no Starter, and no generate-first empty project.
 
@@ -61,17 +61,17 @@ that skill:
 
 ```bash
 # Claude Code — two separate prompts
-/plugin marketplace add aotter/mantle@v0.1.3-alpha.1
+/plugin marketplace add aotter/mantle@v0.1.3-alpha.2
 /plugin install mantle@mantle
 
 # Codex
-codex plugin marketplace add aotter/mantle --ref v0.1.3-alpha.1
+codex plugin marketplace add aotter/mantle --ref v0.1.3-alpha.2
 codex plugin add mantle@mantle
 ```
 
 Cursor and GitHub Copilot read plugin manifests from this repository; still
 start from the same `npx skills add` sentence, or open
-[`skills/install/SKILL.md`](skills/install/SKILL.md) at tag `v0.1.3-alpha.1`.
+[`skills/install/SKILL.md`](skills/install/SKILL.md) at tag `v0.1.3-alpha.2`.
 
 Authoring SSOT is the pinned `@aotter/mantle` package docs, the `mantle` CLI,
 and the projected skills. After a live app is deployed, `/mcp` and `/mcp/staff`
@@ -91,7 +91,7 @@ Coding agents use the same APIs and version-matched
 [skills](skills/README.md). A short starting prompt:
 
 ```text
-Run npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install. Read
+Run npx skills add aotter/mantle@v0.1.3-alpha.2 --skill install. Read
 skills/install/SKILL.md and docs/agent-prompts.md. Interview me about
 host, storage, and surfaces before writing files. Preserve any existing
 application; otherwise author locally from an official example. There is

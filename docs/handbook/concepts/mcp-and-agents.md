@@ -95,10 +95,10 @@ For Claude Code, the same bundle is installable from the plugin marketplace at t
 
 ```sh
 # Canonical
-npx skills add aotter/mantle@v0.1.3-alpha.1 --skill install
+npx skills add aotter/mantle@v0.1.3-alpha.2 --skill install
 
 # Claude Code — two separate prompts
-/plugin marketplace add aotter/mantle@v0.1.3-alpha.1
+/plugin marketplace add aotter/mantle@v0.1.3-alpha.2
 /plugin install mantle@mantle
 ```
 
