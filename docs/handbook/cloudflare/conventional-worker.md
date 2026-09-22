@@ -51,7 +51,7 @@ Once per isolate, `createMantleWorker` assembles and memoizes:
 - Conventional bindings: `DB` becomes the D1 driver, `ASSETS` serves the Admin bundle, `MANTLE_KV` (when bound) becomes the MCP catalog projection. See [Bindings](./bindings.md).
 - Conventional Auth chosen by `MANTLE_AUTH_MODE`, or your `auth` factory. See [Authentication](./authentication.md).
 - Runtime endpoints: manifest HTTP Triggers, `GET /api/views` and `GET /api/views/<name>` for public Views.
-- Admin at `/admin` when Admin assets are present, OAuth consent and discovery, and MCP at `/mcp` and `/mcp/staff`.
+- Admin at `/admin` when Admin assets are present, OAuth consent and discovery, and MCP at `/mcp` and `/mcp/staff`. The MCP transport is Streamable HTTP, POST-only: no session header, no server-initiated stream (`GET` answers `405`), and `tools/call` answers `401` with an OAuth challenge so a client can authenticate mid-session and retry. Verified against the official TypeScript client SDK `@modelcontextprotocol/client` 2.0.x in the adapter's conformance test; that pin is the gate when the SDK is upgraded.
 - A `/favicon.ico` route derived from `siteDefaults.icons`. This is a convention, not a reserved path; an existing host route wins.
 - The final cache policy on every response, and best-effort purge of the deployment-scoped public tag after publishing-content and site-setting writes.
 - A redacted error boundary: an unexpected failure returns `500` with `{ "ok": false, "error": "internal_error" }` and `private, no-store`.
