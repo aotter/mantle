@@ -63,7 +63,7 @@ function filteredManifests(): Manifest[] {
         list: {
           filterField: "orderState",
           primaryField: "orderState",
-          columns: ["placedAt"],
+          columns: ["placedAt", "createdAt", "status"],
         },
       },
     },
@@ -347,7 +347,7 @@ describe("GET /admin/api/entries exact list filter", () => {
     expect(await collections.json()).toMatchObject({
       collections: [{
         filter: { field: "orderState", values: ["pending", "paid"] },
-        list: { primaryField: "orderState", columns: ["placedAt"] },
+        list: { primaryField: "orderState", columns: ["placedAt", "createdAt", "status"] },
         sortableFields: ["orderState"],
       }],
     });
@@ -361,7 +361,8 @@ describe("GET /admin/api/entries exact list filter", () => {
     };
     expect(body.items.map(({ id }) => id)).toEqual(["o1"]);
     expect(body.items[0]?.title).toBeNull();
-    expect(body.items[0]?.data_preview).toEqual({ orderState: "paid", placedAt: 2 });
+    // Native entry columns live on the row, not in `data`; a list column may name one.
+    expect(body.items[0]?.data_preview).toEqual({ orderState: "paid", placedAt: 2, createdAt: 2, status: "draft" });
     expect(db.executions.at(-1)?.sql).toContain('"orderState" = ?');
   });
 

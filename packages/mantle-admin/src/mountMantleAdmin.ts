@@ -1433,8 +1433,18 @@ function titleFieldKey(data: Record<string, unknown>, schema?: JsonSchema): stri
 
 /** Operational previews contain exactly the manifest-declared list
  *  fields. Undeclared lists stay metadata-only. */
+/** Native entry columns live on the row, not in `data`; a list column may name one. */
+const NATIVE_ROW_VALUE: Readonly<Record<string, (row: AdminEntryRow) => unknown>> = {
+  id: (row) => row.id,
+  status: (row) => row.status,
+  version: (row) => row.version,
+  createdAt: (row) => row.createdAt,
+  updatedAt: (row) => row.updatedAt,
+  authorId: (row) => row.authorId,
+};
+
 function adminDataPreview(
-  data: Record<string, unknown>,
+  row: AdminEntryRow,
   manifest?: SchemaManifest,
 ): Record<string, unknown> | undefined {
   if (!manifest || manifest.spec.lifecycle !== "operational") return undefined;
@@ -1442,7 +1452,10 @@ function adminDataPreview(
   const fields = [...(list.primaryField ? [list.primaryField] : []), ...list.columns];
   if (fields.length === 0) return undefined;
   const preview: Record<string, unknown> = {};
-  for (const key of fields) preview[key] = data[key];
+  for (const key of fields) {
+    const native = NATIVE_ROW_VALUE[key];
+    preview[key] = native ? native(row) : row.data[key];
+  }
   return preview;
 }
 
@@ -1479,7 +1492,7 @@ function adminListItem(
       : adminEntryTitle(row.data, manifest?.spec.schema),
     updated_at: row.updatedAt,
     translation_locales: translationLocales,
-    data_preview: adminDataPreview(row.data, manifest),
+    data_preview: adminDataPreview(row, manifest),
   };
 }
 

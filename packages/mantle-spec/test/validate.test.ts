@@ -356,6 +356,16 @@ ${indexYaml}
     }
   });
 
+  it("accepts native entry columns as list columns but not as the primaryField (#1008 follow-up)", () => {
+    const ui = (list: string) => parseSchema(`  lifecycle: operational\n  uiSchema:\n    list:\n${list}`, "slug: { type: string }");
+    expect(ui("      primaryField: slug\n      columns: [createdAt, updatedAt, status]").diagnostics).toEqual([]);
+    expect(ui("      primaryField: createdAt\n      columns: [slug]").diagnostics[0]).toMatchObject({
+      code: "SCHEMA_UI_INVALID",
+      path: expect.stringContaining("/spec/uiSchema/list/primaryField"),
+    });
+    expect(ui("      primaryField: slug\n      columns: [nope]").diagnostics[0]?.code).toBe("SCHEMA_UI_INVALID");
+  });
+
   it("preserves the legacy unique unknown-field diagnostic code", () => {
     const result = parseSchema("  uniqueIndexes: [[missing]]");
     expect(result.diagnostics[0]?.code).toBe("UNIQUE_INDEX_FIELD_UNKNOWN");
