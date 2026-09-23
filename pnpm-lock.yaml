@@ -43,8 +43,8 @@ catalogs:
       specifier: 1.7.2
       version: 1.7.2
     hono:
-      specifier: ^4.13.3
-      version: 4.13.5
+      specifier: ^4.13.7
+      version: 4.13.8
     idb:
       specifier: ^8.0.3
       version: 8.0.3
@@ -136,7 +136,7 @@ importers:
         version: 1.7.2(@cloudflare/workers-types@5.20260904.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.11)
       hono:
         specifier: 'catalog:'
-        version: 4.13.5
+        version: 4.13.8
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -275,7 +275,7 @@ importers:
         version: 1.7.2(@cloudflare/workers-types@5.20260904.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.11)
       hono:
         specifier: 'catalog:'
-        version: 4.13.5
+        version: 4.13.8
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -300,7 +300,7 @@ importers:
         version: 26.1.1
       hono:
         specifier: 'catalog:'
-        version: 4.13.5
+        version: 4.13.8
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -3157,10 +3157,6 @@ packages:
 
   hast-util-whitespace@3.0.0:
     resolution: {integrity: sha512-88JUN06ipLwsnv+dVn+OIYOvAuvBMy/Qoi6O7mQHxdPXpjy+Cd6xRkWwux7DKO+4sYILtLBRIKgsdpS2gQc7qw==}
-
-  hono@4.13.5:
-    resolution: {integrity: sha512-O6+/eCYRkzzzy0rPWwKLiGBR1nFuUPZynnwjxN1MBA62NNqbT0wQEzQyK2gSO5yDIDB336sXQleAhOHrzlYyKw==}
-    engines: {node: '>=16.9.0'}
 
   hono@4.13.8:
     resolution: {integrity: sha512-/Gng7NfoykZl2pjukW5Z6+8Yxm3BPRf86GTbQnt0SbySkvax4fyL4H3HhY1cCpBGmiW9XDRFzRV+CXK2W8QudQ==}
@@ -7241,8 +7237,6 @@ snapshots:
   hast-util-whitespace@3.0.0:
     dependencies:
       '@types/hast': 3.0.5
-
-  hono@4.13.5: {}
 
   hono@4.13.8: {}
 
