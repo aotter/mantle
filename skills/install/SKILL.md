@@ -31,6 +31,11 @@ with the selected optional packages. All `docs/...` paths below then mean
 `skills/install/SKILL.md` before authoring: it supersedes this bootstrap copy.
 Use the new application's installation, never another project's `node_modules`
 or an SDK checkout packing harness, to resolve these paths.
+Before reading a handbook page, verify the version in that application's
+`node_modules/@aotter/mantle/package.json` against its lockfile and confirm
+the page exists under the same package directory. If the package is missing or
+the versions differ, fix the installation first; do not substitute a nearby
+checkout's docs or another project's `node_modules`.
 If the user requested a prerelease, resolve that channel explicitly; `latest`
 need not contain prerelease features. Never mix versioned npm code with branch
 docs. No local CLI exists until the package is installed.
