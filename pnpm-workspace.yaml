@@ -39,7 +39,7 @@ catalog:
   '@better-auth/utils': 0.4.2
   '@better-auth/oauth-provider': 1.7.2
   '@better-auth/mcp': 1.7.2
-  '@better-auth/cimd': 1.7.2
+  '@better-auth/cimd': 1.7.3
   aws4fetch: ^1.0.20
   '@types/bun': ^1.4.0
   '@libsql/client': ^0.17.4
