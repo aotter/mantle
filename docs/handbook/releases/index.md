@@ -98,7 +98,7 @@ See [HTTP, MCP, CLI and packages](../reference/surface.md) for the full list.
 D1 and assets bindings, Better Auth 1.7 (social providers, email OTP, magic
 link, passkey), Admin, MCP, Web and R2 media uploads. The Bun and Vercel
 adapters are experimental, cover public Views and HTTP Triggers only, and leave
-authentication and CSRF to the host. [ChatGPT Sites](../sites/index.md) is a
+authentication and CSRF to the host. [ChatGPT Sites](../chatgpt-sites/index.md) is a
 first-class integration with a runnable reference.
 
 **Agents.** `mantle skills` projects the installed package's skills into

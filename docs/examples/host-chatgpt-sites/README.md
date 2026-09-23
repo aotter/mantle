@@ -1,8 +1,8 @@
 # Mantle on ChatGPT Sites: runnable reference
 
-The runnable application for [Mantle on ChatGPT Sites](../../handbook/sites/index.md) connects Sites D1 + R2 bindings, Sign in with ChatGPT identity, Mantle Admin and staff roles, same-origin media upload, a published-only article frontend, anonymous read-only `/api/mcp`, and Sites-session staff tools at `/api/mcp/staff`. Remote OAuth MCP remains a separate integration; see [MCP support](../../handbook/sites/host-reference.md#remote-mcp-is-a-separate-gate).
+The runnable application for [Mantle on ChatGPT Sites](../../handbook/chatgpt-sites/index.md) connects Sites D1 + R2 bindings, Sign in with ChatGPT identity, Mantle Admin and staff roles, same-origin media upload, a published-only article frontend, anonymous read-only `/api/mcp`, and Sites-session staff tools at `/api/mcp/staff`. Remote OAuth MCP remains a separate integration; see [MCP support](../../handbook/chatgpt-sites/host-reference.md#remote-mcp-is-a-separate-gate).
 
-After setup, follow [Publish your first article](../../handbook/sites/index.md#publish-your-first-article) to verify the editorial workflow in Admin, then [maintain content with an agent](../../handbook/sites/index.md#maintain-content-with-an-agent). Article pages advertise their Markdown mirror through an HTML `rel="alternate"` link; the example does not add a visible Markdown button to the reader UI.
+After setup, follow [Publish your first article](../../handbook/chatgpt-sites/index.md#publish-your-first-article) to verify the editorial workflow in Admin, then [maintain content with an agent](../../handbook/chatgpt-sites/index.md#maintain-content-with-an-agent). Article pages advertise their Markdown mirror through an HTML `rel="alternate"` link; the example does not add a visible Markdown button to the reader UI.
 
 ## Before writing code
 
@@ -67,4 +67,4 @@ The media path uses only the R2 binding: `ports.mediaStorage` + `media.purposes`
 - `/api/mcp/staff` uses the Sites-injected browser identity and re-reads the Mantle staff role. It is mounted and advertised in Admin, but it is not an OAuth resource server. Do not register it as a remote ChatGPT connector until OAuth discovery, a standards-compliant bearer challenge and token verification are implemented and tested.
 - OAuth discovery returns sign-in HTML: Sites' page session is not an OAuth bearer challenge. Do not bypass Sites auth or trust browser cookies as remote MCP credentials.
 
-See the [Sites host reference](../../handbook/sites/host-reference.md) and [OpenAI Sites documentation](https://learn.chatgpt.com/docs/sites).
+See the [Sites host reference](../../handbook/chatgpt-sites/host-reference.md) and [OpenAI Sites documentation](https://learn.chatgpt.com/docs/sites).

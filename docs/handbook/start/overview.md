@@ -24,7 +24,7 @@ current npm `latest` contains it.
 | Embed Runtime in an existing host | [Runtime and adapters](../concepts/runtime-and-adapters.md), then [typed queries](../guides/typed-queries.md) | Bind your storage and call the generated API. |
 | Build a local Cloudflare API | [Minimal Worker tutorial](./quickstart-worker.md) | A running public View and a verified HTTP response. |
 | Add a staff console | [Local Admin tutorial](./quickstart-admin.md) | Email OTP, Admin assets and a local human workflow. |
-| Build on ChatGPT Sites | [Sites integration](../sites/index.md) | Host-owned sign-in and deployment with Mantle content. |
+| Build on ChatGPT Sites | [Sites integration](../chatgpt-sites/index.md) | Host-owned sign-in and deployment with Mantle content. |
 | Work through a coding agent | [Skill installation and handoff](../guides/agent-setup.md) | Bootstrap skill, pinned package, then project-local instructions. |
 
 Human authors can follow these pages directly; installing an agent skill is

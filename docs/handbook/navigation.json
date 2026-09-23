@@ -8,7 +8,7 @@
         { "text": "Project layout and the CLI loop", "link": "/start/project-and-cli" },
         { "text": "Quickstart: a minimal Worker", "link": "/start/quickstart-worker" },
         { "text": "Quickstart: local Admin (opt-in)", "link": "/start/quickstart-admin" },
-        { "text": "When the host is ChatGPT Sites", "link": "/sites/index" }
+        { "text": "When the host is ChatGPT Sites", "link": "/chatgpt-sites/index" }
       ]
     },
     {
@@ -49,9 +49,9 @@
     {
       "text": "ChatGPT Sites",
       "items": [
-        { "text": "Get started", "link": "/sites/index" },
-        { "text": "Host reference", "link": "/sites/host-reference" },
-        { "text": "Equipment checkout and external APIs", "link": "/sites/equipment-checkout" },
+        { "text": "Get started", "link": "/chatgpt-sites/index" },
+        { "text": "Host reference", "link": "/chatgpt-sites/host-reference" },
+        { "text": "Equipment checkout and external APIs", "link": "/chatgpt-sites/equipment-checkout" },
         { "text": "Earlier guide URL", "link": "/cloudflare/chatgpt-sites" }
       ]
     },

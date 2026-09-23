@@ -16,7 +16,7 @@ user asks to create remote resources or ship production. This flow is for
 consumer-owned Cloudflare Workers. New direct-authored apps do not need Landing
 artifacts (`.mantle/launch-state.json`, `.mantle/handoff.md`, or a hosted-auth
 allocation). Treat any Landing handoff as **legacy/optional**. For a ChatGPT
-Site, use the installed `docs/handbook/sites/index.md` integration guide and
+Site, use the installed `docs/handbook/chatgpt-sites/index.md` integration guide and
 the "Publish with Sites" steps in `docs/examples/host-chatgpt-sites/README.md`:
 request D1 and R2 on the Site, set `PUBLIC_ORIGIN` and `OWNER_EMAIL` in Sites
 settings, review the migration, then save and deploy a Sites version. Do not

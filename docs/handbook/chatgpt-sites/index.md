@@ -86,7 +86,7 @@ audience and content requirements:
 
 ```text
 Build a content site with ChatGPT Sites and Mantle. Read
-handbook/sites/index.md and examples/host-chatgpt-sites/README.md from the
+handbook/chatgpt-sites/index.md and examples/host-chatgpt-sites/README.md from the
 installed Mantle docs, and follow that reference's install and run steps.
 Adapt the article example to my content requirements. Include ChatGPT
 sign-in, Mantle staff roles, cover uploads, and published article pages.
@@ -95,7 +95,7 @@ deploying through Sites. Keep remote staff OAuth MCP outside this scope.
 ```
 
 For business rules beyond content, add: "use custom `ref` handlers and
-application-owned tables as described in handbook/sites/equipment-checkout.md."
+application-owned tables as described in handbook/chatgpt-sites/equipment-checkout.md."
 
 ## Beyond content: operational workflows
 

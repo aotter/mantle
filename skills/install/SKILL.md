@@ -42,7 +42,7 @@ docs. No local CLI exists until the package is installed.
    Do not assume Cloudflare, public HTML or Admin is required. Check Node 22+
    and pnpm 9+ for these SDK examples. A ChatGPT Site is not a conventional
    Cloudflare Worker deployment; use the installed
-   `docs/handbook/sites/index.md` integration guide and
+   `docs/handbook/chatgpt-sites/index.md` integration guide and
    `docs/examples/host-chatgpt-sites/` runnable reference when selected.
 2. Choose the requested exact SDK version, or resolve the intended release
    channel once. Pin all selected `@aotter/mantle*` dependencies to that same
@@ -80,7 +80,7 @@ docs. No local CLI exists until the package is installed.
      operational state, `handler: { kind: ref }` Procedures, staff-only SQL
      Views, staff MCP Triggers with `requires.auth`, and outbound webhooks
      called from handler code, follow
-     `docs/handbook/sites/equipment-checkout.md`. It is an implementation
+     `docs/handbook/chatgpt-sites/equipment-checkout.md`. It is an implementation
      guide, not a shipped app: keep Mantle-owned Schema tables and
      application-owned tables separate, and give every application table a
      reviewed migration.
