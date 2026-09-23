@@ -13,7 +13,7 @@
 install skill, then the CLI and handbook.
 
 ```sh
-npx skills add aotter/mantle --skill install
+npx skills add aotter/mantle
 ```
 
 Follow [`skills/install/SKILL.md`](skills/install/SKILL.md) and

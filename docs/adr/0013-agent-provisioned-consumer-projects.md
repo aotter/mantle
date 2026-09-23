@@ -144,7 +144,7 @@ they are debugging a failed provision.
 
 ## Implementation status
 
-- `skills/install/SKILL.md` and `skills/provision/SKILL.md` encode the
+- `skills/install/SKILL.md` and `docs/skills/provision/SKILL.md` encode the
   current agent workflow, including the launch-session fast path.
 - `aotter/mantle-starters` hosts `packages/create-mantle`, whose
   `launch --session` mode validates the session before writing files.

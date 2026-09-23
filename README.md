@@ -123,10 +123,11 @@ Install the Mantle skill to get guided setup for your application and the
 features you need:
 
 ```sh
-npx skills add aotter/mantle --skill install
+npx skills add aotter/mantle
 ```
 
 Ask your agent to follow the installed skill and describe what you want to build.
+The installer finds the `mantle` skill by name.
 See the [agent setup guide](docs/handbook/guides/agent-setup.md) for supported
 editors, plugins, and project instructions.
 

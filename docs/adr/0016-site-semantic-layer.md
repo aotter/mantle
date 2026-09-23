@@ -65,5 +65,5 @@ and to the landing substitution pass.
   generated `.mantle/*.template` bundle files.
 - Substitution: Mantle landing provision-bundle substitution.
 - Install handoff: `skills/install/SKILL.md` describes how agents continue from the landing-provisioned repo.
-- Provision update: `skills/provision/SKILL.md` describes the `AGENTS.md` public-site rewrite after deploy.
+- Provision update: `docs/skills/provision/SKILL.md` describes the `AGENTS.md` public-site rewrite after deploy.
 - Type overlays are applied while building `provision-bundles/<type>.json`; generated repos should not need a second overlay step.

@@ -8,8 +8,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const skillsRoot = join(repoRoot, "skills");
-const SCOPES = new Set(["project", "plugin"]);
+const skillsRoot = join(repoRoot, "docs", "skills");
+const SCOPES = new Set(["project", "plugin", "package"]);
 const failures = [];
 
 const fail = (where, message) => failures.push(`${where}: ${message}`);
@@ -29,10 +29,9 @@ function frontMatter(text) {
 
 const scopesOf = (declared) => (declared ?? "").split(",").map((scope) => scope.trim()).filter(Boolean);
 
-const skills = readdirSync(skillsRoot, { withFileTypes: true })
+const skills = ["mantle", ...readdirSync(skillsRoot, { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name)
-  .sort();
+  .map((entry) => entry.name)].sort();
 
 if (skills.length === 0) fail("skills/", "no skills found");
 
@@ -41,8 +40,8 @@ const declaredReason = new Map();
 const projected = [];
 
 for (const skill of skills) {
-  const file = join(skillsRoot, skill, "SKILL.md");
-  const where = `skills/${skill}/SKILL.md`;
+  const file = skill === "mantle" ? join(repoRoot, "skills", "install", "SKILL.md") : join(skillsRoot, skill, "SKILL.md");
+  const where = skill === "mantle" ? "skills/install/SKILL.md" : `docs/skills/${skill}/SKILL.md`;
   if (!existsSync(file)) {
     fail(where, "missing SKILL.md");
     continue;
@@ -87,7 +86,7 @@ for (const skill of skills) {
 // The README audit table is the human view of the same front matter, and the
 // column a reviewer reads when deciding whether a destructive skill belongs in
 // generated projects. Assert it says what the code will do.
-const readme = readFileSync(join(skillsRoot, "README.md"), "utf8");
+const readme = readFileSync(join(repoRoot, "skills", "README.md"), "utf8");
 const rows = [...readme.matchAll(/^\| `([a-z-]+)` \|(.+)$/gm)].map((match) => ({
   skill: match[1],
   cells: match[2].split("|").map((cell) => cell.trim()),

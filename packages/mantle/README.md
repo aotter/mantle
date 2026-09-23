@@ -12,7 +12,7 @@ where agents write config and the runtime carries the complexity.
 Cold start for a new application is the install skill, not a bare npm add:
 
 ```sh
-npx skills add aotter/mantle --skill install
+npx skills add aotter/mantle
 ```
 
 To depend on this package in an existing project, pin the exact version
@@ -205,7 +205,7 @@ internals or rebuilding Mantle's adapters.
 Cold start from GitHub or a marketplace host:
 
 ```sh
-npx skills add aotter/mantle --skill install
+npx skills add aotter/mantle
 ```
 
 That skill interviews, pins this package, then uses the CLI and the
@@ -223,7 +223,7 @@ Install the Mantle Core skill bundle before authoring or maintaining a
 consumer application. The canonical command is:
 
 ```sh
-npx skills add aotter/mantle --skill install
+npx skills add aotter/mantle
 ```
 
 Claude Code and Codex can install the plugin, then run that skill:
@@ -242,7 +242,7 @@ Cursor and VS Code Copilot can auto-discover the GitHub repo through
 `.cursor-plugin/plugin.json` and `.copilot-plugin/plugin.json` after the repo
 is cloned or opened. Still start from the `npx skills add` sentence (or open
 `skills/install/SKILL.md`). Untagged `aotter/mantle` resolves to `main`, which
-only advances at a release, so it is always the latest published version. Add
+can contain a source-only hotfix ahead of the latest npm release. Add
 `@vX.Y.Z` only to reproduce an older project; never point a consumer at
 `develop` or another moving branch.
 

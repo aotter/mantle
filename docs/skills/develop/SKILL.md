@@ -3,9 +3,9 @@ name: develop
 description: Work on any Mantle project using the Core SDK contract. Use for manifest, runtime, content model, handler, adapter, validation, and MCP work after a project already exists.
 metadata:
   source: "@aotter/mantle"
-  sourcePath: skills/develop/SKILL.md
+  sourcePath: docs/skills/develop/SKILL.md
   applies_to: mantle grammar v0.1
-  projection: project, plugin
+  projection: project
 ---
 
 # Mantle Develop

@@ -114,7 +114,7 @@ export function projectionScopes(skillMarkdown: string): string[] {
 
 async function skillSourceRoot(): Promise<string> {
   const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-  for (const candidate of [join(packageRoot, "skills"), resolve(packageRoot, "../../skills")]) {
+  for (const candidate of [join(packageRoot, "skills"), resolve(packageRoot, "../../docs/skills")]) {
     if ((await stat(candidate).catch(() => null))?.isDirectory()) return candidate;
   }
   throw new Error("Core skills are missing from the installed package");

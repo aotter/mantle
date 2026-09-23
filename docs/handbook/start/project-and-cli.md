@@ -8,7 +8,7 @@ This page describes a directly authored Mantle project: which files are yours, w
 Agents can bootstrap with the install skill; human authors can follow this guide directly. For installation paths and the pinned-package handoff, see [Agent setup](../guides/agent-setup.md):
 
 ```sh
-npx skills add aotter/mantle --skill install
+npx skills add aotter/mantle
 ```
 
 ## You own the project
@@ -96,14 +96,14 @@ Run the harness after any change to a Schema index, View filter or ordering, or 
 
 ## Connecting an agent
 
-`mantle skills` projects the skills the installed package marks `projection: project`. At this version those are `develop`, `plugin`, `theme` and `update`; `install`, `media-gc` and `provision` stay opt-in because they create projects, delete remote objects or handle production secrets. Both tool layouts receive identical bytes. Generation never rewrites these files.
+`mantle skills` projects the skills the installed package marks `projection: project`. At this version those are `develop`, `plugin`, `theme` and `update`; `mantle`, `media-gc` and `provision` stay opt-in because they create projects, delete remote objects or handle production secrets. Both tool layouts receive identical bytes. Generation never rewrites these files.
 
-Install the plugin bundle in the agent host. Cold start uses
+Install the bootstrap skill in the agent host. Cold start uses
 the install skill; an already-installed project pins packages from `package.json`:
 
 ```sh
 # Canonical
-npx skills add aotter/mantle --skill install
+npx skills add aotter/mantle
 
 # Claude Code — two separate prompts
 /plugin marketplace add aotter/mantle
@@ -137,4 +137,4 @@ The projected `develop` skill tells the agent to read `package.json` for the ins
 - [`packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts`](../../../packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts)
 - [`packages/mantle-spec/src/infrastructure/cli/EmitOpenapiCommand.ts`](../../../packages/mantle-spec/src/infrastructure/cli/EmitOpenapiCommand.ts)
 - [`packages/mantle-spec/src/infrastructure/cli/MantleCli.ts`](../../../packages/mantle-spec/src/infrastructure/cli/MantleCli.ts)
-- [`skills/develop/SKILL.md`](../../../skills/develop/SKILL.md)
+- [`docs/skills/develop/SKILL.md`](../../skills/develop/SKILL.md)

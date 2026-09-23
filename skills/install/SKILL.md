@@ -1,5 +1,5 @@
 ---
-name: install
+name: mantle
 description: Author a new Mantle application directly from version-matched SDK docs, or continue an existing project. Use when asked to install Mantle, build a Mantle application, or open a Mantle repository.
 metadata:
   source: "@aotter/mantle"
@@ -9,7 +9,7 @@ metadata:
   projectionReason: Creates a new project; nothing to project into an existing one.
 ---
 
-# Mantle Install
+# Mantle
 
 Mantle is an embeddable manifest engine. The application owns its source and
 provider configuration. There is no Starter/type picker or `mantle create`.
@@ -18,9 +18,9 @@ turn `generate` into implicit scaffolding.
 
 ## Locate the version-matched instructions
 
-`npx skills add aotter/mantle --skill install` installs this brief, not the SDK,
+`npx skills add aotter/mantle` installs this brief, not the SDK,
 a project, or the handbook. Read the path printed by the installer (Codex's
-project-local path is `.agents/skills/install/SKILL.md`); `metadata.sourcePath`
+project-local path is `.agents/skills/mantle/SKILL.md`); `metadata.sourcePath`
 is repository provenance, not a consumer path. A repository install follows
 the selected Git ref and does not pin an npm release.
 

@@ -3,9 +3,9 @@ name: plugin
 description: Discover, plan, apply, and verify Mantle marketplace plugins through the Core SDK contract. Use when the user wants to add an installable capability without hand-planning provisioning steps.
 metadata:
   source: "@aotter/mantle"
-  sourcePath: skills/plugin/SKILL.md
+  sourcePath: docs/skills/plugin/SKILL.md
   applies_to: mantle grammar v0.1
-  projection: project, plugin
+  projection: project
 ---
 
 # Mantle Plugin
