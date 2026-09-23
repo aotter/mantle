@@ -29,6 +29,8 @@ with the selected optional packages. All `docs/...` paths below then mean
 `node_modules/@aotter/mantle/docs/...`; package skills are under
 `node_modules/@aotter/mantle/skills/`. Read that package's
 `skills/install/SKILL.md` before authoring: it supersedes this bootstrap copy.
+Use the new application's installation, never another project's `node_modules`
+or an SDK checkout packing harness, to resolve these paths.
 If the user requested a prerelease, resolve that channel explicitly; `latest`
 need not contain prerelease features. Never mix versioned npm code with branch
 docs. No local CLI exists until the package is installed.
@@ -40,7 +42,7 @@ docs. No local CLI exists until the package is installed.
    Do not assume Cloudflare, public HTML or Admin is required. Check Node 22+
    and pnpm 9+ for these SDK examples. A ChatGPT Site is not a conventional
    Cloudflare Worker deployment; use the installed
-   `docs/handbook/sites/index.md` integration guide and
+   `docs/handbook/chatgpt-sites/index.md` integration guide and
    `docs/examples/host-chatgpt-sites/` runnable reference when selected.
 2. Choose the requested exact SDK version, or resolve the intended release
    channel once. Pin all selected `@aotter/mantle*` dependencies to that same
@@ -60,7 +62,8 @@ docs. No local CLI exists until the package is installed.
      `createAuth` email-otp + `ConsoleEmailSender`. Do not Vite-build Admin.
    - ChatGPT Sites with Admin/D1/R2 — follow
      `docs/examples/host-chatgpt-sites/`, not the email-OTP Worker example.
-     Copy it outside the SDK checkout, then `npm ci`,
+     Copy it outside the SDK checkout, pin its `@aotter/mantle*` dependencies
+     to the selected exact version, then `npm install`,
      `npx mantle validate --phase deploy`, `npm run generate`, `npm run check`,
      `npx wrangler d1 migrations apply DB --local`,
      `npm run dev -- --port 4174`, and `npm test` in a second terminal.
@@ -69,12 +72,15 @@ docs. No local CLI exists until the package is installed.
      and the local/production smoke gates. Sites provisions and deploys; never
      `wrangler deploy` a Site. Request both D1 and R2 when uploads are in scope.
      Browser Admin WebMCP and Sites-session `/api/mcp/staff` do not enable remote staff OAuth MCP.
+     At handoff, show the owner where Admin WebMCP and the public/staff MCP
+     endpoints appear, and state which are usable from the browser versus a
+     remote connector.
    - ChatGPT Sites with custom business rules or an external callback — the
      runnable reference covers builtin content only. For application-owned
      operational state, `handler: { kind: ref }` Procedures, staff-only SQL
      Views, staff MCP Triggers with `requires.auth`, and outbound webhooks
      called from handler code, follow
-     `docs/handbook/sites/equipment-checkout.md`. It is an implementation
+     `docs/handbook/chatgpt-sites/equipment-checkout.md`. It is an implementation
      guide, not a shipped app: keep Mantle-owned Schema tables and
      application-owned tables separate, and give every application table a
      reviewed migration.

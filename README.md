@@ -139,7 +139,7 @@ For a staff console, use the [local Admin example](docs/examples/host-local-admi
 The [project and CLI guide](docs/handbook/start/project-and-cli.md) walks through
 installation, authoring Manifests, generating typed bindings, and verification.
 
-Using ChatGPT Sites? Follow the [Sites integration](docs/handbook/sites/index.md)
+Using ChatGPT Sites? Follow the [Sites integration](docs/handbook/chatgpt-sites/index.md)
 for content management, sign-in, media, and publishing.
 
 ## Choose how much to use

@@ -174,9 +174,6 @@ curl -i http://127.0.0.1:8787/mcp/staff
 
 `generate` fails on missing or invalid manifests and never creates a project, a default Schema or a home route. `mantle generate --check` reports stale output without writing. The reference keeps `.mantle/`, `.agents/` and `.claude/` out of git and regenerates them in `check`; see [Project layout and the CLI loop](./project-and-cli.md).
 
-> **npm and optional peers**
-> A cold npm install can fail with `ERESOLVE` when an Auth peer selects a different optional `@libsql/client` than this snapshot declares. If that happens, pin `@libsql/client` in `overrides` to the range in this checkout's `package.json` and rerun `npm install`. Do not use `--force`. Commit the lockfile and use `npm ci` afterwards.
-
 ## Next steps
 
 - [Quickstart: local Admin](./quickstart-admin.md) — opt-in Dev UI: ASSETS, prebuilt Admin, email OTP.

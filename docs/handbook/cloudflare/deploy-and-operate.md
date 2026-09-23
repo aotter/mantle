@@ -47,7 +47,8 @@ wrangler deploy
 
 ## Post-deploy verification
 
-Probe the deployed origin, not `wrangler dev`:
+Probe the deployed origin, not `wrangler dev`. Run only the probes for surfaces
+the application mounts and configures:
 
 | Probe | Expect |
 |---|---|
@@ -55,7 +56,7 @@ Probe the deployed origin, not `wrangler dev`:
 | `GET /<locale>/<segment>/<slug>` and `GET /<locale>/<segment>/<slug>.md` | `200` HTML and Markdown for a published entry |
 | `GET /llms.txt`, `GET /sitemap.xml`, `GET /robots.txt` | `200` |
 | `GET /<locale>/<segment>/does-not-exist` | `404` from your `notFoundRenderer` |
-| `GET /mcp` without credentials | `401` with `WWW-Authenticate` |
+| `POST /mcp/staff` without credentials | `401` with `WWW-Authenticate`; `GET /mcp` is `405` |
 | `GET /admin` | Sign-in page; sign in with the `ADMIN_GITHUB_LOGIN` account |
 
 Then check the cache: a second anonymous `GET` of a public page should show `cf-cache-status: HIT`; publish a change in Admin and the next request should be a `MISS`. Sample latency with:

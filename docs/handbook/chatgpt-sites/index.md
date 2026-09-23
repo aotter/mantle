@@ -56,7 +56,8 @@ a working example; adapt its fields and lifecycle to your team's content.
    Markdown body. Upload an image in the media library and select it as the
    article's cover. The draft's public article URL should return 404.
 5. **Publish and read.** Publish the article and open `/articles`. Follow its
-   link to check the body and cover, then open its `.md` version. For a public
+   link to check the body and cover, then confirm the page head advertises
+   its `.md` version with `rel="alternate"` and `type="text/markdown"`. For a public
    Site, repeat this while signed out. A restricted Site still enforces its
    audience settings before visitors reach these pages.
 6. **Verify control.** Unpublish the article and confirm its detail page returns
@@ -67,6 +68,17 @@ For later content edits, return to Mantle Admin. Changes to the application's
 schema, code, or deployment settings follow the reference's migration and Sites
 deployment workflow.
 
+## Maintain content with an agent
+
+The owner can use Admin WebMCP in a browser that supports it to let an agent
+discover staff tools for drafts, publishing, and other permitted operations.
+Open `/admin/dev/docs/webmcp` to see that browser surface and
+`/admin/dev/docs/mcp` to see the Site's `/api/mcp` public read-only endpoint and `/api/mcp/staff`
+staff endpoint. The latter uses the current Sites browser session and checks
+the Mantle staff role on each request. It is useful to same-origin browser
+code, but is not a remote OAuth MCP connector for a desktop agent. A remote
+staff connector needs its own verified OAuth flow; see the [host reference](./host-reference.md#remote-mcp-is-a-separate-gate).
+
 ## Ask your agent to set it up
 
 Install the Mantle agent plugin, or `@aotter/mantle` itself, then describe your
@@ -74,7 +86,7 @@ audience and content requirements:
 
 ```text
 Build a content site with ChatGPT Sites and Mantle. Read
-handbook/sites/index.md and examples/host-chatgpt-sites/README.md from the
+handbook/chatgpt-sites/index.md and examples/host-chatgpt-sites/README.md from the
 installed Mantle docs, and follow that reference's install and run steps.
 Adapt the article example to my content requirements. Include ChatGPT
 sign-in, Mantle staff roles, cover uploads, and published article pages.
@@ -83,7 +95,7 @@ deploying through Sites. Keep remote staff OAuth MCP outside this scope.
 ```
 
 For business rules beyond content, add: "use custom `ref` handlers and
-application-owned tables as described in handbook/sites/equipment-checkout.md."
+application-owned tables as described in handbook/chatgpt-sites/equipment-checkout.md."
 
 ## Beyond content: operational workflows
 

@@ -84,7 +84,7 @@ Use only when the user names ChatGPT Sites as the host.
 
 ```text
 Build with ChatGPT Sites; use Mantle for content management and publishing.
-Read handbook/sites/index.md and examples/host-chatgpt-sites/README.md.
+Read handbook/chatgpt-sites/index.md and examples/host-chatgpt-sites/README.md.
 Use that runnable host as a reference and install its pinned
 dependencies from the registry. Derive Schema, View,
 Procedure and Trigger from my requirements and check the Admin editor/picker and public

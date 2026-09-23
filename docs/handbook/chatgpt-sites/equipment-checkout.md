@@ -208,7 +208,7 @@ because the underlying host composition or a different provider succeeded.
 
 ```text
 Extend my existing ChatGPT Site with Mantle equipment checkout. Read the matching
-SDK's docs/handbook/sites/index.md, equipment-checkout.md and host-reference.md.
+SDK's docs/handbook/chatgpt-sites/index.md, equipment-checkout.md and host-reference.md.
 Preserve current content, audience and R2 media. This guide is a design, not an
 installed app: implement and test the missing manifests, handlers and routes.
 Start with one identified kit and one fixed half-day slot per request. Include
