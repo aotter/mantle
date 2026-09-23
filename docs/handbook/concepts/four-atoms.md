@@ -170,4 +170,4 @@ Postgres exposes roughly twenty-five object kinds; an application developer writ
 - [`docs/adr/0012-views-as-public-rest.md`](../../../docs/adr/0012-views-as-public-rest.md)
 - [`packages/mantle-spec/src/domain/model/ManifestGrammar.ts`](../../../packages/mantle-spec/src/domain/model/ManifestGrammar.ts)
 - [`packages/mantle-spec/src/domain/service/ManifestParser.ts`](../../../packages/mantle-spec/src/domain/service/ManifestParser.ts)
-- [`skills/develop/SKILL.md`](../../../skills/develop/SKILL.md)
+- [`docs/skills/develop/SKILL.md`](../../skills/develop/SKILL.md)

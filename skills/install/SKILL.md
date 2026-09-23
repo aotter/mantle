@@ -3,7 +3,7 @@ name: mantle
 description: Author a new Mantle application directly from version-matched SDK docs, or continue an existing project. Use when asked to install Mantle, build a Mantle application, or open a Mantle repository.
 metadata:
   source: "@aotter/mantle"
-  sourcePath: skills/mantle/SKILL.md
+  sourcePath: skills/install/SKILL.md
   applies_to: mantle grammar v0.1
   projection: plugin
   projectionReason: Creates a new project; nothing to project into an existing one.
@@ -28,8 +28,7 @@ After selecting the host and exact version, install `@aotter/mantle` locally
 with the selected optional packages. All `docs/...` paths below then mean
 `node_modules/@aotter/mantle/docs/...`; package skills are under
 `node_modules/@aotter/mantle/skills/`. Read that package's
-`skills/mantle/SKILL.md` before authoring (`skills/install/SKILL.md` in
-published 0.1.3): it supersedes this bootstrap copy.
+`skills/install/SKILL.md` before authoring: it supersedes this bootstrap copy.
 If the user requested a prerelease, resolve that channel explicitly; `latest`
 need not contain prerelease features. Never mix versioned npm code with branch
 docs. No local CLI exists until the package is installed.

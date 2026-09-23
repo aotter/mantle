@@ -3,9 +3,9 @@ name: update
 description: Review and upgrade Mantle SDK dependencies and project-local skills while preserving application source, provider identities and plugin lockfiles.
 metadata:
   source: "@aotter/mantle"
-  sourcePath: skills/update/SKILL.md
+  sourcePath: docs/skills/update/SKILL.md
   applies_to: mantle grammar v0.1
-  projection: project, plugin
+  projection: project
 ---
 
 # Mantle Update

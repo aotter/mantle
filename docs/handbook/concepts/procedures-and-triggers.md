@@ -218,4 +218,4 @@ Register the two `ref` keys in the project's handlers map, then run the check lo
 - [`packages/mantle-spec/src/domain/model/ManifestGrammar.ts`](../../../packages/mantle-spec/src/domain/model/ManifestGrammar.ts)
 - [`packages/mantle-runtime/src/domain/service/BuiltinProjector.ts`](../../../packages/mantle-runtime/src/domain/service/BuiltinProjector.ts)
 - [`packages/mantle-runtime/src/infrastructure/http/createMantleRequestHandler.ts`](../../../packages/mantle-runtime/src/infrastructure/http/createMantleRequestHandler.ts)
-- [`skills/develop/SKILL.md`](../../../skills/develop/SKILL.md)
+- [`docs/skills/develop/SKILL.md`](../../skills/develop/SKILL.md)

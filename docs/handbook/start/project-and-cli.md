@@ -98,7 +98,7 @@ Run the harness after any change to a Schema index, View filter or ordering, or 
 
 `mantle skills` projects the skills the installed package marks `projection: project`. At this version those are `develop`, `plugin`, `theme` and `update`; `mantle`, `media-gc` and `provision` stay opt-in because they create projects, delete remote objects or handle production secrets. Both tool layouts receive identical bytes. Generation never rewrites these files.
 
-Install the plugin bundle in the agent host. Cold start uses
+Install the bootstrap skill in the agent host. Cold start uses
 the install skill; an already-installed project pins packages from `package.json`:
 
 ```sh
@@ -137,4 +137,4 @@ The projected `develop` skill tells the agent to read `package.json` for the ins
 - [`packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts`](../../../packages/mantle-spec/src/infrastructure/cli/ValidateCommand.ts)
 - [`packages/mantle-spec/src/infrastructure/cli/EmitOpenapiCommand.ts`](../../../packages/mantle-spec/src/infrastructure/cli/EmitOpenapiCommand.ts)
 - [`packages/mantle-spec/src/infrastructure/cli/MantleCli.ts`](../../../packages/mantle-spec/src/infrastructure/cli/MantleCli.ts)
-- [`skills/develop/SKILL.md`](../../../skills/develop/SKILL.md)
+- [`docs/skills/develop/SKILL.md`](../../skills/develop/SKILL.md)

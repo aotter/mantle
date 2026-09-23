@@ -29,7 +29,7 @@
     ],
     "websiteURL": "https://mantle.tools/",
     "defaultPrompt": [
-      "Run npx skills add aotter/mantle, then follow skills/mantle/SKILL.md",
+      "Run npx skills add aotter/mantle, then follow the installed mantle skill",
       "Follow the Mantle skill: interview for host and surfaces before writing files",
       "Author a Mantle application from the Mantle skill and an official example"
     ],

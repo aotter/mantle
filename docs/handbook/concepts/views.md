@@ -189,4 +189,4 @@ spec:
 - [`packages/mantle-runtime/src/infrastructure/storage/SqliteViewCompiler.ts`](../../../packages/mantle-runtime/src/infrastructure/storage/SqliteViewCompiler.ts)
 - [`packages/mantle-runtime/src/infrastructure/http/createMantleRequestHandler.ts`](../../../packages/mantle-runtime/src/infrastructure/http/createMantleRequestHandler.ts)
 - [`packages/adapters/cloudflare/src/mount/mountRuntimeEndpoints.ts`](../../../packages/adapters/cloudflare/src/mount/mountRuntimeEndpoints.ts)
-- [`skills/develop/SKILL.md`](../../../skills/develop/SKILL.md)
+- [`docs/skills/develop/SKILL.md`](../../skills/develop/SKILL.md)

@@ -4,13 +4,13 @@ Agent-readable skill briefs for consumers of `@aotter/mantle-*`. Discoverable by
 
 | Skill | When to invoke |
 |---|---|
-| [`develop`](develop/SKILL.md) | `mantle:develop`: Core-owned workflow for manifest, runtime, handler, adapter, validation, and MCP work in any Mantle project. |
-| [`media-gc`](media-gc/SKILL.md) | `mantle:media-gc`: audit or remove stale uncommitted public media objects with the connected Cloudflare API. |
-| [`plugin`](plugin/SKILL.md) | `mantle:plugin`: Core-owned marketplace workflow for plan-first capability installs across applications and adapters. |
-| [`theme`](theme/SKILL.md) | `mantle:theme`: Core-owned visual workflow. Reads project-owned theme and UI contracts. |
-| [`update`](update/SKILL.md) | `mantle:update`: Core-owned drift check workflow for SDK dependencies, local skills, and plugin lockfiles. |
-| [`mantle`](mantle/SKILL.md) | User wants to author a local Mantle application or continue an existing project. |
-| [`provision`](provision/SKILL.md) | User wants a local project shipped to Cloudflare with production auth and operator handoff. |
+| [`develop`](../docs/skills/develop/SKILL.md) | `mantle:develop`: Core-owned workflow for manifest, runtime, handler, adapter, validation, and MCP work in any Mantle project. |
+| [`media-gc`](../docs/skills/media-gc/SKILL.md) | `mantle:media-gc`: audit or remove stale uncommitted public media objects with the connected Cloudflare API. |
+| [`plugin`](../docs/skills/plugin/SKILL.md) | `mantle:plugin`: Core-owned marketplace workflow for plan-first capability installs across applications and adapters. |
+| [`theme`](../docs/skills/theme/SKILL.md) | `mantle:theme`: Core-owned visual workflow. Reads project-owned theme and UI contracts. |
+| [`update`](../docs/skills/update/SKILL.md) | `mantle:update`: Core-owned drift check workflow for SDK dependencies, local skills, and plugin lockfiles. |
+| [`mantle`](install/SKILL.md) | User wants to author a local Mantle application or continue an existing project. |
+| [`provision`](../docs/skills/provision/SKILL.md) | User wants a local project shipped to Cloudflare with production auth and operator handoff. |
 
 The skills target Mantle's v0.1 grammar. The installed package version, not
 duplicated skill prose, selects the exact runtime and embedded docs.
@@ -25,13 +25,13 @@ enforces the columns below.
 
 | Skill | Routes on | Entry-path constraints (read before acting) | Path-gated sections | Projection | Restricted because |
 |---|---|---|---|---|---|
-| `develop` | existing project; manifest, runtime, handler, adapter, or MCP work | four-atom model; adapter neutrality; no direct D1/KV/Postgres writes; no committed secrets | performance harness; local MCP client; locale rules | project, plugin | — |
-| `plugin` | user wants an installable capability | plan before apply; lock entry is the removal manifest; delete only plugin-owned files and atoms | apply; remove | project, plugin | — |
-| `theme` | brand or visual direction in a project | repo-owned theme and UI contracts | — | project, plugin | — |
-| `update` | SDK upgrade or plugin lock review | never blindly overwrite user-owned code | — | project, plugin | — |
+| `develop` | existing project; manifest, runtime, handler, adapter, or MCP work | four-atom model; adapter neutrality; no direct D1/KV/Postgres writes; no committed secrets | performance harness; local MCP client; locale rules | project | — |
+| `plugin` | user wants an installable capability | plan before apply; lock entry is the removal manifest; delete only plugin-owned files and atoms | apply; remove | project | — |
+| `theme` | brand or visual direction in a project | repo-owned theme and UI contracts | — | project | — |
+| `update` | SDK upgrade or plugin lock review | never blindly overwrite user-owned code | — | project | — |
 | `mantle` | new application, or opening an existing project | do not use the SDK checkout as the application; no push/deploy/provider config during cold start | author local project; continue existing project | plugin | Creates a new project; nothing to project into an existing one. |
-| `provision` | ship to Cloudflare and finish production auth | secrets never enter source or logs; explicit auth mode | hosted auth; self-managed auth | plugin | Platform-specific deploy that handles production secrets; opt-in only. |
-| `media-gc` | audit or remove stale uncommitted media objects | audit by default; confirm exact account, bucket, cutoff, and candidate digest; re-audit before applying; never prefix-delete; never print keys | apply | plugin | Destructive remote object deletion and Cloudflare-specific; opt-in only. |
+| `provision` | ship to Cloudflare and finish production auth | secrets never enter source or logs; explicit auth mode | hosted auth; self-managed auth | package | Platform-specific deploy that handles production secrets; opt-in only. |
+| `media-gc` | audit or remove stale uncommitted media objects | audit by default; confirm exact account, bucket, cutoff, and candidate digest; re-audit before applying; never prefix-delete; never print keys | apply | package | Destructive remote object deletion and Cloudflare-specific; opt-in only. |
 
 Deliberately monolithic:
 
@@ -47,7 +47,8 @@ Deliberately monolithic:
 The `mantle:*` namespace is owned by `@aotter/mantle`. Every skill declares its
 own distribution scope in front matter: `metadata.projection: project` marks a
 skill `mantle skills` should place in a consumer project, and a skill that
-withholds `project` must say why. `scripts/check-skills.mjs` holds that
+withholds `project` must say why. `plugin` is the bootstrap skill and `package`
+is an opt-in brief in the installed SDK. `scripts/check-skills.mjs` holds that
 declaration and the audit table below to each other.
 
 Run `mantle skills` to project the installed package's skills into a project;
@@ -58,9 +59,10 @@ contracts.
 
 ## Source-repository marketplace install
 
-The root `SKILL.md` is an exact copy of `skills/mantle/SKILL.md`. It makes
-the no-flag command install just Mantle; plugin hosts still discover the full
-set in `skills/`. `check-skills` guards the copy against drift.
+`skills/install/SKILL.md` declares `name: mantle`. It is the only repository
+skill discovered by the no-flag command and copied as a small directory.
+The other six skills live in `docs/skills/` and ship with the npm package.
+`mantle skills` projects the four ongoing workflows after package installation.
 
 Other marketplace hosts point to the same entry:
 
@@ -81,8 +83,7 @@ codex plugin add mantle@mantle
 Read the path printed by the installer (for project-local Codex,
 `.agents/skills/mantle/SKILL.md`). Only the selected brief is installed, not
 the SDK or handbook. After choosing and installing an exact SDK version, read
-`node_modules/@aotter/mantle/skills/mantle/SKILL.md` (or
-`skills/install/SKILL.md` in published 0.1.3) and its embedded docs;
+`node_modules/@aotter/mantle/skills/install/SKILL.md` and its embedded docs;
 that package supersedes the bootstrap Git-ref instructions. After packages are
 installed, `mantle skills` projects the installed package's own skills into the
 project, and `mantle skills --check` fails on drift.
@@ -110,7 +111,7 @@ The skills target ADR-0007's "AI as primary author" thesis: agents reach these f
 
 Each SKILL.md ships:
 
-- **Front-matter** with a folder-matching `name`, trigger-complete
+- **Front-matter** with a stable `name`, trigger-complete
   `description`, and optional source/version `metadata`. Plugin hosts add the
   external `mantle:` namespace.
 - **Preflight** section — environment + user-confirmation gates.

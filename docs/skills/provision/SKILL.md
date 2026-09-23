@@ -3,9 +3,9 @@ name: provision
 description: Ship a Mantle project through its selected host, routing ChatGPT Sites to its integration guide and conventional Cloudflare Workers to production auth and provisioning.
 metadata:
   source: "@aotter/mantle"
-  sourcePath: skills/provision/SKILL.md
+  sourcePath: docs/skills/provision/SKILL.md
   applies_to: mantle grammar v0.1
-  projection: plugin
+  projection: package
   projectionReason: Platform-specific deploy that handles production secrets; opt-in only.
 ---
 
