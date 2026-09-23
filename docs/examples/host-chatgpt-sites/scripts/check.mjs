@@ -76,6 +76,8 @@ assert.match(publicPage,new RegExp(mediaUrl));
 assert.doesNotMatch(publicPage,/href="javascript:/);
 assert.match(publicPage,/<meta property="og:image"/);
 assert.match(publicPage,/<link rel="canonical"/);
+assert.match(publicPage,/<link rel="alternate" type="text\/markdown"/);
+assert.doesNotMatch(publicPage,/<a\b[^>]*href="[^"]+\.md(?:[?#][^"]*)?"/);
 assert.match(publicPage,/application\/ld\+json/);
 assert.match(await (await call(`/articles/${entry.id}.md`)).text(),/Published body from Mantle/);
 assert.match(await (await call('/articles')).text(),new RegExp(entry.id));

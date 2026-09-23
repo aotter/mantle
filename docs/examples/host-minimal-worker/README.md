@@ -9,15 +9,15 @@ Schema/View is example business data; `mantle generate` never invents it.
 
 For your own project, author package.json, manifests, Worker/provider config
 and TypeScript settings for your requirements. Pin all selected `@aotter/mantle*`
-dependencies to the same intended release. This reference depends on them via
-the `latest` dist-tag instead, so a fresh install always resolves the current
-stable release; Core's test runner substitutes its exact candidate in a
-disposable copy.
+dependencies to the same intended release. The checked-in `latest` values are
+placeholders for Core's disposable release test; resolve and pin one exact
+version before installing a copied application.
 
 Outside the SDK workspace, with Node 22+ and pnpm 9+:
 
 ```sh
-pnpm install
+MANTLE_VERSION=$(pnpm view @aotter/mantle@latest version)
+pnpm add --save-exact "@aotter/mantle@$MANTLE_VERSION" "@aotter/mantle-cloudflare@$MANTLE_VERSION"
 pnpm check
 pnpm dev
 ```
