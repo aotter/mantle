@@ -2,8 +2,8 @@
 
 ## Status
 
-Superseded for first launch by provisioning v2 (2026-06-27). Historical
-record only.
+Superseded by [ADR-0021](0021-retire-starter-scaffolding.md) for 0.1.2 and
+later. Historical pre-stable install flow only.
 
 ## Date
 
@@ -11,7 +11,7 @@ record only.
 
 ## Context
 
-> **Current direction:** Mantle landing creates the GitHub repo from
+> **Historical 2026-06-27 direction, no longer current:** Mantle landing creates the GitHub repo from
 > `mantle-starters` `provision-bundles/<type>.json`, commits the blank
 > or type bundle, and connects Cloudflare Workers CI when possible.
 > Do not extend the old `create-mantle launch --session` or

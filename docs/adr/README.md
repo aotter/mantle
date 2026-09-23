@@ -14,9 +14,9 @@ Records of *why* mantle ended up shaped this way. The numbering preserves POC AD
 | [0010](0010-locale-and-translates.md) | Locale 3-layer (manifest / D1 site_config / data field) + translates pattern. Boot decoupled from `site_config` (issue #60 fix). | Accepted (refreshed) |
 | [0011](0011-adapter-port-spec.md) | Adapter port spec. Required runtime ports plus optional feature ports. | Accepted (new) |
 | [0012](0012-views-as-public-rest.md) | Views auto-expose matching REST and `query_view_*` MCP reads on their declared `public` or `staff` surface. Schemas never get a public REST endpoint. | Accepted + amended |
-| [0013](0013-agent-provisioned-consumer-projects.md) | Historical agent-provisioned consumer projects path. Superseded for first launch by landing provision bundles. | Superseded |
+| [0013](0013-agent-provisioned-consumer-projects.md) | Historical agent-provisioned consumer projects path. | Superseded by 0021 |
 | [0014](0014-auth-better-auth-and-multi-tenant-mcp.md) | The Cloudflare adapter owns one Better Auth 1.7 identity/OAuth/MCP authority with native method options and CIMD discovery. Verified callers are normalized into runtime context; mutable staff role and target authorization are re-evaluated per call. | Accepted + amended |
-| [0016](0016-site-semantic-layer.md) | Site semantic layer: `AGENTS.md` (cross-tool entry) + `.mantle/launch-state.json` (deterministic install context). The older `mantle/site.md` letter surface is suspended from first-run scaffolds. | Accepted (slimmed) |
+| [0016](0016-site-semantic-layer.md) | Historical Starter/Landing `AGENTS.md` and launch-state contract. | Superseded by 0021 |
 | [0017](0017-media-multi-variant-agent-side-optimization.md) | Multi-variant media assets with agent-side optimization and asset-id entry references. | Accepted |
 | [0018](0018-core-starters-repository-boundary.md) | Core produces published SDK artifacts; the separate starters repository validates them as an external consumer. Revisit after release-contract simplification. | Superseded by 0021 |
 | [0019](0019-sealed-manifest-runtime-pipeline.md) | One sealed source-to-runtime pipeline, semantic storage seam, and optional Web/Admin/platform dependency direction. | Accepted |

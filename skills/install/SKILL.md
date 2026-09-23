@@ -15,6 +15,7 @@ Mantle is an embeddable manifest engine. The application owns its source and
 provider configuration. There is no Starter/type picker or `mantle create`.
 Do not use the SDK checkout as the application, copy an old Starter tree, or
 turn `generate` into implicit scaffolding.
+A same-version `mantle-starters` tag is not required; do not wait for one.
 
 ## Locate the version-matched instructions
 
