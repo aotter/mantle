@@ -16,7 +16,7 @@ npx skills add aotter/mantle
 ```
 
 To depend on this package in an existing project, pin the exact version
-from `package.json` (currently `0.1.3`):
+from `package.json` (currently `0.1.4`):
 
 ```bash
 npm install @aotter/mantle
