@@ -214,8 +214,9 @@ See § Authoring shape below for the full retirement rationale.
 Names + PG-1:1 framing are documented in this ADR and the manifest grammar
 reference. Manifest TS types live in `packages/mantle-spec/`. The external
 [`aotter/mantle-starters`](https://github.com/aotter/mantle-starters)
-repository declares consumer instances of each atom. Runtime dispatcher, View
-executor, and Procedure dispatcher live in this repository.
+repository declared alpha-era consumer instances of each atom; new applications
+are authored directly under [ADR-0021](0021-retire-starter-scaffolding.md).
+Runtime dispatcher, View executor, and Procedure dispatcher live in this repository.
 
 ---
 
