@@ -5,6 +5,7 @@ import {
   runValidate,
 } from "@aotter/mantle-spec/cli";
 import { runGenerate } from "./generate.js";
+import { runBuild } from "./build.js";
 import { runSkills } from "./skills.js";
 
 async function main(): Promise<number> {
@@ -18,6 +19,8 @@ async function main(): Promise<number> {
   switch (command) {
     case "generate":
       return runGenerate(rest);
+    case "build":
+      return runBuild(rest);
     case "skills":
       return runSkills(rest);
     case "validate":
@@ -62,6 +65,7 @@ Usage: mantle <subcommand> [options]
 
 Subcommands:
   generate       Compile manifests into a typed runtime binding
+  build          Build a Mantle app and emit a versioned Cloud artifact
   validate       Static manifest and handler-source validation
   skills         Project version-matched Core skills
   emit-openapi   Emit OpenAPI 3.1 from Triggers and Views
