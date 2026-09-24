@@ -83,7 +83,7 @@ spec:
 
   it("mints a store identity when upgrading an existing boot marker", async () => {
     const db = new InMemoryDatabase();
-    await db.migrations.runAll(CANONICAL_MIGRATIONS.slice(0, -2));
+    await db.migrations.runAll(CANONICAL_MIGRATIONS.slice(0, 4));
     db.native().prepare("INSERT INTO _mantle_boot_state(id, fingerprint) VALUES (?, ?)")
       .run("runtime", "legacy");
 

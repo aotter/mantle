@@ -293,4 +293,24 @@ export const CANONICAL_MIGRATIONS: readonly Migration[] = [
       canonical_version TEXT NOT NULL
     );`,
   },
+  {
+    id: "0007-schedule-run-observations",
+    description: "Bounded, durable Cloudflare schedule attempt observations",
+    sql: `CREATE TABLE IF NOT EXISTS _mantle_schedule_runs (
+      run_id TEXT NOT NULL,
+      attempt INTEGER NOT NULL,
+      schedule_id TEXT NOT NULL,
+      scheduled_at INTEGER NOT NULL,
+      started_at INTEGER NOT NULL,
+      finished_at INTEGER,
+      status TEXT NOT NULL,
+      error_summary TEXT,
+      counts TEXT,
+      PRIMARY KEY (run_id, attempt)
+    );
+    CREATE INDEX IF NOT EXISTS _mantle_schedule_runs_recent
+      ON _mantle_schedule_runs (started_at DESC);
+    CREATE INDEX IF NOT EXISTS _mantle_schedule_runs_schedule_recent
+      ON _mantle_schedule_runs (schedule_id, started_at DESC);`,
+  },
 ];

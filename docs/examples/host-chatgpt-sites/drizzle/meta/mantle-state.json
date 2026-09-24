@@ -52,8 +52,9 @@
     "0003-pending-media-uploads",
     "0004-native-schema-storage",
     "0005-store-instance-id",
-    "0006-managed-runtime-version"
+    "0006-managed-runtime-version",
+    "0007-schedule-run-observations"
   ],
-  "lastIndex": 4,
-  "canonicalVersion": "0006-managed-runtime-version"
+  "lastIndex": 5,
+  "canonicalVersion": "0007-schedule-run-observations"
 }

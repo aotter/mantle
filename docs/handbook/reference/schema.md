@@ -264,6 +264,8 @@ TTL is currently rejected on either side of a `translates` relationship (`SCHEMA
 
 Physical cleanup is **explicit**. `runtime.sweepExpired({ collection: "events", limit: 50 })` previews one page; add `delete: true` to remove it. Follow `nextCursor` until absent. The limit is 1–100, `scanned` counts expired candidates and `removed` counts successful deletes. A failure throws and the previous cursor is safe to retry. Ref Procedures can call `ctx.sweepExpired`; a Cloudflare schedule may invoke such a Procedure. The sweep does not fire entry lifecycle hooks: expiration already changed logical visibility, and the sweep only reclaims storage (ADR-0028).
 
+The Developer Console shows declared TTL policies. It does not infer sweep history from a policy; a scheduled Procedure can return `scanned` and `removed` counts to include them in its run observation.
+
 Adding or shortening TTL on an existing Schema immediately changes **read visibility**, but never starts a deletion job. Preview a sweep and review its counts before requesting `delete: true`. Keep a backup when changing the policy on populated data. Physical unique constraints still see expired rows until cleanup, so a reused unique value may conflict before the sweep.
 
 ## Source

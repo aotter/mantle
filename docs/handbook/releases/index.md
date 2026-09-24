@@ -50,7 +50,11 @@ Cloudflare Cron Triggers now target ordinary Procedures through `source.kind:
 schedule`. The generated runtime plan records each schedule, while Wrangler
 registration remains application-owned. Scheduled calls have no user or staff
 authority, carry a stable retry key, and pass through Procedure validation and
-authorization. Other hosts do not register schedules.
+authorization. D1-backed Workers retain owner-only run observations
+for 30 days; the Console distinguishes a declaration from registration and
+observed executions. Managed SQLite hosts must apply the append-only
+`0007-schedule-run-observations` migration before boot. Other hosts do not
+register schedules.
 
 Schemas may declare a `ttl` date-time policy. D1 and Bun hide expired entries
 from semantic reads and declarative Views before any deletion. Physical cleanup

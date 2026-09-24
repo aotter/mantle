@@ -10,6 +10,7 @@ import { SystemClock, type Clock } from "./domain/port/Clock.js";
 import type { DeferredHookDispatcher } from "./domain/port/DeferredHookDispatcher.js";
 import type { EntryReader } from "./domain/port/EntryReader.js";
 import type { SweepExpiredRequest, SweepExpiredResult } from "./domain/port/ExpirySweeper.js";
+import type { RunObservationStore } from "./domain/port/RunObservationStore.js";
 import type { EntryRepository } from "./domain/port/EntryRepository.js";
 import type { MediaAssetRepository } from "./domain/port/MediaAssetRepository.js";
 import type { MediaAsset, MediaStorage } from "./domain/port/MediaStorage.js";
@@ -71,6 +72,7 @@ import {
 } from "./usecase/boot/ValidateBootUseCase.js";
 
 export interface MantleRuntimePorts {
+  readonly runObservations?: RunObservationStore;
   readonly localePolicy?: LocalePolicyReader;
   readonly deferredHookDispatcher?: DeferredHookDispatcher;
   readonly clock?: Clock;
@@ -120,6 +122,7 @@ export interface InvokeMantleTriggerRequest {
 
 /** Programmatic Core bound to one prepared semantic revision. */
 export interface MantleRuntime {
+  readonly runObservations?: RunObservationStore;
   readonly revision: string;
   /** Linked schemas needed by optional projections such as Mantle Web. */
   readonly schemas: ReadonlyMap<string, SchemaManifest>;
@@ -323,6 +326,7 @@ export function createMantleRuntime(args: CreateMantleRuntimeArgs): MantleRuntim
     : null;
 
   return {
+    runObservations: ports.runObservations,
     revision: plan.semanticFingerprint,
     schemas: schemasByName,
     entries: prepared.entries,
