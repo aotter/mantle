@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { access, readFile, readdir, mkdir, writeFile, appendFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { buildSqliteMigrationArtifact, renderSqliteManagedMigration } from "@aotter/mantle-runtime";
+import { buildSqliteMigrationArtifact, fieldColumn, quoteIdent, renderSqliteManagedMigration } from "@aotter/mantle-runtime";
 import type { SchemaManifest } from "@aotter/mantle-spec";
 import { assertInsideProject, type ProjectSelection } from "./generate-project.js";
 
@@ -14,8 +14,9 @@ interface State {
   readonly lastIndex: number;
 }
 
-export async function prepareSites(root: string, output: string, selection: ProjectSelection, schemas: readonly SchemaManifest[], check: boolean): Promise<{
+export async function prepareSites(root: string, output: string, selection: ProjectSelection, schemas: readonly SchemaManifest[], check: boolean, reviewUniqueIndexes = false): Promise<{
   readonly stale: boolean;
+  readonly report?: string;
   readonly commit: () => Promise<void>;
 }> {
   const has = (feature: string): boolean => selection.features.includes(feature as typeof selection.features[number]);
@@ -86,12 +87,13 @@ export async function prepareSites(root: string, output: string, selection: Proj
     }
     if (current === null || (file.owned && current !== file.content)) writes.push(file);
   }
-  const migration = await prepareMigration(root, dbName, schemas, has("admin"), check);
+  const migration = await prepareMigration(root, dbName, schemas, has("admin"), check, reviewUniqueIndexes);
   const ignorePath = join(root, ".gitignore");
   const ignored = await optional(ignorePath);
   const ignoreMissing = !ignored?.split(/\r?\n/).includes(".dev.vars");
   return {
     stale: writes.length > 0 || migration.stale || ignoreMissing,
+    report: migration.report,
     commit: async () => {
       for (const file of writes) {
         const path = resolve(root, file.path);
@@ -108,32 +110,43 @@ export async function prepareSites(root: string, output: string, selection: Proj
   };
 }
 
-async function prepareMigration(root: string, dbName: string, schemas: readonly SchemaManifest[], admin: boolean, check: boolean) {
+async function prepareMigration(root: string, dbName: string, schemas: readonly SchemaManifest[], admin: boolean, check: boolean, reviewUniqueIndexes: boolean) {
   const statePath = join(root, "drizzle/meta/mantle-state.json");
   const fingerprintPath = join(root, "src/storage-fingerprint.json");
   const journalPath = join(root, "drizzle/meta/_journal.json");
   for (const path of [statePath, fingerprintPath, journalPath]) await assertInsideProject(root, path);
   const current = await optional(statePath);
   const state = current ? JSON.parse(current) as State : null;
-  const artifact = await buildSqliteMigrationArtifact(state?.schemas ?? [], schemas, { appliedMigrationIds: state?.appliedMigrationIds });
+  const artifact = await buildSqliteMigrationArtifact(state?.schemas ?? [], schemas, {
+    appliedMigrationIds: state?.appliedMigrationIds, reviewUniqueIndexes,
+  });
   if (state && artifact.sourceFingerprint !== state.fingerprint) throw new Error("Saved migration source fingerprint is invalid.");
-  if (artifact.destructive) throw new Error("Destructive Schema change requires a reviewed migration; no file was written.");
+  if (artifact.destructive) throw new Error("Destructive Schema change requires a reviewed migration; only unique-index tuple replacement supports --review-unique-indexes. No file was written.");
   const fingerprint = await optional(fingerprintPath);
   const fingerprintDrift = Boolean(state && fingerprint !== `${JSON.stringify(state.fingerprint)}\n`);
   const changed = !state || artifact.migrations.length > 0 || artifact.sourceFingerprint !== artifact.targetFingerprint;
-  if (!changed) return { stale: fingerprintDrift, commit: async () => {
+  if (!changed) return { stale: fingerprintDrift, report: undefined, commit: async () => {
     if (fingerprintDrift && !check) await writeFile(fingerprintPath, `${JSON.stringify(state!.fingerprint)}\n`);
   } };
   if (fingerprintDrift) throw new Error("Generated fingerprint and migration source disagree; finish or restore the pending migration first.");
   const index = (state?.lastIndex ?? -1) + 1;
   const tag = `${String(index).padStart(4, "0")}_mantle`;
   const sqlPath = join(root, "drizzle", `${tag}.sql`);
+  const reviewPath = join(root, "drizzle/meta", `${tag}.review.json`);
   const journalText = await optional(journalPath);
   const journal = journalText ? JSON.parse(journalText) as { entries?: Array<{ idx: number; tag: string }> } : null;
-  for (const path of [statePath, fingerprintPath, sqlPath, journalPath]) await assertInsideProject(root, path);
+  for (const path of [statePath, fingerprintPath, sqlPath, journalPath, reviewPath]) await assertInsideProject(root, path);
   const sql = `${!state && admin ? `CREATE TABLE sites_users (id TEXT PRIMARY KEY NOT NULL, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, role TEXT CHECK (role IN ('owner','editor','contributor') OR role IS NULL), signed_in INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')));\n--> statement-breakpoint\n` : ""}${renderSqliteManagedMigration(artifact, state ? { canonicalVersion: state.canonicalVersion } : undefined)}`;
   const existingSql = await optional(sqlPath);
   if (existingSql !== null && existingSql !== sql) throw new Error(`Migration file already exists with different SQL: ${sqlPath}`);
+  const reviewContent = artifact.reviewedUniqueIndexes?.length ? `${JSON.stringify({
+    sourceFingerprint: artifact.sourceFingerprint, targetFingerprint: artifact.targetFingerprint,
+    checksum: artifact.checksum, changes: artifact.reviewedUniqueIndexes,
+    steps: artifact.migrations.map(({ id, description, sql }) => ({ id, description, sql })),
+    rollback: "Old Worker activation is unsupported after this uniqueness change.",
+  }, null, 2)}\n` : null;
+  const existingReview = await optional(reviewPath);
+  if (existingReview !== null && existingReview !== reviewContent) throw new Error(`Reviewed migration report already exists with different content: ${reviewPath}`);
   const last = journal?.entries?.at(-1);
   const journalAhead = last?.idx === index && last.tag === tag && existingSql === sql;
   if (state && !journalAhead && last?.idx !== state.lastIndex) throw new Error("Sites migration journal does not match saved state.");
@@ -143,6 +156,24 @@ async function prepareMigration(root: string, dbName: string, schemas: readonly 
     throw error;
   });
   if (!state && migrationFiles.some(file => file.endsWith(".sql") && file !== `${tag}.sql`)) throw new Error("Existing D1 migrations cannot be adopted without Mantle state.");
+  if (artifact.reviewedUniqueIndexes?.length) {
+    if (!state) throw new Error("Reviewed unique-index replacement requires an existing managed Schema.");
+    await verifyLocalD1(root, dbName, state, existingSql === sql ? {
+      ...state, fingerprint: artifact.targetFingerprint, canonicalVersion: artifact.targetCanonicalVersion,
+    } : undefined);
+    for (const change of artifact.reviewedUniqueIndexes) {
+      const schema = schemas.find(item => item.metadata.name === change.schema)!;
+      for (const fields of change.added) {
+        const columns = fields.map(field => quoteIdent(fieldColumn(schema, field)!));
+        const group = `SELECT ${columns.join(", ")}, COUNT(*) AS copies FROM ${quoteIdent(change.schema)} WHERE ${columns.map(column => `${column} IS NOT NULL`).join(" AND ")} GROUP BY ${columns.join(", ")} HAVING COUNT(*) > 1`;
+        const conflicts = queryLocalD1(root, dbName, `SELECT COUNT(*) AS groups FROM (${group})`)[0] as { groups?: number } | undefined;
+        if (conflicts?.groups) {
+          const sample = queryLocalD1(root, dbName, `${group} LIMIT 3`);
+          throw new Error(`UNIQUE_INDEX_CONFLICT: ${change.schema} (${fields.join(", ")}) has ${conflicts.groups} duplicate group(s); sample ${JSON.stringify(sample)}. No migration was written.`);
+        }
+      }
+    }
+  }
   const nextState: State = { fingerprint: artifact.targetFingerprint, canonicalVersion: artifact.targetCanonicalVersion, schemas,
     appliedMigrationIds: [...new Set([...(state?.appliedMigrationIds ?? []), ...artifact.migrations.map(({ id }) => id)])], lastIndex: index };
   const nextJournal = { version: "7", dialect: "sqlite", entries: [...(journal?.entries ?? []), {
@@ -150,6 +181,7 @@ async function prepareMigration(root: string, dbName: string, schemas: readonly 
   }] };
   return {
     stale: true,
+    report: artifact.reviewedUniqueIndexes?.length ? `Reviewed unique-index plan: ${JSON.stringify({ source: artifact.sourceFingerprint, target: artifact.targetFingerprint, checksum: artifact.checksum, changes: artifact.reviewedUniqueIndexes, sql: relative(root, sqlPath) })}` : undefined,
     commit: async () => {
       if (check) return;
       if (state) await verifyLocalD1(root, dbName, state, existingSql === sql ? nextState : undefined);
@@ -157,6 +189,7 @@ async function prepareMigration(root: string, dbName: string, schemas: readonly 
       await mkdir(dirname(journalPath), { recursive: true });
       await mkdir(dirname(fingerprintPath), { recursive: true });
       if (existingSql === null) await writeFile(sqlPath, sql, { flag: "wx" });
+      if (reviewContent !== null && existingReview === null) await writeFile(reviewPath, reviewContent, { flag: "wx" });
       if (!journalAhead) await writeFile(journalPath, `${JSON.stringify(nextJournal)}\n`, { flag: journalText === null ? "wx" : "w" });
       await writeFile(statePath, `${JSON.stringify(nextState, null, 2)}\n`);
       await writeFile(fingerprintPath, `${JSON.stringify(artifact.targetFingerprint)}\n`);
@@ -167,10 +200,7 @@ async function prepareMigration(root: string, dbName: string, schemas: readonly 
 async function verifyLocalD1(root: string, dbName: string, state: State, appliedNext?: State): Promise<void> {
   const wrangler = join(root, "node_modules/wrangler/bin/wrangler.js");
   await access(wrangler).catch(() => { throw new Error("Install the generated project dependencies before verifying local D1 migrations."); });
-  const query = (sql: string): unknown[] => {
-    const output = execFileSync(process.execPath, [wrangler, "d1", "execute", dbName, "--local", "--command", sql, "--json"], { cwd: root, encoding: "utf8" });
-    return (JSON.parse(output) as Array<{ results: unknown[] }>)[0]?.results ?? [];
-  };
+  const query = (sql: string): unknown[] => queryLocalD1(root, dbName, sql);
   const active = query("SELECT fingerprint FROM _mantle_storage_state WHERE id=1")[0] as { fingerprint?: string } | undefined;
   const expected = active?.fingerprint === state.fingerprint ? state :
     active?.fingerprint === appliedNext?.fingerprint ? appliedNext : null;
@@ -178,6 +208,11 @@ async function verifyLocalD1(root: string, dbName: string, state: State, applied
   const table = query("SELECT name FROM sqlite_schema WHERE type='table' AND name='_mantle_managed_runtime_state'")[0];
   const version = table ? (query("SELECT canonical_version FROM _mantle_managed_runtime_state WHERE id=1")[0] as { canonical_version?: string } | undefined)?.canonical_version : undefined;
   if (version !== expected.canonicalVersion) throw new Error("Local D1 runtime version does not match the applied migration state.");
+}
+
+function queryLocalD1(root: string, dbName: string, sql: string): unknown[] {
+  const output = execFileSync(process.execPath, [join(root, "node_modules/wrangler/bin/wrangler.js"), "d1", "execute", dbName, "--local", "--command", sql, "--json"], { cwd: root, encoding: "utf8" });
+  return (JSON.parse(output) as Array<{ results: unknown[] }>)[0]?.results ?? [];
 }
 
 async function optional(path: string): Promise<string | null> {

@@ -149,6 +149,8 @@ export {
 export {
   isAdditiveSchemaTableChange,
   mergeSchemaTableProjections,
+  fieldColumn,
+  quoteIdent,
 } from "./infrastructure/storage/SqliteSchemaTables.js";
 export {
   prepareDeployment,

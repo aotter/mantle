@@ -70,7 +70,10 @@ without a saved selection keep their prior compile behavior.
 `generate` accepts `--manifests <dir>` (default `./manifests`), `--output <dir>`
 (default `.mantle/generated`), `--namespace <name>`, `--host cf|chatgpt-sites`,
 `--features <comma-list>`, `--adopt`, and `--check`. Check mode exits nonzero
-on drift and does not write. `mantle validate` checks grammar and linked
+on drift and does not write. Sites also accepts `--review-unique-indexes` for
+an explicit, source-bound unique tuple migration and duplicate preflight;
+[review the D1 procedure](../chatgpt-sites/generated-app.md) before applying
+it. `mantle validate` checks grammar and linked
 capabilities; `--phase deploy` adds deployment checks. `mantle skills` projects
 the installed SDK's project skills into `.agents/skills/` and `.claude/skills/`;
 `mantle skills --check` detects drift. `mantle emit-openapi` describes HTTP

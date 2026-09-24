@@ -90,10 +90,50 @@ describe("SQLite migration artifacts", () => {
     const after = schema({ title: { type: "integer" } });
     const artifact = await buildSqliteMigrationArtifact([before], [after]);
     expect(artifact.destructive).toBe(true);
+    expect((await buildSqliteMigrationArtifact([before], [after], { reviewUniqueIndexes: true })).destructive).toBe(true);
     expect((await buildSqliteMigrationArtifact([before], [])).destructive).toBe(true);
     expect((await buildSqliteMigrationArtifact([before], [schema({})])).destructive).toBe(true);
     await expect(verifySqliteMigrationArtifact({ ...artifact, migrations: [{ ...artifact.migrations[0]!, sql: "SELECT 1" }] }))
       .rejects.toThrow("checksum mismatch");
+  });
+
+  it("reviews unique tuple replacement without dropping rows or silently accepting duplicates", async () => {
+    const fields = { userId: { type: "string" as const }, providerSubscriptionId: { type: "string" as const } };
+    const before = { ...schema(fields), spec: { ...schema(fields).spec, uniqueIndexes: [["userId"]] } } as SchemaManifest;
+    const after = { ...schema(fields), spec: { ...schema(fields).spec, uniqueIndexes: [["providerSubscriptionId"]] } } as SchemaManifest;
+    const initial = await buildSqliteMigrationArtifact([], [before]);
+    const ordinary = await buildSqliteMigrationArtifact([before], [after], { appliedMigrationIds: initial.migrations.map(({ id }) => id) });
+    expect(ordinary.destructive).toBe(true);
+    const reviewed = await buildSqliteMigrationArtifact([before], [after], {
+      appliedMigrationIds: initial.migrations.map(({ id }) => id), reviewUniqueIndexes: true,
+    });
+    expect(reviewed.destructive).toBe(false);
+    expect(reviewed.reviewedUniqueIndexes).toEqual([{ schema: "posts", removed: [["userId"]], added: [["providerSubscriptionId"]] }]);
+    await expect(verifySqliteMigrationArtifact(reviewed)).resolves.toBeUndefined();
+    const makeDb = () => {
+      const db = new DatabaseSync(":memory:");
+      db.exec(renderSqliteManagedMigration(initial));
+      return db;
+    };
+    const insert = (db: DatabaseSync, id: string, user: string, subscription: string) => db.prepare(`INSERT INTO posts
+      (_mantle_id,_mantle_status,_mantle_version,_mantle_created_at,_mantle_updated_at,userId,providerSubscriptionId)
+      VALUES (?, 'operational', 1, 1, 1, ?, ?)`).run(id, user, subscription);
+    const conflicted = makeDb();
+    insert(conflicted, "a", "u1", "same");
+    insert(conflicted, "b", "u2", "same");
+    expect(() => conflicted.exec(`BEGIN;${renderSqliteManagedMigration(reviewed, { canonicalVersion: initial.targetCanonicalVersion })}COMMIT;`)).toThrow();
+    conflicted.exec("ROLLBACK");
+    expect(conflicted.prepare("SELECT fingerprint FROM _mantle_storage_state WHERE id=1").get()?.fingerprint).toBe(initial.targetFingerprint);
+    expect(conflicted.prepare("SELECT name FROM sqlite_schema WHERE type='index' AND name LIKE '%unique%'").all()).toHaveLength(1);
+    conflicted.close();
+    const valid = makeDb();
+    insert(valid, "a", "u1", "s1");
+    valid.exec(`BEGIN;${renderSqliteManagedMigration(reviewed, { canonicalVersion: initial.targetCanonicalVersion })}COMMIT;`);
+    insert(valid, "b", "u1", "s2");
+    expect(() => insert(valid, "c", "u3", "s2")).toThrow();
+    expect(valid.prepare("SELECT COUNT(*) AS n FROM posts").get()?.n).toBe(2);
+    expect(valid.prepare("SELECT fingerprint FROM _mantle_storage_state WHERE id=1").get()?.fingerprint).toBe(reviewed.targetFingerprint);
+    valid.close();
   });
 
   it("normalizes property order and fingerprints codecs, nullability, and unions", async () => {
