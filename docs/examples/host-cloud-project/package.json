@@ -1,0 +1,17 @@
+{
+  "name": "mantle-cloud-project-reference",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "dependencies": { "@aotter/mantle": "latest" },
+  "mantleCloud": {
+    "version": 1,
+    "manifests": "manifests",
+    "module": "dist/app.mjs",
+    "assets": "dist/public"
+  },
+  "scripts": {
+    "build:mantle": "node scripts/build.mjs",
+    "test": "mantle build && node scripts/check.mjs"
+  }
+}

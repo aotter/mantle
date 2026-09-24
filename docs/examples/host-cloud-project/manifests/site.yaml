@@ -1,0 +1,30 @@
+apiVersion: cms.mantle.aotter.net/v1
+kind: Schema
+metadata: { name: notes }
+spec:
+  title: Notes
+  lifecycle: publishing
+  schema:
+    type: object
+    required: [title]
+    properties:
+      title: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: View
+metadata: { name: published-notes }
+spec:
+  surface: public
+  from: notes
+  fields: [id, title]
+  filter:
+    eq: { field: status, value: published }
+  limit: 20
+---
+apiVersion: cms.mantle.aotter.net/v1
+kind: Procedure
+metadata: { name: ping }
+spec:
+  input: { type: object, properties: {} }
+  output: { type: object, properties: { ok: { type: boolean } } }
+  handler: { kind: ref, ref: ping }
